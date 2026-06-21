@@ -1512,9 +1512,18 @@ Phases A–E are in scope; F (3D) and G follow.
     4. 5-measure ordering + peripheral handling (§3.2); **[done — `arcmatch_variable_ordering`: singletons
        first, greedy 5-measure expansion, degree-1 peripherals last]**
     5. dynamic-parent backtracking (Alg 6); assemble `ArcMatch`, add to the `[Vf2, Ullmann, Ri, ArcMatch]`
-       test loop;
+       test loop; **[done — `ArcMatch` variant wired into the dispatch and both `_at`/non-`_at` cross-val
+       loops; anchored variant pins the anchor vertex domain row+column; all 31 subiso tests green, all
+       `#[allow(dead_code)]` removed]**
     6. property-based random-graph cross-validation (`ArcMatch == Vf2`) + criterion benches vs `Vf2`/`Ri`
-       on bond-labeled graphs.
+       on bond-labeled graphs. **[proptest done — `tests/property.rs` (feature-gated `proptest`): random labeled
+       graphs + planted induced subgraphs assert all four algorithms return the same match set. It immediately
+       exposed a pre-existing `Vf2` look-ahead bug: the feasibility cut used the induced-subgraph rule
+       (`q_term <= t_term && q_new <= t_new`), whose `q_new <= t_new` term is invalid for monomorphism and
+       under-reports disconnected queries. Corrected to the VF2 monomorphism cut
+       `q_term <= t_term && q_term + q_new <= t_term + t_new` (matches vf2lib's `VF2MonoState`; the
+       induced-subgraph `vf2_sub_state` keeps `new <= new`, the full-iso `vf2_state` uses `==`). Regression
+       added as `disconnected_with_edge`. Criterion benches still TODO.]**
 
 - **Phase F — 3D (deferred).** umol-geometric (greenfield): config constrains local geometry at
   embedding (signed volume / cis-trans side). Substrate = doc 071.

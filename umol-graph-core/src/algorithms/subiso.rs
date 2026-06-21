@@ -16,6 +16,10 @@ pub enum SubgraphIsomorphismAlgorithm {
     /// RI — static most-constrained-first pattern ordering, light matching, no
     /// domain reduction (Bonnici et al. 2013).
     Ri,
+    /// ArcMatch — arc-consistent vertex/edge-domain reduction + path-based reduction
+    /// (exploits edge labels), 5-measure ordering, dynamic-parent backtracking
+    /// (Bonnici et al. 2024).
+    ArcMatch,
 }
 
 impl Graph {
@@ -39,6 +43,9 @@ impl Graph {
             SubgraphIsomorphismAlgorithm::Ri => {
                 self.subgraph_isomorphisms_ri(query, node_match, edge_match)
             }
+            SubgraphIsomorphismAlgorithm::ArcMatch => {
+                self.subgraph_isomorphisms_arcmatch(query, node_match, edge_match)
+            }
         }
     }
 
@@ -59,6 +66,9 @@ impl Graph {
             }
             SubgraphIsomorphismAlgorithm::Ri => {
                 self.subgraph_isomorphisms_at_ri(query, anchor, node_match, edge_match)
+            }
+            SubgraphIsomorphismAlgorithm::ArcMatch => {
+                self.subgraph_isomorphisms_at_arcmatch(query, anchor, node_match, edge_match)
             }
         }
     }
@@ -234,6 +244,75 @@ impl Graph {
         );
         results
     }
+
+    // Bonnici et al. 2024 "ArcMatch: high-performance subgraph matching for labeled
+    // graphs": vertex domains → arc consistency → edge domains → path-based reduction
+    // → 5-measure ordering → dynamic-parent backtracking. Monomorphism semantics.
+    fn subgraph_isomorphisms_arcmatch(
+        &self,
+        query: &Graph,
+        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    ) -> Vec<Vec<usize>> {
+        if query.node_count() > self.node_count() {
+            return Vec::new();
+        }
+        if query.node_count() == 0 {
+            return vec![vec![]];
+        }
+        let mut vertex = arcmatch_vertex_domains(query, self, node_match);
+        arcmatch_arc_consistency(query, self, &mut vertex, edge_match);
+        let mut domains = arcmatch_edge_domains(query, self, vertex, edge_match);
+        arcmatch_path_reduction(query, &mut domains, ARCMATCH_LP);
+        let order = arcmatch_variable_ordering(query, &domains);
+        let mut results = Vec::new();
+        let mut assigned = vec![None; query.node_count()];
+        let mut used = vec![false; self.node_count()];
+        arcmatch_search(query, &order, &domains, 0, &mut assigned, &mut used, &mut results);
+        results
+    }
+
+    fn subgraph_isomorphisms_at_arcmatch(
+        &self,
+        query: &Graph,
+        anchor: (NodeId, NodeId),
+        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    ) -> Vec<Vec<usize>> {
+        if query.node_count() > self.node_count() || query.node_count() == 0 {
+            return Vec::new();
+        }
+        if anchor.0.index() >= query.node_count() || anchor.1.index() >= self.node_count() {
+            return Vec::new();
+        }
+        if !node_match(anchor.0, anchor.1) {
+            return Vec::new();
+        }
+        let n2 = self.node_count();
+        let (qa, ta) = (anchor.0.index(), anchor.1.index());
+        let mut vertex = arcmatch_vertex_domains(query, self, node_match);
+        // Pin the anchor: its row keeps only the anchor target, its target column
+        // keeps only the anchor row.
+        for t in 0..n2 {
+            if t != ta {
+                vertex[qa * n2 + t] = false;
+            }
+        }
+        for q in 0..query.node_count() {
+            if q != qa {
+                vertex[q * n2 + ta] = false;
+            }
+        }
+        arcmatch_arc_consistency(query, self, &mut vertex, edge_match);
+        let mut domains = arcmatch_edge_domains(query, self, vertex, edge_match);
+        arcmatch_path_reduction(query, &mut domains, ARCMATCH_LP);
+        let order = arcmatch_variable_ordering(query, &domains);
+        let mut results = Vec::new();
+        let mut assigned = vec![None; query.node_count()];
+        let mut used = vec![false; n2];
+        arcmatch_search(query, &order, &domains, 0, &mut assigned, &mut used, &mut results);
+        results
+    }
 }
 
 struct Vf2State<'g> {
@@ -393,12 +472,16 @@ impl<'g> Vf2State<'g> {
             }
         }
 
-        // Look-ahead: unmapped query neighbors must not exceed unmapped target
-        // neighbors in either the terminal or non-terminal category.
+        // VF2 monomorphism look-ahead (cf. vf2lib `VF2MonoState`): unmapped terminal
+        // query neighbors must not exceed unmapped terminal target neighbors, and
+        // the total unmapped-neighbor count must not either. Both are necessary for a
+        // monomorphism extension. (The induced-subgraph matcher additionally requires
+        // `q_new <= t_new`, which is invalid here and under-reports disconnected
+        // queries.)
         let (q_term, q_new) = self.unmapped_neighbor_counts_query(q_idx);
         let (t_term, t_new) = self.unmapped_neighbor_counts_target(t_idx);
 
-        q_term <= t_term && q_new <= t_new
+        q_term <= t_term && q_term + q_new <= t_term + t_new
     }
 
     fn unmapped_neighbor_counts_query(&self, idx: usize) -> (u32, u32) {
@@ -687,12 +770,14 @@ fn ri_search(
     }
 }
 
-// ArcMatch (Bonnici et al. 2024), staged port — see doc 104 Phase E. Each stage's
-// helpers carry `#[allow(dead_code)]` until the algorithm is assembled (stage 5).
+// ArcMatch (Bonnici et al. 2024), staged port — see doc 104 Phase E.
+
+/// Max query-path length (in vertices) for the path-based reduction; the paper's
+/// default trade-off.
+const ARCMATCH_LP: usize = 6;
 
 /// ArcMatch stage 1 — initial vertex domains `d[qi * n2 + tj]`: target vertex `tj`
 /// is in `D(qi)` when labels are compatible and `deg(qi) <= deg(tj)`.
-#[allow(dead_code)]
 fn arcmatch_vertex_domains(
     query: &Graph,
     target: &Graph,
@@ -719,7 +804,6 @@ fn arcmatch_vertex_domains(
 /// keep `t` in `D(a)` only if every query edge `{a, b}` has a label-matching target
 /// edge from `t` into `D(b)`. Undirected, so both endpoints of each query edge are
 /// reduced.
-#[allow(dead_code)]
 fn arcmatch_arc_consistency(
     query: &Graph,
     target: &Graph,
@@ -745,7 +829,6 @@ fn arcmatch_arc_consistency(
 
 /// Remove from `D(a)` every target vertex lacking a label-matching target edge into
 /// `D(b)`; returns whether anything was removed.
-#[allow(dead_code)]
 fn arcmatch_reduce_side(
     target: &Graph,
     d: &mut [bool],
@@ -777,7 +860,6 @@ fn arcmatch_reduce_side(
 /// `x in D(a)`, `y in D(b)`, `{x, y}` a target edge, and matching labels. Both
 /// orientations of each query edge are stored so the matcher can pull candidates
 /// from either endpoint.
-#[allow(dead_code)]
 struct ArcMatchDomains {
     n2: usize,
     vertex: Vec<bool>,
@@ -785,7 +867,6 @@ struct ArcMatchDomains {
 }
 
 /// ArcMatch stage 2 — build the edge domains from the (reduced) vertex domains.
-#[allow(dead_code)]
 fn arcmatch_edge_domains(
     query: &Graph,
     target: &Graph,
@@ -822,7 +903,6 @@ fn arcmatch_edge_domains(
 }
 
 /// Each undirected query edge once, as `(a, b)` with `a < b`.
-#[allow(dead_code)]
 fn arcmatch_query_edges(query: &Graph) -> Vec<(usize, usize)> {
     let mut edges = Vec::new();
     for a in 0..query.node_count() {
@@ -840,7 +920,6 @@ fn arcmatch_query_edges(query: &Graph) -> Vec<(usize, usize)> {
 /// DFS from every query vertex; provably safe (Thm 2–3: never discards a target
 /// vertex/edge that belongs to a real match). `lp` is the max path length in
 /// vertices (paper default 6).
-#[allow(dead_code)]
 fn arcmatch_path_reduction(query: &Graph, domains: &mut ArcMatchDomains, lp: usize) {
     for source in 0..query.node_count() {
         let mut omega = vec![source];
@@ -851,7 +930,6 @@ fn arcmatch_path_reduction(query: &Graph, domains: &mut ArcMatchDomains, lp: usi
 /// Algorithm 2 — DFS over the query graph extracting maximal paths (`lp` vertices),
 /// rings (back to the source), and dead-ends; each (≥ 3 vertices — arc consistency
 /// already covers edges) is verified. `omega` is the path stack.
-#[allow(dead_code)]
 fn arcmatch_path_dfs(
     query: &Graph,
     omega: &mut Vec<usize>,
@@ -891,7 +969,6 @@ fn arcmatch_path_dfs(
 
 /// Algorithm 3 — discard from the source domain each target vertex that cannot
 /// reproduce the query path `omega` through the edge domains, then propagate.
-#[allow(dead_code)]
 fn arcmatch_verify_path(
     query: &Graph,
     omega: &[usize],
@@ -917,7 +994,6 @@ fn arcmatch_verify_path(
 /// Algorithm 4 — does a target path `omega_hat` matching the query path `omega`
 /// exist, navigating the edge domains and avoiding revisits? For a ring, the final
 /// step must close back to `omega_hat[0]`.
-#[allow(dead_code)]
 fn arcmatch_verify_path_dfs(
     omega: &[usize],
     omega_hat: &mut Vec<usize>,
@@ -956,7 +1032,6 @@ fn arcmatch_verify_path_dfs(
 /// Algorithm 5 — after the source domain shrank, drop edge-domain pairs whose
 /// endpoints left their vertex domains and vertex-domain entries with no supporting
 /// edge, to a fixpoint.
-#[allow(dead_code)]
 fn arcmatch_refine_domains(query: &Graph, s: usize, domains: &mut ArcMatchDomains) {
     let n2 = domains.n2;
     for nb in arcmatch_query_edges(query) {
@@ -981,7 +1056,6 @@ fn arcmatch_refine_domains(query: &Graph, s: usize, domains: &mut ArcMatchDomain
 
 /// Keep in `D({a,b})` only pairs whose endpoints are still in both vertex domains;
 /// keeps the two directed orientations in sync. Returns whether anything changed.
-#[allow(dead_code)]
 fn arcmatch_drop_pairs_both(domains: &mut ArcMatchDomains, n2: usize, a: usize, b: usize) -> bool {
     let before = domains.edge[&(a, b)].len();
     let mut kept = Vec::with_capacity(before);
@@ -1001,7 +1075,6 @@ fn arcmatch_drop_pairs_both(domains: &mut ArcMatchDomains, n2: usize, a: usize, 
 
 /// Remove from `D(a)` each target vertex with no supporting edge-domain pair (no
 /// `(a-side, _)` pair). Returns whether anything changed.
-#[allow(dead_code)]
 fn arcmatch_drop_unsupported(domains: &mut ArcMatchDomains, n2: usize, a: usize, b: usize) -> bool {
     let mut changed = false;
     for t in 0..n2 {
@@ -1022,7 +1095,6 @@ fn arcmatch_drop_unsupported(domains: &mut ArcMatchDomains, n2: usize, a: usize,
 /// maximizes, lexicographically, the candidate's count of neighbors that are
 /// already ordered, that border the ordered set, and that are unrelated to it, then
 /// its degree, then minimizes its domain size, then its id.
-#[allow(dead_code)]
 fn arcmatch_variable_ordering(query: &Graph, domains: &ArcMatchDomains) -> Vec<usize> {
     let n = query.node_count();
     let n2 = domains.n2;
@@ -1051,7 +1123,6 @@ fn arcmatch_variable_ordering(query: &Graph, domains: &ArcMatchDomains) -> Vec<u
 /// Greedy ordering of the `in_phase` vertices: repeatedly append the best candidate
 /// adjacent to the already-ordered set (or, when none, the best remaining vertex —
 /// a new component root).
-#[allow(dead_code)]
 fn arcmatch_order_phase(
     query: &Graph,
     domain_size: &[usize],
@@ -1097,7 +1168,6 @@ fn arcmatch_order_phase(
 
 /// Split `v`'s neighbors into counts of (already-ordered, bordering-the-ordered-set,
 /// unrelated) vertices — the first three ordering measures.
-#[allow(dead_code)]
 fn arcmatch_neighbor_split(query: &Graph, placed: &[bool], v: usize) -> (usize, usize, usize) {
     let (mut ordered, mut bordering, mut unrelated) = (0, 0, 0);
     for nb in query.neighbors(NodeId(v as u32)).iter() {
@@ -1117,6 +1187,70 @@ fn arcmatch_neighbor_split(query: &Graph, placed: &[bool], v: usize) -> (usize, 
     (ordered, bordering, unrelated)
 }
 
+/// ArcMatch stage 5 — dynamic-parent backtracking (Bonnici 2024 Algorithm 6).
+/// Places query vertices in `order`; for each, picks the already-placed neighbor
+/// (the dynamic parent) with the smallest edge domain, draws candidates from that
+/// edge domain, and keeps those consistent with every placed neighbor. A query
+/// vertex with no placed neighbor (a component root) is seeded from its vertex
+/// domain. `assigned` is indexed by query vertex.
+fn arcmatch_search(
+    query: &Graph,
+    order: &[usize],
+    domains: &ArcMatchDomains,
+    depth: usize,
+    assigned: &mut [Option<usize>],
+    used: &mut [bool],
+    results: &mut Vec<Vec<usize>>,
+) {
+    if depth == order.len() {
+        results.push(assigned.iter().map(|t| t.expect("complete match")).collect());
+        return;
+    }
+    let q = order[depth];
+    let n2 = domains.n2;
+    let parents: Vec<usize> = query
+        .neighbors(NodeId(q as u32))
+        .iter()
+        .map(|nb| nb.node.index())
+        .filter(|&u| assigned[u].is_some())
+        .collect();
+
+    if parents.is_empty() {
+        for t in 0..n2 {
+            if domains.vertex[q * n2 + t] && !used[t] {
+                assigned[q] = Some(t);
+                used[t] = true;
+                arcmatch_search(query, order, domains, depth + 1, assigned, used, results);
+                used[t] = false;
+                assigned[q] = None;
+            }
+        }
+        return;
+    }
+
+    let s = *parents
+        .iter()
+        .min_by_key(|&&p| domains.edge[&(p, q)].len())
+        .expect("non-empty parents");
+    let ms = assigned[s].expect("parent assigned");
+    for &(u_t, v_t) in &domains.edge[&(s, q)] {
+        if u_t != ms || used[v_t] {
+            continue;
+        }
+        let feasible = parents
+            .iter()
+            .all(|&p| domains.edge[&(q, p)].contains(&(v_t, assigned[p].expect("parent assigned"))));
+        if !feasible {
+            continue;
+        }
+        assigned[q] = Some(v_t);
+        used[v_t] = true;
+        arcmatch_search(query, order, domains, depth + 1, assigned, used, results);
+        used[v_t] = false;
+        assigned[q] = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -1124,7 +1258,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::SubgraphIsomorphismAlgorithm::{Ri, Ullmann, Vf2};
+    use super::SubgraphIsomorphismAlgorithm::{ArcMatch, Ri, Ullmann, Vf2};
     use super::*;
 
     fn any_node(_: NodeId, _: NodeId) -> bool {
@@ -1145,6 +1279,18 @@ mod tests {
     fn only_tedge1(_: EdgeId, t: EdgeId) -> bool {
         t.0 == 1
     }
+    // Label maps for the disconnected-query regression: query labels [0,0,1] /
+    // edge [1]; target labels [0,1,0] / edges [0,1].
+    fn disc_node(q: NodeId, t: NodeId) -> bool {
+        const QN: [u8; 3] = [0, 0, 1];
+        const TN: [u8; 3] = [0, 1, 0];
+        QN[q.index()] == TN[t.index()]
+    }
+    fn disc_edge(q: EdgeId, t: EdgeId) -> bool {
+        const QE: [u8; 1] = [1];
+        const TE: [u8; 2] = [0, 1];
+        QE[q.index()] == TE[t.index()]
+    }
 
     #[rstest]
     #[case::empty_query(Graph::new(3, &[[0, 1], [1, 2]]), Graph::default(), any_node, any_edge, vec![vec![]])]
@@ -1159,6 +1305,11 @@ mod tests {
     #[case::no_match(Graph::new(3, &[[0, 1], [1, 2]]), Graph::new(3, &[[0, 1], [1, 2], [0, 2]]), any_node, any_edge, vec![])]
     #[case::disconnected_query(Graph::new(3, &[[0, 1]]), Graph::new(2, &[]), any_node, any_edge,
         vec![vec![0, 1], vec![0, 2], vec![1, 0], vec![1, 2], vec![2, 0], vec![2, 1]])]
+    // Regression: Vf2's look-ahead under-reported disconnected queries whose isolated
+    // node is mapped first (it created target terminals with no query counterpart, so
+    // the now-removed `new <= new` cut spuriously pruned the only match).
+    #[case::disconnected_with_edge(Graph::new(3, &[[0, 1], [1, 2]]), Graph::new(3, &[[1, 2]]),
+        disc_node, disc_edge, vec![vec![0, 2, 1]])]
     #[case::path_in_cycle(Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]), Graph::new(3, &[[0, 1], [1, 2]]), any_node, any_edge,
         vec![vec![0, 1, 2], vec![0, 3, 2], vec![1, 0, 3], vec![1, 2, 3], vec![2, 1, 0], vec![2, 3, 0], vec![3, 0, 1], vec![3, 2, 1]])]
     #[case::k4_self(Graph::new(4, &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]),
@@ -1195,7 +1346,7 @@ mod tests {
         #[case] mut edge_match: fn(EdgeId, EdgeId) -> bool,
         #[case] expected: Vec<Vec<usize>>,
     ) {
-        for alg in [Vf2, Ullmann, Ri] {
+        for alg in [Vf2, Ullmann, Ri, ArcMatch] {
             let mut r = target.subgraph_isomorphisms(&query, &mut node_match, &mut edge_match, alg);
             r.sort();
             assert_eq!(r, expected, "algorithm {alg:?}");
@@ -1221,7 +1372,7 @@ mod tests {
         #[case] mut edge_match: fn(EdgeId, EdgeId) -> bool,
         #[case] expected: Vec<Vec<usize>>,
     ) {
-        for alg in [Vf2, Ullmann, Ri] {
+        for alg in [Vf2, Ullmann, Ri, ArcMatch] {
             let mut r = target
                 .subgraph_isomorphisms_at(&query, anchor, &mut node_match, &mut edge_match, alg);
             r.sort();
