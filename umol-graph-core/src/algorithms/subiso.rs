@@ -820,6 +820,201 @@ fn arcmatch_edge_domains(
     ArcMatchDomains { n2, vertex, edge }
 }
 
+/// Each undirected query edge once, as `(a, b)` with `a < b`.
+#[allow(dead_code)]
+fn arcmatch_query_edges(query: &Graph) -> Vec<(usize, usize)> {
+    let mut edges = Vec::new();
+    for a in 0..query.node_count() {
+        for nb in query.neighbors(NodeId(a as u32)).iter() {
+            let b = nb.node.index();
+            if a < b {
+                edges.push((a, b));
+            }
+        }
+    }
+    edges
+}
+
+/// ArcMatch stage 3 — path-based reduction (Bonnici 2024 §3.1). Runs the query-path
+/// DFS from every query vertex; provably safe (Thm 2–3: never discards a target
+/// vertex/edge that belongs to a real match). `lp` is the max path length in
+/// vertices (paper default 6).
+#[allow(dead_code)]
+fn arcmatch_path_reduction(query: &Graph, domains: &mut ArcMatchDomains, lp: usize) {
+    for source in 0..query.node_count() {
+        let mut omega = vec![source];
+        arcmatch_path_dfs(query, &mut omega, lp, domains);
+    }
+}
+
+/// Algorithm 2 — DFS over the query graph extracting maximal paths (`lp` vertices),
+/// rings (back to the source), and dead-ends; each (≥ 3 vertices — arc consistency
+/// already covers edges) is verified. `omega` is the path stack.
+#[allow(dead_code)]
+fn arcmatch_path_dfs(
+    query: &Graph,
+    omega: &mut Vec<usize>,
+    lp: usize,
+    domains: &mut ArcMatchDomains,
+) {
+    let top = *omega.last().expect("non-empty path");
+    let source = omega[0];
+    let mut extended = false;
+    let neighbors: Vec<usize> = query
+        .neighbors(NodeId(top as u32))
+        .iter()
+        .map(|n| n.node.index())
+        .collect();
+    for v in neighbors {
+        if v == source {
+            if omega.len() >= 3 {
+                omega.push(v); // close the ring: source repeated at the tail
+                arcmatch_verify_path(query, omega, true, domains);
+                omega.pop();
+            }
+        } else if !omega.contains(&v) {
+            extended = true;
+            omega.push(v);
+            if omega.len() == lp {
+                arcmatch_verify_path(query, omega, false, domains);
+            } else {
+                arcmatch_path_dfs(query, omega, lp, domains);
+            }
+            omega.pop();
+        }
+    }
+    if !extended && omega.len() >= 3 {
+        arcmatch_verify_path(query, omega, false, domains);
+    }
+}
+
+/// Algorithm 3 — discard from the source domain each target vertex that cannot
+/// reproduce the query path `omega` through the edge domains, then propagate.
+#[allow(dead_code)]
+fn arcmatch_verify_path(
+    query: &Graph,
+    omega: &[usize],
+    is_ring: bool,
+    domains: &mut ArcMatchDomains,
+) {
+    let source = omega[0];
+    let n2 = domains.n2;
+    let candidates: Vec<usize> = (0..n2).filter(|&t| domains.vertex[source * n2 + t]).collect();
+    let mut reduced = false;
+    for t in candidates {
+        let mut omega_hat = vec![t];
+        if !arcmatch_verify_path_dfs(omega, &mut omega_hat, is_ring, domains) {
+            domains.vertex[source * n2 + t] = false;
+            reduced = true;
+        }
+    }
+    if reduced {
+        arcmatch_refine_domains(query, source, domains);
+    }
+}
+
+/// Algorithm 4 — does a target path `omega_hat` matching the query path `omega`
+/// exist, navigating the edge domains and avoiding revisits? For a ring, the final
+/// step must close back to `omega_hat[0]`.
+#[allow(dead_code)]
+fn arcmatch_verify_path_dfs(
+    omega: &[usize],
+    omega_hat: &mut Vec<usize>,
+    is_ring: bool,
+    domains: &ArcMatchDomains,
+) -> bool {
+    if omega_hat.len() == omega.len() {
+        return true;
+    }
+    let i = omega_hat.len();
+    let (uq, vq) = (omega[i - 1], omega[i]);
+    let current = omega_hat[i - 1];
+    let Some(pairs) = domains.edge.get(&(uq, vq)) else {
+        return false;
+    };
+    let pairs = pairs.clone();
+    for (ut, vt) in pairs {
+        if ut != current {
+            continue;
+        }
+        if is_ring && omega_hat.len() == omega.len() - 1 {
+            if vt == omega_hat[0] {
+                return true;
+            }
+        } else if !omega_hat.contains(&vt) {
+            omega_hat.push(vt);
+            if arcmatch_verify_path_dfs(omega, omega_hat, is_ring, domains) {
+                return true;
+            }
+            omega_hat.pop();
+        }
+    }
+    false
+}
+
+/// Algorithm 5 — after the source domain shrank, drop edge-domain pairs whose
+/// endpoints left their vertex domains and vertex-domain entries with no supporting
+/// edge, to a fixpoint.
+#[allow(dead_code)]
+fn arcmatch_refine_domains(query: &Graph, s: usize, domains: &mut ArcMatchDomains) {
+    let n2 = domains.n2;
+    for nb in arcmatch_query_edges(query) {
+        let (a, b) = nb;
+        if a == s || b == s {
+            arcmatch_drop_pairs_both(domains, n2, a, b);
+        }
+    }
+    let edges = arcmatch_query_edges(query);
+    let mut reduced = true;
+    while reduced {
+        reduced = false;
+        for &(a, b) in &edges {
+            reduced |= arcmatch_drop_pairs_both(domains, n2, a, b);
+        }
+        for &(a, b) in &edges {
+            reduced |= arcmatch_drop_unsupported(domains, n2, a, b);
+            reduced |= arcmatch_drop_unsupported(domains, n2, b, a);
+        }
+    }
+}
+
+/// Keep in `D({a,b})` only pairs whose endpoints are still in both vertex domains;
+/// keeps the two directed orientations in sync. Returns whether anything changed.
+#[allow(dead_code)]
+fn arcmatch_drop_pairs_both(domains: &mut ArcMatchDomains, n2: usize, a: usize, b: usize) -> bool {
+    let before = domains.edge[&(a, b)].len();
+    let mut kept = Vec::with_capacity(before);
+    for &(x, y) in &domains.edge[&(a, b)] {
+        if domains.vertex[a * n2 + x] && domains.vertex[b * n2 + y] {
+            kept.push((x, y));
+        }
+    }
+    if kept.len() == before {
+        return false;
+    }
+    let rev: Vec<(usize, usize)> = kept.iter().map(|&(x, y)| (y, x)).collect();
+    domains.edge.insert((a, b), kept);
+    domains.edge.insert((b, a), rev);
+    true
+}
+
+/// Remove from `D(a)` each target vertex with no supporting edge-domain pair (no
+/// `(a-side, _)` pair). Returns whether anything changed.
+#[allow(dead_code)]
+fn arcmatch_drop_unsupported(domains: &mut ArcMatchDomains, n2: usize, a: usize, b: usize) -> bool {
+    let mut changed = false;
+    for t in 0..n2 {
+        if !domains.vertex[a * n2 + t] {
+            continue;
+        }
+        if !domains.edge[&(a, b)].iter().any(|&(x, _)| x == t) {
+            domains.vertex[a * n2 + t] = false;
+            changed = true;
+        }
+    }
+    changed
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -967,5 +1162,46 @@ mod tests {
         let mut rev = domains.edge[&(1, 0)].clone();
         rev.sort();
         assert_eq!(rev, vec![(0, 1), (1, 0), (1, 2), (2, 1)]);
+    }
+
+    // Safety (Bonnici 2024 Thm 2-3): path-based reduction must never discard a
+    // target vertex/edge that belongs to a real match. Ground truth = Vf2.
+    #[rstest]
+    #[case::path(Graph::new(3, &[[0, 1], [1, 2]]), Graph::new(5, &[[0, 1], [1, 2], [2, 3], [3, 4]]))]
+    #[case::triangle(Graph::new(3, &[[0, 1], [1, 2], [0, 2]]), Graph::new(4, &[[0, 1], [1, 2], [0, 2], [2, 3]]))]
+    #[case::naphthalene(
+        Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
+        Graph::new(10, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [3, 6], [6, 7], [7, 8], [8, 9], [9, 4]])
+    )]
+    #[case::k4(
+        Graph::new(4, &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]),
+        Graph::new(4, &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]])
+    )]
+    fn test_arcmatch_path_reduction_safety(#[case] query: Graph, #[case] target: Graph) {
+        let mut nm: fn(NodeId, NodeId) -> bool = any_node;
+        let mut em: fn(EdgeId, EdgeId) -> bool = any_edge;
+        let matches = target.subgraph_isomorphisms(&query, &mut nm, &mut em, Vf2);
+        assert!(!matches.is_empty(), "fixture should have matches");
+
+        let mut vertex = arcmatch_vertex_domains(&query, &target, &mut nm);
+        arcmatch_arc_consistency(&query, &target, &mut vertex, &mut em);
+        let mut domains = arcmatch_edge_domains(&query, &target, vertex, &mut em);
+        arcmatch_path_reduction(&query, &mut domains, 6);
+
+        let n2 = target.node_count();
+        for m in &matches {
+            for (qi, &ti) in m.iter().enumerate() {
+                assert!(domains.vertex[qi * n2 + ti], "match {m:?}: vertex q{qi}->t{ti} pruned");
+            }
+            for qi in 0..query.node_count() {
+                for nb in query.neighbors(NodeId(qi as u32)).iter() {
+                    let qj = nb.node.index();
+                    assert!(
+                        domains.edge[&(qi, qj)].contains(&(m[qi], m[qj])),
+                        "match {m:?}: edge q{qi}-q{qj} pruned"
+                    );
+                }
+            }
+        }
     }
 }
