@@ -1488,8 +1488,13 @@ Phases A–E are in scope; F (3D) and G follow.
     the host coset into the pattern frame, `coset_matches` (Undetermined pattern coset admits both
     handednesses). Test covers chiral match / enantiomer reject / achiral-matches-both / frame-reindex.
     **TODO**: pattern stereo expressed via `#T`/`#C` atom/bond *constraints* (not `:stereo-atoms` overlays)
-    is not handled — needs the pattern run through stereo perception but not grounding]; (4) `Incidence`
-    (`unimplemented!` placeholder until then); (5) E6 validation.
+    is not handled — needs the pattern run through stereo perception but not grounding]; **(4) `Incidence`**
+    [done 2026-06-20 — subiso on the Levi graph (`incidence_graph(constitution())`); `node_match` carries
+    atom/bond predicates and matches overlay pseudonodes by kind; the Levi match supplies only the atom
+    correspondence (correctly constraining overlay-only connectivity), then the **same** exact
+    `verify_overlays` filters/builds — so `Incidence` returns the identical match set as `GraphAndOverlays`
+    (decided: exact participation, not subset). All three substructure tests now run over BOTH strategies ×
+    6 subiso]; (5) E6 validation.
     - `GraphAndOverlays` — atom-bond subiso with `AtomAst`/`BondAst::matches` predicates (query is the
       general side; host folds in derived topological constraints), then per-overlay post-verification
       against the atom correspondence: dative/noncovalent via the views' `connecting`; aromatic/multicenter

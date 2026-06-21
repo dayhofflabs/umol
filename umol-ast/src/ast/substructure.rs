@@ -14,7 +14,9 @@ use umol_graph_core::{NodeId, SubgraphIsomorphismAlgorithm};
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::embedding::MoleculeEmbedding;
+use super::entity::Entity;
 use super::id::{AtomId, BondId};
+use super::incidence::IncidenceNodeSelection;
 use super::ligand::StereoLigand;
 use super::molecule::MoleculeAst;
 use super::stereo::coset_matches;
@@ -48,7 +50,7 @@ impl MoleculeAst {
                 self.substructure_matches_graph_and_overlays(host, subiso)
             }
             SubstructureMatchAlgorithm::Incidence => {
-                unimplemented!("Incidence substructure strategy")
+                self.substructure_matches_incidence(host, subiso)
             }
         }
     }
@@ -88,6 +90,67 @@ impl MoleculeAst {
             )
             .into_iter()
             .filter_map(|atom_map| pattern.verify_overlays(host, atom_map))
+            .collect()
+    }
+
+    /// Match on the incidence (Levi) graph: relations become pseudonodes wired to
+    /// their participant atoms, so overlay-only connectivity (a 3c-2e bond, an H-bond
+    /// that is the sole link) constrains placement — the case `GraphAndOverlays`
+    /// degrades on. The Levi subiso supplies only the atom correspondence; the same
+    /// exact `verify_overlays` then filters and builds the embedding, so this returns
+    /// the identical match set as `GraphAndOverlays`.
+    fn substructure_matches_incidence<'h>(
+        &self,
+        host: &'h MoleculeAst,
+        subiso: SubgraphIsomorphismAlgorithm,
+    ) -> Vec<MoleculeEmbedding<'h>> {
+        let pattern = self;
+        if pattern.atoms().count() > host.atoms().count() {
+            return Vec::new();
+        }
+        let selection = IncidenceNodeSelection::constitution();
+        let pattern_levi = pattern.incidence_graph(selection);
+        let host_levi = host.incidence_graph(selection);
+        let host_atoms: Vec<AtomAst> = host
+            .atoms()
+            .iter()
+            .map(|a| a.ast.clone().with_constraints(a.derive_constraints()))
+            .collect();
+        let host_bonds: Vec<BondAst> = host
+            .bonds()
+            .iter()
+            .map(|b| b.ast.clone().with_constraints(b.derive_constraints()))
+            .collect();
+        let atom_count = pattern.atoms().count();
+
+        host_levi
+            .graph()
+            .subgraph_isomorphisms(
+                pattern_levi.graph(),
+                // Atoms/bonds carry their predicates; overlay pseudonodes match by
+                // kind only (the exact AST/participation check is `verify_overlays`).
+                &mut |pq, hq| match (pattern_levi.entity(pq), host_levi.entity(hq)) {
+                    (Entity::Atom(pa), Entity::Atom(ha)) => {
+                        pattern.atom(pa).ast.matches(&host_atoms[ha.index()])
+                    }
+                    (Entity::Bond(pb), Entity::Bond(hb)) => {
+                        pattern.bond(pb).ast.matches(&host_bonds[hb.index()])
+                    }
+                    (pe, he) => pe.kind() == he.kind(),
+                },
+                &mut |_, _| true,
+                subiso,
+            )
+            .into_iter()
+            .filter_map(|m| {
+                let atom_map: Vec<AtomId> = (0..atom_count)
+                    .map(|a| match host_levi.entity(NodeId(m[a] as u32)) {
+                        Entity::Atom(id) => id,
+                        _ => unreachable!("a pattern atom node maps to a host atom node"),
+                    })
+                    .collect();
+                pattern.verify_overlays(host, atom_map)
+            })
             .collect()
     }
 
@@ -231,7 +294,8 @@ mod tests {
 
     use super::super::id::AtomId;
     use super::super::molecule::MoleculeAst;
-    use super::SubstructureMatchAlgorithm::GraphAndOverlays;
+    use super::SubstructureMatchAlgorithm;
+    use super::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 
     const SUBISO_ALGS: [SubgraphIsomorphismAlgorithm; 6] = [
         Vf2,
@@ -242,24 +306,29 @@ mod tests {
         RayKirsch,
     ];
 
+    // Both strategies must return the identical match set.
+    const STRATEGIES: [SubstructureMatchAlgorithm; 2] = [GraphAndOverlays, Incidence];
+
     // Pattern C-C in host C-C-O: matches the C-C edge in both orientations, never the
     // C-O edge. The same occurrence set under every subgraph-isomorphism algorithm.
     #[rstest]
     fn test_molecule_ast_substructure_matches() {
         let host = mol!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
         let pattern = mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
-        for subiso in SUBISO_ALGS {
-            let mut maps: Vec<Vec<AtomId>> = pattern
-                .substructure_matches(&host, GraphAndOverlays, subiso)
-                .iter()
-                .map(|e| e.host_atoms().to_vec())
-                .collect();
-            maps.sort();
-            assert_eq!(
-                maps,
-                vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]],
-                "subiso {subiso:?}"
-            );
+        for strategy in STRATEGIES {
+            for subiso in SUBISO_ALGS {
+                let mut maps: Vec<Vec<AtomId>> = pattern
+                    .substructure_matches(&host, strategy, subiso)
+                    .iter()
+                    .map(|e| e.host_atoms().to_vec())
+                    .collect();
+                maps.sort();
+                assert_eq!(
+                    maps,
+                    vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]],
+                    "{strategy:?}/{subiso:?}"
+                );
+            }
         }
     }
 
@@ -280,28 +349,30 @@ mod tests {
         let pattern = mol!(
             r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}]}"#
         );
-        for subiso in SUBISO_ALGS {
-            let embeddings = pattern.substructure_matches(&host, GraphAndOverlays, subiso);
-            let mut maps: Vec<Vec<AtomId>> =
-                embeddings.iter().map(|e| e.host_atoms().to_vec()).collect();
-            maps.sort();
-            assert_eq!(
-                maps,
-                vec![vec![AtomId(0), AtomId(2)], vec![AtomId(2), AtomId(0)]],
-                "subiso {subiso:?}"
-            );
-            assert!(
-                embeddings
-                    .iter()
-                    .all(|e| e.host_noncovalent_bonds().len() == 1),
-                "subiso {subiso:?}"
-            );
-            assert!(
-                pattern
-                    .substructure_matches(&host_bare, GraphAndOverlays, subiso)
-                    .is_empty(),
-                "subiso {subiso:?}"
-            );
+        for strategy in STRATEGIES {
+            for subiso in SUBISO_ALGS {
+                let embeddings = pattern.substructure_matches(&host, strategy, subiso);
+                let mut maps: Vec<Vec<AtomId>> =
+                    embeddings.iter().map(|e| e.host_atoms().to_vec()).collect();
+                maps.sort();
+                assert_eq!(
+                    maps,
+                    vec![vec![AtomId(0), AtomId(2)], vec![AtomId(2), AtomId(0)]],
+                    "{strategy:?}/{subiso:?}"
+                );
+                assert!(
+                    embeddings
+                        .iter()
+                        .all(|e| e.host_noncovalent_bonds().len() == 1),
+                    "{strategy:?}/{subiso:?}"
+                );
+                assert!(
+                    pattern
+                        .substructure_matches(&host_bare, strategy, subiso)
+                        .is_empty(),
+                    "{strategy:?}/{subiso:?}"
+                );
+            }
         }
     }
 
@@ -337,29 +408,32 @@ mod tests {
         let pattern_reframed_enantiomer = reframed("Th1");
 
         let all = vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)];
-        for subiso in SUBISO_ALGS {
-            let occ = |p: &MoleculeAst, h: &MoleculeAst| -> Vec<Vec<AtomId>> {
-                let mut m: Vec<Vec<AtomId>> = p
-                    .substructure_matches(h, GraphAndOverlays, subiso)
-                    .iter()
-                    .map(|e| e.host_atoms().to_vec())
-                    .collect();
-                m.sort();
-                m
-            };
-            assert_eq!(occ(&pattern_r, &host_r), vec![all.clone()], "chiral match {subiso:?}");
-            assert!(occ(&pattern_r, &host_s).is_empty(), "enantiomer {subiso:?}");
-            assert_eq!(occ(&pattern_achiral, &host_r).len(), 1, "achiral/R {subiso:?}");
-            assert_eq!(occ(&pattern_achiral, &host_s).len(), 1, "achiral/S {subiso:?}");
-            assert_eq!(
-                occ(&pattern_reframed, &host_r),
-                vec![vec![AtomId(0), AtomId(3), AtomId(2), AtomId(1)]],
-                "reindex {subiso:?}"
-            );
-            assert!(
-                occ(&pattern_reframed_enantiomer, &host_r).is_empty(),
-                "reindex enantiomer {subiso:?}"
-            );
+        for strategy in STRATEGIES {
+            for subiso in SUBISO_ALGS {
+                let occ = |p: &MoleculeAst, h: &MoleculeAst| -> Vec<Vec<AtomId>> {
+                    let mut m: Vec<Vec<AtomId>> = p
+                        .substructure_matches(h, strategy, subiso)
+                        .iter()
+                        .map(|e| e.host_atoms().to_vec())
+                        .collect();
+                    m.sort();
+                    m
+                };
+                let tag = format!("{strategy:?}/{subiso:?}");
+                assert_eq!(occ(&pattern_r, &host_r), vec![all.clone()], "chiral match {tag}");
+                assert!(occ(&pattern_r, &host_s).is_empty(), "enantiomer {tag}");
+                assert_eq!(occ(&pattern_achiral, &host_r).len(), 1, "achiral/R {tag}");
+                assert_eq!(occ(&pattern_achiral, &host_s).len(), 1, "achiral/S {tag}");
+                assert_eq!(
+                    occ(&pattern_reframed, &host_r),
+                    vec![vec![AtomId(0), AtomId(3), AtomId(2), AtomId(1)]],
+                    "reindex {tag}"
+                );
+                assert!(
+                    occ(&pattern_reframed_enantiomer, &host_r).is_empty(),
+                    "reindex enantiomer {tag}"
+                );
+            }
         }
     }
 }
