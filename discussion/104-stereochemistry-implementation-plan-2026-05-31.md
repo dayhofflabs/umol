@@ -1524,6 +1524,19 @@ Phases A–E are in scope; F (3D) and G follow.
        `q_term <= t_term && q_term + q_new <= t_term + t_new` (matches vf2lib's `VF2MonoState`; the
        induced-subgraph `vf2_sub_state` keeps `new <= new`, the full-iso `vf2_state` uses `==`). Regression
        added as `disconnected_with_edge`. Criterion benches still TODO.]**
+    - ArcMatch path length `lp` is exposed as config: the enum variant is `ArcMatch { path_length: usize }`
+      (`pub const ARCMATCH_DEFAULT_PATH_LENGTH = 6`); `path_length < 3` skips path reduction (arc consistency
+      only), `>= 3` reduces over paths up to that length. Correctness is `lp`-invariant (Thm 2-3); larger `lp`
+      prunes more at higher cost (Thm 1). `lp` is the only tunable across the four algorithms.
+    - Bench note (from a throwaway C60-automorphism timing, 120 matches, unlabeled): `Ri` 4 ms, `ArcMatch`
+      727 ms, `Ullmann` 1.2 s, `Vf2` 5.2 s. On *unlabeled* regular graphs `Ri`'s ordering dominates and
+      ArcMatch's domain/edge-label machinery is pure overhead — so the criterion benches must use
+      **bond-labeled** graphs (and a fullerene/large-symmetric skeleton like C60) for ArcMatch to show its
+      advantage. C60 is a good bench input; it was tried as a unit test but dropped (5.2 s `Vf2`, no extra
+      correctness coverage over cross-val + proptest). Regenerate its 90-edge 0-based adjacency from
+      `umol-io/tests/sdf_parsing/data/molecule/bcl/c60_fullerene.sdf` (V2000: counts on line 4 = `60 90`, 60
+      atom lines 5-64, 90 bond lines 65-154 whose first two fields are 1-based atom ids):
+      `awk 'NR>=65 && NR<=154 {print $1-1", "$2-1}'`. Inline the result in the bench file when written.
 
 - **Phase F — 3D (deferred).** umol-geometric (greenfield): config constrains local geometry at
   embedding (signed volume / cis-trans side). Substrate = doc 071.
