@@ -9,13 +9,15 @@
 
 use std::collections::HashSet;
 
-use umol_graph_core::SubgraphIsomorphismAlgorithm;
+use umol_graph_core::{NodeId, SubgraphIsomorphismAlgorithm};
 
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::embedding::MoleculeEmbedding;
-use super::id::AtomId;
+use super::id::{AtomId, BondId};
+use super::ligand::StereoLigand;
 use super::molecule::MoleculeAst;
+use super::stereo::coset_matches;
 use super::traits::Lattice;
 
 /// Strategy for `substructure_matches`, each composing over a
@@ -152,6 +154,57 @@ impl MoleculeAst {
             multicenter.push(host_mc.id);
         }
 
+        // Stereo: a pattern stereo overlay matches iff the corresponding host site
+        // bears a stereo element of the same class whose coset, reindexed from the
+        // host ligand frame into the pattern's frame (via the atom correspondence),
+        // is admitted by the pattern coset. An `Undetermined` pattern coset admits
+        // both handednesses. TODO: a pattern that asserts stereo via `#T`/`#C` atom
+        // /bond constraints rather than a `:stereo-atoms`/`:stereo-bonds` overlay is
+        // not handled here — that needs the pattern run through stereo perception
+        // (but not grounding, so no valence resolution).
+        let mut stereo_atoms = Vec::new();
+        for sp in pattern.stereo_atoms().iter() {
+            let host_atom = atom_map[sp.site_id().index()];
+            let sh = host.stereo_atoms().incident(host_atom).next()?;
+            if sp.kind() != sh.kind() {
+                return None;
+            }
+            let frame = sp
+                .ligand_frame()
+                .into_iter()
+                .map(|l| StereoLigand { atom_id: atom_map[l.atom_id.index()], kind: l.kind });
+            let host_coset = sh.coset_for(frame)?;
+            if !coset_matches(sp.coset(), &host_coset, sp.kind()) {
+                return None;
+            }
+            stereo_atoms.push(sh.id);
+        }
+
+        let mut stereo_bonds = Vec::new();
+        for sp in pattern.stereo_bonds().iter() {
+            let [a, b] = pattern.bond(sp.site_id()).atom_ids();
+            let host_edge = host
+                .raw_graph()
+                .find_edge(
+                    NodeId::from(atom_map[a.index()]),
+                    NodeId::from(atom_map[b.index()]),
+                )
+                .expect("a matched query bond maps to a host bond");
+            let sh = host.bond(BondId::from(host_edge)).cis_trans_stereo()?;
+            if sp.kind() != sh.kind() {
+                return None;
+            }
+            let frame = sp
+                .ligand_frame()
+                .into_iter()
+                .map(|l| StereoLigand { atom_id: atom_map[l.atom_id.index()], kind: l.kind });
+            let host_coset = sh.coset_for(frame)?;
+            if !coset_matches(sp.coset(), &host_coset, sp.kind()) {
+                return None;
+            }
+            stereo_bonds.push(sh.id);
+        }
+
         Some(MoleculeEmbedding::from_match(
             host,
             pattern,
@@ -160,8 +213,8 @@ impl MoleculeAst {
             aromatic,
             multicenter,
             noncovalent,
-            Vec::new(),
-            Vec::new(),
+            stereo_atoms,
+            stereo_bonds,
         ))
     }
 }
@@ -177,6 +230,7 @@ mod tests {
     use crate::mol;
 
     use super::super::id::AtomId;
+    use super::super::molecule::MoleculeAst;
     use super::SubstructureMatchAlgorithm::GraphAndOverlays;
 
     const SUBISO_ALGS: [SubgraphIsomorphismAlgorithm; 6] = [
@@ -247,6 +301,64 @@ mod tests {
                     .substructure_matches(&host_bare, GraphAndOverlays, subiso)
                     .is_empty(),
                 "subiso {subiso:?}"
+            );
+        }
+    }
+
+    // Stereo coset post-filter on a tetrahedral center (C with F, Cl, Br, and an
+    // implicit H). A chiral pattern matches the same handedness, rejects the
+    // enantiomer; a stereo-agnostic pattern matches both; a pattern whose ligands
+    // are numbered differently still matches once its coset is reindexed into the
+    // host frame (the transposition of two ligands flips the tetrahedral coset).
+    #[rstest]
+    fn test_molecule_ast_substructure_matches_stereo() {
+        let host_r = mol!(
+            r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]}"#
+        );
+        let host_s = mol!(
+            r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th0"}]}"#
+        );
+        // same chirality as host_r, declared with the same atom numbering.
+        let pattern_r = host_r.clone();
+        // no stereo overlay -> stereo unconstrained.
+        let pattern_achiral =
+            mol!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#);
+        // ligands renumbered (Br, Cl, F): same chirality as host_r needs the flipped
+        // coset Th0; the enantiomer keeps Th1.
+        let reframed = |coset: &str| {
+            mol!(&format!(
+                r#"{{:atoms ["C #h1" "Br" "Cl" "F"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+                    :stereo-atoms [{{:site 0 :ligands [1 2 3 [:h 0]] :type "{coset}"}}]}}"#
+            ))
+        };
+        let pattern_reframed = reframed("Th0");
+        let pattern_reframed_enantiomer = reframed("Th1");
+
+        let all = vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)];
+        for subiso in SUBISO_ALGS {
+            let occ = |p: &MoleculeAst, h: &MoleculeAst| -> Vec<Vec<AtomId>> {
+                let mut m: Vec<Vec<AtomId>> = p
+                    .substructure_matches(h, GraphAndOverlays, subiso)
+                    .iter()
+                    .map(|e| e.host_atoms().to_vec())
+                    .collect();
+                m.sort();
+                m
+            };
+            assert_eq!(occ(&pattern_r, &host_r), vec![all.clone()], "chiral match {subiso:?}");
+            assert!(occ(&pattern_r, &host_s).is_empty(), "enantiomer {subiso:?}");
+            assert_eq!(occ(&pattern_achiral, &host_r).len(), 1, "achiral/R {subiso:?}");
+            assert_eq!(occ(&pattern_achiral, &host_s).len(), 1, "achiral/S {subiso:?}");
+            assert_eq!(
+                occ(&pattern_reframed, &host_r),
+                vec![vec![AtomId(0), AtomId(3), AtomId(2), AtomId(1)]],
+                "reindex {subiso:?}"
+            );
+            assert!(
+                occ(&pattern_reframed_enantiomer, &host_r).is_empty(),
+                "reindex enantiomer {subiso:?}"
             );
         }
     }

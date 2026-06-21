@@ -1481,8 +1481,15 @@ Phases A–E are in scope; F (3D) and G follow.
     **(2) overlay post-verification** [done 2026-06-20 — `verify_overlays`: dative (with donor/acceptor role
     check), noncovalent, aromatic, multicenter located by exact-set `connecting`, overlay AST `matches`, host
     overlay ids recorded in the embedding; per-atom `#a`/`#m` already covered by the stage-1 predicate;
-    rejects when a pattern overlay is absent; cross-validated]; (3) stereo coset post-filter (E3/E4);
-    (4) `Incidence` (`unimplemented!` placeholder until then); (5) E6 validation.
+    rejects when a pattern overlay is absent; cross-validated]; **(3) stereo coset post-filter (E3/E4)**
+    [done 2026-06-20 — `verify_overlays` stereo blocks: for each pattern stereo-atom/bond overlay, the host
+    site must bear a same-class stereo element; the pattern ligand frame is mapped into host ids via the atom
+    correspondence (uniform — a virtual ligand's bearing atom is itself corresponded), `coset_for` reindexes
+    the host coset into the pattern frame, `coset_matches` (Undetermined pattern coset admits both
+    handednesses). Test covers chiral match / enantiomer reject / achiral-matches-both / frame-reindex.
+    **TODO**: pattern stereo expressed via `#T`/`#C` atom/bond *constraints* (not `:stereo-atoms` overlays)
+    is not handled — needs the pattern run through stereo perception but not grounding]; (4) `Incidence`
+    (`unimplemented!` placeholder until then); (5) E6 validation.
     - `GraphAndOverlays` — atom-bond subiso with `AtomAst`/`BondAst::matches` predicates (query is the
       general side; host folds in derived topological constraints), then per-overlay post-verification
       against the atom correspondence: dative/noncovalent via the views' `connecting`; aromatic/multicenter

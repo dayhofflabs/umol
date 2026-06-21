@@ -785,7 +785,7 @@ macro_rules! stereo_view_queries {
                     .map(|i| StereoLigandId(i as u8))
             }
 
-            /// The ordered ligand frame (atom ligands + virtual implicit-H / lone-pair slots).
+            /// The ordered ligand frame (atom ligands + virtual implicit-Hs / lone-pairs).
             pub fn ligand_frame(&self) -> Vec<StereoLigand> {
                 self.ligands()
                     .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
