@@ -2,6 +2,8 @@
 //! induced-subgraph reverse check). Multiple named algorithms behind a selector;
 //! all return the same match set (a query→target index vector per occurrence).
 
+use std::collections::HashMap;
+
 use crate::graph::{EdgeId, Graph, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -684,6 +686,140 @@ fn ri_search(
     }
 }
 
+// ArcMatch (Bonnici et al. 2024), staged port — see doc 104 Phase E. Each stage's
+// helpers carry `#[allow(dead_code)]` until the algorithm is assembled (stage 5).
+
+/// ArcMatch stage 1 — initial vertex domains `d[qi * n2 + tj]`: target vertex `tj`
+/// is in `D(qi)` when labels are compatible and `deg(qi) <= deg(tj)`.
+#[allow(dead_code)]
+fn arcmatch_vertex_domains(
+    query: &Graph,
+    target: &Graph,
+    node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+) -> Vec<bool> {
+    let n1 = query.node_count();
+    let n2 = target.node_count();
+    let target_deg: Vec<usize> = (0..n2)
+        .map(|j| target.neighbors(NodeId(j as u32)).len())
+        .collect();
+    let mut d = vec![false; n1 * n2];
+    for qi in 0..n1 {
+        let dq = query.neighbors(NodeId(qi as u32)).len();
+        for tj in 0..n2 {
+            if dq <= target_deg[tj] && node_match(NodeId(qi as u32), NodeId(tj as u32)) {
+                d[qi * n2 + tj] = true;
+            }
+        }
+    }
+    d
+}
+
+/// ArcMatch stage 1 — arc consistency (Bonnici 2024 Algorithm 1) to a fixpoint:
+/// keep `t` in `D(a)` only if every query edge `{a, b}` has a label-matching target
+/// edge from `t` into `D(b)`. Undirected, so both endpoints of each query edge are
+/// reduced.
+#[allow(dead_code)]
+fn arcmatch_arc_consistency(
+    query: &Graph,
+    target: &Graph,
+    d: &mut [bool],
+    edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+) {
+    let n2 = target.node_count();
+    let mut reduced = true;
+    while reduced {
+        reduced = false;
+        for qi in 0..query.node_count() {
+            for nb in query.neighbors(NodeId(qi as u32)).iter() {
+                let qj = nb.node.index();
+                if qj <= qi {
+                    continue; // visit each undirected query edge once
+                }
+                reduced |= arcmatch_reduce_side(target, d, n2, qi, qj, nb.edge, edge_match);
+                reduced |= arcmatch_reduce_side(target, d, n2, qj, qi, nb.edge, edge_match);
+            }
+        }
+    }
+}
+
+/// Remove from `D(a)` every target vertex lacking a label-matching target edge into
+/// `D(b)`; returns whether anything was removed.
+#[allow(dead_code)]
+fn arcmatch_reduce_side(
+    target: &Graph,
+    d: &mut [bool],
+    n2: usize,
+    a: usize,
+    b: usize,
+    e_q: EdgeId,
+    edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+) -> bool {
+    let mut changed = false;
+    for ta in 0..n2 {
+        if !d[a * n2 + ta] {
+            continue;
+        }
+        let supported = target
+            .neighbors(NodeId(ta as u32))
+            .iter()
+            .any(|tn| d[b * n2 + tn.node.index()] && edge_match(e_q, tn.edge));
+        if !supported {
+            d[a * n2 + ta] = false;
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// ArcMatch domain graph (stage 2): post-arc-consistency vertex domains plus, per
+/// directed query-node pair `(a, b)`, the compatible target edges `(x, y)` with
+/// `x in D(a)`, `y in D(b)`, `{x, y}` a target edge, and matching labels. Both
+/// orientations of each query edge are stored so the matcher can pull candidates
+/// from either endpoint.
+#[allow(dead_code)]
+struct ArcMatchDomains {
+    n2: usize,
+    vertex: Vec<bool>,
+    edge: HashMap<(usize, usize), Vec<(usize, usize)>>,
+}
+
+/// ArcMatch stage 2 — build the edge domains from the (reduced) vertex domains.
+#[allow(dead_code)]
+fn arcmatch_edge_domains(
+    query: &Graph,
+    target: &Graph,
+    vertex: Vec<bool>,
+    edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+) -> ArcMatchDomains {
+    let n2 = target.node_count();
+    let mut edge: HashMap<(usize, usize), Vec<(usize, usize)>> = HashMap::new();
+    for qi in 0..query.node_count() {
+        for nb in query.neighbors(NodeId(qi as u32)).iter() {
+            let qj = nb.node.index();
+            if qj <= qi {
+                continue; // visit each undirected query edge once
+            }
+            let e_q = nb.edge;
+            let mut fwd = Vec::new();
+            for x in 0..n2 {
+                if !vertex[qi * n2 + x] {
+                    continue;
+                }
+                for tn in target.neighbors(NodeId(x as u32)).iter() {
+                    let y = tn.node.index();
+                    if vertex[qj * n2 + y] && edge_match(e_q, tn.edge) {
+                        fwd.push((x, y));
+                    }
+                }
+            }
+            let rev: Vec<(usize, usize)> = fwd.iter().map(|&(x, y)| (y, x)).collect();
+            edge.insert((qi, qj), fwd);
+            edge.insert((qj, qi), rev);
+        }
+    }
+    ArcMatchDomains { n2, vertex, edge }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -792,5 +928,44 @@ mod tests {
             r.sort();
             assert_eq!(r, expected, "algorithm {alg:?}");
         }
+    }
+
+    #[rstest]
+    fn test_arcmatch_arc_consistency() {
+        // query: path 0-1-2; target: star, center 0 with leaves 1,2,3.
+        let query = Graph::new(3, &[[0, 1], [1, 2]]);
+        let target = Graph::new(4, &[[0, 1], [0, 2], [0, 3]]);
+        let mut nm: fn(NodeId, NodeId) -> bool = any_node;
+        let mut em: fn(EdgeId, EdgeId) -> bool = any_edge;
+        let mut d = arcmatch_vertex_domains(&query, &target, &mut nm);
+        arcmatch_arc_consistency(&query, &target, &mut d, &mut em);
+        // Degree-1 path endpoints cannot map to the degree-3 center; the degree-2
+        // middle must.
+        assert_eq!(
+            d,
+            vec![
+                false, true, true, true, // D(q0) = {t1, t2, t3}
+                true, false, false, false, // D(q1) = {t0}
+                false, true, true, true, // D(q2) = {t1, t2, t3}
+            ]
+        );
+    }
+
+    #[rstest]
+    fn test_arcmatch_edge_domains() {
+        // query: single edge 0-1; target: path 0-1-2. Degree-1 query domains admit
+        // all target vertices, so the edge domain is every directed target edge.
+        let query = Graph::new(2, &[[0, 1]]);
+        let target = Graph::new(3, &[[0, 1], [1, 2]]);
+        let mut nm: fn(NodeId, NodeId) -> bool = any_node;
+        let mut em: fn(EdgeId, EdgeId) -> bool = any_edge;
+        let vertex = arcmatch_vertex_domains(&query, &target, &mut nm);
+        let domains = arcmatch_edge_domains(&query, &target, vertex, &mut em);
+        let mut fwd = domains.edge[&(0, 1)].clone();
+        fwd.sort();
+        assert_eq!(fwd, vec![(0, 1), (1, 0), (1, 2), (2, 1)]);
+        let mut rev = domains.edge[&(1, 0)].clone();
+        rev.sort();
+        assert_eq!(rev, vec![(0, 1), (1, 0), (1, 2), (2, 1)]);
     }
 }

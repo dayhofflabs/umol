@@ -1493,7 +1493,26 @@ Phases A–E are in scope; F (3D) and G follow.
 
   - **Port order:** `Ullmann` → `Ri` → `ArcMatch` (RI's ordering feeds ArcMatch's variable ordering), fold
     the `Vf2` candidate-gen optimization, then `substructure_matches` (`GraphAndOverlays` first,
-    `Incidence` after).
+    `Incidence` after). **`Ullmann` and `Ri` done** (2026-06-20): both in `subiso` behind the selector,
+    cross-validated against `Vf2` over the 22-case suite.
+
+  - **ArcMatch port (staged).** Reviewed the full algorithm (Bonnici 2024 §3, Algorithms 1–7): initial
+    vertex domains → arc consistency (Alg 1) → edge domains → path-based reduction (Alg 2–5: query-path
+    DFS + target-path DFS over edge domains + `RefineDomains` propagation, with ring all-different) →
+    5-measure most-constrained ordering + peripheral vertices (§3.2) → dynamic-parent backtracking
+    (Alg 6). Largest of the four but fully specified; simple-graph assumption holds for our atom-bond
+    graph. **No reference wrap needed:** path reduction is provably safe (Thm 2–3) ⇒ ArcMatch's match set
+    equals `Vf2`'s, so the existing cross-validation is a complete correctness oracle (over-pruning — the
+    only dangerous failure — returns *fewer* matches and is caught); a one-time dev-only wrap stays a
+    fallback only if a cross-val failure can't be localized. Stages, each cross-validated against `Vf2`:
+    1. vertex domains + arc consistency (Alg 1);
+    2. edge domains (the domain graph);
+    3. path-based reduction (Alg 2–5) — the riskiest piece; **checkpoint here**;
+    4. 5-measure ordering + peripheral handling (§3.2);
+    5. dynamic-parent backtracking (Alg 6); assemble `ArcMatch`, add to the `[Vf2, Ullmann, Ri, ArcMatch]`
+       test loop;
+    6. property-based random-graph cross-validation (`ArcMatch == Vf2`) + criterion benches vs `Vf2`/`Ri`
+       on bond-labeled graphs.
 
 - **Phase F — 3D (deferred).** umol-geometric (greenfield): config constrains local geometry at
   embedding (signed volume / cis-trans side). Substrate = doc 071.
