@@ -91,47 +91,51 @@ impl CosetSpace {
         self.representatives.len()
     }
 
-    /// The canonical representative of σ's coset: the min-rank element of Rσ.
-    pub fn coset_rep(&self, permutation: Permutation) -> Permutation {
-        coset_rep(&self.group, permutation)
+    /// The canonical representative of σ's coset (the min-rank element of Rσ), or
+    /// `None` if σ's degree does not match this space.
+    pub fn coset_rep(&self, permutation: Permutation) -> Option<Permutation> {
+        (permutation.degree() == self.degree()).then(|| coset_rep(&self.group, permutation))
     }
 
-    /// The arrangement number of σ's coset.
-    pub fn index(&self, permutation: Permutation) -> u32 {
-        self.numbering[&self.coset_rep(permutation)]
+    /// The arrangement number of σ's coset, or `None` if σ is not in the parent
+    /// group (wrong degree, or a coset this space does not number).
+    pub fn index(&self, permutation: Permutation) -> Option<u32> {
+        self.numbering.get(&self.coset_rep(permutation)?).copied()
     }
 
-    /// A representative permutation for arrangement number `index`.
-    pub fn unindex(&self, index: u32) -> Permutation {
-        self.representatives[index as usize]
+    /// A representative permutation for arrangement number `index`, or `None` if
+    /// `index >= count`.
+    pub fn unindex(&self, index: u32) -> Option<Permutation> {
+        self.representatives.get(index as usize).copied()
     }
 
-    /// The arrangement number of configuration `index` after the neighbor list
-    /// is relabeled by `relabeling` — where `relabeling(i)` is the position, in
-    /// the original list, of the relabeled list's i-th neighbor. Used to carry a
-    /// parsed `@`-number into umol's incidence order.
-    pub fn reindex(&self, index: u32, relabeling: Permutation) -> u32 {
-        assert!(
-            self.parent.contains(&relabeling),
-            "reindex relabeling is not in the parent group"
-        );
-        self.index(self.unindex(index).compose(relabeling))
+    /// The arrangement number of configuration `index` after the neighbor list is
+    /// relabeled by `relabeling` (`relabeling(i)` is the original-list position of
+    /// the relabeled list's i-th neighbor), or `None` if `index >= count` or
+    /// `relabeling` is not in the parent group. Carries a parsed `@`-number into
+    /// umol's incidence order.
+    pub fn reindex(&self, index: u32, relabeling: Permutation) -> Option<u32> {
+        if !self.parent.contains(&relabeling) {
+            return None;
+        }
+        self.index(self.unindex(index)?.compose(relabeling))
     }
 
-    /// The enantiomeric coset: apply the orientation-reversing generator.
-    pub fn enantiomer(&self, index: u32) -> u32 {
-        self.index(self.unindex(index).compose(self.improper))
+    /// The enantiomeric coset, or `None` if `index >= count`.
+    pub fn enantiomer(&self, index: u32) -> Option<u32> {
+        self.index(self.unindex(index)?.compose(self.improper))
     }
 
     /// Chiral iff the improper generator moves some coset.
     pub fn is_chiral(&self) -> bool {
-        (0..self.count() as u32).any(|i| self.enantiomer(i) != i)
+        (0..self.count() as u32).any(|i| self.enantiomer(i).expect("0..count is in range") != i)
     }
 
     /// Quotient the coset space by extra proper generators (right action on
     /// positions): cosets merge iff related by `⟨generators⟩`. Returns, per
     /// coset, its class's canonical (minimum) index. Shared by stereogenicity
-    /// (Π_proper) and fluxionality (R′ moves).
+    /// (Π_proper) and fluxionality (R′ moves). Every generator must lie in the
+    /// parent group.
     pub fn merge_under(&self, generators: &[Permutation]) -> Vec<u32> {
         fn root(parent: &mut [u32], mut x: u32) -> u32 {
             while parent[x as usize] != x {
@@ -143,9 +147,11 @@ impl CosetSpace {
         let count = self.count() as u32;
         let mut parent: Vec<u32> = (0..count).collect();
         for i in 0..count {
-            let rep = self.unindex(i);
+            let rep = self.unindex(i).expect("0..count is in range");
             for &generator in generators {
-                let j = self.index(rep.compose(generator));
+                let j = self
+                    .index(rep.compose(generator))
+                    .expect("generator stays in the parent group");
                 let (ri, rj) = (root(&mut parent, i), root(&mut parent, j));
                 if ri != rj {
                     parent[ri.max(rj) as usize] = ri.min(rj);
@@ -155,9 +161,10 @@ impl CosetSpace {
         (0..count).map(|i| root(&mut parent, i)).collect()
     }
 
-    /// The observable coset under a fluxional supergroup: the merged class id.
-    pub fn observable_coset(&self, index: u32, fluxional: &[Permutation]) -> u32 {
-        self.merge_under(fluxional)[index as usize]
+    /// The observable coset under a fluxional supergroup (the merged class id), or
+    /// `None` if `index >= count`.
+    pub fn observable_coset(&self, index: u32, fluxional: &[Permutation]) -> Option<u32> {
+        self.merge_under(fluxional).get(index as usize).copied()
     }
 }
 
@@ -361,7 +368,7 @@ mod tests {
         let parent = PermutationGroup::symmetric(degree);
         let space = CosetSpace::new(parent, group, decomposition, Permutation::identity(degree));
         for n in 0..space.count() as u32 {
-            assert_eq!(space.index(space.unindex(n)), n);
+            assert_eq!(space.index(space.unindex(n).unwrap()), Some(n));
         }
     }
 
@@ -376,7 +383,7 @@ mod tests {
             Decomposition::SquarePlanar,
             Permutation::identity(4),
         );
-        assert_eq!(space.index(Permutation::from_image(4, &image)), expected);
+        assert_eq!(space.index(Permutation::from_image(4, &image)), Some(expected));
     }
 
     #[rstest]
@@ -423,7 +430,7 @@ mod tests {
             Decomposition::CanonicalRank,
             Permutation::from_image(4, &[1, 0, 2, 3]),
         );
-        assert_eq!(space.enantiomer(index), expected);
+        assert_eq!(space.enantiomer(index), Some(expected));
     }
 
     #[rstest]
@@ -470,6 +477,6 @@ mod tests {
             Decomposition::CanonicalRank,
             Permutation::identity(4),
         );
-        assert_eq!(space.observable_coset(index, &fluxional), expected);
+        assert_eq!(space.observable_coset(index, &fluxional), Some(expected));
     }
 }

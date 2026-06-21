@@ -306,134 +306,80 @@ mod tests {
         RayKirsch,
     ];
 
-    // Both strategies must return the identical match set.
     const STRATEGIES: [SubstructureMatchAlgorithm; 2] = [GraphAndOverlays, Incidence];
 
-    // Pattern C-C in host C-C-O: matches the C-C edge in both orientations, never the
-    // C-O edge. The same occurrence set under every subgraph-isomorphism algorithm.
     #[rstest]
-    fn test_molecule_ast_substructure_matches() {
-        let host = mol!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
-        let pattern = mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
+    #[case::skeleton(
+        mol!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
+    )]
+    #[case::noncovalent(
+        mol!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]] :noncovalent-bonds [{:a 0 :b 2 :type "Hbd"}]}"#),
+        mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}]}"#),
+        vec![vec![AtomId(0), AtomId(2)], vec![AtomId(2), AtomId(0)]]
+    )]
+    #[case::noncovalent_absent(
+        mol!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}]}"#),
+        vec![]
+    )]
+    #[case::dative(
+        mol!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1"}]}"#),
+        mol!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1"}]}"#),
+        vec![vec![AtomId(0), AtomId(1)]]
+    )]
+    #[case::dative_roles_swapped(
+        mol!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donor 1 :acceptor 0 :type "1"}]}"#),
+        mol!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1"}]}"#),
+        vec![]
+    )]
+    #[case::stereo_chiral(
+        mol!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]}"#),
+        mol!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]}"#),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]]
+    )]
+    #[case::stereo_enantiomer(
+        mol!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th0"}]}"#),
+        mol!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]}"#),
+        vec![]
+    )]
+    #[case::stereo_agnostic_in_r(
+        mol!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]}"#),
+        mol!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]]
+    )]
+    #[case::stereo_agnostic_in_s(
+        mol!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th0"}]}"#),
+        mol!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]]
+    )]
+    #[case::stereo_reframed(
+        mol!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]}"#),
+        mol!(r#"{:atoms ["C #h1" "Br" "Cl" "F"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th0"}]}"#),
+        vec![vec![AtomId(0), AtomId(3), AtomId(2), AtomId(1)]]
+    )]
+    #[case::stereo_reframed_enantiomer(
+        mol!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]}"#),
+        mol!(r#"{:atoms ["C #h1" "Br" "Cl" "F"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]}"#),
+        vec![]
+    )]
+    fn test_molecule_ast_substructure_matches(
+        #[case] host: MoleculeAst,
+        #[case] pattern: MoleculeAst,
+        #[case] expected: Vec<Vec<AtomId>>,
+    ) {
         for strategy in STRATEGIES {
             for subiso in SUBISO_ALGS {
-                let mut maps: Vec<Vec<AtomId>> = pattern
+                let mut occurrences: Vec<Vec<AtomId>> = pattern
                     .substructure_matches(&host, strategy, subiso)
                     .iter()
                     .map(|e| e.host_atoms().to_vec())
                     .collect();
-                maps.sort();
-                assert_eq!(
-                    maps,
-                    vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]],
-                    "{strategy:?}/{subiso:?}"
-                );
+                occurrences.sort();
+                assert_eq!(occurrences, expected, "{strategy:?}/{subiso:?}");
             }
         }
     }
 
-    // Overlay verification: a pattern carrying a hydrogen-bond noncovalent overlay
-    // (its two atoms otherwise unbonded) matches only host atom pairs that actually
-    // carry that overlay, and the embedding records the host overlay id. Absent the
-    // host overlay there is no match.
-    #[rstest]
-    fn test_molecule_ast_substructure_matches_overlay() {
-        // host: C-C-C chain with a hydrogen bond between atoms 0 and 2.
-        let host = mol!(
-            r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]
-                :noncovalent-bonds [{:a 0 :b 2 :type "Hbd"}]}"#
-        );
-        // same skeleton, without the noncovalent overlay.
-        let host_bare = mol!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
-        // pattern: two carbons joined only by a hydrogen bond.
-        let pattern = mol!(
-            r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}]}"#
-        );
-        for strategy in STRATEGIES {
-            for subiso in SUBISO_ALGS {
-                let embeddings = pattern.substructure_matches(&host, strategy, subiso);
-                let mut maps: Vec<Vec<AtomId>> =
-                    embeddings.iter().map(|e| e.host_atoms().to_vec()).collect();
-                maps.sort();
-                assert_eq!(
-                    maps,
-                    vec![vec![AtomId(0), AtomId(2)], vec![AtomId(2), AtomId(0)]],
-                    "{strategy:?}/{subiso:?}"
-                );
-                assert!(
-                    embeddings
-                        .iter()
-                        .all(|e| e.host_noncovalent_bonds().len() == 1),
-                    "{strategy:?}/{subiso:?}"
-                );
-                assert!(
-                    pattern
-                        .substructure_matches(&host_bare, strategy, subiso)
-                        .is_empty(),
-                    "{strategy:?}/{subiso:?}"
-                );
-            }
-        }
-    }
-
-    // Stereo coset post-filter on a tetrahedral center (C with F, Cl, Br, and an
-    // implicit H). A chiral pattern matches the same handedness, rejects the
-    // enantiomer; a stereo-agnostic pattern matches both; a pattern whose ligands
-    // are numbered differently still matches once its coset is reindexed into the
-    // host frame (the transposition of two ligands flips the tetrahedral coset).
-    #[rstest]
-    fn test_molecule_ast_substructure_matches_stereo() {
-        let host_r = mol!(
-            r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
-                :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]}"#
-        );
-        let host_s = mol!(
-            r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
-                :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th0"}]}"#
-        );
-        // same chirality as host_r, declared with the same atom numbering.
-        let pattern_r = host_r.clone();
-        // no stereo overlay -> stereo unconstrained.
-        let pattern_achiral =
-            mol!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#);
-        // ligands renumbered (Br, Cl, F): same chirality as host_r needs the flipped
-        // coset Th0; the enantiomer keeps Th1.
-        let reframed = |coset: &str| {
-            mol!(&format!(
-                r#"{{:atoms ["C #h1" "Br" "Cl" "F"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
-                    :stereo-atoms [{{:site 0 :ligands [1 2 3 [:h 0]] :type "{coset}"}}]}}"#
-            ))
-        };
-        let pattern_reframed = reframed("Th0");
-        let pattern_reframed_enantiomer = reframed("Th1");
-
-        let all = vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)];
-        for strategy in STRATEGIES {
-            for subiso in SUBISO_ALGS {
-                let occ = |p: &MoleculeAst, h: &MoleculeAst| -> Vec<Vec<AtomId>> {
-                    let mut m: Vec<Vec<AtomId>> = p
-                        .substructure_matches(h, strategy, subiso)
-                        .iter()
-                        .map(|e| e.host_atoms().to_vec())
-                        .collect();
-                    m.sort();
-                    m
-                };
-                let tag = format!("{strategy:?}/{subiso:?}");
-                assert_eq!(occ(&pattern_r, &host_r), vec![all.clone()], "chiral match {tag}");
-                assert!(occ(&pattern_r, &host_s).is_empty(), "enantiomer {tag}");
-                assert_eq!(occ(&pattern_achiral, &host_r).len(), 1, "achiral/R {tag}");
-                assert_eq!(occ(&pattern_achiral, &host_s).len(), 1, "achiral/S {tag}");
-                assert_eq!(
-                    occ(&pattern_reframed, &host_r),
-                    vec![vec![AtomId(0), AtomId(3), AtomId(2), AtomId(1)]],
-                    "reindex {tag}"
-                );
-                assert!(
-                    occ(&pattern_reframed_enantiomer, &host_r).is_empty(),
-                    "reindex enantiomer {tag}"
-                );
-            }
-        }
-    }
 }

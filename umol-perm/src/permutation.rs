@@ -10,9 +10,12 @@
 
 use std::fmt;
 
-const MAX_DEGREE: usize = 6;
+/// Largest supported permutation degree (and the backing array width). The current
+/// ceiling is the octahedral coordination (6); raising it to support 7/8-coordinate
+/// geometries is a one-line change here.
+pub(crate) const MAX_DEGREE: usize = 6;
 
-/// A permutation of `0..degree` (`degree ≤ 6`) in one-line notation.
+/// A permutation of `0..degree` (`degree <= MAX_DEGREE`) in one-line notation.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct Permutation {
     image: [u8; MAX_DEGREE],
@@ -59,19 +62,23 @@ impl Permutation {
         self.degree as usize
     }
 
-    /// σ(i).
+    /// σ(i). Panics if `i >= degree`.
     pub fn apply(self, i: usize) -> usize {
+        assert!(i < self.degree(), "apply index out of range");
         self.image[i] as usize
     }
 
-    /// Reorder `items` by σ: `act(items)[i] = items[σ(i)]`.
+    /// Reorder `items` by σ: `act(items)[i] = items[σ(i)]`. Panics unless
+    /// `items.len() >= degree`.
     pub fn act<T: Copy>(self, items: &[T]) -> Vec<T> {
+        assert!(items.len() >= self.degree(), "act slice shorter than degree");
         (0..self.degree()).map(|i| items[self.apply(i)]).collect()
     }
 
-    /// Function composition σ ∘ τ: `compose(τ).apply(i) == σ(τ(i))`.
+    /// Function composition σ ∘ τ: `compose(τ).apply(i) == σ(τ(i))`. Panics on a
+    /// degree mismatch.
     pub fn compose(self, other: Self) -> Self {
-        debug_assert_eq!(self.degree, other.degree);
+        assert_eq!(self.degree, other.degree);
         let mut image = [0u8; MAX_DEGREE];
         for (i, slot) in image.iter_mut().enumerate() {
             *slot = self.image[other.image[i] as usize];
@@ -146,11 +153,14 @@ impl Permutation {
         rank
     }
 
-    /// The `rank`-th permutation of the given degree in Lehmer order.
+    /// The `rank`-th permutation of the given degree in Lehmer order. Panics unless
+    /// `degree <= MAX_DEGREE` and `rank < degree!`.
     pub fn unrank(degree: usize, mut rank: usize) -> Self {
+        assert!(degree <= MAX_DEGREE);
+        let mut factorial: usize = (1..=degree).product();
+        assert!(rank < factorial, "rank out of range");
         let mut available: Vec<u8> = (0..degree as u8).collect();
         let mut image = vec![0u8; degree];
-        let mut factorial: usize = (1..=degree).product();
         for slot in image.iter_mut() {
             factorial /= available.len();
             let idx = rank / factorial;

@@ -315,11 +315,7 @@ impl<'a> StereoAtomView<'a> {
         ligands: impl IntoIterator<Item = StereoLigand>,
     ) -> Option<StereoCosetAst> {
         let permutation = self.permutation_for(ligands)?;
-        Some(coset_apply_permutation(
-            self.coset(),
-            permutation,
-            self.kind(),
-        ))
+        coset_apply_permutation(self.coset(), permutation, self.kind())
     }
 
     /// Site atom followed by the distinct ligand atoms — the relation's atom
@@ -673,11 +669,7 @@ impl<'a> StereoBondView<'a> {
         ligands: impl IntoIterator<Item = StereoLigand>,
     ) -> Option<StereoCosetAst> {
         let permutation = self.permutation_for(ligands)?;
-        Some(coset_apply_permutation(
-            self.coset(),
-            permutation,
-            self.kind(),
-        ))
+        coset_apply_permutation(self.coset(), permutation, self.kind())
     }
 
     /// The site bond's two atoms followed by the distinct ligand atoms — the

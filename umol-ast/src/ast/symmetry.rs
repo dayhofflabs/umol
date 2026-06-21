@@ -142,7 +142,7 @@ impl MoleculeAst {
                 }
             }
         }
-        Some(coset_space.observable_coset(raw, &generators))
+        coset_space.observable_coset(raw, &generators)
     }
 
     /// A generator's orientation = its uniform action on every stereocenter's coset.
@@ -209,7 +209,7 @@ impl MoleculeAst {
 
         if source == target_in_image {
             Ok(Some(Orientation::Proper))
-        } else if source == coset_space.enantiomer(target_in_image) {
+        } else if coset_space.enantiomer(target_in_image) == Some(source) {
             Ok(Some(Orientation::Improper))
         } else {
             Err(())
@@ -501,14 +501,14 @@ fn grade_local(
 ) -> Option<Orientation> {
     let index = coset.as_lit()?;
     let coset_space = space(kind.class_key());
-    let StereoCosetAst::Lit(transported) =
+    let Some(StereoCosetAst::Lit(transported)) =
         coset_apply_permutation(&StereoCosetAst::Lit(index), permutation, kind)
     else {
         return None;
     };
     if transported == index {
         Some(Orientation::Proper)
-    } else if transported == coset_space.enantiomer(index) {
+    } else if coset_space.enantiomer(index) == Some(transported) {
         Some(Orientation::Improper)
     } else {
         None
@@ -570,7 +570,7 @@ fn reexpress(
         }
     }
     match coset_apply_permutation(coset, Permutation::between(stored, requested), kind) {
-        StereoCosetAst::Lit(index) => Some(index),
+        Some(StereoCosetAst::Lit(index)) => Some(index),
         _ => None,
     }
 }

@@ -79,7 +79,9 @@ impl StereoKind {
     /// Act on coset index `index` by `permutation`, through the class's coset algebra.
     #[allow(unused)]
     fn act(self, index: u32, permutation: Permutation) -> u32 {
-        space(self.class_key()).reindex(index, permutation)
+        space(self.class_key())
+            .reindex(index, permutation)
+            .expect("act: valid coset index and relabeling")
     }
 }
 
@@ -526,8 +528,11 @@ pub(crate) fn canon_coset(
                     };
                     return Ok(StereoCosetAst::term(term));
                 }
-                StereoTerm::Lit(i) => BTreeSet::from([s.reindex(*i, g)]),
-                StereoTerm::LitSet(values) => values.iter().map(|i| s.reindex(*i, g)).collect(),
+                StereoTerm::Lit(i) => BTreeSet::from([s.reindex(*i, g).ok_or(Contradiction)?]),
+                StereoTerm::LitSet(values) => values
+                    .iter()
+                    .map(|i| s.reindex(*i, g).ok_or(Contradiction))
+                    .collect::<Result<_, _>>()?,
                 StereoTerm::Swap(_) | StereoTerm::Mirror(_) | StereoTerm::Apply(..) => {
                     unreachable!("compose_term returns a base leaf")
                 }
@@ -615,19 +620,23 @@ pub(crate) fn coset_apply_permutation(
     coset: &StereoCosetAst,
     permutation: Permutation,
     kind: StereoKind,
-) -> StereoCosetAst {
+) -> Option<StereoCosetAst> {
     let s = space(kind.class_key());
     match coset {
-        StereoCosetAst::Undetermined => StereoCosetAst::Undetermined,
-        StereoCosetAst::Lit(i) => StereoCosetAst::Lit(s.reindex(*i, permutation)),
-        StereoCosetAst::LitSet(set) => {
-            StereoCosetAst::LitSet(set.iter().map(|i| s.reindex(*i, permutation)).collect())
-        }
-        StereoCosetAst::Term(t) => canon_coset(
-            StereoCosetAst::term(StereoTerm::apply((**t).clone(), permutation)),
-            kind,
-        )
-        .unwrap_or(StereoCosetAst::Undetermined),
+        StereoCosetAst::Undetermined => Some(StereoCosetAst::Undetermined),
+        StereoCosetAst::Lit(i) => Some(StereoCosetAst::Lit(s.reindex(*i, permutation)?)),
+        StereoCosetAst::LitSet(set) => Some(StereoCosetAst::LitSet(
+            set.iter()
+                .map(|i| s.reindex(*i, permutation))
+                .collect::<Option<_>>()?,
+        )),
+        StereoCosetAst::Term(t) => Some(
+            canon_coset(
+                StereoCosetAst::term(StereoTerm::apply((**t).clone(), permutation)),
+                kind,
+            )
+            .unwrap_or(StereoCosetAst::Undetermined),
+        ),
     }
 }
 
@@ -1034,7 +1043,7 @@ mod tests {
     #[case::lit(StereoCosetAst::Lit(0), Permutation::from_image(4, &[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
     #[case::undetermined(StereoCosetAst::Undetermined, Permutation::from_image(4, &[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCosetAst::Undetermined)]
     fn test_coset_apply_permutation(#[case] coset: StereoCosetAst, #[case] permutation: Permutation, #[case] kind: StereoKind, #[case] expected: StereoCosetAst) {
-        assert_eq!(coset_apply_permutation(&coset, permutation, kind), expected);
+        assert_eq!(coset_apply_permutation(&coset, permutation, kind), Some(expected));
     }
 
     #[rstest]

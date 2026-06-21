@@ -14,5 +14,7 @@ mod lattice;
 mod molecule;
 #[path = "property/stereo.rs"]
 mod stereo;
+#[path = "property/substructure.rs"]
+mod substructure;
 #[path = "property/value.rs"]
 mod value;

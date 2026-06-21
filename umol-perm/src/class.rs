@@ -11,7 +11,7 @@ use std::{fmt, ptr};
 
 use crate::coset::{CosetSpace, Decomposition};
 use crate::group::PermutationGroup;
-use crate::permutation::Permutation;
+use crate::permutation::{Permutation, MAX_DEGREE};
 
 /// A stereo class — either a named permutation-group family (with its degree)
 /// or a coordination geometry whose proper-rotation group fixes the cosets.
@@ -172,6 +172,9 @@ impl FromStr for ClassKey {
         let n: u8 = degree
             .parse()
             .map_err(|_| format!("bad degree in class key: {s}"))?;
+        if n as usize > MAX_DEGREE {
+            return Err(format!("degree {n} exceeds MAX_DEGREE ({MAX_DEGREE}): {s}"));
+        }
         match prefix {
             "Sym" => Ok(ClassKey::Symmetric(n)),
             "Alt" => Ok(ClassKey::Alternating(n)),
@@ -205,7 +208,20 @@ pub struct Coset {
 }
 
 impl Coset {
+    /// A configuration index into `key`'s coset space. Panics if `index >= count`;
+    /// use [`new_unchecked`](Self::new_unchecked) to skip the check.
     pub fn new(key: ClassKey, index: u32) -> Self {
+        let space = space(key);
+        assert!(
+            (index as usize) < space.count(),
+            "coset index out of range for the class"
+        );
+        Self { space, index }
+    }
+
+    /// Like [`new`](Self::new) without the range check; the caller guarantees
+    /// `index < count`.
+    pub fn new_unchecked(key: ClassKey, index: u32) -> Self {
         Self {
             space: space(key),
             index,
@@ -280,7 +296,7 @@ mod tests {
     fn test_space_index_unindex(#[case] key: ClassKey) {
         let space = space(key);
         for n in 0..space.count() as u32 {
-            assert_eq!(space.index(space.unindex(n)), n);
+            assert_eq!(space.index(space.unindex(n).unwrap()), Some(n));
         }
     }
 
@@ -303,7 +319,7 @@ mod tests {
         #[case] to_index: u32,
     ) {
         let relabeling = Permutation::between(&order, &relabeled);
-        assert_eq!(space(key).reindex(from_index, relabeling), to_index);
+        assert_eq!(space(key).reindex(from_index, relabeling), Some(to_index));
     }
 
     #[rstest]

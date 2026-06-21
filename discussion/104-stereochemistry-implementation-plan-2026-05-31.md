@@ -1444,7 +1444,7 @@ Phases A–E are in scope; F (3D) and G follow.
 
   - **Subgraph isomorphism** (`SubgraphIsomorphismAlgorithm`, `umol-graph-core` `subiso`). Verified by
     reading the local references (`materials/codes/{rdkit,cdk,mx,vf2lib}`): RDKit, CDK `VentoFoggia`, mx,
-    and vf2lib are all VF2 (Cordella 2004) or weaker — the "variants" are implementation knobs (candidate
+    an vf2lib are all VF2 (Cordella 2004) or weaker — the "variants" are implementation knobs (candidate
     generation, look-ahead, node ordering), not distinct algorithms (mx has no terminal sets / look-ahead
     = Ullmann-grade). So one `Vf2` plus genuinely distinct approaches:
 

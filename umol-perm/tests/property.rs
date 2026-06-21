@@ -123,25 +123,25 @@ proptest! {
     #[test]
     fn test_coset_space_index_round_trip((key, i) in coset_index()) {
         let s = space(key);
-        prop_assert_eq!(s.index(s.unindex(i)), i);
+        prop_assert_eq!(s.index(s.unindex(i).unwrap()), Some(i));
     }
 
     #[test]
     fn test_coset_space_enantiomer_involution((key, i) in coset_index()) {
         let s = space(key);
-        prop_assert_eq!(s.enantiomer(s.enantiomer(i)), i);
+        prop_assert_eq!(s.enantiomer(s.enantiomer(i).unwrap()), Some(i));
     }
 
     #[test]
     fn test_coset_space_reindex_identity((key, i) in coset_index()) {
         let s = space(key);
-        prop_assert_eq!(s.reindex(i, Permutation::identity(s.degree())), i);
+        prop_assert_eq!(s.reindex(i, Permutation::identity(s.degree())), Some(i));
     }
 
     #[test]
     fn test_coset_space_observable_coset_no_fluxional((key, i) in coset_index()) {
         let s = space(key);
-        prop_assert_eq!(s.observable_coset(i, &[]), i);
+        prop_assert_eq!(s.observable_coset(i, &[]), Some(i));
     }
 
     #[test]

@@ -315,7 +315,9 @@ fn raise_tetrahedral_stereo(
             (Permutation::identity(4), source_coset)
         }
     };
-    let coset = space(ClassKey::Tetrahedral).reindex(source_coset as u32, relabeling);
+    let coset = space(ClassKey::Tetrahedral)
+        .reindex(source_coset as u32, relabeling)
+        .expect("tetrahedral coset reindex");
     Ok(Some(AtomConstraint::TetrahedralStereo(
         TetrahedralStereoAst::stereo(StereoCosetAst::Lit(coset)),
     )))
@@ -359,7 +361,9 @@ fn raise_cis_trans_stereo(
         side_2.first_ligand,
         side_2.second_ligand,
     ];
-    let coset = space(ClassKey::CisTrans).index(Permutation::between(&source, &target));
+    let coset = space(ClassKey::CisTrans)
+        .index(Permutation::between(&source, &target))
+        .expect("cis/trans coset index");
     Ok(Some(BondConstraint::CisTransStereo(
         CisTransStereoAst::stereo(StereoCosetAst::Lit(coset)),
     )))
