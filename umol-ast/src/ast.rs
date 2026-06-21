@@ -24,6 +24,7 @@ pub(crate) mod remap;
 pub(crate) mod ring;
 pub(crate) mod spin;
 pub(crate) mod stereo;
+pub(crate) mod substructure;
 pub(crate) mod symmetry;
 pub(crate) mod traits;
 pub(crate) mod validate;
@@ -83,6 +84,7 @@ pub use stereo::{
     CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfiguration, StereoConfigurationAst,
     StereoCosetAst, StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoAst, Topicity,
 };
+pub use substructure::SubstructureMatchAlgorithm;
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{
     AsLit, Canonical, Canonicalize, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst,

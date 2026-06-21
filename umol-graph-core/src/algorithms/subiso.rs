@@ -1224,6 +1224,8 @@ fn arcmatch_verify_path_dfs(
     let Some(pairs) = domains.edge.get(&(uq, vq)) else {
         return false;
     };
+    // TODO(perf): this clone (per DFS step, scales with target size) only sidesteps a
+    // shared reborrow across the recursive call; removable. Defer to the stage-E benches.
     let pairs = pairs.clone();
     for (ut, vt) in pairs {
         if ut != current {

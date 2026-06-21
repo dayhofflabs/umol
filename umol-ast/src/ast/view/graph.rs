@@ -128,6 +128,9 @@ impl<'a> GraphView<'a> {
         )
     }
 
+    /// Occurrences of `query` within `self` (the host), one query→host `AtomId`
+    /// vector per occurrence. `atom_match`/`bond_match` receive `(query, host)` —
+    /// i.e. `(pattern, target)`, matching the `pattern.matches(target)` convention.
     pub fn subgraph_isomorphisms(
         &self,
         query: &GraphView<'_>,
@@ -138,8 +141,12 @@ impl<'a> GraphView<'a> {
         self.graph
             .subgraph_isomorphisms(
                 query.graph,
-                &mut |tn, qn| atom_match(AtomId::from(tn), AtomId::from(qn)),
-                &mut |te, qe| bond_match(BondId::from(te), BondId::from(qe)),
+                &mut |query_node, host_node| {
+                    atom_match(AtomId::from(query_node), AtomId::from(host_node))
+                },
+                &mut |query_edge, host_edge| {
+                    bond_match(BondId::from(query_edge), BondId::from(host_edge))
+                },
                 alg,
             )
             .into_iter()
@@ -147,6 +154,8 @@ impl<'a> GraphView<'a> {
             .collect()
     }
 
+    /// Like [`subgraph_isomorphisms`](Self::subgraph_isomorphisms) with query atom
+    /// `anchor.0` pinned to host atom `anchor.1`. Closures receive `(query, host)`.
     pub fn subgraph_isomorphisms_at(
         &self,
         query: &GraphView<'_>,
@@ -159,8 +168,12 @@ impl<'a> GraphView<'a> {
             .subgraph_isomorphisms_at(
                 query.graph,
                 (NodeId::from(anchor.0), NodeId::from(anchor.1)),
-                &mut |tn, qn| atom_match(AtomId::from(tn), AtomId::from(qn)),
-                &mut |te, qe| bond_match(BondId::from(te), BondId::from(qe)),
+                &mut |query_node, host_node| {
+                    atom_match(AtomId::from(query_node), AtomId::from(host_node))
+                },
+                &mut |query_edge, host_edge| {
+                    bond_match(BondId::from(query_edge), BondId::from(host_edge))
+                },
                 alg,
             )
             .into_iter()

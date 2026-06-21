@@ -1470,7 +1470,16 @@ Phases A–E are in scope; F (3D) and G follow.
     match set.
 
   - **Substructure matching** (`SubstructureMatchAlgorithm`, `MoleculeAst::substructure_matches`), each
-    strategy composing over a chosen subiso algorithm:
+    strategy composing over a chosen subiso algorithm. API (settled 2026-06-20): receiver is the **pattern**
+    (`pattern.substructure_matches(host, strategy, subiso) -> Vec<MoleculeEmbedding>`), paralleling
+    `pattern.matches(target)`; `strategy` and `subiso` are independent params; result borrows the host. Host
+    match-targets fold derived topological constraints into each host atom/bond (`with_constraints(derive_
+    constraints())`, last-wins), precomputed once per call. Footgun fixed: `GraphView::subgraph_isomorphisms`
+    closures are `(query, host)` order (already the behavior; the wrapper's internal names were swapped and
+    are corrected + documented). Staged like ArcMatch: **(1) skeleton `GraphAndOverlays`** [done 2026-06-20 —
+    `ast/substructure.rs`, `MoleculeEmbedding::from_correspondence`, cross-validated across all six subiso
+    algs]; (2) overlay post-verification; (3) stereo coset post-filter (E3/E4); (4) `Incidence`
+    (`unimplemented!` placeholder until then); (5) E6 validation.
     - `GraphAndOverlays` — atom-bond subiso with `AtomAst`/`BondAst::matches` predicates (query is the
       general side; host folds in derived topological constraints), then per-overlay post-verification
       against the atom correspondence: dative/noncovalent via the views' `connecting`; aromatic/multicenter
@@ -1542,6 +1551,14 @@ Phases A–E are in scope; F (3D) and G follow.
       `umol-io/tests/sdf_parsing/data/molecule/bcl/c60_fullerene.sdf` (V2000: counts on line 4 = `60 90`, 60
       atom lines 5-64, 90 bond lines 65-154 whose first two fields are 1-based atom ids):
       `awk 'NR>=65 && NR<=154 {print $1-1", "$2-1}'`. Inline the result in the bench file when written.
+    - Bench scenarios to cover (goal: a *balanced* matcher across all four, not screening-only — screening
+      is a secondary user interest, not the target): (1) one large molecule, many smallish queries;
+      (2) one query, many medium-sized molecules; (3) one large molecule vs a near-equal-size query (one
+      atom smaller — the hard near-isomorphism regime); (4) highly symmetric / self-similar (dendrimeric)
+      structures. Report per-variant (`Vf2`, `Ullmann`, `Ri`, `ArcMatch`, `Vf2Rdkit`, `RayKirsch`) so no
+      single use case is over-fit. Allocation-reuse / prepared-matcher decisions are driven by these, not
+      assumed. One known deferred micro-alloc to revisit here: the `pairs.clone()` in
+      `arcmatch_verify_path_dfs` (per-DFS-step, scales with target size; see the `TODO(perf)` there).
 
 - **Phase F — 3D (deferred).** umol-geometric (greenfield): config constrains local geometry at
   embedding (signed volume / cis-trans side). Substrate = doc 071.

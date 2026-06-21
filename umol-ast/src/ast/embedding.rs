@@ -5,6 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use umol_graph_core::NodeId;
+
 use super::edit::{AtomRef, BondRef, Edit};
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -52,6 +54,49 @@ impl<'a> MoleculeEmbedding<'a> {
             sub_atoms,
             ast,
         }
+    }
+
+    /// Build an embedding from a substructure-match atom correspondence:
+    /// `atom_map[sub_atom] = host_atom` (the query→host vector from subgraph
+    /// isomorphism). Bonds are recovered from the host topology; overlay maps are
+    /// left empty (populated by the overlay-aware matching stages).
+    pub(crate) fn from_correspondence(
+        host: &'a MoleculeAst,
+        pattern: &MoleculeAst,
+        atom_map: Vec<AtomId>,
+    ) -> Self {
+        let sub_atoms = atom_map
+            .iter()
+            .enumerate()
+            .map(|(sub, &host_atom)| (host_atom, AtomId(sub as u32)))
+            .collect();
+        let host_bonds = pattern
+            .bonds()
+            .iter()
+            .map(|bond| {
+                let [a, b] = bond.atom_ids();
+                let edge = host
+                    .raw_graph()
+                    .find_edge(
+                        NodeId::from(atom_map[a.index()]),
+                        NodeId::from(atom_map[b.index()]),
+                    )
+                    .expect("a matched query bond maps to a host bond");
+                BondId::from(edge)
+            })
+            .collect();
+        Self::new(
+            atom_map,
+            host_bonds,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            sub_atoms,
+            host,
+        )
     }
 
     pub fn ast(&self) -> &'a MoleculeAst {
