@@ -2,6 +2,7 @@
 //! induced-subgraph reverse check). Multiple named algorithms behind a selector;
 //! all return the same match set (a query→target index vector per occurrence).
 
+use std::cmp::Reverse;
 use std::collections::HashMap;
 
 use crate::graph::{EdgeId, Graph, NodeId};
@@ -1015,8 +1016,111 @@ fn arcmatch_drop_unsupported(domains: &mut ArcMatchDomains, n2: usize, a: usize,
     changed
 }
 
+/// ArcMatch stage 4 — query-vertex ordering (Bonnici 2024 §3.2). Singleton-domain
+/// vertices first, then a greedy neighbor-expansion driven by five measures, then
+/// degree-1 ("peripheral", §3.2.1) vertices last (largest domain first). Each step
+/// maximizes, lexicographically, the candidate's count of neighbors that are
+/// already ordered, that border the ordered set, and that are unrelated to it, then
+/// its degree, then minimizes its domain size, then its id.
+#[allow(dead_code)]
+fn arcmatch_variable_ordering(query: &Graph, domains: &ArcMatchDomains) -> Vec<usize> {
+    let n = query.node_count();
+    let n2 = domains.n2;
+    let domain_size: Vec<usize> = (0..n)
+        .map(|v| (0..n2).filter(|&t| domains.vertex[v * n2 + t]).count())
+        .collect();
+    let singleton: Vec<bool> = domain_size.iter().map(|&s| s == 1).collect();
+    let peripheral: Vec<bool> = (0..n)
+        .map(|v| query.neighbors(NodeId(v as u32)).len() == 1 && !singleton[v])
+        .collect();
+
+    let mut order = Vec::with_capacity(n);
+    let mut placed = vec![false; n];
+
+    arcmatch_order_phase(query, &domain_size, &mut order, &mut placed, |v| singleton[v]);
+    arcmatch_order_phase(query, &domain_size, &mut order, &mut placed, |v| {
+        !singleton[v] && !peripheral[v]
+    });
+
+    let mut peris: Vec<usize> = (0..n).filter(|&v| peripheral[v] && !placed[v]).collect();
+    peris.sort_by(|&a, &b| domain_size[b].cmp(&domain_size[a]).then(a.cmp(&b)));
+    order.extend(peris);
+    order
+}
+
+/// Greedy ordering of the `in_phase` vertices: repeatedly append the best candidate
+/// adjacent to the already-ordered set (or, when none, the best remaining vertex —
+/// a new component root).
+#[allow(dead_code)]
+fn arcmatch_order_phase(
+    query: &Graph,
+    domain_size: &[usize],
+    order: &mut Vec<usize>,
+    placed: &mut [bool],
+    in_phase: impl Fn(usize) -> bool,
+) {
+    let n = query.node_count();
+    loop {
+        let remaining: Vec<usize> = (0..n).filter(|&v| in_phase(v) && !placed[v]).collect();
+        if remaining.is_empty() {
+            break;
+        }
+        let frontier: Vec<usize> = remaining
+            .iter()
+            .copied()
+            .filter(|&v| {
+                query
+                    .neighbors(NodeId(v as u32))
+                    .iter()
+                    .any(|nb| placed[nb.node.index()])
+            })
+            .collect();
+        let candidates = if frontier.is_empty() { &remaining } else { &frontier };
+        let best = *candidates
+            .iter()
+            .min_by_key(|&&v| {
+                let (n1, n2, n3) = arcmatch_neighbor_split(query, placed, v);
+                (
+                    Reverse(n1),
+                    Reverse(n2),
+                    Reverse(n3),
+                    Reverse(query.neighbors(NodeId(v as u32)).len()),
+                    domain_size[v],
+                    v,
+                )
+            })
+            .expect("non-empty candidates");
+        order.push(best);
+        placed[best] = true;
+    }
+}
+
+/// Split `v`'s neighbors into counts of (already-ordered, bordering-the-ordered-set,
+/// unrelated) vertices — the first three ordering measures.
+#[allow(dead_code)]
+fn arcmatch_neighbor_split(query: &Graph, placed: &[bool], v: usize) -> (usize, usize, usize) {
+    let (mut ordered, mut bordering, mut unrelated) = (0, 0, 0);
+    for nb in query.neighbors(NodeId(v as u32)).iter() {
+        let u = nb.node.index();
+        if placed[u] {
+            ordered += 1;
+        } else if query
+            .neighbors(NodeId(u as u32))
+            .iter()
+            .any(|w| placed[w.node.index()])
+        {
+            bordering += 1;
+        } else {
+            unrelated += 1;
+        }
+    }
+    (ordered, bordering, unrelated)
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -1203,5 +1307,38 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[rstest]
+    #[case::path_uniform(
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3]]),
+        ArcMatchDomains { n2: 4, vertex: vec![true; 16], edge: HashMap::new() },
+        vec![1, 2, 0, 3]
+    )]
+    #[case::star_center_first(
+        Graph::new(4, &[[0, 1], [0, 2], [0, 3]]),
+        ArcMatchDomains { n2: 4, vertex: vec![true; 16], edge: HashMap::new() },
+        vec![0, 1, 2, 3]
+    )]
+    #[case::singleton_tail_first(
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3]]),
+        ArcMatchDomains {
+            n2: 4,
+            vertex: vec![
+                true, true, true, true,
+                true, true, true, true,
+                true, true, true, true,
+                true, false, false, false,
+            ],
+            edge: HashMap::new(),
+        },
+        vec![3, 2, 1, 0]
+    )]
+    fn test_arcmatch_variable_ordering(
+        #[case] query: Graph,
+        #[case] domains: ArcMatchDomains,
+        #[case] expected: Vec<usize>,
+    ) {
+        assert_eq!(arcmatch_variable_ordering(&query, &domains), expected);
     }
 }

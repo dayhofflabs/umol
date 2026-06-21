@@ -1505,10 +1505,12 @@ Phases A–E are in scope; F (3D) and G follow.
     equals `Vf2`'s, so the existing cross-validation is a complete correctness oracle (over-pruning — the
     only dangerous failure — returns *fewer* matches and is caught); a one-time dev-only wrap stays a
     fallback only if a cross-val failure can't be localized. Stages, each cross-validated against `Vf2`:
-    1. vertex domains + arc consistency (Alg 1);
-    2. edge domains (the domain graph);
-    3. path-based reduction (Alg 2–5) — the riskiest piece; **checkpoint here**;
-    4. 5-measure ordering + peripheral handling (§3.2);
+    1. vertex domains + arc consistency (Alg 1); **[done]**
+    2. edge domains (the domain graph); **[done]**
+    3. path-based reduction (Alg 2–5) — the riskiest piece; **checkpoint here**; **[done — safety test asserts
+       every `Vf2` match survives the reduction over path/triangle/naphthalene/K4]**
+    4. 5-measure ordering + peripheral handling (§3.2); **[done — `arcmatch_variable_ordering`: singletons
+       first, greedy 5-measure expansion, degree-1 peripherals last]**
     5. dynamic-parent backtracking (Alg 6); assemble `ArcMatch`, add to the `[Vf2, Ullmann, Ri, ArcMatch]`
        test loop;
     6. property-based random-graph cross-validation (`ArcMatch == Vf2`) + criterion benches vs `Vf2`/`Ri`
