@@ -125,3 +125,4 @@
 | [121-linux-profiling-setup-2026-06-21.md](121-linux-profiling-setup-2026-06-21.md)                               | Active        | 2026-06-21   |
 | [122-ast-read-path-references-2026-06-21.md](122-ast-read-path-references-2026-06-21.md)                         | Active        | 2026-06-21   |
 | [123-ast-allocation-survey-2026-06-21.md](123-ast-allocation-survey-2026-06-21.md)                               | Active        | 2026-06-21   |
+| [124-tier1-structural-wellformedness-2026-06-21.md](124-tier1-structural-wellformedness-2026-06-21.md)           | Active        | 2026-06-21   |

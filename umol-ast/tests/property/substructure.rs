@@ -1,10 +1,11 @@
 use proptest::prelude::*;
 use umol_ast::ast::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
-use umol_ast::ast::{AtomId, MoleculeAst, SubstructureMatchAlgorithm};
+use umol_ast::ast::{AtomId, EntityStructureValidator, MoleculeAst, SubstructureMatchAlgorithm};
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
 use umol_graph_core::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
+use umol_shared::solution::Solution;
 
 use crate::strategies::molecule_ast_strategy;
 
@@ -17,6 +18,16 @@ const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [
     RayKirsch,
 ];
 const STRATEGIES: [SubstructureMatchAlgorithm; 2] = [GraphAndOverlays, Incidence];
+
+/// Cross-strategy / cross-algorithm agreement is asserted only for structurally
+/// well-formed molecules; the generator may emit tier-1-invalid ones (e.g. parallel
+/// relations) on which the strategies legitimately differ.
+fn is_well_formed(molecule: &MoleculeAst) -> bool {
+    !matches!(
+        EntityStructureValidator.validate(molecule).unwrap(),
+        Solution::Contradictory(_)
+    )
+}
 
 fn sorted_matches(
     pattern: &MoleculeAst,
@@ -36,8 +47,8 @@ fn sorted_matches(
 proptest! {
     #[test]
     fn test_substructure_cross_validation(
-        host in molecule_ast_strategy(),
-        pattern in molecule_ast_strategy(),
+        host in molecule_ast_strategy().prop_filter("well-formed", is_well_formed),
+        pattern in molecule_ast_strategy().prop_filter("well-formed", is_well_formed),
     ) {
         let reference = sorted_matches(&pattern, &host, GraphAndOverlays, Vf2);
         for strategy in STRATEGIES {
@@ -54,6 +65,7 @@ proptest! {
     #[test]
     fn test_substructure_cross_validation_planted(
         (host, subset) in molecule_ast_strategy()
+            .prop_filter("well-formed", is_well_formed)
             .prop_filter("non-empty", |m| m.atoms().count() > 0)
             .prop_flat_map(|m| {
                 let n = m.atoms().count();

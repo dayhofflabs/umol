@@ -498,13 +498,19 @@ fn read_dative_bond_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<DativeBondEntryInput, EdnError> {
     let mut id = None;
-    let mut donor = None;
+    let mut donors = None;
     let mut acceptor = None;
     let mut bond = None;
     read_map(de, |de, key| {
         match key {
             "id" => id = Some(de.read_keyword_name()?.into_owned()),
-            "donor" => donor = Some(read_atom_ref(de)?),
+            // A single donor renders as a scalar ref, multiple donors as a vector.
+            "donor" => {
+                donors = Some(match de.peek_byte()?.ok_or_else(eof_err)? {
+                    b'[' => read_vec(de, read_atom_ref)?,
+                    _ => vec![read_atom_ref(de)?],
+                })
+            }
             "acceptor" => acceptor = Some(read_atom_ref(de)?),
             "type" => bond = Some(read_dative_dsl(de)?),
             _ => de.read_skip_value()?,
@@ -513,7 +519,7 @@ fn read_dative_bond_entry(
     })?;
     Ok(DativeBondEntryInput {
         id,
-        donor: donor.ok_or_else(|| missing("donor", "dative-bond-entry"))?,
+        donors: donors.ok_or_else(|| missing("donor", "dative-bond-entry"))?,
         acceptor: acceptor.ok_or_else(|| missing("acceptor", "dative-bond-entry"))?,
         bond: bond.ok_or_else(|| missing("type", "dative-bond-entry"))?,
     })
@@ -1186,7 +1192,7 @@ pub(crate) struct BondEntryInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DativeBondEntryInput {
     pub(crate) id: Option<String>,
-    pub(crate) donor: AtomRef,
+    pub(crate) donors: Vec<AtomRef>,
     pub(crate) acceptor: AtomRef,
     pub(crate) bond: DativeBondDsl,
 }
@@ -1329,9 +1335,13 @@ impl MoleculeInput {
                 }
                 metadata.set_dative_bond_id(DativeBondId(pos as u32), id);
             }
-            let donor = entry.donor.resolve(atom_count, &atom_id_to_idx)?;
+            let donors = entry
+                .donors
+                .into_iter()
+                .map(|d| d.resolve(atom_count, &atom_id_to_idx))
+                .collect::<Result<Vec<_>, _>>()?;
             let acceptor = entry.acceptor.resolve(atom_count, &atom_id_to_idx)?;
-            dative_list.push((vec![donor], acceptor, entry.bond.0));
+            dative_list.push((donors, acceptor, entry.bond.0));
         }
 
         // Aromatic systems.
@@ -1622,9 +1632,14 @@ fn parse_bond_entry(edn: &Edn<'_>) -> Result<BondEntryInput, DeError> {
 
 fn parse_dative_bond_entry(edn: &Edn<'_>) -> Result<DativeBondEntryInput, DeError> {
     let m = expect_map(edn, "dative-bond-entry")?;
+    let donor_edn = required_key(m, "donor", "dative-bond-entry")?;
+    let donors = match donor_edn {
+        Edn::Vector(_) => parse_vec(donor_edn, ":donor", |e| AtomRef::from_edn(e))?,
+        other => vec![AtomRef::from_edn(other)?],
+    };
     Ok(DativeBondEntryInput {
         id: optional_id(m)?,
-        donor: AtomRef::from_edn(required_key(m, "donor", "dative-bond-entry")?)?,
+        donors,
         acceptor: AtomRef::from_edn(required_key(m, "acceptor", "dative-bond-entry")?)?,
         bond: DativeBondDsl::from_edn(required_key(m, "type", "dative-bond-entry")?)?,
     })
