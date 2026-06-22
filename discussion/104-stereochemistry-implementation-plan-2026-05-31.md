@@ -1598,6 +1598,24 @@ Phases A–E are in scope; F (3D) and G follow.
     (field-wise predicate / search+`neighbors` / per-call buffers) with no dominant hotspot — the gross waste
     is gone.
 
+    **Read-path refactor re-measure (2026-06-21).** After the constraint read-path work — doc 122 (accessors
+    → `Option<&>`, pattern-driven `AtomConstraints`/`BondConstraints::matches`) and doc 124 (tier-1 integrity
+    validation) — re-ran the bench to check for regression. `Vf2Rdkit` GraphAndOverlays median ms/pass:
+    branched **41.4**, phenol **73.5**, bicyclic **40.1** (RDKit 51.1 / 85.4 / 52.1) — identical to
+    Host-borrow within noise (<1%), still ahead of RDKit. Expected: these patterns are unconstrained, so
+    `matches` short-circuits before the changed constraint path, which is therefore not on the measured path
+    (and is provably ≤ the old accessor-driven path, lattice-law-verified). Full GraphAndOverlays sweep this
+    run (median ms/pass; **bold** = umol best per row):
+
+    | pattern  | Vf2   | Ullmann | Ri   | ArcMatch | Vf2Rdkit | RayKirsch | RDKit |
+    | -------- | ----- | ------- | ---- | -------- | -------- | --------- | ----- |
+    | branched | 91.8  | 69.2    | 54.2 | 99.5     | 41.4     | **40.3**  | 51.1  |
+    | phenol   | 163.4 | 98.2    | 78.1 | 201.0    | 73.5     | **58.3**  | 85.4  |
+    | bicyclic | 93.4  | 141.2   | 50.7 | 353.6    | **40.1** | 53.4      | 52.1  |
+
+    `Vf2Rdkit` (the RDKit-equivalent) is the fair head-to-head; `RayKirsch` edges it out on branched/phenol.
+    The `Incidence` strategy is omitted (Levi-graph path, several× slower, not the default).
+
   - **Port order:** `Ullmann` → `Ri` → `ArcMatch` (RI's ordering feeds ArcMatch's variable ordering), fold
     the `Vf2` candidate-gen optimization, then `substructure_matches` (`GraphAndOverlays` first,
     `Incidence` after). **`Ullmann` and `Ri` done** (2026-06-20): both in `subiso` behind the selector,

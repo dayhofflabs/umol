@@ -3,7 +3,27 @@ source: umol-graph/tests/resolution/mod.rs
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
-  :atom-typing {:error "resolution underdetermined" :success false}
+  :atom-typing {
+    :output {
+      :atoms [
+        "Cl#n3#v"
+        "C#h#v3"
+        "C#h2#v2"
+        "C#h2#v2"
+        "C#h2#v2"
+        "C#h2#v2"
+        "C#h#v3"
+        "Cl#n3#v"]
+      :bonds [
+        [0 1 :single]
+        [1 6 :single]
+        [1 2 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 7 :single]]}
+    :success true}
   :counts {
     :output {
       :atoms [

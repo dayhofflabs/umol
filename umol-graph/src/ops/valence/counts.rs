@@ -7,7 +7,7 @@
 use thiserror::Error;
 use umol_ast::ast::{
     aromatic_increment, AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraints,
-    AtomId, AtomView, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
+    AtomId, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
 };
 use umol_shared::element::Element;
 use umol_shared::solution::Solution;
@@ -118,7 +118,12 @@ impl<'a> CountsValence<'a> {
     /// `Underdetermined` if the atom is not ground. Reuses `derive_fields`.
     /// Unlike `resolve_atom` it does not skip ground atoms — that skip is why a
     /// table-violating ground atom otherwise passes resolution unchecked.
-    pub fn conforms_atom(&self, atom: &AtomView<'_>) -> Solution<(), CountsMismatch> {
+    pub fn conforms_molecule_atom(
+        &self,
+        ast: &MoleculeAst,
+        atom_id: AtomId,
+    ) -> Solution<(), CountsMismatch> {
+        let atom = ast.atom(atom_id);
         if !atom.is_ground() {
             return Solution::Underdetermined(());
         }
@@ -480,6 +485,6 @@ mod tests {
             Vec::new(),
             Constraints::default(),
         );
-        assert_eq!(resolver.conforms_atom(&molecule.atom(AtomId(0))), expected);
+        assert_eq!(resolver.conforms_molecule_atom(&molecule, AtomId(0)), expected);
     }
 }

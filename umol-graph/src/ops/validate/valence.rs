@@ -40,13 +40,13 @@ impl<'a> ValenceConformanceValidator<'a> {
     ) -> Result<Solution<(), ValenceConformanceContradiction>, ValenceConformanceError> {
         let ast = ast.as_ref();
         let mut any_undetermined = false;
-        for atom in ast.atoms().iter() {
+        for id in ast.atoms().ids() {
             let outcome = match self {
                 Self::AtomTyping(engine) => engine
-                    .conforms_atom(&atom)
+                    .conforms_molecule_atom(ast, id)
                     .map_contradiction(ValenceConformanceContradiction::from),
                 Self::Counts(engine) => engine
-                    .conforms_atom(&atom)
+                    .conforms_molecule_atom(ast, id)
                     .map_contradiction(ValenceConformanceContradiction::from),
             };
             match outcome {

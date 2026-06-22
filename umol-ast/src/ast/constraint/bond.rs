@@ -367,24 +367,23 @@ impl Lattice for BondConstraints {
         result
     }
 
-    /// `Aromatic` is a flag; pattern requires it iff target also has it. An empty
-    /// pattern constrains nothing, so it matches any target.
+    /// Pattern-driven: every constraint the pattern carries must match the target,
+    /// looked up by reference. `Aromatic` is a flag the target must also carry; an
+    /// empty pattern matches any target.
     fn matches(&self, target: &Self) -> bool {
-        if self.is_empty() {
-            return true;
-        }
-        let matches_val = |p: Option<&ValueAst>, t: Option<&ValueAst>| {
-            p.unwrap_or(&ValueAst::Undetermined)
-                .matches(t.unwrap_or(&ValueAst::Undetermined))
-        };
-        (!self.aromatic() || target.aromatic())
-            && self
-                .cis_trans_stereo()
-                .unwrap_or(&CisTransStereoAst::Undetermined)
-                .matches(target.cis_trans_stereo().unwrap_or(&CisTransStereoAst::Undetermined))
-            && self
-                .ring_memberships()
-                .all(|(scope, v)| matches_val(Some(v), target.ring_membership_value(scope)))
+        self.iter().all(|c| match c {
+            BondConstraint::Aromatic => target.aromatic(),
+            BondConstraint::RingMembership(rm) => rm.count.matches(
+                target
+                    .ring_membership_value(rm.scope)
+                    .unwrap_or(&ValueAst::Undetermined),
+            ),
+            BondConstraint::CisTransStereo(cts) => cts.matches(
+                target
+                    .cis_trans_stereo()
+                    .unwrap_or(&CisTransStereoAst::Undetermined),
+            ),
+        })
     }
 }
 

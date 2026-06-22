@@ -71,7 +71,7 @@ impl MoleculeAst {
             .iter()
             .map(|a| {
                 if derive_atoms {
-                    Cow::Owned(a.ast.clone().with_constraints(a.derive_constraints()))
+                    Cow::Owned(a.ast.clone().with_constraints(a.derive_constraints(true)))
                 } else {
                     Cow::Borrowed(a.ast)
                 }
@@ -83,7 +83,7 @@ impl MoleculeAst {
             .iter()
             .map(|b| {
                 if derive_bonds {
-                    Cow::Owned(b.ast.clone().with_constraints(b.derive_constraints()))
+                    Cow::Owned(b.ast.clone().with_constraints(b.derive_constraints(true)))
                 } else {
                     Cow::Borrowed(b.ast)
                 }

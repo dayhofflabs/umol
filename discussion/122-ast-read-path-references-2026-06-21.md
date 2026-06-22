@@ -86,18 +86,30 @@ read. Worth auditing under the same principle: `AtomView`/`BondView` accessors, 
 pattern-driven gate already skips it when unneeded). The goal is that a substructure match
 over an immutable `MoleculeAst` is provably zero-copy on the read side.
 
-## Open questions (for the design discussion)
+## Resolution (settled, implemented)
 
-1. Accessor return type: `Option<&ValueAst>` vs `&ValueAst` defaulting to a const
-   `Undetermined`?
-2. Storage: Option A (sparse `SmallVec`, ref accessors) or Option B (struct-of-fields)?
-   The sparse-vs-dense memory tradeoff under reaction-network scale is the crux.
-3. Confirm the read/build split: `meet`/`join`/`canonicalize` keep owning; only the read
-   accessors + `matches` go to references.
-4. Scope: just the constraint collections, or a broader reference-discipline pass over the
-   `AtomAst`/`MoleculeAst` view/accessor surface?
-5. Does `ValueAst` itself need anything, or is it fine (the issue is the API around it, not
-   the enum — `Lit` clones cheaply; only `LitSet`/`Term`/`Predicate` allocate, and the read
-   path will stop cloning them)?
+1. Accessor return type: **`Option<&ValueAst>`** (`None` ≡ `Undetermined`).
+2. Storage: **Option A** — sparse `SmallVec` kept, accessors return references. Option B
+   rejected on the dense per-atom memory cost under reaction-network scale.
+3. Read/build split confirmed: `meet`/`join`/`canonicalize`/builder keep owning; the read
+   accessors and `matches` borrow.
+4. Scope here = the constraint collections only. The broader reference-discipline
+   audit moved to doc 123 (allocation survey); its P1 is exactly this migration.
+5. `ValueAst` needs nothing — the fix is the API around it; the read path no longer clones
+   `LitSet`/`Term`/`Predicate`.
 
-No implementation until these are settled.
+Implemented:
+
+- All 14 atom + 2 bond constraint accessors return `Option<&…>`; no read-path clone.
+- `meet`/`join` clone only at the point they build the result.
+- `AtomConstraints::matches` / `BondConstraints::matches` are **pattern-driven**: iterate
+  the pattern's constraints (`self.iter()`) and compare each against the target value by
+  reference; absent target value ≡ `Undetermined`. Cost is proportional to the pattern's
+  constraints, not the fixed field count. Verified behavior-preserving by the lattice-law
+  proptest (`matches == meet-derived`).
+- Cheap leaf `matches` (`ValueAst`/`ElementAst`/`IsotopeMassAst`/`AromaticValenceAst`/
+  `MulticenterValenceAst`); `host_match_targets` borrows via `Cow`; caller sweep across
+  umol-graph / umol-io.
+
+Remaining read-path work (P2–P4: stereo value-type `matches`, embedding per-match
+allocation, incidence-graph build) is tracked in doc 123, not here.

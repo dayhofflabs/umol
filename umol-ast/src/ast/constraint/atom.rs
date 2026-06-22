@@ -892,40 +892,60 @@ impl Lattice for AtomConstraints {
         result
     }
 
-    /// Per-kind match; ring membership matches per `RingScope`. An empty pattern
-    /// constrains nothing, so it matches any target without scanning the accessors.
+    /// Pattern-driven: every constraint the pattern carries must match the target's
+    /// corresponding value, looked up by reference (an absent target value is
+    /// `Undetermined`, which matches). Cost is proportional to the pattern's
+    /// constraints, not the field count; an empty pattern matches any target.
     fn matches(&self, target: &Self) -> bool {
-        if self.is_empty() {
-            return true;
-        }
-        let matches_val = |p: Option<&ValueAst>, t: Option<&ValueAst>| {
-            p.unwrap_or(&ValueAst::Undetermined)
-                .matches(t.unwrap_or(&ValueAst::Undetermined))
-        };
-        matches_val(self.valence(), target.valence())
-            && matches_val(self.total_valence(), target.total_valence())
-            && self
-                .aromatic_valence()
-                .unwrap_or(&AromaticValenceAst::Undetermined)
-                .matches(target.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined))
-            && self
-                .multicenter_valence()
-                .unwrap_or(&MulticenterValenceAst::Undetermined)
-                .matches(target.multicenter_valence().unwrap_or(&MulticenterValenceAst::Undetermined))
-            && matches_val(self.donated_pairs(), target.donated_pairs())
-            && matches_val(self.accepted_pairs(), target.accepted_pairs())
-            && matches_val(self.degree(), target.degree())
-            && matches_val(self.total_degree(), target.total_degree())
-            && matches_val(self.ring_degree(), target.ring_degree())
-            && matches_val(self.ring_valence(), target.ring_valence())
-            && matches_val(self.total_hydrogens(), target.total_hydrogens())
-            && self
-                .tetrahedral_stereo()
-                .unwrap_or(&TetrahedralStereoAst::Undetermined)
-                .matches(target.tetrahedral_stereo().unwrap_or(&TetrahedralStereoAst::Undetermined))
-            && self
-                .ring_memberships()
-                .all(|(scope, v)| matches_val(Some(v), target.ring_membership_value(scope)))
+        self.iter().all(|c| match c {
+            AtomConstraint::Valence(v) => {
+                v.matches(target.valence().unwrap_or(&ValueAst::Undetermined))
+            }
+            AtomConstraint::TotalValence(v) => {
+                v.matches(target.total_valence().unwrap_or(&ValueAst::Undetermined))
+            }
+            AtomConstraint::AromaticValence(av) => av.matches(
+                target
+                    .aromatic_valence()
+                    .unwrap_or(&AromaticValenceAst::Undetermined),
+            ),
+            AtomConstraint::MulticenterValence(mv) => mv.matches(
+                target
+                    .multicenter_valence()
+                    .unwrap_or(&MulticenterValenceAst::Undetermined),
+            ),
+            AtomConstraint::DonatedPairs(v) => {
+                v.matches(target.donated_pairs().unwrap_or(&ValueAst::Undetermined))
+            }
+            AtomConstraint::AcceptedPairs(v) => {
+                v.matches(target.accepted_pairs().unwrap_or(&ValueAst::Undetermined))
+            }
+            AtomConstraint::Degree(v) => {
+                v.matches(target.degree().unwrap_or(&ValueAst::Undetermined))
+            }
+            AtomConstraint::TotalDegree(v) => {
+                v.matches(target.total_degree().unwrap_or(&ValueAst::Undetermined))
+            }
+            AtomConstraint::RingDegree(v) => {
+                v.matches(target.ring_degree().unwrap_or(&ValueAst::Undetermined))
+            }
+            AtomConstraint::RingValence(v) => {
+                v.matches(target.ring_valence().unwrap_or(&ValueAst::Undetermined))
+            }
+            AtomConstraint::TotalHydrogens(v) => {
+                v.matches(target.total_hydrogens().unwrap_or(&ValueAst::Undetermined))
+            }
+            AtomConstraint::RingMembership(rm) => rm.count.matches(
+                target
+                    .ring_membership_value(rm.scope)
+                    .unwrap_or(&ValueAst::Undetermined),
+            ),
+            AtomConstraint::TetrahedralStereo(ts) => ts.matches(
+                target
+                    .tetrahedral_stereo()
+                    .unwrap_or(&TetrahedralStereoAst::Undetermined),
+            ),
+        })
     }
 }
 

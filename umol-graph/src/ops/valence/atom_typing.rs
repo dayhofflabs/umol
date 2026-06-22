@@ -2,7 +2,7 @@
 //! `AtomAst` patterns keyed by element and (optionally) charge.
 
 use thiserror::Error;
-use umol_ast::ast::{AsLit, AtomAst, AtomId, AtomView, Lattice, MoleculeAst};
+use umol_ast::ast::{AsLit, AtomAst, AtomId, Lattice, MoleculeAst};
 use umol_shared::element::Element;
 use umol_shared::solution::Solution;
 
@@ -39,67 +39,79 @@ impl<'a> AtomTypingValence<'a> {
 
     /// Iterates atoms, narrowing each non-ground atom against the registry.
     /// Returns `Err` on the first atom that has zero matching patterns.
-    /// Multiple matches are resolved via [`compare_valence_preference`].
     pub fn resolve(&self, ast: &mut MoleculeAst) -> Result<(), AtomTypingError> {
         for id in ast.atoms().ids() {
+            self.resolve_molecule_atom(ast, id)?;
+        }
+        Ok(())
+    }
+
+    /// Narrows one non-ground atom against the registry. The topology-derived
+    /// predicates are set on the atom in place (resolution enriches it); matching
+    /// then runs against the atom directly, and the winning registry pattern is
+    /// merged via `narrow_from`. Multiple matches resolve via
+    /// [`compare_valence_preference`].
+    fn resolve_molecule_atom(
+        &self,
+        ast: &mut MoleculeAst,
+        id: AtomId,
+    ) -> Result<(), AtomTypingError> {
+        let (element, charge, derived) = {
             let atom = ast.atom(id);
             if atom.is_ground() {
-                continue;
+                return Ok(());
             }
-
             let Some(element) = atom.element().as_lit() else {
-                continue;
+                return Ok(());
             };
+            let charge = atom.charge().as_lit().map(|n| n as i8);
+            (element, charge, atom.derive_constraints(false))
+        };
+        ast.atom_mut(id).ast.constraints.extend(derived);
 
-            // Topological derived predicates should return Lit.
-            let constraints = atom.derive_constraints();
-            let pattern = atom.ast.clone().with_constraints(constraints);
-            let charge = pattern.charge.as_lit().map(|n| n as i8);
-            let candidates: Vec<&AtomAst> = self
-                .model
+        let candidates: Vec<&AtomAst> = {
+            let atom = ast.atom(id).ast;
+            self.model
                 .registry
                 .lookup(element, charge)
                 .iter()
-                .filter(|entry| pattern.matches(entry))
-                .collect();
-
-            match candidates.len() {
-                0 => {
-                    return Err(AtomTypingError::NoMatch {
-                        atom_id: id,
-                        element,
-                        charge,
-                    });
-                }
-                1 => {
-                    let cand = candidates[0];
-                    let atom_mut = ast.atom_mut(id).ast;
-                    atom_mut.narrow_from(cand);
-                }
-                _ => {
-                    let best = candidates
-                        .into_iter()
-                        .max_by(|a, b| compare_valence_preference(a, b))
-                        .unwrap();
-                    let atom_mut = ast.atom_mut(id).ast;
-                    atom_mut.narrow_from(best);
-                }
+                .filter(|entry| atom.matches(entry))
+                .collect()
+        };
+        let best = match candidates.len() {
+            0 => {
+                return Err(AtomTypingError::NoMatch {
+                    atom_id: id,
+                    element,
+                    charge,
+                });
             }
-        }
+            1 => candidates[0],
+            _ => candidates
+                .into_iter()
+                .max_by(|a, b| compare_valence_preference(a, b))
+                .unwrap(),
+        };
+        ast.atom_mut(id).ast.narrow_from(best);
         Ok(())
     }
 
     /// Read-only conformance check for a resolved atom: `Determined` if some
     /// registry pattern admits it, `Contradictory` if none does,
     /// `Underdetermined` if the atom is not ground.
-    pub fn conforms_atom(&self, atom: &AtomView<'_>) -> Solution<(), AtomTypingMismatch> {
+    pub fn conforms_molecule_atom(
+        &self,
+        ast: &MoleculeAst,
+        atom_id: AtomId,
+    ) -> Solution<(), AtomTypingMismatch> {
+        let atom = ast.atom(atom_id);
         if !atom.is_ground() {
             return Solution::Underdetermined(());
         }
         let Some(element) = atom.element().as_lit() else {
             return Solution::Underdetermined(());
         };
-        let constraints = atom.derive_constraints();
+        let constraints = atom.derive_constraints(true);
         let pattern = atom.ast.clone().with_constraints(constraints);
         let charge = pattern.charge.as_lit().map(|n| n as i8);
         let conforms = self
@@ -189,6 +201,6 @@ mod tests {
             Vec::new(),
             Constraints::default(),
         );
-        assert_eq!(resolver.conforms_atom(&molecule.atom(AtomId(0))), expected);
+        assert_eq!(resolver.conforms_molecule_atom(&molecule, AtomId(0)), expected);
     }
 }

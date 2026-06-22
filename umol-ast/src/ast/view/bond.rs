@@ -247,12 +247,16 @@ impl<'a> BondView<'a> {
     }
 
     /// Derive topological constraints from bond properties.
-    pub fn derive_constraints(&self) -> BondConstraints {
+    /// See [`AtomView::derive_constraints`] for `include_missing`: with it, an
+    /// absent overlay yields `NotStereo`; without it, the cis/trans stereo
+    /// constraint is emitted only when the overlay is present.
+    pub fn derive_constraints(&self, include_missing: bool) -> BondConstraints {
         let cis_trans_stereo = match self.cis_trans_stereo() {
-            Some(stereo) => CisTransStereoAst::stereo(stereo.coset().clone()),
-            None => CisTransStereoAst::NotStereo,
+            Some(stereo) => Some(CisTransStereoAst::stereo(stereo.coset().clone())),
+            None if include_missing => Some(CisTransStereoAst::NotStereo),
+            None => None,
         };
-        BondConstraints::from_iter([BondConstraint::cis_trans_stereo(cis_trans_stereo)])
+        BondConstraints::from_iter(cis_trans_stereo.map(BondConstraint::cis_trans_stereo))
     }
 
     /// Is bond ground
@@ -548,7 +552,7 @@ mod tests {
         #[case] bond: BondId,
         #[case] expected: BondConstraints,
     ) {
-        assert_eq!(stereo_molecule.bond(bond).derive_constraints(), expected);
+        assert_eq!(stereo_molecule.bond(bond).derive_constraints(true), expected);
     }
 
     #[rstest]

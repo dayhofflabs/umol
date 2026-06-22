@@ -462,43 +462,62 @@ impl<'a> AtomView<'a> {
     }
 
     /// Derive topological constraints from atom properties.
-    pub fn derive_constraints(&self) -> AtomConstraints {
-        let valence = self.valence();
-        let donated_pairs = self.donated_pairs();
-        let accepted_pairs = self.accepted_pairs();
-        let aromatic_valence = if self.is_in_aromatic_system() {
-            AromaticValenceAst::aromatic(
+    /// Derives topology constraints for an atom. With `include_missing`, an absent
+    /// overlay yields its definite negative (`NotAromatic` / `NotMulticenter` /
+    /// `NotStereo`, zero dative pairs) — the fully-perceived reading used by
+    /// substructure matching and conformance. Without it, the overlay-based fields
+    /// (aromatic / multicenter / stereo, and the dative pair counts) are emitted
+    /// only when the overlay is present — the pre-resolution reading, where an
+    /// absent overlay is not yet perceived rather than known-absent. `valence`
+    /// comes from localized bonds and is always emitted.
+    pub fn derive_constraints(&self, include_missing: bool) -> AtomConstraints {
+        let mut constraints = AtomConstraints::new();
+        constraints.add(AtomConstraint::valence(self.valence()));
+
+        if self.is_in_dative_bond() || include_missing {
+            constraints.add(AtomConstraint::donated_pairs(self.donated_pairs()));
+            constraints.add(AtomConstraint::accepted_pairs(self.accepted_pairs()));
+        }
+
+        if self.is_in_aromatic_system() {
+            constraints.add(AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(
                 self.aromatic_valence()
                     .as_lit_expect("aromatic valence should be Lit"),
-            )
+            )));
         } else if self.neighbors().any(|n| n.bond().constraints().aromatic()) {
-            AromaticValenceAst::aromatic(ValueAst::Undetermined)
-        } else {
-            AromaticValenceAst::NotAromatic
-        };
+            constraints.add(AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(
+                ValueAst::Undetermined,
+            )));
+        } else if include_missing {
+            constraints.add(AtomConstraint::aromatic_valence(
+                AromaticValenceAst::NotAromatic,
+            ));
+        }
 
-        let multicenter_valence = if self.is_in_multicenter_bond() {
-            MulticenterValenceAst::multicenter(
-                self.multicenter_valence()
-                    .as_lit_expect("multicenter valence should be Lit"),
-            )
-        } else {
-            MulticenterValenceAst::NotMulticenter
-        };
+        if self.is_in_multicenter_bond() {
+            constraints.add(AtomConstraint::multicenter_valence(
+                MulticenterValenceAst::multicenter(
+                    self.multicenter_valence()
+                        .as_lit_expect("multicenter valence should be Lit"),
+                ),
+            ));
+        } else if include_missing {
+            constraints.add(AtomConstraint::multicenter_valence(
+                MulticenterValenceAst::NotMulticenter,
+            ));
+        }
 
-        let tetrahedral_stereo = match self.tetrahedral_stereo() {
-            Some(stereo) => TetrahedralStereoAst::stereo(stereo.coset().clone()),
-            None => TetrahedralStereoAst::NotStereo,
-        };
+        if let Some(stereo) = self.tetrahedral_stereo() {
+            constraints.add(AtomConstraint::tetrahedral_stereo(
+                TetrahedralStereoAst::stereo(stereo.coset().clone()),
+            ));
+        } else if include_missing {
+            constraints.add(AtomConstraint::tetrahedral_stereo(
+                TetrahedralStereoAst::NotStereo,
+            ));
+        }
 
-        AtomConstraints::from_iter([
-            AtomConstraint::valence(valence),
-            AtomConstraint::donated_pairs(donated_pairs),
-            AtomConstraint::accepted_pairs(accepted_pairs),
-            AtomConstraint::aromatic_valence(aromatic_valence),
-            AtomConstraint::multicenter_valence(multicenter_valence),
-            AtomConstraint::tetrahedral_stereo(tetrahedral_stereo),
-        ])
+        constraints
     }
 
     /// Is atom ground
@@ -1064,7 +1083,7 @@ mod tests {
         #[case] atom: AtomId,
         #[case] expected: AtomConstraints,
     ) {
-        assert_eq!(stereo_molecule.atom(atom).derive_constraints(), expected);
+        assert_eq!(stereo_molecule.atom(atom).derive_constraints(true), expected);
     }
 
     #[rstest]

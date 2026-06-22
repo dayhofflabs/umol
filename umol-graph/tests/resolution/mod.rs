@@ -119,6 +119,17 @@ fn run_conformance_test(file_path: &Path) {
         counts,
     };
 
+    assert!(
+        results.atom_typing.success,
+        "atom-typing resolution did not succeed: {:?}",
+        results.atom_typing.error
+    );
+    assert!(
+        results.counts.success,
+        "counts resolution did not succeed: {:?}",
+        results.counts.error
+    );
+
     let source_dir = extract_category(file_path);
     let filename = file_path.file_stem().unwrap().to_str().unwrap();
 
