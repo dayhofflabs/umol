@@ -53,11 +53,6 @@ impl NoncovalentBondAst {
         self
     }
 
-    /// Equivalent to `into_ground()`. `NoncovalentBondAst` has no constraint
-    /// defaults.
-    pub fn into_zeroed(self) -> Self {
-        self.into_ground()
-    }
 }
 
 /// Noncovalent interaction kind.
@@ -194,13 +189,6 @@ mod tests {
     #[case::ground(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
     fn test_noncovalent_bond_ast_into_ground(#[case] bond: NoncovalentBondAst) {
         assert_eq!(bond.clone().into_ground(), bond);
-    }
-
-    #[rstest]
-    #[case::default_(NoncovalentBondAst::default())]
-    #[case::ground(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
-    fn test_noncovalent_bond_ast_into_zeroed(#[case] bond: NoncovalentBondAst) {
-        assert_eq!(bond.clone().into_zeroed(), bond.into_ground());
     }
 
     #[rstest]

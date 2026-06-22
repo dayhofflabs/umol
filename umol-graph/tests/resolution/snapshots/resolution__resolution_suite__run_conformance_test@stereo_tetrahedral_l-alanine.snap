@@ -5,8 +5,9 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 {
   :atom-typing {
     :output {
-      :atoms ["N#h2#n#v" "C#h#v3" "C#h3#v" "C#v4" "O#n2#v2" "O#h#n2#v"]
-      :bonds [[0 1 :single] [1 2 :single] [1 3 :single] [3 4 :double] [3 5 :single]]}
+      :atoms ["N#h2#n#v" "C#h#v3#T1" "C#h3#v" "C#v4" "O#n2#v2" "O#h#n2#v"]
+      :bonds [[0 1 :single] [1 2 :single] [1 3 :single] [3 4 :double] [3 5 :single]]
+      :stereo-atoms [{:ligands [0 2 3 [:h 1]] :site 1 :type :cw}]}
     :success true}
   :counts {
     :output {

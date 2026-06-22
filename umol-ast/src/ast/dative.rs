@@ -60,11 +60,6 @@ impl DativeBondAst {
         self
     }
 
-    /// Equivalent to `into_ground()`. `DativeBondAst` has no constraint
-    /// defaults.
-    pub fn into_zeroed(self) -> Self {
-        self.into_ground()
-    }
 }
 
 #[cfg(test)]
@@ -122,13 +117,6 @@ mod tests {
     #[case::with_constraint(DativeBondAst::from_order(1).with_constraint(DativeBondConstraint::Aromatic))]
     fn test_dative_bond_ast_into_ground(#[case] bond: DativeBondAst) {
         assert_eq!(bond.clone().into_ground(), bond);
-    }
-
-    #[rstest]
-    #[case::from_order(DativeBondAst::from_order(1))]
-    #[case::with_constraint(DativeBondAst::from_order(1).with_constraint(DativeBondConstraint::Aromatic))]
-    fn test_dative_bond_ast_into_zeroed(#[case] bond: DativeBondAst) {
-        assert_eq!(bond.clone().into_zeroed(), bond.into_ground());
     }
 
     #[rustfmt::skip]

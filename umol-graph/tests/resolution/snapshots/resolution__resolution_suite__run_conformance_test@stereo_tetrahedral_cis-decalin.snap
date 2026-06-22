@@ -7,12 +7,12 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :output {
       :atoms [
         "H#v"
-        "C#v4"
+        "C#v4#T0"
         "C#h2#v2"
         "C#h2#v2"
         "C#h2#v2"
         "C#h2#v2"
-        "C#v4"
+        "C#v4#T1"
         "H#v"
         "C#h2#v2"
         "C#h2#v2"
@@ -31,7 +31,10 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [6 8 :single]
         [8 9 :single]
         [9 10 :single]
-        [10 11 :single]]}
+        [10 11 :single]]
+      :stereo-atoms [
+        {:ligands [0 2 6 11] :site 1 :type :ccw}
+        {:ligands [1 5 7 8] :site 6 :type :cw}]}
     :success true}
   :counts {
     :output {

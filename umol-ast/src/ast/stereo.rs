@@ -681,12 +681,6 @@ macro_rules! stereo_element {
             pub fn into_ground(self) -> Self {
                 self
             }
-
-            /// Equivalent to `into_ground()`; there are no constraint defaults.
-            pub fn into_zeroed(self) -> Self {
-                self.into_ground()
-            }
-
         }
 
     };

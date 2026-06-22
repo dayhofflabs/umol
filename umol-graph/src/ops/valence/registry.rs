@@ -2,8 +2,10 @@
 //! and (optionally) charge. Consumed by the AtomTyping valence resolver.
 //!
 //! TOML-loaded entries are parsed via `AtomDsl` and raised to ground `AtomAst`
-//! values with `AtomDefaults::zeroed()`. Stored under both
-//! `(element, Some(charge))` and `(element, None)` for the two lookup modes.
+//! values with `ground()` defaults plus the valence-relevant constraints zeroed
+//! (valence, donated/accepted pairs, aromatic valence, multicenter valence); all
+//! other constraints stay unconstrained. Stored under both `(element, Some(charge))`
+//! and `(element, None)` for the two lookup modes.
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -12,7 +14,9 @@ use std::path::Path;
 use std::sync::LazyLock;
 
 use umol_ast::ast::{AtomAst, ElementAst, IntoAst, ValueAst};
-use umol_ast::dsl::{AtomDefaults, AtomDsl};
+use umol_ast::dsl::{
+    AromaticValenceDefault, AtomDefaults, AtomDsl, MulticenterValenceDefault, NumericDefault,
+};
 use umol_shared::element::Element;
 use xxhash_rust::const_xxh3::xxh3_64;
 
@@ -79,7 +83,19 @@ impl AtomTypeRegistry {
     pub fn from_toml_str(input: &str) -> Result<Self, ConfigError> {
         let parsed: AtomTypeRegistryToml = toml::from_str(input)
             .map_err(|e| ConfigError::InvalidAtomTypeRegistry(e.to_string()))?;
-        let defaults = AtomDefaults::zeroed();
+        // Registry entries describe valence types: zero exactly the valence-relevant
+        // constraints. Every other constraint (stereo, …) stays `Required` (emit
+        // nothing) via `ground()`, so an entry never asserts something a valence
+        // type does not own — e.g. `NotStereo`, which would conflict with a
+        // stereocenter atom's own `#T`.
+        let defaults = AtomDefaults {
+            valence: NumericDefault::Zero,
+            donated_pairs: NumericDefault::Zero,
+            accepted_pairs: NumericDefault::Zero,
+            aromatic_valence: AromaticValenceDefault::NotAromatic,
+            multicenter_valence: MulticenterValenceDefault::NotMulticenter,
+            ..AtomDefaults::ground()
+        };
         let mut atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomAst>> = BTreeMap::new();
         for (element_key, charges) in &parsed {
             let element: Element = element_key.parse().map_err(|_| {

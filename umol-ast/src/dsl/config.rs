@@ -160,7 +160,10 @@ impl AtomDefaults {
         }
     }
 
-    /// Grounds struct fields and sets all constraints to zero values (for registry entries)
+    /// Grounds struct fields and sets the constraint defaults to their zero values.
+    /// Used as the omission threshold when *lowering* an AST to DSL (a constraint
+    /// equal to its zeroed value is omitted, keeping output compact). Raising
+    /// (DSL → AST) uses `ground()` plus an explicit per-constraint selection.
     pub fn zeroed() -> Self {
         Self {
             isotope: IsotopeDefault::Natural,
@@ -275,8 +278,8 @@ impl BondDefaults {
         }
     }
 
-    /// Like `ground()` but additionally sets the constraint default
-    /// `cis_trans_stereo` to `NotStereo` (registry entries).
+    /// Like `ground()` but additionally sets `cis_trans_stereo` to `NotStereo`.
+    /// The omission threshold for *lowering* a bond to DSL (compact output).
     pub fn zeroed() -> Self {
         Self {
             charge: NumericDefault::Zero,

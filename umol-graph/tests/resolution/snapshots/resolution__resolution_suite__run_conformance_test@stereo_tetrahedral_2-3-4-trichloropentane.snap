@@ -7,11 +7,11 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :output {
       :atoms [
         "C#h3#v"
-        "C#h#v3"
+        "C#h#v3#T0"
         "Cl#n3#v"
-        "C#h#v3"
+        "C#h#v3#T0"
         "Cl#n3#v"
-        "C#h#v3"
+        "C#h#v3#T1"
         "Cl#n3#v"
         "C#h3#v"]
       :bonds [
@@ -21,7 +21,11 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [3 4 :single]
         [3 5 :single]
         [5 6 :single]
-        [5 7 :single]]}
+        [5 7 :single]]
+      :stereo-atoms [
+        {:ligands [0 2 3 [:h 1]] :site 1 :type :ccw}
+        {:ligands [1 4 5 [:h 3]] :site 3 :type :ccw}
+        {:ligands [3 6 7 [:h 5]] :site 5 :type :cw}]}
     :success true}
   :counts {
     :output {

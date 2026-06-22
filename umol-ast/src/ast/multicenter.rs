@@ -79,11 +79,6 @@ impl MulticenterBondAst {
         self
     }
 
-    /// Equivalent to `into_ground()`. `MulticenterBondAst` has no constraint
-    /// defaults.
-    pub fn into_zeroed(self) -> Self {
-        self.into_ground()
-    }
 }
 
 #[cfg(test)]
@@ -189,16 +184,6 @@ mod tests {
         #[case] expected: MulticenterBondAst,
     ) {
         assert_eq!(actual, expected);
-    }
-
-    #[rstest]
-    #[case::from_counts(MulticenterBondAst::from_counts(vec![1; 3]))]
-    #[case::with_constraint(
-        MulticenterBondAst::from_counts(vec![1; 3])
-            .with_constraint(MulticenterBondConstraint::electron_count(3))
-    )]
-    fn test_multicenter_bond_ast_into_zeroed(#[case] bond: MulticenterBondAst) {
-        assert_eq!(bond.clone().into_zeroed(), bond.into_ground());
     }
 
     #[rustfmt::skip]

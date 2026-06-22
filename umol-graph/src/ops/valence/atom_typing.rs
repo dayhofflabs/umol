@@ -75,7 +75,7 @@ impl<'a> AtomTypingValence<'a> {
                 .registry
                 .lookup(element, charge)
                 .iter()
-                .filter(|entry| atom.matches(entry))
+                .filter(|entry| atom.is_compatible(entry))
                 .collect()
         };
         let best = match candidates.len() {
@@ -119,7 +119,7 @@ impl<'a> AtomTypingValence<'a> {
             .registry
             .lookup(element, charge)
             .iter()
-            .any(|entry| pattern.matches(entry));
+            .any(|entry| pattern.is_compatible(entry));
         if conforms {
             Solution::Determined(())
         } else {

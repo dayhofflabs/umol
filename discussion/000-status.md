@@ -126,3 +126,4 @@
 | [122-ast-read-path-references-2026-06-21.md](122-ast-read-path-references-2026-06-21.md)                         | Completed     | 2026-06-21   |
 | [123-ast-allocation-survey-2026-06-21.md](123-ast-allocation-survey-2026-06-21.md)                               | Active        | 2026-06-21   |
 | [124-tier1-structural-wellformedness-2026-06-21.md](124-tier1-structural-wellformedness-2026-06-21.md)           | Active        | 2026-06-21   |
+| [125-constraints-as-projections-2026-06-22.md](125-constraints-as-projections-2026-06-22.md)                     | Active        | 2026-06-22   |

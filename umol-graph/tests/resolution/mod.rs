@@ -39,11 +39,11 @@ struct ResolveResult {
     error: Option<String>,
 }
 
-fn lower(input: &MoleculeDsl, defaults: &MoleculeDefaults) -> MoleculeAst {
+fn raise(input: &MoleculeDsl, defaults: &MoleculeDefaults) -> MoleculeAst {
     input.clone().into_ast(defaults)
 }
 
-fn raise(ast: &MoleculeAst) -> MoleculeDsl {
+fn lower(ast: &MoleculeAst) -> MoleculeDsl {
     let cfg = MoleculeDefaults::zeroed();
     MoleculeDsl::from_ast(ast, &cfg)
 }
@@ -53,11 +53,11 @@ fn resolve_test(
     chemistry: &ChemistryModel,
     defaults: &MoleculeDefaults,
 ) -> ResolveResult {
-    let mut ast = lower(input, defaults);
+    let mut ast = raise(input, defaults);
     match Resolver::new(chemistry).resolve(&mut ast) {
         Ok(Solution::Determined(())) => ResolveResult {
             success: true,
-            output: Some(raise(&ast)),
+            output: Some(lower(&ast)),
             error: None,
         },
         Ok(Solution::Underdetermined(())) => ResolveResult {

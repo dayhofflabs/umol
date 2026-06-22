@@ -95,34 +95,6 @@ macro_rules! bond_ground {
     }};
 }
 
-/// Parse a compact atom-string into an `AtomAst` with `AtomDefaults::zeroed()`
-/// applied.
-#[macro_export]
-macro_rules! atom_zeroed {
-    ($s:expr $(,)?) => {{
-        let dsl: $crate::dsl::AtomDsl =
-            <$crate::dsl::AtomDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::AtomDsl as $crate::ast::IntoAst<$crate::ast::AtomAst>>::into_ast(
-            dsl,
-            &$crate::dsl::AtomDefaults::zeroed(),
-        )
-    }};
-}
-
-/// Parse a compact bond-string into a `BondAst` with `BondDefaults::zeroed()`
-/// applied.
-#[macro_export]
-macro_rules! bond_zeroed {
-    ($s:expr $(,)?) => {{
-        let dsl: $crate::dsl::BondDsl =
-            <$crate::dsl::BondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::BondDsl as $crate::ast::IntoAst<$crate::ast::BondAst>>::into_ast(
-            dsl,
-            &$crate::dsl::BondDefaults::zeroed(),
-        )
-    }};
-}
-
 /// Parse a compact dative-bond-string into a `DativeBondAst`.
 #[macro_export]
 macro_rules! dative {
@@ -140,19 +112,6 @@ macro_rules! dative_ground {
         <$crate::dsl::DativeBondDsl as $crate::ast::IntoAst<$crate::ast::DativeBondAst>>::into_ast(
             dsl,
             &$crate::dsl::DativeBondDefaults::ground(),
-        )
-    }};
-}
-
-/// Parse a dative-bond DSL string into a `DativeBondAst` with `DativeBondDefaults::zeroed()` applied.
-#[macro_export]
-macro_rules! dative_zeroed {
-    ($s:expr $(,)?) => {{
-        let dsl: $crate::dsl::DativeBondDsl =
-            <$crate::dsl::DativeBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::DativeBondDsl as $crate::ast::IntoAst<$crate::ast::DativeBondAst>>::into_ast(
-            dsl,
-            &$crate::dsl::DativeBondDefaults::zeroed(),
         )
     }};
 }
@@ -179,20 +138,6 @@ macro_rules! aromatic_ground {
     }};
 }
 
-/// Parse an aromatic-system DSL string into an `AromaticSystemAst` with
-/// `AromaticSystemDefaults::zeroed()` applied.
-#[macro_export]
-macro_rules! aromatic_zeroed {
-    ($s:expr $(,)?) => {{
-        let dsl: $crate::dsl::AromaticSystemDsl =
-            <$crate::dsl::AromaticSystemDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::AromaticSystemDsl as $crate::ast::IntoAst<$crate::ast::AromaticSystemAst>>::into_ast(
-            dsl,
-            &$crate::dsl::AromaticSystemDefaults::zeroed(),
-        )
-    }};
-}
-
 /// Parse a compact multicenter-bond-string into a `MulticenterBondAst`.
 #[macro_export]
 macro_rules! multicenter {
@@ -211,20 +156,6 @@ macro_rules! multicenter_ground {
         <$crate::dsl::MulticenterBondDsl as $crate::ast::IntoAst<$crate::ast::MulticenterBondAst>>::into_ast(
             dsl,
             &$crate::dsl::MulticenterBondDefaults::ground(),
-        )
-    }};
-}
-
-/// Parse a multicenter-bond DSL string into a `MulticenterBondAst` with
-/// `MulticenterBondDefaults::zeroed()` applied.
-#[macro_export]
-macro_rules! multicenter_zeroed {
-    ($s:expr $(,)?) => {{
-        let dsl: $crate::dsl::MulticenterBondDsl =
-            <$crate::dsl::MulticenterBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::MulticenterBondDsl as $crate::ast::IntoAst<$crate::ast::MulticenterBondAst>>::into_ast(
-            dsl,
-            &$crate::dsl::MulticenterBondDefaults::zeroed(),
         )
     }};
 }
@@ -251,20 +182,6 @@ macro_rules! noncovalent_ground {
     }};
 }
 
-/// Parse a noncovalent-bond DSL string into a `NoncovalentBondAst` with
-/// `NoncovalentBondDefaults::zeroed()` applied.
-#[macro_export]
-macro_rules! noncovalent_zeroed {
-    ($s:expr $(,)?) => {{
-        let dsl: $crate::dsl::NoncovalentBondDsl =
-            <$crate::dsl::NoncovalentBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::NoncovalentBondDsl as $crate::ast::IntoAst<$crate::ast::NoncovalentBondAst>>::into_ast(
-            dsl,
-            &$crate::dsl::NoncovalentBondDefaults::zeroed(),
-        )
-    }};
-}
-
 /// Parse a compact stereo-atom-string into a `StereoAtomAst`.
 #[macro_export]
 macro_rules! stereo_atom {
@@ -286,19 +203,6 @@ macro_rules! stereo_atom_ground {
     }};
 }
 
-/// Parse a stereo-atom DSL string into a `StereoAtomAst` with `StereoAtomDefaults::zeroed()` applied.
-#[macro_export]
-macro_rules! stereo_atom_zeroed {
-    ($s:expr $(,)?) => {{
-        let dsl: $crate::dsl::StereoAtomDsl =
-            <$crate::dsl::StereoAtomDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::StereoAtomDsl as $crate::ast::IntoAst<$crate::ast::StereoAtomAst>>::into_ast(
-            dsl,
-            &$crate::dsl::StereoAtomDefaults::zeroed(),
-        )
-    }};
-}
-
 /// Parse a compact stereo-bond-string into a `StereoBondAst`.
 #[macro_export]
 macro_rules! stereo_bond {
@@ -316,19 +220,6 @@ macro_rules! stereo_bond_ground {
         <$crate::dsl::StereoBondDsl as $crate::ast::IntoAst<$crate::ast::StereoBondAst>>::into_ast(
             dsl,
             &$crate::dsl::StereoBondDefaults::ground(),
-        )
-    }};
-}
-
-/// Parse a stereo-bond DSL string into a `StereoBondAst` with `StereoBondDefaults::zeroed()` applied.
-#[macro_export]
-macro_rules! stereo_bond_zeroed {
-    ($s:expr $(,)?) => {{
-        let dsl: $crate::dsl::StereoBondDsl =
-            <$crate::dsl::StereoBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        <$crate::dsl::StereoBondDsl as $crate::ast::IntoAst<$crate::ast::StereoBondAst>>::into_ast(
-            dsl,
-            &$crate::dsl::StereoBondDefaults::zeroed(),
         )
     }};
 }
@@ -460,21 +351,6 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::carbon_h4("C #h4", AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64).into_zeroed())]
-    #[case::carbon_v3("C #v3", AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(3_i64)).into_zeroed())]
-    fn test_atom_zeroed_macro(#[case] input: &str, #[case] expected: AtomAst) {
-        assert_eq!(atom_zeroed!(input), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::single("1", BondAst::from_order(1).into_zeroed())]
-    fn test_bond_zeroed_macro(#[case] input: &str, #[case] expected: BondAst) {
-        assert_eq!(bond_zeroed!(input), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
     #[case::single("1", DativeBondAst::from_order(1))]
     #[case::with_ring_size( "2 #R(6)", DativeBondAst::from_order(2).with_constraint(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)),)]
     fn test_dative_macro(#[case] input: &str, #[case] expected: DativeBondAst) {
@@ -492,13 +368,6 @@ mod tests {
     #[case::double("2", DativeBondAst::from_order(2).into_ground())]
     fn test_dative_ground_macro(#[case] input: &str, #[case] expected: DativeBondAst) {
         assert_eq!(dative_ground!(input), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::triple("3", DativeBondAst::from_order(3).into_zeroed())]
-    fn test_dative_zeroed_macro(#[case] input: &str, #[case] expected: DativeBondAst) {
-        assert_eq!(dative_zeroed!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -524,13 +393,6 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::electrons("#e6", AromaticSystemAst::default().with_constraint(AromaticSystemConstraint::electron_count(6)).into_zeroed())]
-    fn test_aromatic_zeroed_macro(#[case] input: &str, #[case] expected: AromaticSystemAst) {
-        assert_eq!(aromatic_zeroed!(input), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
     #[case::charge("#c-", MulticenterBondAst::default().with_charge(-1_i64))]
     fn test_multicenter_macro(#[case] input: &str, #[case] expected: MulticenterBondAst) {
         assert_eq!(multicenter!(input), expected);
@@ -547,13 +409,6 @@ mod tests {
     #[case::charged("#c-", MulticenterBondAst::default().with_charge(-1_i64).into_ground())]
     fn test_multicenter_ground_macro(#[case] input: &str, #[case] expected: MulticenterBondAst) {
         assert_eq!(multicenter_ground!(input), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::charged("#c-", MulticenterBondAst::default().with_charge(-1_i64).into_zeroed())]
-    fn test_multicenter_zeroed_macro(#[case] input: &str, #[case] expected: MulticenterBondAst) {
-        assert_eq!(multicenter_zeroed!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -575,13 +430,6 @@ mod tests {
     #[case::hbond("Hbd", NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).into_ground())]
     fn test_noncovalent_ground_macro(#[case] input: &str, #[case] expected: NoncovalentBondAst) {
         assert_eq!(noncovalent_ground!(input), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::hbond("Hbd", NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).into_zeroed())]
-    fn test_noncovalent_zeroed_macro(#[case] input: &str, #[case] expected: NoncovalentBondAst) {
-        assert_eq!(noncovalent_zeroed!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -608,13 +456,6 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::ccw("Th0", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)))]
-    fn test_stereo_atom_zeroed_macro(#[case] input: &str, #[case] expected: StereoAtomAst) {
-        assert_eq!(stereo_atom_zeroed!(input), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
     #[case::z("Ct1", StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)))]
     #[case::undetermined("Ct*", StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined))]
     fn test_stereo_bond_macro(#[case] input: &str, #[case] expected: StereoBondAst) {
@@ -632,12 +473,5 @@ mod tests {
     #[case::z("Ct1", StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)))]
     fn test_stereo_bond_ground_macro(#[case] input: &str, #[case] expected: StereoBondAst) {
         assert_eq!(stereo_bond_ground!(input), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::z("Ct1", StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)))]
-    fn test_stereo_bond_zeroed_macro(#[case] input: &str, #[case] expected: StereoBondAst) {
-        assert_eq!(stereo_bond_zeroed!(input), expected);
     }
 }

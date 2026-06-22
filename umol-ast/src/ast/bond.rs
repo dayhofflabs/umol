@@ -2,9 +2,8 @@
 
 use umol_ast_macros::{Canonicalize, Lattice};
 
-use super::constraint::{BondConstraint, BondConstraintKind, BondConstraints};
+use super::constraint::{BondConstraint, BondConstraints};
 use super::spin::SpinStateAst;
-use super::stereo::CisTransStereoAst;
 use super::traits::Lattice;
 use super::value::ValueAst;
 
@@ -82,21 +81,6 @@ impl BondAst {
         }
         self
     }
-
-    /// `into_ground()` plus the sole bond constraint default,
-    /// `CisTransStereo(NotStereo)`, added only if absent. Matches the
-    /// `bond_zeroed!` macro semantics.
-    pub fn into_zeroed(mut self) -> Self {
-        self = self.into_ground();
-        if !self
-            .constraints
-            .contains(BondConstraintKind::CisTransStereo)
-        {
-            self.constraints
-                .add(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo));
-        }
-        self
-    }
 }
 
 #[cfg(test)]
@@ -108,7 +92,6 @@ mod tests {
     use crate::ast::constraint::RingScope;
     use crate::ast::error::Contradiction;
     use crate::ast::traits::{Canonicalize, Lattice};
-    use crate::bond_zeroed;
 
     #[rustfmt::skip]
     #[rstest]
@@ -193,15 +176,6 @@ mod tests {
         },
     )]
     fn test_bond_ast_into_ground(#[case] actual: BondAst, #[case] expected: BondAst) {
-        assert_eq!(actual, expected);
-    }
-
-    #[rstest]
-    #[case::from_order(BondAst::from_order(1).into_zeroed(), bond_zeroed!("1"))]
-    #[case::with_constraint(
-        BondAst::from_order(1).with_constraint(BondConstraint::Aromatic).into_zeroed(),
-        bond_zeroed!("1#a"))]
-    fn test_bond_ast_into_zeroed(#[case] actual: BondAst, #[case] expected: BondAst) {
         assert_eq!(actual, expected);
     }
 

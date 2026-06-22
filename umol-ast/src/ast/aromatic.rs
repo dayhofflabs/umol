@@ -79,11 +79,6 @@ impl AromaticSystemAst {
         self
     }
 
-    /// Equivalent to `into_ground()`. `AromaticSystemAst` has no constraint
-    /// defaults.
-    pub fn into_zeroed(self) -> Self {
-        self.into_ground()
-    }
 }
 
 #[cfg(test)]
@@ -167,13 +162,6 @@ mod tests {
         #[case] expected: AromaticSystemAst,
     ) {
         assert_eq!(actual, expected);
-    }
-
-    #[rstest]
-    #[case::from_counts(AromaticSystemAst::from_counts(vec![1; 6]))]
-    #[case::with_constraint(AromaticSystemAst::from_counts(vec![1; 6]).with_constraint(AromaticSystemConstraint::electron_count(6)))]
-    fn test_aromatic_system_ast_into_zeroed(#[case] system: AromaticSystemAst) {
-        assert_eq!(system.clone().into_zeroed(), system.into_ground());
     }
 
     #[rustfmt::skip]

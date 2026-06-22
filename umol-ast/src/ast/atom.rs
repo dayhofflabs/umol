@@ -6,13 +6,10 @@ use std::collections::BTreeSet;
 use umol_ast_macros::{Canonicalize, Lattice};
 use umol_shared::element::{Element, MAX_ATOMIC_NUMBER};
 
-use super::constraint::{
-    AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
-};
+use super::constraint::{AtomConstraint, AtomConstraints};
 use super::error::Contradiction;
 use super::operators::MemOp;
 use super::spin::SpinStateAst;
-use super::stereo::TetrahedralStereoAst;
 use super::traits::{AsLit, Canonicalize, Lattice};
 use super::value::ValueAst;
 
@@ -120,53 +117,6 @@ impl AtomAst {
         if self.spin.multiplicity.is_undetermined() {
             let unpaired = self.spin.unpaired.as_lit().unwrap_or(0);
             self.spin.multiplicity = ValueAst::Lit(unpaired + 1);
-        }
-        self
-    }
-
-    /// `into_ground()` plus chemistry-default constraints for an isolated,
-    /// non-bonded, non-aromatic, non-multicenter atom: `Valence(0)`,
-    /// `DonatedPairs(0)`, `AcceptedPairs(0)`, `MulticenterValence(NotMulticenter)`,
-    /// `AromaticValence(NotAromatic)`, `TetrahedralStereo(NotStereo)`. Each is
-    /// added only if the corresponding constraint kind is not already present;
-    /// existing entries are preserved. Matches the `atom_zeroed!` macro semantics.
-    pub fn into_zeroed(mut self) -> Self {
-        self = self.into_ground();
-        if !self.constraints.contains(AtomConstraintKind::Valence) {
-            self.constraints
-                .add(AtomConstraint::Valence(ValueAst::Lit(0)));
-        }
-        if !self.constraints.contains(AtomConstraintKind::DonatedPairs) {
-            self.constraints
-                .add(AtomConstraint::DonatedPairs(ValueAst::Lit(0)));
-        }
-        if !self.constraints.contains(AtomConstraintKind::AcceptedPairs) {
-            self.constraints
-                .add(AtomConstraint::AcceptedPairs(ValueAst::Lit(0)));
-        }
-        if !self
-            .constraints
-            .contains(AtomConstraintKind::MulticenterValence)
-        {
-            self.constraints.add(AtomConstraint::MulticenterValence(
-                MulticenterValenceAst::NotMulticenter,
-            ));
-        }
-        if !self
-            .constraints
-            .contains(AtomConstraintKind::AromaticValence)
-        {
-            self.constraints.add(AtomConstraint::AromaticValence(
-                AromaticValenceAst::NotAromatic,
-            ));
-        }
-        if !self
-            .constraints
-            .contains(AtomConstraintKind::TetrahedralStereo)
-        {
-            self.constraints.add(AtomConstraint::TetrahedralStereo(
-                TetrahedralStereoAst::NotStereo,
-            ));
         }
         self
     }
@@ -672,7 +622,6 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::{AtomConstraint, RingScope};
-    use crate::atom_zeroed;
 
     #[rstest]
     fn test_atom_ast_from_element() {
@@ -716,16 +665,6 @@ mod tests {
         AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ValueAst::Lit(0),
         lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::from(AtomConstraint::valence(4)) })]
     fn test_atom_ast_into_ground(#[case] actual: AtomAst, #[case] expected: AtomAst) {
-        assert_eq!(actual, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::element(AtomAst::from_element(Element::C).into_zeroed(), atom_zeroed!("C"))]
-    #[case::element_charge(AtomAst::from_element(Element::C).with_charge(1_i64).into_zeroed(), atom_zeroed!("C #i= #c+"))]
-    #[case::constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(3_i64)).into_zeroed(),
-        atom_zeroed!("C #v3"))]
-    fn test_atom_ast_into_zeroed(#[case] actual: AtomAst, #[case] expected: AtomAst) {
         assert_eq!(actual, expected);
     }
 
