@@ -361,8 +361,12 @@ impl Lattice for BondConstraints {
         result
     }
 
-    /// `Aromatic` is a flag; pattern requires it iff target also has it.
+    /// `Aromatic` is a flag; pattern requires it iff target also has it. An empty
+    /// pattern constrains nothing, so it matches any target.
     fn matches(&self, target: &Self) -> bool {
+        if self.is_empty() {
+            return true;
+        }
         (!self.aromatic() || target.aromatic())
             && self.cis_trans_stereo().matches(&target.cis_trans_stereo())
             && self

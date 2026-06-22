@@ -7,6 +7,7 @@
 //! overlays; `Incidence` matches the incidence (Levi) graph for hyperedge-only
 //! connectivity.
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 
 use umol_graph_core::{NodeId, SubgraphIsomorphismAlgorithm};
@@ -60,28 +61,31 @@ impl MoleculeAst {
     /// the *pattern* constrains. An unconstrained pattern never consults the host's
     /// derived constraints (empty pattern constraints match any target), so deriving
     /// them is wasted; element/bond patterns over SMILES-raised hosts skip it.
-    fn host_match_targets(&self, host: &MoleculeAst) -> (Vec<AtomAst>, Vec<BondAst>) {
+    fn host_match_targets<'h>(
+        &self,
+        host: &'h MoleculeAst,
+    ) -> (Vec<Cow<'h, AtomAst>>, Vec<Cow<'h, BondAst>>) {
         let derive_atoms = self.atoms().iter().any(|a| !a.ast.constraints.is_empty());
-        let host_atoms: Vec<AtomAst> = host
+        let host_atoms = host
             .atoms()
             .iter()
             .map(|a| {
                 if derive_atoms {
-                    a.ast.clone().with_constraints(a.derive_constraints())
+                    Cow::Owned(a.ast.clone().with_constraints(a.derive_constraints()))
                 } else {
-                    a.ast.clone()
+                    Cow::Borrowed(a.ast)
                 }
             })
             .collect();
         let derive_bonds = self.bonds().iter().any(|b| !b.ast.constraints.is_empty());
-        let host_bonds: Vec<BondAst> = host
+        let host_bonds = host
             .bonds()
             .iter()
             .map(|b| {
                 if derive_bonds {
-                    b.ast.clone().with_constraints(b.derive_constraints())
+                    Cow::Owned(b.ast.clone().with_constraints(b.derive_constraints()))
                 } else {
-                    b.ast.clone()
+                    Cow::Borrowed(b.ast)
                 }
             })
             .collect();

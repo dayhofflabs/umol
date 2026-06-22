@@ -306,6 +306,18 @@ impl Lattice for AromaticValenceAst {
             (Self::Aromatic(p), Self::Aromatic(q)) => Self::Aromatic(p.join(q)),
         }
     }
+
+    /// Partial-order check `target ⊑ self`, allocation-free — defers to the inner
+    /// `ValueAst::matches` for the `Aromatic` value, never building a `meet`.
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Undetermined, Self::Undetermined | Self::NotAromatic) => true,
+            (Self::Undetermined, Self::Aromatic(v)) => v.canonical().is_ok(),
+            (Self::NotAromatic, Self::NotAromatic) => true,
+            (Self::Aromatic(p), Self::Aromatic(q)) => p.matches(q),
+            _ => false,
+        }
+    }
 }
 
 impl AsLit for AromaticValenceAst {
@@ -425,6 +437,18 @@ impl Lattice for MulticenterValenceAst {
             (Self::NotMulticenter, Self::Multicenter(_))
             | (Self::Multicenter(_), Self::NotMulticenter) => Self::Undetermined,
             (Self::Multicenter(p), Self::Multicenter(q)) => Self::Multicenter(p.join(q)),
+        }
+    }
+
+    /// Partial-order check `target ⊑ self`, allocation-free — defers to the inner
+    /// `ValueAst::matches` for the `Multicenter` value, never building a `meet`.
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Undetermined, Self::Undetermined | Self::NotMulticenter) => true,
+            (Self::Undetermined, Self::Multicenter(v)) => v.canonical().is_ok(),
+            (Self::NotMulticenter, Self::NotMulticenter) => true,
+            (Self::Multicenter(p), Self::Multicenter(q)) => p.matches(q),
+            _ => false,
         }
     }
 }
@@ -863,8 +887,12 @@ impl Lattice for AtomConstraints {
         result
     }
 
-    /// Per-kind match; ring membership matches per `RingScope`.
+    /// Per-kind match; ring membership matches per `RingScope`. An empty pattern
+    /// constrains nothing, so it matches any target without scanning the accessors.
     fn matches(&self, target: &Self) -> bool {
+        if self.is_empty() {
+            return true;
+        }
         self.valence().matches(&target.valence())
             && self.total_valence().matches(&target.total_valence())
             && self.aromatic_valence().matches(&target.aromatic_valence())

@@ -33,7 +33,7 @@ needed.
 Amazon Linux 2023:
 
 ```
-sudo dnf install -y git gcc perf valgrind
+sudo dnf install -y git gcc clang clang-devel perf valgrind
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 . "$HOME/.cargo/env"
 ```
@@ -41,7 +41,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 Ubuntu 24.04:
 
 ```
-sudo apt update && sudo apt install -y git build-essential valgrind linux-tools-common linux-tools-$(uname -r)
+sudo apt update && sudo apt install -y git build-essential clang libclang-dev valgrind linux-tools-common linux-tools-$(uname -r)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 . "$HOME/.cargo/env"
 ```
@@ -60,9 +60,28 @@ sudo sysctl kernel.perf_event_paranoid=1
 sudo sysctl kernel.kptr_restrict=0
 ```
 
-Build note: profile **only `-p umol-graph`** and its dependency tree. The substructure
-path does not need `umol-msym-sys` (the libmsym FFI); building the whole workspace would
-drag that C dependency in.
+### C/C++ build dependencies
+
+`umol-graph-core` depends (non-optionally) on `nauty-Traces-sys` with the `bundled`
+feature: it compiles vendored nauty/Traces C source (needs a C compiler — `gcc`) **and**
+runs `bindgen` (needs **libclang** — the `clang` + `clang-devel`/`libclang-dev` packages
+above). This is pulled in even when profiling `-p umol-graph`, because the automorphism
+algorithm lives in `umol-graph-core`. If bindgen still can't find libclang:
+
+```
+export LIBCLANG_PATH=$(dirname "$(find /usr -name 'libclang.so*' 2>/dev/null | head -1)")
+```
+
+`umol-msym-sys` (the libmsym FFI — a git submodule, `git submodule update --init`) is
+**not** on the `umol-graph` substructure path, so profiling `-p umol-graph` does not need
+it; only a whole-workspace build does.
+
+Portability is a known rough edge: the C deps (nauty via bundled-source + bindgen, libmsym
+via submodule) require a C toolchain and libclang on every build host. Improving it —
+feature-gating the C deps so the subiso/substructure core builds pure-Rust (nauty is used
+only at runtime by `AutomorphismAlgorithm::Nauty`, never by matching), and/or checking in
+pre-generated bindings to drop the bindgen/libclang build requirement — is future work,
+tracked separately.
 
 ## Build with symbols
 
