@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use umol_ast_macros::{Canonicalize, Lattice};
-use umol_shared::element::Element;
+use umol_shared::element::{Element, MAX_ATOMIC_NUMBER};
 
 use super::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
@@ -266,10 +266,6 @@ impl Canonicalize for ElementAst {
     }
 }
 
-fn universe_size() -> usize {
-    Element::all().len()
-}
-
 fn complement(s: &BTreeSet<Element>) -> BTreeSet<Element> {
     Element::all()
         .iter()
@@ -283,15 +279,18 @@ fn complement(s: &BTreeSet<Element>) -> BTreeSet<Element> {
 /// → positive (`Lit`/`LitSet`), else `NotSet` of its complement (tiebreak
 /// positive). Empty semantic set → `Err`; full → `Undetermined`.
 fn canon_set(s: BTreeSet<Element>, negated: bool) -> Result<ElementAst, Contradiction> {
-    let u = universe_size();
-    let semantic_len = if negated { u - s.len() } else { s.len() };
+    let semantic_len = if negated {
+        MAX_ATOMIC_NUMBER as usize - s.len()
+    } else {
+        s.len()
+    };
     if semantic_len == 0 {
         return Err(Contradiction);
     }
-    if semantic_len == u {
+    if semantic_len == MAX_ATOMIC_NUMBER as usize {
         return Ok(ElementAst::Undetermined);
     }
-    if semantic_len <= u / 2 {
+    if semantic_len <= MAX_ATOMIC_NUMBER as usize / 2 {
         let positive = if negated { complement(&s) } else { s };
         Ok(if positive.len() == 1 {
             ElementAst::Lit(*positive.iter().next().unwrap())
@@ -310,18 +309,17 @@ fn canon_var_domain(
     op: MemOp,
     set: BTreeSet<Element>,
 ) -> Result<Option<(MemOp, BTreeSet<Element>)>, Contradiction> {
-    let u = universe_size();
     let admissible_len = match op {
         MemOp::In => set.len(),
-        MemOp::NotIn => u - set.len(),
+        MemOp::NotIn => MAX_ATOMIC_NUMBER as usize - set.len(),
     };
     if admissible_len == 0 {
         return Err(Contradiction);
     }
-    if admissible_len == u {
+    if admissible_len == MAX_ATOMIC_NUMBER as usize {
         return Ok(None);
     }
-    Ok(Some(if admissible_len <= u / 2 {
+    Ok(Some(if admissible_len <= MAX_ATOMIC_NUMBER as usize / 2 {
         let admissible = match op {
             MemOp::In => set,
             MemOp::NotIn => complement(&set),

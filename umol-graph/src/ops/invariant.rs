@@ -56,28 +56,36 @@ impl ValenceInvariants {
         ) else {
             return Solution::Underdetermined(());
         };
-        let valence = match atom.constraints.valence() {
-            ValueAst::Lit(v) if v >= 0 => v,
+        let valence = match atom.constraints.valence().unwrap_or(&ValueAst::Undetermined) {
+            ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
-        let donated = match atom.constraints.donated_pairs() {
-            ValueAst::Lit(v) if v >= 0 => v,
+        let donated = match atom.constraints.donated_pairs().unwrap_or(&ValueAst::Undetermined) {
+            ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
-        let accepted = match atom.constraints.accepted_pairs() {
-            ValueAst::Lit(v) if v >= 0 => v,
+        let accepted = match atom.constraints.accepted_pairs().unwrap_or(&ValueAst::Undetermined) {
+            ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
-        let aromatic_valence = match atom.constraints.aromatic_valence() {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if v >= 0 => v,
+        let aromatic_valence = match atom
+            .constraints
+            .aromatic_valence()
+            .unwrap_or(&AromaticValenceAst::Undetermined)
+        {
+            AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if *v >= 0 => *v,
             AromaticValenceAst::NotAromatic | AromaticValenceAst::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
-        let multicenter_valence = match atom.constraints.multicenter_valence() {
-            MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if v >= 0 => v,
+        let multicenter_valence = match atom
+            .constraints
+            .multicenter_valence()
+            .unwrap_or(&MulticenterValenceAst::Undetermined)
+        {
+            MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if *v >= 0 => *v,
             MulticenterValenceAst::NotMulticenter | MulticenterValenceAst::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
@@ -130,32 +138,36 @@ impl ValenceInvariants {
         let Some(unpaired) = atom.spin().unpaired.as_lit() else {
             return Solution::Underdetermined(());
         };
-        let valence = match atom.constraints().valence() {
-            ValueAst::Lit(v) if v >= 0 => v,
+        let valence = match atom.constraints().valence().unwrap_or(&ValueAst::Undetermined) {
+            ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => match atom.valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Solution::Underdetermined(()),
             },
             _ => return Solution::Underdetermined(()),
         };
-        let donated = match atom.constraints().donated_pairs() {
-            ValueAst::Lit(v) if v >= 0 => v,
+        let donated = match atom.constraints().donated_pairs().unwrap_or(&ValueAst::Undetermined) {
+            ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => match atom.donated_pairs() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Solution::Underdetermined(()),
             },
             _ => return Solution::Underdetermined(()),
         };
-        let accepted = match atom.constraints().accepted_pairs() {
-            ValueAst::Lit(v) if v >= 0 => v,
+        let accepted = match atom.constraints().accepted_pairs().unwrap_or(&ValueAst::Undetermined) {
+            ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => match atom.accepted_pairs() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Solution::Underdetermined(()),
             },
             _ => return Solution::Underdetermined(()),
         };
-        let aromatic_valence = match atom.constraints().aromatic_valence() {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if v >= 0 => v,
+        let aromatic_valence = match atom
+            .constraints()
+            .aromatic_valence()
+            .unwrap_or(&AromaticValenceAst::Undetermined)
+        {
+            AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if *v >= 0 => *v,
             AromaticValenceAst::NotAromatic => 0,
             AromaticValenceAst::Undetermined => match atom.aromatic_valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
@@ -163,8 +175,12 @@ impl ValenceInvariants {
             },
             _ => return Solution::Underdetermined(()),
         };
-        let multicenter_valence = match atom.constraints().multicenter_valence() {
-            MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if v >= 0 => v,
+        let multicenter_valence = match atom
+            .constraints()
+            .multicenter_valence()
+            .unwrap_or(&MulticenterValenceAst::Undetermined)
+        {
+            MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if *v >= 0 => *v,
             MulticenterValenceAst::NotMulticenter => 0,
             MulticenterValenceAst::Undetermined => match atom.multicenter_valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
@@ -219,32 +235,36 @@ impl ValenceInvariants {
             return Vec::new();
         };
 
-        let valence = match atom.constraints().valence() {
-            ValueAst::Lit(v) if v >= 0 => v,
+        let valence = match atom.constraints().valence().unwrap_or(&ValueAst::Undetermined) {
+            ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => match atom.valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
         };
-        let donated = match atom.constraints().donated_pairs() {
-            ValueAst::Lit(v) if v >= 0 => v,
+        let donated = match atom.constraints().donated_pairs().unwrap_or(&ValueAst::Undetermined) {
+            ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => match atom.donated_pairs() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
         };
-        let accepted = match atom.constraints().accepted_pairs() {
-            ValueAst::Lit(v) if v >= 0 => v,
+        let accepted = match atom.constraints().accepted_pairs().unwrap_or(&ValueAst::Undetermined) {
+            ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => match atom.accepted_pairs() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
         };
-        let aromatic_valence = match atom.constraints().aromatic_valence() {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if v >= 0 => v,
+        let aromatic_valence = match atom
+            .constraints()
+            .aromatic_valence()
+            .unwrap_or(&AromaticValenceAst::Undetermined)
+        {
+            AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if *v >= 0 => *v,
             AromaticValenceAst::NotAromatic => 0,
             AromaticValenceAst::Undetermined => match atom.aromatic_valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
@@ -252,8 +272,12 @@ impl ValenceInvariants {
             },
             _ => return Vec::new(),
         };
-        let multicenter_valence = match atom.constraints().multicenter_valence() {
-            MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if v >= 0 => v,
+        let multicenter_valence = match atom
+            .constraints()
+            .multicenter_valence()
+            .unwrap_or(&MulticenterValenceAst::Undetermined)
+        {
+            MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if *v >= 0 => *v,
             MulticenterValenceAst::NotMulticenter => 0,
             MulticenterValenceAst::Undetermined => match atom.multicenter_valence() {
                 ValueAst::Lit(t) if t >= 0 => t,

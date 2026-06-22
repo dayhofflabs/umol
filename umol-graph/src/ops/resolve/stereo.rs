@@ -81,9 +81,15 @@ impl StereoResolver {
         }
 
         let kind = StereoKind::Tetrahedral;
-        let TetrahedralStereoAst::Stereo(coset) = atom.ast.constraints.tetrahedral_stereo() else {
+        let TetrahedralStereoAst::Stereo(coset) = atom
+            .ast
+            .constraints
+            .tetrahedral_stereo()
+            .unwrap_or(&TetrahedralStereoAst::Undetermined)
+        else {
             return None;
         };
+        let coset = coset.clone();
         let model = self.model.kind_model(kind)?;
         if !model.scope.contains(atom.element().as_lit()?) {
             return None;
@@ -121,9 +127,15 @@ impl StereoResolver {
         let bond = ast.bond(id);
 
         let kind = StereoKind::CisTrans;
-        let CisTransStereoAst::Stereo(coset) = bond.ast.constraints.cis_trans_stereo() else {
+        let CisTransStereoAst::Stereo(coset) = bond
+            .ast
+            .constraints
+            .cis_trans_stereo()
+            .unwrap_or(&CisTransStereoAst::Undetermined)
+        else {
             return None;
         };
+        let coset = coset.clone();
         let model = self.model.kind_model(kind)?;
         // Endpoints are canonical (min, max) = raise's (start, end), so side_a/side_b
         // match the coset frame raise stored.

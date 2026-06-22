@@ -502,66 +502,66 @@ impl AtomConstraints {
         }
     }
 
-    pub fn valence(&self) -> ValueAst {
+    pub fn valence(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKind::Valence) {
-            Some(AtomConstraint::Valence(v)) => v.clone(),
-            _ => ValueAst::Undetermined,
+            Some(AtomConstraint::Valence(v)) => Some(v),
+            _ => None,
         }
     }
 
-    pub fn total_valence(&self) -> ValueAst {
+    pub fn total_valence(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKind::TotalValence) {
-            Some(AtomConstraint::TotalValence(v)) => v.clone(),
-            _ => ValueAst::Undetermined,
+            Some(AtomConstraint::TotalValence(v)) => Some(v),
+            _ => None,
         }
     }
 
-    pub fn degree(&self) -> ValueAst {
+    pub fn degree(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKind::Degree) {
-            Some(AtomConstraint::Degree(v)) => v.clone(),
-            _ => ValueAst::Undetermined,
+            Some(AtomConstraint::Degree(v)) => Some(v),
+            _ => None,
         }
     }
 
-    pub fn total_degree(&self) -> ValueAst {
+    pub fn total_degree(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKind::TotalDegree) {
-            Some(AtomConstraint::TotalDegree(v)) => v.clone(),
-            _ => ValueAst::Undetermined,
+            Some(AtomConstraint::TotalDegree(v)) => Some(v),
+            _ => None,
         }
     }
 
-    pub fn ring_degree(&self) -> ValueAst {
+    pub fn ring_degree(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKind::RingDegree) {
-            Some(AtomConstraint::RingDegree(v)) => v.clone(),
-            _ => ValueAst::Undetermined,
+            Some(AtomConstraint::RingDegree(v)) => Some(v),
+            _ => None,
         }
     }
 
-    pub fn ring_valence(&self) -> ValueAst {
+    pub fn ring_valence(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKind::RingValence) {
-            Some(AtomConstraint::RingValence(v)) => v.clone(),
-            _ => ValueAst::Undetermined,
+            Some(AtomConstraint::RingValence(v)) => Some(v),
+            _ => None,
         }
     }
 
-    pub fn total_hydrogens(&self) -> ValueAst {
+    pub fn total_hydrogens(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKind::TotalHydrogens) {
-            Some(AtomConstraint::TotalHydrogens(v)) => v.clone(),
-            _ => ValueAst::Undetermined,
+            Some(AtomConstraint::TotalHydrogens(v)) => Some(v),
+            _ => None,
         }
     }
 
-    pub fn donated_pairs(&self) -> ValueAst {
+    pub fn donated_pairs(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKind::DonatedPairs) {
-            Some(AtomConstraint::DonatedPairs(v)) => v.clone(),
-            _ => ValueAst::Undetermined,
+            Some(AtomConstraint::DonatedPairs(v)) => Some(v),
+            _ => None,
         }
     }
 
-    pub fn accepted_pairs(&self) -> ValueAst {
+    pub fn accepted_pairs(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKind::AcceptedPairs) {
-            Some(AtomConstraint::AcceptedPairs(v)) => v.clone(),
-            _ => ValueAst::Undetermined,
+            Some(AtomConstraint::AcceptedPairs(v)) => Some(v),
+            _ => None,
         }
     }
 
@@ -573,39 +573,36 @@ impl AtomConstraints {
             })
     }
 
-    fn ring_membership_value(&self, scope: RingScope) -> ValueAst {
-        self.ring_memberships()
-            .find(|(s, _)| *s == scope)
-            .map(|(_, v)| v.clone())
-            .unwrap_or(ValueAst::Undetermined)
+    fn ring_membership_value(&self, scope: RingScope) -> Option<&ValueAst> {
+        self.ring_memberships().find(|(s, _)| *s == scope).map(|(_, v)| v)
     }
 
-    pub fn ring_count(&self) -> ValueAst {
+    pub fn ring_count(&self) -> Option<&ValueAst> {
         self.ring_membership_value(RingScope::All)
     }
 
-    pub fn ring_size_count(&self, s: u8) -> ValueAst {
+    pub fn ring_size_count(&self, s: u8) -> Option<&ValueAst> {
         self.ring_membership_value(RingScope::Size(s))
     }
 
-    pub fn aromatic_valence(&self) -> AromaticValenceAst {
+    pub fn aromatic_valence(&self) -> Option<&AromaticValenceAst> {
         match self.get(AtomConstraintKind::AromaticValence) {
-            Some(AtomConstraint::AromaticValence(v)) => v.clone(),
-            _ => AromaticValenceAst::Undetermined,
+            Some(AtomConstraint::AromaticValence(v)) => Some(v),
+            _ => None,
         }
     }
 
-    pub fn multicenter_valence(&self) -> MulticenterValenceAst {
+    pub fn multicenter_valence(&self) -> Option<&MulticenterValenceAst> {
         match self.get(AtomConstraintKind::MulticenterValence) {
-            Some(AtomConstraint::MulticenterValence(v)) => v.clone(),
-            _ => MulticenterValenceAst::Undetermined,
+            Some(AtomConstraint::MulticenterValence(v)) => Some(v),
+            _ => None,
         }
     }
 
-    pub fn tetrahedral_stereo(&self) -> TetrahedralStereoAst {
+    pub fn tetrahedral_stereo(&self) -> Option<&TetrahedralStereoAst> {
         match self.get(AtomConstraintKind::TetrahedralStereo) {
-            Some(AtomConstraint::TetrahedralStereo(c)) => c.clone(),
-            _ => TetrahedralStereoAst::Undetermined,
+            Some(AtomConstraint::TetrahedralStereo(c)) => Some(c),
+            _ => None,
         }
     }
 
@@ -781,64 +778,71 @@ impl Lattice for AtomConstraints {
 
     fn meet(&self, other: &Self) -> Option<Self> {
         let mut result = Self::new();
-        let v = self.valence().meet(&other.valence())?;
+        let meet_val = |a: Option<&ValueAst>, b: Option<&ValueAst>| {
+            a.unwrap_or(&ValueAst::Undetermined)
+                .meet(b.unwrap_or(&ValueAst::Undetermined))
+        };
+        let v = meet_val(self.valence(), other.valence())?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::Valence(v));
         }
-        let v = self.total_valence().meet(&other.total_valence())?;
+        let v = meet_val(self.total_valence(), other.total_valence())?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::TotalValence(v));
         }
-        let v = self.aromatic_valence().meet(&other.aromatic_valence())?;
+        let v = self
+            .aromatic_valence()
+            .unwrap_or(&AromaticValenceAst::Undetermined)
+            .meet(other.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined))?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::AromaticValence(v));
         }
         let v = self
             .multicenter_valence()
-            .meet(&other.multicenter_valence())?;
+            .unwrap_or(&MulticenterValenceAst::Undetermined)
+            .meet(other.multicenter_valence().unwrap_or(&MulticenterValenceAst::Undetermined))?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::MulticenterValence(v));
         }
-        let v = self.donated_pairs().meet(&other.donated_pairs())?;
+        let v = meet_val(self.donated_pairs(), other.donated_pairs())?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::DonatedPairs(v));
         }
-        let v = self.accepted_pairs().meet(&other.accepted_pairs())?;
+        let v = meet_val(self.accepted_pairs(), other.accepted_pairs())?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::AcceptedPairs(v));
         }
-        let v = self.degree().meet(&other.degree())?;
+        let v = meet_val(self.degree(), other.degree())?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::Degree(v));
         }
-        let v = self.total_degree().meet(&other.total_degree())?;
+        let v = meet_val(self.total_degree(), other.total_degree())?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::TotalDegree(v));
         }
-        let v = self.ring_degree().meet(&other.ring_degree())?;
+        let v = meet_val(self.ring_degree(), other.ring_degree())?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::RingDegree(v));
         }
-        let v = self.ring_valence().meet(&other.ring_valence())?;
+        let v = meet_val(self.ring_valence(), other.ring_valence())?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::RingValence(v));
         }
-        let v = self.total_hydrogens().meet(&other.total_hydrogens())?;
+        let v = meet_val(self.total_hydrogens(), other.total_hydrogens())?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::TotalHydrogens(v));
         }
         let v = self
             .tetrahedral_stereo()
-            .meet(&other.tetrahedral_stereo())?;
+            .unwrap_or(&TetrahedralStereoAst::Undetermined)
+            .meet(other.tetrahedral_stereo().unwrap_or(&TetrahedralStereoAst::Undetermined))?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::TetrahedralStereo(v));
         }
         let mut scopes: BTreeSet<RingScope> = self.ring_memberships().map(|(s, _)| s).collect();
         scopes.extend(other.ring_memberships().map(|(s, _)| s));
         for scope in scopes {
-            let v = self
-                .ring_membership_value(scope)
-                .meet(&other.ring_membership_value(scope))?;
+            let v = meet_val(self.ring_membership_value(scope), other.ring_membership_value(scope))?;
             if !v.is_undetermined() {
                 result.add(AtomConstraint::RingMembership(RingMembershipAst::new(
                     scope, v,
@@ -855,7 +859,8 @@ impl Lattice for AtomConstraints {
                 if self.contains(AtomConstraintKind::$kind)
                     && other.contains(AtomConstraintKind::$kind)
                 {
-                    let joined = self.$accessor().join(&other.$accessor());
+                    // both present (guarded above), so the accessors are `Some`
+                    let joined = self.$accessor().unwrap().join(other.$accessor().unwrap());
                     if !joined.is_undetermined() {
                         result.add(AtomConstraint::$variant(joined));
                     }
@@ -876,7 +881,7 @@ impl Lattice for AtomConstraints {
         join_unique_value!(TetrahedralStereo, tetrahedral_stereo, TetrahedralStereo);
         for (scope, v) in self.ring_memberships() {
             if other.ring_memberships().any(|(s, _)| s == scope) {
-                let j = v.join(&other.ring_membership_value(scope));
+                let j = v.join(other.ring_membership_value(scope).unwrap());
                 if !j.is_undetermined() {
                     result.add(AtomConstraint::RingMembership(RingMembershipAst::new(
                         scope, j,
@@ -893,25 +898,34 @@ impl Lattice for AtomConstraints {
         if self.is_empty() {
             return true;
         }
-        self.valence().matches(&target.valence())
-            && self.total_valence().matches(&target.total_valence())
-            && self.aromatic_valence().matches(&target.aromatic_valence())
+        let matches_val = |p: Option<&ValueAst>, t: Option<&ValueAst>| {
+            p.unwrap_or(&ValueAst::Undetermined)
+                .matches(t.unwrap_or(&ValueAst::Undetermined))
+        };
+        matches_val(self.valence(), target.valence())
+            && matches_val(self.total_valence(), target.total_valence())
+            && self
+                .aromatic_valence()
+                .unwrap_or(&AromaticValenceAst::Undetermined)
+                .matches(target.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined))
             && self
                 .multicenter_valence()
-                .matches(&target.multicenter_valence())
-            && self.donated_pairs().matches(&target.donated_pairs())
-            && self.accepted_pairs().matches(&target.accepted_pairs())
-            && self.degree().matches(&target.degree())
-            && self.total_degree().matches(&target.total_degree())
-            && self.ring_degree().matches(&target.ring_degree())
-            && self.ring_valence().matches(&target.ring_valence())
-            && self.total_hydrogens().matches(&target.total_hydrogens())
+                .unwrap_or(&MulticenterValenceAst::Undetermined)
+                .matches(target.multicenter_valence().unwrap_or(&MulticenterValenceAst::Undetermined))
+            && matches_val(self.donated_pairs(), target.donated_pairs())
+            && matches_val(self.accepted_pairs(), target.accepted_pairs())
+            && matches_val(self.degree(), target.degree())
+            && matches_val(self.total_degree(), target.total_degree())
+            && matches_val(self.ring_degree(), target.ring_degree())
+            && matches_val(self.ring_valence(), target.ring_valence())
+            && matches_val(self.total_hydrogens(), target.total_hydrogens())
             && self
                 .tetrahedral_stereo()
-                .matches(&target.tetrahedral_stereo())
+                .unwrap_or(&TetrahedralStereoAst::Undetermined)
+                .matches(target.tetrahedral_stereo().unwrap_or(&TetrahedralStereoAst::Undetermined))
             && self
                 .ring_memberships()
-                .all(|(scope, v)| v.matches(&target.ring_membership_value(scope)))
+                .all(|(scope, v)| matches_val(Some(v), target.ring_membership_value(scope)))
     }
 }
 

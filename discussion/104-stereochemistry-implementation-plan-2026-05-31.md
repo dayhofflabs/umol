@@ -1588,6 +1588,16 @@ Phases A–E are in scope; F (3D) and G follow.
     RDKit now **~2.3×**, below doc 082's raw VF2 margin. Per-host caching of the derived target (`OnceLock`)
     is a later screening-workload optimization, not done. Combined with the cheap `matches`: **~10× → ~2.3×**.
 
+    **Host-borrow (2026-06-21).** `host_match_targets` cloned the entire host (~250 B/atom × corpus, per
+    call); switching the no-derive path to `Cow::Borrowed` removed it. `Vf2Rdkit` GraphAndOverlays ms/pass
+    (vs RDKit on the same machine): branched 125→**41.2** (RDKit 51.1), phenol 212→**73.4** (85.4), bicyclic
+    123→**40.1** (52.1). **umol is now at/ahead of RDKit** — full arc **~10× slower → faster-than-RDKit**.
+    Caveats: RDKit is called per-molecule from Python (per-call FFI overhead in its number; neck-and-neck with
+    its C++ core), and both sides are *unscreened* (RDKit library search adds a `PatternFingerprint`
+    prefilter we don't have). Callgrind (doc 123) shows the residual umol match cost is now distributed
+    (field-wise predicate / search+`neighbors` / per-call buffers) with no dominant hotspot — the gross waste
+    is gone.
+
   - **Port order:** `Ullmann` → `Ri` → `ArcMatch` (RI's ordering feeds ArcMatch's variable ordering), fold
     the `Vf2` candidate-gen optimization, then `substructure_matches` (`GraphAndOverlays` first,
     `Incidence` after). **`Ullmann` and `Ri` done** (2026-06-20): both in `subiso` behind the selector,

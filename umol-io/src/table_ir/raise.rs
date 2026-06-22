@@ -456,19 +456,19 @@ mod tests {
     }
 
     #[rstest]
-    #[case::table_aromatic_none(None, AromaticValenceAst::Undetermined)]
-    #[case::table_aromatic_false(Some(false), AromaticValenceAst::NotAromatic)]
-    #[case::table_aromatic_true(Some(true), AromaticValenceAst::Aromatic(ValueAst::Undetermined))]
+    #[case::table_aromatic_none(None, None)]
+    #[case::table_aromatic_false(Some(false), Some(AromaticValenceAst::NotAromatic))]
+    #[case::table_aromatic_true(Some(true), Some(AromaticValenceAst::Aromatic(ValueAst::Undetermined)))]
     fn test_table_molecule_try_into_ast_aromatic(
         mut carbon: TableMolecule,
         #[case] aromatic: Option<bool>,
-        #[case] expected: AromaticValenceAst,
+        #[case] expected: Option<AromaticValenceAst>,
     ) {
         carbon.atoms[0].aromatic = aromatic;
         let ast: MoleculeAst = (&carbon).try_into_ast(&()).unwrap();
         assert_eq!(
             ast.atom(AtomId(0)).ast.constraints.aromatic_valence(),
-            expected
+            expected.as_ref()
         );
     }
 
@@ -493,10 +493,12 @@ mod tests {
             .iter()
             .any(|c| matches!(c, BondConstraint::Aromatic)));
         for i in 0..2 {
-            assert!(matches!(
-                ast.atom(AtomId(i)).ast.constraints.aromatic_valence(),
-                AromaticValenceAst::Undetermined
-            ));
+            assert!(ast
+                .atom(AtomId(i))
+                .ast
+                .constraints
+                .aromatic_valence()
+                .is_none());
         }
     }
 
@@ -508,10 +510,7 @@ mod tests {
         let ast = parse_mol_to_ast(input).unwrap();
         let atom = ast.atom(AtomId(0)).ast;
         assert_eq!(atom.charge, ValueAst::Lit(0));
-        assert!(matches!(
-            atom.constraints.aromatic_valence(),
-            AromaticValenceAst::Undetermined
-        ));
+        assert!(atom.constraints.aromatic_valence().is_none());
         assert_eq!(atom.to_string(), expected_atom);
     }
 
@@ -524,7 +523,7 @@ mod tests {
         assert!(matches!(atom.implicit_hydrogens, ValueAst::Undetermined));
         assert!(matches!(
             atom.constraints.aromatic_valence(),
-            AromaticValenceAst::NotAromatic
+            Some(AromaticValenceAst::NotAromatic)
         ));
         assert_eq!(atom.to_string(), expected_atom);
     }

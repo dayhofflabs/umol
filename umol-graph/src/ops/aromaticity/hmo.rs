@@ -353,8 +353,8 @@ mod tests {
             .build_calculator(
                 ast,
                 &atoms,
-                &|v| match v.ast.constraints.aromatic_valence() {
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                &|v| match v.ast.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined) {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
                     _ => None,
                 },
             )
@@ -492,8 +492,8 @@ mod tests {
             .find_from_rings(
                 &ast,
                 &ring_info,
-                &|v| match v.ast.constraints.aromatic_valence() {
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                &|v| match v.ast.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined) {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
                     _ => None,
                 },
             )
@@ -535,8 +535,8 @@ mod tests {
             .build_calculator(
                 &pyridine,
                 &atoms,
-                &|v| match v.ast.constraints.aromatic_valence() {
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                &|v| match v.ast.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined) {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
                     _ => None,
                 },
             )

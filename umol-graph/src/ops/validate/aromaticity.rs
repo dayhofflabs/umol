@@ -47,9 +47,11 @@ impl AromaticityConformanceValidator {
     ) -> Result<Solution<(), AromaticityValidatorContradiction>, AromaticityError> {
         let outcome =
             self.perception
-                .find_systems(ast, |v| match v.ast.constraints.aromatic_valence() {
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
-                    _ => None,
+                .find_systems(ast, |v| {
+                    match v.ast.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined) {
+                        AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+                        _ => None,
+                    }
                 })?;
         let perception_systems = match outcome {
             Solution::Determined(systems) => systems,

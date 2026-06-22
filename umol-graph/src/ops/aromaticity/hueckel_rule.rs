@@ -529,8 +529,9 @@ mod tests {
             .ast
             .constraints
             .aromatic_valence()
+            .unwrap_or(&AromaticValenceAst::Undetermined)
         {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+            AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
             _ => None,
         });
         assert_eq!(systems.len(), 1);
@@ -553,8 +554,9 @@ mod tests {
             .ast
             .constraints
             .aromatic_valence()
+            .unwrap_or(&AromaticValenceAst::Undetermined)
         {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+            AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
             _ => None,
         });
         assert!(systems.is_empty());
@@ -567,8 +569,9 @@ mod tests {
             .ast
             .constraints
             .aromatic_valence()
+            .unwrap_or(&AromaticValenceAst::Undetermined)
         {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+            AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
             _ => None,
         });
         assert_eq!(systems.len(), 1);

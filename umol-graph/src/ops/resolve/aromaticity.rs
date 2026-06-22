@@ -31,8 +31,8 @@ impl AromaticityResolver {
             if v.is_in_aromatic_system() {
                 return None;
             }
-            match v.ast.constraints.aromatic_valence() {
-                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+            match v.ast.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined) {
+                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
                 _ => None,
             }
         })?;

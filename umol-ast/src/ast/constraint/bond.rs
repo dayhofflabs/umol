@@ -139,25 +139,22 @@ impl BondConstraints {
             })
     }
 
-    fn ring_membership_value(&self, scope: RingScope) -> ValueAst {
-        self.ring_memberships()
-            .find(|(s, _)| *s == scope)
-            .map(|(_, v)| v.clone())
-            .unwrap_or(ValueAst::Undetermined)
+    fn ring_membership_value(&self, scope: RingScope) -> Option<&ValueAst> {
+        self.ring_memberships().find(|(s, _)| *s == scope).map(|(_, v)| v)
     }
 
-    pub fn ring_count(&self) -> ValueAst {
+    pub fn ring_count(&self) -> Option<&ValueAst> {
         self.ring_membership_value(RingScope::All)
     }
 
-    pub fn ring_size_count(&self, s: u8) -> ValueAst {
+    pub fn ring_size_count(&self, s: u8) -> Option<&ValueAst> {
         self.ring_membership_value(RingScope::Size(s))
     }
 
-    pub fn cis_trans_stereo(&self) -> CisTransStereoAst {
+    pub fn cis_trans_stereo(&self) -> Option<&CisTransStereoAst> {
         match self.get(BondConstraintKind::CisTransStereo) {
-            Some(BondConstraint::CisTransStereo(c)) => c.clone(),
-            _ => CisTransStereoAst::Undetermined,
+            Some(BondConstraint::CisTransStereo(c)) => Some(c),
+            _ => None,
         }
     }
 
@@ -313,19 +310,24 @@ impl Lattice for BondConstraints {
 
     fn meet(&self, other: &Self) -> Option<Self> {
         let mut result = Self::new();
+        let meet_val = |a: Option<&ValueAst>, b: Option<&ValueAst>| {
+            a.unwrap_or(&ValueAst::Undetermined)
+                .meet(b.unwrap_or(&ValueAst::Undetermined))
+        };
         if self.aromatic() || other.aromatic() {
             result.add(BondConstraint::Aromatic);
         }
-        let cts = self.cis_trans_stereo().meet(&other.cis_trans_stereo())?;
+        let cts = self
+            .cis_trans_stereo()
+            .unwrap_or(&CisTransStereoAst::Undetermined)
+            .meet(other.cis_trans_stereo().unwrap_or(&CisTransStereoAst::Undetermined))?;
         if !cts.is_undetermined() {
             result.add(BondConstraint::CisTransStereo(cts));
         }
         let mut scopes: BTreeSet<RingScope> = self.ring_memberships().map(|(s, _)| s).collect();
         scopes.extend(other.ring_memberships().map(|(s, _)| s));
         for scope in scopes {
-            let v = self
-                .ring_membership_value(scope)
-                .meet(&other.ring_membership_value(scope))?;
+            let v = meet_val(self.ring_membership_value(scope), other.ring_membership_value(scope))?;
             if !v.is_undetermined() {
                 result.add(BondConstraint::RingMembership(RingMembershipAst::new(
                     scope, v,
@@ -343,14 +345,18 @@ impl Lattice for BondConstraints {
         if self.contains(BondConstraintKind::CisTransStereo)
             && other.contains(BondConstraintKind::CisTransStereo)
         {
-            let joined = self.cis_trans_stereo().join(&other.cis_trans_stereo());
+            // both present (guarded above), so the accessors are `Some`
+            let joined = self
+                .cis_trans_stereo()
+                .unwrap()
+                .join(other.cis_trans_stereo().unwrap());
             if !joined.is_undetermined() {
                 result.add(BondConstraint::CisTransStereo(joined));
             }
         }
         for (scope, v) in self.ring_memberships() {
             if other.ring_memberships().any(|(s, _)| s == scope) {
-                let j = v.join(&other.ring_membership_value(scope));
+                let j = v.join(other.ring_membership_value(scope).unwrap());
                 if !j.is_undetermined() {
                     result.add(BondConstraint::RingMembership(RingMembershipAst::new(
                         scope, j,
@@ -367,11 +373,18 @@ impl Lattice for BondConstraints {
         if self.is_empty() {
             return true;
         }
+        let matches_val = |p: Option<&ValueAst>, t: Option<&ValueAst>| {
+            p.unwrap_or(&ValueAst::Undetermined)
+                .matches(t.unwrap_or(&ValueAst::Undetermined))
+        };
         (!self.aromatic() || target.aromatic())
-            && self.cis_trans_stereo().matches(&target.cis_trans_stereo())
+            && self
+                .cis_trans_stereo()
+                .unwrap_or(&CisTransStereoAst::Undetermined)
+                .matches(target.cis_trans_stereo().unwrap_or(&CisTransStereoAst::Undetermined))
             && self
                 .ring_memberships()
-                .all(|(scope, v)| v.matches(&target.ring_membership_value(scope)))
+                .all(|(scope, v)| matches_val(Some(v), target.ring_membership_value(scope)))
     }
 }
 

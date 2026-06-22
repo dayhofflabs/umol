@@ -2314,18 +2314,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::introduce(None, Some(AtomConstraint::valence(4)), ValueAst::Lit(4))]
+    #[case::introduce(None, Some(AtomConstraint::valence(4)), Some(ValueAst::Lit(4)))]
     #[case::replace(
         Some(AtomConstraint::valence(3)),
         Some(AtomConstraint::valence(4)),
-        ValueAst::Lit(4)
+        Some(ValueAst::Lit(4))
     )]
-    #[case::remove(Some(AtomConstraint::valence(3)), None, ValueAst::Undetermined)]
+    #[case::remove(Some(AtomConstraint::valence(3)), None, None)]
     fn test_molecule_builder_transact_set_atom_constraint(
         mut one_atom: MoleculeBuilder,
         #[case] old: Option<AtomConstraint>,
         #[case] new: Option<AtomConstraint>,
-        #[case] expected: ValueAst,
+        #[case] expected: Option<ValueAst>,
     ) {
         if let Some(c) = old.clone() {
             one_atom.atom_mut(AtomId(0)).ast.constraints.add(c);
@@ -2339,7 +2339,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             one_atom.atom_mut(AtomId(0)).ast.constraints.valence(),
-            expected
+            expected.as_ref()
         );
     }
 

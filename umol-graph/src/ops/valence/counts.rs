@@ -81,7 +81,7 @@ impl<'a> CountsValence<'a> {
         let accepted_pairs = atom.accepted_pairs().as_lit_or(0);
         let is_aromatic = atom.is_in_aromatic_system()
             || atom.neighbors().any(|n| n.bond().constraints().aromatic())
-            || atom.constraints().aromatic_valence().is_aromatic();
+            || atom.constraints().aromatic_valence().is_some_and(|a| a.is_aromatic());
 
         let derived = self.derive_fields(atom.ast, valence, accepted_pairs, is_aromatic)?;
         let mut resolved = atom.ast.meet(&derived).ok_or(CountsError::NoMatch)?;
@@ -102,9 +102,11 @@ impl<'a> CountsValence<'a> {
         if ast.charge.is_undetermined() {
             return Ok(());
         };
-        let valence = ast.constraints.valence().as_lit_or(0);
-        let accepted_pairs = ast.constraints.accepted_pairs().as_lit_or(0);
-        let is_aromatic = ast.constraints.aromatic_valence().is_aromatic();
+        let valence = ast.constraints.valence().unwrap_or(&ValueAst::Undetermined).as_lit_or(0);
+        let accepted_pairs =
+            ast.constraints.accepted_pairs().unwrap_or(&ValueAst::Undetermined).as_lit_or(0);
+        let is_aromatic =
+            ast.constraints.aromatic_valence().is_some_and(|a| a.is_aromatic());
 
         let derived = self.derive_fields(ast, valence, accepted_pairs, is_aromatic)?;
         *ast = ast.meet(&derived).ok_or(CountsError::NoMatch)?;
@@ -128,7 +130,7 @@ impl<'a> CountsValence<'a> {
         let accepted_pairs = atom.accepted_pairs().as_lit_or(0);
         let is_aromatic = atom.is_in_aromatic_system()
             || atom.neighbors().any(|n| n.bond().constraints().aromatic())
-            || atom.constraints().aromatic_valence().is_aromatic();
+            || atom.constraints().aromatic_valence().is_some_and(|a| a.is_aromatic());
         match self.derive_fields(atom.ast, valence, accepted_pairs, is_aromatic) {
             Ok(_) => Solution::Determined(()),
             Err(_) => Solution::Contradictory(CountsMismatch {
@@ -153,7 +155,8 @@ impl<'a> CountsValence<'a> {
             .shift((2 * accepted_pairs - charge) as i8)
             .and_then(|shifted| self.model.table.entry(shifted));
 
-        let aromatic_constraint = atom.constraints.aromatic_valence();
+        let aromatic_constraint =
+            atom.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined);
         if entry.is_none()
             && matches!(
                 aromatic_constraint,
@@ -177,7 +180,7 @@ impl<'a> CountsValence<'a> {
         };
 
         let aromatic_values = aromatic_valence_values(
-            &aromatic_constraint,
+            aromatic_constraint,
             is_aromatic,
             entry.map(|e| e.aromatic_valences.as_slice()),
         );

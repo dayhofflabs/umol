@@ -717,18 +717,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::with_constraint(Some(AtomConstraint::valence(4)), ValueAst::Lit(4))]
-    #[case::absent(None, ValueAst::Undetermined)]
+    #[case::with_constraint(Some(AtomConstraint::valence(4)), Some(ValueAst::Lit(4)))]
+    #[case::absent(None, None)]
     fn test_atom_view_valence_constraint(
         #[case] constraint: Option<AtomConstraint>,
-        #[case] expected: ValueAst,
+        #[case] expected: Option<ValueAst>,
     ) {
         let mut atom = AtomAst::from_element(Element::C);
         if let Some(c) = constraint {
             atom.constraints.add(c);
         }
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
-        assert_eq!(molecule.atom(AtomId(0)).constraints().valence(), expected);
+        assert_eq!(molecule.atom(AtomId(0)).constraints().valence(), expected.as_ref());
     }
 
     #[rstest]
@@ -759,7 +759,7 @@ mod tests {
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().donated_pairs(),
-            ValueAst::Lit(1),
+            Some(&ValueAst::Lit(1)),
         );
     }
 
@@ -791,7 +791,7 @@ mod tests {
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().accepted_pairs(),
-            ValueAst::Lit(2),
+            Some(&ValueAst::Lit(2)),
         );
     }
 
@@ -1076,7 +1076,7 @@ mod tests {
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().aromatic_valence(),
-            AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
+            Some(&AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
         );
     }
 
@@ -1131,7 +1131,7 @@ mod tests {
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().multicenter_valence(),
-            MulticenterValenceAst::Multicenter(ValueAst::Lit(2)),
+            Some(&MulticenterValenceAst::Multicenter(ValueAst::Lit(2))),
         );
     }
 

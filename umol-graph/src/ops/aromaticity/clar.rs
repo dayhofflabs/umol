@@ -278,8 +278,8 @@ mod tests {
             .find_from_rings(
                 &ast,
                 &rings,
-                &|v| match v.ast.constraints.aromatic_valence() {
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                &|v| match v.ast.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined) {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
                     _ => None,
                 },
             )
@@ -326,8 +326,8 @@ mod tests {
         let model = ClarAromaticity;
         assert!(model
             .find_from_rings(&ast, &rings, &|v| {
-                match v.ast.constraints.aromatic_valence() {
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                match v.ast.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined) {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
                     _ => None,
                 }
             })
