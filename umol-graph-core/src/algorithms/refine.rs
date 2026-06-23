@@ -37,6 +37,15 @@ pub enum RefinementRounds {
     Fixed(usize),
 }
 
+/// A circular (extended-connectivity) refinement algorithm. Chemistry-flavored —
+/// in service of ECFP/FCFP fingerprints — but graph-generic via caller labels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CircularRefinementAlgorithm {
+    /// Rogers & Hahn 2010, hashed with `xxh3_64` seeded by `seed`. The paper
+    /// leaves the hash unspecified; this is a frozen choice.
+    RogersHahn { seed: u64 },
+}
+
 /// Hashing scheme for color refinement. The built-in [`RefinementXxh3Scheme`] families or
 /// custom schemes must implement it.
 pub trait RefinementHash {
@@ -117,6 +126,66 @@ impl Graph {
         }
         let digest = scheme.graph_hash(colorings.last().expect("seed present"));
         Refinement { colorings, digest }
+    }
+
+    /// Rogers–Hahn circular (extended-connectivity) refinement: each node's
+    /// identifier after every round `0..=radius`. Chemistry-flavored (it drives
+    /// ECFP/FCFP) but graph-generic — the caller supplies node and edge labels.
+    /// Round 0 hashes the node label; round r hashes
+    /// `[r, prev_id, sorted (edge_label, neighbor_prev_id)…]` (Rogers & Hahn 2010).
+    pub fn circular_refine(
+        &self,
+        node_label: impl Fn(NodeId) -> u64,
+        edge_label: impl Fn(EdgeId) -> u64,
+        radius: u32,
+        algorithm: CircularRefinementAlgorithm,
+    ) -> Vec<Vec<u64>> {
+        match algorithm {
+            CircularRefinementAlgorithm::RogersHahn { seed } => {
+                self.circular_refine_rogers_hahn(node_label, edge_label, radius, seed)
+            }
+        }
+    }
+
+    fn circular_refine_rogers_hahn(
+        &self,
+        node_label: impl Fn(NodeId) -> u64,
+        edge_label: impl Fn(EdgeId) -> u64,
+        radius: u32,
+        seed: u64,
+    ) -> Vec<Vec<u64>> {
+        let node_count = self.node_count();
+        let mut rounds: Vec<Vec<u64>> = Vec::with_capacity(radius as usize + 1);
+        rounds.push(
+            (0..node_count)
+                .map(|i| xxh3_64_with_seed(&node_label(NodeId(i as u32)).to_le_bytes(), seed))
+                .collect(),
+        );
+        for iteration in 1..=radius {
+            let next = {
+                let previous = rounds.last().expect("round 0 present");
+                (0..node_count)
+                    .map(|i| {
+                        let mut neighbors: Vec<(u64, u64)> = self
+                            .neighbors(NodeId(i as u32))
+                            .iter()
+                            .map(|nb| (edge_label(nb.edge), previous[nb.node.index()]))
+                            .collect();
+                        neighbors.sort_unstable();
+                        let mut buffer = Vec::with_capacity(16 + neighbors.len() * 16);
+                        buffer.extend_from_slice(&u64::from(iteration).to_le_bytes());
+                        buffer.extend_from_slice(&previous[i].to_le_bytes());
+                        for (edge, color) in neighbors {
+                            buffer.extend_from_slice(&edge.to_le_bytes());
+                            buffer.extend_from_slice(&color.to_le_bytes());
+                        }
+                        xxh3_64_with_seed(&buffer, seed)
+                    })
+                    .collect()
+            };
+            rounds.push(next);
+        }
+        rounds
     }
 }
 
@@ -478,5 +547,35 @@ mod tests {
         };
         let h = g.refine(uniform, no_edge_color, algorithm).graph_hash();
         assert_eq!(h, 313131582038434349855774725390837831516);
+    }
+
+    #[rstest]
+    fn test_graph_circular_refine() {
+        // Path 0-1-2 with uniform labels: the ends are symmetric, the middle distinct.
+        let graph = Graph::new(3, &[[0, 1], [1, 2]]);
+        let rounds = graph.circular_refine(
+            |_| 6,
+            |_| 1,
+            2,
+            CircularRefinementAlgorithm::RogersHahn { seed: 0x5eed },
+        );
+        assert_eq!(rounds.len(), 3);
+        assert_eq!(rounds[0][0], rounds[0][1]);
+        assert_eq!(rounds[0][1], rounds[0][2]);
+        assert_eq!(rounds[1][0], rounds[1][2]);
+        assert_ne!(rounds[1][0], rounds[1][1]);
+    }
+
+    #[rstest]
+    fn test_graph_circular_refine_distinguishes_labels() {
+        let graph = Graph::new(2, &[[0, 1]]);
+        let rounds = graph.circular_refine(
+            |n: NodeId| if n.0 == 0 { 6 } else { 7 },
+            |_| 1,
+            0,
+            CircularRefinementAlgorithm::RogersHahn { seed: 1 },
+        );
+        assert_eq!(rounds.len(), 1);
+        assert_ne!(rounds[0][0], rounds[0][1]);
     }
 }

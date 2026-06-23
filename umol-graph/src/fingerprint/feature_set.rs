@@ -1,11 +1,4 @@
 //! Unfolded binary feature set: a sorted, duplicate-free vector of identifiers.
-//!
-//! Identifiers are frozen hashes spread uniformly over `2^width`, so a sorted
-//! contiguous `Vec` is the right structure: similarity is a cache-friendly linear
-//! merge of two sorted runs (a map would only add tree/hash indirection over the
-//! same scan), and subset screening binary-searches the smaller side into the
-//! larger. Presence is all the binary metrics need; a count fingerprint is a
-//! separate representation, added when a count-based method requires it.
 
 use std::cmp::Ordering;
 

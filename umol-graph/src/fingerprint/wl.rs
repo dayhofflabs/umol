@@ -1,10 +1,4 @@
 //! Weisfeiler–Lehman featurizer: frozen color refinement over the atom graph.
-//!
-//! Atoms are nodes, localized bonds are edges. Seeds pack concrete field *values*
-//! (the molecule must be ground) and let the frozen `RefinementXxh3Scheme` do all
-//! hashing, so the fingerprint is bit-stable across runs. Overlay relations
-//! (aromatic / dative / multicenter / noncovalent) do not enter the topology; bond
-//! aromaticity participates only as a seed field.
 
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
 use umol_graph_core::{

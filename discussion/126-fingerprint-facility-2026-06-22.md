@@ -467,6 +467,47 @@ No new crate dependencies.
   for the shared `WlFeaturizer`.
 - `featurizer.rs`: dispatch forwards to the inner struct; non-ground → `NotGround`.
 
+## Implementation plan — slice 2: ECFP (Rogers & Hahn 2010)
+
+Faithful to the R&H *algorithm*, not RDKit. The paper specifies **no** hash function
+or seed — only "a reasonable hash, uniform into 2³² (or 2⁶⁴)" (p.746). So we use
+`xxh3_64` with a dedicated ECFP seed; that is a free, frozen choice, not the WL
+`refine`/albatross machinery. Graph algorithms live in `umol-graph-core`; chemistry
+and dedup in the domain crate.
+
+### `umol-graph-core` additions
+
+- `algorithms/bfs.rs`: `Graph::bfs_distances(source, max_depth) -> Vec<u32>`
+  (`u32::MAX` = beyond `max_depth` or unreachable). General-purpose.
+- `algorithms/circular.rs`: the R&H circular refinement,
+  `Graph::circular_refine(node_label, edge_label, radius, seed) -> Vec<Vec<u64>>`
+  (`[round][node]` identifier). Round 0 = `xxh3_64(seed, node_label(n))`; round *r* =
+  `xxh3_64(seed, [r, prev_id, sorted (edge_label, neighbor_prev_id)…])` — the salted
+  array of p.744. Generic over the label closures and seed (so FCFP/Morgan reuse it
+  with a different seed/invariant); separate from WL `refine`.
+
+### `umol-graph::fingerprint` additions
+
+- `EcfpFeaturizer { radius, seed }` → `Featurizer::Ecfp(..)` → binary `FeatureSet<u64>`.
+- **Daylight seed invariant** (paper-exact): `heavy_atom_degree`, `heavy_atom_valence`,
+  `atomic_number`, `isotope_mass`, `charge`, `total_hydrogens`, `is_in_ring`, bit-packed
+  into the node label. Bond label = (order, aromatic).
+- Per (atom, round 0..=radius): identifier from `circular_refine`; covered **bond set**
+  (rounds ≥1) from `bfs_distances` — edges with an endpoint at distance ≤ *r*−1.
+- **Dedup** (p.745): round-0 identifiers go straight into the set (the set is the
+  identifier-dedup). Rounds ≥1 get structural dedup by bond set — keep the feature
+  with the smallest `(round, identifier)` per bond set (R&H rules 1 & 2). The result
+  is round-0 ids ∪ survivors.
+- ECFP_{2·radius} naming; no stereo at seed; no fold/counts (slice 3).
+
+### Tests
+
+- **R&H conformance, hash-independent**: butyramide `CCCC(=O)N` feature *counts* at
+  radius 0/1/2/3 = **5 / 11 / 14 / 14** (paper Fig 8: ECFP_0/2/4/6) — validates invariants +
+  iteration + dedup without depending on the hash.
+- Pinned exact-id anchor under the ECFP seed.
+- `bfs_distances` unit tests; order-independence + discrimination, as for WL.
+
 ## Scope guardrails
 
 - Deliverables a–f now; the omissions (AP/TT, path, MACCS, MHFP/MAP4,

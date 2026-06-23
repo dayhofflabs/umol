@@ -23,10 +23,12 @@ pub use algorithms::mcs::{
 };
 pub use algorithms::mis::MaxIndependentSetAlgorithm;
 pub use algorithms::refine::{
-    Refinement, RefinementAggregation, RefinementAlgorithm, RefinementHash, RefinementRounds,
-    RefinementWidth, RefinementWidth64, RefinementWidth128, RefinementXxh3Scheme,
+    CircularRefinementAlgorithm, Refinement, RefinementAggregation, RefinementAlgorithm,
+    RefinementHash, RefinementRounds, RefinementWidth, RefinementWidth64, RefinementWidth128,
+    RefinementXxh3Scheme,
 };
 pub use algorithms::subiso::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
+pub use algorithms::traversal::TraversalAlgorithm;
 pub use graph::{EdgeId, Embedding, Graph, Neighbor, NodeId, Remapping};
 pub use relation::{
     FactorOrdering, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, Ordered,
