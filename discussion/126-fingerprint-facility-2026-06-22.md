@@ -574,25 +574,72 @@ delta-mass), so this is genuinely a distinct featurizer, not ECFP with a flag.
   produces it, replicated") is the bit-exact path; confirm given the cost.
 - Deps: `circular_refine` (built) + a hash path; RDKit fixtures.
 
-### Slice 5 — Substructure, unhashed (f)
+### Slice 5 — Substructure (f): two directions on a shared enumeration primitive
 
-Exact subgraph keys for prescreening (the RDKit pattern-FP role): enumerate
-labeled subgraphs, reduce each to a canonical structural key, screen with
-`is_subset`.
+The literature/impl review (open question 2) found that RDKit's *sound*
+substructure-screening FP is `PatternFingerprint` — a **fixed library of ~13 small
+templates** (single atom; 1 bond; 2–3-atom paths; branched 4–5-atom; rings 3–6;
+ring-junction motifs) matched by subgraph isomorphism, keyed by **element +
+bond-type only** (the embedding-monotone invariants; degree/ring-count are
+deliberately excluded), dropping any feature that touches a query/uncertain atom so
+`query ⊆ target` has no false negatives. The path-based "RDKit FP"
+(`Fingerprints.cpp`) is a *similarity* FP and is **not** subset-sound (it bakes
+within-subgraph degree and atom counts into the key).
 
-- Builds: **bounded subgraph / path enumeration in `umol-graph-core`** (primitive 8
-  — new core algorithm, the traversal/enumeration category); a **canonical key**
-  per subgraph (primitive 3, via `auto`/canonical form — collision-free, hence
-  "unhashed"); a keyed feature set; exact-prescreen `is_subset` (**soundness**: the
-  enumeration must be consistent so every query feature is derivable in any
-  superstructure target).
-- Decisions: **the enumeration set** (paths / rings / atom environments / all
-  connected subgraphs ≤ L) — pending the `materials/subgraphs` + RDKit pattern-FP
-  review (open question 2); **canonical-key representation** (canonical-SMILES
-  string vs structural byte key) and how a non-`Copy` key fits `FeatureSet`
-  (relax the `Id` bound to `Clone + Ord`, or a separate keyed container);
-  labeled-only vs also unlabeled-graph features (open question 2).
-- Deps: new core enumeration + canonicalization.
+Two directions are built, sharing one core enumeration primitive:
+
+**Core primitive — `umol-graph-core`, bounded enumeration.** Independently
+justified (topological torsion = length-3-bond paths, BRIDGIT, future RDKit path
+FP), so it is built here regardless of the FPs. New algorithm module; output = edge
+sets (`Vec<Vec<EdgeId>>`) — a feature is an edge set, since a ring and its spanning
+path differ only in edges. Selector enums proxy to named algorithms
+(algorithm-transparency convention):
+- `enumerate_paths(max_length, PathEnumerationAlgorithm::Dfs)` — simple paths ≤
+  `max_length` bonds; bounded DFS, deduped by endpoint orientation.
+- `enumerate_connected_subgraphs(max_size, SubgraphEnumerationAlgorithm::Esu)` —
+  connected (branched) subgraphs ≤ `max_size` bonds; **Wernicke ESU** (*Efficient
+  detection of network motifs*, 2006 — exclusive-neighborhood expansion,
+  duplicate-free).
+- Plus **edge-induced subgraph extraction** `Graph::edge_induced_subgraph(&[EdgeId])
+  -> Embedding` (today only node-induced exists, which cannot isolate a path from a
+  chorded ring).
+
+**Direction B — RDKit `PatternFingerprint` replica (`umol-graph::fingerprint`).**
+Bit-exact, pinned to RDKit 2026.03.3 (same revision as Morgan), offline fixtures —
+for head-to-head benchmark comparison.
+- RDKit's fixed template set expressed as `MoleculeAst` patterns (no SMARTS query
+  layer — the constraints already exist): element `*` = `ElementAst::Undetermined`
+  (the match wildcard); `[R]`/ring-size = `AtomConstraint::RingMembership(RingScope::
+  {All, Size(s)})`; `@` (ring bond) = `BondConstraint::RingMembership`; `~` =
+  `BondAst` with undetermined order.
+- Matched via existing `substructure_matches`; key = RDKit gboost hash over per-atom
+  element + per-bond type (aromatic collapsed) in template order; query-touching
+  matches dropped; fold `% width`.
+- Validate via fixtures (Morgan discipline): ring perception must align with
+  RDKit's; match multiplicity (`uniquify=false` occurrence/count bits) must match.
+  A leaner topological matcher is deferred unless efficiency demands it.
+
+**Direction A — experimental unhashed screen (`umol-graph::fingerprint`).**
+Generative, collision-free.
+- Enumerate paths + connected subgraphs (the core primitive) up to size L.
+- Each subgraph → **exact canonical key**: edge-induced sub-`Graph` → nauty
+  `canonical_labeling(node_color)` (color = embedding-monotone chemical invariants)
+  → serialize `node_count │ colors (canonical order) │ edges (u,v,bond_label)
+  sorted` into a `Vec<u8>`. Collision-free by construction (it is the canonical form
+  serialized, not a hash).
+- Keys collected into `FeatureSet`; **`Id` bound relaxed `Copy+Ord → Clone+Ord`**
+  (the key is a variable-length `Vec<u8>`; safe for existing `FeatureSet<u64>`).
+- Screen with `is_subset`; soundness from embedding-monotone labels only (element,
+  bond type — not degree/ring membership), so every query feature is derivable in
+  any superstructure target.
+
+Decisions resolved: B via `MoleculeAst` (no query layer); paths = DFS, subgraphs =
+ESU; exact `Vec<u8>` key with `Clone + Ord`. No finite automaton exists for the
+general substructure check (subgraph iso is NP-complete; Courcelle tree automata
+give linear time only for fixed patterns on bounded-treewidth graphs, with
+impractical automaton size). Deferred: canonical-SMILES key (vs byte key) until
+DRFP needs it; a leaner topological matcher for B; unlabeled-graph features.
+- Deps: new core enumeration + edge-induced extraction + canonicalization.
 
 ### Slice 6 — Reaction FPs from ECFP/Morgan (difference / role-tagged)
 
@@ -660,9 +707,11 @@ fingerprint the environment around the reaction center.
 
 ### Decisions wanted before their slice
 
-1. **Morgan (slice 4)**: bit-exact RDKit replica vs RDKit-invariant-with-our-hash.
-2. **Substructure (slice 5)**: the enumeration set, and labeled-only vs also
-   unlabeled — pending the literature/impl review.
+1. **Morgan (slice 4)**: resolved — bit-exact RDKit replica, built.
+2. **Substructure (slice 5)**: resolved — two directions (B = RDKit `PatternFingerprint`
+   replica via `MoleculeAst` patterns; A = experimental unhashed generative screen) on
+   a shared core path+subgraph enumeration primitive (DFS + ESU). Exact `Vec<u8>` key,
+   `FeatureSet` `Id: Clone + Ord`.
 3. **Reaction FPs (slice 6)**: ship `RoleTagged` (binary) first, or pull in the
    count representation now so `Difference` lands with it.
 

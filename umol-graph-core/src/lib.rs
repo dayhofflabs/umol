@@ -15,6 +15,7 @@ pub use algorithms::bcc::BiconnectedComponentsAlgorithm;
 pub use algorithms::coloring::BipartitionAlgorithm;
 pub use algorithms::connected::ConnectedComponentsAlgorithm;
 pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
+pub use algorithms::enumeration::{PathEnumerationAlgorithm, SubgraphEnumerationAlgorithm};
 pub use algorithms::matching::{
     Matching, MatchingEnumerationAlgorithm, MaxMatchingAlgorithm, PerfectMatchingAlgorithm,
 };

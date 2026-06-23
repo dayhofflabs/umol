@@ -6,7 +6,7 @@
 //! it and produce a `Remapping` for reindexing external data.
 
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -122,6 +122,40 @@ impl Graph {
         })
     }
 
+    /// Adjacency lists: for each node, its neighbor nodes, sorted by id and
+    /// deduped (parallel edges collapse). Indexed by `NodeId::index`.
+    pub fn adjacency(&self) -> Vec<Vec<NodeId>> {
+        self.node_ids()
+            .map(|node| {
+                // `neighbors` is already sorted by `NodeId`, so dedup suffices.
+                let mut nodes: Vec<NodeId> = self.neighbors(node).iter().map(|n| n.node).collect();
+                nodes.dedup();
+                nodes
+            })
+            .collect()
+    }
+
+    /// Line-graph adjacency: for each edge, the edges sharing one of its
+    /// endpoints, sorted by id and deduped. Indexed by `EdgeId::index`.
+    pub fn edge_adjacency(&self) -> Vec<Vec<EdgeId>> {
+        let mut adjacency: Vec<Vec<EdgeId>> = vec![Vec::new(); self.edge_count()];
+        for edge in self.edge_ids() {
+            let [a, b] = self.edge_endpoints(edge);
+            let mut neighbors: Vec<EdgeId> = Vec::new();
+            for endpoint in [a, b] {
+                for neighbor in self.neighbors(endpoint) {
+                    if neighbor.edge != edge {
+                        neighbors.push(neighbor.edge);
+                    }
+                }
+            }
+            neighbors.sort_unstable_by_key(|e| e.0);
+            neighbors.dedup();
+            adjacency[edge.index()] = neighbors;
+        }
+        adjacency
+    }
+
     pub fn contains_node(&self, id: NodeId) -> bool {
         id.index() < self.csr.node_count
     }
@@ -233,6 +267,36 @@ impl Graph {
             let [a, b] = self.edge_endpoints(eid);
             if sub_nodes.contains_key(&a) && sub_nodes.contains_key(&b) {
                 host_edges.push(eid);
+            }
+        }
+
+        Embedding {
+            host_nodes,
+            host_edges,
+            sub_nodes,
+            graph: self,
+        }
+    }
+
+    /// Subgraph induced by an edge subset: nodes are the endpoints of `edges`,
+    /// edges are exactly `edges` (deduped, first occurrence kept). Unlike
+    /// [`Graph::induced_subgraph`], chords among the endpoints are excluded, so a
+    /// path and a chorded ring on the same atoms stay distinct.
+    pub fn edge_induced_subgraph(&self, edges: &[EdgeId]) -> Embedding<'_> {
+        let mut host_nodes: Vec<NodeId> = Vec::new();
+        let mut sub_nodes: HashMap<NodeId, NodeId> = HashMap::new();
+        let mut host_edges: Vec<EdgeId> = Vec::with_capacity(edges.len());
+        let mut seen_edges: HashSet<EdgeId> = HashSet::with_capacity(edges.len());
+        for &eid in edges {
+            if !seen_edges.insert(eid) {
+                continue;
+            }
+            host_edges.push(eid);
+            for node in self.edge_endpoints(eid) {
+                if let Entry::Vacant(entry) = sub_nodes.entry(node) {
+                    entry.insert(NodeId(host_nodes.len() as u32));
+                    host_nodes.push(node);
+                }
             }
         }
 
@@ -525,6 +589,49 @@ mod tests {
         let mut result: Vec<EdgeId> = g.induced_edges(&sorted_nodes).collect();
         result.sort_unstable();
         assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::path(&[[0, 1], [1, 2]], 3, vec![vec![NodeId(1)], vec![NodeId(0), NodeId(2)], vec![NodeId(1)]])]
+    #[case::triangle(&[[0, 1], [1, 2], [0, 2]], 3, vec![vec![NodeId(1), NodeId(2)], vec![NodeId(0), NodeId(2)], vec![NodeId(0), NodeId(1)]])]
+    #[case::isolated(&[[0, 1]], 3, vec![vec![NodeId(1)], vec![NodeId(0)], vec![]])]
+    fn test_graph_adjacency(
+        #[case] edges: &[[u32; 2]],
+        #[case] node_count: usize,
+        #[case] expected: Vec<Vec<NodeId>>,
+    ) {
+        let g = Graph::new(node_count, edges);
+        assert_eq!(g.adjacency(), expected);
+    }
+
+    #[rstest]
+    #[case::path(&[[0, 1], [1, 2]], vec![vec![EdgeId(1)], vec![EdgeId(0)]])]
+    #[case::triangle(&[[0, 1], [1, 2], [0, 2]], vec![vec![EdgeId(1), EdgeId(2)], vec![EdgeId(0), EdgeId(2)], vec![EdgeId(0), EdgeId(1)]])]
+    #[case::disjoint(&[[0, 1], [2, 3]], vec![vec![], vec![]])]
+    fn test_graph_edge_adjacency(#[case] edges: &[[u32; 2]], #[case] expected: Vec<Vec<EdgeId>>) {
+        let node_count = edges.iter().flat_map(|e| e.iter()).max().unwrap() + 1;
+        let g = Graph::new(node_count as usize, edges);
+        assert_eq!(g.edge_adjacency(), expected);
+    }
+
+    #[rstest]
+    #[case::chord_excluded(&[[0, 1], [1, 2], [0, 2]], &[0, 1], vec![NodeId(0), NodeId(1), NodeId(2)], vec![EdgeId(0), EdgeId(1)])]
+    #[case::full_ring(&[[0, 1], [1, 2], [0, 2]], &[0, 1, 2], vec![NodeId(0), NodeId(1), NodeId(2)], vec![EdgeId(0), EdgeId(1), EdgeId(2)])]
+    #[case::deduped(&[[0, 1], [1, 2]], &[0, 0, 1], vec![NodeId(0), NodeId(1), NodeId(2)], vec![EdgeId(0), EdgeId(1)])]
+    fn test_graph_edge_induced_subgraph(
+        #[case] edges: &[[u32; 2]],
+        #[case] subset: &[u32],
+        #[case] expected_nodes: Vec<NodeId>,
+        #[case] expected_edges: Vec<EdgeId>,
+    ) {
+        let node_count = edges.iter().flat_map(|e| e.iter()).max().unwrap() + 1;
+        let g = Graph::new(node_count as usize, edges);
+        let subset_edges: Vec<EdgeId> = subset.iter().map(|&e| EdgeId(e)).collect();
+        let embedding = g.edge_induced_subgraph(&subset_edges);
+        assert_eq!(embedding.host_edges(), expected_edges.as_slice());
+        let mut nodes = embedding.host_nodes().to_vec();
+        nodes.sort_unstable();
+        assert_eq!(nodes, expected_nodes);
     }
 
     #[test]
