@@ -4,6 +4,7 @@ use umol_ast::ast::MoleculeAst;
 
 use super::ecfp::EcfpFeaturizer;
 use super::feature_set::FeatureSet;
+use super::morgan::MorganFeaturizer;
 use super::wl::WlFeaturizer;
 
 /// A named fingerprint algorithm, dispatching to the concrete featurizer it wraps.
@@ -12,6 +13,7 @@ use super::wl::WlFeaturizer;
 pub enum Featurizer {
     Wl(WlFeaturizer),
     Ecfp(EcfpFeaturizer),
+    Morgan(MorganFeaturizer),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,6 +31,7 @@ impl Featurizer {
         Ok(match self {
             Featurizer::Wl(featurizer) => featurizer.featurize(mol),
             Featurizer::Ecfp(featurizer) => featurizer.featurize(mol),
+            Featurizer::Morgan(featurizer) => featurizer.featurize(mol),
         })
     }
 }

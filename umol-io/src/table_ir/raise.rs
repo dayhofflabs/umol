@@ -15,6 +15,7 @@ use umol_ast::ast::{
     TryIntoAst, ValueAst,
 };
 use umol_perm::{space, ClassKey, Permutation};
+use umol_shared::element::Element;
 use umol_shared::error::UmolError;
 
 use crate::table_ir::atom::Atom as TableAtom;
@@ -166,6 +167,13 @@ impl TryIntoAst<AtomAst> for &TableAtom {
                 atom.constraints.add(AtomConstraint::AromaticValence(
                     AromaticValenceAst::Aromatic(ValueAst::Undetermined),
                 ));
+                // A bare aromatic heteroatom specifies zero H; any H must be bracketed
+                // ([nH]), which arrives above as an explicit count.
+                if self.element != Element::C
+                    && matches!(atom.implicit_hydrogens, ValueAst::Undetermined)
+                {
+                    atom.implicit_hydrogens = ValueAst::Lit(0);
+                }
             }
             Some(false) => {
                 atom.constraints.add(AtomConstraint::AromaticValence(
@@ -458,7 +466,10 @@ mod tests {
     #[rstest]
     #[case::table_aromatic_none(None, None)]
     #[case::table_aromatic_false(Some(false), Some(AromaticValenceAst::NotAromatic))]
-    #[case::table_aromatic_true(Some(true), Some(AromaticValenceAst::Aromatic(ValueAst::Undetermined)))]
+    #[case::table_aromatic_true(
+        Some(true),
+        Some(AromaticValenceAst::Aromatic(ValueAst::Undetermined))
+    )]
     fn test_table_molecule_try_into_ast_aromatic(
         mut carbon: TableMolecule,
         #[case] aromatic: Option<bool>,
@@ -470,6 +481,29 @@ mod tests {
             ast.atom(AtomId(0)).ast.constraints.aromatic_valence(),
             expected.as_ref()
         );
+    }
+
+    // A bare aromatic heteroatom resolves to zero H; aromatic carbon and explicit
+    // bracket H are left to the valence model / preserved.
+    #[rstest]
+    #[case::aromatic_nitrogen_bare(Element::N, Some(true), None, ValueAst::Lit(0))]
+    #[case::aromatic_oxygen_bare(Element::O, Some(true), None, ValueAst::Lit(0))]
+    #[case::aromatic_nitrogen_bracket_h(Element::N, Some(true), Some(1), ValueAst::Lit(1))]
+    #[case::aromatic_carbon_bare(Element::C, Some(true), None, ValueAst::Undetermined)]
+    #[case::aliphatic_nitrogen_bare(Element::N, Some(false), None, ValueAst::Undetermined)]
+    fn test_table_molecule_try_into_ast_aromatic_heteroatoms(
+        #[case] element: Element,
+        #[case] aromatic: Option<bool>,
+        #[case] hydrogens: Option<u8>,
+        #[case] expected: ValueAst,
+    ) {
+        let mut atom = TableAtom::from_element(element);
+        atom.aromatic = aromatic;
+        atom.implicit_hydrogens = hydrogens;
+        let mut mol = TableMolecule::empty();
+        mol.atoms.push(atom);
+        let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
+        assert_eq!(ast.atom(AtomId(0)).ast.implicit_hydrogens, expected);
     }
 
     #[rstest]

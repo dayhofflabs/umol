@@ -23,7 +23,7 @@ pub use algorithms::mcs::{
 };
 pub use algorithms::mis::MaxIndependentSetAlgorithm;
 pub use algorithms::refine::{
-    CircularRefinementAlgorithm, Refinement, RefinementAggregation, RefinementAlgorithm,
+    CircularRefinementAlgorithm, EcScheme, Refinement, RefinementAggregation, RefinementAlgorithm,
     RefinementHash, RefinementRounds, RefinementWidth, RefinementWidth64, RefinementWidth128,
     RefinementXxh3Scheme,
 };

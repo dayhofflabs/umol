@@ -10,9 +10,9 @@ use umol_ast::ast::{
     AsLit, AtomId, BondId, CisTransStereoAst, MoleculeAst, StereoAtomAst, StereoBondAst,
     StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoAst,
 };
+use umol_shared::solution::Solution;
 
 use crate::ops::model::StereoModel;
-use umol_shared::solution::Solution;
 
 #[derive(Clone, Debug)]
 pub struct StereoResolver {
@@ -194,10 +194,23 @@ mod tests {
     };
     use umol_ast::mol_ground;
     use umol_shared::element::Element;
+    use umol_shared::solution::Solution;
 
     use super::StereoResolver;
     use crate::ops::model::{ElementScope, StereoKindModel, StereoModel};
-    use umol_shared::solution::Solution;
+
+    type StereoAtomData = (
+        AtomId,
+        StereoKind,
+        StereoCosetAst,
+        Vec<(AtomId, StereoLigandKind)>,
+    );
+    type StereoBondData = (
+        BondId,
+        StereoKind,
+        StereoCosetAst,
+        Vec<(AtomId, StereoLigandKind)>,
+    );
 
     #[rstest]
     #[case::tetrahedral_atom(
@@ -218,18 +231,8 @@ mod tests {
     #[case::no_stereo( r#"{:atoms ["C #h3" "C #h3"] :bonds [[0 1 "1"]]}"#, vec![], vec![])]
     fn test_stereo_resolver_resolve(
         #[case] input: &str,
-        #[case] expected_atoms: Vec<(
-            AtomId,
-            StereoKind,
-            StereoCosetAst,
-            Vec<(AtomId, StereoLigandKind)>,
-        )>,
-        #[case] expected_bonds: Vec<(
-            BondId,
-            StereoKind,
-            StereoCosetAst,
-            Vec<(AtomId, StereoLigandKind)>,
-        )>,
+        #[case] expected_atoms: Vec<StereoAtomData>,
+        #[case] expected_bonds: Vec<StereoBondData>,
     ) {
         let mut ast = mol_ground!(input);
         let solution = StereoResolver::new(&StereoModel::default())
@@ -237,12 +240,7 @@ mod tests {
             .unwrap();
         assert!(matches!(solution, Solution::Determined(())));
 
-        let atoms: Vec<(
-            AtomId,
-            StereoKind,
-            StereoCosetAst,
-            Vec<(AtomId, StereoLigandKind)>,
-        )> = ast
+        let atoms: Vec<StereoAtomData> = ast
             .stereo_atoms()
             .iter()
             .map(|s| {
@@ -254,12 +252,7 @@ mod tests {
                 )
             })
             .collect();
-        let bonds: Vec<(
-            BondId,
-            StereoKind,
-            StereoCosetAst,
-            Vec<(AtomId, StereoLigandKind)>,
-        )> = ast
+        let bonds: Vec<StereoBondData> = ast
             .stereo_bonds()
             .iter()
             .map(|s| {

@@ -13,13 +13,14 @@
 //! custom impl can reproduce an external scheme exactly (the iterative-recoloring
 //! part of it — invariants/folding/dedup live in the caller).
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
 
 use xxhash_rust::xxh3::{xxh3_128_with_seed, xxh3_64_with_seed};
 
+use crate::algorithms::traversal::TraversalAlgorithm;
 use crate::graph::{EdgeId, Graph, NodeId};
 
 /// A refinement algorithm and its configuration. Parameterized variants carry
@@ -35,15 +36,6 @@ pub enum RefinementAlgorithm<H> {
 pub enum RefinementRounds {
     ToFixpoint,
     Fixed(usize),
-}
-
-/// A circular (extended-connectivity) refinement algorithm. Chemistry-flavored —
-/// in service of ECFP/FCFP fingerprints — but graph-generic via caller labels.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CircularRefinementAlgorithm {
-    /// Rogers & Hahn 2010, hashed with `xxh3_64` seeded by `seed`. The paper
-    /// leaves the hash unspecified; this is a frozen choice.
-    RogersHahn { seed: u64 },
 }
 
 /// Hashing scheme for color refinement. The built-in [`RefinementXxh3Scheme`] families or
@@ -128,65 +120,6 @@ impl Graph {
         Refinement { colorings, digest }
     }
 
-    /// Rogers–Hahn circular (extended-connectivity) refinement: each node's
-    /// identifier after every round `0..=radius`. Chemistry-flavored (it drives
-    /// ECFP/FCFP) but graph-generic — the caller supplies node and edge labels.
-    /// Round 0 hashes the node label; round r hashes
-    /// `[r, prev_id, sorted (edge_label, neighbor_prev_id)…]` (Rogers & Hahn 2010).
-    pub fn circular_refine(
-        &self,
-        node_label: impl Fn(NodeId) -> u64,
-        edge_label: impl Fn(EdgeId) -> u64,
-        radius: u32,
-        algorithm: CircularRefinementAlgorithm,
-    ) -> Vec<Vec<u64>> {
-        match algorithm {
-            CircularRefinementAlgorithm::RogersHahn { seed } => {
-                self.circular_refine_rogers_hahn(node_label, edge_label, radius, seed)
-            }
-        }
-    }
-
-    fn circular_refine_rogers_hahn(
-        &self,
-        node_label: impl Fn(NodeId) -> u64,
-        edge_label: impl Fn(EdgeId) -> u64,
-        radius: u32,
-        seed: u64,
-    ) -> Vec<Vec<u64>> {
-        let node_count = self.node_count();
-        let mut rounds: Vec<Vec<u64>> = Vec::with_capacity(radius as usize + 1);
-        rounds.push(
-            (0..node_count)
-                .map(|i| xxh3_64_with_seed(&node_label(NodeId(i as u32)).to_le_bytes(), seed))
-                .collect(),
-        );
-        for iteration in 1..=radius {
-            let next = {
-                let previous = rounds.last().expect("round 0 present");
-                (0..node_count)
-                    .map(|i| {
-                        let mut neighbors: Vec<(u64, u64)> = self
-                            .neighbors(NodeId(i as u32))
-                            .iter()
-                            .map(|nb| (edge_label(nb.edge), previous[nb.node.index()]))
-                            .collect();
-                        neighbors.sort_unstable();
-                        let mut buffer = Vec::with_capacity(16 + neighbors.len() * 16);
-                        buffer.extend_from_slice(&u64::from(iteration).to_le_bytes());
-                        buffer.extend_from_slice(&previous[i].to_le_bytes());
-                        for (edge, color) in neighbors {
-                            buffer.extend_from_slice(&edge.to_le_bytes());
-                            buffer.extend_from_slice(&color.to_le_bytes());
-                        }
-                        xxh3_64_with_seed(&buffer, seed)
-                    })
-                    .collect()
-            };
-            rounds.push(next);
-        }
-        rounds
-    }
 }
 
 impl<C: Copy + Ord + Eq + Hash> Refinement<C> {
@@ -385,6 +318,184 @@ fn cell_count<C: Ord + Copy>(coloring: &[C]) -> usize {
     c.len()
 }
 
+/// A circular refinement algorithm. One graph algorithm today (extended
+/// connectivity); the hash recipe is a parameter ([`EcScheme`]), not an
+/// algorithmic alternative.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CircularRefinementAlgorithm {
+    /// Extended-connectivity refinement (the Morgan-algorithm family underlying
+    /// ECFP / Morgan fingerprints): iterate `radius` rounds, hashing each node from
+    /// the round, its previous identifier, and its sorted `(edge label, neighbor's
+    /// previous identifier)` pairs; then remove structurally-duplicate features.
+    Ec { radius: u32, scheme: EcScheme },
+}
+
+/// Hash recipe for extended-connectivity refinement. The graph algorithm is the
+/// same for every variant; only the hashing differs. The paper/tool leaves the
+/// hash to the implementer, so these are frozen choices.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EcScheme {
+    /// Rogers & Hahn 2010: `xxh3_64` over the round array, seeded by `seed`.
+    RogersHahn { seed: u64 },
+    /// RDKit Morgan: the vendored 32-bit boost hash with incremental combine.
+    Morgan,
+}
+
+impl Graph {
+    /// Circular refinement; dispatches to the selected algorithm.
+    pub fn circular_refine(
+        &self,
+        node_components: impl Fn(NodeId) -> Vec<u32>,
+        edge_label: impl Fn(EdgeId) -> u32,
+        algorithm: CircularRefinementAlgorithm,
+    ) -> Vec<u64> {
+        match algorithm {
+            CircularRefinementAlgorithm::Ec { radius, scheme } => {
+                self.circular_refine_ec(node_components, edge_label, radius, scheme)
+            }
+        }
+    }
+
+    /// Extended-connectivity refinement plus structural duplicate removal — the
+    /// graph algorithm behind ECFP / Morgan fingerprints. `node_components` gives
+    /// each node's invariant component vector, `edge_label` each edge's label
+    /// (the caller computes these); `scheme` is the hash.
+    ///
+    /// Rounds run `0..=radius`: round 0 hashes the components; round r hashes the
+    /// round, the previous identifier, and the sorted `(edge label, neighbor's
+    /// previous id)` pairs. Features whose covered bond set coincides are then
+    /// reduced to the one with the smallest `(round, identifier)`. The result is the
+    /// surviving feature identifiers (a multiset — equal ids may recur where
+    /// distinct environments collide).
+    fn circular_refine_ec(
+        &self,
+        node_components: impl Fn(NodeId) -> Vec<u32>,
+        edge_label: impl Fn(EdgeId) -> u32,
+        radius: u32,
+        scheme: EcScheme,
+    ) -> Vec<u64> {
+        let node_count = self.node_count();
+
+        let mut rounds: Vec<Vec<u64>> = Vec::with_capacity(radius as usize + 1);
+        rounds.push(
+            (0..node_count)
+                .map(|i| scheme.seed_hash(&node_components(NodeId(i as u32))))
+                .collect(),
+        );
+        for round in 1..=radius {
+            let next = {
+                let previous = rounds.last().expect("round 0 present");
+                (0..node_count)
+                    .map(|i| {
+                        let mut neighbors: Vec<(u32, u64)> = self
+                            .neighbors(NodeId(i as u32))
+                            .iter()
+                            .map(|nb| (edge_label(nb.edge), previous[nb.node.index()]))
+                            .collect();
+                        neighbors.sort_unstable();
+                        scheme.combine(round, previous[i], &neighbors)
+                    })
+                    .collect()
+            };
+            rounds.push(next);
+        }
+        self.remove_duplicate_environments(&rounds, radius)
+    }
+
+    /// Rogers & Hahn duplicate-structure removal: round-0 identifiers are kept
+    /// directly; for rounds ≥ 1, features whose covered bond set coincides collapse
+    /// to the one with the smallest `(round, identifier)`. Bond sets come from a BFS.
+    fn remove_duplicate_environments(&self, rounds: &[Vec<u64>], radius: u32) -> Vec<u64> {
+        let mut identifiers: Vec<u64> = rounds[0].clone();
+        let mut kept: HashMap<Vec<u32>, (u32, u64)> = HashMap::new();
+        if radius >= 1 {
+            for atom in 0..self.node_count() {
+                let source = NodeId(atom as u32);
+                let neighborhood = self.neighborhood(source, radius - 1, TraversalAlgorithm::Bfs);
+                let mut bond_set: BTreeSet<u32> = BTreeSet::new();
+                let mut shell = 0;
+                for round in 1..=radius {
+                    while shell < neighborhood.len() && neighborhood[shell].1 == round - 1 {
+                        for neighbor in self.neighbors(neighborhood[shell].0) {
+                            bond_set.insert(neighbor.edge.index() as u32);
+                        }
+                        shell += 1;
+                    }
+                    let identifier = rounds[round as usize][source.index()];
+                    let key: Vec<u32> = bond_set.iter().copied().collect();
+                    kept.entry(key)
+                        .and_modify(|best| {
+                            if (round, identifier) < *best {
+                                *best = (round, identifier);
+                            }
+                        })
+                        .or_insert((round, identifier));
+                }
+            }
+        }
+        identifiers.extend(kept.values().map(|&(_, identifier)| identifier));
+        identifiers
+    }
+}
+
+impl EcScheme {
+    /// Hash a node's invariant components into its round-0 identifier.
+    fn seed_hash(&self, components: &[u32]) -> u64 {
+        match self {
+            EcScheme::RogersHahn { seed } => {
+                let mut buffer = Vec::with_capacity(components.len() * 4);
+                for &component in components {
+                    buffer.extend_from_slice(&component.to_le_bytes());
+                }
+                xxh3_64_with_seed(&buffer, *seed)
+            }
+            EcScheme::Morgan => u64::from(gboost_hash(components)),
+        }
+    }
+
+    /// Combine a node's previous identifier and its sorted neighbor pairs into the
+    /// next-round identifier.
+    fn combine(&self, round: u32, current: u64, neighbors: &[(u32, u64)]) -> u64 {
+        match self {
+            EcScheme::RogersHahn { seed } => {
+                let mut buffer = Vec::with_capacity(16 + neighbors.len() * 12);
+                buffer.extend_from_slice(&u64::from(round).to_le_bytes());
+                buffer.extend_from_slice(&current.to_le_bytes());
+                for &(edge, color) in neighbors {
+                    buffer.extend_from_slice(&edge.to_le_bytes());
+                    buffer.extend_from_slice(&color.to_le_bytes());
+                }
+                xxh3_64_with_seed(&buffer, *seed)
+            }
+            EcScheme::Morgan => {
+                // RDKit salts with the 0-based layer (round - 1) and hashes in 32 bits.
+                let mut invariant = gboost_combine(round - 1, current as u32);
+                for &(edge, color) in neighbors {
+                    invariant = gboost_combine(invariant, gboost_hash(&[edge, color as u32]));
+                }
+                u64::from(invariant)
+            }
+        }
+    }
+}
+
+/// RDKit's vendored 32-bit `boost::hash_combine` (frozen formula).
+fn gboost_combine(seed: u32, value: u32) -> u32 {
+    seed ^ value
+        .wrapping_add(0x9e37_79b9)
+        .wrapping_add(seed << 6)
+        .wrapping_add(seed >> 2)
+}
+
+/// `boost::hash` over a sequence of 32-bit values: combine each from seed 0.
+fn gboost_hash(values: &[u32]) -> u32 {
+    let mut seed = 0;
+    for &value in values {
+        seed = gboost_combine(seed, value);
+    }
+    seed
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::{assert_eq, assert_ne};
@@ -551,31 +662,42 @@ mod tests {
 
     #[rstest]
     fn test_graph_circular_refine() {
-        // Path 0-1-2 with uniform labels: the ends are symmetric, the middle distinct.
+        // Path 0-1-2, uniform labels: round 0 contributes 3 equal seeds; round 1 adds
+        // three features (two symmetric ends + a distinct middle, each with a distinct
+        // bond set, so none are deduped) — 6 identifiers, 3 distinct values.
         let graph = Graph::new(3, &[[0, 1], [1, 2]]);
-        let rounds = graph.circular_refine(
-            |_| 6,
+        let ids = graph.circular_refine(
+            |_| vec![1u32],
             |_| 1,
-            2,
-            CircularRefinementAlgorithm::RogersHahn { seed: 0x5eed },
+            CircularRefinementAlgorithm::Ec { radius: 1, scheme: EcScheme::Morgan },
         );
-        assert_eq!(rounds.len(), 3);
-        assert_eq!(rounds[0][0], rounds[0][1]);
-        assert_eq!(rounds[0][1], rounds[0][2]);
-        assert_eq!(rounds[1][0], rounds[1][2]);
-        assert_ne!(rounds[1][0], rounds[1][1]);
+        assert_eq!(ids.len(), 6);
+        let distinct: BTreeSet<u64> = ids.iter().copied().collect();
+        assert_eq!(distinct.len(), 3);
+    }
+
+    // RDKit 2026.03.3 connectivity invariants (radius-0 Morgan ids) for these
+    // component vectors; pins the gboost hash bit-exactly to RDKit.
+    #[rstest]
+    #[case(&[6, 4, 3, 0, 0], 2246728737)]
+    #[case(&[6, 4, 2, 0, 0], 2245384272)]
+    #[case(&[8, 2, 1, 0, 0], 864662311)]
+    #[case(&[6, 4, 2, 0, 0, 1], 2968968094)]
+    fn test_gboost_hash(#[case] components: &[u32], #[case] expected: u32) {
+        assert_eq!(gboost_hash(components), expected);
     }
 
     #[rstest]
-    fn test_graph_circular_refine_distinguishes_labels() {
+    fn test_graph_circular_refine_distinguishes_components() {
+        // Radius 0: only the seed hash of the components; distinct components must give
+        // distinct identifiers.
         let graph = Graph::new(2, &[[0, 1]]);
-        let rounds = graph.circular_refine(
-            |n: NodeId| if n.0 == 0 { 6 } else { 7 },
+        let ids = graph.circular_refine(
+            |n: NodeId| vec![6 + n.0],
             |_| 1,
-            0,
-            CircularRefinementAlgorithm::RogersHahn { seed: 1 },
+            CircularRefinementAlgorithm::Ec { radius: 0, scheme: EcScheme::Morgan },
         );
-        assert_eq!(rounds.len(), 1);
-        assert_ne!(rounds[0][0], rounds[0][1]);
+        assert_eq!(ids.len(), 2);
+        assert_ne!(ids[0], ids[1]);
     }
 }
