@@ -30,9 +30,15 @@ impl MoleculeAst {
         let lhs = &rule.lhs;
         let rhs = &rule.rhs;
 
+        // The interface K is the both-present atom-map entries; `(Some, None)` /
+        // `(None, Some)` denote delete / create, which are inferred below by absence
+        // from these K maps.
+        let k_pairs: Vec<(AtomId, AtomId)> =
+            rule.atom_map.iter().filter_map(|&(l, r)| Some((l?, r?))).collect();
+
         let l_to_g: HashMap<AtomId, AtomId> = assignment.atoms.iter().copied().collect();
-        let l_to_r: HashMap<AtomId, AtomId> = rule.atom_map.iter().copied().collect();
-        let r_to_l: HashMap<AtomId, AtomId> = rule.atom_map.iter().map(|&(l, r)| (r, l)).collect();
+        let l_to_r: HashMap<AtomId, AtomId> = k_pairs.iter().copied().collect();
+        let r_to_l: HashMap<AtomId, AtomId> = k_pairs.iter().map(|&(l, r)| (r, l)).collect();
 
         let k_l: HashSet<AtomId> = l_to_r.keys().copied().collect();
         let l_atoms_g: HashSet<AtomId> = l_to_g.values().copied().collect();
@@ -57,7 +63,7 @@ impl MoleculeAst {
 
         // R-atom → G-atom map (K atoms filled now, R\K atoms filled in Phase 1)
         let mut r_to_g: HashMap<AtomId, AtomId> = HashMap::new();
-        for &(l_atom, r_atom) in &rule.atom_map {
+        for &(l_atom, r_atom) in &k_pairs {
             let g_atom = *l_to_g
                 .get(&l_atom)
                 .ok_or(RewriteError::UnmappedLhsAtom(l_atom))?;
@@ -156,7 +162,7 @@ impl MoleculeAst {
         }
 
         // Phase 2: update K atom attributes from R
-        for &(_, r_atom) in &rule.atom_map {
+        for &(_, r_atom) in &k_pairs {
             let g_atom = r_to_g[&r_atom];
             *builder.atom_mut(g_atom).ast = rhs[r_atom].clone();
         }

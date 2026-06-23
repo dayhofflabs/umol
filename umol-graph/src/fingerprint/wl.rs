@@ -1,0 +1,126 @@
+//! Weisfeiler–Lehman featurizer: frozen color refinement over the atom graph.
+//!
+//! Atoms are nodes, localized bonds are edges. Seeds pack concrete field *values*
+//! (the molecule must be ground) and let the frozen `RefinementXxh3Scheme` do all
+//! hashing, so the fingerprint is bit-stable across runs. Overlay relations
+//! (aromatic / dative / multicenter / noncovalent) do not enter the topology; bond
+//! aromaticity participates only as a seed field.
+
+use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
+use umol_graph_core::{
+    EdgeId, NodeId, RefinementAlgorithm, RefinementRounds, RefinementWidth64, RefinementXxh3Scheme,
+};
+
+use super::feature_set::FeatureSet;
+
+/// Weisfeiler–Lehman color-refinement fingerprint over the atom graph, hashed
+/// through a frozen `scheme` for `rounds` rounds.
+#[derive(Clone, Copy, Debug)]
+pub struct WlFeaturizer {
+    pub rounds: RefinementRounds,
+    pub scheme: RefinementXxh3Scheme<RefinementWidth64>,
+}
+
+impl WlFeaturizer {
+    /// `mol` must be ground; the caller ([`super::Featurizer::featurize`])
+    /// guarantees it, so the seeds read concrete literals directly.
+    pub fn featurize(&self, mol: &MoleculeAst) -> FeatureSet<u64> {
+        // Pre-extract seeds so the refine closures stay simple index lookups.
+        let atom_seeds: Vec<u64> = (0..mol.atoms().count())
+            .map(|i| atom_seed(mol, AtomId(i as u32)))
+            .collect();
+        let bond_seeds: Vec<u64> = (0..mol.bonds().count())
+            .map(|e| bond_seed(mol, BondId(e as u32)))
+            .collect();
+
+        let refinement = mol.raw_graph().refine(
+            |node: NodeId| atom_seeds[node.index()],
+            |edge: EdgeId| bond_seeds[edge.index()],
+            RefinementAlgorithm::WeisfeilerLehman {
+                rounds: self.rounds,
+                scheme: self.scheme,
+            },
+        );
+        FeatureSet::from_sorted_unique(refinement.features())
+    }
+}
+
+/// Seed an atom from (atomic number, formal charge, implicit hydrogens), each in
+/// its own byte range so distinct tuples stay distinct before the scheme rehashes.
+fn atom_seed(mol: &MoleculeAst, id: AtomId) -> u64 {
+    let atom = mol.atom(id);
+    let atomic_number = atom.element().as_lit().expect("ground atom").atomic_number();
+    let charge = atom.charge().as_lit().expect("ground atom");
+    let implicit_hydrogens = atom.implicit_hydrogens().as_lit().expect("ground atom");
+    (atomic_number as u64)
+        | (((charge as u16) as u64) << 8)
+        | (((implicit_hydrogens as u16) as u64) << 24)
+}
+
+/// Seed a bond from (bond order, aromatic-system membership).
+fn bond_seed(mol: &MoleculeAst, id: BondId) -> u64 {
+    let bond = mol.bond(id);
+    let order = bond.order().as_lit().expect("ground bond");
+    (order as u16 as u64) | ((bond.is_in_aromatic_system() as u64) << 16)
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::{fixture, rstest};
+    use umol_ast::mol_ground;
+    use umol_graph_core::{RefinementRounds, RefinementXxh3Scheme};
+
+    use super::*;
+
+    #[fixture]
+    fn featurizer() -> WlFeaturizer {
+        WlFeaturizer {
+            rounds: RefinementRounds::Fixed(3),
+            scheme: RefinementXxh3Scheme::albatross(),
+        }
+    }
+
+    #[rstest]
+    #[case::ethane(
+        r#"{:atoms ["C #h3" "C #h3"] :bonds [[0 1 "1"]]}"#,
+        vec![
+            2659163409134283895,
+            7542810387455301591,
+            9541344068636876323,
+            12512207080905326651
+        ]
+    )]
+    fn test_wl_featurizer_featurize(
+        featurizer: WlFeaturizer,
+        #[case] edn: &str,
+        #[case] expected: Vec<u64>,
+    ) {
+        assert_eq!(featurizer.featurize(&mol_ground!(edn)).ids(), expected.as_slice());
+    }
+
+    #[rstest]
+    #[case::relabeled_propane(
+        r#"{:atoms ["C #h3" "C #h2" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#,
+        r#"{:atoms ["C #h2" "C #h3" "C #h3"] :bonds [[0 1 "1"] [0 2 "1"]]}"#,
+        true
+    )]
+    #[case::ethane_vs_propane(
+        r#"{:atoms ["C #h3" "C #h3"] :bonds [[0 1 "1"]]}"#,
+        r#"{:atoms ["C #h3" "C #h2" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#,
+        false
+    )]
+    #[case::propane_vs_isopropyl_cation(
+        r#"{:atoms ["C #h3" "C #h2" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#,
+        r#"{:atoms ["C #h3" "C #h1 #c+" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#,
+        false
+    )]
+    fn test_wl_featurizer_featurize_equivalent(
+        featurizer: WlFeaturizer,
+        #[case] a: &str,
+        #[case] b: &str,
+        #[case] equal: bool,
+    ) {
+        let same = featurizer.featurize(&mol_ground!(a)) == featurizer.featurize(&mol_ground!(b));
+        assert_eq!(same, equal);
+    }
+}

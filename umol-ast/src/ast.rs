@@ -76,7 +76,9 @@ pub use molecule::{MoleculeAst, MoleculeBuilder};
 pub use multicenter::MulticenterBondAst;
 pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 pub use operators::{MemOp, RelOp};
-pub use reaction::{Assignment, ReactionRuleAst};
+pub use reaction::{
+    Assignment, ReactionRuleAst, StereoAtomCorrespondence, StereoBondCorrespondence,
+};
 pub use remap::{IdRemapping, UndoRemapping};
 pub use ring::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;

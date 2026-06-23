@@ -127,3 +127,5 @@
 | [123-ast-allocation-survey-2026-06-21.md](123-ast-allocation-survey-2026-06-21.md)                               | Active        | 2026-06-21   |
 | [124-tier1-structural-wellformedness-2026-06-21.md](124-tier1-structural-wellformedness-2026-06-21.md)           | Active        | 2026-06-21   |
 | [125-constraints-as-projections-2026-06-22.md](125-constraints-as-projections-2026-06-22.md)                     | Active        | 2026-06-22   |
+| [126-fingerprint-facility-2026-06-22.md](126-fingerprint-facility-2026-06-22.md)                                 | Active        | 2026-06-22   |
+| [127-reaction-ast-interim-stereo-2026-06-22.md](127-reaction-ast-interim-stereo-2026-06-22.md)                   | Active        | 2026-06-22   |
