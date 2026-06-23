@@ -19,7 +19,8 @@
 
 use std::marker::PhantomData;
 
-use bitvec::prelude::*;
+use bitvec::array::BitArray;
+use bitvec::order::Lsb0;
 use phf::phf_map;
 
 use crate::units::time::{Time, TimeUnit};

@@ -508,6 +508,166 @@ and dedup in the domain crate.
 - Pinned exact-id anchor under the ECFP seed.
 - `bfs_distances` unit tests; order-independence + discrimination, as for WL.
 
+## Slice roadmap (deliverables a–f)
+
+| Slice | Deliverable | Status |
+|---|---|---|
+| 1 | e. Stable WL | **built** |
+| 2 | a. ECFP | **built** |
+| 3 | (shared) fold → `BitFp` | **built** |
+| 4 | b. Morgan (frozen RDKit replica) | designed below |
+| 5 | f. Substructure (unhashed) | designed below |
+| 6 | reaction FPs from ECFP/Morgan (difference / role-tagged) | designed below |
+| 7 | d. DRFP | designed below |
+| 8 | c. BRIDGIT | designed below |
+
+Order rationale: the shared fold (3) gives the already-built circular FPs a
+fixed-width output; Morgan (4) reuses the ECFP machinery; Substructure (5)
+introduces bounded subgraph enumeration + canonical keys (reused by DRFP);
+**reactions enter at 6** with the ECFP/Morgan-based reaction FPs, which establish
+the reaction-combinator framework; DRFP (7) reuses that framework with
+reaction-native shingles + symmetric difference; BRIDGIT (8) builds on substructure
+matching + reactions. Each slice is detailed (signatures, decisions) at
+implementation time, as slices 1–2 were.
+
+### Slice 3 — fold → `BitFp` (shared) — built
+
+The width-bearing output: fold a `FeatureSet` to a fixed-width bit fingerprint by
+`id % width`, OR-accumulating. Applies to WL/ECFP/Morgan; serves purpose 2
+(fixed-width ML features) and fixed-width prescreening.
+
+- Built: `BitFp` (runtime width, backed by `bitvec::BitVec<u64, Lsb0>`) in
+  `fingerprint/bit_fp.rs`; `FeatureSet::<u64>::fold(width) -> BitFp` (a method, not
+  an `Encoder` enum); `width`/`get`/`count_ones`/`tanimoto`/`dice`/`is_subset` over
+  `BitFp`. Similarity ops run on `as_raw_slice()` (word-level popcount); `repeat`
+  zeros the buffer and `set` only touches live bits, so padding stays zero and the
+  raw-word ops are exact. Equal width asserted.
+- Storage: chose `bitvec` (already a direct dep via umol-shared) over a hand-rolled
+  `Vec<u64>` (don't-reinvent rule) and over `fixedbitset` (`Vec`-backed → not
+  const-constructible, so it can't replace the isotope `const BitArray` → would mean
+  a second bit crate, no gain). No crate offers non-allocating dense word-popcount,
+  so the similarity ops are hand-written on the raw slice regardless.
+- Decisions resolved: **runtime width** (not const-generic); **no `Encoder` enum
+  yet** — a direct `fold` method, because `MinHash`'s output is a different type and
+  would not fit a single-return encoder; introduce `Encoder`/`minhash` when MinHash
+  lands. Deferred: bit-info provenance map; **count fingerprints** (`CountFp` +
+  counted feature source) — first needed by slice 6's `Difference`.
+- Deps: none new.
+
+### Slice 4 — Morgan (b): frozen RDKit replica
+
+Circular refinement + bond-set dedup (the ECFP machinery) but with RDKit's
+*invariant* and *hash*, pinned to a named RDKit revision and frozen — the point is
+to nail down RDKit's moving target so a result is reproducible. RDKit's invariant
+differs from R&H (we verified: total degree not heavy degree, no heavy valence,
+delta-mass), so this is genuinely a distinct featurizer, not ECFP with a flag.
+
+- Builds: the RDKit connectivity invariant (atomic number, total degree, total
+  #H, charge, delta-mass, ring); a Morgan hash path for `circular_refine` (a new
+  `CircularRefinementAlgorithm` variant or a hash abstraction); offline RDKit
+  fixtures (stored expected outputs, no FFI at test time — the subiso-conformance
+  pattern).
+- Decision (**key**): **bit-exact RDKit replica** (replicate boost `hash_combine`
+  + fixtures — heavier, but reproduces existing RDKit Morgan/ECFP6 fingerprints and
+  freezes the unstable reference) **vs RDKit-invariant + our `xxh3`** (lighter,
+  frozen, but does not reproduce RDKit's bits). The doc-stated intent ("as RDKit
+  produces it, replicated") is the bit-exact path; confirm given the cost.
+- Deps: `circular_refine` (built) + a hash path; RDKit fixtures.
+
+### Slice 5 — Substructure, unhashed (f)
+
+Exact subgraph keys for prescreening (the RDKit pattern-FP role): enumerate
+labeled subgraphs, reduce each to a canonical structural key, screen with
+`is_subset`.
+
+- Builds: **bounded subgraph / path enumeration in `umol-graph-core`** (primitive 8
+  — new core algorithm, the traversal/enumeration category); a **canonical key**
+  per subgraph (primitive 3, via `auto`/canonical form — collision-free, hence
+  "unhashed"); a keyed feature set; exact-prescreen `is_subset` (**soundness**: the
+  enumeration must be consistent so every query feature is derivable in any
+  superstructure target).
+- Decisions: **the enumeration set** (paths / rings / atom environments / all
+  connected subgraphs ≤ L) — pending the `materials/subgraphs` + RDKit pattern-FP
+  review (open question 2); **canonical-key representation** (canonical-SMILES
+  string vs structural byte key) and how a non-`Copy` key fits `FeatureSet`
+  (relax the `Id` bound to `Clone + Ord`, or a separate keyed container);
+  labeled-only vs also unlabeled-graph features (open question 2).
+- Deps: new core enumeration + canonicalization.
+
+### Slice 6 — Reaction FPs from ECFP/Morgan (difference / role-tagged)
+
+Apply a *molecular* featurizer (ECFP/Morgan) to each reaction component, then
+combine across roles — the "reaction difference fingerprint" (RDKit) and a
+role-tagged variant. Mode (a) of the reaction model with a molecular featurizer
+(vs DRFP's reaction-native shingles).
+
+- Builds: reaction consumption over `ReactionRuleAst` (lhs/rhs, doc-127 interim);
+  per-component featurization (run the chosen molecular featurizer on each reactant
+  and product); a `ReactionCombinator` enum — `Difference` (signed: Σ product
+  features − Σ reactant features) and `RoleTagged`. The molecular featurizer is a
+  parameter.
+- `RoleTagged` = tag each feature by its side (reactant / product) and union into
+  one set; equivalently, when folded it is the **concatenation**
+  `[reactant_fp ‖ product_fp]` (the role tag is just which block a feature lands
+  in). Unlike `Difference` it does **not** cancel: a feature unchanged by the
+  reaction appears in both blocks, so the unchanged scaffold is retained (larger but
+  information-preserving). "Role" = the side (all reactants unioned, all products
+  unioned), not the individual component. (The name `RoleTagged` is interim — `Role`
+  is not used elsewhere in the codebase yet.) -> DisjointUnion
+- Note: `Difference` is computed from per-component fingerprints summed by role —
+  **no atom map needed** (correcting the earlier "uses the atom map" wording;
+  atom-mapped / CGR handling is mode (b), separate and later). `RoleTagged` needs
+  only the role too.
+- Decisions: **`Difference` is signed/count-valued**, so it needs the count
+  representation (the deferred `CountedFeatureSet`) — this slice either pulls counts
+  in or ships `RoleTagged` (binary) first and defers `Difference`.
+- Deps: ECFP (built) / Morgan (slice 4) + the reaction type + counts (for
+  `Difference`). Establishes the reaction-combinator framework slice 7 reuses.
+
+### Slice 7 — DRFP (d)
+
+Reaction-native (Probst 2022): radius-bounded subgraph *shingles* from both sides
+as canonical-SMILES keys, combined by **symmetric difference** — no atom map.
+
+- Builds: shingle extraction (reuse slice-5 enumeration → canonical SMILES); the
+  `SymmetricDifference` reaction combinator (added to slice-6's `ReactionCombinator`)
+  → `FeatureSet` (then optionally folded).
+- Decisions: **canonical-SMILES dependency** (umol-io writer + a canonical atom
+  order — confirm it exists / what it needs); reaction representation stays the
+  doc-127 interim.
+- Deps: slice-5 enumeration + canonical SMILES + slice-6 reaction framework.
+
+### Slice 8 — BRIDGIT (c)
+
+Circular fingerprints over substructure-matched reactive sites (Hadadi 2019):
+fingerprint the environment around the reaction center.
+
+- Builds: reactive-site queries via existing substructure matching, centering
+  circular refinement on matched sites; reaction-center environment aggregation.
+- Decisions: reactive-site query expressivity (may need a SMARTS-level query layer
+  beyond `MoleculeAst`-as-pattern); centering/aggregation scheme.
+- Deps: substructure matching (built) + `circular_refine` (built) + reactions;
+  possibly the SMARTS query layer.
+
+### Cross-cutting (threaded through the slices, not standalone)
+
+- **Count fingerprints** (`CountedFeatureSet` + `CountFp`, and `cosine`) — for
+  purpose-2 count vectors and count-Tanimoto. The first concrete need is slice 6's
+  `Difference` combinator (signed counts); it ripples back into the featurizers
+  (they must track multiplicity), so its scope is decided there.
+- **SMARTS query layer** — MACCS keys, pharmacophore features, richer reactive
+  sites. Deferred; gates the keyed/feature fingerprints and richer BRIDGIT.
+
+### Decisions wanted before their slice
+
+1. **Morgan (slice 4)**: bit-exact RDKit replica vs RDKit-invariant-with-our-hash.
+2. **Substructure (slice 5)**: the enumeration set, and labeled-only vs also
+   unlabeled — pending the literature/impl review.
+3. **Reaction FPs (slice 6)**: ship `RoleTagged` (binary) first, or pull in the
+   count representation now so `Difference` lands with it.
+
+(Slice-3 `BitFp` width is resolved: runtime.)
+
 ## Scope guardrails
 
 - Deliverables a–f now; the omissions (AP/TT, path, MACCS, MHFP/MAP4,

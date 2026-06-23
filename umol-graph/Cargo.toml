@@ -51,6 +51,7 @@ bench = false
 conformance = []
 
 [dependencies]
+bitvec = "1.0.1"
 clap = { version = "4", features = ["derive"] }
 umol-ast = { path = "../umol-ast", version = "0.1.0" }
 umol-edn = { path = "../umol-edn", version = "0.1.0", features = [
