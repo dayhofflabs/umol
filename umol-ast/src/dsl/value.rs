@@ -88,7 +88,10 @@ impl ToEdn for ValueDsl {
             ValueAst::LitSet(xs) => {
                 Edn::Vector(xs.iter().map(|n| Edn::Int(*n)).collect::<Vec<_>>().into())
             }
-            ValueAst::Term(_) | ValueAst::Predicate(_) => Edn::Str(Cow::Owned(self.to_string())),
+            ValueAst::RangeFrom(_)
+            | ValueAst::RangeTo(_)
+            | ValueAst::Term(_)
+            | ValueAst::Predicate(_) => Edn::Str(Cow::Owned(self.to_string())),
         }
     }
 }
@@ -111,6 +114,8 @@ pub(crate) fn fmt_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result
         ValueAst::Undetermined => f.write_char('*'),
         ValueAst::Lit(n) => write!(f, "{}", n),
         ValueAst::LitSet(s) => fmt_set(f, s.iter().copied()),
+        ValueAst::RangeFrom(n) => write!(f, "({n}..)"),
+        ValueAst::RangeTo(n) => write!(f, "(..{n})"),
         ValueAst::Term(t) => fmt_term(f, t, PREC_OR),
         ValueAst::Predicate(p) => fmt_predicate(f, p, PREC_OR),
     }
@@ -274,8 +279,23 @@ pub(crate) fn value(i: &mut &str) -> PResult<ValueAst> {
         terminated(signed_int, (multispace0, terminator)).map(ValueAst::Lit),
         "*".value(ValueAst::Undetermined),
         set.map(|v: Vec<i64>| ValueAst::lit_set(v)),
+        range,
         or_expr.map(parsed_to_value),
     ))
+    .parse_next(i)
+}
+
+/// A half-open range: `(i..)` → `RangeFrom(i)`, `(..j)` → `RangeTo(j)`. The
+/// both-bounded form is intentionally absent (it is a finite set; use `{…}`).
+fn range(i: &mut &str) -> PResult<ValueAst> {
+    delimited(
+        ('(', multispace0),
+        alt((
+            (signed_int, multispace0, "..").map(|(lo, _, _)| ValueAst::RangeFrom(lo)),
+            ("..", multispace0, signed_int).map(|(_, _, hi)| ValueAst::RangeTo(hi)),
+        )),
+        (multispace0, ')'),
+    )
     .parse_next(i)
 }
 
@@ -574,6 +594,9 @@ mod tests {
         ValueTerm::Sum(vec![ValueTerm::Lit(0), ValueTerm::Lit(1)]),
         ValueTerm::Lit(1),
     ])))]
+    #[case::range_from("(1..)", ValueAst::RangeFrom(1))]
+    #[case::range_to("(..3)", ValueAst::RangeTo(3))]
+    #[case::range_from_neg("(-2..)", ValueAst::RangeFrom(-2))]
     fn test_value(#[case] input: &str, #[case] expected: ValueAst) {
         let result = value.parse(input);
         assert!(result.is_ok(), "{:?} error: {:?}", input, result.clone().unwrap_err());
@@ -616,6 +639,8 @@ mod tests {
     #[case::pred_le(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Le, ValueTerm::Lit(1))), "?h <= 1")]
     #[case::pred_gt(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Gt, ValueTerm::Lit(0))), "?h > 0")]
     #[case::pred_ge(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ge, ValueTerm::Lit(1))), "?h >= 1")]
+    #[case::range_from(ValueAst::RangeFrom(1), "(1..)")]
+    #[case::range_to(ValueAst::RangeTo(3), "(..3)")]
     #[case::pred_mem(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::In, BTreeSet::from([0, 1, 2]))), "?h :: {0,1,2}")]
     #[case::pred_mem_notin(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::NotIn, BTreeSet::from([0, 1]))), "?h !: {0,1}")]
     #[case::pred_and_of_or(ValueAst::predicate(ValuePredicate::And(vec![
@@ -652,6 +677,8 @@ mod tests {
     #[case::and_of_or("(?a == 0 | ?b == 0) & ?c == 0")]
     #[case::mem("?h :: {0,1,2}")]
     #[case::mem_notin("?h !: {0,1}")]
+    #[case::range_from("(1..)")]
+    #[case::range_to("(..3)")]
     fn test_value_display_roundtrip(#[case] input: &str) {
         let parsed = value.parse(input).unwrap();
         let rendered = ValueDsl::from_ast(&parsed, &()).to_string();
@@ -665,6 +692,7 @@ mod tests {
     #[case::undetermined(ValueAst::Undetermined, Edn::Keyword(EdnKeyword::owned("undetermined".into())))]
     #[case::set(ValueAst::lit_set([1, 2, 3]), Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
     #[case::term_var(ValueAst::term(ValueTerm::Var("h".to_string())), Edn::Str(Cow::Borrowed("?h")))]
+    #[case::range_from(ValueAst::RangeFrom(1), Edn::Str(Cow::Borrowed("(1..)")))]
     #[case::pred_rel(
         ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0))),
         Edn::Str(Cow::Borrowed("?h == 0")),
@@ -681,6 +709,7 @@ mod tests {
     #[case::vector(Edn::Vector(vec![Edn::Int(0), Edn::Int(2)].into()), ValueAst::lit_set([0, 2]))]
     #[case::str_int(Edn::Str(Cow::Borrowed("4")), ValueAst::Lit(4))]
     #[case::str_set(Edn::Str(Cow::Borrowed("{1,2}")), ValueAst::lit_set([1, 2]))]
+    #[case::str_range(Edn::Str(Cow::Borrowed("(1..)")), ValueAst::RangeFrom(1))]
     #[case::str_pred(
         Edn::Str(Cow::Borrowed("?h == 0")),
         ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0))),
@@ -702,6 +731,8 @@ mod tests {
     #[case::lit(ValueAst::Lit(3))]
     #[case::undetermined(ValueAst::Undetermined)]
     #[case::set(ValueAst::lit_set([1, 2, 3]))]
+    #[case::range_from(ValueAst::RangeFrom(1))]
+    #[case::range_to(ValueAst::RangeTo(3))]
     #[case::pred(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ge, ValueTerm::Lit(1))))]
     fn test_value_dsl_edn_roundtrip(#[case] v: ValueAst) {
         use umol_edn::{FromEdn, ToEdn};

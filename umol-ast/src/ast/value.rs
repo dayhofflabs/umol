@@ -24,6 +24,8 @@ pub enum ValueAst {
     Undetermined,
     Lit(i64),
     LitSet(Box<BTreeSet<i64>>),
+    RangeFrom(i64),
+    RangeTo(i64),
     Term(Box<ValueTerm>),
     Predicate(Box<ValuePredicate>),
 }
@@ -74,13 +76,12 @@ impl ValueAst {
         Self::Term(Box::new(ValueTerm::Var(name.into())))
     }
 
-    /// The lower-bound pattern `?name >= bound`
-    pub fn var_at_least(name: impl Into<String>, bound: i64) -> Self {
-        Self::Predicate(Box::new(ValuePredicate::Rel(
-            ValueTerm::Var(name.into()),
-            RelOp::Ge,
-            ValueTerm::Lit(bound),
-        )))
+    pub fn range_from(bound: i64) -> Self {
+        Self::RangeFrom(bound)
+    }
+
+    pub fn range_to(bound: i64) -> Self {
+        Self::RangeTo(bound)
     }
 
     pub fn term(term: ValueTerm) -> Self {
@@ -122,6 +123,8 @@ impl Canonicalize for ValueAst {
             ValueAst::Undetermined => ValueAst::Undetermined,
             ValueAst::Lit(n) => ValueAst::Lit(n),
             ValueAst::LitSet(set) => lift_set(*set)?,
+            ValueAst::RangeFrom(n) => ValueAst::RangeFrom(n),
+            ValueAst::RangeTo(n) => ValueAst::RangeTo(n),
             ValueAst::Term(term) => lift_term(canon_term(*term)),
             ValueAst::Predicate(predicate) => match canon_predicate(*predicate) {
                 PredicateForm::Top => ValueAst::Undetermined,
@@ -492,6 +495,31 @@ impl Lattice for ValueAst {
                 }
             }
             (LitSet(s), LitSet(t)) => return lift_set(s.intersection(t).copied().collect()).ok(),
+            (RangeFrom(i), Lit(n)) | (Lit(n), RangeFrom(i)) => {
+                if n >= i {
+                    Lit(*n)
+                } else {
+                    return None;
+                }
+            }
+            (RangeTo(j), Lit(n)) | (Lit(n), RangeTo(j)) => {
+                if n < j {
+                    Lit(*n)
+                } else {
+                    return None;
+                }
+            }
+            (RangeFrom(i), RangeFrom(j)) => RangeFrom((*i).max(*j)),
+            (RangeTo(i), RangeTo(j)) => RangeTo((*i).min(*j)),
+            (RangeFrom(i), RangeTo(j)) | (RangeTo(j), RangeFrom(i)) => {
+                return lift_set((*i..*j).collect()).ok();
+            }
+            (RangeFrom(i), LitSet(s)) | (LitSet(s), RangeFrom(i)) => {
+                return lift_set(s.iter().copied().filter(|&x| x >= *i).collect()).ok();
+            }
+            (RangeTo(j), LitSet(s)) | (LitSet(s), RangeTo(j)) => {
+                return lift_set(s.iter().copied().filter(|&x| x < *j).collect()).ok();
+            }
             (x, y) => {
                 if x == y {
                     x.clone()
@@ -526,6 +554,8 @@ impl Lattice for ValueAst {
                 litset_or_lit(union)
             }
             (LitSet(s), LitSet(t)) => litset_or_lit(s.union(t).copied().collect()),
+            (RangeFrom(i), RangeFrom(j)) => RangeFrom((*i).min(*j)),
+            (RangeTo(i), RangeTo(j)) => RangeTo((*i).max(*j)),
             (x, y) => {
                 if x == y {
                     x.clone()
@@ -556,6 +586,16 @@ impl Lattice for ValueAst {
             (Self::Lit(p), Self::LitSet(t)) => t.len() == 1 && t.contains(p),
             (Self::LitSet(p), Self::Lit(t)) => p.contains(t),
             (Self::LitSet(p), Self::LitSet(t)) => !t.is_empty() && t.iter().all(|x| p.contains(x)),
+            (Self::RangeFrom(i), Self::Lit(t)) => t >= i,
+            (Self::RangeFrom(i), Self::LitSet(t)) => !t.is_empty() && t.iter().all(|x| x >= i),
+            (Self::RangeFrom(i), Self::RangeFrom(j)) => j >= i,
+            (Self::RangeTo(j), Self::Lit(t)) => t < j,
+            (Self::RangeTo(j), Self::LitSet(t)) => !t.is_empty() && t.iter().all(|x| x < j),
+            (Self::RangeTo(j), Self::RangeTo(k)) => k <= j,
+            (Self::Undetermined, Self::RangeFrom(_) | Self::RangeTo(_)) => true,
+            (Self::RangeFrom(_) | Self::RangeTo(_), _) | (_, Self::RangeFrom(_) | Self::RangeTo(_)) => {
+                false
+            }
         }
     }
 }
@@ -630,7 +670,7 @@ mod tests {
     #[rstest]
     #[case::lit_set(ValueAst::lit_set([2, 1, 2]), ValueAst::LitSet(Box::new(BTreeSet::from([1, 2]))))]
     #[case::var(ValueAst::var("x"), ValueAst::Term(Box::new(ValueTerm::Var("x".to_string()))))]
-    #[case::var_at_least(ValueAst::var_at_least("r", 1), ValueAst::Predicate(Box::new(ValuePredicate::Rel(ValueTerm::Var("r".to_string()), RelOp::Ge, ValueTerm::Lit(1)))))]
+    #[case::rel_predicate(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("r".to_string()), RelOp::Ge, ValueTerm::Lit(1))), ValueAst::Predicate(Box::new(ValuePredicate::Rel(ValueTerm::Var("r".to_string()), RelOp::Ge, ValueTerm::Lit(1)))))]
     #[case::term(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::Term(Box::new(ValueTerm::Var("x".to_string()))))]
     #[case::predicate(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))), ValueAst::Predicate(Box::new(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])))))]
     fn test_value_ast_constructors(#[case] actual: ValueAst, #[case] expected: ValueAst) {
@@ -752,7 +792,8 @@ mod tests {
     #[case::lit(ValueAst::Lit(3), false)]
     #[case::litset(ValueAst::lit_set([1, 2]), false)]
     #[case::term(ValueAst::var("x"), false)]
-    #[case::predicate(ValueAst::var_at_least("r", 1), false)]
+    #[case::predicate(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("r".to_string()), RelOp::Ge, ValueTerm::Lit(1))), false)]
+    #[case::range_from(ValueAst::RangeFrom(1), false)]
     fn test_value_ast_is_undetermined(#[case] ast: ValueAst, #[case] expected: bool) {
         assert_eq!(ast.is_undetermined(), expected);
     }
@@ -771,6 +812,13 @@ mod tests {
     #[case::term_term_eq(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("x".to_string())), Some(ValueAst::term(ValueTerm::Var("x".to_string()))))]
     #[case::term_term_neq(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("y".to_string())), None)]
     #[case::term_lit(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::Lit(5), None)]
+    #[case::rangefrom_lit_in(ValueAst::RangeFrom(1), ValueAst::Lit(2), Some(ValueAst::Lit(2)))]
+    #[case::rangefrom_lit_out(ValueAst::RangeFrom(2), ValueAst::Lit(1), None)]
+    #[case::rangefrom_rangefrom(ValueAst::RangeFrom(1), ValueAst::RangeFrom(3), Some(ValueAst::RangeFrom(3)))]
+    #[case::rangeto_rangeto(ValueAst::RangeTo(5), ValueAst::RangeTo(3), Some(ValueAst::RangeTo(3)))]
+    #[case::rangefrom_rangeto_set(ValueAst::RangeFrom(1), ValueAst::RangeTo(4), Some(ValueAst::lit_set([1, 2, 3])))]
+    #[case::rangefrom_rangeto_empty(ValueAst::RangeFrom(4), ValueAst::RangeTo(2), None)]
+    #[case::rangefrom_set(ValueAst::RangeFrom(2), ValueAst::lit_set([1, 2, 3]), Some(ValueAst::lit_set([2, 3])))]
     fn test_value_ast_meet(
         #[case] a: ValueAst,
         #[case] b: ValueAst,
@@ -788,6 +836,9 @@ mod tests {
     #[case::set_set(ValueAst::lit_set([1, 2]), ValueAst::lit_set([2, 3]), ValueAst::lit_set([1, 2, 3]))]
     #[case::term_term_eq(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("x".to_string())))]
     #[case::term_term_neq(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("y".to_string())), ValueAst::Undetermined)]
+    #[case::rangefrom_rangefrom(ValueAst::RangeFrom(3), ValueAst::RangeFrom(1), ValueAst::RangeFrom(1))]
+    #[case::rangeto_rangeto(ValueAst::RangeTo(3), ValueAst::RangeTo(5), ValueAst::RangeTo(5))]
+    #[case::rangefrom_lit_overapprox(ValueAst::RangeFrom(1), ValueAst::Lit(5), ValueAst::Undetermined)]
     fn test_value_ast_join(#[case] a: ValueAst, #[case] b: ValueAst, #[case] expected: ValueAst) {
         assert_eq!(a.join(&b), expected);
     }
@@ -802,6 +853,16 @@ mod tests {
     #[case::set_lit_in(ValueAst::lit_set([1, 2, 3]), ValueAst::Lit(2), true)]
     #[case::set_lit_out(ValueAst::lit_set([1, 2, 3]), ValueAst::Lit(5), false)]
     #[case::set_set(ValueAst::lit_set([1, 2, 3]), ValueAst::lit_set([1, 2]), true)]
+    #[case::rangefrom_lit_ge(ValueAst::RangeFrom(1), ValueAst::Lit(2), true)]
+    #[case::rangefrom_lit_lt(ValueAst::RangeFrom(2), ValueAst::Lit(1), false)]
+    #[case::rangefrom_rangefrom_wider(ValueAst::RangeFrom(1), ValueAst::RangeFrom(2), true)]
+    #[case::rangefrom_rangefrom_narrower(ValueAst::RangeFrom(2), ValueAst::RangeFrom(1), false)]
+    #[case::rangefrom_und(ValueAst::RangeFrom(1), ValueAst::Undetermined, false)]
+    #[case::und_rangefrom(ValueAst::Undetermined, ValueAst::RangeFrom(1), true)]
+    #[case::rangefrom_set_all_ge(ValueAst::RangeFrom(1), ValueAst::lit_set([2, 3]), true)]
+    #[case::rangefrom_set_some_lt(ValueAst::RangeFrom(2), ValueAst::lit_set([1, 3]), false)]
+    #[case::rangeto_lit_lt(ValueAst::RangeTo(3), ValueAst::Lit(2), true)]
+    #[case::rangeto_lit_ge(ValueAst::RangeTo(2), ValueAst::Lit(3), false)]
     fn test_value_ast_matches(
         #[case] pattern: ValueAst,
         #[case] target: ValueAst,

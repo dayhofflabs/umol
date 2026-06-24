@@ -359,12 +359,12 @@ mod tests {
     #[case::aromatic_with_ring("1#a#R(6)", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic, DativeBondConstraint::ring_membership(RingScope::Size(6), 1)]))))]
     #[case::ring_membership_all("1#R2", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(2))]))))]
     #[case::ring_membership_all_bare("1#R", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1))]))))]
-    #[case::ring_membership_all_plus("1#R+", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, ValueAst::var_at_least("r", 1))]))))]
+    #[case::ring_membership_all_plus("1#R+", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, ValueAst::RangeFrom(1))]))))]
     #[case::ring_membership_all_star("1#R*", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined)]))))]
     #[case::ring_membership_size("1#R(6)", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(6), 1)]))))]
     #[case::ring_membership_size_bare("1#R(1)", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(1), 1)]))))]
     #[case::ring_membership_all_and_size("1#R2#R(6)", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(2)), DativeBondConstraint::ring_membership(RingScope::Size(6), 1)]))))]
-    #[case::triple_with_constraint("3#R+", DativeBondDsl(dative(ValueAst::Lit(3), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, ValueAst::var_at_least("r", 1))]))))]
+    #[case::triple_with_constraint("3#R+", DativeBondDsl(dative(ValueAst::Lit(3), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, ValueAst::RangeFrom(1))]))))]
     fn test_parse_dative(#[case] input: &str, #[case] expected: DativeBondDsl) {
         let result = dative_bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());

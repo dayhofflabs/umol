@@ -11,9 +11,8 @@ use super::config::{MultiplicityDefault, UnpairedElectronsDefault};
 use super::error::{PResult, ParseError};
 use super::value::{fmt_value, value};
 use crate::ast::constraint::{RingMembershipAst, RingScope};
-use crate::ast::operators::RelOp;
 use crate::ast::spin::SpinStateAst;
-use crate::ast::value::{ValueAst, ValuePredicate, ValueTerm};
+use crate::ast::value::ValueAst;
 
 pub(crate) fn charge(i: &mut &str) -> PResult<ValueAst> {
     preceded(
@@ -39,7 +38,7 @@ pub(crate) fn ring_count(i: &mut &str) -> PResult<ValueAst> {
         multispace0,
         alt((
             value,
-            "+".value(ValueAst::var_at_least("r", 1)),
+            "+".value(ValueAst::RangeFrom(1)),
             "!".value(ValueAst::Lit(0)),
             empty.value(ValueAst::Lit(1)),
         )),
@@ -87,22 +86,6 @@ pub(crate) fn apply_spin_pair(
         }
     }
     Ok(())
-}
-
-/// Convert `#z?z >= threshold` to syntactic sugar `#z+`
-pub(crate) fn is_plus_sugar(v: &ValueAst, name: &str, threshold: i64) -> bool {
-    let ValueAst::Predicate(p) = v else {
-        return false;
-    };
-    match p.as_ref() {
-        ValuePredicate::Rel(ValueTerm::Var(n), RelOp::Ge, ValueTerm::Lit(t)) => {
-            n == name && *t == threshold
-        }
-        ValuePredicate::Rel(ValueTerm::Lit(t), RelOp::Le, ValueTerm::Var(n)) => {
-            n == name && *t == threshold
-        }
-        _ => false,
-    }
 }
 
 pub(crate) fn fmt_charge(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
@@ -170,7 +153,7 @@ pub(crate) fn fmt_ring_membership(
     if let RingScope::Size(s) = m.scope {
         write!(f, "({})", s)?;
     }
-    if is_plus_sugar(v, "r", 1) {
+    if *v == ValueAst::RangeFrom(1) {
         return write!(f, "+");
     }
     match v {
@@ -312,7 +295,7 @@ mod tests {
     #[case::empty("", ValueAst::Lit(1))]
     #[case::lit("4", ValueAst::Lit(4))]
     #[case::undetermined("*", ValueAst::Undetermined)]
-    #[case::plus_sugar("+", ValueAst::var_at_least("r", 1))]
+    #[case::plus_sugar("+", ValueAst::RangeFrom(1))]
     #[case::bang_sugar("!", ValueAst::Lit(0))]
     #[case::zero_numeric("0", ValueAst::Lit(0))]
     #[case::set("{2,3}", ValueAst::lit_set([2, 3]))]
@@ -325,9 +308,9 @@ mod tests {
     #[case::all_zero_renders_bang(RingScope::All, ValueAst::Lit(0), "#R!")]
     #[case::all_one_renders_bare(RingScope::All, ValueAst::Lit(1), "#R")]
     #[case::all_two(RingScope::All, ValueAst::Lit(2), "#R2")]
-    #[case::all_plus(RingScope::All, ValueAst::var_at_least("r", 1), "#R+")]
+    #[case::all_plus(RingScope::All, ValueAst::RangeFrom(1), "#R+")]
     #[case::size_bare(RingScope::Size(6), ValueAst::Lit(1), "#R(6)")]
-    #[case::size_plus(RingScope::Size(6), ValueAst::var_at_least("r", 1), "#R(6)+")]
+    #[case::size_plus(RingScope::Size(6), ValueAst::RangeFrom(1), "#R(6)+")]
     fn test_fmt_ring_membership(
         #[case] scope: RingScope,
         #[case] count: ValueAst,
@@ -375,24 +358,6 @@ mod tests {
         let err = apply_spin_pair(&mut initial, pred, ParseError::DuplicateAtomPredicate)
             .unwrap_err();
         assert_eq!(err, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::var_ge_threshold_match(ValueAst::var_at_least("r", 1), "r", 1, true)]
-    #[case::different_var(ValueAst::var_at_least("a", 1), "r", 1, false)]
-    #[case::different_threshold(ValueAst::var_at_least("r", 0), "r", 1, false)]
-    #[case::wrong_op(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("r".to_string()), RelOp::Eq, ValueTerm::Lit(1))), "r", 1, false)]
-    #[case::lit_value(ValueAst::Lit(3), "r", 1, false)]
-    #[case::undetermined(ValueAst::Undetermined, "r", 1, false)]
-    #[case::set(ValueAst::lit_set([1, 2]), "r", 1, false)]
-    fn test_is_plus_sugar(
-        #[case] value: ValueAst,
-        #[case] name: &str,
-        #[case] threshold: i64,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(is_plus_sugar(&value, name, threshold), expected);
     }
 
     /// For every (initial u, m) pair reachable after parsing the seven canonical DSL fragments (`""`, `"#u0"`, `"#u1"`, `"#m1"`, `"#m2"`,

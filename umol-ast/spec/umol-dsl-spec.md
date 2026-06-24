@@ -206,9 +206,13 @@ An empty **`nat-set`** **`{ }`** is **invalid**.
 value-expr ::= '*'
              | nat-set
              | nat
+             | range                   (* half-open numeric range            *)
              | '?' id                  (* top-level Ref — bind reference     *)
              | '?' id '::' nat-set     (* top-level Bind — named domain     *)
              | bool-expr
+
+range      ::= '(' signed-int '..' ')'   (* RangeFrom: bound <= value       *)
+             | '(' '..' signed-int ')'    (* RangeTo:   value < bound        *)
 
 bool-expr  ::= or-expr
 
@@ -245,6 +249,8 @@ id  ::= [a-zA-Z][a-zA-Z0-9_]*
 **Top-level `nat`.** A **`nat`** forms a complete top-level **`value-expr`** only when it is **cut** by **end of the substring being tokenized** or by the **next predicate** (**`#`** *tag* on the atom-string / bond-string), after optional whitespace — e.g. **`#h1#v3`** yields **`1`** then **`3`**. If the next non-whitespace character is anything else (e.g. **`+`** in **`1+2`**), parsing **MUST NOT** treat the **`nat`** as this alternative; it falls through to **`bool-expr`**. Implementations **MAY** represent this form as **`Lit`** distinct from a trivial relational **`bool-expr`**. The common **Ground** case (**`#h3`**, **`#v0`**, …) is typically this shape.
 
 **Top-level `nat-set`.** A **`value-expr`** may be **only** a **`nat-set`** (after the usual ignored whitespace between **`value-expr`** tokens, **§7.1**). It denotes a **finite numeric disjunction** for the **one** quantity fixed by the enclosing predicate tag (**§7.3**, **§7.5**): that quantity **MUST** equal one of the listed **`nat`** values. This is the same constraint **shape** as a top-level **`nat-set`** in **bond-string** **`order`** (**§7.5**) and **`element-set`** for the **element** prefix, applied at the **predicate payload** level (e.g. **`#h{1,2,3}`** with payload **`{1,2,3}`**). It **MUST NOT** introduce a numeric **`?id`**; implementations **MAY** lower it to **`bool-expr`** internally. The form ***arith* `::` *nat-set*** on **`mem-expr`** is unchanged: it constrains the **arithmetic** value on the left of **`::`**, not an implicit slot quantity by bare **`{…}`** alone.
+
+**Top-level `range`.** A **`value-expr`** may be a half-open **`range`**: **`(i..)`** is **`RangeFrom(i)`** (admits every value **≥ `i`**), **`(..j)`** is **`RangeTo(j)`** (admits every value **< `j`**). Bounds are **`signed-int`** (so charge ranges admit negatives). The **both-bounded** form **`(i..j)`** is **not** a range — it is the finite set **`{i, …, j−1}`** and **MUST** be written as a **`nat-set`** (**`(i..i)`** is the empty set, a contradiction); restricting **`range`** to half-open keeps it always non-empty and canonical. Ranges are **anonymous** (no **`id`**), so distinct occurrences never couple — unlike a **`?id >= i`** predicate, whose variable would be shared. **`#R+`** lowers to **`RangeFrom(1)`**; **`(i..)`**/**`(..j)`** are the general forms (e.g. **`#R(1..)`**, **`#R(6)(1..)`**). A **`range`** participates in matching by **solution-set inclusion** (**§6.2**): **`RangeFrom(i)`** matches a target **`Lit(n)`** iff **`n ≥ i`**, a target set iff all members are **≥ `i`**, and a target **`RangeFrom(j)`** iff **`j ≥ i`**.
 
 **Top-level `?` *id* and `?` *id* `::` *nat-set*.** A **`value-expr`** may be **only** **`?` *id*** (a numeric **bind reference**) or **`?` *id* `::` *nat-set*** (a **named-bind** with a finite admissible domain). These shapes parse at the **value-expr** level before falling through to **`bool-expr`**, and produce the AST variants **`ValueAst::Ref`** and **`ValueAst::Bind`** respectively. Inside a compound expression (e.g. **`?h + 1`**, **`?h == 0`**), the same **`?` *id*** appears as **`Expr::Var`** inside **`bool-expr`** — the discriminator is whether the surrounding context is the whole value or an operand of a larger operator.
 
@@ -360,7 +366,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 ### 6.2 Pattern–target match
 
-**Match as solution-set inclusion.** Each attribute slot has a **solution set** — the set of ground values the slot admits. A **literal** (e.g. **`C`**, **`3`**, **`+1`**) admits exactly itself; a **set** (**`{C,N}`**, top-level **`nat-set`**) admits its members; a **negation** (**`!H`**, **`!12`**) admits everything in the slot's value domain *except* the named literal; a **negative set** (**`!{F,Cl}`**, **`!{12,13}`**) admits the complement of the listed entries; a **wildcard** (**`*`**) admits everything in the slot's value domain; a **`bool-expr`** admits every value for which the expression holds (**§5**); a **special-symbolic** payload (**`#i=`**, **`#a*`**, **`#a+`**, **`#a!`**, **`#m*`**, **`#m+`**, **`#m!`**, **`#R*`**, **`#R+`**, **`#R!`**) admits only its named symbolic state (**§7.3**). For a given slot, the **pattern** matches the **target** iff `solution-set(pattern)` ⊇ `solution-set(target)` — the pattern admits every value the target admits. Match is **not** symmetric.
+**Match as solution-set inclusion.** Each attribute slot has a **solution set** — the set of ground values the slot admits. A **literal** (e.g. **`C`**, **`3`**, **`+1`**) admits exactly itself; a **set** (**`{C,N}`**, top-level **`nat-set`**) admits its members; a **negation** (**`!H`**, **`!12`**) admits everything in the slot's value domain *except* the named literal; a **negative set** (**`!{F,Cl}`**, **`!{12,13}`**) admits the complement of the listed entries; a **wildcard** (**`*`**) admits everything in the slot's value domain; a **`bool-expr`** admits every value for which the expression holds (**§5**); a **`range`** admits its half-line (**`(i..)`** every value **≥ `i`**, **`(..j)`** every value **< `j`**, **§5**); a **special-symbolic** payload (**`#i=`**, **`#a*`**, **`#a+`**, **`#a!`**, **`#m*`**, **`#m+`**, **`#m!`**) admits only its named symbolic state (**§7.3**). The **`#R`** family is ordinary numeric — **`#R*`** = wildcard, **`#R+`** = **`RangeFrom(1)`**, **`#R!`** = **`Lit(0)`**, **`#Rn`** = **`Lit(n)`** — matched by the wildcard / range / literal rules. For a given slot, the **pattern** matches the **target** iff `solution-set(pattern)` ⊇ `solution-set(target)` — the pattern admits every value the target admits. Match is **not** symmetric.
 
 | pattern kind | target kind | matches iff |
 |--------------|-------------|-------------|
@@ -504,13 +510,13 @@ isotope-domain  ::= nat-set                        (* MemOp::In                 
 | **`=`** | **`#i`** | **Natural isotope**: mass number of the **naturally most abundant** isotope of **`element`**. This is the default / expected isotope for each element. |
 | **`*`** | **`#h`** | **Wildcard** implicit H count (**Query** / **Rule**). |
 | **`*`** | **`#a`** | **No constraint** on aromatic π contribution — equivalent to omitting **`#a`** entirely. |
-| **`+`** | **`#a`** | **Sugar** for the constraint **`?a >= 0`**: atom is a member of some aromatic system with an unspecified π contribution (**Query** / **Rule**). |
+| **`+`** | **`#a`** | Atom is a member of some aromatic system with an **unspecified** π contribution — **`Aromatic(Undetermined)`** (**Query** / **Rule**). |
 | **`!`** | **`#a`** | Atom is **not** a member of any aromatic system. Distinct from **`#a0`**: a **`#a0`** atom *is* in an aromatic system and contributes **zero** π electrons (e.g. a carbocation with an empty p orbital participating in a ring current); a **`#a!`** atom has no aromatic membership at all. Cross-checked against **`:aromatic-systems`** membership during validation (inconsistency is a validator error, not a parse / ground error). |
 | **`*`** | **`#m`** | **No constraint** on multicenter valence — equivalent to omitting **`#m`** entirely. |
-| **`+`** | **`#m`** | **Sugar** for the constraint **`?m >= 0`**: atom is a member of some multicenter bond with an unspecified multicenter-valence count (**Query** / **Rule**). |
+| **`+`** | **`#m`** | Atom is a member of some multicenter bond with an **unspecified** multicenter-valence count — **`Multicenter(Undetermined)`** (**Query** / **Rule**). |
 | **`!`** | **`#m`** | Atom is **not** a member of any multicenter bond. Parallels **`#a!`**; cross-checked against **`:multicenter-bonds`** membership during validation. |
 | **`*`** | **`#R`** | **No constraint** on ring count — equivalent to omitting **`#R`** entirely. |
-| **`+`** | **`#R`** | **Sugar** for the constraint **`?r >= 1`**: atom is in **at least one** ring (**Query** / **Rule**). With a size, **`#R(<size>)+`** means at least one ring of that size (SMARTS **`r<size>`**). |
+| **`+`** | **`#R`** | The range **`RangeFrom(1)`**: atom is in **at least one** ring (**Query** / **Rule**). With a size, **`#R(<size>)+`** means at least one ring of that size (SMARTS **`r<size>`**). **`#R(1..)`** / **`#R(6)(1..)`** are the general range spellings. |
 | **`!`** | **`#R`** | Ring count **0**: atom is in **no** ring (acyclic). With a size, **`#R(<size>)!`** means no ring of that size. |
 | **`*`** | **`#T`** | **No constraint** on tetrahedral stereo — equivalent to omitting **`#T`** entirely (**`Undetermined`**). |
 | **`!`** | **`#T`** | Atom is **not** a tetrahedral stereocenter (**`NotStereo`**). |
@@ -536,7 +542,7 @@ Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`value-expr`** / *
 | **`#X`** | **Connectivity**: degree plus implicit-H count (SMARTS `X`). Derived. |
 | **`#x`** | **Ring connectivity**: number of ring bonds at the atom (SMARTS `x`). Derived. |
 | **`#H`** | **Total hydrogens**: implicit H count plus explicit H neighbors (SMARTS `H`). Derived. |
-| **`#R`** | **Ring membership**. **`#R<count>`** bounds the **total** ring count; **`#R(<size>)<count>`** bounds the count of rings of that **size**. Each count follows the **§5.3** omitted-numeral convention: bare **`#R`** / **`#R(<size>)`** means count **1**; **`#R<n>`** / **`#R(<size>)<n>`** means exactly **n**. **Special** **`#R*`** (no constraint), **`#R+`** (sugar for **`?r >= 1`**, "in at least one ring"), **`#R!`** (count **0**). SMARTS parity: **`R`** → **`#R+`**, **`Rn`** → **`#Rn`**, **`R0`** → **`#R!`**, **`rn`** → **`#R(n)+`**. Derived. |
+| **`#R`** | **Ring membership**. **`#R<count>`** bounds the **total** ring count; **`#R(<size>)<count>`** bounds the count of rings of that **size**. Each count follows the **§5.3** omitted-numeral convention: bare **`#R`** / **`#R(<size>)`** means count **1**; **`#R<n>`** / **`#R(<size>)<n>`** means exactly **n**. **Special** **`#R*`** (no constraint), **`#R+`** (the range **`RangeFrom(1)`**, "in at least one ring"), **`#R!`** (count **0**). SMARTS parity: **`R`** → **`#R+`**, **`Rn`** → **`#Rn`**, **`R0`** → **`#R!`**, **`rn`** → **`#R(n)+`**. Derived. |
 | **`#T`** | **Tetrahedral stereo** configuration at the atom (SMARTS-style stereo query). Payload is a **`config`** (**§7.14**): **special** **`#T*`** / **`#T!`** / **`#T+`**, a coset literal **`#T<n>`** (e.g. **`#T1`**, **`#T2`**), or a coset operator-expression. Canonical constraint form **`{:atom [i {:tetrahedral-stereo …}]}`** (**§7.9**). |
 
 **Case convention.** **Lowercase** tag letters denote the atom's own state fields (isotope, charge, spin, implicit H, localized valence, π contribution, …) plus the SMARTS-lowercase ring-connectivity predicate **`#x`**. **Uppercase** tag letters denote **derived predicates** (topology queries over the surrounding graph) in the SMARTS-parity set. The namespaces are **disjoint**: **`#h`** (implicit H slot) and **`#H`** (total H count) coexist, and **`#x`** (ring connectivity) and **`#X`** (connectivity) coexist, without collision. Ring membership is the single uppercase **`#R`** — total count, or **`#R(<size>)`** for one size; there is **no** lowercase **`#r`** (the former ring-size tag folds into **`#R(<size>)`**).
@@ -598,7 +604,7 @@ order ::= value-expr
 
 **`#u`** / **`#s`.** After **`#u`** or **`#s`**, parse a **`value-expr`** (**§5**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.3** for decimal-only slots). **No** extra lookahead is required beyond **`value-expr`** termination and the next predicate or end of string.
 
-**`#R` (bond ring membership).** Same forms as atom-level **`#R`** (**§7.3**): **`#R<count>`** (total ring count) or **`#R(<size>)<count>`** (count of rings of that size); bare means **1**; **`#R*`** means no constraint; **`#R+`** is sugar for **`?r >= 1`** ("bond lies in at least one ring"); **`#R!`** means count **0**.
+**`#R` (bond ring membership).** Same forms as atom-level **`#R`** (**§7.3**): **`#R<count>`** (total ring count) or **`#R(<size>)<count>`** (count of rings of that size); bare means **1**; **`#R*`** means no constraint; **`#R+`** is the range **`RangeFrom(1)`** ("bond lies in at least one ring"); **`#R!`** means count **0**.
 
 | Tag | Meaning (bond namespace) |
 |-----|---------------------------|
@@ -919,7 +925,7 @@ dative-predicate ::= '#' tag payload
 
 **`#a` (dative-bond aromatic flag).** A bare **`#a`** with no payload marks the dative bond as participating in an aromatic system. Examples: the N→B π-donation of borazine, O→B of boroxine, or a C→M coordination spanning a metallaaromatic ring. The flag carries no value (parallel to the bond-namespace **`#a`** of **§7.5**); aromatic-ring perception cross-checks the flag against actual ring membership.
 
-**`#R` (dative-bond ring membership).** Same forms as the atom-level and bond-level **`#R`** (**§7.3**, **§7.5**): **`#R<count>`** (total ring count) or **`#R(<size>)<count>`** (count of rings of that size); bare means **1**; **`#R*`** means no constraint; **`#R+`** is sugar for **`?r >= 1`** ("dative bond lies in at least one ring"); **`#R!`** means count **0**.
+**`#R` (dative-bond ring membership).** Same forms as the atom-level and bond-level **`#R`** (**§7.3**, **§7.5**): **`#R<count>`** (total ring count) or **`#R(<size>)<count>`** (count of rings of that size); bare means **1**; **`#R*`** means no constraint; **`#R+`** is the range **`RangeFrom(1)`** ("dative bond lies in at least one ring"); **`#R!`** means count **0**.
 
 | Tag | Meaning (dative-bond namespace) | Storage |
 |-----|-----------------------------------|----------|

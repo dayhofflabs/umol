@@ -1,4 +1,4 @@
-# Cargo configuration for umol-models-graph crate
+# Cargo configuration for umol-graph crate
 
 [env]
 # Auto-update snapshots in development, but not in CI
