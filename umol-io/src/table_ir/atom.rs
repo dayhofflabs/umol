@@ -2,9 +2,9 @@
 
 use std::collections::HashMap;
 
-use umol_shared::element::Element;
-use umol_shared::isotope::NamedIsotope;
-use umol_shared::spin::SpinMultiplicity;
+use umol_chem::element::Element;
+use umol_chem::isotope::NamedIsotope;
+use umol_chem::spin::SpinMultiplicity;
 
 use super::error::ConversionError;
 use super::rgroup::RGroup;

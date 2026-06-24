@@ -4,8 +4,8 @@
 //! and valence constraints, using Lagrangian relaxation.
 
 use umol_params::covalent_radii::covalent_radii;
-use umol_shared::element::Element;
-use umol_shared::units::length::Length;
+use umol_chem::element::Element;
+use umol_chem::units::length::Length;
 
 use crate::algorithms::optimization::{
     lagrangian_relaxation, Constraint, LagrangianConfig, Variable,
@@ -200,8 +200,8 @@ pub fn perceive_bonds(mol: &Molecule, config: &BondPerceptionConfig) -> BondPerc
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
-    use umol_shared::element::Element::*;
-    use umol_shared::spin::SpinMultiplicity;
+    use umol_chem::element::Element::*;
+    use umol_chem::spin::SpinMultiplicity;
 
     use super::*;
 

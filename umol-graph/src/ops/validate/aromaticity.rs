@@ -9,7 +9,7 @@ use umol_ast::ast::{AromaticValenceAst, AtomId, MoleculeAst, ValueAst};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError, AromaticityPerception};
 use crate::ops::model::AromaticityModel;
-use umol_shared::solution::Solution;
+use umol_utils::solution::Solution;
 
 #[derive(Clone, Debug)]
 pub struct AromaticityConformanceValidator {
@@ -105,7 +105,7 @@ mod tests {
     use umol_ast::ast::{
         AromaticValenceAst, AtomAst, AtomConstraint, BondAst, MoleculeAst, SpinStateAst, ValueAst,
     };
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
     use crate::ops::model::{ElementScope, RingLimits};

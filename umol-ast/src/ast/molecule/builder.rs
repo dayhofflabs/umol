@@ -1438,7 +1438,7 @@ impl MoleculeBuilder {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
     use crate::ast::atom::AtomAst;

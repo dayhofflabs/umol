@@ -3,8 +3,8 @@
 
 use thiserror::Error;
 use umol_ast::ast::{AsLit, AtomAst, AtomId, Lattice, MoleculeAst};
-use umol_shared::element::Element;
-use umol_shared::solution::Solution;
+use umol_chem::element::Element;
+use umol_utils::solution::Solution;
 
 use super::compare::compare_valence_preference;
 use crate::ops::model::AtomTypingModel;

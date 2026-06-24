@@ -15,8 +15,8 @@ use umol_ast::ast::{
     TryIntoAst, ValueAst,
 };
 use umol_perm::{space, ClassKey, Permutation};
-use umol_shared::element::Element;
-use umol_shared::error::UmolError;
+use umol_chem::element::Element;
+use umol_utils::error::UmolError;
 
 use crate::table_ir::atom::Atom as TableAtom;
 use crate::table_ir::bond::{
@@ -381,7 +381,7 @@ fn raise_cis_trans_stereo(
 mod tests {
     use rstest::*;
     use umol_ast::ast::BondId;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
     use crate::ctfile::parse_mol_to_ast;

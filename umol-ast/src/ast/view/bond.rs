@@ -307,7 +307,7 @@ pub struct BondBuilderViewMut<'a> {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;

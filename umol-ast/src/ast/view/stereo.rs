@@ -848,7 +848,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_perm::Permutation;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;

@@ -18,7 +18,7 @@ use nom::number::complete::double;
 use nom::sequence::{delimited, preceded, separated_pair, terminated};
 use nom::{Err, IResult, Parser};
 use umol_geometric_core::Point3D;
-use umol_shared::spin::SpinMultiplicity;
+use umol_chem::spin::SpinMultiplicity;
 
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
@@ -2395,7 +2395,7 @@ mod tests {
     use bstr::ByteSlice;
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
     use crate::table_ir::atom::{BicycloStereo, BicycloStereoData, Chirality};

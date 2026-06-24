@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use umol_ast_macros::{Canonicalize, Lattice};
-use umol_shared::element::{Element, MAX_ATOMIC_NUMBER};
+use umol_chem::element::{Element, MAX_ATOMIC_NUMBER};
 
 use super::constraint::{AtomConstraint, AtomConstraints};
 use super::error::Contradiction;

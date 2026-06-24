@@ -6,7 +6,7 @@
 //!   alpha_X = alpha_0 + h_X * beta_0
 //!   beta_XY = k_XY * beta_0
 
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 pub struct VanCatledgeParams;
 

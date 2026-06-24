@@ -13,7 +13,7 @@ use umol_ast::ast::{
 };
 use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use crate::ops::model::ElementScope;
 
@@ -301,7 +301,7 @@ mod tests {
         AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, MoleculeAst, RingFamily,
         ValueAst,
     };
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
 

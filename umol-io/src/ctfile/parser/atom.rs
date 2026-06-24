@@ -9,8 +9,8 @@ use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
 use nom::sequence::terminated;
 use nom::{Err, Parser};
 use umol_geometric_core::{all_zero, Point3D};
-use umol_shared::element::Element;
-use umol_shared::isotope::NamedIsotope;
+use umol_chem::element::Element;
+use umol_chem::isotope::NamedIsotope;
 
 use super::convert::{
     convert_atom_charge_code, convert_atom_exact_change_flag_code,

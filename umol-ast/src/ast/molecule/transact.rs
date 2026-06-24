@@ -2036,7 +2036,7 @@ impl MoleculeBuilder {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::super::super::aromatic::AromaticSystemAst;
     use super::super::super::atom::{AtomAst, ElementAst};

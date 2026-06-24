@@ -13,7 +13,7 @@ use std::borrow::Cow;
 use strum::EnumCount;
 use thiserror::Error;
 use umol_ast::ast::{ConstitutionColoring, GraphSymmetryConfig, StereoKind};
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
@@ -230,7 +230,7 @@ pub enum ConfigError {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
 

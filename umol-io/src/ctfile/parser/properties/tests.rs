@@ -4,7 +4,7 @@ use nom::error::ErrorKind as NomErrorKind;
 use nom::Err;
 use pretty_assertions::assert_eq;
 use rstest::*;
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use super::*;
 use crate::ctfile::config::CtabParseFlags;

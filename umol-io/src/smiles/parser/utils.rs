@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 use std::str::from_utf8;
 
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;

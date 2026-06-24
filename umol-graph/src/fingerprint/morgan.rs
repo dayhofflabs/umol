@@ -10,7 +10,7 @@
 
 use umol_ast::ast::{AsLit, AtomId, BondId, IsotopeMassAst, MoleculeAst};
 use umol_graph_core::CircularRefinementAlgorithm;
-use umol_shared::isotope::Isotope;
+use umol_chem::isotope::Isotope;
 
 use crate::hash::Morgan;
 use super::feature_set::{CountedFeatureSet, FeatureSet};

@@ -1,7 +1,7 @@
 //! Spin-state AST.
 
 use umol_ast_macros::{Canonicalize, Lattice};
-use umol_shared::spin::{SpinMultiplicity, SpinState};
+use umol_chem::spin::{SpinMultiplicity, SpinState};
 
 use super::traits::AsLit;
 use super::value::ValueAst;
@@ -66,7 +66,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::spin;
+    use umol_chem::spin;
 
     use super::*;
     use crate::ast::error::Contradiction;

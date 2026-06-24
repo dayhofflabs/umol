@@ -252,7 +252,7 @@ mod tests {
         AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElectronCountsAst, ElementAst,
         MoleculeAst, RingFamily, ValueAst,
     };
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
 

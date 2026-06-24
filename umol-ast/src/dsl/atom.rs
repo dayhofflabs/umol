@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use strum::IntoEnumIterator;
 use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 use winnow::ascii::{dec_uint, multispace0};
 use winnow::combinator::{alt, delimited, empty, opt, preceded, repeat, separated, terminated};
 use winnow::error::{ErrMode, ParserError};
@@ -1170,7 +1170,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
     use crate::ast::constraint::RingScope;

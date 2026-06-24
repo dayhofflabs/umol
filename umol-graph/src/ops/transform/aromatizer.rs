@@ -9,7 +9,7 @@
 
 use thiserror::Error;
 use umol_ast::ast::{AtomView, ElementAst, MoleculeAst, ValueAst};
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError, AromaticityPerception};
 use crate::ops::model::AromaticityModel;
@@ -98,7 +98,7 @@ mod tests {
     use umol_ast::ast::{
         AromaticSystemId, AtomAst, AtomId, BondAst, BondConstraintKind, MoleculeAst, SpinStateAst,
     };
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
 

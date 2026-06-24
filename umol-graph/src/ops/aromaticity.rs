@@ -25,8 +25,8 @@ use umol_ast::ast::{
     AtomView, BondConstraint, BondId, ElectronCountsAst, ElementAst, MoleculeAst, RingFamily,
     ValueAst,
 };
-use umol_shared::element::Element;
-use umol_shared::solution::Solution;
+use umol_chem::element::Element;
+use umol_utils::solution::Solution;
 
 use crate::ops::model::AromaticityModel;
 
@@ -266,7 +266,7 @@ mod tests {
         BondAst, BondConstraintKind, ElectronCountsAst, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_ast::mol_ground;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
     use crate::ops::model::{ElementScope, RingLimits};

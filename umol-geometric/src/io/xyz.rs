@@ -7,9 +7,9 @@ use std::error::Error;
 use std::fmt::{self, Write};
 use std::str::FromStr;
 
-use umol_shared::element::Element;
-use umol_shared::spin::SpinMultiplicity;
-use umol_shared::units::length::Length;
+use umol_chem::element::Element;
+use umol_chem::spin::SpinMultiplicity;
+use umol_chem::units::length::Length;
 
 use crate::molecule::Molecule;
 
@@ -141,7 +141,7 @@ pub fn to_xyz_string(mol: &Molecule, comment: &str) -> String {
 mod tests {
     use float_cmp::approx_eq;
     use rstest::*;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
 

@@ -20,7 +20,7 @@ use umol_ast::ast::{
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_edn::FromEdn;
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 #[path = "fixtures.rs"]
 #[allow(dead_code)]

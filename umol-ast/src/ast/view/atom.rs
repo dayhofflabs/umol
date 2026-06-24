@@ -4,7 +4,7 @@
 use std::ops::Index;
 
 use umol_graph_core::NodeId;
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::super::constraint::{AtomConstraints, RingScope};
@@ -554,7 +554,7 @@ pub struct AtomBuilderViewMut<'a> {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;

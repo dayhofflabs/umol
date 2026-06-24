@@ -7,7 +7,7 @@ use umol_graph_core::{
     CycleEnumerationAlgorithm, EdgeId, MatchingEnumerationAlgorithm, MaxIndependentSetAlgorithm,
     MaxMatchingAlgorithm, NodeId, ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
 };
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use super::super::aromatic::AromaticSystemAst;
 use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};

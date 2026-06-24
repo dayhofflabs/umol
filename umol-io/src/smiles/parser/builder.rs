@@ -2,7 +2,7 @@
 
 use std::mem;
 
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use super::super::error::ParseError;
 use super::utils::{make_bond, make_extended_bond};

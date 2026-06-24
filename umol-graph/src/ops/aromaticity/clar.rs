@@ -12,7 +12,7 @@ use umol_ast::ast::{
     AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet, SpinStateAst,
 };
 use umol_graph_core::Graph;
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ClarError {
@@ -132,7 +132,7 @@ mod tests {
         AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, MoleculeAst,
         RingFamily, RingId, ValueAst,
     };
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
 

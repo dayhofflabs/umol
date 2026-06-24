@@ -4,7 +4,7 @@
 
 use thiserror::Error;
 use umol_ast::ast::MoleculeAst;
-use umol_shared::solution::Solution;
+use umol_utils::solution::Solution;
 
 use crate::ops::model::ValenceModel;
 use crate::ops::valence::{AtomTypingMismatch, AtomTypingValence, CountsMismatch, CountsValence};

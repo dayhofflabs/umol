@@ -35,7 +35,7 @@ pub(crate) use umol_ast::dsl::{
 };
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
 pub(crate) use umol_perm::{Orientation, Permutation};
-pub(crate) use umol_shared::element::Element;
+pub(crate) use umol_chem::element::Element;
 
 const ELEMENTS: &[Element] = &[
     Element::H,

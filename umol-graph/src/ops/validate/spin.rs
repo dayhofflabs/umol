@@ -4,12 +4,12 @@
 //! aromatic system, multicenter bond).
 //!
 //! Stub: always returns `Determined`. Implementation pending; the parity
-//! rule is in `umol_shared::spin::SpinState::are_compatible`.
+//! rule is in `umol_chem::spin::SpinState::are_compatible`.
 
 use thiserror::Error;
 use umol_ast::ast::{AtomAst, MoleculeAst};
 
-use umol_shared::solution::Solution;
+use umol_utils::solution::Solution;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SpinInvariantsValidator;

@@ -20,12 +20,12 @@ pub use multicenter::{
 };
 use thiserror::Error;
 use umol_ast::ast::MoleculeAst;
-use umol_shared::error::UmolError;
+use umol_utils::error::UmolError;
 pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
 use crate::ops::model::ChemistryModel;
-use umol_shared::solution::Solution;
+use umol_utils::solution::Solution;
 
 #[derive(Clone, Debug)]
 pub struct Resolver<'a> {
@@ -153,7 +153,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::MoleculeAst;
     use umol_ast::mol_ground;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
     use crate::ops::model::{

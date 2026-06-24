@@ -1,27 +1,18 @@
 [package]
-name = "umol-params"
+name = "umol-utils"
 version = "0.1.0"
 authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
 edition = "2021"
 rust-version.workspace = true
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rappoport/umol"
-keywords = [
-    "chemistry",
-    "cheminformatics",
-    "computational chemistry",
-    "molecular modeling",
-    "molecular representation",
-]
-description = "Model-dependent parameters for umol."
+description = "Cross-cutting infrastructure (error trait, three-valued outcome) for umol."
 
 [lib]
 bench = false
 
-[dependencies]
-umol-chem = { path = "../umol-chem", version = "0.1.0" }
-
 [dev-dependencies]
+pretty_assertions = "1.4.1"
 rstest = "0.26.1"
 
 [lints.clippy]

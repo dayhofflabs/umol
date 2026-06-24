@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::ops::{Add, Div, Mul, Sub};
 
-use umol_shared::spin::SpinMultiplicity;
+use umol_chem::spin::SpinMultiplicity;
 
 use super::error::Contradiction;
 use super::operators::{MemOp, RelOp};

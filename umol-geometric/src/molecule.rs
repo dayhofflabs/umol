@@ -10,10 +10,10 @@ use umol_msym::{
     BasisKind, CartesianAxis, EquivalenceSet, Irrep, MatrixRep, MsymError, PointGroup, SalcBasis,
     SchoenfliesSymbol, SymmetryCenter, Thresholds,
 };
-use umol_shared::element::Element;
-use umol_shared::spin::SpinMultiplicity;
-use umol_shared::units::angle::Angle;
-use umol_shared::units::length::Length;
+use umol_chem::element::Element;
+use umol_chem::spin::SpinMultiplicity;
+use umol_chem::units::angle::Angle;
+use umol_chem::units::length::Length;
 
 use crate::coordinates::Coordinates;
 
@@ -913,7 +913,7 @@ mod tests {
 
     use float_cmp::approx_eq;
     use rstest::rstest;
-    use umol_shared::element::Element::*;
+    use umol_chem::element::Element::*;
 
     use super::*;
 

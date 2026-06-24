@@ -2,7 +2,7 @@ use bstr::ByteSlice;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_geometric_core::Point3D;
-use umol_shared::spin::SpinMultiplicity;
+use umol_chem::spin::SpinMultiplicity;
 
 use super::super::*;
 use crate::table_ir::bond::BondNoncovalent;

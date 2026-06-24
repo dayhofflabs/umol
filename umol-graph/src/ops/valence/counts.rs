@@ -9,9 +9,9 @@ use umol_ast::ast::{
     aromatic_increment, AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraints,
     AtomId, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
 };
-use umol_shared::element::Element;
-use umol_shared::solution::Solution;
-use umol_shared::spin::{SpinMultiplicity, SpinState};
+use umol_chem::element::Element;
+use umol_utils::solution::Solution;
+use umol_chem::spin::{SpinMultiplicity, SpinState};
 
 use crate::ops::model::CountsModel;
 

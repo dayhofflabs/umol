@@ -10,7 +10,7 @@ use nom::sequence::terminated;
 use nom::{Err, Parser};
 use umol_ast::ast::{MoleculeAst, TryIntoAst};
 use umol_geometric_core::Point3D;
-use umol_shared::error::UmolError;
+use umol_utils::error::UmolError;
 
 use self::accumulator::PropertyAccumulator;
 use self::atom::{atom_block, extended_atom_block};

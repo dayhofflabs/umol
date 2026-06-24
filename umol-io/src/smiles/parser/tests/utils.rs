@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use regex::Regex;
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use super::super::builder::{
     AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder,

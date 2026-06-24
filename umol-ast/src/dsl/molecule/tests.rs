@@ -1,7 +1,7 @@
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_edn::read_string;
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use super::*;
 use crate::ast::atom::AtomAst;

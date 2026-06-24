@@ -9,7 +9,7 @@ use umol_ast::ast::{
 use umol_perm::OrientedPermutation;
 
 use crate::ops::model::StereoModel;
-use umol_shared::solution::Solution;
+use umol_utils::solution::Solution;
 
 #[derive(Clone, Debug)]
 pub struct StereoConformanceValidator {

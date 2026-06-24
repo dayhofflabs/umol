@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 /// Format sum formula according to Hill notation
 pub(super) fn format_sum_formula(

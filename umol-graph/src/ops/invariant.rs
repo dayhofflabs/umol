@@ -11,9 +11,9 @@ use umol_ast::ast::{
     AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraints, AtomId, ElementAst,
     Lattice, MoleculeAst, MulticenterValenceAst, SpinStateAst, ValueAst,
 };
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
-use umol_shared::solution::Solution;
+use umol_utils::solution::Solution;
 
 pub struct ValenceInvariants;
 
@@ -431,7 +431,7 @@ mod tests {
         AtomAst, AtomConstraint, AtomConstraints, AtomId, ElementAst, IsotopeMassAst, MoleculeAst,
         SpinStateAst, ValueAst,
     };
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
 

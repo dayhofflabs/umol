@@ -3,7 +3,7 @@
 use bstr::ByteSlice;
 use pretty_assertions::assert_eq;
 use rstest::*;
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use super::super::*;
 use super::utils::{

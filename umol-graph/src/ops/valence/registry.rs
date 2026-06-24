@@ -17,7 +17,7 @@ use umol_ast::ast::{AtomAst, ElementAst, IntoAst, ValueAst};
 use umol_ast::dsl::{
     AromaticValenceDefault, AtomDefaults, AtomDsl, MulticenterValenceDefault, NumericDefault,
 };
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 use xxhash_rust::const_xxh3::xxh3_64;
 
 use crate::ops::model::ConfigError;
@@ -241,7 +241,7 @@ static DEFAULT_ATOM_TYPE_REGISTRY: LazyLock<AtomTypeRegistry> = LazyLock::new(||
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
 

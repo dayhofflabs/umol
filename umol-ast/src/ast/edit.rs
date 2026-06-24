@@ -752,7 +752,7 @@ impl Undo {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::super::stereo::{StereoConfigurationAst, StereoCosetAst, StereoKind};
     use super::*;

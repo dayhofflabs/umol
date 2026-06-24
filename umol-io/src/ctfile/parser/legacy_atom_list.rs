@@ -7,7 +7,7 @@ use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
 use nom::multi::length_count;
 use nom::sequence::{delimited, preceded, terminated};
 use nom::{Err, Parser};
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use super::utils::{
     fixed_width_int_in_range, fixed_width_int_minus1, fixed_width_int_partial, LinesWithOffsetExt,
@@ -107,7 +107,7 @@ mod tests {
     use bstr::ByteSlice;
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
 

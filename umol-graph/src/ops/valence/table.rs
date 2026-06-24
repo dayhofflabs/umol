@@ -7,7 +7,7 @@ use std::fmt::Write;
 use std::sync::LazyLock;
 
 use serde::Deserialize;
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 use xxhash_rust::const_xxh3::xxh3_64;
 
 use crate::ops::model::ConfigError;
@@ -119,7 +119,7 @@ macro_rules! valence_table {
         let mut table = $crate::ops::valence::ValenceTable::empty();
         $(
             table.insert(
-                <::umol_shared::element::Element as ::std::str::FromStr>::from_str(stringify!($el))
+                <::umol_chem::element::Element as ::std::str::FromStr>::from_str(stringify!($el))
                     .expect("invalid element symbol in valence_table!"),
                 $crate::ops::valence::ValenceEntry {
                     target_covalences: vec![$($v),*],
@@ -139,7 +139,7 @@ static DEFAULT_VALENCE_TABLE: LazyLock<ValenceTable> = LazyLock::new(|| {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
 

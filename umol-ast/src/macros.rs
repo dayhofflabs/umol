@@ -228,7 +228,7 @@ macro_rules! stereo_bond_ground {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use crate::ast::constraint::RingScope;
     use crate::ast::{

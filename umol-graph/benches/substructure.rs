@@ -18,7 +18,7 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
 use umol_graph_core::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 use walkdir::WalkDir;
 
 const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [

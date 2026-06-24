@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::mem;
 
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 use super::context::Context;
 use super::convert::{

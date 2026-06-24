@@ -10,7 +10,7 @@ use umol_ast::ast::{
     AsLit, AtomId, BondId, CisTransStereoAst, MoleculeAst, StereoAtomAst, StereoBondAst,
     StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoAst,
 };
-use umol_shared::solution::Solution;
+use umol_utils::solution::Solution;
 
 use crate::ops::model::StereoModel;
 
@@ -193,8 +193,8 @@ mod tests {
         AtomId, BondId, StereoAtomId, StereoCosetAst, StereoKind, StereoLigandKind,
     };
     use umol_ast::mol_ground;
-    use umol_shared::element::Element;
-    use umol_shared::solution::Solution;
+    use umol_chem::element::Element;
+    use umol_utils::solution::Solution;
 
     use super::StereoResolver;
     use crate::ops::model::{ElementScope, StereoKindModel, StereoModel};

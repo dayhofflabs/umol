@@ -5,8 +5,8 @@ use std::any::Any;
 use nom::error::{Error as NomError, ErrorKind as NomErrorKind, ParseError as NomParseError};
 use nom::Err;
 use thiserror::Error;
-use umol_shared::element::Element;
-use umol_shared::error::UmolError;
+use umol_chem::element::Element;
+use umol_utils::error::UmolError;
 
 use crate::table_ir::SGroupType;
 

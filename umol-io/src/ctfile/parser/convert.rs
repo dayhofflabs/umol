@@ -2,8 +2,8 @@
 //!
 //! All functions return table_ir types.
 
-use umol_shared::element::Element;
-use umol_shared::isotope::Isotope;
+use umol_chem::element::Element;
+use umol_chem::isotope::Isotope;
 
 use crate::ctfile::error::ParseError;
 use crate::table_ir::atom::Chirality;
@@ -420,7 +420,7 @@ pub(super) fn convert_attachment_point_code(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_shared::isotope::NamedIsotope;
+    use umol_chem::isotope::NamedIsotope;
 
     use super::*;
     use crate::table_ir::WildcardAtom;

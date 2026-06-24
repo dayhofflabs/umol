@@ -2,7 +2,8 @@
 members = [
     "umol-ast",
     "umol-ast-macros",
-    "umol-shared",
+    "umol-chem",
+    "umol-utils",
     "umol-edn",
     "umol-edn-macros",
     "umol-geometric",

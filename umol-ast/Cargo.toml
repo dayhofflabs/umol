@@ -41,7 +41,8 @@ umol-edn = { path = "../umol-edn", version = "0.1.0", features = [
 ] }
 umol-graph-core = { path = "../umol-graph-core", version = "0.1.0" }
 umol-perm = { path = "../umol-perm", version = "0.1.0" }
-umol-shared = { path = "../umol-shared", version = "0.1.0" }
+umol-chem = { path = "../umol-chem", version = "0.1.0" }
+umol-utils = { path = "../umol-utils", version = "0.1.0" }
 winnow = "1.0"
 
 [dev-dependencies]

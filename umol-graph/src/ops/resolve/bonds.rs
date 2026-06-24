@@ -5,7 +5,7 @@
 use thiserror::Error;
 use umol_ast::ast::{Lattice, MoleculeAst, SpinStateAst, ValueAst};
 
-use umol_shared::solution::Solution;
+use umol_utils::solution::Solution;
 
 #[derive(Clone, Debug, Default)]
 pub struct BondsResolver;
@@ -47,7 +47,7 @@ mod tests {
     use umol_ast::ast::{
         AtomAst, AtomId, BondAst, BondId, Constraints, MoleculeAst, SpinStateAst, ValueAst,
     };
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
 

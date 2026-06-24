@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use thiserror::Error;
-use umol_shared::error::UmolError;
+use umol_utils::error::UmolError;
 
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum ParseError {

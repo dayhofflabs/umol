@@ -5,7 +5,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use thiserror::Error;
-use umol_shared::solution::Solution;
+use umol_utils::solution::Solution;
 
 use super::electrons::ElectronCountsAst;
 use super::id::{AtomId, BondId};

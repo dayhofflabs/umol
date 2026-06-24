@@ -25,7 +25,7 @@ use umol_ast::ast::{
     AtomAst, ConstraintContradiction, ConstraintError, ConstraintValidator,
     EntityStructureContradiction, EntityStructureError, EntityStructureValidator, MoleculeAst,
 };
-use umol_shared::solution::Solution;
+use umol_utils::solution::Solution;
 pub use valence::{
     ValenceConformanceContradiction, ValenceConformanceError, ValenceConformanceValidator,
 };
@@ -216,7 +216,7 @@ mod tests {
     use rstest::rstest;
     use umol_ast::ast::{AtomAst, AtomConstraint, MoleculeAst, SpinStateAst, ValueAst};
     use umol_ast::{mol, mol_ground};
-    use umol_shared::element::Element;
+    use umol_chem::element::Element;
 
     use super::*;
     use crate::ops::model::ChemistryModel;

@@ -5,7 +5,7 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
 use umol_graph_core::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
-use umol_shared::solution::Solution;
+use umol_utils::solution::Solution;
 
 use crate::strategies::molecule_ast_strategy;
 

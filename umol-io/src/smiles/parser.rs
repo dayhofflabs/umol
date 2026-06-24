@@ -3,14 +3,14 @@
 use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
-use umol_shared::element::Element;
+use umol_chem::element::Element;
 
 mod builder;
 mod cx;
 mod utils;
 
 use umol_ast::ast::{MoleculeAst, TryIntoAst};
-use umol_shared::error::UmolError;
+use umol_utils::error::UmolError;
 
 use self::builder::{AtomData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use self::cx::{
