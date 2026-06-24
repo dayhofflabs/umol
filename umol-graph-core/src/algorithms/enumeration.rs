@@ -20,7 +20,7 @@ impl Graph {
     /// path once. Each path is the ordered edge sequence from one endpoint.
     pub fn enumerate_paths(
         &self,
-        max_length: usize,
+        max_length: u32,
         algorithm: PathEnumerationAlgorithm,
     ) -> Vec<Vec<EdgeId>> {
         match algorithm {
@@ -33,7 +33,7 @@ impl Graph {
     /// subgraph, so chords are excluded unless their bond is in the set.
     pub fn enumerate_connected_subgraphs(
         &self,
-        max_size: usize,
+        max_size: u32,
         algorithm: SubgraphEnumerationAlgorithm,
     ) -> Vec<Vec<EdgeId>> {
         match algorithm {
@@ -41,13 +41,13 @@ impl Graph {
         }
     }
 
-    fn enumerate_paths_dfs(&self, max_length: usize) -> Vec<Vec<EdgeId>> {
+    fn enumerate_paths_dfs(&self, max_length: u32) -> Vec<Vec<EdgeId>> {
         let mut result = Vec::new();
         if max_length == 0 {
             return result;
         }
         let mut visited = vec![false; self.node_count()];
-        let mut edges: Vec<EdgeId> = Vec::with_capacity(max_length);
+        let mut edges: Vec<EdgeId> = Vec::with_capacity(max_length as usize);
         for start in self.node_ids() {
             visited[start.index()] = true;
             self.path_dfs(start, start, max_length, &mut visited, &mut edges, &mut result);
@@ -60,12 +60,12 @@ impl Graph {
         &self,
         start: NodeId,
         current: NodeId,
-        max_length: usize,
+        max_length: u32,
         visited: &mut [bool],
         edges: &mut Vec<EdgeId>,
         result: &mut Vec<Vec<EdgeId>>,
     ) {
-        if edges.len() == max_length {
+        if edges.len() == max_length as usize {
             return;
         }
         for neighbor in self.neighbors(current) {
@@ -84,7 +84,7 @@ impl Graph {
         }
     }
 
-    fn enumerate_connected_subgraphs_esu(&self, max_size: usize) -> Vec<Vec<EdgeId>> {
+    fn enumerate_connected_subgraphs_esu(&self, max_size: u32) -> Vec<Vec<EdgeId>> {
         let mut result = Vec::new();
         if max_size == 0 {
             return result;
@@ -116,10 +116,10 @@ impl Graph {
         root: EdgeId,
         subgraph: &mut Vec<EdgeId>,
         extension: &mut Vec<EdgeId>,
-        max_size: usize,
+        max_size: u32,
         result: &mut Vec<Vec<EdgeId>>,
     ) {
-        if subgraph.len() == max_size {
+        if subgraph.len() == max_size as usize {
             return;
         }
         while let Some(candidate) = extension.pop() {
@@ -195,7 +195,7 @@ mod tests {
     )]
     fn test_graph_enumerate_paths(
         #[case] graph: Graph,
-        #[case] max_length: usize,
+        #[case] max_length: u32,
         #[case] expected: Vec<Vec<u32>>,
     ) {
         let paths = graph.enumerate_paths(max_length, PathEnumerationAlgorithm::Dfs);
@@ -221,7 +221,7 @@ mod tests {
     )]
     fn test_graph_enumerate_connected_subgraphs(
         #[case] graph: Graph,
-        #[case] max_size: usize,
+        #[case] max_size: u32,
         #[case] expected: Vec<Vec<u32>>,
     ) {
         let subgraphs =

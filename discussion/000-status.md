@@ -129,3 +129,4 @@
 | [125-constraints-as-projections-2026-06-22.md](125-constraints-as-projections-2026-06-22.md)                     | Active        | 2026-06-22   |
 | [126-fingerprint-facility-2026-06-22.md](126-fingerprint-facility-2026-06-22.md)                                 | Active        | 2026-06-22   |
 | [127-reaction-ast-interim-stereo-2026-06-22.md](127-reaction-ast-interim-stereo-2026-06-22.md)                   | Active        | 2026-06-22   |
+| [128-substructure-derived-predicate-matching-2026-06-23.md](128-substructure-derived-predicate-matching-2026-06-23.md) | Active        | 2026-06-23   |

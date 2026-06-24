@@ -516,7 +516,7 @@ and dedup in the domain crate.
 | 2 | a. ECFP | **built** |
 | 3 | (shared) fold → `BitFp` | **built** |
 | 4 | b. Morgan (frozen RDKit replica) | designed below |
-| 5 | f. Substructure (unhashed) | designed below |
+| 5 | f. Substructure | A (unhashed) **built**; B (RDKit replica) **built** for acyclic + single rings (6 fixtures bit-exact); junction templates blocked on ring-bond matching |
 | 6 | reaction FPs from ECFP/Morgan (difference / role-tagged) | designed below |
 | 7 | d. DRFP | designed below |
 | 8 | c. BRIDGIT | designed below |
@@ -618,6 +618,28 @@ for head-to-head benchmark comparison.
 - Validate via fixtures (Morgan discipline): ring perception must align with
   RDKit's; match multiplicity (`uniquify=false` occurrence/count bits) must match.
   A leaner topological matcher is deferred unless efficiency demands it.
+
+**B status (this round).** `PatternFingerprinter` → `BitFp(2048)` in
+`fingerprint/pattern.rs`; keying via a domain-private copy of the frozen RDKit boost
+hash (its consolidation with core's identical copy is an **open placement decision**
+— the hash is RDKit-specific, not graph-generic, so it must not enter the core
+public API); output built by collecting raw 32-bit feature+count ids and reusing
+`FeatureSet::fold(2048)`.
+Bit-exact vs RDKit 2026.03.3 for **6 fixtures**: ethanol, benzene, pyridine, furan,
+chlorobenzene, cyclohexane — validating the keying, the chained count bits, match
+multiplicity, query-index `mv` order, ring-perception alignment (incl. the pyridine
+fix), and cycle embedding. The small-ring templates are `*`-atom cycles (no `[R]`):
+a cycle already forces ring membership, so matches are identical and there is no
+ring-fact dependency. **Blocked:** the four junction templates (RDKit indices 9–12,
+fused rings) use `@` ring **bonds** in non-cyclic patterns, which cannot be reduced
+to cycle topology. Naphthalene confirms the gap precisely — umol's 117 bits are a
+strict subset of RDKit's 126 (9 missing, 0 wrong), i.e. exactly the junction
+features. Ring-bond / `[R]` matching needs ring-membership facts evaluated during
+substructure matching, but `derive_constraints` (umol-ast) does not synthesize them
+for atoms/bonds — a gap vs the spec, which classifies `#R` as a derived predicate
+evaluated against the target graph. Closing it (synthesize ring facts in
+`derive_constraints`) is a load-bearing umol-ast change that unblocks the junction
+templates and ring/`@`/`[R]` queries generally.
 
 **Direction A — experimental unhashed screen (`umol-graph::fingerprint`).**
 Generative, collision-free.

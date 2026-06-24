@@ -3,13 +3,14 @@
 use std::cmp::Ordering;
 
 /// A set of feature identifiers, sorted and duplicate-free. `Id` is the hash
-/// width (`u32` / `u64` / `u128`).
+/// width (`u32` / `u64` / `u128`) for hashed fingerprints, or a canonical
+/// structural key (`Vec<u8>`) for the unhashed substructure fingerprint.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FeatureSet<Id> {
     ids: Vec<Id>,
 }
 
-impl<Id: Copy + Ord> FeatureSet<Id> {
+impl<Id: Clone + Ord> FeatureSet<Id> {
     /// Wrap an already sorted, duplicate-free identifier vector (e.g.
     /// [`umol_graph_core::Refinement::features`]) — the zero-copy fast path.
     pub fn from_sorted_unique(ids: Vec<Id>) -> Self {

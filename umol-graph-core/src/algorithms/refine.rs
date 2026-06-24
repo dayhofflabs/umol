@@ -35,7 +35,7 @@ pub enum RefinementAlgorithm<H> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RefinementRounds {
     ToFixpoint,
-    Fixed(usize),
+    Fixed(u32),
 }
 
 /// Hashing scheme for color refinement. The built-in [`RefinementXxh3Scheme`] families or
@@ -94,7 +94,7 @@ impl Graph {
 
         // 1-WL converges in fewer than n rounds.
         let max_rounds = match rounds {
-            RefinementRounds::Fixed(r) => r,
+            RefinementRounds::Fixed(r) => r as usize,
             RefinementRounds::ToFixpoint => n,
         };
 

@@ -84,9 +84,8 @@ rstest = "0.26.1"
 walkdir = "2.5.0"
 
 [[bench]]
-name = "morgan"
+name = "fingerprint"
 harness = false
-required-features = ["legacy"]
 
 [[bench]]
 name = "substructure"
