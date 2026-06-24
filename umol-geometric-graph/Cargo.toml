@@ -1,0 +1,26 @@
+[package]
+name = "umol-geometric-graph"
+version = "0.1.0"
+authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
+edition = "2021"
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/rappoport/umol"
+description = "Conversions between the geometric and graph molecular models for umol."
+
+[lib]
+bench = false
+
+[dependencies]
+umol-ast = { path = "../umol-ast", version = "0.1.0" }
+umol-chem = { path = "../umol-chem", version = "0.1.0" }
+umol-geometric = { path = "../umol-geometric", version = "0.1.0" }
+umol-params = { path = "../umol-params", version = "0.1.0" }
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+rstest = "0.26.1"
+
+[lints.clippy]
+absolute_paths = "warn"
+mod_module_files = "warn"

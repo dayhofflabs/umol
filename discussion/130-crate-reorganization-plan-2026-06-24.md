@@ -118,28 +118,31 @@ Files with both halves (split the two `use` lines across the new crates):
 `graph/ops/{aromaticity,invariant,valence/atom_typing,valence/counts}.rs`,
 `io/table_ir/raise.rs`, `io/ctfile/error.rs`, `io/smiles/parser.rs` (+ a few test mods).
 
-## C. Bridge crate `umol-geometric-graph` (§ii)
+## C. Bridge crate `umol-geometric-graph` (§ii) — done
 
 ### Create the crate
-`umol-geometric-graph`, deps: `umol-graph`, `umol-geometric`, `umol-ast`, `umol-chem`.
-(Depends on `umol-graph` so it can resolve/process the perceived molecule downstream;
-this is also what makes absorbing the io stereo perception a cycle — hence that stays in
-`io`.)
+`umol-geometric-graph`, deps: `umol-ast`, `umol-chem`, `umol-geometric`, `umol-params`.
+**Not `umol-graph`** — see the conversion design below: the geom→AST step is a boundary
+type implementing `IntoAst<MoleculeAst>` (which lives in `umol-ast`); resolution is the
+caller's job, so the bridge does not depend on `umol-graph`. (The earlier cycle rationale
+assumed a `umol-graph` dependency; with the `IntoAst` design it no longer literally
+applies, but io's coordinate→stereo perception still stays in `io` on its own merits — it
+is intrinsic to io's raise step.)
 
-### Move bond perception (mechanical)
-Move `umol-geometric/src/bond_perception.rs` → `umol-geometric-graph/src/`; drop
-`pub mod bond_perception;` from `umol-geometric/src/lib.rs`. Rewrite its imports
-`use crate::{algorithms::optimization::…, molecule::Molecule}` →
-`use umol_geometric::{algorithms::optimization::…, molecule::Molecule}`. No visibility
-changes needed — `algorithms::optimization` and `molecule::Molecule` are already `pub`.
-Its `#[cfg(test)]` module moves with it (it is the only current caller).
+### Move bond perception (mechanical) — done
+Moved `umol-geometric/src/bond_perception.rs` → `umol-geometric-graph/src/`; dropped
+`pub mod bond_perception;` from `umol-geometric/src/lib.rs`. Imports rewritten
+`use crate::{…}` → `use umol_geometric::{…}`. No visibility changes needed. Its tests
+moved with it (the only caller).
 
-### Net-new code: geom → `MoleculeAst`
-Add the conversion that makes perception consumable downstream: from a
-`umol_geometric::molecule::Molecule` (elements + coordinates) run `perceive_bonds`, then
-build a `MoleculeAst` (elements as atoms, the `Vec<(usize,usize,u8)>` as bonds). This is
-the one piece that is written, not moved. Resolution/ops on the result are the caller's
-job (via the `umol-graph` dependency).
+### Net-new code: a boundary type + `IntoAst`
+Per the chosen design, perception produces a boundary type `PerceivedMolecule`
+(`molecule.rs`) — elements, total charge, total spin, perceived bonds (+ feasibility /
+residual diagnostics) — built by `PerceivedMolecule::perceive(mol, config)`. It
+implements `IntoAst<MoleculeAst>` (mirroring io's `TableMolecule`): each atom carries
+only its element, each bond its perceived order, and the geometry's total charge and spin
+become molecule-scope `ChargeSum` / `SpinSum` constraints. Resolution of the lifted AST is
+the caller's job. (Type name `PerceivedMolecule` is provisional, open to rename.)
 
 ### Out of scope
 The graph→3D embedding (doc 071 distance-geometry port) is a separate follow-on; this

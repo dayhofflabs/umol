@@ -7,10 +7,10 @@ use umol_chem::element::Element;
 use umol_chem::units::length::Length;
 use umol_params::covalent_radii::covalent_radii;
 
-use crate::algorithms::optimization::{
+use umol_geometric::algorithms::optimization::{
     lagrangian_relaxation, Constraint, LagrangianConfig, Variable,
 };
-use crate::molecule::Molecule;
+use umol_geometric::molecule::Molecule;
 
 /// Maximum bond order considered.
 const MAX_ORDER: usize = 3;
