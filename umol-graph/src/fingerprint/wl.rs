@@ -3,8 +3,8 @@
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
 use umol_graph_core::{EdgeId, NodeId, Refinement, RefinementAlgorithm, RefinementRounds};
 
-use crate::hash::{RefinementWidth64, RefinementXxh3Scheme};
 use super::feature_set::{CountedFeatureSet, FeatureSet};
+use crate::hash::{RefinementWidth64, RefinementXxh3Scheme};
 
 /// Weisfeiler–Lehman color-refinement fingerprint over the atom graph, hashed
 /// through a frozen `scheme` for `rounds` rounds.
@@ -51,7 +51,11 @@ impl WlFeaturizer {
 /// its own byte range so distinct tuples stay distinct before the scheme rehashes.
 fn atom_seed(mol: &MoleculeAst, id: AtomId) -> u64 {
     let atom = mol.atom(id);
-    let atomic_number = atom.element().as_lit().expect("ground atom").atomic_number();
+    let atomic_number = atom
+        .element()
+        .as_lit()
+        .expect("ground atom")
+        .atomic_number();
     let charge = atom.charge().as_lit().expect("ground atom");
     let implicit_hydrogens = atom.implicit_hydrogens().as_lit().expect("ground atom");
     (atomic_number as u64)
@@ -97,7 +101,10 @@ mod tests {
         #[case] edn: &str,
         #[case] expected: Vec<u64>,
     ) {
-        assert_eq!(featurizer.featurize(&mol_ground!(edn)).ids(), expected.as_slice());
+        assert_eq!(
+            featurizer.featurize(&mol_ground!(edn)).ids(),
+            expected.as_slice()
+        );
     }
 
     #[rstest]

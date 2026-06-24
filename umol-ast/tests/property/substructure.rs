@@ -13,7 +13,9 @@ const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [
     Vf2,
     Ullmann,
     Ri,
-    ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH },
+    ArcMatch {
+        path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
+    },
     Vf2Rdkit,
     RayKirsch,
 ];

@@ -78,7 +78,6 @@ impl MulticenterBondAst {
         }
         self
     }
-
 }
 
 #[cfg(test)]

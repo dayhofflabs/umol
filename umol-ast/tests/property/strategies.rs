@@ -33,9 +33,9 @@ pub(crate) use umol_ast::dsl::{
     MulticenterBondDsl, NoncovalentBondDsl, StereoAtomConstraintDsl, StereoAtomDsl,
     StereoBondConstraintDsl, StereoBondDsl, ValueDsl,
 };
+pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
 pub(crate) use umol_perm::{Orientation, Permutation};
-pub(crate) use umol_chem::element::Element;
 
 const ELEMENTS: &[Element] = &[
     Element::H,
@@ -856,7 +856,10 @@ pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
     let j = a.join(b);
     prop_assert_eq!(j.clone().canonicalize(), Ok(j));
     // `canonical()` (the borrow fast-path) agrees with `canonicalize()`.
-    prop_assert_eq!(a.canonical().map(|c| c.into_owned()), a.clone().canonicalize());
+    prop_assert_eq!(
+        a.canonical().map(|c| c.into_owned()),
+        a.clone().canonicalize()
+    );
     // `equiv` is canonical equality.
     prop_assert_eq!(
         a.equiv(b),

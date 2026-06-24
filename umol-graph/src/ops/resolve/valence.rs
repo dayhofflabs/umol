@@ -3,9 +3,9 @@
 
 use thiserror::Error;
 use umol_ast::ast::MoleculeAst;
+use umol_utils::solution::Solution;
 
 use crate::ops::model::ValenceModel;
-use umol_utils::solution::Solution;
 use crate::ops::valence::{AtomTypingError, AtomTypingValence, CountsError, CountsValence};
 
 #[derive(Clone, Debug)]

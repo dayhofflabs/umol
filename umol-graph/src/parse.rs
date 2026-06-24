@@ -10,10 +10,10 @@ use umol_io::ctfile::parser::parse_mol_bytes_to_table_ir_with;
 use umol_io::smiles::config::SmilesIoConfig;
 use umol_io::smiles::parser::parse_smiles_bytes_to_table_ir_with;
 use umol_utils::error::UmolError;
+use umol_utils::solution::Solution;
 
 use crate::ops::model::ChemistryModel;
 use crate::ops::resolve::{ResolveUnderdetermined, Resolver};
-use umol_utils::solution::Solution;
 
 /// Parse SMILES to a resolved [`MoleculeAst`] using default IO config and model.
 pub fn parse_smiles(input: &str) -> Result<MoleculeAst, Box<dyn UmolError>> {
@@ -93,10 +93,10 @@ mod tests {
 
     use rstest::*;
     use umol_ast::ast::AtomId;
+    use umol_chem::element::Element;
     use umol_io::ctfile::config::CtfileIoConfig;
     use umol_io::ctfile::parse_mol_to_ast;
     use umol_io::smiles::parse_smiles_to_ast;
-    use umol_chem::element::Element;
 
     use super::parse_mol_bytes_with;
     use crate::ops::model::{

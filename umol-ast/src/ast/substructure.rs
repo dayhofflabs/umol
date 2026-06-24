@@ -107,10 +107,16 @@ impl MoleculeAst {
             .subgraph_isomorphisms(
                 &pattern.graph(),
                 &mut |query_atom, host_atom| {
-                    pattern.atom(query_atom).ast.matches(&host_atoms[host_atom.index()])
+                    pattern
+                        .atom(query_atom)
+                        .ast
+                        .matches(&host_atoms[host_atom.index()])
                 },
                 &mut |query_bond, host_bond| {
-                    pattern.bond(query_bond).ast.matches(&host_bonds[host_bond.index()])
+                    pattern
+                        .bond(query_bond)
+                        .ast
+                        .matches(&host_bonds[host_bond.index()])
                 },
                 subiso,
             )
@@ -249,10 +255,10 @@ impl MoleculeAst {
             if sp.kind() != sh.kind() {
                 return None;
             }
-            let frame = sp
-                .ligand_frame()
-                .into_iter()
-                .map(|l| StereoLigand { atom_id: atom_map[l.atom_id.index()], kind: l.kind });
+            let frame = sp.ligand_frame().into_iter().map(|l| StereoLigand {
+                atom_id: atom_map[l.atom_id.index()],
+                kind: l.kind,
+            });
             let host_coset = sh.coset_for(frame)?;
             if !coset_matches(sp.coset(), &host_coset, sp.kind()) {
                 return None;
@@ -274,10 +280,10 @@ impl MoleculeAst {
             if sp.kind() != sh.kind() {
                 return None;
             }
-            let frame = sp
-                .ligand_frame()
-                .into_iter()
-                .map(|l| StereoLigand { atom_id: atom_map[l.atom_id.index()], kind: l.kind });
+            let frame = sp.ligand_frame().into_iter().map(|l| StereoLigand {
+                atom_id: atom_map[l.atom_id.index()],
+                kind: l.kind,
+            });
             let host_coset = sh.coset_for(frame)?;
             if !coset_matches(sp.coset(), &host_coset, sp.kind()) {
                 return None;
@@ -307,18 +313,19 @@ mod tests {
     };
     use umol_graph_core::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
 
-    use crate::mol;
-
     use super::super::id::AtomId;
     use super::super::molecule::MoleculeAst;
     use super::SubstructureMatchAlgorithm;
     use super::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
+    use crate::mol;
 
     const SUBISO_ALGS: [SubgraphIsomorphismAlgorithm; 6] = [
         Vf2,
         Ullmann,
         Ri,
-        ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH },
+        ArcMatch {
+            path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
+        },
         Vf2Rdkit,
         RayKirsch,
     ];
@@ -398,5 +405,4 @@ mod tests {
             }
         }
     }
-
 }

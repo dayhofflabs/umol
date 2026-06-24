@@ -14,8 +14,8 @@ use umol_ast::ast::{
     MulticenterBondAst, NoncovalentBondAst, SpinStateAst, StereoCosetAst, TetrahedralStereoAst,
     TryIntoAst, ValueAst,
 };
-use umol_perm::{space, ClassKey, Permutation};
 use umol_chem::element::Element;
+use umol_perm::{space, ClassKey, Permutation};
 use umol_utils::error::UmolError;
 
 use crate::table_ir::atom::Atom as TableAtom;

@@ -1,7 +1,7 @@
 use pretty_assertions::assert_eq;
 use rstest::*;
-use umol_edn::read_string;
 use umol_chem::element::Element;
+use umol_edn::read_string;
 
 use super::*;
 use crate::ast::atom::AtomAst;
@@ -223,7 +223,8 @@ fn test_molecule_dsl_to_edn_bond_with_id_uses_map_form() {
     let edn = dsl.to_edn();
     assert_eq!(
         edn,
-        read_string(r##"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"##).unwrap()
+        read_string(r##"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"##)
+            .unwrap()
     );
 }
 

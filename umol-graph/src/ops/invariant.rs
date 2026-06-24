@@ -12,7 +12,6 @@ use umol_ast::ast::{
     Lattice, MoleculeAst, MulticenterValenceAst, SpinStateAst, ValueAst,
 };
 use umol_chem::element::Element;
-
 use umol_utils::solution::Solution;
 
 pub struct ValenceInvariants;
@@ -56,17 +55,29 @@ impl ValenceInvariants {
         ) else {
             return Solution::Underdetermined(());
         };
-        let valence = match atom.constraints.valence().unwrap_or(&ValueAst::Undetermined) {
+        let valence = match atom
+            .constraints
+            .valence()
+            .unwrap_or(&ValueAst::Undetermined)
+        {
             ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
-        let donated = match atom.constraints.donated_pairs().unwrap_or(&ValueAst::Undetermined) {
+        let donated = match atom
+            .constraints
+            .donated_pairs()
+            .unwrap_or(&ValueAst::Undetermined)
+        {
             ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
         };
-        let accepted = match atom.constraints.accepted_pairs().unwrap_or(&ValueAst::Undetermined) {
+        let accepted = match atom
+            .constraints
+            .accepted_pairs()
+            .unwrap_or(&ValueAst::Undetermined)
+        {
             ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => 0,
             _ => return Solution::Underdetermined(()),
@@ -138,7 +149,11 @@ impl ValenceInvariants {
         let Some(unpaired) = atom.spin().unpaired.as_lit() else {
             return Solution::Underdetermined(());
         };
-        let valence = match atom.constraints().valence().unwrap_or(&ValueAst::Undetermined) {
+        let valence = match atom
+            .constraints()
+            .valence()
+            .unwrap_or(&ValueAst::Undetermined)
+        {
             ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => match atom.valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
@@ -146,7 +161,11 @@ impl ValenceInvariants {
             },
             _ => return Solution::Underdetermined(()),
         };
-        let donated = match atom.constraints().donated_pairs().unwrap_or(&ValueAst::Undetermined) {
+        let donated = match atom
+            .constraints()
+            .donated_pairs()
+            .unwrap_or(&ValueAst::Undetermined)
+        {
             ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => match atom.donated_pairs() {
                 ValueAst::Lit(t) if t >= 0 => t,
@@ -154,7 +173,11 @@ impl ValenceInvariants {
             },
             _ => return Solution::Underdetermined(()),
         };
-        let accepted = match atom.constraints().accepted_pairs().unwrap_or(&ValueAst::Undetermined) {
+        let accepted = match atom
+            .constraints()
+            .accepted_pairs()
+            .unwrap_or(&ValueAst::Undetermined)
+        {
             ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => match atom.accepted_pairs() {
                 ValueAst::Lit(t) if t >= 0 => t,
@@ -235,7 +258,11 @@ impl ValenceInvariants {
             return Vec::new();
         };
 
-        let valence = match atom.constraints().valence().unwrap_or(&ValueAst::Undetermined) {
+        let valence = match atom
+            .constraints()
+            .valence()
+            .unwrap_or(&ValueAst::Undetermined)
+        {
             ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => match atom.valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
@@ -243,7 +270,11 @@ impl ValenceInvariants {
             },
             _ => return Vec::new(),
         };
-        let donated = match atom.constraints().donated_pairs().unwrap_or(&ValueAst::Undetermined) {
+        let donated = match atom
+            .constraints()
+            .donated_pairs()
+            .unwrap_or(&ValueAst::Undetermined)
+        {
             ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => match atom.donated_pairs() {
                 ValueAst::Lit(t) if t >= 0 => t,
@@ -251,7 +282,11 @@ impl ValenceInvariants {
             },
             _ => return Vec::new(),
         };
-        let accepted = match atom.constraints().accepted_pairs().unwrap_or(&ValueAst::Undetermined) {
+        let accepted = match atom
+            .constraints()
+            .accepted_pairs()
+            .unwrap_or(&ValueAst::Undetermined)
+        {
             ValueAst::Lit(v) if *v >= 0 => *v,
             ValueAst::Undetermined => match atom.accepted_pairs() {
                 ValueAst::Lit(t) if t >= 0 => t,
@@ -420,7 +455,9 @@ fn enumeration_values(field: &ValueAst, bound: RangeInclusive<i64>) -> Vec<i64> 
     match field {
         ValueAst::Lit(n) => vec![*n],
         ValueAst::Undetermined => bound.collect(),
-        _ => bound.filter(|value| field.matches(&ValueAst::Lit(*value))).collect(),
+        _ => bound
+            .filter(|value| field.matches(&ValueAst::Lit(*value)))
+            .collect(),
     }
 }
 

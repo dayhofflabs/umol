@@ -132,7 +132,11 @@ mod tests {
     #[case::equal(&[1, 2, 3], &[1, 2, 3], true)]
     #[case::empty_query(&[], &[1, 2], true)]
     #[case::missing_bit(&[1, 4], &[1, 2, 3], false)]
-    fn test_bit_fp_is_subset(#[case] query: &[usize], #[case] target: &[usize], #[case] expected: bool) {
+    fn test_bit_fp_is_subset(
+        #[case] query: &[usize],
+        #[case] target: &[usize],
+        #[case] expected: bool,
+    ) {
         assert_eq!(bits(8, query).is_subset(&bits(8, target)), expected);
     }
 }

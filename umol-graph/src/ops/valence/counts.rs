@@ -10,8 +10,8 @@ use umol_ast::ast::{
     AtomId, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
 };
 use umol_chem::element::Element;
-use umol_utils::solution::Solution;
 use umol_chem::spin::{SpinMultiplicity, SpinState};
+use umol_utils::solution::Solution;
 
 use crate::ops::model::CountsModel;
 
@@ -81,7 +81,10 @@ impl<'a> CountsValence<'a> {
         let accepted_pairs = atom.accepted_pairs().as_lit_or(0);
         let is_aromatic = atom.is_in_aromatic_system()
             || atom.neighbors().any(|n| n.bond().constraints().aromatic())
-            || atom.constraints().aromatic_valence().is_some_and(|a| a.is_aromatic());
+            || atom
+                .constraints()
+                .aromatic_valence()
+                .is_some_and(|a| a.is_aromatic());
 
         let derived = self.derive_fields(atom.ast, valence, accepted_pairs, is_aromatic)?;
         let mut resolved = atom.ast.meet(&derived).ok_or(CountsError::NoMatch)?;
@@ -102,11 +105,20 @@ impl<'a> CountsValence<'a> {
         if ast.charge.is_undetermined() {
             return Ok(());
         };
-        let valence = ast.constraints.valence().unwrap_or(&ValueAst::Undetermined).as_lit_or(0);
-        let accepted_pairs =
-            ast.constraints.accepted_pairs().unwrap_or(&ValueAst::Undetermined).as_lit_or(0);
-        let is_aromatic =
-            ast.constraints.aromatic_valence().is_some_and(|a| a.is_aromatic());
+        let valence = ast
+            .constraints
+            .valence()
+            .unwrap_or(&ValueAst::Undetermined)
+            .as_lit_or(0);
+        let accepted_pairs = ast
+            .constraints
+            .accepted_pairs()
+            .unwrap_or(&ValueAst::Undetermined)
+            .as_lit_or(0);
+        let is_aromatic = ast
+            .constraints
+            .aromatic_valence()
+            .is_some_and(|a| a.is_aromatic());
 
         let derived = self.derive_fields(ast, valence, accepted_pairs, is_aromatic)?;
         *ast = ast.meet(&derived).ok_or(CountsError::NoMatch)?;
@@ -135,7 +147,10 @@ impl<'a> CountsValence<'a> {
         let accepted_pairs = atom.accepted_pairs().as_lit_or(0);
         let is_aromatic = atom.is_in_aromatic_system()
             || atom.neighbors().any(|n| n.bond().constraints().aromatic())
-            || atom.constraints().aromatic_valence().is_some_and(|a| a.is_aromatic());
+            || atom
+                .constraints()
+                .aromatic_valence()
+                .is_some_and(|a| a.is_aromatic());
         match self.derive_fields(atom.ast, valence, accepted_pairs, is_aromatic) {
             Ok(_) => Solution::Determined(()),
             Err(_) => Solution::Contradictory(CountsMismatch {
@@ -160,8 +175,10 @@ impl<'a> CountsValence<'a> {
             .shift((2 * accepted_pairs - charge) as i8)
             .and_then(|shifted| self.model.table.entry(shifted));
 
-        let aromatic_constraint =
-            atom.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined);
+        let aromatic_constraint = atom
+            .constraints
+            .aromatic_valence()
+            .unwrap_or(&AromaticValenceAst::Undetermined);
         if entry.is_none()
             && matches!(
                 aromatic_constraint,
@@ -194,7 +211,10 @@ impl<'a> CountsValence<'a> {
         for implicit_hydrogens in
             implicit_hydrogen_values(&atom.implicit_hydrogens, bonding_budget, entry.is_none())?
         {
-            if !atom.implicit_hydrogens.matches(&ValueAst::Lit(implicit_hydrogens)) {
+            if !atom
+                .implicit_hydrogens
+                .matches(&ValueAst::Lit(implicit_hydrogens))
+            {
                 continue;
             }
             for &aromatic_valence in &aromatic_values {
@@ -485,6 +505,9 @@ mod tests {
             Vec::new(),
             Constraints::default(),
         );
-        assert_eq!(resolver.conforms_molecule_atom(&molecule, AtomId(0)), expected);
+        assert_eq!(
+            resolver.conforms_molecule_atom(&molecule, AtomId(0)),
+            expected
+        );
     }
 }

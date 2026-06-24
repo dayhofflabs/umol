@@ -75,7 +75,11 @@ fn canonical_key(mol: &MoleculeAst, embedding: &Embedding) -> Vec<u8> {
     for atom in 0..atom_count {
         let id = AtomId::from(embedding.host_node(NodeId(atom as u32)));
         let view = mol.atom(id);
-        let atomic_number = view.element().as_lit().expect("ground atom").atomic_number();
+        let atomic_number = view
+            .element()
+            .as_lit()
+            .expect("ground atom")
+            .atomic_number();
         let charge = view.charge().as_lit().expect("ground atom") as i16;
         colors.push((0, u16::from(atomic_number), charge));
     }
@@ -174,7 +178,9 @@ mod tests {
         let featurizer = SubstructureFeaturizer::new(1);
         let ethane = featurizer.featurize(&mol_ground!(ETHANE)).unwrap();
         let ethene = featurizer
-            .featurize(&mol_ground!(r#"{:atoms ["C #h2" "C #h2"] :bonds [[0 1 "2"]]}"#))
+            .featurize(&mol_ground!(
+                r#"{:atoms ["C #h2" "C #h2"] :bonds [[0 1 "2"]]}"#
+            ))
             .unwrap();
         assert!(!ethane.is_subset(&ethene));
         assert!(!ethene.is_subset(&ethane));

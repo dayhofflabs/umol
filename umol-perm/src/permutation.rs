@@ -71,7 +71,10 @@ impl Permutation {
     /// Reorder `items` by σ: `act(items)[i] = items[σ(i)]`. Panics unless
     /// `items.len() >= degree`.
     pub fn act<T: Copy>(self, items: &[T]) -> Vec<T> {
-        assert!(items.len() >= self.degree(), "act slice shorter than degree");
+        assert!(
+            items.len() >= self.degree(),
+            "act slice shorter than degree"
+        );
         (0..self.degree()).map(|i| items[self.apply(i)]).collect()
     }
 

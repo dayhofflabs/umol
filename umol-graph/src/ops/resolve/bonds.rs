@@ -4,7 +4,6 @@
 
 use thiserror::Error;
 use umol_ast::ast::{Lattice, MoleculeAst, SpinStateAst, ValueAst};
-
 use umol_utils::solution::Solution;
 
 #[derive(Clone, Debug, Default)]

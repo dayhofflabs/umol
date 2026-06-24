@@ -329,9 +329,16 @@ mod tests {
         ast: &mut MoleculeAst,
     ) -> Solution<(), AromaticityContradiction> {
         let outcome = perception
-            .find_systems(ast, |v| match v.ast.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined) {
-                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
-                _ => None,
+            .find_systems(ast, |v| {
+                match v
+                    .ast
+                    .constraints
+                    .aromatic_valence()
+                    .unwrap_or(&AromaticValenceAst::Undetermined)
+                {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+                    _ => None,
+                }
             })
             .unwrap();
         match outcome {
@@ -445,9 +452,16 @@ mod tests {
         #[case] aromatic_valences: Vec<i64>,
     ) {
         let outcome = any_hueckel()
-            .find_systems(&ast, |v| match v.ast.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined) {
-                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
-                _ => None,
+            .find_systems(&ast, |v| {
+                match v
+                    .ast
+                    .constraints
+                    .aromatic_valence()
+                    .unwrap_or(&AromaticValenceAst::Undetermined)
+                {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+                    _ => None,
+                }
             })
             .unwrap();
         let Solution::Determined(systems) = outcome else {

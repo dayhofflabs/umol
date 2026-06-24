@@ -150,7 +150,9 @@ impl OrientedPermutationGroup {
             self.proper.contains(&op.permutation())
         } else {
             match self.improper_rep {
-                Some(rep) => self.proper.contains(&rep.inverse().compose(op).permutation()),
+                Some(rep) => self
+                    .proper
+                    .contains(&rep.inverse().compose(op).permutation()),
                 None => false,
             }
         }

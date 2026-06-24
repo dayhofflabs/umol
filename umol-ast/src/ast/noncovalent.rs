@@ -52,7 +52,6 @@ impl NoncovalentBondAst {
     pub fn into_ground(self) -> Self {
         self
     }
-
 }
 
 /// Noncovalent interaction kind.

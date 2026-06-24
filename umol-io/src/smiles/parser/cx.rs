@@ -17,8 +17,8 @@ use nom::multi::{count, many1, separated_list0};
 use nom::number::complete::double;
 use nom::sequence::{delimited, preceded, separated_pair, terminated};
 use nom::{Err, IResult, Parser};
-use umol_geometric_core::Point3D;
 use umol_chem::spin::SpinMultiplicity;
+use umol_geometric_core::Point3D;
 
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;

@@ -8,7 +8,6 @@
 
 use thiserror::Error;
 use umol_ast::ast::{AtomAst, MoleculeAst};
-
 use umol_utils::solution::Solution;
 
 #[derive(Clone, Copy, Debug, Default)]

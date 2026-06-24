@@ -593,9 +593,8 @@ impl Lattice for ValueAst {
             (Self::RangeTo(j), Self::LitSet(t)) => !t.is_empty() && t.iter().all(|x| x < j),
             (Self::RangeTo(j), Self::RangeTo(k)) => k <= j,
             (Self::Undetermined, Self::RangeFrom(_) | Self::RangeTo(_)) => true,
-            (Self::RangeFrom(_) | Self::RangeTo(_), _) | (_, Self::RangeFrom(_) | Self::RangeTo(_)) => {
-                false
-            }
+            (Self::RangeFrom(_) | Self::RangeTo(_), _)
+            | (_, Self::RangeFrom(_) | Self::RangeTo(_)) => false,
         }
     }
 }

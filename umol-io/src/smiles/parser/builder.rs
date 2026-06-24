@@ -7,7 +7,7 @@ use umol_chem::element::Element;
 use super::super::error::ParseError;
 use super::utils::{make_bond, make_extended_bond};
 use crate::table_ir::{
-    Atom, AtomSymbol, Bond, BondDonation, BondOrder, BondDirection, Chirality, ExtendedAtom,
+    Atom, AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, Chirality, ExtendedAtom,
     ExtendedBond, ExtendedMolecule, Molecule, Span, WildcardAtom,
 };
 

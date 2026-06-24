@@ -5,8 +5,8 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use strum::IntoEnumIterator;
-use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
 use umol_chem::element::Element;
+use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::{dec_uint, multispace0};
 use winnow::combinator::{alt, delimited, empty, opt, preceded, repeat, separated, terminated};
 use winnow::error::{ErrMode, ParserError};

@@ -10,7 +10,7 @@ use super::utils::{
     build_extended_from_graph, find_extended_chiral_center, find_extended_stereo_bond,
 };
 use crate::table_ir::atom::Chirality;
-use crate::table_ir::{AtomSymbol, BondOrder, BondDirection, ExtendedMolecule};
+use crate::table_ir::{AtomSymbol, BondDirection, BondOrder, ExtendedMolecule};
 
 #[rstest]
 #[case::organic_c(b"C", build_extended_from_graph("C@0 |"))]
@@ -924,7 +924,11 @@ fn test_stereo_bonds(
     let (a, b, direction) = find_extended_stereo_bond(&mol).expect("expected a stereo bond");
     assert_eq!(a, exp_a, "atom1 mismatch for {:?}", input_str);
     assert_eq!(b, exp_b, "atom2 mismatch for {:?}", input_str);
-    assert_eq!(direction, exp_direction, "direction mismatch for {:?}", input_str);
+    assert_eq!(
+        direction, exp_direction,
+        "direction mismatch for {:?}",
+        input_str
+    );
 }
 
 #[rstest]

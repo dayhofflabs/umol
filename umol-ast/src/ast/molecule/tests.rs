@@ -2,12 +2,12 @@ use std::collections::HashSet;
 
 use pretty_assertions::assert_eq;
 use rstest::*;
+use umol_chem::element::Element;
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
     CycleEnumerationAlgorithm, EdgeId, MatchingEnumerationAlgorithm, MaxIndependentSetAlgorithm,
     MaxMatchingAlgorithm, NodeId, ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
 };
-use umol_chem::element::Element;
 
 use super::super::aromatic::AromaticSystemAst;
 use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};

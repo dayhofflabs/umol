@@ -26,7 +26,7 @@ use self::utils::{
 use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::ParseError;
 use crate::table_ir::{
-    BondDonation, BondOrder, BondDirection, ChiralityFrame, ExtendedMolecule, ExtendedReaction,
+    BondDirection, BondDonation, BondOrder, ChiralityFrame, ExtendedMolecule, ExtendedReaction,
     Molecule, Reaction, SourceFormat, Span, WildcardAtom,
 };
 
@@ -242,8 +242,12 @@ fn parse_smiles_inner(
         MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1), store_rings);
     let mut branch_stack: Vec<Frame> = Vec::new();
     let mut last_atom_idx: Option<usize> = None;
-    let mut pending_bond: Option<(BondOrder, Option<BondDirection>, Option<BondDonation>, usize)> =
-        None;
+    let mut pending_bond: Option<(
+        BondOrder,
+        Option<BondDirection>,
+        Option<BondDonation>,
+        usize,
+    )> = None;
     let mut after_closed_group: bool = false;
 
     while i < n {
@@ -837,8 +841,12 @@ fn parse_extended_smiles_inner(
         ExtendedMoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1), store_rings);
     let mut branch_stack: Vec<Frame> = Vec::new();
     let mut last_atom_idx: Option<usize> = None;
-    let mut pending_bond: Option<(BondOrder, Option<BondDirection>, Option<BondDonation>, usize)> =
-        None;
+    let mut pending_bond: Option<(
+        BondOrder,
+        Option<BondDirection>,
+        Option<BondDonation>,
+        usize,
+    )> = None;
     let mut just_closed_group: bool = false;
 
     while i < n {

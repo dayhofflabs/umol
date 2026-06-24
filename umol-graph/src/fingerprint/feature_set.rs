@@ -236,7 +236,10 @@ mod tests {
     #[rstest]
     #[case(vec![1u64, 5, 9])]
     fn test_feature_set_from_sorted_unique(#[case] ids: Vec<u64>) {
-        assert_eq!(FeatureSet::from_sorted_unique(ids.clone()).ids(), ids.as_slice());
+        assert_eq!(
+            FeatureSet::from_sorted_unique(ids.clone()).ids(),
+            ids.as_slice()
+        );
     }
 
     #[rstest]

@@ -574,7 +574,9 @@ impl AtomConstraints {
     }
 
     fn ring_membership_value(&self, scope: RingScope) -> Option<&ValueAst> {
-        self.ring_memberships().find(|(s, _)| *s == scope).map(|(_, v)| v)
+        self.ring_memberships()
+            .find(|(s, _)| *s == scope)
+            .map(|(_, v)| v)
     }
 
     pub fn ring_count(&self) -> Option<&ValueAst> {
@@ -793,14 +795,22 @@ impl Lattice for AtomConstraints {
         let v = self
             .aromatic_valence()
             .unwrap_or(&AromaticValenceAst::Undetermined)
-            .meet(other.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined))?;
+            .meet(
+                other
+                    .aromatic_valence()
+                    .unwrap_or(&AromaticValenceAst::Undetermined),
+            )?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::AromaticValence(v));
         }
         let v = self
             .multicenter_valence()
             .unwrap_or(&MulticenterValenceAst::Undetermined)
-            .meet(other.multicenter_valence().unwrap_or(&MulticenterValenceAst::Undetermined))?;
+            .meet(
+                other
+                    .multicenter_valence()
+                    .unwrap_or(&MulticenterValenceAst::Undetermined),
+            )?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::MulticenterValence(v));
         }
@@ -835,14 +845,21 @@ impl Lattice for AtomConstraints {
         let v = self
             .tetrahedral_stereo()
             .unwrap_or(&TetrahedralStereoAst::Undetermined)
-            .meet(other.tetrahedral_stereo().unwrap_or(&TetrahedralStereoAst::Undetermined))?;
+            .meet(
+                other
+                    .tetrahedral_stereo()
+                    .unwrap_or(&TetrahedralStereoAst::Undetermined),
+            )?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::TetrahedralStereo(v));
         }
         let mut scopes: BTreeSet<RingScope> = self.ring_memberships().map(|(s, _)| s).collect();
         scopes.extend(other.ring_memberships().map(|(s, _)| s));
         for scope in scopes {
-            let v = meet_val(self.ring_membership_value(scope), other.ring_membership_value(scope))?;
+            let v = meet_val(
+                self.ring_membership_value(scope),
+                other.ring_membership_value(scope),
+            )?;
             if !v.is_undetermined() {
                 result.add(AtomConstraint::RingMembership(RingMembershipAst::new(
                     scope, v,

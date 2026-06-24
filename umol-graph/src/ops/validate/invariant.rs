@@ -6,9 +6,9 @@
 
 use thiserror::Error;
 use umol_ast::ast::{AtomAst, MoleculeAst};
+use umol_utils::solution::Solution;
 
 use crate::ops::invariant::{ValenceInvariants, ValenceMismatch};
-use umol_utils::solution::Solution;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ValenceInvariantsValidator;

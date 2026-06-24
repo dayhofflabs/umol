@@ -5,27 +5,27 @@
 //! systems, multicenter bonds, noncovalent bonds) to be ground.
 
 pub mod aromaticity;
-pub mod stereo;
 pub mod bonds;
 pub mod multicenter;
+pub mod stereo;
 pub mod valence;
 
 use std::any::Any;
 
 pub use aromaticity::AromaticityResolver;
-pub use stereo::{StereoContradiction, StereoError, StereoResolver};
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
 pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
 };
+pub use stereo::{StereoContradiction, StereoError, StereoResolver};
 use thiserror::Error;
 use umol_ast::ast::MoleculeAst;
 use umol_utils::error::UmolError;
+use umol_utils::solution::Solution;
 pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
 use crate::ops::model::ChemistryModel;
-use umol_utils::solution::Solution;
 
 #[derive(Clone, Debug)]
 pub struct Resolver<'a> {

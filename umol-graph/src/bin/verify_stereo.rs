@@ -101,7 +101,7 @@ const EXAMPLES: &[(&str, &str, &str)] = &[
     (
         "stereo_tetrahedral",
         "cis-decalin",
-        "[H][C@]12CCCC[C@@]1([H])CCCC2"
+        "[H][C@]12CCCC[C@@]1([H])CCCC2",
     ),
     (
         "stereo_tetrahedral",

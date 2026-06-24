@@ -3,8 +3,8 @@
 
 use std::ops::Index;
 
-use umol_graph_core::NodeId;
 use umol_chem::element::Element;
+use umol_graph_core::NodeId;
 
 use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::super::constraint::{AtomConstraints, RingScope};
@@ -480,14 +480,16 @@ impl<'a> AtomView<'a> {
         }
 
         if self.is_in_aromatic_system() {
-            constraints.add(AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(
-                self.aromatic_valence()
-                    .as_lit_expect("aromatic valence should be Lit"),
-            )));
+            constraints.add(AtomConstraint::aromatic_valence(
+                AromaticValenceAst::aromatic(
+                    self.aromatic_valence()
+                        .as_lit_expect("aromatic valence should be Lit"),
+                ),
+            ));
         } else if self.neighbors().any(|n| n.bond().constraints().aromatic()) {
-            constraints.add(AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(
-                ValueAst::Undetermined,
-            )));
+            constraints.add(AtomConstraint::aromatic_valence(
+                AromaticValenceAst::aromatic(ValueAst::Undetermined),
+            ));
         } else if include_missing {
             constraints.add(AtomConstraint::aromatic_valence(
                 AromaticValenceAst::NotAromatic,
@@ -747,7 +749,10 @@ mod tests {
             atom.constraints.add(c);
         }
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
-        assert_eq!(molecule.atom(AtomId(0)).constraints().valence(), expected.as_ref());
+        assert_eq!(
+            molecule.atom(AtomId(0)).constraints().valence(),
+            expected.as_ref()
+        );
     }
 
     #[rstest]

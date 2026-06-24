@@ -78,7 +78,6 @@ impl AromaticSystemAst {
         }
         self
     }
-
 }
 
 #[cfg(test)]

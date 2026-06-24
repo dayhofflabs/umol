@@ -16,8 +16,8 @@ use umol_graph::ops::model::{
     AromaticityModel, ChemistryModel, CountsModel, StereoModel, ValenceModel,
 };
 use umol_graph::ops::resolve::Resolver;
-use umol_utils::solution::Solution;
 use umol_graph::ops::valence::ValenceTable;
+use umol_utils::solution::Solution;
 
 #[derive(FromEdn)]
 struct TestInput {

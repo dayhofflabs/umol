@@ -9,8 +9,8 @@
 use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
-use umol_geometric_core::Point3D;
 use umol_chem::element::Element;
+use umol_geometric_core::Point3D;
 
 use super::atom::{Atom, AtomSymbol, ExtendedAtom};
 use super::bond::{Bond, ExtendedBond};

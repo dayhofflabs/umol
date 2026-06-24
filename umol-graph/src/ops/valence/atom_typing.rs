@@ -201,6 +201,9 @@ mod tests {
             Vec::new(),
             Constraints::default(),
         );
-        assert_eq!(resolver.conforms_molecule_atom(&molecule, AtomId(0)), expected);
+        assert_eq!(
+            resolver.conforms_molecule_atom(&molecule, AtomId(0)),
+            expected
+        );
     }
 }

@@ -20,10 +20,10 @@ use umol_ast::ast::{AsLit, BondId, MoleculeAst, SubstructureMatchAlgorithm};
 use umol_ast::mol;
 use umol_graph_core::{NodeId, SubgraphIsomorphismAlgorithm};
 
-use crate::hash::gboost_combine;
 use super::bit_fp::BitFp;
 use super::feature_set::FeatureSet;
 use super::featurizer::FingerprintError;
+use crate::hash::gboost_combine;
 
 /// RDKit default fold width for `PatternFingerprint`.
 pub const PATTERN_FP_WIDTH: usize = 2048;
@@ -70,8 +70,12 @@ impl PatternFingerprinter {
                 let host = embedding.host_atoms();
                 let mut bit_id = template.index;
                 for &atom in host {
-                    let atomic_number =
-                        mol.atom(atom).element().as_lit().expect("ground atom").atomic_number();
+                    let atomic_number = mol
+                        .atom(atom)
+                        .element()
+                        .as_lit()
+                        .expect("ground atom")
+                        .atomic_number();
                     bit_id = gboost_combine(bit_id, u32::from(atomic_number));
                 }
                 for &(query_a, query_b) in &template.bonds {
@@ -146,9 +150,8 @@ static TEMPLATES: LazyLock<Vec<PatternTemplate>> = LazyLock::new(|| {
 mod tests {
     use rstest::rstest;
 
-    use crate::parse::parse_smiles;
-
     use super::*;
+    use crate::parse::parse_smiles;
 
     // RDKit 2026.03.3 `PatternFingerprint` on-bits (width 2048). CCO is acyclic, so
     // its bits come solely from the non-ring templates.

@@ -64,10 +64,9 @@ mod tests {
     use rstest::rstest;
     use umol_ast::ast::ReactionAst;
 
+    use super::*;
     use crate::fingerprint::{Featurizer, MorganFeaturizer};
     use crate::parse::parse_smiles;
-
-    use super::*;
 
     /// Morgan radius-0 oxygen invariant of ethanol — present in `CCO`, absent in `CC`.
     const ETHANOL_OXYGEN: u64 = 864662311;

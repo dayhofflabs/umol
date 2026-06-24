@@ -847,8 +847,8 @@ pub struct StereoBondBuilderViewMut<'a> {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_perm::Permutation;
     use umol_chem::element::Element;
+    use umol_perm::Permutation;
 
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;

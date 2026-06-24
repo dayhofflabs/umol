@@ -50,7 +50,14 @@ impl Graph {
         let mut edges: Vec<EdgeId> = Vec::with_capacity(max_length as usize);
         for start in self.node_ids() {
             visited[start.index()] = true;
-            self.path_dfs(start, start, max_length, &mut visited, &mut edges, &mut result);
+            self.path_dfs(
+                start,
+                start,
+                max_length,
+                &mut visited,
+                &mut edges,
+                &mut result,
+            );
             visited[start.index()] = false;
         }
         result

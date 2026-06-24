@@ -11,8 +11,8 @@ use super::super::builder::{
     AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder,
 };
 use crate::table_ir::{
-    AtomSymbol, BondDonation, BondOrder, BondDirection, Chirality, ChiralityFrame, ExtendedMolecule,
-    Molecule, SourceFormat, Span, WildcardAtom,
+    AtomSymbol, BondDirection, BondDonation, BondOrder, Chirality, ChiralityFrame,
+    ExtendedMolecule, Molecule, SourceFormat, Span, WildcardAtom,
 };
 
 /// Returns the sorted list of neighbor atom indices for a given atom in a Molecule.

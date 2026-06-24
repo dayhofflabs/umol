@@ -3,7 +3,6 @@
 
 use thiserror::Error;
 use umol_ast::ast::{Lattice, MoleculeAst, SpinStateAst, ValueAst};
-
 use umol_utils::solution::Solution;
 
 #[derive(Clone, Debug, Default)]
@@ -48,10 +47,9 @@ mod tests {
     use super::*;
 
     fn one_multicenter(charge: ValueAst, spin: SpinStateAst) -> MoleculeAst {
-        let bond =
-            MulticenterBondAst::from_counts(vec![1, 0, 1])
-                .with_charge(charge)
-                .with_spin(spin);
+        let bond = MulticenterBondAst::from_counts(vec![1, 0, 1])
+            .with_charge(charge)
+            .with_spin(spin);
         MoleculeAst::from_parts(
             vec![
                 AtomAst::from_element(Element::B),

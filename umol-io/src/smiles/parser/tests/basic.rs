@@ -8,7 +8,7 @@ use umol_chem::element::Element;
 use super::super::*;
 use super::utils::{build_from_graph, find_chiral_center, find_stereo_bond};
 use crate::table_ir::atom::Chirality;
-use crate::table_ir::{BondOrder, BondDirection};
+use crate::table_ir::{BondDirection, BondOrder};
 
 #[rstest]
 #[case::organic_c(b"C", build_from_graph("C@0 |"))]
@@ -945,7 +945,11 @@ fn test_stereo_bonds(
     let (a, b, direction) = find_stereo_bond(&mol).expect("expected a stereo bond");
     assert_eq!(a, exp_a, "atom1 mismatch for {:?}", input_str);
     assert_eq!(b, exp_b, "atom2 mismatch for {:?}", input_str);
-    assert_eq!(direction, exp_direction, "direction mismatch for {:?}", input_str);
+    assert_eq!(
+        direction, exp_direction,
+        "direction mismatch for {:?}",
+        input_str
+    );
 }
 
 #[rstest]

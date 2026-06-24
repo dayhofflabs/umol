@@ -41,7 +41,9 @@ pub enum EntityStructureContradiction {
     DativeBondDonorDuplicate { acceptor: AtomId, donor: AtomId },
     #[error("dative bond: acceptor {atom:?} is also a donor")]
     DativeBondAcceptorIsDonor { atom: AtomId },
-    #[error("dative bond: parallel datives to acceptor {acceptor:?} sharing donor {shared_donor:?}")]
+    #[error(
+        "dative bond: parallel datives to acceptor {acceptor:?} sharing donor {shared_donor:?}"
+    )]
     DativeBondsParallel {
         acceptor: AtomId,
         shared_donor: AtomId,
@@ -188,9 +190,9 @@ fn aromatic_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradi
         let mut local: HashSet<AtomId> = HashSet::new();
         for atom in atoms {
             if !local.insert(atom) {
-                return Some(EntityStructureContradiction::AromaticSystemDuplicateParticipant {
-                    atom,
-                });
+                return Some(
+                    EntityStructureContradiction::AromaticSystemDuplicateParticipant { atom },
+                );
             }
             if global.contains(&atom) {
                 return Some(EntityStructureContradiction::AromaticSystemsOverlap { atom });

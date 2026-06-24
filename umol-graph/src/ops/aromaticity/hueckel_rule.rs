@@ -249,8 +249,8 @@ fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomId>]) -> Vec<HashSe
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElectronCountsAst, ElementAst,
-        MoleculeAst, RingFamily, ValueAst,
+        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElectronCountsAst,
+        ElementAst, MoleculeAst, RingFamily, ValueAst,
     };
     use umol_chem::element::Element;
 

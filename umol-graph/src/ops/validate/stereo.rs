@@ -2,14 +2,14 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AsLit, GraphSymmetry, Lattice, StereoLigandPair, LigandSymmetryAst, MemOp, MoleculeAst,
-    StereoAtomId, StereoBondId, StereoKind, StereoSymmetry, Stereogenicity, StereogenicityAst,
+    AsLit, GraphSymmetry, Lattice, LigandSymmetryAst, MemOp, MoleculeAst, StereoAtomId,
+    StereoBondId, StereoKind, StereoLigandPair, StereoSymmetry, Stereogenicity, StereogenicityAst,
     Topicity, TopicityAst, TopicityRelationAst,
 };
 use umol_perm::OrientedPermutation;
+use umol_utils::solution::Solution;
 
 use crate::ops::model::StereoModel;
-use umol_utils::solution::Solution;
 
 #[derive(Clone, Debug)]
 pub struct StereoConformanceValidator {
@@ -224,7 +224,8 @@ impl StereoConformanceValidator {
         }
 
         for ls in ligand_symmetries {
-            let op = OrientedPermutation::new(ls.permutation.permutation.0, ls.permutation.orientation);
+            let op =
+                OrientedPermutation::new(ls.permutation.permutation.0, ls.permutation.orientation);
             let in_group = sym.group().contains(op);
             let holds = match ls.member {
                 MemOp::In => in_group,
@@ -249,7 +250,7 @@ impl StereoConformanceValidator {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        OrientedLigandPermutation, LigandPermutation, StereoAtomConstraint, StereoBondConstraint,
+        LigandPermutation, OrientedLigandPermutation, StereoAtomConstraint, StereoBondConstraint,
         StereoConfigurationAst, StereoKind, StereoLigandId, StereogenicityAst,
     };
     use umol_ast::mol_ground;

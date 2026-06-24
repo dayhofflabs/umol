@@ -229,7 +229,10 @@ mod tests {
         #[case] expected: Solution<(), ValidatorContradiction>,
     ) {
         let model = ChemistryModel::default();
-        assert_eq!(Validator::new(&model).validate(&molecule).unwrap(), expected);
+        assert_eq!(
+            Validator::new(&model).validate(&molecule).unwrap(),
+            expected
+        );
     }
 
     #[rstest]
@@ -237,7 +240,9 @@ mod tests {
         let molecule = mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         let model = ChemistryModel::default();
         assert_eq!(
-            Validator::new(&model).validate_integrity(&molecule).unwrap(),
+            Validator::new(&model)
+                .validate_integrity(&molecule)
+                .unwrap(),
             Solution::Determined(())
         );
     }
@@ -276,7 +281,8 @@ mod tests {
         atom.implicit_hydrogens = ValueAst::Lit(hydrogens);
         atom.spin = SpinStateAst::from((0_u8, 1_u8));
         if let Some(v) = valence {
-            atom.constraints.add(AtomConstraint::Valence(ValueAst::Lit(v)));
+            atom.constraints
+                .add(AtomConstraint::Valence(ValueAst::Lit(v)));
         }
         let model = ChemistryModel::default();
         assert_eq!(

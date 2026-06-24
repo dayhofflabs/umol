@@ -35,8 +35,8 @@ impl BondMatching {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::MaxMatchingAlgorithm;
     use umol_chem::element::Element;
+    use umol_graph_core::MaxMatchingAlgorithm;
 
     use super::*;
     use crate::ast::atom::AtomAst;

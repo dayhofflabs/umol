@@ -383,7 +383,10 @@ mod tests {
             Decomposition::SquarePlanar,
             Permutation::identity(4),
         );
-        assert_eq!(space.index(Permutation::from_image(4, &image)), Some(expected));
+        assert_eq!(
+            space.index(Permutation::from_image(4, &image)),
+            Some(expected)
+        );
     }
 
     #[rstest]
@@ -404,7 +407,12 @@ mod tests {
                 Permutation::from_image(4, &[2, 3, 0, 1]),
             ],
         );
-        let space = CosetSpace::new(parent, group, Decomposition::CanonicalRank, Permutation::identity(4));
+        let space = CosetSpace::new(
+            parent,
+            group,
+            Decomposition::CanonicalRank,
+            Permutation::identity(4),
+        );
         assert_eq!(space.count(), 2);
         // The within-side swap (0 1) is the cis↔trans flip: a different coset from identity.
         let within_side_swap = Permutation::from_image(4, &[1, 0, 2, 3]);

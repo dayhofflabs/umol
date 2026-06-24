@@ -9,11 +9,11 @@
 //! mass tables agreeing with RDKit's; natural atoms are always 0.
 
 use umol_ast::ast::{AsLit, AtomId, BondId, IsotopeMassAst, MoleculeAst};
-use umol_graph_core::CircularRefinementAlgorithm;
 use umol_chem::isotope::Isotope;
+use umol_graph_core::CircularRefinementAlgorithm;
 
-use crate::hash::Morgan;
 use super::feature_set::{CountedFeatureSet, FeatureSet};
+use crate::hash::Morgan;
 
 /// RDKit Morgan fingerprint of `radius` iterations (ECFP_{2·radius} equivalent).
 #[derive(Clone, Copy, Debug)]
@@ -95,9 +95,8 @@ fn bond_type(mol: &MoleculeAst, id: BondId) -> u32 {
 mod tests {
     use rstest::rstest;
 
-    use crate::parse::parse_smiles;
-
     use super::*;
+    use crate::parse::parse_smiles;
 
     // RDKit 2026.03.3 `GetMorganFingerprint` sparse identifiers (sorted) per
     // (SMILES, radius). Bit-exact target for the replica.

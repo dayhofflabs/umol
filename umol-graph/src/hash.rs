@@ -185,8 +185,10 @@ impl<W: RefinementWidth> RefinementHash for RefinementXxh3Scheme<W> {
         };
         match self.aggregation {
             RefinementAggregation::Sorted => {
-                let mut elements: Vec<W::Color> =
-                    neighbors.iter().map(|&(edge, c)| element(edge, c)).collect();
+                let mut elements: Vec<W::Color> = neighbors
+                    .iter()
+                    .map(|&(edge, c)| element(edge, c))
+                    .collect();
                 elements.sort_unstable();
                 let mut buf = Vec::new();
                 W::push_le(&mut buf, current);
@@ -291,7 +293,11 @@ mod tests {
         let g = Graph::new(2, &[[0, 1]]);
         let plain = hash_of(&g);
         let node_colored = g
-            .refine(|nd| nd.index() as u64, no_edge_color, wl_128(RefinementRounds::ToFixpoint))
+            .refine(
+                |nd| nd.index() as u64,
+                no_edge_color,
+                wl_128(RefinementRounds::ToFixpoint),
+            )
             .graph_hash();
         let edge_colored = g
             .refine(uniform, |_| 7, wl_128(RefinementRounds::ToFixpoint))
@@ -333,8 +339,12 @@ mod tests {
         };
         let path = Graph::new(3, &[[0, 1], [1, 2]]);
         let triangle = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
-        let hp = path.refine(uniform, no_edge_color, algorithm()).graph_hash();
-        let ht = triangle.refine(uniform, no_edge_color, algorithm()).graph_hash();
+        let hp = path
+            .refine(uniform, no_edge_color, algorithm())
+            .graph_hash();
+        let ht = triangle
+            .refine(uniform, no_edge_color, algorithm())
+            .graph_hash();
         assert_ne!(hp, ht);
     }
 
@@ -369,7 +379,10 @@ mod tests {
         let ids = graph.circular_refine(
             |_| vec![1u32],
             |_| 1,
-            CircularRefinementAlgorithm::Ec { radius: 1, scheme: Morgan },
+            CircularRefinementAlgorithm::Ec {
+                radius: 1,
+                scheme: Morgan,
+            },
         );
         assert_eq!(ids.len(), 6);
         let distinct: BTreeSet<u64> = ids.iter().copied().collect();
@@ -395,7 +408,10 @@ mod tests {
         let ids = graph.circular_refine(
             |n: NodeId| vec![6 + n.0],
             |_| 1,
-            CircularRefinementAlgorithm::Ec { radius: 0, scheme: Morgan },
+            CircularRefinementAlgorithm::Ec {
+                radius: 0,
+                scheme: Morgan,
+            },
         );
         assert_eq!(ids.len(), 2);
         assert_ne!(ids[0], ids[1]);

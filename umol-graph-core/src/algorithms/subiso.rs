@@ -87,15 +87,14 @@ impl Graph {
             SubgraphIsomorphismAlgorithm::Ri => {
                 self.subgraph_isomorphisms_at_ri(query, anchor, node_match, edge_match)
             }
-            SubgraphIsomorphismAlgorithm::ArcMatch { path_length } => {
-                self.subgraph_isomorphisms_at_arcmatch(
+            SubgraphIsomorphismAlgorithm::ArcMatch { path_length } => self
+                .subgraph_isomorphisms_at_arcmatch(
                     query,
                     anchor,
                     node_match,
                     edge_match,
                     path_length,
-                )
-            }
+                ),
             SubgraphIsomorphismAlgorithm::Vf2Rdkit => {
                 self.subgraph_isomorphisms_at_vf2rdkit(query, anchor, node_match, edge_match)
             }
@@ -412,7 +411,15 @@ impl Graph {
         let mut mapping = vec![None; query.node_count()];
         let mut used = vec![false; self.node_count()];
         let mut results = Vec::new();
-        vf2rdkit_search(query, self, &mut mapping, &mut used, node_match, edge_match, &mut results);
+        vf2rdkit_search(
+            query,
+            self,
+            &mut mapping,
+            &mut used,
+            node_match,
+            edge_match,
+            &mut results,
+        );
         results
     }
 
@@ -437,7 +444,15 @@ impl Graph {
         mapping[anchor.0.index()] = Some(anchor.1.index());
         used[anchor.1.index()] = true;
         let mut results = Vec::new();
-        vf2rdkit_search(query, self, &mut mapping, &mut used, node_match, edge_match, &mut results);
+        vf2rdkit_search(
+            query,
+            self,
+            &mut mapping,
+            &mut used,
+            node_match,
+            edge_match,
+            &mut results,
+        );
         results
     }
 
@@ -1551,7 +1566,9 @@ fn vf2rdkit_search(
         }
         mapping[q] = Some(t);
         used[t] = true;
-        vf2rdkit_search(query, target, mapping, used, node_match, edge_match, results);
+        vf2rdkit_search(
+            query, target, mapping, used, node_match, edge_match, results,
+        );
         used[t] = false;
         mapping[q] = None;
     }
@@ -1617,15 +1634,31 @@ fn rk_search(
         (Some(mb), Some(me)) => {
             if let Some(te) = target.find_edge(NodeId(mb as u32), NodeId(me as u32)) {
                 if edge_match(qedge, te) {
-                    rk_search(target, bond_order, isolated, i + 1, mapping, used, node_match, edge_match, results);
+                    rk_search(
+                        target,
+                        bond_order,
+                        isolated,
+                        i + 1,
+                        mapping,
+                        used,
+                        node_match,
+                        edge_match,
+                        results,
+                    );
                 }
             }
         }
         (Some(mb), None) => {
-            rk_extend(target, bond_order, isolated, i, qe, mb, qedge, mapping, used, node_match, edge_match, results);
+            rk_extend(
+                target, bond_order, isolated, i, qe, mb, qedge, mapping, used, node_match,
+                edge_match, results,
+            );
         }
         (None, Some(me)) => {
-            rk_extend(target, bond_order, isolated, i, qb, me, qedge, mapping, used, node_match, edge_match, results);
+            rk_extend(
+                target, bond_order, isolated, i, qb, me, qedge, mapping, used, node_match,
+                edge_match, results,
+            );
         }
         (None, None) => {
             for atom in 0..target.node_count() {
@@ -1634,7 +1667,9 @@ fn rk_search(
                 }
                 mapping[qb] = Some(atom);
                 used[atom] = true;
-                rk_search(target, bond_order, isolated, i, mapping, used, node_match, edge_match, results);
+                rk_search(
+                    target, bond_order, isolated, i, mapping, used, node_match, edge_match, results,
+                );
                 used[atom] = false;
                 mapping[qb] = None;
             }
@@ -1662,12 +1697,25 @@ fn rk_extend(
     for k in 0..target.neighbors(NodeId(m_anchor as u32)).len() {
         let nb = target.neighbors(NodeId(m_anchor as u32))[k];
         let t = nb.node.index();
-        if used[t] || !node_match(NodeId(q_free as u32), NodeId(t as u32)) || !edge_match(qedge, nb.edge) {
+        if used[t]
+            || !node_match(NodeId(q_free as u32), NodeId(t as u32))
+            || !edge_match(qedge, nb.edge)
+        {
             continue;
         }
         mapping[q_free] = Some(t);
         used[t] = true;
-        rk_search(target, bond_order, isolated, i + 1, mapping, used, node_match, edge_match, results);
+        rk_search(
+            target,
+            bond_order,
+            isolated,
+            i + 1,
+            mapping,
+            used,
+            node_match,
+            edge_match,
+            results,
+        );
         used[t] = false;
         mapping[q_free] = None;
     }
@@ -1713,8 +1761,7 @@ mod tests {
     use rstest::*;
 
     use super::SubgraphIsomorphismAlgorithm::{ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit};
-    use super::ARCMATCH_DEFAULT_PATH_LENGTH;
-    use super::*;
+    use super::{ARCMATCH_DEFAULT_PATH_LENGTH, *};
 
     fn any_node(_: NodeId, _: NodeId) -> bool {
         true
@@ -1801,7 +1848,16 @@ mod tests {
         #[case] mut edge_match: fn(EdgeId, EdgeId) -> bool,
         #[case] expected: Vec<Vec<usize>>,
     ) {
-        for alg in [Vf2, Ullmann, Ri, ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }, Vf2Rdkit, RayKirsch] {
+        for alg in [
+            Vf2,
+            Ullmann,
+            Ri,
+            ArcMatch {
+                path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
+            },
+            Vf2Rdkit,
+            RayKirsch,
+        ] {
             let mut r = target.subgraph_isomorphisms(&query, &mut node_match, &mut edge_match, alg);
             r.sort();
             assert_eq!(r, expected, "algorithm {alg:?}");
@@ -1827,7 +1883,16 @@ mod tests {
         #[case] mut edge_match: fn(EdgeId, EdgeId) -> bool,
         #[case] expected: Vec<Vec<usize>>,
     ) {
-        for alg in [Vf2, Ullmann, Ri, ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }, Vf2Rdkit, RayKirsch] {
+        for alg in [
+            Vf2,
+            Ullmann,
+            Ri,
+            ArcMatch {
+                path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
+            },
+            Vf2Rdkit,
+            RayKirsch,
+        ] {
             let mut r = target.subgraph_isomorphisms_at(
                 &query,
                 anchor,

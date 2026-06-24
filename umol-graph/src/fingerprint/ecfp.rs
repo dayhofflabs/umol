@@ -9,8 +9,8 @@
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
 use umol_graph_core::CircularRefinementAlgorithm;
 
-use crate::hash::{RogersHahn, ECFP_SEED};
 use super::feature_set::{CountedFeatureSet, FeatureSet};
+use crate::hash::{RogersHahn, ECFP_SEED};
 
 /// ECFP fingerprint of `radius` iterations (diameter `2 * radius`, i.e. ECFP_{2r}).
 #[derive(Clone, Copy, Debug)]

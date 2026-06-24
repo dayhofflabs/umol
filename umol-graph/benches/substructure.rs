@@ -13,19 +13,21 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 use umol_ast::ast::{AtomAst, AtomId, BondAst, MoleculeAst, SubstructureMatchAlgorithm, ValueAst};
+use umol_chem::element::Element;
 use umol_graph::parse::parse_smiles;
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
 use umol_graph_core::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
-use umol_chem::element::Element;
 use walkdir::WalkDir;
 
 const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [
     Vf2,
     Ullmann,
     Ri,
-    ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH },
+    ArcMatch {
+        path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
+    },
     Vf2Rdkit,
     RayKirsch,
 ];

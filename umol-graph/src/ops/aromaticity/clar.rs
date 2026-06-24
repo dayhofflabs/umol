@@ -11,8 +11,8 @@ use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet, SpinStateAst,
 };
-use umol_graph_core::Graph;
 use umol_chem::element::Element;
+use umol_graph_core::Graph;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ClarError {
@@ -275,14 +275,15 @@ mod tests {
         let rings = enumerate_induced(&ast);
         let model = ClarAromaticity;
         let systems = model
-            .find_from_rings(
-                &ast,
-                &rings,
-                &|v| match v.ast.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined) {
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
-                    _ => None,
-                },
-            )
+            .find_from_rings(&ast, &rings, &|v| match v
+                .ast
+                .constraints
+                .aromatic_valence()
+                .unwrap_or(&AromaticValenceAst::Undetermined)
+            {
+                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+                _ => None,
+            })
             .unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
@@ -326,7 +327,12 @@ mod tests {
         let model = ClarAromaticity;
         assert!(model
             .find_from_rings(&ast, &rings, &|v| {
-                match v.ast.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined) {
+                match v
+                    .ast
+                    .constraints
+                    .aromatic_valence()
+                    .unwrap_or(&AromaticValenceAst::Undetermined)
+                {
                     AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
                     _ => None,
                 }

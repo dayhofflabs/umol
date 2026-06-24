@@ -10,7 +10,7 @@ use super::super::error::ParseError;
 use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
-    AtomSymbol, Bond, BondDonation, BondOrder, BondDirection, ExtendedBond, Span, WildcardAtom,
+    AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, ExtendedBond, Span, WildcardAtom,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -353,7 +353,12 @@ pub(super) fn attach_atom(
     builder: &mut MoleculeBuilder,
     last_atom_idx: Option<usize>,
     curr_atom_idx: usize,
-    pending_bond: &mut Option<(BondOrder, Option<BondDirection>, Option<BondDonation>, usize)>,
+    pending_bond: &mut Option<(
+        BondOrder,
+        Option<BondDirection>,
+        Option<BondDonation>,
+        usize,
+    )>,
     curr_aromatic: bool,
     curr_atom_start: u32,
     curr_atom_end: u32,
@@ -413,7 +418,12 @@ pub(super) fn parse_bond(b: u8) -> (BondOrder, Option<BondDirection>) {
 pub(super) fn parse_extended_bond(
     input: &[u8],
     pos: usize,
-) -> (BondOrder, Option<BondDirection>, Option<BondDonation>, usize) {
+) -> (
+    BondOrder,
+    Option<BondDirection>,
+    Option<BondDonation>,
+    usize,
+) {
     let b0 = input[pos];
     let next = if pos + 1 < input.len() {
         Some(input[pos + 1])
@@ -575,7 +585,12 @@ pub(super) fn attach_extended_atom(
     builder: &mut ExtendedMoleculeBuilder,
     last_atom_idx: Option<usize>,
     curr_atom_idx: usize,
-    pending_bond: &mut Option<(BondOrder, Option<BondDirection>, Option<BondDonation>, usize)>,
+    pending_bond: &mut Option<(
+        BondOrder,
+        Option<BondDirection>,
+        Option<BondDonation>,
+        usize,
+    )>,
     curr_aromatic: bool,
     curr_atom_start: u32,
     curr_atom_end: u32,

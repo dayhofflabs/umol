@@ -140,7 +140,9 @@ impl BondConstraints {
     }
 
     fn ring_membership_value(&self, scope: RingScope) -> Option<&ValueAst> {
-        self.ring_memberships().find(|(s, _)| *s == scope).map(|(_, v)| v)
+        self.ring_memberships()
+            .find(|(s, _)| *s == scope)
+            .map(|(_, v)| v)
     }
 
     pub fn ring_count(&self) -> Option<&ValueAst> {
@@ -320,14 +322,21 @@ impl Lattice for BondConstraints {
         let cts = self
             .cis_trans_stereo()
             .unwrap_or(&CisTransStereoAst::Undetermined)
-            .meet(other.cis_trans_stereo().unwrap_or(&CisTransStereoAst::Undetermined))?;
+            .meet(
+                other
+                    .cis_trans_stereo()
+                    .unwrap_or(&CisTransStereoAst::Undetermined),
+            )?;
         if !cts.is_undetermined() {
             result.add(BondConstraint::CisTransStereo(cts));
         }
         let mut scopes: BTreeSet<RingScope> = self.ring_memberships().map(|(s, _)| s).collect();
         scopes.extend(other.ring_memberships().map(|(s, _)| s));
         for scope in scopes {
-            let v = meet_val(self.ring_membership_value(scope), other.ring_membership_value(scope))?;
+            let v = meet_val(
+                self.ring_membership_value(scope),
+                other.ring_membership_value(scope),
+            )?;
             if !v.is_undetermined() {
                 result.add(BondConstraint::RingMembership(RingMembershipAst::new(
                     scope, v,

@@ -3,6 +3,10 @@
 use std::collections::HashMap;
 
 use nalgebra::{DMatrix, DVector, Vector3};
+use umol_chem::element::Element;
+use umol_chem::spin::SpinMultiplicity;
+use umol_chem::units::angle::Angle;
+use umol_chem::units::length::Length;
 use umol_msym::{
     compute_salcs as compute_salcs_raw, detect_symmetry,
     generate_symmetry_images as generate_image_centers, group,
@@ -10,10 +14,6 @@ use umol_msym::{
     BasisKind, CartesianAxis, EquivalenceSet, Irrep, MatrixRep, MsymError, PointGroup, SalcBasis,
     SchoenfliesSymbol, SymmetryCenter, Thresholds,
 };
-use umol_chem::element::Element;
-use umol_chem::spin::SpinMultiplicity;
-use umol_chem::units::angle::Angle;
-use umol_chem::units::length::Length;
 
 use crate::coordinates::Coordinates;
 

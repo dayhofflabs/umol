@@ -33,8 +33,11 @@ impl MoleculeAst {
         // The interface K is the both-present atom-map entries; `(Some, None)` /
         // `(None, Some)` denote delete / create, which are inferred below by absence
         // from these K maps.
-        let k_pairs: Vec<(AtomId, AtomId)> =
-            rule.atom_map.iter().filter_map(|&(l, r)| Some((l?, r?))).collect();
+        let k_pairs: Vec<(AtomId, AtomId)> = rule
+            .atom_map
+            .iter()
+            .filter_map(|&(l, r)| Some((l?, r?)))
+            .collect();
 
         let l_to_g: HashMap<AtomId, AtomId> = assignment.atoms.iter().copied().collect();
         let l_to_r: HashMap<AtomId, AtomId> = k_pairs.iter().copied().collect();

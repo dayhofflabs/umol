@@ -5,10 +5,10 @@
 //! them, and writes back aromatic system entries on success.
 
 use umol_ast::ast::{AromaticValenceAst, MoleculeAst, ValueAst};
+use umol_utils::solution::Solution;
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError, AromaticityPerception};
 use crate::ops::model::AromaticityModel;
-use umol_utils::solution::Solution;
 
 #[derive(Clone, Debug)]
 pub struct AromaticityResolver {
@@ -31,7 +31,12 @@ impl AromaticityResolver {
             if v.is_in_aromatic_system() {
                 return None;
             }
-            match v.ast.constraints.aromatic_valence().unwrap_or(&AromaticValenceAst::Undetermined) {
+            match v
+                .ast
+                .constraints
+                .aromatic_valence()
+                .unwrap_or(&AromaticValenceAst::Undetermined)
+            {
                 AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
                 _ => None,
             }

@@ -19,8 +19,8 @@ use umol_ast::ast::{
     MoleculeAst, RelOp, SpinStateAst, ValueAst, ValuePredicate, ValueTerm,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
-use umol_edn::FromEdn;
 use umol_chem::element::Element;
+use umol_edn::FromEdn;
 
 #[path = "fixtures.rs"]
 #[allow(dead_code)]

@@ -59,7 +59,6 @@ impl DativeBondAst {
     pub fn into_ground(self) -> Self {
         self
     }
-
 }
 
 #[cfg(test)]

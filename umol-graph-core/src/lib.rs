@@ -19,9 +19,7 @@ pub use algorithms::enumeration::{PathEnumerationAlgorithm, SubgraphEnumerationA
 pub use algorithms::matching::{
     Matching, MatchingEnumerationAlgorithm, MaxMatchingAlgorithm, PerfectMatchingAlgorithm,
 };
-pub use algorithms::mcs::{
-    CommonSubgraph, McesAlgorithm, McisAlgorithm, McsConnectivity,
-};
+pub use algorithms::mcs::{CommonSubgraph, McesAlgorithm, McisAlgorithm, McsConnectivity};
 pub use algorithms::mis::MaxIndependentSetAlgorithm;
 pub use algorithms::refine::{
     CircularRefinementAlgorithm, CircularRefinementHash, Refinement, RefinementAlgorithm,

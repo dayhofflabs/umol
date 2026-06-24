@@ -12,5 +12,5 @@ mod permutation;
 pub use class::{space, ClassKey, Coset};
 pub use coset::CosetSpace;
 pub use group::PermutationGroup;
-pub use oriented::{OrientedPermutation, OrientedPermutationGroup, Orientation};
+pub use oriented::{Orientation, OrientedPermutation, OrientedPermutationGroup};
 pub use permutation::Permutation;
