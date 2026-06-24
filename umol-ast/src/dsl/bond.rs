@@ -501,6 +501,11 @@ mod tests {
     #[case::ring_membership_all_star("1#R*", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined)]) }))]
     #[case::ring_membership_size("1#R(6)", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::Size(6), 1)]) }))]
     #[case::ring_membership_size_conj("1#R(5)#R(6)", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::Size(5), 1), BondConstraint::ring_membership(RingScope::Size(6), 1)]) }))]
+    // Whitespace between order and first predicate, and between successive
+    // predicates, is ignored.
+    #[case::whitespace_before_predicate("2 #c+", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::whitespace_between_predicates("2#c+ #a", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic]) }))]
+    #[case::whitespace_surrounding_predicates("  2  #c+  #a  ", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic]) }))]
     fn test_parse_bond(#[case] input: &str, #[case] expected: BondDsl) {
         let result = bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());

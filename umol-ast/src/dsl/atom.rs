@@ -1266,6 +1266,11 @@ mod tests {
     #[case::ring_zero("C#R0", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::All, ValueAst::Lit(0))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_membership_all("C#R2", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::All, ValueAst::Lit(2))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_membership_size_conj("C#R(5)#R(6)", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1), AtomConstraint::ring_membership(RingScope::Size(6), 1)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    // Whitespace between element and first predicate, and between successive
+    // predicates, is ignored (§7.6).
+    #[case::whitespace_before_predicate("C #h3", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Lit(3), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::whitespace_between_predicates("C#c+ #h3", AtomDsl(AtomAst { charge: ValueAst::Lit(1), implicit_hydrogens: ValueAst::Lit(3), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::whitespace_surrounding_predicates("  C  #c+  #h3  ", AtomDsl(AtomAst { charge: ValueAst::Lit(1), implicit_hydrogens: ValueAst::Lit(3), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     fn test_parse_atom(#[case] input: &str, #[case] expected: AtomDsl) {
         let result = atom.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
