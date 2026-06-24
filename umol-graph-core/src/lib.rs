@@ -24,9 +24,8 @@ pub use algorithms::mcs::{
 };
 pub use algorithms::mis::MaxIndependentSetAlgorithm;
 pub use algorithms::refine::{
-    CircularRefinementAlgorithm, EcScheme, Refinement, RefinementAggregation, RefinementAlgorithm,
-    RefinementHash, RefinementRounds, RefinementWidth, RefinementWidth64, RefinementWidth128,
-    RefinementXxh3Scheme,
+    CircularRefinementAlgorithm, CircularRefinementHash, Refinement, RefinementAlgorithm,
+    RefinementHash, RefinementRounds,
 };
 pub use algorithms::subiso::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
 pub use algorithms::traversal::TraversalAlgorithm;

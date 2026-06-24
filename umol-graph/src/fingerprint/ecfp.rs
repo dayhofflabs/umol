@@ -7,12 +7,10 @@
 //! a frozen choice (placeholder identity, like the WL schemes).
 
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
-use umol_graph_core::{CircularRefinementAlgorithm, EcScheme};
+use umol_graph_core::CircularRefinementAlgorithm;
 
+use crate::hash::{RogersHahn, ECFP_SEED};
 use super::feature_set::{CountedFeatureSet, FeatureSet};
-
-/// Frozen ECFP hash seed. Placeholder identity, not yet formalized.
-pub const ECFP_SEED: u64 = 0xECF0_5EED_0000_0001;
 
 /// ECFP fingerprint of `radius` iterations (diameter `2 * radius`, i.e. ECFP_{2r}).
 #[derive(Clone, Copy, Debug)]
@@ -46,7 +44,7 @@ impl EcfpFeaturizer {
             |edge| bond_label(mol, BondId::from(edge)),
             CircularRefinementAlgorithm::Ec {
                 radius: self.radius,
-                scheme: EcScheme::RogersHahn { seed: self.seed },
+                scheme: RogersHahn { seed: self.seed },
             },
         )
     }

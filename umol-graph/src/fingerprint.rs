@@ -11,7 +11,7 @@ mod substructure;
 mod wl;
 
 pub use bit_fp::BitFp;
-pub use ecfp::{EcfpFeaturizer, ECFP_SEED};
+pub use ecfp::EcfpFeaturizer;
 pub use feature_set::{CountedFeatureSet, FeatureSet, SignedFeatureSet};
 pub use featurizer::{Featurizer, FingerprintError};
 pub use morgan::MorganFeaturizer;

@@ -130,3 +130,5 @@
 | [126-fingerprint-facility-2026-06-22.md](126-fingerprint-facility-2026-06-22.md)                                 | Closed        | 2026-06-23   |
 | [127-reaction-ast-interim-stereo-2026-06-22.md](127-reaction-ast-interim-stereo-2026-06-22.md)                   | Active        | 2026-06-22   |
 | [128-substructure-derived-predicate-matching-2026-06-23.md](128-substructure-derived-predicate-matching-2026-06-23.md) | Active        | 2026-06-23   |
+| [129-crate-organization-2026-06-24.md](129-crate-organization-2026-06-24.md)                                     | Active        | 2026-06-24   |
+| [130-crate-reorganization-plan-2026-06-24.md](130-crate-reorganization-plan-2026-06-24.md)                       | Active        | 2026-06-24   |

@@ -1,11 +1,9 @@
 //! Weisfeiler–Lehman featurizer: frozen color refinement over the atom graph.
 
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
-use umol_graph_core::{
-    EdgeId, NodeId, Refinement, RefinementAlgorithm, RefinementRounds, RefinementWidth64,
-    RefinementXxh3Scheme,
-};
+use umol_graph_core::{EdgeId, NodeId, Refinement, RefinementAlgorithm, RefinementRounds};
 
+use crate::hash::{RefinementWidth64, RefinementXxh3Scheme};
 use super::feature_set::{CountedFeatureSet, FeatureSet};
 
 /// Weisfeiler–Lehman color-refinement fingerprint over the atom graph, hashed
@@ -72,7 +70,7 @@ fn bond_seed(mol: &MoleculeAst, id: BondId) -> u64 {
 mod tests {
     use rstest::{fixture, rstest};
     use umol_ast::mol_ground;
-    use umol_graph_core::{RefinementRounds, RefinementXxh3Scheme};
+    use umol_graph_core::RefinementRounds;
 
     use super::*;
 

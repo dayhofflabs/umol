@@ -9,9 +9,10 @@
 //! mass tables agreeing with RDKit's; natural atoms are always 0.
 
 use umol_ast::ast::{AsLit, AtomId, BondId, IsotopeMassAst, MoleculeAst};
-use umol_graph_core::{CircularRefinementAlgorithm, EcScheme};
+use umol_graph_core::CircularRefinementAlgorithm;
 use umol_shared::isotope::Isotope;
 
+use crate::hash::Morgan;
 use super::feature_set::{CountedFeatureSet, FeatureSet};
 
 /// RDKit Morgan fingerprint of `radius` iterations (ECFP_{2·radius} equivalent).
@@ -25,14 +26,12 @@ impl MorganFeaturizer {
         Self { radius }
     }
 
-    /// `mol` must be ground. Returns the deduplicated set of 32-bit identifiers
-    /// (stored in `u64`), matching RDKit's `GetMorganFingerprint` nonzero elements.
+    /// Returns the deduplicated set of identifiers.
     pub fn featurize(&self, mol: &MoleculeAst) -> FeatureSet<u64> {
         FeatureSet::from_features(self.identifiers(mol))
     }
 
-    /// `mol` must be ground. Like [`Self::featurize`] but keeps per-identifier
-    /// counts, matching RDKit's `GetMorganFingerprint` nonzero-element counts.
+    /// Compute per-identifier occurrences
     pub fn featurize_counted(&self, mol: &MoleculeAst) -> CountedFeatureSet<u64> {
         CountedFeatureSet::from_features(self.identifiers(mol))
     }
@@ -45,7 +44,7 @@ impl MorganFeaturizer {
             |edge| bond_type(mol, BondId::from(edge)),
             CircularRefinementAlgorithm::Ec {
                 radius: self.radius,
-                scheme: EcScheme::Morgan,
+                scheme: Morgan,
             },
         )
     }

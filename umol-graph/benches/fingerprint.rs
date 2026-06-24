@@ -18,8 +18,9 @@ use umol_ast::ast::MoleculeAst;
 use umol_graph::fingerprint::{
     EcfpFeaturizer, MorganFeaturizer, PatternFingerprinter, SubstructureFeaturizer, WlFeaturizer,
 };
+use umol_graph::hash::RefinementXxh3Scheme;
 use umol_graph::parse::parse_smiles;
-use umol_graph_core::{RefinementRounds, RefinementXxh3Scheme};
+use umol_graph_core::RefinementRounds;
 use walkdir::WalkDir;
 
 /// Circular fingerprint radius (ECFP4 / Morgan radius 2).

@@ -20,6 +20,7 @@ use umol_ast::ast::{AsLit, BondId, MoleculeAst, SubstructureMatchAlgorithm};
 use umol_ast::mol;
 use umol_graph_core::{NodeId, SubgraphIsomorphismAlgorithm};
 
+use crate::hash::gboost_combine;
 use super::bit_fp::BitFp;
 use super::feature_set::FeatureSet;
 use super::featurizer::FingerprintError;
@@ -29,18 +30,6 @@ pub const PATTERN_FP_WIDTH: usize = 2048;
 
 /// RDKit's occurrence-counter salt (`0xBEEF`) chained into the count bit per match.
 const COUNT_SALT: u32 = 0xBEEF;
-
-/// Frozen RDKit 32-bit `boost::hash_combine`. Deliberately duplicated from
-/// umol-graph-core's circular-refinement copy rather than exported from it: the
-/// boost hash is RDKit-specific, not a graph algorithm, so it must not enter the
-/// core public API. Where the single shared copy should ultimately live is an open
-/// placement decision.
-fn gboost_combine(seed: u32, value: u32) -> u32 {
-    seed ^ value
-        .wrapping_add(0x9e37_79b9)
-        .wrapping_add(seed << 6)
-        .wrapping_add(seed >> 2)
-}
 
 /// Bit-exact replica of RDKit's `PatternFingerprint`, folded to `width` bits.
 #[derive(Clone, Copy, Debug)]
