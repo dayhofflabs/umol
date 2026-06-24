@@ -95,6 +95,126 @@ impl<Id: Clone + Ord> FeatureSet<Id> {
     }
 }
 
+/// A counted multiset of feature identifiers: sorted by `Id`, each with its
+/// occurrence count. The counted counterpart of [`FeatureSet`] — the count of an
+/// identifier is its multiplicity in the featurizer's pre-dedup output.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CountedFeatureSet<Id> {
+    entries: Vec<(Id, u32)>,
+}
+
+impl<Id: Clone + Ord> CountedFeatureSet<Id> {
+    /// Count occurrences of each identifier, sorted by identifier.
+    pub fn from_features(ids: impl IntoIterator<Item = Id>) -> Self {
+        let mut ids: Vec<Id> = ids.into_iter().collect();
+        ids.sort_unstable();
+        let mut entries: Vec<(Id, u32)> = Vec::new();
+        for id in ids {
+            match entries.last_mut() {
+                Some((last, count)) if *last == id => *count += 1,
+                _ => entries.push((id, 1)),
+            }
+        }
+        Self { entries }
+    }
+
+    /// Build from `(identifier, count)` pairs with unique identifiers (e.g.
+    /// [`umol_graph_core::Refinement::counts`]), sorting by identifier.
+    pub fn from_counts(counts: impl IntoIterator<Item = (Id, u32)>) -> Self {
+        let mut entries: Vec<(Id, u32)> = counts.into_iter().collect();
+        entries.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        debug_assert!(
+            entries.windows(2).all(|w| w[0].0 < w[1].0),
+            "counts must have unique identifiers"
+        );
+        Self { entries }
+    }
+
+    /// The `(identifier, count)` pairs, sorted by identifier.
+    pub fn entries(&self) -> &[(Id, u32)] {
+        &self.entries
+    }
+
+    /// Count of `id`, or 0 if absent.
+    pub fn count(&self, id: &Id) -> u32 {
+        self.entries
+            .binary_search_by(|(entry, _)| entry.cmp(id))
+            .map(|i| self.entries[i].1)
+            .unwrap_or(0)
+    }
+
+    /// Number of distinct identifiers.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+/// A signed difference of two counted feature sets: sorted by `Id`, each with a
+/// nonzero signed count. Used for the reaction difference fingerprint (product
+/// counts minus reactant counts).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SignedFeatureSet<Id> {
+    entries: Vec<(Id, i32)>,
+}
+
+impl<Id: Clone + Ord> SignedFeatureSet<Id> {
+    /// `minuend − subtrahend` per identifier (signed), dropping zeros. Linear merge
+    /// of the two sorted counted sets.
+    pub fn difference(minuend: &CountedFeatureSet<Id>, subtrahend: &CountedFeatureSet<Id>) -> Self {
+        let (a, b) = (minuend.entries(), subtrahend.entries());
+        let mut entries: Vec<(Id, i32)> = Vec::new();
+        let (mut i, mut j) = (0, 0);
+        while i < a.len() && j < b.len() {
+            match a[i].0.cmp(&b[j].0) {
+                Ordering::Less => {
+                    entries.push((a[i].0.clone(), a[i].1 as i32));
+                    i += 1;
+                }
+                Ordering::Greater => {
+                    entries.push((b[j].0.clone(), -(b[j].1 as i32)));
+                    j += 1;
+                }
+                Ordering::Equal => {
+                    let delta = a[i].1 as i32 - b[j].1 as i32;
+                    if delta != 0 {
+                        entries.push((a[i].0.clone(), delta));
+                    }
+                    i += 1;
+                    j += 1;
+                }
+            }
+        }
+        entries.extend(a[i..].iter().map(|(id, c)| (id.clone(), *c as i32)));
+        entries.extend(b[j..].iter().map(|(id, c)| (id.clone(), -(*c as i32))));
+        Self { entries }
+    }
+
+    /// The `(identifier, signed count)` pairs, sorted by identifier.
+    pub fn entries(&self) -> &[(Id, i32)] {
+        &self.entries
+    }
+
+    /// Signed count of `id`, or 0 if absent.
+    pub fn count(&self, id: &Id) -> i32 {
+        self.entries
+            .binary_search_by(|(entry, _)| entry.cmp(id))
+            .map(|i| self.entries[i].1)
+            .unwrap_or(0)
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -149,5 +269,30 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(set(&query).is_subset(&set(&target)), expected);
+    }
+
+    #[rstest]
+    #[case::counts_and_sorts(vec![3u64, 1, 2, 3, 1], vec![(1, 2), (2, 1), (3, 2)])]
+    #[case::all_distinct(vec![1u64, 2, 3], vec![(1, 1), (2, 1), (3, 1)])]
+    #[case::empty(vec![], vec![])]
+    fn test_counted_feature_set_from_features(
+        #[case] input: Vec<u64>,
+        #[case] expected: Vec<(u64, u32)>,
+    ) {
+        assert_eq!(
+            CountedFeatureSet::from_features(input).entries(),
+            expected.as_slice()
+        );
+    }
+
+    #[rstest]
+    fn test_signed_feature_set_difference() {
+        let minuend = CountedFeatureSet::from_features(vec![1u64, 1, 2, 3]);
+        let subtrahend = CountedFeatureSet::from_features(vec![2u64, 3, 3, 4]);
+        // 1: 2−0, 2: 1−1=0 (dropped), 3: 1−2=−1, 4: 0−1=−1.
+        assert_eq!(
+            SignedFeatureSet::difference(&minuend, &subtrahend).entries(),
+            &[(1u64, 2), (3, -1), (4, -1)]
+        );
     }
 }

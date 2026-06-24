@@ -517,8 +517,8 @@ and dedup in the domain crate.
 | 3 | (shared) fold → `BitFp` | **built** |
 | 4 | b. Morgan (frozen RDKit replica) | designed below |
 | 5 | f. Substructure | A (unhashed) **built**; B (RDKit replica) **built** for acyclic + single rings (6 fixtures bit-exact); junction templates blocked on ring-bond matching |
-| 6 | reaction FPs from ECFP/Morgan (difference / role-tagged) | designed below |
-| 7 | d. DRFP | designed below |
+| 6 | reaction FPs from ECFP/Morgan (Difference / DisjointUnion) | **built** (counts pulled in) |
+| 7 | d. DRFP | designed; **blocked on canonical-SMILES rendering** (deferred) |
 | 8 | c. BRIDGIT | designed below |
 
 Order rationale: the shared fold (3) gives the already-built circular FPs a
@@ -693,7 +693,7 @@ role-tagged variant. Mode (a) of the reaction model with a molecular featurizer
 - Deps: ECFP (built) / Morgan (slice 4) + the reaction type + counts (for
   `Difference`). Establishes the reaction-combinator framework slice 7 reuses.
 
-### Slice 7 — DRFP (d)
+### Slice 7 — DRFP (d) - **Deferred**
 
 Reaction-native (Probst 2022): radius-bounded subgraph *shingles* from both sides
 as canonical-SMILES keys, combined by **symmetric difference** — no atom map.
@@ -706,7 +706,7 @@ as canonical-SMILES keys, combined by **symmetric difference** — no atom map.
   doc-127 interim.
 - Deps: slice-5 enumeration + canonical SMILES + slice-6 reaction framework.
 
-### Slice 8 — BRIDGIT (c)
+### Slice 8 — BRIDGIT (c) **Deferred**
 
 Circular fingerprints over substructure-matched reactive sites (Hadadi 2019):
 fingerprint the environment around the reaction center.

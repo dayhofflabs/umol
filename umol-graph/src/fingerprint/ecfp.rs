@@ -9,7 +9,7 @@
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
 use umol_graph_core::{CircularRefinementAlgorithm, EcScheme};
 
-use super::feature_set::FeatureSet;
+use super::feature_set::{CountedFeatureSet, FeatureSet};
 
 /// Frozen ECFP hash seed. Placeholder identity, not yet formalized.
 pub const ECFP_SEED: u64 = 0xECF0_5EED_0000_0001;
@@ -31,15 +31,24 @@ impl EcfpFeaturizer {
 
     /// `mol` must be ground. Returns the deduplicated set of feature identifiers.
     pub fn featurize(&self, mol: &MoleculeAst) -> FeatureSet<u64> {
-        let identifiers = mol.raw_graph().circular_refine(
+        FeatureSet::from_features(self.identifiers(mol))
+    }
+
+    /// `mol` must be ground. Like [`Self::featurize`] but keeps per-identifier counts.
+    pub fn featurize_counted(&self, mol: &MoleculeAst) -> CountedFeatureSet<u64> {
+        CountedFeatureSet::from_features(self.identifiers(mol))
+    }
+
+    /// The circular-refinement identifier multiset (one per surviving environment).
+    fn identifiers(&self, mol: &MoleculeAst) -> Vec<u64> {
+        mol.raw_graph().circular_refine(
             |node| atom_components(mol, AtomId::from(node)),
             |edge| bond_label(mol, BondId::from(edge)),
             CircularRefinementAlgorithm::Ec {
                 radius: self.radius,
                 scheme: EcScheme::RogersHahn { seed: self.seed },
             },
-        );
-        FeatureSet::from_features(identifiers)
+        )
     }
 }
 

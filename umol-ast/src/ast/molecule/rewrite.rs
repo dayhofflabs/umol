@@ -6,7 +6,7 @@ use super::super::error::RewriteError;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
-use super::super::reaction::{Assignment, ReactionRuleAst};
+use super::super::reaction::{Assignment, ReactionAst};
 use super::MoleculeAst;
 
 fn map_participants(
@@ -24,7 +24,7 @@ impl MoleculeAst {
     /// preserves index stability for K atoms during addition.
     pub fn apply_rule(
         &self,
-        rule: &ReactionRuleAst,
+        rule: &ReactionAst,
         assignment: &Assignment,
     ) -> Result<MoleculeAst, RewriteError> {
         let lhs = &rule.lhs;

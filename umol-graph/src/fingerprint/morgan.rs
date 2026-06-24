@@ -12,7 +12,7 @@ use umol_ast::ast::{AsLit, AtomId, BondId, IsotopeMassAst, MoleculeAst};
 use umol_graph_core::{CircularRefinementAlgorithm, EcScheme};
 use umol_shared::isotope::Isotope;
 
-use super::feature_set::FeatureSet;
+use super::feature_set::{CountedFeatureSet, FeatureSet};
 
 /// RDKit Morgan fingerprint of `radius` iterations (ECFP_{2·radius} equivalent).
 #[derive(Clone, Copy, Debug)]
@@ -28,15 +28,26 @@ impl MorganFeaturizer {
     /// `mol` must be ground. Returns the deduplicated set of 32-bit identifiers
     /// (stored in `u64`), matching RDKit's `GetMorganFingerprint` nonzero elements.
     pub fn featurize(&self, mol: &MoleculeAst) -> FeatureSet<u64> {
-        let identifiers = mol.raw_graph().circular_refine(
+        FeatureSet::from_features(self.identifiers(mol))
+    }
+
+    /// `mol` must be ground. Like [`Self::featurize`] but keeps per-identifier
+    /// counts, matching RDKit's `GetMorganFingerprint` nonzero-element counts.
+    pub fn featurize_counted(&self, mol: &MoleculeAst) -> CountedFeatureSet<u64> {
+        CountedFeatureSet::from_features(self.identifiers(mol))
+    }
+
+    /// The circular-refinement identifier multiset (one per surviving environment);
+    /// dedup yields the binary set, counting yields the counted set.
+    fn identifiers(&self, mol: &MoleculeAst) -> Vec<u64> {
+        mol.raw_graph().circular_refine(
             |node| atom_components(mol, AtomId::from(node)),
             |edge| bond_type(mol, BondId::from(edge)),
             CircularRefinementAlgorithm::Ec {
                 radius: self.radius,
                 scheme: EcScheme::Morgan,
             },
-        );
-        FeatureSet::from_features(identifiers)
+        )
     }
 }
 
@@ -116,5 +127,21 @@ mod tests {
         let mol = parse_smiles(smiles).expect("parse");
         let fingerprint = MorganFeaturizer::new(radius).featurize(&mol);
         assert_eq!(fingerprint.ids(), expected);
+    }
+
+    // RDKit 2026.03.3 `GetMorganFingerprint().GetNonzeroElements()` — the same
+    // identifiers with their occurrence counts. Validates the counted path.
+    #[rstest]
+    #[case::propane_r1("CCC", 1, &[(2068133184, 1), (2245384272, 1), (2246728737, 2), (3542456614, 2)])]
+    #[case::ethanol_r1("CCO", 1, &[(864662311, 1), (1535166686, 1), (2245384272, 1), (2246728737, 1), (3542456614, 1), (4018048386, 1)])]
+    #[case::benzene_r2("c1ccccc1", 2, &[(98513984, 6), (2763854213, 6), (3218693969, 6)])]
+    fn test_morgan_featurizer_featurize_counted(
+        #[case] smiles: &str,
+        #[case] radius: u32,
+        #[case] expected: &[(u64, u32)],
+    ) {
+        let mol = parse_smiles(smiles).expect("parse");
+        let fingerprint = MorganFeaturizer::new(radius).featurize_counted(&mol);
+        assert_eq!(fingerprint.entries(), expected);
     }
 }

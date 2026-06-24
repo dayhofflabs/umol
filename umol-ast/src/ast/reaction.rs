@@ -12,7 +12,8 @@ use super::id::{
 };
 use super::molecule::MoleculeAst;
 
-/// Double-pushout reaction rule.
+/// A reaction as a double-pushout rewrite — homoiconic, holding a concrete
+/// reaction or a rule.
 ///
 /// `lhs` and `rhs` are the left- and right-hand-side molecule patterns. `atom_map`
 /// pairs the interface K: `(Some, Some)` is preserved, `(Some, None)` is deleted,
@@ -21,7 +22,7 @@ use super::molecule::MoleculeAst;
 /// overlay relations in K are inferred from the topology of L and R over the mapped
 /// atoms.
 #[derive(Clone, Debug)]
-pub struct ReactionRuleAst {
+pub struct ReactionAst {
     pub lhs: MoleculeAst,
     pub rhs: MoleculeAst,
     pub atom_map: Vec<(Option<AtomId>, Option<AtomId>)>,

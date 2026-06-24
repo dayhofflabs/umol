@@ -2,10 +2,11 @@
 
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
 use umol_graph_core::{
-    EdgeId, NodeId, RefinementAlgorithm, RefinementRounds, RefinementWidth64, RefinementXxh3Scheme,
+    EdgeId, NodeId, Refinement, RefinementAlgorithm, RefinementRounds, RefinementWidth64,
+    RefinementXxh3Scheme,
 };
 
-use super::feature_set::FeatureSet;
+use super::feature_set::{CountedFeatureSet, FeatureSet};
 
 /// Weisfeiler–Lehman color-refinement fingerprint over the atom graph, hashed
 /// through a frozen `scheme` for `rounds` rounds.
@@ -19,6 +20,16 @@ impl WlFeaturizer {
     /// `mol` must be ground; the caller ([`super::Featurizer::featurize`])
     /// guarantees it, so the seeds read concrete literals directly.
     pub fn featurize(&self, mol: &MoleculeAst) -> FeatureSet<u64> {
+        FeatureSet::from_sorted_unique(self.refinement(mol).features())
+    }
+
+    /// `mol` must be ground. Like [`Self::featurize`] but keeps per-identifier
+    /// counts (node occurrences of each color over all rounds).
+    pub fn featurize_counted(&self, mol: &MoleculeAst) -> CountedFeatureSet<u64> {
+        CountedFeatureSet::from_counts(self.refinement(mol).counts())
+    }
+
+    fn refinement(&self, mol: &MoleculeAst) -> Refinement<u64> {
         // Pre-extract seeds so the refine closures stay simple index lookups.
         let atom_seeds: Vec<u64> = (0..mol.atoms().count())
             .map(|i| atom_seed(mol, AtomId(i as u32)))
@@ -27,15 +38,14 @@ impl WlFeaturizer {
             .map(|e| bond_seed(mol, BondId(e as u32)))
             .collect();
 
-        let refinement = mol.raw_graph().refine(
+        mol.raw_graph().refine(
             |node: NodeId| atom_seeds[node.index()],
             |edge: EdgeId| bond_seeds[edge.index()],
             RefinementAlgorithm::WeisfeilerLehman {
                 rounds: self.rounds,
                 scheme: self.scheme,
             },
-        );
-        FeatureSet::from_sorted_unique(refinement.features())
+        )
     }
 }
 

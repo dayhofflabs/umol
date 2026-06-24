@@ -3,7 +3,7 @@
 use umol_ast::ast::MoleculeAst;
 
 use super::ecfp::EcfpFeaturizer;
-use super::feature_set::FeatureSet;
+use super::feature_set::{CountedFeatureSet, FeatureSet};
 use super::morgan::MorganFeaturizer;
 use super::wl::WlFeaturizer;
 
@@ -32,6 +32,21 @@ impl Featurizer {
             Featurizer::Wl(featurizer) => featurizer.featurize(mol),
             Featurizer::Ecfp(featurizer) => featurizer.featurize(mol),
             Featurizer::Morgan(featurizer) => featurizer.featurize(mol),
+        })
+    }
+
+    /// Featurize `mol`, keeping per-identifier counts. `mol` must be ground.
+    pub fn featurize_counted(
+        &self,
+        mol: &MoleculeAst,
+    ) -> Result<CountedFeatureSet<u64>, FingerprintError> {
+        if !mol.is_ground() {
+            return Err(FingerprintError::NotGround);
+        }
+        Ok(match self {
+            Featurizer::Wl(featurizer) => featurizer.featurize_counted(mol),
+            Featurizer::Ecfp(featurizer) => featurizer.featurize_counted(mol),
+            Featurizer::Morgan(featurizer) => featurizer.featurize_counted(mol),
         })
     }
 }
