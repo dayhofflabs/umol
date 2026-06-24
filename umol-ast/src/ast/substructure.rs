@@ -332,13 +332,13 @@ mod tests {
         vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
     )]
     #[case::noncovalent(
-        mol!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]] :noncovalent-bonds [{:a 0 :b 2 :type "Hbd"}]}"#),
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}]}"#),
+        mol!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]] :noncovalent-bonds [{:atoms [0 2] :type "Hbd"}]}"#),
+        mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}]}"#),
         vec![vec![AtomId(0), AtomId(2)], vec![AtomId(2), AtomId(0)]]
     )]
     #[case::noncovalent_absent(
         mol!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}]}"#),
+        mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}]}"#),
         vec![]
     )]
     #[case::dative(

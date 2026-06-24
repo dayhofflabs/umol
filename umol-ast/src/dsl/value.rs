@@ -566,6 +566,9 @@ mod tests {
     #[case::num_i64_min("-9223372036854775808", ValueAst::Lit(i64::MIN))]
     #[case::set("{0,1,2}", ValueAst::lit_set([0, 1, 2]))]
     #[case::set_spaced("{ 0, 1 ,2}", ValueAst::lit_set([0, 1, 2]))]
+    #[case::range_from("(1..)", ValueAst::RangeFrom(1))]
+    #[case::range_to("(..3)", ValueAst::RangeTo(3))]
+    #[case::range_from_neg("(-2..)", ValueAst::RangeFrom(-2))]
     #[case::var("?h", ValueAst::term(ValueTerm::Var("h".to_string())))]
     #[case::sum("1 + 2", ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Lit(2)])))]
     #[case::diff("1 - 2", ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Neg(Box::new(ValueTerm::Lit(2)))])))]
@@ -594,9 +597,6 @@ mod tests {
         ValueTerm::Sum(vec![ValueTerm::Lit(0), ValueTerm::Lit(1)]),
         ValueTerm::Lit(1),
     ])))]
-    #[case::range_from("(1..)", ValueAst::RangeFrom(1))]
-    #[case::range_to("(..3)", ValueAst::RangeTo(3))]
-    #[case::range_from_neg("(-2..)", ValueAst::RangeFrom(-2))]
     fn test_value(#[case] input: &str, #[case] expected: ValueAst) {
         let result = value.parse(input);
         assert!(result.is_ok(), "{:?} error: {:?}", input, result.clone().unwrap_err());
@@ -608,9 +608,15 @@ mod tests {
     #[case::invalid_char("[]")]
     #[case::bare_open_paren("(")]
     #[case::whitespace_id("? h")]
+    #[case::spaced_le("?h < = 1")]
+    #[case::spaced_ge("?h > = 1")]
+    #[case::spaced_eq("?h = = 0")]
+    #[case::spaced_mem("?h : : {0,1}")]
     #[case::bare_plus("+")]
     #[case::bare_equal("=")]
     #[case::empty_set("{}")]
+    #[case::open_range("(..)")]
+    #[case::finite_range("(1..3)")]
     #[case::unclosed_paren_add("(0 + 1")]
     #[case::not_term("!?h")]
     fn test_value_error(#[case] input: &str) {
@@ -627,6 +633,8 @@ mod tests {
     #[case::undetermined(ValueAst::Undetermined, "*")]
     #[case::lit_neg(ValueAst::Lit(-3), "-3")]
     #[case::set(ValueAst::lit_set([0, 1, 2]), "{0,1,2}")]
+    #[case::range_from(ValueAst::RangeFrom(1), "(1..)")]
+    #[case::range_to(ValueAst::RangeTo(3), "(..3)")]
     #[case::term_var(ValueAst::term(ValueTerm::Var("h".to_string())), "?h")]
     #[case::term_neg(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Var("x".to_string())))), "-?x")]
     #[case::term_sum(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Lit(2)])), "1 + 2")]
@@ -639,8 +647,6 @@ mod tests {
     #[case::pred_le(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Le, ValueTerm::Lit(1))), "?h <= 1")]
     #[case::pred_gt(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Gt, ValueTerm::Lit(0))), "?h > 0")]
     #[case::pred_ge(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ge, ValueTerm::Lit(1))), "?h >= 1")]
-    #[case::range_from(ValueAst::RangeFrom(1), "(1..)")]
-    #[case::range_to(ValueAst::RangeTo(3), "(..3)")]
     #[case::pred_mem(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::In, BTreeSet::from([0, 1, 2]))), "?h :: {0,1,2}")]
     #[case::pred_mem_notin(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::NotIn, BTreeSet::from([0, 1]))), "?h !: {0,1}")]
     #[case::pred_and_of_or(ValueAst::predicate(ValuePredicate::And(vec![

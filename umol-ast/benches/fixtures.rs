@@ -21,7 +21,7 @@ pub const MOL_DIBORANE: &str = r##"{:atoms ["B" "H" "B" "H" "H" "H" "H" "H"]
                {:atoms [0 3 2] :electrons [1 0 1] :type "#e2"}]}"##;
 
 pub const MOL_WITH_CONSTRAINTS: &str = r##"{:atoms [[:c1 "C"] [:c2 "C"] [:o "O"]]
- :bonds [{:id :b1 :a :c1 :b :c2 :type "1"} {:id :b2 :a :c2 :b :o :type "1"}]
+ :bonds [{:id :b1 :atoms [:c1 :c2] :type "1"} {:id :b2 :atoms [:c2 :o] :type "1"}]
  :constraints [{:connected {:atoms [:c1 :c2 :o]}}
                {:bond-order-sum {:bonds [:b1 :b2] :sum 2}}
                {:not {:atom [:c1 {:valence 3}]}}]}"##;

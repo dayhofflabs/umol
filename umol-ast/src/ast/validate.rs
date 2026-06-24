@@ -273,6 +273,10 @@ impl ConstraintValidator {
         _ast: impl AsRef<MoleculeAst>,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         // TODO: stub. Per-relation constraint evaluators not yet implemented.
+        // Entity constraint consistency: an entity's inline (entity-local) constraints
+        // and the molecule-scope (`:constraints`) entries referencing it must be jointly
+        // satisfiable — a same-kind conflict (e.g. inline `#v4` vs `{:atom [i {:valence 3}]}`)
+        // is a contradiction.
         // Aromatic systems: `ElectronCount(#e) == sum(electrons) - system.charge`.
         // Multicenter bonds: analogous rule.
         // Rings: sum of ring size counts == total ring count.
@@ -297,7 +301,7 @@ mod tests {
     #[case::dative_shared_acceptor_disjoint_donors(mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donor 1 :acceptor 0 :type "1"} {:donor 2 :acceptor 0 :type "1"}]}"#))]
     #[case::dative_shared_donors_distinct_acceptors(mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donor 2 :acceptor 0 :type "1"} {:donor 2 :acceptor 1 :type "1"}]}"#))]
     #[case::multicenter_partial_overlap(mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type ""} {:atoms [1 2 3] :type ""}]}"#))]
-    #[case::noncovalent_distinct_kinds(mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"} {:a 0 :b 1 :type "Vdw"}]}"#))]
+    #[case::noncovalent_distinct_kinds(mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"} {:atoms [0 1] :type "Vdw"}]}"#))]
     fn test_entity_structure_validator_validate(#[case] ast: MoleculeAst) {
         assert_eq!(
             EntityStructureValidator.validate(ast).unwrap(),
@@ -331,11 +335,11 @@ mod tests {
         EntityStructureContradiction::DativeBondsParallel { acceptor: AtomId(0), shared_donor: AtomId(1) }
     )]
     #[case::noncovalent_self_loop(
-        mol!(r#"{:atoms ["C"] :bonds [] :noncovalent-bonds [{:a 0 :b 0 :type "Hbd"}]}"#),
+        mol!(r#"{:atoms ["C"] :bonds [] :noncovalent-bonds [{:atoms [0 0] :type "Hbd"}]}"#),
         EntityStructureContradiction::NoncovalentBondSelfLoop { atom: AtomId(0) }
     )]
     #[case::noncovalent_parallel(
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"} {:a 0 :b 1 :type "Hbd"}]}"#),
+        mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"} {:atoms [0 1] :type "Hbd"}]}"#),
         EntityStructureContradiction::NoncovalentBondsParallel {
             atoms: [AtomId(0), AtomId(1)],
             kind: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),

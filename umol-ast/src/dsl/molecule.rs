@@ -448,6 +448,16 @@ fn read_dative_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<DativeBondDsl, 
         .map_err(|e| DeError::subgrammar("dative", e).into())
 }
 
+/// A two-endpoint `:atoms` vector for a binary relation: exactly two refs.
+fn two_atom_refs(atoms: Vec<AtomRef>, entry: &'static str) -> Result<[AtomRef; 2], DeError> {
+    atoms.try_into().map_err(|v: Vec<AtomRef>| {
+        DeError::Custom(format!(
+            "{entry} :atoms must have exactly 2 atoms, got {}",
+            v.len()
+        ))
+    })
+}
+
 fn read_bond_entry(de: &mut EdnStreamDeserializer<'_>) -> Result<BondEntryInput, EdnError> {
     match de.peek_byte()?.ok_or_else(eof_err)? {
         b'[' => {
@@ -465,23 +475,23 @@ fn read_bond_entry(de: &mut EdnStreamDeserializer<'_>) -> Result<BondEntryInput,
         }
         b'{' => {
             let mut id = None;
-            let mut a = None;
-            let mut b = None;
+            let mut atoms = None;
             let mut bond = None;
             read_map(de, |de, key| {
                 match key {
                     "id" => id = Some(de.read_keyword_name()?.into_owned()),
-                    "a" => a = Some(read_atom_ref(de)?),
-                    "b" => b = Some(read_atom_ref(de)?),
+                    "atoms" => atoms = Some(read_vec(de, read_atom_ref)?),
                     "type" => bond = Some(read_bond_dsl(de)?),
                     _ => de.read_skip_value()?,
                 }
                 Ok(())
             })?;
+            let atoms = atoms.ok_or_else(|| missing("atoms", "bond-entry"))?;
+            let [a, b] = two_atom_refs(atoms, "bond-entry")?;
             Ok(BondEntryInput {
                 id,
-                a: a.ok_or_else(|| missing("a", "bond-entry"))?,
-                b: b.ok_or_else(|| missing("b", "bond-entry"))?,
+                a,
+                b,
                 bond: bond.ok_or_else(|| missing("type", "bond-entry"))?,
             })
         }
@@ -605,14 +615,12 @@ fn read_noncovalent_bond_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<NoncovalentBondEntryInput, EdnError> {
     let mut id = None;
-    let mut a = None;
-    let mut b = None;
+    let mut atoms = None;
     let mut bond = None;
     read_map(de, |de, key| {
         match key {
             "id" => id = Some(de.read_keyword_name()?.into_owned()),
-            "a" => a = Some(read_atom_ref(de)?),
-            "b" => b = Some(read_atom_ref(de)?),
+            "atoms" => atoms = Some(read_vec(de, read_atom_ref)?),
             "type" => {
                 let text = de.read_string_or_keyword()?;
                 bond = Some(
@@ -625,10 +633,12 @@ fn read_noncovalent_bond_entry(
         }
         Ok(())
     })?;
+    let atoms = atoms.ok_or_else(|| missing("atoms", "noncovalent-bond-entry"))?;
+    let [a, b] = two_atom_refs(atoms, "noncovalent-bond-entry")?;
     Ok(NoncovalentBondEntryInput {
         id,
-        a: a.ok_or_else(|| missing("a", "noncovalent-bond-entry"))?,
-        b: b.ok_or_else(|| missing("b", "noncovalent-bond-entry"))?,
+        a,
+        b,
         bond: bond.ok_or_else(|| missing("type", "noncovalent-bond-entry"))?,
     })
 }
@@ -919,13 +929,12 @@ fn render_bonds(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
             let b = render_atom_ref(view.atom_ids()[1], meta);
             match meta.bond_id(view.id) {
                 Some(id) => {
-                    let mut m = EdnMap::with_capacity(4);
+                    let mut m = EdnMap::with_capacity(3);
                     m.insert(
                         Edn::keyword("id"),
                         Edn::Keyword(EdnKeyword::owned(id.to_string())),
                     );
-                    m.insert(Edn::keyword("a"), a);
-                    m.insert(Edn::keyword("b"), b);
+                    m.insert(Edn::keyword("atoms"), Edn::Vector(vec![a, b].into()));
                     m.insert(Edn::keyword("type"), bond_edn);
                     Edn::Map(m)
                 }
@@ -1053,8 +1062,10 @@ fn render_noncovalent(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
                 );
             }
             let [a, b] = view.atom_ids();
-            m.insert(Edn::keyword("a"), render_atom_ref(a, meta));
-            m.insert(Edn::keyword("b"), render_atom_ref(b, meta));
+            m.insert(
+                Edn::keyword("atoms"),
+                Edn::Vector(vec![render_atom_ref(a, meta), render_atom_ref(b, meta)].into()),
+            );
             m.insert(
                 Edn::keyword("type"),
                 NoncovalentBondDsl::from_ref(view.ast).to_edn(),
@@ -1616,12 +1627,18 @@ fn parse_bond_entry(edn: &Edn<'_>) -> Result<BondEntryInput, DeError> {
             b: AtomRef::from_edn(&v[1])?,
             bond: BondDsl::from_edn(&v[2])?,
         }),
-        Edn::Map(m) => Ok(BondEntryInput {
-            id: optional_id(m)?,
-            a: AtomRef::from_edn(required_key(m, "a", "bond-entry")?)?,
-            b: AtomRef::from_edn(required_key(m, "b", "bond-entry")?)?,
-            bond: BondDsl::from_edn(required_key(m, "type", "bond-entry")?)?,
-        }),
+        Edn::Map(m) => {
+            let atoms = parse_vec(required_key(m, "atoms", "bond-entry")?, ":atoms", |e| {
+                AtomRef::from_edn(e)
+            })?;
+            let [a, b] = two_atom_refs(atoms, "bond-entry")?;
+            Ok(BondEntryInput {
+                id: optional_id(m)?,
+                a,
+                b,
+                bond: BondDsl::from_edn(required_key(m, "type", "bond-entry")?)?,
+            })
+        }
         other => Err(DeError::TypeMismatch {
             expected: "bond-entry map or 3-vec",
             got: other.kind(),
@@ -1700,10 +1717,16 @@ fn parse_electron_counts(edn: &Edn<'_>, label: &'static str) -> Result<ElectronC
 
 fn parse_noncovalent_bond_entry(edn: &Edn<'_>) -> Result<NoncovalentBondEntryInput, DeError> {
     let m = expect_map(edn, "noncovalent-bond-entry")?;
+    let atoms = parse_vec(
+        required_key(m, "atoms", "noncovalent-bond-entry")?,
+        ":atoms",
+        |e| AtomRef::from_edn(e),
+    )?;
+    let [a, b] = two_atom_refs(atoms, "noncovalent-bond-entry")?;
     Ok(NoncovalentBondEntryInput {
         id: optional_id(m)?,
-        a: AtomRef::from_edn(required_key(m, "a", "noncovalent-bond-entry")?)?,
-        b: AtomRef::from_edn(required_key(m, "b", "noncovalent-bond-entry")?)?,
+        a,
+        b,
         bond: NoncovalentBondDsl::from_edn(required_key(m, "type", "noncovalent-bond-entry")?)?,
     })
 }

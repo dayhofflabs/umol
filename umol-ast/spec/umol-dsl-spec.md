@@ -98,7 +98,7 @@ dative-bond-list   ::= [ dative-bond-entry* ]
 
 atom-ref ::= int | keyword
 
-bond-entry ::= { [:id keyword] :a atom-ref :b atom-ref :type bond-spec }
+bond-entry ::= { [:id keyword] :atoms [ atom-ref atom-ref ] :type bond-spec }
              | [ atom-ref atom-ref bond-spec ]
 dative-bond-entry   ::= { [:id keyword] :donor ( atom-ref | [ atom-ref+ ] )
                           :acceptor atom-ref :type dative-bond-spec }
@@ -112,7 +112,7 @@ noncovalent-bond-list ::= [ noncovalent-bond-entry* ]
 
 aromatic-system-entry    ::= { [:id keyword] :atoms [ atom-ref+ ] [:electrons [ value-expr+ ]] :type "aromatic-string" }
 multicenter-bond-entry ::= { [:id keyword] :atoms [ atom-ref+ ] [:electrons [ value-expr+ ]] :type "multicenter-string" }
-noncovalent-bond-entry ::= { [:id keyword] :a atom-ref :b atom-ref :type noncovalent-bond-spec }
+noncovalent-bond-entry ::= { [:id keyword] :atoms [ atom-ref atom-ref ] :type noncovalent-bond-spec }
 
 noncovalent-bond-spec ::= "noncovalent-string"
 
@@ -161,9 +161,9 @@ Whether an empty string **`:type ""`** parses depends on the subgrammar:
 
 **Endpoints.** Every atom site referenced from a structural relation **MUST** exist under **`:atoms`**, either by positional index (integer) or by id keyword:
 
-- **`bond-entry`** **`:a`** and **`:b`**
+- **`bond-entry`** **`:atoms`** (exactly two)
 - **`dative-bond-entry`** **`:donor`** and **`:acceptor`**
-- **`noncovalent-bond-entry`** **`:a`** and **`:b`**
+- **`noncovalent-bond-entry`** **`:atoms`** (exactly two)
 - every reference in an **`aromatic-system-entry`** or **`multicenter-bond-entry`** **`:atoms`** vector
 
 **Positional index endpoints.** Let **`n`** be the length of **`:atoms`**. An integer endpoint **`i`** with **0 ≤ i < n** denotes the atom at position **`i`**. A keyword endpoint denotes the atom whose inline id is that keyword.
@@ -176,13 +176,13 @@ Whether an empty string **`:type ""`** parses depends on the subgrammar:
 
 These rules apply **within** a single **molecule map**. **Constraints across** relation kinds (e.g. the same atom pair in **`:bonds`** and **`:dative-bonds`**) are **not** specified here.
 
-**`:bonds` (localized).** The list **MUST NOT** contain two **`bond-entry`** values with the same **unordered** pair of atom sites **{`:a`, `:b`}** (endpoints as a set).
+**`:bonds` (localized).** The list **MUST NOT** contain two **`bond-entry`** values with the same **unordered** pair of atom sites (their two **`:atoms`**, as a set).
 
 **`:dative-bonds`.** No **donor→acceptor** edge may repeat — counting each donor in an entry's **`:donor`** list against that entry's **`:acceptor`**, across all entries. A donor→acceptor edge and the reverse acceptor→donor edge between the **same** two atoms also violate this rule.
 
 **`:aromatic-systems`.** For every two distinct **`aromatic-system-entry`** values, the sets of keywords in their **`:atoms`** vectors **MUST** be disjoint. Aromatic systems **MUST NOT** share an atom.
 
-**`:noncovalent-bonds`.** For every two distinct **`noncovalent-bond-entry`** values, the sets **{`:a`, `:b`}** **MUST** be disjoint. Noncovalent bonds **MUST NOT** share an atom with another noncovalent bond in the same map.
+**`:noncovalent-bonds`.** A **`noncovalent-bond-entry`**'s two **`:atoms`** **MUST** be distinct (no self-loop). Entries **MAY** share atoms — e.g. a hydrogen bond and a van-der-Waals contact over the **same** pair coexist — but the list **MUST NOT** contain two entries with both the **same** unordered **`:atoms`** pair **and** the **same** kind (no duplicate).
 
 **`:stereo-atoms` / `:stereo-bonds`.** The lists **MUST NOT** contain two **`stereo-atom-entry`** values with the same **`:site`** atom, nor two **`stereo-bond-entry`** values with the same **`:site`** bond. Each atom (resp. bond) **MUST** be the site of at most one stereo element.
 
@@ -839,6 +839,8 @@ Parsers **MUST** accept both. Bare per-entity predicates (not nested under **`:a
 
 **Relational leaves** (**§7.9** `relational-constraint`) and **molecule-scope leaves** (`molecule-constraint`) have **no** inline form regardless of which entity they reference.
 
+**Combining the inline and `:constraints` forms.** An entity **MAY** carry per-entity constraints in **both** serializations at once. They apply **conjunctively** — an entity's effective constraints are its inline predicates **together with** every molecule-scope per-entity entry that references it; neither serialization overrides the other. A same-kind clash with **conflicting** values (e.g. inline **`#v4`** and **`{:atom [i {:valence 3}]}`** on the same atom) is an unsatisfiable conjunction — a **contradiction** — and **MUST** be rejected as an error.
+
 **Lift / inline.** The two storage scopes — inline on the entity (`AtomAst::constraints` etc.) and at molecule scope (`MoleculeAst::constraints` as `{:atom [ref form]}` peers) — are interchangeable for the inline-capable narrow leaves. Implementations **SHOULD** expose:
 
 - **`lift_constraints`** (entity → molecule): drains every inline store into the molecule list as `{:<entity> [ref form]}` peers.
@@ -1009,6 +1011,13 @@ glyph       ::= '=' | '\'' | '/'
 **Class.** **`Th`** tetrahedral, **`Ct`** cis/trans, **`Sp`** square-planar, **`Tb`** trigonal-bipyramidal, **`Oh`** octahedral. A **`stereo-atom-entry`** carries an atom-centered class (**`Th`** / **`Sp`** / **`Tb`** / **`Oh`**); a **`stereo-bond-entry`** carries **`Ct`**. Matching presently realizes **`Th`** and **`Ct`**; **`Sp`** / **`Tb`** / **`Oh`** parse and round-trip but their matching is **staged**.
 
 **Coset.** The **`coset`** is a **dense per-class arrangement index** over the entry's ordered **`:ligands`** frame (**§4**) — the OpenSMILES arrangement number for the class, **not** a Lehmer / permutation rank. For **`Th`**: **`1`** = anticlockwise (**`@`**), **`2`** = clockwise (**`@@`**). For **`Ct`**: **`1`** = **Z** (cis), **`2`** = **E** (trans). **`Sp`** / **`Tb`** / **`Oh`** follow the OpenSMILES numbering for their class. **`*`** is an **undetermined** (open) coset.
+
+**Inline ligand frame (`#T` / `#C` without `:ligands`).** An atom **`#T`** or bond **`#C`** inline coset (and the **`{:atom [i {:tetrahedral-stereo …}]}`** / **`{:bond [i {:cis-trans-stereo …}]}`** EDN forms) carries **no** **`:ligands`** vector, so its index is numbered against an **implicit frame derived from the molecular graph**:
+
+- **`#T`** (tetrahedral, atom site): the atom's neighbor atoms in **ascending atom-index** order, then — when there are **exactly three** explicit neighbors — **one** virtual ligand (an implicit hydrogen or a lone pair) appended **last**. The site **MUST** present **3 or 4** ligands this way (three explicit + one virtual, or four explicit); any other count is invalid.
+- **`#C`** (cis/trans, double-bond site): for **each** double-bond terminus in turn, that terminus's substituents (its neighbors other than the far terminus) in **ascending atom-index** order, then — when a side has a **single** explicit substituent — **one** virtual ligand appended **last within that side's group**. Each side **MUST** present **at least one** explicit substituent.
+
+A **`stereo-atom-entry`** / **`stereo-bond-entry`** **`:ligands`** vector **overrides** this implicit frame; the two coincide when **`:ligands`** lists the same neighbors in the same order.
 
 **`config`** (atom **`#T`** / bond **`#C`** / **`{:stereo …}`**).** The constraint payload extends **`coset`** with two leading sentinels: **`*`** = **`Undetermined`** (no stereo constraint — equivalent to omitting the predicate), **`!`** = **`NotStereo`** (the site is **not** a stereocenter), **`+`** = **`Stereo`** with an **undetermined** coset (the site **is** a stereocenter, coset unspecified). A bare **`nat`** / **`coset-expr`** is **`Stereo`** with that coset. The EDN equivalents are **`:undetermined`** / **`:not-stereo`** / **`{:stereo :undetermined}`** / **`{:stereo coset-form}`** (**§7.9**); a **`coset-set`** serializes to the EDN vector form **`[ int+ ]`**, every other **`coset-expr`** to a **`"coset-string"`**.
 
