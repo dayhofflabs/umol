@@ -40,10 +40,14 @@ New/extended in `umol-graph-core/src/algorithms/`:
      methods `maximum_common_induced_subgraph[s]` / `…_edge_subgraph[s]`.
    - **enumeration** (new): `CommonSubgraphEnumerationAlgorithm` (cf.
      `MatchingEnumerationAlgorithm`), variant `BronKerbosch` (full-name, not `Bk`), method
-     `common_subgraph_enumeration(…, alg) -> Vec<CommonSubgraph>` — modular product +
+     `enumerate_common_subgraphs(…, alg) -> Vec<CommonSubgraph>` — modular product +
      Bron–Kerbosch maximal-clique enumeration → every maximal common *induced* subgraph
-     (disconnected included), under a caller vertex-compatibility predicate; reuse
-     `McsConnectivity` for the optional connected-only filter (off by default).
+     (disconnected included), under caller `node_match`/`edge_match` predicates. **No
+     connectivity parameter** — disconnected is both required and complete for overlaps
+     (a connected `L_B` can still match `R_A` in disjoint regions, e.g. bimolecular
+     consumption of two A-produced fragments; connected-only would drop those), and rule
+     sides are small so there is no pruning motivation. `McsConnectivity` therefore stays
+     MCS-only (the maximum path); the enumeration never needs it.
    Operation names (maximum vs enumeration) disambiguate — no maximum/maximal collision. The
    merge is path-only (callers use the crate-root re-exports).
 2. **Canonical labeling + generic incidence** (extend `auto.rs`). nauty's `densenauty`

@@ -1,12 +1,18 @@
-//! Maximum common subgraph (MCIS / MCES) via McGregor backtracking.
+//! Common subgraphs of two graphs: the **maximum** (largest) via McGregor, and the
+//! **enumeration** of all maximal (non-extendable) common subgraphs via Bron–Kerbosch.
 //!
-//! McGregor's vertex-mapping search (J. J. McGregor, "Backtrack search algorithms
-//! and the maximal common subgraph problem", Software: Practice and Experience 12
-//! (1982) 23–34): extend a partial injective vertex correspondence between two
-//! graphs, allowing vertices to be skipped, with branch-and-bound on the objective.
-//! MCIS maximizes mapped vertices under an induced (edge-iff-edge) constraint; MCES
-//! maximizes shared edges with no induced constraint. Sound and complete but
-//! exponential — the clique-based routes (RASCAL etc.) are the faster alternatives.
+//! Maximum (`Mcis`/`Mces`) — McGregor's vertex-mapping search (J. J. McGregor,
+//! "Backtrack search algorithms and the maximal common subgraph problem", Software:
+//! Practice and Experience 12 (1982) 23–34): extend a partial injective vertex
+//! correspondence between two graphs, allowing vertices to be skipped, with
+//! branch-and-bound on the objective. MCIS maximizes mapped vertices under an induced
+//! (edge-iff-edge) constraint; MCES maximizes shared edges with no induced constraint.
+//!
+//! Enumeration (`CommonSubgraphEnumerationAlgorithm`) — every maximal common induced
+//! subgraph as a maximal clique of the modular product. A distinct operation from the
+//! maximum: it lists all non-extendable overlaps, disconnected ones included.
+
+use bitvec::prelude::*;
 
 use crate::graph::{EdgeId, Graph, NodeId};
 
@@ -24,6 +30,14 @@ pub enum McisAlgorithm {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum McesAlgorithm {
     McGregor,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommonSubgraphEnumerationAlgorithm {
+    /// Bron–Kerbosch maximal-clique enumeration over the modular product (Bron &
+    /// Kerbosch, CACM 16 (1973) 575–577; modular product: Levi, Calcolo 9 (1973)
+    /// 341–352).
+    BronKerbosch,
 }
 
 /// One common subgraph: a vertex correspondence between the two graphs (sorted by
@@ -619,6 +633,146 @@ impl<'g> McsState<'g> {
     }
 }
 
+impl Graph {
+    /// Every maximal common induced subgraph of `self` and `other`: each a
+    /// non-extendable vertex correspondence under `node_match`, with an edge present
+    /// iff present (and `edge_match`-compatible) in both graphs. Unlike the maximum,
+    /// this enumerates *all* maximal overlaps, disconnected ones included.
+    pub fn enumerate_common_subgraphs<N, E>(
+        &self,
+        other: &Graph,
+        node_match: &mut N,
+        edge_match: &mut E,
+        alg: CommonSubgraphEnumerationAlgorithm,
+    ) -> Vec<CommonSubgraph>
+    where
+        N: FnMut(NodeId, NodeId) -> bool,
+        E: FnMut(EdgeId, EdgeId) -> bool,
+    {
+        match alg {
+            CommonSubgraphEnumerationAlgorithm::BronKerbosch => {
+                self.enumerate_common_subgraphs_bron_kerbosch(other, node_match, edge_match)
+            }
+        }
+    }
+
+    fn enumerate_common_subgraphs_bron_kerbosch<N, E>(
+        &self,
+        other: &Graph,
+        node_match: &mut N,
+        edge_match: &mut E,
+    ) -> Vec<CommonSubgraph>
+    where
+        N: FnMut(NodeId, NodeId) -> bool,
+        E: FnMut(EdgeId, EdgeId) -> bool,
+    {
+        // Modular-product vertices: the `node_match`-compatible node pairs.
+        let mut pairs: Vec<(NodeId, NodeId)> = Vec::new();
+        for a in self.node_ids() {
+            for b in other.node_ids() {
+                if node_match(a, b) {
+                    pairs.push((a, b));
+                }
+            }
+        }
+        let count = pairs.len();
+
+        // Modular-product adjacency: distinct pairs whose edges agree — both present
+        // and `edge_match`-compatible, or both absent. Pairs sharing a node stay
+        // non-adjacent, enforcing injectivity.
+        let mut neighbors = vec![bitvec![0; count]; count];
+        for i in 0..count {
+            let (a1, b1) = pairs[i];
+            for j in (i + 1)..count {
+                let (a2, b2) = pairs[j];
+                if a1 == a2 || b1 == b2 {
+                    continue;
+                }
+                let agree = match (self.find_edge(a1, a2), other.find_edge(b1, b2)) {
+                    (Some(ea), Some(eb)) => edge_match(ea, eb),
+                    (None, None) => true,
+                    _ => false,
+                };
+                if agree {
+                    neighbors[i].set(j, true);
+                    neighbors[j].set(i, true);
+                }
+            }
+        }
+
+        let mut cliques = Vec::new();
+        bron_kerbosch(
+            &neighbors,
+            &mut Vec::new(),
+            bitvec![1; count],
+            bitvec![0; count],
+            &mut cliques,
+        );
+
+        let mut subgraphs: Vec<CommonSubgraph> = cliques
+            .into_iter()
+            .map(|clique| {
+                let mut edge_count = 0;
+                for x in 0..clique.len() {
+                    for y in (x + 1)..clique.len() {
+                        let (a1, b1) = pairs[clique[x]];
+                        let (a2, b2) = pairs[clique[y]];
+                        if self.find_edge(a1, a2).is_some() && other.find_edge(b1, b2).is_some() {
+                            edge_count += 1;
+                        }
+                    }
+                }
+                let mut mapping: Vec<(NodeId, NodeId)> = clique.iter().map(|&i| pairs[i]).collect();
+                mapping.sort_unstable_by_key(|&(a, _)| a.0);
+                CommonSubgraph {
+                    mapping,
+                    edge_count,
+                }
+            })
+            .collect();
+        subgraphs.sort_by(|x, y| x.mapping.cmp(&y.mapping));
+        subgraphs.dedup();
+        subgraphs
+    }
+}
+
+/// Bron–Kerbosch with pivoting (Tomita et al.): append to `out` every maximal clique
+/// of the graph given by `neighbors` (per-vertex adjacency bitsets).
+fn bron_kerbosch(
+    neighbors: &[BitVec],
+    clique: &mut Vec<usize>,
+    mut candidates: BitVec,
+    mut excluded: BitVec,
+    out: &mut Vec<Vec<usize>>,
+) {
+    if candidates.not_any() && excluded.not_any() {
+        out.push(clique.clone());
+        return;
+    }
+    let pivot = candidates
+        .iter_ones()
+        .chain(excluded.iter_ones())
+        .max_by_key(|&u| (candidates.clone() & neighbors[u].clone()).count_ones())
+        .expect("candidates ∪ excluded is non-empty here");
+    let expand: Vec<usize> = (candidates.clone() & !neighbors[pivot].clone())
+        .iter_ones()
+        .collect();
+    for v in expand {
+        let nv = neighbors[v].clone();
+        clique.push(v);
+        bron_kerbosch(
+            neighbors,
+            clique,
+            candidates.clone() & nv.clone(),
+            excluded.clone() & nv,
+            out,
+        );
+        clique.pop();
+        candidates.set(v, false);
+        excluded.set(v, true);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -841,5 +995,142 @@ mod tests {
             }
         );
         assert!(r.is_empty());
+    }
+
+    #[rstest]
+    #[case::single_edge(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[[0, 1]]),
+        vec![
+            CommonSubgraph {
+                mapping: vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
+                edge_count: 1,
+            },
+            CommonSubgraph {
+                mapping: vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
+                edge_count: 1,
+            },
+        ]
+    )]
+    #[case::single_node(
+        Graph::new(1, &[]),
+        Graph::new(1, &[]),
+        vec![CommonSubgraph {
+            mapping: vec![(NodeId(0), NodeId(0))],
+            edge_count: 0,
+        }]
+    )]
+    fn test_graph_enumerate_common_subgraphs(
+        #[case] a: Graph,
+        #[case] b: Graph,
+        #[case] expected: Vec<CommonSubgraph>,
+    ) {
+        assert_eq!(
+            a.enumerate_common_subgraphs(
+                &b,
+                &mut any_node,
+                &mut any_edge,
+                CommonSubgraphEnumerationAlgorithm::BronKerbosch,
+            ),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::path_with_d_edge(
+        Graph::new(3, &[[0, 1], [1, 2]]),
+        vec![0u8, 1, 2],
+        Graph::new(3, &[[0, 1], [1, 2]]),
+        vec![0u8, 1, 2],
+        vec![CommonSubgraph {
+            mapping: vec![
+                (NodeId(0), NodeId(0)),
+                (NodeId(1), NodeId(1)),
+                (NodeId(2), NodeId(2)),
+            ],
+            edge_count: 2,
+        }]
+    )]
+    #[case::disjoint_edges(
+        Graph::new(4, &[[0, 1], [2, 3]]),
+        vec![0u8, 1, 2, 3],
+        Graph::new(4, &[[0, 1], [2, 3]]),
+        vec![0u8, 1, 2, 3],
+        vec![CommonSubgraph {
+            mapping: vec![
+                (NodeId(0), NodeId(0)),
+                (NodeId(1), NodeId(1)),
+                (NodeId(2), NodeId(2)),
+                (NodeId(3), NodeId(3)),
+            ],
+            edge_count: 2,
+        }]
+    )]
+    fn test_graph_enumerate_common_subgraphs_labeled(
+        #[case] a: Graph,
+        #[case] labels_a: Vec<u8>,
+        #[case] b: Graph,
+        #[case] labels_b: Vec<u8>,
+        #[case] expected: Vec<CommonSubgraph>,
+    ) {
+        let mut node_match = |x: NodeId, y: NodeId| labels_a[x.index()] == labels_b[y.index()];
+        assert_eq!(
+            a.enumerate_common_subgraphs(
+                &b,
+                &mut node_match,
+                &mut any_edge,
+                CommonSubgraphEnumerationAlgorithm::BronKerbosch,
+            ),
+            expected,
+        );
+    }
+
+    #[rstest]
+    fn test_graph_enumerate_common_subgraphs_edge_filter() {
+        let edge = Graph::new(2, &[[0, 1]]);
+        assert_eq!(
+            edge.enumerate_common_subgraphs(
+                &edge,
+                &mut any_node,
+                &mut reject_edge,
+                CommonSubgraphEnumerationAlgorithm::BronKerbosch,
+            ),
+            vec![
+                CommonSubgraph {
+                    mapping: vec![(NodeId(0), NodeId(0))],
+                    edge_count: 0,
+                },
+                CommonSubgraph {
+                    mapping: vec![(NodeId(0), NodeId(1))],
+                    edge_count: 0,
+                },
+                CommonSubgraph {
+                    mapping: vec![(NodeId(1), NodeId(0))],
+                    edge_count: 0,
+                },
+                CommonSubgraph {
+                    mapping: vec![(NodeId(1), NodeId(1))],
+                    edge_count: 0,
+                },
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_graph_enumerate_common_subgraphs_empty() {
+        let a = Graph::new(1, &[]);
+        let b = Graph::new(1, &[]);
+        assert_eq!(
+            a.enumerate_common_subgraphs(
+                &b,
+                &mut cross,
+                &mut any_edge,
+                CommonSubgraphEnumerationAlgorithm::BronKerbosch,
+            ),
+            vec![CommonSubgraph {
+                mapping: vec![],
+                edge_count: 0,
+            }],
+        );
     }
 }

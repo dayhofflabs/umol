@@ -13,13 +13,16 @@ pub(crate) mod union_find;
 pub use algorithms::auto::{AutoGroupOrder, Automorphism, AutomorphismAlgorithm};
 pub use algorithms::bcc::BiconnectedComponentsAlgorithm;
 pub use algorithms::coloring::BipartitionAlgorithm;
+pub use algorithms::common_subgraph::{
+    CommonSubgraph, CommonSubgraphEnumerationAlgorithm, McesAlgorithm, McisAlgorithm,
+    McsConnectivity,
+};
 pub use algorithms::connected::ConnectedComponentsAlgorithm;
 pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
 pub use algorithms::enumeration::{PathEnumerationAlgorithm, SubgraphEnumerationAlgorithm};
 pub use algorithms::matching::{
     Matching, MatchingEnumerationAlgorithm, MaxMatchingAlgorithm, PerfectMatchingAlgorithm,
 };
-pub use algorithms::mcs::{CommonSubgraph, McesAlgorithm, McisAlgorithm, McsConnectivity};
 pub use algorithms::mis::MaxIndependentSetAlgorithm;
 pub use algorithms::refine::{
     CircularRefinementAlgorithm, CircularRefinementHash, Refinement, RefinementAlgorithm,

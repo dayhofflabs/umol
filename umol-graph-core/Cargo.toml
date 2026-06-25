@@ -19,6 +19,7 @@ required-features = ["proptest"]
 proptest = []
 
 [dependencies]
+bitvec = "1.0.1"
 nauty-Traces-sys = { version = "0.11", features = ["bundled", "tls"] }
 
 [dev-dependencies]
