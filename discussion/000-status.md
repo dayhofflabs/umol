@@ -132,3 +132,5 @@
 | [128-substructure-derived-predicates-2026-06-23.md](128-substructure-derived-predicates-2026-06-23.md)           | Active        | 2026-06-23   |
 | [129-crate-organization-2026-06-24.md](129-crate-organization-2026-06-24.md)                                     | Completed     | 2026-06-24   |
 | [130-crate-reorganization-plan-2026-06-24.md](130-crate-reorganization-plan-2026-06-24.md)                       | Completed     | 2026-06-24   |
+| [131-reaction-application-design-2026-06-24.md](131-reaction-application-design-2026-06-24.md)                   | Active        | 2026-06-24   |
+| [132-reaction-ast-implementation-plan-2026-06-25.md](132-reaction-ast-implementation-plan-2026-06-25.md)         | Active        | 2026-06-25   |
