@@ -10,9 +10,7 @@
 //! change with context and would break the subset test.
 
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
-use umol_graph_core::{
-    AutomorphismAlgorithm, EdgeId, Embedding, Graph, NodeId, SubgraphEnumerationAlgorithm,
-};
+use umol_graph_core::{AutomorphismAlgorithm, Embedding, SubgraphEnumerationAlgorithm};
 
 use super::feature_set::FeatureSet;
 use super::featurizer::FingerprintError;
@@ -55,71 +53,28 @@ impl SubstructureFeaturizer {
 /// isomorphic as element/charge/bond-order-labeled graphs.
 fn canonical_key(mol: &MoleculeAst, embedding: &Embedding) -> Vec<u8> {
     let subgraph = embedding.extract();
-    let atom_count = subgraph.node_count();
-    let bond_count = subgraph.edge_count();
-
-    // Subdivide each bond into a vertex so nauty (vertex-color only) canonicalizes
-    // bond orders: atom nodes 0..atom_count, bond nodes atom_count.. .
-    let mut subdivided_edges: Vec<[u32; 2]> = Vec::with_capacity(2 * bond_count);
-    for bond in 0..bond_count {
-        let [a, b] = subgraph.edge_endpoints(EdgeId(bond as u32));
-        let bond_node = (atom_count + bond) as u32;
-        subdivided_edges.push([a.0, bond_node]);
-        subdivided_edges.push([bond_node, b.0]);
-    }
-    let subdivided = Graph::new(atom_count + bond_count, &subdivided_edges);
-
-    // Colors: (class, value, signed). Atoms (class 0) carry element + charge; bond
-    // nodes (class 1) carry bond order. The class split keeps the two disjoint.
-    let mut colors: Vec<(u8, u16, i16)> = Vec::with_capacity(atom_count + bond_count);
-    for atom in 0..atom_count {
-        let id = AtomId::from(embedding.host_node(NodeId(atom as u32)));
-        let view = mol.atom(id);
-        let atomic_number = view
-            .element()
-            .as_lit()
-            .expect("ground atom")
-            .atomic_number();
-        let charge = view.charge().as_lit().expect("ground atom") as i16;
-        colors.push((0, u16::from(atomic_number), charge));
-    }
-    for bond in 0..bond_count {
-        let id = BondId::from(embedding.host_edge(EdgeId(bond as u32)));
-        let order = mol.bond(id).order().as_lit().expect("ground bond") as u16;
-        colors.push((1, order, 0));
-    }
-
-    let automorphism =
-        subdivided.automorphisms(|node| colors[node.index()], AutomorphismAlgorithm::Nauty);
-    let canonical = automorphism.canonical_labeling();
-    let mut position = vec![0u32; atom_count + bond_count];
-    for (rank, node) in canonical.iter().enumerate() {
-        position[node.index()] = rank as u32;
-    }
-
-    let mut key: Vec<u8> = Vec::new();
-    key.extend_from_slice(&((atom_count + bond_count) as u32).to_le_bytes());
-    for &node in canonical {
-        let (class, value, signed) = colors[node.index()];
-        key.push(class);
-        key.extend_from_slice(&value.to_le_bytes());
-        key.extend_from_slice(&signed.to_le_bytes());
-    }
-    let mut canonical_edges: Vec<(u32, u32)> = subdivided
-        .edge_ids()
-        .map(|edge| {
-            let [u, v] = subdivided.edge_endpoints(edge);
-            let (u, v) = (position[u.index()], position[v.index()]);
-            (u.min(v), u.max(v))
-        })
-        .collect();
-    canonical_edges.sort_unstable();
-    key.extend_from_slice(&(canonical_edges.len() as u32).to_le_bytes());
-    for (u, v) in canonical_edges {
-        key.extend_from_slice(&u.to_le_bytes());
-        key.extend_from_slice(&v.to_le_bytes());
-    }
-    key
+    subgraph.canonical_key(
+        |node| {
+            let id = AtomId::from(embedding.host_node(node));
+            let view = mol.atom(id);
+            let atomic_number = view
+                .element()
+                .as_lit()
+                .expect("ground atom")
+                .atomic_number();
+            let charge = view.charge().as_lit().expect("ground atom") as i16;
+            let mut color = Vec::with_capacity(4);
+            color.extend_from_slice(&u16::from(atomic_number).to_le_bytes());
+            color.extend_from_slice(&charge.to_le_bytes());
+            color
+        },
+        |edge| {
+            let id = BondId::from(embedding.host_edge(edge));
+            let order = mol.bond(id).order().as_lit().expect("ground bond") as u16;
+            order.to_le_bytes().to_vec()
+        },
+        AutomorphismAlgorithm::Nauty,
+    )
 }
 
 #[cfg(test)]

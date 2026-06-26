@@ -6,6 +6,7 @@
 //! components, cycle enumeration, maximum independent set).
 
 pub mod algorithms;
+pub(crate) mod digraph;
 pub(crate) mod graph;
 pub(crate) mod relation;
 pub(crate) mod union_find;
@@ -29,7 +30,9 @@ pub use algorithms::refine::{
     RefinementHash, RefinementRounds,
 };
 pub use algorithms::subiso::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
+pub use algorithms::toposort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::TraversalAlgorithm;
+pub use digraph::DiGraph;
 pub use graph::{EdgeId, Embedding, Graph, Neighbor, NodeId, Remapping};
 pub use relation::{
     FactorOrdering, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, Ordered,

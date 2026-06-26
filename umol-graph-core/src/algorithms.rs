@@ -1,4 +1,4 @@
-//! Graph algorithms operating on `Graph`.
+//! Graph algorithms operating on `Graph` and `DiGraph`.
 
 pub mod auto;
 pub mod bcc;
@@ -11,4 +11,5 @@ pub mod matching;
 pub mod mis;
 pub mod refine;
 pub mod subiso;
+pub mod toposort;
 pub mod traversal;

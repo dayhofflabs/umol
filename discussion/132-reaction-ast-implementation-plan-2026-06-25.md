@@ -62,9 +62,14 @@ New/extended in `umol-graph-core/src/algorithms/`:
    Consumer note: `canonical_form` serves reaction iso-dedup (equality *up to atom
    renumbering*), which is a `umol-graph` generation concern (follow-on). `umol-ast` does
    **not** call nauty in this increment — see W2.3.
-3. **Deterministic topological sort** (new `toposort` in `traversal.rs`). Kahn's algorithm
-   with a **key-ordered ready set** (caller supplies the node key) → a unique topological
-   order. Used to sequence deltas when lowering. Acyclic by construction at the call site.
+3. **Directed graph + deterministic topological sort.** Directed graphs are a graph-core
+   foundation type, not a domain-side or per-caller construction. New `DiGraph` (general
+   directed graph, CSR out-adjacency, `digraph.rs`, reusing `NodeId`) — one model serves
+   the delta-dependency DAG now and cyclic reaction/derivation networks later. New
+   `algorithms/toposort.rs`: `impl DiGraph::topological_order<K: Ord>(key, alg)` via Kahn's
+   algorithm draining a **key-ordered ready set** (ties by `NodeId`) → a unique order;
+   `None` on a cycle (so the "DAG" case needs no separate type). Used to sequence deltas
+   when lowering.
 
 Tests: small hand-built graphs with enumerated expected overlaps / canonical labels /
 orderings; assert exact result sets, not counts.

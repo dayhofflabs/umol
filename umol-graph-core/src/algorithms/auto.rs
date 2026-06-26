@@ -7,7 +7,7 @@ use std::os::raw::c_int;
 
 use nauty_Traces_sys::*;
 
-use crate::graph::{Graph, NodeId};
+use crate::graph::{EdgeId, Graph, NodeId};
 
 thread_local! {
     /// Accumulates the generators nauty emits via `userautomproc` during one
@@ -189,6 +189,93 @@ impl Graph {
             generators,
         }
     }
+
+    /// Numbering-invariant canonical key of `self` as an edge-colored graph: two
+    /// graphs yield equal keys iff isomorphic under `node_color` and `edge_color`.
+    /// Each edge is subdivided into a class-disjoint colored vertex so nauty (vertex
+    /// colors only) canonicalizes edge colors; the key is the canonical node colors
+    /// followed by the canonical edge list. Topology only — overlays/N-ary relations
+    /// belong to a richer incidence built by the caller.
+    pub fn canonical_key(
+        &self,
+        node_color: impl Fn(NodeId) -> Vec<u8>,
+        edge_color: impl Fn(EdgeId) -> Vec<u8>,
+        alg: AutomorphismAlgorithm,
+    ) -> Vec<u8> {
+        let nodes: Vec<NodeId> = self.node_ids().collect();
+        let edges: Vec<EdgeId> = self.edge_ids().collect();
+        let node_total = nodes.len();
+        let subdivided_total = node_total + edges.len();
+
+        let mut dense = vec![0u32; self.node_bound()];
+        for (pos, &id) in nodes.iter().enumerate() {
+            dense[id.index()] = pos as u32;
+        }
+
+        // Subdivide: original nodes 0..node_total, then one vertex per edge.
+        let mut subdivided_edges: Vec<[u32; 2]> = Vec::with_capacity(2 * edges.len());
+        for (k, &eid) in edges.iter().enumerate() {
+            let [a, b] = self.edge_endpoints(eid);
+            let edge_vertex = (node_total + k) as u32;
+            subdivided_edges.push([dense[a.index()], edge_vertex]);
+            subdivided_edges.push([edge_vertex, dense[b.index()]]);
+        }
+        let subdivided = Graph::new(subdivided_total, &subdivided_edges);
+
+        // Class-prefixed colors keep node (0) and edge (1) vertices disjoint; ranks
+        // feed nauty's vertex partition while the bytes go into the key.
+        let mut colors: Vec<Vec<u8>> = Vec::with_capacity(subdivided_total);
+        for &id in &nodes {
+            let mut color = vec![0u8];
+            color.extend_from_slice(&node_color(id));
+            colors.push(color);
+        }
+        for &eid in &edges {
+            let mut color = vec![1u8];
+            color.extend_from_slice(&edge_color(eid));
+            colors.push(color);
+        }
+
+        let mut distinct = colors.clone();
+        distinct.sort();
+        distinct.dedup();
+        let ranks: Vec<u32> = colors
+            .iter()
+            .map(|color| distinct.binary_search(color).expect("color is present") as u32)
+            .collect();
+
+        let canonical = subdivided
+            .automorphisms(|node| ranks[node.index()], alg)
+            .canonical_labeling()
+            .to_vec();
+        let mut position = vec![0u32; subdivided_total];
+        for (rank, node) in canonical.iter().enumerate() {
+            position[node.index()] = rank as u32;
+        }
+
+        let mut key: Vec<u8> = Vec::new();
+        key.extend_from_slice(&(subdivided_total as u32).to_le_bytes());
+        for &node in &canonical {
+            let color = &colors[node.index()];
+            key.extend_from_slice(&(color.len() as u32).to_le_bytes());
+            key.extend_from_slice(color);
+        }
+        let mut canonical_edges: Vec<(u32, u32)> = subdivided
+            .edge_ids()
+            .map(|edge| {
+                let [u, v] = subdivided.edge_endpoints(edge);
+                let (u, v) = (position[u.index()], position[v.index()]);
+                (u.min(v), u.max(v))
+            })
+            .collect();
+        canonical_edges.sort_unstable();
+        key.extend_from_slice(&(canonical_edges.len() as u32).to_le_bytes());
+        for (u, v) in canonical_edges {
+            key.extend_from_slice(&u.to_le_bytes());
+            key.extend_from_slice(&v.to_le_bytes());
+        }
+        key
+    }
 }
 
 impl Automorphism {
@@ -296,5 +383,89 @@ mod tests {
     ) {
         let aut = g.automorphisms(|n| colors[n.index()], Nauty);
         assert_eq!(aut.generators(), expected);
+    }
+
+    #[rstest]
+    #[case::reversed_path(
+        Graph::new(3, &[[0, 1], [1, 2]]),
+        vec![vec![0u8], vec![1], vec![2]],
+        vec![vec![9u8], vec![9]],
+        Graph::new(3, &[[0, 1], [1, 2]]),
+        vec![vec![2u8], vec![1], vec![0]],
+        vec![vec![9u8], vec![9]]
+    )]
+    #[case::swapped_edge(
+        Graph::new(2, &[[0, 1]]),
+        vec![vec![0u8], vec![1]],
+        vec![vec![7u8]],
+        Graph::new(2, &[[0, 1]]),
+        vec![vec![1u8], vec![0]],
+        vec![vec![7u8]]
+    )]
+    fn test_graph_canonical_key_isomorphic(
+        #[case] a: Graph,
+        #[case] a_nodes: Vec<Vec<u8>>,
+        #[case] a_edges: Vec<Vec<u8>>,
+        #[case] b: Graph,
+        #[case] b_nodes: Vec<Vec<u8>>,
+        #[case] b_edges: Vec<Vec<u8>>,
+    ) {
+        let key_a = a.canonical_key(
+            |node| a_nodes[node.index()].clone(),
+            |edge| a_edges[edge.index()].clone(),
+            Nauty,
+        );
+        let key_b = b.canonical_key(
+            |node| b_nodes[node.index()].clone(),
+            |edge| b_edges[edge.index()].clone(),
+            Nauty,
+        );
+        assert_eq!(key_a, key_b);
+    }
+
+    #[rstest]
+    #[case::node_color(
+        Graph::new(2, &[[0, 1]]),
+        vec![vec![0u8], vec![1]],
+        vec![vec![7u8]],
+        Graph::new(2, &[[0, 1]]),
+        vec![vec![0u8], vec![2]],
+        vec![vec![7u8]]
+    )]
+    #[case::edge_color(
+        Graph::new(2, &[[0, 1]]),
+        vec![vec![0u8], vec![1]],
+        vec![vec![7u8]],
+        Graph::new(2, &[[0, 1]]),
+        vec![vec![0u8], vec![1]],
+        vec![vec![8u8]]
+    )]
+    #[case::topology(
+        Graph::new(3, &[[0, 1], [1, 2]]),
+        vec![vec![0u8], vec![0], vec![0]],
+        vec![vec![7u8], vec![7]],
+        Graph::new(3, &[[0, 1], [1, 2], [0, 2]]),
+        vec![vec![0u8], vec![0], vec![0]],
+        vec![vec![7u8], vec![7], vec![7]]
+    )]
+    fn test_graph_canonical_key_distinct(
+        #[case] a: Graph,
+        #[case] a_nodes: Vec<Vec<u8>>,
+        #[case] a_edges: Vec<Vec<u8>>,
+        #[case] b: Graph,
+        #[case] b_nodes: Vec<Vec<u8>>,
+        #[case] b_edges: Vec<Vec<u8>>,
+    ) {
+        let key_a = a.canonical_key(
+            |node| a_nodes[node.index()].clone(),
+            |edge| a_edges[edge.index()].clone(),
+            Nauty,
+        );
+        let key_b = b.canonical_key(
+            |node| b_nodes[node.index()].clone(),
+            |edge| b_edges[edge.index()].clone(),
+            Nauty,
+        );
+        assert_ne!(key_a, key_b);
     }
 }
