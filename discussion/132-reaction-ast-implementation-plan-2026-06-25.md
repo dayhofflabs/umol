@@ -6,6 +6,9 @@ doc-127 interim. Overlays + stereo + overlay composition (#7–#9) are **increme
 out of scope here. Molecules keep their overlays in `lhs` (unchanged, carried through);
 rules in this increment only add/remove/modify atoms, bonds, and constraints.
 
+**Reopened:** W1–W4 are done; **W5** (the `ReactionSpanAst → ReactionAst` inverse projection)
+adds a fifth localized-topology workstream, still open.
+
 Terminology: *topology* = atoms + **localized** bonds (single, double, triple); *overlays*
 are the **non-localized** entities (aromatic systems, dative, multicenter, noncovalent) plus
 stereo. The diff between topology and overlay is localization — that is the increment 1 /
@@ -234,6 +237,44 @@ result sets; admissibility rejection; associativity on a small `(A,B,C)` triple 
   `ReactionAst::new(lhs, deltas)`. `FingerprintError::Inconsistent` added for the
   derive-failure path. Workspace green (`cargo build`/`clippy --all-targets`); no interim
   references remain.
+
+## W5 — umol-ast: `ReactionSpanAst → ReactionAst` (inverse projection) **Open**
+
+Reopens increment 1. The span is the symmetric pivot (doc 131), but only the forward
+`to_reaction_span` and the `left()` / `right()` molecule projections exist — the inverse
+`span → ReactionAst` (= `span → (left(), deltas)`) is missing. Needed for the lossless
+forward/reverse pivot doc 131 states, and as the landing point for import (mapped reaction SMILES /
+SMIRKS / GML project to the span, then to `(lhs, deltas)`); it also subsumes the SMIRKS/GML
+diff-constructor.
+
+**Method:** `ReactionSpanAst::to_reaction(&self) -> ReactionAst` (infallible — a diff yields no
+contradiction). Scope: localized topology, like the rest of increment 1 (overlays inherit the
+increment-2 deferral).
+
+**Frame.** `left()` reconstructs `lhs` in its original frame: union nodes `0..n` are exactly the
+`lhs` atoms (never `Added`; created atoms append at `n..` and are dropped by `left()`), so the
+recovered deltas reference union ids directly — `0..n` for preserved/removed, `n..` for created.
+`lhs = self.left()`; `deltas` from each element's `Change` tag:
+- `Unchanged` → nothing;
+- `Added(ast)` → `Add { id = union id, ast }` (bond endpoints from `graph.edge_endpoints`);
+- `Removed(ast)` → `Remove { id, ast }` (bonds carry endpoints);
+- `Modified { left, right }` → the **AST-diff** below.
+
+**The AST-diff (the new capability — inverse of `apply_*_change`).**
+- *Fields:* one `SetField { old: left.f, new: right.f }` per field `f` with `left.f != right.f`,
+  enumerating the same `(variant ⇒ field)` map `field_ops!` owns. **Open sub-decision (pick before
+  coding):** generate a `diff_field` from `field_ops!` — reuses the map, but adds a method to the
+  internal `DeltaFamily` trait — vs. a free `diff_atom` / `diff_bond` in `delta.rs` that duplicates
+  the small field enumeration (no trait change).
+- *Constraints:* keyed diff over the per-entity constraint set — group `left` / `right` by
+  `constraint_key`; per key emit `SetConstraint { old, new }` (both-present-differ = modify,
+  left-only = remove, right-only = add). **Confirm** the `AtomConstraints` / `BondConstraints`
+  iteration + key API and unique-vs-non-unique handling (non-unique kinds need a multiset diff per
+  key, not a single pair).
+
+**Tests:** round-trip `r.to_reaction_span().to_reaction()` equals `r` up to delta normal form
+(`canonicalize` both sides); `span.to_reaction().to_reaction_span() == span`; field / constraint /
+add / remove / mixed cases.
 
 ## Out of scope (increment 2 / follow-on)
 

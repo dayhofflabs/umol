@@ -70,8 +70,8 @@ impl ReactionAst {
                         new: new.clone(),
                     })
                 }
-                Delta::Bond(BondDelta::Add { id, endpoints, ast }) => {
-                    created_bonds.insert(*id, (*endpoints, ast.clone()));
+                Delta::Bond(BondDelta::Add { id, atoms, ast }) => {
+                    created_bonds.insert(*id, (*atoms, ast.clone()));
                 }
                 Delta::Bond(BondDelta::Remove { id, .. }) => {
                     let host_bond = m.host_bond(*id);
@@ -124,9 +124,9 @@ impl ReactionAst {
             edits.push(Edit::AddBonds {
                 bonds: created_bonds
                     .values()
-                    .map(|(endpoints, ast)| AddBond {
-                        a: atom_ref(endpoints[0]),
-                        b: atom_ref(endpoints[1]),
+                    .map(|(atoms, ast)| AddBond {
+                        a: atom_ref(atoms[0]),
+                        b: atom_ref(atoms[1]),
                         ast: ast.clone(),
                     })
                     .collect(),

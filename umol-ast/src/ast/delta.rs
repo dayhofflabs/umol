@@ -65,12 +65,12 @@ impl AtomDelta {
 pub enum BondDelta {
     Add {
         id: BondId,
-        endpoints: [AtomId; 2],
+        atoms: [AtomId; 2],
         ast: BondAst,
     },
     Remove {
         id: BondId,
-        endpoints: [AtomId; 2],
+        atoms: [AtomId; 2],
         ast: BondAst,
     },
     SetField {
@@ -87,8 +87,8 @@ pub enum BondDelta {
 impl BondDelta {
     pub fn inverse(self) -> Self {
         match self {
-            Self::Add { id, endpoints, ast } => Self::Remove { id, endpoints, ast },
-            Self::Remove { id, endpoints, ast } => Self::Add { id, endpoints, ast },
+            Self::Add { id, atoms, ast } => Self::Remove { id, atoms, ast },
+            Self::Remove { id, atoms, ast } => Self::Add { id, atoms, ast },
             Self::SetField { id, change } => Self::SetField {
                 id,
                 change: change.inverse(),
@@ -138,9 +138,9 @@ impl Delta {
 }
 
 /// Generates the per-variant field-change operations (`fuse_field`, `field_is_identity`,
-/// `apply_field`) of a `DeltaFamily` impl from the `(variant => ast field)` map.
+/// `apply_field`) of a `EntityDelta` impl from the `(variant => ast field)` map.
 macro_rules! field_ops {
-    ($change:ident, $ast:ident, { $($variant:ident => $field:ident),+ $(,)? }) => {
+    ($change:ident, $ast:ident, $constraint:ident, { $($variant:ident => $field:ident),+ $(,)? }) => {
         fn fuse_field(prev: $change, next: $change) -> Option<$change> {
             match (prev, next) {
                 $(
@@ -173,18 +173,57 @@ macro_rules! field_ops {
             }
             Ok(())
         }
+
+        fn diff_field(left: &$ast, right: &$ast) -> Vec<$change> {
+            let mut out = Vec::new();
+            $(
+                if left.$field != right.$field {
+                    out.push($change::$variant {
+                        old: left.$field.clone(),
+                        new: right.$field.clone(),
+                    });
+                }
+            )+
+            out
+        }
+
+        #[allow(clippy::type_complexity)]
+        fn diff_constraints(
+            left: &$ast,
+            right: &$ast,
+        ) -> Vec<(Option<$constraint>, Option<$constraint>)> {
+            let mut left_by_key: HashMap<_, $constraint> = HashMap::new();
+            for constraint in left.constraints.iter() {
+                left_by_key.insert(constraint.key(), constraint.clone());
+            }
+            let mut right_by_key: HashMap<_, $constraint> = HashMap::new();
+            for constraint in right.constraints.iter() {
+                right_by_key.insert(constraint.key(), constraint.clone());
+            }
+            let mut keys: HashSet<_> = left_by_key.keys().cloned().collect();
+            keys.extend(right_by_key.keys().cloned());
+            let mut out = Vec::new();
+            for key in keys {
+                let l = left_by_key.get(&key).cloned();
+                let r = right_by_key.get(&key).cloned();
+                if l != r {
+                    out.push((l, r));
+                }
+            }
+            out
+        }
     };
 }
 
-/// The per-entity op the fold operates on, abstracting `AtomDelta`/`BondDelta`. `payload`
-/// is the structural data of `Add`/`Remove` (`()` for atoms, endpoints for bonds).
-enum EntityOp<F: DeltaFamily> {
+/// The per-entity op the fold operates on, abstracting `AtomDelta`/`BondDelta`. `atoms` carries
+/// the entity's participant atoms in `Add`/`Remove` (`()` for an atom, its two ids for a bond).
+pub(crate) enum EntityOp<F: EntityDelta> {
     Add {
-        payload: F::Payload,
+        atoms: F::Atoms,
         ast: F::Ast,
     },
     Remove {
-        payload: F::Payload,
+        atoms: F::Atoms,
         ast: F::Ast,
     },
     SetField(F::FieldChange),
@@ -194,16 +233,16 @@ enum EntityOp<F: DeltaFamily> {
     },
 }
 
-/// A per-entity delta family the canonicalize fold is generic over. Atoms and bonds (and,
+/// A per-entity-kind delta the canonicalize fold is generic over. Atoms and bonds (and,
 /// later, the overlay families) supply the structural deconstruction (`id`/`split`/
 /// `rebuild`) and per-variant field/constraint operations; the fold itself is written once.
-trait DeltaFamily: Sized {
+pub(crate) trait EntityDelta: Sized {
     type Id: Copy + Eq + Hash;
     type Ast;
     type FieldChange;
-    type Constraint: PartialEq;
-    type ConstraintKey: Eq + Hash;
-    type Payload;
+    type Constraint: Clone + PartialEq;
+    type ConstraintKey: Clone + Eq + Hash;
+    type Atoms;
 
     fn id(&self) -> Self::Id;
     fn split(self) -> EntityOp<Self>;
@@ -213,6 +252,7 @@ trait DeltaFamily: Sized {
     fn field_is_identity(change: &Self::FieldChange) -> bool;
     fn field_inverse(change: Self::FieldChange) -> Self::FieldChange;
     fn apply_field(ast: &mut Self::Ast, change: Self::FieldChange) -> Result<(), Contradiction>;
+    fn diff_field(left: &Self::Ast, right: &Self::Ast) -> Vec<Self::FieldChange>;
 
     fn constraint_key(constraint: &Self::Constraint) -> Self::ConstraintKey;
     fn apply_constraint(
@@ -220,11 +260,16 @@ trait DeltaFamily: Sized {
         old: Option<Self::Constraint>,
         new: Option<Self::Constraint>,
     ) -> Result<(), Contradiction>;
+    #[allow(clippy::type_complexity)]
+    fn diff_constraints(
+        left: &Self::Ast,
+        right: &Self::Ast,
+    ) -> Vec<(Option<Self::Constraint>, Option<Self::Constraint>)>;
 }
 
 /// Fold one entity's ops (input order) to its normal form. `created` (an `Add` is present)
 /// vs `preserved` paths per doc 131.
-fn fold_group<F: DeltaFamily>(id: F::Id, group: Vec<F>) -> Result<Vec<F>, Contradiction> {
+fn fold_group<F: EntityDelta>(id: F::Id, group: Vec<F>) -> Result<Vec<F>, Contradiction> {
     let ops: Vec<EntityOp<F>> = group.into_iter().map(F::split).collect();
     let created = ops.iter().any(|op| matches!(op, EntityOp::Add { .. }));
     let folded = if created {
@@ -237,19 +282,19 @@ fn fold_group<F: DeltaFamily>(id: F::Id, group: Vec<F>) -> Result<Vec<F>, Contra
 
 /// Created entity: seed `ast` from `Add`, absorb subsequent field/constraint changes; an
 /// `Add`+`Remove` cancels. Yields one `Add` with the final ast, or nothing.
-fn fold_created<F: DeltaFamily>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>>, Contradiction> {
-    let mut state: Option<(F::Payload, F::Ast)> = None;
+fn fold_created<F: EntityDelta>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>>, Contradiction> {
+    let mut state: Option<(F::Atoms, F::Ast)> = None;
     let mut removed = false;
     for op in ops {
         if removed {
             return Err(Contradiction);
         }
         match op {
-            EntityOp::Add { payload, ast } => {
+            EntityOp::Add { atoms, ast } => {
                 if state.is_some() {
                     return Err(Contradiction);
                 }
-                state = Some((payload, ast));
+                state = Some((atoms, ast));
             }
             EntityOp::SetField(change) => {
                 let (_, ast) = state.as_mut().ok_or(Contradiction)?;
@@ -269,7 +314,7 @@ fn fold_created<F: DeltaFamily>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>
         }
     }
     Ok(match state {
-        Some((payload, ast)) => vec![EntityOp::Add { payload, ast }],
+        Some((atoms, ast)) => vec![EntityOp::Add { atoms, ast }],
         None => Vec::new(),
     })
 }
@@ -278,13 +323,13 @@ fn fold_created<F: DeltaFamily>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>
 /// `Remove` subsumes the prior changes and carries the *original* value (the changes are
 /// reverted on the removed ast).
 #[allow(clippy::type_complexity)]
-fn fold_preserved<F: DeltaFamily>(
+fn fold_preserved<F: EntityDelta>(
     ops: Vec<EntityOp<F>>,
 ) -> Result<Vec<EntityOp<F>>, Contradiction> {
     let mut fields: HashMap<Discriminant<F::FieldChange>, F::FieldChange> = HashMap::new();
     let mut constraints: HashMap<F::ConstraintKey, (Option<F::Constraint>, Option<F::Constraint>)> =
         HashMap::new();
-    let mut removed: Option<(F::Payload, F::Ast)> = None;
+    let mut removed: Option<(F::Atoms, F::Ast)> = None;
     for op in ops {
         if removed.is_some() {
             return Err(Contradiction);
@@ -316,19 +361,19 @@ fn fold_preserved<F: DeltaFamily>(
                     }
                 }
             }
-            EntityOp::Remove { payload, ast } => {
-                removed = Some((payload, ast));
+            EntityOp::Remove { atoms, ast } => {
+                removed = Some((atoms, ast));
             }
         }
     }
-    if let Some((payload, mut ast)) = removed {
+    if let Some((atoms, mut ast)) = removed {
         for (_slot, change) in fields {
             F::apply_field(&mut ast, F::field_inverse(change))?;
         }
         for (_key, (old, new)) in constraints {
             F::apply_constraint(&mut ast, new, old)?;
         }
-        return Ok(vec![EntityOp::Remove { payload, ast }]);
+        return Ok(vec![EntityOp::Remove { atoms, ast }]);
     }
     let mut out = Vec::new();
     for (_slot, change) in fields {
@@ -344,13 +389,13 @@ fn fold_preserved<F: DeltaFamily>(
     Ok(out)
 }
 
-impl DeltaFamily for AtomDelta {
+impl EntityDelta for AtomDelta {
     type Id = AtomId;
     type Ast = AtomAst;
     type FieldChange = AtomFieldChange;
     type Constraint = AtomConstraint;
     type ConstraintKey = AtomConstraintKey;
-    type Payload = ();
+    type Atoms = ();
 
     fn id(&self) -> AtomId {
         match self {
@@ -363,8 +408,8 @@ impl DeltaFamily for AtomDelta {
 
     fn split(self) -> EntityOp<Self> {
         match self {
-            AtomDelta::Add { ast, .. } => EntityOp::Add { payload: (), ast },
-            AtomDelta::Remove { ast, .. } => EntityOp::Remove { payload: (), ast },
+            AtomDelta::Add { ast, .. } => EntityOp::Add { atoms: (), ast },
+            AtomDelta::Remove { ast, .. } => EntityOp::Remove { atoms: (), ast },
             AtomDelta::SetField { change, .. } => EntityOp::SetField(change),
             AtomDelta::SetConstraint { old, new, .. } => EntityOp::SetConstraint { old, new },
         }
@@ -379,7 +424,7 @@ impl DeltaFamily for AtomDelta {
         }
     }
 
-    field_ops!(AtomFieldChange, AtomAst, {
+    field_ops!(AtomFieldChange, AtomAst, AtomConstraint, {
         Element => element,
         IsotopeMass => isotope_mass,
         Charge => charge,
@@ -413,13 +458,13 @@ impl DeltaFamily for AtomDelta {
     }
 }
 
-impl DeltaFamily for BondDelta {
+impl EntityDelta for BondDelta {
     type Id = BondId;
     type Ast = BondAst;
     type FieldChange = BondFieldChange;
     type Constraint = BondConstraint;
     type ConstraintKey = BondConstraintKey;
-    type Payload = [AtomId; 2];
+    type Atoms = [AtomId; 2];
 
     fn id(&self) -> BondId {
         match self {
@@ -432,12 +477,12 @@ impl DeltaFamily for BondDelta {
 
     fn split(self) -> EntityOp<Self> {
         match self {
-            BondDelta::Add { endpoints, ast, .. } => EntityOp::Add {
-                payload: endpoints,
+            BondDelta::Add { atoms, ast, .. } => EntityOp::Add {
+                atoms,
                 ast,
             },
-            BondDelta::Remove { endpoints, ast, .. } => EntityOp::Remove {
-                payload: endpoints,
+            BondDelta::Remove { atoms, ast, .. } => EntityOp::Remove {
+                atoms,
                 ast,
             },
             BondDelta::SetField { change, .. } => EntityOp::SetField(change),
@@ -447,14 +492,14 @@ impl DeltaFamily for BondDelta {
 
     fn rebuild(id: BondId, op: EntityOp<Self>) -> Self {
         match op {
-            EntityOp::Add { payload, ast } => BondDelta::Add {
+            EntityOp::Add { atoms, ast } => BondDelta::Add {
                 id,
-                endpoints: payload,
+                atoms,
                 ast,
             },
-            EntityOp::Remove { payload, ast } => BondDelta::Remove {
+            EntityOp::Remove { atoms, ast } => BondDelta::Remove {
                 id,
-                endpoints: payload,
+                atoms,
                 ast,
             },
             EntityOp::SetField(change) => BondDelta::SetField { id, change },
@@ -462,7 +507,7 @@ impl DeltaFamily for BondDelta {
         }
     }
 
-    field_ops!(BondFieldChange, BondAst, {
+    field_ops!(BondFieldChange, BondAst, BondConstraint, {
         Order => order,
         Charge => charge,
         Spin => spin,
@@ -493,17 +538,17 @@ impl DeltaFamily for BondDelta {
     }
 }
 
-/// Apply a resolved per-entity change to a value AST, reusing the `DeltaFamily` apply that
+/// Apply a resolved per-entity change to a value AST, reusing the `EntityDelta` apply that
 /// `canonicalize` uses. `SetField` / `SetConstraint` mutate the ast; `Add` / `Remove` are
 /// no-ops (they carry a whole ast, not a change). Materializes the right-hand value of a
 /// preserved entity for a `ReactionSpanAst`.
 pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<(), Contradiction> {
     match delta {
         AtomDelta::SetField { change, .. } => {
-            <AtomDelta as DeltaFamily>::apply_field(ast, change.clone())
+            <AtomDelta as EntityDelta>::apply_field(ast, change.clone())
         }
         AtomDelta::SetConstraint { old, new, .. } => {
-            <AtomDelta as DeltaFamily>::apply_constraint(ast, old.clone(), new.clone())
+            <AtomDelta as EntityDelta>::apply_constraint(ast, old.clone(), new.clone())
         }
         AtomDelta::Add { .. } | AtomDelta::Remove { .. } => Ok(()),
     }
@@ -512,16 +557,31 @@ pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<
 pub(crate) fn apply_bond_change(ast: &mut BondAst, delta: &BondDelta) -> Result<(), Contradiction> {
     match delta {
         BondDelta::SetField { change, .. } => {
-            <BondDelta as DeltaFamily>::apply_field(ast, change.clone())
+            <BondDelta as EntityDelta>::apply_field(ast, change.clone())
         }
         BondDelta::SetConstraint { old, new, .. } => {
-            <BondDelta as DeltaFamily>::apply_constraint(ast, old.clone(), new.clone())
+            <BondDelta as EntityDelta>::apply_constraint(ast, old.clone(), new.clone())
         }
         BondDelta::Add { .. } | BondDelta::Remove { .. } => Ok(()),
     }
 }
 
-/// Re-anchor a delta's ids and bond endpoints through total atom/bond id maps. Used to move
+/// Recover the `SetField` / `SetConstraint` deltas that carry `left` to `right` for one entity —
+/// the inverse of `apply_*_change`, used to project a `Modified` span element back to deltas.
+pub(crate) fn diff<F: EntityDelta>(id: F::Id, left: &F::Ast, right: &F::Ast) -> Vec<F> {
+    let mut out: Vec<F> = F::diff_field(left, right)
+        .into_iter()
+        .map(|change| F::rebuild(id, EntityOp::SetField(change)))
+        .collect();
+    out.extend(
+        F::diff_constraints(left, right)
+            .into_iter()
+            .map(|(old, new)| F::rebuild(id, EntityOp::SetConstraint { old, new })),
+    );
+    out
+}
+
+/// Re-anchor a delta's ids and bond atoms through total atom/bond id maps. Used to move
 /// deltas between frames (reverse re-anchoring, composition). The maps must cover every id the
 /// delta references.
 pub(crate) fn remap_delta(
@@ -550,14 +610,14 @@ pub(crate) fn remap_delta(
             },
         }),
         Delta::Bond(b) => Delta::Bond(match b {
-            BondDelta::Add { id, endpoints, ast } => BondDelta::Add {
+            BondDelta::Add { id, atoms, ast } => BondDelta::Add {
                 id: bond[&id],
-                endpoints: [atom[&endpoints[0]], atom[&endpoints[1]]],
+                atoms: [atom[&atoms[0]], atom[&atoms[1]]],
                 ast,
             },
-            BondDelta::Remove { id, endpoints, ast } => BondDelta::Remove {
+            BondDelta::Remove { id, atoms, ast } => BondDelta::Remove {
                 id: bond[&id],
-                endpoints: [atom[&endpoints[0]], atom[&endpoints[1]]],
+                atoms: [atom[&atoms[0]], atom[&atoms[1]]],
                 ast,
             },
             BondDelta::SetField { id, change } => BondDelta::SetField {
@@ -640,8 +700,8 @@ impl Canonicalize for Deltas {
         for (id, group) in bonds {
             let folded = fold_group::<BondDelta>(id, group)?;
             for delta in &folded {
-                if let BondDelta::Add { endpoints, .. } = delta {
-                    if endpoints.iter().any(|atom| removed_atoms.contains(atom)) {
+                if let BondDelta::Add { atoms, .. } = delta {
+                    if atoms.iter().any(|atom| removed_atoms.contains(atom)) {
                         return Err(Contradiction);
                     }
                 }
@@ -721,12 +781,12 @@ mod tests {
     #[case::add_remove(
         BondDelta::Add {
             id: BondId(0),
-            endpoints: [AtomId(0), AtomId(1)],
+            atoms: [AtomId(0), AtomId(1)],
             ast: BondAst::default(),
         },
         BondDelta::Remove {
             id: BondId(0),
-            endpoints: [AtomId(0), AtomId(1)],
+            atoms: [AtomId(0), AtomId(1)],
             ast: BondAst::default(),
         }
     )]
@@ -781,12 +841,12 @@ mod tests {
     #[case::bond(
         Delta::Bond(BondDelta::Add {
             id: BondId(0),
-            endpoints: [AtomId(0), AtomId(1)],
+            atoms: [AtomId(0), AtomId(1)],
             ast: BondAst::default(),
         }),
         Delta::Bond(BondDelta::Remove {
             id: BondId(0),
-            endpoints: [AtomId(0), AtomId(1)],
+            atoms: [AtomId(0), AtomId(1)],
             ast: BondAst::default(),
         })
     )]
@@ -930,7 +990,7 @@ mod tests {
             }),
             Delta::Bond(BondDelta::Add {
                 id: BondId(0),
-                endpoints: [AtomId(0), AtomId(1)],
+                atoms: [AtomId(0), AtomId(1)],
                 ast: BondAst::default(),
             }),
         ]);

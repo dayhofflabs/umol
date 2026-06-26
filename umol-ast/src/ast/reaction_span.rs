@@ -16,7 +16,7 @@ use umol_graph_core::{EdgeId, Graph};
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::delta::{
-    apply_atom_change, apply_bond_change, remap_delta, AtomDelta, BondDelta, Delta, Deltas,
+    apply_atom_change, apply_bond_change, diff, remap_delta, AtomDelta, BondDelta, Delta, Deltas,
 };
 use super::error::Contradiction;
 use super::id::{AtomId, BondId};
@@ -94,6 +94,53 @@ impl ReactionSpanAst {
         self.project(|atom| atom.right(), |bond| bond.right())
     }
 
+    /// Recover the operational `ReactionAst` from the span — the inverse of
+    /// `ReactionAst::to_reaction_span`, up to delta normal form. `lhs = left()` (which preserves
+    /// the original lhs frame); each element's `Change` tag yields its delta, a `Modified` element
+    /// via an AST-diff of its left/right values.
+    pub fn to_reaction(&self) -> ReactionAst {
+        let mut deltas: Vec<Delta> = Vec::new();
+        for (node, change) in self.atoms.iter().enumerate() {
+            let id = AtomId(node as u32);
+            match change {
+                Change::Unchanged(_) => {}
+                Change::Added(ast) => {
+                    deltas.push(Delta::Atom(AtomDelta::Add { id, ast: ast.clone() }));
+                }
+                Change::Removed(ast) => {
+                    deltas.push(Delta::Atom(AtomDelta::Remove { id, ast: ast.clone() }));
+                }
+                Change::Modified { left, right } => {
+                    deltas.extend(diff::<AtomDelta>(id, left, right).into_iter().map(Delta::Atom));
+                }
+            }
+        }
+        for (edge, change) in self.bonds.iter().enumerate() {
+            let id = BondId(edge as u32);
+            let bond_atoms = || {
+                let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
+                [AtomId::from(a), AtomId::from(b)]
+            };
+            match change {
+                Change::Unchanged(_) => {}
+                Change::Added(ast) => deltas.push(Delta::Bond(BondDelta::Add {
+                    id,
+                    atoms: bond_atoms(),
+                    ast: ast.clone(),
+                })),
+                Change::Removed(ast) => deltas.push(Delta::Bond(BondDelta::Remove {
+                    id,
+                    atoms: bond_atoms(),
+                    ast: ast.clone(),
+                })),
+                Change::Modified { left, right } => {
+                    deltas.extend(diff::<BondDelta>(id, left, right).into_iter().map(Delta::Bond));
+                }
+            }
+        }
+        ReactionAst::new(self.left(), Deltas::from_iter(deltas))
+    }
+
     /// Project one side to a `MoleculeAst`. `atom_side` / `bond_side` pick the left or right
     /// value of each element; absent elements are dropped and the survivors are renumbered.
     fn project(
@@ -158,8 +205,8 @@ impl ReactionAst {
                     BondDelta::Remove { id, ast, .. } => {
                         removed_bonds.insert(*id, ast.clone());
                     }
-                    BondDelta::Add { id, endpoints, ast } => {
-                        added_bonds.insert(*id, (*endpoints, ast.clone()));
+                    BondDelta::Add { id, atoms, ast } => {
+                        added_bonds.insert(*id, (*atoms, ast.clone()));
                     }
                     BondDelta::SetField { id, .. } | BondDelta::SetConstraint { id, .. } => {
                         bond_changes.entry(*id).or_default().push(bond.clone());
@@ -219,10 +266,10 @@ impl ReactionAst {
                 bonds.push(Change::Unchanged(lhs.bond(id).ast.clone()));
             }
         }
-        for (endpoints, ast) in added_bonds.into_values() {
+        for (atoms, ast) in added_bonds.into_values() {
             edges.push([
-                atom_index[&endpoints[0]] as u32,
-                atom_index[&endpoints[1]] as u32,
+                atom_index[&atoms[0]] as u32,
+                atom_index[&atoms[1]] as u32,
             ]);
             bonds.push(Change::Added(ast));
         }
@@ -449,7 +496,7 @@ mod tests {
                 }),
                 Delta::Bond(BondDelta::Remove {
                     id: BondId(0),
-                    endpoints: [AtomId(0), AtomId(1)],
+                    atoms: [AtomId(0), AtomId(1)],
                     ast: BondAst::from_order(1),
                 }),
                 Delta::Atom(AtomDelta::Add {
@@ -458,7 +505,7 @@ mod tests {
                 }),
                 Delta::Bond(BondDelta::Add {
                     id: BondId(1),
-                    endpoints: [AtomId(0), AtomId(2)],
+                    atoms: [AtomId(0), AtomId(2)],
                     ast: BondAst::from_order(1),
                 }),
             ]),
@@ -508,7 +555,7 @@ mod tests {
                 }),
                 Delta::Bond(BondDelta::Remove {
                     id: BondId(0),
-                    endpoints: [AtomId(0), AtomId(1)],
+                    atoms: [AtomId(0), AtomId(1)],
                     ast: BondAst::from_order(1),
                 }),
                 Delta::Atom(AtomDelta::Add {
@@ -517,7 +564,7 @@ mod tests {
                 }),
                 Delta::Bond(BondDelta::Add {
                     id: BondId(1),
-                    endpoints: [AtomId(0), AtomId(2)],
+                    atoms: [AtomId(0), AtomId(2)],
                     ast: BondAst::from_order(1),
                 }),
             ]),

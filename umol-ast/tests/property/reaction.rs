@@ -92,7 +92,7 @@ fn build_reaction(
         let [x, y] = lhs.raw_graph().edge_endpoints(EdgeId(id.0));
         deltas.push(Delta::Bond(BondDelta::Remove {
             id,
-            endpoints: [AtomId::from(x), AtomId::from(y)],
+            atoms: [AtomId::from(x), AtomId::from(y)],
             ast: lhs.bond(id).ast.clone(),
         }));
     }
@@ -139,7 +139,7 @@ fn build_reaction(
         if let Some(anchor) = anchor {
             deltas.push(Delta::Bond(BondDelta::Add {
                 id: BondId((bond_count + offset) as u32),
-                endpoints: [anchor, atom],
+                atoms: [anchor, atom],
                 ast: BondAst::from_order(1),
             }));
         }

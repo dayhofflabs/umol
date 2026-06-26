@@ -1,9 +1,17 @@
 # 131 — Reaction application: prior-art review and design
 
-Designing the end-user API for applying `ReactionAst` rules to molecules. The DPO
-primitive (`MoleculeAst::apply_rule`) and the matcher (`substructure_matches`) exist
-but are disconnected and uncalled (see doc 127). This doc records a review of how
-existing codes do it, the resulting design decisions, and open directions.
+Designing the end-user API for applying `ReactionAst` rules to molecules. At the time of this
+review the DPO primitive (`MoleculeAst::apply_rule`, since removed) and the matcher
+(`substructure_matches`) existed but were disconnected and uncalled (see doc 127). This doc
+records a review of how existing codes do it, the resulting design decisions, and open directions.
+
+> **Status (post-increment-1).** The design below is implemented for **localized topology**
+> (atoms + localized bonds + constraints): `ReactionAst`, `ReactionSpanAst` / `to_reaction_span`,
+> `reverse`, `apply` / `apply_at`, and `compose` exist and are tested (plan and exact APIs in
+> doc 132, W1–W4 done). The interim doc-127 `MoleculeAst::apply_rule` and the lhs/rhs+map
+> `ReactionAst` are **removed**. Names and design choices below have been reconciled to the
+> implementation; outstanding work (overlays, stereo, equality saturation, import/export) is
+> catalogued in §"Implementation status and outstanding work" near the end.
 
 Reaction is intrinsically multi-molecular: molecularity and product count are both
 variable, and one rule application yields several reactions (one per match).
@@ -98,7 +106,7 @@ is a separate lightweight path, not the DPO engine.
    - changes are the deltas (explicit);
    - atom map = the `lhs` id space carried through the deltas (`Add` = created with a fresh
      id, `Remove` = deleted), so K = surviving `lhs` atoms;
-   - R-side = `lhs` with the deltas applied; CGR = `to_condensed()` (`lhs` superimposed with
+   - R-side = `lhs` with the deltas applied; CGR = `to_reaction_span()` (`lhs` superimposed with
      each delta's `(left, right)` labels; molintern grounds the CGR view).
 
    Why this rather than a *stored* symmetric combined graph (the earlier A+B hybrid):
@@ -167,9 +175,8 @@ is a separate lightweight path, not the DPO engine.
    step *before* it (CDK op-codes / MØD composition) and the combination/enumeration
    layer *above* it (RDKit index space, LillyMol odometer, MØD builder). Atom map is
    re-derived from the match, never stored on the product. APIs depend on this
-   contract so the generic core (today's `apply_rule` + matcher + a
-   `MoleculeEmbedding→match` bridge) can be replaced by an op-program or composition
-   engine later.
+   contract so the generic core (`apply_at` + matcher, taking a `MoleculeEmbedding` match) can
+   be replaced by an op-program or composition engine later.
 3. **iii is two layers over one core**: a combinatorial-library odometer (fixed roles,
    reagent lists, streamed, pre-searched reagents) and a network builder
    (open educt combinations, canonical-form dedup, repeat-to-fixpoint).
@@ -272,7 +279,7 @@ Consequences for the type:
   identity) but **non-minimal** — it keeps the cancelling pair and would need a simplify
   pass. Reconciliation: the condensed view is the same derived projection we
   need for the CGR and R-side, so **compose on the derived view** (project `lhs+edits` →
-  `CondensedReactionAst` → MØD-style overlap+case-analysis → project the minimal result
+  `ReactionSpanAst` → MØD-style overlap+case-analysis → project the minimal result
   back to `lhs+edits`). `(lhs, edits)` stays the *store* (it wins on apply / uniformity /
   full molecules / homoiconicity, and apply ≫ compose for network building); the condensed
   form is the *working form* for compose and CGR. If a workflow ever became
@@ -286,7 +293,7 @@ the store; everything else (compose, CGR, SMIRKS, `(L,K,R)`/GML) flows through o
 derivation hub plus its inverse.
 
 **The hub derivation.**
-- `to_condensed(&self) -> CondensedReactionAst` — replay `edits` on `lhs` to the
+- `to_reaction_span(&self) -> ReactionSpanAst` — replay `edits` on `lhs` to the
   **condensed reaction AST**, the superimposed union graph carrying a paired
   `(left, right)` value per element (from each edit's `old`/`new`) over the atom map (the
   K interface). This is a generalized, attributed CGR (= MØD's `CombinedRule`): the
@@ -298,14 +305,14 @@ derivation hub plus its inverse.
   is not assumed). Linear in `edits`. Convenience reads: `right() -> MoleculeAst`,
   `membership()`, `atom_map()`. Every item below except apply reads from this.
 - It is the **symmetric pivot**: `ReactionAst` is `lhs`-anchored, but the condensed form is
-  side-neutral, so `reverse()` routes through it (`to_condensed()` → swap `left`/`right` →
+  side-neutral, so `reverse()` routes through it (`to_reaction_span()` → swap `left`/`right` →
   project back to the rhs-anchored `ReactionAst`). The round-trip
-  `(lhs, edits) ↔ CondensedReactionAst ↔ (rhs, reverse_edits)` is lossless on the **net
+  `(lhs, edits) ↔ ReactionSpanAst ↔ (rhs, reverse_edits)` is lossless on the **net
   transformation** (map and all values survive exactly); it canonicalizes the delta, so it
   is identity only up to edit-list normalization, not byte-identity on a hand-built
   journal.
 
-**Apply (common case) — native on the store, does *not* need `combined()`.**
+**Apply (common case) — native on the store, does *not* need `to_reaction_span()`.**
 - `apply(&self, host, match) -> MoleculeAst` = remap `edits` onto the match, `transact`;
   match enumeration via subiso (`lhs` → host). [decision 2]
 
@@ -321,29 +328,29 @@ derivation hub plus its inverse.
 
 **Export — NOT core methods; boundary types that *read* the core derivation.** Exactly as
 `MoleculeAst` does not serialize SMILES/CTfile (that is `umol-io` + the DSL boundary
-types), the reaction core exposes `to_condensed()` / `right()` / membership / atom-map and
+types), the reaction core exposes `to_reaction_span()` / `right()` / membership / atom-map and
 the boundary layer renders from them:
 - SMIRKS and GML (MØD-style `(L,K,R)`) → `umol-io` boundary types (external formats, like
-  SMILES/CTfile), reading `to_condensed()`.
-- CGR: `CondensedReactionAst` *is* the in-memory CGR (generalized); CGR *file* forms
+  SMILES/CTfile), reading `to_reaction_span()`.
+- CGR: `ReactionSpanAst` *is* the in-memory CGR (generalized); CGR *file* forms
   (CGR-SMILES, graphml, etc.) are `umol-io` boundary types serializing it.
 - EDN `ReactionDsl` `FromEdn`/`ToEdn` → the `umol-ast` DSL boundary, like `MoleculeDsl`.
 
-So the **core** primitive set is just: the hub `to_condensed()` (+ reads `right()`,
+So the **core** primitive set is just: the hub `to_reaction_span()` (+ reads `right()`,
 `membership()`, `atom_map()`), the diff constructor (import substrate), `apply`, and
 `compose`. Everything format-facing is a boundary type reading the hub. Apply dominates
 and stays native on `(lhs, edits)`, so only the rarer operations pay the (cheap)
-projection; and because `CondensedReactionAst` is the MØD `CombinedRule`, the `(L,K,R)`
+projection; and because `ReactionSpanAst` is the MØD `CombinedRule`, the `(L,K,R)`
 boundary type is nearly free and shares the hub with composition.
 
-(`to_condensed`/`CondensedReactionAst` are settled; the remaining operation names above are
+(`to_reaction_span`/`ReactionSpanAst` are settled; the remaining operation names above are
 *descriptive placeholders* — final names TBD.)
 
-### CGR — it *is* `CondensedReactionAst`
+### CGR — it *is* `ReactionSpanAst`
 
 A CGR is the union graph with `(from→to)` labels per element over a shared atom map. That
-is exactly `CondensedReactionAst`, so the CGR is not a separate type — it is the hub object
-(`to_condensed()`), and CGR *files* are `umol-io` serializations of it.
+is exactly `ReactionSpanAst`, so the CGR is not a separate type — it is the hub object
+(`to_reaction_span()`), and CGR *files* are `umol-io` serializations of it.
 `molintern/cgr_graph.py` builds the classic form from mapped reaction SMILES (nodes over
 shared map indices with `from_charge/to_charge`; edges with `from_order/to_order`, order
 `0` = bond absent on that side; `reduce` → the reaction center). Bond create/break is
@@ -372,7 +379,7 @@ implement `Lattice`. `Lattice` lives on the *typed per-entity* containers
 with the flat `Constraints`: wrap `Vec<Delta>` in a `Deltas` newtype that impls
 `Canonicalize`; `ReactionAst::canonicalize` composes lhs's + deltas' canonical forms; lazy
 equivalence (canonicalize-on-compare) is inherited — no bespoke reaction-equality code.
-The compose "non-minimal cancelling pair" residue *is* `Edits::canonicalize`, not a
+The compose "non-minimal cancelling pair" residue *is* `Deltas::canonicalize`, not a
 separate simplify pass.
 
 **`Lattice` does not apply.** Edit lists form a non-commutative **monoid** under
@@ -391,8 +398,8 @@ the `Deltas` monoid op nor a lattice.)
 
 - **`Deltas::canonicalize`** (lhs-free, monoid normal form): the reduction system below.
 - **lhs-relative minimization** (drop a delta whose `new` already equals lhs's value; spot
-  an `Add` duplicating an lhs element) needs lhs → lives in `to_condensed`/`compose` on
-  `ReactionAst`. `to_condensed` is the lhs-relative canonicalizer; bare
+  an `Add` duplicating an lhs element) needs lhs → lives in `to_reaction_span`/`compose` on
+  `ReactionAst`. `to_reaction_span` is the lhs-relative canonicalizer; bare
   `Deltas::canonicalize` is the lhs-free one. The signature *enforces* keeping `Deltas`
   self-contained.
 
@@ -752,9 +759,10 @@ right lift target; neither raw SMARTS nor a fully-ground graph can hold both.
 
 ## Algorithm decisions and open points (inputs to the impl plan)
 
-Two-increment structure: **increment 1** = σ-topology (atoms + bonds + atom/bond attribute
+Two-increment structure: **increment 1** = localized topology (atoms + bonds + atom/bond attribute
 deltas; molecules keep overlays in `lhs`, unchanged) covering `apply` + **minimal
-`compose`** + the primitives; **increment 2** = overlays + stereo + overlay composition.
+`compose`** + the primitives — **done** (doc 132, W1–W4); **increment 2** = overlays + stereo +
+overlay composition — **outstanding** (see §"Implementation status and outstanding work").
 
 ### Settled
 
@@ -773,7 +781,7 @@ deltas; molecules keep overlays in `lhs`, unchanged) covering `apply` + **minima
   excision-style rules, not a prerequisite. Note: reaction-SMARTS messiness (implicit H,
   valence, unmapped atoms, aromaticity) is *upstream* in the SMARTS→rule lift (umol-io
   boundary), orthogonal to the pushout policy — neither DPO nor SqPO addresses it.
-- **Canonical labeling (#6) — settled for σ-topology.** `canonical_form` = **nauty** (a
+- **Canonical labeling (#6) — settled for localized topology.** `canonical_form` = **nauty** (a
   dependency) on the **incidence graph already built for subiso** (the edge-color→
   vertex-color reduction: atom-nodes and bond-nodes in separate color classes, sub-colored
   by label; nauty's canonical labels pull back to the molecular graph). The only new
@@ -793,13 +801,14 @@ deltas; molecules keep overlays in `lhs`, unchanged) covering `apply` + **minima
   canonical labeling (#6), not by a separate scheme. The per-frame delta normal form (#2)
   needs no canonical created-ids; #6 handles equality/dedup across frames.
 
-### Open — gate the increment-1 plan
+### Done in increment 1
 
-- **#4 Overlap enumeration** (minimal compose) — extend MCS (McGregor) to **all common
-  subgraphs** (which overlaps; disconnected allowed; size range) + the **admissibility
-  filter** (pushout-complement existence under DPO). (Behr–Sobociński.)
-- **#5 σ-topology composite construction** — per-element case analysis over the condensed
-  view → minimal `(lhs, deltas)`. "Implement the papers," construction to be written out.
+- **#4 Overlap enumeration** — done: graph-core `enumerate_common_subgraphs` (Bron–Kerbosch over
+  the modular product) yields every maximal common induced subgraph; the admissibility filter
+  (pushout-complement / boundary bonds + combined-frame dangling) lives in `compose`.
+  (Behr–Sobociński.)
+- **#5 localized topology composite construction** — done: the four-class composite frame algebra
+  + per-element fold + `canonicalize`, doc 132 §W3.
 
 ### Open — increment 2 (design-then-plan, not blocking the first plan)
 
@@ -809,6 +818,113 @@ deltas; molecules keep overlays in `lhs`, unchanged) covering `apply` + **minima
   ligand (H / lone-pair) frames; coset action via umol-perm.
 - **#9 Saturation for iv** — congruence key (= #6), fixpoint detection, cost/extraction
   function + rule set (domain choices).
+
+## Implementation status and outstanding work
+
+Increment 1 (localized topology) is implemented and tested; doc 132 (W1–W4) is the plan and the
+exact APIs. This section reconciles names/choices with the code and catalogues what remains —
+**analysis against the current localized-only code, not an implementation plan.**
+
+**Names/choices that supersede the sketches above.**
+
+- The hub type is **`ReactionSpanAst`** (this doc's `ReactionSpanAst`, formerly "Condensed…"):
+  `graph` + `Vec<Change<AtomAst>>` / `Vec<Change<BondAst>>`, `Change = Unchanged | Modified{left,
+  right} | Added | Removed`, with `left()` / `right()` projections. It is named for the DPO span —
+  relative to `ReactionAst` it is an *expansion*, not a condensation — but it is the same object
+  this doc calls the CGR / condensed form / `CombinedRule`.
+- **Construction is value-accumulation, not edit-replay.** `to_reaction_span` folds the deltas
+  onto `lhs`'s values (reusing the `canonicalize` fold + `apply_atom_change` / `apply_bond_change`)
+  and tags each element — it does **not** replay through `transact` as §"Primitive operations"
+  sketches. `transact` is reserved for apply-to-host. `reverse` and `compose` share
+  `delta::remap_delta` for frame re-anchoring.
+- **Apply is two methods:** `apply_at(&self, m: &MoleculeEmbedding) -> Result<MoleculeAst,
+  ApplyError>` (lower match-remapped deltas → `Vec<Edit>` → `transact`, with the DPO dangling
+  check) and `apply(&self, host, subiso) -> impl Iterator` (enumerate matches via
+  `substructure_matches`, then `apply_at`). `compose -> Vec<ReactionAst>`.
+- The `Delta` sum is `{ Atom(AtomDelta), Bond(BondDelta), Constraint(ConstraintDelta) }`; the fold
+  is generic over a `DeltaFamily` trait + `field_ops!` macro, deliberately built so the overlay
+  families plug in unchanged.
+
+### 1. Overlays in `apply` — highest priority (blocks aromaticity & stereo reactions)
+
+`apply_at` handles `AtomDelta` / `BondDelta` only (molecule-level `ConstraintDelta` is skipped).
+**No reaction can change an aromatic system, a dative / multicenter / noncovalent bond, or a
+stereocenter** — most of organic chemistry is unrepresentable. Mostly mechanical, because:
+
+- the `transact` `Edit` vocabulary **already has** every overlay op (`AddAromaticSystem` / `Remove…`
+  / `SetAromaticSystemField`, dative, multicenter, noncovalent, `AddStereoAtom` / …) and `transact`
+  applies them — apply's lowering only needs to emit them;
+- `MoleculeEmbedding` **already carries** the overlay host-id maps (`host_aromatic_system`,
+  `host_dative_bond`, …), populated by `substructure_matches`' `verify_overlays` — remapping
+  overlay deltas onto a match is ready.
+
+Missing:
+- the six overlay `Delta` families (`AromaticSystemDelta`, `DativeBondDelta`,
+  `MulticenterBondDelta`, `NoncovalentBondDelta`, `StereoAtomDelta`, `StereoBondDelta`), each
+  `{Add, Remove, SetField, SetConstraint}` over a stable per-family id with the **atom-set as
+  structural payload** (the identity scheme already chosen for `BondDelta`); they `impl
+  DeltaFamily` (the macro + fold generalize) and extend the `Delta` sum;
+- `apply_at` lowering arms mapping each overlay delta → its existing overlay `Edit`;
+- the DPO dangling check extended to overlay incidence (deleting an atom must account for its
+  overlay participations, not only its localized `bond_ids()`);
+- **stereo is the genuinely novel part** (§"Core rule form", stereo paragraph): a pattern rule
+  cannot carry a concrete `SetStereoAtomField::Configuration{old,new}` (it doesn't know the matched
+  coset), so stereo needs the **relative** ops `PermuteStereoAtom{perm}` / `MirrorStereoAtom` /
+  `SwapStereoAtom` that *lower at apply* to `Configuration{matched, perm·matched}` via the
+  umol-perm coset algebra. None of this exists; it is the hardest sub-task.
+
+### 2. Overlays in `ReactionSpanAst` / `to_reaction_span` — critical
+
+The span stores only localized `Change<AtomAst>` / `Change<BondAst>`, and `right()` / `left()`
+rebuild via `from_atoms_and_bonds`, so **any overlay in `lhs` is silently dropped** — `right()` is
+correct only for an overlay-free `lhs` (the "carried-through overlays" requirement is unmet once
+overlays exist). Need: `Change`-tagged overlay relation-sets mirroring `MoleculeAst`'s storage
+(`FixedVarBirelationSet` / `VarRelationSet`); `to_reaction_span` folding overlay deltas onto `lhs`'s
+overlay sets (an `apply_*_change` per family); and `left()` / `right()` rebuilding a full molecule
+via `from_parts` (carrying unchanged overlays through).
+
+### 3. Overlays + stereo in `compose` — critical
+
+`compose` overlaps on the localized `raw_graph()` and remaps `AtomDelta` / `BondDelta` only.
+
+- **Overlay-only connectivity** (a 3c-2e bond or an H-bond that is the sole link between fragments)
+  is invisible to a localized-graph overlap; per this doc the overlap should run on the **incidence
+  (Levi) graph** — `substructure_matches_incidence` already exists on the apply side; compose needs
+  common-subgraph enumeration over the incidence graph.
+- the four-class frame algebra extends to each overlay family's relation ids; boundary-bond and
+  combined-frame-dangling admissibility extend to overlay incidence.
+- **stereo under composition** (#8): reindexing in the composite changes a stereocenter's
+  atom-index frame; `TransformFrameStereoAtom/Bond` (the coset counterpart of `IdRemapping`) keeps
+  unchanged configurations correct via the umol-perm coset action. Not built; associativity is then
+  inherited (the argument in §"Core rule form").
+
+### 4. Equality saturation (iv) and the reaction network (iii-b)
+
+Nothing built. graph-core has the congruence key (`canonical_key`, localized) — the one
+graph-specific piece (§"Sketch: the saturation primitive"). Outstanding: the generic `saturate` /
+`DerivationGraph` deduplicating fixpoint over a `RewriteSystem` trait (`key` via `canonical_key`,
+`derive` via DPO + rules), co-located in graph-core; `umol-graph` supplying the chemistry `derive`
+(iv rule catalog; iii-b multi-educt binding) and cost/extraction; the pluggable-key strength axis
+(fixed-atom term-native hash vs nauty). Depends on overlay-aware `canonical_key` (#6, increment 2)
+to dedup overlay-bearing molecules.
+
+### 5. Smaller gaps
+
+- **Molecule-level constraint deltas** are dropped by both `to_reaction_span` and `apply` today.
+  Need: the span to carry left/right molecule `Constraints`; `apply` to lower `ConstraintDelta` →
+  `Push` / `PopMoleculeConstraint` (stack-discipline caveat — arbitrary-position removal is outside
+  the `Edit` grammar, needs `constraints_mut().remove_at`).
+- **`ReactionSpanAst → ReactionAst` (the inverse projection)** — promoted to an active workstream,
+  **doc 132 §W5**. The blocker is `span → deltas`: a `Modified{left, right}` element needs an
+  **AST-diff** (the inverse of `apply_*_change`) to recover its `SetField` / `SetConstraint`
+  deltas; membership → `Add` / `Remove` is trivial. Today only `left()` / `right()` exist and
+  `reverse()` bypasses the span by inverting deltas directly. A general AST-diff also subsumes the
+  SMIRKS/GML `from_lhs_rhs_map` constructor.
+- **Reaction equality up to renumbering** (iso-dedup): `canonical_key` on the condensed incidence
+  graph — a `umol-graph` concern (the AST stays value-level / fixed-frame). Not built.
+- **Import / export boundary types** — SMIRKS / GML in, CGR / MOD / SMIRKS-file out, and
+  `ReactionDsl` (EDN) — all `umol-io` / DSL boundary types reading the hub; none built. The lift
+  design is §"SMARTS/SMIRKS → `ReactionAst`".
 
 ## References
 

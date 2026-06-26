@@ -102,7 +102,7 @@ mod tests {
                 }),
                 Delta::Bond(BondDelta::Remove {
                     id: BondId(1),
-                    endpoints: [AtomId(1), AtomId(2)],
+                    atoms: [AtomId(1), AtomId(2)],
                     ast: bond,
                 }),
             ]),

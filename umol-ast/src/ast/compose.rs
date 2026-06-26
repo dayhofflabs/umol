@@ -485,7 +485,7 @@ mod tests {
                 }),
                 Delta::Bond(BondDelta::Add {
                     id: BondId(0),
-                    endpoints: [AtomId(0), AtomId(1)],
+                    atoms: [AtomId(0), AtomId(1)],
                     ast: BondAst::from_order(1),
                 }),
             ]),
@@ -502,7 +502,7 @@ mod tests {
                     }),
                     Delta::Bond(BondDelta::Add {
                         id: BondId(0),
-                        endpoints: [AtomId(0), AtomId(1)],
+                        atoms: [AtomId(0), AtomId(1)],
                         ast: BondAst::from_order(2),
                     }),
                 ]),
@@ -524,7 +524,7 @@ mod tests {
                 }),
                 Delta::Bond(BondDelta::Add {
                     id: BondId(0),
-                    endpoints: [AtomId(0), AtomId(1)],
+                    atoms: [AtomId(0), AtomId(1)],
                     ast: BondAst::from_order(1),
                 }),
             ]),
