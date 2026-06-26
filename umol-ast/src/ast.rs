@@ -21,6 +21,7 @@ pub(crate) mod multicenter;
 pub(crate) mod noncovalent;
 pub(crate) mod operators;
 pub(crate) mod reaction;
+pub(crate) mod reaction_span;
 pub(crate) mod remap;
 pub(crate) mod ring;
 pub(crate) mod spin;
@@ -65,7 +66,7 @@ pub use edit::{
 pub use electrons::ElectronCountsAst;
 pub use embedding::MoleculeEmbedding;
 pub use entity::{Entity, EntityKind};
-pub use error::{Contradiction, RewriteError};
+pub use error::Contradiction;
 pub use id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId, StereoLigandId,
@@ -78,7 +79,8 @@ pub use molecule::{MoleculeAst, MoleculeBuilder};
 pub use multicenter::MulticenterBondAst;
 pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 pub use operators::{MemOp, RelOp};
-pub use reaction::{Assignment, ReactionAst, StereoAtomCorrespondence, StereoBondCorrespondence};
+pub use reaction::ReactionAst;
+pub use reaction_span::{Change, ReactionSpanAst};
 pub use remap::{IdRemapping, UndoRemapping};
 pub use ring::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;

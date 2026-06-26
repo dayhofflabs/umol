@@ -114,17 +114,35 @@ replaced in W4.
    `Err(Contradiction)` on the doc-131 conditions. Confluence checked by an idempotence
    proptest. (Flat-vs-split container is the one deferred data-structure decision — a
    non-breaking later refactor since both shapes assemble over the same per-family enums.)
-3. **`ReactionAst { lhs: MoleculeAst, deltas: Deltas }`** (`reaction.rs`). `impl Canonicalize`
-   composing `lhs`' and `deltas`' canonical forms; lazy `equiv`. Equality here is
-   **value-level in a fixed atom frame** (`lhs` + delta canonical forms); equality *up to
-   atom renumbering* (reaction iso-dedup) is a separate `umol-graph` operation via
-   `canonical_form` on the condensed graph — `umol-ast` cannot reach the full incidence, so
-   it does not attempt iso-canonicalization (forced by layering). `reverse()` (map `inverse`
-   over deltas, re-anchor on the rhs). Migrate `ast/molecule/rewrite.rs` to this type.
-4. **`CondensedReactionAst`** + **`to_condensed()`** (`condensed.rs`). Replay `deltas` on
-   `lhs` → the superimposed union graph with per-element `(left,right)` values + atom map
-   (= the generalized CGR). Membership derived from each pair. Convenience: `right()`,
-   `membership()`, `atom_map()`.
+3. **`ReactionAst { lhs: MoleculeAst, deltas: Deltas }` — done** (`reaction.rs`). The type +
+   `impl Canonicalize`. `canonicalize` reduces `deltas` (the #2 reduction) and **passes `lhs`
+   through**: `MoleculeAst` has structural `PartialEq`/`Eq` (cache-excluded) but no whole-molecule
+   `Canonicalize`, so there is no canonical form to compose — `ReactionAst` derives `PartialEq`
+   and reduces only the deltas. Equality here is **value-level in a fixed atom frame** (`lhs` +
+   delta canonical forms); equality *up to atom renumbering* (reaction iso-dedup) is a separate
+   `umol-graph` operation via `canonical_form` on the condensed graph — `umol-ast` cannot reach
+   the full incidence, so it does not attempt iso-canonicalization (forced by layering).
+   `right()`/`left()` are projections of the span (item 4, value-accumulation — no lowering);
+   `reverse()` builds from the span by swapping sides; only `apply` onto a host (items 5–6) needs
+   the delta→`Edit` lowering + the `transact` engine. The interim
+   doc-127 `ReactionAst`/`Assignment`/`Stereo{Atom,Bond}Correspondence`, `RewriteError`, and
+   `ast/molecule/rewrite.rs::apply_rule` (no production callers, superseded by item 5 `apply`) are
+   **removed**. `umol-graph/fingerprint/reaction.rs` is left red until it migrates to `right()`
+   (W4).
+4. **`ReactionSpanAst` + `to_reaction_span()` — done** (`reaction_span.rs`). The materialized
+   superimposed `L ∪_K R` graph (the DPO rule span; deliberately **not** "condensed" — it is an
+   *expansion* of, not a condensation of, the operational `ReactionAst`). A graph-core `Graph`
+   over the `lhs` frame (deleted elements kept as nodes/edges, created elements appended) +
+   parallel `Vec<Change<AtomAst>>` / `Vec<Change<BondAst>>`, where `Change = Unchanged | Modified
+   { left, right } | Added | Removed` carries DPO membership + the per-side value(s). Built by
+   **value-accumulation**: canonicalize the deltas, annotate each `lhs` element, and compute a
+   `Modified` element's right value by applying its field/constraint changes at the value level
+   (reusing the canonicalize fold's apply via `pub(crate)` `apply_atom_change` / `apply_bond_change`
+   in `delta.rs`) — **no RHS materialized, no `transact`, no back-map**. `left()` / `right()`
+   project a side back to a `MoleculeAst` (survivors renumbered); the DPO span `L ←K─ R` is the
+   tag partition. **Scope:** localized topology only — molecule-level constraints and overlays are
+   not represented here (carried by the operational form). **No exporters** (CGR / MOD): those are
+   `umol-io` boundary types via `FromAst`, out of scope; GML in/out is out of scope.
 5. **`apply_at(&self, host, match) -> Result<MoleculeAst, ApplyError>`**: remap `deltas` onto
    `match` (K ids → host ids, created → `New`) → a `Vec<Edit>` → existing `transact`. DPO
    **dangling check** before transacting (reject if a deleted host atom carries unmatched
@@ -134,7 +152,7 @@ replaced in W4.
    meet) over a `Graph` view of each (reuse `ast/embedding.rs`), `× apply_at`. Lazy.
 
 Tests: `Deltas::canonicalize` table cases (each fuse/cancel/contradiction row from doc 131) +
-idempotence (`canonicalize∘canonicalize == canonicalize`) via proptest; `to_condensed` /
+idempotence (`canonicalize∘canonicalize == canonicalize`) via proptest; `to_reaction_span` /
 `reverse` round-trip; `apply` on concrete localized-only reactions (bond make, bond break,
 order change, atom add/remove) asserting the exact product `MoleculeAst`; dangling rejection.
 
@@ -142,7 +160,7 @@ order change, atom add/remove) asserting the exact product `MoleculeAst`; dangli
 
 `ReactionAst::compose(&self, other) -> impl Iterator<ReactionAst>` (`compose.rs`):
 
-1. `R_A = self.to_condensed().right()`; `L_B = other.lhs`.
+1. `R_A = self.to_reaction_span().right()`; `L_B = other.lhs`.
 2. Enumerate overlaps via the W1 all-maximal-common-subgraph primitive on `(R_A, L_B)`,
    compatibility = lattice meet.
 3. **RC-anchored filter** (default): keep overlaps that touch `self`'s reaction center (the

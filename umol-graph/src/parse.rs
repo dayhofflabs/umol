@@ -1,8 +1,6 @@
 //! Format parsing into a resolved [`MoleculeAst`] — parse + raise + resolve.
 //!
-//! These wrappers combine the io parse layer with the `ops` resolver. Per doc 065 a
-//! cross-module combiner returns `Box<dyn UmolError>`: a parse `ParseError`, a
-//! `ResolverContradiction`, or `ResolveUnderdetermined`, each boxed at this boundary.
+//! These wrappers combine the io parse layer with the `ops` resolver.
 
 use umol_ast::ast::{MoleculeAst, TryIntoAst};
 use umol_io::ctfile::config::CtfileIoConfig;

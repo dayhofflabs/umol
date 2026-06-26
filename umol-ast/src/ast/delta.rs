@@ -493,6 +493,34 @@ impl DeltaFamily for BondDelta {
     }
 }
 
+/// Apply a resolved per-entity change to a value AST, reusing the `DeltaFamily` apply that
+/// `canonicalize` uses. `SetField` / `SetConstraint` mutate the ast; `Add` / `Remove` are
+/// no-ops (they carry a whole ast, not a change). Materializes the right-hand value of a
+/// preserved entity for a `ReactionSpanAst`.
+pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<(), Contradiction> {
+    match delta {
+        AtomDelta::SetField { change, .. } => {
+            <AtomDelta as DeltaFamily>::apply_field(ast, change.clone())
+        }
+        AtomDelta::SetConstraint { old, new, .. } => {
+            <AtomDelta as DeltaFamily>::apply_constraint(ast, old.clone(), new.clone())
+        }
+        AtomDelta::Add { .. } | AtomDelta::Remove { .. } => Ok(()),
+    }
+}
+
+pub(crate) fn apply_bond_change(ast: &mut BondAst, delta: &BondDelta) -> Result<(), Contradiction> {
+    match delta {
+        BondDelta::SetField { change, .. } => {
+            <BondDelta as DeltaFamily>::apply_field(ast, change.clone())
+        }
+        BondDelta::SetConstraint { old, new, .. } => {
+            <BondDelta as DeltaFamily>::apply_constraint(ast, old.clone(), new.clone())
+        }
+        BondDelta::Add { .. } | BondDelta::Remove { .. } => Ok(()),
+    }
+}
+
 /// The resolved-delta collection.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Deltas(Vec<Delta>);
