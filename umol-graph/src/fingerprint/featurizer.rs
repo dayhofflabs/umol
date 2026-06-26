@@ -19,11 +19,11 @@ pub enum Featurizer {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FingerprintError {
     NotGround,
+    Inconsistent,
 }
 
 impl Featurizer {
-    /// Featurize `mol`, yielding an unfolded [`FeatureSet`]. The molecule must be
-    /// ground — the precondition shared by every featurizer, checked once here.
+    /// Featurize `mol`, yielding an unfolded [`FeatureSet`].
     pub fn featurize(&self, mol: &MoleculeAst) -> Result<FeatureSet<u64>, FingerprintError> {
         if !mol.is_ground() {
             return Err(FingerprintError::NotGround);
@@ -35,7 +35,7 @@ impl Featurizer {
         })
     }
 
-    /// Featurize `mol`, keeping per-identifier counts. `mol` must be ground.
+    /// Featurize `mol`, keeping per-identifier counts.
     pub fn featurize_counted(
         &self,
         mol: &MoleculeAst,

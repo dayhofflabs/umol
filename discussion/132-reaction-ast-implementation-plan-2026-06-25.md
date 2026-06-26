@@ -74,7 +74,7 @@ New/extended in `umol-graph-core/src/algorithms/`:
 Tests: small hand-built graphs with enumerated expected overlaps / canonical labels /
 orderings; assert exact result sets, not counts.
 
-## W2 — umol-ast: resolved delta + reaction AST
+## W2 — umol-ast: resolved delta + reaction AST **Done**
 
 The resolved-delta vocabulary is **molecule-level, not reaction-scoped** — it is the
 `Delta` counterpart of the deferred `Edit` in `ast/edit.rs`, reusable for base+delta
@@ -188,11 +188,15 @@ Tests: compose two concrete localized bonding rules; assert
 result sets; admissibility rejection; associativity on a small `(A,B,C)` triple (inherited
 from #2, verified empirically).
 
-## W4 — retire interim + migrate callers
+## W4 — retire interim + migrate callers **Done**
 
-- Remove the doc-127 correspondence macro/types from `ast/reaction.rs`.
-- Migrate `ast/molecule/rewrite.rs` and `umol-graph/fingerprint/reaction.rs` (reaction
-  fingerprint) to the new `ReactionAst`.
+- doc-127 correspondence macro/types, `Assignment`, `RewriteError`, and
+  `ast/molecule/rewrite.rs` (`apply_rule`) removed in W2.3.
+- `umol-graph/fingerprint/reaction.rs` migrated: the product side is derived via
+  `to_reaction_span().right()` (was the stored `rhs`); the three tests build
+  `ReactionAst::new(lhs, deltas)`. `FingerprintError::Inconsistent` added for the
+  derive-failure path. Workspace green (`cargo build`/`clippy --all-targets`); no interim
+  references remain.
 
 ## Out of scope (increment 2 / follow-on)
 
@@ -200,7 +204,7 @@ from #2, verified empirically).
   saturation for iv (#9); the per-entity-split `Deltas` container; canonical encoding of
   overlays into the incidence graph.
 - Exporters (SMIRKS/GML/CGR) as `umol-io` boundary types and `ReactionDsl` (EDN) — they read
-  `to_condensed`; separate workstream, not blocking the core.
+  `to_reaction_span`; separate workstream, not blocking the core.
 - Network-generation (iii) APIs over molecule collections → `umol-graph` ops, drive
   `apply`/`compose`; follow-on.
 
