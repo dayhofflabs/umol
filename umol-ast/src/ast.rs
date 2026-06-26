@@ -66,7 +66,7 @@ pub use edit::{
 pub use electrons::ElectronCountsAst;
 pub use embedding::MoleculeEmbedding;
 pub use entity::{Entity, EntityKind};
-pub use error::Contradiction;
+pub use error::{ApplyError, Contradiction};
 pub use id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId, StereoLigandId,

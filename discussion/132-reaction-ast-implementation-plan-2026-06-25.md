@@ -123,8 +123,8 @@ replaced in W4.
    `umol-graph` operation via `canonical_form` on the condensed graph — `umol-ast` cannot reach
    the full incidence, so it does not attempt iso-canonicalization (forced by layering).
    `right()`/`left()` are projections of the span (item 4, value-accumulation — no lowering);
-   `reverse()` builds from the span by swapping sides; only `apply` onto a host (items 5–6) needs
-   the delta→`Edit` lowering + the `transact` engine. The interim
+   `reverse()` is done (invert each delta + re-anchor to the product frame, item 4); only `apply`
+   onto a host (items 5–6) needs the delta→`Edit` lowering + the `transact` engine. The interim
    doc-127 `ReactionAst`/`Assignment`/`Stereo{Atom,Bond}Correspondence`, `RewriteError`, and
    `ast/molecule/rewrite.rs::apply_rule` (no production callers, superseded by item 5 `apply`) are
    **removed**. `umol-graph/fingerprint/reaction.rs` is left red until it migrates to `right()`
@@ -143,13 +143,24 @@ replaced in W4.
    tag partition. **Scope:** localized topology only — molecule-level constraints and overlays are
    not represented here (carried by the operational form). **No exporters** (CGR / MOD): those are
    `umol-io` boundary types via `FromAst`, out of scope; GML in/out is out of scope.
-5. **`apply_at(&self, host, match) -> Result<MoleculeAst, ApplyError>`**: remap `deltas` onto
-   `match` (K ids → host ids, created → `New`) → a `Vec<Edit>` → existing `transact`. DPO
-   **dangling check** before transacting (reject if a deleted host atom carries unmatched
-   bonds); matches assumed injective.
-6. **`apply(&self, host) -> impl Iterator<MoleculeAst>`**: enumerate injective matches of
-   `lhs` into `host` via graph-core `subiso` (compatibility = `AtomAst`/`BondAst` lattice
-   meet) over a `Graph` view of each (reuse `ast/embedding.rs`), `× apply_at`. Lazy.
+   **`reverse()` — done** (same module): invert each delta (`Delta::inverse`) and re-anchor its
+   ids / bond endpoints to the product's compacted frame (survivors take `right()`'s frame;
+   deleted elements become created and take fresh ids). `reverse().to_reaction_span()` swaps the
+   span's sides. No lowering — pure id remap over the canonical deltas.
+5. **`apply_at(&self, m: &MoleculeEmbedding) -> Result<MoleculeAst, ApplyError>` — done**
+   (`reaction.rs`). Reuses `MoleculeEmbedding` as the match (`host_atom` / `host_bond` maps).
+   Canonicalize `deltas`; **DPO gluing check** (a deleted host atom keeps no localized bond the
+   rule does not also delete → `ApplyError::Dangling`); lower the match-remapped deltas to a
+   `Vec<Edit>` in emit order **AddAtoms → AddBonds → Set\* → RemoveTopology (last)**, created
+   atoms taking `New(0..k)` (flat counter) and preserved/removed referencing `Id(host …)`; then
+   **checked** `transact` on `host.edit()` (precondition holds for concrete reactions — the match
+   forces `host == old`; a genuine mismatch surfaces as `ApplyError::Transaction`). Molecule-level
+   constraints deferred. `ApplyError` is flat: `Dangling { host_atom } | Inconsistent |
+   Transaction(_)`.
+6. **`apply(&self, host, subiso) -> impl Iterator<MoleculeAst>` — done** (`reaction.rs`).
+   `lhs.substructure_matches(host, GraphAndOverlays, subiso)` × `apply_at`; the `subiso`
+   algorithm is an explicit argument (transparency). DPO-invalid (dangling) matches are skipped
+   (`filter_map`).
 
 Tests: `Deltas::canonicalize` table cases (each fuse/cancel/contradiction row from doc 131) +
 idempotence (`canonicalize∘canonicalize == canonicalize`) via proptest; `to_reaction_span` /
