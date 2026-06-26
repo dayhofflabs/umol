@@ -80,7 +80,7 @@ The resolved-delta vocabulary is **molecule-level, not reaction-scoped** — it 
 `Delta` counterpart of the deferred `Edit` in `ast/edit.rs`, reusable for base+delta
 molecule storage and MMP (the reason `ReactionEdit` was rejected in doc 131). So it lives
 at **`ast/delta.rs`, a sibling of `ast/edit.rs`**; only the reaction-specific types
-(`ReactionAst`, `CondensedReactionAst`) use it. The doc-127 interim `ast/reaction.rs` is
+(`ReactionAst`, `ReactionSpanAst`) use it. The doc-127 interim `ast/reaction.rs` is
 replaced in W4.
 
 1. **Per-family delta enums — done** (`ast/delta.rs`, sibling to `ast/edit.rs`).
@@ -167,26 +167,63 @@ idempotence (`canonicalize∘canonicalize == canonicalize`) via proptest; `to_re
 `reverse` round-trip; `apply` on concrete localized-only reactions (bond make, bond break,
 order change, atom add/remove) asserting the exact product `MoleculeAst`; dangling rejection.
 
-## W3 — umol-ast: minimal compose
+## W3 — umol-ast: minimal compose **Done**
 
-`ReactionAst::compose(&self, other) -> impl Iterator<ReactionAst>` (`compose.rs`):
+Implemented in `compose.rs`: `ReactionAst::compose(&self, other, scope) -> Vec<ReactionAst>` +
+`CompositionScope { RcAnchored, Full }`; the frame remap reuses `pub(crate) delta::remap_delta`
+(also now backing `reverse`). Both gluing conditions are enforced (boundary-bond /
+pushout-complement rejection during `lhs_C` construction; combined-frame dangling for B's
+deletion of shared atoms). Tests: exact composite, `apply`-equivalence, an A-created overlap
+(create-then-modify fusion across the seam), and a boundary-bond rejection (`N→N-C` ∘ `N-C-O`
+yields none).
 
-1. `R_A = self.to_reaction_span().right()`; `L_B = other.lhs`.
-2. Enumerate overlaps via the W1 all-maximal-common-subgraph primitive on `(R_A, L_B)`,
-   compatibility = lattice meet.
-3. **RC-anchored filter** (default): keep overlaps that touch `self`'s reaction center (the
-   changed elements of `self.deltas` projected onto `R_A`). A `CompositionScope::Full` flag
-   drops the filter (the free rule-algebra sum, for algebra/CRN work).
-4. Per admissible overlap (DPO dangling check on the combined frame): **glue** (id-identify
-   per the overlap map — assemble-along-a-partial-map, id reuse, no node merge) → **concat**
-   `self.deltas ++ remapped other.deltas` → **`canonicalize`** (#2, which performs the
-   create-then-delete cancellation and keep-then-modify fusion) → `ReactionAst(lhs_C,
-   deltas_C)`, where `lhs_C = self.lhs + (L_B \ overlap)`.
+`ReactionAst::compose(&self, other, scope) -> Vec<ReactionAst>` (`compose.rs`).
+Sequential composition A;B: applying the composite equals `B.apply(A.apply(H))`. A = `self`,
+B = `other`.
+
+**Overlap enumeration.** `R_A = self.to_reaction_span().right()`, `L_B = other.lhs`. Enumerate
+maximal common *induced* subgraphs of `(R_A, L_B)` via the W1 `enumerate_common_subgraphs`
+(`BronKerbosch`); compatibility is **symmetric** — `Lattice::meet(…).is_some()` on the
+`AtomAst` / `BondAst` pairs (not the asymmetric `matches`). Each overlap `E` is the matter A
+produces and B consumes, as a node correspondence `R_A ↔ L_B` (`CommonSubgraph::mapping`).
+
+**Scope.** `CompositionScope::RcAnchored` (default) keeps overlaps touching A's reaction center
+(the changed elements of `self.deltas`, projected onto `R_A`); `Full` keeps all (the free
+rule-algebra sum, for algebra / CRN work).
+
+**Composite frame.** `lhs_C` and `deltas_C` share one frame with four id classes, allocated in
+order: (1) `lhs_A` atoms `0..n_A`; (2) `L_B \ E` atoms appended `n_A..n_A+e`; (3) A-created
+atoms (from `deltas_A`), shifted to `≥ n_A+e`; (4) B-created atoms after those. Maps:
+
+- **R_A → composite**: read off A's span survivors — R_A id `k` is the k-th survivor of A's span
+  (`lhs_A` non-removed in place, A-created appended) → its `lhs_A` id (class 1) or its shifted
+  A-created id (class 3).
+- **L_B → composite**: an overlap atom → its R_A node → composite (above); a non-overlap atom →
+  its class-2 id; a B-created atom → class 4.
+
+`deltas_C = shift_created(deltas_A) ++ remap(deltas_B)`, then `canonicalize` (#2 — fires the
+create-then-delete cancellation and keep-then-modify fusion across the A|B seam). `lhs_C =
+lhs_A + (L_B \ E)` with the incident L_B context bonds.
+
+**Admissibility = the DPO gluing conditions (genuine, not heuristics).** An overlap is rejected
+iff the sequential composite provably does not exist:
+
+- **Pushout-complement (boundary bonds).** An `L_B` context bond incident to an overlap atom
+  that A *created* and to a non-overlap atom cannot sit in `lhs_C` (its created endpoint does not
+  exist before the composite runs). No `H` realizes such a match — after A that bond is absent
+  (A did not create it; it was not in `H`), so B cannot match. Reject. When the overlap atom is
+  `lhs_A`-preserved the bond *does* sit in `lhs_C` → admissible.
+- **Dangling.** B deleting a shared atom that retains an undeleted incident bond in the combined
+  frame → reject (the `apply` gluing check, on the combined frame).
+
+Each rejected overlap has no `B.apply(A.apply(H))` witness; the conditions are silent in the
+common (admissible) case.
 
 Tests: compose two concrete localized bonding rules; assert
-`compose(A,B).apply(H) == B.apply(A.apply(H))` on hand-built `H`; RC-anchored vs `Full`
-result sets; admissibility rejection; associativity on a small `(A,B,C)` triple (inherited
-from #2, verified empirically).
+`compose(A,B).apply(H) == B.apply(A.apply(H))` on hand-built `H` (the oracle — exercises
+admissible composites and confirms rejected overlaps have no witness); RC-anchored vs `Full`
+result sets; admissibility rejection; associativity on a small `(A,B,C)` triple (inherited from
+#2, verified empirically).
 
 ## W4 — retire interim + migrate callers **Done**
 

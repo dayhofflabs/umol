@@ -15,7 +15,9 @@ use umol_graph_core::{EdgeId, Graph};
 
 use super::atom::AtomAst;
 use super::bond::BondAst;
-use super::delta::{apply_atom_change, apply_bond_change, AtomDelta, BondDelta, Delta, Deltas};
+use super::delta::{
+    apply_atom_change, apply_bond_change, remap_delta, AtomDelta, BondDelta, Delta, Deltas,
+};
 use super::error::Contradiction;
 use super::id::{AtomId, BondId};
 use super::molecule::MoleculeAst;
@@ -284,61 +286,9 @@ impl ReactionAst {
 
         let reversed: Deltas = deltas
             .iter()
-            .map(|delta| reverse_delta(delta.clone(), &rev_atom, &rev_bond))
+            .map(|delta| remap_delta(delta.clone().inverse(), &rev_atom, &rev_bond))
             .collect();
         Ok(ReactionAst::new(new_lhs, reversed))
-    }
-}
-
-/// Invert a delta and re-anchor its ids / bond endpoints from the forward frame to the reverse
-/// reaction's frame.
-fn reverse_delta(
-    delta: Delta,
-    rev_atom: &HashMap<AtomId, AtomId>,
-    rev_bond: &HashMap<BondId, BondId>,
-) -> Delta {
-    match delta.inverse() {
-        Delta::Atom(atom) => Delta::Atom(match atom {
-            AtomDelta::Add { id, ast } => AtomDelta::Add {
-                id: rev_atom[&id],
-                ast,
-            },
-            AtomDelta::Remove { id, ast } => AtomDelta::Remove {
-                id: rev_atom[&id],
-                ast,
-            },
-            AtomDelta::SetField { id, change } => AtomDelta::SetField {
-                id: rev_atom[&id],
-                change,
-            },
-            AtomDelta::SetConstraint { id, old, new } => AtomDelta::SetConstraint {
-                id: rev_atom[&id],
-                old,
-                new,
-            },
-        }),
-        Delta::Bond(bond) => Delta::Bond(match bond {
-            BondDelta::Add { id, endpoints, ast } => BondDelta::Add {
-                id: rev_bond[&id],
-                endpoints: [rev_atom[&endpoints[0]], rev_atom[&endpoints[1]]],
-                ast,
-            },
-            BondDelta::Remove { id, endpoints, ast } => BondDelta::Remove {
-                id: rev_bond[&id],
-                endpoints: [rev_atom[&endpoints[0]], rev_atom[&endpoints[1]]],
-                ast,
-            },
-            BondDelta::SetField { id, change } => BondDelta::SetField {
-                id: rev_bond[&id],
-                change,
-            },
-            BondDelta::SetConstraint { id, old, new } => BondDelta::SetConstraint {
-                id: rev_bond[&id],
-                old,
-                new,
-            },
-        }),
-        Delta::Constraint(constraint) => Delta::Constraint(constraint),
     }
 }
 

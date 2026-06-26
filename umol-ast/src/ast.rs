@@ -4,6 +4,7 @@ pub(crate) mod aromatic;
 pub(crate) mod atom;
 pub(crate) mod bond;
 pub(crate) mod coloring;
+pub(crate) mod compose;
 pub(crate) mod constraint;
 pub(crate) mod dative;
 pub(crate) mod delta;
@@ -64,6 +65,7 @@ pub use edit::{
     StereoAtomFieldChange, StereoAtomRef, StereoBondFieldChange, StereoBondRef, Undo,
 };
 pub use electrons::ElectronCountsAst;
+pub use compose::CompositionScope;
 pub use embedding::MoleculeEmbedding;
 pub use entity::{Entity, EntityKind};
 pub use error::{ApplyError, Contradiction};

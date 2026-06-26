@@ -521,6 +521,59 @@ pub(crate) fn apply_bond_change(ast: &mut BondAst, delta: &BondDelta) -> Result<
     }
 }
 
+/// Re-anchor a delta's ids and bond endpoints through total atom/bond id maps. Used to move
+/// deltas between frames (reverse re-anchoring, composition). The maps must cover every id the
+/// delta references.
+pub(crate) fn remap_delta(
+    delta: Delta,
+    atom: &HashMap<AtomId, AtomId>,
+    bond: &HashMap<BondId, BondId>,
+) -> Delta {
+    match delta {
+        Delta::Atom(a) => Delta::Atom(match a {
+            AtomDelta::Add { id, ast } => AtomDelta::Add {
+                id: atom[&id],
+                ast,
+            },
+            AtomDelta::Remove { id, ast } => AtomDelta::Remove {
+                id: atom[&id],
+                ast,
+            },
+            AtomDelta::SetField { id, change } => AtomDelta::SetField {
+                id: atom[&id],
+                change,
+            },
+            AtomDelta::SetConstraint { id, old, new } => AtomDelta::SetConstraint {
+                id: atom[&id],
+                old,
+                new,
+            },
+        }),
+        Delta::Bond(b) => Delta::Bond(match b {
+            BondDelta::Add { id, endpoints, ast } => BondDelta::Add {
+                id: bond[&id],
+                endpoints: [atom[&endpoints[0]], atom[&endpoints[1]]],
+                ast,
+            },
+            BondDelta::Remove { id, endpoints, ast } => BondDelta::Remove {
+                id: bond[&id],
+                endpoints: [atom[&endpoints[0]], atom[&endpoints[1]]],
+                ast,
+            },
+            BondDelta::SetField { id, change } => BondDelta::SetField {
+                id: bond[&id],
+                change,
+            },
+            BondDelta::SetConstraint { id, old, new } => BondDelta::SetConstraint {
+                id: bond[&id],
+                old,
+                new,
+            },
+        }),
+        Delta::Constraint(c) => Delta::Constraint(c),
+    }
+}
+
 /// The resolved-delta collection.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Deltas(Vec<Delta>);
