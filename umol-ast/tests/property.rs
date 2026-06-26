@@ -4,6 +4,8 @@
 #[path = "property/strategies.rs"]
 mod strategies;
 
+#[path = "property/delta.rs"]
+mod delta;
 #[path = "property/edit.rs"]
 mod edit;
 #[path = "property/entity.rs"]

@@ -46,7 +46,7 @@ pub enum BondRef {
 
 /// Per-field old/new payload for an atom attribute mutation. Variant
 /// discriminant identifies the field; `old` and `new` carry the typed values.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AtomFieldChange {
     Element {
         old: ElementAst,
@@ -88,7 +88,7 @@ impl AtomFieldChange {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BondFieldChange {
     Order {
         old: ValueAst,
