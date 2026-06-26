@@ -14,6 +14,8 @@ mod entity;
 mod lattice;
 #[path = "property/molecule.rs"]
 mod molecule;
+#[path = "property/reaction.rs"]
+mod reaction;
 #[path = "property/stereo.rs"]
 mod stereo;
 #[path = "property/substructure.rs"]
