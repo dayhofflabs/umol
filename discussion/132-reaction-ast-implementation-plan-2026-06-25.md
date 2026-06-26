@@ -30,7 +30,7 @@ canonical labeling (#3 ⊂ #6); overlap enumeration (#4); composite = glue+conca
   `algorithms::mcs` references). `algorithms/subiso.rs` (`SubgraphIsomorphismAlgorithm`) is
   reused for apply.
 
-## W1 — graph-core primitives
+## W1 — graph-core primitives **Done**
 
 New/extended in `umol-graph-core/src/algorithms/`:
 
@@ -76,22 +76,37 @@ orderings; assert exact result sets, not counts.
 
 ## W2 — umol-ast: resolved delta + reaction AST
 
-Replaces `ast/reaction.rs` (doc-127 correspondence types removed). New modules under
-`ast/reaction/`:
+The resolved-delta vocabulary is **molecule-level, not reaction-scoped** — it is the
+`Delta` counterpart of the deferred `Edit` in `ast/edit.rs`, reusable for base+delta
+molecule storage and MMP (the reason `ReactionEdit` was rejected in doc 131). So it lives
+at **`ast/delta.rs`, a sibling of `ast/edit.rs`**; only the reaction-specific types
+(`ReactionAst`, `CondensedReactionAst`) use it. The doc-127 interim `ast/reaction.rs` is
+replaced in W4.
 
-1. **Per-family delta enums** (`delta.rs`). Increment-1 families only: `AtomDelta`,
-   `BondDelta`, each `{ Add{id, ast}, Remove{id, ast}, SetField{id, change} }` over **stable
-   ids** (`AtomId`/`BondId`, never `New`), reusing the existing `AtomFieldChange`/
-   `BondFieldChange` payloads. `ConstraintDelta` as a set-diff (`Add C`/`Remove C`). Sum:
-   `enum Delta { Atom(AtomDelta), Bond(BondDelta), Constraint(ConstraintDelta) }`.
-   Per-family `inverse()` (closure under inversion: `Add`↔`Remove`, `SetField` old/new swap).
+1. **Per-family delta enums — done** (`ast/delta.rs`, sibling to `ast/edit.rs`).
+   Increment-1 families: `AtomDelta` and `BondDelta`, each with `Add`, `Remove`, `SetField`
+   (reusing the existing `AtomFieldChange`/`BondFieldChange` payloads — so atom element and
+   **bond order** changes ride here), and `SetConstraint { old, new }` for inline per-entity
+   constraints (keyed old→new: `(None,Some)` add, `(Some,None)` remove, `(Some,Some)`
+   modify — old/new sharing a key, which is what lets canonicalization chain-fuse and detect
+   contradictions, like `SetField`). Identity is the **stable per-family id** — uniform
+   across all families including overlays, where an atom set can't identify the entity
+   (multicenter spans >2 atoms; multicenter/noncovalent allow parallels); `BondDelta`
+   `Add`/`Remove` additionally carry `endpoints` as structural payload, not as identity.
+   `ConstraintDelta { Add(Constraint), Remove(Constraint) }` for molecule-level constraints,
+   with **multiset** semantics (the store is not force-deduped — dedup is only the lazy
+   canonical form), so `Add`/`Remove` are genuine inverses. Sum:
+   `enum Delta { Atom, Bond, Constraint }`; per-family `inverse()` (closure under inversion:
+   `Add`↔`Remove`, `SetField`/`SetConstraint` swap old/new).
    *(Dative/aromatic/multicenter/noncovalent/stereo families are increment 2.)*
 2. **`Deltas`** newtype (`Vec<Delta>`) — **flat container** for increment 1. `impl
    Canonicalize` = the #2 reduction system: group by target `(family,id)` / `(family,id,
    field)`, fold each (fuse chains, cancel `Add`/`Remove`, drop no-ops, `Remove` subsumes
-   prior sets, `Add` absorbs sets), set-diff constraints, then the cross-entity dangling check
-   on the folded set; `Err(Contradiction)` on the conditions in doc 131. Order is **not**
-   stored. (Per-entity split container is the one deferred data-structure decision — a
+   prior sets, `Add` absorbs sets); entity `SetConstraint` folds as a keyed old→new chain by
+   `(entity, constraint-key)`; molecule-level `ConstraintDelta` cancels `Add`↔`Remove`
+   one-for-one **preserving multiplicity** (multiset, *not* dedup — corrects doc 131's
+   "duplicate `Add C` dedups"); then the cross-entity dangling check on the folded set;
+   `Err(Contradiction)` on the conditions in doc 131. Order is **not** stored. (Per-entity split container is the one deferred data-structure decision — a
    non-breaking later refactor since both shapes assemble over the same per-family enums.)
 3. **`ReactionAst { lhs: MoleculeAst, deltas: Deltas }`** (`reaction.rs`). `impl Canonicalize`
    composing `lhs`' and `deltas`' canonical forms; lazy `equiv`. Equality here is

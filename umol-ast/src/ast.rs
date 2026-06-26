@@ -6,6 +6,7 @@ pub(crate) mod bond;
 pub(crate) mod coloring;
 pub(crate) mod constraint;
 pub(crate) mod dative;
+pub(crate) mod delta;
 pub(crate) mod edit;
 pub(crate) mod electrons;
 pub(crate) mod embedding;
@@ -50,6 +51,7 @@ pub use constraint::{
     StereogenicityAst, SubPatternAnchor, TopicityAst, TopicityRelationAst,
 };
 pub use dative::DativeBondAst;
+pub use delta::{AtomDelta, BondDelta, ConstraintDelta, Delta};
 pub use edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
