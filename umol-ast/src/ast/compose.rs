@@ -88,7 +88,8 @@ fn compose_all(
             continue;
         }
         let [x, y] = span_a.graph().edge_endpoints(EdgeId(aframe as u32));
-        if span_a.atoms()[x.index()].right().is_some() && span_a.atoms()[y.index()].right().is_some()
+        if span_a.atoms()[x.index()].right().is_some()
+            && span_a.atoms()[y.index()].right().is_some()
         {
             ra_bond_aframe.push(aframe);
         }
@@ -310,11 +311,13 @@ fn compose_all(
         let ra_atom_comp = |ra: AtomId| AtomId(aframe_atom_comp(ra_atom_aframe[ra.index()]) as u32);
         let ra_bond_comp = |rb: BondId| BondId(aframe_bond_comp(ra_bond_aframe[rb.index()]) as u32);
 
-        let mut da_atom: HashMap<AtomId, AtomId> = (0..n_a as u32).map(|i| (AtomId(i), AtomId(i))).collect();
+        let mut da_atom: HashMap<AtomId, AtomId> =
+            (0..n_a as u32).map(|i| (AtomId(i), AtomId(i))).collect();
         for (&id, &rank) in &a_atom_rank {
             da_atom.insert(id, AtomId((n_a + e + rank) as u32));
         }
-        let mut da_bond: HashMap<BondId, BondId> = (0..m_a as u32).map(|j| (BondId(j), BondId(j))).collect();
+        let mut da_bond: HashMap<BondId, BondId> =
+            (0..m_a as u32).map(|j| (BondId(j), BondId(j))).collect();
         for (&id, &rank) in &a_bond_rank {
             da_bond.insert(id, BondId((m_a + f + rank) as u32));
         }

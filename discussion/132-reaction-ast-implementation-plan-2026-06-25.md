@@ -238,7 +238,21 @@ result sets; admissibility rejection; associativity on a small `(A,B,C)` triple 
   derive-failure path. Workspace green (`cargo build`/`clippy --all-targets`); no interim
   references remain.
 
-## W5 — umol-ast: `ReactionSpanAst → ReactionAst` (inverse projection) **Open**
+## W5 — umol-ast: `ReactionSpanAst → ReactionAst` (inverse projection) **Done**
+
+Implemented as `ReactionSpanAst::to_reaction`. The delta machinery was unified on the way and the
+terminology aligned to the existing `Entity` / `EntityKind` vocabulary: the per-entity trait is
+**`EntityDelta`** (was "DeltaFamily"; `pub(crate)`), its structural associated type is **`Atoms`**
+and `BondDelta`'s field is **`atoms`** (the DSL `:atoms`; was "Payload" / "endpoints"), and
+`field_ops!` now also generates `diff_field` / `diff_constraints`. The generic operations are
+**default methods on `EntityDelta`** — `diff` and `deltas_from_states` — so `to_reaction` is
+`AtomDelta::deltas_from_states(…) ++ BondDelta::deltas_from_states(…)`, ready for the six overlay
+families (each adds only its trait impl, `Atoms` type, `into_delta`, `MoleculeAst` field). The
+per-element span state (one of `Unchanged` / `Modified` / `Added` / `Removed`) is
+**`LeftRightState`** — a *state*, not an op (renamed from "Change", which collided with `Edit` /
+`Delta`); it lives in `delta.rs` with the trait. Still per-entity and to be unified with the
+overlay work: `to_reaction_span` (graph build + per-kind `LeftRightState` storage) and `apply`
+(per-kind `Edit` variants).
 
 Reopens increment 1. The span is the symmetric pivot (doc 131), but only the forward
 `to_reaction_span` and the `left()` / `right()` molecule projections exist — the inverse
@@ -262,10 +276,9 @@ recovered deltas reference union ids directly — `0..n` for preserved/removed, 
 
 **The AST-diff (the new capability — inverse of `apply_*_change`).**
 - *Fields:* one `SetField { old: left.f, new: right.f }` per field `f` with `left.f != right.f`,
-  enumerating the same `(variant ⇒ field)` map `field_ops!` owns. **Open sub-decision (pick before
-  coding):** generate a `diff_field` from `field_ops!` — reuses the map, but adds a method to the
-  internal `DeltaFamily` trait — vs. a free `diff_atom` / `diff_bond` in `delta.rs` that duplicates
-  the small field enumeration (no trait change).
+  enumerating the same `(variant ⇒ field)` map `field_ops!` owns. **Resolved:** `field_ops!`
+  generates `diff_field`; the `EntityDelta` trait carries it — no duplication, and it generalizes
+  to the overlay families unchanged.
 - *Constraints:* keyed diff over the per-entity constraint set — group `left` / `right` by
   `constraint_key`; per key emit `SetConstraint { old, new }` (both-present-differ = modify,
   left-only = remove, right-only = add). **Confirm** the `AtomConstraints` / `BondConstraints`

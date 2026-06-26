@@ -17,7 +17,10 @@ fn simple_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
     (1usize..=4)
         .prop_flat_map(|atom_count| {
             (
-                prop::collection::vec(element_strategy().prop_map(AtomAst::from_element), atom_count),
+                prop::collection::vec(
+                    element_strategy().prop_map(AtomAst::from_element),
+                    atom_count,
+                ),
                 edge_set_strategy(atom_count),
             )
         })

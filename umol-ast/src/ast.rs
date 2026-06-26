@@ -38,6 +38,7 @@ pub use aromatic::AromaticSystemAst;
 pub use atom::{AtomAst, ElementAst, IsotopeMassAst};
 pub use bond::BondAst;
 pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};
+pub use compose::CompositionScope;
 pub use constraint::{
     aromatic_increment, AromaticSystemConstraint, AromaticSystemConstraintKey,
     AromaticSystemConstraintKind, AromaticSystemConstraints, AromaticValenceAst, AtomConstraint,
@@ -53,7 +54,7 @@ pub use constraint::{
     StereogenicityAst, SubPatternAnchor, TopicityAst, TopicityRelationAst,
 };
 pub use dative::DativeBondAst;
-pub use delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
+pub use delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas, LeftRightState};
 pub use edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
@@ -65,7 +66,6 @@ pub use edit::{
     StereoAtomFieldChange, StereoAtomRef, StereoBondFieldChange, StereoBondRef, Undo,
 };
 pub use electrons::ElectronCountsAst;
-pub use compose::CompositionScope;
 pub use embedding::MoleculeEmbedding;
 pub use entity::{Entity, EntityKind};
 pub use error::{ApplyError, Contradiction};
@@ -82,7 +82,7 @@ pub use multicenter::MulticenterBondAst;
 pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 pub use operators::{MemOp, RelOp};
 pub use reaction::ReactionAst;
-pub use reaction_span::{Change, ReactionSpanAst};
+pub use reaction_span::ReactionSpanAst;
 pub use remap::{IdRemapping, UndoRemapping};
 pub use ring::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;

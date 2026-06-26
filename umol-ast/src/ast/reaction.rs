@@ -201,7 +201,10 @@ mod tests {
         );
         assert_eq!(
             reaction.canonicalize().unwrap(),
-            ReactionAst::new(MoleculeAst::default(), Deltas::from_iter([charge_set(0, 0, 2)])),
+            ReactionAst::new(
+                MoleculeAst::default(),
+                Deltas::from_iter([charge_set(0, 0, 2)])
+            ),
         );
     }
 

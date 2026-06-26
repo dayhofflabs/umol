@@ -137,8 +137,9 @@ impl Delta {
     }
 }
 
-/// Generates the per-variant field-change operations (`fuse_field`, `field_is_identity`,
-/// `apply_field`) of a `EntityDelta` impl from the `(variant => ast field)` map.
+/// Generates the per-variant field/constraint operations of an `EntityDelta` impl from the
+/// `(variant => ast field)` map: `fuse_field`, `field_is_identity`, `apply_field`, `diff_field`,
+/// and `diff_constraints`.
 macro_rules! field_ops {
     ($change:ident, $ast:ident, $constraint:ident, { $($variant:ident => $field:ident),+ $(,)? }) => {
         fn fuse_field(prev: $change, next: $change) -> Option<$change> {
@@ -215,6 +216,42 @@ macro_rules! field_ops {
     };
 }
 
+/// One element's left/right state across a reaction span — a *state*, not an operation (unlike
+/// `Edit` / `Delta`). `left()` / `right()` read the side values.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LeftRightState<T> {
+    /// In the interface `K` — present and identical on both sides.
+    Unchanged(T),
+    /// In the interface `K` — present on both sides but relabeled (a dynamic element).
+    Modified { left: T, right: T },
+    /// In `R` only — created.
+    Added(T),
+    /// In `L` only — deleted.
+    Removed(T),
+}
+
+impl<T> LeftRightState<T> {
+    /// The left-side (`L`) value, or `None` if the element is created.
+    pub fn left(&self) -> Option<&T> {
+        match self {
+            Self::Unchanged(value) | Self::Removed(value) | Self::Modified { left: value, .. } => {
+                Some(value)
+            }
+            Self::Added(_) => None,
+        }
+    }
+
+    /// The right-side (`R`) value, or `None` if the element is deleted.
+    pub fn right(&self) -> Option<&T> {
+        match self {
+            Self::Unchanged(value) | Self::Added(value) | Self::Modified { right: value, .. } => {
+                Some(value)
+            }
+            Self::Removed(_) => None,
+        }
+    }
+}
+
 /// The per-entity op the fold operates on, abstracting `AtomDelta`/`BondDelta`. `atoms` carries
 /// the entity's participant atoms in `Add`/`Remove` (`()` for an atom, its two ids for a bond).
 pub(crate) enum EntityOp<F: EntityDelta> {
@@ -237,8 +274,8 @@ pub(crate) enum EntityOp<F: EntityDelta> {
 /// later, the overlay families) supply the structural deconstruction (`id`/`split`/
 /// `rebuild`) and per-variant field/constraint operations; the fold itself is written once.
 pub(crate) trait EntityDelta: Sized {
-    type Id: Copy + Eq + Hash;
-    type Ast;
+    type Id: Copy + Eq + Hash + From<usize>;
+    type Ast: Clone;
     type FieldChange;
     type Constraint: Clone + PartialEq;
     type ConstraintKey: Clone + Eq + Hash;
@@ -247,6 +284,7 @@ pub(crate) trait EntityDelta: Sized {
     fn id(&self) -> Self::Id;
     fn split(self) -> EntityOp<Self>;
     fn rebuild(id: Self::Id, op: EntityOp<Self>) -> Self;
+    fn into_delta(self) -> Delta;
 
     fn fuse_field(prev: Self::FieldChange, next: Self::FieldChange) -> Option<Self::FieldChange>;
     fn field_is_identity(change: &Self::FieldChange) -> bool;
@@ -265,6 +303,65 @@ pub(crate) trait EntityDelta: Sized {
         left: &Self::Ast,
         right: &Self::Ast,
     ) -> Vec<(Option<Self::Constraint>, Option<Self::Constraint>)>;
+
+    /// The `SetField` / `SetConstraint` deltas carrying `left` to `right` for one entity — the
+    /// inverse of `apply_*_change`, recovering a `Modified` element's deltas.
+    fn diff(id: Self::Id, left: &Self::Ast, right: &Self::Ast) -> Vec<Self> {
+        let mut out: Vec<Self> = Self::diff_field(left, right)
+            .into_iter()
+            .map(|change| Self::rebuild(id, EntityOp::SetField(change)))
+            .collect();
+        out.extend(
+            Self::diff_constraints(left, right)
+                .into_iter()
+                .map(|(old, new)| Self::rebuild(id, EntityOp::SetConstraint { old, new })),
+        );
+        out
+    }
+
+    /// Recover this kind's deltas from its left/right state column: `Added`/`Removed` become
+    /// structural `Add`/`Remove` (their `atoms` from `atoms(index)`), `Modified` becomes the
+    /// field/constraint `diff`. The id of element `i` is `i` (the column is id-indexed).
+    fn deltas_from_states(
+        states: &[LeftRightState<Self::Ast>],
+        atoms: impl Fn(usize) -> Self::Atoms,
+    ) -> Vec<Delta> {
+        let mut out = Vec::new();
+        for (index, state) in states.iter().enumerate() {
+            let id = Self::Id::from(index);
+            match state {
+                LeftRightState::Unchanged(_) => {}
+                LeftRightState::Added(ast) => out.push(
+                    Self::rebuild(
+                        id,
+                        EntityOp::Add {
+                            atoms: atoms(index),
+                            ast: ast.clone(),
+                        },
+                    )
+                    .into_delta(),
+                ),
+                LeftRightState::Removed(ast) => out.push(
+                    Self::rebuild(
+                        id,
+                        EntityOp::Remove {
+                            atoms: atoms(index),
+                            ast: ast.clone(),
+                        },
+                    )
+                    .into_delta(),
+                ),
+                LeftRightState::Modified { left, right } => {
+                    out.extend(
+                        Self::diff(id, left, right)
+                            .into_iter()
+                            .map(Self::into_delta),
+                    );
+                }
+            }
+        }
+        out
+    }
 }
 
 /// Fold one entity's ops (input order) to its normal form. `created` (an `Add` is present)
@@ -397,6 +494,10 @@ impl EntityDelta for AtomDelta {
     type ConstraintKey = AtomConstraintKey;
     type Atoms = ();
 
+    fn into_delta(self) -> Delta {
+        Delta::Atom(self)
+    }
+
     fn id(&self) -> AtomId {
         match self {
             AtomDelta::Add { id, .. }
@@ -466,6 +567,10 @@ impl EntityDelta for BondDelta {
     type ConstraintKey = BondConstraintKey;
     type Atoms = [AtomId; 2];
 
+    fn into_delta(self) -> Delta {
+        Delta::Bond(self)
+    }
+
     fn id(&self) -> BondId {
         match self {
             BondDelta::Add { id, .. }
@@ -477,14 +582,8 @@ impl EntityDelta for BondDelta {
 
     fn split(self) -> EntityOp<Self> {
         match self {
-            BondDelta::Add { atoms, ast, .. } => EntityOp::Add {
-                atoms,
-                ast,
-            },
-            BondDelta::Remove { atoms, ast, .. } => EntityOp::Remove {
-                atoms,
-                ast,
-            },
+            BondDelta::Add { atoms, ast, .. } => EntityOp::Add { atoms, ast },
+            BondDelta::Remove { atoms, ast, .. } => EntityOp::Remove { atoms, ast },
             BondDelta::SetField { change, .. } => EntityOp::SetField(change),
             BondDelta::SetConstraint { old, new, .. } => EntityOp::SetConstraint { old, new },
         }
@@ -492,16 +591,8 @@ impl EntityDelta for BondDelta {
 
     fn rebuild(id: BondId, op: EntityOp<Self>) -> Self {
         match op {
-            EntityOp::Add { atoms, ast } => BondDelta::Add {
-                id,
-                atoms,
-                ast,
-            },
-            EntityOp::Remove { atoms, ast } => BondDelta::Remove {
-                id,
-                atoms,
-                ast,
-            },
+            EntityOp::Add { atoms, ast } => BondDelta::Add { id, atoms, ast },
+            EntityOp::Remove { atoms, ast } => BondDelta::Remove { id, atoms, ast },
             EntityOp::SetField(change) => BondDelta::SetField { id, change },
             EntityOp::SetConstraint { old, new } => BondDelta::SetConstraint { id, old, new },
         }
@@ -566,21 +657,6 @@ pub(crate) fn apply_bond_change(ast: &mut BondAst, delta: &BondDelta) -> Result<
     }
 }
 
-/// Recover the `SetField` / `SetConstraint` deltas that carry `left` to `right` for one entity —
-/// the inverse of `apply_*_change`, used to project a `Modified` span element back to deltas.
-pub(crate) fn diff<F: EntityDelta>(id: F::Id, left: &F::Ast, right: &F::Ast) -> Vec<F> {
-    let mut out: Vec<F> = F::diff_field(left, right)
-        .into_iter()
-        .map(|change| F::rebuild(id, EntityOp::SetField(change)))
-        .collect();
-    out.extend(
-        F::diff_constraints(left, right)
-            .into_iter()
-            .map(|(old, new)| F::rebuild(id, EntityOp::SetConstraint { old, new })),
-    );
-    out
-}
-
 /// Re-anchor a delta's ids and bond atoms through total atom/bond id maps. Used to move
 /// deltas between frames (reverse re-anchoring, composition). The maps must cover every id the
 /// delta references.
@@ -591,14 +667,8 @@ pub(crate) fn remap_delta(
 ) -> Delta {
     match delta {
         Delta::Atom(a) => Delta::Atom(match a {
-            AtomDelta::Add { id, ast } => AtomDelta::Add {
-                id: atom[&id],
-                ast,
-            },
-            AtomDelta::Remove { id, ast } => AtomDelta::Remove {
-                id: atom[&id],
-                ast,
-            },
+            AtomDelta::Add { id, ast } => AtomDelta::Add { id: atom[&id], ast },
+            AtomDelta::Remove { id, ast } => AtomDelta::Remove { id: atom[&id], ast },
             AtomDelta::SetField { id, change } => AtomDelta::SetField {
                 id: atom[&id],
                 change,
@@ -853,6 +923,30 @@ mod tests {
     fn test_delta_inverse(#[case] input: Delta, #[case] expected: Delta) {
         assert_eq!(input.clone().inverse(), expected);
         assert_eq!(input.clone().inverse().inverse(), input);
+    }
+
+    #[rstest]
+    #[case::unchanged(LeftRightState::Unchanged(5), Some(&5))]
+    #[case::modified(LeftRightState::Modified { left: 1, right: 2 }, Some(&1))]
+    #[case::removed(LeftRightState::Removed(7), Some(&7))]
+    #[case::added(LeftRightState::Added(9), None)]
+    fn test_left_right_state_left(
+        #[case] state: LeftRightState<i32>,
+        #[case] expected: Option<&i32>,
+    ) {
+        assert_eq!(state.left(), expected);
+    }
+
+    #[rstest]
+    #[case::unchanged(LeftRightState::Unchanged(5), Some(&5))]
+    #[case::modified(LeftRightState::Modified { left: 1, right: 2 }, Some(&2))]
+    #[case::added(LeftRightState::Added(9), Some(&9))]
+    #[case::removed(LeftRightState::Removed(7), None)]
+    fn test_left_right_state_right(
+        #[case] state: LeftRightState<i32>,
+        #[case] expected: Option<&i32>,
+    ) {
+        assert_eq!(state.right(), expected);
     }
 
     fn charge_set(id: u32, old: i64, new: i64) -> Delta {

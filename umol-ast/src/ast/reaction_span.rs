@@ -6,7 +6,7 @@
 //! a `MoleculeAst`. `Modified` (a preserved element relabeled across the reaction) is the
 //! relabeling-DPO reading: the element persists in `K`, its label resolved per side.
 
-// TODO: Add overlays. Molecule-level constraints and overlays not represented here yet, 
+// TODO: Add overlays. Molecule-level constraints and overlays not represented here yet,
 // dropped on conversion from ReactionAst.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -16,7 +16,8 @@ use umol_graph_core::{EdgeId, Graph};
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::delta::{
-    apply_atom_change, apply_bond_change, diff, remap_delta, AtomDelta, BondDelta, Delta, Deltas,
+    apply_atom_change, apply_bond_change, remap_delta, AtomDelta, BondDelta, Delta, Deltas,
+    EntityDelta, LeftRightState,
 };
 use super::error::Contradiction;
 use super::id::{AtomId, BondId};
@@ -24,49 +25,14 @@ use super::molecule::MoleculeAst;
 use super::reaction::ReactionAst;
 use super::traits::Canonicalize;
 
-/// One element's superimposed state: its DPO membership plus the value(s) it carries.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Change<T> {
-    /// In the interface `K` — present and identical on both sides.
-    Unchanged(T),
-    /// In the interface `K` — present on both sides but relabeled (a dynamic element).
-    Modified { left: T, right: T },
-    /// In `R` only — created.
-    Added(T),
-    /// In `L` only — deleted.
-    Removed(T),
-}
-
-impl<T> Change<T> {
-    /// The left-side (`L`) value, or `None` if the element is created.
-    pub fn left(&self) -> Option<&T> {
-        match self {
-            Self::Unchanged(value) | Self::Removed(value) | Self::Modified { left: value, .. } => {
-                Some(value)
-            }
-            Self::Added(_) => None,
-        }
-    }
-
-    /// The right-side (`R`) value, or `None` if the element is deleted.
-    pub fn right(&self) -> Option<&T> {
-        match self {
-            Self::Unchanged(value) | Self::Added(value) | Self::Modified { right: value, .. } => {
-                Some(value)
-            }
-            Self::Removed(_) => None,
-        }
-    }
-}
-
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
 /// topology is the `lhs` frame (deleted elements kept as nodes/edges) with created elements
 /// appended; `atoms` / `bonds` are indexed parallel to the graph's nodes / edges.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReactionSpanAst {
     graph: Graph,
-    atoms: Vec<Change<AtomAst>>,
-    bonds: Vec<Change<BondAst>>,
+    atoms: Vec<LeftRightState<AtomAst>>,
+    bonds: Vec<LeftRightState<BondAst>>,
 }
 
 impl ReactionSpanAst {
@@ -74,11 +40,11 @@ impl ReactionSpanAst {
         &self.graph
     }
 
-    pub fn atoms(&self) -> &[Change<AtomAst>] {
+    pub fn atoms(&self) -> &[LeftRightState<AtomAst>] {
         &self.atoms
     }
 
-    pub fn bonds(&self) -> &[Change<BondAst>] {
+    pub fn bonds(&self) -> &[LeftRightState<BondAst>] {
         &self.bonds
     }
 
@@ -96,48 +62,14 @@ impl ReactionSpanAst {
 
     /// Recover the operational `ReactionAst` from the span — the inverse of
     /// `ReactionAst::to_reaction_span`, up to delta normal form. `lhs = left()` (which preserves
-    /// the original lhs frame); each element's `Change` tag yields its delta, a `Modified` element
+    /// the original lhs frame); each element's `LeftRightState` yields its delta, a `Modified` one
     /// via an AST-diff of its left/right values.
     pub fn to_reaction(&self) -> ReactionAst {
-        let mut deltas: Vec<Delta> = Vec::new();
-        for (node, change) in self.atoms.iter().enumerate() {
-            let id = AtomId(node as u32);
-            match change {
-                Change::Unchanged(_) => {}
-                Change::Added(ast) => {
-                    deltas.push(Delta::Atom(AtomDelta::Add { id, ast: ast.clone() }));
-                }
-                Change::Removed(ast) => {
-                    deltas.push(Delta::Atom(AtomDelta::Remove { id, ast: ast.clone() }));
-                }
-                Change::Modified { left, right } => {
-                    deltas.extend(diff::<AtomDelta>(id, left, right).into_iter().map(Delta::Atom));
-                }
-            }
-        }
-        for (edge, change) in self.bonds.iter().enumerate() {
-            let id = BondId(edge as u32);
-            let bond_atoms = || {
-                let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
-                [AtomId::from(a), AtomId::from(b)]
-            };
-            match change {
-                Change::Unchanged(_) => {}
-                Change::Added(ast) => deltas.push(Delta::Bond(BondDelta::Add {
-                    id,
-                    atoms: bond_atoms(),
-                    ast: ast.clone(),
-                })),
-                Change::Removed(ast) => deltas.push(Delta::Bond(BondDelta::Remove {
-                    id,
-                    atoms: bond_atoms(),
-                    ast: ast.clone(),
-                })),
-                Change::Modified { left, right } => {
-                    deltas.extend(diff::<BondDelta>(id, left, right).into_iter().map(Delta::Bond));
-                }
-            }
-        }
+        let mut deltas = AtomDelta::deltas_from_states(&self.atoms, |_| ());
+        deltas.extend(BondDelta::deltas_from_states(&self.bonds, |edge| {
+            let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
+            [AtomId::from(a), AtomId::from(b)]
+        }));
         ReactionAst::new(self.left(), Deltas::from_iter(deltas))
     }
 
@@ -145,8 +77,8 @@ impl ReactionSpanAst {
     /// value of each element; absent elements are dropped and the survivors are renumbered.
     fn project(
         &self,
-        atom_side: impl Fn(&Change<AtomAst>) -> Option<&AtomAst>,
-        bond_side: impl Fn(&Change<BondAst>) -> Option<&BondAst>,
+        atom_side: impl Fn(&LeftRightState<AtomAst>) -> Option<&AtomAst>,
+        bond_side: impl Fn(&LeftRightState<BondAst>) -> Option<&BondAst>,
     ) -> MoleculeAst {
         let mut compacted: Vec<Option<AtomId>> = vec![None; self.atoms.len()];
         let mut atoms: Vec<AtomAst> = Vec::new();
@@ -227,51 +159,50 @@ impl ReactionAst {
             atom_index.insert(id, atom_count + offset);
         }
 
-        let mut atoms: Vec<Change<AtomAst>> = Vec::with_capacity(atom_count + added_atoms.len());
+        let mut atoms: Vec<LeftRightState<AtomAst>> =
+            Vec::with_capacity(atom_count + added_atoms.len());
         for node in 0..atom_count {
             let id = AtomId(node as u32);
             if let Some(ast) = removed_atoms.get(&id) {
-                atoms.push(Change::Removed(ast.clone()));
+                atoms.push(LeftRightState::Removed(ast.clone()));
             } else if let Some(changes) = atom_changes.get(&id) {
                 let left = lhs.atom(id).ast.clone();
                 let mut right = left.clone();
                 for change in changes {
                     apply_atom_change(&mut right, change)?;
                 }
-                atoms.push(Change::Modified { left, right });
+                atoms.push(LeftRightState::Modified { left, right });
             } else {
-                atoms.push(Change::Unchanged(lhs.atom(id).ast.clone()));
+                atoms.push(LeftRightState::Unchanged(lhs.atom(id).ast.clone()));
             }
         }
         for ast in added_atoms.into_values() {
-            atoms.push(Change::Added(ast));
+            atoms.push(LeftRightState::Added(ast));
         }
 
-        let mut bonds: Vec<Change<BondAst>> = Vec::with_capacity(bond_count + added_bonds.len());
+        let mut bonds: Vec<LeftRightState<BondAst>> =
+            Vec::with_capacity(bond_count + added_bonds.len());
         let mut edges: Vec<[u32; 2]> = Vec::with_capacity(bond_count + added_bonds.len());
         for edge in 0..bond_count {
             let id = BondId(edge as u32);
             let [a, b] = lhs.raw_graph().edge_endpoints(EdgeId(edge as u32));
             edges.push([a.0, b.0]);
             if let Some(ast) = removed_bonds.get(&id) {
-                bonds.push(Change::Removed(ast.clone()));
+                bonds.push(LeftRightState::Removed(ast.clone()));
             } else if let Some(changes) = bond_changes.get(&id) {
                 let left = lhs.bond(id).ast.clone();
                 let mut right = left.clone();
                 for change in changes {
                     apply_bond_change(&mut right, change)?;
                 }
-                bonds.push(Change::Modified { left, right });
+                bonds.push(LeftRightState::Modified { left, right });
             } else {
-                bonds.push(Change::Unchanged(lhs.bond(id).ast.clone()));
+                bonds.push(LeftRightState::Unchanged(lhs.bond(id).ast.clone()));
             }
         }
         for (atoms, ast) in added_bonds.into_values() {
-            edges.push([
-                atom_index[&atoms[0]] as u32,
-                atom_index[&atoms[1]] as u32,
-            ]);
-            bonds.push(Change::Added(ast));
+            edges.push([atom_index[&atoms[0]] as u32, atom_index[&atoms[1]] as u32]);
+            bonds.push(LeftRightState::Added(ast));
         }
 
         let graph = Graph::new(atoms.len(), &edges);
@@ -350,24 +281,6 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::unchanged(Change::Unchanged(5), Some(&5))]
-    #[case::modified(Change::Modified { left: 1, right: 2 }, Some(&1))]
-    #[case::removed(Change::Removed(7), Some(&7))]
-    #[case::added(Change::Added(9), None)]
-    fn test_change_left(#[case] change: Change<i32>, #[case] expected: Option<&i32>) {
-        assert_eq!(change.left(), expected);
-    }
-
-    #[rstest]
-    #[case::unchanged(Change::Unchanged(5), Some(&5))]
-    #[case::modified(Change::Modified { left: 1, right: 2 }, Some(&2))]
-    #[case::added(Change::Added(9), Some(&9))]
-    #[case::removed(Change::Removed(7), None)]
-    fn test_change_right(#[case] change: Change<i32>, #[case] expected: Option<&i32>) {
-        assert_eq!(change.right(), expected);
-    }
-
-    #[rstest]
     fn test_reaction_ast_to_reaction_span() {
         let reaction = ReactionAst::new(
             MoleculeAst::from_atoms_and_bonds(
@@ -389,13 +302,13 @@ mod tests {
         assert_eq!(
             span.atoms(),
             [
-                Change::Unchanged(AtomAst::from_element(Element::C)),
-                Change::Unchanged(AtomAst::from_element(Element::C)),
+                LeftRightState::Unchanged(AtomAst::from_element(Element::C)),
+                LeftRightState::Unchanged(AtomAst::from_element(Element::C)),
             ],
         );
         assert_eq!(
             span.bonds(),
-            [Change::Modified {
+            [LeftRightState::Modified {
                 left: BondAst::from_order(1),
                 right: BondAst::from_order(2),
             }],
@@ -408,16 +321,16 @@ mod tests {
         assert_eq!(
             span.atoms(),
             [
-                Change::Unchanged(AtomAst::from_element(Element::C)),
-                Change::Removed(AtomAst::from_element(Element::O)),
-                Change::Added(AtomAst::from_element(Element::N)),
+                LeftRightState::Unchanged(AtomAst::from_element(Element::C)),
+                LeftRightState::Removed(AtomAst::from_element(Element::O)),
+                LeftRightState::Added(AtomAst::from_element(Element::N)),
             ],
         );
         assert_eq!(
             span.bonds(),
             [
-                Change::Removed(BondAst::from_order(1)),
-                Change::Added(BondAst::from_order(1)),
+                LeftRightState::Removed(BondAst::from_order(1)),
+                LeftRightState::Added(BondAst::from_order(1)),
             ],
         );
         assert_eq!(

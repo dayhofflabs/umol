@@ -40,17 +40,9 @@ fn atom_delta_strategy() -> impl Strategy<Value = AtomDelta> {
 
 fn bond_delta_strategy() -> impl Strategy<Value = BondDelta> {
     prop_oneof![
-        (
-            bond_id_strategy(),
-            atoms_strategy(),
-            bond_ast_strategy()
-        )
+        (bond_id_strategy(), atoms_strategy(), bond_ast_strategy())
             .prop_map(|(id, atoms, ast)| BondDelta::Add { id, atoms, ast }),
-        (
-            bond_id_strategy(),
-            atoms_strategy(),
-            bond_ast_strategy()
-        )
+        (bond_id_strategy(), atoms_strategy(), bond_ast_strategy())
             .prop_map(|(id, atoms, ast)| BondDelta::Remove { id, atoms, ast }),
         (bond_id_strategy(), value_basic(1..=3), value_basic(1..=3)).prop_map(|(id, old, new)| {
             BondDelta::SetField {
