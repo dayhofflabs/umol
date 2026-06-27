@@ -1948,7 +1948,7 @@ impl TransactionCase {
                 (id % (count - 1)) as u32,
             )))],
             Self::SetAtomCharge { count, id, charge } => {
-                vec![Edit::SetAtomField {
+                vec![Edit::ModifyAtomField {
                     id: AtomRef::Id(AtomId((id % count) as u32)),
                     change: AtomFieldChange::Charge {
                         old: ValueAst::default(),
@@ -1958,7 +1958,7 @@ impl TransactionCase {
             }
             Self::SetBondOrder { count, id, order } => {
                 let bond_id = id % (count - 1);
-                vec![Edit::SetBondField {
+                vec![Edit::ModifyBondField {
                     id: BondRef::Id(BondId(bond_id as u32)),
                     change: BondFieldChange::Order {
                         old: ValueAst::Lit((bond_id % 3 + 1) as i64),
@@ -1967,9 +1967,13 @@ impl TransactionCase {
                 }]
             }
             Self::AddAtomConstraint { count, id, size } => {
-                vec![Edit::AddAtomConstraint {
+                vec![Edit::ModifyAtomConstraint {
                     id: AtomRef::Id(AtomId((id % count) as u32)),
-                    constraint: AtomConstraint::ring_membership(RingScope::Size(*size as u8), 1),
+                    old: None,
+                    new: Some(AtomConstraint::ring_membership(
+                        RingScope::Size(*size as u8),
+                        1,
+                    )),
                 }]
             }
             Self::AddDativeBond {

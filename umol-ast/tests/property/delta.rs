@@ -24,7 +24,7 @@ fn atom_delta_strategy() -> impl Strategy<Value = AtomDelta> {
         (atom_id_strategy(), atom_ast_strategy())
             .prop_map(|(id, ast)| AtomDelta::Remove { id, ast }),
         (atom_id_strategy(), value_basic(0..=3), value_basic(0..=3)).prop_map(|(id, old, new)| {
-            AtomDelta::SetField {
+            AtomDelta::ModifyField {
                 id,
                 change: AtomFieldChange::Charge { old, new },
             }
@@ -34,7 +34,7 @@ fn atom_delta_strategy() -> impl Strategy<Value = AtomDelta> {
             prop::option::of(atom_constraint_strategy()),
             prop::option::of(atom_constraint_strategy()),
         )
-            .prop_map(|(id, old, new)| AtomDelta::SetConstraint { id, old, new }),
+            .prop_map(|(id, old, new)| AtomDelta::ModifyConstraint { id, old, new }),
     ]
 }
 
@@ -45,7 +45,7 @@ fn bond_delta_strategy() -> impl Strategy<Value = BondDelta> {
         (bond_id_strategy(), atoms_strategy(), bond_ast_strategy())
             .prop_map(|(id, atoms, ast)| BondDelta::Remove { id, atoms, ast }),
         (bond_id_strategy(), value_basic(1..=3), value_basic(1..=3)).prop_map(|(id, old, new)| {
-            BondDelta::SetField {
+            BondDelta::ModifyField {
                 id,
                 change: BondFieldChange::Order { old, new },
             }
@@ -55,7 +55,7 @@ fn bond_delta_strategy() -> impl Strategy<Value = BondDelta> {
             prop::option::of(bond_constraint_strategy()),
             prop::option::of(bond_constraint_strategy()),
         )
-            .prop_map(|(id, old, new)| BondDelta::SetConstraint { id, old, new }),
+            .prop_map(|(id, old, new)| BondDelta::ModifyConstraint { id, old, new }),
     ]
 }
 

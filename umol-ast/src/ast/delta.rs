@@ -30,11 +30,11 @@ pub enum AtomDelta {
         id: AtomId,
         ast: AtomAst,
     },
-    SetField {
+    ModifyField {
         id: AtomId,
         change: AtomFieldChange,
     },
-    SetConstraint {
+    ModifyConstraint {
         id: AtomId,
         old: Option<AtomConstraint>,
         new: Option<AtomConstraint>,
@@ -42,16 +42,16 @@ pub enum AtomDelta {
 }
 
 impl AtomDelta {
-    /// The inverse delta: `Add`↔`Remove`; `SetField` / `SetConstraint` swap old/new.
+    /// The inverse delta: `Add`↔`Remove`; `ModifyField` / `ModifyConstraint` swap old/new.
     pub fn inverse(self) -> Self {
         match self {
             Self::Add { id, ast } => Self::Remove { id, ast },
             Self::Remove { id, ast } => Self::Add { id, ast },
-            Self::SetField { id, change } => Self::SetField {
+            Self::ModifyField { id, change } => Self::ModifyField {
                 id,
                 change: change.inverse(),
             },
-            Self::SetConstraint { id, old, new } => Self::SetConstraint {
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
                 id,
                 old: new,
                 new: old,
@@ -73,11 +73,11 @@ pub enum BondDelta {
         atoms: [AtomId; 2],
         ast: BondAst,
     },
-    SetField {
+    ModifyField {
         id: BondId,
         change: BondFieldChange,
     },
-    SetConstraint {
+    ModifyConstraint {
         id: BondId,
         old: Option<BondConstraint>,
         new: Option<BondConstraint>,
@@ -89,11 +89,11 @@ impl BondDelta {
         match self {
             Self::Add { id, atoms, ast } => Self::Remove { id, atoms, ast },
             Self::Remove { id, atoms, ast } => Self::Add { id, atoms, ast },
-            Self::SetField { id, change } => Self::SetField {
+            Self::ModifyField { id, change } => Self::ModifyField {
                 id,
                 change: change.inverse(),
             },
-            Self::SetConstraint { id, old, new } => Self::SetConstraint {
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
                 id,
                 old: new,
                 new: old,
@@ -263,8 +263,8 @@ pub(crate) enum EntityOp<F: EntityDelta> {
         atoms: F::Atoms,
         ast: F::Ast,
     },
-    SetField(F::FieldChange),
-    SetConstraint {
+    ModifyField(F::FieldChange),
+    ModifyConstraint {
         old: Option<F::Constraint>,
         new: Option<F::Constraint>,
     },
@@ -304,17 +304,17 @@ pub(crate) trait EntityDelta: Sized {
         right: &Self::Ast,
     ) -> Vec<(Option<Self::Constraint>, Option<Self::Constraint>)>;
 
-    /// The `SetField` / `SetConstraint` deltas carrying `left` to `right` for one entity — the
+    /// The `ModifyField` / `ModifyConstraint` deltas carrying `left` to `right` for one entity — the
     /// inverse of `apply_*_change`, recovering a `Modified` element's deltas.
     fn diff(id: Self::Id, left: &Self::Ast, right: &Self::Ast) -> Vec<Self> {
         let mut out: Vec<Self> = Self::diff_field(left, right)
             .into_iter()
-            .map(|change| Self::rebuild(id, EntityOp::SetField(change)))
+            .map(|change| Self::rebuild(id, EntityOp::ModifyField(change)))
             .collect();
         out.extend(
             Self::diff_constraints(left, right)
                 .into_iter()
-                .map(|(old, new)| Self::rebuild(id, EntityOp::SetConstraint { old, new })),
+                .map(|(old, new)| Self::rebuild(id, EntityOp::ModifyConstraint { old, new })),
         );
         out
     }
@@ -393,11 +393,11 @@ fn fold_created<F: EntityDelta>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>
                 }
                 state = Some((atoms, ast));
             }
-            EntityOp::SetField(change) => {
+            EntityOp::ModifyField(change) => {
                 let (_, ast) = state.as_mut().ok_or(Contradiction)?;
                 F::apply_field(ast, change)?;
             }
-            EntityOp::SetConstraint { old, new } => {
+            EntityOp::ModifyConstraint { old, new } => {
                 let (_, ast) = state.as_mut().ok_or(Contradiction)?;
                 F::apply_constraint(ast, old, new)?;
             }
@@ -416,7 +416,7 @@ fn fold_created<F: EntityDelta>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>
     })
 }
 
-/// Preserved entity: fuse `SetField` chains per field and `SetConstraint` chains per key. A
+/// Preserved entity: fuse `ModifyField` chains per field and `ModifyConstraint` chains per key. A
 /// `Remove` subsumes the prior changes and carries the *original* value (the changes are
 /// reverted on the removed ast).
 #[allow(clippy::type_complexity)]
@@ -433,7 +433,7 @@ fn fold_preserved<F: EntityDelta>(
         }
         match op {
             EntityOp::Add { .. } => return Err(Contradiction),
-            EntityOp::SetField(change) => {
+            EntityOp::ModifyField(change) => {
                 let slot = discriminant(&change);
                 let fused = match fields.remove(&slot) {
                     Some(prev) => F::fuse_field(prev, change).ok_or(Contradiction)?,
@@ -441,7 +441,7 @@ fn fold_preserved<F: EntityDelta>(
                 };
                 fields.insert(slot, fused);
             }
-            EntityOp::SetConstraint { old, new } => {
+            EntityOp::ModifyConstraint { old, new } => {
                 let key = match old.as_ref().or(new.as_ref()) {
                     Some(constraint) => F::constraint_key(constraint),
                     None => continue,
@@ -475,12 +475,12 @@ fn fold_preserved<F: EntityDelta>(
     let mut out = Vec::new();
     for (_slot, change) in fields {
         if !F::field_is_identity(&change) {
-            out.push(EntityOp::SetField(change));
+            out.push(EntityOp::ModifyField(change));
         }
     }
     for (_key, (old, new)) in constraints {
         if old != new {
-            out.push(EntityOp::SetConstraint { old, new });
+            out.push(EntityOp::ModifyConstraint { old, new });
         }
     }
     Ok(out)
@@ -502,8 +502,8 @@ impl EntityDelta for AtomDelta {
         match self {
             AtomDelta::Add { id, .. }
             | AtomDelta::Remove { id, .. }
-            | AtomDelta::SetField { id, .. }
-            | AtomDelta::SetConstraint { id, .. } => *id,
+            | AtomDelta::ModifyField { id, .. }
+            | AtomDelta::ModifyConstraint { id, .. } => *id,
         }
     }
 
@@ -511,8 +511,8 @@ impl EntityDelta for AtomDelta {
         match self {
             AtomDelta::Add { ast, .. } => EntityOp::Add { atoms: (), ast },
             AtomDelta::Remove { ast, .. } => EntityOp::Remove { atoms: (), ast },
-            AtomDelta::SetField { change, .. } => EntityOp::SetField(change),
-            AtomDelta::SetConstraint { old, new, .. } => EntityOp::SetConstraint { old, new },
+            AtomDelta::ModifyField { change, .. } => EntityOp::ModifyField(change),
+            AtomDelta::ModifyConstraint { old, new, .. } => EntityOp::ModifyConstraint { old, new },
         }
     }
 
@@ -520,8 +520,8 @@ impl EntityDelta for AtomDelta {
         match op {
             EntityOp::Add { ast, .. } => AtomDelta::Add { id, ast },
             EntityOp::Remove { ast, .. } => AtomDelta::Remove { id, ast },
-            EntityOp::SetField(change) => AtomDelta::SetField { id, change },
-            EntityOp::SetConstraint { old, new } => AtomDelta::SetConstraint { id, old, new },
+            EntityOp::ModifyField(change) => AtomDelta::ModifyField { id, change },
+            EntityOp::ModifyConstraint { old, new } => AtomDelta::ModifyConstraint { id, old, new },
         }
     }
 
@@ -575,8 +575,8 @@ impl EntityDelta for BondDelta {
         match self {
             BondDelta::Add { id, .. }
             | BondDelta::Remove { id, .. }
-            | BondDelta::SetField { id, .. }
-            | BondDelta::SetConstraint { id, .. } => *id,
+            | BondDelta::ModifyField { id, .. }
+            | BondDelta::ModifyConstraint { id, .. } => *id,
         }
     }
 
@@ -584,8 +584,8 @@ impl EntityDelta for BondDelta {
         match self {
             BondDelta::Add { atoms, ast, .. } => EntityOp::Add { atoms, ast },
             BondDelta::Remove { atoms, ast, .. } => EntityOp::Remove { atoms, ast },
-            BondDelta::SetField { change, .. } => EntityOp::SetField(change),
-            BondDelta::SetConstraint { old, new, .. } => EntityOp::SetConstraint { old, new },
+            BondDelta::ModifyField { change, .. } => EntityOp::ModifyField(change),
+            BondDelta::ModifyConstraint { old, new, .. } => EntityOp::ModifyConstraint { old, new },
         }
     }
 
@@ -593,8 +593,8 @@ impl EntityDelta for BondDelta {
         match op {
             EntityOp::Add { atoms, ast } => BondDelta::Add { id, atoms, ast },
             EntityOp::Remove { atoms, ast } => BondDelta::Remove { id, atoms, ast },
-            EntityOp::SetField(change) => BondDelta::SetField { id, change },
-            EntityOp::SetConstraint { old, new } => BondDelta::SetConstraint { id, old, new },
+            EntityOp::ModifyField(change) => BondDelta::ModifyField { id, change },
+            EntityOp::ModifyConstraint { old, new } => BondDelta::ModifyConstraint { id, old, new },
         }
     }
 
@@ -630,15 +630,15 @@ impl EntityDelta for BondDelta {
 }
 
 /// Apply a resolved per-entity change to a value AST, reusing the `EntityDelta` apply that
-/// `canonicalize` uses. `SetField` / `SetConstraint` mutate the ast; `Add` / `Remove` are
+/// `canonicalize` uses. `ModifyField` / `ModifyConstraint` mutate the ast; `Add` / `Remove` are
 /// no-ops (they carry a whole ast, not a change). Materializes the right-hand value of a
 /// preserved entity for a `ReactionSpanAst`.
 pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<(), Contradiction> {
     match delta {
-        AtomDelta::SetField { change, .. } => {
+        AtomDelta::ModifyField { change, .. } => {
             <AtomDelta as EntityDelta>::apply_field(ast, change.clone())
         }
-        AtomDelta::SetConstraint { old, new, .. } => {
+        AtomDelta::ModifyConstraint { old, new, .. } => {
             <AtomDelta as EntityDelta>::apply_constraint(ast, old.clone(), new.clone())
         }
         AtomDelta::Add { .. } | AtomDelta::Remove { .. } => Ok(()),
@@ -647,10 +647,10 @@ pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<
 
 pub(crate) fn apply_bond_change(ast: &mut BondAst, delta: &BondDelta) -> Result<(), Contradiction> {
     match delta {
-        BondDelta::SetField { change, .. } => {
+        BondDelta::ModifyField { change, .. } => {
             <BondDelta as EntityDelta>::apply_field(ast, change.clone())
         }
-        BondDelta::SetConstraint { old, new, .. } => {
+        BondDelta::ModifyConstraint { old, new, .. } => {
             <BondDelta as EntityDelta>::apply_constraint(ast, old.clone(), new.clone())
         }
         BondDelta::Add { .. } | BondDelta::Remove { .. } => Ok(()),
@@ -669,11 +669,11 @@ pub(crate) fn remap_delta(
         Delta::Atom(a) => Delta::Atom(match a {
             AtomDelta::Add { id, ast } => AtomDelta::Add { id: atom[&id], ast },
             AtomDelta::Remove { id, ast } => AtomDelta::Remove { id: atom[&id], ast },
-            AtomDelta::SetField { id, change } => AtomDelta::SetField {
+            AtomDelta::ModifyField { id, change } => AtomDelta::ModifyField {
                 id: atom[&id],
                 change,
             },
-            AtomDelta::SetConstraint { id, old, new } => AtomDelta::SetConstraint {
+            AtomDelta::ModifyConstraint { id, old, new } => AtomDelta::ModifyConstraint {
                 id: atom[&id],
                 old,
                 new,
@@ -690,11 +690,11 @@ pub(crate) fn remap_delta(
                 atoms: [atom[&atoms[0]], atom[&atoms[1]]],
                 ast,
             },
-            BondDelta::SetField { id, change } => BondDelta::SetField {
+            BondDelta::ModifyField { id, change } => BondDelta::ModifyField {
                 id: bond[&id],
                 change,
             },
-            BondDelta::SetConstraint { id, old, new } => BondDelta::SetConstraint {
+            BondDelta::ModifyConstraint { id, old, new } => BondDelta::ModifyConstraint {
                 id: bond[&id],
                 old,
                 new,
@@ -821,22 +821,22 @@ mod tests {
         AtomDelta::Remove { id: AtomId(0), ast: AtomAst::from_element(Element::C) }
     )]
     #[case::set_field(
-        AtomDelta::SetField {
+        AtomDelta::ModifyField {
             id: AtomId(1),
             change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Lit(1) },
         },
-        AtomDelta::SetField {
+        AtomDelta::ModifyField {
             id: AtomId(1),
             change: AtomFieldChange::Charge { old: ValueAst::Lit(1), new: ValueAst::Lit(0) },
         }
     )]
     #[case::set_constraint(
-        AtomDelta::SetConstraint {
+        AtomDelta::ModifyConstraint {
             id: AtomId(2),
             old: Some(AtomConstraint::Valence(ValueAst::Lit(4))),
             new: Some(AtomConstraint::Valence(ValueAst::Lit(3))),
         },
-        AtomDelta::SetConstraint {
+        AtomDelta::ModifyConstraint {
             id: AtomId(2),
             old: Some(AtomConstraint::Valence(ValueAst::Lit(3))),
             new: Some(AtomConstraint::Valence(ValueAst::Lit(4))),
@@ -861,22 +861,22 @@ mod tests {
         }
     )]
     #[case::set_field(
-        BondDelta::SetField {
+        BondDelta::ModifyField {
             id: BondId(2),
             change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
         },
-        BondDelta::SetField {
+        BondDelta::ModifyField {
             id: BondId(2),
             change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(1) },
         }
     )]
     #[case::set_constraint(
-        BondDelta::SetConstraint {
+        BondDelta::ModifyConstraint {
             id: BondId(3),
             old: None,
             new: Some(BondConstraint::Aromatic),
         },
-        BondDelta::SetConstraint {
+        BondDelta::ModifyConstraint {
             id: BondId(3),
             old: Some(BondConstraint::Aromatic),
             new: None,
@@ -950,7 +950,7 @@ mod tests {
     }
 
     fn charge_set(id: u32, old: i64, new: i64) -> Delta {
-        Delta::Atom(AtomDelta::SetField {
+        Delta::Atom(AtomDelta::ModifyField {
             id: AtomId(id),
             change: AtomFieldChange::Charge {
                 old: ValueAst::Lit(old),
@@ -1009,7 +1009,7 @@ mod tests {
 
     #[rstest]
     fn test_deltas_canonicalize_remove_subsumes_field() {
-        // SetField then Remove must canonicalize to a Remove carrying the original value.
+        // ModifyField then Remove must canonicalize to a Remove carrying the original value.
         let deltas = Deltas::from_iter([
             charge_set(0, 0, 1),
             Delta::Atom(AtomDelta::Remove {
@@ -1029,12 +1029,12 @@ mod tests {
     #[rstest]
     fn test_deltas_canonicalize_constraint_chain() {
         let deltas = Deltas::from_iter([
-            Delta::Atom(AtomDelta::SetConstraint {
+            Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
                 old: None,
                 new: Some(AtomConstraint::Valence(ValueAst::Lit(4))),
             }),
-            Delta::Atom(AtomDelta::SetConstraint {
+            Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
                 old: Some(AtomConstraint::Valence(ValueAst::Lit(4))),
                 new: Some(AtomConstraint::Valence(ValueAst::Lit(3))),
@@ -1042,7 +1042,7 @@ mod tests {
         ]);
         assert_eq!(
             deltas.canonicalize().unwrap(),
-            Deltas::from_iter([Delta::Atom(AtomDelta::SetConstraint {
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
                 old: None,
                 new: Some(AtomConstraint::Valence(ValueAst::Lit(3))),
@@ -1052,7 +1052,7 @@ mod tests {
 
     #[rstest]
     fn test_deltas_canonicalize_order_independent() {
-        let order_set = Delta::Bond(BondDelta::SetField {
+        let order_set = Delta::Bond(BondDelta::ModifyField {
             id: BondId(0),
             change: BondFieldChange::Order {
                 old: ValueAst::Lit(1),

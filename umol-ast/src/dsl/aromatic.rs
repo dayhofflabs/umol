@@ -17,7 +17,7 @@ use super::predicates::{
     apply_spin_pair, charge, fmt_charge, fmt_spin_pair, lower_spin, optional_value, raise_spin,
     SpinPredicate,
 };
-use super::value::fmt_value;
+use super::value::{fmt_value, ValueDsl};
 use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::constraint::AromaticSystemConstraint;
 use crate::ast::traits::{FromAst, IntoAst};
@@ -325,7 +325,7 @@ impl<'de> FromEdn<'de> for AromaticSystemConstraintDsl {
         };
         match kw {
             "electron-count" => {
-                let v = super::value::ValueDsl::from_edn(value)?;
+                let v = ValueDsl::from_edn(value)?;
                 Ok(Self::ElectronCount(v.0))
             }
             other => Err(DeError::Custom(format!(
@@ -340,7 +340,7 @@ impl ToEdn for AromaticSystemConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         match self {
             Self::ElectronCount(v) => {
-                let value_edn = super::value::ValueDsl(v.clone()).to_edn();
+                let value_edn = ValueDsl(v.clone()).to_edn();
                 let mut map = EdnMap::with_capacity(1);
                 map.insert(
                     Edn::Keyword(EdnKeyword::owned("electron-count".to_string())),

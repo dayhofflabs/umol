@@ -115,15 +115,15 @@ fn compose_all(
     let mut rc_aframe_bonds: HashSet<usize> = HashSet::new();
     for delta in da.iter() {
         match delta {
-            Delta::Atom(AtomDelta::SetField { id, .. })
-            | Delta::Atom(AtomDelta::SetConstraint { id, .. }) => {
+            Delta::Atom(AtomDelta::ModifyField { id, .. })
+            | Delta::Atom(AtomDelta::ModifyConstraint { id, .. }) => {
                 rc_aframe_atoms.insert(id.index());
             }
             Delta::Atom(AtomDelta::Add { id, .. }) => {
                 rc_aframe_atoms.insert(n_a + a_atom_rank[id]);
             }
-            Delta::Bond(BondDelta::SetField { id, .. })
-            | Delta::Bond(BondDelta::SetConstraint { id, .. }) => {
+            Delta::Bond(BondDelta::ModifyField { id, .. })
+            | Delta::Bond(BondDelta::ModifyConstraint { id, .. }) => {
                 rc_aframe_bonds.insert(id.index());
             }
             Delta::Bond(BondDelta::Add { id, .. }) => {
@@ -421,7 +421,7 @@ mod tests {
     fn bond_order_rule(from: u8, to: u8) -> ReactionAst {
         ReactionAst::new(
             carbon_oxygen(from),
-            Deltas::from_iter([Delta::Bond(BondDelta::SetField {
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
                     old: ValueAst::Lit(from as i64),
@@ -440,7 +440,7 @@ mod tests {
             a.compose(&b, CompositionScope::Full),
             vec![ReactionAst::new(
                 carbon_oxygen(1),
-                Deltas::from_iter([Delta::Bond(BondDelta::SetField {
+                Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
                     change: BondFieldChange::Order {
                         old: ValueAst::Lit(1),

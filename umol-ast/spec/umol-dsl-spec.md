@@ -18,10 +18,10 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, **RECOMMENDED*
 
 **Term algebra levels (non-normative sketch).** Four levels of expressiveness exist in this algebra, each a strict superset of the previous:
 
-- **L1 — Ground**: fully instantiated molecules; no wildcards, binds, or logic. Every numeric slot is a concrete integer; element is a single symbol.
-- **L2 — Constraint / Query**: adds wildcards (**`*`**), element/numeric sets, **`bool-expr`**, and **`?id`** references. Sufficient for substructure queries.
-- **L3 — Rule**: adds **`element-bind`** / **`element-ref`**, cross-atom **`id`** scope (**§6**), and **`:guards`** on molecule maps. Sufficient for transformation rules.
-- **L4 — Compound**: rules whose RHS produces molecule maps that are themselves L2/L3 terms; higher-order composition.
+- **Ground**: fully instantiated molecules; no wildcards, binds, or logic. Every numeric slot is a concrete integer; element is a single symbol.
+- **Query / Pattern**: adds wildcards (**`*`**), element/numeric sets, **`bool-expr`**, and **`?id`** references. Sufficient for substructure queries.
+- **Rule**: adds **`element-bind`** / **`element-ref`**, cross-atom **`id`** scope (**§6**), and **`:guards`** on molecule maps. Sufficient for transformation rules.
+- **Compound**: rules whose RHS produces molecule maps that are themselves other terms; higher-order composition.
 
 The subgrammars in **§5**, **§7** define forms that are syntactically valid across all levels; which forms are *semantically* allowed depends on which level is in force (**§3**).
 
@@ -422,19 +422,17 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 **Examples (atom):** **`C`**, **`C#h3`**, **`C#h*`**, **`!H`**, **`!{F,Cl}`**, **`?e`**, **`?e :: {Cl,Br}`**, **`?e :: !{F,Cl}`**, **`C#a*`**, **`C#a !`**, **`C#c+`**, **`C#c-`**, **`C#c +`**.
 
 - A **`nat`** and an **`id`** contain **no** internal whitespace.
-- A **relational** token is **`<=`**, **`>=`**, **`==`**, or a **single** **`<`** or **`>`** that is **not** part of **`<=` `>=`**. **Multi-character** tokens are one lexical unit.
+- A **relational** token is **`<=`**, **`>=`**, **`==`**, or a **single** **`<`** or **`>`** that is **not** part of **`<=` `>=`**. **Multi-character** tokens are one lexical unit. Plain **`=`** is **not** a relational operator.
 - An **arithmetic** token is **`+`**, **`-`**, **`*`**, **`/`**, **`%`**. Leading **`+`** / **`-`** on a **`base-expr`** are **`sign`** tokens (**§5**); binary **`+`** / **`-`** appear between **`mult-expr`** operands.
 - **Inside** an **element** or **order** **brace set** `{…}`, optional whitespace is allowed **only** immediately before or after a comma separating entries. No whitespace inside an **`element-literal`** or **`order-entry`** (**`nat`**).
-
-**`=` (U+003D).** Plain **`=`** is **not** an operator in **`value-expr`**; equality is **`==`**. **`=`** **MUST NOT** appear in a **Ground** string in a **`value-expr`** position (no **`bool-expr`**). It **MAY** appear inside payloads only as part of **`==`** or other defined tokens.
 
 **Vacuous-payload elision (canonical rendering).** Implementations **MAY** elide vacuous payloads — predicates whose value is **`Undetermined`** (`*` in surface form), and inherent fields with prefixed tags (**`#c`**, **`#u`**, **`#s`**, **`#e`**, …) whose value is **`Undetermined`** — from the canonical rendered form. Both forms remain admissible **on parse**, so a renderer that elides them still accepts a string in which they appear explicitly. **Leading unprefixed** inherent fields (bond **order**, atom **element**, noncovalent bond **type**) are **exempt** from this elision because they fix the entity-string's start position; for these, **`Undetermined`** **MUST** render as **`*`**. Round-trip identity at the AST level therefore holds only for ASTs whose constraint and inherent-field payloads are non-vacuous (or whose vacuous payloads sit on a leading unprefixed field).
 
 ### 7.2 Numerical limits
 
-**Chemical elements.** Any **`element-literal`**, any entry in an **`element-set`**, and any **nominal** binding or reference (**`element-bind`**, **`element-ref`**) **MUST** refer only to elements from **hydrogen** (**H**) through **oganesson** (**Og**). Implementations **MUST** reject symbols outside that range in **Ground**; **Query** / **Rule** **SHOULD** use the same restriction unless explicitly documented otherwise.
+**Chemical elements.** Any **`element-literal`**, any entry in an **`element-set`**, and any **nominal** binding or reference (**`element-bind`**, **`element-ref`**) **MUST** refer only to elements from **hydrogen** (**H**) through **oganesson** (**Og**). Implementations **MUST** reject symbols outside that range.
 
-**Charges.** **Formal charge** on atoms (**`#c`**), **formal bond charge** (**`#c`** on **bond-string**), **aromatic-system charge** (**`#c`** on **aromatic-string**, **§7.10**), and atom-subset charge sums **`{:charge-sum {:atoms [...] :sum n}}`** (**§7.9**) where integral **MUST** fit a **signed 8-bit** integer (**−128…127**). The **`#c`** payload is a **`value-expr`** (or **Ground** subset) that evaluates to the signed charge, including the **special** forms **`+`** / **`-`** for **±1** (**§7.3**), e.g. **`#c2`**, **`#c-2`**, **`#c+`**, **`#c-`**.
+**Charges.** **Formal charge** on atoms (**`#c`**), **formal bond charge** (**`#c`** on **bond-string**), **aromatic-system charge** (**`#c`** on **aromatic-string**, **§7.10**), and atom-subset charge sums **`{:charge-sum {:atoms [...] :sum n}}`** (**§7.9**) where integral **MUST** fit a **signed 8-bit** integer (**−128…127**). The **`#c`** payload is a **`value-expr`** that evaluates to the signed charge, including the **special** forms **`+`** / **`-`** for **±1** (**§7.3**), e.g. **`#c2`**, **`#c-2`**, **`#c+`**, **`#c-`**.
 
 **Isotope mass number.** The numeric value carried by **`#i`** in **Ground** **MUST** fit an **unsigned 32-bit** integer.
 
@@ -547,7 +545,7 @@ Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`value-expr`** / *
 
 **Case convention.** **Lowercase** tag letters denote the atom's own state fields (isotope, charge, spin, implicit H, localized valence, π contribution, …) plus the SMARTS-lowercase ring-connectivity predicate **`#x`**. **Uppercase** tag letters denote **derived predicates** (topology queries over the surrounding graph) in the SMARTS-parity set. The namespaces are **disjoint**: **`#h`** (implicit H slot) and **`#H`** (total H count) coexist, and **`#x`** (ring connectivity) and **`#X`** (connectivity) coexist, without collision. Ring membership is the single uppercase **`#R`** — total count, or **`#R(<size>)`** for one size; there is **no** lowercase **`#r`** (the former ring-size tag folds into **`#R(<size>)`**).
 
-### 7.4 Element and bond **`order`** (via **`value-expr`**)
+### 7.4 Element
 
 The **`element`** nonterminal (**atom-string** prefix) is **literal** | **wildcard `*`** | **brace set** | **negation** | **bind** | **ref** (**§7.4** grammar below). The **bond-string** **`order`** prefix (**§7.5**) is a single **`value-expr`** (**§5**), which **subsumes** literal **`nat`**, **`*`**, brace **`nat-set`**, **`?` *id***, **`?` *id* `::` *nat-set***, and **arithmetic** / logic (e.g. **`1+1`**, **`?o+1`**) where allowed by context.
 
@@ -1046,7 +1044,7 @@ A **`stereo-atom-entry`** / **`stereo-bond-entry`** **`:ligands`** vector **over
 
 Examples use the vector **`:atoms`** form with inline ids. Bond entries show **`:id`** where useful.
 
-### 8.1 Methanol (CH₃OH) — Ground, L1
+### 8.1 Methanol (CH₃OH) — Ground
 
 ```clojure
 {:atoms [[:C  "C#h3"]
@@ -1058,7 +1056,7 @@ Examples use the vector **`:atoms`** form with inline ids. Bond entries show **`
 
 The **`H`** atom here represents an **explicit** hydrogen (e.g. a hydroxyl H one wishes to name). Implicit H counts on **`C`** (**`#h3`**) and **`O`** (**`#h1`**) already account for the remaining hydrogens.
 
-### 8.2 Indole — Ground, L1, aromatic ring
+### 8.2 Indole — Ground, aromatic ring
 
 ```clojure
 {:atoms [[:N   "N#h1"]
@@ -1080,7 +1078,7 @@ The **`H`** atom here represents an **explicit** hydrogen (e.g. a hydroxyl H one
 
 Localized bonds carry the σ-skeleton orders; the aromatic π system is expressed in **`:aromatic-systems`**.
 
-### 8.3 Substructure query — L2
+### 8.3 Substructure query
 
 Match any carbon with at least two implicit hydrogens that is directly bonded to a nitrogen:
 
@@ -1092,7 +1090,7 @@ Match any carbon with at least two implicit hydrogens that is directly bonded to
 
 **`(?h >= 2)`** is a **`bool-expr`** payload on **`#h`**; **`?h`** is bound to the matched atom's implicit H count.
 
-### 8.4 Transformation rule — L3
+### 8.4 Transformation rule
 
 Replace a primary amine carbon (C with three H and bonded to NH₂) with a quaternary carbon (no H, same bond to nitrogen):
 

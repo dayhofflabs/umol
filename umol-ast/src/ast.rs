@@ -58,11 +58,11 @@ pub use delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas, LeftRightS
 pub use edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
-    AromaticSystemRef, AtomFieldChange, AtomRef, BondFieldChange, BondRef, ConstraintUpdate,
-    DativeBondFieldChange, DativeBondRef, DroppedConstraint, Edit, MulticenterBondFieldChange,
+    AromaticSystemRef, AtomFieldChange, AtomRef, BondFieldChange, BondRef, CascadedConstraints,
+    DativeBondFieldChange, DativeBondRef, Edit, ModifiedConstraint, MulticenterBondFieldChange,
     MulticenterBondRef, NoncovalentBondFieldChange, NoncovalentBondRef, RemovedAromaticSystem,
-    RemovedAtom, RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
-    RemovedOverlays, RemovedStereoAtom, RemovedStereoBond, RewrittenConstraint,
+    RemovedAtom, RemovedBond, RemovedConstraint, RemovedDativeBond, RemovedMulticenterBond,
+    RemovedNoncovalentBond, RemovedOverlays, RemovedStereoAtom, RemovedStereoBond,
     StereoAtomFieldChange, StereoAtomRef, StereoBondFieldChange, StereoBondRef, Undo,
 };
 pub use electrons::ElectronCountsAst;

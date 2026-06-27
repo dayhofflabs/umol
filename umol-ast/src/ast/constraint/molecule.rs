@@ -6,7 +6,7 @@ use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-use super::super::edit::{ConstraintUpdate, DroppedConstraint, RewrittenConstraint};
+use super::super::edit::{CascadedConstraints, ModifiedConstraint, RemovedConstraint};
 use super::super::error::Contradiction;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -236,14 +236,14 @@ impl Constraints {
 
     /// Remap entity indices and return the patch needed to restore or inspect
     /// constraints that were dropped or rewritten by the remap.
-    pub fn remap_with_update(&mut self, remap: &IdRemapping) -> ConstraintUpdate {
-        let mut update = ConstraintUpdate::default();
+    pub fn remap_with_update(&mut self, remap: &IdRemapping) -> CascadedConstraints {
+        let mut update = CascadedConstraints::default();
         let mut next = Vec::new();
         for (position, constraint) in mem::take(&mut self.0).into_iter().enumerate() {
             match constraint.clone().remap(remap) {
                 Some(mapped) => {
                     if mapped != constraint {
-                        update.rewritten.push(RewrittenConstraint {
+                        update.modified.push(ModifiedConstraint {
                             position,
                             old: constraint,
                             new: mapped.clone(),
@@ -251,7 +251,7 @@ impl Constraints {
                     }
                     next.push(mapped);
                 }
-                None => update.dropped.push(DroppedConstraint {
+                None => update.removed.push(RemovedConstraint {
                     position,
                     constraint,
                 }),
@@ -1074,13 +1074,13 @@ mod tests {
         );
         assert_eq!(
             update,
-            ConstraintUpdate {
-                dropped: vec![DroppedConstraint {
+            CascadedConstraints {
+                removed: vec![RemovedConstraint {
                     position: 1,
                     constraint: Constraint::Atom(AtomId(1), AtomConstraint::degree(3)),
                 }],
-                rewritten: vec![
-                    RewrittenConstraint {
+                modified: vec![
+                    ModifiedConstraint {
                         position: 2,
                         old: Constraint::Bond(
                             BondId(2),
@@ -1091,7 +1091,7 @@ mod tests {
                             BondConstraint::ring_membership(RingScope::Size(6), 1)
                         ),
                     },
-                    RewrittenConstraint {
+                    ModifiedConstraint {
                         position: 3,
                         old: Constraint::Molecule(MoleculeConstraint::Connected {
                             atoms: Some(vec![AtomId(0), AtomId(2)]),
@@ -1114,12 +1114,12 @@ mod tests {
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ));
 
-        ConstraintUpdate {
-            dropped: vec![DroppedConstraint {
+        CascadedConstraints {
+            removed: vec![RemovedConstraint {
                 position: 1,
                 constraint: Constraint::Atom(AtomId(1), AtomConstraint::degree(3)),
             }],
-            rewritten: vec![RewrittenConstraint {
+            modified: vec![ModifiedConstraint {
                 position: 2,
                 old: Constraint::Bond(
                     BondId(2),

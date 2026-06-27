@@ -1,5 +1,5 @@
 //! Property tests for reaction application and composition. Generates valid localized reactions:
-//! deltas consistent with `lhs` (`SetField` with the lhs value as `old`), appended atoms, and
+//! deltas consistent with `lhs` (`ModifyField` with the lhs value as `old`), appended atoms, and
 //! DPO-valid deletions (a removed atom takes all its incident bonds), so `apply` stays
 //! dangling-free. Reactions drive the public surface only.
 
@@ -108,7 +108,7 @@ fn build_reaction(
         let old = lhs.atom(id).ast.charge.clone();
         let new = ValueAst::Lit(charge);
         if old != new {
-            deltas.push(Delta::Atom(AtomDelta::SetField {
+            deltas.push(Delta::Atom(AtomDelta::ModifyField {
                 id,
                 change: AtomFieldChange::Charge { old, new },
             }));
@@ -123,7 +123,7 @@ fn build_reaction(
         let old = lhs.bond(id).ast.order.clone();
         let new = ValueAst::Lit(order);
         if old != new {
-            deltas.push(Delta::Bond(BondDelta::SetField {
+            deltas.push(Delta::Bond(BondDelta::ModifyField {
                 id,
                 change: BondFieldChange::Order { old, new },
             }));

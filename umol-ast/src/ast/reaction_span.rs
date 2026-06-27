@@ -129,7 +129,7 @@ impl ReactionAst {
                     AtomDelta::Add { id, ast } => {
                         added_atoms.insert(*id, ast.clone());
                     }
-                    AtomDelta::SetField { id, .. } | AtomDelta::SetConstraint { id, .. } => {
+                    AtomDelta::ModifyField { id, .. } | AtomDelta::ModifyConstraint { id, .. } => {
                         atom_changes.entry(*id).or_default().push(atom.clone());
                     }
                 },
@@ -140,7 +140,7 @@ impl ReactionAst {
                     BondDelta::Add { id, atoms, ast } => {
                         added_bonds.insert(*id, (*atoms, ast.clone()));
                     }
-                    BondDelta::SetField { id, .. } | BondDelta::SetConstraint { id, .. } => {
+                    BondDelta::ModifyField { id, .. } | BondDelta::ModifyConstraint { id, .. } => {
                         bond_changes.entry(*id).or_default().push(bond.clone());
                     }
                 },
@@ -290,7 +290,7 @@ mod tests {
                 ],
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ),
-            Deltas::from_iter([Delta::Bond(BondDelta::SetField {
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
                     old: ValueAst::Lit(1),
@@ -370,7 +370,7 @@ mod tests {
                 ],
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ),
-            Deltas::from_iter([Delta::Bond(BondDelta::SetField {
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
                     old: ValueAst::Lit(1),

@@ -59,12 +59,14 @@ impl ReactionAst {
                     removed_host_atoms.push(host_atom);
                     remove_atoms.push(AtomRef::Id(host_atom));
                 }
-                Delta::Atom(AtomDelta::SetField { id, change }) => sets.push(Edit::SetAtomField {
-                    id: AtomRef::Id(m.host_atom(*id)),
-                    change: change.clone(),
-                }),
-                Delta::Atom(AtomDelta::SetConstraint { id, old, new }) => {
-                    sets.push(Edit::SetAtomConstraint {
+                Delta::Atom(AtomDelta::ModifyField { id, change }) => {
+                    sets.push(Edit::ModifyAtomField {
+                        id: AtomRef::Id(m.host_atom(*id)),
+                        change: change.clone(),
+                    })
+                }
+                Delta::Atom(AtomDelta::ModifyConstraint { id, old, new }) => {
+                    sets.push(Edit::ModifyAtomConstraint {
                         id: AtomRef::Id(m.host_atom(*id)),
                         old: old.clone(),
                         new: new.clone(),
@@ -78,12 +80,14 @@ impl ReactionAst {
                     removed_host_bonds.insert(host_bond);
                     remove_bonds.push(BondRef::Id(host_bond));
                 }
-                Delta::Bond(BondDelta::SetField { id, change }) => sets.push(Edit::SetBondField {
-                    id: BondRef::Id(m.host_bond(*id)),
-                    change: change.clone(),
-                }),
-                Delta::Bond(BondDelta::SetConstraint { id, old, new }) => {
-                    sets.push(Edit::SetBondConstraint {
+                Delta::Bond(BondDelta::ModifyField { id, change }) => {
+                    sets.push(Edit::ModifyBondField {
+                        id: BondRef::Id(m.host_bond(*id)),
+                        change: change.clone(),
+                    })
+                }
+                Delta::Bond(BondDelta::ModifyConstraint { id, old, new }) => {
+                    sets.push(Edit::ModifyBondConstraint {
                         id: BondRef::Id(m.host_bond(*id)),
                         old: old.clone(),
                         new: new.clone(),
@@ -183,7 +187,7 @@ mod tests {
     use super::*;
 
     fn charge_set(id: u32, old: i64, new: i64) -> Delta {
-        Delta::Atom(AtomDelta::SetField {
+        Delta::Atom(AtomDelta::ModifyField {
             id: AtomId(id),
             change: AtomFieldChange::Charge {
                 old: ValueAst::Lit(old),
@@ -218,7 +222,7 @@ mod tests {
                 ],
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ),
-            Deltas::from_iter([Delta::Bond(BondDelta::SetField {
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
                     old: ValueAst::Lit(1),
@@ -302,7 +306,7 @@ mod tests {
                 ],
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ),
-            Deltas::from_iter([Delta::Bond(BondDelta::SetField {
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
                     old: ValueAst::Lit(1),

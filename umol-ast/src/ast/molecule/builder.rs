@@ -22,7 +22,7 @@ use super::super::constraint::{Constraint, Constraints};
 use super::super::dative::DativeBondAst;
 use super::super::edit::{
     AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
-    AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, ConstraintUpdate,
+    AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, CascadedConstraints,
     RemovedAromaticSystem, RemovedAtom, RemovedBond, RemovedDativeBond, RemovedMulticenterBond,
     RemovedNoncovalentBond, RemovedOverlays, RemovedStereoAtom, RemovedStereoBond,
 };
@@ -1182,7 +1182,7 @@ impl MoleculeBuilder {
         bonds: Vec<RemovedBond>,
         overlays: RemovedOverlays,
         undo_remapping: &UndoRemapping,
-        constraint_update: ConstraintUpdate,
+        cascade: CascadedConstraints,
     ) {
         self.restore_atoms(atoms, undo_remapping);
         self.restore_bonds(bonds, undo_remapping);
@@ -1192,7 +1192,7 @@ impl MoleculeBuilder {
         self.restore_noncovalent_bonds(overlays.noncovalent_bonds, undo_remapping);
         self.restore_stereo_atoms(overlays.stereo_atoms, undo_remapping);
         self.restore_stereo_bonds(overlays.stereo_bonds, undo_remapping);
-        constraint_update.rollback_into(&mut self.constraints);
+        cascade.rollback_into(&mut self.constraints);
     }
 
     pub(super) fn restore_dative_bond(
@@ -1445,7 +1445,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::AtomConstraint;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::DroppedConstraint;
+    use crate::ast::RemovedConstraint;
     use crate::mol;
 
     #[fixture]
@@ -1487,12 +1487,12 @@ mod tests {
             removed_bonds,
             RemovedOverlays::default(),
             &remap.undo_remapping(),
-            ConstraintUpdate {
-                dropped: vec![DroppedConstraint {
+            CascadedConstraints {
+                removed: vec![RemovedConstraint {
                     position: 0,
                     constraint: dropped_constraint,
                 }],
-                rewritten: Vec::new(),
+                modified: Vec::new(),
             },
         );
 

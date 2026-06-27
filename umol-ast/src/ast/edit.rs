@@ -256,11 +256,11 @@ pub enum Edit {
         atoms: Vec<AtomRef>,
         bonds: Vec<BondRef>,
     },
-    SetAtomField {
+    ModifyAtomField {
         id: AtomRef,
         change: AtomFieldChange,
     },
-    SetBondField {
+    ModifyBondField {
         id: BondRef,
         change: BondFieldChange,
     },
@@ -275,7 +275,7 @@ pub enum Edit {
         atoms: Vec<AtomRef>,
         ast: DativeBondAst,
     },
-    SetDativeBondField {
+    ModifyDativeBondField {
         id: DativeBondRef,
         change: DativeBondFieldChange,
     },
@@ -290,7 +290,7 @@ pub enum Edit {
         atoms: Vec<AtomRef>,
         ast: AromaticSystemAst,
     },
-    SetAromaticSystemField {
+    ModifyAromaticSystemField {
         id: AromaticSystemRef,
         change: AromaticSystemFieldChange,
     },
@@ -305,7 +305,7 @@ pub enum Edit {
         atoms: Vec<AtomRef>,
         ast: MulticenterBondAst,
     },
-    SetMulticenterBondField {
+    ModifyMulticenterBondField {
         id: MulticenterBondRef,
         change: MulticenterBondFieldChange,
     },
@@ -320,7 +320,7 @@ pub enum Edit {
         atoms: [AtomRef; 2],
         ast: NoncovalentBondAst,
     },
-    SetNoncovalentBondField {
+    ModifyNoncovalentBondField {
         id: NoncovalentBondRef,
         change: NoncovalentBondFieldChange,
     },
@@ -339,7 +339,7 @@ pub enum Edit {
         ligands: Vec<(AtomRef, StereoLigandKind)>,
         ast: StereoAtomAst,
     },
-    SetStereoAtomField {
+    ModifyStereoAtomField {
         id: StereoAtomRef,
         change: StereoAtomFieldChange,
     },
@@ -354,77 +354,45 @@ pub enum Edit {
         ligands: Vec<(AtomRef, StereoLigandKind)>,
         ast: StereoBondAst,
     },
-    SetStereoBondField {
+    ModifyStereoBondField {
         id: StereoBondRef,
         change: StereoBondFieldChange,
     },
 
-    // Entity-inline constraints — atom
-    SetAtomConstraint {
+    // Entity-inline constraints — keyed (one per `key()`), so a single modify
+    // (old → new) covers add (old None), remove (new None), and replace.
+    ModifyAtomConstraint {
         id: AtomRef,
         old: Option<AtomConstraint>,
         new: Option<AtomConstraint>,
     },
-    AddAtomConstraint {
-        id: AtomRef,
-        constraint: AtomConstraint,
-    },
-    RemoveAtomConstraint {
-        id: AtomRef,
-        constraint: AtomConstraint,
-    },
-
-    // Entity-inline constraints — bond
-    SetBondConstraint {
+    ModifyBondConstraint {
         id: BondRef,
         old: Option<BondConstraint>,
         new: Option<BondConstraint>,
     },
-    AddBondConstraint {
-        id: BondRef,
-        constraint: BondConstraint,
-    },
-    RemoveBondConstraint {
-        id: BondRef,
-        constraint: BondConstraint,
-    },
-
-    // Entity-inline constraints — dative bond
-    SetDativeBondConstraint {
+    ModifyDativeBondConstraint {
         id: DativeBondRef,
         old: Option<DativeBondConstraint>,
         new: Option<DativeBondConstraint>,
     },
-    AddDativeBondConstraint {
-        id: DativeBondRef,
-        constraint: DativeBondConstraint,
-    },
-    RemoveDativeBondConstraint {
-        id: DativeBondRef,
-        constraint: DativeBondConstraint,
-    },
-
-    // Entity-inline constraints — aromatic system (no non-unique kinds)
-    SetAromaticSystemConstraint {
+    ModifyAromaticSystemConstraint {
         id: AromaticSystemRef,
         old: Option<AromaticSystemConstraint>,
         new: Option<AromaticSystemConstraint>,
     },
-
-    // Entity-inline constraints — multicenter bond (no non-unique kinds)
-    SetMulticenterBondConstraint {
+    ModifyMulticenterBondConstraint {
         id: MulticenterBondRef,
         old: Option<MulticenterBondConstraint>,
         new: Option<MulticenterBondConstraint>,
     },
 
-    // Molecule-list constraints (stack discipline; arbitrary-position removal
-    // not part of the Edit grammar — use `constraints_mut().remove_at()` for
-    // that, outside transact).
-    PushMoleculeConstraint {
+    // Molecule-list constraints — a true multiset, so add/remove by value
+    // (remove takes the first matching entry; its position is captured for undo).
+    AddMoleculeConstraint {
         constraint: Constraint,
     },
-    PopMoleculeConstraint {
+    RemoveMoleculeConstraint {
         constraint: Constraint,
     },
 }
@@ -619,39 +587,39 @@ pub struct RemovedOverlays {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DroppedConstraint {
+pub struct RemovedConstraint {
     pub position: usize,
     pub constraint: Constraint,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RewrittenConstraint {
+pub struct ModifiedConstraint {
     pub position: usize,
     pub old: Constraint,
     pub new: Constraint,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ConstraintUpdate {
-    pub dropped: Vec<DroppedConstraint>,
-    pub rewritten: Vec<RewrittenConstraint>,
+pub struct CascadedConstraints {
+    pub removed: Vec<RemovedConstraint>,
+    pub modified: Vec<ModifiedConstraint>,
 }
 
-impl ConstraintUpdate {
+impl CascadedConstraints {
     pub fn is_empty(&self) -> bool {
-        self.dropped.is_empty() && self.rewritten.is_empty()
+        self.removed.is_empty() && self.modified.is_empty()
     }
 
     pub fn rollback_into(self, constraints: &mut Constraints) {
         let mut items = constraints.take();
-        for rewritten in self.rewritten {
-            if let Some(pos) = items.iter().position(|c| *c == rewritten.new) {
-                items[pos] = rewritten.old;
+        for modified in self.modified {
+            if let Some(pos) = items.iter().position(|c| *c == modified.new) {
+                items[pos] = modified.old;
             }
         }
-        for dropped in self.dropped {
-            let position = dropped.position.min(items.len());
-            items.insert(position, dropped.constraint);
+        for removed in self.removed {
+            let position = removed.position.min(items.len());
+            items.insert(position, removed.constraint);
         }
         *constraints = items.into_iter().collect();
     }
@@ -666,13 +634,13 @@ pub enum Undo {
         atoms: Vec<AddedAtom>,
         bonds: Vec<AddedBond>,
     },
-    RestoreTopology {
+    RestoreRemovedTopology {
         atoms: Vec<RemovedAtom>,
         bonds: Vec<RemovedBond>,
         overlays: RemovedOverlays,
         remapping: IdRemapping,
         undo_remapping: UndoRemapping,
-        constraint_update: ConstraintUpdate,
+        cascade: CascadedConstraints,
     },
     RemoveAddedDativeBond(AddedDativeBond),
     RestoreRemovedDativeBond {
@@ -704,46 +672,46 @@ pub enum Undo {
         removed: RemovedStereoBond,
         undo_remapping: UndoRemapping,
     },
-    SetAtomField {
+    ModifyAtomField {
         id: AtomId,
         change: AtomFieldChange,
     },
-    SetBondField {
+    ModifyBondField {
         id: BondId,
         change: BondFieldChange,
     },
-    SetDativeBondField {
+    ModifyDativeBondField {
         id: DativeBondId,
         change: DativeBondFieldChange,
     },
-    SetAromaticSystemField {
+    ModifyAromaticSystemField {
         id: AromaticSystemId,
         change: AromaticSystemFieldChange,
     },
-    SetMulticenterBondField {
+    ModifyMulticenterBondField {
         id: MulticenterBondId,
         change: MulticenterBondFieldChange,
     },
-    SetNoncovalentBondField {
+    ModifyNoncovalentBondField {
         id: NoncovalentBondId,
         change: NoncovalentBondFieldChange,
     },
-    SetStereoAtomField {
+    ModifyStereoAtomField {
         id: StereoAtomId,
         change: StereoAtomFieldChange,
     },
-    SetStereoBondField {
+    ModifyStereoBondField {
         id: StereoBondId,
         change: StereoBondFieldChange,
     },
-    ApplyConstraintUpdate(ConstraintUpdate),
+    ApplyCascadedConstraints(CascadedConstraints),
     ApplyEdit(Box<Edit>),
 }
 
 impl Undo {
     pub fn id_remapping(&self) -> Option<&IdRemapping> {
         match self {
-            Self::RestoreTopology { remapping, .. } => Some(remapping),
+            Self::RestoreRemovedTopology { remapping, .. } => Some(remapping),
             _ => None,
         }
     }
