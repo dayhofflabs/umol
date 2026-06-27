@@ -1171,6 +1171,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_edn::read_string;
 
     use super::*;
     use crate::ast::constraint::RingScope;
@@ -1565,7 +1566,7 @@ mod tests {
     #[case::with_tetrahedral_stereo(r##""C#T1""##)]
     fn test_atom_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
         let via_stream = AtomDsl::from_edn_str(input).unwrap();
-        let tree = umol_edn::read_string(input).unwrap();
+        let tree = read_string(input).unwrap();
         let via_tree = AtomDsl::from_edn(&tree).unwrap();
         assert_eq!(via_stream, via_tree);
     }
@@ -1583,7 +1584,7 @@ mod tests {
     ) {
         let dsl = AromaticValenceDsl::from_ast(&input, &());
         let edn = dsl.to_edn();
-        let expected = umol_edn::read_string(edn_source).unwrap();
+        let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected);
         let parsed = AromaticValenceDsl::from_edn(&edn).unwrap();
         assert_eq!(parsed.into_ast(&()), input);
@@ -1601,7 +1602,7 @@ mod tests {
     ) {
         let dsl = MulticenterValenceDsl::from_ast(&input, &());
         let edn = dsl.to_edn();
-        let expected = umol_edn::read_string(edn_source).unwrap();
+        let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected);
         let parsed = MulticenterValenceDsl::from_edn(&edn).unwrap();
         assert_eq!(parsed.into_ast(&()), input);
@@ -1609,7 +1610,7 @@ mod tests {
 
     #[rstest]
     fn test_aromatic_valence_dsl_rejects_unknown_key() {
-        let edn = umol_edn::read_string("{:bogus 1}").unwrap();
+        let edn = read_string("{:bogus 1}").unwrap();
         let err = AromaticValenceDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::UnknownField { .. }));
     }
@@ -1648,9 +1649,10 @@ mod tests {
     #[case::tetrahedral_stereo_set(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([1, 2]))), "{:tetrahedral-stereo {:stereo [1 2]}}")]
     #[case::tetrahedral_stereo_term(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1))))), "{:tetrahedral-stereo {:stereo \"~1\"}}")]
     fn test_atom_constraint_dsl_roundtrip(#[case] input: AtomConstraint, #[case] edn_source: &str) {
+
         let dsl = AtomConstraintDsl::from_ast(&input, &());
         let edn = dsl.to_edn();
-        let expected = umol_edn::read_string(edn_source).unwrap();
+        let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = AtomConstraintDsl::from_edn(&edn).unwrap();
         assert_eq!(parsed.into_ast(&()), input, "parse-back mismatch");
@@ -1664,21 +1666,21 @@ mod tests {
 
     #[rstest]
     fn test_atom_constraint_dsl_rejects_multiple_keys() {
-        let edn = umol_edn::read_string("{:valence 4 :degree 3}").unwrap();
+        let edn = read_string("{:valence 4 :degree 3}").unwrap();
         let err = AtomConstraintDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
     }
 
     #[rstest]
     fn test_atom_constraint_dsl_rejects_unknown_key() {
-        let edn = umol_edn::read_string("{:bogus 1}").unwrap();
+        let edn = read_string("{:bogus 1}").unwrap();
         let err = AtomConstraintDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::UnknownField { .. }));
     }
 
     #[rstest]
     fn test_atom_constraint_dsl_accepts_value_as_string_subgrammar() {
-        let edn = umol_edn::read_string(r##"{:valence "?h + 1"}"##).unwrap();
+        let edn = read_string(r##"{:valence "?h + 1"}"##).unwrap();
         let parsed = AtomConstraintDsl::from_edn(&edn).unwrap();
         assert_eq!(
             parsed.into_ast(&()),

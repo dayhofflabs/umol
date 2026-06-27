@@ -216,13 +216,13 @@ macro_rules! field_ops {
     };
 }
 
-/// One element's left/right state across a reaction span — a *state*, not an operation (unlike
-/// `Edit` / `Delta`). `left()` / `right()` read the side values.
+/// One entity's span across a reaction — its slice of the superimposed `L`∪`K`∪`R`. A *state*, not
+/// an operation (unlike `Edit` / `Delta`). `left()` / `right()` read the side values.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum LeftRightState<T> {
+pub enum EntitySpan<T> {
     /// In the interface `K` — present and identical on both sides.
     Unchanged(T),
-    /// In the interface `K` — present on both sides but relabeled (a dynamic element).
+    /// In the interface `K` — present on both sides but relabeled (a dynamic entity).
     Modified { left: T, right: T },
     /// In `R` only — created.
     Added(T),
@@ -230,8 +230,8 @@ pub enum LeftRightState<T> {
     Removed(T),
 }
 
-impl<T> LeftRightState<T> {
-    /// The left-side (`L`) value, or `None` if the element is created.
+impl<T> EntitySpan<T> {
+    /// The left-side (`L`) value, or `None` if the entity is created.
     pub fn left(&self) -> Option<&T> {
         match self {
             Self::Unchanged(value) | Self::Removed(value) | Self::Modified { left: value, .. } => {
@@ -241,7 +241,7 @@ impl<T> LeftRightState<T> {
         }
     }
 
-    /// The right-side (`R`) value, or `None` if the element is deleted.
+    /// The right-side (`R`) value, or `None` if the entity is deleted.
     pub fn right(&self) -> Option<&T> {
         match self {
             Self::Unchanged(value) | Self::Added(value) | Self::Modified { right: value, .. } => {
@@ -305,7 +305,7 @@ pub(crate) trait EntityDelta: Sized {
     ) -> Vec<(Option<Self::Constraint>, Option<Self::Constraint>)>;
 
     /// The `ModifyField` / `ModifyConstraint` deltas carrying `left` to `right` for one entity — the
-    /// inverse of `apply_*_change`, recovering a `Modified` element's deltas.
+    /// inverse of `apply_*_change`, recovering a `Modified` entity's deltas.
     fn diff(id: Self::Id, left: &Self::Ast, right: &Self::Ast) -> Vec<Self> {
         let mut out: Vec<Self> = Self::diff_field(left, right)
             .into_iter()
@@ -321,17 +321,17 @@ pub(crate) trait EntityDelta: Sized {
 
     /// Recover this kind's deltas from its left/right state column: `Added`/`Removed` become
     /// structural `Add`/`Remove` (their `atoms` from `atoms(index)`), `Modified` becomes the
-    /// field/constraint `diff`. The id of element `i` is `i` (the column is id-indexed).
+    /// field/constraint `diff`. The id of entity `i` is `i` (the column is id-indexed).
     fn deltas_from_states(
-        states: &[LeftRightState<Self::Ast>],
+        states: &[EntitySpan<Self::Ast>],
         atoms: impl Fn(usize) -> Self::Atoms,
     ) -> Vec<Delta> {
         let mut out = Vec::new();
         for (index, state) in states.iter().enumerate() {
             let id = Self::Id::from(index);
             match state {
-                LeftRightState::Unchanged(_) => {}
-                LeftRightState::Added(ast) => out.push(
+                EntitySpan::Unchanged(_) => {}
+                EntitySpan::Added(ast) => out.push(
                     Self::rebuild(
                         id,
                         EntityOp::Add {
@@ -341,7 +341,7 @@ pub(crate) trait EntityDelta: Sized {
                     )
                     .into_delta(),
                 ),
-                LeftRightState::Removed(ast) => out.push(
+                EntitySpan::Removed(ast) => out.push(
                     Self::rebuild(
                         id,
                         EntityOp::Remove {
@@ -351,7 +351,7 @@ pub(crate) trait EntityDelta: Sized {
                     )
                     .into_delta(),
                 ),
-                LeftRightState::Modified { left, right } => {
+                EntitySpan::Modified { left, right } => {
                     out.extend(
                         Self::diff(id, left, right)
                             .into_iter()
@@ -926,24 +926,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(LeftRightState::Unchanged(5), Some(&5))]
-    #[case::modified(LeftRightState::Modified { left: 1, right: 2 }, Some(&1))]
-    #[case::removed(LeftRightState::Removed(7), Some(&7))]
-    #[case::added(LeftRightState::Added(9), None)]
-    fn test_left_right_state_left(
-        #[case] state: LeftRightState<i32>,
+    #[case::unchanged(EntitySpan::Unchanged(5), Some(&5))]
+    #[case::modified(EntitySpan::Modified { left: 1, right: 2 }, Some(&1))]
+    #[case::removed(EntitySpan::Removed(7), Some(&7))]
+    #[case::added(EntitySpan::Added(9), None)]
+    fn test_entity_span_left(
+        #[case] state: EntitySpan<i32>,
         #[case] expected: Option<&i32>,
     ) {
         assert_eq!(state.left(), expected);
     }
 
     #[rstest]
-    #[case::unchanged(LeftRightState::Unchanged(5), Some(&5))]
-    #[case::modified(LeftRightState::Modified { left: 1, right: 2 }, Some(&2))]
-    #[case::added(LeftRightState::Added(9), Some(&9))]
-    #[case::removed(LeftRightState::Removed(7), None)]
-    fn test_left_right_state_right(
-        #[case] state: LeftRightState<i32>,
+    #[case::unchanged(EntitySpan::Unchanged(5), Some(&5))]
+    #[case::modified(EntitySpan::Modified { left: 1, right: 2 }, Some(&2))]
+    #[case::added(EntitySpan::Added(9), Some(&9))]
+    #[case::removed(EntitySpan::Removed(7), None)]
+    fn test_entity_span_right(
+        #[case] state: EntitySpan<i32>,
         #[case] expected: Option<&i32>,
     ) {
         assert_eq!(state.right(), expected);

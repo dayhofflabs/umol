@@ -3,8 +3,8 @@
 //! Materialized superimposed graph carrying, per atom/bond, both its before and after state plus a
 //! membership tag. The DPO span `L ←K─ R` is read off the tags — `K = Unchanged ∪ Modified`,
 //! `L = K ∪ Removed`, `R = K ∪ Added` — and `right()` / `left()` project the two sides back to
-//! a `MoleculeAst`. `Modified` (a preserved element relabeled across the reaction) is the
-//! relabeling-DPO reading: the element persists in `K`, its label resolved per side.
+//! a `MoleculeAst`. `Modified` (a preserved entity relabeled across the reaction) is the
+//! relabeling-DPO reading: the entity persists in `K`, its label resolved per side.
 
 // TODO: Add overlays. Molecule-level constraints and overlays not represented here yet,
 // dropped on conversion from ReactionAst.
@@ -17,7 +17,7 @@ use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::delta::{
     apply_atom_change, apply_bond_change, remap_delta, AtomDelta, BondDelta, Delta, Deltas,
-    EntityDelta, LeftRightState,
+    EntityDelta, EntitySpan,
 };
 use super::error::Contradiction;
 use super::id::{AtomId, BondId};
@@ -26,13 +26,13 @@ use super::reaction::ReactionAst;
 use super::traits::Canonicalize;
 
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
-/// topology is the `lhs` frame (deleted elements kept as nodes/edges) with created elements
+/// topology is the `lhs` frame (deleted entities kept as nodes/edges) with created entities
 /// appended; `atoms` / `bonds` are indexed parallel to the graph's nodes / edges.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReactionSpanAst {
     graph: Graph,
-    atoms: Vec<LeftRightState<AtomAst>>,
-    bonds: Vec<LeftRightState<BondAst>>,
+    atoms: Vec<EntitySpan<AtomAst>>,
+    bonds: Vec<EntitySpan<BondAst>>,
 }
 
 impl ReactionSpanAst {
@@ -40,29 +40,29 @@ impl ReactionSpanAst {
         &self.graph
     }
 
-    pub fn atoms(&self) -> &[LeftRightState<AtomAst>] {
+    pub fn atoms(&self) -> &[EntitySpan<AtomAst>] {
         &self.atoms
     }
 
-    pub fn bonds(&self) -> &[LeftRightState<BondAst>] {
+    pub fn bonds(&self) -> &[EntitySpan<BondAst>] {
         &self.bonds
     }
 
-    /// The left-hand (reactant) molecule: every element present on the left, in a compacted
-    /// frame (created elements dropped).
+    /// The left-hand (reactant) molecule: every entity present on the left, in a compacted
+    /// frame (created entities dropped).
     pub fn left(&self) -> MoleculeAst {
         self.project(|atom| atom.left(), |bond| bond.left())
     }
 
-    /// The right-hand (product) molecule: every element present on the right, in a compacted
-    /// frame (deleted elements dropped).
+    /// The right-hand (product) molecule: every entity present on the right, in a compacted
+    /// frame (deleted entities dropped).
     pub fn right(&self) -> MoleculeAst {
         self.project(|atom| atom.right(), |bond| bond.right())
     }
 
     /// Recover the operational `ReactionAst` from the span — the inverse of
     /// `ReactionAst::to_reaction_span`, up to delta normal form. `lhs = left()` (which preserves
-    /// the original lhs frame); each element's `LeftRightState` yields its delta, a `Modified` one
+    /// the original lhs frame); each entity's `EntitySpan` yields its delta, a `Modified` one
     /// via an AST-diff of its left/right values.
     pub fn to_reaction(&self) -> ReactionAst {
         let mut deltas = AtomDelta::deltas_from_states(&self.atoms, |_| ());
@@ -74,11 +74,11 @@ impl ReactionSpanAst {
     }
 
     /// Project one side to a `MoleculeAst`. `atom_side` / `bond_side` pick the left or right
-    /// value of each element; absent elements are dropped and the survivors are renumbered.
+    /// value of each entity; absent entities are dropped and the survivors are renumbered.
     fn project(
         &self,
-        atom_side: impl Fn(&LeftRightState<AtomAst>) -> Option<&AtomAst>,
-        bond_side: impl Fn(&LeftRightState<BondAst>) -> Option<&BondAst>,
+        atom_side: impl Fn(&EntitySpan<AtomAst>) -> Option<&AtomAst>,
+        bond_side: impl Fn(&EntitySpan<BondAst>) -> Option<&BondAst>,
     ) -> MoleculeAst {
         let mut compacted: Vec<Option<AtomId>> = vec![None; self.atoms.len()];
         let mut atoms: Vec<AtomAst> = Vec::new();
@@ -103,8 +103,8 @@ impl ReactionSpanAst {
 
 impl ReactionAst {
     /// Materialize the superimposed reaction span. Canonicalizes the deltas, then annotates
-    /// each `lhs` element (in its own frame) with its before/after state — `Removed` /
-    /// `Added` / `Modified` / `Unchanged` — appending created elements. A `Modified` element's
+    /// each `lhs` entity (in its own frame) with its before/after state — `Removed` /
+    /// `Added` / `Modified` / `Unchanged` — appending created entities. A `Modified` entity's
     /// right value is its left value with the entity's field/constraint changes applied.
     /// `Err(Contradiction)` if the deltas are inconsistent (or inconsistent with `lhs`).
     pub fn to_reaction_span(&self) -> Result<ReactionSpanAst, Contradiction> {
@@ -159,28 +159,28 @@ impl ReactionAst {
             atom_index.insert(id, atom_count + offset);
         }
 
-        let mut atoms: Vec<LeftRightState<AtomAst>> =
+        let mut atoms: Vec<EntitySpan<AtomAst>> =
             Vec::with_capacity(atom_count + added_atoms.len());
         for node in 0..atom_count {
             let id = AtomId(node as u32);
             if let Some(ast) = removed_atoms.get(&id) {
-                atoms.push(LeftRightState::Removed(ast.clone()));
+                atoms.push(EntitySpan::Removed(ast.clone()));
             } else if let Some(changes) = atom_changes.get(&id) {
                 let left = lhs.atom(id).ast.clone();
                 let mut right = left.clone();
                 for change in changes {
                     apply_atom_change(&mut right, change)?;
                 }
-                atoms.push(LeftRightState::Modified { left, right });
+                atoms.push(EntitySpan::Modified { left, right });
             } else {
-                atoms.push(LeftRightState::Unchanged(lhs.atom(id).ast.clone()));
+                atoms.push(EntitySpan::Unchanged(lhs.atom(id).ast.clone()));
             }
         }
         for ast in added_atoms.into_values() {
-            atoms.push(LeftRightState::Added(ast));
+            atoms.push(EntitySpan::Added(ast));
         }
 
-        let mut bonds: Vec<LeftRightState<BondAst>> =
+        let mut bonds: Vec<EntitySpan<BondAst>> =
             Vec::with_capacity(bond_count + added_bonds.len());
         let mut edges: Vec<[u32; 2]> = Vec::with_capacity(bond_count + added_bonds.len());
         for edge in 0..bond_count {
@@ -188,21 +188,21 @@ impl ReactionAst {
             let [a, b] = lhs.raw_graph().edge_endpoints(EdgeId(edge as u32));
             edges.push([a.0, b.0]);
             if let Some(ast) = removed_bonds.get(&id) {
-                bonds.push(LeftRightState::Removed(ast.clone()));
+                bonds.push(EntitySpan::Removed(ast.clone()));
             } else if let Some(changes) = bond_changes.get(&id) {
                 let left = lhs.bond(id).ast.clone();
                 let mut right = left.clone();
                 for change in changes {
                     apply_bond_change(&mut right, change)?;
                 }
-                bonds.push(LeftRightState::Modified { left, right });
+                bonds.push(EntitySpan::Modified { left, right });
             } else {
-                bonds.push(LeftRightState::Unchanged(lhs.bond(id).ast.clone()));
+                bonds.push(EntitySpan::Unchanged(lhs.bond(id).ast.clone()));
             }
         }
         for (atoms, ast) in added_bonds.into_values() {
             edges.push([atom_index[&atoms[0]] as u32, atom_index[&atoms[1]] as u32]);
-            bonds.push(LeftRightState::Added(ast));
+            bonds.push(EntitySpan::Added(ast));
         }
 
         let graph = Graph::new(atoms.len(), &edges);
@@ -239,7 +239,7 @@ impl ReactionAst {
         created_bonds.sort();
 
         // Forward → reverse-frame maps, matching `right()`'s compaction: survivors take ids in
-        // union order (lhs in place, created appended); deleted elements become created in the
+        // union order (lhs in place, created appended); deleted entities become created in the
         // reverse and take fresh ids after the survivors.
         let removed_atom_set: HashSet<AtomId> = removed_atoms.iter().copied().collect();
         let removed_bond_set: HashSet<BondId> = removed_bonds.iter().copied().collect();
@@ -302,13 +302,13 @@ mod tests {
         assert_eq!(
             span.atoms(),
             [
-                LeftRightState::Unchanged(AtomAst::from_element(Element::C)),
-                LeftRightState::Unchanged(AtomAst::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
             ],
         );
         assert_eq!(
             span.bonds(),
-            [LeftRightState::Modified {
+            [EntitySpan::Modified {
                 left: BondAst::from_order(1),
                 right: BondAst::from_order(2),
             }],
@@ -321,16 +321,16 @@ mod tests {
         assert_eq!(
             span.atoms(),
             [
-                LeftRightState::Unchanged(AtomAst::from_element(Element::C)),
-                LeftRightState::Removed(AtomAst::from_element(Element::O)),
-                LeftRightState::Added(AtomAst::from_element(Element::N)),
+                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                EntitySpan::Removed(AtomAst::from_element(Element::O)),
+                EntitySpan::Added(AtomAst::from_element(Element::N)),
             ],
         );
         assert_eq!(
             span.bonds(),
             [
-                LeftRightState::Removed(BondAst::from_order(1)),
-                LeftRightState::Added(BondAst::from_order(1)),
+                EntitySpan::Removed(BondAst::from_order(1)),
+                EntitySpan::Added(BondAst::from_order(1)),
             ],
         );
         assert_eq!(

@@ -248,10 +248,10 @@ and `BondDelta`'s field is **`atoms`** (the DSL `:atoms`; was "Payload" / "endpo
 **default methods on `EntityDelta`** — `diff` and `deltas_from_states` — so `to_reaction` is
 `AtomDelta::deltas_from_states(…) ++ BondDelta::deltas_from_states(…)`, ready for the six overlay
 families (each adds only its trait impl, `Atoms` type, `into_delta`, `MoleculeAst` field). The
-per-element span state (one of `Unchanged` / `Modified` / `Added` / `Removed`) is
-**`LeftRightState`** — a *state*, not an op (renamed from "Change", which collided with `Edit` /
-`Delta`); it lives in `delta.rs` with the trait. Still per-entity and to be unified with the
-overlay work: `to_reaction_span` (graph build + per-kind `LeftRightState` storage) and `apply`
+per-entity span (one of `Unchanged` / `Modified` / `Added` / `Removed`) is
+**`EntitySpan`** — a *state*, not an op (was "Change", which collided with `Edit` / `Delta`, then
+the misnamed "LeftRightState"); it lives in `delta.rs` with the trait. Still per-entity and to be unified with the
+overlay work: `to_reaction_span` (graph build + per-kind `EntitySpan` storage) and `apply`
 (per-kind `Edit` variants).
 
 Reopens increment 1. The span is the symmetric pivot (doc 131), but only the forward

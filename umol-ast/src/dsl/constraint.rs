@@ -14,7 +14,7 @@ use super::atom::{AromaticValenceDsl, AtomConstraintDsl, MulticenterValenceDsl};
 use super::bond::BondConstraintDsl;
 use super::dative::DativeBondConstraintDsl;
 use super::error::ParseError;
-use super::molecule::{MoleculeMetadata, MoleculeDsl};
+use super::molecule::{read_molecule_input, MoleculeDsl, MoleculeMetadata};
 use super::multicenter::MulticenterBondConstraintDsl;
 use super::noncovalent::NoncovalentBondConstraintDsl;
 use super::relational::{RelationalConstraintDsl, RELATIONAL_KEYS};
@@ -170,7 +170,11 @@ macro_rules! define_ref {
 
             /// Resolve this ref to an AST index against `metadata`. Fails on
             /// unknown id or out-of-range numeric index.
-            pub fn into_ast(self, count: usize, metadata: &MoleculeMetadata) -> Result<$id, ParseError> {
+            pub fn into_ast(
+                self,
+                count: usize,
+                metadata: &MoleculeMetadata,
+            ) -> Result<$id, ParseError> {
                 match self {
                     Self::Index(i) => {
                         if i < count {
@@ -1282,7 +1286,7 @@ pub(super) fn read_molecule_constraint_dsl(
                 match k {
                     "anchor" => anchor = Some(read_sub_pattern_anchor_dsl(d)?),
                     "pattern" => {
-                        let input = super::molecule::read_molecule_input(d)?;
+                        let input = read_molecule_input(d)?;
                         let (ast, _metadata) = input
                             .into_ast()
                             .map_err(|e| DeError::Custom(e.to_string()))?;
@@ -1450,13 +1454,19 @@ pub enum MoleculeConstraintDsl {
     },
 }
 
-fn atom_subset_from_ast(atoms: &Option<Vec<AtomId>>, meta: &MoleculeMetadata) -> Option<Vec<AtomRef>> {
+fn atom_subset_from_ast(
+    atoms: &Option<Vec<AtomId>>,
+    meta: &MoleculeMetadata,
+) -> Option<Vec<AtomRef>> {
     atoms
         .as_ref()
         .map(|v| v.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
 }
 
-fn bond_subset_from_ast(bonds: &Option<Vec<BondId>>, meta: &MoleculeMetadata) -> Option<Vec<BondRef>> {
+fn bond_subset_from_ast(
+    bonds: &Option<Vec<BondId>>,
+    meta: &MoleculeMetadata,
+) -> Option<Vec<BondRef>> {
     bonds
         .as_ref()
         .map(|v| v.iter().map(|&b| BondRef::from_ast(b, meta)).collect())
@@ -1491,7 +1501,10 @@ fn bond_subset_into_ast(
 }
 
 impl MoleculeConstraintDsl {
-    pub(crate) fn from_ast(c: &MoleculeConstraint, meta: &MoleculeMetadata) -> Result<Self, ParseError> {
+    pub(crate) fn from_ast(
+        c: &MoleculeConstraint,
+        meta: &MoleculeMetadata,
+    ) -> Result<Self, ParseError> {
         Ok(match c {
             MoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum {
                 atoms: atom_subset_from_ast(atoms, meta),
@@ -1658,7 +1671,8 @@ impl ToEdn for MoleculeConstraintDsl {
                 ("connected", Edn::Map(m))
             }
             Self::SubPattern { anchor, pattern } => {
-                let pattern_dsl = MoleculeDsl::from_parts((**pattern).clone(), MoleculeMetadata::default());
+                let pattern_dsl =
+                    MoleculeDsl::from_parts((**pattern).clone(), MoleculeMetadata::default());
                 let mut m = EdnMap::with_capacity(2);
                 m.insert(Edn::keyword("anchor"), anchor.to_edn());
                 m.insert(Edn::keyword("pattern"), pattern_dsl.to_edn());

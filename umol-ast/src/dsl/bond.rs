@@ -465,6 +465,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_edn::read_string;
 
     use super::*;
     use crate::ast::constraint::{BondConstraints, RingScope};
@@ -610,7 +611,7 @@ mod tests {
     #[case::with_cis_trans_stereo(r##""2#C1""##)]
     fn test_bond_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
         let via_stream = BondDsl::from_edn_str(input).unwrap();
-        let tree = umol_edn::read_string(input).unwrap();
+        let tree = read_string(input).unwrap();
         let via_tree = BondDsl::from_edn(&tree).unwrap();
         assert_eq!(via_stream, via_tree);
     }
@@ -626,14 +627,14 @@ mod tests {
     #[case::quadruple(":quadruple", BondAst { order: ValueAst::Lit(4), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
     #[case::aromatic(":aromatic", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic]) })]
     fn test_bond_dsl_keyword_shorthand_tree(#[case] input: &str, #[case] expected: BondAst) {
-        let edn = umol_edn::read_string(input).unwrap();
+        let edn = read_string(input).unwrap();
         let dsl = BondDsl::from_edn(&edn).unwrap();
         assert_eq!(dsl.0, expected);
     }
 
     #[rstest]
     fn test_bond_dsl_keyword_shorthand_unknown_rejected() {
-        let edn = umol_edn::read_string(":bogus").unwrap();
+        let edn = read_string(":bogus").unwrap();
         let err = BondDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
     }
@@ -656,7 +657,7 @@ mod tests {
     ) {
         let dsl = BondConstraintDsl::from_ast(&input, &());
         let edn = dsl.to_edn();
-        let expected = umol_edn::read_string(edn_source).unwrap();
+        let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
         assert_eq!(parsed.into_ast(&()), input, "parse-back mismatch");
@@ -690,15 +691,14 @@ mod tests {
 
     #[rstest]
     fn test_bond_constraint_dsl_rejects_unknown_key() {
-        let edn = umol_edn::read_string("{:bogus 1}").unwrap();
+        let edn = read_string("{:bogus 1}").unwrap();
         let err = BondConstraintDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::UnknownField { .. }));
     }
 
     #[rstest]
     fn test_bond_constraint_dsl_accepts_value_as_string_subgrammar() {
-        let edn = umol_edn::read_string(r##"{:ring-membership {:size 6 :count "?n :: {5,6}"}}"##)
-            .unwrap();
+        let edn = read_string(r##"{:ring-membership {:size 6 :count "?n :: {5,6}"}}"##).unwrap();
         let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
         assert_eq!(
             parsed.into_ast(&()),

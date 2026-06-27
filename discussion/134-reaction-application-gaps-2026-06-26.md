@@ -56,10 +56,10 @@ the increment-1 / increment-2 split — the structural debt behind the localized
 - The `EntityDelta` generic path (the `diff` / `deltas_from_states` default methods + the
   `field_ops!` macro) means each new entity is mostly mechanical — per entity only: its `*Delta`
   enum, the `EntityDelta` impl (the `(variant ⇒ field)` map), the `Atoms` type, `into_delta`, the
-  `MoleculeAst` field, the `Edit` variant, and its `LeftRightState` span slot.
+  `MoleculeAst` field, the `Edit` variant, and its `EntitySpan` span slot.
 - **Span generalization (tied to 133 work item 2).** `ReactionSpanAst` carries only atom/bond
-  `Vec<LeftRightState<…>>`; `LeftRightState<T>` and the per-entity vecs are atom/bond-shaped and do
-  not generalize to eight entities. Generalizing the span container (one `LeftRightState` column per
+  `Vec<EntitySpan<…>>`; `EntitySpan<T>` and the per-entity vecs are atom/bond-shaped and do
+  not generalize to eight entities. Generalizing the span container (one `EntitySpan` column per
   entity kind, ideally index-free / `Entity`-keyed) is part of this gap.
 
 Larger of the two: six overlay deltas + the span generalization.
