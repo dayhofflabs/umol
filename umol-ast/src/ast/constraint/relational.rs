@@ -12,12 +12,12 @@
 //! variants so ref-bearing constraints are unrepresentable inline.
 //!
 //! Two sub-patterns share the enum:
-//! - **Role identity**: `Donor`, `Acceptor`, `Parallels`, `Ends`, `Atoms`,
-//!   `Contains`, `ContainsAll` — constrain an atom/bond identity to a role
-//!   or set membership.
-//! - **Role predicate**: `DonorSatisfies`, `AcceptorSatisfies`, `AllAtoms`,
-//!   `AnyAtom`, `EndsSatisfy` — delegate an `AtomConstraint` to a role slot,
-//!   quantified over the matching participants.
+//! - **Role identity / set membership**: `Donor`, `Donors`, `ContainsAllDonors`,
+//!   `Acceptor`, `Parallels`, `Ends`, `Atoms`, `Contains`, `ContainsAll` —
+//!   constrain an atom/bond identity to a role or set membership.
+//! - **Role predicate**: `AllDonors`, `AnyDonor`, `AcceptorSatisfies`,
+//!   `AllAtoms`, `AnyAtom`, `EndsSatisfy` — delegate an `AtomConstraint` to a
+//!   role slot, quantified over the matching participants.
 
 use super::super::error::Contradiction;
 use super::super::id::{
@@ -36,25 +36,41 @@ use super::atom::AtomConstraint;
 /// `And`/`Or`/`Not`); cannot appear inline on an entity.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RelationalConstraint {
-    /// The donor end of dative bond `bond` is `atom`.
+    /// Dative bond `bond` has exactly `atoms` as its donors (as a set).
+    DativeBondDonors {
+        bond: DativeBondId,
+        atoms: Vec<AtomId>,
+    },
+    /// `atom` is one of the donors of dative bond `bond`.
     DativeBondDonor { bond: DativeBondId, atom: AtomId },
-    /// The acceptor end of dative bond `bond` is `atom`.
+    /// Every atom in `atoms` is a donor of dative bond `bond` (set inclusion,
+    /// not equality).
+    DativeBondContainsAllDonors {
+        bond: DativeBondId,
+        atoms: Vec<AtomId>,
+    },
+    /// Every donor of dative bond `bond` satisfies `predicate`.
+    DativeBondAllDonors {
+        bond: DativeBondId,
+        predicate: Box<AtomConstraint>,
+    },
+    /// At least one donor of dative bond `bond` satisfies `predicate`.
+    DativeBondAnyDonor {
+        bond: DativeBondId,
+        predicate: Box<AtomConstraint>,
+    },
+    /// The acceptor of dative bond `bond` is `atom`.
     DativeBondAcceptor { bond: DativeBondId, atom: AtomId },
+    /// The acceptor of dative bond `bond` satisfies `predicate`.
+    DativeBondAcceptorSatisfies {
+        bond: DativeBondId,
+        predicate: Box<AtomConstraint>,
+    },
     /// Dative bond `dative` is parallel to a localized bond `parallel`
     /// (same atom pair).
     DativeBondParallels {
         dative: DativeBondId,
         parallel: BondId,
-    },
-    /// The donor end of dative bond `bond` satisfies `predicate`.
-    DativeBondDonorSatisfies {
-        bond: DativeBondId,
-        predicate: Box<AtomConstraint>,
-    },
-    /// The acceptor end of dative bond `bond` satisfies `predicate`.
-    DativeBondAcceptorSatisfies {
-        bond: DativeBondId,
-        predicate: Box<AtomConstraint>,
     },
 
     /// Aromatic system `system` consists of exactly `atoms` (as a set).
@@ -193,21 +209,31 @@ impl RelationalConstraint {
     /// referenced entity has been removed by the remapping.
     pub fn remap(self, remap: &IdRemapping) -> Option<Self> {
         Some(match self {
+            Self::DativeBondDonors { bond, atoms } => {
+                let bond = remap.dative_bond(bond)?;
+                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.atom(a)).collect();
+                Self::DativeBondDonors { bond, atoms: atoms? }
+            }
             Self::DativeBondDonor { bond, atom } => Self::DativeBondDonor {
                 bond: remap.dative_bond(bond)?,
                 atom: remap.atom(atom)?,
             },
+            Self::DativeBondContainsAllDonors { bond, atoms } => {
+                let bond = remap.dative_bond(bond)?;
+                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.atom(a)).collect();
+                Self::DativeBondContainsAllDonors { bond, atoms: atoms? }
+            }
+            Self::DativeBondAllDonors { bond, predicate } => Self::DativeBondAllDonors {
+                bond: remap.dative_bond(bond)?,
+                predicate,
+            },
+            Self::DativeBondAnyDonor { bond, predicate } => Self::DativeBondAnyDonor {
+                bond: remap.dative_bond(bond)?,
+                predicate,
+            },
             Self::DativeBondAcceptor { bond, atom } => Self::DativeBondAcceptor {
                 bond: remap.dative_bond(bond)?,
                 atom: remap.atom(atom)?,
-            },
-            Self::DativeBondParallels { dative, parallel } => Self::DativeBondParallels {
-                dative: remap.dative_bond(dative)?,
-                parallel: remap.bond(parallel)?,
-            },
-            Self::DativeBondDonorSatisfies { bond, predicate } => Self::DativeBondDonorSatisfies {
-                bond: remap.dative_bond(bond)?,
-                predicate,
             },
             Self::DativeBondAcceptorSatisfies { bond, predicate } => {
                 Self::DativeBondAcceptorSatisfies {
@@ -215,6 +241,10 @@ impl RelationalConstraint {
                     predicate,
                 }
             }
+            Self::DativeBondParallels { dative, parallel } => Self::DativeBondParallels {
+                dative: remap.dative_bond(dative)?,
+                parallel: remap.bond(parallel)?,
+            },
             Self::AromaticSystemAtoms { system, atoms } => {
                 let system = remap.aromatic_system(system)?;
                 let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.atom(a)).collect();
@@ -358,7 +388,11 @@ impl Canonicalize for RelationalConstraint {
     /// `system`, `parallel`, atom sets) are unchanged.
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
-            Self::DativeBondDonorSatisfies { bond, predicate } => Self::DativeBondDonorSatisfies {
+            Self::DativeBondAllDonors { bond, predicate } => Self::DativeBondAllDonors {
+                bond,
+                predicate: Box::new((*predicate).canonicalize()?),
+            },
+            Self::DativeBondAnyDonor { bond, predicate } => Self::DativeBondAnyDonor {
                 bond,
                 predicate: Box::new((*predicate).canonicalize()?),
             },
@@ -422,7 +456,9 @@ impl Canonicalize for RelationalConstraint {
                 stereo_bond,
                 predicate: Box::new((*predicate).canonicalize()?),
             },
-            other @ (Self::DativeBondDonor { .. }
+            other @ (Self::DativeBondDonors { .. }
+            | Self::DativeBondDonor { .. }
+            | Self::DativeBondContainsAllDonors { .. }
             | Self::DativeBondAcceptor { .. }
             | Self::DativeBondParallels { .. }
             | Self::AromaticSystemAtoms { .. }
@@ -564,8 +600,10 @@ mod tests {
         one_atom_one_dative(), Some(RelationalConstraint::DativeBondParallels { dative: DativeBondId(0), parallel: BondId(2) }))]
     #[case::dative_parallels_drops_when_bond_removed(RelationalConstraint::DativeBondParallels { dative: DativeBondId(0), parallel: BondId(0) },
         drop_bond0(), None)]
-    #[case::dative_donor_satisfies_shifts(RelationalConstraint::DativeBondDonorSatisfies { bond: DativeBondId(1), predicate: val_pred() },
-        one_atom_one_dative(), Some(RelationalConstraint::DativeBondDonorSatisfies { bond: DativeBondId(0), predicate: val_pred() }))]
+    #[case::dative_all_donors_shifts(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(1), predicate: val_pred() },
+        one_atom_one_dative(), Some(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: val_pred() }))]
+    #[case::dative_donors_shifts(RelationalConstraint::DativeBondDonors { bond: DativeBondId(1), atoms: vec![AtomId(2)] },
+        one_atom_one_dative(), Some(RelationalConstraint::DativeBondDonors { bond: DativeBondId(0), atoms: vec![AtomId(1)] }))]
     #[case::dative_acceptor_satisfies_shifts(RelationalConstraint::DativeBondAcceptorSatisfies { bond: DativeBondId(1), predicate: val_pred() },
         one_atom_one_dative(), Some(RelationalConstraint::DativeBondAcceptorSatisfies { bond: DativeBondId(0), predicate: val_pred() }))]
     #[case::aromatic_atoms_shifts(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(1), atoms: vec![AtomId(0), AtomId(2)] },
@@ -669,8 +707,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::predicate_litset_singleton(
-        RelationalConstraint::DativeBondDonorSatisfies { bond: DativeBondId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::lit_set([4]))) },
-        Ok(RelationalConstraint::DativeBondDonorSatisfies { bond: DativeBondId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))) }))]
+        RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::lit_set([4]))) },
+        Ok(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))) }))]
     #[case::both_ends_canonicalize(
         RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
             predicates: [Box::new(AtomConstraint::Valence(ValueAst::lit_set([4]))), Box::new(AtomConstraint::Degree(ValueAst::lit_set([2])))] },
@@ -679,13 +717,19 @@ mod tests {
     #[case::predicate_empty_litset_contradiction(
         RelationalConstraint::StereoAtomAllLigands { stereo_atom: StereoAtomId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::lit_set(Vec::<i64>::new()))) },
         Err(Contradiction))]
-    #[case::ref_only_unchanged(
-        RelationalConstraint::DativeBondDonor { bond: DativeBondId(1), atom: AtomId(2) },
-        Ok(RelationalConstraint::DativeBondDonor { bond: DativeBondId(1), atom: AtomId(2) }))]
     fn test_relational_constraint_canonicalize(
         #[case] input: RelationalConstraint,
         #[case] expected: Result<RelationalConstraint, Contradiction>,
     ) {
         assert_eq!(input.canonicalize(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::dative_donor(RelationalConstraint::DativeBondDonor { bond: DativeBondId(1), atom: AtomId(2) })]
+    #[case::dative_donors(RelationalConstraint::DativeBondDonors { bond: DativeBondId(0), atoms: vec![AtomId(1), AtomId(2)] })]
+    #[case::aromatic_contains(RelationalConstraint::AromaticSystemContains { system: AromaticSystemId(0), atom: AtomId(1) })]
+    fn test_relational_constraint_canonicalize_identity(#[case] input: RelationalConstraint) {
+        assert_eq!(input.clone().canonicalize(), Ok(input));
     }
 }

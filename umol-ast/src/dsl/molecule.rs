@@ -508,13 +508,7 @@ fn read_dative_bond_entry(
     read_map(de, |de, key| {
         match key {
             "id" => id = Some(de.read_keyword_name()?.into_owned()),
-            // A single donor renders as a scalar ref, multiple donors as a vector.
-            "donor" => {
-                donors = Some(match de.peek_byte()?.ok_or_else(eof_err)? {
-                    b'[' => read_vec(de, read_atom_ref)?,
-                    _ => vec![read_atom_ref(de)?],
-                })
-            }
+            "donors" => donors = Some(read_vec(de, read_atom_ref)?),
             "acceptor" => acceptor = Some(read_atom_ref(de)?),
             "type" => bond = Some(read_dative_dsl(de)?),
             _ => de.read_skip_value()?,
@@ -523,7 +517,7 @@ fn read_dative_bond_entry(
     })?;
     Ok(DativeBondEntryInput {
         id,
-        donors: donors.ok_or_else(|| missing("donor", "dative-bond-entry"))?,
+        donors: donors.ok_or_else(|| missing("donors", "dative-bond-entry"))?,
         acceptor: acceptor.ok_or_else(|| missing("acceptor", "dative-bond-entry"))?,
         bond: bond.ok_or_else(|| missing("type", "dative-bond-entry"))?,
     })
@@ -935,19 +929,13 @@ fn render_dative(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
                     Edn::Keyword(EdnKeyword::owned(id.to_string())),
                 );
             }
-            let donors: Vec<AtomId> = view.donor_ids().collect();
-            let donor_edn = if donors.len() == 1 {
-                render_atom_ref(donors[0], meta)
-            } else {
-                Edn::Vector(
-                    donors
-                        .into_iter()
-                        .map(|a| render_atom_ref(a, meta))
-                        .collect::<Vec<_>>()
-                        .into(),
-                )
-            };
-            m.insert(Edn::keyword("donor"), donor_edn);
+            let donors = Edn::Vector(
+                view.donor_ids()
+                    .map(|a| render_atom_ref(a, meta))
+                    .collect::<Vec<_>>()
+                    .into(),
+            );
+            m.insert(Edn::keyword("donors"), donors);
             m.insert(
                 Edn::keyword("acceptor"),
                 render_atom_ref(view.acceptor_id(), meta),
@@ -1318,6 +1306,11 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|d| d.resolve(atom_count, &atom_id_to_idx))
                 .collect::<Result<Vec<_>, _>>()?;
+            if donors.is_empty() {
+                return Err(ParseError::InvalidValue(
+                    "dative bond requires at least one donor".to_string(),
+                ));
+            }
             let acceptor = entry.acceptor.resolve(atom_count, &atom_id_to_idx)?;
             dative_list.push((donors, acceptor, entry.bond.0));
         }
@@ -1616,11 +1609,11 @@ fn parse_bond_entry(edn: &Edn<'_>) -> Result<BondEntryInput, DeError> {
 
 fn parse_dative_bond_entry(edn: &Edn<'_>) -> Result<DativeBondEntryInput, DeError> {
     let m = expect_map(edn, "dative-bond-entry")?;
-    let donor_edn = required_key(m, "donor", "dative-bond-entry")?;
-    let donors = match donor_edn {
-        Edn::Vector(_) => parse_vec(donor_edn, ":donor", |e| AtomRef::from_edn(e))?,
-        other => vec![AtomRef::from_edn(other)?],
-    };
+    let donors = parse_vec(
+        required_key(m, "donors", "dative-bond-entry")?,
+        ":donors",
+        |e| AtomRef::from_edn(e),
+    )?;
     Ok(DativeBondEntryInput {
         id: optional_id(m)?,
         donors,

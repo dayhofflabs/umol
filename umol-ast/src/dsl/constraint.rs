@@ -1023,25 +1023,37 @@ pub(super) fn read_relational_constraint_dsl(
     use RelationalConstraintDsl as R;
     de.consume_byte(b'[')?;
     let c = match key {
+        "dative-bond-donors" => R::DativeBondDonors {
+            bond: read_dative_bond_ref(de)?,
+            atoms: read_atom_ref_vec(de)?,
+        },
         "dative-bond-donor" => R::DativeBondDonor {
             bond: read_dative_bond_ref(de)?,
             atom: read_atom_ref(de)?,
+        },
+        "dative-bond-contains-all-donors" => R::DativeBondContainsAllDonors {
+            bond: read_dative_bond_ref(de)?,
+            atoms: read_atom_ref_vec(de)?,
+        },
+        "dative-bond-all-donors" => R::DativeBondAllDonors {
+            bond: read_dative_bond_ref(de)?,
+            predicate: Box::new(read_atom_constraint_dsl(de)?),
+        },
+        "dative-bond-any-donor" => R::DativeBondAnyDonor {
+            bond: read_dative_bond_ref(de)?,
+            predicate: Box::new(read_atom_constraint_dsl(de)?),
         },
         "dative-bond-acceptor" => R::DativeBondAcceptor {
             bond: read_dative_bond_ref(de)?,
             atom: read_atom_ref(de)?,
         },
-        "dative-bond-parallels" => R::DativeBondParallels {
-            dative: read_dative_bond_ref(de)?,
-            parallel: read_bond_ref(de)?,
-        },
-        "dative-bond-donor-satisfies" => R::DativeBondDonorSatisfies {
-            bond: read_dative_bond_ref(de)?,
-            predicate: Box::new(read_atom_constraint_dsl(de)?),
-        },
         "dative-bond-acceptor-satisfies" => R::DativeBondAcceptorSatisfies {
             bond: read_dative_bond_ref(de)?,
             predicate: Box::new(read_atom_constraint_dsl(de)?),
+        },
+        "dative-bond-parallels" => R::DativeBondParallels {
+            dative: read_dative_bond_ref(de)?,
+            parallel: read_bond_ref(de)?,
         },
         "aromatic-system-atoms" => R::AromaticSystemAtoms {
             system: read_aromatic_system_ref(de)?,
@@ -2731,8 +2743,8 @@ mod tests {
         "{:dative-bond-acceptor [0 3]}")]
     #[case::dative_bond_leaf_parallels(Constraint::Relational(RelationalConstraint::DativeBondParallels { dative: DativeBondId(0), parallel: BondId(2) }),
         "{:dative-bond-parallels [0 2]}")]
-    #[case::dative_bond_leaf_donor_satisfies(Constraint::Relational(RelationalConstraint::DativeBondDonorSatisfies { bond: DativeBondId(0),
-        predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(3))) }), "{:dative-bond-donor-satisfies [0 {:valence 3}]}")]
+    #[case::dative_bond_leaf_all_donors(Constraint::Relational(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0),
+        predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(3))) }), "{:dative-bond-all-donors [0 {:valence 3}]}")]
     #[case::aromatic_system_leaf_atoms(Constraint::Relational(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(0),
         atoms: vec![AtomId(0), AtomId(1)] }), "{:aromatic-system-atoms [0 [0 1]]}")]
     #[case::aromatic_system_leaf_contains(Constraint::Relational(RelationalConstraint::AromaticSystemContains { system: AromaticSystemId(0), atom: AtomId(2) }),

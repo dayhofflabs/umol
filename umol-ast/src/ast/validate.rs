@@ -299,9 +299,9 @@ mod tests {
 
     #[rstest]
     #[case::aromatic_system(mol!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "*"}]}"#))]
-    #[case::cross_type_parallel(mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :dative-bonds [{:donor 0 :acceptor 1 :type "1"}]}"#))]
-    #[case::dative_shared_acceptor_disjoint_donors(mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donor 1 :acceptor 0 :type "1"} {:donor 2 :acceptor 0 :type "1"}]}"#))]
-    #[case::dative_shared_donors_distinct_acceptors(mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donor 2 :acceptor 0 :type "1"} {:donor 2 :acceptor 1 :type "1"}]}"#))]
+    #[case::cross_type_parallel(mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#))]
+    #[case::dative_shared_acceptor_disjoint_donors(mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donors [1] :acceptor 0 :type "1"} {:donors [2] :acceptor 0 :type "1"}]}"#))]
+    #[case::dative_shared_donors_distinct_acceptors(mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donors [2] :acceptor 0 :type "1"} {:donors [2] :acceptor 1 :type "1"}]}"#))]
     #[case::multicenter_partial_overlap(mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "*"} {:atoms [1 2 3] :type "*"}]}"#))]
     #[case::noncovalent_distinct_kinds(mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"} {:atoms [0 1] :type "Vdw"}]}"#))]
     fn test_entity_structure_validator_validate(#[case] ast: MoleculeAst) {
@@ -329,11 +329,11 @@ mod tests {
         EntityStructureContradiction::BondsParallel { atoms: [AtomId(0), AtomId(1)] }
     )]
     #[case::dative_acceptor_is_donor(
-        mol!(r#"{:atoms ["C"] :bonds [] :dative-bonds [{:donor 0 :acceptor 0 :type "1"}]}"#),
+        mol!(r#"{:atoms ["C"] :bonds [] :dative-bonds [{:donors [0] :acceptor 0 :type "1"}]}"#),
         EntityStructureContradiction::DativeBondAcceptorIsDonor { atom: AtomId(0) }
     )]
     #[case::dative_parallel(
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :dative-bonds [{:donor 1 :acceptor 0 :type "1"} {:donor 1 :acceptor 0 :type "1"}]}"#),
+        mol!(r#"{:atoms ["C" "C"] :bonds [] :dative-bonds [{:donors [1] :acceptor 0 :type "1"} {:donors [1] :acceptor 0 :type "1"}]}"#),
         EntityStructureContradiction::DativeBondsParallel { acceptor: AtomId(0), shared_donor: AtomId(1) }
     )]
     #[case::noncovalent_self_loop(
@@ -372,7 +372,7 @@ mod tests {
         EntityStructureContradiction::StereoBondSitesDuplicate { bond: BondId(0) }
     )]
     #[case::dative_donor_duplicate(
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :dative-bonds [{:donor [1 1] :acceptor 0 :type "1"}]}"#),
+        mol!(r#"{:atoms ["C" "C"] :bonds [] :dative-bonds [{:donors [1 1] :acceptor 0 :type "1"}]}"#),
         EntityStructureContradiction::DativeBondDonorDuplicate { acceptor: AtomId(0), donor: AtomId(1) }
     )]
     fn test_entity_structure_validator_validate_error(

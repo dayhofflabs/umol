@@ -1317,22 +1317,45 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
 
         if counts.atom > 0 {
             let atom_id = atom_id_strategy(counts.atom);
+            let max_atoms = counts.atom.min(3);
+            let atoms_vec = prop::collection::vec(atom_id.clone(), 1..=max_atoms);
+            let donors = (dative_id.clone(), atoms_vec.clone())
+                .prop_map(|(bond, atoms)| {
+                    Constraint::Relational(RelationalConstraint::DativeBondDonors { bond, atoms })
+                })
+                .boxed();
             let donor = (dative_id.clone(), atom_id.clone())
                 .prop_map(|(bond, atom)| {
                     Constraint::Relational(RelationalConstraint::DativeBondDonor { bond, atom })
                 })
                 .boxed();
-            let acceptor = (dative_id.clone(), atom_id.clone())
-                .prop_map(|(bond, atom)| {
-                    Constraint::Relational(RelationalConstraint::DativeBondAcceptor { bond, atom })
+            let contains_all_donors = (dative_id.clone(), atoms_vec)
+                .prop_map(|(bond, atoms)| {
+                    Constraint::Relational(RelationalConstraint::DativeBondContainsAllDonors {
+                        bond,
+                        atoms,
+                    })
                 })
                 .boxed();
-            let donor_satisfies = (dative_id.clone(), atom_constraint_strategy())
+            let all_donors = (dative_id.clone(), atom_constraint_strategy())
                 .prop_map(|(bond, predicate)| {
-                    Constraint::Relational(RelationalConstraint::DativeBondDonorSatisfies {
+                    Constraint::Relational(RelationalConstraint::DativeBondAllDonors {
                         bond,
                         predicate: Box::new(predicate),
                     })
+                })
+                .boxed();
+            let any_donor = (dative_id.clone(), atom_constraint_strategy())
+                .prop_map(|(bond, predicate)| {
+                    Constraint::Relational(RelationalConstraint::DativeBondAnyDonor {
+                        bond,
+                        predicate: Box::new(predicate),
+                    })
+                })
+                .boxed();
+            let acceptor = (dative_id.clone(), atom_id)
+                .prop_map(|(bond, atom)| {
+                    Constraint::Relational(RelationalConstraint::DativeBondAcceptor { bond, atom })
                 })
                 .boxed();
             let acceptor_satisfies = (dative_id.clone(), atom_constraint_strategy())
@@ -1343,9 +1366,12 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                     })
                 })
                 .boxed();
+            choices.push(donors);
             choices.push(donor);
+            choices.push(contains_all_donors);
+            choices.push(all_donors);
+            choices.push(any_donor);
             choices.push(acceptor);
-            choices.push(donor_satisfies);
             choices.push(acceptor_satisfies);
         }
         if counts.bond > 0 {

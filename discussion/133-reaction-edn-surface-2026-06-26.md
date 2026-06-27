@@ -404,7 +404,45 @@ ReactionMetadata};`). The partial-DSL parsers (D2) are free fns in the existing 
     counts for real) and drop `:electrons`.
   - 0.1f — spec: drop `:electrons` from the §4 entries, rewrite ¶142, update §7.10/§7.11 (mandatory head
     grammar `[<n>(,<n>)*] | *`; `""` no longer valid for these strings; concrete examples).
-- 0.2 — `:donor` → `:donors`: `dsl/molecule.rs` dative-bond-entry parser + `dsl/dative.rs`, + spec §4.
+- 0.2 — `:donor` → `:donors` (molecule-wide): rename the dative-bond-entry key and make it **always a
+  vector** (a single donor is a 1-vector). Touches `dsl/molecule.rs` + spec only — *not* `dsl/dative.rs`
+  (donor/acceptor live in the entry map, not the dative-string). Sub-steps:
+  - 0.2a — streaming reader (`read_dative_bond_entry`): rename the `"donor"` arm to `"donors"`, parse
+    the value as a vector only (`read_vec`, drop the `peek_byte` scalar/vector branch);
+    `missing("donors", …)`.
+  - 0.2b — tree reader (`parse_dative_bond_entry`): `required_key(m, "donors", …)`, parse via
+    `parse_vec` only (drop the `Edn::Vector(_)`-vs-scalar match).
+  - 0.2c — render (`render_dative`): emit `:donors` always as a vector (drop the `len() == 1`
+    scalar-ref branch); key `"donors"`.
+  - 0.2d — reject an empty `:donors` (a dative bond needs ≥1 donor); check whether
+    `dative_structure_check` already covers it, else error at parse.
+  - 0.2e — tests/fixtures: `:donor X` → `:donors [X]`, `:donor [X Y]` → `:donors [X Y]` across
+    `molecule/tests.rs`, `validate.rs`, `macros.rs`, `benches/fixtures.rs`, examples, and other crates.
+    Add an error test: a bare-int `:donors 1` (non-vector) is a parse error (streaming + tree).
+  - 0.2f — spec §4: rename `:donor` → `:donors` in the `dative-bond-entry` production and the dative
+    paragraph; state it is always a vector (≥1 donor).
+- 0.3 — dative **donor relational constraints → multi-atom parity** (donors are a set, so mirror the
+  aromatic/multicenter 5-variant set pattern; the **acceptor stays single**). Role stays in the name
+  (`Donor`, not `Atom`). Sub-steps:
+  - 0.3a — `ast/constraint/relational.rs` enum: keep `DativeBondDonor { bond, atom }` (semantics →
+    **membership**, "`atom` is one of the donors" = `Contains` analogue; fix doc); add
+    `DativeBondDonors { bond, atoms }` (exact set = `Atoms`), `DativeBondContainsAllDonors { bond,
+    atoms }` (⊇ = `ContainsAll`); replace `DativeBondDonorSatisfies` with `DativeBondAllDonors { bond,
+    predicate }` (∀ = `AllAtoms`) and `DativeBondAnyDonor { bond, predicate }` (∃ = `AnyAtom`). Acceptor
+    variants unchanged.
+  - 0.3b — `relational.rs` `remap`: arms for the new variants (vec-atom map for `Donors` /
+    `ContainsAllDonors`, single-atom for `Donor`, predicate-only for `All`/`AnyDonors`), mirroring the
+    aromatic arms.
+  - 0.3c — `relational.rs` canonicalize + any exhaustive match (e.g. the `other @ (…)` arms): cover the
+    new variants.
+  - 0.3d — `dsl/relational.rs` (+ `dsl/constraint.rs` dispatch if needed): parse/render keys
+    `:dative-bond-donors` (exact), `:dative-bond-donor` (membership), `:dative-bond-contains-all-donors`
+    (⊇), `:dative-bond-all-donors` (∀), `:dative-bond-any-donor` (∃) — replacing
+    `:dative-bond-donor-satisfies`; mirror the aromatic/multicenter key handling.
+  - 0.3e — tests: `relational.rs`, `dsl/relational.rs`, `molecule/tests.rs` (replace the
+    `:dative-bond-donor-satisfies` case, add cases for the new variants), `property/strategies.rs`.
+  - 0.3f — spec §8: replace the single donor-satisfies form with the five donor forms, mirroring the
+    aromatic/multicenter relational forms.
 
 **D1 — Types** (all in `dsl/reaction.rs`):
 - 1.1 — `ReactionDsl` (boundary). Shape: `struct ReactionDsl { ast: ReactionAst, metadata:

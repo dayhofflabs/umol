@@ -100,7 +100,7 @@ atom-ref ::= int | keyword
 
 bond-entry ::= { [:id keyword] :atoms [ atom-ref atom-ref ] :type bond-spec }
              | [ atom-ref atom-ref bond-spec ]
-dative-bond-entry   ::= { [:id keyword] :donor ( atom-ref | [ atom-ref+ ] )
+dative-bond-entry   ::= { [:id keyword] :donors [ atom-ref+ ]
                           :acceptor atom-ref :type dative-bond-spec }
 
 bond-spec ::= "bond-string" | bond-keyword
@@ -135,7 +135,7 @@ Whether an empty string **`:type ""`** parses depends on the subgrammar:
 - **`bond-string`** (**§7.5**), **`dative-string`** (**§7.11**), and **`noncovalent-string`** (**§7.12**) require a leading inherent-field token (bond order, dative order, noncovalent kind), so an empty payload is a parse error. Use the appropriate keyword shorthand (e.g. **`:single`**) or the literal token (e.g. **`"1"`**, **`"Hbd"`**).
 - **`stereo-string`** (**§7.14**) requires a leading **`class`** token (**`Th`** / **`Ct`** / **`Sp`** / **`Tb`** / **`Oh`**) followed by a **`coset`**, so an empty payload is a parse error. Use a literal token (e.g. **`"Th1"`**) or a **`stereo-keyword`** (**`:ccw`** / **`:cw`** / **`:z`** / **`:e`**).
 
-**Dative bond entry.** A dative bond entry binds a **single acceptor** to **one or more donors** (a coordination center): **`:acceptor`** names the atom accepting the electron pair(s); **`:donor`** names the donating atom, or a **vector** of donating atoms when several donate to the same acceptor. The leading **`order`** token of the **`dative-string`** payload (**§7.12**) records the number of donated pairs; one shared **`:type`** covers every donor→acceptor edge of the entry. The **`:acceptor`** and every **`:donor`** **MUST** reference distinct atom sites. The mandatory **`:type`** slot carries a **`dative-string`** (**§7.12**) — order plus optional aromatic flag (**`#a`**) and the ring-membership predicate (**`#R`**); its leading order parallels the bond-string's (**§7.5** / **§7.6**). The dative-string has **no** direction token — direction is expressed entirely by the **`:donor`** / **`:acceptor`** assignment.
+**Dative bond entry.** A dative bond entry binds a **single acceptor** to **one or more donors** (a coordination center): **`:acceptor`** names the atom accepting the electron pair(s); **`:donors`** is a **vector** of one or more donating atoms. The leading **`order`** token of the **`dative-string`** payload (**§7.12**) records the number of donated pairs; one shared **`:type`** covers every donor→acceptor edge of the entry. The **`:acceptor`** and every donor **MUST** reference distinct atom sites. The mandatory **`:type`** slot carries a **`dative-string`** (**§7.12**) — order plus optional aromatic flag (**`#a`**) and the ring-membership predicate (**`#R`**); its leading order parallels the bond-string's (**§7.5** / **§7.6**). The dative-string has **no** direction token — direction is expressed entirely by the **`:donors`** / **`:acceptor`** assignment.
 
 **Multicenter entry.** The mandatory **`:type`** slot carries a **`multicenter-string`** payload (**§7.11**) — a leading **electron counts** specification then per-system charge, spin, and the optional asserted total electron count (**`#e<n>`**). The **`multicenter-string`** subgrammar is independent from **`aromatic-string`** even though they share the same predicate shape.
 
@@ -162,7 +162,7 @@ Whether an empty string **`:type ""`** parses depends on the subgrammar:
 **Endpoints.** Every atom site referenced from a structural relation **MUST** exist under **`:atoms`**, either by positional index (integer) or by id keyword:
 
 - **`bond-entry`** **`:atoms`** (exactly two)
-- **`dative-bond-entry`** **`:donor`** and **`:acceptor`**
+- **`dative-bond-entry`** **`:donors`** and **`:acceptor`**
 - **`noncovalent-bond-entry`** **`:atoms`** (exactly two)
 - every reference in an **`aromatic-system-entry`** or **`multicenter-bond-entry`** **`:atoms`** vector
 
@@ -178,7 +178,7 @@ These rules apply **within** a single **molecule map**. **Constraints across** r
 
 **`:bonds` (localized).** The list **MUST NOT** contain two **`bond-entry`** values with the same **unordered** pair of atom sites (their two **`:atoms`**, as a set).
 
-**`:dative-bonds`.** No **donor→acceptor** edge may repeat — counting each donor in an entry's **`:donor`** list against that entry's **`:acceptor`**, across all entries. A donor→acceptor edge and the reverse acceptor→donor edge between the **same** two atoms also violate this rule.
+**`:dative-bonds`.** No **donor→acceptor** edge may repeat — counting each donor in an entry's **`:donors`** list against that entry's **`:acceptor`**, across all entries. A donor→acceptor edge and the reverse acceptor→donor edge between the **same** two atoms also violate this rule.
 
 **`:aromatic-systems`.** For every two distinct **`aromatic-system-entry`** values, the sets of keywords in their **`:atoms`** vectors **MUST** be disjoint. Aromatic systems **MUST NOT** share an atom.
 
@@ -355,7 +355,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 | localized bond | order, charge (**`#c`**), spin (**`#u`**, **`#s`**) |
 | aromatic system | charge (**`#c`**), spin (**`#u`**, **`#s`**), π-electron count (**`#e`**) |
 | multicenter bond | charge (**`#c`**), spin (**`#u`**, **`#s`**), electron count (**`#e`**) |
-| dative bond | a single **`:acceptor`** and its one-or-more **`:donor`** atoms — the assignment on the map entry (**§4**) — plus the leading **`order`** token of the dative-string (number of donated electron pairs; **§7.12**). |
+| dative bond | a single **`:acceptor`** and its one-or-more **`:donors`** atoms — the assignment on the map entry (**§4**) — plus the leading **`order`** token of the dative-string (number of donated electron pairs; **§7.12**). |
 | noncovalent bond | interaction kind (**`Hbd`**, **`Xbd`**, **`Ybd`**, **`Ion`**, **`Vdw`**) |
 | stereo atom | coordination **`class`** (geometry) and **`coset`** configuration index (the **`:type`** payload, **§7.14**). The bearing **`:site`** atom and ordered **`:ligands`** frame (**§4**) are the relation's participants, not payload fields. |
 | stereo bond | cis/trans **`class`** and **`coset`** configuration (the **`:type`** payload, **§7.14**). The bearing **`:site`** bond and ordered **`:ligands`** frame (**§4**) are the relation's participants. |
@@ -683,11 +683,14 @@ entity-constraint ::=
   | { :stereo-bond       [stereo-bond-ref      stereo-bond-constraint-form] }
 
 relational-constraint ::=
-    { :dative-bond-donor              [dative-bond-ref atom-ref]              }
-  | { :dative-bond-acceptor           [dative-bond-ref atom-ref]              }
-  | { :dative-bond-parallels          [dative-bond-ref bond-ref]              }
-  | { :dative-bond-donor-satisfies    [dative-bond-ref atom-constraint-form]  }
-  | { :dative-bond-acceptor-satisfies [dative-bond-ref atom-constraint-form]  }
+    { :dative-bond-donors              [dative-bond-ref [atom-ref+]]           }
+  | { :dative-bond-donor               [dative-bond-ref atom-ref]              }
+  | { :dative-bond-contains-all-donors [dative-bond-ref [atom-ref+]]           }
+  | { :dative-bond-all-donors          [dative-bond-ref atom-constraint-form]  }
+  | { :dative-bond-any-donor           [dative-bond-ref atom-constraint-form]  }
+  | { :dative-bond-acceptor            [dative-bond-ref atom-ref]              }
+  | { :dative-bond-acceptor-satisfies  [dative-bond-ref atom-constraint-form]  }
+  | { :dative-bond-parallels           [dative-bond-ref bond-ref]              }
   | { :aromatic-system-atoms          [aromatic-system-ref [atom-ref+]]       }
   | { :aromatic-system-contains       [aromatic-system-ref atom-ref]          }
   | { :aromatic-system-contains-all   [aromatic-system-ref [atom-ref+]]       }
@@ -916,7 +919,7 @@ multicenter-predicate ::= '#' tag payload
 
 ### 7.12 Dative-bond subgrammar
 
-**Dative-string** carries the **bond order** (number of donated electron pairs) and optional **aromatic** and **ring-membership** constraints on a single **`dative-bond-entry`** (**§4**). The grammar parallels **bond-string** (**§7.5**): a leading **`order`** token followed by zero or more **`#…`** predicates. The dative-string has **no** inherent-field tags beyond order and **no** direction token; direction is expressed entirely by the **`:donor`** / **`:acceptor`** assignment on the containing entry.
+**Dative-string** carries the **bond order** (number of donated electron pairs) and optional **aromatic** and **ring-membership** constraints on a single **`dative-bond-entry`** (**§4**). The grammar parallels **bond-string** (**§7.5**): a leading **`order`** token followed by zero or more **`#…`** predicates. The dative-string has **no** inherent-field tags beyond order and **no** direction token; direction is expressed entirely by the **`:donors`** / **`:acceptor`** assignment on the containing entry.
 
 ```
 dative-string ::= order dative-predicate*
@@ -941,7 +944,7 @@ dative-predicate ::= '#' tag payload
 | **`#a`** | **Aromatic**: the dative bond is part of an aromatic system. | derived |
 | **`#R`** | **Ring membership**: **`#R<count>`** (total) / **`#R(<size>)<count>`** (per size); **special** **`#R*`** / **`#R+`** / **`#R!`** (**§7.3**). | derived |
 
-**Direction.** Dative bonds are intrinsically directional. Direction is carried entirely by the ordered **`:donor`** / **`:acceptor`** assignment on the containing **`dative-bond-entry`** (**§4**); the dative-string itself has **no** direction token. Under pattern matching (**§6**), the embedding MUST map pattern **`:donor`** atoms to target donors and the pattern **`:acceptor`** to the target acceptor — a donor/acceptor swap across the embedding rejects the match.
+**Direction.** Dative bonds are intrinsically directional. Direction is carried entirely by the ordered **`:donors`** / **`:acceptor`** assignment on the containing **`dative-bond-entry`** (**§4**); the dative-string itself has **no** direction token. Under pattern matching (**§6**), the embedding MUST map pattern **`:donors`** atoms to target donors and the pattern **`:acceptor`** to the target acceptor — a donor/acceptor swap across the embedding rejects the match.
 
 **Donor / acceptor / cross-bond references.** Donor-side and acceptor-side constraints on the endpoint atoms (equivalent to the **`:donated-pairs`** / **`:accepted-pairs`** atom-constraint forms of **§7.9**, or atom-string **`#d`** / **`#t`** of **§7.3** pinned to one endpoint) attach via the molecule-wide **`:constraints`** section; they **MUST NOT** be encoded inside the dative-string. The same holds for the "parallels another bond" relation and any reference to other molecule-level entities.
 

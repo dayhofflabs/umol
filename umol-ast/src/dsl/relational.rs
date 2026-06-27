@@ -31,24 +31,39 @@ use crate::ast::traits::{FromAst, IntoAst};
 /// See the AST enum for per-variant semantics.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RelationalConstraintDsl {
+    /// EDN: `{:dative-bond-donors [<dative_ref> [<atom_ref>+]]}`.
+    DativeBondDonors {
+        bond: DativeBondRef,
+        atoms: Vec<AtomRef>,
+    },
     /// EDN: `{:dative-bond-donor [<dative_ref> <atom_ref>]}`.
     DativeBondDonor { bond: DativeBondRef, atom: AtomRef },
-    /// EDN: `{:dative-bond-acceptor [<dative_ref> <atom_ref>]}`.
-    DativeBondAcceptor { bond: DativeBondRef, atom: AtomRef },
-    /// EDN: `{:dative-bond-parallels [<dative_ref> <bond_ref>]}`.
-    DativeBondParallels {
-        dative: DativeBondRef,
-        parallel: BondRef,
+    /// EDN: `{:dative-bond-contains-all-donors [<dative_ref> [<atom_ref>+]]}`.
+    DativeBondContainsAllDonors {
+        bond: DativeBondRef,
+        atoms: Vec<AtomRef>,
     },
-    /// EDN: `{:dative-bond-donor-satisfies [<dative_ref> <atom-constraint>]}`.
-    DativeBondDonorSatisfies {
+    /// EDN: `{:dative-bond-all-donors [<dative_ref> <atom-constraint>]}`.
+    DativeBondAllDonors {
         bond: DativeBondRef,
         predicate: Box<AtomConstraintDsl>,
     },
+    /// EDN: `{:dative-bond-any-donor [<dative_ref> <atom-constraint>]}`.
+    DativeBondAnyDonor {
+        bond: DativeBondRef,
+        predicate: Box<AtomConstraintDsl>,
+    },
+    /// EDN: `{:dative-bond-acceptor [<dative_ref> <atom_ref>]}`.
+    DativeBondAcceptor { bond: DativeBondRef, atom: AtomRef },
     /// EDN: `{:dative-bond-acceptor-satisfies [<dative_ref> <atom-constraint>]}`.
     DativeBondAcceptorSatisfies {
         bond: DativeBondRef,
         predicate: Box<AtomConstraintDsl>,
+    },
+    /// EDN: `{:dative-bond-parallels [<dative_ref> <bond_ref>]}`.
+    DativeBondParallels {
+        dative: DativeBondRef,
+        parallel: BondRef,
     },
 
     /// EDN: `{:aromatic-system-atoms [<system_ref> [<atom_ref>+]]}`.
@@ -177,11 +192,14 @@ pub enum RelationalConstraintDsl {
 /// flat-key convention — every relational form is its own `:<entity>-<role>`
 /// keyword, rather than nested under the entity like narrow constraints.
 pub(super) const RELATIONAL_KEYS: &[&str] = &[
+    "dative-bond-donors",
     "dative-bond-donor",
+    "dative-bond-contains-all-donors",
+    "dative-bond-all-donors",
+    "dative-bond-any-donor",
     "dative-bond-acceptor",
-    "dative-bond-parallels",
-    "dative-bond-donor-satisfies",
     "dative-bond-acceptor-satisfies",
+    "dative-bond-parallels",
     "aromatic-system-atoms",
     "aromatic-system-contains",
     "aromatic-system-contains-all",
@@ -247,25 +265,37 @@ impl RelationalConstraintDsl {
     pub(crate) fn from_ast(rel: &RelationalConstraint, meta: &MoleculeMetadata) -> Self {
         use RelationalConstraint::*;
         match rel {
+            DativeBondDonors { bond, atoms } => Self::DativeBondDonors {
+                bond: DativeBondRef::from_ast(*bond, meta),
+                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+            },
             DativeBondDonor { bond, atom } => Self::DativeBondDonor {
                 bond: DativeBondRef::from_ast(*bond, meta),
                 atom: AtomRef::from_ast(*atom, meta),
+            },
+            DativeBondContainsAllDonors { bond, atoms } => Self::DativeBondContainsAllDonors {
+                bond: DativeBondRef::from_ast(*bond, meta),
+                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+            },
+            DativeBondAllDonors { bond, predicate } => Self::DativeBondAllDonors {
+                bond: DativeBondRef::from_ast(*bond, meta),
+                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+            },
+            DativeBondAnyDonor { bond, predicate } => Self::DativeBondAnyDonor {
+                bond: DativeBondRef::from_ast(*bond, meta),
+                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             DativeBondAcceptor { bond, atom } => Self::DativeBondAcceptor {
                 bond: DativeBondRef::from_ast(*bond, meta),
                 atom: AtomRef::from_ast(*atom, meta),
             },
-            DativeBondParallels { dative, parallel } => Self::DativeBondParallels {
-                dative: DativeBondRef::from_ast(*dative, meta),
-                parallel: BondRef::from_ast(*parallel, meta),
-            },
-            DativeBondDonorSatisfies { bond, predicate } => Self::DativeBondDonorSatisfies {
-                bond: DativeBondRef::from_ast(*bond, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
-            },
             DativeBondAcceptorSatisfies { bond, predicate } => Self::DativeBondAcceptorSatisfies {
                 bond: DativeBondRef::from_ast(*bond, meta),
                 predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+            },
+            DativeBondParallels { dative, parallel } => Self::DativeBondParallels {
+                dative: DativeBondRef::from_ast(*dative, meta),
+                parallel: BondRef::from_ast(*parallel, meta),
             },
             AromaticSystemAtoms { system, atoms } => Self::AromaticSystemAtoms {
                 system: AromaticSystemRef::from_ast(*system, meta),
@@ -387,30 +417,48 @@ impl RelationalConstraintDsl {
     ) -> Result<RelationalConstraint, ParseError> {
         use RelationalConstraintDsl::*;
         Ok(match self {
+            DativeBondDonors { bond, atoms } => RelationalConstraint::DativeBondDonors {
+                bond: bond.into_ast(counts.dative_bond_count, meta)?,
+                atoms: atoms
+                    .into_iter()
+                    .map(|a| a.into_ast(counts.atom_count, meta))
+                    .collect::<Result<_, _>>()?,
+            },
             DativeBondDonor { bond, atom } => RelationalConstraint::DativeBondDonor {
                 bond: bond.into_ast(counts.dative_bond_count, meta)?,
                 atom: atom.into_ast(counts.atom_count, meta)?,
+            },
+            DativeBondContainsAllDonors { bond, atoms } => {
+                RelationalConstraint::DativeBondContainsAllDonors {
+                    bond: bond.into_ast(counts.dative_bond_count, meta)?,
+                    atoms: atoms
+                        .into_iter()
+                        .map(|a| a.into_ast(counts.atom_count, meta))
+                        .collect::<Result<_, _>>()?,
+                }
+            }
+            DativeBondAllDonors { bond, predicate } => RelationalConstraint::DativeBondAllDonors {
+                bond: bond.into_ast(counts.dative_bond_count, meta)?,
+                predicate: Box::new(predicate.into_ast(&())),
+            },
+            DativeBondAnyDonor { bond, predicate } => RelationalConstraint::DativeBondAnyDonor {
+                bond: bond.into_ast(counts.dative_bond_count, meta)?,
+                predicate: Box::new(predicate.into_ast(&())),
             },
             DativeBondAcceptor { bond, atom } => RelationalConstraint::DativeBondAcceptor {
                 bond: bond.into_ast(counts.dative_bond_count, meta)?,
                 atom: atom.into_ast(counts.atom_count, meta)?,
             },
-            DativeBondParallels { dative, parallel } => RelationalConstraint::DativeBondParallels {
-                dative: dative.into_ast(counts.dative_bond_count, meta)?,
-                parallel: parallel.into_ast(counts.bond_count, meta)?,
-            },
-            DativeBondDonorSatisfies { bond, predicate } => {
-                RelationalConstraint::DativeBondDonorSatisfies {
-                    bond: bond.into_ast(counts.dative_bond_count, meta)?,
-                    predicate: Box::new(predicate.into_ast(&())),
-                }
-            }
             DativeBondAcceptorSatisfies { bond, predicate } => {
                 RelationalConstraint::DativeBondAcceptorSatisfies {
                     bond: bond.into_ast(counts.dative_bond_count, meta)?,
                     predicate: Box::new(predicate.into_ast(&())),
                 }
             }
+            DativeBondParallels { dative, parallel } => RelationalConstraint::DativeBondParallels {
+                dative: dative.into_ast(counts.dative_bond_count, meta)?,
+                parallel: parallel.into_ast(counts.bond_count, meta)?,
+            },
             AromaticSystemAtoms { system, atoms } => RelationalConstraint::AromaticSystemAtoms {
                 system: system.into_ast(counts.aromatic_system_count, meta)?,
                 atoms: atoms
@@ -576,25 +624,37 @@ fn render_atom_refs(refs: &[AtomRef]) -> Edn<'static> {
 fn render_payload(dsl: &RelationalConstraintDsl) -> (&'static str, Edn<'static>) {
     use RelationalConstraintDsl::*;
     match dsl {
+        DativeBondDonors { bond, atoms } => (
+            "dative-bond-donors",
+            render_pair(bond.to_edn(), render_atom_refs(atoms)),
+        ),
         DativeBondDonor { bond, atom } => (
             "dative-bond-donor",
             render_pair(bond.to_edn(), atom.to_edn()),
+        ),
+        DativeBondContainsAllDonors { bond, atoms } => (
+            "dative-bond-contains-all-donors",
+            render_pair(bond.to_edn(), render_atom_refs(atoms)),
+        ),
+        DativeBondAllDonors { bond, predicate } => (
+            "dative-bond-all-donors",
+            render_pair(bond.to_edn(), predicate.to_edn()),
+        ),
+        DativeBondAnyDonor { bond, predicate } => (
+            "dative-bond-any-donor",
+            render_pair(bond.to_edn(), predicate.to_edn()),
         ),
         DativeBondAcceptor { bond, atom } => (
             "dative-bond-acceptor",
             render_pair(bond.to_edn(), atom.to_edn()),
         ),
-        DativeBondParallels { dative, parallel } => (
-            "dative-bond-parallels",
-            render_pair(dative.to_edn(), parallel.to_edn()),
-        ),
-        DativeBondDonorSatisfies { bond, predicate } => (
-            "dative-bond-donor-satisfies",
-            render_pair(bond.to_edn(), predicate.to_edn()),
-        ),
         DativeBondAcceptorSatisfies { bond, predicate } => (
             "dative-bond-acceptor-satisfies",
             render_pair(bond.to_edn(), predicate.to_edn()),
+        ),
+        DativeBondParallels { dative, parallel } => (
+            "dative-bond-parallels",
+            render_pair(dative.to_edn(), parallel.to_edn()),
         ),
         AromaticSystemAtoms { system, atoms } => (
             "aromatic-system-atoms",
@@ -755,11 +815,39 @@ fn parse_atom_constraint_pair<'de>(
 fn parse_payload<'de>(key: &str, edn: &Edn<'de>) -> Result<RelationalConstraintDsl, DeError> {
     use RelationalConstraintDsl::*;
     Ok(match key {
+        "dative-bond-donors" => {
+            let (bond, atoms) = parse_pair(edn, key)?;
+            DativeBondDonors {
+                bond: DativeBondRef::from_edn(bond)?,
+                atoms: parse_atom_refs(atoms, key)?,
+            }
+        }
         "dative-bond-donor" => {
             let (bond, atom) = parse_pair(edn, key)?;
             DativeBondDonor {
                 bond: DativeBondRef::from_edn(bond)?,
                 atom: AtomRef::from_edn(atom)?,
+            }
+        }
+        "dative-bond-contains-all-donors" => {
+            let (bond, atoms) = parse_pair(edn, key)?;
+            DativeBondContainsAllDonors {
+                bond: DativeBondRef::from_edn(bond)?,
+                atoms: parse_atom_refs(atoms, key)?,
+            }
+        }
+        "dative-bond-all-donors" => {
+            let (bond, predicate) = parse_pair(edn, key)?;
+            DativeBondAllDonors {
+                bond: DativeBondRef::from_edn(bond)?,
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?),
+            }
+        }
+        "dative-bond-any-donor" => {
+            let (bond, predicate) = parse_pair(edn, key)?;
+            DativeBondAnyDonor {
+                bond: DativeBondRef::from_edn(bond)?,
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?),
             }
         }
         "dative-bond-acceptor" => {
@@ -769,25 +857,18 @@ fn parse_payload<'de>(key: &str, edn: &Edn<'de>) -> Result<RelationalConstraintD
                 atom: AtomRef::from_edn(atom)?,
             }
         }
-        "dative-bond-parallels" => {
-            let (dative, parallel) = parse_pair(edn, key)?;
-            DativeBondParallels {
-                dative: DativeBondRef::from_edn(dative)?,
-                parallel: BondRef::from_edn(parallel)?,
-            }
-        }
-        "dative-bond-donor-satisfies" => {
-            let (bond, predicate) = parse_pair(edn, key)?;
-            DativeBondDonorSatisfies {
-                bond: DativeBondRef::from_edn(bond)?,
-                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?),
-            }
-        }
         "dative-bond-acceptor-satisfies" => {
             let (bond, predicate) = parse_pair(edn, key)?;
             DativeBondAcceptorSatisfies {
                 bond: DativeBondRef::from_edn(bond)?,
                 predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?),
+            }
+        }
+        "dative-bond-parallels" => {
+            let (dative, parallel) = parse_pair(edn, key)?;
+            DativeBondParallels {
+                dative: DativeBondRef::from_edn(dative)?,
+                parallel: BondRef::from_edn(parallel)?,
             }
         }
         "aromatic-system-atoms" => {
@@ -999,8 +1080,14 @@ mod tests {
     #[case::dative_donor(RelationalConstraint::DativeBondDonor { bond: DativeBondId(0), atom: AtomId(2) }, "{:dative-bond-donor [0 2]}")]
     #[case::dative_acceptor(RelationalConstraint::DativeBondAcceptor { bond: DativeBondId(1), atom: AtomId(3) }, "{:dative-bond-acceptor [1 3]}")]
     #[case::dative_parallels(RelationalConstraint::DativeBondParallels { dative: DativeBondId(0), parallel: BondId(2) }, "{:dative-bond-parallels [0 2]}")]
-    #[case::dative_donor_satisfies(RelationalConstraint::DativeBondDonorSatisfies { bond: DativeBondId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(3))) },
-        "{:dative-bond-donor-satisfies [0 {:valence 3}]}")]
+    #[case::dative_donors(RelationalConstraint::DativeBondDonors { bond: DativeBondId(0), atoms: vec![AtomId(1), AtomId(2)] },
+        "{:dative-bond-donors [0 [1 2]]}")]
+    #[case::dative_contains_all_donors(RelationalConstraint::DativeBondContainsAllDonors { bond: DativeBondId(0), atoms: vec![AtomId(1), AtomId(2)] },
+        "{:dative-bond-contains-all-donors [0 [1 2]]}")]
+    #[case::dative_all_donors(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(3))) },
+        "{:dative-bond-all-donors [0 {:valence 3}]}")]
+    #[case::dative_any_donor(RelationalConstraint::DativeBondAnyDonor { bond: DativeBondId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(3))) },
+        "{:dative-bond-any-donor [0 {:valence 3}]}")]
     #[case::dative_acceptor_satisfies(RelationalConstraint::DativeBondAcceptorSatisfies { bond: DativeBondId(0),
         predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(2))) }, "{:dative-bond-acceptor-satisfies [0 {:degree 2}]}")]
     #[case::aromatic_system_atoms(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(0), atoms: vec![AtomId(0), AtomId(1)] },

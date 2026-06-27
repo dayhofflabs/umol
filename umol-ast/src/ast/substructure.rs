@@ -349,13 +349,13 @@ mod tests {
         vec![]
     )]
     #[case::dative(
-        mol!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1"}]}"#),
-        mol!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1"}]}"#),
+        mol!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#),
+        mol!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#),
         vec![vec![AtomId(0), AtomId(1)]]
     )]
     #[case::dative_roles_swapped(
-        mol!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donor 1 :acceptor 0 :type "1"}]}"#),
-        mol!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1"}]}"#),
+        mol!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [1] :acceptor 0 :type "1"}]}"#),
+        mol!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#),
         vec![]
     )]
     #[case::stereo_chiral(
