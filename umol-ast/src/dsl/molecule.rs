@@ -1,6 +1,6 @@
 //! Molecule DSL.
 //!
-//! `MoleculeDsl` wraps a `MoleculeAst` together with the `Metadata` that records
+//! `MoleculeDsl` wraps a `MoleculeAst` together with the `MoleculeMetadata` that records
 //! the surface-form id/alias bindings (atom ids, bond ids, etc.). The EDN
 //! form is a map keyed by `:atoms`, `:bonds`, `:dative-bonds`, `:aromatic-systems`,
 //! `:multicenter-bonds`, `:noncovalent-bonds`, `:atom-aliases`/`:aliases`, and
@@ -53,12 +53,77 @@ use crate::ast::stereo::{StereoAtomAst, StereoBondAst};
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::StereoLigandView;
 
-/// Surface-form metadata paired with a `MoleculeAst`. Records atom ids,
-/// per-entity ids, and the atom-alias table. Never drifts onto a different
-/// AST: `MoleculeDsl` keeps both fields private and rewraps atomically
+/// Surface DSL for a whole molecule. Pairs `MoleculeAst` with `MoleculeMetadata`;
+/// fields are private so metadata cannot drift onto a different AST.
+#[derive(Clone, Debug, Default)]
+pub struct MoleculeDsl {
+    ast: MoleculeAst,
+    metadata: MoleculeMetadata,
+}
+
+impl MoleculeDsl {
+    pub fn from_parts(ast: MoleculeAst, metadata: MoleculeMetadata) -> Self {
+        Self { ast, metadata }
+    }
+
+    pub fn ast(&self) -> &MoleculeAst {
+        &self.ast
+    }
+
+    pub fn metadata(&self) -> &MoleculeMetadata {
+        &self.metadata
+    }
+
+    pub fn into_parts(self) -> (MoleculeAst, MoleculeMetadata) {
+        (self.ast, self.metadata)
+    }
+}
+
+impl PartialEq for MoleculeDsl {
+    fn eq(&self, other: &Self) -> bool {
+        self.ast == other.ast && self.metadata == other.metadata
+    }
+}
+
+impl Eq for MoleculeDsl {}
+
+impl FromStr for MoleculeDsl {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        MoleculeDsl::from_edn_str(s).map_err(|e| ParseError::EdnParse(e.to_string()))
+    }
+}
+
+impl Display for MoleculeDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_edn())
+    }
+}
+
+impl<'de> FromEdn<'de> for MoleculeDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let input = parse_molecule_input(edn)?;
+        let (ast, metadata) = input
+            .into_ast()
+            .map_err(|e| DeError::Custom(e.to_string()))?;
+        Ok(MoleculeDsl::from_parts(ast, metadata))
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        let mut de = EdnStreamDeserializer::new(input);
+        let mi = read_molecule_input(&mut de)?;
+        de.expect_eof()?;
+        let (ast, metadata) = mi.into_ast().map_err(|e| DeError::Custom(e.to_string()))?;
+        Ok(MoleculeDsl::from_parts(ast, metadata))
+    }
+}
+
+/// Surface-form metadata paired with a `MoleculeAst`. Records entity ids, atom aliases,
+/// entity ids, `MoleculeDsl` keeps both fields private and rewraps atomically
 /// through `from_parts`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Metadata {
+pub struct MoleculeMetadata {
     atom_ids: IndexMap<AtomId, String>,
     atom_aliases: BiBTreeMap<String, Box<AtomDsl>>,
     bond_ids: IndexMap<BondId, String>,
@@ -70,7 +135,7 @@ pub struct Metadata {
     stereo_bond_ids: IndexMap<StereoBondId, String>,
 }
 
-impl Metadata {
+impl MoleculeMetadata {
     pub fn new() -> Self {
         Self::default()
     }
@@ -228,72 +293,6 @@ impl Metadata {
     }
 }
 
-/// Surface DSL for a whole molecule. Pairs `MoleculeAst` with `Metadata`;
-/// fields are private so metadata cannot drift onto a different AST.
-#[derive(Clone, Debug, Default)]
-pub struct MoleculeDsl {
-    ast: MoleculeAst,
-    metadata: Metadata,
-}
-
-impl MoleculeDsl {
-    pub fn from_parts(ast: MoleculeAst, metadata: Metadata) -> Self {
-        Self { ast, metadata }
-    }
-
-    pub fn ast(&self) -> &MoleculeAst {
-        &self.ast
-    }
-
-    pub fn metadata(&self) -> &Metadata {
-        &self.metadata
-    }
-
-    pub fn into_parts(self) -> (MoleculeAst, Metadata) {
-        (self.ast, self.metadata)
-    }
-}
-
-impl PartialEq for MoleculeDsl {
-    fn eq(&self, other: &Self) -> bool {
-        self.ast == other.ast && self.metadata == other.metadata
-    }
-}
-
-impl Eq for MoleculeDsl {}
-
-impl FromStr for MoleculeDsl {
-    type Err = ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        MoleculeDsl::from_edn_str(s).map_err(|e| ParseError::EdnParse(e.to_string()))
-    }
-}
-
-impl Display for MoleculeDsl {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_edn())
-    }
-}
-
-impl<'de> FromEdn<'de> for MoleculeDsl {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        let input = parse_molecule_input(edn)?;
-        let (ast, metadata) = input
-            .into_ast()
-            .map_err(|e| DeError::Custom(e.to_string()))?;
-        Ok(MoleculeDsl::from_parts(ast, metadata))
-    }
-
-    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
-        let mut de = EdnStreamDeserializer::new(input);
-        let mi = read_molecule_input(&mut de)?;
-        de.expect_eof()?;
-        let (ast, metadata) = mi.into_ast().map_err(|e| DeError::Custom(e.to_string()))?;
-        Ok(MoleculeDsl::from_parts(ast, metadata))
-    }
-}
-
 /// Direct EDN parsing for `MoleculeAst`. Accepts the same molecule-map
 /// surface as [`MoleculeDsl::from_edn`]; any id keywords or aliases in the
 /// input resolve to positional indices, then the metadata is discarded —
@@ -325,18 +324,14 @@ impl Display for MoleculeAst {
 /// Direct EDN rendering for `MoleculeAst`. Always emits canonical positional
 /// refs (no id keywords, no aliases) since the AST carries no metadata.
 /// For id-bearing surface output, wrap in [`MoleculeDsl`] with appropriate
-/// [`Metadata`] and call [`MoleculeDsl::to_edn`].
+/// [`MoleculeMetadata`] and call [`MoleculeDsl::to_edn`].
 impl ToEdn for MoleculeAst {
     fn to_edn(&self) -> Edn<'static> {
-        render_molecule_edn(self, &Metadata::default())
+        render_molecule_edn(self, &MoleculeMetadata::default())
     }
 }
 
-// Single-pass parse of the molecule map directly off the source text, using
-// only the byte-level / typed primitives on `EdnStreamDeserializer`. Each
-// non-terminal in the grammar has one `read_*` function; no detour through
-// an intermediate `Edn` tree.
-
+// Streaming parse of the molecule map.
 pub(super) fn read_molecule_input(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<MoleculeInput, EdnError> {
@@ -813,7 +808,7 @@ impl FromAst<MoleculeAst> for MoleculeDsl {
         }
         MoleculeDsl {
             ast: ast_out,
-            metadata: Metadata::default(),
+            metadata: MoleculeMetadata::default(),
         }
     }
 }
@@ -851,7 +846,7 @@ impl IntoAst<MoleculeAst> for MoleculeDsl {
     }
 }
 
-fn render_molecule_edn(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
+fn render_molecule_edn(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let mut map = EdnMap::with_capacity(8);
     map.insert(Edn::keyword("atoms"), render_atoms(ast, meta));
     map.insert(Edn::keyword("bonds"), render_bonds(ast, meta));
@@ -890,7 +885,7 @@ fn render_molecule_edn(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     Edn::Map(map)
 }
 
-fn render_atoms(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
+fn render_atoms(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = ast
         .atoms()
         .iter()
@@ -899,7 +894,7 @@ fn render_atoms(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
-fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &Metadata) -> Edn<'static> {
+fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let dsl = AtomDsl::from_ref(atom);
     let spec = if let Some(alias) = meta.atom_alias_for(dsl) {
         Edn::Keyword(EdnKeyword::owned(alias.to_string()))
@@ -912,14 +907,14 @@ fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &Metadata) -> Edn<'static
     }
 }
 
-fn render_atom_ref(id: AtomId, meta: &Metadata) -> Edn<'static> {
+fn render_atom_ref(id: AtomId, meta: &MoleculeMetadata) -> Edn<'static> {
     match meta.atom_id(id) {
         Some(id) => Edn::Keyword(EdnKeyword::owned(id.to_string())),
         None => Edn::Int(id.index() as i64),
     }
 }
 
-fn render_bonds(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
+fn render_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = ast
         .bonds()
         .iter()
@@ -945,7 +940,7 @@ fn render_bonds(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
-fn render_dative(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
+fn render_dative(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = ast
         .dative_bonds()
         .iter()
@@ -984,7 +979,7 @@ fn render_dative(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
-fn render_aromatic(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
+fn render_aromatic(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = ast
         .aromatic_systems()
         .iter()
@@ -1014,7 +1009,7 @@ fn render_aromatic(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
-fn render_multicenter(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
+fn render_multicenter(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = ast
         .multicenter_bonds()
         .iter()
@@ -1049,7 +1044,7 @@ fn render_electron_counts(counts: &[i64]) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
-fn render_noncovalent(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
+fn render_noncovalent(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = ast
         .noncovalent_bonds()
         .iter()
@@ -1076,7 +1071,7 @@ fn render_noncovalent(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
-fn render_stereo_atoms(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
+fn render_stereo_atoms(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = ast
         .stereo_atoms()
         .iter()
@@ -1104,7 +1099,7 @@ fn render_stereo_atoms(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
-fn render_stereo_bonds(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
+fn render_stereo_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = ast
         .stereo_bonds()
         .iter()
@@ -1132,7 +1127,7 @@ fn render_stereo_bonds(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
-fn render_stereo_ligand(ligand: StereoLigandView<'_>, meta: &Metadata) -> Edn<'static> {
+fn render_stereo_ligand(ligand: StereoLigandView<'_>, meta: &MoleculeMetadata) -> Edn<'static> {
     let atom = render_atom_ref(ligand.atom_id(), meta);
     match ligand.kind() {
         StereoLigandKind::Atom => atom,
@@ -1141,14 +1136,14 @@ fn render_stereo_ligand(ligand: StereoLigandView<'_>, meta: &Metadata) -> Edn<'s
     }
 }
 
-fn render_bond_ref(id: BondId, meta: &Metadata) -> Edn<'static> {
+fn render_bond_ref(id: BondId, meta: &MoleculeMetadata) -> Edn<'static> {
     match meta.bond_id(id) {
         Some(id) => Edn::Keyword(EdnKeyword::owned(id.to_string())),
         None => Edn::Int(id.index() as i64),
     }
 }
 
-fn render_atom_aliases(meta: &Metadata) -> Edn<'static> {
+fn render_atom_aliases(meta: &MoleculeMetadata) -> Edn<'static> {
     let mut pairs: Vec<Edn<'static>> = Vec::with_capacity(meta.atom_aliases_len() * 2);
     for (name, dsl) in meta.iter_atom_aliases() {
         pairs.push(Edn::Keyword(EdnKeyword::owned(name.to_string())));
@@ -1258,9 +1253,9 @@ pub(crate) struct StereoBondEntryInput {
 impl MoleculeInput {
     /// Destructive lowering: consumes the input, resolves refs against the
     /// built id scopes, and produces the final `MoleculeAst` with its
-    /// `Metadata`. Called from `FromEdn::from_edn` and the streaming path.
+    /// `MoleculeMetadata`. Called from `FromEdn::from_edn` and the streaming path.
     /// TODO: Fix pub(crate) visibility marker.
-    pub(crate) fn into_ast(self) -> Result<(MoleculeAst, Metadata), ParseError> {
+    pub(crate) fn into_ast(self) -> Result<(MoleculeAst, MoleculeMetadata), ParseError> {
         let MoleculeInput {
             atoms: atom_entries,
             bonds: bond_entries,
@@ -1276,7 +1271,7 @@ impl MoleculeInput {
 
         // Alias table: bijective. The parser enforces both directions —
         // duplicate names and duplicate atom-dsls are rejected at parse
-        // time. Programmatic `Metadata::add_atom_alias` is last-wins.
+        // time. Programmatic `MoleculeMetadata::add_atom_alias` is last-wins.
         let mut alias_table: IndexMap<String, Box<AtomDsl>> = IndexMap::new();
         for (name, dsl) in alias_entries {
             if alias_table.contains_key(&name) {
@@ -1292,7 +1287,7 @@ impl MoleculeInput {
 
         // Atoms: materialize AtomAst from each entry; collect ids.
         let mut atoms: Vec<AtomAst> = Vec::with_capacity(atom_entries.len());
-        let mut metadata = Metadata::new();
+        let mut metadata = MoleculeMetadata::new();
         let mut atom_id_to_idx: IndexMap<String, AtomId> = IndexMap::new();
         for (pos, entry) in atom_entries.into_iter().enumerate() {
             if let Some(id) = entry.id {

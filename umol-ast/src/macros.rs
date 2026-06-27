@@ -4,7 +4,7 @@
 //! for tests, examples, and inline literal data. They wrap the corresponding
 //! `FromStr` impl with `.unwrap()`.
 
-/// Parse a molecule-EDN string into a `MoleculeAst`. Metadata (atom IDs,
+/// Parse a molecule-EDN string into a `MoleculeAst`. MoleculeMetadata (atom IDs,
 /// aliases, etc.) in the input is dropped. Use [`dsl!`] to keep metadata.
 ///
 /// ```ignore
@@ -63,7 +63,7 @@ macro_rules! mol_ground {
             <$crate::dsl::MoleculeDsl as ::core::str::FromStr>::from_str($s).unwrap();
         let (ast, _meta) = dsl.into_parts();
         <$crate::dsl::MoleculeDsl as $crate::ast::IntoAst<$crate::ast::MoleculeAst>>::into_ast(
-            $crate::dsl::MoleculeDsl::from_parts(ast, $crate::dsl::Metadata::default()),
+            $crate::dsl::MoleculeDsl::from_parts(ast, $crate::dsl::MoleculeMetadata::default()),
             &$crate::dsl::MoleculeDefaults::ground(),
         )
     }};
@@ -237,7 +237,7 @@ mod tests {
         MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst, StereoBondAst,
         StereoCosetAst, StereoKind,
     };
-    use crate::dsl::molecule::Metadata;
+    use crate::dsl::molecule::MoleculeMetadata;
     use crate::dsl::{AtomDsl, MoleculeDsl};
 
     #[rustfmt::skip]
@@ -273,7 +273,7 @@ mod tests {
                 vec![AtomAst::from_element(Element::C); 2],
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ),
-            Metadata::new().with_atom_alias("c", "C".parse::<AtomDsl>().unwrap()),
+            MoleculeMetadata::new().with_atom_alias("c", "C".parse::<AtomDsl>().unwrap()),
         ),
     )]
     #[case::with_atom_ids(
@@ -283,7 +283,7 @@ mod tests {
                 vec![AtomAst::from_element(Element::C); 2],
                 vec![],
             ),
-            Metadata::new().with_atom_id(AtomId(0), "a").with_atom_id(AtomId(1), "b"),
+            MoleculeMetadata::new().with_atom_id(AtomId(0), "a").with_atom_id(AtomId(1), "b"),
         ),
     )]
     fn test_dsl_macro(#[case] input: &str, #[case] expected: MoleculeDsl) {

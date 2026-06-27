@@ -14,8 +14,8 @@ use crate::{dsl, mol};
 
 #[rstest]
 fn test_metadata_new() {
-    let m = Metadata::new();
-    assert_eq!(m, Metadata::default());
+    let m = MoleculeMetadata::new();
+    assert_eq!(m, MoleculeMetadata::default());
     assert!(m.atom_id(AtomId(0)).is_none());
     assert!(m.bond_id(BondId(0)).is_none());
     assert!(m.dative_bond_id(DativeBondId(0)).is_none());
@@ -30,7 +30,7 @@ fn test_metadata_new() {
 #[case::set(&["c1"], "c1")]
 #[case::last_wins(&["old", "new"], "new")]
 fn test_metadata_set_atom_id(#[case] names: &[&str], #[case] expected: &str) {
-    let mut m = Metadata::new();
+    let mut m = MoleculeMetadata::new();
     for name in names {
         m.set_atom_id(AtomId(0), *name);
     }
@@ -39,42 +39,42 @@ fn test_metadata_set_atom_id(#[case] names: &[&str], #[case] expected: &str) {
 
 #[rstest]
 fn test_metadata_set_bond_id() {
-    let mut m = Metadata::new();
+    let mut m = MoleculeMetadata::new();
     m.set_bond_id(BondId(2), "b1");
     assert_eq!(m.bond_id(BondId(2)), Some("b1"));
 }
 
 #[rstest]
 fn test_metadata_set_dative_bond_id() {
-    let mut m = Metadata::new();
+    let mut m = MoleculeMetadata::new();
     m.set_dative_bond_id(DativeBondId(1), "d1");
     assert_eq!(m.dative_bond_id(DativeBondId(1)), Some("d1"));
 }
 
 #[rstest]
 fn test_metadata_set_aromatic_system_id() {
-    let mut m = Metadata::new();
+    let mut m = MoleculeMetadata::new();
     m.set_aromatic_system_id(AromaticSystemId(0), "ring1");
     assert_eq!(m.aromatic_system_id(AromaticSystemId(0)), Some("ring1"));
 }
 
 #[rstest]
 fn test_metadata_set_multicenter_bond_id() {
-    let mut m = Metadata::new();
+    let mut m = MoleculeMetadata::new();
     m.set_multicenter_bond_id(MulticenterBondId(0), "mc1");
     assert_eq!(m.multicenter_bond_id(MulticenterBondId(0)), Some("mc1"));
 }
 
 #[rstest]
 fn test_metadata_set_noncovalent_bond_id() {
-    let mut m = Metadata::new();
+    let mut m = MoleculeMetadata::new();
     m.set_noncovalent_bond_id(NoncovalentBondId(0), "h1");
     assert_eq!(m.noncovalent_bond_id(NoncovalentBondId(0)), Some("h1"));
 }
 
 #[rstest]
 fn test_metadata_add_atom_alias() {
-    let mut m = Metadata::new();
+    let mut m = MoleculeMetadata::new();
     let atom = AtomAst::from_element(Element::C).with_implicit_hydrogens(2_i64);
     m.add_atom_alias("HC2", atom.clone());
     assert!(m.has_atom_alias("HC2"));
@@ -84,7 +84,7 @@ fn test_metadata_add_atom_alias() {
 
 #[rstest]
 fn test_metadata_add_atom_alias_duplicate_name_replaces_atom() {
-    let mut m = Metadata::new();
+    let mut m = MoleculeMetadata::new();
     let first = AtomAst::from_element(Element::C);
     let second = AtomAst::from_element(Element::N);
     m.add_atom_alias("X", first.clone());
@@ -96,7 +96,7 @@ fn test_metadata_add_atom_alias_duplicate_name_replaces_atom() {
 
 #[rstest]
 fn test_metadata_add_atom_alias_duplicate_atom_replaces_name() {
-    let mut m = Metadata::new();
+    let mut m = MoleculeMetadata::new();
     let atom = AtomAst::from_element(Element::C);
     m.add_atom_alias("first", atom.clone());
     m.add_atom_alias("second", atom.clone());
@@ -107,7 +107,7 @@ fn test_metadata_add_atom_alias_duplicate_atom_replaces_name() {
 
 #[rstest]
 fn test_metadata_iter_atom_aliases() {
-    let m = Metadata::new()
+    let m = MoleculeMetadata::new()
         .with_atom_alias("a", AtomAst::from_element(Element::C))
         .with_atom_alias("b", AtomAst::from_element(Element::N));
     let collected: Vec<(&str, AtomAst)> = m
@@ -121,7 +121,7 @@ fn test_metadata_iter_atom_aliases() {
 
 #[rstest]
 fn test_metadata_with_atom_id_chains() {
-    let m = Metadata::new()
+    let m = MoleculeMetadata::new()
         .with_atom_id(AtomId(0), "a")
         .with_atom_id(AtomId(1), "b");
     assert_eq!(m.atom_id(AtomId(0)), Some("a"));
@@ -130,56 +130,56 @@ fn test_metadata_with_atom_id_chains() {
 
 #[rstest]
 fn test_metadata_with_bond_id() {
-    let m = Metadata::new().with_bond_id(BondId(0), "b");
+    let m = MoleculeMetadata::new().with_bond_id(BondId(0), "b");
     assert_eq!(m.bond_id(BondId(0)), Some("b"));
 }
 
 #[rstest]
 fn test_metadata_with_dative_bond_id() {
-    let m = Metadata::new().with_dative_bond_id(DativeBondId(0), "d");
+    let m = MoleculeMetadata::new().with_dative_bond_id(DativeBondId(0), "d");
     assert_eq!(m.dative_bond_id(DativeBondId(0)), Some("d"));
 }
 
 #[rstest]
 fn test_metadata_with_aromatic_system_id() {
-    let m = Metadata::new().with_aromatic_system_id(AromaticSystemId(0), "r");
+    let m = MoleculeMetadata::new().with_aromatic_system_id(AromaticSystemId(0), "r");
     assert_eq!(m.aromatic_system_id(AromaticSystemId(0)), Some("r"));
 }
 
 #[rstest]
 fn test_metadata_with_multicenter_bond_id() {
-    let m = Metadata::new().with_multicenter_bond_id(MulticenterBondId(0), "mc");
+    let m = MoleculeMetadata::new().with_multicenter_bond_id(MulticenterBondId(0), "mc");
     assert_eq!(m.multicenter_bond_id(MulticenterBondId(0)), Some("mc"));
 }
 
 #[rstest]
 fn test_metadata_with_noncovalent_bond_id() {
-    let m = Metadata::new().with_noncovalent_bond_id(NoncovalentBondId(0), "h");
+    let m = MoleculeMetadata::new().with_noncovalent_bond_id(NoncovalentBondId(0), "h");
     assert_eq!(m.noncovalent_bond_id(NoncovalentBondId(0)), Some("h"));
 }
 
 #[rstest]
 fn test_metadata_with_stereo_atom_id() {
-    let m = Metadata::new().with_stereo_atom_id(StereoAtomId(0), "s");
+    let m = MoleculeMetadata::new().with_stereo_atom_id(StereoAtomId(0), "s");
     assert_eq!(m.stereo_atom_id(StereoAtomId(0)), Some("s"));
 }
 
 #[rstest]
 fn test_metadata_with_stereo_bond_id() {
-    let m = Metadata::new().with_stereo_bond_id(StereoBondId(0), "sb");
+    let m = MoleculeMetadata::new().with_stereo_bond_id(StereoBondId(0), "sb");
     assert_eq!(m.stereo_bond_id(StereoBondId(0)), Some("sb"));
 }
 
 #[rstest]
 fn test_metadata_with_atom_alias() {
     let atom = AtomAst::from_element(Element::C);
-    let m = Metadata::new().with_atom_alias("c", atom.clone());
+    let m = MoleculeMetadata::new().with_atom_alias("c", atom.clone());
     assert_eq!(m.atom_alias_for(&AtomDsl(atom)), Some("c"));
 }
 
 #[rstest]
 fn test_metadata_mixed_chain() {
-    let m = Metadata::new()
+    let m = MoleculeMetadata::new()
         .with_atom_id(AtomId(0), "c1")
         .with_bond_id(BondId(0), "b1")
         .with_atom_alias("X", AtomAst::from_element(Element::C));
@@ -191,7 +191,7 @@ fn test_metadata_mixed_chain() {
 #[rstest]
 fn test_molecule_dsl_to_edn_empty() {
     let ast = MoleculeAst::default();
-    let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
+    let dsl = MoleculeDsl::from_parts(ast, MoleculeMetadata::default());
     let edn = dsl.to_edn();
     assert_eq!(edn, read_string("{:atoms [] :bonds []}").unwrap());
 }
@@ -495,7 +495,7 @@ fn test_molecule_dsl_from_str_rejects_invalid() {
 #[case::stereo_bond(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"##)]
 fn test_molecule_dsl_dsl_to_ast_to_dsl_roundtrip_zeroed(#[case] source: &str) {
     let ast = mol!(source);
-    let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
+    let dsl = MoleculeDsl::from_parts(ast, MoleculeMetadata::default());
     let cfg = MoleculeDefaults::zeroed();
     let raised = dsl.clone().into_ast(&cfg);
     let lowered = MoleculeDsl::from_ast(&raised, &cfg);
@@ -507,7 +507,7 @@ fn test_molecule_dsl_from_ast_has_empty_metadata() {
     let ast = mol!(r#"{:atoms ["C"] :bonds []}"#);
     let cfg = MoleculeDefaults::zeroed();
     let dsl = MoleculeDsl::from_ast(&ast, &cfg);
-    assert_eq!(dsl.metadata(), &Metadata::default());
+    assert_eq!(dsl.metadata(), &MoleculeMetadata::default());
 }
 
 #[rustfmt::skip]
@@ -595,7 +595,7 @@ fn test_molecule_dsl_render_elides_vacuous_molecule_constraint(
         Constraints::default(),
     );
     ast.constraints_mut().push(Constraint::Molecule(constraint));
-    let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
+    let dsl = MoleculeDsl::from_parts(ast, MoleculeMetadata::default());
     let Edn::Map(m) = &dsl.to_edn() else {
         panic!("expected map")
     };
@@ -631,7 +631,7 @@ fn test_molecule_dsl_render_keeps_non_vacuous_drops_vacuous() {
             atoms: None,
             sum: ValueAst::Lit(0),
         }));
-    let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
+    let dsl = MoleculeDsl::from_parts(ast, MoleculeMetadata::default());
     let edn = dsl.to_edn();
     let Edn::Map(m) = &edn else {
         panic!("expected map")

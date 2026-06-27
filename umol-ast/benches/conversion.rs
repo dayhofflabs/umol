@@ -2,7 +2,7 @@
 //!
 //! Measures the `FromAst` and `IntoAst` paths on `MoleculeDsl` — separate
 //! from `FromEdn`/`ToEdn`, which bypass these traits via `MoleculeInput`.
-//! Used as a regression net for `Metadata` / DSL-newtype refactors.
+//! Used as a regression net for `MoleculeMetadata` / DSL-newtype refactors.
 
 use std::hint::black_box;
 

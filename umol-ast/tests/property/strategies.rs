@@ -29,7 +29,7 @@ pub(crate) use umol_ast::ast::{
     ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
-    parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl,
+    parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, MoleculeMetadata, MoleculeDsl,
     MulticenterBondDsl, NoncovalentBondDsl, StereoAtomConstraintDsl, StereoAtomDsl,
     StereoBondConstraintDsl, StereoBondDsl, ValueDsl,
 };
@@ -1754,13 +1754,13 @@ pub(crate) fn molecule_ast_with_constraints_strategy() -> impl Strategy<Value = 
     })
 }
 
-/// Generate a `Metadata` populated for an AST of the given counts. Entity
+/// Generate a `MoleculeMetadata` populated for an AST of the given counts. Entity
 /// ids use deterministic prefixed names (`atom0`, `bond1`, ...) so that
 /// names are unique across kinds and disjoint from alias names. Atom
 /// aliases are capped at 3 and use a 3-element pool (`C`, `N`, `O`) for
 /// the alias atom-DSL values, keeping bijectivity (each alias name
 /// distinct, each alias atom distinct).
-pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<Metadata> {
+pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMetadata> {
     const ALIAS_ELEMENTS: [Element; 3] = [Element::C, Element::N, Element::O];
     let id_flag = || prop::option::weighted(0.4, Just(()));
     let atom_flags = prop::collection::vec(id_flag(), counts.atom);
@@ -1779,7 +1779,7 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<Metadata> 
     )
         .prop_map(
             |(atoms, bonds, datives, aromatics, multicenters, noncovalents)| {
-                let mut meta = Metadata::new();
+                let mut meta = MoleculeMetadata::new();
                 for (i, slot) in atoms.iter().enumerate() {
                     if slot.is_some() {
                         meta.set_atom_id(AtomId(i as u32), format!("atom{i}"));

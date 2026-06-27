@@ -39,7 +39,7 @@ pub use constraint::{
 };
 pub use dative::{parse_dative_bond, DativeBondConstraintDsl, DativeBondDsl, DativeBondPredicate};
 pub use error::ParseError;
-pub use molecule::{Metadata, MoleculeDsl};
+pub use molecule::{MoleculeMetadata, MoleculeDsl};
 pub use multicenter::{
     parse_multicenter_bond, MulticenterBondConstraintDsl, MulticenterBondDsl,
     MulticenterBondPredicate,

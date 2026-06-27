@@ -3,7 +3,7 @@
 //! Boundary types between the AST `Constraint` tree and its EDN form. Refs in
 //! the tree carry either an integer index or a symbolic id; resolution to /
 //! from the `AtomId` / `BondId` / ... on the AST is a separate fallible
-//! step that consults the surrounding `Metadata`.
+//! step that consults the surrounding `MoleculeMetadata`.
 
 use indexmap::IndexMap;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
@@ -14,7 +14,7 @@ use super::atom::{AromaticValenceDsl, AtomConstraintDsl, MulticenterValenceDsl};
 use super::bond::BondConstraintDsl;
 use super::dative::DativeBondConstraintDsl;
 use super::error::ParseError;
-use super::molecule::{Metadata, MoleculeDsl};
+use super::molecule::{MoleculeMetadata, MoleculeDsl};
 use super::multicenter::MulticenterBondConstraintDsl;
 use super::noncovalent::NoncovalentBondConstraintDsl;
 use super::relational::{RelationalConstraintDsl, RELATIONAL_KEYS};
@@ -45,7 +45,7 @@ use crate::ast::value::ValueAst;
 /// resolution (DSL → AST). `from_ast` (AST → DSL) does not read counts.
 ///
 /// Crate-internal. `Copy` (48 B of primitives) — callers pass by reference
-/// for consistency with `Metadata`, not for cost reasons.
+/// for consistency with `MoleculeMetadata`, not for cost reasons.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct EntityCounts {
     pub(crate) atom_count: usize,
@@ -160,7 +160,7 @@ macro_rules! define_ref {
         impl $name {
             /// Build a ref from an AST index, preferring an id from `metadata`
             /// if one is recorded for this index.
-            pub fn from_ast(id: $id, metadata: &Metadata) -> Self {
+            pub fn from_ast(id: $id, metadata: &MoleculeMetadata) -> Self {
                 if let Some(name) = metadata.$accessor(id) {
                     Self::Id(name.to_string())
                 } else {
@@ -170,7 +170,7 @@ macro_rules! define_ref {
 
             /// Resolve this ref to an AST index against `metadata`. Fails on
             /// unknown id or out-of-range numeric index.
-            pub fn into_ast(self, count: usize, metadata: &Metadata) -> Result<$id, ParseError> {
+            pub fn into_ast(self, count: usize, metadata: &MoleculeMetadata) -> Result<$id, ParseError> {
                 match self {
                     Self::Index(i) => {
                         if i < count {
@@ -199,7 +199,7 @@ macro_rules! define_ref {
 
             /// Resolve this ref against a pre-built id → index map. O(1) id
             /// lookup; intended for entity-loop resolution where cloning the
-            /// full `Metadata` per call is wasteful.
+            /// full `MoleculeMetadata` per call is wasteful.
             pub fn resolve(
                 self,
                 count: usize,
@@ -1425,7 +1425,7 @@ pub(super) fn read_constraints_dsl(
 /// `SubPattern` carries a `Box<MoleculeAst>` directly: defaults are a
 /// ground-input convenience that has no meaning for patterns, where
 /// `Undetermined` is a wildcard. The AST↔DSL bridge for the pattern is
-/// the identity; the EDN bridge wraps with empty `Metadata` so refs render
+/// the identity; the EDN bridge wraps with empty `MoleculeMetadata` so refs render
 /// as numeric indices.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MoleculeConstraintDsl {
@@ -1450,13 +1450,13 @@ pub enum MoleculeConstraintDsl {
     },
 }
 
-fn atom_subset_from_ast(atoms: &Option<Vec<AtomId>>, meta: &Metadata) -> Option<Vec<AtomRef>> {
+fn atom_subset_from_ast(atoms: &Option<Vec<AtomId>>, meta: &MoleculeMetadata) -> Option<Vec<AtomRef>> {
     atoms
         .as_ref()
         .map(|v| v.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
 }
 
-fn bond_subset_from_ast(bonds: &Option<Vec<BondId>>, meta: &Metadata) -> Option<Vec<BondRef>> {
+fn bond_subset_from_ast(bonds: &Option<Vec<BondId>>, meta: &MoleculeMetadata) -> Option<Vec<BondRef>> {
     bonds
         .as_ref()
         .map(|v| v.iter().map(|&b| BondRef::from_ast(b, meta)).collect())
@@ -1465,7 +1465,7 @@ fn bond_subset_from_ast(bonds: &Option<Vec<BondId>>, meta: &Metadata) -> Option<
 fn atom_subset_into_ast(
     atoms: Option<Vec<AtomRef>>,
     count: usize,
-    meta: &Metadata,
+    meta: &MoleculeMetadata,
 ) -> Result<Option<Vec<AtomId>>, ParseError> {
     atoms
         .map(|v| {
@@ -1479,7 +1479,7 @@ fn atom_subset_into_ast(
 fn bond_subset_into_ast(
     bonds: Option<Vec<BondRef>>,
     count: usize,
-    meta: &Metadata,
+    meta: &MoleculeMetadata,
 ) -> Result<Option<Vec<BondId>>, ParseError> {
     bonds
         .map(|v| {
@@ -1491,7 +1491,7 @@ fn bond_subset_into_ast(
 }
 
 impl MoleculeConstraintDsl {
-    pub(crate) fn from_ast(c: &MoleculeConstraint, meta: &Metadata) -> Result<Self, ParseError> {
+    pub(crate) fn from_ast(c: &MoleculeConstraint, meta: &MoleculeMetadata) -> Result<Self, ParseError> {
         Ok(match c {
             MoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum {
                 atoms: atom_subset_from_ast(atoms, meta),
@@ -1509,7 +1509,7 @@ impl MoleculeConstraintDsl {
                 atoms: atom_subset_from_ast(atoms, meta),
             },
             MoleculeConstraint::SubPattern { anchor, pattern } => {
-                let pattern_meta = Metadata::default();
+                let pattern_meta = MoleculeMetadata::default();
                 let anchor_dsl = SubPatternAnchorDsl::from_ast_pair(anchor, meta, &pattern_meta);
                 Self::SubPattern {
                     anchor: anchor_dsl,
@@ -1522,7 +1522,7 @@ impl MoleculeConstraintDsl {
     pub(crate) fn into_ast(
         self,
         counts: &EntityCounts,
-        meta: &Metadata,
+        meta: &MoleculeMetadata,
     ) -> Result<MoleculeConstraint, ParseError> {
         Ok(match self {
             Self::ChargeSum { atoms, sum } => MoleculeConstraint::ChargeSum {
@@ -1542,7 +1542,7 @@ impl MoleculeConstraintDsl {
             },
             Self::SubPattern { anchor, pattern } => {
                 let pattern_counts = EntityCounts::from_ast(&pattern);
-                let pattern_meta = Metadata::default();
+                let pattern_meta = MoleculeMetadata::default();
                 let anchor_ast =
                     anchor.into_ast_pair(counts, meta, &pattern_counts, &pattern_meta)?;
                 MoleculeConstraint::SubPattern {
@@ -1658,7 +1658,7 @@ impl ToEdn for MoleculeConstraintDsl {
                 ("connected", Edn::Map(m))
             }
             Self::SubPattern { anchor, pattern } => {
-                let pattern_dsl = MoleculeDsl::from_parts((**pattern).clone(), Metadata::default());
+                let pattern_dsl = MoleculeDsl::from_parts((**pattern).clone(), MoleculeMetadata::default());
                 let mut m = EdnMap::with_capacity(2);
                 m.insert(Edn::keyword("anchor"), anchor.to_edn());
                 m.insert(Edn::keyword("pattern"), pattern_dsl.to_edn());
@@ -1673,8 +1673,8 @@ impl ToEdn for MoleculeConstraintDsl {
 
 /// Surface DSL wrapper around `SubPatternAnchor`. Each vector carries
 /// `(target, pattern)` ref pairs. Target-side refs resolve against the outer
-/// molecule's `Metadata`; pattern-side refs resolve against the pattern
-/// molecule's `Metadata`.
+/// molecule's `MoleculeMetadata`; pattern-side refs resolve against the pattern
+/// molecule's `MoleculeMetadata`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SubPatternAnchorDsl {
     pub atoms: Vec<(AtomRef, AtomRef)>,
@@ -1692,8 +1692,8 @@ impl SubPatternAnchorDsl {
     /// metadata; `pattern_meta` is the pattern molecule's metadata.
     pub fn from_ast_pair(
         anchor: &SubPatternAnchor,
-        target_meta: &Metadata,
-        pattern_meta: &Metadata,
+        target_meta: &MoleculeMetadata,
+        pattern_meta: &MoleculeMetadata,
     ) -> Self {
         Self {
             atoms: anchor
@@ -1784,9 +1784,9 @@ impl SubPatternAnchorDsl {
     pub(crate) fn into_ast_pair(
         self,
         target_counts: &EntityCounts,
-        target_meta: &Metadata,
+        target_meta: &MoleculeMetadata,
         pattern_counts: &EntityCounts,
-        pattern_meta: &Metadata,
+        pattern_meta: &MoleculeMetadata,
     ) -> Result<SubPatternAnchor, ParseError> {
         let mut anchor = SubPatternAnchor::new();
         for (t, p) in self.atoms {
@@ -2211,7 +2211,7 @@ impl ToEdn for ConstraintDsl {
 }
 
 impl ConstraintDsl {
-    pub(crate) fn from_ast(c: &Constraint, meta: &Metadata) -> Result<Self, ParseError> {
+    pub(crate) fn from_ast(c: &Constraint, meta: &MoleculeMetadata) -> Result<Self, ParseError> {
         Ok(match c {
             Constraint::Atom(id, c) => Self::Atom(
                 AtomRef::from_ast(*id, meta),
@@ -2263,7 +2263,7 @@ impl ConstraintDsl {
     pub(crate) fn into_ast(
         self,
         counts: &EntityCounts,
-        meta: &Metadata,
+        meta: &MoleculeMetadata,
     ) -> Result<Constraint, ParseError> {
         Ok(match self {
             Self::Atom(r, c) => {
@@ -2340,7 +2340,7 @@ impl ConstraintsDsl {
     /// during the AST → DSL lowering, matching the canonical-rendering
     /// rule: a constraint that asserts nothing does not appear in the
     /// canonical surface form.
-    pub(crate) fn from_ast(cs: &Constraints, meta: &Metadata) -> Result<Self, ParseError> {
+    pub(crate) fn from_ast(cs: &Constraints, meta: &MoleculeMetadata) -> Result<Self, ParseError> {
         Ok(Self(
             cs.iter()
                 .filter(|c| !c.is_vacuous())
@@ -2352,7 +2352,7 @@ impl ConstraintsDsl {
     pub(crate) fn into_ast(
         self,
         counts: &EntityCounts,
-        meta: &Metadata,
+        meta: &MoleculeMetadata,
     ) -> Result<Constraints, ParseError> {
         let mut out = Constraints::new();
         for c in self.0 {
@@ -2440,8 +2440,8 @@ mod tests {
     use crate::ast::value::ValueAst;
 
     #[fixture]
-    fn meta_with_atom_id() -> Metadata {
-        Metadata::new().with_atom_id(AtomId(2), "c1")
+    fn meta_with_atom_id() -> MoleculeMetadata {
+        MoleculeMetadata::new().with_atom_id(AtomId(2), "c1")
     }
 
     #[rstest]
@@ -2483,19 +2483,19 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_ref_from_ast_uses_id_when_present(meta_with_atom_id: Metadata) {
+    fn test_atom_ref_from_ast_uses_id_when_present(meta_with_atom_id: MoleculeMetadata) {
         let r = AtomRef::from_ast(AtomId(2), &meta_with_atom_id);
         assert_eq!(r, AtomRef::Id("c1".into()));
     }
 
     #[rstest]
-    fn test_atom_ref_from_ast_falls_back_to_index_without_id(meta_with_atom_id: Metadata) {
+    fn test_atom_ref_from_ast_falls_back_to_index_without_id(meta_with_atom_id: MoleculeMetadata) {
         let r = AtomRef::from_ast(AtomId(4), &meta_with_atom_id);
         assert_eq!(r, AtomRef::Index(4));
     }
 
     #[rstest]
-    fn test_atom_ref_into_ast_resolves_id(meta_with_atom_id: Metadata) {
+    fn test_atom_ref_into_ast_resolves_id(meta_with_atom_id: MoleculeMetadata) {
         let id = AtomRef::Id("c1".into())
             .into_ast(5, &meta_with_atom_id)
             .unwrap();
@@ -2503,13 +2503,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_ref_into_ast_resolves_index(meta_with_atom_id: Metadata) {
+    fn test_atom_ref_into_ast_resolves_index(meta_with_atom_id: MoleculeMetadata) {
         let id = AtomRef::Index(3).into_ast(5, &meta_with_atom_id).unwrap();
         assert_eq!(id, AtomId(3));
     }
 
     #[rstest]
-    fn test_atom_ref_into_ast_out_of_range_index(meta_with_atom_id: Metadata) {
+    fn test_atom_ref_into_ast_out_of_range_index(meta_with_atom_id: MoleculeMetadata) {
         let err = AtomRef::Index(9)
             .into_ast(5, &meta_with_atom_id)
             .unwrap_err();
@@ -2523,7 +2523,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_ref_into_ast_unknown_id(meta_with_atom_id: Metadata) {
+    fn test_atom_ref_into_ast_unknown_id(meta_with_atom_id: MoleculeMetadata) {
         let err = AtomRef::Id("nope".into())
             .into_ast(5, &meta_with_atom_id)
             .unwrap_err();
@@ -2567,7 +2567,7 @@ mod tests {
         #[case] input: MoleculeConstraint,
         #[case] edn_source: &str,
     ) {
-        let meta = Metadata::default();
+        let meta = MoleculeMetadata::default();
         let dsl = MoleculeConstraintDsl::from_ast(&input, &meta).unwrap();
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
@@ -2610,7 +2610,7 @@ mod tests {
         #[case] input: Constraint,
         #[case] edn_source: &str,
     ) {
-        let meta = Metadata::default();
+        let meta = MoleculeMetadata::default();
         let dsl = ConstraintDsl::from_ast(&input, &meta).unwrap();
         let edn = dsl.to_edn();
         assert_eq!(edn, read_string(edn_source).unwrap(), "render mismatch");
@@ -2643,7 +2643,7 @@ mod tests {
 
     #[rstest]
     fn test_sub_pattern_anchor_dsl_empty_roundtrip(#[from(full_counts)] counts: EntityCounts) {
-        let meta = Metadata::default();
+        let meta = MoleculeMetadata::default();
         let anchor = SubPatternAnchor::new();
         let dsl = SubPatternAnchorDsl::from_ast_pair(&anchor, &meta, &meta);
         let edn = dsl.to_edn();
@@ -2658,7 +2658,7 @@ mod tests {
 
     #[rstest]
     fn test_sub_pattern_anchor_dsl_atoms_roundtrip(#[from(full_counts)] counts: EntityCounts) {
-        let meta = Metadata::default();
+        let meta = MoleculeMetadata::default();
         let mut anchor = SubPatternAnchor::new();
         anchor.push_atom(AtomId(3), AtomId(0));
         anchor.push_atom(AtomId(5), AtomId(1));
@@ -2674,7 +2674,7 @@ mod tests {
 
     #[rstest]
     fn test_sub_pattern_anchor_dsl_stereo_roundtrip(#[from(full_counts)] counts: EntityCounts) {
-        let meta = Metadata::default();
+        let meta = MoleculeMetadata::default();
         let mut anchor = SubPatternAnchor::new();
         anchor.push_stereo_atom(StereoAtomId(2), StereoAtomId(0));
         anchor.push_stereo_bond(StereoBondId(4), StereoBondId(1));
@@ -2757,7 +2757,7 @@ mod tests {
         #[case] input: Constraint,
         #[case] edn_source: &str,
     ) {
-        let meta = Metadata::default();
+        let meta = MoleculeMetadata::default();
         let dsl = ConstraintDsl::from_ast(&input, &meta).unwrap();
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
@@ -2815,7 +2815,7 @@ mod tests {
         #[case] edn_source: &str,
     ) {
         let wrapped = Constraint::Bond(BondId(0), input.clone());
-        let meta = Metadata::default();
+        let meta = MoleculeMetadata::default();
         let dsl = ConstraintDsl::from_ast(&wrapped, &meta).unwrap();
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
@@ -2864,7 +2864,7 @@ mod tests {
 
     #[rstest]
     fn test_constraints_dsl_empty_roundtrip(#[from(full_counts)] counts: EntityCounts) {
-        let meta = Metadata::default();
+        let meta = MoleculeMetadata::default();
         let cs = Constraints::new();
         let dsl = ConstraintsDsl::from_ast(&cs, &meta).unwrap();
         let edn = dsl.to_edn();
@@ -2876,7 +2876,7 @@ mod tests {
 
     #[rstest]
     fn test_constraints_dsl_multi_roundtrip(#[from(full_counts)] counts: EntityCounts) {
-        let meta = Metadata::default();
+        let meta = MoleculeMetadata::default();
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(
             AtomId(0),

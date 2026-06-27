@@ -100,14 +100,6 @@ These follow the existing conventions directly; not contested, listed for comple
 
   So a delta/span value is always a whole entity DSL string (`:single` is its `BondDsl` keyword
   shorthand); per-field values live inside that string, not as separate EDN slots.
-- **Constituent free fns.** `Delta`, `LeftRightState`, and `*FieldChange` are constituents of the
-  two boundary types, so they get `read_`/`render_` (streaming) and `read_edn_`/`render_edn_`
-  (tree) free functions, not `FromEdn`/`ToEdn` — unless we decide they are independently useful
-  boundary types (see decision 6).
-- **Ctx / defaults.** A `ReactionDefaults` aggregating `MoleculeDefaults` for `lhs` and the atom/
-  bond defaults for delta/span values; `zeroed()` is the omission threshold for rendering (drop
-  defaulted fields), as in molecules. Open whether `ReactionDefaults` adds anything beyond the
-  reused `MoleculeDefaults` — likely not, decision deferred to implementation.
 
 ## Work item 1 — `Delta` encoding  **[resolved — add / remove / modify]**
 
@@ -208,10 +200,6 @@ Running example (the SN2):
          {:atom {:modify :nu "#c0"}}]          ; Nu → neutral
 ```
 
-This **dissolves the inline-only serialization problem**: a modify (or add) value is a whole entity
-DSL string, so element / isotope (`#i`) / spin (`#u#s`) ride inside it — no standalone leaf
-serialization for `ElementAst` / `IsotopeMassAst` / `SpinStateAst` is needed.
-
 ### `:electrons` moves into the entity DSL
 
 The per-atom electron-contribution vector currently sits as an `:electrons` map key on
@@ -242,67 +230,47 @@ vector-valued key is plural (`:atoms`, `:ligands`, `:electrons`, `:donors`), whe
 `:donor` is a singular name holding ref-or-vector. Ripples to the molecule spec §4 dative-bond-entry
 and `dsl/dative.rs`; a dative bond needs ≥1 donor.
 
-## Work item 2 — `LeftRightState` encoding  **[decision]**
+## Work item 2 — `LeftRightState` encoding  **[open — leading proposal, not finalized]**
 
-`ReactionSpanDsl` is the superimposed graph and reads like a molecule whose entries may carry a
-transition. An all-`Unchanged` span **is** a molecule map (homoiconic — the same keys `:atoms`/
-`:bonds`).
+`ReactionSpanDsl` is the superimposed graph; it reads like a molecule whose entries may carry a
+transition, and an all-`Unchanged` span **is** a plain molecule map (homoiconic — the same `:atoms`/
+`:bonds` keys).
+
+**Leading proposal (open — not finalized).** Per-element state is tagged with **participle
+keywords** — `:added` / `:modified` / `:removed` — and a bare entry is `Unchanged`. This mirrors the `LeftRightState` variants and keeps
+the established **verb (operations) vs participle (states)** split: the delta surface uses `:add` /
+`:remove` / `:modify` (operations over `lhs`); the span uses `:added` / `:modified` / `:removed`
+(per-element states). `Unchanged` stays as cheap as a plain molecule entry.
+
+Atoms — a bare atom DSL is `Unchanged`; the tags wrap the value(s):
 
 ```clojure
-{:atoms ["C#h3"
-         {:modified ["Br" "Br#c-1"]}
-         {:modified ["O#h1#c-1" "O#h1"]}]
- :bonds [{:removed [0 1 :single]}
-         {:added   [0 2 :single]}]}
+{:atoms ["C#h3"                                  ; Unchanged
+         {:modified ["Br" "Br#c-1"]}             ; Modified — [left right], two full atom DSLs
+         {:added "O#h1"}                         ; Added   — right-only value
+         {:removed "O"}                          ; Removed — left-only value
+         [:nu {:modified ["O#h1#c-1" "O#h1"]}]]  ; with an id: [<id> <state>]
+ …}
 ```
 
-The contested axis is **how each of the four states is tagged** while keeping `Unchanged` (the
-common case) as cheap as a plain molecule entry.
+Bonds — endpoints are frame-invariant, so the state wraps the bond entry; `Modified` keeps the
+endpoints once and pairs the bond value:
 
-### Atom-state options
+```clojure
+ :bonds [[0 1 :single]                           ; Unchanged
+         {:modified [0 2 [:single :double]]}     ; Modified — [<ref> <ref> [left right]]
+         {:added   [0 2 :single]}                ; Added
+         {:removed [0 1 :single]}]               ; Removed
+```
 
-| state | Option I — word-tagged maps | Option II — sigil keywords |
-|-------|------------------------------|-----------------------------|
-| Unchanged | `"C"` (bare atom-string) | `"C"` |
-| Modified | `{:modified ["C#h3" "C#h0"]}` | `{:>> ["C#h3" "C#h0"]}` |
-| Added | `{:added "N"}` | `{:+ "N"}` |
-| Removed | `{:removed "O"}` | `{:- "O"}` |
+`Modified` carries the two full values as a `[left right]` pair — lossless, no new grammar.
+**Rejected:** sigil tags (`:+`/`:-`/`:>>`, cryptic); a positional `[a b]` for atom `Modified`
+(collides with the inline-id `[:id "C"]` form); an in-string arrow (pollutes the atom subgrammar);
+a delta-style field diff (that's the delta surface's job — the span carries states, not ops).
 
-Option I is explicit and reads well; Option II is terser and visually CGR-like (`+`/`-`/`>>` are
-legal EDN keyword characters) but cryptic. Either way, ids attach as today's inline-id 2-vector,
-nesting the state: `[:br {:modified ["Br" "Br#c-1"]}]`, `[:oh {:added "O#h1"}]`.
-
-A third option, **III — positional pair = Modified**: `"C"` = Unchanged, `["C#h3" "C#h0"]` =
-Modified (a 2-vector of strings), with `Added`/`Removed` still tagged. Cheapest Modified, but the
-2-vector collides with the inline-id form `[:id "C"]` (keyword-first vs string-first
-disambiguates, yet mixing ids with Modified gets awkward). Mentioned for completeness; the
-collision makes it the weakest.
-
-### Bond-state options
-
-Bonds always carry endpoints, so the state wraps a bond entry (`[<ref> <ref> <bond-spec>]`):
-
-| state | wrapped form | type-on-the-entry form |
-|-------|--------------|------------------------|
-| Unchanged | `[0 1 :single]` | `[0 1 :single]` |
-| Modified | `{:modified [0 1 [:single :double]]}` | `[0 1 {:modified [:single :double]}]` |
-| Added | `{:added [0 1 :double]}` | `[0 1 {:added :double}]` |
-| Removed | `{:removed [0 1 :single]}` | `[0 1 {:removed :single}]` |
-
-Left column wraps the whole entry (uniform with the atom-state tagging); right column keeps the
-endpoints bare and tags only the `:type` slot (endpoints are frame-invariant, only the bond value
-changes — except for Added/Removed where the bond itself is present on one side only, which the
-right column expresses as a one-sided type). Decision 3 picks the atom and bond encodings together
-for consistency.
-
-### Modified value form (decision 4)
-
-`Modified` carries two full ASTs (`left`, `right`). The pair `["C#h3" "C#h0"]` is lossless and
-needs no new grammar. Alternatives — an in-string arrow (`"C#h3>>C#h0"`, rejected: pollutes the
-atom subgrammar) or a delta-style field diff (`{:charge ["0" "-1"]}`, rejected here: that is the
-*delta* surface's job, and the span deliberately carries states not ops). The pair is the natural
-span form; the only question is whether `Modified` ever wants to elide the unchanged half (it
-cannot — both sides are full values by construction).
+**Generalization debt.** `LeftRightState<T>` and the span's per-entity `atoms`/`bonds` vecs are
+atom/bond-shaped and will not survive the six overlay entities; generalizing the span container is
+tracked in doc 134 (gap 2). The encoding above is the localized-topology (atom/bond) surface.
 
 ## Cross-cutting
 
@@ -325,7 +293,11 @@ cannot — both sides are full values by construction).
   ids. It belongs with the SMIRKS import work, not here. The span's superimposed form is the
   faithful `ReactionSpanAst` boundary and strictly carries the map.
 
-## Open decisions
+## Decisions
+
+The **delta-surface** decisions are resolved (work item 1). The **span** encoding (work item 2) is
+still **open** — a leading proposal is recorded for context, not finalized. Other remaining items
+are implementation gaps, tracked in doc 134.
 
 1. **Delta key shape** — **resolved: B** (entity-then-op), for coherence with the entity-keyed
    `:constraints` records, a small reused keyspace, and a single `EntityDelta`-driven path.
@@ -353,31 +325,123 @@ cannot — both sides are full values by construction).
 8. **Remove cross-check** — **resolved**: a `:remove` ref must resolve to an existing entity, but
    that is the same ref-existence validation `MoleculeInput` already performs for atom-refs in bonds
    — reuse it, not new machinery.
-9. **`LeftRightState` encoding** (work item 2) — atom-state (I word-tagged / II sigil / III
-   positional) and bond-state (whole-entry wrap vs type-slot tag), chosen together. **Open.**
-10. **`Modified` value form** (work item 2) — the `[left right]` string pair vs any alternative.
-    **Open.**
-11. **Boundary vs constituent** — `Delta` is now a constituent of `ReactionDsl` (recover-from-`lhs`
-    rules out a standalone `DeltaDsl`); whether the span / `LeftRightState` is its own boundary type
-    is **open** (the span is self-contained, so it could be). 
+9. **`LeftRightState` encoding** (work item 2) — **open**. Leading proposal: participle tags
+   `:added`/`:modified`/`:removed`, bare = `Unchanged`; bond states wrap the entry; `Modified` =
+   `[left right]`. Recorded for context, not finalized.
+10. **`Modified` value form** — **open** (part of work item 2). Leading proposal: the `[left right]`
+    full-value pair.
+11. **Boundary vs constituent** — `Delta` is a constituent of `ReactionDsl` (recover-from-`lhs`
+    rules out a standalone `DeltaDsl`); the span is self-contained, so `ReactionSpanDsl` is its own
+    boundary type. **Resolved.**
 12. **Self-describing tag** — **resolved: none** for now (caller picks the boundary type, as with
     molecules); revisit if mixed/heterogeneous streams arise.
-13. **Generalization debt** — `LeftRightState<T>` and the per-entity field-change split are
-    atom/bond-shaped and will not survive the overlays; revisit when overlays land. **Deferred.**
-14. **Dative bonds** — **resolved** (the asymmetric case: multi-donor + single acceptor, not an
+13. **Dative bonds** — **resolved** (the asymmetric case: multi-donor + single acceptor, not an
     endpoint pair). `:add` = `{[:id <id>] :donors [<atom-ref>*] :acceptor <atom-ref> :type
     <dative-bond-dsl>}`; `:remove` ref = `<index> | <id> | {:donors [<atom-ref>*] :acceptor
     <atom-ref>}`. The `:donor` → `:donors` rename is a molecule-wide change, recorded separately.
-15. **Surface vs AST scope** — the encoding spans all eight entities, but the AST `Delta` is
-    `Atom` / `Bond` / `Constraint` only today; the overlay-entity deltas are forward-looking (need
-    increment-2 AST support). **Note.**
 
-## After decisions (implementation sketch)
+**Deferred to doc 134 (implementation gaps, not surface-design questions):**
+- **Generalization debt** — `LeftRightState<T>` and the per-entity span vecs are atom/bond-shaped
+  and won't survive the six overlay entities (134 gap 2).
+- **Surface vs AST scope** — the surface spans all eight entities, but the AST `Delta` is
+  `Atom`/`Bond`/`Constraint` only; overlay-entity deltas need increment-2 AST support (134 gap 2).
+- **Molecule-constraint reaction application** — `apply_at` currently drops `Delta::Constraint`;
+  closing it needs a match-based constraint ref-remap (134 gap 1).
 
-`umol-ast/src/dsl/reaction.rs` (and `reaction_span.rs`): the two `*Dsl` boundary types and a raw
-`ReactionInput` (resolved against `lhs`, mirroring `MoleculeInput`), with their
-`FromEdn`/`ToEdn`/`FromStr`/`Display`/`FromAst`/`IntoAst`; `read_/render_` + `read_edn_/render_edn_`
-free fns for `Delta`, `LeftRightState`, `*FieldChange`; `ReactionDefaults` in `dsl/config.rs` if
-needed; round-trip tests (DSL→AST→DSL and the cross-form DSL→AST→span-AST→span-DSL); and the spec
-updated once the encoding is fixed — a normative reactions section added and the stale §8.4 sketch
-revised to match.
+## Implementation plan — delta surface (`ReactionDsl` ↔ `ReactionAst`)
+
+Increment-1 entities (atom / bond / molecule-constraint); overlay-entity deltas deferred
+(doc 134 gap 2). Types and signatures below are approximate (shapes + API, no bodies).
+
+**Module placement.** New module `umol-ast/src/dsl/reaction.rs`, registered in
+`umol-ast/src/dsl.rs` (`pub(crate) mod reaction;` + `pub use reaction::{ReactionDsl,
+ReactionMetadata};`). The partial-DSL parsers (W2) are free fns in the existing `dsl/atom.rs` /
+`dsl/bond.rs`, next to `parse_atom` / `parse_bond`. No other new modules.
+
+**W0 — Prerequisites** (molecule-DSL; no new types):
+- 0.1 — `:electrons` → head of the aromatic-system / multicenter-bond DSL string, parsed as a
+  `[<nat>(,<nat>)*]` vector: `dsl/aromatic.rs`, `dsl/multicenter.rs` (+ the entry parsers in
+  `dsl/molecule.rs` that currently read the `:electrons` map key), + spec.
+- 0.2 — `:donor` → `:donors`: `dsl/molecule.rs` dative-bond-entry parser + `dsl/dative.rs`, + spec §4.
+
+**W1 — Types** (all in `dsl/reaction.rs`):
+- 1.1 — `ReactionDsl` (boundary). Shape: `struct ReactionDsl { ast: ReactionAst, metadata:
+  ReactionMetadata }` (private fields). API: `from_parts(ReactionAst, ReactionMetadata) -> Self`,
+  `into_parts(self) -> (ReactionAst, ReactionMetadata)`, `ast(&self) -> &ReactionAst`, `metadata(&self)
+  -> &ReactionMetadata`. Traits: `FromEdn<'de>`, `ToEdn`, `FromStr`, `Display`, `FromAst<ReactionAst>`,
+  `IntoAst<ReactionAst>` (reusing the lhs `MoleculeDefaults` as `Ctx` — no new defaults type).
+- 1.2 — `ReactionMetadata`. Shape: `struct ReactionMetadata { lhs: molecule::Metadata, atom_handles:
+  BiBTreeMap<String, AtomId>, bond_handles: BiBTreeMap<String, BondId> }` (the lhs molecule metadata +
+  created-entity handle ↔ id bindings). Traits: `Clone`, `Debug`, `Default`. API: accessors.
+- 1.3 — `ReactionInput` (raw parse target, `pub(crate)`). Shape: `struct ReactionInput { lhs:
+  MoleculeInput, deltas: Vec<DeltaInput> }`. API: `into_ast(self) -> Result<(ReactionAst,
+  ReactionMetadata), DeError>` (resolution, W5). Traits: `Debug`.
+- 1.4 — `DeltaInput` (raw delta, `pub(crate)`). Shape: enum (refs unresolved, `:modify` RHS a
+  partial AST):
+  ```
+  enum DeltaInput {
+      AtomAdd { handle: Option<String>, value: AtomAst },
+      AtomRemove(AtomRefDsl),
+      AtomModify(AtomRefDsl, AtomAst),            // partial: unspecified fields Undetermined
+      BondAdd { handle: Option<String>, atoms: [AtomRefDsl; 2], value: BondAst },
+      BondRemove(BondRefDsl),
+      BondModify(BondRefDsl, BondAst),            // partial
+      ConstraintAdd(ConstraintDsl),
+      ConstraintRemove(ConstraintDsl),
+  }
+  ```
+  Traits: `Debug`. (Reuses the existing `AtomRefDsl`/`BondRefDsl` and `ConstraintDsl`.)
+- 1.5 — `ReactionAst` gets `FromEdn`/`ToEdn`/`FromStr`/`Display` routing through `ReactionDsl`
+  (discarding `metadata`), mirroring `MoleculeAst` (in `dsl/reaction.rs`).
+
+**W2 — Partial entity-DSL parsers** (free fns):
+- 2.1 — `pub fn parse_partial_atom(&str) -> Result<AtomAst, ParseError>` in `dsl/atom.rs`: sparse
+  grammar — element optional, every unspecified field `Undetermined`; reuses the existing predicate
+  sub-parsers.
+- 2.2 — `pub fn parse_partial_bond(&str) -> Result<BondAst, ParseError>` in `dsl/bond.rs`: order
+  optional.
+- 2.3 — matching `fmt_partial_atom` / `fmt_partial_bond` (render only the non-`Undetermined` fields),
+  same files (for W6).
+
+**W3 — Delta parser** (`dsl/reaction.rs`, free fns):
+- 3.1 — `read_delta(&mut EdnStreamDeserializer) -> Result<DeltaInput, EdnError>` (streaming) and
+  `parse_delta(&Edn) -> Result<DeltaInput, DeError>` (tree). Dispatch: entity keyword → op keyword →
+  payload.
+- 3.2 — payload parsers: `:add` reuses the molecule entry parser for the entity; `:remove` → an
+  `AtomRefDsl`/`BondRefDsl` (incl. the structural form); `:modify` → ref + `parse_partial_*` (W2);
+  `:constraint` → `ConstraintDsl::from_edn`.
+
+**W4 — Top-level parser** (`dsl/reaction.rs`, free fns):
+- 4.1 — `read_reaction_input(&mut …) -> Result<ReactionInput, EdnError>` and
+  `parse_reaction_input(&Edn) -> Result<ReactionInput, DeError>`: `:lhs` via `read_molecule_input` /
+  `parse_molecule_input`, `:deltas` via W3.
+- 4.2 — `ReactionDsl::from_edn` / `from_edn_str` call 4.1 then `ReactionInput::into_ast` (W5).
+
+**W5 — Resolution** (`ReactionInput::into_ast`, `dsl/reaction.rs`):
+- 5.1 — resolve `lhs` (`MoleculeInput::into_ast`) → `(MoleculeAst, molecule::Metadata)`.
+- 5.2 — ref namespace = lhs ids ∪ `:add` handles; resolve each `AtomRefDsl`/`BondRefDsl` against it
+  (reuse the molecule ref resolver); error on unknown / non-covering ref.
+- 5.3 — `AtomAdd`/`BondAdd` → `Add` with a fresh id (lhs count + order) + register the handle.
+- 5.4 — `AtomRemove`/`BondRemove` → recover the entity's `ast` from `lhs` → `Remove`.
+- 5.5 — `AtomModify`/`BondModify` → diff the partial RHS against the `lhs` entity → `ModifyField` /
+  `ModifyConstraint` deltas (old from `lhs`; an `Undetermined` constraint = removal).
+- 5.6 — `ConstraintAdd`/`ConstraintRemove` → `Delta::Constraint(ConstraintDelta::{Add,Remove})`
+  (resolve constraint refs against the namespace).
+
+**W6 — Render** (`dsl/reaction.rs`):
+- 6.1 — `ReactionDsl::from_ast(&ReactionAst, &MoleculeDefaults) -> Self` and `ToEdn::to_edn`.
+- 6.2 — `render_reaction_edn(&ReactionAst, &ReactionMetadata) -> Edn`: `:lhs` via the molecule
+  renderer; `:deltas` via 6.3.
+- 6.3 — `render_deltas`: group by entity; **coalesce** one entity's `ModifyField` + `ModifyConstraint`
+  into a single `:modify <ref> <partial-DSL>` (via `fmt_partial_*`, dropping `old`, `#v*` for a
+  removed constraint); emit `:add` / `:remove` / `:constraint`; canonical (post-`canonicalize`) order.
+
+**W7 — Tests** (`#[cfg(test)]` in `dsl/reaction.rs`, `#[rstest]`): round-trip DSL→AST→DSL;
+recover-from-`lhs` (a `?`-var `:modify` reading the lhs value); add-then-reference; structural remove;
+molecule `:constraint`; partial-RHS parse.
+
+**W8 — Spec** (`umol-ast/spec/umol-dsl-spec.md`): a normative reactions section; revise §8.4.
+
+**Span surface** (`ReactionSpanDsl` ↔ `ReactionSpanAst`): no plan yet — work item 2's encoding is
+still open. **Increment-2 gaps** (overlay deltas, span generalization, molecule-constraint apply):
+doc 134.

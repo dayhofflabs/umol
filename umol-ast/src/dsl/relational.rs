@@ -20,7 +20,7 @@ use super::constraint::{
     NoncovalentBondRef, StereoAtomRef, StereoBondRef,
 };
 use super::error::ParseError;
-use super::molecule::Metadata;
+use super::molecule::MoleculeMetadata;
 use crate::ast::constraint::RelationalConstraint;
 use crate::ast::traits::{FromAst, IntoAst};
 
@@ -244,7 +244,7 @@ impl ToEdn for RelationalConstraintDsl {
 }
 
 impl RelationalConstraintDsl {
-    pub(crate) fn from_ast(rel: &RelationalConstraint, meta: &Metadata) -> Self {
+    pub(crate) fn from_ast(rel: &RelationalConstraint, meta: &MoleculeMetadata) -> Self {
         use RelationalConstraint::*;
         match rel {
             DativeBondDonor { bond, atom } => Self::DativeBondDonor {
@@ -383,7 +383,7 @@ impl RelationalConstraintDsl {
     pub(crate) fn into_ast(
         self,
         counts: &EntityCounts,
-        meta: &Metadata,
+        meta: &MoleculeMetadata,
     ) -> Result<RelationalConstraint, ParseError> {
         use RelationalConstraintDsl::*;
         Ok(match self {
@@ -976,8 +976,8 @@ mod tests {
     use crate::ast::value::ValueAst;
 
     #[fixture]
-    fn meta() -> Metadata {
-        Metadata::default()
+    fn meta() -> MoleculeMetadata {
+        MoleculeMetadata::default()
     }
 
     #[fixture]
@@ -1048,7 +1048,7 @@ mod tests {
     #[case::stereo_bond_any_ligand(RelationalConstraint::StereoBondAnyLigand { stereo_bond: StereoBondId(0), predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(3))) },
         "{:stereo-bond-any-ligand [0 {:degree 3}]}")]
     fn test_relational_constraint_dsl_roundtrip(
-        meta: Metadata,
+        meta: MoleculeMetadata,
         full_counts: EntityCounts,
         #[case] input: RelationalConstraint,
         #[case] edn_source: &str,
@@ -1090,7 +1090,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_relational_constraint_dsl_rejects_out_of_range_atom(meta: Metadata) {
+    fn test_relational_constraint_dsl_rejects_out_of_range_atom(meta: MoleculeMetadata) {
         let counts = EntityCounts {
             atom_count: 2,
             bond_count: 0,
@@ -1116,7 +1116,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_relational_constraint_dsl_rejects_out_of_range_bond(meta: Metadata) {
+    fn test_relational_constraint_dsl_rejects_out_of_range_bond(meta: MoleculeMetadata) {
         let counts = EntityCounts {
             atom_count: 5,
             bond_count: 0,

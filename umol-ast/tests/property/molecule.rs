@@ -65,7 +65,7 @@ proptest! {
     }
 }
 
-/// When `Metadata` records an id for an entity, refs in molecule constraints
+/// When `MoleculeMetadata` records an id for an entity, refs in molecule constraints
 /// render as the keyword `:id` rather than the positional integer. Rendered
 /// EDN must carry the keyword form, never the integer index, and must
 /// roundtrip back through both the tree and streaming parsers.
@@ -89,7 +89,7 @@ fn test_constraint_ref_uses_keyword_when_metadata_id_present() {
         cs,
     );
 
-    let mut metadata = Metadata::new();
+    let mut metadata = MoleculeMetadata::new();
     metadata.set_atom_id(AtomId(0), "carbon".to_string());
 
     let dsl = MoleculeDsl::from_parts(ast, metadata);
