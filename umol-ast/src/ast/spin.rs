@@ -17,6 +17,20 @@ impl SpinStateAst {
     pub fn closed_shell() -> Self {
         SpinState::closed_shell().into()
     }
+
+    pub fn high_spin_complete(&mut self) {
+        match (&self.unpaired, &self.multiplicity) {
+            (ValueAst::Undetermined, ValueAst::Lit(m)) => {
+                let unpaired = *m - 1;
+                self.unpaired = ValueAst::Lit(unpaired);
+            }
+            (ValueAst::Lit(u), ValueAst::Undetermined) => {
+                let multiplicity = u + 1;
+                self.multiplicity = ValueAst::Lit(multiplicity);
+            }
+            _ => {}
+        }
+    }
 }
 
 impl Default for SpinStateAst {
@@ -72,6 +86,19 @@ mod tests {
     use crate::ast::error::Contradiction;
     use crate::ast::traits::{Canonicalize, Lattice};
     use crate::ast::value::ValueTerm;
+
+    #[rstest]
+    #[case::unpaired_undetermined(SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) })]
+    #[case::multiplicity_undetermined(SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) })]
+    #[case::both_determined(SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) }, SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) })]
+    fn test_spin_state_ast_high_spin_complete(
+        #[case] input: SpinStateAst,
+        #[case] expected: SpinStateAst,
+    ) {
+        let mut ast = input.clone();
+        ast.high_spin_complete();
+        assert_eq!(ast, expected);
+    }
 
     #[rustfmt::skip]
     #[rstest]

@@ -20,10 +20,8 @@ impl BondsResolver {
         Self
     }
 
-    /// Fills `charge → Lit(0)` for any covalent bond whose `charge` is
-    /// `Undetermined`, and `spin → closed_shell` for any bond whose spin is
-    /// fully `Undetermined`. Existing literals / partially-constrained spin
-    /// states pass through unchanged.
+    /// Fills charge and spin defaults. Uses maximum multiplicity for partially defined
+    /// spin states, otherwise uses closed-shell singlet.
     pub fn resolve(
         &self,
         ast: &mut MoleculeAst,
@@ -34,6 +32,8 @@ impl BondsResolver {
             }
             if bond.spin.is_undetermined() {
                 bond.spin = SpinStateAst::closed_shell();
+            } else {
+                bond.spin.high_spin_complete();
             }
         }
         Ok(Solution::Determined(()))
@@ -43,59 +43,24 @@ impl BondsResolver {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{
-        AtomAst, AtomId, BondAst, BondId, Constraints, MoleculeAst, SpinStateAst, ValueAst,
-    };
-    use umol_chem::element::Element;
+    use umol_ast::ast::BondId;
+    use umol_ast::mol;
 
     use super::*;
 
-    fn one_bond(charge: ValueAst, spin: SpinStateAst) -> MoleculeAst {
-        let mut bond = BondAst::from_order(1);
-        bond.charge = charge;
-        bond.spin = spin;
-        MoleculeAst::from_parts(
-            vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
-            ],
-            vec![(AtomId(0), AtomId(1), bond)],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        )
-    }
-
     #[rstest]
-    fn test_bonds_resolver_fills_undetermined_charge_and_spin() {
-        let mut ast = one_bond(ValueAst::Undetermined, SpinStateAst::default());
-        BondsResolver::new().resolve(&mut ast).unwrap();
-        let bond = ast.bond(BondId(0)).ast;
-        assert_eq!(bond.charge, ValueAst::Lit(0));
-        assert_eq!(bond.spin, SpinStateAst::closed_shell());
-    }
-
-    #[rstest]
-    fn test_bonds_resolver_preserves_existing_charge() {
-        let mut ast = one_bond(ValueAst::Lit(1), SpinStateAst::default());
-        BondsResolver::new().resolve(&mut ast).unwrap();
-        let bond = ast.bond(BondId(0)).ast;
-        assert_eq!(bond.charge, ValueAst::Lit(1));
-    }
-
-    #[rstest]
-    fn test_bonds_resolver_preserves_partial_spin() {
-        let partial = SpinStateAst {
-            unpaired: ValueAst::Lit(2),
-            multiplicity: ValueAst::Undetermined,
-        };
-        let mut ast = one_bond(ValueAst::Undetermined, partial.clone());
-        BondsResolver::new().resolve(&mut ast).unwrap();
-        let bond = ast.bond(BondId(0)).ast;
-        assert_eq!(bond.spin, partial);
+    #[case::undetermined(mol!(r#"{:atoms ["C" "C"] :bonds [{:atoms [0 1] :type "1"}]}"#), ValueAst::Lit(0), SpinStateAst::closed_shell())]
+    #[case::spin_undetermined(mol!(r#"{:atoms ["C" "C"] :bonds [{:atoms [0 1] :type "1#c+"}]}"#), ValueAst::Lit(1), SpinStateAst::closed_shell())]
+    #[case::charge_undetermined(mol!(r#"{:atoms ["C" "C"] :bonds [{:atoms [0 1] :type "1#u2#s1"}]}"#), ValueAst::Lit(0), SpinStateAst::from((2_u8, 1_u8)))]
+    #[case::unpaired_undetermined(mol!(r#"{:atoms ["C" "C"] :bonds [{:atoms [0 1] :type "1#s3"}]}"#), ValueAst::Lit(0), SpinStateAst::from((2_u8, 3_u8)))]
+    #[case::multiplicity_undetermined(mol!(r#"{:atoms ["C" "C"] :bonds [{:atoms [0 1] :type "1#u2"}]}"#), ValueAst::Lit(0), SpinStateAst::from((2_u8, 3_u8)))]
+    fn test_bonds_resolver_resolve(
+        #[case] mut mol: MoleculeAst,
+        #[case] charge: ValueAst,
+        #[case] spin: SpinStateAst,
+    ) {
+        BondsResolver::new().resolve(&mut mol).unwrap();
+        assert_eq!(mol[BondId(0)].charge, charge);
+        assert_eq!(mol[BondId(0)].spin, spin);
     }
 }

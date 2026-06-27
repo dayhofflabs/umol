@@ -144,7 +144,7 @@ impl SpinState {
     /// Unpaired electrons = sum of atomic unpaired electrons.
     /// Multiplicity = max coupled multiplicity (all spins parallel).
     /// Returns `None` if the result exceeds `MAX_UNPAIRED_ELECTRONS`.
-    pub fn high_spin(states: &[SpinState]) -> Option<Self> {
+    pub fn high_spin_combine(states: &[SpinState]) -> Option<Self> {
         let unpaired: u32 = states.iter().map(|s| s.unpaired as u32).sum();
         Self::max_multiplicity(unpaired as u8)
     }
@@ -521,7 +521,7 @@ mod tests {
     #[case(vec![spin!("#u2"), spin!("#u2"), spin!("#u2")], spin!("#u6"))]
     #[case(vec![spin!("#u2#s1"), spin!("#u")], spin!("#u3"))]
     fn test_high_spin(#[case] states: Vec<SpinState>, #[case] expected: SpinState) {
-        let hs = SpinState::high_spin(&states).unwrap();
+        let hs = SpinState::high_spin_combine(&states).unwrap();
         assert_eq!(hs, expected);
     }
 

@@ -29,6 +29,8 @@ impl MulticenterBondsResolver {
             }
             if bond.spin.is_undetermined() {
                 bond.spin = SpinStateAst::closed_shell();
+            } else {
+                bond.spin.high_spin_complete();
             }
         }
         Ok(Solution::Determined(()))
@@ -38,49 +40,24 @@ impl MulticenterBondsResolver {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{
-        AtomAst, AtomId, Constraints, MoleculeAst, MulticenterBondAst, MulticenterBondId,
-        SpinStateAst, ValueAst,
-    };
-    use umol_chem::element::Element;
+    use umol_ast::ast::{MulticenterBondId, SpinStateAst, ValueAst};
+    use umol_ast::mol;
 
     use super::*;
 
-    fn one_multicenter(charge: ValueAst, spin: SpinStateAst) -> MoleculeAst {
-        let bond = MulticenterBondAst::from_electrons(vec![1, 0, 1])
-            .with_charge(charge)
-            .with_spin(spin);
-        MoleculeAst::from_parts(
-            vec![
-                AtomAst::from_element(Element::B),
-                AtomAst::from_element(Element::H),
-                AtomAst::from_element(Element::B),
-            ],
-            vec![],
-            vec![],
-            vec![],
-            vec![(vec![AtomId(0), AtomId(1), AtomId(2)], bond)],
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        )
-    }
-
     #[rstest]
-    fn test_multicenter_bonds_resolver_fills_undetermined() {
-        let mut ast = one_multicenter(ValueAst::Undetermined, SpinStateAst::default());
-        MulticenterBondsResolver::new().resolve(&mut ast).unwrap();
-        let bond = &ast[MulticenterBondId(0)];
-        assert_eq!(bond.charge, ValueAst::Lit(0));
-        assert_eq!(bond.spin, SpinStateAst::closed_shell());
-    }
-
-    #[rstest]
-    fn test_multicenter_bonds_resolver_preserves_existing_charge() {
-        let mut ast = one_multicenter(ValueAst::Lit(-1), SpinStateAst::default());
-        MulticenterBondsResolver::new().resolve(&mut ast).unwrap();
-        let bond = &ast[MulticenterBondId(0)];
-        assert_eq!(bond.charge, ValueAst::Lit(-1));
+    #[case::undetermined(mol!(r#"{:atoms ["B" "H" "B"] :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]"}]}"#), ValueAst::Lit(0), SpinStateAst::closed_shell())]
+    #[case::spin_undetermined(mol!(r#"{:atoms ["B" "H" "B"] :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#c-"}]}"#), ValueAst::Lit(-1), SpinStateAst::closed_shell())]
+    #[case::charge_undetermined(mol!(r#"{:atoms ["B" "H" "B"] :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#u2#s1"}]}"#), ValueAst::Lit(0), SpinStateAst::from((2_u8, 1_u8)))]
+    #[case::unpaired_undetermined(mol!(r#"{:atoms ["B" "H" "B"] :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#s3"}]}"#), ValueAst::Lit(0), SpinStateAst::from((2_u8, 3_u8)))]
+    #[case::multiplicity_undetermined(mol!(r#"{:atoms ["B" "H" "B"] :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#u2"}]}"#), ValueAst::Lit(0), SpinStateAst::from((2_u8, 3_u8)))]
+    fn test_multicenter_bonds_resolver_fills_undetermined_charge_and_spin(
+        #[case] mut mol: MoleculeAst,
+        #[case] charge: ValueAst,
+        #[case] spin: SpinStateAst,
+    ) {
+        MulticenterBondsResolver::new().resolve(&mut mol).unwrap();
+        assert_eq!(mol[MulticenterBondId(0)].charge, charge);
+        assert_eq!(mol[MulticenterBondId(0)].spin, spin);
     }
 }

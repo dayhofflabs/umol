@@ -1,17 +1,11 @@
-//! AST conversion traits.
+//! AST-related traits.
 //!
-//! `FromAst` / `IntoAst` are the infallible pair: lossless conversions between
-//! AST and an external representation, parameterized by a configuration
-//! context. Used for the DSL ↔ AST pair, where lower/raise is a structural
-//! transformation that cannot fail.
-//!
-//! `TryFromAst` / `TryIntoAst` are the fallible pair: conversions that can
-//! reject the input on chemistry or representation grounds. Used for
-//! `TableIR → MoleculeAst` raising (e.g., `ExtendedMolecule` Sgroups have no
-//! faithful AST representation).
-//!
-//! The split mirrors `From` / `TryFrom` in `std`. There is no blanket impl
-//! between the pairs.
+//! `FromAst` / `IntoAst` are infallible conversions parameterized by context.
+//! `TryFromAst` / `TryIntoAst` are fallible, reject invalid boundary inputs.
+//! `AsLit` extracts a literal value from an AST type.
+//! `Lattice` is a refinement lattice on AST value types.
+//! `Canonicalize` is a canonical form of an AST value.
+//! `Canonical` is a value carrying the guarantee that it is canonical.
 
 use std::borrow::Cow;
 
