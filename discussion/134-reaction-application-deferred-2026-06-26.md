@@ -1,22 +1,23 @@
-# 134 — Reaction-application gaps (deferred)
+# 134 — Reaction-application: deferred items
 
-Two reaction-application gaps surfaced while landing the `Edit`/`Delta`/`Undo` vocabulary refactor
+Two reaction-application items were left to work out while landing the `Edit`/`Delta`/`Undo` vocabulary refactor
 (`Add`/`Modify`/`Remove` ↔ `Added`/`Modified`/`Removed`, key-based `ModifyConstraint`, by-value
 molecule `Add`/`Remove`, `CascadedConstraints`) and designing the reaction EDN surface (doc 133).
 The vocabulary/transact groundwork is landed and green; these are the remaining application
 features, both increment-2. Captured here so they are not lost; to be tackled after the reaction
 DSL (133) is implemented.
 
-## Gap 1 — molecule-level constraints don't apply in reactions
+## 1 — molecule-level constraints don't apply in reactions
 
 **State.** `ReactionAst::apply_at` has `Delta::Constraint(_) => {}` — a molecule-level
 `ConstraintDelta` (add/remove on the flat `Vec<Constraint>`) is **silently dropped** on apply.
-(`to_reaction_span` also doesn't carry molecule constraints, by design — they're operational, not
-part of the L/R molecule projection, so `apply_at` is the only place they take effect.)
+(The span side is resolved separately: `ReactionSpanAst` gains a `constraints: Vec<ConstraintSpan>`
+field and `to_reaction_span` populates it — doc 133, decision 14. This item is the *operational*
+`apply_at` path only.)
 
 **Mechanism is ready.** The transact layer now supports general by-value
 `Edit::Add/RemoveMoleculeConstraint` (true multiset; `Remove` is last-match-by-value with the
-position captured for rollback via `CascadedConstraints`). So the gap is *closable* — only the
+position captured for rollback via `CascadedConstraints`). So this is *closable* — only the
 lowering is missing.
 
 **Blocker.** Applying a rule-frame constraint to the host needs its atom/bond refs remapped through
@@ -30,7 +31,7 @@ injection, so there is no existing remap that fits.
   (entity-leaves, `Relational`, `Molecule`-scope `:atoms`/`:bonds` lists and sub-pattern anchors,
   `And`/`Or`/`Not`). It is total (no drops). Overlay entity-leaf refs (dative/aromatic/multicenter/
   noncovalent/stereo) are out of increment-1 — the embedding maps only atoms/bonds — so those error
-  (and are subsumed by Gap 2).
+  (and are subsumed by item 2).
 - Wire `apply_at`: for `Delta::Constraint(ConstraintDelta::Add/Remove(c))`, emit
   `Edit::Add/RemoveMoleculeConstraint { c.map_topology_refs(lhs→host via m, created→appended) }`,
   ordered **before** `RemoveTopology` so transact's own renumbering (`remap_with_update`) finishes
@@ -39,7 +40,7 @@ injection, so there is no existing remap that fits.
 
 Smaller of the two: one remap method + the `apply_at` arm.
 
-## Gap 2 — missing entity `Delta` infrastructure (overlays)
+## 2 — overlay entity `Delta` infrastructure
 
 **State.** The AST `Delta` is `Atom(AtomDelta) | Bond(BondDelta) | Constraint(ConstraintDelta)`
 only. The six overlay entities — dative bond, aromatic system, multicenter bond, noncovalent bond,
@@ -48,7 +49,7 @@ overlay entity at all.
 
 **Mismatch.** The reaction EDN surface (doc 133) and the `apply` / `to_reaction_span` design are
 written for all eight entities, but the AST `Delta` covers three (atom / bond / constraint). This is
-the increment-1 / increment-2 split — the structural debt behind the localized-topology scoping.
+the increment-1 / increment-2 split in the localized-topology scoping, left to work out.
 
 **Proposed solution.**
 - Add the six overlay `*Delta` enums on the `EntityDelta` pattern: `Add` / `ModifyField` /
@@ -57,15 +58,18 @@ the increment-1 / increment-2 split — the structural debt behind the localized
   `field_ops!` macro) means each new entity is mostly mechanical — per entity only: its `*Delta`
   enum, the `EntityDelta` impl (the `(variant ⇒ field)` map), the `Atoms` type, `into_delta`, the
   `MoleculeAst` field, the `Edit` variant, and its `EntitySpan` span slot.
-- **Span generalization (tied to 133 work item 2).** `ReactionSpanAst` carries only atom/bond
-  `Vec<EntitySpan<…>>`; `EntitySpan<T>` and the per-entity vecs are atom/bond-shaped and do
-  not generalize to eight entities. Generalizing the span container (one `EntitySpan` column per
-  entity kind, ideally index-free / `Entity`-keyed) is part of this gap.
+- **Span generalization (tied to 133 work item 2).** Every `MoleculeAst` entity collection is
+  parameterized by its AST payload type `R`: atoms/bonds as `Vec<R>`, the six overlays as `*Relation`
+  / `*Birelation` sets that split a topological part (participants + incidence over `NodeId` /
+  `EdgeId`) from a `data: Vec<R>` payload column. `ReactionSpanAst` is the identical structure with
+  that payload lifted `R → EntitySpan<R>` in every collection — topology shared, only the per-entry
+  value becomes a span; `EntitySpan<T>` itself is unchanged. It's done for the two vecs; lifting the
+  six overlay relation sets' `data` columns to `EntitySpan<…>` is the remaining work.
 
 Larger of the two: six overlay deltas + the span generalization.
 
 ## Sequencing
 
-Both are increment-2, after the reaction DSL (133) lands. Gap 1 is independent and small. Gap 2 is
-the structural one and subsumes Gap 1's overlay-ref limitation. Neither blocks the 133 surface
+Both are increment-2, after the reaction DSL (133) lands. Item 1 is independent and small. Item 2 is
+the larger one and subsumes item 1's overlay-ref limitation. Neither blocks the 133 surface
 design, which is for atom/bond/constraint (localized topology) and complete on its own.
