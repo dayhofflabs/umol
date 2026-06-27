@@ -24,13 +24,8 @@ impl AromaticSystemAst {
         }
     }
 
-    pub fn from_counts(electrons: Vec<i64>) -> Self {
+    pub fn from_electrons(electrons: Vec<i64>) -> Self {
         Self::new(ElectronCountsAst::Lit(electrons))
-    }
-
-    pub fn with_electrons(mut self, electrons: impl Into<ElectronCountsAst>) -> Self {
-        self.electrons = electrons.into();
-        self
     }
 
     pub fn with_charge(mut self, charge: impl Into<ValueAst>) -> Self {
@@ -95,11 +90,11 @@ mod tests {
         AromaticSystemAst { electrons: ElectronCountsAst::Lit(vec![1; 3]),
             charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
             constraints: AromaticSystemConstraints::new() })]
-    #[case::from_counts(AromaticSystemAst::from_counts(vec![1, 1, 1]),
+    #[case::from_electrons(AromaticSystemAst::from_electrons(vec![1, 1, 1]),
         AromaticSystemAst { electrons: ElectronCountsAst::Lit(vec![1; 3]),
             charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
             constraints: AromaticSystemConstraints::new() })]
-    fn test_aromatic_system_ast_new(
+    fn test_aromatic_system_ast_constructors(
         #[case] actual: AromaticSystemAst,
         #[case] expected: AromaticSystemAst,
     ) {
@@ -108,27 +103,17 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::with_electrons(AromaticSystemAst::default().with_electrons(ElectronCountsAst::Lit(vec![2; 3])),
-        AromaticSystemAst { electrons: ElectronCountsAst::Lit(vec![2; 3]),
-            charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: AromaticSystemConstraints::new() })]
-    #[case::with_charge(AromaticSystemAst::default().with_charge(-1),
-        AromaticSystemAst { electrons: ElectronCountsAst::Undetermined,
+    #[case::with_charge(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(-1),
+        AromaticSystemAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]),
             charge: ValueAst::Lit(-1), spin: SpinStateAst::default(),
             constraints: AromaticSystemConstraints::new() })]
-    #[case::with_spin(AromaticSystemAst::default().with_spin((0_u8, 1_u8)),
-        AromaticSystemAst { electrons: ElectronCountsAst::Undetermined,
+    #[case::with_spin(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_spin((0_u8, 1_u8)),
+        AromaticSystemAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]),
             charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(),
             constraints: AromaticSystemConstraints::new() })]
     #[case::with_constraint(
-        AromaticSystemAst::default().with_constraint(AromaticSystemConstraint::electron_count(6)),
-        AromaticSystemAst { electrons: ElectronCountsAst::Undetermined,
-            charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6)) })]
-    #[case::with_constraints_extends(
-        AromaticSystemAst::default()
-            .with_constraints([AromaticSystemConstraint::electron_count(6)]),
-        AromaticSystemAst { electrons: ElectronCountsAst::Undetermined,
+        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraint::electron_count(6)),
+        AromaticSystemAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]),
             charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
             constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6)) })]
     #[case::with_constraint_replaces_same_kind(
@@ -147,13 +132,13 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::from_ground_electrons(AromaticSystemAst::from_counts(vec![1; 6]).into_ground(),
+    #[case::from_ground_electrons(AromaticSystemAst::from_electrons(vec![1; 6]).into_ground(),
         AromaticSystemAst { electrons: ElectronCountsAst::Lit(vec![1; 6]), charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AromaticSystemConstraints::new() })]
-    #[case::preserves_set_charge(AromaticSystemAst::from_counts(vec![1; 6]).with_charge(1_i64).into_ground(),
+    #[case::preserves_set_charge(AromaticSystemAst::from_electrons(vec![1; 6]).with_charge(1_i64).into_ground(),
         AromaticSystemAst { electrons: ElectronCountsAst::Lit(vec![1; 6]), charge: ValueAst::Lit(1), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AromaticSystemConstraints::new() })]
-    #[case::preserves_constraints(AromaticSystemAst::from_counts(vec![1; 6]).with_constraint(AromaticSystemConstraint::electron_count(6)).into_ground(),
+    #[case::preserves_constraints(AromaticSystemAst::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraint::electron_count(6)).into_ground(),
         AromaticSystemAst { electrons: ElectronCountsAst::Lit(vec![1; 6]), charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6)) })]
     fn test_aromatic_system_ast_into_ground(
@@ -233,14 +218,14 @@ mod tests {
         Some(AromaticSystemAst::default())
     )]
     #[case::electrons_length_mismatch(
-        AromaticSystemAst::from_counts(vec![1; 6]),
-        AromaticSystemAst::from_counts(vec![1; 5]),
+        AromaticSystemAst::from_electrons(vec![1; 6]),
+        AromaticSystemAst::from_electrons(vec![1; 5]),
         None,
     )]
     #[case::narrows_electrons(
         AromaticSystemAst::new(ElectronCountsAst::Undetermined),
-        AromaticSystemAst::from_counts(vec![1; 3]),
-        Some(AromaticSystemAst::from_counts(vec![1; 3])),
+        AromaticSystemAst::from_electrons(vec![1; 3]),
+        Some(AromaticSystemAst::from_electrons(vec![1; 3])),
     )]
     fn test_aromatic_system_ast_meet(
         #[case] a: AromaticSystemAst,
@@ -252,8 +237,8 @@ mod tests {
 
     #[rstest]
     #[case::electrons_length_mismatch_widens_to_default(
-        AromaticSystemAst::from_counts(vec![1; 6]),
-        AromaticSystemAst::from_counts(vec![1; 5]),
+        AromaticSystemAst::from_electrons(vec![1; 6]),
+        AromaticSystemAst::from_electrons(vec![1; 5]),
         AromaticSystemAst::default(),
     )]
     fn test_aromatic_system_ast_join(

@@ -246,11 +246,11 @@ mod tests {
     #[case::carbon_oxygen(r#"{:atoms ["C #h2" "O"] :bonds [[0 1 "2"]]}"#,
         MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(2_i64), AtomAst::from_element(Element::O)],
         vec![(AtomId(0), AtomId(1), BondAst::from_order(2))]))]
-    #[case::aromatic_system(r##"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :electrons [1 1 1] :type "#e3"}]}"##,
+    #[case::aromatic_system(r##"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]#e3"}]}"##,
         MoleculeAst::from_parts(vec![AtomAst::from_element(Element::C); 3],
             vec![(AtomId(0), AtomId(1), BondAst::from_order(1)), (AtomId(1), AtomId(2), BondAst::from_order(1)), (AtomId(2), AtomId(0), BondAst::from_order(1))],
             vec![], vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemAst::from_counts(vec![1; 3]).with_constraint(AromaticSystemConstraint::electron_count(3)))],
+            AromaticSystemAst::from_electrons(vec![1; 3]).with_constraint(AromaticSystemConstraint::electron_count(3)))],
             vec![], vec![],
             Vec::new(), Vec::new(), Constraints::default()))]
     fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
@@ -372,8 +372,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::charge("#c+", AromaticSystemAst::default().with_charge(1_i64))]
-    #[case::electrons("#e6", AromaticSystemAst::default().with_constraint(AromaticSystemConstraint::electron_count(6)))]
+    #[case::charge("[1,1,1]#c+", AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64))]
+    #[case::electron_count("*#e6", AromaticSystemAst::default().with_constraint(AromaticSystemConstraint::electron_count(6)))]
     fn test_aromatic_macro(#[case] input: &str, #[case] expected: AromaticSystemAst) {
         assert_eq!(aromatic!(input), expected);
     }
@@ -386,14 +386,14 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::electrons("#e6", AromaticSystemAst::default().with_constraint(AromaticSystemConstraint::electron_count(6)).into_ground())]
+    #[case::electron_count("[1,1,1,1,1,1]#e6", AromaticSystemAst::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraint::electron_count(6)).into_ground())]
     fn test_aromatic_ground_macro(#[case] input: &str, #[case] expected: AromaticSystemAst) {
         assert_eq!(aromatic_ground!(input), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::charge("#c-", MulticenterBondAst::default().with_charge(-1_i64))]
+    #[case::charge("[1,1,1,1,1]#c-", MulticenterBondAst::from_electrons(vec![1; 5]).with_charge(-1_i64))]
     fn test_multicenter_macro(#[case] input: &str, #[case] expected: MulticenterBondAst) {
         assert_eq!(multicenter!(input), expected);
     }
@@ -406,7 +406,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::charged("#c-", MulticenterBondAst::default().with_charge(-1_i64).into_ground())]
+    #[case::charged("[1,1,1,1,1]#c-", MulticenterBondAst::from_electrons(vec![1; 5]).with_charge(-1_i64).into_ground())]
     fn test_multicenter_ground_macro(#[case] input: &str, #[case] expected: MulticenterBondAst) {
         assert_eq!(multicenter_ground!(input), expected);
     }

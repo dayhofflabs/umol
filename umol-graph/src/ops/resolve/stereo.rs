@@ -227,7 +227,7 @@ mod tests {
     #[case::aromatic_skip(
         r##"{:atoms ["C #h #T1" "C #h" "C #h" "C #h" "C #h" "C #h"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "#e6"}]}"##, vec![], vec![])]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]}"##, vec![], vec![])]
     #[case::no_stereo( r#"{:atoms ["C #h3" "C #h3"] :bonds [[0 1 "1"]]}"#, vec![], vec![])]
     fn test_stereo_resolver_resolve(
         #[case] input: &str,

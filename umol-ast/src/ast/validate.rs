@@ -298,11 +298,11 @@ mod tests {
     use crate::mol;
 
     #[rstest]
-    #[case::aromatic_system(mol!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type ""}]}"#))]
+    #[case::aromatic_system(mol!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "*"}]}"#))]
     #[case::cross_type_parallel(mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :dative-bonds [{:donor 0 :acceptor 1 :type "1"}]}"#))]
     #[case::dative_shared_acceptor_disjoint_donors(mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donor 1 :acceptor 0 :type "1"} {:donor 2 :acceptor 0 :type "1"}]}"#))]
     #[case::dative_shared_donors_distinct_acceptors(mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donor 2 :acceptor 0 :type "1"} {:donor 2 :acceptor 1 :type "1"}]}"#))]
-    #[case::multicenter_partial_overlap(mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type ""} {:atoms [1 2 3] :type ""}]}"#))]
+    #[case::multicenter_partial_overlap(mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "*"} {:atoms [1 2 3] :type "*"}]}"#))]
     #[case::noncovalent_distinct_kinds(mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"} {:atoms [0 1] :type "Vdw"}]}"#))]
     fn test_entity_structure_validator_validate(#[case] ast: MoleculeAst) {
         assert_eq!(
@@ -313,11 +313,11 @@ mod tests {
 
     #[rstest]
     #[case::aromatic_electrons_length(
-        mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :electrons [1 1] :type ""}]}"#),
+        mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :type "[1,1]"}]}"#),
         EntityStructureContradiction::AromaticSystemElectronsLengthMismatch { electrons_len: 2, atoms_len: 3 }
     )]
     #[case::multicenter_electrons_length(
-        mol!(r#"{:atoms ["B" "B" "H"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :electrons [1] :type ""}]}"#),
+        mol!(r#"{:atoms ["B" "B" "H"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "[1]"}]}"#),
         EntityStructureContradiction::MulticenterElectronsLengthMismatch { electrons_len: 1, atoms_len: 3 }
     )]
     #[case::bond_self_loop(
@@ -348,19 +348,19 @@ mod tests {
         }
     )]
     #[case::aromatic_duplicate_participant(
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 1] :type ""}]}"#),
+        mol!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 1] :type "*"}]}"#),
         EntityStructureContradiction::AromaticSystemDuplicateParticipant { atom: AtomId(1) }
     )]
     #[case::aromatic_overlap(
-        mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type ""} {:atoms [1 2] :type ""}]}"#),
+        mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "*"} {:atoms [1 2] :type "*"}]}"#),
         EntityStructureContradiction::AromaticSystemsOverlap { atom: AtomId(1) }
     )]
     #[case::multicenter_duplicate_participant(
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 1] :type ""}]}"#),
+        mol!(r#"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 1] :type "*"}]}"#),
         EntityStructureContradiction::MulticenterBondDuplicateParticipant { atom: AtomId(1) }
     )]
     #[case::multicenter_identical(
-        mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type ""} {:atoms [0 1 2] :type ""}]}"#),
+        mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "*"} {:atoms [0 1 2] :type "*"}]}"#),
         EntityStructureContradiction::MulticenterBondsIdentical { atoms: vec![AtomId(0), AtomId(1), AtomId(2)] }
     )]
     #[case::stereo_atom_sites_duplicate(

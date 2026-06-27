@@ -1,4 +1,4 @@
-//! Predicate sub-parsers and apply helpers shared between atom and bond DSL.
+//! Predicate sub-parsers and apply helpers shared across the entity-string DSLs.
 
 use std::{fmt, mem};
 

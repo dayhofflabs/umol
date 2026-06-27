@@ -96,7 +96,7 @@ impl HueckelRuleAromaticity {
 
             candidates.push((
                 atoms,
-                AromaticSystemAst::from_counts(electrons)
+                AromaticSystemAst::from_electrons(electrons)
                     .with_charge(0)
                     .with_spin(SpinStateAst::closed_shell()),
             ));

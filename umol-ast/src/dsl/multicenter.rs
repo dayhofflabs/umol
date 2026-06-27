@@ -12,6 +12,7 @@ use winnow::token::take;
 use winnow::Parser;
 
 use super::config::{MulticenterBondDefaults, NumericDefault};
+use super::electrons::{electron_counts, fmt_electron_counts};
 use super::error::{PResult, ParseError};
 use super::predicates::{
     apply_spin_pair, charge, fmt_charge, fmt_spin_pair, lower_spin, optional_value, raise_spin,
@@ -136,9 +137,11 @@ pub fn parse_multicenter_bond(input: &str) -> Result<MulticenterBondDsl, ParseEr
 
 pub(crate) fn multicenter_bond(i: &mut &str) -> PResult<MulticenterBondDsl> {
     multispace0.parse_next(i)?;
+    let electrons = electron_counts(i)?;
+    multispace0.parse_next(i)?;
     let preds: Vec<MulticenterBondPredicate> =
         repeat(0.., terminated(multicenter_bond_predicate, multispace0)).parse_next(i)?;
-    let mut form = MulticenterBondDsl::default();
+    let mut form = MulticenterBondDsl(MulticenterBondAst::new(electrons));
     apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
     Ok(form)
 }
@@ -221,6 +224,7 @@ fn electron_count_value(ast: &MulticenterBondAst) -> Option<&ValueAst> {
 }
 
 fn fmt_multicenter_bond_ast(f: &mut fmt::Formatter<'_>, ast: &MulticenterBondAst) -> fmt::Result {
+    fmt_electron_counts(f, &ast.electrons)?;
     fmt_charge(f, &ast.charge)?;
     fmt_spin_pair(f, &ast.spin)?;
     if let Some(v) = electron_count_value(ast) {
@@ -367,16 +371,16 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty("", MulticenterBondDsl(MulticenterBondAst::default()))]
-    #[case::whitespace("   ", MulticenterBondDsl(MulticenterBondAst::default()))]
-    #[case::charge_pos("#c+1", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: MulticenterBondConstraints::new() }))]
-    #[case::charge_neg("#c-2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: MulticenterBondConstraints::new() }))]
-    #[case::electrons("#e6", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(6))]) }))]
-    #[case::electrons_bare("#e", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(1))]) }))]
-    #[case::unpaired("#u1", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, electrons: ElectronCountsAst::Undetermined, constraints: MulticenterBondConstraints::new() }))]
-    #[case::mult("#s2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, electrons: ElectronCountsAst::Undetermined, constraints: MulticenterBondConstraints::new() }))]
-    #[case::charge_electrons("#c+#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))]) }))]
-    #[case::full("#c0#u0#s1#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), electrons: ElectronCountsAst::Undetermined, constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))]) }))]
+    #[case::undetermined("*", MulticenterBondDsl(MulticenterBondAst::default()))]
+    #[case::whitespace("  [1,1,1]  #c+1  ", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: MulticenterBondConstraints::new() }))]
+    #[case::charge_pos("[1,1,1]#c+1", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: MulticenterBondConstraints::new() }))]
+    #[case::charge_neg("[1,1,1]#c-2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), constraints: MulticenterBondConstraints::new() }))]
+    #[case::electron_count("[1,1,1]#e6", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(6))]) }))]
+    #[case::electron_count_bare("[1,1,1]#e", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(1))]) }))]
+    #[case::unpaired("[1,1,1]#u1", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, constraints: MulticenterBondConstraints::new() }))]
+    #[case::mult("[1,1,1]#s2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, constraints: MulticenterBondConstraints::new() }))]
+    #[case::charge_electron_count("[1,1,1]#c+#e2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))]) }))]
+    #[case::full("[1,1,1]#c0#u0#s1#e2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))]) }))]
     fn test_parse_multicenter(#[case] input: &str, #[case] expected: MulticenterBondDsl) {
         let result = multicenter_bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -385,13 +389,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unknown("#x", ParseError::UnknownMulticenterBondPredicate("#x".to_string()))]
-    #[case::unknown_a("#a", ParseError::UnknownMulticenterBondPredicate("#a".to_string()))]
-    #[case::dup_charge("#c+#c-", ParseError::DuplicateMulticenterBondPredicate("#c".to_string()))]
-    #[case::dup_electrons("#e2#e4", ParseError::DuplicateMulticenterBondPredicate("#e".to_string()))]
-    #[case::dup_unpaired("#u1#u2", ParseError::DuplicateMulticenterBondPredicate("#u".to_string()))]
-    #[case::dup_multiplicity("#s1#s2", ParseError::DuplicateMulticenterBondPredicate("#s".to_string()))]
-    #[case::trailing("#c+ foo", ParseError::TrailingInput("foo".to_string()))]
+    #[case::missing_head("#c+1", ParseError::ExpectedElectronCounts)]
+    #[case::unknown("[1,1,1]#x", ParseError::UnknownMulticenterBondPredicate("#x".to_string()))]
+    #[case::unknown_a("[1,1,1]#a", ParseError::UnknownMulticenterBondPredicate("#a".to_string()))]
+    #[case::dup_charge("[1,1,1]#c+#c-", ParseError::DuplicateMulticenterBondPredicate("#c".to_string()))]
+    #[case::dup_electron_count("[1,1,1]#e2#e4", ParseError::DuplicateMulticenterBondPredicate("#e".to_string()))]
+    #[case::dup_unpaired("[1,1,1]#u1#u2", ParseError::DuplicateMulticenterBondPredicate("#u".to_string()))]
+    #[case::dup_multiplicity("[1,1,1]#s1#s2", ParseError::DuplicateMulticenterBondPredicate("#s".to_string()))]
+    #[case::trailing("[1,1,1]#c+ foo", ParseError::TrailingInput("foo".to_string()))]
     fn test_parse_multicenter_error(#[case] input: &str, #[case] expected: ParseError) {
         let result = multicenter_bond.parse(input);
         assert!(result.is_err(), "{:?} should fail", input);
@@ -400,11 +405,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty("")]
-    #[case::charge("#c+1")]
-    #[case::electrons("#e6")]
-    #[case::unpaired("#u2")]
-    #[case::explicit_mult("#s2")]
+    #[case::undetermined("*")]
+    #[case::charge("[1,1,1]#c+1")]
+    #[case::electron_count("[1,1,1]#e6")]
+    #[case::unpaired("[1,1,1]#u2")]
+    #[case::explicit_mult("[1,1,1]#s2")]
     fn test_multicenter_roundtrip(#[case] input: &str) {
         let form: MulticenterBondDsl = input.parse().unwrap();
         let rendered = form.to_string();
@@ -440,9 +445,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(r##""""##)]
-    #[case::charge(r##""#c+""##)]
-    #[case::full(r##""#c0#u0#s1#e2""##)]
+    #[case::undetermined(r##""*""##)]
+    #[case::charge(r##""[1,1,1]#c+""##)]
+    #[case::full(r##""[1,1,1]#c0#u0#s1#e2""##)]
     fn test_multicenter_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
         let via_stream = MulticenterBondDsl::from_edn_str(input).unwrap();
         let tree = read_string(input).unwrap();
@@ -462,8 +467,8 @@ mod tests {
     /// surface form drops it.
     #[rstest]
     fn test_multicenter_render_elides_vacuous_electron_count() {
-        let parsed: MulticenterBondDsl = multicenter_bond.parse("#e*").unwrap();
-        assert_eq!(parsed.to_string(), "");
+        let parsed: MulticenterBondDsl = multicenter_bond.parse("[1,1,1]#e*").unwrap();
+        assert_eq!(parsed.to_string(), "[1,1,1]");
         let reparsed: MulticenterBondDsl = multicenter_bond.parse(&parsed.to_string()).unwrap();
         assert!(
             reparsed.0.constraints.is_empty(),
@@ -473,8 +478,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty("")]
-    #[case::charged("#c+")]
+    #[case::undetermined("*")]
+    #[case::charged("[1,1,1]#c+")]
     fn test_multicenter_bond_ast_from_str_to_string_roundtrip(#[case] s: &str) {
         let ast: MulticenterBondAst = s.parse().unwrap();
         assert_eq!(ast.to_string(), s);

@@ -40,7 +40,6 @@ use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::dative::DativeBondAst;
-use crate::ast::electrons::ElectronCountsAst;
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -536,12 +535,10 @@ fn read_aromatic_system_entry(
     let mut id = None;
     let mut atoms = None;
     let mut system = None;
-    let mut electrons = None;
     read_map(de, |de, key| {
         match key {
             "id" => id = Some(de.read_keyword_name()?.into_owned()),
             "atoms" => atoms = Some(read_vec(de, read_atom_ref)?),
-            "electrons" => electrons = Some(read_electron_counts(de)?),
             "type" => {
                 let s = de.read_string()?;
                 system = Some(
@@ -554,21 +551,12 @@ fn read_aromatic_system_entry(
         }
         Ok(())
     })?;
-    let mut system = system.ok_or_else(|| missing("type", "aromatic-system-entry"))?;
-    if let Some(es) = electrons {
-        system.0.electrons = es;
-    }
+    let system = system.ok_or_else(|| missing("type", "aromatic-system-entry"))?;
     Ok(AromaticSystemEntryInput {
         id,
         atoms: atoms.ok_or_else(|| missing("atoms", "aromatic-system-entry"))?,
         system,
     })
-}
-
-fn read_electron_counts(de: &mut EdnStreamDeserializer<'_>) -> Result<ElectronCountsAst, EdnError> {
-    let slice = de.read_value_slice()?;
-    let edn = umol_edn::read_string(slice)?;
-    parse_electron_counts(&edn, ":electrons").map_err(EdnError::from)
 }
 
 fn read_multicenter_bond_entry(
@@ -577,12 +565,10 @@ fn read_multicenter_bond_entry(
     let mut id = None;
     let mut atoms = None;
     let mut bond = None;
-    let mut electrons = None;
     read_map(de, |de, key| {
         match key {
             "id" => id = Some(de.read_keyword_name()?.into_owned()),
             "atoms" => atoms = Some(read_vec(de, read_atom_ref)?),
-            "electrons" => electrons = Some(read_electron_counts(de)?),
             "type" => {
                 let s = de.read_string()?;
                 bond = Some(
@@ -595,10 +581,7 @@ fn read_multicenter_bond_entry(
         }
         Ok(())
     })?;
-    let mut bond = bond.ok_or_else(|| missing("type", "multicenter-bond-entry"))?;
-    if let Some(es) = electrons {
-        bond.0.electrons = es;
-    }
+    let bond = bond.ok_or_else(|| missing("type", "multicenter-bond-entry"))?;
     Ok(MulticenterBondEntryInput {
         id,
         atoms: atoms.ok_or_else(|| missing("atoms", "multicenter-bond-entry"))?,
@@ -994,9 +977,6 @@ fn render_aromatic(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
             let atoms: Vec<Edn<'static>> =
                 view.atom_ids().map(|a| render_atom_ref(a, meta)).collect();
             m.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
-            if let ElectronCountsAst::Lit(counts) = &view.ast.electrons {
-                m.insert(Edn::keyword("electrons"), render_electron_counts(counts));
-            }
             m.insert(
                 Edn::keyword("type"),
                 Edn::Str(Cow::Owned(
@@ -1024,9 +1004,6 @@ fn render_multicenter(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static
             let atoms: Vec<Edn<'static>> =
                 view.atom_ids().map(|a| render_atom_ref(a, meta)).collect();
             m.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
-            if let ElectronCountsAst::Lit(counts) = &view.ast.electrons {
-                m.insert(Edn::keyword("electrons"), render_electron_counts(counts));
-            }
             m.insert(
                 Edn::keyword("type"),
                 Edn::Str(Cow::Owned(
@@ -1036,11 +1013,6 @@ fn render_multicenter(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static
             Edn::Map(m)
         })
         .collect();
-    Edn::Vector(entries.into())
-}
-
-fn render_electron_counts(counts: &[i64]) -> Edn<'static> {
-    let entries: Vec<Edn<'static>> = counts.iter().map(|&n| Edn::Int(n)).collect();
     Edn::Vector(entries.into())
 }
 
@@ -1659,11 +1631,7 @@ fn parse_dative_bond_entry(edn: &Edn<'_>) -> Result<DativeBondEntryInput, DeErro
 
 fn parse_aromatic_system_entry(edn: &Edn<'_>) -> Result<AromaticSystemEntryInput, DeError> {
     let m = expect_map(edn, "aromatic-system-entry")?;
-    let mut system =
-        AromaticSystemDsl::from_edn(required_key(m, "type", "aromatic-system-entry")?)?;
-    if let Some(edn) = m.get_keyword("electrons") {
-        system.0.electrons = parse_electron_counts(edn, ":electrons")?;
-    }
+    let system = AromaticSystemDsl::from_edn(required_key(m, "type", "aromatic-system-entry")?)?;
     Ok(AromaticSystemEntryInput {
         id: optional_id(m)?,
         atoms: parse_vec(
@@ -1677,11 +1645,7 @@ fn parse_aromatic_system_entry(edn: &Edn<'_>) -> Result<AromaticSystemEntryInput
 
 fn parse_multicenter_bond_entry(edn: &Edn<'_>) -> Result<MulticenterBondEntryInput, DeError> {
     let m = expect_map(edn, "multicenter-bond-entry")?;
-    let mut bond =
-        MulticenterBondDsl::from_edn(required_key(m, "type", "multicenter-bond-entry")?)?;
-    if let Some(edn) = m.get_keyword("electrons") {
-        bond.0.electrons = parse_electron_counts(edn, ":electrons")?;
-    }
+    let bond = MulticenterBondDsl::from_edn(required_key(m, "type", "multicenter-bond-entry")?)?;
     Ok(MulticenterBondEntryInput {
         id: optional_id(m)?,
         atoms: parse_vec(
@@ -1691,23 +1655,6 @@ fn parse_multicenter_bond_entry(edn: &Edn<'_>) -> Result<MulticenterBondEntryInp
         )?,
         bond,
     })
-}
-
-fn parse_electron_counts(edn: &Edn<'_>, label: &'static str) -> Result<ElectronCountsAst, DeError> {
-    if let Edn::Keyword(k) = edn {
-        if k.name() == "undetermined" {
-            return Ok(ElectronCountsAst::Undetermined);
-        }
-    }
-    let counts = parse_vec(edn, label, |e| match e {
-        Edn::Int(n) => Ok(*n),
-        _ => Err(DeError::TypeMismatch {
-            expected: "integer electron count",
-            got: e.kind(),
-            path: vec![label.into()],
-        }),
-    })?;
-    Ok(ElectronCountsAst::Lit(counts))
 }
 
 fn parse_noncovalent_bond_entry(edn: &Edn<'_>) -> Result<NoncovalentBondEntryInput, DeError> {

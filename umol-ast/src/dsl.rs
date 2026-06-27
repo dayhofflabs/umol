@@ -6,6 +6,7 @@ pub(crate) mod bond;
 pub(crate) mod config;
 pub(crate) mod constraint;
 pub(crate) mod dative;
+pub(crate) mod electrons;
 pub(crate) mod error;
 pub(crate) mod molecule;
 pub(crate) mod multicenter;

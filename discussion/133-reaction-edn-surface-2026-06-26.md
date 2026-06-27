@@ -384,9 +384,26 @@ ReactionMetadata};`). The partial-DSL parsers (D2) are free fns in the existing 
 `dsl/bond.rs`, next to `parse_atom` / `parse_bond`. No other new modules.
 
 **D0 — Prerequisites** (molecule-DSL; no new types):
-- 0.1 — `:electrons` → head of the aromatic-system / multicenter-bond DSL string, parsed as a
-  `[<nat>(,<nat>)*]` vector: `dsl/aromatic.rs`, `dsl/multicenter.rs` (+ the entry parsers in
-  `dsl/molecule.rs` that currently read the `:electrons` map key), + spec.
+- 0.1 — relocate the per-atom `electrons: ElectronCountsAst` field from the `:electrons` map key to a
+  **mandatory head** of the aromatic-system / multicenter-bond DSL string. No AST change —
+  `ElectronCountsAst` stays `Lit(Vec<i64>)`; the head parses integers (the existing domain, not
+  enforcing non-negative). Sub-points:
+  - 0.1a — aromatic-string head parser (`dsl/aromatic.rs`): winnow `electron_head ->
+    ElectronCountsAst` — mandatory, `*` → `Undetermined`, `[n(,n)*]` → `Lit` (whitespace ignored, ≥1
+    element); wired into `aromatic_system` before the predicate loop; missing/malformed head → new
+    `ParseError` variant(s). `raise`/`lower` keep passing `electrons` through (no defaulting).
+  - 0.1b — aromatic-string `Display` (`dsl/aromatic.rs`): emit the head first — `*` for `Undetermined`,
+    `[n,n,…]` for `Lit`.
+  - 0.1c — multicenter-string parser + `Display` (`dsl/multicenter.rs`): same as 0.1a/b.
+  - 0.1d — drop the `:electrons` map key (`dsl/molecule.rs`): remove the streaming + tree reads and the
+    render for both entities, plus the now-unused `read_`/`parse_`/`render_electron_counts`; the `:type`
+    DSL carries electrons now.
+  - 0.1e — tests: string parse/`Display`/round-trip (concrete `[…]` heads, a dedicated `*` case, and
+    invalid forms — empty `[]`, unmatched `[`/`]`, non-numeric, empty/trailing comma, missing head);
+    `molecule/tests.rs` + fixtures move electrons into `:type` (length-matched 1s for synthetic, correct
+    counts for real) and drop `:electrons`.
+  - 0.1f — spec: drop `:electrons` from the §4 entries, rewrite ¶142, update §7.10/§7.11 (mandatory head
+    grammar `[<n>(,<n>)*] | *`; `""` no longer valid for these strings; concrete examples).
 - 0.2 — `:donor` → `:donors`: `dsl/molecule.rs` dative-bond-entry parser + `dsl/dative.rs`, + spec §4.
 
 **D1 — Types** (all in `dsl/reaction.rs`):
@@ -527,18 +544,33 @@ reuses the complete molecule entry parsers — no partial parser, unlike the del
   Unchanged(ConstraintDsl), Added(ConstraintDsl), Removed(ConstraintDsl) }` (refs unresolved). Traits:
   `Debug`.
 
-**S3 — Entry parser** (`dsl/reaction_span.rs`, free fns):
-- 3.1 — `read_span_entry<T>(…, inner) -> Result<EntitySpan<T>, EdnError>` / `parse_span_entry`: read
-  `bare | {:add v} | {:remove v} | {:modify [l r]}`, delegating the inner complete value(s) to
-  `inner` (`:modify` reads a 2-vector of complete values).
-- 3.2 — inner value parsers reuse the molecule `:atoms`/`:bonds` entry parsers (the same ones
-  `read_molecule_input` uses, reused by delta D3.2 for `:add`) — atoms capture the inline `:id`
-  handle, bonds the endpoint refs. Constraints use the 3-op variant (no `:modify`) over
-  `ConstraintDsl::from_edn` → `ConstraintSpanInput`.
+**S3 — Entry parsers** (`dsl/reaction_span.rs`, free fns). A generic `read_span_entry<T>` does **not**
+fit: a span entry splits into **slot-level** data (shared by both sides — the atom `:id` handle; the
+bond handle + `[<ref> <ref>]` endpoints) and a **per-side** value (the `EntitySpan`), and the two
+entities place that slot data differently. So a shared op-classifier handles the `bare | {:<op> …}`
+wrapper and each per-entity parser owns its slot/value split:
+- 3.1 — `classify_span_op(&Edn) -> (SpanOp, &Edn)`, `enum SpanOp { Unchanged, Add, Remove, Modify }`:
+  a bare value ⇒ `Unchanged` (payload = the value); a single-key map `{:add|:remove|:modify <p>}` ⇒
+  that op (payload = `<p>`). The only place the op wrapper is recognized; `SpanOp` is a parse-internal
+  helper (no AST counterpart).
+- 3.2 — `parse_atom_span_entry(&Edn) -> Result<(Option<String>, EntitySpan<AtomAst>), DeError>`: peel
+  the optional **outer** `[<id> …]` handle (slot-level — one handle, not one per side), classify the
+  op (3.1), then parse the value(s) with the molecule atom-entry parser (the one reused by delta
+  D3.2): one complete atom for `Unchanged`/`Add`/`Remove`, the `[left right]` pair for `Modify`.
+- 3.3 — `parse_bond_span_entry(&Edn) -> Result<(Option<String>, [AtomRefDsl; 2], EntitySpan<BondAst>), DeError>`:
+  a bond carries its endpoints (and optional handle) **once, inside** the payload — `[<ref> <ref>
+  <bond-dsl>]` for `Unchanged`/`Add`/`Remove`, `[<ref> <ref> [left right]]` for `Modify` (or the
+  `{[:id …] :atoms […] :type …}` map form, which also supplies the handle). Classify the op (3.1),
+  split off the shared `[<ref> <ref>]` endpoints + handle, wrap the per-side bond value(s) in
+  `EntitySpan<BondAst>`.
+- 3.4 — `parse_constraint_span_entry(&Edn) -> Result<ConstraintSpanInput, DeError>`: op wrapper
+  `bare | {:add c} | {:remove c}` only (no `:modify`, no slot data); `c` via `ConstraintDsl::from_edn`.
 
 **S4 — Top-level parser** (`dsl/reaction_span.rs`, free fns):
 - 4.1 — `read_span_input(&mut EdnStreamDeserializer) -> Result<SpanInput, EdnError>` /
   `parse_span_input(&Edn) -> Result<SpanInput, DeError>`: `:atoms`/`:bonds`/`:constraints` via S3.
+  Since S3's classifier needs the whole entry, the streaming reader buffers each section element to an
+  `Edn` before dispatching to the tree-form entry parser (3.2/3.3/3.4).
 - 4.2 — `ReactionSpanDsl::from_edn` / `from_edn_str` call 4.1 then `SpanInput::into_ast` (S5). A plain
   molecule map (all entries bare) parses as an all-`Unchanged` span (homoiconicity).
 

@@ -41,6 +41,10 @@ pub enum ParseError {
     DuplicateStereoPredicate(String),
     #[error("expected noncovalent-bond kind")]
     ExpectedNoncovalentBondKind,
+    #[error("expected electron counts ('*' or '[...]')")]
+    ExpectedElectronCounts,
+    #[error("malformed electron counts: {0:?}")]
+    MalformedElectronCounts(String),
     #[error("trailing input: {0:?}")]
     TrailingInput(String),
     #[error("raising error: {0}")]

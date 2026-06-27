@@ -1275,7 +1275,7 @@ mod tests {
             vec![],
             vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                AromaticSystemAst::from_counts(vec![1, 2, 0]),
+                AromaticSystemAst::from_electrons(vec![1, 2, 0]),
             )],
             vec![],
             vec![],
@@ -1341,7 +1341,7 @@ mod tests {
             vec![],
             vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::from_counts(vec![2, 2, 2]),
+                MulticenterBondAst::from_electrons(vec![2, 2, 2]),
             )],
             vec![],
             Vec::new(),
