@@ -302,7 +302,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraint) -> fmt::Result
     }
 }
 
-fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
+pub(crate) fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     // Exhaustive destructure: adding a new BondAst field is a compile error
     // here, forcing the author to decide how lowering should handle it.
     let BondAst {
@@ -322,7 +322,7 @@ fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     lower_bond_constraints(constraints, cfg);
 }
 
-fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
+pub(crate) fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     // Exhaustive destructure: adding a new BondAst field is a compile error
     // here, forcing the author to decide how raising should handle it.
     let BondAst {

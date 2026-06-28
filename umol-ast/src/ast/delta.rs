@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::Hash;
 use std::mem::{discriminant, Discriminant};
-use std::slice::Iter;
+use std::slice::{Iter, IterMut};
 
 use super::atom::AtomAst;
 use super::bond::BondAst;
@@ -727,6 +727,10 @@ impl Deltas {
 
     pub fn iter(&self) -> Iter<'_, Delta> {
         self.0.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> IterMut<'_, Delta> {
+        self.0.iter_mut()
     }
 
     pub fn push(&mut self, delta: Delta) {

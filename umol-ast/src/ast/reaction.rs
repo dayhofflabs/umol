@@ -21,7 +21,7 @@ use super::substructure::SubstructureMatchAlgorithm;
 use super::traits::Canonicalize;
 
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionAst {
     pub lhs: MoleculeAst,
     pub deltas: Deltas,

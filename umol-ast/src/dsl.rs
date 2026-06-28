@@ -29,10 +29,11 @@ pub use bond::{parse_bond, BondConstraintDsl, BondDsl, BondPredicate};
 pub use config::{
     AromaticSystemDefaults, AromaticSystemOverrides, AromaticValenceDefault, AtomDefaults,
     AtomOverrides, BondDefaults, BondOverrides, DativeBondDefaults, DativeBondOverrides,
-    IsotopeDefault, MoleculeDefaults, MoleculeOverrides, MulticenterBondDefaults,
+    DeltaDefaults, IsotopeDefault, MoleculeDefaults, MoleculeOverrides, MulticenterBondDefaults,
     MulticenterBondOverrides, MulticenterValenceDefault, MultiplicityDefault,
-    NoncovalentBondDefaults, NoncovalentBondOverrides, NumericDefault, StereoAtomDefaults,
-    StereoAtomOverrides, StereoBondDefaults, StereoBondOverrides, StereoDefault,
+    NoncovalentBondDefaults, NoncovalentBondOverrides, NumericDefault, ReactionDefaults,
+    ReactionOverrides, StereoAtomDefaults, StereoAtomOverrides, StereoBondDefaults,
+    StereoBondOverrides, StereoDefault,
     UnpairedElectronsDefault,
 };
 pub use constraint::{
@@ -47,7 +48,7 @@ pub use multicenter::{
     MulticenterBondPredicate,
 };
 pub use noncovalent::{parse_noncovalent_bond, NoncovalentBondConstraintDsl, NoncovalentBondDsl};
-pub use reaction::ReactionMetadata;
+pub use reaction::{ReactionDsl, ReactionMetadata};
 pub use refs::{
     AromaticSystemRefDsl, AtomRefDsl, BondRefDsl, DativeBondRefDsl, MulticenterBondRefDsl,
     NoncovalentBondRefDsl,

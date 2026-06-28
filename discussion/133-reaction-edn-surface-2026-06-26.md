@@ -452,7 +452,7 @@ ending at a compilable, tested checkpoint. The boundary-type traits (`FromAst`/`
 Within a chunk the entity order is atom → bond → constraint (bond resolution needs atom ids). The tree
 may go red between work items inside a chunk; each chunk ends green and tested. Prereqs in brackets.
 
-**R1 — Raw + metadata types** [—]:
+**R1 — Raw + metadata types** [—]: **Done**
 - R1a — create `dsl/reaction.rs`; add `pub(crate) mod reaction;` to `dsl.rs` (between `noncovalent` and
   `refs`); imports mirror `dsl/molecule.rs`.
 - R1b — `#[derive(Clone, Debug, Default, PartialEq, Eq)] struct ReactionMetadata { lhs: MoleculeMetadata,
@@ -471,20 +471,22 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
 - *Checkpoint:* compiles.
 
 **R2 — `ReactionDsl` boundary shell** [R1]:
-- R2a — `#[derive(Clone, Debug)] struct ReactionDsl { ast: ReactionAst, metadata: ReactionMetadata }`
-  (private fields) + doc; `pub use reaction::ReactionDsl;`. No `Default` (`ReactionAst` has none).
+- R2a — `#[derive(Clone, Debug, Default)] struct ReactionDsl { ast: ReactionAst, metadata: ReactionMetadata }`
+  (private fields) + doc; `pub use reaction::ReactionDsl;`.
 - R2b — inherent API: `from_parts`, `into_parts`, `ast`, `metadata`.
 - R2c — derive `PartialEq` + `Eq`.
 - *Checkpoint:* type exists + exported.
 
 **R3 — AST↔DSL conversion** [R2]:
-- R3a — `FromAst<ReactionAst>` (`Ctx = MoleculeDefaults`): clone ast; convert `lhs` entities via the
-  per-entity DSL converter; walk `deltas`, converting each `Atom`/`BondDelta::{Add, Remove}` embedded
-  AST; `metadata = ReactionMetadata::default()`.
-- R3b — `IntoAst<ReactionAst>`: inverse raise (lhs entities + `Add`/`Remove` embedded ASTs).
-- R3c — tests: `from_ast` → `into_ast` identity on a `ReactionAst` (lhs + atom add + bond add + modify +
-  constraint).
-- *Checkpoint (tested):* programmatic `ReactionAst` ↔ `ReactionDsl`, no EDN.
+- R3a — `FromAst<ReactionAst>` (`Ctx = ReactionDefaults` — atom/bond only): `lhs` via
+  `MoleculeDsl::from_ast` (with a `MoleculeDefaults` carrying the reaction's atom/bond policy, no-op for
+  the rest); `deltas` via `lower_delta` (per-delta `lower_atom`/`lower_bond` on `Add`/`Remove` payloads);
+  `metadata = ReactionMetadata::default()`.
+- R3b — `IntoAst<ReactionAst>`: inverse — `lhs` via `MoleculeDsl::into_ast`, `deltas` via `raise_delta`.
+- R3c — test: DSL→AST→DSL round-trip under `ReactionDefaults::ground()` (wrap a `ReactionAst` as
+  `ReactionDsl`, `into_ast` then `from_ast`, assert `.ast()` equal) — covers lhs + atom add + bond add +
+  modify + constraint.
+- *Checkpoint (tested):* programmatic round-trip, no EDN.
 
 **R4 — Partial entity parsers** [—] (`dsl/atom.rs`, `dsl/bond.rs`; reuse existing field parsers):
 - R4a — `partial_atom` winnow parser + `read_partial_atom(&str) -> Result<AtomAst, ParseError>` (sparse,

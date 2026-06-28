@@ -638,7 +638,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
     }
 }
 
-fn raise_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
+pub(crate) fn raise_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
     // Exhaustive destructure: adding a new AtomAst field is a compile error
     // here, forcing the author to decide how raising should handle it.
     let AtomAst {
@@ -752,7 +752,7 @@ fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
     }
 }
 
-fn lower_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
+pub(crate) fn lower_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
     // Exhaustive destructure: adding a new AtomAst field is a compile error
     // here, forcing the author to decide how lowering should handle it.
     let AtomAst {

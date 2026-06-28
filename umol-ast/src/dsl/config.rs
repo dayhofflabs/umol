@@ -105,6 +105,82 @@ pub struct MoleculeOverrides {
     pub stereo_bond: StereoBondOverrides,
 }
 
+/// Defaults for reaction DSL <-> AST interconversion. Atom/bond only — the
+/// entities the reaction surface handles (parallels `ReactionInput`).
+#[derive(Debug, Clone, FromEdn, ToEdn)]
+pub struct ReactionDefaults {
+    pub atom: AtomDefaults,
+    pub bond: BondDefaults,
+}
+
+impl ReactionDefaults {
+    /// No-op defaults.
+    pub fn new() -> Self {
+        Self {
+            atom: AtomDefaults::new(),
+            bond: BondDefaults::new(),
+        }
+    }
+
+    /// Composes `*Defaults::ground()` for each entity.
+    pub fn ground() -> Self {
+        Self {
+            atom: AtomDefaults::ground(),
+            bond: BondDefaults::ground(),
+        }
+    }
+
+    /// Add overrides.
+    pub fn with_overrides(self, ov: ReactionOverrides) -> Self {
+        Self {
+            atom: self.atom.with_overrides(ov.atom),
+            bond: self.bond.with_overrides(ov.bond),
+        }
+    }
+
+    /// Molecule-level defaults for converting the `lhs`: this reaction's atom/bond
+    /// policy, no-op for entity kinds the reaction surface does not yet cover.
+    pub fn molecule_defaults(&self) -> MoleculeDefaults {
+        MoleculeDefaults {
+            atom: self.atom.clone(),
+            bond: self.bond.clone(),
+            ..MoleculeDefaults::new()
+        }
+    }
+
+    /// Defaults for converting deltas (atom/bond).
+    pub fn delta_defaults(&self) -> DeltaDefaults {
+        DeltaDefaults {
+            atom: self.atom.clone(),
+            bond: self.bond.clone(),
+        }
+    }
+}
+
+impl Default for ReactionDefaults {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Sparse overrides on `ReactionDefaults`. Each field is the corresponding
+/// per-entity `*Overrides` bundle.
+#[derive(Clone, Debug, Default, FromEdn)]
+pub struct ReactionOverrides {
+    #[edn(default)]
+    pub atom: AtomOverrides,
+    #[edn(default)]
+    pub bond: BondOverrides,
+}
+
+/// Defaults for converting reaction deltas (atom/bond) — the `delta_defaults()`
+/// projection of `ReactionDefaults`.
+#[derive(Clone, Debug)]
+pub struct DeltaDefaults {
+    pub atom: AtomDefaults,
+    pub bond: BondDefaults,
+}
+
 /// Lowering/raising defaults for atoms: describe how `AtomAst`
 /// struct fields and constraintsa are treated when converting between DSL and AST.
 #[derive(Clone, Debug, FromEdn, ToEdn)]
