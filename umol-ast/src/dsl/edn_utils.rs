@@ -2,6 +2,10 @@
 
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer};
 
+pub(super) fn eof_err() -> EdnError {
+    DeError::Custom("unexpected end of input".into()).into()
+}
+
 pub(crate) fn single_key_map(key: &str, value: Edn<'static>) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(1);
     m.insert(Edn::Keyword(EdnKeyword::owned(key.into())), value);

@@ -8,17 +8,20 @@
 
 use bimap::BiBTreeMap;
 use indexmap::IndexMap;
-use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer};
+use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn};
 
-use super::atom::{lower_atom, raise_atom, AtomDsl};
+use super::atom::{lower_atom, raise_atom, AtomDsl, PartialAtomDsl};
 use super::bond::{lower_bond, raise_bond};
 use super::config::{DeltaDefaults, ReactionDefaults};
 use super::constraint::ConstraintDsl;
 use super::edn_utils::{
     consume_single_key_map_close, parse_single_key_map, read_single_key_map_header,
 };
-use super::molecule::{MoleculeDsl, MoleculeInput, MoleculeMetadata};
-use super::refs::{AtomRefDsl, BondRefDsl};
+use super::molecule::{
+    parse_atom_entry, read_atom_entry, AtomEntryInput, BondEntryInput, MoleculeDsl, MoleculeInput,
+    MoleculeMetadata,
+};
+use super::refs::{read_atom_ref, AtomRef, BondRef};
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::delta::{AtomDelta, BondDelta, Delta};
@@ -197,24 +200,17 @@ impl ReactionMetadata {
 }
 
 /// One unresolved delta parsed from a `:deltas` entry. Refs stay symbolic
-/// (`AtomRefDsl`/`BondRefDsl`); a `:modify` RHS is a partial entity AST
-/// (unspecified fields `Undetermined`); `id` is the created entity's optional
-/// `:id` name.
-#[derive(Debug)]
+/// (`AtomRef`/`BondRef`) and an `:add` carries the molecule entry verbatim
+/// (bare atom / alias / created-id resolved in R7); a `:modify` RHS is a
+/// partial entity AST (unspecified fields `Undetermined`).
+#[derive(Debug, PartialEq)]
 pub(crate) enum DeltaInput {
-    AtomAdd {
-        id: Option<String>,
-        value: AtomAst,
-    },
-    AtomRemove(AtomRefDsl),
-    AtomModify(AtomRefDsl, AtomAst),
-    BondAdd {
-        id: Option<String>,
-        atoms: [AtomRefDsl; 2],
-        value: BondAst,
-    },
-    BondRemove(BondRefDsl),
-    BondModify(BondRefDsl, BondAst),
+    AtomAdd(AtomEntryInput),
+    AtomRemove(AtomRef),
+    AtomModify(AtomRef, AtomAst),
+    BondAdd(BondEntryInput),
+    BondRemove(BondRef),
+    BondModify(BondRef, BondAst),
     ConstraintAdd(ConstraintDsl),
     ConstraintRemove(ConstraintDsl),
 }
@@ -241,12 +237,26 @@ fn read_delta_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInput, Ed
 
 fn read_delta_atom_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInput, EdnError> {
     let op = read_single_key_map_header(de)?;
-    match op.as_str() {
-        "add" => todo!("R5b"),
-        "remove" => todo!("R5b"),
-        "modify" => todo!("R5b"),
-        o => Err(DeError::Custom(format!("unknown atom delta op :{o}")).into()),
-    }
+    let input = match op.as_str() {
+        "add" => DeltaInput::AtomAdd(read_atom_entry(de)?),
+        "remove" => DeltaInput::AtomRemove(read_atom_ref(de)?),
+        "modify" => {
+            de.consume_byte(b'[')?;
+            let r = read_atom_ref(de)?;
+            let s = de.read_string()?;
+            let dsl: PartialAtomDsl = s
+                .as_ref()
+                .parse()
+                .map_err(|e| DeError::subgrammar("partial-atom", e))?;
+            if !de.try_consume_byte(b']')? {
+                return Err(DeError::Custom("atom :modify expects [ref dsl]".into()).into());
+            }
+            DeltaInput::AtomModify(r, dsl.0)
+        }
+        o => return Err(DeError::Custom(format!("unknown atom delta op :{o}")).into()),
+    };
+    consume_single_key_map_close(de, "atom delta")?;
+    Ok(input)
 }
 
 fn read_delta_bond_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInput, EdnError> {
@@ -279,11 +289,29 @@ fn parse_delta_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
 }
 
 fn parse_delta_atom_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
-    let (op, _payload) = parse_single_key_map(edn, "atom delta")?;
+    let (op, payload) = parse_single_key_map(edn, "atom delta")?;
     match op {
-        "add" => todo!("R5b"),
-        "remove" => todo!("R5b"),
-        "modify" => todo!("R5b"),
+        "add" => Ok(DeltaInput::AtomAdd(parse_atom_entry(payload)?)),
+        "remove" => Ok(DeltaInput::AtomRemove(AtomRef::from_edn(payload)?)),
+        "modify" => {
+            let Edn::Vector(v) = payload else {
+                return Err(DeError::TypeMismatch {
+                    expected: "atom :modify [ref dsl]",
+                    got: payload.kind(),
+                    path: vec!["atom delta".into()],
+                });
+            };
+            if v.len() != 2 {
+                return Err(DeError::Custom(format!(
+                    "atom :modify expects [ref dsl], got {} elements",
+                    v.len()
+                )));
+            }
+            Ok(DeltaInput::AtomModify(
+                AtomRef::from_edn(&v[0])?,
+                PartialAtomDsl::from_edn(&v[1])?.0,
+            ))
+        }
         o => Err(DeError::Custom(format!("unknown atom delta op :{o}"))),
     }
 }
@@ -312,12 +340,15 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_edn::read_string;
 
     use super::*;
+    use crate::ast::atom::ElementAst;
     use crate::ast::constraint::Constraint;
     use crate::ast::delta::{ConstraintDelta, Deltas};
     use crate::ast::edit::AtomFieldChange;
     use crate::ast::value::ValueAst;
+    use crate::dsl::molecule::AtomSpecInput;
     use crate::mol;
 
     #[rstest]
@@ -342,5 +373,99 @@ mod tests {
         let dsl = ReactionDsl::from_parts(reaction, ReactionMetadata::default());
         let lowered = ReactionDsl::from_ast(&dsl.clone().into_ast(&cfg), &cfg);
         assert_eq!(lowered.ast(), dsl.ast());
+    }
+
+    #[rstest]
+    #[case::add_bare(
+        r##"{:atom {:add "C#h3"}}"##,
+        DeltaInput::AtomAdd(AtomEntryInput {
+            id: None,
+            spec: AtomSpecInput::Bare(Box::new(AtomDsl({
+                let mut a = AtomAst::new(ElementAst::Lit(Element::C));
+                a.implicit_hydrogens = ValueAst::Lit(3);
+                a
+            }))),
+        })
+    )]
+    #[case::add_id(
+        r##"{:atom {:add [:nu "O#h1"]}}"##,
+        DeltaInput::AtomAdd(AtomEntryInput {
+            id: Some("nu".into()),
+            spec: AtomSpecInput::Bare(Box::new(AtomDsl({
+                let mut a = AtomAst::new(ElementAst::Lit(Element::O));
+                a.implicit_hydrogens = ValueAst::Lit(1);
+                a
+            }))),
+        })
+    )]
+    #[case::add_alias(
+        "{:atom {:add :foo}}",
+        DeltaInput::AtomAdd(AtomEntryInput {
+            id: None,
+            spec: AtomSpecInput::Alias("foo".into()),
+        })
+    )]
+    #[case::remove_id("{:atom {:remove :br}}", DeltaInput::AtomRemove(AtomRef::Id("br".into())))]
+    #[case::remove_index("{:atom {:remove 1}}", DeltaInput::AtomRemove(AtomRef::Index(1)))]
+    #[case::modify(
+        r##"{:atom {:modify [:br "#c-1"]}}"##,
+        DeltaInput::AtomModify(AtomRef::Id("br".into()), {
+            let mut a = AtomAst::new(ElementAst::Undetermined);
+            a.charge = ValueAst::Lit(-1);
+            a
+        })
+    )]
+    fn test_parse_delta_input_atom(#[case] input: &str, #[case] expected: DeltaInput) {
+        assert_eq!(
+            parse_delta_input(&read_string(input).unwrap()).unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::add_bare(
+        r##"{:atom {:add "C#h3"}}"##,
+        DeltaInput::AtomAdd(AtomEntryInput {
+            id: None,
+            spec: AtomSpecInput::Bare(Box::new(AtomDsl({
+                let mut a = AtomAst::new(ElementAst::Lit(Element::C));
+                a.implicit_hydrogens = ValueAst::Lit(3);
+                a
+            }))),
+        })
+    )]
+    #[case::add_id(
+        r##"{:atom {:add [:nu "O#h1"]}}"##,
+        DeltaInput::AtomAdd(AtomEntryInput {
+            id: Some("nu".into()),
+            spec: AtomSpecInput::Bare(Box::new(AtomDsl({
+                let mut a = AtomAst::new(ElementAst::Lit(Element::O));
+                a.implicit_hydrogens = ValueAst::Lit(1);
+                a
+            }))),
+        })
+    )]
+    #[case::add_alias(
+        "{:atom {:add :foo}}",
+        DeltaInput::AtomAdd(AtomEntryInput {
+            id: None,
+            spec: AtomSpecInput::Alias("foo".into()),
+        })
+    )]
+    #[case::remove_id("{:atom {:remove :br}}", DeltaInput::AtomRemove(AtomRef::Id("br".into())))]
+    #[case::remove_index("{:atom {:remove 1}}", DeltaInput::AtomRemove(AtomRef::Index(1)))]
+    #[case::modify(
+        r##"{:atom {:modify [:br "#c-1"]}}"##,
+        DeltaInput::AtomModify(AtomRef::Id("br".into()), {
+            let mut a = AtomAst::new(ElementAst::Undetermined);
+            a.charge = ValueAst::Lit(-1);
+            a
+        })
+    )]
+    fn test_read_delta_input_atom(#[case] input: &str, #[case] expected: DeltaInput) {
+        assert_eq!(
+            read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
+            expected
+        );
     }
 }

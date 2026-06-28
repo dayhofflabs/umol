@@ -166,10 +166,10 @@ id of its site/focus.
 ### Modify — ref + the RHS entity DSL (no 1:1 old/new)
 
 ```
-{:atom            {:modify <atom-ref> <atom-dsl>}}
-{:bond            {:modify <bond-ref> <bond-dsl>}}
-{:aromatic-system {:modify <aromatic-ref> <aromatic-system-dsl>}}
-{:stereo-atom     {:modify <stereo-atom-ref> <stereo-atom-dsl>}}   ; analogously
+{:atom            {:modify [<atom-ref> <atom-dsl>]}}
+{:bond            {:modify [<bond-ref> <bond-dsl>]}}
+{:aromatic-system {:modify [<aromatic-ref> <aromatic-system-dsl>]}}
+{:stereo-atom     {:modify [<stereo-atom-ref> <stereo-atom-dsl>]}}   ; analogously
 ```
 
 The surface deliberately does **not** mirror the AST's per-field `ModifyField` /

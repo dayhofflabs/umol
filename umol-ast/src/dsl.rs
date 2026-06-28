@@ -38,10 +38,7 @@ pub use config::{
     ReactionOverrides, StereoAtomDefaults, StereoAtomOverrides, StereoBondDefaults,
     StereoBondOverrides, StereoDefault, UnpairedElectronsDefault,
 };
-pub use constraint::{
-    AromaticSystemRef, AtomRef, BondRef, ConstraintDsl, ConstraintsDsl, DativeBondRef,
-    MoleculeConstraintDsl, MulticenterBondRef, NoncovalentBondRef, SubPatternAnchorDsl,
-};
+pub use constraint::{ConstraintDsl, ConstraintsDsl, MoleculeConstraintDsl, SubPatternAnchorDsl};
 pub use dative::{parse_dative_bond, DativeBondConstraintDsl, DativeBondDsl, DativeBondPredicate};
 pub use error::ParseError;
 pub use molecule::{MoleculeDsl, MoleculeMetadata};
@@ -52,8 +49,7 @@ pub use multicenter::{
 pub use noncovalent::{parse_noncovalent_bond, NoncovalentBondConstraintDsl, NoncovalentBondDsl};
 pub use reaction::{ReactionDsl, ReactionMetadata};
 pub use refs::{
-    AromaticSystemRefDsl, AtomRefDsl, BondRefDsl, DativeBondRefDsl, MulticenterBondRefDsl,
-    NoncovalentBondRefDsl,
+    AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
 };
 pub use relational::RelationalConstraintDsl;
 pub use stereo::{

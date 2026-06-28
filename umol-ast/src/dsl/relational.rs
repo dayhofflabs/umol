@@ -15,12 +15,13 @@
 use umol_edn::{DeError, Edn, EdnKeyword, EdnMap, FromEdn, ToEdn};
 
 use super::atom::AtomConstraintDsl;
-use super::constraint::{
-    AromaticSystemRef, AtomRef, BondRef, DativeBondRef, EntityCounts, MulticenterBondRef,
-    NoncovalentBondRef, StereoAtomRef, StereoBondRef,
-};
+use super::constraint::EntityCounts;
 use super::error::ParseError;
 use super::molecule::MoleculeMetadata;
+use super::refs::{
+    AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
+    StereoAtomRef, StereoBondRef,
+};
 use crate::ast::constraint::RelationalConstraint;
 use crate::ast::traits::{FromAst, IntoAst};
 

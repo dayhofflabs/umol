@@ -26,14 +26,15 @@ use super::atom::AtomDsl;
 use super::bond::{expand_bond_keyword, BondDsl};
 use super::config::MoleculeDefaults;
 use super::constraint::{
-    eof_err, missing, read_atom_ref, read_bond_ref, read_constraints_dsl, unexpected_byte_kind,
-    AtomRef, BondRef, ConstraintDsl, ConstraintsDsl, EntityCounts,
+    missing, read_constraints_dsl, unexpected_byte_kind, ConstraintDsl, ConstraintsDsl,
+    EntityCounts,
 };
 use super::dative::DativeBondDsl;
-use super::edn_utils::{parse_vec, read_map, read_vec};
+use super::edn_utils::{eof_err, parse_vec, read_map, read_vec};
 use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
 use super::noncovalent::NoncovalentBondDsl;
+use super::refs::{read_atom_ref, read_bond_ref, AtomRef, BondRef};
 use super::stereo::{
     expand_stereo_atom_keyword, expand_stereo_bond_keyword, StereoAtomDsl, StereoBondDsl,
 };
@@ -372,7 +373,9 @@ pub(super) fn read_molecule_input(
     Ok(mi)
 }
 
-fn read_atom_entry(de: &mut EdnStreamDeserializer<'_>) -> Result<AtomEntryInput, EdnError> {
+pub(super) fn read_atom_entry(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<AtomEntryInput, EdnError> {
     match de.peek_byte()?.ok_or_else(eof_err)? {
         b'[' => {
             de.consume_byte(b'[')?;
@@ -1215,7 +1218,6 @@ impl MoleculeInput {
     /// Destructive lowering: consumes the input, resolves refs against the
     /// built id scopes, and produces the final `MoleculeAst` with its
     /// `MoleculeMetadata`. Called from `FromEdn::from_edn` and the streaming path.
-    /// TODO: Fix pub(crate) visibility marker.
     pub(crate) fn into_ast(self) -> Result<(MoleculeAst, MoleculeMetadata), ParseError> {
         let MoleculeInput {
             atoms: atom_entries,
@@ -1515,7 +1517,7 @@ fn parse_molecule_input(edn: &Edn<'_>) -> Result<MoleculeInput, DeError> {
     Ok(input)
 }
 
-fn parse_atom_entry(edn: &Edn<'_>) -> Result<AtomEntryInput, DeError> {
+pub(super) fn parse_atom_entry(edn: &Edn<'_>) -> Result<AtomEntryInput, DeError> {
     match edn {
         Edn::Str(s) => {
             let dsl: AtomDsl = s.parse().map_err(|e| DeError::subgrammar("atom", e))?;

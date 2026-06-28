@@ -247,4 +247,10 @@ tags
 .history
 .ionide
 
+### LSP ###
+.lsp/
+
+### EDN ###
+.clj-kondo/
+
 # End of https://www.toptal.com/developers/gitignore/api/linux,macos,vim,emacs,intellij+all,visualstudiocode,rust,rust-analyzer
