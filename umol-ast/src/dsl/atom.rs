@@ -155,24 +155,20 @@ pub fn parse_atom(input: &str) -> Result<AtomDsl, ParseError> {
     atom.parse(input).map_err(|e| e.into_inner())
 }
 
-/// Fast path for the overwhelmingly common case of an element-only
-/// atom-string ("C", "N", "Cl", "Og", …). Returns `None` if the input
-/// has anything beyond a single 1- or 2-byte ASCII element symbol, in
-/// which case the caller falls through to the winnow parser.
+/// Fast path for element-only atom string. Currently requires element names in title case.
 fn parse_bare_element(input: &str) -> Option<AtomDsl> {
     let bytes = input.as_bytes();
-    let is_first = |b: u8| b.is_ascii_uppercase();
-    let is_rest = |b: u8| b.is_ascii_lowercase();
-    let ok = match bytes {
-        [a] => is_first(*a),
-        [a, b] => is_first(*a) && is_rest(*b),
-        _ => false,
-    };
-    if !ok {
+    if bytes.len() != 1 && bytes.len() != 2 {
         return None;
     }
-    let el = Element::from_symbol_bytes(bytes)?;
-    Some(AtomDsl(AtomAst::new(ElementAst::Lit(el))))
+    if !bytes[0].is_ascii_uppercase() {
+        return None;
+    }
+    if bytes.len() == 2 && !bytes[1].is_ascii_lowercase() {
+        return None;
+    }
+    let el = Element::from_symbol_bytes(input.as_bytes())?;
+    Some(AtomDsl(AtomAst::from_element(el)))
 }
 
 /// Atom-string parser (does not require consuming all input).
@@ -185,8 +181,68 @@ pub(crate) fn atom(i: &mut &str) -> PResult<AtomDsl> {
     Ok(form)
 }
 
-fn is_set(v: &ValueAst) -> bool {
-    !matches!(v, ValueAst::Undetermined)
+/// Partial atom with all fields, including element, optional.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PartialAtomDsl(pub AtomAst);
+
+impl FromStr for PartialAtomDsl {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_partial_atom(s)
+    }
+}
+
+impl Display for PartialAtomDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ast = &self.0;
+        if !matches!(ast.element, ElementAst::Undetermined) {
+            fmt_element(f, &ast.element)?;
+        }
+        fmt_isotope_mass(f, &ast.isotope_mass)?;
+        fmt_charge(f, &ast.charge)?;
+        fmt_value_field(f, "#h", &ast.implicit_hydrogens)?;
+        fmt_value_field(f, "#n", &ast.lone_pairs)?;
+        fmt_spin_pair(f, &ast.spin)?;
+        for c in ast.constraints.iter() {
+            fmt_constraint(f, c)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'de> FromEdn<'de> for PartialAtomDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        match edn {
+            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("atom", e)),
+            other => Err(DeError::TypeMismatch {
+                expected: "string",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl ToEdn for PartialAtomDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Str(Cow::Owned(self.to_string()))
+    }
+}
+
+pub fn parse_partial_atom(input: &str) -> Result<PartialAtomDsl, ParseError> {
+    partial_atom.parse(input).map_err(|e| e.into_inner())
+}
+
+pub(crate) fn partial_atom(i: &mut &str) -> PResult<PartialAtomDsl> {
+    let el = delimited(multispace0, opt(element), multispace0)
+        .parse_next(i)?
+        .unwrap_or(ElementAst::Undetermined);
+    let preds: Vec<AtomPredicate> =
+        repeat(0.., terminated(atom_predicate, multispace0)).parse_next(i)?;
+    let mut form = AtomDsl(AtomAst::new(el));
+    apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
+    Ok(PartialAtomDsl(form.0))
 }
 
 fn constraint_tag(kind: AtomConstraintKind) -> &'static str {
@@ -460,7 +516,7 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
                 ast.isotope_mass = v;
             }
             AtomPredicate::Charge(v) => {
-                if is_set(&ast.charge) {
+                if !matches!(ast.charge, ValueAst::Undetermined) {
                     return Err(ParseError::DuplicateAtomPredicate("#c".to_string()));
                 }
                 ast.charge = v;
@@ -472,7 +528,7 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
                 ast.implicit_hydrogens = v;
             }
             AtomPredicate::LonePairs(v) => {
-                if is_set(&ast.lone_pairs) {
+                if !matches!(ast.lone_pairs, ValueAst::Undetermined) {
                     return Err(ParseError::DuplicateAtomPredicate("#n".to_string()));
                 }
                 ast.lone_pairs = v;
@@ -1197,8 +1253,7 @@ mod tests {
     #[case::trailing_whitespace("C ")]
     #[case::wildcard("*")]
     #[case::set("{C,N}")]
-    #[case::bind("(?e :: {C,N})")]
-    #[case::ref_("(?e)")]
+    #[case::var("(?e)")]
     #[case::h_count("C#h3")]
     #[case::charge_plus("N#c+")]
     #[case::full("C#c+1#R+#v4")]
@@ -1308,6 +1363,60 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty("", PartialAtomDsl(AtomAst::new(ElementAst::Undetermined)))]
+    #[case::element_only("O", PartialAtomDsl(AtomAst::new(ElementAst::Lit(Element::O))))]
+    #[case::charge_only("#c-1", PartialAtomDsl({
+        let mut a = AtomAst::new(ElementAst::Undetermined);
+        a.charge = ValueAst::Lit(-1);
+        a
+    }))]
+    #[case::element_and_pred("O#h1", PartialAtomDsl({
+        let mut a = AtomAst::new(ElementAst::Lit(Element::O));
+        a.implicit_hydrogens = ValueAst::Lit(1);
+        a
+    }))]
+    fn test_parse_partial_atom(#[case] input: &str, #[case] expected: PartialAtomDsl) {
+        assert_eq!(parse_partial_atom(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    fn test_parse_partial_atom_error() {
+        assert_eq!(
+            parse_partial_atom("#h1#h2"),
+            Err(ParseError::DuplicateAtomPredicate("#h".to_string()))
+        );
+    }
+
+    #[rstest]
+    fn test_partial_atom_dsl_from_edn() {
+        let edn = read_string(r##""#c-1""##).unwrap();
+        let mut expected = AtomAst::new(ElementAst::Undetermined);
+        expected.charge = ValueAst::Lit(-1);
+        assert_eq!(
+            PartialAtomDsl::from_edn(&edn).unwrap(),
+            PartialAtomDsl(expected)
+        );
+    }
+
+    #[rstest]
+    fn test_partial_atom_dsl_from_edn_error() {
+        let edn = read_string("1").unwrap();
+        assert!(matches!(
+            PartialAtomDsl::from_edn(&edn),
+            Err(DeError::TypeMismatch {
+                expected: "string",
+                ..
+            })
+        ));
+    }
+
+    #[rstest]
+    fn test_partial_atom_dsl_to_edn() {
+        let dsl = parse_partial_atom("O#h1").unwrap();
+        assert_eq!(PartialAtomDsl::from_edn(&dsl.to_edn()).unwrap(), dsl);
+    }
+
+    #[rstest]
     #[case::arom_not_aromatic("C#a!")]
     #[case::arom_plus("C#a+")]
     #[case::arom_zero("C#a0")]
@@ -1323,9 +1432,9 @@ mod tests {
     #[case::ring_membership_size_conj("C#R(5)#R(6)")]
     #[case::element_not_lit("!H")]
     #[case::element_not_set("!{F,Cl}")]
-    #[case::element_ref_bare("?e")]
-    #[case::element_bind_in("?e :: {C,N}")]
-    #[case::element_bind_not_in_set("?e :: !{F,Cl}")]
+    #[case::element_var_bare("?e")]
+    #[case::element_var_domain("?e :: {C,N}")]
+    #[case::element_var_domain_not_in("?e :: !{F,Cl}")]
     fn test_atom_display_roundtrip(#[case] input: &str) {
         let parsed = atom.parse(input).unwrap();
         assert_eq!(parsed.to_string(), input);
@@ -1372,15 +1481,15 @@ mod tests {
     #[case::undetermined("*", ElementAst::Undetermined)]
     #[case::set("{C,N,O}", ElementAst::lit_set(vec![Element::C, Element::N, Element::O]))]
     #[case::set_spaced("{ C, N}", ElementAst::lit_set(vec![Element::C, Element::N]))]
-    #[case::bind_paren("(?e :: {C,N})", ElementAst::var_in("e", vec![Element::C, Element::N]))]
-    #[case::bind_bare("?e :: {C,N}", ElementAst::var_in("e", vec![Element::C, Element::N]))]
-    #[case::bind_paren_paren("((?e :: {C,N}))", ElementAst::var_in("e", vec![Element::C, Element::N]))]
-    #[case::bind_not_in_lit("?e :: !H", ElementAst::var_not_in("e", vec![Element::H]))]
-    #[case::bind_not_in_set("?e :: !{F,Cl}", ElementAst::var_not_in("e", vec![Element::F, Element::Cl]))]
-    #[case::bind_not_in_paren("(?e :: !{F,Cl})", ElementAst::var_not_in("e", vec![Element::F, Element::Cl]))]
-    #[case::ref_bare("?e", ElementAst::var("e".to_string()))]
-    #[case::ref_paren("(?e)", ElementAst::var("e".to_string()))]
-    #[case::ref_paren_paren("((?e))", ElementAst::var("e".to_string()))]
+    #[case::var_domain_paren("(?e :: {C,N})", ElementAst::var_in("e", vec![Element::C, Element::N]))]
+    #[case::var_domain_bare("?e :: {C,N}", ElementAst::var_in("e", vec![Element::C, Element::N]))]
+    #[case::var_domain_paren_paren("((?e :: {C,N}))", ElementAst::var_in("e", vec![Element::C, Element::N]))]
+    #[case::var_domain_not_in_lit("?e :: !H", ElementAst::var_not_in("e", vec![Element::H]))]
+    #[case::var_domain_not_in_set("?e :: !{F,Cl}", ElementAst::var_not_in("e", vec![Element::F, Element::Cl]))]
+    #[case::var_domain_not_in_paren("(?e :: !{F,Cl})", ElementAst::var_not_in("e", vec![Element::F, Element::Cl]))]
+    #[case::var_bare("?e", ElementAst::var("e".to_string()))]
+    #[case::var_paren("(?e)", ElementAst::var("e".to_string()))]
+    #[case::var_paren_paren("((?e))", ElementAst::var("e".to_string()))]
     #[case::not_lit("!H", ElementAst::not(Element::H))]
     #[case::not_set("!{F,Cl}", ElementAst::not_set(vec![Element::F, Element::Cl]))]
     fn test_element(#[case] input: &str, #[case] expected: ElementAst) {

@@ -470,14 +470,14 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   (`pub(crate)`; struct only, `into_ast` in R7).
 - *Checkpoint:* compiles.
 
-**R2 — `ReactionDsl` boundary shell** [R1]:
+**R2 — `ReactionDsl` boundary shell** [R1]: **Done**
 - R2a — `#[derive(Clone, Debug, Default)] struct ReactionDsl { ast: ReactionAst, metadata: ReactionMetadata }`
   (private fields) + doc; `pub use reaction::ReactionDsl;`.
 - R2b — inherent API: `from_parts`, `into_parts`, `ast`, `metadata`.
 - R2c — derive `PartialEq` + `Eq`.
 - *Checkpoint:* type exists + exported.
 
-**R3 — AST↔DSL conversion** [R2]:
+**R3 — AST↔DSL conversion** [R2]: **Done**
 - R3a — `FromAst<ReactionAst>` (`Ctx = ReactionDefaults` — atom/bond only): `lhs` via
   `MoleculeDsl::from_ast` (with a `MoleculeDefaults` carrying the reaction's atom/bond policy, no-op for
   the rest); `deltas` via `lower_delta` (per-delta `lower_atom`/`lower_bond` on `Add`/`Remove` payloads);
@@ -489,12 +489,12 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
 - *Checkpoint (tested):* programmatic round-trip, no EDN.
 
 **R4 — Partial entity parsers** [—] (`dsl/atom.rs`, `dsl/bond.rs`; reuse existing field parsers):
-- R4a — `partial_atom` winnow parser + `read_partial_atom(&str) -> Result<AtomAst, ParseError>` (sparse,
+- R4a — `partial_atom` winnow parser + `parse_partial_atom(&str) -> Result<AtomAst, ParseError>` (sparse,
   every unspecified field `Undetermined`).
 - R4b — `read_edn_partial_atom` (Edn → AtomAst).
 - R4c — `fmt_partial_atom` (AtomAst → str, non-`Undetermined` fields only) + `render_partial_atom`
   (AtomAst → Edn).
-- R4d — `partial_bond` + `read_partial_bond` (order optional).
+- R4d — `partial_bond` + `parse_partial_bond` (order optional).
 - R4e — `read_edn_partial_bond`.
 - R4f — `fmt_partial_bond` + `render_partial_bond`.
 - R4g — tests: partial atom/bond parse + render round-trips (str + Edn), all-`Undetermined` and sparse

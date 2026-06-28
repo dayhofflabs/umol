@@ -1629,7 +1629,7 @@ mod tests {
     #[case::open(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined)), "Th*")]
     #[case::square_planar(StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(2))), "Sp2")]
     #[case::octahedral(StereoAtomDsl(StereoAtomAst::new(StereoKind::Octahedral, StereoCosetAst::Lit(6))), "Oh6")]
-    fn test_fmt_stereo_atom(#[case] form: StereoAtomDsl, #[case] expected: &str) {
+    fn test_stereo_atom_dsl_to_string(#[case] form: StereoAtomDsl, #[case] expected: &str) {
         assert_eq!(form.to_string(), expected);
     }
 
@@ -1765,7 +1765,7 @@ mod tests {
     #[rstest]
     #[case::cis_trans_z(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(0))), "Ct0")]
     #[case::open(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined)), "Ct*")]
-    fn test_fmt_stereo_bond(#[case] form: StereoBondDsl, #[case] expected: &str) {
+    fn test_stereo_bond_dsl_to_string(#[case] form: StereoBondDsl, #[case] expected: &str) {
         assert_eq!(form.to_string(), expected);
     }
 
@@ -1873,13 +1873,13 @@ mod tests {
     #[case::mirror(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::mirror(StereoTerm::Lit(1)))), "'1")]
     #[case::apply(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_cycles(4, &[vec![0, 1]])))), "1^(0,1)")]
     fn test_fmt_tetrahedral_stereo_config(#[case] c: TetrahedralStereoAst, #[case] expected: &str) {
-        struct W<'a>(&'a TetrahedralStereoAst);
-        impl fmt::Display for W<'_> {
+        struct W(TetrahedralStereoAst);
+        impl fmt::Display for W {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt_tetrahedral_stereo_config(f, self.0)
+                fmt_tetrahedral_stereo_config(f, &self.0)
             }
         }
-        assert_eq!(W(&c).to_string(), expected);
+        assert_eq!(W(c).to_string(), expected);
     }
 
     #[rustfmt::skip]
