@@ -506,14 +506,23 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   routing (`:add` / `:remove` / `:modify`); arms are R5b–d. Content-independent EDN helpers
   (`single_key_map`, `read_vec`/`read_map`/`read_single_key_map_header`/`consume_single_key_map_close`,
   `parse_vec`, and the new tree `parse_single_key_map`) live in `dsl/edn_utils.rs`.
-- R5b — atom arms (in `{read,parse}_delta_atom_input`): `:add` (molecule atom-entry parser + `:id`),
-  `:remove` (`AtomRefDsl`, incl. structural), `:modify` (`AtomRefDsl` + `PartialAtomDsl::from_edn`).
-- R5c — bond arms (in `{read,parse}_delta_bond_input`): `:add` (bond-entry parser + `[AtomRefDsl; 2]`
-  + `:id`), `:remove` (`BondRefDsl`), `:modify` (`BondRefDsl` + `PartialBondDsl::from_edn`).
-- R5d — constraint arms (in `{read,parse}_delta_constraint_input`): `:add` / `:remove` via
-  `ConstraintDsl::from_edn`.
-- R5e — tests: each `DeltaInput` shape parses (streaming + tree).
-- *Checkpoint (tested):* every `DeltaInput` shape parses.
+  `DeltaInput::Atom{Add,Remove,Modify}` etc. carry `AtomRef`/`BondRef` (index | keyword id, from
+  `dsl/refs.rs`); `Add` carries the unresolved molecule entry, resolved in R7.
+- R5b — atom arms (in `{read,parse}_delta_atom_input`): `:add` → `AtomAdd(AtomEntryInput)` (reuses
+  `molecule::{read,parse}_atom_entry`; a bare atom, `[<id> <dsl>]`, or alias spec — aliases kept
+  unresolved, not rejected); `:remove` → `AtomRemove(AtomRef)`; `:modify [<ref> <dsl>]` →
+  `AtomModify(AtomRef, PartialAtomDsl)`.
+- R5c — bond arms (in `{read,parse}_delta_bond_input`): `:add` → `BondAdd(BondEntryInput)` (reuses
+  `molecule::{read,parse}_bond_entry`; vector or map+`:id` form); `:remove` → `BondRemove(BondRef)`;
+  `:modify [<ref> <dsl>]` → `BondModify(BondRef, PartialBondDsl)`. The structural bond-ref
+  (`[<atom-ref> <atom-ref>]`) is deferred to the cross-cutting structural-ref work; refs are index|id
+  for now.
+- R5d — constraint arms (in `{read,parse}_delta_constraint_input`): `:add` / `:remove` →
+  `Constraint{Add,Remove}(ConstraintDsl)` value-based — molecule-level constraints are keyless (flat
+  multiset), so removal names the whole constraint, not a ref.
+- R5e — tests: `test_{parse,read}_delta_input_{atom,bond,constraint}` cover every `DeltaInput` shape,
+  tree + streaming. (Landed per-arm in R5b–d.)
+- *Checkpoint (tested):* every `DeltaInput` shape parses. **Done.**
 
 **R6 — Top-level parse** [R1, R5] (`dsl/reaction.rs`):
 - R6a — `read_reaction_input` / `parse_reaction_input`: `:lhs` via the molecule input parser, `:deltas`

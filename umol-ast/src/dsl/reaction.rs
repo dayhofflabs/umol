@@ -13,7 +13,7 @@ use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn};
 use super::atom::{lower_atom, raise_atom, AtomDsl, PartialAtomDsl};
 use super::bond::{lower_bond, raise_bond, PartialBondDsl};
 use super::config::{DeltaDefaults, ReactionDefaults};
-use super::constraint::ConstraintDsl;
+use super::constraint::{read_constraint_dsl, ConstraintDsl};
 use super::edn_utils::{
     consume_single_key_map_close, parse_single_key_map, read_single_key_map_header,
 };
@@ -285,11 +285,13 @@ fn read_delta_bond_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInpu
 
 fn read_delta_constraint_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInput, EdnError> {
     let op = read_single_key_map_header(de)?;
-    match op.as_str() {
-        "add" => todo!("R5d"),
-        "remove" => todo!("R5d"),
-        o => Err(DeError::Custom(format!("unknown constraint delta op :{o}")).into()),
-    }
+    let input = match op.as_str() {
+        "add" => DeltaInput::ConstraintAdd(read_constraint_dsl(de)?),
+        "remove" => DeltaInput::ConstraintRemove(read_constraint_dsl(de)?),
+        o => return Err(DeError::Custom(format!("unknown constraint delta op :{o}")).into()),
+    };
+    consume_single_key_map_close(de, "constraint delta")?;
+    Ok(input)
 }
 
 fn parse_delta_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
@@ -359,10 +361,12 @@ fn parse_delta_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
 }
 
 fn parse_delta_constraint_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
-    let (op, _payload) = parse_single_key_map(edn, "constraint delta")?;
+    let (op, payload) = parse_single_key_map(edn, "constraint delta")?;
     match op {
-        "add" => todo!("R5d"),
-        "remove" => todo!("R5d"),
+        "add" => Ok(DeltaInput::ConstraintAdd(ConstraintDsl::from_edn(payload)?)),
+        "remove" => Ok(DeltaInput::ConstraintRemove(ConstraintDsl::from_edn(
+            payload,
+        )?)),
         o => Err(DeError::Custom(format!("unknown constraint delta op :{o}"))),
     }
 }
@@ -381,6 +385,7 @@ mod tests {
     use crate::ast::edit::AtomFieldChange;
     use crate::ast::value::ValueAst;
     use crate::dsl::bond::BondDsl;
+    use crate::dsl::constraint::MoleculeConstraintDsl;
     use crate::dsl::molecule::AtomSpecInput;
     use crate::mol;
 
@@ -560,6 +565,46 @@ mod tests {
         DeltaInput::BondModify(BondRef::Id("b1".into()), BondAst::from_order(2))
     )]
     fn test_read_delta_input_bond(#[case] input: &str, #[case] expected: DeltaInput) {
+        assert_eq!(
+            read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::add(
+        "{:constraint {:add {:connected {}}}}",
+        DeltaInput::ConstraintAdd(ConstraintDsl::Molecule(MoleculeConstraintDsl::Connected {
+            atoms: None,
+        }))
+    )]
+    #[case::remove(
+        "{:constraint {:remove {:connected {}}}}",
+        DeltaInput::ConstraintRemove(ConstraintDsl::Molecule(MoleculeConstraintDsl::Connected {
+            atoms: None,
+        }))
+    )]
+    fn test_parse_delta_input_constraint(#[case] input: &str, #[case] expected: DeltaInput) {
+        assert_eq!(
+            parse_delta_input(&read_string(input).unwrap()).unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::add(
+        "{:constraint {:add {:connected {}}}}",
+        DeltaInput::ConstraintAdd(ConstraintDsl::Molecule(MoleculeConstraintDsl::Connected {
+            atoms: None,
+        }))
+    )]
+    #[case::remove(
+        "{:constraint {:remove {:connected {}}}}",
+        DeltaInput::ConstraintRemove(ConstraintDsl::Molecule(MoleculeConstraintDsl::Connected {
+            atoms: None,
+        }))
+    )]
+    fn test_read_delta_input_constraint(#[case] input: &str, #[case] expected: DeltaInput) {
         assert_eq!(
             read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
             expected
