@@ -12,6 +12,7 @@ pub(crate) mod molecule;
 pub(crate) mod multicenter;
 pub(crate) mod noncovalent;
 mod predicates;
+pub(crate) mod reaction;
 pub(crate) mod refs;
 pub(crate) mod relational;
 pub(crate) mod stereo;
@@ -46,6 +47,7 @@ pub use multicenter::{
     MulticenterBondPredicate,
 };
 pub use noncovalent::{parse_noncovalent_bond, NoncovalentBondConstraintDsl, NoncovalentBondDsl};
+pub use reaction::ReactionMetadata;
 pub use refs::{
     AromaticSystemRefDsl, AtomRefDsl, BondRefDsl, DativeBondRefDsl, MulticenterBondRefDsl,
     NoncovalentBondRefDsl,
