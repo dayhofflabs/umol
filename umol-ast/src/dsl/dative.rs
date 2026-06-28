@@ -11,9 +11,9 @@ use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
 
-use super::atom::single_key_map;
 use super::config::DativeBondDefaults;
 use super::constraint::RingMembershipDsl;
+use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
 use super::predicates::{fmt_ring_membership, ring_membership};
 use super::value::{fmt_value, value};

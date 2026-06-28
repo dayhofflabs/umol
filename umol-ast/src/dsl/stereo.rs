@@ -16,8 +16,8 @@ use winnow::error::ErrMode;
 use winnow::token::any;
 use winnow::Parser;
 
-use super::atom::single_key_map;
 use super::config::{StereoAtomDefaults, StereoBondDefaults};
+use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
 use super::value::id;
 use crate::ast::constraint::{

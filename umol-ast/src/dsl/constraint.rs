@@ -13,6 +13,9 @@ use super::aromatic::AromaticSystemConstraintDsl;
 use super::atom::{AromaticValenceDsl, AtomConstraintDsl, MulticenterValenceDsl};
 use super::bond::BondConstraintDsl;
 use super::dative::DativeBondConstraintDsl;
+use super::edn_utils::{
+    consume_single_key_map_close, read_map, read_single_key_map_header, read_vec,
+};
 use super::error::ParseError;
 use super::molecule::{read_molecule_input, MoleculeDsl, MoleculeMetadata};
 use super::multicenter::MulticenterBondConstraintDsl;
@@ -97,56 +100,6 @@ pub(super) fn unexpected_byte_kind(b: u8) -> &'static str {
         b'0'..=b'9' | b'-' | b'+' => "number",
         _ => "token",
     }
-}
-
-pub(super) fn read_vec<T>(
-    de: &mut EdnStreamDeserializer<'_>,
-    mut read_element: impl FnMut(&mut EdnStreamDeserializer<'_>) -> Result<T, EdnError>,
-) -> Result<Vec<T>, EdnError> {
-    de.consume_byte(b'[')?;
-    let mut out = Vec::new();
-    loop {
-        if de.try_consume_byte(b']')? {
-            break;
-        }
-        out.push(read_element(de)?);
-    }
-    Ok(out)
-}
-
-pub(super) fn read_map(
-    de: &mut EdnStreamDeserializer<'_>,
-    mut on_entry: impl FnMut(&mut EdnStreamDeserializer<'_>, &str) -> Result<(), EdnError>,
-) -> Result<(), EdnError> {
-    de.consume_byte(b'{')?;
-    loop {
-        if de.try_consume_byte(b'}')? {
-            break;
-        }
-        let key = de.read_keyword_name()?.into_owned();
-        on_entry(de, key.as_str())?;
-    }
-    Ok(())
-}
-
-/// Consume `{:key value}` as a single-key map, returning the key and
-/// leaving the stream positioned at the opening-map byte (caller has already
-/// read the value). Errors if the map contains more than one key.
-pub(super) fn read_single_key_map_header(
-    de: &mut EdnStreamDeserializer<'_>,
-) -> Result<String, EdnError> {
-    de.consume_byte(b'{')?;
-    Ok(de.read_keyword_name()?.into_owned())
-}
-
-pub(super) fn consume_single_key_map_close(
-    de: &mut EdnStreamDeserializer<'_>,
-    context: &'static str,
-) -> Result<(), EdnError> {
-    if !de.try_consume_byte(b'}')? {
-        return Err(DeError::Custom(format!("{} must have exactly one key", context)).into());
-    }
-    Ok(())
 }
 
 macro_rules! define_ref {

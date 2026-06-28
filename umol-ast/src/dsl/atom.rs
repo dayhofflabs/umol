@@ -18,6 +18,7 @@ use super::config::{
     NumericDefault, StereoDefault,
 };
 use super::constraint::RingMembershipDsl;
+use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
 use super::predicates::{
     apply_spin_pair, charge, fmt_charge, fmt_ring_membership, fmt_spin_pair, lower_spin,
@@ -1212,12 +1213,6 @@ impl IntoAst<AtomConstraint> for AtomConstraintDsl {
     fn into_ast(self, _ctx: &Self::Ctx) -> AtomConstraint {
         self.0
     }
-}
-
-pub(crate) fn single_key_map(key: &str, value: Edn<'static>) -> Edn<'static> {
-    let mut m = umol_edn::EdnMap::with_capacity(1);
-    m.insert(Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())), value);
-    Edn::Map(m)
 }
 
 #[cfg(test)]

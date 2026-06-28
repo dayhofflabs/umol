@@ -26,10 +26,11 @@ use super::atom::AtomDsl;
 use super::bond::{expand_bond_keyword, BondDsl};
 use super::config::MoleculeDefaults;
 use super::constraint::{
-    eof_err, missing, read_atom_ref, read_bond_ref, read_constraints_dsl, read_map, read_vec,
-    unexpected_byte_kind, AtomRef, BondRef, ConstraintDsl, ConstraintsDsl, EntityCounts,
+    eof_err, missing, read_atom_ref, read_bond_ref, read_constraints_dsl, unexpected_byte_kind,
+    AtomRef, BondRef, ConstraintDsl, ConstraintsDsl, EntityCounts,
 };
 use super::dative::DativeBondDsl;
+use super::edn_utils::{parse_vec, read_map, read_vec};
 use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
 use super::noncovalent::NoncovalentBondDsl;
@@ -1512,21 +1513,6 @@ fn parse_molecule_input(edn: &Edn<'_>) -> Result<MoleculeInput, DeError> {
         }
     }
     Ok(input)
-}
-
-fn parse_vec<T>(
-    edn: &Edn<'_>,
-    context: &'static str,
-    mut f: impl FnMut(&Edn<'_>) -> Result<T, DeError>,
-) -> Result<Vec<T>, DeError> {
-    let Edn::Vector(v) = edn else {
-        return Err(DeError::TypeMismatch {
-            expected: "vector",
-            got: edn.kind(),
-            path: vec![context.into()],
-        });
-    };
-    v.iter().map(|e| f(e)).collect()
 }
 
 fn parse_atom_entry(edn: &Edn<'_>) -> Result<AtomEntryInput, DeError> {

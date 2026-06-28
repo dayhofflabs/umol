@@ -8,11 +8,15 @@
 
 use bimap::BiBTreeMap;
 use indexmap::IndexMap;
+use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer};
 
 use super::atom::{lower_atom, raise_atom, AtomDsl};
 use super::bond::{lower_bond, raise_bond};
 use super::config::{DeltaDefaults, ReactionDefaults};
 use super::constraint::ConstraintDsl;
+use super::edn_utils::{
+    consume_single_key_map_close, parse_single_key_map, read_single_key_map_header,
+};
 use super::molecule::{MoleculeDsl, MoleculeInput, MoleculeMetadata};
 use super::refs::{AtomRefDsl, BondRefDsl};
 use crate::ast::atom::AtomAst;
@@ -221,6 +225,86 @@ pub(crate) enum DeltaInput {
 pub(crate) struct ReactionInput {
     lhs: MoleculeInput,
     deltas: Vec<DeltaInput>,
+}
+
+fn read_delta_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInput, EdnError> {
+    let entity = read_single_key_map_header(de)?;
+    let input = match entity.as_str() {
+        "atom" => read_delta_atom_input(de)?,
+        "bond" => read_delta_bond_input(de)?,
+        "constraint" => read_delta_constraint_input(de)?,
+        e => return Err(DeError::Custom(format!("unknown reaction delta :{e}")).into()),
+    };
+    consume_single_key_map_close(de, "delta")?;
+    Ok(input)
+}
+
+fn read_delta_atom_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInput, EdnError> {
+    let op = read_single_key_map_header(de)?;
+    match op.as_str() {
+        "add" => todo!("R5b"),
+        "remove" => todo!("R5b"),
+        "modify" => todo!("R5b"),
+        o => Err(DeError::Custom(format!("unknown atom delta op :{o}")).into()),
+    }
+}
+
+fn read_delta_bond_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInput, EdnError> {
+    let op = read_single_key_map_header(de)?;
+    match op.as_str() {
+        "add" => todo!("R5c"),
+        "remove" => todo!("R5c"),
+        "modify" => todo!("R5c"),
+        o => Err(DeError::Custom(format!("unknown bond delta op :{o}")).into()),
+    }
+}
+
+fn read_delta_constraint_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInput, EdnError> {
+    let op = read_single_key_map_header(de)?;
+    match op.as_str() {
+        "add" => todo!("R5d"),
+        "remove" => todo!("R5d"),
+        o => Err(DeError::Custom(format!("unknown constraint delta op :{o}")).into()),
+    }
+}
+
+fn parse_delta_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
+    let (entity, body) = parse_single_key_map(edn, "delta")?;
+    match entity {
+        "atom" => parse_delta_atom_input(body),
+        "bond" => parse_delta_bond_input(body),
+        "constraint" => parse_delta_constraint_input(body),
+        e => Err(DeError::Custom(format!("unknown reaction delta :{e}"))),
+    }
+}
+
+fn parse_delta_atom_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
+    let (op, _payload) = parse_single_key_map(edn, "atom delta")?;
+    match op {
+        "add" => todo!("R5b"),
+        "remove" => todo!("R5b"),
+        "modify" => todo!("R5b"),
+        o => Err(DeError::Custom(format!("unknown atom delta op :{o}"))),
+    }
+}
+
+fn parse_delta_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
+    let (op, _payload) = parse_single_key_map(edn, "bond delta")?;
+    match op {
+        "add" => todo!("R5c"),
+        "remove" => todo!("R5c"),
+        "modify" => todo!("R5c"),
+        o => Err(DeError::Custom(format!("unknown bond delta op :{o}"))),
+    }
+}
+
+fn parse_delta_constraint_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
+    let (op, _payload) = parse_single_key_map(edn, "constraint delta")?;
+    match op {
+        "add" => todo!("R5d"),
+        "remove" => todo!("R5d"),
+        o => Err(DeError::Custom(format!("unknown constraint delta op :{o}"))),
+    }
 }
 
 #[cfg(test)]

@@ -488,9 +488,9 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   modify + constraint.
 - *Checkpoint (tested):* programmatic round-trip, no EDN.
 
-**R4 — Partial entity boundary types** [—] (`dsl/atom.rs`, `dsl/bond.rs`; reuse existing field parsers).
-Each is a `*Dsl` boundary type owning its serde via traits — no free `read_edn_`/`render_`/`fmt_` partial
-fns:
+**R4 — Partial entity boundary types** [—] **Done**
+  (`dsl/atom.rs`, `dsl/bond.rs`; reuse existing field parsers).  Each is a `*Dsl` boundary type owning
+  its serde via traits — no free `read_edn_`/`render_`/`fmt_` partial fns:
 - R4a — `PartialAtomDsl(pub AtomAst)`: `partial_atom` combinator (element optional ⇒ `Undetermined`,
   unspecified fields `Undetermined`) + `parse_partial_atom -> PartialAtomDsl`; `FromStr` (→
   `parse_partial_atom`), `Display` (complete render minus the element when `Undetermined`), `FromEdn`
@@ -501,13 +501,17 @@ fns:
 - *Checkpoint (tested):* partial round-trips.
 
 **R5 — Delta parsing** [R1, R4] (`dsl/reaction.rs`):
-- R5a — dispatch skeleton: `read_delta_input` (streaming) / `parse_delta_input` (tree) — entity-kw →
-  op-kw routing.
-- R5b — atom arms: `:add` (molecule atom-entry parser + `:id`), `:remove` (`AtomRefDsl`, incl.
-  structural), `:modify` (`AtomRefDsl` + `PartialAtomDsl::from_edn`).
-- R5c — bond arms: `:add` (bond-entry parser + `[AtomRefDsl; 2]` + `:id`), `:remove` (`BondRefDsl`),
-  `:modify` (`BondRefDsl` + `PartialBondDsl::from_edn`).
-- R5d — constraint arms: `:add` / `:remove` via `ConstraintDsl::from_edn`.
+- R5a — dispatch: `read_delta_input` (streaming) / `parse_delta_input` (tree) route the outer
+  entity keyword to per-entity `{read,parse}_delta_<entity>_input`, each owning its op-keyword
+  routing (`:add` / `:remove` / `:modify`); arms are R5b–d. Content-independent EDN helpers
+  (`single_key_map`, `read_vec`/`read_map`/`read_single_key_map_header`/`consume_single_key_map_close`,
+  `parse_vec`, and the new tree `parse_single_key_map`) live in `dsl/edn_utils.rs`.
+- R5b — atom arms (in `{read,parse}_delta_atom_input`): `:add` (molecule atom-entry parser + `:id`),
+  `:remove` (`AtomRefDsl`, incl. structural), `:modify` (`AtomRefDsl` + `PartialAtomDsl::from_edn`).
+- R5c — bond arms (in `{read,parse}_delta_bond_input`): `:add` (bond-entry parser + `[AtomRefDsl; 2]`
+  + `:id`), `:remove` (`BondRefDsl`), `:modify` (`BondRefDsl` + `PartialBondDsl::from_edn`).
+- R5d — constraint arms (in `{read,parse}_delta_constraint_input`): `:add` / `:remove` via
+  `ConstraintDsl::from_edn`.
 - R5e — tests: each `DeltaInput` shape parses (streaming + tree).
 - *Checkpoint (tested):* every `DeltaInput` shape parses.
 

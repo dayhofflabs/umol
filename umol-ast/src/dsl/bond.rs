@@ -12,9 +12,9 @@ use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
 
-use super::atom::single_key_map;
 use super::config::{BondDefaults, NumericDefault, StereoDefault};
 use super::constraint::RingMembershipDsl;
+use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
 use super::predicates::{
     apply_spin_pair, charge, fmt_charge, fmt_ring_membership, fmt_spin_pair, lower_spin,
