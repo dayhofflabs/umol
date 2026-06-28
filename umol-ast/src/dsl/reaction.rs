@@ -11,17 +11,17 @@ use indexmap::IndexMap;
 use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn};
 
 use super::atom::{lower_atom, raise_atom, AtomDsl, PartialAtomDsl};
-use super::bond::{lower_bond, raise_bond};
+use super::bond::{lower_bond, raise_bond, PartialBondDsl};
 use super::config::{DeltaDefaults, ReactionDefaults};
 use super::constraint::ConstraintDsl;
 use super::edn_utils::{
     consume_single_key_map_close, parse_single_key_map, read_single_key_map_header,
 };
 use super::molecule::{
-    parse_atom_entry, read_atom_entry, AtomEntryInput, BondEntryInput, MoleculeDsl, MoleculeInput,
-    MoleculeMetadata,
+    parse_atom_entry, parse_bond_entry, read_atom_entry, read_bond_entry, AtomEntryInput,
+    BondEntryInput, MoleculeDsl, MoleculeInput, MoleculeMetadata,
 };
-use super::refs::{read_atom_ref, AtomRef, BondRef};
+use super::refs::{read_atom_ref, read_bond_ref, AtomRef, BondRef};
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::delta::{AtomDelta, BondDelta, Delta};
@@ -261,12 +261,26 @@ fn read_delta_atom_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInpu
 
 fn read_delta_bond_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInput, EdnError> {
     let op = read_single_key_map_header(de)?;
-    match op.as_str() {
-        "add" => todo!("R5c"),
-        "remove" => todo!("R5c"),
-        "modify" => todo!("R5c"),
-        o => Err(DeError::Custom(format!("unknown bond delta op :{o}")).into()),
-    }
+    let input = match op.as_str() {
+        "add" => DeltaInput::BondAdd(read_bond_entry(de)?),
+        "remove" => DeltaInput::BondRemove(read_bond_ref(de)?),
+        "modify" => {
+            de.consume_byte(b'[')?;
+            let r = read_bond_ref(de)?;
+            let s = de.read_string()?;
+            let dsl: PartialBondDsl = s
+                .as_ref()
+                .parse()
+                .map_err(|e| DeError::subgrammar("partial-bond", e))?;
+            if !de.try_consume_byte(b']')? {
+                return Err(DeError::Custom("bond :modify expects [ref dsl]".into()).into());
+            }
+            DeltaInput::BondModify(r, dsl.0)
+        }
+        o => return Err(DeError::Custom(format!("unknown bond delta op :{o}")).into()),
+    };
+    consume_single_key_map_close(de, "bond delta")?;
+    Ok(input)
 }
 
 fn read_delta_constraint_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInput, EdnError> {
@@ -317,11 +331,29 @@ fn parse_delta_atom_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
 }
 
 fn parse_delta_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
-    let (op, _payload) = parse_single_key_map(edn, "bond delta")?;
+    let (op, payload) = parse_single_key_map(edn, "bond delta")?;
     match op {
-        "add" => todo!("R5c"),
-        "remove" => todo!("R5c"),
-        "modify" => todo!("R5c"),
+        "add" => Ok(DeltaInput::BondAdd(parse_bond_entry(payload)?)),
+        "remove" => Ok(DeltaInput::BondRemove(BondRef::from_edn(payload)?)),
+        "modify" => {
+            let Edn::Vector(v) = payload else {
+                return Err(DeError::TypeMismatch {
+                    expected: "bond :modify [ref dsl]",
+                    got: payload.kind(),
+                    path: vec!["bond delta".into()],
+                });
+            };
+            if v.len() != 2 {
+                return Err(DeError::Custom(format!(
+                    "bond :modify expects [ref dsl], got {} elements",
+                    v.len()
+                )));
+            }
+            Ok(DeltaInput::BondModify(
+                BondRef::from_edn(&v[0])?,
+                PartialBondDsl::from_edn(&v[1])?.0,
+            ))
+        }
         o => Err(DeError::Custom(format!("unknown bond delta op :{o}"))),
     }
 }
@@ -348,6 +380,7 @@ mod tests {
     use crate::ast::delta::{ConstraintDelta, Deltas};
     use crate::ast::edit::AtomFieldChange;
     use crate::ast::value::ValueAst;
+    use crate::dsl::bond::BondDsl;
     use crate::dsl::molecule::AtomSpecInput;
     use crate::mol;
 
@@ -463,6 +496,70 @@ mod tests {
         })
     )]
     fn test_read_delta_input_atom(#[case] input: &str, #[case] expected: DeltaInput) {
+        assert_eq!(
+            read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::add_vec(
+        r##"{:bond {:add [0 1 "1"]}}"##,
+        DeltaInput::BondAdd(BondEntryInput {
+            id: None,
+            a: AtomRef::Index(0),
+            b: AtomRef::Index(1),
+            bond: BondDsl(BondAst::from_order(1)),
+        })
+    )]
+    #[case::add_map_id(
+        r##"{:bond {:add {:id :b1 :atoms [:c :nu] :type "2"}}}"##,
+        DeltaInput::BondAdd(BondEntryInput {
+            id: Some("b1".into()),
+            a: AtomRef::Id("c".into()),
+            b: AtomRef::Id("nu".into()),
+            bond: BondDsl(BondAst::from_order(2)),
+        })
+    )]
+    #[case::remove_id("{:bond {:remove :b1}}", DeltaInput::BondRemove(BondRef::Id("b1".into())))]
+    #[case::remove_index("{:bond {:remove 0}}", DeltaInput::BondRemove(BondRef::Index(0)))]
+    #[case::modify(
+        r##"{:bond {:modify [:b1 "2"]}}"##,
+        DeltaInput::BondModify(BondRef::Id("b1".into()), BondAst::from_order(2))
+    )]
+    fn test_parse_delta_input_bond(#[case] input: &str, #[case] expected: DeltaInput) {
+        assert_eq!(
+            parse_delta_input(&read_string(input).unwrap()).unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::add_vec(
+        r##"{:bond {:add [0 1 "1"]}}"##,
+        DeltaInput::BondAdd(BondEntryInput {
+            id: None,
+            a: AtomRef::Index(0),
+            b: AtomRef::Index(1),
+            bond: BondDsl(BondAst::from_order(1)),
+        })
+    )]
+    #[case::add_map_id(
+        r##"{:bond {:add {:id :b1 :atoms [:c :nu] :type "2"}}}"##,
+        DeltaInput::BondAdd(BondEntryInput {
+            id: Some("b1".into()),
+            a: AtomRef::Id("c".into()),
+            b: AtomRef::Id("nu".into()),
+            bond: BondDsl(BondAst::from_order(2)),
+        })
+    )]
+    #[case::remove_id("{:bond {:remove :b1}}", DeltaInput::BondRemove(BondRef::Id("b1".into())))]
+    #[case::remove_index("{:bond {:remove 0}}", DeltaInput::BondRemove(BondRef::Index(0)))]
+    #[case::modify(
+        r##"{:bond {:modify [:b1 "2"]}}"##,
+        DeltaInput::BondModify(BondRef::Id("b1".into()), BondAst::from_order(2))
+    )]
+    fn test_read_delta_input_bond(#[case] input: &str, #[case] expected: DeltaInput) {
         assert_eq!(
             read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
             expected

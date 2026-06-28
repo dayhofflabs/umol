@@ -456,7 +456,9 @@ fn two_atom_refs(atoms: Vec<AtomRef>, entry: &'static str) -> Result<[AtomRef; 2
     })
 }
 
-fn read_bond_entry(de: &mut EdnStreamDeserializer<'_>) -> Result<BondEntryInput, EdnError> {
+pub(super) fn read_bond_entry(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<BondEntryInput, EdnError> {
     match de.peek_byte()?.ok_or_else(eof_err)? {
         b'[' => {
             de.consume_byte(b'[')?;
@@ -1567,7 +1569,7 @@ fn parse_atom_spec(edn: &Edn<'_>) -> Result<AtomSpecInput, DeError> {
     }
 }
 
-fn parse_bond_entry(edn: &Edn<'_>) -> Result<BondEntryInput, DeError> {
+pub(super) fn parse_bond_entry(edn: &Edn<'_>) -> Result<BondEntryInput, DeError> {
     match edn {
         Edn::Vector(v) if v.len() == 3 => Ok(BondEntryInput {
             id: None,
