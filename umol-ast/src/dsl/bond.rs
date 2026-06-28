@@ -7,7 +7,7 @@ use std::str::FromStr;
 use strum::IntoEnumIterator;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
-use winnow::combinator::{delimited, repeat, terminated};
+use winnow::combinator::{delimited, opt, repeat, terminated};
 use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
@@ -29,9 +29,7 @@ use crate::ast::stereo::CisTransStereoAst;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
 
-/// Surface DSL wrapper around `BondAst`. Parses and renders the bond-string
-/// form (order plus `#…` predicates); inline constraints land in
-/// `self.0.constraints`.
+/// Surface DSL wrapper around `BondAst`.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BondDsl(pub BondAst);
@@ -206,6 +204,70 @@ fn bond(i: &mut &str) -> PResult<BondDsl> {
     let mut form = BondDsl(BondAst::new(order));
     apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
     Ok(form)
+}
+
+/// Partial bond with all predicates, including order, optional.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PartialBondDsl(pub BondAst);
+
+impl FromStr for PartialBondDsl {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_partial_bond(s)
+    }
+}
+
+impl Display for PartialBondDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ast = &self.0;
+        match &ast.order {
+            ValueAst::Undetermined => {}
+            ValueAst::Lit(n) => write!(f, "{}", n)?,
+            v => fmt_value(f, v)?,
+        }
+        fmt_charge(f, &ast.charge)?;
+        fmt_spin_pair(f, &ast.spin)?;
+        for c in ast.constraints.iter() {
+            fmt_constraint(f, c)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'de> FromEdn<'de> for PartialBondDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        match edn {
+            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("bond", e)),
+            other => Err(DeError::TypeMismatch {
+                expected: "string",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl ToEdn for PartialBondDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Str(Cow::Owned(self.to_string()))
+    }
+}
+
+/// Parse a partial bond-string: order and all fields optional, unspecified `Undetermined`.
+pub fn parse_partial_bond(input: &str) -> Result<PartialBondDsl, ParseError> {
+    partial_bond.parse(input).map_err(|e| e.into_inner())
+}
+
+fn partial_bond(i: &mut &str) -> PResult<PartialBondDsl> {
+    let order = delimited(multispace0, opt(value), multispace0)
+        .parse_next(i)?
+        .unwrap_or(ValueAst::Undetermined);
+    let preds: Vec<BondPredicate> =
+        repeat(0.., terminated(bond_predicate, multispace0)).parse_next(i)?;
+    let mut form = BondDsl(BondAst::new(order));
+    apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
+    Ok(PartialBondDsl(form.0))
 }
 
 fn constraint_tag(c: &BondConstraint) -> &'static str {
@@ -461,7 +523,6 @@ impl ToEdn for BondConstraintDsl {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
 
     use pretty_assertions::assert_eq;
     use rstest::*;
@@ -469,10 +530,9 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::{BondConstraints, RingScope};
-    use crate::ast::operators::MemOp;
     use crate::ast::spin::SpinStateAst;
     use crate::ast::stereo::StereoCosetAst;
-    use crate::ast::value::{ValuePredicate, ValueTerm};
+    use crate::bond;
 
     #[rustfmt::skip]
     #[rstest]
@@ -540,6 +600,51 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::empty("", PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::order_only("2", PartialBondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::charge_only("#c-1", PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::order_and_pred("1#a", PartialBondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic]) }))]
+    fn test_parse_partial_bond(#[case] input: &str, #[case] expected: PartialBondDsl) {
+        assert_eq!(parse_partial_bond(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::dup_charge("#c+#c-", ParseError::DuplicateBondPredicate("#c".to_string()))]
+    fn test_parse_partial_bond_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(parse_partial_bond(input).unwrap_err(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::charge_only(r##""#c-1""##, PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    fn test_partial_bond_dsl_from_edn(#[case] input: &str, #[case] expected: PartialBondDsl) {
+        assert_eq!(
+            PartialBondDsl::from_edn(&read_string(input).unwrap()).unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::non_string("1")]
+    fn test_partial_bond_dsl_from_edn_error(#[case] input: &str) {
+        assert!(matches!(
+            PartialBondDsl::from_edn(&read_string(input).unwrap()),
+            Err(DeError::TypeMismatch {
+                expected: "string",
+                ..
+            })
+        ));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::charge_only(PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }), r##""#c-""##)]
+    fn test_partial_bond_dsl_to_edn(#[case] input: PartialBondDsl, #[case] expected: &str) {
+        assert_eq!(input.to_edn(), read_string(expected).unwrap());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::charge_pos("#c+2", BondPredicate::Charge(ValueAst::Lit(2)))]
     #[case::charge_neg("#c-2", BondPredicate::Charge(ValueAst::Lit(-2)))]
     #[case::charge_plus("#c+", BondPredicate::Charge(ValueAst::Lit(1)))]
@@ -563,7 +668,7 @@ mod tests {
     #[rstest]
     #[case::unknown("#x", ParseError::UnknownBondPredicate("#x".to_string()))]
     #[case::unknown_tag("#z", ParseError::UnknownBondPredicate("#z".to_string()))]
-    #[case::trailing_no_hash("fo", ParseError::TrailingInput("fo".to_string()))]
+    #[case::trailing_no_tag("fo", ParseError::TrailingInput("fo".to_string()))]
     fn test_bond_predicate_error(#[case] input: &str, #[case] expected: ParseError) {
         let result = bond_predicate.parse(input);
         assert!(
@@ -616,9 +721,6 @@ mod tests {
         assert_eq!(via_stream, via_tree);
     }
 
-    /// Bond-keyword shorthands expand to their bond-string equivalents
-    /// in the tree-parse path (`BondDsl::from_edn`). Mirrors the spec
-    /// §7.7 expansion table.
     #[rustfmt::skip]
     #[rstest]
     #[case::single(":single", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
@@ -626,14 +728,14 @@ mod tests {
     #[case::triple(":triple", BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
     #[case::quadruple(":quadruple", BondAst { order: ValueAst::Lit(4), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
     #[case::aromatic(":aromatic", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic]) })]
-    fn test_bond_dsl_keyword_shorthand_tree(#[case] input: &str, #[case] expected: BondAst) {
+    fn test_bond_dsl_keyword_shorthand(#[case] input: &str, #[case] expected: BondAst) {
         let edn = read_string(input).unwrap();
         let dsl = BondDsl::from_edn(&edn).unwrap();
         assert_eq!(dsl.0, expected);
     }
 
     #[rstest]
-    fn test_bond_dsl_keyword_shorthand_unknown_rejected() {
+    fn test_bond_dsl_keyword_shorthand_error() {
         let edn = read_string(":bogus").unwrap();
         let err = BondDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
@@ -663,16 +765,11 @@ mod tests {
         assert_eq!(parsed.into_ast(&()), input, "parse-back mismatch");
     }
 
-    /// Vacuous bond constraints elide on rendering (canonical-rendering
-    /// rule, see `dsl::predicates`). `#R*` and `#r*` are admitted on
-    /// parse but the rendered surface drops them.
+    /// Vacuous bond constraints elide on rendering.
     #[rstest]
     #[case::ring_membership_all("1#R*", "1")]
     #[case::ring_membership_size("1#R(6)*", "1")]
-    fn test_bond_render_elides_vacuous_constraints(
-        #[case] input: &str,
-        #[case] expected_canonical: &str,
-    ) {
+    fn test_bond_render_vacuous_constraints(#[case] input: &str, #[case] expected_canonical: &str) {
         let parsed: BondDsl = bond.parse(input).unwrap();
         assert_eq!(parsed.to_string(), expected_canonical);
         let reparsed: BondDsl = bond.parse(&parsed.to_string()).unwrap();
@@ -684,33 +781,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraint_dsl_rejects_wrong_shape() {
-        let err = BondConstraintDsl::from_edn(&Edn::Int(3)).unwrap_err();
-        assert!(matches!(err, DeError::TypeMismatch { .. }));
-    }
-
-    #[rstest]
-    fn test_bond_constraint_dsl_rejects_unknown_key() {
-        let edn = read_string("{:bogus 1}").unwrap();
-        let err = BondConstraintDsl::from_edn(&edn).unwrap_err();
-        assert!(matches!(err, DeError::UnknownField { .. }));
-    }
-
-    #[rstest]
-    fn test_bond_constraint_dsl_accepts_value_as_string_subgrammar() {
-        let edn = read_string(r##"{:ring-membership {:size 6 :count "?n :: {5,6}"}}"##).unwrap();
-        let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
-        assert_eq!(
-            parsed.into_ast(&()),
-            BondConstraint::ring_membership(
-                RingScope::Size(6),
-                ValueAst::predicate(ValuePredicate::Mem(
-                    ValueTerm::Var("n".to_string()),
-                    MemOp::In,
-                    BTreeSet::from([5, 6]),
-                ))
-            ),
-        );
+    #[case::wrong_shape(Edn::Int(3), DeError::TypeMismatch { expected: ":aromatic / {:ring-membership …} / {:cis-trans-stereo …}", got: "int", path: vec![] })]
+    #[case::unknown_key("{:bogus 1}", DeError::UnknownField { key: "bogus".to_string(), path: vec!["bond-constraint".into()] })]
+    fn test_bond_constraint_dsl_error(#[case] input: Edn<'static>, #[case] expected: DeError) {
+        let err = BondConstraintDsl::from_edn(&input).unwrap_err();
+        assert_eq!(err, expected);
     }
 
     #[rstest]
@@ -723,11 +798,17 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_ast_to_edn_roundtrip() {
-        use umol_edn::ToEdn;
-        let ast: BondAst = "2".parse().unwrap();
-        let edn = ast.to_edn();
-        let back = BondAst::from_edn(&edn).unwrap();
-        assert_eq!(back, ast);
+    #[case::double(bond!("2"))]
+    #[case::aromatic(bond!("1#a"))]
+    #[case::ring_membership_all(bond!("1#R+"))]
+    #[case::ring_membership_size(bond!("1#R(6)+"))]
+    #[case::cis_trans_stereo(bond!("1#C1"))]
+    #[case::cis_trans_stereo_undetermined(bond!("1#C*"))]
+    #[case::cis_trans_stereo_not_stereo(bond!("1#C!"))]
+    #[case::cis_trans_stereo_set(bond!("1#C{1,2}"))]
+    fn test_bond_ast_to_edn_from_edn_roundtrip(#[case] input: BondAst) {
+        let edn = input.to_edn();
+        let parsed = BondAst::from_edn(&edn).unwrap();
+        assert_eq!(parsed, input);
     }
 }

@@ -25,7 +25,9 @@ pub use atom::{
     parse_atom, parse_partial_atom, AromaticValenceDsl, AtomConstraintDsl, AtomDsl, AtomPredicate,
     MulticenterValenceDsl, PartialAtomDsl,
 };
-pub use bond::{parse_bond, BondConstraintDsl, BondDsl, BondPredicate};
+pub use bond::{
+    parse_bond, parse_partial_bond, BondConstraintDsl, BondDsl, BondPredicate, PartialBondDsl,
+};
 pub use config::{
     AromaticSystemDefaults, AromaticSystemOverrides, AromaticValenceDefault, AtomDefaults,
     AtomOverrides, BondDefaults, BondOverrides, DativeBondDefaults, DativeBondOverrides,
@@ -33,8 +35,7 @@ pub use config::{
     MulticenterBondOverrides, MulticenterValenceDefault, MultiplicityDefault,
     NoncovalentBondDefaults, NoncovalentBondOverrides, NumericDefault, ReactionDefaults,
     ReactionOverrides, StereoAtomDefaults, StereoAtomOverrides, StereoBondDefaults,
-    StereoBondOverrides, StereoDefault,
-    UnpairedElectronsDefault,
+    StereoBondOverrides, StereoDefault, UnpairedElectronsDefault,
 };
 pub use constraint::{
     AromaticSystemRef, AtomRef, BondRef, ConstraintDsl, ConstraintsDsl, DativeBondRef,
@@ -42,7 +43,7 @@ pub use constraint::{
 };
 pub use dative::{parse_dative_bond, DativeBondConstraintDsl, DativeBondDsl, DativeBondPredicate};
 pub use error::ParseError;
-pub use molecule::{MoleculeMetadata, MoleculeDsl};
+pub use molecule::{MoleculeDsl, MoleculeMetadata};
 pub use multicenter::{
     parse_multicenter_bond, MulticenterBondConstraintDsl, MulticenterBondDsl,
     MulticenterBondPredicate,

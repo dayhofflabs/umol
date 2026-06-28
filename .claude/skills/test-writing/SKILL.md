@@ -21,9 +21,9 @@ description: Apply on ANY task that adds, extends, revises, writes, updates, ren
 
 - `test_<function>()` for free functions.
 - `test_<struct>_<method>()` for inherent methods.
-- `test_<struct>_<method>_error()` for the failure path of the same method.
-- **Do not embed test behavior in the name.** No `test_X_returns_zero_when_empty`, no `test_X_handles_negative`. Behavior belongs in `#[case]` labels.
-- Acceptable qualifiers: `_error` (failure path), `_identity` (when split out — see Identity comparisons), `_partial` (when distinguishing related tests on the same method).
+- A name may carry an optional trailing **scenario** qualifier: `test_<struct>_<method>_<scenario>` (e.g. `_error`, `_identity`, `_roundtrip`, `_partial`).
+- **Scenario, not behavior.** A *scenario* is a **noun** — *which* grouping of inputs/conditions is under test (`error`, `identity`, `roundtrip`, `partial`). A *behavior* is a **verb** — *what happens* (`returns_zero`, `handles_negative`, `elides_vacuous`, `drops_x`). A name may name a scenario; it must **never** encode a behavior — behavior belongs in `#[case]::label`. `_error`/`_identity` are common scenarios, **not** a closed whitelist, and `_identity` is not special.
+- The scenario suffix is **optional** — use it only when it earns its keep: (a) splitting that scenario off allows conciser assertions (e.g. `_identity` needs no separate expected value), or (b) the method has enough functionality that grouping tests by scenario keeps each focused. Otherwise omit it; the bare `test_<struct>_<method>` plus `#[case]` labels suffices.
 
 ## Assertions
 

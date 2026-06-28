@@ -1380,29 +1380,29 @@ mod tests {
     }
 
     #[rstest]
-    fn test_parse_partial_atom_error() {
+    #[case::dup_hydrogens("#h1#h2", ParseError::DuplicateAtomPredicate("#h".to_string()))]
+    fn test_parse_partial_atom_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(parse_partial_atom(input).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case::charge_only(r##""#c-1""##, PartialAtomDsl({
+        let mut a = AtomAst::new(ElementAst::Undetermined);
+        a.charge = ValueAst::Lit(-1);
+        a
+    }))]
+    fn test_partial_atom_dsl_from_edn(#[case] input: &str, #[case] expected: PartialAtomDsl) {
         assert_eq!(
-            parse_partial_atom("#h1#h2"),
-            Err(ParseError::DuplicateAtomPredicate("#h".to_string()))
+            PartialAtomDsl::from_edn(&read_string(input).unwrap()).unwrap(),
+            expected
         );
     }
 
     #[rstest]
-    fn test_partial_atom_dsl_from_edn() {
-        let edn = read_string(r##""#c-1""##).unwrap();
-        let mut expected = AtomAst::new(ElementAst::Undetermined);
-        expected.charge = ValueAst::Lit(-1);
-        assert_eq!(
-            PartialAtomDsl::from_edn(&edn).unwrap(),
-            PartialAtomDsl(expected)
-        );
-    }
-
-    #[rstest]
-    fn test_partial_atom_dsl_from_edn_error() {
-        let edn = read_string("1").unwrap();
+    #[case::non_string("1")]
+    fn test_partial_atom_dsl_from_edn_error(#[case] input: &str) {
         assert!(matches!(
-            PartialAtomDsl::from_edn(&edn),
+            PartialAtomDsl::from_edn(&read_string(input).unwrap()),
             Err(DeError::TypeMismatch {
                 expected: "string",
                 ..
@@ -1411,9 +1411,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_partial_atom_dsl_to_edn() {
-        let dsl = parse_partial_atom("O#h1").unwrap();
-        assert_eq!(PartialAtomDsl::from_edn(&dsl.to_edn()).unwrap(), dsl);
+    #[case::charge_only(PartialAtomDsl({
+        let mut a = AtomAst::new(ElementAst::Undetermined);
+        a.charge = ValueAst::Lit(-1);
+        a
+    }), r##""#c-""##)]
+    fn test_partial_atom_dsl_to_edn(#[case] input: PartialAtomDsl, #[case] expected: &str) {
+        assert_eq!(input.to_edn(), read_string(expected).unwrap());
     }
 
     #[rstest]

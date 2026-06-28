@@ -237,13 +237,10 @@ mod tests {
     use crate::mol;
 
     #[rstest]
-    fn test_reaction_dsl_dsl_to_ast_to_dsl_roundtrip() {
-        let lhs = mol!(r##"{:atoms ["C" "Br"] :bonds [[0 1 "1"]]}"##);
-        let deltas = Deltas::from_iter([
-            Delta::Atom(AtomDelta::Add {
-                id: AtomId(2),
-                ast: AtomAst::from_element(Element::O),
-            }),
+    #[case::sn2(ReactionAst::new(
+        mol!(r##"{:atoms ["C" "Br"] :bonds [[0 1 "1"]]}"##),
+        Deltas::from_iter([
+            Delta::Atom(AtomDelta::Add { id: AtomId(2), ast: AtomAst::from_element(Element::O) }),
             Delta::Bond(BondDelta::Add {
                 id: BondId(1),
                 atoms: [AtomId(0), AtomId(2)],
@@ -251,18 +248,15 @@ mod tests {
             }),
             Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(1),
-                change: AtomFieldChange::Charge {
-                    old: ValueAst::Lit(0),
-                    new: ValueAst::Lit(-1),
-                },
+                change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Lit(-1) },
             }),
             Delta::Constraint(ConstraintDelta::Add(Constraint::And(vec![]))),
-        ]);
-        let dsl =
-            ReactionDsl::from_parts(ReactionAst::new(lhs, deltas), ReactionMetadata::default());
+        ]),
+    ))]
+    fn test_reaction_dsl_from_ast_roundtrip(#[case] reaction: ReactionAst) {
         let cfg = ReactionDefaults::ground();
-        let raised = dsl.clone().into_ast(&cfg);
-        let lowered = ReactionDsl::from_ast(&raised, &cfg);
+        let dsl = ReactionDsl::from_parts(reaction, ReactionMetadata::default());
+        let lowered = ReactionDsl::from_ast(&dsl.clone().into_ast(&cfg), &cfg);
         assert_eq!(lowered.ast(), dsl.ast());
     }
 }

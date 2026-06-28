@@ -488,26 +488,25 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   modify + constraint.
 - *Checkpoint (tested):* programmatic round-trip, no EDN.
 
-**R4 — Partial entity parsers** [—] (`dsl/atom.rs`, `dsl/bond.rs`; reuse existing field parsers):
-- R4a — `partial_atom` winnow parser + `parse_partial_atom(&str) -> Result<AtomAst, ParseError>` (sparse,
-  every unspecified field `Undetermined`).
-- R4b — `read_edn_partial_atom` (Edn → AtomAst).
-- R4c — `fmt_partial_atom` (AtomAst → str, non-`Undetermined` fields only) + `render_partial_atom`
-  (AtomAst → Edn).
-- R4d — `partial_bond` + `parse_partial_bond` (order optional).
-- R4e — `read_edn_partial_bond`.
-- R4f — `fmt_partial_bond` + `render_partial_bond`.
-- R4g — tests: partial atom/bond parse + render round-trips (str + Edn), all-`Undetermined` and sparse
-  cases.
+**R4 — Partial entity boundary types** [—] (`dsl/atom.rs`, `dsl/bond.rs`; reuse existing field parsers).
+Each is a `*Dsl` boundary type owning its serde via traits — no free `read_edn_`/`render_`/`fmt_` partial
+fns:
+- R4a — `PartialAtomDsl(pub AtomAst)`: `partial_atom` combinator (element optional ⇒ `Undetermined`,
+  unspecified fields `Undetermined`) + `parse_partial_atom -> PartialAtomDsl`; `FromStr` (→
+  `parse_partial_atom`), `Display` (complete render minus the element when `Undetermined`), `FromEdn`
+  (`Edn::Str` → `s.parse`, recoded to `DeError`), `ToEdn` (`Edn::Str(to_string())`).
+- R4b — `PartialBondDsl(pub BondAst)`: same shape, order optional.
+- R4c — tests: parse + `FromEdn`/`ToEdn` round-trips (str + Edn), all-`Undetermined` and sparse cases,
+  duplicate-predicate error.
 - *Checkpoint (tested):* partial round-trips.
 
 **R5 — Delta parsing** [R1, R4] (`dsl/reaction.rs`):
 - R5a — dispatch skeleton: `read_delta_input` (streaming) / `parse_delta_input` (tree) — entity-kw →
   op-kw routing.
 - R5b — atom arms: `:add` (molecule atom-entry parser + `:id`), `:remove` (`AtomRefDsl`, incl.
-  structural), `:modify` (`AtomRefDsl` + `read_edn_partial_atom`).
+  structural), `:modify` (`AtomRefDsl` + `PartialAtomDsl::from_edn`).
 - R5c — bond arms: `:add` (bond-entry parser + `[AtomRefDsl; 2]` + `:id`), `:remove` (`BondRefDsl`),
-  `:modify` (`BondRefDsl` + `read_edn_partial_bond`).
+  `:modify` (`BondRefDsl` + `PartialBondDsl::from_edn`).
 - R5d — constraint arms: `:add` / `:remove` via `ConstraintDsl::from_edn`.
 - R5e — tests: each `DeltaInput` shape parses (streaming + tree).
 - *Checkpoint (tested):* every `DeltaInput` shape parses.
@@ -546,9 +545,9 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
 
 **R9 — Render** [R1, R4] (`dsl/reaction.rs`):
 - R9a — `render_deltas` atom ops: add (entry renderer + `:id`), remove (ref), modify (coalesce
-  `ModifyField` + `ModifyConstraint` → `{:modify <ref> <partial>}` via `render_partial_atom`, drop
+  `ModifyField` + `ModifyConstraint` → `{:modify <ref> <partial>}` via `PartialAtomDsl::to_edn`, drop
   `old`, `#v*` for a removed constraint).
-- R9b — `render_deltas` bond ops (same, `render_partial_bond`).
+- R9b — `render_deltas` bond ops (same, `PartialBondDsl::to_edn`).
 - R9c — `render_deltas` constraint ops + canonical (post-`canonicalize`) order across all ops.
 - R9d — `render_reaction_edn`: `:lhs` via the molecule renderer + `:deltas`.
 - R9e — tests: `ReactionAst` → EDN per op.
