@@ -194,6 +194,9 @@ impl FromStr for PartialAtomDsl {
     }
 }
 
+/// Render a partial atom-string (omits the element when `Undetermined`).
+/// Undetermined constraints are rendered explicitly as `#<tag>*`, unlike
+/// AtomDsl which elides them.
 impl Display for PartialAtomDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let ast = &self.0;
@@ -206,7 +209,11 @@ impl Display for PartialAtomDsl {
         fmt_value_field(f, "#n", &ast.lone_pairs)?;
         fmt_spin_pair(f, &ast.spin)?;
         for c in ast.constraints.iter() {
-            fmt_constraint(f, c)?;
+            if c.is_undetermined() {
+                write!(f, "{}*", constraint_tag(c.kind()))?;
+            } else {
+                fmt_constraint(f, c)?;
+            }
         }
         Ok(())
     }

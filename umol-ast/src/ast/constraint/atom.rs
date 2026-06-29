@@ -134,6 +134,32 @@ impl AtomConstraint {
             Self::TetrahedralStereo(c) => c.is_undetermined(),
         }
     }
+
+    /// The same kind/sub-key with its value made `Undetermined` (the vacuous form).
+    /// Renders as `#v*` etc.; a reaction `:modify` uses it to mark a constraint for removal.
+    pub fn as_undetermined(&self) -> Self {
+        match self {
+            Self::Valence(_) => Self::Valence(ValueAst::Undetermined),
+            Self::TotalValence(_) => Self::TotalValence(ValueAst::Undetermined),
+            Self::DonatedPairs(_) => Self::DonatedPairs(ValueAst::Undetermined),
+            Self::AcceptedPairs(_) => Self::AcceptedPairs(ValueAst::Undetermined),
+            Self::Degree(_) => Self::Degree(ValueAst::Undetermined),
+            Self::TotalDegree(_) => Self::TotalDegree(ValueAst::Undetermined),
+            Self::RingDegree(_) => Self::RingDegree(ValueAst::Undetermined),
+            Self::RingValence(_) => Self::RingValence(ValueAst::Undetermined),
+            Self::TotalHydrogens(_) => Self::TotalHydrogens(ValueAst::Undetermined),
+            Self::RingMembership(m) => {
+                Self::RingMembership(RingMembershipAst::new(m.scope, ValueAst::Undetermined))
+            }
+            Self::AromaticValence(_) => Self::AromaticValence(AromaticValenceAst::Undetermined),
+            Self::MulticenterValence(_) => {
+                Self::MulticenterValence(MulticenterValenceAst::Undetermined)
+            }
+            Self::TetrahedralStereo(_) => {
+                Self::TetrahedralStereo(TetrahedralStereoAst::Undetermined)
+            }
+        }
+    }
 }
 
 impl Canonicalize for AtomConstraint {
@@ -1130,6 +1156,21 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(c.is_undetermined(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::valence(AtomConstraint::valence(4), AtomConstraint::Valence(ValueAst::Undetermined))]
+    #[case::degree(AtomConstraint::Degree(ValueAst::Lit(2)), AtomConstraint::Degree(ValueAst::Undetermined))]
+    #[case::ring_membership_keeps_scope(AtomConstraint::ring_membership(RingScope::Size(6), 1), AtomConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined))]
+    #[case::aromatic(AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1)), AtomConstraint::aromatic_valence(AromaticValenceAst::Undetermined))]
+    #[case::multicenter(AtomConstraint::multicenter_valence(MulticenterValenceAst::multicenter(1)), AtomConstraint::multicenter_valence(MulticenterValenceAst::Undetermined))]
+    #[case::tetrahedral(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo), AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Undetermined))]
+    fn test_atom_constraint_as_undetermined(
+        #[case] c: AtomConstraint,
+        #[case] expected: AtomConstraint,
+    ) {
+        assert_eq!(c.as_undetermined(), expected);
     }
 
     #[rustfmt::skip]

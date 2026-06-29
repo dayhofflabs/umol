@@ -579,7 +579,7 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   same-reaction-added atom), plus `test_{atom,bond}_ast_update`.
 - *Checkpoint (tested):* hand-built `ReactionInput` resolves (atoms, bonds, constraints).
 
-**R8 — `FromEdn` path** [R2, R6, R7]:
+**R8 — `FromEdn` path** [R2, R6, R7]: **Done**
 - R8a — **Done.** `FromEdn` for `ReactionDsl`: `from_edn` → `parse_reaction_input` (tree) →
   `into_ast` → `from_parts`; `from_edn_str` → `read_reaction_input` (streaming) + `expect_eof` →
   `into_ast` → `from_parts`. `ParseError` mapped via `DeError::Custom`. Mirrors `MoleculeDsl`. Wires
@@ -593,9 +593,17 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
 - *Checkpoint (tested):* EDN → AST end to end.
 
 **R9 — Render** [R1, R4] (`dsl/reaction.rs`):
-- R9a — `render_deltas` atom ops: add (entry renderer + `:id`), remove (ref), modify (coalesce
-  `ModifyField` + `ModifyConstraint` → `{:modify <ref> <partial>}` via `PartialAtomDsl::to_edn`, drop
-  `old`, `#v*` for a removed constraint).
+- R9a — **Done.** `render_deltas` atom ops (`dsl/reaction.rs`): add → `{:atom {:add <entry>}}`
+  (reaction-local `render_atom_entry`: created-id frame + lhs∪reaction alias), remove →
+  `{:atom {:remove <ref>}}` (reaction-local `render_atom_ref`: lhs frame only — the two id spaces stay
+  disjoint), modify → coalesce consecutive same-id `ModifyField`/`ModifyConstraint` into one partial
+  `AtomAst` (fields set to `new`; constraint set adds `new`; constraint removal adds
+  `old.as_undetermined()`), rendered `{:atom {:modify [<ref> <PartialAtomDsl>]}}`; `old` dropped.
+  Constraint-removal `#v*`: the partial atom is the one place an undetermined constraint is **not**
+  vacuous — `PartialAtomDsl`'s render now emits `#<tag>*` for an undetermined constraint (full
+  `AtomDsl`/molecule still drops vacuous, unchanged). New AST primitive
+  `AtomConstraint::as_undetermined()` (vacuous form, keeps `RingMembership` scope). Tests:
+  `test_render_deltas`, `test_atom_constraint_as_undetermined`.
 - R9b — `render_deltas` bond ops (same, `PartialBondDsl::to_edn`).
 - R9c — `render_deltas` constraint ops + canonical (post-`canonicalize`) order across all ops.
 - R9d — `render_reaction_edn`: `:lhs` via the molecule renderer + `:deltas`.
