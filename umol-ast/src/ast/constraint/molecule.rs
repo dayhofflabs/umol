@@ -648,6 +648,7 @@ mod tests {
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::spin::SpinStateAst;
     use crate::ast::value::{ValueAst, ValueTerm};
+    use crate::ast::BooleanAst;
 
     fn idx_remapping(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> IdRemapping {
         IdRemapping::new(
@@ -687,7 +688,7 @@ mod tests {
     #[case::atom_undetermined(Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Undetermined)), true)]
     #[case::bond_lit(Constraint::Bond(BondId(0), BondConstraint::ring_membership(RingScope::Size(6), 1)), false)]
     #[case::bond_undetermined(Constraint::Bond(BondId(0), BondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined)), true)]
-    #[case::bond_aromatic_flag(Constraint::Bond(BondId(0), BondConstraint::Aromatic), false)]
+    #[case::bond_aromatic_flag(Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))), false)]
     #[case::dative_undetermined(Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined)), true)]
     #[case::aromatic_system_undetermined(Constraint::AromaticSystem(AromaticSystemId(0),
         AromaticSystemConstraint::ElectronCount(ValueAst::Undetermined)), true)]
@@ -702,7 +703,7 @@ mod tests {
     #[case::and_empty(Constraint::And(vec![]), true)]
     #[case::and_nonempty(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraint::valence(4))]), false)]
     #[case::or_empty(Constraint::Or(vec![]), true)]
-    #[case::or_nonempty(Constraint::Or(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic)]), false)]
+    #[case::or_nonempty(Constraint::Or(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true)))]), false)]
     #[case::not(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)))), false)]
     fn test_constraint_is_vacuous(#[case] c: Constraint, #[case] expected: bool) {
         assert_eq!(c.is_vacuous(), expected);
@@ -717,11 +718,11 @@ mod tests {
     #[case::and_flattens_nested(
         Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-            Constraint::And(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic)]),
+            Constraint::And(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true)))]),
         ]),
         Ok(Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
         ])),
     )]
     #[case::and_drops_empty_or_child(
@@ -730,28 +731,28 @@ mod tests {
     )]
     #[case::and_sorts_and_dedups(
         Constraint::And(vec![
-            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
         ]),
         Ok(Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
         ])),
     )]
     #[case::or_flattens_nested(
         Constraint::Or(vec![
             Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraint::valence(4))]),
-            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
         ]),
         Ok(Constraint::Or(vec![
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
         ])),
     )]
     #[case::or_drops_empty_and_child(
-        Constraint::Or(vec![Constraint::And(vec![]), Constraint::Bond(BondId(0), BondConstraint::Aromatic)]),
-        Ok(Constraint::Or(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic)])),
+        Constraint::Or(vec![Constraint::And(vec![]), Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true)))]),
+        Ok(Constraint::Or(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true)))])),
     )]
     #[case::not_folds_child(
         Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4)))))),
@@ -781,12 +782,12 @@ mod tests {
         None,
     )]
     #[case::bond_shifts(
-        Constraint::Bond(BondId(3), BondConstraint::Aromatic),
+        Constraint::Bond(BondId(3), BondConstraint::Aromatic(BooleanAst::Lit(true))),
         idx_remapping(vec![], vec![1]),
-        Some(Constraint::Bond(BondId(2), BondConstraint::Aromatic)),
+        Some(Constraint::Bond(BondId(2), BondConstraint::Aromatic(BooleanAst::Lit(true)))),
     )]
     #[case::bond_dropped(
-        Constraint::Bond(BondId(1), BondConstraint::Aromatic),
+        Constraint::Bond(BondId(1), BondConstraint::Aromatic(BooleanAst::Lit(true))),
         idx_remapping(vec![], vec![1]),
         None,
     )]
@@ -923,7 +924,7 @@ mod tests {
         ], 2)]
     #[case::combinator(vec![Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
         ])], 1)]
     fn test_constraints_push(
         #[case] items: Vec<Constraint>,
@@ -980,13 +981,16 @@ mod tests {
     fn test_constraints_iter() {
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)));
-        cs.push(Constraint::Bond(BondId(0), BondConstraint::Aromatic));
+        cs.push(Constraint::Bond(
+            BondId(0),
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
+        ));
         let collected: Vec<_> = cs.iter().cloned().collect();
         assert_eq!(
             collected,
             vec![
                 Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-                Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+                Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
             ],
         );
     }
@@ -1150,21 +1154,21 @@ mod tests {
     #[rstest]
     #[case::flattens_top_level_and_then_sorts(
         Constraints::from(vec![
-            Constraint::And(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic)]),
+            Constraint::And(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true)))]),
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
         ]),
         Ok(Constraints::from(vec![
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
         ])),
     )]
     #[case::drops_empty_or_and_dedups(
         Constraints::from(vec![
             Constraint::Or(vec![]),
-            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
-            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
         ]),
-        Ok(Constraints::from(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic)])),
+        Ok(Constraints::from(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true)))])),
     )]
     #[case::inner_contradiction_propagates(
         Constraints::from(vec![Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::lit_set(Vec::<i64>::new())))]),
@@ -1487,8 +1491,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::single(
-        vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic)],
-        vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic)],
+        vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true)))],
+        vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true)))],
     )]
     #[case::preserves_order_and_duplicates(
         vec![
@@ -1513,24 +1517,28 @@ mod tests {
     fn test_constraints_into_iter() {
         let cs = Constraints::from_iter([
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
         ]);
         let collected: Vec<_> = cs.into_iter().collect();
         assert_eq!(
             collected,
             vec![
                 Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-                Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+                Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
             ],
         );
     }
 
     #[rstest]
     fn test_constraints_from_constraint() {
-        let cs: Constraints = Constraint::Bond(BondId(0), BondConstraint::Aromatic).into();
+        let cs: Constraints =
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))).into();
         assert_eq!(
             cs.as_slice(),
-            &[Constraint::Bond(BondId(0), BondConstraint::Aromatic)],
+            &[Constraint::Bond(
+                BondId(0),
+                BondConstraint::Aromatic(BooleanAst::Lit(true))
+            )],
         );
     }
 
@@ -1538,14 +1546,14 @@ mod tests {
     fn test_constraints_from_vec() {
         let cs: Constraints = vec![
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
         ]
         .into();
         assert_eq!(
             cs.as_slice(),
             &[
                 Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-                Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+                Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
             ],
         );
     }

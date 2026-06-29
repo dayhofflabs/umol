@@ -12,6 +12,7 @@ use umol_graph_core::{
 use super::super::aromatic::AromaticSystemAst;
 use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::super::bond::BondAst;
+use super::super::boolean::BooleanAst;
 use super::super::constraint::{
     AtomConstraint, AtomConstraints, BondConstraint, BondConstraints, Constraint, Constraints,
     DativeBondConstraint, DativeBondConstraints, MoleculeConstraint, RelationalConstraint,
@@ -1838,7 +1839,7 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
     ast.bond_mut(BondId(0))
         .ast
         .constraints
-        .add(BondConstraint::Aromatic);
+        .add(BondConstraint::Aromatic(BooleanAst::Lit(true)));
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
         .add(DativeBondConstraint::ring_membership(
@@ -1862,7 +1863,10 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
         AtomId(2),
         AtomConstraint::Degree(ValueAst::Lit(3)),
     ));
-    expected.push(Constraint::Bond(BondId(0), BondConstraint::Aromatic));
+    expected.push(Constraint::Bond(
+        BondId(0),
+        BondConstraint::Aromatic(BooleanAst::Lit(true)),
+    ));
     expected.push(Constraint::DativeBond(
         DativeBondId(0),
         DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)),
@@ -1903,8 +1907,10 @@ fn test_molecule_ast_inline_constraints_drains_top_level_leaves(
         AtomId(0),
         AtomConstraint::Valence(ValueAst::Lit(4)),
     ));
-    ast.constraints_mut()
-        .push(Constraint::Bond(BondId(0), BondConstraint::Aromatic));
+    ast.constraints_mut().push(Constraint::Bond(
+        BondId(0),
+        BondConstraint::Aromatic(BooleanAst::Lit(true)),
+    ));
     ast.constraints_mut().push(Constraint::DativeBond(
         DativeBondId(0),
         DativeBondConstraint::ring_membership(RingScope::Size(5), 1),
@@ -1919,7 +1925,7 @@ fn test_molecule_ast_inline_constraints_drains_top_level_leaves(
     );
     assert_eq!(
         ast[BondId(0)].constraints,
-        BondConstraints::from_iter([BondConstraint::Aromatic])
+        BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))])
     );
     assert_eq!(
         ast[DativeBondId(0)].constraints,
@@ -1959,7 +1965,7 @@ fn test_molecule_ast_inline_constraints_skips_combinator_nested(
     let leaf = Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Lit(4)));
     let nested = Constraint::And(vec![
         leaf.clone(),
-        Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+        Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
     ]);
     ast.constraints_mut().push(nested.clone());
 
@@ -2017,7 +2023,7 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
     ast.bond_mut(BondId(0))
         .ast
         .constraints
-        .add(BondConstraint::Aromatic);
+        .add(BondConstraint::Aromatic(BooleanAst::Lit(true)));
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
         .add(DativeBondConstraint::ring_membership(

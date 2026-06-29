@@ -6,6 +6,7 @@ use std::vec::IntoIter;
 
 use strum::{EnumDiscriminants, EnumIter};
 
+use super::super::boolean::BooleanAst;
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::Contradiction;
 use super::super::remap::IdRemapping;
@@ -18,7 +19,7 @@ use super::super::value::ValueAst;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(BondConstraintKind), derive(Hash, EnumIter))]
 pub enum BondConstraint {
-    Aromatic,
+    Aromatic(BooleanAst),
     RingMembership(RingMembershipAst),
     CisTransStereo(CisTransStereoAst),
 }
@@ -39,7 +40,7 @@ impl BondConstraint {
     /// Entry identity for order/dedup: `kind()` plus `RingMembership`'s `RingScope`.
     pub fn key(&self) -> BondConstraintKey {
         match self {
-            Self::Aromatic => BondConstraintKey::Aromatic,
+            Self::Aromatic(_) => BondConstraintKey::Aromatic,
             Self::RingMembership(m) => BondConstraintKey::RingMembership(m.scope),
             Self::CisTransStereo(_) => BondConstraintKey::CisTransStereo,
         }
@@ -50,22 +51,20 @@ impl BondConstraint {
         self.kind() != BondConstraintKind::RingMembership
     }
 
-    /// `Aromatic` is a flag with no value; the value-carrying variants are
-    /// undetermined iff their inner value is undetermined.
+    /// Each variant is undetermined iff its inner value is undetermined.
     pub fn is_undetermined(&self) -> bool {
         match self {
-            Self::Aromatic => false,
+            Self::Aromatic(b) => b.is_undetermined(),
             Self::RingMembership(m) => m.count.is_undetermined(),
             Self::CisTransStereo(c) => c.is_undetermined(),
         }
     }
 
     /// The same kind/sub-key with its value made `Undetermined` (the vacuous form). Renders as
-    /// `#R*` / `#C*`; a reaction `:modify` uses it to mark a constraint for removal. `Aromatic` is a
-    /// flag with no vacuous form — it is not removable this way and is returned unchanged.
+    /// `#a*` / `#R*` / `#C*`; a reaction `:modify` uses it to mark a constraint for removal.
     pub fn as_undetermined(&self) -> Self {
         match self {
-            Self::Aromatic => Self::Aromatic,
+            Self::Aromatic(_) => Self::Aromatic(BooleanAst::Undetermined),
             Self::RingMembership(m) => {
                 Self::RingMembership(RingMembershipAst::new(m.scope, ValueAst::Undetermined))
             }
@@ -97,7 +96,7 @@ impl Canonicalize for BondConstraint {
     /// Canonicalize the inner value; kind and sub-key are preserved.
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
-            Self::Aromatic => Self::Aromatic,
+            Self::Aromatic(b) => Self::Aromatic(b.canonicalize()?),
             Self::RingMembership(m) => {
                 Self::RingMembership(RingMembershipAst::new(m.scope, m.count.canonicalize()?))
             }
@@ -140,8 +139,12 @@ impl BondConstraints {
         self.0.iter_mut().find(|c| c.kind() == kind)
     }
 
-    pub fn aromatic(&self) -> bool {
-        self.contains(BondConstraintKind::Aromatic)
+    /// The bond's aromatic value, or `Undetermined` when no `Aromatic` constraint is present.
+    pub fn aromatic(&self) -> BooleanAst {
+        match self.get(BondConstraintKind::Aromatic) {
+            Some(BondConstraint::Aromatic(b)) => *b,
+            _ => BooleanAst::Undetermined,
+        }
     }
 
     fn ring_memberships(&self) -> impl Iterator<Item = (RingScope, &ValueAst)> {
@@ -309,7 +312,7 @@ impl Canonicalize for BondConstraints {
 impl Lattice for BondConstraints {
     fn is_undetermined(&self) -> bool {
         self.iter().all(|c| match c {
-            BondConstraint::Aromatic => false,
+            BondConstraint::Aromatic(b) => b.is_undetermined(),
             BondConstraint::RingMembership(m) => m.count.is_undetermined(),
             BondConstraint::CisTransStereo(c) => c.is_undetermined(),
         })
@@ -317,7 +320,7 @@ impl Lattice for BondConstraints {
 
     fn is_ground(&self) -> bool {
         self.iter().all(|c| match c {
-            BondConstraint::Aromatic => true,
+            BondConstraint::Aromatic(b) => b.is_ground(),
             BondConstraint::RingMembership(m) => m.count.is_ground(),
             BondConstraint::CisTransStereo(c) => c.is_ground(),
         })
@@ -329,8 +332,9 @@ impl Lattice for BondConstraints {
             a.unwrap_or(&ValueAst::Undetermined)
                 .meet(b.unwrap_or(&ValueAst::Undetermined))
         };
-        if self.aromatic() || other.aromatic() {
-            result.add(BondConstraint::Aromatic);
+        let aromatic = self.aromatic().meet(&other.aromatic())?;
+        if !aromatic.is_undetermined() {
+            result.add(BondConstraint::Aromatic(aromatic));
         }
         let cts = self
             .cis_trans_stereo()
@@ -361,8 +365,9 @@ impl Lattice for BondConstraints {
 
     fn join(&self, other: &Self) -> Self {
         let mut result = Self::new();
-        if self.aromatic() && other.aromatic() {
-            result.add(BondConstraint::Aromatic);
+        let aromatic = self.aromatic().join(&other.aromatic());
+        if !aromatic.is_undetermined() {
+            result.add(BondConstraint::Aromatic(aromatic));
         }
         if self.contains(BondConstraintKind::CisTransStereo)
             && other.contains(BondConstraintKind::CisTransStereo)
@@ -390,11 +395,11 @@ impl Lattice for BondConstraints {
     }
 
     /// Pattern-driven: every constraint the pattern carries must match the target,
-    /// looked up by reference. `Aromatic` is a flag the target must also carry; an
-    /// empty pattern matches any target.
+    /// looked up by reference. Each value is matched on its own lattice; an empty
+    /// pattern matches any target.
     fn matches(&self, target: &Self) -> bool {
         self.iter().all(|c| match c {
-            BondConstraint::Aromatic => target.aromatic(),
+            BondConstraint::Aromatic(b) => b.matches(&target.aromatic()),
             BondConstraint::RingMembership(rm) => rm.count.matches(
                 target
                     .ring_membership_value(rm.scope)
@@ -462,7 +467,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(BondConstraint::Aromatic, BondConstraintKind::Aromatic)]
+    #[case::aromatic(BondConstraint::Aromatic(BooleanAst::Lit(true)), BondConstraintKind::Aromatic)]
     #[case::ring_membership_all(BondConstraint::ring_membership(RingScope::All, 1), BondConstraintKind::RingMembership)]
     #[case::ring_membership_size(BondConstraint::ring_membership(RingScope::Size(6), 1), BondConstraintKind::RingMembership)]
     #[case::cis_trans_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), BondConstraintKind::CisTransStereo)]
@@ -472,7 +477,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(BondConstraint::Aromatic, BondConstraintKey::Aromatic)]
+    #[case::aromatic(BondConstraint::Aromatic(BooleanAst::Lit(true)), BondConstraintKey::Aromatic)]
     #[case::ring_membership_all(BondConstraint::ring_membership(RingScope::All, 1), BondConstraintKey::RingMembership(RingScope::All))]
     #[case::ring_membership_size(BondConstraint::ring_membership(RingScope::Size(6), 1), BondConstraintKey::RingMembership(RingScope::Size(6)))]
     #[case::cis_trans_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), BondConstraintKey::CisTransStereo)]
@@ -491,7 +496,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::aromatic(BondConstraint::Aromatic, true)]
+    #[case::aromatic(BondConstraint::Aromatic(BooleanAst::Lit(true)), true)]
     #[case::ring_membership(BondConstraint::ring_membership(RingScope::Size(6), 1), false)]
     #[case::cis_trans_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), true)]
     fn test_bond_constraint_is_unique(#[case] c: BondConstraint, #[case] expected: bool) {
@@ -500,7 +505,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(BondConstraint::Aromatic, false)]
+    #[case::aromatic(BondConstraint::Aromatic(BooleanAst::Lit(true)), false)]
     #[case::ring_membership_all_lit(BondConstraint::ring_membership(RingScope::All, 1), false)]
     #[case::ring_membership_all_undetermined(BondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined), true)]
     #[case::ring_membership_size_lit(BondConstraint::ring_membership(RingScope::Size(6), 1), false)]
@@ -513,7 +518,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic_unchanged(BondConstraint::Aromatic, BondConstraint::Aromatic)]
+    #[case::aromatic(BondConstraint::Aromatic(BooleanAst::Lit(true)), BondConstraint::Aromatic(BooleanAst::Undetermined))]
     #[case::ring_membership_keeps_scope(BondConstraint::ring_membership(RingScope::Size(6), 1), BondConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined))]
     #[case::cis_trans(BondConstraint::CisTransStereo(CisTransStereoAst::stereo(1_u32)), BondConstraint::CisTransStereo(CisTransStereoAst::Undetermined))]
     fn test_bond_constraint_as_undetermined(#[case] c: BondConstraint, #[case] expected: BondConstraint) {
@@ -522,7 +527,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(BondConstraint::Aromatic, Ok(BondConstraint::Aromatic))]
+    #[case::aromatic(BondConstraint::Aromatic(BooleanAst::Lit(true)), Ok(BondConstraint::Aromatic(BooleanAst::Lit(true))))]
     #[case::ring_count_litset_singleton(
         BondConstraint::RingMembership(RingMembershipAst::new(RingScope::All, ValueAst::lit_set([2]))),
         Ok(BondConstraint::ring_membership(RingScope::All, 2)))]
@@ -557,7 +562,7 @@ mod tests {
         #[case] expected: bool,
     ) {
         let cs = BondConstraints::from_iter([
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
         assert_eq!(cs.contains(kind), expected);
@@ -565,7 +570,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(BondConstraintKind::Aromatic, Some(BondConstraint::Aromatic))]
+    #[case::aromatic(BondConstraintKind::Aromatic, Some(BondConstraint::Aromatic(BooleanAst::Lit(true))))]
     #[case::ring_membership(BondConstraintKind::RingMembership, Some(BondConstraint::ring_membership(RingScope::Size(6), 1)))]
     #[case::cis_trans_absent(BondConstraintKind::CisTransStereo, None)]
     fn test_bond_constraints_get(
@@ -573,7 +578,7 @@ mod tests {
         #[case] expected: Option<BondConstraint>,
     ) {
         let cs = BondConstraints::from_iter([
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
         assert_eq!(cs.get(kind), expected.as_ref());
@@ -582,7 +587,7 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_get_mut() {
         let mut cs = BondConstraints::from_iter([
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
         let entry = cs.get_mut(BondConstraintKind::RingMembership).unwrap();
@@ -590,7 +595,7 @@ mod tests {
         assert_eq!(
             cs.as_slice(),
             &[
-                BondConstraint::Aromatic,
+                BondConstraint::Aromatic(BooleanAst::Lit(true)),
                 BondConstraint::ring_membership(RingScope::Size(5), 1),
             ],
         );
@@ -598,7 +603,7 @@ mod tests {
 
     #[rstest]
     fn test_bond_constraints_get_mut_absent() {
-        let mut cs = BondConstraints::from_iter([BondConstraint::Aromatic]);
+        let mut cs = BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]);
         assert!(cs.get_mut(BondConstraintKind::RingMembership).is_none());
     }
 
@@ -614,7 +619,7 @@ mod tests {
         #[case] expected: bool,
     ) {
         let cs = BondConstraints::from_iter([
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::All, 2),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
@@ -623,7 +628,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(BondConstraintKey::Aromatic, Some(BondConstraint::Aromatic))]
+    #[case::aromatic(BondConstraintKey::Aromatic, Some(BondConstraint::Aromatic(BooleanAst::Lit(true))))]
     #[case::ring_all(BondConstraintKey::RingMembership(RingScope::All), Some(BondConstraint::ring_membership(RingScope::All, 2)))]
     #[case::ring_size(BondConstraintKey::RingMembership(RingScope::Size(6)), Some(BondConstraint::ring_membership(RingScope::Size(6), 1)))]
     #[case::ring_size_absent(BondConstraintKey::RingMembership(RingScope::Size(5)), None)]
@@ -632,7 +637,7 @@ mod tests {
         #[case] expected: Option<BondConstraint>,
     ) {
         let cs = BondConstraints::from_iter([
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::All, 2),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
@@ -658,7 +663,7 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_remove_by_key() {
         let mut cs = BondConstraints::from_iter([
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::All, 2),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
@@ -670,7 +675,7 @@ mod tests {
         assert_eq!(
             cs.as_slice(),
             &[
-                BondConstraint::Aromatic,
+                BondConstraint::Aromatic(BooleanAst::Lit(true)),
                 BondConstraint::ring_membership(RingScope::All, 2),
             ],
         );
@@ -686,10 +691,10 @@ mod tests {
         Ok(BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, 2)])))]
     #[case::drop_vacuous(
         BondConstraints::from_iter([
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined),
         ]),
-        Ok(BondConstraints::from_iter([BondConstraint::Aromatic])))]
+        Ok(BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))])))]
     #[case::canonicalizes_values(
         BondConstraints::from_iter([
             BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::term(StereoTerm::Lit(1)))),
@@ -712,14 +717,14 @@ mod tests {
     fn test_bond_constraints_iter() {
         let cs = BondConstraints::from_iter([
             BondConstraint::ring_membership(RingScope::Size(6), 1),
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::All, 1),
         ]);
         let collected: Vec<_> = cs.iter().cloned().collect();
         assert_eq!(
             collected,
             vec![
-                BondConstraint::Aromatic,
+                BondConstraint::Aromatic(BooleanAst::Lit(true)),
                 BondConstraint::ring_membership(RingScope::All, 1),
                 BondConstraint::ring_membership(RingScope::Size(6), 1),
             ],
@@ -728,15 +733,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::fresh(vec![BondConstraint::Aromatic], vec![None], vec![BondConstraint::Aromatic])]
+    #[case::fresh(vec![BondConstraint::Aromatic(BooleanAst::Lit(true))], vec![None], vec![BondConstraint::Aromatic(BooleanAst::Lit(true))])]
     #[case::replace_value_kind(vec![BondConstraint::cis_trans_stereo(CisTransStereoAst::Undetermined), BondConstraint::cis_trans_stereo(CisTransStereoAst::NotStereo)],
         vec![None, Some(BondConstraint::cis_trans_stereo(CisTransStereoAst::Undetermined))], vec![BondConstraint::cis_trans_stereo(CisTransStereoAst::NotStereo)])]
-    #[case::replace_unit_variant(vec![BondConstraint::Aromatic, BondConstraint::Aromatic],
-        vec![None, Some(BondConstraint::Aromatic)], vec![BondConstraint::Aromatic])]
+    #[case::replace_unit_variant(vec![BondConstraint::Aromatic(BooleanAst::Lit(true)), BondConstraint::Aromatic(BooleanAst::Lit(true))],
+        vec![None, Some(BondConstraint::Aromatic(BooleanAst::Lit(true)))], vec![BondConstraint::Aromatic(BooleanAst::Lit(true))])]
     #[case::append_multi_valued_ring(vec![BondConstraint::ring_membership(RingScope::All, 1), BondConstraint::ring_membership(RingScope::All, 2)],
         vec![None, None], vec![BondConstraint::ring_membership(RingScope::All, 1), BondConstraint::ring_membership(RingScope::All, 2)])]
-    #[case::distinct_kinds(vec![BondConstraint::Aromatic, BondConstraint::ring_membership(RingScope::All, 1), BondConstraint::ring_membership(RingScope::Size(6), 1)],
-        vec![None, None, None], vec![BondConstraint::Aromatic, BondConstraint::ring_membership(RingScope::All, 1), BondConstraint::ring_membership(RingScope::Size(6), 1)])]
+    #[case::distinct_kinds(vec![BondConstraint::Aromatic(BooleanAst::Lit(true)), BondConstraint::ring_membership(RingScope::All, 1), BondConstraint::ring_membership(RingScope::Size(6), 1)],
+        vec![None, None, None], vec![BondConstraint::Aromatic(BooleanAst::Lit(true)), BondConstraint::ring_membership(RingScope::All, 1), BondConstraint::ring_membership(RingScope::Size(6), 1)])]
     fn test_bond_constraints_add(
         #[case] sequence: Vec<BondConstraint>,
         #[case] expected_returns: Vec<Option<BondConstraint>>,
@@ -750,15 +755,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::partial(|c: &BondConstraint| matches!(c, BondConstraint::Aromatic) || matches!(c, BondConstraint::RingMembership(m) if m.scope == RingScope::Size(6)), vec![
-            BondConstraint::Aromatic, BondConstraint::ring_membership(RingScope::Size(6), 1)])]
+    #[case::partial(|c: &BondConstraint| matches!(c, BondConstraint::Aromatic(BooleanAst::Lit(true))) || matches!(c, BondConstraint::RingMembership(m) if m.scope == RingScope::Size(6)), vec![
+            BondConstraint::Aromatic(BooleanAst::Lit(true)), BondConstraint::ring_membership(RingScope::Size(6), 1)])]
     #[case::all_dropped(|_: &BondConstraint| false, vec![])]
     fn test_bond_constraints_retain(
         #[case] predicate: impl FnMut(&BondConstraint) -> bool,
         #[case] expected: Vec<BondConstraint>,
     ) {
         let mut cs = BondConstraints::from_iter([
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::All, 1),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
@@ -768,7 +773,7 @@ mod tests {
 
     #[rstest]
     fn test_bond_constraints_clear() {
-        let mut cs = BondConstraints::from_iter([BondConstraint::Aromatic]);
+        let mut cs = BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]);
         cs.clear();
         assert_eq!(cs, BondConstraints::new());
     }
@@ -776,14 +781,14 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_take() {
         let mut cs = BondConstraints::from_iter([
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
         let drained: Vec<_> = cs.take().collect();
         assert_eq!(
             drained,
             vec![
-                BondConstraint::Aromatic,
+                BondConstraint::Aromatic(BooleanAst::Lit(true)),
                 BondConstraint::ring_membership(RingScope::Size(6), 1),
             ],
         );
@@ -792,16 +797,16 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic_present(BondConstraintKind::Aromatic, Some(BondConstraint::Aromatic), vec![BondConstraint::ring_membership(RingScope::Size(6), 1)])]
-    #[case::ring_membership_present(BondConstraintKind::RingMembership, Some(BondConstraint::ring_membership(RingScope::Size(6), 1)), vec![BondConstraint::Aromatic])]
-    #[case::cis_trans_absent(BondConstraintKind::CisTransStereo, None, vec![BondConstraint::Aromatic, BondConstraint::ring_membership(RingScope::Size(6), 1)])]
+    #[case::aromatic_present(BondConstraintKind::Aromatic, Some(BondConstraint::Aromatic(BooleanAst::Lit(true))), vec![BondConstraint::ring_membership(RingScope::Size(6), 1)])]
+    #[case::ring_membership_present(BondConstraintKind::RingMembership, Some(BondConstraint::ring_membership(RingScope::Size(6), 1)), vec![BondConstraint::Aromatic(BooleanAst::Lit(true))])]
+    #[case::cis_trans_absent(BondConstraintKind::CisTransStereo, None, vec![BondConstraint::Aromatic(BooleanAst::Lit(true)), BondConstraint::ring_membership(RingScope::Size(6), 1)])]
     fn test_bond_constraints_remove(
         #[case] kind: BondConstraintKind,
         #[case] expected_returned: Option<BondConstraint>,
         #[case] expected_state: Vec<BondConstraint>,
     ) {
         let mut cs = BondConstraints::from_iter([
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
         assert_eq!(cs.remove(kind), expected_returned);
@@ -811,7 +816,7 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_remap() {
         let cs = BondConstraints::from_iter([
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
         let remap = IdRemapping::new(
@@ -828,10 +833,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty_pattern_matches_anything(BondConstraints::new(), BondConstraints::from_iter([BondConstraint::Aromatic]), true)]
-    #[case::aromatic_required_present(BondConstraints::from_iter([BondConstraint::Aromatic]),
-        BondConstraints::from_iter([BondConstraint::Aromatic]), true)]
-    #[case::aromatic_required_absent(BondConstraints::from_iter([BondConstraint::Aromatic]), BondConstraints::new(), false)]
+    #[case::empty_pattern_matches_anything(BondConstraints::new(), BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]), true)]
+    #[case::aromatic_required_present(BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]),
+        BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]), true)]
+    #[case::aromatic_required_absent(BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]), BondConstraints::new(), false)]
     #[case::ring_membership_all_wildcard_matches_lit(BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined)]),
         BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, 1)]), true)]
     #[case::ring_membership_all_lit_mismatch(BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, 1)]),
@@ -854,8 +859,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::distinct(vec![BondConstraint::Aromatic, BondConstraint::ring_membership(RingScope::All, 1)],
-        vec![BondConstraint::Aromatic, BondConstraint::ring_membership(RingScope::All, 1)])]
+    #[case::distinct(vec![BondConstraint::Aromatic(BooleanAst::Lit(true)), BondConstraint::ring_membership(RingScope::All, 1)],
+        vec![BondConstraint::Aromatic(BooleanAst::Lit(true)), BondConstraint::ring_membership(RingScope::All, 1)])]
     #[case::unique_kind_last_wins(vec![BondConstraint::cis_trans_stereo(CisTransStereoAst::Undetermined), BondConstraint::cis_trans_stereo(CisTransStereoAst::NotStereo)],
         vec![BondConstraint::cis_trans_stereo(CisTransStereoAst::NotStereo)])]
     #[case::ring_appends(vec![BondConstraint::ring_membership(RingScope::All, 1), BondConstraint::ring_membership(RingScope::Size(6), 1)],
@@ -872,14 +877,14 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_into_iter() {
         let cs = BondConstraints::from_iter([
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
         let collected: Vec<_> = cs.into_iter().collect();
         assert_eq!(
             collected,
             vec![
-                BondConstraint::Aromatic,
+                BondConstraint::Aromatic(BooleanAst::Lit(true)),
                 BondConstraint::ring_membership(RingScope::Size(6), 1),
             ],
         );
@@ -887,21 +892,24 @@ mod tests {
 
     #[rstest]
     fn test_bond_constraints_from_bond_constraint() {
-        let cs: BondConstraints = BondConstraint::Aromatic.into();
-        assert_eq!(cs.as_slice(), &[BondConstraint::Aromatic]);
+        let cs: BondConstraints = BondConstraint::Aromatic(BooleanAst::Lit(true)).into();
+        assert_eq!(
+            cs.as_slice(),
+            &[BondConstraint::Aromatic(BooleanAst::Lit(true))]
+        );
     }
 
     #[rstest]
     fn test_bond_constraints_from_vec() {
         let cs: BondConstraints = vec![
-            BondConstraint::Aromatic,
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]
         .into();
         assert_eq!(
             cs.as_slice(),
             &[
-                BondConstraint::Aromatic,
+                BondConstraint::Aromatic(BooleanAst::Lit(true)),
                 BondConstraint::ring_membership(RingScope::Size(6), 1),
             ],
         );

@@ -834,6 +834,7 @@ mod tests {
     use super::super::constraint::MoleculeConstraint;
     use super::super::value::ValueAst;
     use super::*;
+    use crate::ast::BooleanAst;
 
     #[rstest]
     #[case::add_remove(
@@ -894,11 +895,11 @@ mod tests {
         BondDelta::ModifyConstraint {
             id: BondId(3),
             old: None,
-            new: Some(BondConstraint::Aromatic),
+            new: Some(BondConstraint::Aromatic(BooleanAst::Lit(true))),
         },
         BondDelta::ModifyConstraint {
             id: BondId(3),
-            old: Some(BondConstraint::Aromatic),
+            old: Some(BondConstraint::Aromatic(BooleanAst::Lit(true))),
             new: None,
         }
     )]

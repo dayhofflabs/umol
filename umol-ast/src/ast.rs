@@ -3,6 +3,7 @@
 pub(crate) mod aromatic;
 pub(crate) mod atom;
 pub(crate) mod bond;
+pub(crate) mod boolean;
 pub(crate) mod coloring;
 pub(crate) mod compose;
 pub(crate) mod constraint;
@@ -37,6 +38,7 @@ pub(crate) mod view;
 pub use aromatic::AromaticSystemAst;
 pub use atom::{AtomAst, ElementAst, IsotopeMassAst};
 pub use bond::BondAst;
+pub use boolean::BooleanAst;
 pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};
 pub use compose::CompositionScope;
 pub use constraint::{

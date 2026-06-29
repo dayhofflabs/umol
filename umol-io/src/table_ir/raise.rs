@@ -9,7 +9,7 @@ use std::collections::HashSet;
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, BondConstraint,
+    AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, BondConstraint, BooleanAst,
     CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, MoleculeAst,
     MulticenterBondAst, NoncovalentBondAst, SpinStateAst, StereoCosetAst, TetrahedralStereoAst,
     TryIntoAst, ValueAst,
@@ -208,7 +208,8 @@ impl TryIntoAst<BondAst> for &TableBond {
             None => ValueAst::Undetermined,
         };
         if matches!(self.order, TableBondOrder::Aromatic) {
-            bond.constraints.add(BondConstraint::Aromatic);
+            bond.constraints
+                .add(BondConstraint::Aromatic(BooleanAst::Lit(true)));
         }
         Ok(bond)
     }
@@ -525,7 +526,7 @@ mod tests {
         assert!(bond
             .constraints
             .iter()
-            .any(|c| matches!(c, BondConstraint::Aromatic)));
+            .any(|c| matches!(c, BondConstraint::Aromatic(BooleanAst::Lit(true)))));
         for i in 0..2 {
             assert!(ast
                 .atom(AtomId(i))

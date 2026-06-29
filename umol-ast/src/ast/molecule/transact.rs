@@ -1842,6 +1842,7 @@ mod tests {
     use super::super::super::value::ValueAst;
     use super::super::MoleculeAst;
     use super::*;
+    use crate::ast::BooleanAst;
 
     #[fixture]
     fn empty() -> MoleculeBuilder {
@@ -2127,7 +2128,7 @@ mod tests {
             .transact(vec![Edit::ModifyBondConstraint {
                 id: BondRef::Id(BondId(0)),
                 old: None,
-                new: Some(BondConstraint::Aromatic),
+                new: Some(BondConstraint::Aromatic(BooleanAst::Lit(true))),
             }])
             .unwrap();
         assert!(diatomic
@@ -2135,7 +2136,7 @@ mod tests {
             .ast
             .constraints
             .iter()
-            .any(|c| *c == BondConstraint::Aromatic));
+            .any(|c| *c == BondConstraint::Aromatic(BooleanAst::Lit(true))));
     }
 
     #[rstest]

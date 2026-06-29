@@ -7,7 +7,7 @@
 use thiserror::Error;
 use umol_ast::ast::{
     aromatic_increment, AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraints,
-    AtomId, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
+    AtomId, BooleanAst, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_chem::spin::{SpinMultiplicity, SpinState};
@@ -80,7 +80,9 @@ impl<'a> CountsValence<'a> {
         };
         let accepted_pairs = atom.accepted_pairs().as_lit_or(0);
         let is_aromatic = atom.is_in_aromatic_system()
-            || atom.neighbors().any(|n| n.bond().constraints().aromatic())
+            || atom
+                .neighbors()
+                .any(|n| matches!(n.bond().constraints().aromatic(), BooleanAst::Lit(true)))
             || atom
                 .constraints()
                 .aromatic_valence()
@@ -146,7 +148,9 @@ impl<'a> CountsValence<'a> {
         let valence = atom.valence().as_lit_or(0);
         let accepted_pairs = atom.accepted_pairs().as_lit_or(0);
         let is_aromatic = atom.is_in_aromatic_system()
-            || atom.neighbors().any(|n| n.bond().constraints().aromatic())
+            || atom
+                .neighbors()
+                .any(|n| matches!(n.bond().constraints().aromatic(), BooleanAst::Lit(true)))
             || atom
                 .constraints()
                 .aromatic_valence()

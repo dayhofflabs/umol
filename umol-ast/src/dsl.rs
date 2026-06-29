@@ -3,6 +3,7 @@
 pub(crate) mod aromatic;
 pub(crate) mod atom;
 pub(crate) mod bond;
+pub(crate) mod boolean;
 pub(crate) mod config;
 pub(crate) mod constraint;
 pub(crate) mod dative;
@@ -29,6 +30,7 @@ pub use atom::{
 pub use bond::{
     parse_bond, parse_partial_bond, BondConstraintDsl, BondDsl, BondPredicate, PartialBondDsl,
 };
+pub use boolean::{parse_boolean, BooleanDsl};
 pub use config::{
     AromaticSystemDefaults, AromaticSystemOverrides, AromaticValenceDefault, AtomDefaults,
     AtomOverrides, BondDefaults, BondOverrides, DativeBondDefaults, DativeBondOverrides,

@@ -7,6 +7,7 @@ use umol_chem::element::Element;
 use umol_graph_core::NodeId;
 
 use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
+use super::super::boolean::BooleanAst;
 use super::super::constraint::{AtomConstraints, RingScope};
 use super::super::electrons::ElectronCountsAst;
 use super::super::id::{
@@ -486,7 +487,10 @@ impl<'a> AtomView<'a> {
                         .as_lit_expect("aromatic valence should be Lit"),
                 ),
             ));
-        } else if self.neighbors().any(|n| n.bond().constraints().aromatic()) {
+        } else if self
+            .neighbors()
+            .any(|n| matches!(n.bond().constraints().aromatic(), BooleanAst::Lit(true)))
+        {
             constraints.add(AtomConstraint::aromatic_valence(
                 AromaticValenceAst::aromatic(ValueAst::Undetermined),
             ));

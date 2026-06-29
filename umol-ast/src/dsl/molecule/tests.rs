@@ -363,7 +363,7 @@ fn test_molecule_dsl_edn_roundtrip_with_ids_and_aliases() {
 #[case::constraints_atom_aromatic_valence_with_value(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:aromatic-valence {:aromatic 6}}]}]}"##)]
 #[case::constraints_atom_multicenter_valence_not(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:multicenter-valence :not-multicenter}]}]}"##)]
 #[case::constraints_atom_multicenter_valence_with_value(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:multicenter-valence {:multicenter 3}}]}]}"##)]
-#[case::constraints_bond_aromatic(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 :aromatic]}]}"##)]
+#[case::constraints_bond_aromatic(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:aromatic true}]}]}"##)]
 #[case::constraints_bond_ring_count(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:ring-membership {:count 1}}]}]}"##)]
 #[case::constraints_bond_ring_size(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:ring-membership {:size 6 :count 1}}]}]}"##)]
 #[case::constraints_dative_ring_count(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}] :constraints [{:dative-bond [0 {:ring-membership {:count 1}}]}]}"##)]
@@ -772,7 +772,7 @@ fn test_molecule_dsl_required_field_missing_streaming(#[case] source: &str) {
 #[case::atom_multicenter_valence_not(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:multicenter-valence :not-multicenter}]}]}"##)]
 #[case::atom_multicenter_valence_value(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:multicenter-valence {:multicenter 3}}]}]}"##)]
 // BondConstraint variants
-#[case::bond_aromatic(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 :aromatic]}]}"##)]
+#[case::bond_aromatic(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:aromatic true}]}]}"##)]
 #[case::bond_ring_count(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:ring-membership {:count 1}}]}]}"##)]
 #[case::bond_ring_size(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:ring-membership {:size 6 :count 1}}]}]}"##)]
 // DativeBondConstraint variants
@@ -928,14 +928,14 @@ fn test_molecule_ast_to_edn_canonical_positional_refs() {
     let source = r##"{:atoms [[:c1 "C"] [:c2 "C"]]
                       :bonds [{:id :b1 :atoms [:c1 :c2] :type "1"}]
                       :constraints [{:atom [:c1 {:valence 4}]}
-                                    {:bond [:b1 :aromatic]}]}"##;
+                                    {:bond [:b1 {:aromatic true}]}]}"##;
     let dsl = MoleculeDsl::from_edn(&read_string(source).unwrap()).unwrap();
     let (ast, _meta) = dsl.into_parts();
 
     // Canonical render: positional refs only.
     let canonical_source = r##"{:atoms ["C" "C"] :bonds [[0 1 :single]]
              :constraints [{:atom [0 {:valence 4}]}
-                           {:bond [0 :aromatic]}]}"##;
+                           {:bond [0 {:aromatic true}]}]}"##;
     assert_eq!(ast.to_edn(), read_string(canonical_source).unwrap());
 }
 

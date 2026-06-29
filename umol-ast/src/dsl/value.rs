@@ -1,7 +1,4 @@
-//! Value DSL: parser, `Display`, EDN boundary. The string and EDN forms of a
-//! `ValueAst` are DSL concerns, so they all live on `ValueDsl` here. The AST
-//! type itself has no `Display` impl. The parser is **faithful** (no folding);
-//! normalization is `ValueAst::canonicalize`, run lazily.
+//! Value DSL: parser, `Display`, EDN boundary. The canonicalization is run lazily.
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;

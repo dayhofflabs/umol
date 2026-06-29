@@ -11,6 +11,7 @@ use umol_perm::{Orientation, Permutation};
 use super::aromatic::AromaticSystemConstraintDsl;
 use super::atom::{AromaticValenceDsl, AtomConstraintDsl, MulticenterValenceDsl};
 use super::bond::BondConstraintDsl;
+use super::boolean::read_boolean_dsl;
 use super::dative::DativeBondConstraintDsl;
 use super::edn_utils::{
     consume_single_key_map_close, eof_err, missing, read_map, read_single_key_map_header, read_vec,
@@ -438,20 +439,10 @@ pub(super) fn read_bond_constraint_dsl(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<BondConstraintDsl, EdnError> {
     match de.peek_byte()?.ok_or_else(eof_err)? {
-        b':' => {
-            let name = de.read_keyword_name()?;
-            match name.as_ref() {
-                "aromatic" => Ok(BondConstraintDsl(BondConstraint::Aromatic)),
-                other => Err(DeError::Custom(format!(
-                    "unknown bond-constraint keyword :{}",
-                    other
-                ))
-                .into()),
-            }
-        }
         b'{' => {
             let key = read_single_key_map_header(de)?;
             let c = match key.as_str() {
+                "aromatic" => BondConstraint::Aromatic(read_boolean_dsl(de)?.0),
                 "ring-membership" => BondConstraint::RingMembership(read_ring_membership_dsl(de)?),
                 "cis-trans-stereo" => {
                     BondConstraint::CisTransStereo(read_cis_trans_stereo_dsl(de)?)
@@ -468,7 +459,7 @@ pub(super) fn read_bond_constraint_dsl(
             Ok(BondConstraintDsl(c))
         }
         b => Err(DeError::TypeMismatch {
-            expected: ":aromatic / {:ring-membership …}",
+            expected: "{:aromatic …} / {:ring-membership …} / {:cis-trans-stereo …}",
             got: unexpected_byte_kind(b),
             path: vec!["bond-constraint".into()],
         }
@@ -2240,6 +2231,7 @@ mod tests {
         Topicity,
     };
     use crate::ast::value::ValueAst;
+    use crate::ast::BooleanAst;
 
     #[fixture]
     fn full_counts() -> EntityCounts {
@@ -2413,7 +2405,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::atom_leaf(Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Lit(4))), "{:atom [0 {:valence 4}]}")]
-    #[case::bond_leaf(Constraint::Bond(BondId(1), BondConstraint::Aromatic), "{:bond [1 :aromatic]}")]
+    #[case::bond_leaf(Constraint::Bond(BondId(1), BondConstraint::Aromatic(BooleanAst::Lit(true))), "{:bond [1 {:aromatic true}]}")]
     #[case::dative_bond_leaf_ring_count(Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1))),
         "{:dative-bond [0 {:ring-membership {:count 1}}]}")]
     #[case::dative_bond_leaf_donor(Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(0), atom: AtomId(2) }),
@@ -2453,8 +2445,8 @@ mod tests {
     #[case::molecule_sub_pattern(Constraint::Molecule(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) }),
         "{:sub-pattern {:anchor {} :pattern {:atoms [] :bonds []}}}")]
     #[case::not(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Lit(3))))), "{:not {:atom [0 {:valence 3}]}}")]
-    #[case::and(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Lit(4))), Constraint::Bond(BondId(0), BondConstraint::Aromatic)]),
-        "{:and [{:atom [0 {:valence 4}]} {:bond [0 :aromatic]}]}")]
+    #[case::and(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Lit(4))), Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true)))]),
+        "{:and [{:atom [0 {:valence 4}]} {:bond [0 {:aromatic true}]}]}")]
     #[case::or(Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraint::Degree(ValueAst::Lit(3))), Constraint::Atom(AtomId(0), AtomConstraint::Degree(ValueAst::Lit(4)))]),
         "{:or [{:atom [0 {:degree 3}]} {:atom [0 {:degree 4}]}]}")]
     fn test_constraint_dsl_roundtrip(
@@ -2509,7 +2501,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(BondConstraint::Aromatic, "{:bond [0 :aromatic]}")]
+    #[case::aromatic(BondConstraint::Aromatic(BooleanAst::Lit(true)), "{:bond [0 {:aromatic true}]}")]
     #[case::ring_membership_all(BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:bond [0 {:ring-membership {:count 1}}]}")]
     #[case::ring_membership_size(BondConstraint::ring_membership(RingScope::Size(6), 1), "{:bond [0 {:ring-membership {:size 6 :count 1}}]}")]
     #[case::cis_trans_stereo_not_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), "{:bond [0 {:cis-trans-stereo :not-stereo}]}")]

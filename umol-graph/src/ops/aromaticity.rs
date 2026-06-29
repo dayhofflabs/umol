@@ -22,8 +22,8 @@ pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AsLit, AtomConstraint, AtomId,
-    AtomView, BondConstraint, BondId, ElectronCountsAst, ElementAst, MoleculeAst, RingFamily,
-    ValueAst,
+    AtomView, BondConstraint, BondId, BooleanAst, ElectronCountsAst, ElementAst, MoleculeAst,
+    RingFamily, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_utils::solution::Solution;
@@ -147,7 +147,9 @@ impl AromaticityPerception {
             .collect();
         for bond_id in bond_ids {
             let bond = ast.bond_mut(bond_id);
-            bond.ast.constraints.add(BondConstraint::Aromatic);
+            bond.ast
+                .constraints
+                .add(BondConstraint::Aromatic(BooleanAst::Lit(true)));
         }
     }
 

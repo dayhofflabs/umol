@@ -123,6 +123,7 @@ mod tests {
     use crate::ast::constraint::RingScope;
     use crate::ast::error::Contradiction;
     use crate::ast::traits::{Canonicalize, Lattice};
+    use crate::ast::BooleanAst;
 
     #[rustfmt::skip]
     #[rstest]
@@ -142,16 +143,16 @@ mod tests {
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
     #[case::with_spin(BondAst::from_order(1).with_spin((0_u8, 1_u8)),
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(), constraints: BondConstraints::new() })]
-    #[case::with_constraint(BondAst::from_order(1).with_constraint(BondConstraint::Aromatic),
+    #[case::with_constraint(BondAst::from_order(1).with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))),
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::Aromatic) })]
+            constraints: BondConstraints::from(BondConstraint::Aromatic(BooleanAst::Lit(true))) })]
     #[case::with_constraints_extends(
         BondAst::from_order(1)
-            .with_constraint(BondConstraint::Aromatic)
+            .with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true)))
             .with_constraints([BondConstraint::ring_membership(RingScope::All, 1), BondConstraint::ring_membership(RingScope::Size(6), 1)]),
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
             constraints: BondConstraints::from_iter([
-                BondConstraint::Aromatic,
+                BondConstraint::Aromatic(BooleanAst::Lit(true)),
                 BondConstraint::ring_membership(RingScope::All, 1),
                 BondConstraint::ring_membership(RingScope::Size(6), 1),
             ]) })]
@@ -212,12 +213,12 @@ mod tests {
         },
     )]
     #[case::preserves_constraints(
-        BondAst::from_order(1).with_constraint(BondConstraint::Aromatic).into_ground(),
+        BondAst::from_order(1).with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))).into_ground(),
         BondAst {
             order: ValueAst::Lit(1),
             charge: ValueAst::Lit(0),
             spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: BondConstraints::from(BondConstraint::Aromatic),
+            constraints: BondConstraints::from(BondConstraint::Aromatic(BooleanAst::Lit(true))),
         },
     )]
     fn test_bond_ast_into_ground(#[case] actual: BondAst, #[case] expected: BondAst) {
@@ -233,7 +234,7 @@ mod tests {
     #[case::charge_undetermined(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(),
         constraints: BondConstraints::new() }, false)]
     #[case::ground_with_constraint(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::closed_shell(),
-        constraints: BondConstraints::from(BondConstraint::Aromatic) }, true)]
+        constraints: BondConstraints::from(BondConstraint::Aromatic(BooleanAst::Lit(true))) }, true)]
     fn test_bond_ast_is_ground(#[case] ast: BondAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
@@ -272,12 +273,12 @@ mod tests {
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(), constraints: BondConstraints::new() }, true)]
     #[case::constraint_required_present(
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::Aromatic) },
+            constraints: BondConstraints::from(BondConstraint::Aromatic(BooleanAst::Lit(true))) },
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::Aromatic) }, true)]
+            constraints: BondConstraints::from(BondConstraint::Aromatic(BooleanAst::Lit(true))) }, true)]
     #[case::constraint_required_absent(
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::Aromatic) },
+            constraints: BondConstraints::from(BondConstraint::Aromatic(BooleanAst::Lit(true))) },
         BondAst::from_order(1), false)]
     fn test_bond_ast_matches(
         #[case] pattern: BondAst,

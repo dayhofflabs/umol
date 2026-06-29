@@ -249,9 +249,9 @@ mod tests {
     use crate::ast::constraint::RingScope;
     use crate::ast::{
         AromaticSystemAst, AromaticSystemConstraint, AtomAst, AtomConstraint, AtomId, BondAst,
-        BondConstraint, Constraints, DativeBondAst, DativeBondConstraint, ElementAst, MoleculeAst,
-        MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst, StereoBondAst,
-        StereoCosetAst, StereoKind, ValueAst,
+        BondConstraint, BooleanAst, Constraints, DativeBondAst, DativeBondConstraint, ElementAst,
+        MoleculeAst, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst,
+        StereoBondAst, StereoCosetAst, StereoKind, ValueAst,
     };
     use crate::dsl::molecule::MoleculeMetadata;
     use crate::dsl::{AtomDsl, MoleculeDsl};
@@ -357,7 +357,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::double("2", BondAst::from_order(2))]
-    #[case::aromatic("1#a", BondAst::from_order(1).with_constraint(BondConstraint::Aromatic))]
+    #[case::aromatic("1#a", BondAst::from_order(1).with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))))]
     fn test_bond_macro(#[case] input: &str, #[case] expected: BondAst) {
         assert_eq!(bond!(input), expected);
     }
@@ -380,7 +380,7 @@ mod tests {
     #[case::empty("", BondAst::new(ValueAst::Undetermined))]
     #[case::order("1", BondAst::from_order(1))]
     #[case::field_only("#c+", BondAst::new(ValueAst::Undetermined).with_charge(1_i64))]
-    #[case::constraint_only("#a", BondAst::new(ValueAst::Undetermined).with_constraint(BondConstraint::Aromatic))]
+    #[case::constraint_only("#a", BondAst::new(ValueAst::Undetermined).with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))))]
     fn test_partial_bond_macro(#[case] input: &str, #[case] expected: BondAst) {
         assert_eq!(partial_bond!(input), expected);
     }

@@ -170,7 +170,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst,
-        BondConstraint, Constraints, MoleculeAst, SpinStateAst, ValueAst,
+        BondConstraint, BooleanAst, Constraints, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_chem::element::Element;
 
@@ -191,7 +191,8 @@ mod tests {
         let mut bonds = Vec::new();
         for i in 0..6 {
             let mut bond = BondAst::from_order(1);
-            bond.constraints.add(BondConstraint::Aromatic);
+            bond.constraints
+                .add(BondConstraint::Aromatic(BooleanAst::Lit(true)));
             bonds.push((AtomId(i), AtomId((i + 1) % 6), bond));
         }
         let system = AromaticSystemAst::from_electrons(vec![1; 6]);
@@ -275,7 +276,8 @@ mod tests {
         let mut bonds = Vec::new();
         for i in 0..5 {
             let mut bond = BondAst::from_order(1);
-            bond.constraints.add(BondConstraint::Aromatic);
+            bond.constraints
+                .add(BondConstraint::Aromatic(BooleanAst::Lit(true)));
             bonds.push((AtomId(i), AtomId((i + 1) % 5), bond));
         }
         let system = AromaticSystemAst::from_electrons(vec![1; 5]);
