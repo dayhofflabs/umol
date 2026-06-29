@@ -2,8 +2,58 @@
 
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer};
 
+use super::refs::AtomRef;
+
 pub(super) fn eof_err() -> EdnError {
     DeError::Custom("unexpected end of input".into()).into()
+}
+
+pub(super) fn two_atom_refs(
+    atoms: Vec<AtomRef>,
+    entry: &'static str,
+) -> Result<[AtomRef; 2], DeError> {
+    atoms.try_into().map_err(|v: Vec<AtomRef>| {
+        DeError::Custom(format!(
+            "{entry} :atoms must have exactly 2 atoms, got {}",
+            v.len()
+        ))
+    })
+}
+
+pub(super) fn required_key<'e>(
+    m: &'e EdnMap<'e>,
+    key: &'static str,
+    context: &'static str,
+) -> Result<&'e Edn<'e>, DeError> {
+    m.get_keyword(key).ok_or_else(|| DeError::MissingField {
+        key: key.to_string(),
+        path: vec![context.into()],
+    })
+}
+
+pub(super) fn optional_id(m: &EdnMap<'_>) -> Result<Option<String>, DeError> {
+    match m.get_keyword("id") {
+        Some(Edn::Keyword(k)) => Ok(Some(k.name().to_string())),
+        Some(other) => Err(DeError::TypeMismatch {
+            expected: "keyword id",
+            got: other.kind(),
+            path: vec![":id".into()],
+        }),
+        None => Ok(None),
+    }
+}
+
+/// The two elements of a `[left right]` vector.
+pub(super) fn pair<'a, 'de>(
+    edn: &'a Edn<'de>,
+    context: &'static str,
+) -> Result<(&'a Edn<'de>, &'a Edn<'de>), DeError> {
+    if let Edn::Vector(v) = edn {
+        if v.len() == 2 {
+            return Ok((&v[0], &v[1]));
+        }
+    }
+    Err(DeError::Custom(format!("{context} expects [left right]")))
 }
 
 pub(super) fn missing(key: &str, context: &'static str) -> EdnError {

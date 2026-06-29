@@ -781,35 +781,53 @@ green and tested. Prereqs in brackets.
 - *Checkpoint:* type exists + exported. **Done** (build clean; `ReactionSpanDsl` warnings cleared by
   the `pub use` — only C3's `SpanInput`/`ConstraintSpanInput` remain, until C6/C8).
 
-**C5 — AST↔DSL conversion** [C4]:
-- C5a — `FromAst<ReactionSpanAst>` (`Ctx = MoleculeDefaults`): clone ast; walk `atoms` / `bonds`,
-  converting each `EntitySpan`'s populated side(s) (embedded `AtomAst` / `BondAst`) via the per-entity
-  DSL converter; `metadata = MoleculeMetadata::default()`.
-- C5b — `IntoAst<ReactionSpanAst>`: inverse raise.
-- C5c — tests: `from_ast` → `into_ast` identity on a `ReactionSpanAst` (atom / bond spans + constraints).
-- *Checkpoint (tested):* programmatic `ReactionSpanAst` ↔ `ReactionSpanDsl`, no EDN.
+**C5 — AST↔DSL conversion** [C4]: **Done**
+- C5a — **Done.** `FromAst<ReactionSpanAst>` (`Ctx = MoleculeDefaults`): rebuilds the span via
+  `ReactionSpanAst::from_parts`, lowering each `EntitySpan` side with `AtomDsl/BondDsl::from_ast`
+  (`cfg.atom` / `cfg.bond`); constraints pass through (as in `MoleculeDsl`); `metadata =
+  MoleculeMetadata::default()`. A private `map_span` helper applies the per-side converter across the
+  four `EntitySpan` variants (used 4×; no `EntitySpan::map` on the AST type).
+- C5b — **Done.** `IntoAst<ReactionSpanAst>`: inverse raise via `AtomDsl/BondDsl(..).into_ast`, same
+  `from_parts` rebuild (clones rather than `atoms_mut`, since `ReactionSpanAst` exposes only accessors).
+- C5c — **Done.** `test_reaction_span_dsl_from_ast` — `#[case]` table asserting `from_ast → into_ast`
+  identity: `modify` (Modified bond + Unchanged atoms + Unchanged constraint) and `add_remove`
+  (Unchanged/Removed/Added atoms & bonds + Added constraint).
+- *Checkpoint (tested):* programmatic `ReactionSpanAst` ↔ `ReactionSpanDsl`, no EDN. **Done** (full
+  suite 3862 pass).
 
-**C6 — Span op classifier + entry parsers** [C3] (`dsl/reaction_span.rs`):
-- C6a — `classify_span_op(&Edn) -> (SpanOp, &Edn)`, `enum SpanOp { Unchanged, Add, Remove, Modify }`:
-  bare value ⇒ `Unchanged`; `{:add|:remove|:modify <p>}` ⇒ that op. Only place the op wrapper is
-  recognized.
-- C6b — `parse_atom_span_entry`: peel the optional outer `[<id> …]`, classify op, parse via the
-  molecule atom-entry parser (one complete atom for `Unchanged` / `Add` / `Remove`, `[left right]` for
-  `Modify`).
-- C6c — `parse_bond_span_entry`: endpoints + optional `:id` carried once inside the payload
-  (`[<ref> <ref> <bond-dsl>]`, `[<ref> <ref> [left right]]`, or the `{[:id …] :atoms […] :type …}` map
-  form); classify op, split off the shared `[<ref> <ref>]` + `:id`.
-- C6d — `parse_constraint_span_entry`: `bare | {:add c} | {:remove c}` (no `:modify`, no slot data);
-  `c` via `ConstraintDsl::from_edn`.
-- C6e — tests: each entry shape parses (per op, per entity).
-- *Checkpoint (tested):* entry parsers.
+**C6 — Span entry parsers** [C3] (`dsl/reaction_span.rs`): **Done**
+- C6a — **Dropped the `SpanOp` enum / separate `classify_span_op` pass** (it was redundant double
+  classification — `EntitySpan`/`ConstraintSpanInput` *are* the classification). Replaced by a small
+  `verb_wrapper(&Edn) -> Option<(&str, &Edn)>` discriminator (borrows the verb str, no clone; keys only
+  on `add`/`modify`/`remove`, so a bare single-key constraint like `{:connected …}` is correctly
+  `None`). Each entry parser matches it inline and builds the span variant directly.
+- C6b — **Done.** `parse_atom_span_entry` → `(Option<String>, EntitySpan<AtomAst>)`: `split_span_entry`
+  splits the optional outer `[<id> <body>]`; `verb_wrapper` then dispatches; values parsed to `AtomAst`
+  via `AtomDsl::from_edn(..).0` (`Modify` = `[left right]`).
+- C6c — **Done.** `parse_bond_span_entry` → `(Option<String>, [AtomRef; 2], EntitySpan<BondAst>)`:
+  `Unchanged`/`Add`/`Remove` reuse `parse_bond_entry`; `Modify` uses `split_bond_frame` (handles
+  `[a b [left right]]` and the `{:id :atoms :type [left right]}` map) + `pair`.
+- C6d — **Done.** `parse_constraint_span_entry` → `ConstraintSpanInput`: `verb_wrapper`; `c` via
+  `ConstraintDsl::from_edn`; `:modify` / other verbs error.
+- C6e — **Done.** Three `#[case]` tables (atom 5, bond 6 incl. map + modify-map, constraint 3); 16
+  reaction_span tests pass. `ConstraintSpanInput` gained `PartialEq` for the assertion.
+- *Decisions:* span atom/bond **values are complete entities, not aliases** (`AtomDsl/BondDsl::from_edn`,
+  matching `EntitySpan<AtomAst>`); the generic map helpers `two_atom_refs` / `required_key` /
+  `optional_id` / `pair` moved from `molecule.rs` to `edn_utils.rs` (not molecule-specific). `AtomRefDsl`
+  in the plan was the nonexistent name for `AtomRef`.
+- *Checkpoint (tested):* entry parsers. **Done** (full suite 3876 pass).
 
-**C7 — Top-level parse** [C3, C6] (`dsl/reaction_span.rs`):
-- C7a — `read_span_input` / `parse_span_input`: `:atoms` / `:bonds` / `:constraints` via C6; the
-  streaming reader buffers each section element to an `Edn` before dispatching to the tree entry parser;
-  a plain molecule map (all entries bare) parses as an all-`Unchanged` span (homoiconicity).
-- C7b — tests: a full span map and a plain molecule map → raw `SpanInput`.
-- *Checkpoint (tested):* span map parses.
+**C7 — Top-level parse** [C3, C6] (`dsl/reaction_span.rs`): **Done**
+- C7a — **Done.** `parse_span_input` (tree, via `parse_vec` + the C6 entry parsers) and
+  `read_span_input` (streaming, via `read_map`/`read_vec`, buffering each section element with
+  `read_value_slice` → `read_string` → the tree entry parser). Unknown top-level key errors; a plain
+  molecule map (only `:atoms`/`:bonds`/`:constraints`, all entries bare) parses as an all-`Unchanged`
+  span. (Per C7a the streaming reader intentionally buffers to a tree rather than duplicating the
+  molecule entry grammar — a documented exception to streaming-never-delegates-to-tree.)
+- C7b — **Done.** `test_parse_span_input` `#[case]` table (`full` span map, `plain_molecule`) asserts
+  both `parse_span_input` and `read_span_input` produce the expected `SpanInput` (tree/streaming
+  parity). `SpanInput` gained `PartialEq` for the assertion.
+- *Checkpoint (tested):* span map parses. **Done** (18 reaction_span tests; full suite 3878 pass).
 
 **C8 — Resolution** [C1, C3]: `SpanInput::into_ast → (ReactionSpanAst, MoleculeMetadata)`. Work items in
 dependency order (no fresh-id assignment — union-frame):

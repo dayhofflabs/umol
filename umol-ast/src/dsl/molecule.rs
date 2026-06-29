@@ -27,7 +27,10 @@ use super::bond::{expand_bond_keyword, BondDsl};
 use super::config::MoleculeDefaults;
 use super::constraint::{read_constraints_dsl, ConstraintDsl, ConstraintsDsl, EntityCounts};
 use super::dative::DativeBondDsl;
-use super::edn_utils::{eof_err, missing, parse_vec, read_map, read_vec, unexpected_byte_kind};
+use super::edn_utils::{
+    eof_err, missing, optional_id, parse_vec, read_map, read_vec, required_key, two_atom_refs,
+    unexpected_byte_kind,
+};
 use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
 use super::noncovalent::NoncovalentBondDsl;
@@ -456,15 +459,6 @@ fn read_dative_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<DativeBondDsl, 
 }
 
 /// A two-endpoint `:atoms` vector for a binary relation: exactly two refs.
-fn two_atom_refs(atoms: Vec<AtomRef>, entry: &'static str) -> Result<[AtomRef; 2], DeError> {
-    atoms.try_into().map_err(|v: Vec<AtomRef>| {
-        DeError::Custom(format!(
-            "{entry} :atoms must have exactly 2 atoms, got {}",
-            v.len()
-        ))
-    })
-}
-
 pub(super) fn read_bond_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<BondEntryInput, EdnError> {
@@ -1761,29 +1755,6 @@ fn expect_map<'e>(edn: &'e Edn<'e>, context: &'static str) -> Result<&'e EdnMap<
             got: other.kind(),
             path: vec![context.into()],
         }),
-    }
-}
-
-fn required_key<'e>(
-    m: &'e EdnMap<'e>,
-    key: &'static str,
-    context: &'static str,
-) -> Result<&'e Edn<'e>, DeError> {
-    m.get_keyword(key).ok_or_else(|| DeError::MissingField {
-        key: key.to_string(),
-        path: vec![context.into()],
-    })
-}
-
-fn optional_id(m: &EdnMap<'_>) -> Result<Option<String>, DeError> {
-    match m.get_keyword("id") {
-        Some(Edn::Keyword(k)) => Ok(Some(k.name().to_string())),
-        Some(other) => Err(DeError::TypeMismatch {
-            expected: "keyword id",
-            got: other.kind(),
-            path: vec![":id".into()],
-        }),
-        None => Ok(None),
     }
 }
 
