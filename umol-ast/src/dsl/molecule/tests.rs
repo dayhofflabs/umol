@@ -9,7 +9,7 @@ use crate::ast::constraint::{Constraint, MoleculeConstraint};
 use crate::ast::electrons::ElectronCountsAst;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::value::ValueAst;
-use crate::{dsl, mol};
+use crate::{mol, mol_dsl};
 
 #[rstest]
 fn test_metadata_new() {
@@ -188,66 +188,25 @@ fn test_metadata_mixed_chain() {
 }
 
 #[rstest]
-fn test_molecule_dsl_to_edn_empty() {
-    let ast = MoleculeAst::default();
-    let dsl = MoleculeDsl::from_parts(ast, MoleculeMetadata::default());
-    let edn = dsl.to_edn();
-    assert_eq!(edn, read_string("{:atoms [] :bonds []}").unwrap());
-}
-
-#[rstest]
-fn test_molecule_dsl_to_edn_two_atoms_one_bond() {
-    let dsl = dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
-    let edn = dsl.to_edn();
-    // Canonical render: order-1 default bond becomes the `:single` keyword.
-    assert_eq!(
-        edn,
-        read_string(r##"{:atoms ["C" "C"] :bonds [[0 1 :single]]}"##).unwrap()
-    );
-}
-
-#[rstest]
-fn test_molecule_dsl_to_edn_atom_with_id() {
-    let dsl = dsl!(r#"{:atoms [[:c1 "C"] "C"] :bonds []}"#);
-    let edn = dsl.to_edn();
-    assert_eq!(
-        edn,
-        read_string(r##"{:atoms [[:c1 "C"] "C"] :bonds []}"##).unwrap()
-    );
-}
-
-#[rstest]
-fn test_molecule_dsl_to_edn_bond_with_id_uses_map_form() {
-    let dsl = dsl!(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]}"#);
-    let edn = dsl.to_edn();
-    assert_eq!(
-        edn,
-        read_string(r##"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"##)
-            .unwrap()
-    );
-}
-
-#[rstest]
-fn test_molecule_dsl_to_edn_atom_alias_substituted() {
-    let dsl = dsl!(r#"{:atoms [:x :x] :bonds [] :atom-aliases [:x "C"]}"#);
-    let edn = dsl.to_edn();
-    // Both atoms match the alias — rendered as :x keyword references; the
-    // alias table emits the :atom-aliases key.
-    assert_eq!(
-        edn,
-        read_string(r##"{:atoms [:x :x] :bonds [] :atom-aliases [:x "C"]}"##).unwrap()
-    );
+#[case::empty("{:atoms [] :bonds []}", MoleculeAst::default())]
+#[case::two_atoms_one_bond(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#, MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C); 2], vec![(AtomId(0), AtomId(1), BondAst::from_order(1))]))]
+#[case::atom_with_id(r#"{:atoms [[:c1 "C"] "C"] :bonds []}"#, MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C); 2], vec![]))]
+#[case::bond_with_id(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"#, MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C); 2], vec![(AtomId(0), AtomId(1), BondAst::from_order(1))]))]
+#[case::atom_alias(r#"{:atoms [:x :x] :bonds [[0 1 "1"]] :atom-aliases [:x "C"]}"#, MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C); 2], vec![(AtomId(0), AtomId(1), BondAst::from_order(1))]))]
+fn test_mol_dsl_to_edn(#[case] input: &str, #[case] expected: MoleculeAst) {
+    let dsl = mol_dsl!(input);
+    assert_eq!(dsl.into_ast(&MoleculeDefaults::default()), expected);
 }
 
 #[rstest]
 fn test_molecule_dsl_display_to_edn_parity() {
-    let dsl = dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
+    let dsl = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
     assert_eq!(dsl.to_string(), dsl.to_edn().to_string());
 }
 
 #[rstest]
 fn test_molecule_dsl_to_edn_omits_empty_optional_sections() {
-    let dsl = dsl!(r#"{:atoms ["C"] :bonds []}"#);
+    let dsl = mol_dsl!(r#"{:atoms ["C"] :bonds []}"#);
     let edn = dsl.to_edn();
     let Edn::Map(m) = &edn else {
         panic!("expected map");

@@ -838,7 +838,7 @@ impl IntoAst<MoleculeAst> for MoleculeDsl {
     }
 }
 
-fn render_molecule_edn(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
+pub(super) fn render_molecule_edn(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let mut map = EdnMap::with_capacity(8);
     map.insert(Edn::keyword("atoms"), render_atoms(ast, meta));
     map.insert(Edn::keyword("bonds"), render_bonds(ast, meta));

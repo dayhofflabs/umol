@@ -4,17 +4,17 @@
 /// (atom IDs, aliases, etc.). Use [`mol!`] when you only need the AST.
 ///
 /// ```ignore
-/// let d = dsl!(r#"{:atom-aliases [:c "C"] :atoms [:c :c] :bonds [[0 1 "1"]]}"#);
+/// let d = mol_dsl!(r#"{:atom-aliases [:c "C"] :atoms [:c :c] :bonds [[0 1 "1"]]}"#);
 /// ```
 #[macro_export]
-macro_rules! dsl {
+macro_rules! mol_dsl {
     ($s:expr $(,)?) => {{
         <$crate::dsl::MoleculeDsl as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
 /// Parse a molecule-EDN string into a `MoleculeAst`. MoleculeMetadata (atom IDs,
-/// aliases, etc.) in the input is dropped. Use [`dsl!`] to keep metadata.
+/// aliases, etc.) in the input is dropped. Use [`mol_dsl!`] to keep metadata.
 ///
 /// ```ignore
 /// let m = mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
@@ -280,13 +280,13 @@ mod tests {
         ),
     )]
     fn test_dsl_macro(#[case] input: &str, #[case] expected: MoleculeDsl) {
-        assert_eq!(dsl!(input), expected);
+        assert_eq!(mol_dsl!(input), expected);
     }
 
     #[rstest]
     #[should_panic]
     fn test_dsl_macro_error() {
-        let _ = dsl!("invalid");
+        let _ = mol_dsl!("invalid");
     }
 
     #[rustfmt::skip]

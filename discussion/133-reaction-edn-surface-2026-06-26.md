@@ -633,8 +633,18 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   when a constraint delta is present. `render_deltas` renders deltas in their stored order (no
   ToEdn-side canonicalization). Test: `test_render_deltas_constraint` (molecule `:connected` +
   entity-leaf `{:atom [:o …]}` referencing a created atom + `:remove`).
-- R9d — `render_reaction_edn`: `:lhs` via the molecule renderer + `:deltas`.
-- R9e — tests: `ReactionAst` → EDN per op.
+- R9d — **Done.** `render_reaction_edn(&ReactionAst, &ReactionMetadata)` builds the `{:lhs …
+  :deltas … :atom-aliases …}` map: `:lhs` via the molecule renderer (`render_molecule_edn`, made
+  `pub(super)`), `:deltas` via `render_deltas`, then `:atom-aliases` (reaction-level, only when
+  present) — aliases last, matching the molecule surface. Key order is cosmetic (both parse paths
+  collect keys order-independently; alias resolution is deferred to `into_ast`).
+  Test: `test_render_reaction_edn` (render → reparse preserves the `ReactionDsl`, covering a modify
+  and a reaction-level alias used by an `:add`).
+- R9e — **Done.** Per-op render table tests (`render_deltas`, shared `meta` fixture):
+  `test_render_deltas_atom` (add / remove / modify-field / modify-set-constraint /
+  modify-remove-constraint `#v*` / coalesced `#c-#v*`), `test_render_deltas_bond` (add / remove /
+  modify-field / modify-constraint `#a`), `test_render_deltas_constraint` (molecule / entity-leaf via
+  combined metadata / remove); plus `test_render_reaction_edn` (top-level render→reparse).
 - *Checkpoint (tested):* AST renders to EDN.
 
 **R10 — `ToEdn` path + AST routing** [R2, R8, R9]:
