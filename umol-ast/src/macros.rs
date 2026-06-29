@@ -1,21 +1,4 @@
-//! Construction macros for the AST and DSL surface.
-//!
-//! All four are runtime parsers that panic on malformed input — appropriate
-//! for tests, examples, and inline literal data. They wrap the corresponding
-//! `FromStr` impl with `.unwrap()`.
-
-/// Parse a molecule-EDN string into a `MoleculeAst`. MoleculeMetadata (atom IDs,
-/// aliases, etc.) in the input is dropped. Use [`dsl!`] to keep metadata.
-///
-/// ```ignore
-/// let m = mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
-/// ```
-#[macro_export]
-macro_rules! mol {
-    ($s:expr $(,)?) => {{
-        <$crate::ast::MoleculeAst as ::core::str::FromStr>::from_str($s).unwrap()
-    }};
-}
+//! Construction macros for the AST and DSL objects.
 
 /// Parse a molecule-EDN string into a `MoleculeDsl`, preserving metadata
 /// (atom IDs, aliases, etc.). Use [`mol!`] when you only need the AST.
@@ -30,27 +13,16 @@ macro_rules! dsl {
     }};
 }
 
-/// Parse a compact atom-string into an `AtomAst`.
+/// Parse a molecule-EDN string into a `MoleculeAst`. MoleculeMetadata (atom IDs,
+/// aliases, etc.) in the input is dropped. Use [`dsl!`] to keep metadata.
 ///
 /// ```ignore
-/// let a = atom!("C#h*#a+");
+/// let m = mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
 /// ```
 #[macro_export]
-macro_rules! atom {
+macro_rules! mol {
     ($s:expr $(,)?) => {{
-        <$crate::ast::AtomAst as ::core::str::FromStr>::from_str($s).unwrap()
-    }};
-}
-
-/// Parse a compact bond-string into a `BondAst`.
-///
-/// ```ignore
-/// let b = bond!("1#a");
-/// ```
-#[macro_export]
-macro_rules! bond {
-    ($s:expr $(,)?) => {{
-        <$crate::ast::BondAst as ::core::str::FromStr>::from_str($s).unwrap()
+        <$crate::ast::MoleculeAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
 }
 
@@ -69,6 +41,18 @@ macro_rules! mol_ground {
     }};
 }
 
+/// Parse a compact atom-string into an `AtomAst`.
+///
+/// ```ignore
+/// let a = atom!("C#h*#a+");
+/// ```
+#[macro_export]
+macro_rules! atom {
+    ($s:expr $(,)?) => {{
+        <$crate::ast::AtomAst as ::core::str::FromStr>::from_str($s).unwrap()
+    }};
+}
+
 /// Parse atom DSL into an `AtomAst` with `AtomDefaults::ground()` applied.
 #[macro_export]
 macro_rules! atom_ground {
@@ -82,6 +66,28 @@ macro_rules! atom_ground {
     }};
 }
 
+/// Parse partial atom DSL into `AtomAst`.
+#[macro_export]
+macro_rules! partial_atom {
+    ($s:expr $(,)?) => {{
+        <$crate::dsl::PartialAtomDsl as ::core::str::FromStr>::from_str($s)
+            .unwrap()
+            .0
+    }};
+}
+
+/// Parse a compact bond-string into a `BondAst`.
+///
+/// ```ignore
+/// let b = bond!("1#a");
+/// ```
+#[macro_export]
+macro_rules! bond {
+    ($s:expr $(,)?) => {{
+        <$crate::ast::BondAst as ::core::str::FromStr>::from_str($s).unwrap()
+    }};
+}
+
 /// Parse a bond DSL into a `BondAst` with `BondDefaults::ground()` applied.
 #[macro_export]
 macro_rules! bond_ground {
@@ -92,6 +98,16 @@ macro_rules! bond_ground {
             dsl,
             &$crate::dsl::BondDefaults::ground(),
         )
+    }};
+}
+
+/// Parse partial bond DSL into `BondAst`.
+#[macro_export]
+macro_rules! partial_bond {
+    ($s:expr $(,)?) => {{
+        <$crate::dsl::PartialBondDsl as ::core::str::FromStr>::from_str($s)
+            .unwrap()
+            .0
     }};
 }
 
@@ -233,35 +249,12 @@ mod tests {
     use crate::ast::constraint::RingScope;
     use crate::ast::{
         AromaticSystemAst, AromaticSystemConstraint, AtomAst, AtomConstraint, AtomId, BondAst,
-        BondConstraint, Constraints, DativeBondAst, DativeBondConstraint, MoleculeAst,
+        BondConstraint, Constraints, DativeBondAst, DativeBondConstraint, ElementAst, MoleculeAst,
         MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst, StereoBondAst,
-        StereoCosetAst, StereoKind,
+        StereoCosetAst, StereoKind, ValueAst,
     };
     use crate::dsl::molecule::MoleculeMetadata;
     use crate::dsl::{AtomDsl, MoleculeDsl};
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::empty("{}", MoleculeAst::default())]
-    #[case::carbon_oxygen(r#"{:atoms ["C #h2" "O"] :bonds [[0 1 "2"]]}"#,
-        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(2_i64), AtomAst::from_element(Element::O)],
-        vec![(AtomId(0), AtomId(1), BondAst::from_order(2))]))]
-    #[case::aromatic_system(r##"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]#e3"}]}"##,
-        MoleculeAst::from_parts(vec![AtomAst::from_element(Element::C); 3],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1)), (AtomId(1), AtomId(2), BondAst::from_order(1)), (AtomId(2), AtomId(0), BondAst::from_order(1))],
-            vec![], vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemAst::from_electrons(vec![1; 3]).with_constraint(AromaticSystemConstraint::electron_count(3)))],
-            vec![], vec![],
-            Vec::new(), Vec::new(), Constraints::default()))]
-    fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
-        assert_eq!(mol!(input), expected);
-    }
-
-    #[rstest]
-    #[should_panic]
-    fn test_mol_macro_error() {
-        let _: MoleculeAst = mol!("invalid");
-    }
 
     #[rustfmt::skip]
     #[rstest]
@@ -298,6 +291,39 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::empty("{}", MoleculeAst::default())]
+    #[case::carbon_oxygen(r#"{:atoms ["C #h2" "O"] :bonds [[0 1 "2"]]}"#,
+        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(2_i64), AtomAst::from_element(Element::O)],
+        vec![(AtomId(0), AtomId(1), BondAst::from_order(2))]))]
+    #[case::aromatic_system(r##"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]#e3"}]}"##,
+        MoleculeAst::from_parts(vec![AtomAst::from_element(Element::C); 3],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1)), (AtomId(1), AtomId(2), BondAst::from_order(1)), (AtomId(2), AtomId(0), BondAst::from_order(1))],
+            vec![], vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemAst::from_electrons(vec![1; 3]).with_constraint(AromaticSystemConstraint::electron_count(3)))],
+            vec![], vec![],
+            Vec::new(), Vec::new(), Constraints::default()))]
+    fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
+        assert_eq!(mol!(input), expected);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_mol_macro_error() {
+        let _: MoleculeAst = mol!("invalid");
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::methane(r#"{:atoms ["C #h4"] :bonds []}"#,
+        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground()], vec![]))]
+    #[case::carbon_charged(r#"{:atoms ["C #c+"] :bonds []}"#,
+        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_charge(1_i64).into_ground()], vec![]))]
+    fn test_mol_ground_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
+        assert_eq!(mol_ground!(input), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::carbon_charge("C#c+", AtomAst::from_element(Element::C).with_charge(1_i64))]
     fn test_atom_macro(#[case] input: &str, #[case] expected: AtomAst) {
         assert_eq!(atom!(input), expected);
@@ -307,6 +333,25 @@ mod tests {
     #[should_panic]
     fn test_atom_macro_error() {
         let _ = atom!("invalid");
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::carbon_h4("C #h4", AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground())]
+    #[case::carbon("C", AtomAst::from_element(Element::C).into_ground())]
+    #[case::carbon_v4("C #v4", AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4_i64)).into_ground())]
+    fn test_atom_ground_macro(#[case] input: &str, #[case] expected: AtomAst) {
+        assert_eq!(atom_ground!(input), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty("", AtomAst::new(ElementAst::Undetermined))]
+    #[case::element("C#h4", AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64))]
+    #[case::field_only("#h4", AtomAst::new(ElementAst::Undetermined).with_implicit_hydrogens(4_i64))]
+    #[case::constraint_only("#v4", AtomAst::new(ElementAst::Undetermined).with_constraint(AtomConstraint::valence(4_i64)))]
+    fn test_partial_atom_macro(#[case] input: &str, #[case] expected: AtomAst) {
+        assert_eq!(partial_atom!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -325,28 +370,19 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::methane(r#"{:atoms ["C #h4"] :bonds []}"#,
-        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground()], vec![]))]
-    #[case::carbon_charged(r#"{:atoms ["C #c+"] :bonds []}"#,
-        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_charge(1_i64).into_ground()], vec![]))]
-    fn test_mol_ground_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
-        assert_eq!(mol_ground!(input), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::carbon_h4("C #h4", AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground())]
-    #[case::carbon("C", AtomAst::from_element(Element::C).into_ground())]
-    #[case::carbon_v4("C #v4", AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4_i64)).into_ground())]
-    fn test_atom_ground_macro(#[case] input: &str, #[case] expected: AtomAst) {
-        assert_eq!(atom_ground!(input), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
     #[case::double("2", BondAst::from_order(2).into_ground())]
     fn test_bond_ground_macro(#[case] input: &str, #[case] expected: BondAst) {
         assert_eq!(bond_ground!(input), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty("", BondAst::new(ValueAst::Undetermined))]
+    #[case::order("1", BondAst::from_order(1))]
+    #[case::field_only("#c+", BondAst::new(ValueAst::Undetermined).with_charge(1_i64))]
+    #[case::constraint_only("#a", BondAst::new(ValueAst::Undetermined).with_constraint(BondConstraint::Aromatic))]
+    fn test_partial_bond_macro(#[case] input: &str, #[case] expected: BondAst) {
+        assert_eq!(partial_bond!(input), expected);
     }
 
     #[rustfmt::skip]

@@ -17,7 +17,7 @@ use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::delta::{
     apply_atom_change, apply_bond_change, remap_delta, AtomDelta, BondDelta, Delta, Deltas,
-    EntityDelta, EntitySpan,
+    EntityFold, EntitySpan,
 };
 use super::error::Contradiction;
 use super::id::{AtomId, BondId};

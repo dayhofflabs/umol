@@ -68,6 +68,37 @@ impl BondAst {
         self
     }
 
+    /// Overwrite with `other`, keeping existing values and constraints.
+    pub fn update(&self, other: &BondAst) -> BondAst {
+        let mut constraints = self.constraints.clone();
+        for c in other.constraints.iter() {
+            constraints.remove_by_key(c.key());
+        }
+        for c in other.constraints.iter() {
+            if !c.is_undetermined() {
+                constraints.add(c.clone());
+            }
+        }
+        BondAst {
+            order: if other.order.is_undetermined() {
+                self.order.clone()
+            } else {
+                other.order.clone()
+            },
+            charge: if other.charge.is_undetermined() {
+                self.charge.clone()
+            } else {
+                other.charge.clone()
+            },
+            spin: if other.spin.is_undetermined() {
+                self.spin.clone()
+            } else {
+                other.spin.clone()
+            },
+            constraints,
+        }
+    }
+
     /// Fill `Undetermined` value-bearing struct fields with zero defaults:
     /// charge → `Lit(0)`, spin → closed-shell singlet `(0, 1)`. Existing
     /// values and `constraints` are preserved. The result is ground iff
@@ -144,6 +175,20 @@ mod tests {
             ]) })]
     fn test_bond_ast_with_methods(#[case] actual: BondAst, #[case] expected: BondAst) {
         assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::overwrite(
+        BondAst::from_order(1).with_charge(0_i64).with_constraint(BondConstraint::ring_membership(RingScope::Size(6), 1_i64)),
+        BondAst::new(ValueAst::Undetermined).with_charge(-1_i64).with_constraint(BondConstraint::ring_membership(RingScope::Size(6), 2_i64)),
+        BondAst::from_order(1).with_charge(-1_i64).with_constraint(BondConstraint::ring_membership(RingScope::Size(6), 2_i64)))]
+    #[case::remove_constraint(
+        BondAst::from_order(1).with_constraint(BondConstraint::ring_membership(RingScope::Size(6), 1_i64)),
+        BondAst::new(ValueAst::Undetermined).with_constraint(BondConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined)),
+        BondAst::from_order(1))]
+    fn test_bond_ast_update(#[case] lhs: BondAst, #[case] rhs: BondAst, #[case] expected: BondAst) {
+        assert_eq!(lhs.update(&rhs), expected);
     }
 
     #[rustfmt::skip]

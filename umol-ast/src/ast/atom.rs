@@ -91,6 +91,52 @@ impl AtomAst {
         self
     }
 
+    /// Overwrite with `other`, keeping existing values and constraints.
+    pub fn update(&self, other: &AtomAst) -> AtomAst {
+        let mut constraints = self.constraints.clone();
+        for c in other.constraints.iter() {
+            constraints.remove_by_key(c.key());
+        }
+        for c in other.constraints.iter() {
+            if !c.is_undetermined() {
+                constraints.add(c.clone());
+            }
+        }
+        AtomAst {
+            element: if other.element.is_undetermined() {
+                self.element.clone()
+            } else {
+                other.element.clone()
+            },
+            isotope_mass: if other.isotope_mass.is_undetermined() {
+                self.isotope_mass.clone()
+            } else {
+                other.isotope_mass.clone()
+            },
+            charge: if other.charge.is_undetermined() {
+                self.charge.clone()
+            } else {
+                other.charge.clone()
+            },
+            implicit_hydrogens: if other.implicit_hydrogens.is_undetermined() {
+                self.implicit_hydrogens.clone()
+            } else {
+                other.implicit_hydrogens.clone()
+            },
+            lone_pairs: if other.lone_pairs.is_undetermined() {
+                self.lone_pairs.clone()
+            } else {
+                other.lone_pairs.clone()
+            },
+            spin: if other.spin.is_undetermined() {
+                self.spin.clone()
+            } else {
+                other.spin.clone()
+            },
+            constraints,
+        }
+    }
+
     /// Fill `Undetermined` value-bearing struct fields with defaults: isotope→
     /// Natural; charge / implicit hydrogens / lone pairs → 0; spin → 0 unpaired
     /// and, for the (possibly already-set) unpaired count, the maximal
@@ -651,6 +697,17 @@ mod tests {
         AtomAst { constraints: AtomConstraints::from(AtomConstraint::valence(4)), ..Default::default() })]
     fn test_atom_ast_with_methods(#[case] actual: AtomAst, #[case] expected: AtomAst) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::overwrite(AtomAst::from_element(Element::C).with_charge(0_i64) .with_constraint(AtomConstraint::valence(4_i64)),
+        AtomAst::new(ElementAst::Undetermined).with_charge(-1_i64).with_constraint(AtomConstraint::valence(6_i64)),
+        AtomAst::from_element(Element::C).with_charge(-1_i64).with_constraint(AtomConstraint::valence(6_i64)))]
+    #[case::remove_constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4_i64)),
+        AtomAst::new(ElementAst::Undetermined).with_constraint(AtomConstraint::valence(ValueAst::Undetermined)),
+        AtomAst::from_element(Element::C))]
+    fn test_atom_ast_update(#[case] lhs: AtomAst, #[case] rhs: AtomAst, #[case] expected: AtomAst) {
+        assert_eq!(lhs.update(&rhs), expected);
     }
 
     #[rustfmt::skip]

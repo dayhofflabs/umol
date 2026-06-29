@@ -13,7 +13,8 @@ use super::atom::{AromaticValenceDsl, AtomConstraintDsl, MulticenterValenceDsl};
 use super::bond::BondConstraintDsl;
 use super::dative::DativeBondConstraintDsl;
 use super::edn_utils::{
-    consume_single_key_map_close, eof_err, read_map, read_single_key_map_header, read_vec,
+    consume_single_key_map_close, eof_err, missing, read_map, read_single_key_map_header, read_vec,
+    unexpected_byte_kind,
 };
 use super::error::ParseError;
 use super::molecule::{read_molecule_input, MoleculeDsl, MoleculeMetadata};
@@ -76,27 +77,19 @@ impl EntityCounts {
             stereo_bond_count: ast.stereo_bonds().count(),
         }
     }
-}
 
-// Shared across the constraint-tree readers here and the molecule-map reader
-// in `super::molecule`.
-
-pub(super) fn missing(key: &str, context: &'static str) -> EdnError {
-    DeError::MissingField {
-        key: key.to_string(),
-        path: vec![context.into()],
+    /// Reserve the next atom id and grow the count.
+    pub(crate) fn allocate_atom(&mut self) -> AtomId {
+        let id = AtomId::from(self.atom_count);
+        self.atom_count += 1;
+        id
     }
-    .into()
-}
 
-pub(super) fn unexpected_byte_kind(b: u8) -> &'static str {
-    match b {
-        b'"' => "string",
-        b':' => "keyword",
-        b'[' => "vector",
-        b'{' => "map",
-        b'0'..=b'9' | b'-' | b'+' => "number",
-        _ => "token",
+    /// Reserve the next bond id and grow the count.
+    pub(crate) fn allocate_bond(&mut self) -> BondId {
+        let id = BondId::from(self.bond_count);
+        self.bond_count += 1;
+        id
     }
 }
 
@@ -775,12 +768,12 @@ fn read_atom_ref_pair(
     context: &'static str,
 ) -> Result<[AtomRef; 2], EdnError> {
     de.consume_byte(b'[')?;
-    let a = read_atom_ref(de)?;
-    let b = read_atom_ref(de)?;
+    let first = read_atom_ref(de)?;
+    let second = read_atom_ref(de)?;
     if !de.try_consume_byte(b']')? {
         return Err(DeError::Custom(format!("{}: expected 2 elements", context)).into());
     }
-    Ok([a, b])
+    Ok([first, second])
 }
 
 fn read_atom_constraint_pair(
@@ -788,12 +781,12 @@ fn read_atom_constraint_pair(
     context: &'static str,
 ) -> Result<[AtomConstraintDsl; 2], EdnError> {
     de.consume_byte(b'[')?;
-    let a = read_atom_constraint_dsl(de)?;
-    let b = read_atom_constraint_dsl(de)?;
+    let first = read_atom_constraint_dsl(de)?;
+    let second = read_atom_constraint_dsl(de)?;
     if !de.try_consume_byte(b']')? {
         return Err(DeError::Custom(format!("{}: expected 2 elements", context)).into());
     }
-    Ok([a, b])
+    Ok([first, second])
 }
 
 pub(super) fn read_relational_constraint_dsl(
@@ -992,18 +985,18 @@ pub(super) fn read_sub_pattern_anchor_dsl(
     Ok(out)
 }
 
-fn read_ref_pair<A, B>(
+fn read_ref_pair<R1, R2>(
     de: &mut EdnStreamDeserializer<'_>,
-    read_a: fn(&mut EdnStreamDeserializer<'_>) -> Result<A, EdnError>,
-    read_b: fn(&mut EdnStreamDeserializer<'_>) -> Result<B, EdnError>,
-) -> Result<(A, B), EdnError> {
+    read_first: fn(&mut EdnStreamDeserializer<'_>) -> Result<R1, EdnError>,
+    read_second: fn(&mut EdnStreamDeserializer<'_>) -> Result<R2, EdnError>,
+) -> Result<(R1, R2), EdnError> {
     de.consume_byte(b'[')?;
-    let a = read_a(de)?;
-    let b = read_b(de)?;
+    let first = read_first(de)?;
+    let second = read_second(de)?;
     if !de.try_consume_byte(b']')? {
         return Err(DeError::Custom("anchor pair must have 2 elements".into()).into());
     }
-    Ok((a, b))
+    Ok((first, second))
 }
 
 pub(super) fn read_molecule_constraint_dsl(

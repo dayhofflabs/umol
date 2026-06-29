@@ -212,7 +212,10 @@ impl RelationalConstraint {
             Self::DativeBondDonors { bond, atoms } => {
                 let bond = remap.dative_bond(bond)?;
                 let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.atom(a)).collect();
-                Self::DativeBondDonors { bond, atoms: atoms? }
+                Self::DativeBondDonors {
+                    bond,
+                    atoms: atoms?,
+                }
             }
             Self::DativeBondDonor { bond, atom } => Self::DativeBondDonor {
                 bond: remap.dative_bond(bond)?,
@@ -221,7 +224,10 @@ impl RelationalConstraint {
             Self::DativeBondContainsAllDonors { bond, atoms } => {
                 let bond = remap.dative_bond(bond)?;
                 let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.atom(a)).collect();
-                Self::DativeBondContainsAllDonors { bond, atoms: atoms? }
+                Self::DativeBondContainsAllDonors {
+                    bond,
+                    atoms: atoms?,
+                }
             }
             Self::DativeBondAllDonors { bond, predicate } => Self::DativeBondAllDonors {
                 bond: remap.dative_bond(bond)?,

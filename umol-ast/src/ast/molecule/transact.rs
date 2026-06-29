@@ -307,16 +307,16 @@ impl MoleculeBuilder {
                 Ok(())
             }
             Edit::AddBonds { bonds } => {
-                for AddBond { a, b, ast } in bonds {
-                    let a = created.atom(a)?;
-                    if a.index() >= self.atom_count() {
+                for AddBond { endpoints: [first, second], ast } in bonds {
+                    let first = created.atom(first)?;
+                    if first.index() >= self.atom_count() {
                         return Err(TransactionError::IdOutOfRange("atom"));
                     }
-                    let b = created.atom(b)?;
-                    if b.index() >= self.atom_count() {
+                    let second = created.atom(second)?;
+                    if second.index() >= self.atom_count() {
                         return Err(TransactionError::IdOutOfRange("atom"));
                     }
-                    let id = self.add_bond(a, b, ast);
+                    let id = self.add_bond(first, second, ast);
                     created.push(CreatedEntity::Bond(id));
                 }
                 Ok(())
@@ -659,20 +659,20 @@ impl MoleculeBuilder {
             }
             Edit::AddBonds { bonds } => {
                 let mut added = Vec::with_capacity(bonds.len());
-                for AddBond { a, b, ast } in bonds {
-                    let a = created.atom(a)?;
-                    if a.index() >= self.atom_count() {
+                for AddBond { endpoints: [first, second], ast } in bonds {
+                    let first = created.atom(first)?;
+                    if first.index() >= self.atom_count() {
                         return Err(TransactionError::IdOutOfRange("atom"));
                     }
-                    let b = created.atom(b)?;
-                    if b.index() >= self.atom_count() {
+                    let second = created.atom(second)?;
+                    if second.index() >= self.atom_count() {
                         return Err(TransactionError::IdOutOfRange("atom"));
                     }
-                    let id = self.add_bond(a, b, ast.clone());
+                    let id = self.add_bond(first, second, ast.clone());
                     created.push(CreatedEntity::Bond(id));
                     added.push(AddedBond {
                         id,
-                        endpoints: [a, b],
+                        endpoints: [first, second],
                         ast,
                     });
                 }

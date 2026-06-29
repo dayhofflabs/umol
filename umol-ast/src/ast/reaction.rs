@@ -129,8 +129,7 @@ impl ReactionAst {
                 bonds: created_bonds
                     .values()
                     .map(|(atoms, ast)| AddBond {
-                        a: atom_ref(atoms[0]),
-                        b: atom_ref(atoms[1]),
+                        endpoints: [atom_ref(atoms[0]), atom_ref(atoms[1])],
                         ast: ast.clone(),
                     })
                     .collect(),

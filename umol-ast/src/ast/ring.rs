@@ -358,8 +358,8 @@ impl RingSet {
 /// Edge in a `RingGraph`: the two rings it connects and their relation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RingGraphEdge {
-    pub source: RingId,
-    pub target: RingId,
+    pub first: RingId,
+    pub second: RingId,
     pub relation: RingRelation,
 }
 
@@ -384,15 +384,15 @@ impl RingGraph {
                     continue;
                 }
                 edges.push(RingGraphEdge {
-                    source: a,
-                    target: b,
+                    first: a,
+                    second: b,
                     relation,
                 });
                 neighbors[a.index()].push((b, relation));
                 neighbors[b.index()].push((a, relation));
             }
         }
-        edges.sort_by_key(|e| (e.source, e.target, e.relation as u8));
+        edges.sort_by_key(|e| (e.first, e.second, e.relation as u8));
         for n in &mut neighbors {
             n.sort_by_key(|(id, rel)| (*id, *rel as u8));
         }
@@ -1005,8 +1005,8 @@ mod tests {
         assert_eq!(
             graph.edges(),
             &[RingGraphEdge {
-                source: RingId(0),
-                target: RingId(1),
+                first: RingId(0),
+                second: RingId(1),
                 relation: RingRelation::Fused,
             }],
         );

@@ -1,11 +1,11 @@
 # 134 — Reaction-application: deferred items
 
-Two reaction-application items were left to work out while landing the `Edit`/`Delta`/`Undo` vocabulary refactor
+Four items were left to work out while landing the `Edit`/`Delta`/`Undo` vocabulary refactor
 (`Add`/`Modify`/`Remove` ↔ `Added`/`Modified`/`Removed`, key-based `ModifyConstraint`, by-value
-molecule `Add`/`Remove`, `CascadedConstraints`) and designing the reaction EDN surface (doc 133).
-The vocabulary/transact groundwork is landed and green; these are the remaining application
-features, both increment-2. Captured here so they are not lost; to be tackled after the reaction
-DSL (133) is implemented.
+molecule `Add`/`Remove`, `CascadedConstraints`) and designing the reaction EDN surface (doc 133) —
+two reaction-application features, plus structural entity refs (item 3) and a constraint-store
+cleanup (item 4), which surfaced while implementing 133. The vocabulary/transact groundwork is landed and green; all are increment-2,
+captured here so they are not lost, to be tackled after the reaction DSL (133) is implemented.
 
 ## 1 — molecule-level constraints don't apply in reactions
 
@@ -68,8 +68,76 @@ the increment-1 / increment-2 split in the localized-topology scoping, left to w
 
 Larger of the two: six overlay deltas + the span generalization.
 
+## 3 — structural entity refs
+
+**State.** Every `<entity>-ref` is `int | keyword` (position or id) — reaction surface (doc 133) and
+spec (§7.9). A bond/overlay with no id can only be named by position; to reference it otherwise you
+must give it an `:id`.
+
+**Want.** Name an entity by its constituents instead — a bond by its endpoints, an aromatic /
+multicenter system by its members, a dative bond by donors+acceptor, a stereo element by
+site+ligands. (Atoms are the base; no structural form.)
+
+**Form — explicit map, uniform.** `<entity>-ref ::= int | keyword | <structural-map>`, the §4 entry
+form minus `:type`/`:id`:
+
+| entity | structural ref |
+|---|---|
+| bond, noncovalent-bond | `{:atoms [atom-ref atom-ref]}` |
+| aromatic-system, multicenter-bond | `{:atoms [atom-ref+]}` |
+| dative-bond | `{:donors [atom-ref+] :acceptor atom-ref}` |
+| stereo-atom | `{:site atom-ref [:ligands [atom-ref+]]}` |
+| stereo-bond | `{:site bond-ref [:ligands [...]]}` |
+
+Map form (not the bare `[atom-ref …]` vector) so a structural ref is self-delimiting and never
+collides with the vectors it nests inside (anchor pairs `[[ref ref]+]`, relational `[ref target]`).
+Checked: the forms paired with a ref never key on `:atoms`/`:donors`/`:site`, and stereo forms are
+vectors, so `[<ref> <form>]` stays unambiguous by shape/key.
+
+**Sites.** One production, so it reaches every non-atom ref at once: reaction `:remove`/`:modify`;
+entity constraints; relational leading refs plus the embedded `bond-ref` in `:dative-bond-parallels`
+/ `:stereo-bond-site`; `:bond-order-sum :bonds`; anchor pairs; stereo-bond entry `:site`. In an
+entity constraint a structural ref is the *query* form (point at an id-less entity by its parts); the
+relational leaves still assert membership of a named entity.
+
+Extending a production propagates everywhere automatically:
+
+  - A. Reaction deltas (doc 133, not yet in spec): :remove <ref>, :modify <ref> …. ← the proposed site.
+  - B. Entity constraints (§7.9 677–683): {:bond [bond-ref form]} + the 6 other non-atom entities.
+  - C. Relational constraints (§7.9 686–717): the leading <entity>-ref of every leaf, plus two embedded cross-refs to a bond-ref: :dative-bond-parallels [dative-bond-ref bond-ref] and
+  :stereo-bond-site [stereo-bond-ref bond-ref].
+  - D. Molecule-scope (§7.9 722): :bond-order-sum {:bonds [bond-ref+] …}.
+  - E. Anchor-spec (§7.9 794–800): pair-lists [[<entity>-ref <entity>-ref]+] for bonds, dative-bonds, aromatic-systems, multicenter-bonds, noncovalent-bonds, stereo-atoms, stereo-bonds.
+  - F. Stereo-bond entry :site (§4 line 148): a bond-ref to an existing bond.
+
+**Cost.** Not a `define_ref` tweak. The macro emits a uniform `enum { Index, Id }` resolving over an
+`id → index` map. The structural variant has a per-entity payload (`[AtomRef;2]` / `Vec<AtomRef>` /
+donors+acceptor / site+ligands) and resolves by matching the host's entity *collections* by
+constituents — a different payload and resolution per entity. §4.1 uniqueness (no two bonds on a
+pair, aromatic systems disjoint, …) makes the match ≤1 hit, so the semantics are clean; the code
+shape is the work.
+
+## 4 — entity constraints: uniqueness-by-key explicit
+
+**State.** Each entity constraint store (`AtomConstraints`, plus the bond / overlay analogs) is
+addressed two ways: by `kind` (`AtomConstraintKind`), which is **multi-valued** — `RingMembership`
+has one entry per size — and by `key` (`AtomConstraintKey`), which is **always unique** (a kind's
+subkeys distinguish its entries). `add` calls this distinction `is_unique` ("unique kinds replace,
+ring appends") — misleading: by key *everything* is unique; "non-unique" only means a kind has
+subkeys.
+
+**Want.** Redesign the constraint-store API so uniqueness-by-key is the clear primary invariant —
+every entry is addressable by a unique key, a kind is just a group of keys — and retire the
+kind-centric `is_unique`/"unique" nomenclature. Applies to all entity constraint stores.
+
+**Now.** `AtomAst::update` (reaction `:modify` resolution) already works per key via `remove_by_key`;
+this item is the broader API/nomenclature cleanup, not blocking.
+
 ## Sequencing
 
-Both are increment-2, after the reaction DSL (133) lands. Item 1 is independent and small. Item 2 is
-the larger one and subsumes item 1's overlay-ref limitation. Neither blocks the 133 surface
-design, which is for atom/bond/constraint (localized topology) and complete on its own.
+All four are increment-2, after the reaction DSL (133) lands. Item 1 is independent and small. Item
+2 is the larger one and subsumes item 1's overlay-ref limitation. Item 3 rides with item 2 — six of
+its seven structural forms are overlay entities and share the resolution rework; bond is the only
+localized entity gaining one, and it is unblocked (name an existing bond by `:id` or index until
+then). Item 4 is independent API/naming cleanup. None blocks the 133 surface design, which is
+atom/bond/constraint with index|id refs and complete on its own.

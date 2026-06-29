@@ -235,8 +235,7 @@ impl StereoBondFieldChange {
 /// Single bond addition inside an `Edit::AddBonds` batch.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddBond {
-    pub a: AtomRef,
-    pub b: AtomRef,
+    pub endpoints: [AtomRef; 2],
     pub ast: BondAst,
 }
 
@@ -402,9 +401,12 @@ impl Edit {
         Self::AddAtoms { atoms: vec![ast] }
     }
 
-    pub fn add_bond(a: AtomRef, b: AtomRef, ast: BondAst) -> Self {
+    pub fn add_bond(first: AtomRef, second: AtomRef, ast: BondAst) -> Self {
         Self::AddBonds {
-            bonds: vec![AddBond { a, b, ast }],
+            bonds: vec![AddBond {
+                endpoints: [first, second],
+                ast,
+            }],
         }
     }
 
@@ -839,8 +841,7 @@ mod tests {
             ),
             Edit::AddBonds {
                 bonds: vec![AddBond {
-                    a: AtomRef::Id(AtomId(0)),
-                    b: AtomRef::Id(AtomId(1)),
+                    endpoints: [AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
                     ast: single_bond,
                 }],
             },

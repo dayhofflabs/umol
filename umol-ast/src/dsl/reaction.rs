@@ -13,21 +13,25 @@ use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn};
 use super::atom::{lower_atom, raise_atom, AtomDsl, PartialAtomDsl};
 use super::bond::{lower_bond, raise_bond, PartialBondDsl};
 use super::config::{DeltaDefaults, ReactionDefaults};
-use super::constraint::{read_constraint_dsl, ConstraintDsl};
+use super::constraint::{read_constraint_dsl, ConstraintDsl, EntityCounts};
 use super::edn_utils::{
-    consume_single_key_map_close, parse_single_key_map, read_single_key_map_header,
+    consume_single_key_map_close, missing, parse_single_key_map, parse_vec,
+    read_single_key_map_header, read_vec,
 };
+use super::error::ParseError;
 use super::molecule::{
-    parse_atom_entry, parse_bond_entry, read_atom_entry, read_bond_entry, AtomEntryInput,
-    BondEntryInput, MoleculeDsl, MoleculeInput, MoleculeMetadata,
+    parse_atom_aliases, parse_atom_entry, parse_bond_entry, parse_molecule_input,
+    read_atom_aliases, read_atom_entry, read_bond_entry, read_molecule_input, AtomEntryInput,
+    AtomSpecInput, BondEntryInput, MoleculeDsl, MoleculeInput, MoleculeMetadata,
 };
 use super::refs::{read_atom_ref, read_bond_ref, AtomRef, BondRef};
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
-use crate::ast::delta::{AtomDelta, BondDelta, Delta};
+use crate::ast::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
 use crate::ast::id::{AtomId, BondId};
 use crate::ast::reaction::ReactionAst;
 use crate::ast::traits::{FromAst, IntoAst};
+use crate::ast::EntityPatch;
 
 /// Surface DSL for a reaction. Pairs `ReactionAst` with `ReactionMetadata`; fields are
 /// private so metadata cannot drift onto a different AST.
@@ -217,10 +221,237 @@ pub(crate) enum DeltaInput {
 
 /// Raw parse target for a reaction: the lhs molecule input plus the unresolved
 /// deltas. Resolution (`into_ast`, R7) lifts this to `(ReactionAst, ReactionMetadata)`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct ReactionInput {
     lhs: MoleculeInput,
+    atom_aliases: Vec<(String, Box<AtomDsl>)>,
     deltas: Vec<DeltaInput>,
+}
+
+impl ReactionInput {
+    pub(crate) fn into_ast(self) -> Result<(ReactionAst, ReactionMetadata), ParseError> {
+        let ReactionInput {
+            lhs,
+            atom_aliases,
+            deltas,
+        } = self;
+        let (lhs, lhs_meta) = lhs.into_ast()?;
+
+        // Alias table for `:add` = lhs aliases ∪ reaction aliases (bijective; collisions error).
+        let mut aliases: IndexMap<String, Box<AtomDsl>> = lhs_meta
+            .iter_atom_aliases()
+            .map(|(name, dsl)| (name.to_string(), Box::new(dsl.clone())))
+            .collect();
+        let mut metadata = ReactionMetadata {
+            lhs: lhs_meta,
+            ..Default::default()
+        };
+        for (name, dsl) in atom_aliases {
+            if aliases.contains_key(&name) {
+                return Err(ParseError::DuplicateId(name));
+            }
+            if aliases.values().any(|existing| existing == &dsl) {
+                return Err(ParseError::InvalidValue(
+                    "atom-aliases must be bijective: two names map to the same atom".into(),
+                ));
+            }
+            metadata.add_atom_alias(name.clone(), (*dsl).clone());
+            aliases.insert(name, dsl);
+        }
+
+        // Resolution namespace: lhs entity ids (all kinds) and running counts, both seeded from the
+        // lhs molecule and grown in delta order as entities are defined. Every ref — entity and
+        // constraint — resolves against this pair; `metadata` separately records created-entity ids
+        // for roundtrip. No forward refs: only adds processed earlier are visible.
+        let mut counts = EntityCounts::from_ast(&lhs);
+        let mut namespace = metadata.lhs().clone();
+        let lhs_atom_count = counts.atom_count;
+        let lhs_bond_count = counts.bond_count;
+
+        let mut resolved = Deltas::new();
+        for delta in deltas {
+            match delta {
+                DeltaInput::AtomAdd(entry) => {
+                    let id = counts.allocate_atom();
+                    if let Some(name) = entry.id {
+                        if namespace.contains_id(&name) || aliases.contains_key(&name) {
+                            return Err(ParseError::DuplicateId(name));
+                        }
+                        namespace.set_atom_id(id, name.clone());
+                        metadata.set_atom_id(id, name);
+                    }
+                    let ast = match entry.spec {
+                        AtomSpecInput::Bare(dsl) => dsl.0,
+                        AtomSpecInput::Alias(name) => match aliases.get(&name) {
+                            Some(dsl) => dsl.0.clone(),
+                            None => {
+                                return Err(ParseError::InvalidValue(format!(
+                                    "unknown atom alias :{name}"
+                                )))
+                            }
+                        },
+                    };
+                    resolved.push(Delta::Atom(AtomDelta::Add { id, ast }));
+                }
+                DeltaInput::AtomRemove(r) => {
+                    let id = r.into_ast(counts.atom_count, &namespace)?;
+                    if id.index() >= lhs_atom_count {
+                        return Err(ParseError::InvalidValue(format!(
+                            "cannot remove atom :{} added in the same reaction",
+                            id.index()
+                        )));
+                    }
+                    resolved.push(Delta::Atom(AtomDelta::Remove {
+                        id,
+                        ast: lhs[id].clone(),
+                    }));
+                }
+                DeltaInput::AtomModify(r, rhs) => {
+                    let id = r.into_ast(counts.atom_count, &namespace)?;
+                    if id.index() >= lhs_atom_count {
+                        return Err(ParseError::InvalidValue(format!(
+                            "cannot modify atom :{} added in the same reaction",
+                            id.index()
+                        )));
+                    }
+                    let new = lhs[id].update(&rhs);
+                    for d in AtomDelta::diff(id, &lhs[id], &new) {
+                        resolved.push(Delta::Atom(d));
+                    }
+                }
+                DeltaInput::BondAdd(entry) => {
+                    let id = counts.allocate_bond();
+                    if let Some(name) = entry.id {
+                        if namespace.contains_id(&name) || aliases.contains_key(&name) {
+                            return Err(ParseError::DuplicateId(name));
+                        }
+                        namespace.set_bond_id(id, name.clone());
+                        metadata.set_bond_id(id, name);
+                    }
+                    let a = entry.first.into_ast(counts.atom_count, &namespace)?;
+                    let b = entry.second.into_ast(counts.atom_count, &namespace)?;
+                    resolved.push(Delta::Bond(BondDelta::Add {
+                        id,
+                        atoms: [a, b],
+                        ast: entry.bond.0,
+                    }));
+                }
+                DeltaInput::BondRemove(r) => {
+                    let id = r.into_ast(counts.bond_count, &namespace)?;
+                    if id.index() >= lhs_bond_count {
+                        return Err(ParseError::InvalidValue(format!(
+                            "cannot remove bond :{} added in the same reaction",
+                            id.index()
+                        )));
+                    }
+                    resolved.push(Delta::Bond(BondDelta::Remove {
+                        id,
+                        atoms: lhs.bond(id).atom_ids(),
+                        ast: lhs[id].clone(),
+                    }));
+                }
+                DeltaInput::BondModify(r, rhs) => {
+                    let id = r.into_ast(counts.bond_count, &namespace)?;
+                    if id.index() >= lhs_bond_count {
+                        return Err(ParseError::InvalidValue(format!(
+                            "cannot modify bond :{} added in the same reaction",
+                            id.index()
+                        )));
+                    }
+                    let new = lhs[id].update(&rhs);
+                    for d in BondDelta::diff(id, &lhs[id], &new) {
+                        resolved.push(Delta::Bond(d));
+                    }
+                }
+                DeltaInput::ConstraintAdd(dsl) => {
+                    let c = dsl.into_ast(&counts, &namespace)?;
+                    resolved.push(Delta::Constraint(ConstraintDelta::Add(c)));
+                }
+                DeltaInput::ConstraintRemove(dsl) => {
+                    let c = dsl.into_ast(&counts, &namespace)?;
+                    resolved.push(Delta::Constraint(ConstraintDelta::Remove(c)));
+                }
+            }
+        }
+        Ok((
+            ReactionAst {
+                lhs,
+                deltas: resolved,
+            },
+            metadata,
+        ))
+    }
+}
+
+fn read_reaction_input(de: &mut EdnStreamDeserializer<'_>) -> Result<ReactionInput, EdnError> {
+    de.consume_byte(b'{')?;
+    let mut lhs = None;
+    let mut atom_aliases = Vec::new();
+    let mut deltas = Vec::new();
+    loop {
+        if de.try_consume_byte(b'}')? {
+            break;
+        }
+        let key = de.read_keyword_name()?.into_owned();
+        match key.as_str() {
+            "lhs" => lhs = Some(read_molecule_input(de)?),
+            "atom-aliases" => atom_aliases = read_atom_aliases(de)?,
+            "deltas" => deltas = read_vec(de, read_delta_input)?,
+            other => {
+                return Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["reaction".into()],
+                }
+                .into())
+            }
+        }
+    }
+    Ok(ReactionInput {
+        lhs: lhs.ok_or_else(|| missing("lhs", "reaction"))?,
+        atom_aliases,
+        deltas,
+    })
+}
+
+fn parse_reaction_input(edn: &Edn<'_>) -> Result<ReactionInput, DeError> {
+    let Edn::Map(m) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "reaction map",
+            got: edn.kind(),
+            path: Vec::new(),
+        });
+    };
+    let mut lhs = None;
+    let mut atom_aliases = Vec::new();
+    let mut deltas = Vec::new();
+    for (k, v) in m.iter() {
+        let Edn::Keyword(key) = k else {
+            return Err(DeError::TypeMismatch {
+                expected: "keyword key",
+                got: k.kind(),
+                path: vec!["reaction".into()],
+            });
+        };
+        match key.name() {
+            "lhs" => lhs = Some(parse_molecule_input(v)?),
+            "atom-aliases" => atom_aliases = parse_atom_aliases(v)?,
+            "deltas" => deltas = parse_vec(v, ":deltas", parse_delta_input)?,
+            other => {
+                return Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["reaction".into()],
+                })
+            }
+        }
+    }
+    Ok(ReactionInput {
+        lhs: lhs.ok_or(DeError::MissingField {
+            key: "lhs".to_string(),
+            path: vec!["reaction".into()],
+        })?,
+        atom_aliases,
+        deltas,
+    })
 }
 
 fn read_delta_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInput, EdnError> {
@@ -380,9 +611,9 @@ mod tests {
 
     use super::*;
     use crate::ast::atom::ElementAst;
-    use crate::ast::constraint::Constraint;
+    use crate::ast::constraint::{AtomConstraint, Constraint, MoleculeConstraint};
     use crate::ast::delta::{ConstraintDelta, Deltas};
-    use crate::ast::edit::AtomFieldChange;
+    use crate::ast::edit::{AtomFieldChange, BondFieldChange};
     use crate::ast::value::ValueAst;
     use crate::dsl::bond::BondDsl;
     use crate::dsl::constraint::MoleculeConstraintDsl;
@@ -512,8 +743,8 @@ mod tests {
         r##"{:bond {:add [0 1 "1"]}}"##,
         DeltaInput::BondAdd(BondEntryInput {
             id: None,
-            a: AtomRef::Index(0),
-            b: AtomRef::Index(1),
+            first: AtomRef::Index(0),
+            second: AtomRef::Index(1),
             bond: BondDsl(BondAst::from_order(1)),
         })
     )]
@@ -521,8 +752,8 @@ mod tests {
         r##"{:bond {:add {:id :b1 :atoms [:c :nu] :type "2"}}}"##,
         DeltaInput::BondAdd(BondEntryInput {
             id: Some("b1".into()),
-            a: AtomRef::Id("c".into()),
-            b: AtomRef::Id("nu".into()),
+            first: AtomRef::Id("c".into()),
+            second: AtomRef::Id("nu".into()),
             bond: BondDsl(BondAst::from_order(2)),
         })
     )]
@@ -544,8 +775,8 @@ mod tests {
         r##"{:bond {:add [0 1 "1"]}}"##,
         DeltaInput::BondAdd(BondEntryInput {
             id: None,
-            a: AtomRef::Index(0),
-            b: AtomRef::Index(1),
+            first: AtomRef::Index(0),
+            second: AtomRef::Index(1),
             bond: BondDsl(BondAst::from_order(1)),
         })
     )]
@@ -553,8 +784,8 @@ mod tests {
         r##"{:bond {:add {:id :b1 :atoms [:c :nu] :type "2"}}}"##,
         DeltaInput::BondAdd(BondEntryInput {
             id: Some("b1".into()),
-            a: AtomRef::Id("c".into()),
-            b: AtomRef::Id("nu".into()),
+            first: AtomRef::Id("c".into()),
+            second: AtomRef::Id("nu".into()),
             bond: BondDsl(BondAst::from_order(2)),
         })
     )]
@@ -608,6 +839,300 @@ mod tests {
         assert_eq!(
             read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
             expected
+        );
+    }
+
+    #[rstest]
+    fn test_parse_reaction_input() {
+        let input = r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}} {:bond {:remove 0}} {:constraint {:add {:connected {}}}}]}"##;
+        let expected = ReactionInput {
+            lhs: MoleculeInput {
+                atoms: vec![AtomEntryInput {
+                    id: None,
+                    spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))),
+                }],
+                ..Default::default()
+            },
+            atom_aliases: Vec::new(),
+            deltas: vec![
+                DeltaInput::AtomAdd(AtomEntryInput {
+                    id: None,
+                    spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))),
+                }),
+                DeltaInput::BondRemove(BondRef::Index(0)),
+                DeltaInput::ConstraintAdd(ConstraintDsl::Molecule(
+                    MoleculeConstraintDsl::Connected { atoms: None },
+                )),
+            ],
+        };
+        assert_eq!(
+            parse_reaction_input(&read_string(input).unwrap()).unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    fn test_read_reaction_input() {
+        let input = r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}} {:bond {:remove 0}} {:constraint {:add {:connected {}}}}]}"##;
+        let expected = ReactionInput {
+            lhs: MoleculeInput {
+                atoms: vec![AtomEntryInput {
+                    id: None,
+                    spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))),
+                }],
+                ..Default::default()
+            },
+            atom_aliases: Vec::new(),
+            deltas: vec![
+                DeltaInput::AtomAdd(AtomEntryInput {
+                    id: None,
+                    spec: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))),
+                }),
+                DeltaInput::BondRemove(BondRef::Index(0)),
+                DeltaInput::ConstraintAdd(ConstraintDsl::Molecule(
+                    MoleculeConstraintDsl::Connected { atoms: None },
+                )),
+            ],
+        };
+        assert_eq!(
+            read_reaction_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast() {
+        let input = r##"{:lhs {:atoms ["C"]} :atom-aliases [:me "C#h3"] :deltas [{:atom {:add [:nu :me]}} {:atom {:add "O"}}]}"##;
+        let (ast, meta) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(1),
+                    ast: {
+                        let mut a = AtomAst::new(ElementAst::Lit(Element::C));
+                        a.implicit_hydrogens = ValueAst::Lit(3);
+                        a
+                    },
+                }),
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(2),
+                    ast: AtomAst::from_element(Element::O),
+                }),
+            ]),
+        );
+        assert_eq!(meta.atom_id(AtomId(1)), Some("nu"));
+        assert_eq!(meta.atom_id(AtomId(2)), None);
+        assert!(meta.has_atom_alias("me"));
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_alias_union() {
+        // `:lo` is an lhs alias, `:hi` a reaction alias; both `:add` resolve (union),
+        // but each set stays in its own metadata slot for independent round-trip.
+        let input = r##"{:lhs {:atoms ["C"] :atom-aliases [:lo "N"]} :atom-aliases [:hi "C#h3"] :deltas [{:atom {:add :lo}} {:atom {:add :hi}}]}"##;
+        let (ast, meta) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(1),
+                    ast: AtomAst::from_element(Element::N),
+                }),
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(2),
+                    ast: {
+                        let mut a = AtomAst::new(ElementAst::Lit(Element::C));
+                        a.implicit_hydrogens = ValueAst::Lit(3);
+                        a
+                    },
+                }),
+            ]),
+        );
+        assert_eq!(meta.lhs().atom_aliases_len(), 1);
+        assert!(meta.lhs().has_atom_alias("lo"));
+        assert_eq!(meta.atom_aliases_len(), 1);
+        assert!(meta.has_atom_alias("hi"));
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_atom_remove() {
+        let input = r##"{:lhs {:atoms [[:br "Br"] "C"]} :deltas [{:atom {:remove :br}}]}"##;
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                ast: AtomAst::from_element(Element::Br),
+            })]),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_atom_remove_error() {
+        // Adding then removing the same id is prohibited — recover-from-lhs cannot reach an added atom.
+        let input =
+            r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:x "O"]}} {:atom {:remove :x}}]}"##;
+        let err = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap_err();
+        assert!(matches!(err, ParseError::InvalidValue(_)));
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_atom_modify() {
+        // lhs :br is Br#c0; modify charge to -1 → one ModifyField (old recovered from lhs).
+        let input = r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##;
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: ValueAst::Lit(0),
+                    new: ValueAst::Lit(-1),
+                },
+            })]),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_bond_add() {
+        // Bond-add attaches to a same-reaction atom: :o is AtomId(1), bond endpoints [0, :o].
+        let input = r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:bond {:add [0 :o "1"]}}]}"##;
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(1),
+                    ast: AtomAst::from_element(Element::O),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(0),
+                    atoms: [AtomId(0), AtomId(1)],
+                    ast: BondAst::from_order(1),
+                }),
+            ]),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_bond_remove() {
+        let input = r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]} :deltas [{:bond {:remove :b1}}]}"##;
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([Delta::Bond(BondDelta::Remove {
+                id: BondId(0),
+                atoms: [AtomId(0), AtomId(1)],
+                ast: BondAst::from_order(1),
+            })]),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_bond_remove_error() {
+        // Adding then removing the same bond is prohibited — recover-from-lhs cannot reach it.
+        let input =
+            r##"{:lhs {:atoms ["C" "O"]} :deltas [{:bond {:add [0 1 "1"]}} {:bond {:remove 0}}]}"##;
+        let err = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap_err();
+        assert!(matches!(err, ParseError::InvalidValue(_)));
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_bond_modify() {
+        // lhs :b1 is order 1; modify to order 2 → one ModifyField (old recovered from lhs).
+        let input = r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]} :deltas [{:bond {:modify [:b1 "2"]}}]}"##;
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order {
+                    old: ValueAst::Lit(1),
+                    new: ValueAst::Lit(2),
+                },
+            })]),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_constraint_add() {
+        let input = r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}"##;
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None },)
+            ))]),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_constraint_remove() {
+        let input = r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:remove {:connected {}}}}]}"##;
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None },)
+            ))]),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_constraint_added_atom_ref() {
+        // The constraint ref :o names an atom added in the same reaction (AtomId(1)), resolved
+        // against the unified namespace.
+        let input = r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:constraint {:add {:atom [:o {:valence 2}]}}}]}"##;
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(1),
+                    ast: AtomAst::from_element(Element::O),
+                }),
+                Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(
+                    AtomId(1),
+                    AtomConstraint::Valence(ValueAst::Lit(2)),
+                ))),
+            ]),
         );
     }
 }

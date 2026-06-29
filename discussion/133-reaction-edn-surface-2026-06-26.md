@@ -444,7 +444,7 @@ ReactionMetadata};`). The partial-DSL parsers (R4) are free fns in the existing 
   - 0.3f — spec §8: replace the single donor-satisfies form with the five donor forms, mirroring the
     aromatic/multicenter relational forms.
 
-## Reaction build plan (R1–R11)
+## Reaction build plan (R1–R12)
 
 Bottom-up: each chunk is a coherent semantic context placed where its dependencies are satisfied,
 ending at a compilable, tested checkpoint. The boundary-type traits (`FromAst`/`IntoAst`/`FromEdn`/
@@ -500,7 +500,7 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   duplicate-predicate error.
 - *Checkpoint (tested):* partial round-trips.
 
-**R5 — Delta parsing** [R1, R4] (`dsl/reaction.rs`):
+**R5 — Delta parsing** [R1, R4] (`dsl/reaction.rs`) **Done**
 - R5a — dispatch: `read_delta_input` (streaming) / `parse_delta_input` (tree) route the outer
   entity keyword to per-entity `{read,parse}_delta_<entity>_input`, each owning its op-keyword
   routing (`:add` / `:remove` / `:modify`); arms are R5b–d. Content-independent EDN helpers
@@ -514,9 +514,8 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   `AtomModify(AtomRef, PartialAtomDsl)`.
 - R5c — bond arms (in `{read,parse}_delta_bond_input`): `:add` → `BondAdd(BondEntryInput)` (reuses
   `molecule::{read,parse}_bond_entry`; vector or map+`:id` form); `:remove` → `BondRemove(BondRef)`;
-  `:modify [<ref> <dsl>]` → `BondModify(BondRef, PartialBondDsl)`. The structural bond-ref
-  (`[<atom-ref> <atom-ref>]`) is deferred to the cross-cutting structural-ref work; refs are index|id
-  for now.
+  `:modify [<ref> <dsl>]` → `BondModify(BondRef, PartialBondDsl)`. The structural bond-ref is
+  deferred to doc 134 item 3 (lands with the overlay entities); refs are index|id for now.
 - R5d — constraint arms (in `{read,parse}_delta_constraint_input`): `:add` / `:remove` →
   `Constraint{Add,Remove}(ConstraintDsl)` value-based — molecule-level constraints are keyless (flat
   multiset), so removal names the whole constraint, not a ref.
@@ -524,31 +523,61 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   tree + streaming. (Landed per-arm in R5b–d.)
 - *Checkpoint (tested):* every `DeltaInput` shape parses. **Done.**
 
-**R6 — Top-level parse** [R1, R5] (`dsl/reaction.rs`):
-- R6a — `read_reaction_input` / `parse_reaction_input`: `:lhs` via the molecule input parser, `:deltas`
-  looped via R5.
-- R6b — tests: a full reaction map → raw `ReactionInput`.
-- *Checkpoint (tested):* reaction map parses.
+**R6 — Top-level parse** [R1, R5] (`dsl/reaction.rs`) **Done**
+- R6a — `read_reaction_input` / `parse_reaction_input`: `:lhs` via the molecule input parser
+  (`read_/parse_molecule_input`, now `pub(super)`) — **mandatory** (`MissingField` if absent, like a
+  molecule must give `:atoms`); `:deltas` looped via R5 (`read_vec`/`parse_vec` over the R5 dispatch);
+  `:atom-aliases` (reaction-level, the molecule's flat name/atom-string vector form via
+  `read_/parse_atom_aliases`) → `ReactionInput.atom_aliases`; unknown key → `UnknownField`.
+- R6b — tests: `test_{parse,read}_reaction_input` — a full reaction map (lhs + atom/bond/constraint
+  deltas) → raw `ReactionInput`.
+- *Checkpoint (tested):* reaction map parses. **Done.** (The dispatch chain stays dead-code until R8
+  wires `read_/parse_reaction_input` into `ReactionDsl`'s `FromEdn`/`from_edn_str` — the public root.)
 
-**R7 — Resolution** [R1]: `ReactionInput::into_ast → (ReactionAst, ReactionMetadata)`
+**R7 — Resolution** [R1]: `ReactionInput::into_ast → (ReactionAst, ReactionMetadata)` **Done**
 (`dsl/reaction.rs`). Work items in dependency order:
-- R7a — `into_ast` skeleton + resolve `lhs` (`MoleculeInput::into_ast`), seed `ReactionMetadata.lhs`.
-- R7b — atom adds → fresh `AtomId` (lhs atom count + order), record its `:id` via `set_atom_id`.
-- R7c — atom namespace = lhs atom ids ∪ atom-add ids; resolve atom refs (unknown / non-covering ref
-  → error).
-- R7d — bond adds → fresh `BondId`, record its `:id` via `set_bond_id`; resolve endpoint atom refs (via
-  R7c — may name added atoms).
-- R7e — bond namespace = lhs bond ids ∪ bond-add ids; resolve bond refs (unknown / non-covering ref
-  → error).
-- R7f — removes (atom + bond) → recover entity AST from `lhs` by id → `Remove`.
-- R7g — modifies (atom + bond) → diff partial RHS vs lhs current → `ModifyField` / `ModifyConstraint`
-  (new as written — a possibly-symbolic `ValueAst` stored unevaluated, resolved at apply not at the
-  boundary; an `Undetermined` constraint = removal).
-- R7h — constraint add/remove → `ConstraintDelta` (resolve refs against the atom+bond namespace).
-- R7i — assemble `Deltas` + `ReactionMetadata`.
-- R7j — tests: add-then-reference, structural remove, recover-from-lhs modify, constraint add/remove,
-  unknown-ref error.
-- *Checkpoint (tested):* hand-built `ReactionInput` resolves.
+- R7a — **Done.** `into_ast(self) -> Result<(ReactionAst, ReactionMetadata), ParseError>` (no Ctx,
+  mirrors `MoleculeInput::into_ast` — display-form AST; raise is the separate `IntoAst` step). Resolves
+  `lhs`, seeds `ReactionMetadata.lhs`. Single in-order pass over `:deltas` (no forward refs).
+- R7b — **Done.** Atom adds → fresh `AtomId` (lhs atom count + order), `:id` recorded via
+  `set_atom_id`, `check_id_disjoint` against the id/alias namespace. `:add` spec resolves: `Bare` →
+  `AtomDsl.0`; `Alias` → the **union** alias table (lhs aliases ∪ reaction `:atom-aliases`, bijective,
+  collisions error), which is also seeded into `ReactionMetadata.atom_aliases`. Test:
+  `test_reaction_input_into_ast`.
+- R7c — **Done.** Atom namespace = lhs atom ids ∪ atom-add ids (`atom_id_to_idx` seeded from lhs,
+  grown per add); atom refs resolve via `AtomRef::resolve` (unknown / out-of-range → error).
+- R7d — **Done.** Bond adds → fresh `BondId` (lhs bond count + order), `:id` via `set_bond_id`,
+  disjoint from the atom/alias/bond-id namespace; endpoint atom refs resolve against the running atom
+  count (may name same-reaction added atoms). `BondDelta::Add { id, atoms: [a, b], ast }`.
+- R7e — **Done.** Bond namespace = lhs bond ids ∪ bond-add ids (`bond_id_to_idx`); bond refs resolve
+  via `BondRef::resolve`.
+- R7f — **Done.** Removes (atom + bond) recover the entity AST from `lhs` by id (`lhs[id].clone()`;
+  bond endpoints via `lhs.bond(id).atom_ids()`) → `Remove`. Removing an entity added in the same
+  reaction is an error (recover-from-lhs cannot reach it).
+- R7g — **Done.** Modifies (atom + bond): `lhs[id].update(&rhs)` overlays the partial RHS onto the lhs
+  value (`AtomAst::update` / `BondAst::update`), then `EntityPatch::diff` emits the
+  `ModifyField` / `ModifyConstraint` deltas (a possibly-symbolic `ValueAst` stored unevaluated; an
+  `Undetermined` constraint = removal). Modifying a same-reaction-added entity is an error.
+- R7h — **Done.** Constraint add/remove → `ConstraintDelta::Add` / `Remove`, each wrapping
+  `ConstraintDsl::into_ast(&counts, &namespace)` (the existing full constraint resolver — all entity
+  kinds + relational + molecule + And/Or/Not). Constraint `Remove` needs no lhs recovery; the DSL
+  carries the whole constraint.
+- **Unified resolution namespace** (replaces the per-entity `IndexMap`s across R7c–h): a running
+  `EntityCounts` (`EntityCounts::from_ast(&lhs)` + `allocate_atom` / `allocate_bond` mutators) and a
+  running `MoleculeMetadata` (`metadata.lhs().clone()`), both seeded from lhs and grown in delta order
+  as entities are defined; every ref — entity and constraint — resolves against this pair via
+  `Ref::into_ast(count, &namespace)` (linear id scan; O(count), parse-time). Disjointness uses
+  `MoleculeMetadata::contains_id`. `metadata` (the output `ReactionMetadata`) keeps created ids
+  separate for roundtrip. Generalizes to doc-134 overlays (each overlay add: `allocate_<kind>` +
+  `set_<kind>_id` + `metadata.set_<kind>_id`, refs resolve against the same pair). Sub-linear is
+  deferred: would make `MoleculeMetadata`'s id maps `BiBTreeMap` (O(log n) both ways), a separate
+  shared-type change.
+- R7i — **Done.** Assembles `Deltas` + `ReactionMetadata` (`ReactionAst { lhs, deltas }`).
+- R7j — **Done.** `test_reaction_input_into_ast{,_alias_union}`,
+  `..._atom_{remove,remove_error,modify}`, `..._bond_{add,remove,remove_error,modify}`,
+  `..._constraint_{add,remove,added_atom_ref}` (the last exercises a constraint ref naming a
+  same-reaction-added atom), plus `test_{atom,bond}_ast_update`.
+- *Checkpoint (tested):* hand-built `ReactionInput` resolves (atoms, bonds, constraints).
 
 **R8 — `FromEdn` path** [R2, R6, R7]:
 - R8a — `FromEdn` (`from_edn` + `from_edn_str`): parse (R6) → `into_ast` (R7) → `from_parts`.
@@ -578,6 +607,21 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
 - R11a — add the normative reactions section to `umol-dsl-spec.md`.
 - R11b — revise §8.4.
 - *Checkpoint:* spec updated.
+
+**R12 — Property & fuzz tests** [R10] (`proptest`, feature-gated; `cargo-fuzz` targets):
+Reuse the existing harness — `umol-ast/tests/property/{delta,reaction}.rs` and `umol-ast/fuzz/`.
+- R12a — patch algebra (`EntityPatch`) for `AtomDelta` / `BondDelta`: over generated state pairs,
+  `apply(left, diff(left, right)) == right`; `diff(x, x)` is empty; `apply` of an empty diff is the
+  identity.
+- R12b — partial entity AST↔DSL: round-trip `PartialAtomDsl` / `PartialBondDsl` through
+  `FromAst` / `IntoAst` (with defaults `Ctx`) over generated partial atoms/bonds.
+- R12c — partial entity EDN: round-trip `PartialAtomDsl` / `PartialBondDsl` through `FromEdn`/`ToEdn`,
+  and the tree (`from_edn`) and streaming (`read_*`) parsers agree on the same input.
+- R12d — delta EDN: round-trip the reaction delta ops through the EDN surface (render → parse),
+  per op kind (add / remove / modify-field / modify-constraint) for atoms and bonds.
+- R12e — fuzz the reaction EDN parsers: one target driving the streaming reader and one the tree
+  parser; both must not panic and must agree (parse-or-error parity) on arbitrary bytes.
+- *Checkpoint (tested):* algebra and round-trip laws hold under generation; parsers fuzz-clean.
 
 ## Implementation plan — span surface (`ReactionSpanDsl` ↔ `ReactionSpanAst`)
 

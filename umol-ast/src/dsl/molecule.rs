@@ -25,12 +25,9 @@ use super::aromatic::AromaticSystemDsl;
 use super::atom::AtomDsl;
 use super::bond::{expand_bond_keyword, BondDsl};
 use super::config::MoleculeDefaults;
-use super::constraint::{
-    missing, read_constraints_dsl, unexpected_byte_kind, ConstraintDsl, ConstraintsDsl,
-    EntityCounts,
-};
+use super::constraint::{read_constraints_dsl, ConstraintDsl, ConstraintsDsl, EntityCounts};
 use super::dative::DativeBondDsl;
-use super::edn_utils::{eof_err, parse_vec, read_map, read_vec};
+use super::edn_utils::{eof_err, missing, parse_vec, read_map, read_vec, unexpected_byte_kind};
 use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
 use super::noncovalent::NoncovalentBondDsl;
@@ -171,6 +168,18 @@ impl MoleculeMetadata {
 
     pub fn stereo_bond_id(&self, id: StereoBondId) -> Option<&str> {
         self.stereo_bond_ids.get(&id).map(String::as_str)
+    }
+
+    /// Whether `name` is already bound to any entity id (across all kinds). Linear scan.
+    pub fn contains_id(&self, name: &str) -> bool {
+        self.atom_ids.values().any(|n| n == name)
+            || self.bond_ids.values().any(|n| n == name)
+            || self.dative_bond_ids.values().any(|n| n == name)
+            || self.aromatic_system_ids.values().any(|n| n == name)
+            || self.multicenter_bond_ids.values().any(|n| n == name)
+            || self.noncovalent_bond_ids.values().any(|n| n == name)
+            || self.stereo_atom_ids.values().any(|n| n == name)
+            || self.stereo_bond_ids.values().any(|n| n == name)
     }
 
     /// Name of the alias bound to this atom DSL, if any.
@@ -468,8 +477,8 @@ pub(super) fn read_bond_entry(
             de.consume_byte(b']')?;
             Ok(BondEntryInput {
                 id: None,
-                a,
-                b,
+                first: a,
+                second: b,
                 bond,
             })
         }
@@ -490,8 +499,8 @@ pub(super) fn read_bond_entry(
             let [a, b] = two_atom_refs(atoms, "bond-entry")?;
             Ok(BondEntryInput {
                 id,
-                a,
-                b,
+                first: a,
+                second: b,
                 bond: bond.ok_or_else(|| missing("type", "bond-entry"))?,
             })
         }
@@ -615,8 +624,8 @@ fn read_noncovalent_bond_entry(
     let [a, b] = two_atom_refs(atoms, "noncovalent-bond-entry")?;
     Ok(NoncovalentBondEntryInput {
         id,
-        a,
-        b,
+        first: a,
+        second: b,
         bond: bond.ok_or_else(|| missing("type", "noncovalent-bond-entry"))?,
     })
 }
@@ -728,7 +737,7 @@ fn read_stereo_bond_entry(
     })
 }
 
-fn read_atom_aliases(
+pub(super) fn read_atom_aliases(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<Vec<(String, Box<AtomDsl>)>, EdnError> {
     de.consume_byte(b'[')?;
@@ -903,8 +912,8 @@ fn render_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
         .iter()
         .map(|view| {
             let bond_edn = BondDsl::from_ref(view.ast).to_edn();
-            let a = render_atom_ref(view.atom_ids()[0], meta);
-            let b = render_atom_ref(view.atom_ids()[1], meta);
+            let first = render_atom_ref(view.atom_ids()[0], meta);
+            let second = render_atom_ref(view.atom_ids()[1], meta);
             match meta.bond_id(view.id) {
                 Some(id) => {
                     let mut m = EdnMap::with_capacity(3);
@@ -912,11 +921,14 @@ fn render_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
                         Edn::keyword("id"),
                         Edn::Keyword(EdnKeyword::owned(id.to_string())),
                     );
-                    m.insert(Edn::keyword("atoms"), Edn::Vector(vec![a, b].into()));
+                    m.insert(
+                        Edn::keyword("atoms"),
+                        Edn::Vector(vec![first, second].into()),
+                    );
                     m.insert(Edn::keyword("type"), bond_edn);
                     Edn::Map(m)
                 }
-                None => Edn::Vector(vec![a, b, bond_edn].into()),
+                None => Edn::Vector(vec![first, second, bond_edn].into()),
             }
         })
         .collect();
@@ -1156,8 +1168,8 @@ pub(crate) enum AtomSpecInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct BondEntryInput {
     pub(crate) id: Option<String>,
-    pub(crate) a: AtomRef,
-    pub(crate) b: AtomRef,
+    pub(crate) first: AtomRef,
+    pub(crate) second: AtomRef,
     pub(crate) bond: BondDsl,
 }
 
@@ -1186,8 +1198,8 @@ pub(crate) struct MulticenterBondEntryInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct NoncovalentBondEntryInput {
     pub(crate) id: Option<String>,
-    pub(crate) a: AtomRef,
-    pub(crate) b: AtomRef,
+    pub(crate) first: AtomRef,
+    pub(crate) second: AtomRef,
     pub(crate) bond: NoncovalentBondDsl,
 }
 
@@ -1290,8 +1302,8 @@ impl MoleculeInput {
                 bond_id_to_idx.insert(id.clone(), BondId(pos as u32));
                 metadata.set_bond_id(BondId(pos as u32), id);
             }
-            let a = entry.a.resolve(atom_count, &atom_id_to_idx)?;
-            let b = entry.b.resolve(atom_count, &atom_id_to_idx)?;
+            let a = entry.first.resolve(atom_count, &atom_id_to_idx)?;
+            let b = entry.second.resolve(atom_count, &atom_id_to_idx)?;
             bonds.push((a, b, entry.bond.0));
         }
 
@@ -1369,9 +1381,9 @@ impl MoleculeInput {
                 }
                 metadata.set_noncovalent_bond_id(NoncovalentBondId(pos as u32), id);
             }
-            let a = entry.a.resolve(atom_count, &atom_id_to_idx)?;
-            let b = entry.b.resolve(atom_count, &atom_id_to_idx)?;
-            noncovalent_list.push((a, b, entry.bond.0));
+            let first = entry.first.resolve(atom_count, &atom_id_to_idx)?;
+            let second = entry.second.resolve(atom_count, &atom_id_to_idx)?;
+            noncovalent_list.push((first, second, entry.bond.0));
         }
 
         // Stereo atoms.
@@ -1460,7 +1472,7 @@ impl MoleculeInput {
     }
 }
 
-fn parse_molecule_input(edn: &Edn<'_>) -> Result<MoleculeInput, DeError> {
+pub(super) fn parse_molecule_input(edn: &Edn<'_>) -> Result<MoleculeInput, DeError> {
     let Edn::Map(m) = edn else {
         return Err(DeError::TypeMismatch {
             expected: "molecule map",
@@ -1573,8 +1585,8 @@ pub(super) fn parse_bond_entry(edn: &Edn<'_>) -> Result<BondEntryInput, DeError>
     match edn {
         Edn::Vector(v) if v.len() == 3 => Ok(BondEntryInput {
             id: None,
-            a: AtomRef::from_edn(&v[0])?,
-            b: AtomRef::from_edn(&v[1])?,
+            first: AtomRef::from_edn(&v[0])?,
+            second: AtomRef::from_edn(&v[1])?,
             bond: BondDsl::from_edn(&v[2])?,
         }),
         Edn::Map(m) => {
@@ -1584,8 +1596,8 @@ pub(super) fn parse_bond_entry(edn: &Edn<'_>) -> Result<BondEntryInput, DeError>
             let [a, b] = two_atom_refs(atoms, "bond-entry")?;
             Ok(BondEntryInput {
                 id: optional_id(m)?,
-                a,
-                b,
+                first: a,
+                second: b,
                 bond: BondDsl::from_edn(required_key(m, "type", "bond-entry")?)?,
             })
         }
@@ -1650,8 +1662,8 @@ fn parse_noncovalent_bond_entry(edn: &Edn<'_>) -> Result<NoncovalentBondEntryInp
     let [a, b] = two_atom_refs(atoms, "noncovalent-bond-entry")?;
     Ok(NoncovalentBondEntryInput {
         id: optional_id(m)?,
-        a,
-        b,
+        first: a,
+        second: b,
         bond: NoncovalentBondDsl::from_edn(required_key(m, "type", "noncovalent-bond-entry")?)?,
     })
 }
@@ -1706,7 +1718,7 @@ fn parse_stereo_bond_entry(edn: &Edn<'_>) -> Result<StereoBondEntryInput, DeErro
     })
 }
 
-fn parse_atom_aliases(edn: &Edn<'_>) -> Result<Vec<(String, Box<AtomDsl>)>, DeError> {
+pub(super) fn parse_atom_aliases(edn: &Edn<'_>) -> Result<Vec<(String, Box<AtomDsl>)>, DeError> {
     let Edn::Vector(v) = edn else {
         return Err(DeError::TypeMismatch {
             expected: "vector of keyword/atom-string pairs",
@@ -1776,7 +1788,7 @@ fn optional_id(m: &EdnMap<'_>) -> Result<Option<String>, DeError> {
 }
 
 /// Check that `id` is not already claimed by an atom id or alias name.
-fn check_id_disjoint(
+pub(super) fn check_id_disjoint(
     id: &str,
     atom_id_to_idx: &IndexMap<String, AtomId>,
     alias_table: &IndexMap<String, Box<AtomDsl>>,

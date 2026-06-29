@@ -245,14 +245,14 @@ fn rich_molecule() -> MoleculeAst {
 fn test_molecule_ast_bond(
     #[from(rich_molecule)] ast: MoleculeAst,
     #[case] id: BondId,
-    #[case] src: AtomId,
-    #[case] tgt: AtomId,
+    #[case] first: AtomId,
+    #[case] second: AtomId,
     #[case] order: ValueAst,
 ) {
     let bv = ast.bond(id);
     assert_eq!(bv.id, id);
-    assert_eq!(bv.atom_ids()[0], src);
-    assert_eq!(bv.atom_ids()[1], tgt);
+    assert_eq!(bv.atom_ids()[0], first);
+    assert_eq!(bv.atom_ids()[1], second);
     assert_eq!(bv.ast.order, order);
 }
 

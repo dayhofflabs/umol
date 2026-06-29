@@ -92,6 +92,7 @@ pub use stereo::{
 };
 pub use substructure::SubstructureMatchAlgorithm;
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
+pub(crate) use traits::EntityPatch;
 pub use traits::{
     AsLit, Canonical, Canonicalize, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst,
 };

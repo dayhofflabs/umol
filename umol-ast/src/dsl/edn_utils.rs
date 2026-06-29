@@ -6,6 +6,25 @@ pub(super) fn eof_err() -> EdnError {
     DeError::Custom("unexpected end of input".into()).into()
 }
 
+pub(super) fn missing(key: &str, context: &'static str) -> EdnError {
+    DeError::MissingField {
+        key: key.to_string(),
+        path: vec![context.into()],
+    }
+    .into()
+}
+
+pub(super) fn unexpected_byte_kind(b: u8) -> &'static str {
+    match b {
+        b'"' => "string",
+        b':' => "keyword",
+        b'[' => "vector",
+        b'{' => "map",
+        b'0'..=b'9' | b'-' | b'+' => "number",
+        _ => "token",
+    }
+}
+
 pub(crate) fn single_key_map(key: &str, value: Edn<'static>) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(1);
     m.insert(Edn::Keyword(EdnKeyword::owned(key.into())), value);

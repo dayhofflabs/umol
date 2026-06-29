@@ -17,7 +17,7 @@ use super::constraint::{
 use super::edit::{AtomFieldChange, BondFieldChange};
 use super::error::Contradiction;
 use super::id::{AtomId, BondId};
-use super::traits::Canonicalize;
+use super::traits::{Canonicalize, EntityPatch};
 
 /// A resolved edit to a single atom.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -137,30 +137,10 @@ impl Delta {
     }
 }
 
-/// Generates the per-variant field/constraint operations of an `EntityDelta` impl from the
-/// `(variant => ast field)` map: `fuse_field`, `field_is_identity`, `apply_field`, `diff_field`,
-/// and `diff_constraints`.
-macro_rules! field_ops {
+/// Per-variant diff/apply ops for the `EntityPatch` impl, from the `(variant => ast field)` map:
+/// `apply_field`, `diff_field`, `diff_constraints`.
+macro_rules! diff_field_ops {
     ($change:ident, $ast:ident, $constraint:ident, { $($variant:ident => $field:ident),+ $(,)? }) => {
-        fn fuse_field(prev: $change, next: $change) -> Option<$change> {
-            match (prev, next) {
-                $(
-                    (
-                        $change::$variant { old, new: prev_new },
-                        $change::$variant { old: next_old, new },
-                    ) if prev_new == next_old => Some($change::$variant { old, new }),
-                )+
-                #[allow(unreachable_patterns)]
-                _ => None,
-            }
-        }
-
-        fn field_is_identity(change: &$change) -> bool {
-            match change {
-                $( $change::$variant { old, new } => old == new, )+
-            }
-        }
-
         fn apply_field(ast: &mut $ast, change: $change) -> Result<(), Contradiction> {
             match change {
                 $(
@@ -216,6 +196,31 @@ macro_rules! field_ops {
     };
 }
 
+/// Per-variant fold ops for the crate-private `EntityFold` impl: `fuse_field`,
+/// `field_is_identity`.
+macro_rules! fold_field_ops {
+    ($change:ident, { $($variant:ident),+ $(,)? }) => {
+        fn fuse_field(prev: $change, next: $change) -> Option<$change> {
+            match (prev, next) {
+                $(
+                    (
+                        $change::$variant { old, new: prev_new },
+                        $change::$variant { old: next_old, new },
+                    ) if prev_new == next_old => Some($change::$variant { old, new }),
+                )+
+                #[allow(unreachable_patterns)]
+                _ => None,
+            }
+        }
+
+        fn field_is_identity(change: &$change) -> bool {
+            match change {
+                $( $change::$variant { old, new } => old == new, )+
+            }
+        }
+    };
+}
+
 /// One entity's span across a reaction — its slice of the superimposed `L`∪`K`∪`R`. A *state*, not
 /// an operation (unlike `Edit` / `Delta`). `left()` / `right()` read the side values.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -254,7 +259,7 @@ impl<T> EntitySpan<T> {
 
 /// The per-entity op the fold operates on, abstracting `AtomDelta`/`BondDelta`. `atoms` carries
 /// the entity's participant atoms in `Add`/`Remove` (`()` for an atom, its two ids for a bond).
-pub(crate) enum EntityOp<F: EntityDelta> {
+pub(crate) enum EntityOp<F: EntityFold> {
     Add {
         atoms: F::Atoms,
         ast: F::Ast,
@@ -270,14 +275,10 @@ pub(crate) enum EntityOp<F: EntityDelta> {
     },
 }
 
-/// A per-entity-kind delta the canonicalize fold is generic over. Atoms and bonds (and,
-/// later, the overlay families) supply the structural deconstruction (`id`/`split`/
-/// `rebuild`) and per-variant field/constraint operations; the fold itself is written once.
-pub(crate) trait EntityDelta: Sized {
-    type Id: Copy + Eq + Hash + From<usize>;
-    type Ast: Clone;
-    type FieldChange;
-    type Constraint: Clone + PartialEq;
+/// The canonicalize-fold extension of `EntityPatch` — the `EntityOp` deconstruction
+/// (`split`/`rebuild`), per-field/constraint fold helpers, and span→deltas recovery.
+/// Crate-internal: only the fold and span lowering use it.
+pub(crate) trait EntityFold: EntityPatch {
     type ConstraintKey: Clone + Eq + Hash;
     type Atoms;
 
@@ -289,35 +290,7 @@ pub(crate) trait EntityDelta: Sized {
     fn fuse_field(prev: Self::FieldChange, next: Self::FieldChange) -> Option<Self::FieldChange>;
     fn field_is_identity(change: &Self::FieldChange) -> bool;
     fn field_inverse(change: Self::FieldChange) -> Self::FieldChange;
-    fn apply_field(ast: &mut Self::Ast, change: Self::FieldChange) -> Result<(), Contradiction>;
-    fn diff_field(left: &Self::Ast, right: &Self::Ast) -> Vec<Self::FieldChange>;
-
     fn constraint_key(constraint: &Self::Constraint) -> Self::ConstraintKey;
-    fn apply_constraint(
-        ast: &mut Self::Ast,
-        old: Option<Self::Constraint>,
-        new: Option<Self::Constraint>,
-    ) -> Result<(), Contradiction>;
-    #[allow(clippy::type_complexity)]
-    fn diff_constraints(
-        left: &Self::Ast,
-        right: &Self::Ast,
-    ) -> Vec<(Option<Self::Constraint>, Option<Self::Constraint>)>;
-
-    /// The `ModifyField` / `ModifyConstraint` deltas carrying `left` to `right` for one entity — the
-    /// inverse of `apply_*_change`, recovering a `Modified` entity's deltas.
-    fn diff(id: Self::Id, left: &Self::Ast, right: &Self::Ast) -> Vec<Self> {
-        let mut out: Vec<Self> = Self::diff_field(left, right)
-            .into_iter()
-            .map(|change| Self::rebuild(id, EntityOp::ModifyField(change)))
-            .collect();
-        out.extend(
-            Self::diff_constraints(left, right)
-                .into_iter()
-                .map(|(old, new)| Self::rebuild(id, EntityOp::ModifyConstraint { old, new })),
-        );
-        out
-    }
 
     /// Recover this kind's deltas from its left/right state column: `Added`/`Removed` become
     /// structural `Add`/`Remove` (their `atoms` from `atoms(index)`), `Modified` becomes the
@@ -366,7 +339,7 @@ pub(crate) trait EntityDelta: Sized {
 
 /// Fold one entity's ops (input order) to its normal form. `created` (an `Add` is present)
 /// vs `preserved` paths per doc 131.
-fn fold_group<F: EntityDelta>(id: F::Id, group: Vec<F>) -> Result<Vec<F>, Contradiction> {
+fn fold_group<F: EntityFold>(id: F::Id, group: Vec<F>) -> Result<Vec<F>, Contradiction> {
     let ops: Vec<EntityOp<F>> = group.into_iter().map(F::split).collect();
     let created = ops.iter().any(|op| matches!(op, EntityOp::Add { .. }));
     let folded = if created {
@@ -379,7 +352,7 @@ fn fold_group<F: EntityDelta>(id: F::Id, group: Vec<F>) -> Result<Vec<F>, Contra
 
 /// Created entity: seed `ast` from `Add`, absorb subsequent field/constraint changes; an
 /// `Add`+`Remove` cancels. Yields one `Add` with the final ast, or nothing.
-fn fold_created<F: EntityDelta>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>>, Contradiction> {
+fn fold_created<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>>, Contradiction> {
     let mut state: Option<(F::Atoms, F::Ast)> = None;
     let mut removed = false;
     for op in ops {
@@ -420,9 +393,7 @@ fn fold_created<F: EntityDelta>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>
 /// `Remove` subsumes the prior changes and carries the *original* value (the changes are
 /// reverted on the removed ast).
 #[allow(clippy::type_complexity)]
-fn fold_preserved<F: EntityDelta>(
-    ops: Vec<EntityOp<F>>,
-) -> Result<Vec<EntityOp<F>>, Contradiction> {
+fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F>>, Contradiction> {
     let mut fields: HashMap<Discriminant<F::FieldChange>, F::FieldChange> = HashMap::new();
     let mut constraints: HashMap<F::ConstraintKey, (Option<F::Constraint>, Option<F::Constraint>)> =
         HashMap::new();
@@ -486,17 +457,53 @@ fn fold_preserved<F: EntityDelta>(
     Ok(out)
 }
 
-impl EntityDelta for AtomDelta {
+impl EntityPatch for AtomDelta {
     type Id = AtomId;
     type Ast = AtomAst;
     type FieldChange = AtomFieldChange;
     type Constraint = AtomConstraint;
+
+    fn modify_field(id: AtomId, change: AtomFieldChange) -> Self {
+        AtomDelta::ModifyField { id, change }
+    }
+
+    fn modify_constraint(
+        id: AtomId,
+        old: Option<AtomConstraint>,
+        new: Option<AtomConstraint>,
+    ) -> Self {
+        AtomDelta::ModifyConstraint { id, old, new }
+    }
+
+    diff_field_ops!(AtomFieldChange, AtomAst, AtomConstraint, {
+        Element => element,
+        IsotopeMass => isotope_mass,
+        Charge => charge,
+        ImplicitHydrogens => implicit_hydrogens,
+        LonePairs => lone_pairs,
+        Spin => spin,
+    });
+
+    fn apply_constraint(
+        ast: &mut AtomAst,
+        old: Option<AtomConstraint>,
+        new: Option<AtomConstraint>,
+    ) -> Result<(), Contradiction> {
+        if let Some(old) = old {
+            if ast.constraints.remove_entry(&old).is_none() {
+                return Err(Contradiction);
+            }
+        }
+        if let Some(new) = new {
+            ast.constraints.add(new);
+        }
+        Ok(())
+    }
+}
+
+impl EntityFold for AtomDelta {
     type ConstraintKey = AtomConstraintKey;
     type Atoms = ();
-
-    fn into_delta(self) -> Delta {
-        Delta::Atom(self)
-    }
 
     fn id(&self) -> AtomId {
         match self {
@@ -520,19 +527,14 @@ impl EntityDelta for AtomDelta {
         match op {
             EntityOp::Add { ast, .. } => AtomDelta::Add { id, ast },
             EntityOp::Remove { ast, .. } => AtomDelta::Remove { id, ast },
-            EntityOp::ModifyField(change) => AtomDelta::ModifyField { id, change },
-            EntityOp::ModifyConstraint { old, new } => AtomDelta::ModifyConstraint { id, old, new },
+            EntityOp::ModifyField(change) => Self::modify_field(id, change),
+            EntityOp::ModifyConstraint { old, new } => Self::modify_constraint(id, old, new),
         }
     }
 
-    field_ops!(AtomFieldChange, AtomAst, AtomConstraint, {
-        Element => element,
-        IsotopeMass => isotope_mass,
-        Charge => charge,
-        ImplicitHydrogens => implicit_hydrogens,
-        LonePairs => lone_pairs,
-        Spin => spin,
-    });
+    fn into_delta(self) -> Delta {
+        Delta::Atom(self)
+    }
 
     fn field_inverse(change: AtomFieldChange) -> AtomFieldChange {
         change.inverse()
@@ -542,10 +544,44 @@ impl EntityDelta for AtomDelta {
         constraint.key()
     }
 
+    fold_field_ops!(AtomFieldChange, {
+        Element,
+        IsotopeMass,
+        Charge,
+        ImplicitHydrogens,
+        LonePairs,
+        Spin,
+    });
+}
+
+impl EntityPatch for BondDelta {
+    type Id = BondId;
+    type Ast = BondAst;
+    type FieldChange = BondFieldChange;
+    type Constraint = BondConstraint;
+
+    fn modify_field(id: BondId, change: BondFieldChange) -> Self {
+        BondDelta::ModifyField { id, change }
+    }
+
+    fn modify_constraint(
+        id: BondId,
+        old: Option<BondConstraint>,
+        new: Option<BondConstraint>,
+    ) -> Self {
+        BondDelta::ModifyConstraint { id, old, new }
+    }
+
+    diff_field_ops!(BondFieldChange, BondAst, BondConstraint, {
+        Order => order,
+        Charge => charge,
+        Spin => spin,
+    });
+
     fn apply_constraint(
-        ast: &mut AtomAst,
-        old: Option<AtomConstraint>,
-        new: Option<AtomConstraint>,
+        ast: &mut BondAst,
+        old: Option<BondConstraint>,
+        new: Option<BondConstraint>,
     ) -> Result<(), Contradiction> {
         if let Some(old) = old {
             if ast.constraints.remove_entry(&old).is_none() {
@@ -559,17 +595,9 @@ impl EntityDelta for AtomDelta {
     }
 }
 
-impl EntityDelta for BondDelta {
-    type Id = BondId;
-    type Ast = BondAst;
-    type FieldChange = BondFieldChange;
-    type Constraint = BondConstraint;
+impl EntityFold for BondDelta {
     type ConstraintKey = BondConstraintKey;
     type Atoms = [AtomId; 2];
-
-    fn into_delta(self) -> Delta {
-        Delta::Bond(self)
-    }
 
     fn id(&self) -> BondId {
         match self {
@@ -593,16 +621,14 @@ impl EntityDelta for BondDelta {
         match op {
             EntityOp::Add { atoms, ast } => BondDelta::Add { id, atoms, ast },
             EntityOp::Remove { atoms, ast } => BondDelta::Remove { id, atoms, ast },
-            EntityOp::ModifyField(change) => BondDelta::ModifyField { id, change },
-            EntityOp::ModifyConstraint { old, new } => BondDelta::ModifyConstraint { id, old, new },
+            EntityOp::ModifyField(change) => Self::modify_field(id, change),
+            EntityOp::ModifyConstraint { old, new } => Self::modify_constraint(id, old, new),
         }
     }
 
-    field_ops!(BondFieldChange, BondAst, BondConstraint, {
-        Order => order,
-        Charge => charge,
-        Spin => spin,
-    });
+    fn into_delta(self) -> Delta {
+        Delta::Bond(self)
+    }
 
     fn field_inverse(change: BondFieldChange) -> BondFieldChange {
         change.inverse()
@@ -612,34 +638,24 @@ impl EntityDelta for BondDelta {
         constraint.key()
     }
 
-    fn apply_constraint(
-        ast: &mut BondAst,
-        old: Option<BondConstraint>,
-        new: Option<BondConstraint>,
-    ) -> Result<(), Contradiction> {
-        if let Some(old) = old {
-            if ast.constraints.remove_entry(&old).is_none() {
-                return Err(Contradiction);
-            }
-        }
-        if let Some(new) = new {
-            ast.constraints.add(new);
-        }
-        Ok(())
-    }
+    fold_field_ops!(BondFieldChange, {
+        Order,
+        Charge,
+        Spin,
+    });
 }
 
-/// Apply a resolved per-entity change to a value AST, reusing the `EntityDelta` apply that
+/// Apply a resolved per-entity change to a value AST, reusing the `EntityPatch` apply that
 /// `canonicalize` uses. `ModifyField` / `ModifyConstraint` mutate the ast; `Add` / `Remove` are
 /// no-ops (they carry a whole ast, not a change). Materializes the right-hand value of a
 /// preserved entity for a `ReactionSpanAst`.
 pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<(), Contradiction> {
     match delta {
         AtomDelta::ModifyField { change, .. } => {
-            <AtomDelta as EntityDelta>::apply_field(ast, change.clone())
+            <AtomDelta as EntityPatch>::apply_field(ast, change.clone())
         }
         AtomDelta::ModifyConstraint { old, new, .. } => {
-            <AtomDelta as EntityDelta>::apply_constraint(ast, old.clone(), new.clone())
+            <AtomDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
         }
         AtomDelta::Add { .. } | AtomDelta::Remove { .. } => Ok(()),
     }
@@ -648,10 +664,10 @@ pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<
 pub(crate) fn apply_bond_change(ast: &mut BondAst, delta: &BondDelta) -> Result<(), Contradiction> {
     match delta {
         BondDelta::ModifyField { change, .. } => {
-            <BondDelta as EntityDelta>::apply_field(ast, change.clone())
+            <BondDelta as EntityPatch>::apply_field(ast, change.clone())
         }
         BondDelta::ModifyConstraint { old, new, .. } => {
-            <BondDelta as EntityDelta>::apply_constraint(ast, old.clone(), new.clone())
+            <BondDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
         }
         BondDelta::Add { .. } | BondDelta::Remove { .. } => Ok(()),
     }
@@ -934,10 +950,7 @@ mod tests {
     #[case::modified(EntitySpan::Modified { left: 1, right: 2 }, Some(&1))]
     #[case::removed(EntitySpan::Removed(7), Some(&7))]
     #[case::added(EntitySpan::Added(9), None)]
-    fn test_entity_span_left(
-        #[case] state: EntitySpan<i32>,
-        #[case] expected: Option<&i32>,
-    ) {
+    fn test_entity_span_left(#[case] state: EntitySpan<i32>, #[case] expected: Option<&i32>) {
         assert_eq!(state.left(), expected);
     }
 
@@ -946,10 +959,7 @@ mod tests {
     #[case::modified(EntitySpan::Modified { left: 1, right: 2 }, Some(&2))]
     #[case::added(EntitySpan::Added(9), Some(&9))]
     #[case::removed(EntitySpan::Removed(7), None)]
-    fn test_entity_span_right(
-        #[case] state: EntitySpan<i32>,
-        #[case] expected: Option<&i32>,
-    ) {
+    fn test_entity_span_right(#[case] state: EntitySpan<i32>, #[case] expected: Option<&i32>) {
         assert_eq!(state.right(), expected);
     }
 

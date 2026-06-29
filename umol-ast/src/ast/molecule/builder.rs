@@ -562,9 +562,9 @@ impl MoleculeBuilder {
     /// Append a localized bond directly to the builder.
     ///
     /// This is a low-level, non-transactional construction primitive. It
-    /// assumes `src` and `tgt` are valid atom ids in the current dense layout.
-    pub fn add_bond(&mut self, src: AtomId, tgt: AtomId, bond: BondAst) -> BondId {
-        let id = self.graph.add_edge(NodeId::from(src), NodeId::from(tgt));
+    /// assumes `first` and `second` are valid atom ids in the current dense layout.
+    pub fn add_bond(&mut self, first: AtomId, second: AtomId, bond: BondAst) -> BondId {
+        let id = self.graph.add_edge(NodeId::from(first), NodeId::from(second));
         Arc::make_mut(&mut self.bonds).push(bond);
         BondId::from(id)
     }

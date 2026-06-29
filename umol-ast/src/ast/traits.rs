@@ -8,6 +8,7 @@
 //! `Canonical` is a value carrying the guarantee that it is canonical.
 
 use std::borrow::Cow;
+use std::hash::Hash;
 
 use super::error::Contradiction;
 
@@ -211,5 +212,55 @@ impl<T: Canonicalize> Canonical<T> {
 
     pub fn into_inner(self) -> T {
         self.0
+    }
+}
+
+/// The patch algebra over one entity's fields and constraints. A delta is the morphism between two
+/// states (`Ast`s): `apply` is its action — carrying a state forward by a `ModifyField` /
+/// `ModifyConstraint` delta — and `diff` is the inverse, factoring two states back into the deltas
+/// between them, with `apply(left, diff(left, right)) == right`. It is not a generic patch algebra:
+/// the moves are exactly an entity's fields and constraints, not arbitrary tree edits. Atoms and
+/// bonds (and, later, the overlay families) supply the per-variant operations; `diff` is written
+/// once.
+pub(crate) trait EntityPatch: Sized {
+    type Id: Copy + Eq + Hash + From<usize>;
+    type Ast: Clone;
+    type FieldChange;
+    type Constraint: Clone + PartialEq;
+
+    fn modify_field(id: Self::Id, change: Self::FieldChange) -> Self;
+    fn modify_constraint(
+        id: Self::Id,
+        old: Option<Self::Constraint>,
+        new: Option<Self::Constraint>,
+    ) -> Self;
+
+    fn apply_field(ast: &mut Self::Ast, change: Self::FieldChange) -> Result<(), Contradiction>;
+    fn diff_field(left: &Self::Ast, right: &Self::Ast) -> Vec<Self::FieldChange>;
+
+    fn apply_constraint(
+        ast: &mut Self::Ast,
+        old: Option<Self::Constraint>,
+        new: Option<Self::Constraint>,
+    ) -> Result<(), Contradiction>;
+    #[allow(clippy::type_complexity)]
+    fn diff_constraints(
+        left: &Self::Ast,
+        right: &Self::Ast,
+    ) -> Vec<(Option<Self::Constraint>, Option<Self::Constraint>)>;
+
+    /// The `ModifyField` / `ModifyConstraint` deltas carrying `left` to `right` for one entity — the
+    /// inverse of `apply_*_change`, recovering a `Modified` entity's deltas.
+    fn diff(id: Self::Id, left: &Self::Ast, right: &Self::Ast) -> Vec<Self> {
+        let mut out: Vec<Self> = Self::diff_field(left, right)
+            .into_iter()
+            .map(|change| Self::modify_field(id, change))
+            .collect();
+        out.extend(
+            Self::diff_constraints(left, right)
+                .into_iter()
+                .map(|(old, new)| Self::modify_constraint(id, old, new)),
+        );
+        out
     }
 }

@@ -29,7 +29,7 @@ pub(crate) use umol_ast::ast::{
     ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
-    parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, MoleculeMetadata, MoleculeDsl,
+    parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, MoleculeDsl, MoleculeMetadata,
     MulticenterBondDsl, NoncovalentBondDsl, StereoAtomConstraintDsl, StereoAtomDsl,
     StereoBondConstraintDsl, StereoBondDsl, ValueDsl,
 };
