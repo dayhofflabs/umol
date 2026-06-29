@@ -143,6 +143,17 @@ impl ReactionMetadata {
         &self.lhs
     }
 
+    pub fn combined_metadata(&self) -> MoleculeMetadata {
+        let mut combined = self.lhs.clone();
+        for (&id, name) in &self.atom_ids {
+            combined.set_atom_id(id, name);
+        }
+        for (&id, name) in &self.bond_ids {
+            combined.set_bond_id(id, name);
+        }
+        combined
+    }
+
     pub fn atom_id(&self, id: AtomId) -> Option<&str> {
         self.atom_ids.get(&id).map(String::as_str)
     }
@@ -637,6 +648,8 @@ fn parse_delta_constraint_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
 fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> {
     let deltas = deltas.as_slice();
     let mut out = Vec::new();
+    // Built once on the first constraint delta (constraint refs resolve against lhs ∪ created).
+    let mut combined_metadata: Option<MoleculeMetadata> = None;
     let mut i = 0;
     while i < deltas.len() {
         match &deltas[i] {
@@ -739,7 +752,20 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 );
                 out.push(single_key_map("bond", single_key_map("modify", payload)));
             }
-            _ => todo!("R9c: constraint deltas"),
+            Delta::Constraint(delta) => {
+                let (op, constraint) = match delta {
+                    ConstraintDelta::Add(c) => ("add", c),
+                    ConstraintDelta::Remove(c) => ("remove", c),
+                };
+                let combined = combined_metadata.get_or_insert_with(|| meta.combined_metadata());
+                let dsl = ConstraintDsl::from_ast(constraint, combined)
+                    .expect("ConstraintDsl::from_ast is infallible for a well-formed AST");
+                out.push(single_key_map(
+                    "constraint",
+                    single_key_map(op, dsl.to_edn()),
+                ));
+                i += 1;
+            }
         }
     }
     out
@@ -1487,6 +1513,35 @@ mod tests {
             read_string("{:bond {:add {:id :b2 :atoms [:c :n] :type :single}}}").unwrap(),
             read_string("{:bond {:remove :bx}}").unwrap(),
             read_string(r##"{:bond {:modify [:b1 "2"]}}"##).unwrap(),
+        ];
+        assert_eq!(render_deltas(&deltas, &meta), expected);
+    }
+
+    #[rstest]
+    fn test_render_deltas_constraint() {
+        // lhs atom :c(0); reaction adds atom :o(1). The entity-leaf constraint ref :o resolves
+        // against the combined (lhs ∪ created) metadata.
+        let meta = ReactionMetadata {
+            lhs: MoleculeMetadata::new().with_atom_id(AtomId(0), "c"),
+            ..Default::default()
+        }
+        .with_atom_id(AtomId(1), "o");
+        let deltas = Deltas::from_iter([
+            Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
+                MoleculeConstraint::Connected { atoms: None },
+            ))),
+            Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(
+                AtomId(1),
+                AtomConstraint::Valence(ValueAst::Lit(2)),
+            ))),
+            Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(
+                MoleculeConstraint::Connected { atoms: None },
+            ))),
+        ]);
+        let expected = vec![
+            read_string("{:constraint {:add {:connected {}}}}").unwrap(),
+            read_string("{:constraint {:add {:atom [:o {:valence 2}]}}}").unwrap(),
+            read_string("{:constraint {:remove {:connected {}}}}").unwrap(),
         ];
         assert_eq!(render_deltas(&deltas, &meta), expected);
     }

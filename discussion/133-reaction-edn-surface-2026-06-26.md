@@ -612,10 +612,27 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   `{:bond {:modify [<ref> <PartialBondDsl>]}}` (partial renders order as a bare string, `"2"`).
   Endpoints resolve against the **union** namespace (`render_atom_endpoint`: created ∪ lhs) — a bond
   may attach to a same-reaction atom, unlike a delta target ref. `BondConstraint::as_undetermined`
-  added (`Aromatic` is a flag with no vacuous form, not removable this way); `PartialBondDsl` renders
-  undetermined constraints as `#<tag>*`. Tests: `test_render_deltas_bond`,
-  `test_bond_constraint_as_undetermined`.
-- R9c — `render_deltas` constraint ops + canonical (post-`canonicalize`) order across all ops.
+  added; `PartialBondDsl` renders undetermined constraints as `#<tag>*`. Tests:
+  `test_render_deltas_bond`, `test_bond_constraint_as_undetermined`.
+  - **Aromatic-as-lattice follow-up** (fixes the original "`Aromatic` is a flag, not removable"
+    deficit): introduced `BooleanAst` (`Undetermined`/`Lit(bool)`, full lattice) + `BooleanDsl`
+    (`+`/`` → true, `!` → false, `*` → undetermined; EDN `true`/`false`/`:undetermined`). Rewired
+    `BondConstraint::Aromatic(BooleanAst)` and `DativeBondConstraint::Aromatic(BooleanAst)`: now
+    value-aware in `is_undetermined`/`as_undetermined`/`canonicalize`/`Lattice` (`aromatic() ->
+    BooleanAst`), so a bond/dative aromatic **is** removable via `#a*` like every other constraint.
+    Surface: `#a`/`#a+` = true, `#a!` = not-aromatic, `#a*` = undetermined; the constraint EDN became
+    `{:aromatic <bool>}` (the bare `:aromatic` keyword shorthand for the **constraint** is gone; the
+    bond-keyword shorthand `:aromatic` for a whole bond stays). Made vacuous-`*` elision uniform in
+    the per-constraint formatters: `#a*`, `#C*` (cis-trans) and `#T*` (tetrahedral) all elide on full
+    render, while `#a+`/`#C+`/`#T+` (= `Stereo(Undetermined)`, "is a stereocenter, config unknown")
+    are preserved. Cross-crate updates: `kekulizer`, `aromaticity`, `counts`, `table_ir/raise`.
+- R9c — **Done.** `render_deltas` constraint ops: `ConstraintDelta::Add`/`Remove` →
+  `{:constraint {:add|:remove <ConstraintDsl>}}` via `ConstraintDsl::from_ast(c, combined)`. Its
+  entity refs span lhs ∪ created, so they resolve against `ReactionMetadata::combined_metadata()`
+  (merges the lhs molecule metadata with the created-entity id bindings) — built once, lazily, only
+  when a constraint delta is present. `render_deltas` renders deltas in their stored order (no
+  ToEdn-side canonicalization). Test: `test_render_deltas_constraint` (molecule `:connected` +
+  entity-leaf `{:atom [:o …]}` referencing a created atom + `:remove`).
 - R9d — `render_reaction_edn`: `:lhs` via the molecule renderer + `:deltas`.
 - R9e — tests: `ReactionAst` → EDN per op.
 - *Checkpoint (tested):* AST renders to EDN.
@@ -631,6 +648,9 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
 **R11 — Spec** [R10]:
 - R11a — add the normative reactions section to `umol-dsl-spec.md`.
 - R11b — revise §8.4.
+- R11c - update the #a special forms for aromatic constraints (bonds, dative bonds): #a+, #a!,
+         remove mentions of #a / :aromatic being a flag, if present,
+         update :aromatic -> {:aromatic <boolean>} <boolean> = true | false | :undetermined.
 - *Checkpoint:* spec updated.
 
 **R12 — Property & fuzz tests** [R10] (`proptest`, feature-gated; `cargo-fuzz` targets):
