@@ -2,6 +2,8 @@
 //! complete before/after value (`EntitySpan`) rather than a delta. Entity ids, bond endpoints,
 //! and constraint topology refs are resolved in `into_ast`.
 
+use std::str::FromStr;
+
 use indexmap::IndexMap;
 use umol_edn::{read_string, DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn};
 use umol_graph_core::Graph;
@@ -444,6 +446,33 @@ impl SpanInput {
     }
 }
 
+impl<'de> FromEdn<'de> for ReactionSpanDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let (ast, metadata) = parse_span_input(edn)?
+            .into_ast()
+            .map_err(|e| DeError::Custom(e.to_string()))?;
+        Ok(ReactionSpanDsl::from_parts(ast, metadata))
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        let mut de = EdnStreamDeserializer::new(input);
+        let span_input = read_span_input(&mut de)?;
+        de.expect_eof()?;
+        let (ast, metadata) = span_input
+            .into_ast()
+            .map_err(|e| DeError::Custom(e.to_string()))?;
+        Ok(ReactionSpanDsl::from_parts(ast, metadata))
+    }
+}
+
+impl FromStr for ReactionSpanDsl {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        ReactionSpanDsl::from_edn_str(s).map_err(|e| ParseError::EdnParse(e.to_string()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::*;
@@ -676,5 +705,45 @@ mod tests {
                 .unwrap_err(),
             expected,
         );
+    }
+
+    #[rstest]
+    #[case::span(
+        r#"{:atoms ["C" {:add "O"}] :bonds [{:add [0 1 :single]}]}"#,
+        ReactionSpanDsl::from_parts(
+            ReactionSpanAst::from_parts(
+                Graph::new(2, &[[0, 1]]),
+                vec![
+                    EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                    EntitySpan::Added(AtomAst::from_element(Element::O)),
+                ],
+                vec![EntitySpan::Added(BondAst::from_order(1))],
+                vec![],
+            ),
+            MoleculeMetadata::new(),
+        ),
+    )]
+    #[case::plain_molecule(
+        r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#,
+        ReactionSpanDsl::from_parts(
+            ReactionSpanAst::from_parts(
+                Graph::new(2, &[[0, 1]]),
+                vec![
+                    EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                    EntitySpan::Unchanged(AtomAst::from_element(Element::O)),
+                ],
+                vec![EntitySpan::Unchanged(BondAst::from_order(1))],
+                vec![],
+            ),
+            MoleculeMetadata::new(),
+        ),
+    )]
+    fn test_reaction_span_dsl_from_edn(#[case] input: &str, #[case] expected: ReactionSpanDsl) {
+        assert_eq!(
+            ReactionSpanDsl::from_edn(&read_string(input).unwrap()).unwrap(),
+            expected,
+        );
+        assert_eq!(ReactionSpanDsl::from_edn_str(input).unwrap(), expected);
+        assert_eq!(ReactionSpanDsl::from_str(input).unwrap(), expected);
     }
 }
