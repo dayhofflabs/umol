@@ -592,7 +592,7 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   `test_reaction_dsl_from_str` (`FromStr` ≡ `from_edn_str`).
 - *Checkpoint (tested):* EDN → AST end to end.
 
-**R9 — Render** [R1, R4] (`dsl/reaction.rs`):
+**R9 — Render** [R1, R4] (`dsl/reaction.rs`): **Done**
 - R9a — **Done.** `render_deltas` atom ops (`dsl/reaction.rs`): add → `{:atom {:add <entry>}}`
   (reaction-local `render_atom_entry`: created-id frame + lhs∪reaction alias), remove →
   `{:atom {:remove <ref>}}` (reaction-local `render_atom_ref`: lhs frame only — the two id spaces stay
@@ -647,13 +647,17 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   combined metadata / remove); plus `test_render_reaction_edn` (top-level render→reparse).
 - *Checkpoint (tested):* AST renders to EDN.
 
-**R10 — `ToEdn` path + AST routing** [R2, R8, R9]:
-- R10a — `ToEdn` (`render_reaction_edn`).
-- R10b — `Display` (`write!("{}", self.to_edn())`).
-- R10c — `ReactionAst` routing: `FromEdn` / `ToEdn` / `FromStr` / `Display` through `ReactionDsl`
-  (discard `metadata`).
-- R10d — tests: full DSL → AST → DSL round-trip, including a molecule-`:constraint` delta.
-- *Checkpoint (tested):* full round-trip.
+**R10 — `ToEdn` path + AST routing** [R2, R8, R9]: **Done**
+- R10a — **Done.** `impl ToEdn for ReactionDsl` delegates to `render_reaction_edn(&self.ast, &self.metadata)`;
+  `test_reaction_dsl_from_edn_to_edn_roundtrip` exercises the trait path (from_edn → `to_edn` → from_edn).
+- R10b — **Done.** `impl Display for ReactionDsl` → `write!("{}", self.to_edn())`.
+- R10c — **Done.** `ReactionAst` routing through `ReactionDsl`: `FromEdn`/`FromStr` discard metadata
+  (`dsl.into_parts().0`); `Display` → `to_edn`; `ToEdn` renders with `ReactionMetadata::default()`
+  (positional lhs + refs, no ids/aliases), mirroring `MoleculeAst::to_edn`.
+- R10d — **Done.** `test_reaction_dsl_from_edn_to_edn_roundtrip` (+molecule-`:connected` and entity-leaf
+  `:atom` constraint deltas); `test_reaction_ast_to_edn` (metadata-free positional round-trip: lhs modify,
+  created-atom-as-bond-endpoint, molecule constraint, entity-leaf constraint).
+- *Checkpoint (tested):* full round-trip. **Done.**
 
 **R11 — Spec** [R10]:
 - R11a — add the normative reactions section to `umol-dsl-spec.md`.

@@ -6,6 +6,7 @@
 //! `:deltas` (a vector of `:add` / `:remove` / `:modify` / `:constraint` operations). Each
 //! entity delegates to its own entity DSL.
 
+use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use bimap::BiBTreeMap;
@@ -420,6 +421,51 @@ impl FromStr for ReactionDsl {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         ReactionDsl::from_edn_str(s).map_err(|e| ParseError::EdnParse(e.to_string()))
+    }
+}
+
+impl ToEdn for ReactionDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        render_reaction_edn(&self.ast, &self.metadata)
+    }
+}
+
+impl Display for ReactionDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_edn())
+    }
+}
+
+impl<'de> FromEdn<'de> for ReactionAst {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        ReactionDsl::from_edn(edn).map(|dsl| dsl.into_parts().0)
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        ReactionDsl::from_edn_str(input).map(|dsl| dsl.into_parts().0)
+    }
+}
+
+impl FromStr for ReactionAst {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_edn_str(s).map_err(|e| ParseError::EdnParse(e.to_string()))
+    }
+}
+
+impl Display for ReactionAst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_edn())
+    }
+}
+
+/// Direct EDN rendering for `ReactionAst`. The lhs and refs emit canonical positional
+/// form (no id keywords, no aliases) since the AST carries no metadata. For id/alias-bearing
+/// surface output, wrap in [`ReactionDsl`] with the appropriate [`ReactionMetadata`].
+impl ToEdn for ReactionAst {
+    fn to_edn(&self) -> Edn<'static> {
+        render_reaction_edn(self, &ReactionMetadata::default())
     }
 }
 
@@ -1509,10 +1555,23 @@ mod tests {
     #[rstest]
     #[case::modify(r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##)]
     #[case::reaction_alias(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add :nu}}] :atom-aliases [:nu "O#h1#c-1"] }"##)]
-    fn test_render_reaction_edn(#[case] input: &str) {
+    #[case::molecule_constraint(r##"{:lhs {:atoms ["C" "N"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]} :deltas [{:bond {:modify [:b1 "2"]}} {:constraint {:add {:connected {}}}}]}"##)]
+    #[case::entity_leaf_constraint(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:constraint {:add {:atom [:o {:valence 2}]}}}]}"##)]
+    fn test_reaction_dsl_from_edn_to_edn_roundtrip(#[case] input: &str) {
         let dsl = ReactionDsl::from_edn(&read_string(input).unwrap()).unwrap();
-        let (ast, meta) = dsl.clone().into_parts();
-        let reparsed = ReactionDsl::from_edn(&render_reaction_edn(&ast, &meta)).unwrap();
+        let reparsed = ReactionDsl::from_edn(&dsl.to_edn()).unwrap();
         assert_eq!(reparsed, dsl);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::modify(r##"{:lhs {:atoms ["Br#c0"]} :deltas [{:atom {:modify [0 "#c-1"]}}]}"##)]
+    #[case::add_atom_and_bond(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}} {:bond {:add [0 1 "1"]}}]}"##)]
+    #[case::molecule_constraint(r##"{:lhs {:atoms ["C" "N"] :bonds [[0 1 "1"]]} :deltas [{:constraint {:add {:connected {}}}}]}"##)]
+    #[case::entity_leaf_constraint(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}} {:constraint {:add {:atom [1 {:valence 2}]}}}]}"##)]
+    fn test_reaction_ast_to_edn(#[case] input: &str) {
+        let ast = ReactionAst::from_edn(&read_string(input).unwrap()).unwrap();
+        let reparsed = ReactionAst::from_edn(&ast.to_edn()).unwrap();
+        assert_eq!(reparsed, ast);
     }
 }
