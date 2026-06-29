@@ -15,6 +15,7 @@ pub(crate) mod multicenter;
 pub(crate) mod noncovalent;
 mod predicates;
 pub(crate) mod reaction;
+pub(crate) mod reaction_span;
 pub(crate) mod refs;
 pub(crate) mod relational;
 pub(crate) mod stereo;
@@ -50,6 +51,7 @@ pub use multicenter::{
 };
 pub use noncovalent::{parse_noncovalent_bond, NoncovalentBondConstraintDsl, NoncovalentBondDsl};
 pub use reaction::{ReactionDsl, ReactionMetadata};
+pub use reaction_span::ReactionSpanDsl;
 pub use refs::{
     AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
 };

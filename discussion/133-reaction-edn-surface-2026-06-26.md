@@ -759,23 +759,27 @@ green and tested. Prereqs in brackets.
 - *Checkpoint (tested):* conversion carries constraints. **Done** (8 reaction_span tests, full suite
   3857 pass).
 
-**C3 — DSL module + raw input types** [—] (`dsl/reaction_span.rs`):
-- C3a — create `dsl/reaction_span.rs`; add `pub(crate) mod reaction_span;` to `dsl.rs`; imports mirror
-  `dsl/reaction.rs`.
-- C3b — `#[derive(Debug)] enum ConstraintSpanInput { Unchanged(ConstraintDsl), Added(ConstraintDsl),
-  Removed(ConstraintDsl) }` (refs unresolved).
-- C3c — `#[derive(Debug)] struct SpanInput { atoms: Vec<(Option<String>, EntitySpan<AtomAst>)>, bonds:
-  Vec<(Option<String>, [AtomRefDsl; 2], EntitySpan<BondAst>)>, constraints: Vec<ConstraintSpanInput> }`
-  (`pub(crate)`; `into_ast` in C8).
-- *Checkpoint:* compiles.
+**C3 — DSL module + raw input types** [—] (`dsl/reaction_span.rs`): **Done**
+- C3a — **Done.** Created `dsl/reaction_span.rs`; `pub(crate) mod reaction_span;` added to `dsl.rs`
+  (before `refs`). Shell imports only what the input types reference (`ConstraintDsl`, `AtomRef`,
+  `AtomAst`, `BondAst`, `EntitySpan`) to stay warning-clean; the rest grow with C6–C8.
+- C3b — **Done.** `#[derive(Debug)] pub(crate) enum ConstraintSpanInput { Unchanged | Added |
+  Removed }(ConstraintDsl)`.
+- C3c — **Done.** `#[derive(Debug)] pub(crate) struct SpanInput { atoms: Vec<(Option<String>,
+  EntitySpan<AtomAst>)>, bonds: Vec<(Option<String>, [AtomRef; 2], EntitySpan<BondAst>)>, constraints:
+  Vec<ConstraintSpanInput> }`. Plan's `AtomRefDsl` corrected to **`AtomRef`** (the real ref type from
+  `dsl/refs.rs`, as used for endpoints in `dsl/reaction.rs`). `into_ast` deferred to C8.
+- *Checkpoint:* compiles. **Done** (two transient dead-code warnings — `ConstraintSpanInput` /
+  `SpanInput` unused until C6 parsing / C8 `into_ast`).
 
-**C4 — `ReactionSpanDsl` boundary shell** [C1, C3]:
-- C4a — `#[derive(Clone, Debug)] struct ReactionSpanDsl { ast: ReactionSpanAst, metadata:
-  MoleculeMetadata }` (private fields) + doc; `pub use reaction_span::ReactionSpanDsl;`. No `Default`
+**C4 — `ReactionSpanDsl` boundary shell** [C1, C3]: **Done**
+- C4a — **Done.** `pub struct ReactionSpanDsl { ast: ReactionSpanAst, metadata: MoleculeMetadata }`
+  (private fields) + doc; `pub use reaction_span::ReactionSpanDsl;` added to `dsl.rs`. No `Default`
   (`ReactionSpanAst` has none).
-- C4b — inherent API: `from_parts`, `into_parts`, `ast`, `metadata`.
-- C4c — derive `PartialEq` + `Eq`.
-- *Checkpoint:* type exists + exported.
+- C4b — **Done.** Inherent API: `from_parts`, `into_parts`, `ast`, `metadata` (mirrors `ReactionDsl`).
+- C4c — **Done.** Derives `Clone, Debug, PartialEq, Eq` (`MoleculeMetadata` supplies all four).
+- *Checkpoint:* type exists + exported. **Done** (build clean; `ReactionSpanDsl` warnings cleared by
+  the `pub use` — only C3's `SpanInput`/`ConstraintSpanInput` remain, until C6/C8).
 
 **C5 — AST↔DSL conversion** [C4]:
 - C5a — `FromAst<ReactionSpanAst>` (`Ctx = MoleculeDefaults`): clone ast; walk `atoms` / `bonds`,
