@@ -25,7 +25,7 @@ use super::error::ParseError;
 use super::molecule::{
     parse_atom_aliases, parse_atom_entry, parse_bond_entry, parse_molecule_input,
     read_atom_aliases, read_atom_entry, read_bond_entry, read_molecule_input, render_molecule_edn,
-    AtomEntryInput, AtomSpecInput, BondEntryInput, MoleculeDsl, MoleculeInput, MoleculeMetadata,
+    resolve_atom_spec, AtomEntryInput, BondEntryInput, MoleculeDsl, MoleculeInput, MoleculeMetadata,
 };
 use super::refs::{read_atom_ref, read_bond_ref, AtomRef, BondRef};
 use crate::ast::atom::{AtomAst, ElementAst};
@@ -295,17 +295,7 @@ impl ReactionInput {
                         namespace.set_atom_id(id, name.clone());
                         metadata.set_atom_id(id, name);
                     }
-                    let ast = match entry.spec {
-                        AtomSpecInput::Bare(dsl) => dsl.0,
-                        AtomSpecInput::Alias(name) => match aliases.get(&name) {
-                            Some(dsl) => dsl.0.clone(),
-                            None => {
-                                return Err(ParseError::InvalidValue(format!(
-                                    "unknown atom alias :{name}"
-                                )))
-                            }
-                        },
-                    };
+                    let ast = resolve_atom_spec(entry.spec, &aliases)?;
                     resolved.push(Delta::Atom(AtomDelta::Add { id, ast }));
                 }
                 DeltaInput::AtomRemove(r) => {

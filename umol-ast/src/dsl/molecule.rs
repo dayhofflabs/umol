@@ -1159,6 +1159,21 @@ pub(crate) enum AtomSpecInput {
     Alias(String),
 }
 
+/// Resolve an atom spec to its `AtomAst`: a bare value is its own atom; an alias is looked up in the
+/// table (unknown → error). Shared by the molecule, reaction, and span `into_ast` paths.
+pub(super) fn resolve_atom_spec(
+    spec: AtomSpecInput,
+    aliases: &IndexMap<String, Box<AtomDsl>>,
+) -> Result<AtomAst, ParseError> {
+    match spec {
+        AtomSpecInput::Bare(dsl) => Ok(dsl.0),
+        AtomSpecInput::Alias(name) => match aliases.get(&name) {
+            Some(dsl) => Ok(dsl.0.clone()),
+            None => Err(ParseError::InvalidValue(format!("unknown atom alias :{name}"))),
+        },
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct BondEntryInput {
     pub(crate) id: Option<String>,
@@ -1266,19 +1281,7 @@ impl MoleculeInput {
                 atom_id_to_idx.insert(id.clone(), AtomId(pos as u32));
                 metadata.set_atom_id(AtomId(pos as u32), id);
             }
-            let ast = match entry.spec {
-                AtomSpecInput::Bare(dsl) => dsl.0,
-                AtomSpecInput::Alias(name) => match alias_table.get(&name) {
-                    Some(dsl) => dsl.0.clone(),
-                    None => {
-                        return Err(ParseError::InvalidValue(format!(
-                            "unknown atom alias :{}",
-                            name
-                        )));
-                    }
-                },
-            };
-            atoms.push(ast);
+            atoms.push(resolve_atom_spec(entry.spec, &alias_table)?);
         }
 
         let atom_count = atoms.len();

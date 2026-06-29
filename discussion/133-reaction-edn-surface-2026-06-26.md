@@ -840,9 +840,9 @@ frame is molecule-shaped and `atom_aliases` is a legitimate span field, so no de
 is needed. (Bond DSL keywords `:single`/`:double`/`:triple`/`:aromatic` flow through `BondDsl::from_edn`
 — the same `:type` leaf parser `parse_bond_entry` uses — and are covered by tests.)
 
-**C8 — Resolution** [C1, C3]: `SpanInput::into_ast → (ReactionSpanAst, MoleculeMetadata)`. Work items in
-dependency order (no fresh-id assignment — union-frame; C8a also builds the bijective alias table and
-populates `MoleculeMetadata.atom_aliases`, and atom `AtomSpecInput` sides resolve to `AtomAst` —
+**C8 — Resolution** [C1, C3]: `SpanInput::into_ast → (ReactionSpanAst, MoleculeMetadata)`. **Done**
+Work items in dependency order (no fresh-id assignment — union-frame; C8a also builds the bijective alias
+table and populates `MoleculeMetadata.atom_aliases`, and atom `AtomSpecInput` sides resolve to `AtomAst` —
 `Bare → .0`, `Alias → table lookup`, unknown → error):
 - C8a — `into_ast` skeleton + union namespace = atom-entry positions ∪ inline `:id`s →
   `MoleculeMetadata`.

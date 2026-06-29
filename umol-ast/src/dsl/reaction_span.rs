@@ -2,21 +2,26 @@
 //! complete before/after value (`EntitySpan`) rather than a delta. Entity ids, bond endpoints,
 //! and constraint topology refs are resolved in `into_ast`.
 
+use indexmap::IndexMap;
 use umol_edn::{read_string, DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn};
+use umol_graph_core::Graph;
 
 use super::atom::AtomDsl;
 use super::bond::BondDsl;
 use super::config::MoleculeDefaults;
-use super::constraint::ConstraintDsl;
+use super::constraint::{ConstraintDsl, EntityCounts};
 use super::edn_utils::{optional_id, pair, parse_vec, read_map, read_vec, required_key, two_atom_refs};
+use super::error::ParseError;
 use super::molecule::{
-    parse_atom_aliases, parse_atom_entry, parse_bond_entry, read_atom_aliases, AtomSpecInput,
-    MoleculeMetadata,
+    parse_atom_aliases, parse_atom_entry, parse_bond_entry, read_atom_aliases, resolve_atom_spec,
+    AtomSpecInput, MoleculeMetadata,
 };
 use super::refs::AtomRef;
+use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
+use crate::ast::id::{AtomId, BondId};
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::{EntitySpan, ReactionSpanAst};
+use crate::ast::{ConstraintSpan, EntitySpan, ReactionSpanAst};
 
 /// Surface DSL for a reaction span. Pairs `ReactionSpanAst` with the `MoleculeMetadata` recording
 /// its span-frame id↔name bindings; fields private so metadata cannot drift onto a different AST.
@@ -314,6 +319,131 @@ fn read_span_input(de: &mut EdnStreamDeserializer<'_>) -> Result<SpanInput, EdnE
     })
 }
 
+fn resolve_atom_span(
+    span: EntitySpan<AtomSpecInput>,
+    aliases: &IndexMap<String, Box<AtomDsl>>,
+) -> Result<EntitySpan<AtomAst>, ParseError> {
+    Ok(match span {
+        EntitySpan::Unchanged(s) => EntitySpan::Unchanged(resolve_atom_spec(s, aliases)?),
+        EntitySpan::Added(s) => EntitySpan::Added(resolve_atom_spec(s, aliases)?),
+        EntitySpan::Removed(s) => EntitySpan::Removed(resolve_atom_spec(s, aliases)?),
+        EntitySpan::Modified { left, right } => EntitySpan::Modified {
+            left: resolve_atom_spec(left, aliases)?,
+            right: resolve_atom_spec(right, aliases)?,
+        },
+    })
+}
+
+fn resolve_constraint_span(
+    input: ConstraintSpanInput,
+    counts: &EntityCounts,
+    meta: &MoleculeMetadata,
+) -> Result<ConstraintSpan, ParseError> {
+    Ok(match input {
+        ConstraintSpanInput::Unchanged(dsl) => ConstraintSpan::Unchanged(dsl.into_ast(counts, meta)?),
+        ConstraintSpanInput::Added(dsl) => ConstraintSpan::Added(dsl.into_ast(counts, meta)?),
+        ConstraintSpanInput::Removed(dsl) => ConstraintSpan::Removed(dsl.into_ast(counts, meta)?),
+    })
+}
+
+impl SpanInput {
+    /// Resolve the union-frame span: positions are the union ids (no fresh-id allocation), inline
+    /// `:id`s and `:atom-aliases` populate the namespace, atom `AtomSpecInput` sides resolve to
+    /// `AtomAst`, bond endpoints and constraint refs resolve against the namespace, and each
+    /// projected side must be internally ref-consistent.
+    pub(crate) fn into_ast(self) -> Result<(ReactionSpanAst, MoleculeMetadata), ParseError> {
+        let atom_count = self.atoms.len();
+        let bond_count = self.bonds.len();
+
+        // Namespace: inline ids onto the union positions, then the bijective alias table.
+        let mut metadata = MoleculeMetadata::default();
+        for (index, (id, _)) in self.atoms.iter().enumerate() {
+            if let Some(name) = id {
+                if metadata.contains_id(name) {
+                    return Err(ParseError::DuplicateId(name.clone()));
+                }
+                metadata.set_atom_id(AtomId(index as u32), name.clone());
+            }
+        }
+        for (index, (id, _, _)) in self.bonds.iter().enumerate() {
+            if let Some(name) = id {
+                if metadata.contains_id(name) {
+                    return Err(ParseError::DuplicateId(name.clone()));
+                }
+                metadata.set_bond_id(BondId(index as u32), name.clone());
+            }
+        }
+        let mut aliases: IndexMap<String, Box<AtomDsl>> = IndexMap::new();
+        for (name, dsl) in self.atom_aliases {
+            if aliases.contains_key(&name) || metadata.contains_id(&name) {
+                return Err(ParseError::DuplicateId(name));
+            }
+            if aliases.values().any(|existing| existing == &dsl) {
+                return Err(ParseError::InvalidValue(
+                    "atom-aliases must be bijective: two names map to the same atom".into(),
+                ));
+            }
+            metadata.add_atom_alias(name.clone(), (*dsl).clone());
+            aliases.insert(name, dsl);
+        }
+
+        // Resolve atoms (alias → AtomAst), bonds (endpoints + value), constraints.
+        let mut atoms: Vec<EntitySpan<AtomAst>> = Vec::with_capacity(atom_count);
+        for (_, span) in self.atoms {
+            atoms.push(resolve_atom_span(span, &aliases)?);
+        }
+        let mut bonds: Vec<EntitySpan<BondAst>> = Vec::with_capacity(bond_count);
+        let mut endpoints: Vec<[AtomId; 2]> = Vec::with_capacity(bond_count);
+        let mut edges: Vec<[u32; 2]> = Vec::with_capacity(bond_count);
+        for (_, [ref_a, ref_b], span) in self.bonds {
+            let a = ref_a.into_ast(atom_count, &metadata)?;
+            let b = ref_b.into_ast(atom_count, &metadata)?;
+            edges.push([a.index() as u32, b.index() as u32]);
+            endpoints.push([a, b]);
+            bonds.push(span);
+        }
+
+        // Per-side ref consistency: a bond present on a side needs both endpoints present there.
+        for (span, [a, b]) in bonds.iter().zip(&endpoints) {
+            if span.left().is_some()
+                && (atoms[a.index()].left().is_none() || atoms[b.index()].left().is_none())
+            {
+                return Err(ParseError::InvalidValue(
+                    "bond present on the left references an atom absent on the left".into(),
+                ));
+            }
+            if span.right().is_some()
+                && (atoms[a.index()].right().is_none() || atoms[b.index()].right().is_none())
+            {
+                return Err(ParseError::InvalidValue(
+                    "bond present on the right references an atom absent on the right".into(),
+                ));
+            }
+        }
+
+        let counts = EntityCounts {
+            atom_count,
+            bond_count,
+            dative_bond_count: 0,
+            aromatic_system_count: 0,
+            multicenter_bond_count: 0,
+            noncovalent_bond_count: 0,
+            stereo_atom_count: 0,
+            stereo_bond_count: 0,
+        };
+        let mut constraints: Vec<ConstraintSpan> = Vec::with_capacity(self.constraints.len());
+        for input in self.constraints {
+            constraints.push(resolve_constraint_span(input, &counts, &metadata)?);
+        }
+
+        let graph = Graph::new(atom_count, &edges);
+        Ok((
+            ReactionSpanAst::from_parts(graph, atoms, bonds, constraints),
+            metadata,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::*;
@@ -322,12 +452,10 @@ mod tests {
     use umol_edn::read_string;
 
     use super::*;
-    use crate::ast::atom::AtomAst;
     use crate::ast::boolean::BooleanAst;
     use crate::ast::constraint::{BondConstraint, Constraint, Constraints, MoleculeConstraint};
     use crate::ast::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
     use crate::ast::edit::BondFieldChange;
-    use crate::ast::id::{AtomId, BondId};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::reaction::ReactionAst;
     use crate::ast::value::ValueAst;
@@ -495,5 +623,58 @@ mod tests {
         assert_eq!(parse_span_input(&read_string(input).unwrap()).unwrap(), expected);
         let mut de = EdnStreamDeserializer::new(input);
         assert_eq!(read_span_input(&mut de).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::alias_and_add(
+        r#"{:atoms [:nu {:add "O"}] :bonds [{:add [0 1 :single]}] :atom-aliases [:nu "C"]}"#,
+        ReactionSpanAst::from_parts(
+            Graph::new(2, &[[0, 1]]),
+            vec![
+                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                EntitySpan::Added(AtomAst::from_element(Element::O)),
+            ],
+            vec![EntitySpan::Added(BondAst::from_order(1))],
+            vec![],
+        ),
+        MoleculeMetadata::new().with_atom_alias("nu", AtomDsl(AtomAst::from_element(Element::C))),
+    )]
+    fn test_span_input_into_ast(
+        #[case] input: &str,
+        #[case] expected_ast: ReactionSpanAst,
+        #[case] expected_metadata: MoleculeMetadata,
+    ) {
+        assert_eq!(
+            parse_span_input(&read_string(input).unwrap())
+                .unwrap()
+                .into_ast()
+                .unwrap(),
+            (expected_ast, expected_metadata),
+        );
+    }
+
+    #[rstest]
+    #[case::unknown_alias(
+        r#"{:atoms [:nu]}"#,
+        ParseError::InvalidValue("unknown atom alias :nu".to_string()),
+    )]
+    #[case::unknown_ref(
+        r#"{:atoms ["C"] :bonds [[0 5 :single]]}"#,
+        ParseError::InvalidRef { kind: "atom", value: "5".to_string() },
+    )]
+    #[case::left_inconsistent(
+        r#"{:atoms ["C" {:add "O"}] :bonds [[0 1 :single]]}"#,
+        ParseError::InvalidValue(
+            "bond present on the left references an atom absent on the left".to_string(),
+        ),
+    )]
+    fn test_span_input_into_ast_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(
+            parse_span_input(&read_string(input).unwrap())
+                .unwrap()
+                .into_ast()
+                .unwrap_err(),
+            expected,
+        );
     }
 }
