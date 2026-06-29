@@ -1063,7 +1063,9 @@ A **`stereo-atom-entry`** / **`stereo-bond-entry`** **`:ligands`** vector **over
 
 ## 8. Reaction map
 
-A **reaction map** describes a graph transformation as a left-hand-side molecule (**`:lhs`**) together with an **ordered** list of **`:deltas`** that edit it. The transformed (right-hand-side) molecule is the result of applying the deltas in order to **`:lhs`**; it is **not** written out. This is the **operational** surface — the lhs plus the edits — not a superimposed L∪K∪R graph.
+A reaction has two interchangeable surface forms, denoting the same transformation: the **operational** form (a left-hand side plus an edit list) and the **span** form (the superimposed `L ∪_K R` graph). The operational form is defined first; the span form follows.
+
+**Operational form.** A **reaction map** describes a graph transformation as a left-hand-side molecule (**`:lhs`**) together with an **ordered** list of **`:deltas`** that edit it. The transformed (right-hand-side) molecule is the result of applying the deltas in order to **`:lhs`**; it is **not** written out. This is the **operational** surface — the lhs plus the edits — not a superimposed L∪K∪R graph.
 
 ```
 reaction-map ::=
@@ -1106,6 +1108,66 @@ constraint-delta ::=
 **`:atom-aliases`.** As in **§4**, with the alias namespace spanning lhs ∪ reaction. Aliases are resolved **after** the entire map is read, independent of tree vs. streaming parse, so their position in the top-level map is **not** significant; canonical serialization emits **`:atom-aliases`** **last**.
 
 **Serialization.** A reaction map serializes its keys in the order **`:lhs`**, **`:deltas`**, then **`:atom-aliases`** (only when aliases are present). **`:lhs`** renders per **§4**; deltas render in **stored order** (the canonical AST order, not source order); each ref renders as its **`:id`** keyword when one is declared on the referenced entry, falling back to the positional integer (**§7.9**). Serializing a reaction that carries **no** surface metadata emits the **positional** form throughout (no **`:id`** keywords, no aliases); **`:id`** / alias output requires retaining the declared ids and aliases alongside the structural graph.
+
+**Span form.** A reaction may instead be written as its **superimposed span** — the `L ∪_K R` graph overlaying the before and after states — which shares the **molecule-map shape** (**`:atoms`** / **`:bonds`** / **`:constraints`** / **`:atom-aliases`**). Each entry is either a **bare** molecule entry (**unchanged** — present and identical on both sides) or that entry wrapped in a single-key **verb** map, **`:add`** / **`:modify`** / **`:remove`** (the **same** verbs as the operational deltas).
+
+```
+span-map ::=
+    { :atoms        [ atom-span* ]
+      [:bonds        [ bond-span* ]]?
+      [:constraints  [ constraint-span* ]]?
+      [:atom-aliases atom-alias-list]? }
+
+atom-span      ::= atom-span-body | [ keyword-id atom-span-body ]
+atom-span-body ::=
+    atom-value                              (* Unchanged *)
+  | { :add    atom-value }
+  | { :remove atom-value }
+  | { :modify [ atom-value atom-value ] }   (* [left right] *)
+
+bond-span ::=
+    bond-entry                              (* Unchanged *)
+  | { :add    bond-entry }
+  | { :remove bond-entry }
+  | { :modify ( [ atom-ref atom-ref [ bond-value bond-value ] ]
+              | { [:id keyword]? :atoms [ atom-ref atom-ref ] :type [ bond-value bond-value ] } ) }
+
+constraint-span ::=
+    constraint-entry                        (* Unchanged *)
+  | { :add    constraint-entry }
+  | { :remove constraint-entry }            (* no :modify — constraints are a by-value multiset *)
+```
+
+**`atom-value`** is an atom literal or an **`:atom-aliases`** keyword (the value position of a **§4** atom entry); **`bond-value`** is a **`bond-string`** / **`bond-keyword`** (a bond entry's **`:type`**); **`atom-entry`** / **`bond-entry`** / **`constraint-entry`** are the **§4** / **§7.9** forms.
+
+**Union frame.** Span entries are in the **union frame** (`L ∪ R`): every entity — unchanged, added, removed, or modified — occupies a slot, and positions are the ids (no allocation, unlike the operational form). An atom's optional **`[:id …]`** and a bond's **`:id`** name it; refs (bond endpoints, constraint refs) resolve against this single frame.
+
+**`:modify` carries both sides** — `[left right]`, **complete** values (atoms `[left right]`; bonds carry endpoints once, `[a b [left right]]`). This is the one place the span differs from the operational **`:modify`**, which carries only the new value: the span is **self-contained** (it has no **`:lhs`** to recover the old value from).
+
+**Constraints** are a by-value multiset — bare = unchanged, **`{:add c}`** / **`{:remove c}`**; there is **no** **`:modify`**.
+
+**Per-side consistency.** The **left** projection (unchanged ∪ removed ∪ modified-left) and the **right** projection (unchanged ∪ added ∪ modified-right) must **each** be a valid molecule — every ref a side uses **MUST** resolve within that side (e.g. a bond present on the left must have both endpoints present on the left).
+
+**Homoiconicity.** A plain molecule map (every entry bare) is a valid span — the identity reaction; the molecule *is* the span.
+
+**Equivalence.** The span and operational forms denote the same reaction: the span's **left** projection is the operational **`:lhs`**, and applying the **`:deltas`** yields the **right** projection. Both reuse the whole molecule entity / constraint grammar unchanged; the span adds only the **`{:add|:modify|:remove}`** wrapper.
+
+A substitution (replace an O by an N on a carbon) as a span:
+
+```clojure
+{:atoms ["C"                     ; Unchanged
+         {:remove "O"}           ; Removed — left only
+         {:add "N"}]             ; Added — right only
+ :bonds [{:remove [0 1 :single]} ; Removed — C–O
+         {:add [0 2 :single]}]}  ; Added — C–N
+```
+
+A bond-order change, with both atoms unchanged:
+
+```clojure
+{:atoms ["C" "C"]
+ :bonds [{:modify [0 1 [:single :double]]}]}  ; order 1 → 2, endpoints once
+```
 
 ## 9. Molecule map examples (non-normative)
 

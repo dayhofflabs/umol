@@ -899,8 +899,17 @@ table and populates `MoleculeMetadata.atom_aliases`, and atom `AtomSpecInput` si
   `test_reaction_span_ast_constraint_projection` (`:add` → right only, `:remove` → left only).
 - *Checkpoint (tested):* full round-trip. **Done** (54 reaction_span tests; full suite 3914).
 
-**C12 — Spec** [C11]:
-- C12a — add the span surface beside the delta surface in the reactions section of `umol-dsl-spec.md`.
-- *Checkpoint:* spec updated.
+**C12 — Spec** [C11]: **Done**
+- C12a — **Done.** §8 now leads with the two interchangeable forms; the existing delta surface is
+  labelled **Operational form**, and a **Span form** subsection adds the `span-map` grammar
+  (`atom-span`/`bond-span`/`constraint-span`), the union-frame / `:modify [left right]` / by-value
+  constraints / per-side consistency / homoiconicity / equivalence paragraphs, and two examples
+  (substitution, bond-order modify — both byte-identical to the C11d round-trip test inputs).
+- *Checkpoint:* spec updated. **Done.**
+
+**C1–C12 complete.** `ReactionSpanDsl` ↔ EDN is end-to-end (parse → resolve → render → round-trip),
+spec'd, with molecule render/resolve helpers shared (`resolve_atom_spec`, `render_atom_value`,
+`render_bond_entry`). Increment-2 (overlay deltas / overlay span columns / molecule-constraint
+`apply_at`) remains in doc 134.
 
 **Increment-2 (doc 134):** overlay deltas, overlay span columns, molecule-constraint `apply_at`.
