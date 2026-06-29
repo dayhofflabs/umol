@@ -10,10 +10,10 @@ use std::str::FromStr;
 
 use bimap::BiBTreeMap;
 use indexmap::IndexMap;
-use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
 use super::atom::{lower_atom, raise_atom, AtomDsl, PartialAtomDsl};
-use super::bond::{lower_bond, raise_bond, PartialBondDsl};
+use super::bond::{lower_bond, raise_bond, BondDsl, PartialBondDsl};
 use super::config::{DeltaDefaults, ReactionDefaults};
 use super::constraint::{read_constraint_dsl, ConstraintDsl, EntityCounts};
 use super::edn_utils::{
@@ -30,7 +30,7 @@ use super::refs::{read_atom_ref, read_bond_ref, AtomRef, BondRef};
 use crate::ast::atom::{AtomAst, ElementAst};
 use crate::ast::bond::BondAst;
 use crate::ast::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
-use crate::ast::edit::AtomFieldChange;
+use crate::ast::edit::{AtomFieldChange, BondFieldChange};
 use crate::ast::id::{AtomId, BondId};
 use crate::ast::reaction::ReactionAst;
 use crate::ast::traits::{FromAst, IntoAst};
@@ -694,7 +694,52 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 );
                 out.push(single_key_map("atom", single_key_map("modify", payload)));
             }
-            _ => todo!("R9b/R9c: bond and constraint deltas"),
+            Delta::Bond(BondDelta::Add { id, atoms, ast }) => {
+                out.push(single_key_map(
+                    "bond",
+                    single_key_map("add", render_bond_entry(*id, *atoms, ast, meta)),
+                ));
+                i += 1;
+            }
+            Delta::Bond(BondDelta::Remove { id, .. }) => {
+                out.push(single_key_map(
+                    "bond",
+                    single_key_map("remove", render_bond_ref(*id, meta)),
+                ));
+                i += 1;
+            }
+            Delta::Bond(
+                BondDelta::ModifyField { id, .. } | BondDelta::ModifyConstraint { id, .. },
+            ) => {
+                let id = *id;
+                let mut partial = BondAst::default();
+                while let Some(Delta::Bond(delta)) = deltas.get(i) {
+                    match delta {
+                        BondDelta::ModifyField { id: j, change } if *j == id => match change {
+                            BondFieldChange::Order { new, .. } => partial.order = new.clone(),
+                            BondFieldChange::Charge { new, .. } => partial.charge = new.clone(),
+                            BondFieldChange::Spin { new, .. } => partial.spin = new.clone(),
+                        },
+                        BondDelta::ModifyConstraint { id: j, old, new } if *j == id => match new {
+                            Some(c) => {
+                                partial.constraints.add(c.clone());
+                            }
+                            None => {
+                                if let Some(old) = old {
+                                    partial.constraints.add(old.as_undetermined());
+                                }
+                            }
+                        },
+                        _ => break,
+                    }
+                    i += 1;
+                }
+                let payload = Edn::Vector(
+                    vec![render_bond_ref(id, meta), PartialBondDsl(partial).to_edn()].into(),
+                );
+                out.push(single_key_map("bond", single_key_map("modify", payload)));
+            }
+            _ => todo!("R9c: constraint deltas"),
         }
     }
     out
@@ -724,6 +769,52 @@ fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &ReactionMetadata) -> Edn
             Edn::Vector(vec![Edn::Keyword(EdnKeyword::owned(name.to_string())), spec].into())
         }
         None => spec,
+    }
+}
+
+/// An atom named as a bond endpoint — resolved against the union namespace (lhs ∪ created), since a
+/// bond may attach to a same-reaction atom. Unlike a delta target ref, which is lhs-only.
+fn render_atom_endpoint(id: AtomId, meta: &ReactionMetadata) -> Edn<'static> {
+    match meta.atom_id(id).or_else(|| meta.lhs().atom_id(id)) {
+        Some(name) => Edn::Keyword(EdnKeyword::owned(name.to_string())),
+        None => Edn::Int(id.index() as i64),
+    }
+}
+
+/// A bond delta target (`:remove` / `:modify`) names an existing lhs bond — resolved lhs-frame only.
+fn render_bond_ref(id: BondId, meta: &ReactionMetadata) -> Edn<'static> {
+    match meta.lhs().bond_id(id) {
+        Some(name) => Edn::Keyword(EdnKeyword::owned(name.to_string())),
+        None => Edn::Int(id.index() as i64),
+    }
+}
+
+/// A created bond (`:add`). Renders `[<a> <b> <bond-dsl>]`, or `{:id <id> :atoms [<a> <b>] :type
+/// <bond-dsl>}` when the bond carries an id. Endpoints resolve against the union namespace.
+fn render_bond_entry(
+    id: BondId,
+    atoms: [AtomId; 2],
+    ast: &BondAst,
+    meta: &ReactionMetadata,
+) -> Edn<'static> {
+    let bond_edn = BondDsl::from_ref(ast).to_edn();
+    let first = render_atom_endpoint(atoms[0], meta);
+    let second = render_atom_endpoint(atoms[1], meta);
+    match meta.bond_id(id) {
+        Some(name) => {
+            let mut m = EdnMap::with_capacity(3);
+            m.insert(
+                Edn::keyword("id"),
+                Edn::Keyword(EdnKeyword::owned(name.to_string())),
+            );
+            m.insert(
+                Edn::keyword("atoms"),
+                Edn::Vector(vec![first, second].into()),
+            );
+            m.insert(Edn::keyword("type"), bond_edn);
+            Edn::Map(m)
+        }
+        None => Edn::Vector(vec![first, second, bond_edn].into()),
     }
 }
 
@@ -1355,6 +1446,47 @@ mod tests {
             read_string(r##"{:atom {:add [:o "O"]}}"##).unwrap(),
             read_string("{:atom {:remove :c}}").unwrap(),
             read_string(r##"{:atom {:modify [:br "#c-#v*"]}}"##).unwrap(),
+        ];
+        assert_eq!(render_deltas(&deltas, &meta), expected);
+    }
+
+    #[rstest]
+    fn test_render_deltas_bond() {
+        // lhs atoms :c(0) :o(1), lhs bonds :b1(0) :bx(1); reaction adds atom :n(2) and bond :b2(2).
+        // The bond-add endpoints span the union (lhs :c + created :n).
+        let meta = ReactionMetadata {
+            lhs: MoleculeMetadata::new()
+                .with_atom_id(AtomId(0), "c")
+                .with_atom_id(AtomId(1), "o")
+                .with_bond_id(BondId(0), "b1")
+                .with_bond_id(BondId(1), "bx"),
+            ..Default::default()
+        }
+        .with_atom_id(AtomId(2), "n")
+        .with_bond_id(BondId(2), "b2");
+        let deltas = Deltas::from_iter([
+            Delta::Bond(BondDelta::Add {
+                id: BondId(2),
+                atoms: [AtomId(0), AtomId(2)],
+                ast: BondAst::from_order(1),
+            }),
+            Delta::Bond(BondDelta::Remove {
+                id: BondId(1),
+                atoms: [AtomId(0), AtomId(1)],
+                ast: BondAst::from_order(1),
+            }),
+            Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order {
+                    old: ValueAst::Lit(1),
+                    new: ValueAst::Lit(2),
+                },
+            }),
+        ]);
+        let expected = vec![
+            read_string("{:bond {:add {:id :b2 :atoms [:c :n] :type :single}}}").unwrap(),
+            read_string("{:bond {:remove :bx}}").unwrap(),
+            read_string(r##"{:bond {:modify [:b1 "2"]}}"##).unwrap(),
         ];
         assert_eq!(render_deltas(&deltas, &meta), expected);
     }

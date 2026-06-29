@@ -59,6 +59,19 @@ impl BondConstraint {
             Self::CisTransStereo(c) => c.is_undetermined(),
         }
     }
+
+    /// The same kind/sub-key with its value made `Undetermined` (the vacuous form). Renders as
+    /// `#R*` / `#C*`; a reaction `:modify` uses it to mark a constraint for removal. `Aromatic` is a
+    /// flag with no vacuous form — it is not removable this way and is returned unchanged.
+    pub fn as_undetermined(&self) -> Self {
+        match self {
+            Self::Aromatic => Self::Aromatic,
+            Self::RingMembership(m) => {
+                Self::RingMembership(RingMembershipAst::new(m.scope, ValueAst::Undetermined))
+            }
+            Self::CisTransStereo(_) => Self::CisTransStereo(CisTransStereoAst::Undetermined),
+        }
+    }
 }
 
 /// Entry identity: discriminant + sub-key. Variant order matches `BondConstraint`,
@@ -496,6 +509,15 @@ mod tests {
     #[case::cis_trans_undetermined(BondConstraint::CisTransStereo(CisTransStereoAst::Undetermined), true)]
     fn test_bond_constraint_is_undetermined(#[case] c: BondConstraint, #[case] expected: bool) {
         assert_eq!(c.is_undetermined(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic_unchanged(BondConstraint::Aromatic, BondConstraint::Aromatic)]
+    #[case::ring_membership_keeps_scope(BondConstraint::ring_membership(RingScope::Size(6), 1), BondConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined))]
+    #[case::cis_trans(BondConstraint::CisTransStereo(CisTransStereoAst::stereo(1_u32)), BondConstraint::CisTransStereo(CisTransStereoAst::Undetermined))]
+    fn test_bond_constraint_as_undetermined(#[case] c: BondConstraint, #[case] expected: BondConstraint) {
+        assert_eq!(c.as_undetermined(), expected);
     }
 
     #[rustfmt::skip]

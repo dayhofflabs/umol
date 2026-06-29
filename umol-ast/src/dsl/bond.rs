@@ -229,7 +229,13 @@ impl Display for PartialBondDsl {
         fmt_charge(f, &ast.charge)?;
         fmt_spin_pair(f, &ast.spin)?;
         for c in ast.constraints.iter() {
-            fmt_constraint(f, c)?;
+            // The partial bond is the one place an undetermined constraint is not vacuous: it
+            // renders explicitly as `#<tag>*`, the reaction `:modify` constraint-removal marker.
+            if c.is_undetermined() {
+                write!(f, "{}*", constraint_tag(c))?;
+            } else {
+                fmt_constraint(f, c)?;
+            }
         }
         Ok(())
     }

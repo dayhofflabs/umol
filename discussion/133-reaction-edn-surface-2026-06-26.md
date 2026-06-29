@@ -604,7 +604,17 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   `AtomDsl`/molecule still drops vacuous, unchanged). New AST primitive
   `AtomConstraint::as_undetermined()` (vacuous form, keeps `RingMembership` scope). Tests:
   `test_render_deltas`, `test_atom_constraint_as_undetermined`.
-- R9b — `render_deltas` bond ops (same, `PartialBondDsl::to_edn`).
+- R9b — **Done.** `render_deltas` bond ops: add → `{:bond {:add <entry>}}` (`render_bond_entry`:
+  `[<a> <b> <type>]`, or `{:id :atoms :type}` when the bond has an id; `<type>` is full `BondDsl`
+  so a plain order renders its keyword shorthand `:single`/`:double`); remove →
+  `{:bond {:remove <ref>}}` (`render_bond_ref`, lhs frame); modify → coalesce same-id
+  `ModifyField`(Order/Charge/Spin)/`ModifyConstraint` into a partial `BondAst` →
+  `{:bond {:modify [<ref> <PartialBondDsl>]}}` (partial renders order as a bare string, `"2"`).
+  Endpoints resolve against the **union** namespace (`render_atom_endpoint`: created ∪ lhs) — a bond
+  may attach to a same-reaction atom, unlike a delta target ref. `BondConstraint::as_undetermined`
+  added (`Aromatic` is a flag with no vacuous form, not removable this way); `PartialBondDsl` renders
+  undetermined constraints as `#<tag>*`. Tests: `test_render_deltas_bond`,
+  `test_bond_constraint_as_undetermined`.
 - R9c — `render_deltas` constraint ops + canonical (post-`canonicalize`) order across all ops.
 - R9d — `render_reaction_edn`: `:lhs` via the molecule renderer + `:deltas`.
 - R9e — tests: `ReactionAst` → EDN per op.
