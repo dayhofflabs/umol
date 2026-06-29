@@ -580,9 +580,16 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
 - *Checkpoint (tested):* hand-built `ReactionInput` resolves (atoms, bonds, constraints).
 
 **R8 — `FromEdn` path** [R2, R6, R7]:
-- R8a — `FromEdn` (`from_edn` + `from_edn_str`): parse (R6) → `into_ast` (R7) → `from_parts`.
-- R8b — `FromStr` (`Err = ParseError`, delegates `from_edn_str`).
-- R8c — tests: EDN string → `ReactionDsl` / `ReactionAst` end to end.
+- R8a — **Done.** `FromEdn` for `ReactionDsl`: `from_edn` → `parse_reaction_input` (tree) →
+  `into_ast` → `from_parts`; `from_edn_str` → `read_reaction_input` (streaming) + `expect_eof` →
+  `into_ast` → `from_parts`. `ParseError` mapped via `DeError::Custom`. Mirrors `MoleculeDsl`. Wires
+  up the previously-unused reaction parse fns.
+- R8b — **Done.** `FromStr for ReactionDsl` (`Err = ParseError`), delegating `from_edn_str` and
+  mapping `EdnError` → `ParseError::EdnParse`. Mirrors `MoleculeDsl`.
+- R8c — **Done.** `test_reaction_dsl_from_edn` (EDN → `ReactionDsl`, asserting the resolved
+  `ReactionAst` for atom-modify and atom-add+bond-add), `test_reaction_dsl_from_edn_str_from_edn_parity`
+  (tree vs streaming agree across modify / bond-modify+constraint / add cases), and
+  `test_reaction_dsl_from_str` (`FromStr` ≡ `from_edn_str`).
 - *Checkpoint (tested):* EDN → AST end to end.
 
 **R9 — Render** [R1, R4] (`dsl/reaction.rs`):

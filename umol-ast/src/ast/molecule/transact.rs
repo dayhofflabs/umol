@@ -307,7 +307,11 @@ impl MoleculeBuilder {
                 Ok(())
             }
             Edit::AddBonds { bonds } => {
-                for AddBond { endpoints: [first, second], ast } in bonds {
+                for AddBond {
+                    endpoints: [first, second],
+                    ast,
+                } in bonds
+                {
                     let first = created.atom(first)?;
                     if first.index() >= self.atom_count() {
                         return Err(TransactionError::IdOutOfRange("atom"));
@@ -659,7 +663,11 @@ impl MoleculeBuilder {
             }
             Edit::AddBonds { bonds } => {
                 let mut added = Vec::with_capacity(bonds.len());
-                for AddBond { endpoints: [first, second], ast } in bonds {
+                for AddBond {
+                    endpoints: [first, second],
+                    ast,
+                } in bonds
+                {
                     let first = created.atom(first)?;
                     if first.index() >= self.atom_count() {
                         return Err(TransactionError::IdOutOfRange("atom"));

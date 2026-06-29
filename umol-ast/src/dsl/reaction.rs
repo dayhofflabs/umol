@@ -6,6 +6,8 @@
 //! `:deltas` (a vector of `:add` / `:remove` / `:modify` / `:constraint` operations). Each
 //! entity delegates to its own entity DSL.
 
+use std::str::FromStr;
+
 use bimap::BiBTreeMap;
 use indexmap::IndexMap;
 use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn};
@@ -383,6 +385,32 @@ impl ReactionInput {
     }
 }
 
+impl<'de> FromEdn<'de> for ReactionDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let input = parse_reaction_input(edn)?;
+        let (ast, metadata) = input
+            .into_ast()
+            .map_err(|e| DeError::Custom(e.to_string()))?;
+        Ok(ReactionDsl::from_parts(ast, metadata))
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        let mut de = EdnStreamDeserializer::new(input);
+        let ri = read_reaction_input(&mut de)?;
+        de.expect_eof()?;
+        let (ast, metadata) = ri.into_ast().map_err(|e| DeError::Custom(e.to_string()))?;
+        Ok(ReactionDsl::from_parts(ast, metadata))
+    }
+}
+
+impl FromStr for ReactionDsl {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        ReactionDsl::from_edn_str(s).map_err(|e| ParseError::EdnParse(e.to_string()))
+    }
+}
+
 fn read_reaction_input(de: &mut EdnStreamDeserializer<'_>) -> Result<ReactionInput, EdnError> {
     de.consume_byte(b'{')?;
     let mut lhs = None;
@@ -614,6 +642,7 @@ mod tests {
     use crate::ast::constraint::{AtomConstraint, Constraint, MoleculeConstraint};
     use crate::ast::delta::{ConstraintDelta, Deltas};
     use crate::ast::edit::{AtomFieldChange, BondFieldChange};
+    use crate::ast::molecule::MoleculeAst;
     use crate::ast::value::ValueAst;
     use crate::dsl::bond::BondDsl;
     use crate::dsl::constraint::MoleculeConstraintDsl;
@@ -1134,5 +1163,61 @@ mod tests {
                 ))),
             ]),
         );
+    }
+
+    #[rstest]
+    #[case::atom_modify(
+        r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##,
+        ReactionAst {
+            lhs: MoleculeAst::from_edn_str(r##"{:atoms [[:br "Br#c0"]]}"##).unwrap(),
+            deltas: Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Lit(-1) },
+            })]),
+        }
+    )]
+    #[case::atom_add_bond_add(
+        r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:bond {:add [0 :o "1"]}}]}"##,
+        ReactionAst {
+            lhs: MoleculeAst::from_edn_str(r##"{:atoms ["C"]}"##).unwrap(),
+            deltas: Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(1),
+                    ast: AtomAst::from_element(Element::O),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(0),
+                    atoms: [AtomId(0), AtomId(1)],
+                    ast: BondAst::from_order(1),
+                }),
+            ]),
+        }
+    )]
+    fn test_reaction_dsl_from_edn(#[case] input: &str, #[case] expected: ReactionAst) {
+        let dsl = ReactionDsl::from_edn(&read_string(input).unwrap()).unwrap();
+        assert_eq!(dsl.ast(), &expected);
+    }
+
+    #[rstest]
+    #[case::atom_modify(
+        r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##
+    )]
+    #[case::bond_modify_and_constraint(
+        r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]} :deltas [{:bond {:modify [:b1 "2"]}} {:constraint {:add {:connected {}}}}]}"##
+    )]
+    #[case::atom_add_bond_add(
+        r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:bond {:add [0 :o "1"]}}]}"##
+    )]
+    fn test_reaction_dsl_from_edn_str_from_edn_parity(#[case] input: &str) {
+        let via_tree = ReactionDsl::from_edn(&read_string(input).unwrap()).unwrap();
+        let via_stream = ReactionDsl::from_edn_str(input).unwrap();
+        assert_eq!(via_tree, via_stream);
+    }
+
+    #[rstest]
+    fn test_reaction_dsl_from_str() {
+        let input = r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##;
+        let dsl: ReactionDsl = input.parse().unwrap();
+        assert_eq!(dsl, ReactionDsl::from_edn_str(input).unwrap());
     }
 }
