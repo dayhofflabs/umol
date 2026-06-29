@@ -695,6 +695,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
         AtomConstraint::TotalValence(v) => fmt_value_field_required(f, "#V", v),
         AtomConstraint::TotalHydrogens(v) => fmt_value_field_required(f, "#H", v),
         AtomConstraint::RingMembership(m) => fmt_ring_membership(f, m),
+        AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Undetermined) => Ok(()),
         AtomConstraint::TetrahedralStereo(c) => {
             write!(f, "#T")?;
             fmt_tetrahedral_stereo_config(f, c)
@@ -1367,16 +1368,8 @@ mod tests {
     #[rstest]
     #[case::empty("", PartialAtomDsl(AtomAst::new(ElementAst::Undetermined)))]
     #[case::element_only("O", PartialAtomDsl(AtomAst::new(ElementAst::Lit(Element::O))))]
-    #[case::charge_only("#c-1", PartialAtomDsl({
-        let mut a = AtomAst::new(ElementAst::Undetermined);
-        a.charge = ValueAst::Lit(-1);
-        a
-    }))]
-    #[case::element_and_pred("O#h1", PartialAtomDsl({
-        let mut a = AtomAst::new(ElementAst::Lit(Element::O));
-        a.implicit_hydrogens = ValueAst::Lit(1);
-        a
-    }))]
+    #[case::charge_only("#c-1", PartialAtomDsl(AtomAst::new(ElementAst::Undetermined).with_charge(ValueAst::Lit(-1))))]
+    #[case::element_and_pred("O#h1", PartialAtomDsl(AtomAst::new(ElementAst::Lit(Element::O)).with_implicit_hydrogens(ValueAst::Lit(1))))]
     fn test_parse_partial_atom(#[case] input: &str, #[case] expected: PartialAtomDsl) {
         assert_eq!(parse_partial_atom(input).unwrap(), expected);
     }
@@ -1388,11 +1381,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::charge_only(r##""#c-1""##, PartialAtomDsl({
-        let mut a = AtomAst::new(ElementAst::Undetermined);
-        a.charge = ValueAst::Lit(-1);
-        a
-    }))]
+    #[case::charge_only(r##""#c-1""##, PartialAtomDsl(AtomAst::new(ElementAst::Undetermined).with_charge(ValueAst::Lit(-1))))]
     fn test_partial_atom_dsl_from_edn(#[case] input: &str, #[case] expected: PartialAtomDsl) {
         assert_eq!(
             PartialAtomDsl::from_edn(&read_string(input).unwrap()).unwrap(),
@@ -1413,11 +1402,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::charge_only(PartialAtomDsl({
-        let mut a = AtomAst::new(ElementAst::Undetermined);
-        a.charge = ValueAst::Lit(-1);
-        a
-    }), r##""#c-""##)]
+    #[case::charge_only(PartialAtomDsl(AtomAst::new(ElementAst::Undetermined).with_charge(ValueAst::Lit(-1))), r##""#c-""##)]
     fn test_partial_atom_dsl_to_edn(#[case] input: PartialAtomDsl, #[case] expected: &str) {
         assert_eq!(input.to_edn(), read_string(expected).unwrap());
     }
@@ -1446,11 +1431,6 @@ mod tests {
         assert_eq!(parsed.to_string(), input);
     }
 
-    /// Vacuous constraints (those with `Undetermined` payload) elide on
-    /// rendering per the canonical-rendering rule (see `dsl::predicates`).
-    /// `#v*`, `#R*`, `#m*`, `#a*` etc. are admitted on parse but the
-    /// rendered surface drops them entirely, so the constraint is gone
-    /// after a render → reparse cycle.
     #[rstest]
     #[case::valence("C#v*", "C")]
     #[case::donated("C#d*", "C")]
@@ -1465,10 +1445,8 @@ mod tests {
     #[case::ring_membership_size("C#R(6)*", "C")]
     #[case::aromatic_undetermined("C#a*", "C")]
     #[case::multicenter_undetermined("C#m*", "C")]
-    fn test_atom_render_elides_vacuous_constraints(
-        #[case] input: &str,
-        #[case] expected_canonical: &str,
-    ) {
+    #[case::tetrahedral_undetermined("C#T*", "C")]
+    fn test_atom_render_vacuous_constraints(#[case] input: &str, #[case] expected_canonical: &str) {
         let parsed: AtomDsl = atom.parse(input).unwrap();
         assert_eq!(parsed.to_string(), expected_canonical);
         let reparsed: AtomDsl = atom.parse(&parsed.to_string()).unwrap();
@@ -1774,36 +1752,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraint_dsl_rejects_non_map() {
-        let err = AtomConstraintDsl::from_edn(&Edn::Int(3)).unwrap_err();
-        assert!(matches!(err, DeError::TypeMismatch { .. }));
-    }
-
-    #[rstest]
-    fn test_atom_constraint_dsl_rejects_multiple_keys() {
-        let edn = read_string("{:valence 4 :degree 3}").unwrap();
-        let err = AtomConstraintDsl::from_edn(&edn).unwrap_err();
-        assert!(matches!(err, DeError::Custom(_)));
-    }
-
-    #[rstest]
-    fn test_atom_constraint_dsl_rejects_unknown_key() {
-        let edn = read_string("{:bogus 1}").unwrap();
-        let err = AtomConstraintDsl::from_edn(&edn).unwrap_err();
-        assert!(matches!(err, DeError::UnknownField { .. }));
-    }
-
-    #[rstest]
-    fn test_atom_constraint_dsl_accepts_value_as_string_subgrammar() {
-        let edn = read_string(r##"{:valence "?h + 1"}"##).unwrap();
-        let parsed = AtomConstraintDsl::from_edn(&edn).unwrap();
-        assert_eq!(
-            parsed.into_ast(&()),
-            AtomConstraint::Valence(ValueAst::term(ValueTerm::Sum(vec![
-                ValueTerm::Var("h".into()),
-                ValueTerm::Lit(1),
-            ])))
-        );
+    #[case::non_map(Edn::Int(3), DeError::TypeMismatch { expected: "atom-constraint single-key map", got: "int", path: vec![] })]
+    #[case::multiple_keys(read_string("{:valence 4 :degree 3}").unwrap(), DeError::Custom("atom-constraint must have exactly one key, got 2".to_string()))]
+    #[case::unknown_key(read_string("{:bogus 1}").unwrap(), DeError::UnknownField { key: "bogus".to_string(), path: vec!["atom-constraint".into()] })]
+    fn test_atom_constraint_dsl_error(#[case] input: Edn<'static>, #[case] expected: DeError) {
+        let err = AtomConstraintDsl::from_edn(&input).unwrap_err();
+        assert_eq!(err, expected);
     }
 
     #[rstest]

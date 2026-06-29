@@ -471,20 +471,10 @@ pub(super) fn read_dative_bond_constraint_dsl(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<DativeBondConstraintDsl, EdnError> {
     match de.peek_byte()?.ok_or_else(eof_err)? {
-        b':' => {
-            let name = de.read_keyword_name()?;
-            match name.as_ref() {
-                "aromatic" => Ok(DativeBondConstraintDsl::Aromatic),
-                other => Err(DeError::Custom(format!(
-                    "unknown dative-bond-constraint keyword :{}",
-                    other
-                ))
-                .into()),
-            }
-        }
         b'{' => {
             let key = read_single_key_map_header(de)?;
             let c = match key.as_str() {
+                "aromatic" => DativeBondConstraintDsl::Aromatic(read_boolean_dsl(de)?.0),
                 "ring-membership" => {
                     DativeBondConstraintDsl::RingMembership(read_ring_membership_dsl(de)?)
                 }
@@ -500,7 +490,7 @@ pub(super) fn read_dative_bond_constraint_dsl(
             Ok(c)
         }
         b => Err(DeError::TypeMismatch {
-            expected: ":aromatic / {:ring-membership …}",
+            expected: "{:aromatic …} / {:ring-membership …}",
             got: unexpected_byte_kind(b),
             path: vec!["dative-bond-constraint".into()],
         }

@@ -2860,7 +2860,7 @@ mod tests {
             .transact(vec![Edit::ModifyDativeBondConstraint {
                 id: DativeBondRef::Id(DativeBondId(0)),
                 old: None,
-                new: Some(DativeBondConstraint::Aromatic),
+                new: Some(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
             }])
             .unwrap();
         assert!(diatomic_with_overlays
@@ -2868,7 +2868,7 @@ mod tests {
             .ast
             .constraints
             .iter()
-            .any(|c| *c == DativeBondConstraint::Aromatic));
+            .any(|c| *c == DativeBondConstraint::Aromatic(BooleanAst::Lit(true))));
     }
 
     #[rstest]

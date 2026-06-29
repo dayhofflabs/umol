@@ -369,6 +369,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraint) -> fmt::Result
         BondConstraint::Aromatic(BooleanAst::Lit(false)) => write!(f, "#a!"),
         BondConstraint::Aromatic(BooleanAst::Undetermined) => Ok(()),
         BondConstraint::RingMembership(m) => fmt_ring_membership(f, m),
+        BondConstraint::CisTransStereo(CisTransStereoAst::Undetermined) => Ok(()),
         BondConstraint::CisTransStereo(c) => {
             write!(f, "#C")?;
             fmt_cis_trans_stereo_config(f, c)
@@ -686,6 +687,7 @@ mod tests {
     #[case::ring_membership_size("#R(6)", BondPredicate::Constraint(BondConstraint::ring_membership(RingScope::Size(6), 1)))]
     #[case::ring_membership_size_undetermined("#R(6)*", BondPredicate::Constraint(BondConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined)))]
     #[case::cis_trans_stereo_undetermined("#C*", BondPredicate::Constraint(BondConstraint::CisTransStereo(CisTransStereoAst::Undetermined)))]
+    #[case::cis_trans_stereo_plus("#C+", BondPredicate::Constraint(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Undetermined))))]
     #[case::cis_trans_stereo_not_stereo("#C!", BondPredicate::Constraint(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo)))]
     #[case::cis_trans_stereo("#C1", BondPredicate::Constraint(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Lit(1)))))]
     fn test_bond_predicate(#[case] input: &str, #[case] expected: BondPredicate) {
@@ -800,7 +802,7 @@ mod tests {
     #[case::ring_membership_all("1#R*", "1")]
     #[case::ring_membership_size("1#R(6)*", "1")]
     #[case::aromatic("1#a*", "1")]
-    #[case::cis_trans_stereo("2#C+", "2")]
+    #[case::cis_trans_stereo("2#C*", "2")]
     fn test_bond_render_vacuous_constraints(#[case] input: &str, #[case] expected_canonical: &str) {
         let parsed: BondDsl = bond.parse(input).unwrap();
         assert_eq!(parsed.to_string(), expected_canonical);
@@ -824,6 +826,9 @@ mod tests {
     #[case::single("1")]
     #[case::double("2")]
     #[case::aromatic("1#a")]
+    #[case::ring_membership_all("1#R2")]
+    #[case::ring_membership_size("1#R(6)")]
+    #[case::cis_trans_stereo("2#C1")]
     fn test_bond_ast_from_str_to_string_roundtrip(#[case] s: &str) {
         let ast: BondAst = s.parse().unwrap();
         assert_eq!(ast.to_string(), s);
@@ -835,7 +840,7 @@ mod tests {
     #[case::ring_membership_all(bond!("1#R+"))]
     #[case::ring_membership_size(bond!("1#R(6)+"))]
     #[case::cis_trans_stereo(bond!("1#C1"))]
-    #[case::cis_trans_stereo_undetermined(bond!("1#C*"))]
+    #[case::cis_trans_stereo_coset_undetermined(bond!("1#C+"))]
     #[case::cis_trans_stereo_not_stereo(bond!("1#C!"))]
     #[case::cis_trans_stereo_set(bond!("1#C{1,2}"))]
     fn test_bond_ast_to_edn_from_edn_roundtrip(#[case] input: BondAst) {

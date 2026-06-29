@@ -13,8 +13,8 @@ pub(crate) use umol_ast::ast::{
     AddBond, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKind,
     AromaticSystemConstraints, AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint,
     AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomId, AtomRef, BondAst, BondConstraint,
-    BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef, Canonicalize,
-    CisTransStereoAst, Constraint, Constraints, DativeBondAst, DativeBondConstraint,
+    BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef, BooleanAst,
+    Canonicalize, CisTransStereoAst, Constraint, Constraints, DativeBondAst, DativeBondConstraint,
     DativeBondConstraintKind, DativeBondConstraints, DativeBondId, Edit, ElectronCountsAst,
     ElementAst, FluxionalityAst, IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst,
     MemOp, MoleculeAst, MoleculeConstraint, MulticenterBondAst, MulticenterBondConstraint,
@@ -403,7 +403,7 @@ pub(crate) fn atom_constraints_strategy() -> impl Strategy<Value = AtomConstrain
 
 pub(crate) fn bond_constraint_strategy() -> BoxedStrategy<BondConstraint> {
     prop_oneof![
-        Just(BondConstraint::Aromatic),
+        any::<bool>().prop_map(|b| BondConstraint::Aromatic(BooleanAst::Lit(b))),
         constraint_inner_value_strategy(0..=6)
             .prop_map(|v| BondConstraint::ring_membership(RingScope::All, v)),
         (3u8..=10, constraint_inner_value_strategy(0..=6))
@@ -425,7 +425,7 @@ pub(crate) fn bond_constraints_strategy() -> impl Strategy<Value = BondConstrain
 
 pub(crate) fn dative_bond_constraint_strategy() -> BoxedStrategy<DativeBondConstraint> {
     prop_oneof![
-        Just(DativeBondConstraint::Aromatic),
+        any::<bool>().prop_map(|b| DativeBondConstraint::Aromatic(BooleanAst::Lit(b))),
         constraint_inner_value_strategy(0..=6)
             .prop_map(|v| DativeBondConstraint::ring_membership(RingScope::All, v)),
         (3u8..=10, constraint_inner_value_strategy(0..=6)).prop_map(|(s, count)| {
@@ -493,11 +493,10 @@ pub(crate) fn canonical_keyword_bond_strategy() -> impl Strategy<Value = BondAst
         Just(BondAst::new(ValueAst::Lit(2))),
         Just(BondAst::new(ValueAst::Lit(3))),
         Just(BondAst::new(ValueAst::Lit(4))),
-        Just({
-            let mut bond = BondAst::new(ValueAst::Lit(1));
-            bond.constraints.add(BondConstraint::Aromatic);
-            bond
-        }),
+        Just(
+            BondAst::new(ValueAst::Lit(1))
+                .with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))),
+        ),
     ]
 }
 

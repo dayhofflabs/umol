@@ -792,12 +792,12 @@ mod tests {
         None,
     )]
     #[case::dative_shifts(
-        Constraint::DativeBond(DativeBondId(2), DativeBondConstraint::Aromatic),
+        Constraint::DativeBond(DativeBondId(2), DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
         relation_remapping(vec![0], vec![], vec![], vec![], vec![], vec![]),
-        Some(Constraint::DativeBond(DativeBondId(1), DativeBondConstraint::Aromatic)),
+        Some(Constraint::DativeBond(DativeBondId(1), DativeBondConstraint::Aromatic(BooleanAst::Lit(true)))),
     )]
     #[case::dative_dropped(
-        Constraint::DativeBond(DativeBondId(1), DativeBondConstraint::Aromatic),
+        Constraint::DativeBond(DativeBondId(1), DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
         relation_remapping(vec![1], vec![], vec![], vec![], vec![], vec![]),
         None,
     )]
