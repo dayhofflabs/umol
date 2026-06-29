@@ -660,12 +660,20 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
 - *Checkpoint (tested):* full round-trip. **Done.**
 
 **R11 — Spec** [R10]:
-- R11a — add the normative reactions section to `umol-dsl-spec.md`.
-- R11b — revise §8.4.
-- R11c - update the #a special forms for aromatic constraints (bonds, dative bonds): #a+, #a!,
-         remove mentions of #a / :aromatic being a flag, if present,
-         update :aromatic -> {:aromatic <boolean>} <boolean> = true | false | :undetermined.
-- *Checkpoint:* spec updated.
+- R11a — **Done.** New normative **§8 Reaction map** in `umol-dsl-spec.md`: `reaction-map`/`delta`/
+  `atom-delta`/`bond-delta`/`constraint-delta` grammar + normative paras (reference frames lhs vs
+  lhs∪created, no-forward-refs, create-vs-edit, `:modify` partial w/ `#tag*` removal + coalescing,
+  `:constraint` deltas, `:atom-aliases` resolved-after/emitted-last, serialization order/positional).
+  Examples section renumbered §8→§9; §1 "EDN and rules" cross-refs §8.
+- R11b — **Done.** §9.4 (was §8.4) rewritten from the obsolete `:lhs`/`:rhs` whole-molecule rewrite to
+  the `:lhs` + `:deltas` surface: a `:modify` field edit, and a grow-and-constrain reaction (atom add →
+  bond add → `:connected`). Both examples verified to parse + round-trip.
+- R11c — **Done.** Bond `#a` (§7.5) and dative `#a` (§7.12) recast from no-payload flag to a boolean
+  constraint: `#a`/`#a+`=true, `#a!`=false, `#a*`=undetermined (elided); EDN `:aromatic` → `{:aromatic
+  <boolean>}`, `<boolean>` = `true | false | :undetermined`; added the `boolean` production to §7.9;
+  bond/dative-constraint-form updated; §4 dative prose "flag"→"constraint". Atom `#a` (π-contribution,
+  §5.4/§7.3) untouched — distinct namespace.
+- *Checkpoint:* spec updated. **Done.**
 
 **R12 — Property & fuzz tests** [R10] (`proptest`, feature-gated; `cargo-fuzz` targets):
 Reuse the existing harness — `umol-ast/tests/property/{delta,reaction}.rs` and `umol-ast/fuzz/`.

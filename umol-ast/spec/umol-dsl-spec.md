@@ -14,7 +14,7 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, **RECOMMENDED*
 
 **Relational molecule.** A molecule map (**§4**) is a set of named relations (atoms, localized bonds, optional dative / aromatic / multicenter sections, and global fields). Fragment composition is relation-wise merge where defined.
 
-**EDN and rules.** EDN carries the relational structure. **Rule** evaluation (pattern **LHS** → product **RHS**, **§6**) is a separate computation layer: it **MAY** consume and produce molecule maps that use the same surface notation.
+**EDN and rules.** EDN carries the relational structure. **Rule** evaluation (pattern **LHS** → product **RHS**, **§6**) is a separate computation layer: it **MAY** consume and produce molecule maps that use the same surface notation. The **reaction map** (**§8**) is the operational encoding of such a rule — the **LHS** plus an ordered **`:deltas`** edit list whose application yields the **RHS**.
 
 **Term algebra levels (non-normative sketch).** Four levels of expressiveness exist in this algebra, each a strict superset of the previous:
 
@@ -135,7 +135,7 @@ Whether an empty string **`:type ""`** parses depends on the subgrammar:
 - **`bond-string`** (**§7.5**), **`dative-string`** (**§7.11**), and **`noncovalent-string`** (**§7.12**) require a leading inherent-field token (bond order, dative order, noncovalent kind), so an empty payload is a parse error. Use the appropriate keyword shorthand (e.g. **`:single`**) or the literal token (e.g. **`"1"`**, **`"Hbd"`**).
 - **`stereo-string`** (**§7.14**) requires a leading **`class`** token (**`Th`** / **`Ct`** / **`Sp`** / **`Tb`** / **`Oh`**) followed by a **`coset`**, so an empty payload is a parse error. Use a literal token (e.g. **`"Th1"`**) or a **`stereo-keyword`** (**`:ccw`** / **`:cw`** / **`:z`** / **`:e`**).
 
-**Dative bond entry.** A dative bond entry binds a **single acceptor** to **one or more donors** (a coordination center): **`:acceptor`** names the atom accepting the electron pair(s); **`:donors`** is a **vector** of one or more donating atoms. The leading **`order`** token of the **`dative-string`** payload (**§7.12**) records the number of donated pairs; one shared **`:type`** covers every donor→acceptor edge of the entry. The **`:acceptor`** and every donor **MUST** reference distinct atom sites. The mandatory **`:type`** slot carries a **`dative-string`** (**§7.12**) — order plus optional aromatic flag (**`#a`**) and the ring-membership predicate (**`#R`**); its leading order parallels the bond-string's (**§7.5** / **§7.6**). The dative-string has **no** direction token — direction is expressed entirely by the **`:donors`** / **`:acceptor`** assignment.
+**Dative bond entry.** A dative bond entry binds a **single acceptor** to **one or more donors** (a coordination center): **`:acceptor`** names the atom accepting the electron pair(s); **`:donors`** is a **vector** of one or more donating atoms. The leading **`order`** token of the **`dative-string`** payload (**§7.12**) records the number of donated pairs; one shared **`:type`** covers every donor→acceptor edge of the entry. The **`:acceptor`** and every donor **MUST** reference distinct atom sites. The mandatory **`:type`** slot carries a **`dative-string`** (**§7.12**) — order plus optional aromatic constraint (**`#a`**) and the ring-membership predicate (**`#R`**); its leading order parallels the bond-string's (**§7.5** / **§7.6**). The dative-string has **no** direction token — direction is expressed entirely by the **`:donors`** / **`:acceptor`** assignment.
 
 **Multicenter entry.** The mandatory **`:type`** slot carries a **`multicenter-string`** payload (**§7.11**) — a leading **electron counts** specification then per-system charge, spin, and the optional asserted total electron count (**`#e<n>`**). The **`multicenter-string`** subgrammar is independent from **`aromatic-string`** even though they share the same predicate shape.
 
@@ -476,7 +476,7 @@ tag ::= [A-Za-z_]
 
 **`payload` parsing.** After trimming leading / trailing whitespace on the **payload** substring, parse as follows:
 
-1. **`#c`**, **Ground** or **Query** / **Rule**: if the trimmed payload is **exactly** **`+`** or **`-`**, the formal charge is **+1** or **−1** (same meaning as **`#c+1`** / **`#c-1`**). Otherwise parse as **`value-expr`** (**§5**) (or the **Ground** subset in **§5.4**).
+1. **`#c`**: if the trimmed payload is **exactly** **`+`** or **`-`**, the formal charge is **+1** or **−1** (same meaning as **`#c+1`** / **`#c-1`**). Otherwise parse as **`value-expr`** (**§5**) (or the **Ground** subset in **§5.4**).
 2. **`#i`**: parsed by a **dedicated isotope subgrammar** (see below), not as **`value-expr`**.
 3. **Any other tag**: parse the payload as **`value-expr`** (or **Ground** subset) unless the payload matches a **special** form below.
 
@@ -499,27 +499,24 @@ isotope-domain  ::= nat-set                        (* MemOp::In                 
 
 **Paren-transparency.** Outer parentheses around **`?` *id*** or **`?` *id* `::` *isotope-domain*** are **optional** and **semantically transparent** (same rule as element §7.4 and value-expr §5). Canonical render is bare.
 
+**Undetermined** value: **`\*`** describes an undetermined value. For constraints, **`\*`** means **no constraint** and MAY be elided.
+
 **Natural is its own channel.** **`=`** (Natural) **does not unify** with numeric variants in the lattice: **`Natural ∧ Lit(n) = ⊥`**, **`Natural ∨ Lit(n) = Undetermined`** for any **`n`**. Natural is the "no specific mass committed" state and is **disjoint** from any explicit mass number. **Ground** isotope is either **`Natural`** or a single **`Lit(n)`**.
 
-**Special predicate payloads** (trimmed; **not** parsed as boolean **`!`** — these are **opaque** lexemes for the given tag):
+**Special predicate payloads**:
 
 | Form | Tag | Meaning |
 |------|-----|---------|
 | **`=`** | **`#i`** | **Natural isotope**: mass number of the **naturally most abundant** isotope of **`element`**. This is the default / expected isotope for each element. |
-| **`*`** | **`#h`** | **Wildcard** implicit H count (**Query** / **Rule**). |
-| **`*`** | **`#a`** | **No constraint** on aromatic π contribution — equivalent to omitting **`#a`** entirely. |
-| **`+`** | **`#a`** | Atom is a member of some aromatic system with an **unspecified** π contribution — **`Aromatic(Undetermined)`** (**Query** / **Rule**). |
-| **`!`** | **`#a`** | Atom is **not** a member of any aromatic system. Distinct from **`#a0`**: a **`#a0`** atom *is* in an aromatic system and contributes **zero** π electrons (e.g. a carbocation with an empty p orbital participating in a ring current); a **`#a!`** atom has no aromatic membership at all. Cross-checked against **`:aromatic-systems`** membership during validation (inconsistency is a validator error, not a parse / ground error). |
-| **`*`** | **`#m`** | **No constraint** on multicenter valence — equivalent to omitting **`#m`** entirely. |
-| **`+`** | **`#m`** | Atom is a member of some multicenter bond with an **unspecified** multicenter-valence count — **`Multicenter(Undetermined)`** (**Query** / **Rule**). |
-| **`!`** | **`#m`** | Atom is **not** a member of any multicenter bond. Parallels **`#a!`**; cross-checked against **`:multicenter-bonds`** membership during validation. |
-| **`*`** | **`#R`** | **No constraint** on ring count — equivalent to omitting **`#R`** entirely. |
-| **`+`** | **`#R`** | The range **`RangeFrom(1)`**: atom is in **at least one** ring (**Query** / **Rule**). With a size, **`#R(<size>)+`** means at least one ring of that size (SMARTS **`r<size>`**). **`#R(1..)`** / **`#R(6)(1..)`** are the general range spellings. |
-| **`!`** | **`#R`** | Ring count **0**: atom is in **no** ring (acyclic). With a size, **`#R(<size>)!`** means no ring of that size. |
-| **`*`** | **`#T`** | **No constraint** on tetrahedral stereo — equivalent to omitting **`#T`** entirely (**`Undetermined`**). |
+| **`+`** | **`#a`** | Aromatic, **unspecified** aromatic valence. Note that **`#a0`** is a valid aromatic valence (aromatic boron, tropylium). |
+| **`!`** | **`#a`** | Not aromatic is **not** a member of any aromatic system. |
+| **`+`** | **`#m`** | Multicenter, **unspecified** multicenter valence. Note that **`#m0`** is valid multicenter valence (B2H6). |
+| **`!`** | **`#m`** | Not in multicenter bond. |
+| **`+`** | **`#R`** | Atom is in **at least one** ring. With size, **`#R(<size>)+`** means at least one ring of that size (SMARTS **`r<size>`**). |
+| **`!`** | **`#R`** | Atom is in not in a ring (acyclic). With a size, **`#R(<size>)!`** means no ring of that size. |
 | **`!`** | **`#T`** | Atom is **not** a tetrahedral stereocenter (**`NotStereo`**). |
-| **`+`** | **`#T`** | Atom **is** a tetrahedral stereocenter with an **unspecified** coset (**`Stereo(Undetermined)`**). |
-| **`+`** / **`-`** (alone) | **`#c`** | **+1** / **−1** formal charge (**§7.3** above). |
+| **`+`** | **`#T`** | Atom **is** a tetrahedral stereocenter with an **unspecified** coset. |
+| **`+`** / **`-`** | **`#c`** | **+1** / **−1** formal charge (**§7.3** above). |
 
 Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`value-expr`** / **`decimal-tail`** rules (**§5**, **§5.3**).
 
@@ -609,9 +606,19 @@ order ::= value-expr
 | **`#c`** | Bond formal charge (**`i8`**, **§7.2**) |
 | **`#u`** | Unpaired electrons (bond centered); **`u8`** |
 | **`#s`** | Spin multiplicity (2S+1) (bond centered); **`u8`** |
-| **`#a`** | Bond is a member of some aromatic system declared under **`:aromatic-systems`**. Derived predicate; no payload. Canonical form is **`{:bond [i :aromatic]}`** under **`:constraints`**. |
-| **`#R`** | **Ring membership**: **`#R<count>`** bounds the bond's **total** ring count, **`#R(<size>)<count>`** the count of rings of that **size**. Omitted-numeral convention (**§5.3**); **special** **`#R*`** / **`#R+`** / **`#R!`** (as for atoms, **§7.3**). Derived. |
+| **`#a`** | **Aromatic** membership; **`bool`** |
+| **`#R`** | **Ring membership**: **`#R<count>`** gives the **total** ring count, **`#R(<size>)<count>`** the count of rings of that **size**. Omitted-numeral convention (**§5.3**); Derived. |
 | **`#C`** | **Cis/trans stereo** configuration at the bond (SMARTS-style stereo query). Payload is a **`config`** (**§7.14**): **special** **`#C*`** / **`#C!`** / **`#C+`**, a coset literal **`#C<n>`** (e.g. **`#C1`**, **`#C2`**), or a coset operator-expression. Canonical constraint form **`{:bond [i {:cis-trans-stereo …}]}`** (**§7.9**). |
+
+**Special predicate payloads**:
+
+| Form | Tag | Meaning |
+|------|-----|---------|
+| **`!`** | **`#a`** | Bond **not** aromatic. |
+| **`+`** | **`#a`** | Bond aromatic. Equivalent to **`#a`**. |
+| **`!`** | **`#R`** | Bond **not** in a ring. When used with a ring size specification, **`R(6)!`**, bond not in a ring of **that** size. |
+| **`+`** | **`#R`** | Bond in **at least one** ring. When used with a ring size specification, **`R(6)+`**, bond is at least one ring of **that** size. |
+| **`!`** | **`#C`** | Bond **not** cis-trans setereogenic. | 
 
 **Bond order values** in the **bond-string** **MUST NOT** be **fractional** after evaluation (**§7.6**). **Aromatic** bond **order** as a distinct category **MUST NOT** be used in **`order`**; use **§4** instead.
 
@@ -742,13 +749,16 @@ atom-constraint-form ::=
   | { :tetrahedral-stereo  stereo-config-form }
 
 bond-constraint-form ::=
-    :aromatic
+    { :aromatic boolean }
   | { :ring-membership ring-membership-form }
   | { :cis-trans-stereo stereo-config-form }
 
 dative-bond-constraint-form ::=
-    :aromatic
+    { :aromatic boolean }
   | { :ring-membership ring-membership-form }
+
+(* A boolean lattice value: the two literals plus the top (no constraint).  *)
+boolean ::= true | false | :undetermined
 
 (* One ring-membership fact. With :size, a count of rings of that size;     *)
 (* without :size, the total ring count. :count is required.                 *)
@@ -934,14 +944,14 @@ dative-predicate ::= '#' tag payload
 
 **Whitespace** between **`#`** and the tag letter is **invalid** (**§7.1**).
 
-**`#a` (dative-bond aromatic flag).** A bare **`#a`** with no payload marks the dative bond as participating in an aromatic system. Examples: the N→B π-donation of borazine, O→B of boroxine, or a C→M coordination spanning a metallaaromatic ring. The flag carries no value (parallel to the bond-namespace **`#a`** of **§7.5**); aromatic-ring perception cross-checks the flag against actual ring membership.
+**`#a` (dative-bond aromatic constraint).** A **boolean** constraint asserting whether the dative bond participates in an aromatic system. **`#a`** / **`#a+`** assert it **does** (**`true`**); **`#a!`** asserts it does **not** (**`false`**); **`#a*`** is **`undetermined`** — no constraint, **elided** on render. Examples of the **`true`** case: the N→B π-donation of borazine, O→B of boroxine, or a C→M coordination spanning a metallaaromatic ring. The semantics parallel the bond-namespace **`#a`** of **§7.5**; aromatic-ring perception cross-checks the constraint against actual ring membership.
 
 **`#R` (dative-bond ring membership).** Same forms as the atom-level and bond-level **`#R`** (**§7.3**, **§7.5**): **`#R<count>`** (total ring count) or **`#R(<size>)<count>`** (count of rings of that size); bare means **1**; **`#R*`** means no constraint; **`#R+`** is the range **`RangeFrom(1)`** ("dative bond lies in at least one ring"); **`#R!`** means count **0**.
 
 | Tag | Meaning (dative-bond namespace) | Storage |
 |-----|-----------------------------------|----------|
 | (leading) | **Order**: number of donated electron pairs (**`u8`**, **§7.2**) | inherent field |
-| **`#a`** | **Aromatic**: the dative bond is part of an aromatic system. | derived |
+| **`#a`** | **Aromatic**: boolean constraint — the dative bond **is** (**`#a`** / **`#a+`**) / **is not** (**`#a!`**) part of an aromatic system; **`#a*`** = **`undetermined`**. | boolean constraint |
 | **`#R`** | **Ring membership**: **`#R<count>`** (total) / **`#R(<size>)<count>`** (per size); **special** **`#R*`** / **`#R+`** / **`#R!`** (**§7.3**). | derived |
 
 **Direction.** Dative bonds are intrinsically directional. Direction is carried entirely by the ordered **`:donors`** / **`:acceptor`** assignment on the containing **`dative-bond-entry`** (**§4**); the dative-string itself has **no** direction token. Under pattern matching (**§6**), the embedding MUST map pattern **`:donors`** atoms to target donors and the pattern **`:acceptor`** to the target acceptor — a donor/acceptor swap across the embedding rejects the match.
@@ -1051,11 +1061,57 @@ A **`stereo-atom-entry`** / **`stereo-bond-entry`** **`:ligands`** vector **over
 
 ---
 
-## 8. Molecule map examples (non-normative)
+## 8. Reaction map
+
+A **reaction map** describes a graph transformation as a left-hand-side molecule (**`:lhs`**) together with an **ordered** list of **`:deltas`** that edit it. The transformed (right-hand-side) molecule is the result of applying the deltas in order to **`:lhs`**; it is **not** written out. This is the **operational** surface — the lhs plus the edits — not a superimposed L∪K∪R graph.
+
+```
+reaction-map ::=
+    { :lhs    molecule-map
+      :deltas [ delta* ]
+      [:atom-aliases atom-alias-list]? }
+
+delta ::=
+    { :atom       atom-delta }
+  | { :bond       bond-delta }
+  | { :constraint constraint-delta }
+
+atom-delta ::=
+    { :add    atom-entry }
+  | { :remove atom-ref }
+  | { :modify [ atom-ref partial-atom-string ] }
+
+bond-delta ::=
+    { :add    bond-entry }
+  | { :remove bond-ref }
+  | { :modify [ bond-ref partial-bond-string ] }
+
+constraint-delta ::=
+    { :add    constraint-entry }
+  | { :remove constraint-entry }
+```
+
+**`:lhs`** is a **`molecule-map`** (**§4**); **`atom-entry`** / **`bond-entry`** are the **§4** entry forms (a bare spec, an **`[id spec]`** / **`[a b spec]`** vector, or the **`{:id … :atoms … :type …}`** map); **`constraint-entry`** is a single **§7.9** constraint (a per-entity narrow leaf, a relational leaf, a molecule-scope leaf, or a combinator). **`atom-ref`** / **`bond-ref`** are **§7.9** refs. **`:lhs`** and **`:deltas`** are **required**; **`:atom-aliases`** is **optional**.
+
+**Reference frames.** A delta **`:remove`** / **`:modify`** target names an **existing lhs** entity, resolved in the **lhs frame** (positional index into **`:lhs`**'s **`:atoms`** / **`:bonds`**, or its declared **`:id`**). A created atom (**`:atom :add`**) **extends** the namespace; **bond endpoints** (in a **`:bond :add`**) and every **ref inside a `:constraint`** delta resolve against the **union** of lhs entities and reaction-created entities (lhs ∪ created). The same integer index that addresses an lhs entity in the lhs frame addresses a created entity once allocated: created atoms take indices continuing past the lhs atom count, in delta order.
+
+**No forward references.** A delta **MAY** reference only entities present in **`:lhs`** or created by an **earlier** delta in **`:deltas`**. A reference to an entity created **later** is an error.
+
+**Create vs. edit.** **`:remove`** and **`:modify`** **MUST** target an **lhs** entity; removing or modifying an entity **created in the same reaction** is an error (collapse the creation into its final state instead). **`:add`** introduces a new entity.
+
+**`:modify` payload.** The **`partial-atom-string`** (**`partial-bond-string`**) is a compact **atom-string** (**bond-string**, **§7.3** / **§7.5**) carrying **only** the changes: a field left **`undetermined`** (e.g. an omitted element) keeps the lhs value; a field with a definite value **overwrites** it; a constraint predicate **sets** that constraint; an **undetermined** predicate written as **`#tag*`** **removes** it (**§7.1** — the same vacuous form that is elided on a full render is, on a **`:modify`** partial, the explicit **removal marker**). Consecutive **`:atom`** (or **`:bond`**) **`:modify`** edits to the **same** entity **coalesce** on serialization into a **single** **`:modify`** with one merged partial.
+
+**`:constraint` deltas.** **`{:constraint {:add …}}`** / **`{:constraint {:remove …}}`** add or remove one molecule-scope or per-entity constraint (**§7.9**); refs inside the **`constraint-entry`** resolve against the lhs ∪ created union.
+
+**`:atom-aliases`.** As in **§4**, with the alias namespace spanning lhs ∪ reaction. Aliases are resolved **after** the entire map is read, independent of tree vs. streaming parse, so their position in the top-level map is **not** significant; canonical serialization emits **`:atom-aliases`** **last**.
+
+**Serialization.** A reaction map serializes its keys in the order **`:lhs`**, **`:deltas`**, then **`:atom-aliases`** (only when aliases are present). **`:lhs`** renders per **§4**; deltas render in **stored order** (the canonical AST order, not source order); each ref renders as its **`:id`** keyword when one is declared on the referenced entry, falling back to the positional integer (**§7.9**). Serializing a reaction that carries **no** surface metadata emits the **positional** form throughout (no **`:id`** keywords, no aliases); **`:id`** / alias output requires retaining the declared ids and aliases alongside the structural graph.
+
+## 9. Molecule map examples (non-normative)
 
 Examples use the vector **`:atoms`** form with inline ids. Bond entries show **`:id`** where useful.
 
-### 8.1 Methanol (CH₃OH) — Ground
+### 9.1 Methanol (CH₃OH) — Ground
 
 ```clojure
 {:atoms [[:C  "C#h3"]
@@ -1067,7 +1123,7 @@ Examples use the vector **`:atoms`** form with inline ids. Bond entries show **`
 
 The **`H`** atom here represents an **explicit** hydrogen (e.g. a hydroxyl H one wishes to name). Implicit H counts on **`C`** (**`#h3`**) and **`O`** (**`#h1`**) already account for the remaining hydrogens.
 
-### 8.2 Indole — Ground, aromatic ring
+### 9.2 Indole — Ground, aromatic ring
 
 ```clojure
 {:atoms [[:N   "N#h1"]
@@ -1089,7 +1145,7 @@ The **`H`** atom here represents an **explicit** hydrogen (e.g. a hydroxyl H one
 
 Localized bonds carry the σ-skeleton orders; the aromatic π system is expressed in **`:aromatic-systems`**.
 
-### 8.3 Substructure query
+### 9.3 Substructure query
 
 Match any carbon with at least two implicit hydrogens that is directly bonded to a nitrogen:
 
@@ -1101,17 +1157,26 @@ Match any carbon with at least two implicit hydrogens that is directly bonded to
 
 **`(?h >= 2)`** is a **`bool-expr`** payload on **`#h`**; **`?h`** is bound to the matched atom's implicit H count.
 
-### 8.4 Transformation rule
+### 9.4 Reaction (transformation rule)
 
-Replace a primary amine carbon (C with three H and bonded to NH₂) with a quaternary carbon (no H, same bond to nitrogen):
+A reaction is **`:lhs`** plus an ordered **`:deltas`** edit list (**§8**); the right-hand side is the result of applying the deltas, not written out.
+
+Strip the three implicit H from a primary-amine carbon (C bonded to NH₂), leaving a quaternary carbon — a single field edit on the lhs **`:C`**:
 
 ```clojure
 {:lhs {:atoms [[:C "C#h3"]
                [:N "N#h2"]]
        :bonds [[:C :N :single]]}
- :rhs {:atoms [[:C "C#h0"]
-               [:N "N#h2"]]
-       :bonds [[:C :N :single]]}}
+ :deltas [{:atom {:modify [:C "#h0"]}}]}
 ```
 
-(The **`:lhs`** / **`:rhs`** wrapping is a rule-level convention, not a molecule map key — not normative here.)
+A reaction that grows the graph and asserts a constraint — add a hydroxyl O to the carbon, then require the result be connected:
+
+```clojure
+{:lhs {:atoms [[:C "C#h3"]]}
+ :deltas [{:atom {:add [:O "O#h1"]}}
+          {:bond {:add [:C :O :single]}}
+          {:constraint {:add {:connected {}}}}]}
+```
+
+The added **`:O`** is visible to the later **`:bond :add`** (no forward references, **§8**); the **`:connected`** molecule constraint (**§7.9**) ranges over the post-edit graph.
