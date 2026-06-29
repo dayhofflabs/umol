@@ -6,23 +6,25 @@
 //! a `MoleculeAst`. `Modified` (a preserved entity relabeled across the reaction) is the
 //! relabeling-DPO reading: the entity persists in `K`, its label resolved per side.
 
-// TODO: Add overlays. Molecule-level constraints and overlays not represented here yet,
-// dropped on conversion from ReactionAst.
+// TODO: Add overlays. Overlay entities not represented here yet, dropped on conversion
+// from ReactionAst.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use umol_graph_core::{EdgeId, Graph};
+use umol_graph_core::{EdgeId, Graph, Remapping};
 
 use super::atom::AtomAst;
 use super::bond::BondAst;
+use super::constraint::{Constraint, Constraints};
 use super::delta::{
-    apply_atom_change, apply_bond_change, remap_delta, AtomDelta, BondDelta, ConstraintSpan, Delta,
-    Deltas, EntityFold, EntitySpan,
+    apply_atom_change, apply_bond_change, remap_delta, AtomDelta, BondDelta, ConstraintDelta,
+    ConstraintSpan, Delta, Deltas, EntityFold, EntitySpan,
 };
 use super::error::Contradiction;
 use super::id::{AtomId, BondId};
 use super::molecule::MoleculeAst;
 use super::reaction::ReactionAst;
+use super::remap::IdRemapping;
 use super::traits::Canonicalize;
 
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
@@ -70,13 +72,13 @@ impl ReactionSpanAst {
     /// The left-hand (reactant) molecule: every entity present on the left, in a compacted
     /// frame (created entities dropped).
     pub fn left(&self) -> MoleculeAst {
-        self.project(|atom| atom.left(), |bond| bond.left())
+        self.project(|atom| atom.left(), |bond| bond.left(), |c| c.left())
     }
 
     /// The right-hand (product) molecule: every entity present on the right, in a compacted
     /// frame (deleted entities dropped).
     pub fn right(&self) -> MoleculeAst {
-        self.project(|atom| atom.right(), |bond| bond.right())
+        self.project(|atom| atom.right(), |bond| bond.right(), |c| c.right())
     }
 
     /// Recover the operational `ReactionAst` from the span — the inverse of
@@ -89,34 +91,80 @@ impl ReactionSpanAst {
             let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
             [AtomId::from(a), AtomId::from(b)]
         }));
+        for span in &self.constraints {
+            match span {
+                ConstraintSpan::Added(c) => {
+                    deltas.push(Delta::Constraint(ConstraintDelta::Add(c.clone())))
+                }
+                ConstraintSpan::Removed(c) => {
+                    deltas.push(Delta::Constraint(ConstraintDelta::Remove(c.clone())))
+                }
+                ConstraintSpan::Unchanged(_) => {}
+            }
+        }
         ReactionAst::new(self.left(), Deltas::from_iter(deltas))
     }
 
-    /// Project one side to a `MoleculeAst`. `atom_side` / `bond_side` pick the left or right
-    /// value of each entity; absent entities are dropped and the survivors are renumbered.
+    /// Project one side to a `MoleculeAst`. `atom_side` / `bond_side` / `constraint_side` pick the
+    /// left or right value of each entity; absent entities are dropped and the survivors are
+    /// renumbered. The side's constraints are remapped through the same compaction — refs to a
+    /// removed atom/bond are dropped.
     fn project(
         &self,
         atom_side: impl Fn(&EntitySpan<AtomAst>) -> Option<&AtomAst>,
         bond_side: impl Fn(&EntitySpan<BondAst>) -> Option<&BondAst>,
+        constraint_side: impl Fn(&ConstraintSpan) -> Option<&Constraint>,
     ) -> MoleculeAst {
         let mut compacted: Vec<Option<AtomId>> = vec![None; self.atoms.len()];
         let mut atoms: Vec<AtomAst> = Vec::new();
+        let mut removed_nodes: Vec<u32> = Vec::new();
         for (node, change) in self.atoms.iter().enumerate() {
-            if let Some(ast) = atom_side(change) {
-                compacted[node] = Some(AtomId(atoms.len() as u32));
-                atoms.push(ast.clone());
+            match atom_side(change) {
+                Some(ast) => {
+                    compacted[node] = Some(AtomId(atoms.len() as u32));
+                    atoms.push(ast.clone());
+                }
+                None => removed_nodes.push(node as u32),
             }
         }
         let mut bonds: Vec<(AtomId, AtomId, BondAst)> = Vec::new();
+        let mut removed_edges: Vec<u32> = Vec::new();
         for (edge, change) in self.bonds.iter().enumerate() {
-            if let Some(ast) = bond_side(change) {
-                let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
-                if let (Some(a), Some(b)) = (compacted[a.index()], compacted[b.index()]) {
-                    bonds.push((a, b, ast.clone()));
-                }
+            let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
+            match (bond_side(change), compacted[a.index()], compacted[b.index()]) {
+                (Some(ast), Some(a), Some(b)) => bonds.push((a, b, ast.clone())),
+                _ => removed_edges.push(edge as u32),
             }
         }
-        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+
+        let remap = IdRemapping::new(
+            Remapping::new(removed_nodes, removed_edges),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let mut constraints = Constraints::new();
+        for span in &self.constraints {
+            if let Some(c) = constraint_side(span) {
+                constraints.push(c.clone());
+            }
+        }
+        constraints.remap(&remap);
+
+        MoleculeAst::from_parts(
+            atoms,
+            bonds,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            constraints,
+        )
     }
 }
 
@@ -138,6 +186,8 @@ impl ReactionAst {
         let mut removed_bonds: HashMap<BondId, BondAst> = HashMap::new();
         let mut added_bonds: BTreeMap<BondId, ([AtomId; 2], BondAst)> = BTreeMap::new();
         let mut bond_changes: HashMap<BondId, Vec<BondDelta>> = HashMap::new();
+        let mut added_constraints: Vec<Constraint> = Vec::new();
+        let mut removed_constraints: Vec<Constraint> = Vec::new();
 
         for delta in deltas.iter() {
             match delta {
@@ -163,8 +213,10 @@ impl ReactionAst {
                         bond_changes.entry(*id).or_default().push(bond.clone());
                     }
                 },
-                // Molecule-level constraints are carried by the operational form, not the span.
-                Delta::Constraint(_) => {}
+                Delta::Constraint(ConstraintDelta::Add(c)) => added_constraints.push(c.clone()),
+                Delta::Constraint(ConstraintDelta::Remove(c)) => {
+                    removed_constraints.push(c.clone())
+                }
             }
         }
 
@@ -224,8 +276,23 @@ impl ReactionAst {
             bonds.push(EntitySpan::Added(ast));
         }
 
+        let mut constraints: Vec<ConstraintSpan> =
+            Vec::with_capacity(lhs.constraints().len() + added_constraints.len());
+        for c in lhs.constraints().iter() {
+            match removed_constraints.iter().position(|r| r == c) {
+                Some(pos) => {
+                    removed_constraints.remove(pos);
+                    constraints.push(ConstraintSpan::Removed(c.clone()));
+                }
+                None => constraints.push(ConstraintSpan::Unchanged(c.clone())),
+            }
+        }
+        for c in added_constraints {
+            constraints.push(ConstraintSpan::Added(c));
+        }
+
         let graph = Graph::new(atoms.len(), &edges);
-        Ok(ReactionSpanAst::from_parts(graph, atoms, bonds, Vec::new()))
+        Ok(ReactionSpanAst::from_parts(graph, atoms, bonds, constraints))
     }
 
     /// The reverse reaction: the product becomes the reactant and every delta is inverted and
@@ -290,6 +357,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
+    use super::super::constraint::{Constraint, Constraints, MoleculeConstraint};
     use super::super::delta::Deltas;
     use super::super::edit::BondFieldChange;
     use super::super::value::ValueAst;
@@ -463,6 +531,127 @@ mod tests {
         let span = forward.reverse().unwrap().to_reaction_span().unwrap();
         assert_eq!(span.left(), expected_reactant);
         assert_eq!(span.right(), expected_product);
+    }
+
+    #[rstest]
+    #[case::unchanged(
+        ReactionAst::new(
+            MoleculeAst::from_parts(
+                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                vec![], vec![], vec![], vec![], vec![], vec![],
+                Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+            ),
+            Deltas::new(),
+        ),
+        vec![ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }))],
+    )]
+    #[case::added(
+        ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ),
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+            ))]),
+        ),
+        vec![ConstraintSpan::Added(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }))],
+    )]
+    #[case::removed(
+        ReactionAst::new(
+            MoleculeAst::from_parts(
+                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                vec![], vec![], vec![], vec![], vec![], vec![],
+                Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+            ),
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+            ))]),
+        ),
+        vec![ConstraintSpan::Removed(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }))],
+    )]
+    fn test_reaction_span_ast_constraints(
+        #[case] reaction: ReactionAst,
+        #[case] expected: Vec<ConstraintSpan>,
+    ) {
+        assert_eq!(
+            reaction.to_reaction_span().unwrap().constraints(),
+            expected.as_slice(),
+        );
+    }
+
+    #[rstest]
+    #[case::add(ReactionAst::new(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ),
+        Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
+            Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+        ))]),
+    ))]
+    #[case::remove(ReactionAst::new(
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            vec![], vec![], vec![], vec![], vec![], vec![],
+            Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+        ),
+        Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(
+            Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+        ))]),
+    ))]
+    fn test_reaction_span_ast_to_reaction(#[case] reaction: ReactionAst) {
+        assert_eq!(
+            reaction.clone().to_reaction_span().unwrap().to_reaction(),
+            reaction,
+        );
+    }
+
+    // A constraint naming atom 1 survives the left projection (atom 1 present) and is dropped on the
+    // right (atom 1 removed) — the projection remap drops the dangling ref.
+    #[rstest]
+    fn test_reaction_span_ast_project() {
+        let span = ReactionAst::new(
+            MoleculeAst::from_parts(
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::O),
+                ],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected {
+                    atoms: Some(vec![AtomId(0), AtomId(1)]),
+                })),
+            ),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Remove {
+                    id: AtomId(1),
+                    ast: AtomAst::from_element(Element::O),
+                }),
+                Delta::Bond(BondDelta::Remove {
+                    id: BondId(0),
+                    atoms: [AtomId(0), AtomId(1)],
+                    ast: BondAst::from_order(1),
+                }),
+            ]),
+        )
+        .to_reaction_span()
+        .unwrap();
+        assert_eq!(
+            span.left().constraints().as_slice(),
+            [Constraint::Molecule(MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(0), AtomId(1)]),
+            })],
+        );
+        assert!(span.right().constraints().is_empty());
     }
 
     // C-O with atom 1 (O) and its bond removed, replaced by a new N (atom 2) bonded to C.

@@ -740,16 +740,24 @@ green and tested. Prereqs in brackets.
   Vec<EntitySpan<BondAst>>, constraints: Vec<ConstraintSpan>)` (`pub(crate)`).
 - *Checkpoint:* AST compiles.
 
-**C2 — AST: carry constraints through conversion** [C1] (`ast/reaction_span.rs`):
-- C2a — `to_reaction_span`: each surviving `lhs` constraint → `Unchanged`, each `ConstraintDelta::Add` /
-  `Remove` → `Added` / `Removed`; populate `constraints`.
-- C2b — `project()` (`left()` / `right()`): set the projected molecule's constraints (`left` =
-  `Unchanged` + `Removed`, `right` = `Unchanged` + `Added`) via `MoleculeAst::from_parts`.
-- C2c — `to_reaction`: append `Delta::Constraint(ConstraintDelta::Add/Remove)` per `Added` / `Removed`
-  (skip `Unchanged`).
-- C2d — tests: molecule → span → molecule and reaction → span → reaction keep constraints;
-  `left()` / `right()` projections.
-- *Checkpoint (tested):* conversion carries constraints.
+**C2 — AST: carry constraints through conversion** [C1] (`ast/reaction_span.rs`): **Done**
+- C2a — **Done.** `to_reaction_span` collects `ConstraintDelta::Add`/`Remove` from the delta loop, then
+  builds the column by multiset subtraction: each lhs constraint matched by a `Remove` → `Removed`
+  (consuming one match), the rest → `Unchanged`; each `Add` → `Added`.
+- C2b — **Done.** `project()` takes a `constraint_side` selector (`left = Unchanged+Removed`,
+  `right = Unchanged+Added`) and builds the molecule via `MoleculeAst::from_parts`. Per the decision,
+  the side's constraints are **remapped through the projection's compaction** — an `IdRemapping` built
+  from the removed-node/edge lists drives `Constraints::remap`, so refs to a removed atom/bond are
+  dropped (consistent with how `project` already compacts bonds; this is removal-compaction, not the
+  deferred arbitrary-match remap of doc 134 item 1).
+- C2c — **Done.** `to_reaction` appends `Delta::Constraint(ConstraintDelta::Add/Remove)` per
+  `Added`/`Removed` (skips `Unchanged`); refs stay in the span frame (lhs preserved via `left()`).
+- C2d — **Done.** Three tests: `constraints_unchanged` (molecule → span, both projections carry it),
+  `to_reaction_constraints` (`Added` round-trips to the operational reaction), and
+  `project_drops_dangling_constraint` (a constraint naming a removed atom is kept on the left, dropped
+  on the right by the remap).
+- *Checkpoint (tested):* conversion carries constraints. **Done** (8 reaction_span tests, full suite
+  3857 pass).
 
 **C3 — DSL module + raw input types** [—] (`dsl/reaction_span.rs`):
 - C3a — create `dsl/reaction_span.rs`; add `pub(crate) mod reaction_span;` to `dsl.rs`; imports mirror
