@@ -16,8 +16,8 @@ use umol_graph_core::{EdgeId, Graph};
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::delta::{
-    apply_atom_change, apply_bond_change, remap_delta, AtomDelta, BondDelta, Delta, Deltas,
-    EntityFold, EntitySpan,
+    apply_atom_change, apply_bond_change, remap_delta, AtomDelta, BondDelta, ConstraintSpan, Delta,
+    Deltas, EntityFold, EntitySpan,
 };
 use super::error::Contradiction;
 use super::id::{AtomId, BondId};
@@ -33,9 +33,24 @@ pub struct ReactionSpanAst {
     graph: Graph,
     atoms: Vec<EntitySpan<AtomAst>>,
     bonds: Vec<EntitySpan<BondAst>>,
+    constraints: Vec<ConstraintSpan>,
 }
 
 impl ReactionSpanAst {
+    pub(crate) fn from_parts(
+        graph: Graph,
+        atoms: Vec<EntitySpan<AtomAst>>,
+        bonds: Vec<EntitySpan<BondAst>>,
+        constraints: Vec<ConstraintSpan>,
+    ) -> Self {
+        Self {
+            graph,
+            atoms,
+            bonds,
+            constraints,
+        }
+    }
+
     pub fn graph(&self) -> &Graph {
         &self.graph
     }
@@ -46,6 +61,10 @@ impl ReactionSpanAst {
 
     pub fn bonds(&self) -> &[EntitySpan<BondAst>] {
         &self.bonds
+    }
+
+    pub fn constraints(&self) -> &[ConstraintSpan] {
+        &self.constraints
     }
 
     /// The left-hand (reactant) molecule: every entity present on the left, in a compacted
@@ -206,11 +225,7 @@ impl ReactionAst {
         }
 
         let graph = Graph::new(atoms.len(), &edges);
-        Ok(ReactionSpanAst {
-            graph,
-            atoms,
-            bonds,
-        })
+        Ok(ReactionSpanAst::from_parts(graph, atoms, bonds, Vec::new()))
     }
 
     /// The reverse reaction: the product becomes the reactant and every delta is inverted and

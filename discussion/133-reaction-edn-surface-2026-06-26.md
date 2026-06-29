@@ -731,7 +731,7 @@ there is no partial parser (span `:modify` carries complete `[left right]` value
 `MoleculeMetadata` (no new type). The tree may go red between work items inside a chunk; each chunk ends
 green and tested. Prereqs in brackets.
 
-**C1 — AST: constraint span** [—] (`ast/delta.rs`, `ast/reaction_span.rs`):
+**C1 — AST: constraint span** [—] (`ast/delta.rs`, `ast/reaction_span.rs`): **Done**
 - C1a — `#[derive(Clone, Debug, PartialEq, Eq)] enum ConstraintSpan { Unchanged(Constraint),
   Added(Constraint), Removed(Constraint) }` (no `Modified` — molecule constraints are a by-value
   multiset) + `left()` / `right()` accessors; re-export from `ast.rs` beside `EntitySpan`.

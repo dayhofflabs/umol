@@ -257,6 +257,36 @@ impl<T> EntitySpan<T> {
     }
 }
 
+/// A molecule-level constraint's span across a reaction — its slice of the superimposed `L`∪`K`∪`R`.
+/// A *state*, not an operation (unlike `ConstraintDelta`). `left()` / `right()` read the side values.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ConstraintSpan {
+    /// In the interface `K` — present and identical on both sides.
+    Unchanged(Constraint),
+    /// In `R` only — created.
+    Added(Constraint),
+    /// In `L` only — deleted.
+    Removed(Constraint),
+}
+
+impl ConstraintSpan {
+    /// The left-side (`L`) value, or `None` if the constraint is created.
+    pub fn left(&self) -> Option<&Constraint> {
+        match self {
+            Self::Unchanged(value) | Self::Removed(value) => Some(value),
+            Self::Added(_) => None,
+        }
+    }
+
+    /// The right-side (`R`) value, or `None` if the constraint is deleted.
+    pub fn right(&self) -> Option<&Constraint> {
+        match self {
+            Self::Unchanged(value) | Self::Added(value) => Some(value),
+            Self::Removed(_) => None,
+        }
+    }
+}
+
 /// The per-entity op the fold operates on, abstracting `AtomDelta`/`BondDelta`. `atoms` carries
 /// the entity's participant atoms in `Add`/`Remove` (`()` for an atom, its two ids for a bond).
 pub(crate) enum EntityOp<F: EntityFold> {

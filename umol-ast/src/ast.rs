@@ -56,7 +56,7 @@ pub use constraint::{
     StereogenicityAst, SubPatternAnchor, TopicityAst, TopicityRelationAst,
 };
 pub use dative::DativeBondAst;
-pub use delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas, EntitySpan};
+pub use delta::{AtomDelta, BondDelta, ConstraintDelta, ConstraintSpan, Delta, Deltas, EntitySpan};
 pub use edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
