@@ -9,9 +9,11 @@ use super::bond::BondDsl;
 use super::config::MoleculeDefaults;
 use super::constraint::ConstraintDsl;
 use super::edn_utils::{optional_id, pair, parse_vec, read_map, read_vec, required_key, two_atom_refs};
-use super::molecule::{parse_bond_entry, MoleculeMetadata};
+use super::molecule::{
+    parse_atom_aliases, parse_atom_entry, parse_bond_entry, read_atom_aliases, AtomSpecInput,
+    MoleculeMetadata,
+};
 use super::refs::AtomRef;
-use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::{EntitySpan, ReactionSpanAst};
@@ -103,13 +105,15 @@ pub(crate) enum ConstraintSpanInput {
     Removed(ConstraintDsl),
 }
 
-/// A parsed reaction span before ref resolution: each atom/bond carries its complete `EntitySpan`
-/// value plus an optional surface id; bond endpoints stay unresolved until `into_ast`.
+/// A parsed reaction span before ref resolution: each atom carries an unresolved `AtomSpecInput`
+/// (`Bare | Alias`) per `EntitySpan` side, each bond its endpoints + value, plus the `:atom-aliases`
+/// table. Aliases, bond endpoints, and constraint refs are resolved in `into_ast`.
 #[derive(Debug, PartialEq)]
 pub(crate) struct SpanInput {
-    atoms: Vec<(Option<String>, EntitySpan<AtomAst>)>,
+    atoms: Vec<(Option<String>, EntitySpan<AtomSpecInput>)>,
     bonds: Vec<(Option<String>, [AtomRef; 2], EntitySpan<BondAst>)>,
     constraints: Vec<ConstraintSpanInput>,
+    atom_aliases: Vec<(String, Box<AtomDsl>)>,
 }
 
 const SPAN_VERBS: [&str; 3] = ["add", "modify", "remove"];
@@ -142,17 +146,17 @@ fn verb_wrapper<'a, 'de>(edn: &'a Edn<'de>) -> Option<(&'a str, &'a Edn<'de>)> {
 
 fn parse_atom_span_entry(
     edn: &Edn<'_>,
-) -> Result<(Option<String>, EntitySpan<AtomAst>), DeError> {
+) -> Result<(Option<String>, EntitySpan<AtomSpecInput>), DeError> {
     let (id, body) = split_span_entry(edn);
     let span = match verb_wrapper(body) {
-        None => EntitySpan::Unchanged(AtomDsl::from_edn(body)?.0),
-        Some(("add", p)) => EntitySpan::Added(AtomDsl::from_edn(p)?.0),
-        Some(("remove", p)) => EntitySpan::Removed(AtomDsl::from_edn(p)?.0),
+        None => EntitySpan::Unchanged(parse_atom_entry(body)?.spec),
+        Some(("add", p)) => EntitySpan::Added(parse_atom_entry(p)?.spec),
+        Some(("remove", p)) => EntitySpan::Removed(parse_atom_entry(p)?.spec),
         Some(("modify", p)) => {
             let (left, right) = pair(p, "atom span :modify")?;
             EntitySpan::Modified {
-                left: AtomDsl::from_edn(left)?.0,
-                right: AtomDsl::from_edn(right)?.0,
+                left: parse_atom_entry(left)?.spec,
+                right: parse_atom_entry(right)?.spec,
             }
         }
         Some((verb, _)) => return Err(DeError::Custom(format!("atom span: unexpected verb :{verb}"))),
@@ -246,6 +250,7 @@ fn parse_span_input(edn: &Edn<'_>) -> Result<SpanInput, DeError> {
     let mut atoms = Vec::new();
     let mut bonds = Vec::new();
     let mut constraints = Vec::new();
+    let mut atom_aliases = Vec::new();
     for (key, value) in m.iter() {
         let Edn::Keyword(key) = key else {
             return Err(DeError::TypeMismatch {
@@ -260,6 +265,7 @@ fn parse_span_input(edn: &Edn<'_>) -> Result<SpanInput, DeError> {
             "constraints" => {
                 constraints = parse_vec(value, ":constraints", |e| parse_constraint_span_entry(e))?
             }
+            "atom-aliases" => atom_aliases = parse_atom_aliases(value)?,
             other => return Err(DeError::Custom(format!("unknown span key :{other}"))),
         }
     }
@@ -267,6 +273,7 @@ fn parse_span_input(edn: &Edn<'_>) -> Result<SpanInput, DeError> {
         atoms,
         bonds,
         constraints,
+        atom_aliases,
     })
 }
 
@@ -276,6 +283,7 @@ fn read_span_input(de: &mut EdnStreamDeserializer<'_>) -> Result<SpanInput, EdnE
     let mut atoms = Vec::new();
     let mut bonds = Vec::new();
     let mut constraints = Vec::new();
+    let mut atom_aliases = Vec::new();
     read_map(de, |de, key| {
         match key {
             "atoms" => {
@@ -293,6 +301,7 @@ fn read_span_input(de: &mut EdnStreamDeserializer<'_>) -> Result<SpanInput, EdnE
                     Ok(parse_constraint_span_entry(&read_string(de.read_value_slice()?)?)?)
                 })?
             }
+            "atom-aliases" => atom_aliases = read_atom_aliases(de)?,
             other => return Err(DeError::Custom(format!("unknown span key :{other}")).into()),
         }
         Ok(())
@@ -301,6 +310,7 @@ fn read_span_input(de: &mut EdnStreamDeserializer<'_>) -> Result<SpanInput, EdnE
         atoms,
         bonds,
         constraints,
+        atom_aliases,
     })
 }
 
@@ -312,7 +322,9 @@ mod tests {
     use umol_edn::read_string;
 
     use super::*;
-    use crate::ast::constraint::{Constraint, Constraints, MoleculeConstraint};
+    use crate::ast::atom::AtomAst;
+    use crate::ast::boolean::BooleanAst;
+    use crate::ast::constraint::{BondConstraint, Constraint, Constraints, MoleculeConstraint};
     use crate::ast::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
     use crate::ast::edit::BondFieldChange;
     use crate::ast::id::{AtomId, BondId};
@@ -365,17 +377,19 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(r#""C""#, (None, EntitySpan::Unchanged(AtomAst::from_element(Element::C))))]
-    #[case::add(r#"{:add "O"}"#, (None, EntitySpan::Added(AtomAst::from_element(Element::O))))]
-    #[case::remove(r#"{:remove "O"}"#, (None, EntitySpan::Removed(AtomAst::from_element(Element::O))))]
+    #[case::unchanged(r#""C""#, (None, EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))))))]
+    #[case::add(r#"{:add "O"}"#, (None, EntitySpan::Added(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))))))]
+    #[case::remove(r#"{:remove "O"}"#, (None, EntitySpan::Removed(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))))))]
     #[case::modify(r#"{:modify ["C" "N"]}"#, (None, EntitySpan::Modified {
-        left: AtomAst::from_element(Element::C),
-        right: AtomAst::from_element(Element::N),
+        left: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))),
+        right: AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::N)))),
     }))]
-    #[case::with_id(r#"[:c "C"]"#, (Some("c".to_string()), EntitySpan::Unchanged(AtomAst::from_element(Element::C))))]
+    #[case::with_id(r#"[:c "C"]"#, (Some("c".to_string()), EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))))))]
+    #[case::alias(r#":nu"#, (None, EntitySpan::Unchanged(AtomSpecInput::Alias("nu".to_string()))))]
+    #[case::add_alias(r#"{:add :nu}"#, (None, EntitySpan::Added(AtomSpecInput::Alias("nu".to_string()))))]
     fn test_parse_atom_span_entry(
         #[case] input: &str,
-        #[case] expected: (Option<String>, EntitySpan<AtomAst>),
+        #[case] expected: (Option<String>, EntitySpan<AtomSpecInput>),
     ) {
         assert_eq!(
             parse_atom_span_entry(&read_string(input).unwrap()).unwrap(),
@@ -396,6 +410,10 @@ mod tests {
         left: BondAst::from_order(1),
         right: BondAst::from_order(2),
     }))]
+    #[case::triple("[0 1 :triple]", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(BondAst::from_order(3))))]
+    #[case::aromatic("[0 1 :aromatic]", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(
+        BondAst::from_order(1).with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))),
+    )))]
     fn test_parse_bond_span_entry(
         #[case] input: &str,
         #[case] expected: (Option<String>, [AtomRef; 2], EntitySpan<BondAst>),
@@ -428,8 +446,8 @@ mod tests {
         r#"{:atoms ["C" {:add "O"}] :bonds [[0 1 :single]] :constraints [{:connected {}}]}"#,
         SpanInput {
             atoms: vec![
-                (None, EntitySpan::Unchanged(AtomAst::from_element(Element::C))),
-                (None, EntitySpan::Added(AtomAst::from_element(Element::O))),
+                (None, EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))))),
+                (None, EntitySpan::Added(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))))),
             ],
             bonds: vec![(
                 None,
@@ -439,14 +457,15 @@ mod tests {
             constraints: vec![ConstraintSpanInput::Unchanged(
                 ConstraintDsl::from_edn(&read_string(r#"{:connected {}}"#).unwrap()).unwrap(),
             )],
+            atom_aliases: vec![],
         },
     )]
     #[case::plain_molecule(
         r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#,
         SpanInput {
             atoms: vec![
-                (None, EntitySpan::Unchanged(AtomAst::from_element(Element::C))),
-                (None, EntitySpan::Unchanged(AtomAst::from_element(Element::O))),
+                (None, EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::C)))))),
+                (None, EntitySpan::Unchanged(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))))),
             ],
             bonds: vec![(
                 None,
@@ -454,6 +473,22 @@ mod tests {
                 EntitySpan::Unchanged(BondAst::from_order(1)),
             )],
             constraints: vec![],
+            atom_aliases: vec![],
+        },
+    )]
+    #[case::with_aliases(
+        r#"{:atoms [:nu {:add "O"}] :atom-aliases [:nu "C#h3"]}"#,
+        SpanInput {
+            atoms: vec![
+                (None, EntitySpan::Unchanged(AtomSpecInput::Alias("nu".to_string()))),
+                (None, EntitySpan::Added(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))))),
+            ],
+            bonds: vec![],
+            constraints: vec![],
+            atom_aliases: vec![(
+                "nu".to_string(),
+                Box::new(AtomDsl::from_edn(&read_string(r#""C#h3""#).unwrap()).unwrap()),
+            )],
         },
     )]
     fn test_parse_span_input(#[case] input: &str, #[case] expected: SpanInput) {

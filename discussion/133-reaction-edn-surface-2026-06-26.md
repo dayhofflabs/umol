@@ -829,8 +829,21 @@ green and tested. Prereqs in brackets.
   parity). `SpanInput` gained `PartialEq` for the assertion.
 - *Checkpoint (tested):* span map parses. **Done** (18 reaction_span tests; full suite 3878 pass).
 
+**Alias support + metadata decision (amends C3/C6/C7).** Spans support `:atom-aliases` exactly like a
+molecule map — the earlier "span values are complete, no aliases" was an implementation gap, not a
+design property. So: `SpanInput.atoms` holds `EntitySpan<AtomSpecInput>` (`Bare | Alias`, unresolved)
+plus an `atom_aliases: Vec<(String, Box<AtomDsl>)>` field; C6 parses atom values via `parse_atom_entry`
+(the molecule entry layer, alias-aware) not `AtomDsl::from_edn`; C7 parses the `:atom-aliases` section
+(`parse_atom_aliases`/`read_atom_aliases`). Bonds/constraints unchanged (no aliases). This also settles
+the metadata type: **`MoleculeMetadata` is the direct, hygienic correspondence** — the span's union
+frame is molecule-shaped and `atom_aliases` is a legitimate span field, so no dedicated type / refactor
+is needed. (Bond DSL keywords `:single`/`:double`/`:triple`/`:aromatic` flow through `BondDsl::from_edn`
+— the same `:type` leaf parser `parse_bond_entry` uses — and are covered by tests.)
+
 **C8 — Resolution** [C1, C3]: `SpanInput::into_ast → (ReactionSpanAst, MoleculeMetadata)`. Work items in
-dependency order (no fresh-id assignment — union-frame):
+dependency order (no fresh-id assignment — union-frame; C8a also builds the bijective alias table and
+populates `MoleculeMetadata.atom_aliases`, and atom `AtomSpecInput` sides resolve to `AtomAst` —
+`Bare → .0`, `Alias → table lookup`, unknown → error):
 - C8a — `into_ast` skeleton + union namespace = atom-entry positions ∪ inline `:id`s →
   `MoleculeMetadata`.
 - C8b — resolve each bond's `[AtomRefDsl; 2]` against the namespace (unknown ref → error).
