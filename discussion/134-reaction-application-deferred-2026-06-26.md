@@ -67,6 +67,13 @@ the increment-1 / increment-2 split in the localized-topology scoping, left to w
   that payload lifted `R → EntitySpan<R>` in every collection — topology shared, only the per-entry
   value becomes a span; `EntitySpan<T>` itself is unchanged. It's done for the two vecs; lifting the
   six overlay relation sets' `data` columns to `EntitySpan<…>` is the remaining work.
+- **Span DSL for overlays (render + parse).** `dsl/reaction_span.rs` covers atoms/bonds/constraints
+  only. Adding overlay spans needs the overlay entry parsers/renderers shared the way atoms/bonds are:
+  atoms/bonds reuse `parse_atom_entry`/`parse_bond_entry` and the factored `render_atom_value` /
+  `render_bond_entry` (molecule.rs). The six molecule overlay renderers (`render_dative` … etc.) are
+  still inline (TODO in `molecule.rs`) — factor each into a shared `render_<entity>_entry`
+  parameterized by the rendered value, then the span wraps them with the `{:add|:modify|:remove}`
+  verbs, mirroring `render_bond_span_entry`.
 
 Larger of the two: six overlay deltas + the span generalization.
 

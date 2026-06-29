@@ -844,43 +844,60 @@ is needed. (Bond DSL keywords `:single`/`:double`/`:triple`/`:aromatic` flow thr
 Work items in dependency order (no fresh-id assignment — union-frame; C8a also builds the bijective alias
 table and populates `MoleculeMetadata.atom_aliases`, and atom `AtomSpecInput` sides resolve to `AtomAst` —
 `Bare → .0`, `Alias → table lookup`, unknown → error):
-- C8a — `into_ast` skeleton + union namespace = atom-entry positions ∪ inline `:id`s →
-  `MoleculeMetadata`.
-- C8b — resolve each bond's `[AtomRefDsl; 2]` against the namespace (unknown ref → error).
-- C8c — build `Graph` from atom entries (nodes) + bond entries (edges) — every entry holds a union slot
-  regardless of op.
-- C8d — resolve `ConstraintSpanInput` refs → `ConstraintSpan` against the namespace.
-- C8e — per-side ref consistency: the left projection (`Unchanged` ∪ `Removed` ∪ `Modified.left`) and
-  the right projection (`Unchanged` ∪ `Added` ∪ `Modified.right`) must each be internally
-  ref-consistent (run the molecule ref/consistency check on each side).
-- C8f — assemble `Vec<EntitySpan<…>>` + `Vec<ConstraintSpan>` → `ReactionSpanAst::from_parts`.
-- C8g — tests: hand-built `SpanInput` resolves; per-side inconsistency error; unknown-ref error.
-- *Checkpoint (tested):* `SpanInput` resolves.
+- C8a — **Done.** Union namespace: positions are the ids, inline `:id`s set on `MoleculeMetadata`
+  (unique via `contains_id` → `DuplicateId`); bijective alias table (→ `MoleculeMetadata.atom_aliases`).
+- C8b — **Done.** Each bond's `[AtomRef; 2]` resolved via `AtomRef::into_ast(atom_count, &metadata)`
+  (out-of-range / unknown → `InvalidRef`).
+- C8c — **Done.** `Graph::new(atom_count, &edges)` over every bond's resolved endpoints.
+- C8d — **Done.** `ConstraintSpanInput` → `ConstraintSpan` via `ConstraintDsl::into_ast(&counts,
+  &metadata)`; `counts` is a directly-constructed `EntityCounts` (overlays 0).
+- C8e — **Done.** Per-side ref consistency: a bond present on a side requires both endpoint atoms
+  present on that side (`EntitySpan::left()`/`right()`); else `InvalidValue`.
+- C8f — **Done.** `ReactionSpanAst::from_parts(graph, atoms, bonds, constraints)`.
+- C8g — **Done.** `test_span_input_into_ast` (`#[case]` table, full `(ReactionSpanAst,
+  MoleculeMetadata)` expected) + `test_span_input_into_ast_error` (`#[case]` table asserting the exact
+  `ParseError`: unknown alias / out-of-range ref / left-side inconsistency).
+- *Refactor:* `resolve_atom_spec(spec, aliases) -> AtomAst` factored into `molecule.rs` (beside
+  `AtomSpecInput`) and shared by the molecule, reaction, **and** span `into_ast` paths (was inlined
+  thrice).
+- *Checkpoint (tested):* `SpanInput` resolves. **Done.**
 
-**C9 — `FromEdn` path** [C4, C7, C8]:
-- C9a — `FromEdn` (`from_edn` + `from_edn_str`): parse (C7) → `into_ast` (C8) → `from_parts`.
-- C9b — `FromStr` (`Err = ParseError`, delegates `from_edn_str`).
-- C9c — tests: span EDN string → `ReactionSpanDsl` / `ReactionSpanAst`; a plain molecule map →
-  all-`Unchanged`.
-- *Checkpoint (tested):* EDN → AST end to end.
+**C9 — `FromEdn` path** [C4, C7, C8]: **Done**
+- C9a — **Done.** `FromEdn`: `from_edn` (tree `parse_span_input` → `into_ast` → `from_parts`) +
+  `from_edn_str` (streaming `read_span_input` + `expect_eof` → `into_ast` → `from_parts`).
+- C9b — **Done.** `FromStr` (`Err = ParseError`, delegates `from_edn_str`).
+- C9c — **Done.** `test_reaction_span_dsl_from_edn` (`#[case]` table: span map + plain molecule →
+  all-`Unchanged`) asserting `from_edn` / `from_edn_str` / `from_str` all yield the same
+  `ReactionSpanDsl`.
+- *Checkpoint (tested):* EDN → AST end to end. **Done** (29 reaction_span tests; full suite 3889).
 
-**C10 — Render** [C1] (`dsl/reaction_span.rs`; no partial parser — span values are complete):
-- C10a — render atom span entries: bare for `Unchanged`, else `{:add v}` / `{:remove v}` /
-  `{:modify [l r]}` via the molecule atom renderer.
-- C10b — render bond span entries (same).
-- C10c — render constraint span entries: `:constraints` bare / `{:add}` / `{:remove}`.
-- C10d — `render_span_edn`: assemble `:atoms` / `:bonds` / `:constraints`.
-- C10e — tests: `ReactionSpanAst` → EDN per op / entity.
-- *Checkpoint (tested):* AST renders to EDN.
+**C10 — Render** [C1] (`dsl/reaction_span.rs`; no partial parser — span values are complete): **Done**
+- C10a — **Done.** `render_atom_span_entry`: bare for `Unchanged`, else `{:add v}`/`{:remove v}`/
+  `{:modify [l r]}`; value via the shared `render_atom_value`; outer `[:id …]` when the atom has an id.
+- C10b — **Done.** `render_bond_span_entry` over the shared `render_bond_entry` (`[a b value]` or
+  `{:id :atoms :type value}`); value is one `BondDsl::to_edn` (incl. `:single`/`:aromatic` keywords) or
+  `[left right]` for `Modify`.
+- *Refactor:* `render_atom_value` and `render_bond_entry` factored into `molecule.rs` (the canonical
+  render layer; `render_atom_ref` already lived there) and shared by molecule rendering + the span —
+  same dedup as `resolve_atom_spec`. (`render_bond_frame` was a misnomer — it renders a bond *entry*.)
+- C10c — **Done.** `render_constraint_span_entry`: bare / `{:add c}` / `{:remove c}` via
+  `ConstraintDsl::from_ast(c, meta).to_edn()`.
+- C10d — **Done.** `render_span_edn`: `:atoms` (always) + `:bonds`/`:constraints`/`:atom-aliases`
+  (when non-empty), endpoints read from `ast.graph()`.
+- C10e — **Done.** `test_render_{atom,bond,constraint}_span_entry` `#[case]` tables (per op + ids +
+  aliases + bond keywords), asserting `render == read_string(expected)`.
+- *Checkpoint (tested):* AST renders to EDN. **Done** (44 reaction_span tests; full suite 3904).
 
-**C11 — `ToEdn` path + AST routing** [C4, C9, C10]:
-- C11a — `ToEdn` (`render_span_edn`).
-- C11b — `Display` (`write!("{}", self.to_edn())`).
-- C11c — `ReactionSpanAst` routing: `FromEdn` / `ToEdn` / `FromStr` / `Display` through
-  `ReactionSpanDsl` (discard `metadata`).
-- C11d — tests: full span DSL → AST → DSL round-trip; homoiconicity; `:modify [left right]`; `:add` /
-  `:remove`; `:constraints` add/remove survival through `left()` / `right()`.
-- *Checkpoint (tested):* full round-trip.
+**C11 — `ToEdn` path + AST routing** [C4, C9, C10]: **Done**
+- C11a — **Done.** `impl ToEdn for ReactionSpanDsl` → `render_span_edn(&self.ast, &self.metadata)`.
+- C11b — **Done.** `impl Display for ReactionSpanDsl` → `write!("{}", self.to_edn())`.
+- C11c — **Done.** `ReactionSpanAst` routing through `ReactionSpanDsl`: `FromEdn`/`FromStr` discard
+  metadata (`into_parts().0`); `Display` → `to_edn`; `ToEdn` renders with `MoleculeMetadata::default()`
+  (positional, no ids/aliases), mirroring `ReactionAst`.
+- C11d — **Done.** `test_reaction_span_dsl_to_edn` (`#[case]` round-trip: plain-molecule / modify /
+  add_remove / constraint / aliases), `test_reaction_span_ast_to_edn` (positional AST round-trip), and
+  `test_reaction_span_ast_constraint_projection` (`:add` → right only, `:remove` → left only).
+- *Checkpoint (tested):* full round-trip. **Done** (54 reaction_span tests; full suite 3914).
 
 **C12 — Spec** [C11]:
 - C12a — add the span surface beside the delta surface in the reactions section of `umol-dsl-spec.md`.

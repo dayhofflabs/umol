@@ -2,28 +2,31 @@
 //! complete before/after value (`EntitySpan`) rather than a delta. Entity ids, bond endpoints,
 //! and constraint topology refs are resolved in `into_ast`.
 
+use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use indexmap::IndexMap;
-use umol_edn::{read_string, DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn};
-use umol_graph_core::Graph;
+use umol_edn::{read_string, DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_graph_core::{EdgeId, Graph};
 
 use super::atom::AtomDsl;
 use super::bond::BondDsl;
 use super::config::MoleculeDefaults;
 use super::constraint::{ConstraintDsl, EntityCounts};
-use super::edn_utils::{optional_id, pair, parse_vec, read_map, read_vec, required_key, two_atom_refs};
+use super::edn_utils::{
+    optional_id, pair, parse_vec, read_map, read_vec, required_key, single_key_map, two_atom_refs,
+};
 use super::error::ParseError;
 use super::molecule::{
-    parse_atom_aliases, parse_atom_entry, parse_bond_entry, read_atom_aliases, resolve_atom_spec,
-    AtomSpecInput, MoleculeMetadata,
+    parse_atom_aliases, parse_atom_entry, parse_bond_entry, read_atom_aliases, render_atom_value,
+    render_bond_entry, resolve_atom_spec, AtomSpecInput, MoleculeMetadata,
 };
 use super::refs::AtomRef;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::id::{AtomId, BondId};
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::{ConstraintSpan, EntitySpan, ReactionSpanAst};
+use crate::ast::{Constraint, ConstraintSpan, EntitySpan, ReactionSpanAst};
 
 /// Surface DSL for a reaction span. Pairs `ReactionSpanAst` with the `MoleculeMetadata` recording
 /// its span-frame id↔name bindings; fields private so metadata cannot drift onto a different AST.
@@ -473,6 +476,155 @@ impl FromStr for ReactionSpanDsl {
     }
 }
 
+fn render_atom_span_entry(
+    id: AtomId,
+    span: &EntitySpan<AtomAst>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let body = match span {
+        EntitySpan::Unchanged(a) => render_atom_value(a, meta),
+        EntitySpan::Added(a) => single_key_map("add", render_atom_value(a, meta)),
+        EntitySpan::Removed(a) => single_key_map("remove", render_atom_value(a, meta)),
+        EntitySpan::Modified { left, right } => single_key_map(
+            "modify",
+            Edn::Vector(vec![render_atom_value(left, meta), render_atom_value(right, meta)].into()),
+        ),
+    };
+    match meta.atom_id(id) {
+        Some(name) => {
+            Edn::Vector(vec![Edn::Keyword(EdnKeyword::owned(name.to_string())), body].into())
+        }
+        None => body,
+    }
+}
+
+fn render_bond_span_entry(
+    id: BondId,
+    endpoints: [AtomId; 2],
+    span: &EntitySpan<BondAst>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let value = |bond: &BondAst| BondDsl::from_ref(bond).to_edn();
+    match span {
+        EntitySpan::Unchanged(b) => render_bond_entry(id, endpoints, value(b), meta),
+        EntitySpan::Added(b) => single_key_map("add", render_bond_entry(id, endpoints, value(b), meta)),
+        EntitySpan::Removed(b) => {
+            single_key_map("remove", render_bond_entry(id, endpoints, value(b), meta))
+        }
+        EntitySpan::Modified { left, right } => single_key_map(
+            "modify",
+            render_bond_entry(
+                id,
+                endpoints,
+                Edn::Vector(vec![value(left), value(right)].into()),
+                meta,
+            ),
+        ),
+    }
+}
+
+fn render_constraint_span_entry(span: &ConstraintSpan, meta: &MoleculeMetadata) -> Edn<'static> {
+    let render = |c: &Constraint| {
+        ConstraintDsl::from_ast(c, meta)
+            .expect("ConstraintDsl::from_ast is infallible for a well-formed AST")
+            .to_edn()
+    };
+    match span {
+        ConstraintSpan::Unchanged(c) => render(c),
+        ConstraintSpan::Added(c) => single_key_map("add", render(c)),
+        ConstraintSpan::Removed(c) => single_key_map("remove", render(c)),
+    }
+}
+
+/// Render a `ReactionSpanAst` (+ its `MoleculeMetadata`) to the span EDN map.
+fn render_span_edn(ast: &ReactionSpanAst, meta: &MoleculeMetadata) -> Edn<'static> {
+    let mut map = EdnMap::with_capacity(4);
+    let atoms: Vec<Edn<'static>> = ast
+        .atoms()
+        .iter()
+        .enumerate()
+        .map(|(i, span)| render_atom_span_entry(AtomId(i as u32), span, meta))
+        .collect();
+    map.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
+
+    let bonds: Vec<Edn<'static>> = ast
+        .bonds()
+        .iter()
+        .enumerate()
+        .map(|(j, span)| {
+            let [a, b] = ast.graph().edge_endpoints(EdgeId(j as u32));
+            render_bond_span_entry(BondId(j as u32), [AtomId::from(a), AtomId::from(b)], span, meta)
+        })
+        .collect();
+    if !bonds.is_empty() {
+        map.insert(Edn::keyword("bonds"), Edn::Vector(bonds.into()));
+    }
+
+    let constraints: Vec<Edn<'static>> = ast
+        .constraints()
+        .iter()
+        .map(|span| render_constraint_span_entry(span, meta))
+        .collect();
+    if !constraints.is_empty() {
+        map.insert(Edn::keyword("constraints"), Edn::Vector(constraints.into()));
+    }
+
+    if meta.has_atom_aliases() {
+        let mut pairs: Vec<Edn<'static>> = Vec::with_capacity(meta.atom_aliases_len() * 2);
+        for (name, dsl) in meta.iter_atom_aliases() {
+            pairs.push(Edn::Keyword(EdnKeyword::owned(name.to_string())));
+            pairs.push(dsl.to_edn());
+        }
+        map.insert(Edn::keyword("atom-aliases"), Edn::Vector(pairs.into()));
+    }
+
+    Edn::Map(map)
+}
+
+impl ToEdn for ReactionSpanDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        render_span_edn(&self.ast, &self.metadata)
+    }
+}
+
+impl Display for ReactionSpanDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_edn())
+    }
+}
+
+impl<'de> FromEdn<'de> for ReactionSpanAst {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        ReactionSpanDsl::from_edn(edn).map(|dsl| dsl.into_parts().0)
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        ReactionSpanDsl::from_edn_str(input).map(|dsl| dsl.into_parts().0)
+    }
+}
+
+impl FromStr for ReactionSpanAst {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_edn_str(s).map_err(|e| ParseError::EdnParse(e.to_string()))
+    }
+}
+
+impl Display for ReactionSpanAst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_edn())
+    }
+}
+
+/// Direct EDN rendering for `ReactionSpanAst`: positional form (no `:id` keywords, no aliases) since
+/// the AST carries no metadata. For id/alias-bearing output, wrap in [`ReactionSpanDsl`].
+impl ToEdn for ReactionSpanAst {
+    fn to_edn(&self) -> Edn<'static> {
+        render_span_edn(self, &MoleculeMetadata::default())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::*;
@@ -745,5 +897,97 @@ mod tests {
         );
         assert_eq!(ReactionSpanDsl::from_edn_str(input).unwrap(), expected);
         assert_eq!(ReactionSpanDsl::from_str(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::unchanged(AtomId(0), EntitySpan::Unchanged(AtomAst::from_element(Element::C)), MoleculeMetadata::new(), r#""C""#)]
+    #[case::add(AtomId(0), EntitySpan::Added(AtomAst::from_element(Element::O)), MoleculeMetadata::new(), r#"{:add "O"}"#)]
+    #[case::remove(AtomId(0), EntitySpan::Removed(AtomAst::from_element(Element::O)), MoleculeMetadata::new(), r#"{:remove "O"}"#)]
+    #[case::modify(AtomId(0), EntitySpan::Modified { left: AtomAst::from_element(Element::C), right: AtomAst::from_element(Element::N) }, MoleculeMetadata::new(), r#"{:modify ["C" "N"]}"#)]
+    #[case::with_id(AtomId(0), EntitySpan::Unchanged(AtomAst::from_element(Element::C)), MoleculeMetadata::new().with_atom_id(AtomId(0), "c"), r#"[:c "C"]"#)]
+    #[case::alias(AtomId(0), EntitySpan::Unchanged(AtomAst::from_element(Element::C)), MoleculeMetadata::new().with_atom_alias("nu", AtomDsl(AtomAst::from_element(Element::C))), r#":nu"#)]
+    fn test_render_atom_span_entry(
+        #[case] id: AtomId,
+        #[case] span: EntitySpan<AtomAst>,
+        #[case] meta: MoleculeMetadata,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            render_atom_span_entry(id, &span, &meta),
+            read_string(expected).unwrap(),
+        );
+    }
+
+    #[rstest]
+    #[case::unchanged(EntitySpan::Unchanged(BondAst::from_order(1)), MoleculeMetadata::new(), "[0 1 :single]")]
+    #[case::add(EntitySpan::Added(BondAst::from_order(2)), MoleculeMetadata::new(), "{:add [0 1 :double]}")]
+    #[case::remove(EntitySpan::Removed(BondAst::from_order(1)), MoleculeMetadata::new(), "{:remove [0 1 :single]}")]
+    #[case::modify(EntitySpan::Modified { left: BondAst::from_order(1), right: BondAst::from_order(2) }, MoleculeMetadata::new(), "{:modify [0 1 [:single :double]]}")]
+    #[case::with_id(EntitySpan::Unchanged(BondAst::from_order(1)), MoleculeMetadata::new().with_bond_id(BondId(0), "b1"), "{:id :b1 :atoms [0 1] :type :single}")]
+    #[case::aromatic(EntitySpan::Unchanged(BondAst::from_order(1).with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true)))), MoleculeMetadata::new(), "[0 1 :aromatic]")]
+    fn test_render_bond_span_entry(
+        #[case] span: EntitySpan<BondAst>,
+        #[case] meta: MoleculeMetadata,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            render_bond_span_entry(BondId(0), [AtomId(0), AtomId(1)], &span, &meta),
+            read_string(expected).unwrap(),
+        );
+    }
+
+    #[rstest]
+    #[case::unchanged(ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })), "{:connected {}}")]
+    #[case::add(ConstraintSpan::Added(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })), "{:add {:connected {}}}")]
+    #[case::remove(ConstraintSpan::Removed(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })), "{:remove {:connected {}}}")]
+    fn test_render_constraint_span_entry(#[case] span: ConstraintSpan, #[case] expected: &str) {
+        assert_eq!(
+            render_constraint_span_entry(&span, &MoleculeMetadata::new()),
+            read_string(expected).unwrap(),
+        );
+    }
+
+    // `ReactionSpanDsl` (ast + metadata) round-trips through the EDN surface (render → reparse).
+    #[rstest]
+    #[case::plain_molecule(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
+    #[case::modify(r#"{:atoms ["C" "C"] :bonds [{:modify [0 1 [:single :double]]}]}"#)]
+    #[case::add_remove(r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :single]}]}"#)]
+    #[case::constraint(r#"{:atoms ["C"] :constraints [{:connected {}} {:add {:connected {}}}]}"#)]
+    #[case::aliases(r#"{:atoms [:nu {:add "O"}] :atom-aliases [:nu "C"]}"#)]
+    fn test_reaction_span_dsl_to_edn(#[case] input: &str) {
+        let dsl = ReactionSpanDsl::from_str(input).unwrap();
+        assert_eq!(ReactionSpanDsl::from_edn(&dsl.to_edn()).unwrap(), dsl);
+    }
+
+    // `ReactionSpanAst` renders positionally and round-trips (metadata discarded on both sides).
+    #[rstest]
+    #[case::plain_molecule(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
+    #[case::modify(r#"{:atoms ["C" "C"] :bonds [{:modify [0 1 [:single :double]]}]}"#)]
+    #[case::add_remove(r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :single]}]}"#)]
+    fn test_reaction_span_ast_to_edn(#[case] input: &str) {
+        let ast = ReactionSpanAst::from_str(input).unwrap();
+        assert_eq!(ReactionSpanAst::from_edn(&ast.to_edn()).unwrap(), ast);
+    }
+
+    // An `:add` constraint lands on the right projection only; `:remove` on the left only.
+    #[rstest]
+    #[case::add(
+        r#"{:atoms ["C"] :constraints [{:add {:connected {}}}]}"#,
+        vec![],
+        vec![Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })],
+    )]
+    #[case::remove(
+        r#"{:atoms ["C"] :constraints [{:remove {:connected {}}}]}"#,
+        vec![Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })],
+        vec![],
+    )]
+    fn test_reaction_span_ast_constraint_projection(
+        #[case] input: &str,
+        #[case] left: Vec<Constraint>,
+        #[case] right: Vec<Constraint>,
+    ) {
+        let ast = ReactionSpanAst::from_str(input).unwrap();
+        assert_eq!(ast.left().constraints().as_slice(), left.as_slice());
+        assert_eq!(ast.right().constraints().as_slice(), right.as_slice());
     }
 }

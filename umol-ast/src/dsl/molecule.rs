@@ -880,13 +880,17 @@ fn render_atoms(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
-fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &MoleculeMetadata) -> Edn<'static> {
+/// An atom value: its alias keyword if one is bound, else the atom-string.
+pub(super) fn render_atom_value(atom: &AtomAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let dsl = AtomDsl::from_ref(atom);
-    let spec = if let Some(alias) = meta.atom_alias_for(dsl) {
-        Edn::Keyword(EdnKeyword::owned(alias.to_string()))
-    } else {
-        dsl.to_edn()
-    };
+    match meta.atom_alias_for(dsl) {
+        Some(alias) => Edn::Keyword(EdnKeyword::owned(alias.to_string())),
+        None => dsl.to_edn(),
+    }
+}
+
+fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &MoleculeMetadata) -> Edn<'static> {
+    let spec = render_atom_value(atom, meta);
     match meta.atom_id(id) {
         Some(id) => Edn::Vector(vec![Edn::Keyword(EdnKeyword::owned(id.to_string())), spec].into()),
         None => spec,
@@ -900,35 +904,54 @@ fn render_atom_ref(id: AtomId, meta: &MoleculeMetadata) -> Edn<'static> {
     }
 }
 
+/// A bond entry — `[a b value]`, or `{:id … :atoms [a b] :type value}` when the bond has an id.
+/// `value` is the rendered `:type` (one bond-dsl, or a `[left right]` vector for a span `:modify`).
+pub(super) fn render_bond_entry(
+    id: BondId,
+    [a, b]: [AtomId; 2],
+    value: Edn<'static>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let first = render_atom_ref(a, meta);
+    let second = render_atom_ref(b, meta);
+    match meta.bond_id(id) {
+        Some(name) => {
+            let mut m = EdnMap::with_capacity(3);
+            m.insert(
+                Edn::keyword("id"),
+                Edn::Keyword(EdnKeyword::owned(name.to_string())),
+            );
+            m.insert(
+                Edn::keyword("atoms"),
+                Edn::Vector(vec![first, second].into()),
+            );
+            m.insert(Edn::keyword("type"), value);
+            Edn::Map(m)
+        }
+        None => Edn::Vector(vec![first, second, value].into()),
+    }
+}
+
 fn render_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = ast
         .bonds()
         .iter()
         .map(|view| {
-            let bond_edn = BondDsl::from_ref(view.ast).to_edn();
-            let first = render_atom_ref(view.atom_ids()[0], meta);
-            let second = render_atom_ref(view.atom_ids()[1], meta);
-            match meta.bond_id(view.id) {
-                Some(id) => {
-                    let mut m = EdnMap::with_capacity(3);
-                    m.insert(
-                        Edn::keyword("id"),
-                        Edn::Keyword(EdnKeyword::owned(id.to_string())),
-                    );
-                    m.insert(
-                        Edn::keyword("atoms"),
-                        Edn::Vector(vec![first, second].into()),
-                    );
-                    m.insert(Edn::keyword("type"), bond_edn);
-                    Edn::Map(m)
-                }
-                None => Edn::Vector(vec![first, second, bond_edn].into()),
-            }
+            render_bond_entry(
+                view.id,
+                view.atom_ids(),
+                BondDsl::from_ref(view.ast).to_edn(),
+                meta,
+            )
         })
         .collect();
     Edn::Vector(entries.into())
 }
 
+// TODO: the overlay renderers below (dative / aromatic / multicenter / noncovalent / stereo) build
+// their entries inline. When overlay spans land, factor each into a shared `render_<entity>_entry`
+// (parameterized by the rendered value, like `render_bond_entry`) so `reaction_span` can wrap them
+// with the span op wrappers instead of re-implementing the entry rendering.
 fn render_dative(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = ast
         .dative_bonds()
