@@ -106,6 +106,50 @@ proptest! {
         prop_assert_eq!(dsl, parsed);
     }
 
+    /// Partial atom DSL (the reaction `:modify` payload) round-trips through its
+    /// compact string form: `parse(display(x)) == x` for any generated atom.
+    #[test]
+    fn test_partial_atom_dsl_display_from_str_roundtrip(atom in atom_ast_strategy()) {
+        let dsl = PartialAtomDsl(atom);
+        let rendered = dsl.to_string();
+        let parsed: PartialAtomDsl = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_partial_bond_dsl_display_from_str_roundtrip(bond in bond_ast_strategy()) {
+        let dsl = PartialBondDsl(bond);
+        let rendered = dsl.to_string();
+        let parsed: PartialBondDsl = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    /// Partial atom DSL round-trips through the EDN form (a string leaf):
+    /// `from_edn(to_edn(x)) == x`.
+    #[test]
+    fn test_partial_atom_dsl_to_edn_from_edn_roundtrip(atom in atom_ast_strategy()) {
+        let dsl = PartialAtomDsl(atom);
+        let edn = dsl.to_edn();
+        let parsed = PartialAtomDsl::from_edn(&edn).map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_partial_bond_dsl_to_edn_from_edn_roundtrip(bond in bond_ast_strategy()) {
+        let dsl = PartialBondDsl(bond);
+        let edn = dsl.to_edn();
+        let parsed = PartialBondDsl::from_edn(&edn).map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
 }
 
 /// Vacuous-payload `AtomConstraint` variants render to nothing in the

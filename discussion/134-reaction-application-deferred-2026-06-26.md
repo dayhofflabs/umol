@@ -1,11 +1,13 @@
 # 134 — Reaction-application: deferred items
 
-Four items were left to work out while landing the `Edit`/`Delta`/`Undo` vocabulary refactor
+Five items were left to work out while landing the `Edit`/`Delta`/`Undo` vocabulary refactor
 (`Add`/`Modify`/`Remove` ↔ `Added`/`Modified`/`Removed`, key-based `ModifyConstraint`, by-value
 molecule `Add`/`Remove`, `CascadedConstraints`) and designing the reaction EDN surface (doc 133) —
 two reaction-application features, plus structural entity refs (item 3) and a constraint-store
-cleanup (item 4), which surfaced while implementing 133. The vocabulary/transact groundwork is landed and green; all are increment-2,
-captured here so they are not lost, to be tackled after the reaction DSL (133) is implemented.
+cleanup (item 4), which surfaced while implementing 133, plus a serde streaming-parser / naming
+review (item 5) that surfaced while wiring the R12 tests. The vocabulary/transact groundwork is
+landed and green; all are increment-2, captured here so they are not lost, to be tackled after the
+reaction DSL (133) is implemented.
 
 ## 1 — molecule-level constraints don't apply in reactions
 
@@ -133,11 +135,42 @@ kind-centric `is_unique`/"unique" nomenclature. Applies to all entity constraint
 **Now.** `AtomAst::update` (reaction `:modify` resolution) already works per key via `remove_by_key`;
 this item is the broader API/nomenclature cleanup, not blocking.
 
+## 5 — FromEdn streaming-parser audit + parse-direction naming review
+
+Two related reviews surfaced while wiring the R12 tests (doc 133).
+
+**5a — streaming `from_edn_str` audit.** Per dsl-serialization, every EDN-shaped `*Dsl` must override
+`FromEdn::from_edn_str` to drive its hand-written streaming `read_*` — never the trait default, which
+delegates to the tree (`read_string` + `from_edn`), violating "streaming must not delegate to tree."
+Today only the top-level / full-entity types do (`MoleculeDsl`, `ReactionDsl`, `AtomDsl`, `BondDsl`,
+`DativeBondDsl`, … via `read_subgrammar_all`); the constituent boundary types inherit the
+tree-delegating default. Audit every `FromEdn` impl and add the override where missing. The full
+type list and per-type wiring notes are in doc 133's R12 deferred note; in summary:
+
+- Most delegate to an existing single-arg `read_<type>_dsl` (mechanical); a few readers
+  (`read_topicity`, `read_stereogenicity`, the stereo constraint readers) are private and need
+  `pub(super)`; the ref and stereo constraint `*Dsl` macros need the override in the macro body.
+- `read_molecule_constraint_dsl(de, key)` and `read_relational_constraint_dsl(de, key)` take a
+  pre-consumed dispatch key (the `{`+key is consumed by the umbrella `read_constraint_dsl`), so they
+  have **no** standalone reader — a thin standalone reader or a small restructure is needed, a design
+  decision rather than a mechanical change.
+- `fuzz_constraints` calls `ConstraintDsl`/`ConstraintsDsl::from_edn_str` directly, so its "streaming"
+  arm is currently the tree path — fixing the override makes that target exercise the real streaming
+  reader.
+
+**5b — parse-direction naming.** Review the naming across the two parse directions and decide a
+consistent scheme: string → AST (`FromStr`/`parse_<type>` → AST via defaults) versus the EDN-DSL
+boundary (`FromEdn::from_edn` tree / `from_edn_str` streaming, `read_<type>` / `read_edn_<type>`,
+`*Dsl` vs `*Ast` trait targets). Confirm the `parse_`/`read_`/`read_edn_` split reads unambiguously
+for "parse a string into an AST" vs "parse into the EDN/DSL form," and settle the prospective
+`read_edn_` → `pick_` rename (dsl-serialization, not yet adopted).
+
 ## Sequencing
 
-All four are increment-2, after the reaction DSL (133) lands. Item 1 is independent and small. Item
+All five are increment-2, after the reaction DSL (133) lands. Item 1 is independent and small. Item
 2 is the larger one and subsumes item 1's overlay-ref limitation. Item 3 rides with item 2 — six of
 its seven structural forms are overlay entities and share the resolution rework; bond is the only
 localized entity gaining one, and it is unblocked (name an existing bond by `:id` or index until
-then). Item 4 is independent API/naming cleanup. None blocks the 133 surface design, which is
+then). Item 4 is independent API/naming cleanup. Item 5 is independent serde cleanup (5a mechanical
+plus the two dispatch-key readers; 5b a naming pass). None blocks the 133 surface design, which is
 atom/bond/constraint with index|id refs and complete on its own.

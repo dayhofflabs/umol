@@ -223,4 +223,16 @@ proptest! {
             prop_assert!(sequential.contains(product));
         }
     }
+
+    /// The reaction round-trips through the EDN surface: render → parse reaches a
+    /// fixpoint, exercising the atom/bond add / remove / modify-field delta ops
+    /// (`ReactionAst::to_edn` then `from_edn`, twice, must agree).
+    #[test]
+    fn test_reaction_ast_edn_roundtrip_stable(reaction in reaction_strategy()) {
+        let once = ReactionAst::from_edn(&reaction.to_edn())
+            .map_err(|e| TestCaseError::fail(format!("first reparse failed: {e}")))?;
+        let twice = ReactionAst::from_edn(&once.to_edn())
+            .map_err(|e| TestCaseError::fail(format!("second reparse failed: {e}")))?;
+        prop_assert_eq!(once, twice);
+    }
 }

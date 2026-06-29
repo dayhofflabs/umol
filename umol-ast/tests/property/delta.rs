@@ -1,10 +1,42 @@
 use proptest::prelude::*;
 use umol_ast::ast::{
     AtomDelta, AtomFieldChange, AtomId, BondDelta, BondFieldChange, BondId, Canonicalize,
-    Constraint, ConstraintDelta, Delta, Deltas, MoleculeConstraint, ValueAst,
+    Constraint, ConstraintDelta, Delta, Deltas, EntityPatch, MoleculeConstraint, ValueAst,
 };
 
 use crate::strategies::*;
+
+/// Apply a `diff` (only `ModifyField` / `ModifyConstraint` deltas) to an atom state.
+fn apply_atom_diff(mut ast: AtomAst, diff: Vec<AtomDelta>) -> AtomAst {
+    for d in diff {
+        match d {
+            AtomDelta::ModifyField { change, .. } => {
+                AtomDelta::apply_field(&mut ast, change).unwrap()
+            }
+            AtomDelta::ModifyConstraint { old, new, .. } => {
+                AtomDelta::apply_constraint(&mut ast, old, new).unwrap()
+            }
+            other => unreachable!("diff yields only modify deltas, got {other:?}"),
+        }
+    }
+    ast
+}
+
+/// Apply a `diff` (only `ModifyField` / `ModifyConstraint` deltas) to a bond state.
+fn apply_bond_diff(mut ast: BondAst, diff: Vec<BondDelta>) -> BondAst {
+    for d in diff {
+        match d {
+            BondDelta::ModifyField { change, .. } => {
+                BondDelta::apply_field(&mut ast, change).unwrap()
+            }
+            BondDelta::ModifyConstraint { old, new, .. } => {
+                BondDelta::apply_constraint(&mut ast, old, new).unwrap()
+            }
+            other => unreachable!("diff yields only modify deltas, got {other:?}"),
+        }
+    }
+    ast
+}
 
 fn atom_id_strategy() -> impl Strategy<Value = AtomId> {
     (0u32..3).prop_map(AtomId)
@@ -92,5 +124,35 @@ proptest! {
         if let Ok(once) = deltas.canonicalize() {
             prop_assert_eq!(once.clone().canonicalize().unwrap(), once);
         }
+    }
+
+    /// `apply(left, diff(left, right)) == right` for atoms — the patch algebra law.
+    #[test]
+    fn test_atom_delta_diff_apply(left in atom_ast_strategy(), right in atom_ast_strategy()) {
+        let diff = AtomDelta::diff(AtomId(0), &left, &right);
+        prop_assert_eq!(apply_atom_diff(left, diff), right);
+    }
+
+    /// `diff(x, x)` is empty and applying it is the identity (atoms).
+    #[test]
+    fn test_atom_delta_diff_identity(atom in atom_ast_strategy()) {
+        let diff = AtomDelta::diff(AtomId(0), &atom, &atom);
+        prop_assert!(diff.is_empty());
+        prop_assert_eq!(apply_atom_diff(atom.clone(), diff), atom);
+    }
+
+    /// `apply(left, diff(left, right)) == right` for bonds.
+    #[test]
+    fn test_bond_delta_diff_apply(left in bond_ast_strategy(), right in bond_ast_strategy()) {
+        let diff = BondDelta::diff(BondId(0), &left, &right);
+        prop_assert_eq!(apply_bond_diff(left, diff), right);
+    }
+
+    /// `diff(x, x)` is empty and applying it is the identity (bonds).
+    #[test]
+    fn test_bond_delta_diff_identity(bond in bond_ast_strategy()) {
+        let diff = BondDelta::diff(BondId(0), &bond, &bond);
+        prop_assert!(diff.is_empty());
+        prop_assert_eq!(apply_bond_diff(bond.clone(), diff), bond);
     }
 }

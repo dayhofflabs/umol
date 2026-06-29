@@ -218,11 +218,8 @@ impl<T: Canonicalize> Canonical<T> {
 /// The patch algebra over one entity's fields and constraints. A delta is the morphism between two
 /// states (`Ast`s): `apply` is its action — carrying a state forward by a `ModifyField` /
 /// `ModifyConstraint` delta — and `diff` is the inverse, factoring two states back into the deltas
-/// between them, with `apply(left, diff(left, right)) == right`. It is not a generic patch algebra:
-/// the moves are exactly an entity's fields and constraints, not arbitrary tree edits. Atoms and
-/// bonds (and, later, the overlay families) supply the per-variant operations; `diff` is written
-/// once.
-pub(crate) trait EntityPatch: Sized {
+/// between them, with `apply(left, diff(left, right)) == right`.
+pub trait EntityPatch: Sized {
     type Id: Copy + Eq + Hash + From<usize>;
     type Ast: Clone;
     type FieldChange;
@@ -234,10 +231,8 @@ pub(crate) trait EntityPatch: Sized {
         old: Option<Self::Constraint>,
         new: Option<Self::Constraint>,
     ) -> Self;
-
     fn apply_field(ast: &mut Self::Ast, change: Self::FieldChange) -> Result<(), Contradiction>;
     fn diff_field(left: &Self::Ast, right: &Self::Ast) -> Vec<Self::FieldChange>;
-
     fn apply_constraint(
         ast: &mut Self::Ast,
         old: Option<Self::Constraint>,

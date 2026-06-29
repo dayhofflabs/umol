@@ -675,20 +675,44 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   §5.4/§7.3) untouched — distinct namespace.
 - *Checkpoint:* spec updated. **Done.**
 
-**R12 — Property & fuzz tests** [R10] (`proptest`, feature-gated; `cargo-fuzz` targets):
+**R12 — Property & fuzz tests** [R10] (`proptest`, feature-gated; `cargo-fuzz` targets): **Done**
 Reuse the existing harness — `umol-ast/tests/property/{delta,reaction}.rs` and `umol-ast/fuzz/`.
-- R12a — patch algebra (`EntityPatch`) for `AtomDelta` / `BondDelta`: over generated state pairs,
-  `apply(left, diff(left, right)) == right`; `diff(x, x)` is empty; `apply` of an empty diff is the
-  identity.
-- R12b — partial entity AST↔DSL: round-trip `PartialAtomDsl` / `PartialBondDsl` through
-  `FromAst` / `IntoAst` (with defaults `Ctx`) over generated partial atoms/bonds.
-- R12c — partial entity EDN: round-trip `PartialAtomDsl` / `PartialBondDsl` through `FromEdn`/`ToEdn`,
-  and the tree (`from_edn`) and streaming (`read_*`) parsers agree on the same input.
-- R12d — delta EDN: round-trip the reaction delta ops through the EDN surface (render → parse),
-  per op kind (add / remove / modify-field / modify-constraint) for atoms and bonds.
-- R12e — fuzz the reaction EDN parsers: one target driving the streaming reader and one the tree
-  parser; both must not panic and must agree (parse-or-error parity) on arbitrary bytes.
-- *Checkpoint (tested):* algebra and round-trip laws hold under generation; parsers fuzz-clean.
+- R12a — **Done.** Patch algebra (`EntityPatch`, now `pub`) for `AtomDelta` / `BondDelta` in
+  `property/delta.rs`: `test_{atom,bond}_delta_diff_apply` (`apply(left, diff(left, right)) == right`)
+  and `test_{atom,bond}_delta_diff_identity` (`diff(x, x)` empty; empty-diff apply is the identity),
+  via local `apply_{atom,bond}_diff` helpers.
+- R12b — **Done.** Partial entity AST↔DSL string round-trip in `property/entity.rs`:
+  `test_partial_{atom,bond}_dsl_display_from_str_roundtrip` (`parse(display(x)) == x`).
+- R12c — **Done.** Partial entity EDN round-trip in `property/entity.rs`:
+  `test_partial_{atom,bond}_dsl_to_edn_from_edn_roundtrip` (`from_edn(to_edn(x)) == x`). The partial's
+  EDN form is a string leaf; tree-vs-streaming parity is **not** asserted here — see the deferred note.
+- R12d — **Done.** Delta EDN round-trip in `property/reaction.rs`:
+  `test_reaction_ast_edn_roundtrip_stable` (render → parse reaches a fixpoint over `reaction_strategy`,
+  covering atom/bond add / remove / modify-field). modify-constraint ops are covered by the R9e unit
+  tests, not generated here.
+- R12e — **Done.** `umol-ast/fuzz/fuzz_targets/fuzz_reaction.rs` (registered in `fuzz/Cargo.toml`):
+  drives `ReactionDsl::from_edn_str` (streaming) and `read_string` + `from_edn` (tree); no panic, and
+  parse-or-error parity (asserts equality when both succeed). Not executed here (needs `cargo-fuzz`).
+- *Checkpoint (tested):* algebra and round-trip laws hold under generation (3854 lib + 95 property
+  tests pass); fuzz target compiles into the harness.
+
+**Deferred — streaming `from_edn_str` for the constituent `*Dsl` types.** Per dsl-serialization, every
+EDN-shaped `*Dsl` should override `FromEdn::from_edn_str` to drive its hand-written streaming `read_*`
+(never the default, which delegates to the tree `read_string` + `from_edn`). Today only the top-level /
+full-entity types do (`MoleculeDsl`, `ReactionDsl`, `AtomDsl`, `BondDsl`, `DativeBondDsl`, … via
+`read_subgrammar_all`); the constituent boundary types still inherit the tree-delegating default:
+`ValueDsl`, `BooleanDsl`, `RingMembershipDsl`, `AromaticValenceDsl`, `MulticenterValenceDsl`,
+`AtomConstraintDsl`, `BondConstraintDsl`, `DativeBondConstraintDsl`, `AromaticSystemConstraintDsl`,
+`MulticenterBondConstraintDsl`, `NoncovalentBondConstraintDsl`, `SubPatternAnchorDsl`,
+`MoleculeConstraintDsl`, `RelationalConstraintDsl`, `ConstraintDsl`, `ConstraintsDsl`,
+`StereogenicityDsl`, `TopicityDsl`, `StereoCosetDsl`, `PartialAtomDsl`, `PartialBondDsl`, the stereo
+constraint `*Dsl` macro, and the ref `*Dsl` macro. `fuzz_constraints` calls
+`ConstraintDsl`/`ConstraintsDsl::from_edn_str` directly, so its "streaming" arm is currently the tree
+path. Wiring notes: most have a single-arg standalone `read_<type>_dsl` to delegate to (trivial);
+`read_topicity`/`read_stereogenicity`/the stereo constraint readers are private and would need
+`pub(super)`; `read_molecule_constraint_dsl(de, key)` and `read_relational_constraint_dsl(de, key)`
+have **no** standalone reader (the `{`+dispatch-key is consumed by the umbrella `read_constraint_dsl`),
+so they need a thin standalone reader or a different structure — design decision, not mechanical.
 
 ## Implementation plan — span surface (`ReactionSpanDsl` ↔ `ReactionSpanAst`)
 

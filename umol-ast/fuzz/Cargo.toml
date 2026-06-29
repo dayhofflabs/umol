@@ -34,3 +34,10 @@ path = "fuzz_targets/fuzz_constraints.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_reaction"
+path = "fuzz_targets/fuzz_reaction.rs"
+test = false
+doc = false
+bench = false
