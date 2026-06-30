@@ -134,7 +134,7 @@ pub(super) fn consume_single_key_map_close(
 pub(super) fn parse_vec<T>(
     edn: &Edn<'_>,
     context: &'static str,
-    mut f: impl FnMut(&Edn<'_>) -> Result<T, DeError>,
+    f: impl FnMut(&Edn<'_>) -> Result<T, DeError>,
 ) -> Result<Vec<T>, DeError> {
     let Edn::Vector(v) = edn else {
         return Err(DeError::TypeMismatch {
@@ -143,7 +143,7 @@ pub(super) fn parse_vec<T>(
             path: vec![context.into()],
         });
     };
-    v.iter().map(|e| f(e)).collect()
+    v.iter().map(f).collect()
 }
 
 pub(super) fn parse_single_key_map<'a, 'de>(

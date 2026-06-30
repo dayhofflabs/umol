@@ -6,9 +6,6 @@
 //! a `MoleculeAst`. `Modified` (a preserved entity relabeled across the reaction) is the
 //! relabeling-DPO reading: the entity persists in `K`, its label resolved per side.
 
-// TODO: Add overlays. Overlay entities not represented here yet, dropped on conversion
-// from ReactionAst.
-
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::Hash;
 
@@ -75,6 +72,7 @@ pub struct ReactionSpanAst {
 
 #[allow(clippy::type_complexity)]
 impl ReactionSpanAst {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_parts(
         graph: Graph,
         atoms: Vec<EntitySpan<AtomAst>>,
@@ -160,6 +158,62 @@ impl ReactionSpanAst {
             let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
             [AtomId::from(a), AtomId::from(b)]
         }));
+        let dative_states: Vec<EntitySpan<DativeBondAst>> = (0..self.dative_bonds.relation_count())
+            .map(|i| self.dative_bonds.data(RelationId(i as u32)).clone())
+            .collect();
+        deltas.extend(DativeBondDelta::deltas_from_states(&dative_states, |index| {
+            let rid = RelationId(index as u32);
+            (
+                self.dative_bonds
+                    .participants_2(rid)
+                    .iter()
+                    .map(|&n| AtomId::from(n))
+                    .collect(),
+                AtomId::from(self.dative_bonds.participants_1(rid)[0]),
+            )
+        }));
+        let aromatic_states: Vec<EntitySpan<AromaticSystemAst>> = (0..self
+            .aromatic_systems
+            .relation_count())
+            .map(|i| self.aromatic_systems.data(RelationId(i as u32)).clone())
+            .collect();
+        deltas.extend(AromaticSystemDelta::deltas_from_states(
+            &aromatic_states,
+            |index| {
+                self.aromatic_systems
+                    .participants(RelationId(index as u32))
+                    .iter()
+                    .map(|&n| AtomId::from(n))
+                    .collect()
+            },
+        ));
+        let multicenter_states: Vec<EntitySpan<MulticenterBondAst>> = (0..self
+            .multicenter_bonds
+            .relation_count())
+            .map(|i| self.multicenter_bonds.data(RelationId(i as u32)).clone())
+            .collect();
+        deltas.extend(MulticenterBondDelta::deltas_from_states(
+            &multicenter_states,
+            |index| {
+                self.multicenter_bonds
+                    .participants(RelationId(index as u32))
+                    .iter()
+                    .map(|&n| AtomId::from(n))
+                    .collect()
+            },
+        ));
+        let noncovalent_states: Vec<EntitySpan<NoncovalentBondAst>> = (0..self
+            .noncovalent_bonds
+            .relation_count())
+            .map(|i| self.noncovalent_bonds.data(RelationId(i as u32)).clone())
+            .collect();
+        deltas.extend(NoncovalentBondDelta::deltas_from_states(
+            &noncovalent_states,
+            |index| {
+                let [a, b] = *self.noncovalent_bonds.participants(RelationId(index as u32));
+                [AtomId::from(a), AtomId::from(b)]
+            },
+        ));
         for span in &self.constraints {
             match span {
                 ConstraintSpan::Added(c) => {
@@ -810,8 +864,8 @@ mod tests {
 
     use super::super::constraint::{Constraint, Constraints, MoleculeConstraint};
     use super::super::delta::Deltas;
-    use super::super::edit::BondFieldChange;
-    use super::super::noncovalent::NoncovalentBondKind;
+    use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange};
+    use super::super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindAst};
     use super::super::value::ValueAst;
     use super::*;
 
@@ -1103,6 +1157,89 @@ mod tests {
         Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(
             Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
         ))]),
+    ))]
+    #[case::dative_add(ReactionAst::new(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::B),
+                AtomAst::from_element(Element::N),
+            ],
+            vec![],
+        ),
+        Deltas::from_iter([Delta::DativeBond(DativeBondDelta::Add {
+            id: DativeBondId(0),
+            donors: vec![AtomId(0), AtomId(2)],
+            acceptor: AtomId(1),
+            ast: DativeBondAst::from_order(1),
+        })]),
+    ))]
+    #[case::aromatic_add(ReactionAst::new(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+            vec![],
+        ),
+        Deltas::from_iter([Delta::AromaticSystem(AromaticSystemDelta::Add {
+            id: AromaticSystemId(0),
+            atoms: vec![AtomId(0), AtomId(1)],
+            ast: AromaticSystemAst::from_electrons(vec![1, 2]),
+        })]),
+    ))]
+    #[case::multicenter_add(ReactionAst::new(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::B),
+                AtomAst::from_element(Element::H),
+                AtomAst::from_element(Element::B),
+            ],
+            vec![],
+        ),
+        Deltas::from_iter([Delta::MulticenterBond(MulticenterBondDelta::Add {
+            id: MulticenterBondId(0),
+            atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+            ast: MulticenterBondAst::from_electrons(vec![3, 5, 7]),
+        })]),
+    ))]
+    #[case::noncovalent_add(ReactionAst::new(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            vec![],
+        ),
+        Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+            id: NoncovalentBondId(0),
+            atoms: [AtomId(0), AtomId(1)],
+            ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        })]),
+    ))]
+    #[case::noncovalent_remove(ReactionAst::new(
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            vec![], vec![], vec![], vec![],
+            vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            vec![], vec![],
+            Constraints::new(),
+        ),
+        Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
+            id: NoncovalentBondId(0),
+            atoms: [AtomId(0), AtomId(1)],
+            ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        })]),
+    ))]
+    #[case::noncovalent_modify(ReactionAst::new(
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            vec![], vec![], vec![], vec![],
+            vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            vec![], vec![],
+            Constraints::new(),
+        ),
+        Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
+            id: NoncovalentBondId(0),
+            change: NoncovalentBondFieldChange::Kind {
+                old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
+                new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
+            },
+        })]),
     ))]
     fn test_reaction_span_ast_to_reaction(#[case] reaction: ReactionAst) {
         assert_eq!(

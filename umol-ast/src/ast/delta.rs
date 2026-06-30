@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::Hash;
+use std::iter;
 use std::mem::{discriminant, Discriminant};
 use std::slice::{Iter, IterMut};
 
@@ -1676,7 +1677,7 @@ impl Canonicalize for Deltas {
                 {
                     if donors
                         .iter()
-                        .chain(std::iter::once(acceptor))
+                        .chain(iter::once(acceptor))
                         .any(|atom| removed_atoms.contains(atom))
                     {
                         return Err(Contradiction);

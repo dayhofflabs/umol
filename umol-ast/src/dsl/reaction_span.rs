@@ -191,6 +191,7 @@ fn parse_atom_span_entry(
 
 /// Parse a complete bond-entry payload (`[a b bond]` or the `{:id :atoms :type}` map) and wrap its
 /// `BondAst` into the given span side.
+#[allow(clippy::type_complexity)]
 fn bond_entry_span(
     payload: &Edn<'_>,
     wrap: impl Fn(BondAst) -> EntitySpan<BondAst>,
@@ -228,6 +229,7 @@ fn split_bond_frame<'e>(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn parse_bond_span_entry(
     edn: &Edn<'_>,
 ) -> Result<(Option<String>, [AtomRef; 2], EntitySpan<BondAst>), DeError> {
@@ -285,10 +287,10 @@ fn parse_span_input(edn: &Edn<'_>) -> Result<SpanInput, DeError> {
             });
         };
         match key.name() {
-            "atoms" => atoms = parse_vec(value, ":atoms", |e| parse_atom_span_entry(e))?,
-            "bonds" => bonds = parse_vec(value, ":bonds", |e| parse_bond_span_entry(e))?,
+            "atoms" => atoms = parse_vec(value, ":atoms", parse_atom_span_entry)?,
+            "bonds" => bonds = parse_vec(value, ":bonds", parse_bond_span_entry)?,
             "constraints" => {
-                constraints = parse_vec(value, ":constraints", |e| parse_constraint_span_entry(e))?
+                constraints = parse_vec(value, ":constraints", parse_constraint_span_entry)?
             }
             "atom-aliases" => atom_aliases = parse_atom_aliases(value)?,
             other => return Err(DeError::Custom(format!("unknown span key :{other}"))),
