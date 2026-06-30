@@ -1,6 +1,7 @@
 //! Aromatic system AST.
 
 use umol_ast_macros::{Canonicalize, Lattice};
+use umol_graph_core::ParticipantPosition;
 
 use super::constraint::{AromaticSystemConstraint, AromaticSystemConstraints};
 use super::electrons::ElectronCountsAst;
@@ -72,6 +73,12 @@ impl AromaticSystemAst {
             self.spin = SpinStateAst::from((0_u8, 1_u8));
         }
         self
+    }
+
+    /// Reorder the positional `electrons` by `order`, tracking a participant
+    /// reordering; charge / spin / constraints are positionless and unchanged.
+    pub fn permute(&mut self, order: &[ParticipantPosition]) {
+        self.electrons.permute(order);
     }
 }
 
@@ -247,5 +254,19 @@ mod tests {
         #[case] expected: AromaticSystemAst,
     ) {
         assert_eq!(a.join(&b), expected);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_ast_permute() {
+        let mut input = AromaticSystemAst::from_electrons(vec![10, 20, 30]).with_charge(-1);
+        input.permute(&[
+            ParticipantPosition(2),
+            ParticipantPosition(0),
+            ParticipantPosition(1),
+        ]);
+        assert_eq!(
+            input,
+            AromaticSystemAst::from_electrons(vec![30, 10, 20]).with_charge(-1)
+        );
     }
 }

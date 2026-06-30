@@ -3,6 +3,8 @@
 
 use std::borrow::Cow;
 
+use umol_graph_core::ParticipantPosition;
+
 use super::error::Contradiction;
 use super::traits::{AsLit, Canonicalize, Lattice};
 
@@ -24,6 +26,20 @@ impl ElectronCountsAst {
 
     pub fn lit(counts: Vec<i64>) -> Self {
         Self::Lit(counts)
+    }
+
+    /// Reorder the positional counts by `order` (`new[i] = old[order[i]]`) to
+    /// track a participant reordering. `Undetermined` is unchanged.
+    pub fn permute(&mut self, order: &[ParticipantPosition]) {
+        if let Self::Lit(counts) = self {
+            debug_assert_eq!(
+                order.len(),
+                counts.len(),
+                "permutation length matches the count vector"
+            );
+            let reordered: Vec<i64> = order.iter().map(|p| counts[p.index()]).collect();
+            *counts = reordered;
+        }
     }
 }
 
@@ -112,6 +128,26 @@ mod tests {
         #[case] expected: ElectronCountsAst,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::reorder(
+        ElectronCountsAst::Lit(vec![10, 20, 30]),
+        vec![ParticipantPosition(2), ParticipantPosition(0), ParticipantPosition(1)],
+        ElectronCountsAst::Lit(vec![30, 10, 20]),
+    )]
+    #[case::undetermined(
+        ElectronCountsAst::Undetermined,
+        vec![ParticipantPosition(1), ParticipantPosition(0)],
+        ElectronCountsAst::Undetermined,
+    )]
+    fn test_electron_counts_ast_permute(
+        #[case] mut input: ElectronCountsAst,
+        #[case] order: Vec<ParticipantPosition>,
+        #[case] expected: ElectronCountsAst,
+    ) {
+        input.permute(&order);
+        assert_eq!(input, expected);
     }
 
     #[rstest]
