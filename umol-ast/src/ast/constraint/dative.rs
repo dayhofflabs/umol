@@ -405,7 +405,7 @@ impl From<Vec<DativeBondConstraint>> for DativeBondConstraints {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Remapping;
+    use umol_graph_core::RemovalRemapping;
 
     use super::*;
     #[rustfmt::skip]
@@ -771,7 +771,7 @@ mod tests {
             DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
         let remap = IdRemapping::new(
-            Remapping::new(vec![1], vec![1]),
+            RemovalRemapping::new(vec![1], vec![1]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

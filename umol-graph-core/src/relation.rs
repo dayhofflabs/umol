@@ -13,12 +13,23 @@
 use std::hash::Hash;
 use std::marker::PhantomData;
 
-use crate::graph::{EdgeId, NodeId, Remapping};
+use crate::graph::{EdgeId, NodeId, RemovalRemapping};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RelationId(pub u32);
 
 impl RelationId {
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+/// Position of a participant within a single relation's tuple — local to the
+/// relation (frame-relative), distinct from the global `NodeId`/`EdgeId`/`RelationId`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ParticipantPosition(pub u32);
+
+impl ParticipantPosition {
     pub fn index(self) -> usize {
         self.0 as usize
     }
@@ -58,21 +69,21 @@ pub struct ParticipantRefs {
     pub edge: Option<EdgeId>,
 }
 
-/// A value that can occupy a relation factor: routes through a `Remapping` in
+/// A value that can occupy a relation factor: routes through a `RemovalRemapping` in
 /// both directions and exposes its node/edge refs for incidence. One impl per
 /// concrete id type — dispatch is static, since a factor is homogeneous.
 pub trait RelationParticipant: Copy + Ord + Hash {
-    fn remap(self, remapping: &Remapping) -> Option<Self>;
-    fn unmap(self, remapping: &Remapping) -> Self;
+    fn remap(self, remapping: &RemovalRemapping) -> Option<Self>;
+    fn unmap(self, remapping: &RemovalRemapping) -> Self;
     fn refs(self) -> ParticipantRefs;
 }
 
 impl RelationParticipant for NodeId {
-    fn remap(self, remapping: &Remapping) -> Option<Self> {
+    fn remap(self, remapping: &RemovalRemapping) -> Option<Self> {
         remapping.map_node(self)
     }
 
-    fn unmap(self, remapping: &Remapping) -> Self {
+    fn unmap(self, remapping: &RemovalRemapping) -> Self {
         remapping.unmap_node(self)
     }
 
@@ -85,11 +96,11 @@ impl RelationParticipant for NodeId {
 }
 
 impl RelationParticipant for EdgeId {
-    fn remap(self, remapping: &Remapping) -> Option<Self> {
+    fn remap(self, remapping: &RemovalRemapping) -> Option<Self> {
         remapping.map_edge(self)
     }
 
-    fn unmap(self, remapping: &Remapping) -> Self {
+    fn unmap(self, remapping: &RemovalRemapping) -> Self {
         remapping.unmap_edge(self)
     }
 
@@ -262,7 +273,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    pub fn apply_removal_remapping(&self, remapping: &RemovalRemapping) -> Self
     where
         D: Clone,
     {
@@ -396,7 +407,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    pub fn apply_removal_remapping(&self, remapping: &RemovalRemapping) -> Self
     where
         D: Clone,
     {
@@ -541,7 +552,7 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    pub fn apply_removal_remapping(&self, remapping: &RemovalRemapping) -> Self
     where
         D: Clone,
     {
@@ -703,7 +714,7 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    pub fn apply_removal_remapping(&self, remapping: &RemovalRemapping) -> Self
     where
         D: Clone,
     {
@@ -872,7 +883,7 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    pub fn apply_removal_remapping(&self, remapping: &RemovalRemapping) -> Self
     where
         D: Clone,
     {
@@ -945,7 +956,7 @@ mod tests {
     #[case::removed(NodeId(1), None)]
     #[case::after_removed(NodeId(2), Some(NodeId(1)))]
     fn test_node_id_remap(#[case] id: NodeId, #[case] expected: Option<NodeId>) {
-        let remapping = Remapping::new(vec![1], vec![]);
+        let remapping = RemovalRemapping::new(vec![1], vec![]);
         assert_eq!(id.remap(&remapping), expected);
     }
 
@@ -953,7 +964,7 @@ mod tests {
     #[case::before_gap(NodeId(0), NodeId(0))]
     #[case::after_gap(NodeId(1), NodeId(2))]
     fn test_node_id_unmap(#[case] id: NodeId, #[case] expected: NodeId) {
-        let remapping = Remapping::new(vec![1], vec![]);
+        let remapping = RemovalRemapping::new(vec![1], vec![]);
         assert_eq!(id.unmap(&remapping), expected);
     }
 
@@ -972,7 +983,7 @@ mod tests {
     #[case::removed(EdgeId(0), None)]
     #[case::after_removed(EdgeId(2), Some(EdgeId(1)))]
     fn test_edge_id_remap(#[case] id: EdgeId, #[case] expected: Option<EdgeId>) {
-        let remapping = Remapping::new(vec![], vec![0]);
+        let remapping = RemovalRemapping::new(vec![], vec![0]);
         assert_eq!(id.remap(&remapping), expected);
     }
 
@@ -980,7 +991,7 @@ mod tests {
     #[case::before_gap(EdgeId(0), EdgeId(0))]
     #[case::after_gap(EdgeId(1), EdgeId(2))]
     fn test_edge_id_unmap(#[case] id: EdgeId, #[case] expected: EdgeId) {
-        let remapping = Remapping::new(vec![], vec![1]);
+        let remapping = RemovalRemapping::new(vec![], vec![1]);
         assert_eq!(id.unmap(&remapping), expected);
     }
 
@@ -1081,8 +1092,8 @@ mod tests {
     fn test_fixed_relation_set_apply_remapping() {
         let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
             FixedRelationSet::new(vec![([n(0), n(2)], "keep"), ([n(1), n(3)], "drop")]);
-        let remapping = Remapping::new(vec![1], vec![]);
-        let out = rs.apply_remapping(&remapping);
+        let remapping = RemovalRemapping::new(vec![1], vec![]);
+        let out = rs.apply_removal_remapping(&remapping);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
@@ -1212,8 +1223,8 @@ mod tests {
             (vec![n(0), n(2), n(4)], "keep"),
             (vec![n(1), n(3)], "drop"),
         ]);
-        let remapping = Remapping::new(vec![1], vec![]);
-        let out = rs.apply_remapping(&remapping);
+        let remapping = RemovalRemapping::new(vec![1], vec![]);
+        let out = rs.apply_removal_remapping(&remapping);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
@@ -1291,8 +1302,8 @@ mod tests {
                 ([n(0)], [n(2), n(4)], "keep"),
                 ([n(1)], [n(5), n(6)], "drop"),
             ]);
-        let remapping = Remapping::new(vec![1], vec![]);
-        let out = rs.apply_remapping(&remapping);
+        let remapping = RemovalRemapping::new(vec![1], vec![]);
+        let out = rs.apply_removal_remapping(&remapping);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
@@ -1378,8 +1389,8 @@ mod tests {
                 ([n(0)], vec![n(2), n(4)], "keep"),
                 ([n(5)], vec![n(1), n(3)], "drop"),
             ]);
-        let remapping = Remapping::new(vec![1], vec![]);
-        let out = rs.apply_remapping(&remapping);
+        let remapping = RemovalRemapping::new(vec![1], vec![]);
+        let out = rs.apply_removal_remapping(&remapping);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
@@ -1464,8 +1475,8 @@ mod tests {
                 (vec![n(0), n(2)], vec![n(4)], "keep"),
                 (vec![n(5)], vec![n(1)], "drop"),
             ]);
-        let remapping = Remapping::new(vec![1], vec![]);
-        let out = rs.apply_remapping(&remapping);
+        let remapping = RemovalRemapping::new(vec![1], vec![]);
+        let out = rs.apply_removal_remapping(&remapping);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(3)]);

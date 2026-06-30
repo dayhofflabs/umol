@@ -323,7 +323,7 @@ impl From<Vec<MulticenterBondConstraint>> for MulticenterBondConstraints {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Remapping;
+    use umol_graph_core::RemovalRemapping;
 
     use super::*;
     #[rstest]
@@ -619,7 +619,7 @@ mod tests {
     fn test_multicenter_bond_constraints_remap() {
         let cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
         let remap = IdRemapping::new(
-            Remapping::new(vec![0, 1], vec![0]),
+            RemovalRemapping::new(vec![0, 1], vec![0]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

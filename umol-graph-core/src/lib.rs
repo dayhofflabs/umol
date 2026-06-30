@@ -33,10 +33,13 @@ pub use algorithms::subiso::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH
 pub use algorithms::toposort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::TraversalAlgorithm;
 pub use digraph::DiGraph;
-pub use graph::{EdgeId, Embedding, Graph, Neighbor, NodeId, Remapping};
+pub use graph::{
+    remove_edge_vec, remove_node_vec, EdgeId, Embedding, Graph, Neighbor, NodeId, Remapping,
+    RemovalRemapping,
+};
 pub use relation::{
     FactorOrdering, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, Ordered,
-    ParticipantRefs, RelationId, RelationParticipant, Unordered, VarRelationSet,
-    VarVarBirelationSet,
+    ParticipantPosition, ParticipantRefs, RelationId, RelationParticipant, Unordered,
+    VarRelationSet, VarVarBirelationSet,
 };
 pub use union_find::UnionFind;

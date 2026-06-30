@@ -224,9 +224,9 @@ no-parallel-overlay enforcement, are independent and out of this plan's critical
 **Dependency-ordered items (ii–iv).**
 
 **I0 — graph-core: remapping & participant positions** `[—]`
-- I0a — graph-core: `ParticipantPosition(u32)` newtype. `[—]`
-- I0b — graph-core: rename `Remapping`→`RemovalRemapping`; relation-set `apply_remapping`→`apply_removal_remapping` on all five types (no reindex — monotonic); migrate callers (`MoleculeBuilder`, the `IdRemapping` wrapper); move data-column compaction to free `remove_node_vec`/`remove_edge_vec`. `[—]`
-- I0c — graph-core: new general `Remapping` — total relabel (`Vec<NodeId>`/`Vec<EdgeId>`), `map_node`/`map_edge`/`unmap_*`/constructors. `[—]`
+- I0a — graph-core: `ParticipantPosition(u32)` newtype. `[—]` **Done** (relation.rs, beside `RelationId`; re-exported from lib.rs).
+- I0b — graph-core: rename `Remapping`→`RemovalRemapping`; relation-set `apply_remapping`→`apply_removal_remapping` on all five types (no reindex — monotonic); migrate callers (`MoleculeBuilder`, the `IdRemapping` wrapper); move data-column compaction to free `remove_node_vec`/`remove_edge_vec`. `[—]` **Done** (79 type + 22 method renames; `apply_to_*_vec`→free fns over `map_node`/`map_edge`; `IdRemapping`/`UndoRemapping` untouched; graph-core 296 + umol-ast 3914 tests green).
+- I0c — graph-core: new general `Remapping` — total relabel (`Vec<NodeId>`/`Vec<EdgeId>`), `map_node`/`map_edge`/`unmap_*`/constructors. `[—]` **Done** (`new`/`map_node`/`map_edge` + `#[rstest]` tests; graph-core 301 green). `unmap_*` **deferred** — partial inverse for a non-bijective injection with no current consumer (forward covers apply/remap_delta/reindex; `reverse()` builds a fresh forward map; rollback uses `Edit`/`Undo`); add when a consumer appears.
 - I0d — graph-core: `apply_remapping(&Remapping) -> (Self, Vec<ParticipantPosition>)` on all five relation-set types (argsort → per-relation participant permutation). `[I0a, I0c]`
 - I0e — graph-core: common-subgraph enumeration over the incidence (Levi) graph (overlay-aware overlap; sibling of `enumerate_common_subgraphs`, mirroring the existing `substructure_matches_incidence`). `[—]`
 

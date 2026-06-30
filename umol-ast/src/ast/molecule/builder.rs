@@ -11,8 +11,9 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
-    RelationId, RelationParticipant, Remapping, Unordered, VarRelationSet,
+    remove_edge_vec, remove_node_vec, EdgeId, FactorOrdering, FixedRelationSet,
+    FixedVarBirelationSet, Graph, NodeId, Ordered, RelationId, RelationParticipant, RemovalRemapping,
+    Unordered, VarRelationSet,
 };
 
 use super::super::aromatic::AromaticSystemAst;
@@ -99,10 +100,10 @@ where
         }
     }
 
-    fn apply_remapping(self, remap: &Remapping) -> Self {
+    fn apply_removal_remapping(self, remap: &RemovalRemapping) -> Self {
         match self {
             FixedSetStorage::Shared(arc) => {
-                FixedSetStorage::Shared(Arc::new(arc.apply_remapping(remap)))
+                FixedSetStorage::Shared(Arc::new(arc.apply_removal_remapping(remap)))
             }
             FixedSetStorage::Mutable(vec) => {
                 let remapped: Vec<([P; N], D)> = vec
@@ -206,10 +207,10 @@ where
         }
     }
 
-    fn apply_remapping(self, remap: &Remapping) -> Self {
+    fn apply_removal_remapping(self, remap: &RemovalRemapping) -> Self {
         match self {
             VarSetStorage::Shared(arc) => {
-                VarSetStorage::Shared(Arc::new(arc.apply_remapping(remap)))
+                VarSetStorage::Shared(Arc::new(arc.apply_removal_remapping(remap)))
             }
             VarSetStorage::Mutable(vec) => {
                 let remapped: Vec<(Vec<P>, D)> = vec
@@ -317,10 +318,10 @@ where
         }
     }
 
-    fn apply_remapping(self, remap: &Remapping) -> Self {
+    fn apply_removal_remapping(self, remap: &RemovalRemapping) -> Self {
         match self {
             FixedVarSetStorage::Shared(arc) => {
-                FixedVarSetStorage::Shared(Arc::new(arc.apply_remapping(remap)))
+                FixedVarSetStorage::Shared(Arc::new(arc.apply_removal_remapping(remap)))
             }
             FixedVarSetStorage::Mutable(vec) => {
                 let remapped: Vec<([L1; N1], Vec<L2>, D)> = vec
@@ -392,7 +393,7 @@ where
 /// `remap` (i.e. dropped by the structural removal).
 fn birelation_removed<L1, O1, const N1: usize, L2, O2, D>(
     storage: &FixedVarSetStorage<L1, O1, N1, L2, O2, D>,
-    remap: &Remapping,
+    remap: &RemovalRemapping,
 ) -> Vec<RelationId>
 where
     L1: RelationParticipant,
@@ -438,7 +439,7 @@ where
 
 fn fixed_relation_removed<P, O, D, const N: usize>(
     storage: &FixedSetStorage<P, O, D, N>,
-    remap: &Remapping,
+    remap: &RemovalRemapping,
 ) -> Vec<RelationId>
 where
     P: RelationParticipant,
@@ -460,7 +461,7 @@ where
 
 fn var_relation_removed<P, O, D>(
     storage: &VarSetStorage<P, O, D>,
-    remap: &Remapping,
+    remap: &RemovalRemapping,
 ) -> Vec<RelationId>
 where
     P: RelationParticipant,
@@ -959,7 +960,7 @@ impl MoleculeBuilder {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.dative_bonds.remove_relations(&raw);
         let idx_remap = IdRemapping::new(
-            Remapping::new(Vec::new(), Vec::new()),
+            RemovalRemapping::new(Vec::new(), Vec::new()),
             raw,
             Vec::new(),
             Vec::new(),
@@ -978,7 +979,7 @@ impl MoleculeBuilder {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.aromatic_systems.remove_relations(&raw);
         let idx_remap = IdRemapping::new(
-            Remapping::new(Vec::new(), Vec::new()),
+            RemovalRemapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             raw,
             Vec::new(),
@@ -997,7 +998,7 @@ impl MoleculeBuilder {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.multicenter_bonds.remove_relations(&raw);
         let idx_remap = IdRemapping::new(
-            Remapping::new(Vec::new(), Vec::new()),
+            RemovalRemapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             raw,
@@ -1016,7 +1017,7 @@ impl MoleculeBuilder {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.noncovalent_bonds.remove_relations(&raw);
         let idx_remap = IdRemapping::new(
-            Remapping::new(Vec::new(), Vec::new()),
+            RemovalRemapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1035,7 +1036,7 @@ impl MoleculeBuilder {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_atoms.remove_relations(&raw);
         let idx_remap = IdRemapping::new(
-            Remapping::new(Vec::new(), Vec::new()),
+            RemovalRemapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1054,7 +1055,7 @@ impl MoleculeBuilder {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_bonds.remove_relations(&raw);
         let idx_remap = IdRemapping::new(
-            Remapping::new(Vec::new(), Vec::new()),
+            RemovalRemapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1080,8 +1081,8 @@ impl MoleculeBuilder {
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
         let remap = self.graph.remove(&nodes, &edges);
 
-        let new_atoms = remap.apply_to_node_vec(&self.atoms);
-        let new_bonds = remap.apply_to_edge_vec(&self.bonds);
+        let new_atoms = remove_node_vec(&remap, &self.atoms);
+        let new_bonds = remove_edge_vec(&remap, &self.bonds);
         self.atoms = Arc::new(new_atoms);
         self.bonds = Arc::new(new_bonds);
 
@@ -1096,25 +1097,25 @@ impl MoleculeBuilder {
             &mut self.dative_bonds,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.dative_bonds = dative.apply_remapping(&remap);
+        self.dative_bonds = dative.apply_removal_remapping(&remap);
 
         let aromatic = mem::replace(
             &mut self.aromatic_systems,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
-        self.aromatic_systems = aromatic.apply_remapping(&remap);
+        self.aromatic_systems = aromatic.apply_removal_remapping(&remap);
 
         let multicenter = mem::replace(
             &mut self.multicenter_bonds,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
-        self.multicenter_bonds = multicenter.apply_remapping(&remap);
+        self.multicenter_bonds = multicenter.apply_removal_remapping(&remap);
 
         let noncovalent = mem::replace(
             &mut self.noncovalent_bonds,
             FixedSetStorage::Shared(Arc::new(FixedRelationSet::default())),
         );
-        self.noncovalent_bonds = noncovalent.apply_remapping(&remap);
+        self.noncovalent_bonds = noncovalent.apply_removal_remapping(&remap);
 
         // Forward-remap stereo overlays: a stereo element whose site or any
         // ligand atom/bond was removed drops out (cascade). The dropped ids
@@ -1124,12 +1125,12 @@ impl MoleculeBuilder {
             &mut self.stereo_atoms,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.stereo_atoms = stereo_atoms.apply_remapping(&remap);
+        self.stereo_atoms = stereo_atoms.apply_removal_remapping(&remap);
         let stereo_bonds = mem::replace(
             &mut self.stereo_bonds,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.stereo_bonds = stereo_bonds.apply_remapping(&remap);
+        self.stereo_bonds = stereo_bonds.apply_removal_remapping(&remap);
 
         let idx_remap = IdRemapping::new(
             remap,

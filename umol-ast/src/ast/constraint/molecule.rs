@@ -637,7 +637,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{RelationId, Remapping};
+    use umol_graph_core::{RelationId, RemovalRemapping};
 
     use super::*;
     use crate::ast::atom::AtomAst;
@@ -652,7 +652,7 @@ mod tests {
 
     fn idx_remapping(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> IdRemapping {
         IdRemapping::new(
-            Remapping::new(removed_nodes, removed_edges),
+            RemovalRemapping::new(removed_nodes, removed_edges),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -672,7 +672,7 @@ mod tests {
     ) -> IdRemapping {
         let rel = |v: Vec<u32>| v.into_iter().map(RelationId).collect::<Vec<_>>();
         IdRemapping::new(
-            Remapping::new(Vec::new(), Vec::new()),
+            RemovalRemapping::new(Vec::new(), Vec::new()),
             rel(removed_dative),
             rel(removed_aromatic),
             rel(removed_multicenter),

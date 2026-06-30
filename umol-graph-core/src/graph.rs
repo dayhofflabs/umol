@@ -3,7 +3,7 @@
 //! `Graph` stores only adjacency (offsets, neighbor lists, edge endpoints).
 //! Node and edge data live externally in `Vec`s indexed by `NodeId`/`EdgeId`.
 //! The CSR is wrapped in `Arc` for zero-cost cloning; mutations rebuild
-//! it and produce a `Remapping` for reindexing external data.
+//! it and produce a `RemovalRemapping` for reindexing external data.
 
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
@@ -195,7 +195,7 @@ impl Graph {
         new_id
     }
 
-    pub fn remove(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> Remapping {
+    pub fn remove(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> RemovalRemapping {
         let mut removed_nodes: Vec<u32> = nodes.iter().map(|n| n.0).collect();
         removed_nodes.sort_unstable();
         removed_nodes.dedup();
@@ -232,14 +232,14 @@ impl Graph {
             &kept_edges,
         ));
 
-        Remapping::new(removed_nodes, removed_edge_set)
+        RemovalRemapping::new(removed_nodes, removed_edge_set)
     }
 
-    pub fn remove_node(&mut self, id: NodeId) -> Remapping {
+    pub fn remove_node(&mut self, id: NodeId) -> RemovalRemapping {
         self.remove(&[id], &[])
     }
 
-    pub fn remove_edge(&mut self, id: EdgeId) -> Remapping {
+    pub fn remove_edge(&mut self, id: EdgeId) -> RemovalRemapping {
         self.remove(&[], &[id])
     }
 
@@ -382,12 +382,12 @@ impl Default for Graph {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Remapping {
+pub struct RemovalRemapping {
     removed_nodes: Vec<u32>,
     removed_edges: Vec<u32>,
 }
 
-impl Remapping {
+impl RemovalRemapping {
     pub fn new(mut removed_nodes: Vec<u32>, mut removed_edges: Vec<u32>) -> Self {
         removed_nodes.sort_unstable();
         removed_nodes.dedup();
@@ -422,22 +422,6 @@ impl Remapping {
     pub fn unmap_edge(&self, post: EdgeId) -> EdgeId {
         EdgeId(unmap_dense(&self.removed_edges, post.0))
     }
-
-    pub fn apply_to_node_vec<T: Clone>(&self, data: &[T]) -> Vec<T> {
-        data.iter()
-            .enumerate()
-            .filter(|(i, _)| self.removed_nodes.binary_search(&(*i as u32)).is_err())
-            .map(|(_, v)| v.clone())
-            .collect()
-    }
-
-    pub fn apply_to_edge_vec<T: Clone>(&self, data: &[T]) -> Vec<T> {
-        data.iter()
-            .enumerate()
-            .filter(|(i, _)| self.removed_edges.binary_search(&(*i as u32)).is_err())
-            .map(|(_, v)| v.clone())
-            .collect()
-    }
 }
 
 // Inverse dense shift: re-add removed ids at or below the post index (fixpoint).
@@ -449,6 +433,48 @@ fn unmap_dense(removed: &[u32], post: u32) -> u32 {
             return old;
         }
         old = next;
+    }
+}
+
+/// Compact a node-indexed data column to the post-removal layout (drop removed, keep order).
+pub fn remove_node_vec<T: Clone>(remapping: &RemovalRemapping, data: &[T]) -> Vec<T> {
+    data.iter()
+        .enumerate()
+        .filter(|(i, _)| remapping.map_node(NodeId(*i as u32)).is_some())
+        .map(|(_, v)| v.clone())
+        .collect()
+}
+
+/// Compact an edge-indexed data column to the post-removal layout (drop removed, keep order).
+pub fn remove_edge_vec<T: Clone>(remapping: &RemovalRemapping, data: &[T]) -> Vec<T> {
+    data.iter()
+        .enumerate()
+        .filter(|(i, _)| remapping.map_edge(EdgeId(*i as u32)).is_some())
+        .map(|(_, v)| v.clone())
+        .collect()
+}
+
+/// General relabeling of node/edge ids: a **total** map old→new (no drops —
+/// removal is `RemovalRemapping`). Indexed by old id, so `map_node(NodeId(i))`
+/// is `nodes[i]`. The map may be an injection into a larger id space (e.g. a
+/// composition's merged frame), so it is not necessarily a bijection.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Remapping {
+    nodes: Vec<NodeId>,
+    edges: Vec<EdgeId>,
+}
+
+impl Remapping {
+    pub fn new(nodes: Vec<NodeId>, edges: Vec<EdgeId>) -> Self {
+        Self { nodes, edges }
+    }
+
+    pub fn map_node(&self, old: NodeId) -> NodeId {
+        self.nodes[old.0 as usize]
+    }
+
+    pub fn map_edge(&self, old: EdgeId) -> EdgeId {
+        self.edges[old.0 as usize]
     }
 }
 
@@ -772,6 +798,26 @@ mod tests {
         assert_eq!(g.edge_endpoints(EdgeId(1)), [NodeId(0), NodeId(2)]);
     }
 
+    #[fixture]
+    fn remapping() -> Remapping {
+        Remapping::new(vec![NodeId(2), NodeId(0), NodeId(5)], vec![EdgeId(3), EdgeId(1)])
+    }
+
+    #[rstest]
+    #[case::first(NodeId(0), NodeId(2))]
+    #[case::middle(NodeId(1), NodeId(0))]
+    #[case::last(NodeId(2), NodeId(5))]
+    fn test_remapping_map_node(remapping: Remapping, #[case] old: NodeId, #[case] expected: NodeId) {
+        assert_eq!(remapping.map_node(old), expected);
+    }
+
+    #[rstest]
+    #[case::relabel(EdgeId(0), EdgeId(3))]
+    #[case::fixed(EdgeId(1), EdgeId(1))]
+    fn test_remapping_map_edge(remapping: Remapping, #[case] old: EdgeId, #[case] expected: EdgeId) {
+        assert_eq!(remapping.map_edge(old), expected);
+    }
+
     #[test]
     fn test_graph_cow_sharing() {
         let g1 = Graph::new(3, &[[0, 1], [1, 2]]);
@@ -829,7 +875,7 @@ mod tests {
         #[case] removed: Vec<u32>,
         #[case] expected: Option<NodeId>,
     ) {
-        let remap = Remapping::new(removed, vec![]);
+        let remap = RemovalRemapping::new(removed, vec![]);
         assert_eq!(remap.map_node(old), expected);
     }
 
@@ -844,7 +890,7 @@ mod tests {
         #[case] removed: Vec<u32>,
         #[case] expected: NodeId,
     ) {
-        let remap = Remapping::new(removed, vec![]);
+        let remap = RemovalRemapping::new(removed, vec![]);
         assert_eq!(remap.unmap_node(post), expected);
     }
 }

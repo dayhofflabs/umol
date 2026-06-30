@@ -1,6 +1,6 @@
 //! Stereo ligand AST: a ligand occupying a coordination position of a stereo site.
 
-use umol_graph_core::{NodeId, ParticipantRefs, RelationParticipant, Remapping};
+use umol_graph_core::{NodeId, ParticipantRefs, RelationParticipant, RemovalRemapping};
 
 use super::id::AtomId;
 
@@ -26,14 +26,14 @@ impl StereoLigand {
 }
 
 impl RelationParticipant for StereoLigand {
-    fn remap(self, remapping: &Remapping) -> Option<Self> {
+    fn remap(self, remapping: &RemovalRemapping) -> Option<Self> {
         Some(Self {
             atom_id: AtomId::from(remapping.map_node(NodeId::from(self.atom_id))?),
             kind: self.kind,
         })
     }
 
-    fn unmap(self, remapping: &Remapping) -> Self {
+    fn unmap(self, remapping: &RemovalRemapping) -> Self {
         Self {
             atom_id: AtomId::from(remapping.unmap_node(NodeId::from(self.atom_id))),
             kind: self.kind,
@@ -77,7 +77,7 @@ mod tests {
     #[rstest]
     fn test_stereo_ligand_remap() {
         // node 1 removed ⇒ surviving node 3 densifies to 2; the kind is carried
-        let remapping = Remapping::new(vec![1], Vec::new());
+        let remapping = RemovalRemapping::new(vec![1], Vec::new());
         let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen);
         assert_eq!(
             ligand.remap(&remapping),
@@ -90,14 +90,14 @@ mod tests {
 
     #[rstest]
     fn test_stereo_ligand_remap_removed() {
-        let remapping = Remapping::new(vec![3], Vec::new());
+        let remapping = RemovalRemapping::new(vec![3], Vec::new());
         let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::Atom);
         assert_eq!(ligand.remap(&remapping), None);
     }
 
     #[rstest]
     fn test_stereo_ligand_unmap() {
-        let remapping = Remapping::new(vec![1], Vec::new());
+        let remapping = RemovalRemapping::new(vec![1], Vec::new());
         let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::Atom);
         assert_eq!(
             ligand.unmap(&remapping),

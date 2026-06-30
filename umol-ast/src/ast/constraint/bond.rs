@@ -449,7 +449,7 @@ impl From<Vec<BondConstraint>> for BondConstraints {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Remapping;
+    use umol_graph_core::RemovalRemapping;
 
     use super::*;
     use crate::ast::stereo::{StereoCosetAst, StereoTerm};
@@ -820,7 +820,7 @@ mod tests {
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
         let remap = IdRemapping::new(
-            Remapping::new(vec![0, 1, 2], vec![0, 1]),
+            RemovalRemapping::new(vec![0, 1, 2], vec![0, 1]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

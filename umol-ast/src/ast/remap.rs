@@ -1,10 +1,10 @@
 //! AST-level id remapping produced by `MoleculeBuilder::remove`.
 //!
-//! Wraps `umol_graph_core::Remapping` for node/edge (atom/bond) and carries
+//! Wraps `umol_graph_core::RemovalRemapping` for node/edge (atom/bond) and carries
 //! sorted removed-id lists for the six relation kinds. Storage is O(removed)
 //! per kind; lookups are binary search + partition-point shift.
 
-use umol_graph_core::{EdgeId, NodeId, RelationId, Remapping};
+use umol_graph_core::{EdgeId, NodeId, RelationId, RemovalRemapping};
 
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -17,7 +17,7 @@ use super::id::{
 /// id references against the new `MoleculeAst` layout.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdRemapping {
-    graph: Remapping,
+    graph: RemovalRemapping,
     removed_dative_bonds: Vec<RelationId>,
     removed_aromatic_systems: Vec<RelationId>,
     removed_multicenter_bonds: Vec<RelationId>,
@@ -37,7 +37,7 @@ pub struct UndoRemapping {
 impl IdRemapping {
     pub fn empty() -> Self {
         Self::new(
-            Remapping::new(Vec::new(), Vec::new()),
+            RemovalRemapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -57,7 +57,7 @@ impl IdRemapping {
         removed_stereo_bonds: Vec<RelationId>,
     ) -> Self {
         Self::new(
-            Remapping::new(Vec::new(), Vec::new()),
+            RemovalRemapping::new(Vec::new(), Vec::new()),
             removed_dative_bonds,
             removed_aromatic_systems,
             removed_multicenter_bonds,
@@ -69,7 +69,7 @@ impl IdRemapping {
 
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        graph: Remapping,
+        graph: RemovalRemapping,
         mut removed_dative_bonds: Vec<RelationId>,
         mut removed_aromatic_systems: Vec<RelationId>,
         mut removed_multicenter_bonds: Vec<RelationId>,
@@ -126,7 +126,7 @@ impl IdRemapping {
         remap_relation(&self.removed_stereo_bonds, id.into()).map(StereoBondId::from)
     }
 
-    pub fn graph(&self) -> &Remapping {
+    pub fn graph(&self) -> &RemovalRemapping {
         &self.graph
     }
 
@@ -219,14 +219,14 @@ mod tests {
     use std::fmt::Debug;
 
     use rstest::*;
-    use umol_graph_core::Remapping;
+    use umol_graph_core::RemovalRemapping;
 
     use super::*;
 
     #[fixture]
     fn remapping() -> IdRemapping {
         IdRemapping::new(
-            Remapping::new(vec![1, 3], vec![0, 2]),
+            RemovalRemapping::new(vec![1, 3], vec![0, 2]),
             vec![RelationId(2), RelationId(0), RelationId(2)],
             vec![RelationId(1)],
             vec![RelationId(3), RelationId(0)],

@@ -11,7 +11,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use umol_graph_core::{EdgeId, Graph, Remapping};
+use umol_graph_core::{EdgeId, Graph, RemovalRemapping};
 
 use super::atom::AtomAst;
 use super::bond::BondAst;
@@ -138,7 +138,7 @@ impl ReactionSpanAst {
         }
 
         let remap = IdRemapping::new(
-            Remapping::new(removed_nodes, removed_edges),
+            RemovalRemapping::new(removed_nodes, removed_edges),
             Vec::new(),
             Vec::new(),
             Vec::new(),

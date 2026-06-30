@@ -170,7 +170,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Remapping;
+    use umol_graph_core::RemovalRemapping;
 
     use super::*;
 
@@ -214,7 +214,7 @@ mod tests {
     fn test_noncovalent_bond_constraints_remap() {
         let cs = NoncovalentBondConstraints::new();
         let remap = IdRemapping::new(
-            Remapping::new(Vec::new(), Vec::new()),
+            RemovalRemapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),

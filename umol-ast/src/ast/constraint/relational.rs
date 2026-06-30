@@ -489,7 +489,7 @@ impl Canonicalize for RelationalConstraint {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{RelationId, Remapping};
+    use umol_graph_core::{RelationId, RemovalRemapping};
 
     use super::*;
     use crate::ast::value::ValueAst;
@@ -507,7 +507,7 @@ mod tests {
     ) -> IdRemapping {
         let rel = |v: Vec<u32>| v.into_iter().map(RelationId).collect::<Vec<_>>();
         IdRemapping::new(
-            Remapping::new(removed_nodes, removed_edges),
+            RemovalRemapping::new(removed_nodes, removed_edges),
             rel(removed_dative),
             rel(removed_aromatic),
             rel(removed_multicenter),
