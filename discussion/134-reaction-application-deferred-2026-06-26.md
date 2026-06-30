@@ -74,8 +74,18 @@ the increment-1 / increment-2 split in the localized-topology scoping, left to w
   still inline (TODO in `molecule.rs`) — factor each into a shared `render_<entity>_entry`
   parameterized by the rendered value, then the span wraps them with the `{:add|:modify|:remove}`
   verbs, mirroring `render_bond_span_entry`.
+- **Remapping split + reindex (graph-core; settled 2026-06-29, design in doc 131 #7/#8).** Overlay
+  deltas and lhs overlays must re-anchor through frame changes. Split `Remapping` into two disjoint
+  types: `RemovalRemapping` (today's `Remapping`, monotonic compaction, `apply_removal_remapping ->
+  Self`, never reindexes) and a new general `Remapping` (total relabel, `apply_remapping -> (Self,
+  Vec<ParticipantPosition>)`). `ParticipantPosition(u32)` is a new graph-core newtype (positions are
+  implicit slice indices today). Only `VarRelationSet` (aromatic/multicenter `electrons`) consumes
+  the permutation, via `AromaticSystemAst`/`MulticenterBondAst::reindex`; dative/noncovalent are
+  scalar and stereo is `Ordered` (coset reframe is the separate #8 op), so they ignore it. `apply_*`
+  added uniformly across all five relation-set types. Compose's `remap_delta` HashMaps unify onto the
+  general `Remapping`.
 
-Larger of the two: six overlay deltas + the span generalization.
+Larger of the two: six overlay deltas + the span generalization + the remapping split.
 
 ## 3 — structural entity refs
 
@@ -125,6 +135,16 @@ donors+acceptor / site+ligands) and resolves by matching the host's entity *coll
 constituents — a different payload and resolution per entity. §4.1 uniqueness (no two bonds on a
 pair, aromatic systems disjoint, …) makes the match ≤1 hit, so the semantics are clean; the code
 shape is the work.
+
+**Decided (2026-06-29): no parallel overlays of any kind — structural refs are total and
+unambiguous.** Every overlay family — including **noncovalent bonds** — forbids two entries with the
+same constituents/roles. This drops the one prior exception (spec §4.1 currently lets a noncovalent
+pair carry two different-kind interactions); the clearer semantics outweigh that flexibility. So a
+structural ref names **any** overlay (incl. noncovalent) by its constituents with ≤1 hit, and the
+overlay-composition correspondence is by structure = by id (doc 131 #7 settled). **Spec §4.1 must
+change:** rewrite the `:noncovalent-bonds` clause to "at most one interaction per unordered atom
+pair" (drop the different-kind-coexist allowance), and add a `:multicenter-bonds` clause (no two with
+the same atom set) — §4.1 currently omits multicenter.
 
 ## 4 — entity constraints: uniqueness-by-key explicit
 
@@ -181,3 +201,71 @@ localized entity gaining one, and it is unblocked (name an existing bond by `:id
 then). Item 4 is independent API/naming cleanup. Item 5 is independent serde cleanup (5a mechanical
 plus the two dispatch-key readers; 5b a naming pass). None blocks the 133 surface design, which is
 atom/bond/constraint with index|id refs and complete on its own.
+
+## 6 — Increment-2 implementation plan
+
+Dependency-ordered plan for the overlay-composition increment: items 2 + 3 above, the
+overlay-composition semantics settled in doc 131 (#7/#8), and item 1's overlay-ref limitation that
+item 2 subsumes. Each subitem lists its location and `[deps]`. Items 4 and 5, and umol-graph
+no-parallel-overlay enforcement, are independent and out of this plan's critical path.
+
+**By location (i).**
+
+| location | subitems |
+|---|---|
+| graph-core | I0a–I0e |
+| umol-ast/ast (entity ASTs) | I1a, I6b |
+| umol-ast/ast/delta.rs | I1b, I1c, I1d, I6a |
+| umol-ast reaction.rs (apply) | I2a, I2b, I6c |
+| umol-ast reaction_span.rs | I2c–I2f, I7a |
+| umol-ast compose.rs | I3a, I3b, I3c |
+| umol-ast/dsl (tree / stream / format / traits) | I4a–I4e, I5a, I6d |
+
+**Dependency-ordered items (ii–iv).**
+
+**I0 — graph-core: remapping & participant positions** `[—]`
+- I0a — graph-core: `ParticipantPosition(u32)` newtype. `[—]`
+- I0b — graph-core: rename `Remapping`→`RemovalRemapping`; relation-set `apply_remapping`→`apply_removal_remapping` on all five types (no reindex — monotonic); migrate callers (`MoleculeBuilder`, the `IdRemapping` wrapper); move data-column compaction to free `remove_node_vec`/`remove_edge_vec`. `[—]`
+- I0c — graph-core: new general `Remapping` — total relabel (`Vec<NodeId>`/`Vec<EdgeId>`), `map_node`/`map_edge`/`unmap_*`/constructors. `[—]`
+- I0d — graph-core: `apply_remapping(&Remapping) -> (Self, Vec<ParticipantPosition>)` on all five relation-set types (argsort → per-relation participant permutation). `[I0a, I0c]`
+- I0e — graph-core: common-subgraph enumeration over the incidence (Levi) graph (overlay-aware overlap; sibling of `enumerate_common_subgraphs`, mirroring the existing `substructure_matches_incidence`). `[—]`
+
+**I1 — overlay reindex + the four uniform overlay deltas** `[I0]`
+- I1a — umol-ast/ast: `AromaticSystemAst::reindex` / `MulticenterBondAst::reindex` — permute `electrons` by a `ParticipantPosition` permutation. `[I0a]`
+- I1b — delta.rs: the four non-stereo overlay `*Delta` (`DativeBondDelta`, `AromaticSystemDelta`, `MulticenterBondDelta`, `NoncovalentBondDelta`) on the `EntityDelta` pattern (`Add`/`ModifyField`/`ModifyConstraint`/`Remove`, atom-set structural payload, stable id); their `Atoms` types + `into_delta`; extend the `Delta` sum. `[—]`
+- I1c — delta.rs: `Deltas::canonicalize` over the four families (generic `EntityDelta` fold + `field_ops!`; mechanical). `[I1b]`
+- I1d — delta.rs: `remap_delta` over overlay deltas — re-anchor participants through the general `Remapping`, reindex positional payloads via I1a. `[I1a, I1b, I0c]`
+
+**I2 — apply + span for the four overlays** `[I1]`
+- I2a — reaction.rs: `apply_at` overlay lowering arms (overlay `Delta` → existing overlay `Edit`); fold in item 1 (molecule-constraint lowering via `Constraint::map_topology_refs`). `[I1b]`
+- I2b — reaction.rs: DPO dangling check extended to overlay incidence (a deleted atom's overlay participations, not only `bond_ids()`). `[I1b]`
+- I2c — reaction_span.rs: lift the six overlay relation-set `data` columns to `EntitySpan<…>` (all six incl. stereo, uniform). `[I1b]`
+- I2d — reaction_span.rs: `to_reaction_span` folds overlay deltas onto `lhs` overlays (an `apply_*_change` per family). `[I2c, I1b]`
+- I2e — reaction_span.rs: `left()`/`right()` carry unchanged overlays through `from_parts`. `[I2c]`
+- I2f — reaction_span.rs: `to_reaction` (span→deltas) for overlays (`EntityDelta::diff`/`deltas_from_states` defaults). `[I2c, I1b]`
+
+**I3 — composition for overlays** `[I1, I2, I0e]`
+- I3a — compose.rs: unify `remap_delta`/frame algebra onto the general `Remapping`; extend the four-class composite frame to overlay relation ids. `[I1d, I0c, I0d]`
+- I3b — compose.rs: overlay-aware overlap via I0e (incidence common-subgraph) so overlay-only connectivity is visible. `[I0e]`
+- I3c — compose.rs: admissibility (boundary-bond / combined-frame dangling) extended over overlay incidence. `[I3a, I2b]`
+
+**I4 — overlay span DSL** `[I1b, I2c]`
+- I4a — dsl/molecule.rs: factor the six inline overlay renderers (`render_dative` …) into shared `render_<entity>_entry` (the existing TODO). `[—]`
+- I4b — dsl/reaction_span.rs (tree): `parse_<entity>_span_entry` over the shared entry parsers, `{:add|:modify|:remove}`-wrapped. `[I4a, I2c]`
+- I4c — dsl/reaction_span.rs (format): `render_<entity>_span_entry` over I4a, span-wrapped. `[I4a, I2c]`
+- I4d — dsl/reaction_span.rs (stream): streaming `read_*` for overlay span entries. `[I4b]`
+- I4e — dsl/reaction_span.rs (traits): extend `ReactionSpanDsl` `FromEdn`/`ToEdn`/`FromStr`/`Display` over overlays. `[I4b, I4c, I4d]`
+
+**I5 — structural entity refs (item 3)** `[I2c, I4]`
+- I5a — dsl: the uniform `<entity>-ref` structural-map variant + per-entity resolution by constituents (item 3); six of its seven forms are overlays and ride here. `[item 3]`
+
+**I6 — stereo deltas (the novel part)** `[I1, I2a]`
+- I6a — delta.rs: `StereoAtomDelta`/`StereoBondDelta` — membership `Add`/`Remove` plus relative ops `Permute`/`Mirror`/`Swap`; lower at apply to `SetStereoAtomField::Configuration{matched, perm·matched}` via the umol-perm coset algebra. `[I1b, I2a]`
+- I6b — umol-ast/ast: `TransformFrameStereoAtom`/`Bond` (#8) — coset action under a reindexing's induced ligand-frame permutation (deliberate frame op; self-inverting). `[I6a]`
+- I6c — reaction.rs / reaction_span.rs: stereo apply lowering + stereo span fold (columns already in I2c). `[I6a, I2a, I2c]`
+- I6d — dsl: stereo delta / relative-op surface. `[I4, I6a]`
+
+**I7 — standalone fragment diff** `[I2f]`
+- I7a — reaction_span.rs: lift `to_reaction`'s AST-diff into a standalone `diff(MoleculeAst, MoleculeAst, correspondence) -> Deltas` — the model-blind substrate for umol-graph de-aromatization (doc 131). `[I2f]`
+
+**Out of critical path:** item 4 (constraint-store uniqueness-by-key cleanup), item 5 (FromEdn streaming audit + parse-direction naming), and umol-graph `validate` enforcement of the no-parallel-overlay invariant (spec §4.1) — all independent.

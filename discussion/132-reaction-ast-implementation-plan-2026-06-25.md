@@ -6,9 +6,6 @@ doc-127 interim. Overlays + stereo + overlay composition (#7–#9) are **increme
 out of scope here. Molecules keep their overlays in `lhs` (unchanged, carried through);
 rules in this increment only add/remove/modify atoms, bonds, and constraints.
 
-**Reopened:** W1–W4 are done; **W5** (the `ReactionSpanAst → ReactionAst` inverse projection)
-adds a fifth localized-topology workstream, still open.
-
 Terminology: *topology* = atoms + **localized** bonds (single, double, triple); *overlays*
 are the **non-localized** entities (aromatic systems, dative, multicenter, noncovalent) plus
 stereo. The diff between topology and overlay is localization — that is the increment 1 /

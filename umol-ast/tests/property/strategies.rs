@@ -23,7 +23,7 @@ pub(crate) use umol_ast::ast::{
     NoncovalentBondKindAst, OrientedLigandPermutation, RelOp, RelationalConstraint, RingScope,
     SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomConstraints, StereoAtomId,
     StereoBondAst, StereoBondConstraint, StereoBondConstraints, StereoBondId,
-    StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigand, StereoLigandId,
+    StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigand, StereoLigandPosition,
     StereoLigandKind, StereoLigandPair, Stereogenicity, StereogenicityAst, SubPatternAnchor,
     TetrahedralStereoAst, Topicity, TopicityAst, TopicityRelationAst, ValueAst, ValuePredicate,
     ValueTerm,
@@ -762,7 +762,7 @@ pub(crate) fn mem_op_strategy() -> impl Strategy<Value = MemOp> {
 
 pub(crate) fn ligand_pair_strategy(degree: usize) -> impl Strategy<Value = StereoLigandPair> {
     (0..degree as u8, 0..degree as u8)
-        .prop_map(|(a, b)| StereoLigandPair::new(StereoLigandId(a), StereoLigandId(b)))
+        .prop_map(|(a, b)| StereoLigandPair::new(StereoLigandPosition(a), StereoLigandPosition(b)))
 }
 
 /// Non-vacuous topicity relations only (`Undetermined` elides on render, so it

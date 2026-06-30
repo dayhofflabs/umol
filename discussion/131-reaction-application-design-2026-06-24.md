@@ -813,9 +813,106 @@ overlay composition — **outstanding** (see §"Implementation status and outsta
 ### Open — increment 2 (design-then-plan, not blocking the first plan)
 
 - **#7 Overlay composition** — Add/Remove/Modify overlays + attribute changes under an
-  overlap; associativity (adhesive / attributed-DPO / SqPO / PBPO+).
+  overlap; associativity (adhesive / attributed-DPO / SqPO / PBPO+). **Semantics settled
+  (2026-06-29), below.**
 - **#8 Stereo `TransformFrame`** — induced frame permutation from a reindexing + virtual-
-  ligand (H / lone-pair) frames; coset action via umol-perm.
+  ligand (H / lone-pair) frames; coset action via umol-perm. **Now the frame-relative
+  attribute-coupling case of the single overlay path (#7), not separate machinery.**
+
+#### #7/#8 settled overlay-composition semantics
+
+The categorical skeleton (pushout / pushout-complement, the overlap product, associativity,
+unit) is inherited from the adhesive structure (Lack–Sobociński) and is **not** the novel
+part. The novelty is only that umol overlays are **attributed n-ary relations whose identity
+is a name and whose attributes are coupled to the participant multiset**. Three settled calls:
+
+1. **No parallel overlays — uniform structural identity.** No two overlays of a kind may share
+   the same constituents/roles, for **every** family including noncovalent (previously the one
+   exception; that exception is dropped — the clearer semantics outweigh the lost flexibility
+   of two different-kind interactions on one atom pair). Consequence: an overlay's structural
+   signature is a unique key, so correspondence "by id" and "by structure" coincide (bijective),
+   and `compose` — which *derives* the overlay correspondence from the base/incidence overlap
+   (no overlay map is given) — is unambiguous. Structural refs (doc 134 §3) are the surface
+   syntax for naming any overlay by its constituents. (Spec §4.1 must change to match: the
+   `:noncovalent-bonds` clause currently permits same-pair-different-kind parallels, and has no
+   `:multicenter-bonds` clause at all.)
+
+2. **No subsumption at the overlay level.** A top-level aromatic/multicenter system matches on
+   its `electrons` vector *whole* (electrons.rs: "compared whole, never cell-by-cell"), so a
+   3-member system never matches a 6-member one. The K-interface is therefore exact overlay
+   identity — there is no pattern-subobject vs identity-subobject tension. (Distinct from the
+   atom/bond-level aromatic *valence* projection, which does subsume — a different layer.)
+
+3. **Strict DPO for overlays — no implicit participant-set change.** An overlay incident to a
+   deleted participant that the rule does not also handle ⇒ the DPO dangling condition rejects
+   the match/overlap (the dangling check extends to overlay incidence). Deleting an aromatic
+   atom without reassigning the ring electrons *is* that dangling violation; "shrinking a 6π
+   system to 5e" is unrepresentable by construction. An overlay's participant set changes
+   **only** via an explicit overlay `Delta` (Remove-old + Add-new / Modify) authored by the
+   rule, which sets the new attribute itself. SqPO (auto-delete) is again rejected — it would
+   silently break electron balance, against umol's show-structure-explicitly stance. This
+   **dissolves the attribute-reassignment problem**: the only attribute-under-remap case left
+   is pure relabeling — a remap re-sorting an unordered factor must permute the positional
+   `electrons` vector (and transform the frame-relative stereo coset, #8) in lockstep. That is
+   mechanical, not a chemistry decision. (The mechanics — who computes the participant
+   permutation and who applies it — are settled in the reindex-mechanism section below.)
+
+**Model-dependent localization is not AST machinery.** Resolving a strict-DPO rejection (e.g.
+de-aromatize a ring to a Kekulé structure before removing an atom) is model-dependent
+(aromaticity perception) and lives in **umol-graph**, not the AST/DPO engine — which only
+rejects (dangling) until the host is localized. The enabling AST primitive is a **model-blind
+`diff(MoleculeAst, MoleculeAst, correspondence) -> Deltas`** (W5's `to_reaction` AST-diff
+generalized to a standalone fragment diff; inverse of `apply`). umol-graph computes
+`after = kekulize(before)` (identity correspondence — same nuclei) and calls `diff` to get the
+localization deltas, applied/composed ahead of the rule. CT framing: an entity/fragment is the
+**linear rule** `∅ ← ∅ → E` (creation) / `E ← ∅ → ∅` (deletion); the general backing is that an
+object is the colimit (iterated pushouts) of its elements. Factoring a net transform into
+(localize);(rewrite) is rule **decomposition** (the inverse of the composition product `*`).
+This creation rule is **not** umol's homoiconic molecule-as-rule: the latter is the **identity**
+`G ←G→ G` = `(lhs = G, ∅ deltas)` = an all-`Unchanged` span (a plain molecule map in the span
+DSL). `∅←∅→G` is the MØD bind-rule device, used only for apply-as-compose. De-aromatization is
+neither — it is `diff(aromatic_fragment, kekulé_fragment)`: a span with a `Removed` aromatic
+overlay plus `Modified` ring bonds / atom flags, projected to deltas.
+
+#### Reindex mechanism (the one new primitive)
+
+Two **orthogonal** concerns:
+- **graph-core** — a node/edge id remap induces a *within-relation participant reordering* iff
+  the factor is `Unordered` (arity-1 ⇒ `Ordered`≡`Unordered`, and is always declared `Ordered`)
+  **and** the relabel is non-monotonic. graph-core knows each factor's `FactorOrdering`, so it
+  computes the induced permutation with no `D` knowledge.
+- **umol-ast** — whether that reordering matters depends on whether `D` carries data aligned to
+  participant order. Only `VarRelationSet` does: aromatic / multicenter `electrons` (positional
+  vector). dative / noncovalent are safe (scalar `D`); **stereo is safe because its ligand factor
+  is `Ordered`** — decided: explicit ligand order stays (atom-id ordering is a headache, esp. with
+  virtual ligands), so no re-sort occurs. The coset *is* order-dependent but protected by storage;
+  its frame transform (#8) is a separate deliberate op via umol-perm, never on the remap path.
+
+So `reindex needed = (re-sort occurs) ∧ (data order-dependent)` ⇒ aromatic / multicenter only.
+
+**Two remappings, separate types** (they never coexist — removal from `Graph::remove`, general
+from compose — and share nothing but the name, so an enum/trait would force dispatch on a
+statically-known distinction and bundle methods valid for one case only):
+- **`RemovalRemapping`** (today's `Remapping`, renamed): monotonic compaction, `O(removed)`;
+  relation sets via `apply_removal_remapping(&RemovalRemapping) -> Self` — **never** reindexes
+  (monotonic ⇒ order preserved); data columns via the existing compaction (free fn over its
+  `map_node`).
+- **`Remapping`** (new, general): a **total** relabel (`Vec<NodeId>` / `Vec<EdgeId>`, no drops —
+  drops are `RemovalRemapping`'s job, so no `Vec<Option<…>>`); relation sets via
+  `apply_remapping(&Remapping) -> (Self, Vec<ParticipantPosition>)`, always returning the
+  per-relation participant permutation (the argsort it already performs; non-positional families
+  ignore it). `ParticipantPosition(u32)` is a **new** newtype — graph-core has no participant-
+  position type today (positions are implicit slice indices), so it is purely additive, surfacing
+  only on this return. `u32` is the project-wide index width (no mixed int widths, no participant
+  cap). umol-ast's `AromaticSystemAst` / `MulticenterBondAst::reindex(perm)` permutes `electrons`.
+  Naming: `Position` (not `Id`) marks a *frame-relative position within a relation*, vs the
+  global-unique container `Id`s (`NodeId`/`EdgeId`/`RelationId`); umol-ast's domain analog
+  `StereoLigandId` is renamed `StereoLigandPosition` (and widened `u8`→`u32`) to match (same
+  concept for the stereo ligand factor).
+
+The type split removes the `Option`, the with/without-reindex method pair, and any
+`Vec<Option<…>>`. `apply_*` are added **uniformly** across all five relation-set types (library
+completeness, not per-current-caller).
 - **#9 Saturation for iv** — congruence key (= #6), fixpoint detection, cost/extraction
   function + rule set (domain choices).
 

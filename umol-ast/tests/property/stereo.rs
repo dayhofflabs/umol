@@ -100,9 +100,9 @@ proptest! {
     /// `StereoLigandPair::new` normalizes to `first <= second` and is symmetric.
     #[test]
     fn test_ligand_pair_ast_normalization(a in 0u8..6, b in 0u8..6) {
-        let pair = StereoLigandPair::new(StereoLigandId(a), StereoLigandId(b));
+        let pair = StereoLigandPair::new(StereoLigandPosition(a), StereoLigandPosition(b));
         prop_assert!(pair.first().0 <= pair.second().0);
-        prop_assert_eq!(pair, StereoLigandPair::new(StereoLigandId(b), StereoLigandId(a)));
+        prop_assert_eq!(pair, StereoLigandPair::new(StereoLigandPosition(b), StereoLigandPosition(a)));
     }
 
     /// Concrete (non-lattice) literal `matches` is exactly equality.

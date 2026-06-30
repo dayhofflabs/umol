@@ -182,7 +182,9 @@ These rules apply **within** a single **molecule map**. **Constraints across** r
 
 **`:aromatic-systems`.** For every two distinct **`aromatic-system-entry`** values, the sets of keywords in their **`:atoms`** vectors **MUST** be disjoint. Aromatic systems **MUST NOT** share an atom.
 
-**`:noncovalent-bonds`.** A **`noncovalent-bond-entry`**'s two **`:atoms`** **MUST** be distinct (no self-loop). Entries **MAY** share atoms — e.g. a hydrogen bond and a van-der-Waals contact over the **same** pair coexist — but the list **MUST NOT** contain two entries with both the **same** unordered **`:atoms`** pair **and** the **same** kind (no duplicate).
+**`:multicenter-bonds`.** The list **MUST NOT** contain two **`multicenter-bond-entry`** values with the **same** set of **`:atoms`**. Entries **MAY** share atoms — an atom **MAY** participate in several multicenter bonds (e.g. a bridging boron) — but no two **MAY** have **identical** atom sets.
+
+**`:noncovalent-bonds`.** A **`noncovalent-bond-entry`**'s two **`:atoms`** **MUST** be distinct (no self-loop). The list **MUST NOT** contain two entries with the **same** unordered **`:atoms`** pair: **at most one** noncovalent interaction per atom pair, **regardless of kind**.
 
 **`:stereo-atoms` / `:stereo-bonds`.** The lists **MUST NOT** contain two **`stereo-atom-entry`** values with the same **`:site`** atom, nor two **`stereo-bond-entry`** values with the same **`:site`** bond. Each atom (resp. bond) **MUST** be the site of at most one stereo element.
 

@@ -73,7 +73,7 @@ pub use entity::{Entity, EntityKind};
 pub use error::{ApplyError, Contradiction};
 pub use id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-    StereoAtomId, StereoBondId, StereoLigandId,
+    StereoAtomId, StereoBondId, StereoLigandPosition,
 };
 pub use incidence::{IncidenceGraph, IncidenceNodeSelection};
 pub use ligand::{StereoLigand, StereoLigandKind};

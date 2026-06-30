@@ -8,7 +8,7 @@ use umol_perm::{space, Orientation, OrientedPermutation, OrientedPermutationGrou
 
 use super::coloring::MoleculeColoring;
 use super::entity::{Entity, EntityKind};
-use super::id::{AtomId, StereoAtomId, StereoBondId, StereoLigandId};
+use super::id::{AtomId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use super::incidence::{IncidenceGraph, IncidenceNodeSelection};
 use super::ligand::{StereoLigand, StereoLigandKind};
 use super::molecule::MoleculeAst;
@@ -418,7 +418,7 @@ impl StereoSymmetry {
     }
 
     /// The topicity relation between two ligand positions.
-    pub fn topicity(&self, a: StereoLigandId, b: StereoLigandId) -> Topicity {
+    pub fn topicity(&self, a: StereoLigandPosition, b: StereoLigandPosition) -> Topicity {
         if self.group.proper_orbit_of(a.index()).contains(&b.index()) {
             Topicity::Homotopic
         } else if self.group.star_orbit_of(a.index()).contains(&b.index()) {
@@ -432,7 +432,7 @@ impl StereoSymmetry {
         let degree = self.kind.degree();
         (0..degree).any(|a| {
             (a + 1..degree).any(|b| {
-                self.topicity(StereoLigandId(a as u8), StereoLigandId(b as u8))
+                self.topicity(StereoLigandPosition(a as u32), StereoLigandPosition(b as u32))
                     == Topicity::Enantiotopic
             })
         })
@@ -590,7 +590,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::coloring::ConstitutionColoring;
     use crate::ast::constraint::Constraints;
-    use crate::ast::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandId};
+    use crate::ast::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
     use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind};
 
     fn config() -> GraphSymmetryConfig<ConstitutionColoring> {
@@ -697,7 +697,7 @@ mod tests {
         assert!(stereo.is_stereogenic());
         // Four distinct ligands ⇒ no local symmetry ⇒ pairwise diastereotopic.
         assert_eq!(
-            stereo.topicity(StereoLigandId(0), StereoLigandId(1)),
+            stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(1)),
             Topicity::Diastereotopic
         );
     }
@@ -722,11 +722,11 @@ mod tests {
         // Two identical Cl ⇒ prochiral, not a genuine stereocenter.
         assert!(!stereo.is_stereogenic());
         assert_eq!(
-            stereo.topicity(StereoLigandId(0), StereoLigandId(1)),
+            stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(1)),
             Topicity::Enantiotopic
         ); // the two Cl
         assert_eq!(
-            stereo.topicity(StereoLigandId(0), StereoLigandId(2)),
+            stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(2)),
             Topicity::Diastereotopic
         ); // Cl vs F
     }
@@ -771,7 +771,7 @@ mod tests {
         let stereo = mol.stereo_bond_symmetry(&gs, StereoBondId(0));
         assert!(stereo.is_stereogenic());
         assert_eq!(
-            stereo.topicity(StereoLigandId(0), StereoLigandId(1)),
+            stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(1)),
             Topicity::Diastereotopic
         ); // F vs Cl on C0
     }

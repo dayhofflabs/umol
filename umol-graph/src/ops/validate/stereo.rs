@@ -251,7 +251,7 @@ mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
         LigandPermutation, OrientedLigandPermutation, StereoAtomConstraint, StereoBondConstraint,
-        StereoConfigurationAst, StereoKind, StereoLigandId, StereogenicityAst,
+        StereoConfigurationAst, StereoKind, StereoLigandPosition, StereogenicityAst,
     };
     use umol_ast::mol_ground;
     use umol_perm::{Orientation, Permutation};
@@ -343,12 +343,12 @@ mod tests {
             ast.stereo_atom_mut(StereoAtomId(0))
                 .constraints
                 .add(StereoAtomConstraint::Topicity(TopicityAst {
-                    pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)),
+                    pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
                     relation: TopicityRelationAst::Lit(Topicity::Homotopic),
                 }));
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::TopicityMismatch {
-            pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)),
+            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
             asserted: TopicityRelationAst::Lit(Topicity::Homotopic),
             derived: Topicity::Diastereotopic,
         }

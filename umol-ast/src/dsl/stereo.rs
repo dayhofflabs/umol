@@ -25,7 +25,7 @@ use crate::ast::constraint::{
     StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
     StereoLigandPair, StereogenicityAst, TopicityAst, TopicityRelationAst,
 };
-use crate::ast::id::StereoLigandId;
+use crate::ast::id::StereoLigandPosition;
 use crate::ast::operators::MemOp;
 use crate::ast::stereo::{
     CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst,
@@ -509,8 +509,8 @@ fn ligand_pair(i: &mut &str) -> PResult<StereoLigandPair> {
     let (a, b) =
         delimited('(', separated_pair(cycle_point, ',', cycle_point), ')').parse_next(i)?;
     Ok(StereoLigandPair::new(
-        StereoLigandId(a as u8),
-        StereoLigandId(b as u8),
+        StereoLigandPosition(a as u32),
+        StereoLigandPosition(b as u32),
     ))
 }
 
@@ -1142,7 +1142,7 @@ impl<'de> FromEdn<'de> for TopicityDsl {
                 "topicity pair must have 2 positions".into(),
             ));
         }
-        let position = |e: &Edn| -> Result<StereoLigandId, DeError> {
+        let position = |e: &Edn| -> Result<StereoLigandPosition, DeError> {
             let Edn::Int(n) = e else {
                 return Err(DeError::TypeMismatch {
                     expected: "int (ligand position)",
@@ -1150,12 +1150,12 @@ impl<'de> FromEdn<'de> for TopicityDsl {
                     path: vec!["topicity".into()],
                 });
             };
-            let v = u8::try_from(*n).map_err(|_| DeError::OutOfRange {
+            let v = u32::try_from(*n).map_err(|_| DeError::OutOfRange {
                 value: n.to_string(),
                 target: "ligand position",
                 path: Vec::new(),
             })?;
-            Ok(StereoLigandId(v))
+            Ok(StereoLigandPosition(v))
         };
         let pair = StereoLigandPair::new(position(&p[0])?, position(&p[1])?);
         Ok(Self(TopicityAst {
@@ -1664,9 +1664,9 @@ mod tests {
             permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_cycles(4, &[vec![0, 1, 2]])), orientation: Orientation::Proper },
             member: MemOp::In }))]
     #[case::topicity_negated("Th1#o!'(0,1)",
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Enantiotopic])) }))]
+        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Enantiotopic])) }))]
     #[case::topicity_open("Th1#o*(0,1)",
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), relation: TopicityRelationAst::Undetermined }))]
+        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined }))]
     #[case::stereogenicity("Th1#g/",
         StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)))]
     fn test_stereo_atom_predicate(#[case] input: &str, #[case] expected: StereoAtomConstraint) {
@@ -1977,20 +1977,20 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }), "{:pair [0 1] :relation :homotopic}")]
-    #[case::undetermined(TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), relation: TopicityRelationAst::Undetermined }), "{:pair [0 1] :relation :undetermined}")]
-    #[case::lit_set(TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(1), StereoLigandId(2)), relation: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }), "{:pair [1 2] :relation [:homotopic :enantiotopic]}")]
-    #[case::not_set(TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(1), StereoLigandId(2)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }), "{:pair [1 2] :relation [:diastereotopic] :member :not-in}")]
+    #[case::lit(TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }), "{:pair [0 1] :relation :homotopic}")]
+    #[case::undetermined(TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined }), "{:pair [0 1] :relation :undetermined}")]
+    #[case::lit_set(TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(1), StereoLigandPosition(2)), relation: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }), "{:pair [1 2] :relation [:homotopic :enantiotopic]}")]
+    #[case::not_set(TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(1), StereoLigandPosition(2)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }), "{:pair [1 2] :relation [:diastereotopic] :member :not-in}")]
     fn test_topicity_dsl_to_edn(#[case] form: TopicityDsl, #[case] expected: &str) {
         assert_eq!(form.to_edn(), read_string(expected).unwrap());
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit("{:pair [0 1] :relation :homotopic}", TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }))]
-    #[case::undetermined("{:pair [0 1] :relation :undetermined}", TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), relation: TopicityRelationAst::Undetermined }))]
-    #[case::lit_set("{:pair [1 2] :relation [:homotopic :enantiotopic]}", TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(1), StereoLigandId(2)), relation: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
-    #[case::not_set("{:pair [1 2] :relation [:diastereotopic] :member :not-in}", TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(1), StereoLigandId(2)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }))]
+    #[case::lit("{:pair [0 1] :relation :homotopic}", TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }))]
+    #[case::undetermined("{:pair [0 1] :relation :undetermined}", TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined }))]
+    #[case::lit_set("{:pair [1 2] :relation [:homotopic :enantiotopic]}", TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(1), StereoLigandPosition(2)), relation: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
+    #[case::not_set("{:pair [1 2] :relation [:diastereotopic] :member :not-in}", TopicityDsl(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(1), StereoLigandPosition(2)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }))]
     fn test_topicity_dsl_from_edn(#[case] input: &str, #[case] expected: TopicityDsl) {
         assert_eq!(TopicityDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
     }

@@ -1,16 +1,14 @@
-//! Relation sets: N-ary relations over typed participants (`RelationParticipant`
-//! — a `NodeId` or `EdgeId`), each carrying a shared union incidence index (a
-//! node index and an edge index) routed from every participant's `refs()`.
-//!
+//! Relation sets: N-ary relations over typed participants (`NodeId`, `EdgeId`,
+//! or external type implementing `RelationParticipant`), each carrying a shared
+//! union incidence index (a node index and an edge index) routed from every
+//! participant's `refs()`.
 //! `FixedRelationSet<P, O, D, N>` stores relations of compile-time-known arity,
-//! `VarRelationSet<P, O, D>` stores variable-arity relations.
-//! Participants are typed `P` (`RelationParticipant`);
-//! the factor ordering `O` (`Unordered`/`Ordered`) controls canonicalization.
-//!
-//! `FixedFixedBirelationSet`, `FixedVarBirelationSet`, and `VarVarBirelationSet`
-//! relate two factors, each with its own participant type, ordering, and arity.
-//! The union incidence spans both factors, so a relation is reachable from any
-//! of its participants regardless of id-space.
+//! `VarRelationSet<P, O, D>` stores variable-arity relations. Participants are
+//! typed `P` (`RelationParticipant`); the factor ordering `O` (`Unordered`/`Ordered`)
+//! controls canonicalization. `FixedFixedBirelationSet`, `FixedVarBirelationSet`,
+//! and `VarVarBirelationSet` relate two factors, each with its own participant
+//! type, ordering, and arity. The union incidence spans both factors, so a relation
+//! is reachable from any of its participants regardless of id-space.
 
 use std::hash::Hash;
 use std::marker::PhantomData;

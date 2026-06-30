@@ -40,7 +40,7 @@ use crate::ast::constraint::{
     OrientedLigandPermutation, RingMembershipAst, RingScope, StereoAtomConstraint,
     StereoBondConstraint, StereoLigandPair, StereogenicityAst, SubPatternAnchor, TopicityAst,
 };
-use crate::ast::id::{AtomId, BondId, StereoLigandId};
+use crate::ast::id::{AtomId, BondId, StereoLigandPosition};
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::operators::MemOp;
 use crate::ast::spin::SpinStateAst;
@@ -655,8 +655,8 @@ fn read_topicity(de: &mut EdnStreamDeserializer<'_>) -> Result<TopicityAst, EdnE
                     DeError::Custom("topicity :pair must have 2 positions".to_string())
                 })?;
                 pair = Some(StereoLigandPair::new(
-                    StereoLigandId(a as u8),
-                    StereoLigandId(b as u8),
+                    StereoLigandPosition(a as u32),
+                    StereoLigandPosition(b as u32),
                 ));
             }
             "relation" => value = Some(read_relation_value(de)?),
@@ -2285,7 +2285,7 @@ mod tests {
     #[case::topicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Octahedral,
             StereoAtomConstraint::Topicity(TopicityAst {
-                pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)),
+                pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
                 relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
         "{:stereo-atom [0 [:octahedral {:topicity {:pair [0 1] :relation :enantiotopic}}]]}")]
     #[case::stereogenicity(

@@ -659,7 +659,7 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   created-atom-as-bond-endpoint, molecule constraint, entity-leaf constraint).
 - *Checkpoint (tested):* full round-trip. **Done.**
 
-**R11 — Spec** [R10]:
+**R11 — Spec** [R10]: **Done**
 - R11a — **Done.** New normative **§8 Reaction map** in `umol-dsl-spec.md`: `reaction-map`/`delta`/
   `atom-delta`/`bond-delta`/`constraint-delta` grammar + normative paras (reference frames lhs vs
   lhs∪created, no-forward-refs, create-vs-edit, `:modify` partial w/ `#tag*` removal + coalescing,
