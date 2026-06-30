@@ -59,6 +59,10 @@ impl ReactionAst {
         let mut remove_bonds: Vec<BondRef> = Vec::new();
         let mut removed_host_atoms: Vec<AtomId> = Vec::new();
         let mut removed_host_bonds: HashSet<BondId> = HashSet::new();
+        let mut removed_host_dative: HashSet<DativeBondId> = HashSet::new();
+        let mut removed_host_aromatic: HashSet<AromaticSystemId> = HashSet::new();
+        let mut removed_host_multicenter: HashSet<MulticenterBondId> = HashSet::new();
+        let mut removed_host_noncovalent: HashSet<NoncovalentBondId> = HashSet::new();
         let mut constraint_deltas: Vec<ConstraintDelta> = Vec::new();
 
         for delta in deltas.iter() {
@@ -119,7 +123,10 @@ impl ReactionAst {
                             new: new.clone(),
                         })
                     }
-                    DativeBondDelta::Add { .. } | DativeBondDelta::Remove { .. } => {}
+                    DativeBondDelta::Add { .. } => {}
+                    DativeBondDelta::Remove { id, .. } => {
+                        removed_host_dative.insert(m.host_dative_bond(*id));
+                    }
                 },
                 Delta::AromaticSystem(a) => match a {
                     AromaticSystemDelta::ModifyField { id, change } => {
@@ -135,7 +142,10 @@ impl ReactionAst {
                             new: new.clone(),
                         })
                     }
-                    AromaticSystemDelta::Add { .. } | AromaticSystemDelta::Remove { .. } => {}
+                    AromaticSystemDelta::Add { .. } => {}
+                    AromaticSystemDelta::Remove { id, .. } => {
+                        removed_host_aromatic.insert(m.host_aromatic_system(*id));
+                    }
                 },
                 Delta::MulticenterBond(mc) => match mc {
                     MulticenterBondDelta::ModifyField { id, change } => {
@@ -151,7 +161,10 @@ impl ReactionAst {
                             new: new.clone(),
                         })
                     }
-                    MulticenterBondDelta::Add { .. } | MulticenterBondDelta::Remove { .. } => {}
+                    MulticenterBondDelta::Add { .. } => {}
+                    MulticenterBondDelta::Remove { id, .. } => {
+                        removed_host_multicenter.insert(m.host_multicenter_bond(*id));
+                    }
                 },
                 Delta::NoncovalentBond(nc) => match nc {
                     NoncovalentBondDelta::ModifyField { id, change } => {
@@ -162,16 +175,41 @@ impl ReactionAst {
                     }
                     // `NoncovalentBondConstraint` is uninhabited — no `Edit` variant, no-op.
                     NoncovalentBondDelta::ModifyConstraint { .. } => {}
-                    NoncovalentBondDelta::Add { .. } | NoncovalentBondDelta::Remove { .. } => {}
+                    NoncovalentBondDelta::Add { .. } => {}
+                    NoncovalentBondDelta::Remove { id, .. } => {
+                        removed_host_noncovalent.insert(m.host_noncovalent_bond(*id));
+                    }
                 },
                 Delta::Constraint(c) => constraint_deltas.push(c.clone()),
             }
         }
 
-        // DPO gluing condition: a deleted host atom keeps no bond the rule does not delete.
+        // DPO gluing condition: a deleted host atom keeps no bond or overlay the rule does not
+        // also delete. (Stereo incidence is deferred to I6c, with stereo deltas.)
         for &host_atom in &removed_host_atoms {
-            for bond in host.atom(host_atom).bond_ids() {
+            let atom = host.atom(host_atom);
+            for bond in atom.bond_ids() {
                 if !removed_host_bonds.contains(&bond) {
+                    return Err(ApplyError::Dangling { host_atom });
+                }
+            }
+            for dative in atom.dative_bond_ids() {
+                if !removed_host_dative.contains(&dative) {
+                    return Err(ApplyError::Dangling { host_atom });
+                }
+            }
+            if let Some(aromatic) = atom.aromatic_system_id() {
+                if !removed_host_aromatic.contains(&aromatic) {
+                    return Err(ApplyError::Dangling { host_atom });
+                }
+            }
+            for multicenter in atom.multicenter_bond_ids() {
+                if !removed_host_multicenter.contains(&multicenter) {
+                    return Err(ApplyError::Dangling { host_atom });
+                }
+            }
+            for noncovalent in atom.noncovalent_bond_ids() {
+                if !removed_host_noncovalent.contains(&noncovalent) {
                     return Err(ApplyError::Dangling { host_atom });
                 }
             }
@@ -394,6 +432,7 @@ mod tests {
 
     use super::super::constraint::{Constraint, Constraints, MoleculeConstraint};
     use super::super::edit::{AtomFieldChange, BondFieldChange};
+    use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use super::super::value::ValueAst;
     use super::*;
 
@@ -504,6 +543,107 @@ mod tests {
             Err(ApplyError::Dangling {
                 host_atom: AtomId(0),
             }),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_ast_apply_at_overlay_dangling() {
+        // Removing an atom that is an endpoint of a host noncovalent bond the rule does not also
+        // remove violates the DPO gluing condition → `Dangling`.
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::O)], vec![]),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                ast: AtomAst::from_element(Element::O),
+            })]),
+        );
+        let host = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::O),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![(
+                AtomId(0),
+                AtomId(1),
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            vec![],
+            vec![],
+            Constraints::new(),
+        );
+        let embedding = MoleculeEmbedding::from_match(
+            &host,
+            &reaction.lhs,
+            vec![AtomId(0)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+        assert_eq!(
+            reaction.apply_at(&embedding),
+            Err(ApplyError::Dangling {
+                host_atom: AtomId(0),
+            }),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_ast_apply_at_overlay_removed_not_dangling() {
+        // The same removal, but the rule also removes the noncovalent bond → no dangle; the atom
+        // and the bond go, leaving the other atom.
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_parts(
+                vec![
+                    AtomAst::from_element(Element::O),
+                    AtomAst::from_element(Element::O),
+                ],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![(
+                    AtomId(0),
+                    AtomId(1),
+                    NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                )],
+                vec![],
+                vec![],
+                Constraints::new(),
+            ),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Remove {
+                    id: AtomId(0),
+                    ast: AtomAst::from_element(Element::O),
+                }),
+                Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
+                    id: NoncovalentBondId(0),
+                    atoms: [AtomId(0), AtomId(1)],
+                    ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                }),
+            ]),
+        );
+        let host = reaction.lhs.clone();
+        let embedding = MoleculeEmbedding::from_match(
+            &host,
+            &reaction.lhs,
+            vec![AtomId(0), AtomId(1)],
+            vec![],
+            vec![],
+            vec![],
+            vec![NoncovalentBondId(0)],
+            vec![],
+            vec![],
+        );
+        assert_eq!(
+            reaction.apply_at(&embedding).unwrap(),
+            MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::O)], vec![]),
         );
     }
 
