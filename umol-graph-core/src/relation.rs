@@ -40,6 +40,9 @@ impl ParticipantPosition {
 /// is the datum); `Ordered` preserves input order (position is the datum).
 pub trait FactorOrdering {
     fn canonicalize<P: Ord>(participants: &mut [P]);
+    /// Canonicalize `participants` in place and return the position permutation
+    /// `σ`: the new position `i` holds the participant from old position `σ[i]`.
+    fn canonicalize_positions<P: Ord + Copy>(participants: &mut [P]) -> Vec<ParticipantPosition>;
 }
 
 /// Set-valued factor: participants are canonicalized by sorting.
@@ -54,10 +57,27 @@ impl FactorOrdering for Unordered {
     fn canonicalize<P: Ord>(participants: &mut [P]) {
         participants.sort_unstable();
     }
+
+    fn canonicalize_positions<P: Ord + Copy>(participants: &mut [P]) -> Vec<ParticipantPosition> {
+        let mut order: Vec<usize> = (0..participants.len()).collect();
+        order.sort_by(|&a, &b| participants[a].cmp(&participants[b]));
+        let sorted: Vec<P> = order.iter().map(|&i| participants[i]).collect();
+        participants.copy_from_slice(&sorted);
+        order
+            .into_iter()
+            .map(|i| ParticipantPosition(i as u32))
+            .collect()
+    }
 }
 
 impl FactorOrdering for Ordered {
     fn canonicalize<P: Ord>(_participants: &mut [P]) {}
+
+    fn canonicalize_positions<P: Ord + Copy>(participants: &mut [P]) -> Vec<ParticipantPosition> {
+        (0..participants.len() as u32)
+            .map(ParticipantPosition)
+            .collect()
+    }
 }
 
 /// The id-space contents of a participant, surfaced for the incidence index.
@@ -217,6 +237,22 @@ impl<P: PartialEq, O, D: PartialEq, const N: usize> PartialEq for FixedRelationS
 
 impl<P: Eq, O, D: Eq, const N: usize> Eq for FixedRelationSet<P, O, D, N> {}
 
+/// Relabel a factor's participants through a general `Remapping` and re-canonicalize,
+/// returning the new participants and the position permutation `σ` (`σ[new] = old`).
+/// Total — no participant is dropped.
+fn remap_factor<P, O>(
+    participants: &[P],
+    remapping: &Remapping,
+) -> (Vec<P>, Vec<ParticipantPosition>)
+where
+    P: RelationParticipant,
+    O: FactorOrdering,
+{
+    let mut relabeled: Vec<P> = participants.iter().map(|&p| p.remap(remapping)).collect();
+    let positions = O::canonicalize_positions(&mut relabeled);
+    (relabeled, positions)
+}
+
 impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelationSet<P, O, D, N> {
     pub fn new(entries: Vec<([P; N], D)>) -> Self {
         let mut participants = Vec::with_capacity(entries.len());
@@ -300,6 +336,25 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
             })
             .collect();
         Self::new(entries)
+    }
+
+    pub fn apply_remapping(&self, remapping: &Remapping) -> (Self, Vec<ParticipantPosition>)
+    where
+        D: Clone,
+    {
+        let mut positions = Vec::new();
+        let entries: Vec<([P; N], D)> = (0..self.relation_count())
+            .map(|i| {
+                let rid = RelationId(i as u32);
+                let (sorted, sigma) = remap_factor::<P, O>(self.participants(rid), remapping);
+                positions.extend(sigma);
+                let parts: [P; N] = sorted
+                    .try_into()
+                    .unwrap_or_else(|_| unreachable!("factor arity preserved"));
+                (parts, self.data(rid).clone())
+            })
+            .collect();
+        (Self::new(entries), positions)
     }
 }
 
@@ -433,6 +488,22 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
             })
             .collect();
         Self::new(entries)
+    }
+
+    pub fn apply_remapping(&self, remapping: &Remapping) -> (Self, Vec<ParticipantPosition>)
+    where
+        D: Clone,
+    {
+        let mut positions = Vec::new();
+        let entries: Vec<(Vec<P>, D)> = (0..self.relation_count())
+            .map(|i| {
+                let rid = RelationId(i as u32);
+                let (sorted, sigma) = remap_factor::<P, O>(self.participants(rid), remapping);
+                positions.extend(sigma);
+                (sorted, self.data(rid).clone())
+            })
+            .collect();
+        (Self::new(entries), positions)
     }
 }
 
@@ -585,6 +656,34 @@ where
             })
             .collect();
         Self::new(entries)
+    }
+
+    pub fn apply_remapping(
+        &self,
+        remapping: &Remapping,
+    ) -> (Self, Vec<ParticipantPosition>, Vec<ParticipantPosition>)
+    where
+        D: Clone,
+    {
+        let mut positions_1 = Vec::new();
+        let mut positions_2 = Vec::new();
+        let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.relation_count())
+            .map(|i| {
+                let rid = RelationId(i as u32);
+                let (s1, sigma1) = remap_factor::<L1, O1>(self.participants_1(rid), remapping);
+                let (s2, sigma2) = remap_factor::<L2, O2>(self.participants_2(rid), remapping);
+                positions_1.extend(sigma1);
+                positions_2.extend(sigma2);
+                let f1: [L1; N1] = s1
+                    .try_into()
+                    .unwrap_or_else(|_| unreachable!("factor arity preserved"));
+                let f2: [L2; N2] = s2
+                    .try_into()
+                    .unwrap_or_else(|_| unreachable!("factor arity preserved"));
+                (f1, f2, self.data(rid).clone())
+            })
+            .collect();
+        (Self::new(entries), positions_1, positions_2)
     }
 }
 
@@ -746,6 +845,31 @@ where
             })
             .collect();
         Self::new(entries)
+    }
+
+    pub fn apply_remapping(
+        &self,
+        remapping: &Remapping,
+    ) -> (Self, Vec<ParticipantPosition>, Vec<ParticipantPosition>)
+    where
+        D: Clone,
+    {
+        let mut positions_1 = Vec::new();
+        let mut positions_2 = Vec::new();
+        let entries: Vec<([L1; N1], Vec<L2>, D)> = (0..self.relation_count())
+            .map(|i| {
+                let rid = RelationId(i as u32);
+                let (s1, sigma1) = remap_factor::<L1, O1>(self.participants_1(rid), remapping);
+                let (s2, sigma2) = remap_factor::<L2, O2>(self.participants_2(rid), remapping);
+                positions_1.extend(sigma1);
+                positions_2.extend(sigma2);
+                let f1: [L1; N1] = s1
+                    .try_into()
+                    .unwrap_or_else(|_| unreachable!("factor arity preserved"));
+                (f1, s2, self.data(rid).clone())
+            })
+            .collect();
+        (Self::new(entries), positions_1, positions_2)
     }
 }
 
@@ -914,6 +1038,28 @@ where
             })
             .collect();
         Self::new(entries)
+    }
+
+    pub fn apply_remapping(
+        &self,
+        remapping: &Remapping,
+    ) -> (Self, Vec<ParticipantPosition>, Vec<ParticipantPosition>)
+    where
+        D: Clone,
+    {
+        let mut positions_1 = Vec::new();
+        let mut positions_2 = Vec::new();
+        let entries: Vec<(Vec<L1>, Vec<L2>, D)> = (0..self.relation_count())
+            .map(|i| {
+                let rid = RelationId(i as u32);
+                let (s1, sigma1) = remap_factor::<L1, O1>(self.participants_1(rid), remapping);
+                let (s2, sigma2) = remap_factor::<L2, O2>(self.participants_2(rid), remapping);
+                positions_1.extend(sigma1);
+                positions_2.extend(sigma2);
+                (s1, s2, self.data(rid).clone())
+            })
+            .collect();
+        (Self::new(entries), positions_1, positions_2)
     }
 }
 
@@ -1099,7 +1245,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_relation_set_apply_remapping() {
+    fn test_fixed_relation_set_apply_removal_remapping() {
         let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
             FixedRelationSet::new(vec![([n(0), n(2)], "keep"), ([n(1), n(3)], "drop")]);
         let remapping = RemovalRemapping::new(vec![1], vec![]);
@@ -1107,6 +1253,21 @@ mod tests {
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
+    }
+
+    #[rstest]
+    fn test_fixed_relation_set_apply_remapping() {
+        // swap the pair: [0,1] relabeled to [1,0], re-sorted to [0,1]; σ = [1,0]
+        let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
+            FixedRelationSet::new(vec![([n(0), n(1)], "x")]);
+        let remapping = Remapping::new(vec![n(1), n(0)], vec![]);
+        let (out, positions) = rs.apply_remapping(&remapping);
+        assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
+        assert_eq!(out.data(RelationId(0)), &"x");
+        assert_eq!(
+            positions,
+            vec![ParticipantPosition(1), ParticipantPosition(0)]
+        );
     }
 
     #[rstest]
@@ -1228,7 +1389,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_var_relation_set_apply_remapping() {
+    fn test_var_relation_set_apply_removal_remapping() {
         let rs: VarRelationSet<NodeId, Unordered, &str> = VarRelationSet::new(vec![
             (vec![n(0), n(2), n(4)], "keep"),
             (vec![n(1), n(3)], "drop"),
@@ -1238,6 +1399,25 @@ mod tests {
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
+    }
+
+    #[rstest]
+    fn test_var_relation_set_apply_remapping() {
+        // relabel 0→2, 1→0, 2→1: [0,1,2] relabeled to [2,0,1], re-sorted to [0,1,2]; σ = [1,2,0]
+        let rs: VarRelationSet<NodeId, Unordered, &str> =
+            VarRelationSet::new(vec![(vec![n(0), n(1), n(2)], "x")]);
+        let remapping = Remapping::new(vec![n(2), n(0), n(1)], vec![]);
+        let (out, positions) = rs.apply_remapping(&remapping);
+        assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(2)]);
+        assert_eq!(out.data(RelationId(0)), &"x");
+        assert_eq!(
+            positions,
+            vec![
+                ParticipantPosition(1),
+                ParticipantPosition(2),
+                ParticipantPosition(0)
+            ]
+        );
     }
 
     #[rstest]
@@ -1305,7 +1485,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_fixed_birelation_set_apply_remapping() {
+    fn test_fixed_fixed_birelation_set_apply_removal_remapping() {
         // dropped relation loses a factor-1 participant
         let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 2, &str> =
             FixedFixedBirelationSet::new(vec![
@@ -1318,6 +1498,19 @@ mod tests {
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_apply_remapping() {
+        // factor-1 [0,1] swaps (σ₁ = [1,0]); factor-2 [2] is fixed (σ₂ = [0])
+        let rs: FixedFixedBirelationSet<NodeId, Unordered, 2, NodeId, Unordered, 1, &str> =
+            FixedFixedBirelationSet::new(vec![([n(0), n(1)], [n(2)], "x")]);
+        let remapping = Remapping::new(vec![n(1), n(0), n(2)], vec![]);
+        let (out, p1, p2) = rs.apply_remapping(&remapping);
+        assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
+        assert_eq!(out.participants_2(RelationId(0)), &[n(2)]);
+        assert_eq!(p1, vec![ParticipantPosition(1), ParticipantPosition(0)]);
+        assert_eq!(p2, vec![ParticipantPosition(0)]);
     }
 
     #[rstest]
@@ -1393,7 +1586,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_var_birelation_set_apply_remapping() {
+    fn test_fixed_var_birelation_set_apply_removal_remapping() {
         let rs: FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Ordered, &str> =
             FixedVarBirelationSet::new(vec![
                 ([n(0)], vec![n(2), n(4)], "keep"),
@@ -1405,6 +1598,19 @@ mod tests {
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
+    }
+
+    #[rstest]
+    fn test_fixed_var_birelation_set_apply_remapping() {
+        // factor-1 [0] fixed (σ₁ = [0]); factor-2 [1,2] relabeled to [3,1], re-sorted to [1,3] (σ₂ = [1,0])
+        let rs: FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, &str> =
+            FixedVarBirelationSet::new(vec![([n(0)], vec![n(1), n(2)], "x")]);
+        let remapping = Remapping::new(vec![n(0), n(3), n(1)], vec![]);
+        let (out, p1, p2) = rs.apply_remapping(&remapping);
+        assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
+        assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
+        assert_eq!(p1, vec![ParticipantPosition(0)]);
+        assert_eq!(p2, vec![ParticipantPosition(1), ParticipantPosition(0)]);
     }
 
     #[rstest]
@@ -1478,7 +1684,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_var_var_birelation_set_apply_remapping() {
+    fn test_var_var_birelation_set_apply_removal_remapping() {
         // dropped relation loses a factor-2 participant
         let rs: VarVarBirelationSet<NodeId, Unordered, NodeId, Unordered, &str> =
             VarVarBirelationSet::new(vec![
@@ -1491,6 +1697,19 @@ mod tests {
         assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
+    }
+
+    #[rstest]
+    fn test_var_var_birelation_set_apply_remapping() {
+        // both factors swap: factor-1 [0,1]→[1,0]→[0,1] (σ₁ = [1,0]); factor-2 [2,3]→[3,2]→[2,3] (σ₂ = [1,0])
+        let rs: VarVarBirelationSet<NodeId, Unordered, NodeId, Unordered, &str> =
+            VarVarBirelationSet::new(vec![(vec![n(0), n(1)], vec![n(2), n(3)], "x")]);
+        let remapping = Remapping::new(vec![n(1), n(0), n(3), n(2)], vec![]);
+        let (out, p1, p2) = rs.apply_remapping(&remapping);
+        assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
+        assert_eq!(out.participants_2(RelationId(0)), &[n(2), n(3)]);
+        assert_eq!(p1, vec![ParticipantPosition(1), ParticipantPosition(0)]);
+        assert_eq!(p2, vec![ParticipantPosition(1), ParticipantPosition(0)]);
     }
 
     #[rstest]
