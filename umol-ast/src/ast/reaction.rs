@@ -463,187 +463,126 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_apply_at() {
-        let reaction = ReactionAst::new(
+    #[case::bond_order(
+        ReactionAst::new(
             MoleculeAst::from_atoms_and_bonds(
-                vec![
-                    AtomAst::from_element(Element::C),
-                    AtomAst::from_element(Element::O),
-                ],
+                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order {
-                    old: ValueAst::Lit(1),
-                    new: ValueAst::Lit(2),
-                },
+                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
-        );
-        let host = MoleculeAst::from_atoms_and_bonds(
-            vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::O),
-            ],
+        ),
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
             vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        );
-        let embedding = MoleculeEmbedding::from_match(
-            &host,
-            &reaction.lhs,
-            vec![AtomId(0), AtomId(1)],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        );
-        assert_eq!(
-            reaction.apply_at(&embedding).unwrap(),
-            MoleculeAst::from_atoms_and_bonds(
-                vec![
-                    AtomAst::from_element(Element::C),
-                    AtomAst::from_element(Element::O),
-                ],
-                vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
-            ),
-        );
-    }
-
-    #[rstest]
-    fn test_reaction_ast_apply_at_error() {
-        // The rule deletes a lone atom; its host image still carries an undeleted bond → dangling.
-        let reaction = ReactionAst::new(
-            MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], vec![]),
-            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
-                id: AtomId(0),
-                ast: AtomAst::from_element(Element::C),
-            })]),
-        );
-        let host = MoleculeAst::from_atoms_and_bonds(
-            vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::O),
-            ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        );
-        let embedding = MoleculeEmbedding::from_match(
-            &host,
-            &reaction.lhs,
-            vec![AtomId(0)],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        );
-        assert_eq!(
-            reaction.apply_at(&embedding),
-            Err(ApplyError::Dangling {
-                host_atom: AtomId(0),
-            }),
-        );
-    }
-
-    #[rstest]
-    fn test_reaction_ast_apply_at_overlay_dangling() {
-        // Removing an atom that is an endpoint of a host noncovalent bond the rule does not also
-        // remove violates the DPO gluing condition → `Dangling`.
-        let reaction = ReactionAst::new(
-            MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::O)], vec![]),
-            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
-                id: AtomId(0),
-                ast: AtomAst::from_element(Element::O),
-            })]),
-        );
-        let host = MoleculeAst::from_parts(
-            vec![
-                AtomAst::from_element(Element::O),
-                AtomAst::from_element(Element::O),
-            ],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![(
-                AtomId(0),
-                AtomId(1),
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
-            )],
-            vec![],
-            vec![],
-            Constraints::new(),
-        );
-        let embedding = MoleculeEmbedding::from_match(
-            &host,
-            &reaction.lhs,
-            vec![AtomId(0)],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        );
-        assert_eq!(
-            reaction.apply_at(&embedding),
-            Err(ApplyError::Dangling {
-                host_atom: AtomId(0),
-            }),
-        );
-    }
-
-    #[rstest]
-    fn test_reaction_ast_apply_at_overlay_removed_not_dangling() {
-        // The same removal, but the rule also removes the noncovalent bond → no dangle; the atom
-        // and the bond go, leaving the other atom.
-        let reaction = ReactionAst::new(
+        ),
+        vec![AtomId(0), AtomId(1)],
+        vec![],
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+        ),
+    )]
+    #[case::overlay_removed(
+        ReactionAst::new(
             MoleculeAst::from_parts(
-                vec![
-                    AtomAst::from_element(Element::O),
-                    AtomAst::from_element(Element::O),
-                ],
-                vec![],
-                vec![],
-                vec![],
-                vec![],
-                vec![(
-                    AtomId(0),
-                    AtomId(1),
-                    NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
-                )],
-                vec![],
-                vec![],
+                vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+                vec![], vec![], vec![], vec![],
+                vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+                vec![], vec![],
                 Constraints::new(),
             ),
             Deltas::from_iter([
-                Delta::Atom(AtomDelta::Remove {
-                    id: AtomId(0),
-                    ast: AtomAst::from_element(Element::O),
-                }),
+                Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomAst::from_element(Element::O) }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                     id: NoncovalentBondId(0),
                     atoms: [AtomId(0), AtomId(1)],
                     ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
                 }),
             ]),
-        );
-        let host = reaction.lhs.clone();
+        ),
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            vec![], vec![], vec![], vec![],
+            vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            vec![], vec![],
+            Constraints::new(),
+        ),
+        vec![AtomId(0), AtomId(1)],
+        vec![NoncovalentBondId(0)],
+        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::O)], vec![]),
+    )]
+    fn test_reaction_ast_apply_at(
+        #[case] reaction: ReactionAst,
+        #[case] host: MoleculeAst,
+        #[case] atom_map: Vec<AtomId>,
+        #[case] host_noncovalent: Vec<NoncovalentBondId>,
+        #[case] expected: MoleculeAst,
+    ) {
         let embedding = MoleculeEmbedding::from_match(
             &host,
             &reaction.lhs,
-            vec![AtomId(0), AtomId(1)],
+            atom_map,
             vec![],
             vec![],
             vec![],
-            vec![NoncovalentBondId(0)],
+            host_noncovalent,
+            vec![],
+            vec![],
+        );
+        assert_eq!(reaction.apply_at(&embedding).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::dangling_bond(
+        ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], vec![]),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                ast: AtomAst::from_element(Element::C),
+            })]),
+        ),
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ),
+    )]
+    #[case::dangling_noncovalent(
+        ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::O)], vec![]),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                ast: AtomAst::from_element(Element::O),
+            })]),
+        ),
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            vec![], vec![], vec![], vec![],
+            vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            vec![], vec![],
+            Constraints::new(),
+        ),
+    )]
+    fn test_reaction_ast_apply_at_error(#[case] reaction: ReactionAst, #[case] host: MoleculeAst) {
+        // The rule deletes a host atom that still carries an undeleted bond/overlay → dangling.
+        let embedding = MoleculeEmbedding::from_match(
+            &host,
+            &reaction.lhs,
+            vec![AtomId(0)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
             vec![],
             vec![],
         );
         assert_eq!(
-            reaction.apply_at(&embedding).unwrap(),
-            MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::O)], vec![]),
+            reaction.apply_at(&embedding),
+            Err(ApplyError::Dangling {
+                host_atom: AtomId(0),
+            }),
         );
     }
 

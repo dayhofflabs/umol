@@ -13,8 +13,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::Hash;
 
 use umol_graph_core::{
-    Compaction, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered, Unordered,
-    VarRelationSet,
+    Compaction, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered, RelationId,
+    Unordered, VarRelationSet,
 };
 
 use super::aromatic::AromaticSystemAst;
@@ -141,13 +141,13 @@ impl ReactionSpanAst {
     /// The left-hand (reactant) molecule: every entity present on the left, in a compacted
     /// id space (created entities dropped).
     pub fn left(&self) -> MoleculeAst {
-        self.project(|atom| atom.left(), |bond| bond.left(), |c| c.left())
+        self.project(Side::Left)
     }
 
     /// The right-hand (product) molecule: every entity present on the right, in a compacted
     /// id space (deleted entities dropped).
     pub fn right(&self) -> MoleculeAst {
-        self.project(|atom| atom.right(), |bond| bond.right(), |c| c.right())
+        self.project(Side::Right)
     }
 
     /// Recover the operational `ReactionAst` from the span — the inverse of
@@ -174,21 +174,17 @@ impl ReactionSpanAst {
         ReactionAst::new(self.left(), Deltas::from_iter(deltas))
     }
 
-    /// Project one side to a `MoleculeAst`. `atom_side` / `bond_side` / `constraint_side` pick the
-    /// left or right value of each entity; absent entities are dropped and the survivors are
-    /// renumbered. The side's constraints are compacted through the same compaction — refs to a
-    /// removed atom/bond are dropped.
-    fn project(
-        &self,
-        atom_side: impl Fn(&EntitySpan<AtomAst>) -> Option<&AtomAst>,
-        bond_side: impl Fn(&EntitySpan<BondAst>) -> Option<&BondAst>,
-        constraint_side: impl Fn(&ConstraintSpan) -> Option<&Constraint>,
-    ) -> MoleculeAst {
+    /// Project one `Side` to a `MoleculeAst`: every entity present on that side, in a compacted id
+    /// space (entities absent on the side dropped, the survivors renumbered). Overlays are carried
+    /// through (an overlay is dropped if its side value is absent or any participant is dropped),
+    /// and the side's constraints are compacted through the same compaction (atom/bond and overlay
+    /// refs to a dropped entity are dropped).
+    fn project(&self, side: Side) -> MoleculeAst {
         let mut compacted: Vec<Option<AtomId>> = vec![None; self.atoms.len()];
         let mut atoms: Vec<AtomAst> = Vec::new();
         let mut removed_nodes: Vec<u32> = Vec::new();
         for (node, change) in self.atoms.iter().enumerate() {
-            match atom_side(change) {
+            match entity_side(change, side) {
                 Some(ast) => {
                     compacted[node] = Some(AtomId(atoms.len() as u32));
                     atoms.push(ast.clone());
@@ -196,28 +192,126 @@ impl ReactionSpanAst {
                 None => removed_nodes.push(node as u32),
             }
         }
+        let mut compacted_bonds: Vec<Option<BondId>> = vec![None; self.bonds.len()];
         let mut bonds: Vec<(AtomId, AtomId, BondAst)> = Vec::new();
         let mut removed_edges: Vec<u32> = Vec::new();
         for (edge, change) in self.bonds.iter().enumerate() {
             let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
-            match (bond_side(change), compacted[a.index()], compacted[b.index()]) {
-                (Some(ast), Some(a), Some(b)) => bonds.push((a, b, ast.clone())),
+            match (entity_side(change, side), compacted[a.index()], compacted[b.index()]) {
+                (Some(ast), Some(a), Some(b)) => {
+                    compacted_bonds[edge] = Some(BondId(bonds.len() as u32));
+                    bonds.push((a, b, ast.clone()));
+                }
                 _ => removed_edges.push(edge as u32),
+            }
+        }
+
+        let atom = |n: NodeId| compacted[n.index()];
+        let mut dative: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> = Vec::new();
+        let mut removed_dative: Vec<RelationId> = Vec::new();
+        for i in 0..self.dative_bonds.relation_count() {
+            let rid = RelationId(i as u32);
+            let acceptor = atom(self.dative_bonds.participants_1(rid)[0]);
+            let donors: Option<Vec<AtomId>> =
+                self.dative_bonds.participants_2(rid).iter().map(|&n| atom(n)).collect();
+            match (entity_side(self.dative_bonds.data(rid), side), acceptor, donors) {
+                (Some(ast), Some(acceptor), Some(donors)) => {
+                    dative.push((donors, acceptor, ast.clone()))
+                }
+                _ => removed_dative.push(rid),
+            }
+        }
+
+        let mut aromatic: Vec<(Vec<AtomId>, AromaticSystemAst)> = Vec::new();
+        let mut removed_aromatic: Vec<RelationId> = Vec::new();
+        for i in 0..self.aromatic_systems.relation_count() {
+            let rid = RelationId(i as u32);
+            let members: Option<Vec<AtomId>> =
+                self.aromatic_systems.participants(rid).iter().map(|&n| atom(n)).collect();
+            match (entity_side(self.aromatic_systems.data(rid), side), members) {
+                (Some(ast), Some(members)) => aromatic.push((members, ast.clone())),
+                _ => removed_aromatic.push(rid),
+            }
+        }
+
+        let mut multicenter: Vec<(Vec<AtomId>, MulticenterBondAst)> = Vec::new();
+        let mut removed_multicenter: Vec<RelationId> = Vec::new();
+        for i in 0..self.multicenter_bonds.relation_count() {
+            let rid = RelationId(i as u32);
+            let members: Option<Vec<AtomId>> =
+                self.multicenter_bonds.participants(rid).iter().map(|&n| atom(n)).collect();
+            match (entity_side(self.multicenter_bonds.data(rid), side), members) {
+                (Some(ast), Some(members)) => multicenter.push((members, ast.clone())),
+                _ => removed_multicenter.push(rid),
+            }
+        }
+
+        let mut noncovalent: Vec<(AtomId, AtomId, NoncovalentBondAst)> = Vec::new();
+        let mut removed_noncovalent: Vec<RelationId> = Vec::new();
+        for i in 0..self.noncovalent_bonds.relation_count() {
+            let rid = RelationId(i as u32);
+            let [a, b] = *self.noncovalent_bonds.participants(rid);
+            match (entity_side(self.noncovalent_bonds.data(rid), side), atom(a), atom(b)) {
+                (Some(ast), Some(a), Some(b)) => noncovalent.push((a, b, ast.clone())),
+                _ => removed_noncovalent.push(rid),
+            }
+        }
+
+        let ligands = |ls: &[StereoLigand]| -> Option<Vec<StereoLigand>> {
+            ls.iter()
+                .map(|l| atom(NodeId::from(l.atom_id)).map(|a| StereoLigand::new(a, l.kind)))
+                .collect()
+        };
+        let mut stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> = Vec::new();
+        let mut removed_stereo_atoms: Vec<RelationId> = Vec::new();
+        for i in 0..self.stereo_atoms.relation_count() {
+            let rid = RelationId(i as u32);
+            let site = atom(self.stereo_atoms.participants_1(rid)[0]);
+            match (
+                entity_side(self.stereo_atoms.data(rid), side),
+                site,
+                ligands(self.stereo_atoms.participants_2(rid)),
+            ) {
+                (Some(ast), Some(site), Some(ligands)) => {
+                    stereo_atoms.push((site, ligands, ast.clone()))
+                }
+                _ => removed_stereo_atoms.push(rid),
+            }
+        }
+
+        let mut stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)> = Vec::new();
+        let mut removed_stereo_bonds: Vec<RelationId> = Vec::new();
+        for i in 0..self.stereo_bonds.relation_count() {
+            let rid = RelationId(i as u32);
+            let site = compacted_bonds[self.stereo_bonds.participants_1(rid)[0].index()];
+            match (
+                entity_side(self.stereo_bonds.data(rid), side),
+                site,
+                ligands(self.stereo_bonds.participants_2(rid)),
+            ) {
+                (Some(ast), Some(site), Some(ligands)) => {
+                    stereo_bonds.push((site, ligands, ast.clone()))
+                }
+                _ => removed_stereo_bonds.push(rid),
             }
         }
 
         let compaction = IdCompaction::new(
             Compaction::new(removed_nodes, removed_edges),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            removed_dative,
+            removed_aromatic,
+            removed_multicenter,
+            removed_noncovalent,
+            removed_stereo_atoms,
+            removed_stereo_bonds,
         );
         let mut constraints = Constraints::new();
         for span in &self.constraints {
-            if let Some(c) = constraint_side(span) {
+            let value = match side {
+                Side::Left => span.left(),
+                Side::Right => span.right(),
+            };
+            if let Some(c) = value {
                 constraints.push(c.clone());
             }
         }
@@ -226,14 +320,29 @@ impl ReactionSpanAst {
         MoleculeAst::from_parts(
             atoms,
             bonds,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            dative,
+            aromatic,
+            multicenter,
+            noncovalent,
+            stereo_atoms,
+            stereo_bonds,
             constraints,
         )
+    }
+}
+
+/// Which side of the span a projection reads.
+#[derive(Clone, Copy)]
+enum Side {
+    Left,
+    Right,
+}
+
+/// The side value of an entity span (`None` if the entity is absent on that side).
+fn entity_side<T>(span: &EntitySpan<T>, side: Side) -> Option<&T> {
+    match side {
+        Side::Left => span.left(),
+        Side::Right => span.right(),
     }
 }
 
@@ -702,6 +811,7 @@ mod tests {
     use super::super::constraint::{Constraint, Constraints, MoleculeConstraint};
     use super::super::delta::Deltas;
     use super::super::edit::BondFieldChange;
+    use super::super::noncovalent::NoncovalentBondKind;
     use super::super::value::ValueAst;
     use super::*;
 
@@ -1043,6 +1153,69 @@ mod tests {
             })],
         );
         assert!(span.right().constraints().is_empty());
+    }
+
+    #[rstest]
+    #[case::unchanged(
+        ReactionAst::new(
+            MoleculeAst::from_parts(
+                vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+                vec![], vec![], vec![], vec![],
+                vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+                vec![], vec![],
+                Constraints::new(),
+            ),
+            Deltas::new(),
+        ),
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            vec![], vec![], vec![], vec![],
+            vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            vec![], vec![],
+            Constraints::new(),
+        ),
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            vec![], vec![], vec![], vec![],
+            vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            vec![], vec![],
+            Constraints::new(),
+        ),
+    )]
+    #[case::added(
+        ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+                vec![],
+            ),
+            Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+                id: NoncovalentBondId(0),
+                atoms: [AtomId(0), AtomId(1)],
+                ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            })]),
+        ),
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            vec![],
+        ),
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            vec![], vec![], vec![], vec![],
+            vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            vec![], vec![],
+            Constraints::new(),
+        ),
+    )]
+    fn test_reaction_span_ast_project_overlay(
+        #[case] reaction: ReactionAst,
+        #[case] expected_left: MoleculeAst,
+        #[case] expected_right: MoleculeAst,
+    ) {
+        // An unchanged overlay carries through both projections; an added overlay is absent on the
+        // left, present on the right.
+        let span = reaction.to_reaction_span().unwrap();
+        assert_eq!(span.left(), expected_left);
+        assert_eq!(span.right(), expected_right);
     }
 
     // C-O with atom 1 (O) and its bond removed, replaced by a new N (atom 2) bonded to C.
