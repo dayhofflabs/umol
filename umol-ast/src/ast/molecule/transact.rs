@@ -713,19 +713,19 @@ impl MoleculeBuilder {
                 let (removed_atoms, removed_bonds, overlays) =
                     self.capture_removed_topology(&atoms, &bonds);
                 let pre_constraints = self.constraints().clone();
-                let remapping = if !atoms.is_empty() || !bonds.is_empty() {
+                let compaction = if !atoms.is_empty() || !bonds.is_empty() {
                     self.remove(&atoms, &bonds)
                 } else {
                     IdCompaction::empty()
                 };
                 let mut constraints = pre_constraints;
-                let cascade = constraints.compact_with_update(&remapping);
-                let undo_compaction = remapping.undo_compaction();
+                let cascade = constraints.compact_with_update(&compaction);
+                let undo_compaction = compaction.undo_compaction();
                 Ok(Undo::RestoreRemovedTopology {
                     atoms: removed_atoms,
                     bonds: removed_bonds,
                     overlays,
-                    remapping,
+                    compaction,
                     undo_compaction,
                     cascade,
                 })
@@ -2030,7 +2030,7 @@ mod tests {
             atoms,
             bonds,
             overlays,
-            remapping,
+            compaction,
             ..
         }] = tx.undos()
         else {
@@ -2042,7 +2042,7 @@ mod tests {
             vec![BondId(0)]
         );
         assert!(overlays.dative_bonds.is_empty());
-        assert_eq!(remapping.compact_bond(BondId(0)), None);
+        assert_eq!(compaction.compact_bond(BondId(0)), None);
     }
 
     #[rstest]

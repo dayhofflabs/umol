@@ -26,16 +26,16 @@ impl StereoLigand {
 }
 
 impl RelationParticipant for StereoLigand {
-    fn compact(self, remapping: &Compaction) -> Option<Self> {
+    fn compact(self, compaction: &Compaction) -> Option<Self> {
         Some(Self {
-            atom_id: AtomId::from(remapping.compact_node(NodeId::from(self.atom_id))?),
+            atom_id: AtomId::from(compaction.compact_node(NodeId::from(self.atom_id))?),
             kind: self.kind,
         })
     }
 
-    fn uncompact(self, remapping: &Compaction) -> Self {
+    fn uncompact(self, compaction: &Compaction) -> Self {
         Self {
-            atom_id: AtomId::from(remapping.uncompact_node(NodeId::from(self.atom_id))),
+            atom_id: AtomId::from(compaction.uncompact_node(NodeId::from(self.atom_id))),
             kind: self.kind,
         }
     }
@@ -82,12 +82,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_ligand_remap() {
+    fn test_stereo_ligand_compact() {
         // node 1 removed ⇒ surviving node 3 densifies to 2; the kind is carried
-        let remapping = Compaction::new(vec![1], Vec::new());
+        let compaction = Compaction::new(vec![1], Vec::new());
         let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen);
         assert_eq!(
-            ligand.compact(&remapping),
+            ligand.compact(&compaction),
             Some(StereoLigand::new(
                 AtomId(2),
                 StereoLigandKind::ImplicitHydrogen
@@ -96,18 +96,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_ligand_remap_removed() {
-        let remapping = Compaction::new(vec![3], Vec::new());
+    fn test_stereo_ligand_compact_removed() {
+        let compaction = Compaction::new(vec![3], Vec::new());
         let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::Atom);
-        assert_eq!(ligand.compact(&remapping), None);
+        assert_eq!(ligand.compact(&compaction), None);
     }
 
     #[rstest]
-    fn test_stereo_ligand_unmap() {
-        let remapping = Compaction::new(vec![1], Vec::new());
+    fn test_stereo_ligand_uncompact() {
+        let compaction = Compaction::new(vec![1], Vec::new());
         let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::Atom);
         assert_eq!(
-            ligand.uncompact(&remapping),
+            ligand.uncompact(&compaction),
             StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
         );
     }

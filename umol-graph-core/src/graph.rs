@@ -746,34 +746,34 @@ mod tests {
     fn test_graph_remove_node() {
         // 0--1--2, remove node 1
         let mut g = Graph::new(3, &[[0, 1], [1, 2]]);
-        let remap = g.remove_node(NodeId(1));
+        let compaction = g.remove_node(NodeId(1));
 
         assert_eq!(g.node_count(), 2);
         assert_eq!(g.edge_count(), 0);
-        assert_eq!(remap.removed_nodes, vec![1]);
-        assert_eq!(remap.removed_edges, vec![0, 1]);
+        assert_eq!(compaction.removed_nodes, vec![1]);
+        assert_eq!(compaction.removed_edges, vec![0, 1]);
 
         // node 0 stays 0, node 2 becomes 1
-        assert_eq!(remap.compact_node(NodeId(0)), Some(NodeId(0)));
-        assert_eq!(remap.compact_node(NodeId(1)), None);
-        assert_eq!(remap.compact_node(NodeId(2)), Some(NodeId(1)));
+        assert_eq!(compaction.compact_node(NodeId(0)), Some(NodeId(0)));
+        assert_eq!(compaction.compact_node(NodeId(1)), None);
+        assert_eq!(compaction.compact_node(NodeId(2)), Some(NodeId(1)));
     }
 
     #[test]
     fn test_graph_remove_node_partial() {
         // triangle 0-1, 1-2, 0-2; remove node 0
         let mut g = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
-        let remap = g.remove_node(NodeId(0));
+        let compaction = g.remove_node(NodeId(0));
 
         assert_eq!(g.node_count(), 2);
         assert_eq!(g.edge_count(), 1);
-        assert_eq!(remap.removed_nodes, vec![0]);
-        assert_eq!(remap.removed_edges, vec![0, 2]);
+        assert_eq!(compaction.removed_nodes, vec![0]);
+        assert_eq!(compaction.removed_edges, vec![0, 2]);
 
         // surviving edge (old 1) maps to new 0
-        assert_eq!(remap.compact_edge(EdgeId(0)), None);
-        assert_eq!(remap.compact_edge(EdgeId(1)), Some(EdgeId(0)));
-        assert_eq!(remap.compact_edge(EdgeId(2)), None);
+        assert_eq!(compaction.compact_edge(EdgeId(0)), None);
+        assert_eq!(compaction.compact_edge(EdgeId(1)), Some(EdgeId(0)));
+        assert_eq!(compaction.compact_edge(EdgeId(2)), None);
 
         // nodes 1,2 become 0,1
         assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
@@ -783,16 +783,16 @@ mod tests {
     fn test_graph_remove_edge() {
         // triangle, remove edge 1 (1-2)
         let mut g = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
-        let remap = g.remove_edge(EdgeId(1));
+        let compaction = g.remove_edge(EdgeId(1));
 
         assert_eq!(g.node_count(), 3);
         assert_eq!(g.edge_count(), 2);
-        assert_eq!(remap.removed_nodes, Vec::<u32>::new());
-        assert_eq!(remap.removed_edges, vec![1]);
+        assert_eq!(compaction.removed_nodes, Vec::<u32>::new());
+        assert_eq!(compaction.removed_edges, vec![1]);
 
-        assert_eq!(remap.compact_edge(EdgeId(0)), Some(EdgeId(0)));
-        assert_eq!(remap.compact_edge(EdgeId(1)), None);
-        assert_eq!(remap.compact_edge(EdgeId(2)), Some(EdgeId(1)));
+        assert_eq!(compaction.compact_edge(EdgeId(0)), Some(EdgeId(0)));
+        assert_eq!(compaction.compact_edge(EdgeId(1)), None);
+        assert_eq!(compaction.compact_edge(EdgeId(2)), Some(EdgeId(1)));
 
         assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
         assert_eq!(g.edge_endpoints(EdgeId(1)), [NodeId(0), NodeId(2)]);
@@ -833,25 +833,25 @@ mod tests {
     fn test_graph_remove_batch() {
         // 0-1, 1-2, 2-3, 3-4; remove nodes 1 and 3
         let mut g = Graph::new(5, &[[0, 1], [1, 2], [2, 3], [3, 4]]);
-        let remap = g.remove(&[NodeId(1), NodeId(3)], &[]);
+        let compaction = g.remove(&[NodeId(1), NodeId(3)], &[]);
 
         assert_eq!(g.node_count(), 3);
         // edges 0(0-1), 1(1-2), 2(2-3), 3(3-4) — all incident to 1 or 3 are removed
         // only none survive since every edge touches node 1 or 3
         assert_eq!(g.edge_count(), 0);
 
-        assert_eq!(remap.compact_node(NodeId(0)), Some(NodeId(0)));
-        assert_eq!(remap.compact_node(NodeId(1)), None);
-        assert_eq!(remap.compact_node(NodeId(2)), Some(NodeId(1)));
-        assert_eq!(remap.compact_node(NodeId(3)), None);
-        assert_eq!(remap.compact_node(NodeId(4)), Some(NodeId(2)));
+        assert_eq!(compaction.compact_node(NodeId(0)), Some(NodeId(0)));
+        assert_eq!(compaction.compact_node(NodeId(1)), None);
+        assert_eq!(compaction.compact_node(NodeId(2)), Some(NodeId(1)));
+        assert_eq!(compaction.compact_node(NodeId(3)), None);
+        assert_eq!(compaction.compact_node(NodeId(4)), Some(NodeId(2)));
     }
 
     #[test]
     fn test_graph_remove_nodes_and_edges() {
         // 0-1, 1-2, 2-3, 0-3; remove node 1, edge 3 (0-3)
         let mut g = Graph::new(4, &[[0, 1], [1, 2], [2, 3], [0, 3]]);
-        let remap = g.remove(&[NodeId(1)], &[EdgeId(3)]);
+        let compaction = g.remove(&[NodeId(1)], &[EdgeId(3)]);
 
         assert_eq!(g.node_count(), 3);
         // edge 0(0-1) removed (incident to 1)
@@ -861,7 +861,7 @@ mod tests {
         assert_eq!(g.edge_count(), 1);
         assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(1), NodeId(2)]);
 
-        assert_eq!(remap.compact_edge(EdgeId(2)), Some(EdgeId(0)));
+        assert_eq!(compaction.compact_edge(EdgeId(2)), Some(EdgeId(0)));
     }
 
     #[rstest]
@@ -870,13 +870,13 @@ mod tests {
     #[case::removed(NodeId(2), vec![2], None)]
     #[case::after_removed(NodeId(3), vec![2], Some(NodeId(2)))]
     #[case::multi_removed(NodeId(5), vec![1, 3], Some(NodeId(3)))]
-    fn test_remapping_node(
+    fn test_compaction_node(
         #[case] old: NodeId,
         #[case] removed: Vec<u32>,
         #[case] expected: Option<NodeId>,
     ) {
-        let remap = Compaction::new(removed, vec![]);
-        assert_eq!(remap.compact_node(old), expected);
+        let compaction = Compaction::new(removed, vec![]);
+        assert_eq!(compaction.compact_node(old), expected);
     }
 
     #[rstest]
@@ -885,12 +885,12 @@ mod tests {
     #[case::at_gap(NodeId(2), vec![2], NodeId(3))]
     #[case::after_gap(NodeId(3), vec![2], NodeId(4))]
     #[case::multi_removed(NodeId(3), vec![1, 3], NodeId(5))]
-    fn test_remapping_uncompact_node(
+    fn test_uncompaction_node(
         #[case] post: NodeId,
         #[case] removed: Vec<u32>,
         #[case] expected: NodeId,
     ) {
-        let remap = Compaction::new(removed, vec![]);
-        assert_eq!(remap.uncompact_node(post), expected);
+        let compaction = Compaction::new(removed, vec![]);
+        assert_eq!(compaction.uncompact_node(post), expected);
     }
 }

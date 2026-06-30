@@ -278,7 +278,7 @@ impl BondConstraints {
     }
 
     /// No-op: no `BondConstraint` variant carries an entity index.
-    pub fn compact(self, _remap: &IdCompaction) -> Self {
+    pub fn compact(self, _compaction: &IdCompaction) -> Self {
         self
     }
 }
@@ -814,12 +814,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_remap() {
+    fn test_bond_constraints_compact() {
         let cs = BondConstraints::from_iter([
             BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
-        let remap = IdCompaction::new(
+        let compaction = IdCompaction::new(
             Compaction::new(vec![0, 1, 2], vec![0, 1]),
             Vec::new(),
             Vec::new(),
@@ -828,7 +828,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        assert_eq!(cs.clone().compact(&remap), cs);
+        assert_eq!(cs.clone().compact(&compaction), cs);
     }
 
     #[rustfmt::skip]

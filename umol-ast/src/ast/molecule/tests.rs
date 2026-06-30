@@ -1470,7 +1470,7 @@ fn test_molecule_builder_add_and_remove(#[from(rich_molecule)] ast: MoleculeAst)
     let new_a = b.add_atom(AtomAst::from_element(Element::Br));
     b.add_bond(AtomId(0), new_a, BondAst::from_order(1));
     b.remove_aromatic_systems(&[AromaticSystemId(0)]);
-    let _remap = b.remove(&[AtomId(3)], &[BondId(2)]);
+    let _compaction = b.remove(&[AtomId(3)], &[BondId(2)]);
     let result = b.build();
     let atoms: Vec<Element> = result
         .atoms()

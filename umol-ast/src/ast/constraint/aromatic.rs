@@ -48,8 +48,8 @@ impl AromaticSystemConstraint {
         }
     }
 
-    pub fn compact(self, _remap: &IdCompaction) -> Option<Self> {
-        // Value-only: no indices to remap.
+    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+        // Value-only: no indices to compact.
         Some(self)
     }
 
@@ -230,8 +230,8 @@ impl AromaticSystemConstraints {
         out
     }
 
-    pub fn compact(self, remap: &IdCompaction) -> Self {
-        Self(self.0.into_iter().filter_map(|c| c.compact(remap)).collect())
+    pub fn compact(self, compaction: &IdCompaction) -> Self {
+        Self(self.0.into_iter().filter_map(|c| c.compact(compaction)).collect())
     }
 }
 
@@ -611,9 +611,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_remap() {
+    fn test_aromatic_system_constraints_compact() {
         let cs = AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6));
-        let remap = IdCompaction::new(
+        let compaction = IdCompaction::new(
             Compaction::new(vec![0, 1], vec![0]),
             Vec::new(),
             Vec::new(),
@@ -622,7 +622,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        assert_eq!(cs.clone().compact(&remap), cs);
+        assert_eq!(cs.clone().compact(&compaction), cs);
     }
 
     #[rustfmt::skip]

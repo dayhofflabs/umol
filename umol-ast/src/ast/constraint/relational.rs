@@ -207,135 +207,135 @@ pub enum RelationalConstraint {
 impl RelationalConstraint {
     /// Remap all indices this constraint carries. Returns `None` if any
     /// referenced entity has been removed by the remapping.
-    pub fn compact(self, remap: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, compaction: &IdCompaction) -> Option<Self> {
         Some(match self {
             Self::DativeBondDonors { bond, atoms } => {
-                let bond = remap.compact_dative_bond(bond)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.compact_atom(a)).collect();
+                let bond = compaction.compact_dative_bond(bond)?;
+                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
                 Self::DativeBondDonors {
                     bond,
                     atoms: atoms?,
                 }
             }
             Self::DativeBondDonor { bond, atom } => Self::DativeBondDonor {
-                bond: remap.compact_dative_bond(bond)?,
-                atom: remap.compact_atom(atom)?,
+                bond: compaction.compact_dative_bond(bond)?,
+                atom: compaction.compact_atom(atom)?,
             },
             Self::DativeBondContainsAllDonors { bond, atoms } => {
-                let bond = remap.compact_dative_bond(bond)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.compact_atom(a)).collect();
+                let bond = compaction.compact_dative_bond(bond)?;
+                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
                 Self::DativeBondContainsAllDonors {
                     bond,
                     atoms: atoms?,
                 }
             }
             Self::DativeBondAllDonors { bond, predicate } => Self::DativeBondAllDonors {
-                bond: remap.compact_dative_bond(bond)?,
+                bond: compaction.compact_dative_bond(bond)?,
                 predicate,
             },
             Self::DativeBondAnyDonor { bond, predicate } => Self::DativeBondAnyDonor {
-                bond: remap.compact_dative_bond(bond)?,
+                bond: compaction.compact_dative_bond(bond)?,
                 predicate,
             },
             Self::DativeBondAcceptor { bond, atom } => Self::DativeBondAcceptor {
-                bond: remap.compact_dative_bond(bond)?,
-                atom: remap.compact_atom(atom)?,
+                bond: compaction.compact_dative_bond(bond)?,
+                atom: compaction.compact_atom(atom)?,
             },
             Self::DativeBondAcceptorSatisfies { bond, predicate } => {
                 Self::DativeBondAcceptorSatisfies {
-                    bond: remap.compact_dative_bond(bond)?,
+                    bond: compaction.compact_dative_bond(bond)?,
                     predicate,
                 }
             }
             Self::DativeBondParallels { dative, parallel } => Self::DativeBondParallels {
-                dative: remap.compact_dative_bond(dative)?,
-                parallel: remap.compact_bond(parallel)?,
+                dative: compaction.compact_dative_bond(dative)?,
+                parallel: compaction.compact_bond(parallel)?,
             },
             Self::AromaticSystemAtoms { system, atoms } => {
-                let system = remap.compact_aromatic_system(system)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.compact_atom(a)).collect();
+                let system = compaction.compact_aromatic_system(system)?;
+                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
                 Self::AromaticSystemAtoms {
                     system,
                     atoms: atoms?,
                 }
             }
             Self::AromaticSystemContains { system, atom } => Self::AromaticSystemContains {
-                system: remap.compact_aromatic_system(system)?,
-                atom: remap.compact_atom(atom)?,
+                system: compaction.compact_aromatic_system(system)?,
+                atom: compaction.compact_atom(atom)?,
             },
             Self::AromaticSystemContainsAll { system, atoms } => {
-                let system = remap.compact_aromatic_system(system)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.compact_atom(a)).collect();
+                let system = compaction.compact_aromatic_system(system)?;
+                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
                 Self::AromaticSystemContainsAll {
                     system,
                     atoms: atoms?,
                 }
             }
             Self::AromaticSystemAllAtoms { system, predicate } => Self::AromaticSystemAllAtoms {
-                system: remap.compact_aromatic_system(system)?,
+                system: compaction.compact_aromatic_system(system)?,
                 predicate,
             },
             Self::AromaticSystemAnyAtom { system, predicate } => Self::AromaticSystemAnyAtom {
-                system: remap.compact_aromatic_system(system)?,
+                system: compaction.compact_aromatic_system(system)?,
                 predicate,
             },
             Self::MulticenterBondAtoms { bond, atoms } => {
-                let bond = remap.compact_multicenter_bond(bond)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.compact_atom(a)).collect();
+                let bond = compaction.compact_multicenter_bond(bond)?;
+                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
                 Self::MulticenterBondAtoms {
                     bond,
                     atoms: atoms?,
                 }
             }
             Self::MulticenterBondContains { bond, atom } => Self::MulticenterBondContains {
-                bond: remap.compact_multicenter_bond(bond)?,
-                atom: remap.compact_atom(atom)?,
+                bond: compaction.compact_multicenter_bond(bond)?,
+                atom: compaction.compact_atom(atom)?,
             },
             Self::MulticenterBondContainsAll { bond, atoms } => {
-                let bond = remap.compact_multicenter_bond(bond)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.compact_atom(a)).collect();
+                let bond = compaction.compact_multicenter_bond(bond)?;
+                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
                 Self::MulticenterBondContainsAll {
                     bond,
                     atoms: atoms?,
                 }
             }
             Self::MulticenterBondAllAtoms { bond, predicate } => Self::MulticenterBondAllAtoms {
-                bond: remap.compact_multicenter_bond(bond)?,
+                bond: compaction.compact_multicenter_bond(bond)?,
                 predicate,
             },
             Self::MulticenterBondAnyAtom { bond, predicate } => Self::MulticenterBondAnyAtom {
-                bond: remap.compact_multicenter_bond(bond)?,
+                bond: compaction.compact_multicenter_bond(bond)?,
                 predicate,
             },
             Self::NoncovalentBondEnds { bond, atoms } => {
-                let bond = remap.compact_noncovalent_bond(bond)?;
+                let bond = compaction.compact_noncovalent_bond(bond)?;
                 let [a, b] = atoms;
                 Self::NoncovalentBondEnds {
                     bond,
-                    atoms: [remap.compact_atom(a)?, remap.compact_atom(b)?],
+                    atoms: [compaction.compact_atom(a)?, compaction.compact_atom(b)?],
                 }
             }
             Self::NoncovalentBondContains { bond, atom } => Self::NoncovalentBondContains {
-                bond: remap.compact_noncovalent_bond(bond)?,
-                atom: remap.compact_atom(atom)?,
+                bond: compaction.compact_noncovalent_bond(bond)?,
+                atom: compaction.compact_atom(atom)?,
             },
             Self::NoncovalentBondEndsSatisfy { bond, predicates } => {
                 Self::NoncovalentBondEndsSatisfy {
-                    bond: remap.compact_noncovalent_bond(bond)?,
+                    bond: compaction.compact_noncovalent_bond(bond)?,
                     predicates,
                 }
             }
             Self::StereoAtomSite { stereo_atom, atom } => Self::StereoAtomSite {
-                stereo_atom: remap.compact_stereo_atom(stereo_atom)?,
-                atom: remap.compact_atom(atom)?,
+                stereo_atom: compaction.compact_stereo_atom(stereo_atom)?,
+                atom: compaction.compact_atom(atom)?,
             },
             Self::StereoAtomContains { stereo_atom, atom } => Self::StereoAtomContains {
-                stereo_atom: remap.compact_stereo_atom(stereo_atom)?,
-                atom: remap.compact_atom(atom)?,
+                stereo_atom: compaction.compact_stereo_atom(stereo_atom)?,
+                atom: compaction.compact_atom(atom)?,
             },
             Self::StereoAtomLigands { stereo_atom, atoms } => {
-                let stereo_atom = remap.compact_stereo_atom(stereo_atom)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.compact_atom(a)).collect();
+                let stereo_atom = compaction.compact_stereo_atom(stereo_atom)?;
+                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
                 Self::StereoAtomLigands {
                     stereo_atom,
                     atoms: atoms?,
@@ -345,27 +345,27 @@ impl RelationalConstraint {
                 stereo_atom,
                 predicate,
             } => Self::StereoAtomAllLigands {
-                stereo_atom: remap.compact_stereo_atom(stereo_atom)?,
+                stereo_atom: compaction.compact_stereo_atom(stereo_atom)?,
                 predicate,
             },
             Self::StereoAtomAnyLigand {
                 stereo_atom,
                 predicate,
             } => Self::StereoAtomAnyLigand {
-                stereo_atom: remap.compact_stereo_atom(stereo_atom)?,
+                stereo_atom: compaction.compact_stereo_atom(stereo_atom)?,
                 predicate,
             },
             Self::StereoBondSite { stereo_bond, bond } => Self::StereoBondSite {
-                stereo_bond: remap.compact_stereo_bond(stereo_bond)?,
-                bond: remap.compact_bond(bond)?,
+                stereo_bond: compaction.compact_stereo_bond(stereo_bond)?,
+                bond: compaction.compact_bond(bond)?,
             },
             Self::StereoBondContains { stereo_bond, atom } => Self::StereoBondContains {
-                stereo_bond: remap.compact_stereo_bond(stereo_bond)?,
-                atom: remap.compact_atom(atom)?,
+                stereo_bond: compaction.compact_stereo_bond(stereo_bond)?,
+                atom: compaction.compact_atom(atom)?,
             },
             Self::StereoBondLigands { stereo_bond, atoms } => {
-                let stereo_bond = remap.compact_stereo_bond(stereo_bond)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.compact_atom(a)).collect();
+                let stereo_bond = compaction.compact_stereo_bond(stereo_bond)?;
+                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
                 Self::StereoBondLigands {
                     stereo_bond,
                     atoms: atoms?,
@@ -375,14 +375,14 @@ impl RelationalConstraint {
                 stereo_bond,
                 predicate,
             } => Self::StereoBondAllLigands {
-                stereo_bond: remap.compact_stereo_bond(stereo_bond)?,
+                stereo_bond: compaction.compact_stereo_bond(stereo_bond)?,
                 predicate,
             },
             Self::StereoBondAnyLigand {
                 stereo_bond,
                 predicate,
             } => Self::StereoBondAnyLigand {
-                stereo_bond: remap.compact_stereo_bond(stereo_bond)?,
+                stereo_bond: compaction.compact_stereo_bond(stereo_bond)?,
                 predicate,
             },
         })
@@ -858,12 +858,12 @@ mod tests {
     #[case::stereo_bond_any_ligand_shifts(RelationalConstraint::StereoBondAnyLigand { stereo_bond: StereoBondId(1), predicate: val_pred() },
         remapping(vec![], vec![], vec![], vec![], vec![], vec![], vec![], vec![0]),
         Some(RelationalConstraint::StereoBondAnyLigand { stereo_bond: StereoBondId(0), predicate: val_pred() }))]
-    fn test_relational_constraint_remap(
+    fn test_relational_constraint_compact(
         #[case] input: RelationalConstraint,
-        #[case] remap: IdCompaction,
+        #[case] compaction: IdCompaction,
         #[case] expected: Option<RelationalConstraint>,
     ) {
-        assert_eq!(input.compact(&remap), expected);
+        assert_eq!(input.compact(&compaction), expected);
     }
 
     #[rustfmt::skip]

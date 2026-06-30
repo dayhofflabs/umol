@@ -176,7 +176,7 @@ impl ReactionSpanAst {
 
     /// Project one side to a `MoleculeAst`. `atom_side` / `bond_side` / `constraint_side` pick the
     /// left or right value of each entity; absent entities are dropped and the survivors are
-    /// renumbered. The side's constraints are remapped through the same compaction — refs to a
+    /// renumbered. The side's constraints are compacted through the same compaction — refs to a
     /// removed atom/bond are dropped.
     fn project(
         &self,
@@ -206,7 +206,7 @@ impl ReactionSpanAst {
             }
         }
 
-        let remap = IdCompaction::new(
+        let compaction = IdCompaction::new(
             Compaction::new(removed_nodes, removed_edges),
             Vec::new(),
             Vec::new(),
@@ -221,7 +221,7 @@ impl ReactionSpanAst {
                 constraints.push(c.clone());
             }
         }
-        constraints.compact(&remap);
+        constraints.compact(&compaction);
 
         MoleculeAst::from_parts(
             atoms,
@@ -1002,7 +1002,7 @@ mod tests {
     }
 
     // A constraint naming atom 1 survives the left projection (atom 1 present) and is dropped on the
-    // right (atom 1 removed) — the projection remap drops the dangling ref.
+    // right (atom 1 removed) — the projection compaction drops the dangling ref.
     #[rstest]
     fn test_reaction_span_ast_project() {
         let span = ReactionAst::new(

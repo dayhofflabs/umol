@@ -65,8 +65,8 @@ impl DativeBondConstraint {
         }
     }
 
-    pub fn compact(self, _remap: &IdCompaction) -> Option<Self> {
-        // Value-only: no indices to remap.
+    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+        // Value-only: no indices to compact.
         Some(self)
     }
 
@@ -280,8 +280,8 @@ impl DativeBondConstraints {
         out
     }
 
-    pub fn compact(self, remap: &IdCompaction) -> Self {
-        Self(self.0.into_iter().filter_map(|c| c.compact(remap)).collect())
+    pub fn compact(self, compaction: &IdCompaction) -> Self {
+        Self(self.0.into_iter().filter_map(|c| c.compact(compaction)).collect())
     }
 }
 
@@ -770,12 +770,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_constraints_remap() {
+    fn test_dative_bond_constraints_compact() {
         let cs = DativeBondConstraints::from_iter([
             DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
             DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
-        let remap = IdCompaction::new(
+        let compaction = IdCompaction::new(
             Compaction::new(vec![1], vec![1]),
             Vec::new(),
             Vec::new(),
@@ -784,7 +784,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        assert_eq!(cs.clone().compact(&remap), cs);
+        assert_eq!(cs.clone().compact(&compaction), cs);
     }
 
     #[rustfmt::skip]

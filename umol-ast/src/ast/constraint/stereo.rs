@@ -324,7 +324,7 @@ macro_rules! stereo_constraint {
             }
 
             /// Frame-relative ligand positions carry no atom ids, so compact is a no-op.
-            pub fn compact(self, _remap: &IdCompaction) -> Option<Self> {
+            pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
                 Some(self)
             }
 
@@ -507,7 +507,7 @@ macro_rules! stereo_constraint {
             }
 
             /// No-op: frame-relative ligand positions carry no entity index.
-            pub fn compact(self, _remap: &IdCompaction) -> Self {
+            pub fn compact(self, _compaction: &IdCompaction) -> Self {
                 self
             }
 

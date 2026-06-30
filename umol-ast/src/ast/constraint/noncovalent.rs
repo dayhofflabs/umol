@@ -25,7 +25,7 @@ impl NoncovalentBondConstraint {
         match *self {}
     }
 
-    pub fn compact(self, _remap: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
         match self {}
     }
 
@@ -125,7 +125,7 @@ impl NoncovalentBondConstraints {
         mem::take(&mut self.0).into_iter()
     }
 
-    pub fn compact(self, _remap: &IdCompaction) -> Self {
+    pub fn compact(self, _compaction: &IdCompaction) -> Self {
         self
     }
 }
@@ -216,9 +216,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_remap() {
+    fn test_noncovalent_bond_constraints_compact() {
         let cs = NoncovalentBondConstraints::new();
-        let remap = IdCompaction::new(
+        let compaction = IdCompaction::new(
             Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
@@ -227,7 +227,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        assert_eq!(cs.clone().compact(&remap), cs);
+        assert_eq!(cs.clone().compact(&compaction), cs);
     }
 
     #[rstest]

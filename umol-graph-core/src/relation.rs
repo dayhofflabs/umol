@@ -94,19 +94,19 @@ pub struct ParticipantRefs {
 /// forward), and exposes its node/edge refs for incidence. One impl per concrete
 /// id type — dispatch is static, since a factor is homogeneous.
 pub trait RelationParticipant: Copy + Ord + Hash {
-    fn compact(self, remapping: &Compaction) -> Option<Self>;
-    fn uncompact(self, remapping: &Compaction) -> Self;
+    fn compact(self, compaction: &Compaction) -> Option<Self>;
+    fn uncompact(self, compaction: &Compaction) -> Self;
     fn remap(self, remapping: &Remapping) -> Self;
     fn refs(self) -> ParticipantRefs;
 }
 
 impl RelationParticipant for NodeId {
-    fn compact(self, remapping: &Compaction) -> Option<Self> {
-        remapping.compact_node(self)
+    fn compact(self, compaction: &Compaction) -> Option<Self> {
+        compaction.compact_node(self)
     }
 
-    fn uncompact(self, remapping: &Compaction) -> Self {
-        remapping.uncompact_node(self)
+    fn uncompact(self, compaction: &Compaction) -> Self {
+        compaction.uncompact_node(self)
     }
 
     fn remap(self, remapping: &Remapping) -> Self {
@@ -122,12 +122,12 @@ impl RelationParticipant for NodeId {
 }
 
 impl RelationParticipant for EdgeId {
-    fn compact(self, remapping: &Compaction) -> Option<Self> {
-        remapping.compact_edge(self)
+    fn compact(self, compaction: &Compaction) -> Option<Self> {
+        compaction.compact_edge(self)
     }
 
-    fn uncompact(self, remapping: &Compaction) -> Self {
-        remapping.uncompact_edge(self)
+    fn uncompact(self, compaction: &Compaction) -> Self {
+        compaction.uncompact_edge(self)
     }
 
     fn remap(self, remapping: &Remapping) -> Self {
@@ -319,7 +319,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_compaction(&self, remapping: &Compaction) -> Self
+    pub fn apply_compaction(&self, compaction: &Compaction) -> Self
     where
         D: Clone,
     {
@@ -329,7 +329,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
                 let parts: Option<Vec<P>> = self
                     .participants(rid)
                     .iter()
-                    .map(|&p| p.compact(remapping))
+                    .map(|&p| p.compact(compaction))
                     .collect();
                 let parts: [P; N] = parts?.try_into().ok()?;
                 Some((parts, self.data(rid).clone()))
@@ -472,7 +472,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_compaction(&self, remapping: &Compaction) -> Self
+    pub fn apply_compaction(&self, compaction: &Compaction) -> Self
     where
         D: Clone,
     {
@@ -482,7 +482,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
                 let parts: Option<Vec<P>> = self
                     .participants(rid)
                     .iter()
-                    .map(|&p| p.compact(remapping))
+                    .map(|&p| p.compact(compaction))
                     .collect();
                 Some((parts?, self.data(rid).clone()))
             })
@@ -633,7 +633,7 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_compaction(&self, remapping: &Compaction) -> Self
+    pub fn apply_compaction(&self, compaction: &Compaction) -> Self
     where
         D: Clone,
     {
@@ -643,13 +643,13 @@ where
                 let f1: Option<Vec<L1>> = self
                     .participants_1(rid)
                     .iter()
-                    .map(|&p| p.compact(remapping))
+                    .map(|&p| p.compact(compaction))
                     .collect();
                 let f1: [L1; N1] = f1?.try_into().ok()?;
                 let f2: Option<Vec<L2>> = self
                     .participants_2(rid)
                     .iter()
-                    .map(|&p| p.compact(remapping))
+                    .map(|&p| p.compact(compaction))
                     .collect();
                 let f2: [L2; N2] = f2?.try_into().ok()?;
                 Some((f1, f2, self.data(rid).clone()))
@@ -823,7 +823,7 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_compaction(&self, remapping: &Compaction) -> Self
+    pub fn apply_compaction(&self, compaction: &Compaction) -> Self
     where
         D: Clone,
     {
@@ -833,13 +833,13 @@ where
                 let f1: Option<Vec<L1>> = self
                     .participants_1(rid)
                     .iter()
-                    .map(|&p| p.compact(remapping))
+                    .map(|&p| p.compact(compaction))
                     .collect();
                 let f1: [L1; N1] = f1?.try_into().ok()?;
                 let f2: Option<Vec<L2>> = self
                     .participants_2(rid)
                     .iter()
-                    .map(|&p| p.compact(remapping))
+                    .map(|&p| p.compact(compaction))
                     .collect();
                 Some((f1, f2?, self.data(rid).clone()))
             })
@@ -1017,7 +1017,7 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_compaction(&self, remapping: &Compaction) -> Self
+    pub fn apply_compaction(&self, compaction: &Compaction) -> Self
     where
         D: Clone,
     {
@@ -1027,12 +1027,12 @@ where
                 let f1: Option<Vec<L1>> = self
                     .participants_1(rid)
                     .iter()
-                    .map(|&p| p.compact(remapping))
+                    .map(|&p| p.compact(compaction))
                     .collect();
                 let f2: Option<Vec<L2>> = self
                     .participants_2(rid)
                     .iter()
-                    .map(|&p| p.compact(remapping))
+                    .map(|&p| p.compact(compaction))
                     .collect();
                 Some((f1?, f2?, self.data(rid).clone()))
             })
@@ -1111,17 +1111,17 @@ mod tests {
     #[case::before_removed(NodeId(0), Some(NodeId(0)))]
     #[case::removed(NodeId(1), None)]
     #[case::after_removed(NodeId(2), Some(NodeId(1)))]
-    fn test_node_id_remap(#[case] id: NodeId, #[case] expected: Option<NodeId>) {
-        let remapping = Compaction::new(vec![1], vec![]);
-        assert_eq!(id.compact(&remapping), expected);
+    fn test_node_id_compact(#[case] id: NodeId, #[case] expected: Option<NodeId>) {
+        let compaction = Compaction::new(vec![1], vec![]);
+        assert_eq!(id.compact(&compaction), expected);
     }
 
     #[rstest]
     #[case::before_gap(NodeId(0), NodeId(0))]
     #[case::after_gap(NodeId(1), NodeId(2))]
     fn test_node_id_unmap(#[case] id: NodeId, #[case] expected: NodeId) {
-        let remapping = Compaction::new(vec![1], vec![]);
-        assert_eq!(id.uncompact(&remapping), expected);
+        let compaction = Compaction::new(vec![1], vec![]);
+        assert_eq!(id.uncompact(&compaction), expected);
     }
 
     #[rstest]
@@ -1138,17 +1138,17 @@ mod tests {
     #[rstest]
     #[case::removed(EdgeId(0), None)]
     #[case::after_removed(EdgeId(2), Some(EdgeId(1)))]
-    fn test_edge_id_remap(#[case] id: EdgeId, #[case] expected: Option<EdgeId>) {
-        let remapping = Compaction::new(vec![], vec![0]);
-        assert_eq!(id.compact(&remapping), expected);
+    fn test_edge_id_compact(#[case] id: EdgeId, #[case] expected: Option<EdgeId>) {
+        let compaction = Compaction::new(vec![], vec![0]);
+        assert_eq!(id.compact(&compaction), expected);
     }
 
     #[rstest]
     #[case::before_gap(EdgeId(0), EdgeId(0))]
     #[case::after_gap(EdgeId(1), EdgeId(2))]
     fn test_edge_id_unmap(#[case] id: EdgeId, #[case] expected: EdgeId) {
-        let remapping = Compaction::new(vec![], vec![1]);
-        assert_eq!(id.uncompact(&remapping), expected);
+        let compaction = Compaction::new(vec![], vec![1]);
+        assert_eq!(id.uncompact(&compaction), expected);
     }
 
     #[rstest]
@@ -1248,8 +1248,8 @@ mod tests {
     fn test_fixed_relation_set_apply_compaction() {
         let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
             FixedRelationSet::new(vec![([n(0), n(2)], "keep"), ([n(1), n(3)], "drop")]);
-        let remapping = Compaction::new(vec![1], vec![]);
-        let out = rs.apply_compaction(&remapping);
+        let compaction = Compaction::new(vec![1], vec![]);
+        let out = rs.apply_compaction(&compaction);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
@@ -1394,8 +1394,8 @@ mod tests {
             (vec![n(0), n(2), n(4)], "keep"),
             (vec![n(1), n(3)], "drop"),
         ]);
-        let remapping = Compaction::new(vec![1], vec![]);
-        let out = rs.apply_compaction(&remapping);
+        let compaction = Compaction::new(vec![1], vec![]);
+        let out = rs.apply_compaction(&compaction);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
@@ -1492,8 +1492,8 @@ mod tests {
                 ([n(0)], [n(2), n(4)], "keep"),
                 ([n(1)], [n(5), n(6)], "drop"),
             ]);
-        let remapping = Compaction::new(vec![1], vec![]);
-        let out = rs.apply_compaction(&remapping);
+        let compaction = Compaction::new(vec![1], vec![]);
+        let out = rs.apply_compaction(&compaction);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
@@ -1592,8 +1592,8 @@ mod tests {
                 ([n(0)], vec![n(2), n(4)], "keep"),
                 ([n(5)], vec![n(1), n(3)], "drop"),
             ]);
-        let remapping = Compaction::new(vec![1], vec![]);
-        let out = rs.apply_compaction(&remapping);
+        let compaction = Compaction::new(vec![1], vec![]);
+        let out = rs.apply_compaction(&compaction);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
@@ -1691,8 +1691,8 @@ mod tests {
                 (vec![n(0), n(2)], vec![n(4)], "keep"),
                 (vec![n(5)], vec![n(1)], "drop"),
             ]);
-        let remapping = Compaction::new(vec![1], vec![]);
-        let out = rs.apply_compaction(&remapping);
+        let compaction = Compaction::new(vec![1], vec![]);
+        let out = rs.apply_compaction(&compaction);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(3)]);

@@ -100,22 +100,22 @@ where
         }
     }
 
-    fn apply_compaction(self, remap: &Compaction) -> Self {
+    fn apply_compaction(self, compaction: &Compaction) -> Self {
         match self {
             FixedSetStorage::Shared(arc) => {
-                FixedSetStorage::Shared(Arc::new(arc.apply_compaction(remap)))
+                FixedSetStorage::Shared(Arc::new(arc.apply_compaction(compaction)))
             }
             FixedSetStorage::Mutable(vec) => {
-                let remapped: Vec<([P; N], D)> = vec
+                let compacted: Vec<([P; N], D)> = vec
                     .into_iter()
                     .filter_map(|(mut participants, d)| {
                         for slot in &mut participants {
-                            *slot = (*slot).compact(remap)?;
+                            *slot = (*slot).compact(compaction)?;
                         }
                         Some((participants, d))
                     })
                     .collect();
-                FixedSetStorage::Mutable(remapped)
+                FixedSetStorage::Mutable(compacted)
             }
         }
     }
@@ -207,21 +207,21 @@ where
         }
     }
 
-    fn apply_compaction(self, remap: &Compaction) -> Self {
+    fn apply_compaction(self, compaction: &Compaction) -> Self {
         match self {
             VarSetStorage::Shared(arc) => {
-                VarSetStorage::Shared(Arc::new(arc.apply_compaction(remap)))
+                VarSetStorage::Shared(Arc::new(arc.apply_compaction(compaction)))
             }
             VarSetStorage::Mutable(vec) => {
-                let remapped: Vec<(Vec<P>, D)> = vec
+                let compacted: Vec<(Vec<P>, D)> = vec
                     .into_iter()
                     .filter_map(|(participants, d)| {
                         let mapped: Option<Vec<P>> =
-                            participants.into_iter().map(|p| p.compact(remap)).collect();
+                            participants.into_iter().map(|p| p.compact(compaction)).collect();
                         mapped.map(|p| (p, d))
                     })
                     .collect();
-                VarSetStorage::Mutable(remapped)
+                VarSetStorage::Mutable(compacted)
             }
         }
     }
@@ -318,24 +318,24 @@ where
         }
     }
 
-    fn apply_compaction(self, remap: &Compaction) -> Self {
+    fn apply_compaction(self, compaction: &Compaction) -> Self {
         match self {
             FixedVarSetStorage::Shared(arc) => {
-                FixedVarSetStorage::Shared(Arc::new(arc.apply_compaction(remap)))
+                FixedVarSetStorage::Shared(Arc::new(arc.apply_compaction(compaction)))
             }
             FixedVarSetStorage::Mutable(vec) => {
-                let remapped: Vec<([L1; N1], Vec<L2>, D)> = vec
+                let compacted: Vec<([L1; N1], Vec<L2>, D)> = vec
                     .into_iter()
                     .filter_map(|(mut participants_1, participants_2, d)| {
                         for slot in &mut participants_1 {
-                            *slot = (*slot).compact(remap)?;
+                            *slot = (*slot).compact(compaction)?;
                         }
                         let participants_2: Option<Vec<L2>> =
-                            participants_2.into_iter().map(|p| p.compact(remap)).collect();
+                            participants_2.into_iter().map(|p| p.compact(compaction)).collect();
                         Some((participants_1, participants_2?, d))
                     })
                     .collect();
-                FixedVarSetStorage::Mutable(remapped)
+                FixedVarSetStorage::Mutable(compacted)
             }
         }
     }
@@ -390,10 +390,10 @@ where
 }
 
 /// Indices of birelations whose first or second factor maps to `None` under
-/// `remap` (i.e. dropped by the structural removal).
+/// `compaction` (i.e. dropped by the structural removal).
 fn birelation_removed<L1, O1, const N1: usize, L2, O2, D>(
     storage: &FixedVarSetStorage<L1, O1, N1, L2, O2, D>,
-    remap: &Compaction,
+    compaction: &Compaction,
 ) -> Vec<RelationId>
 where
     L1: RelationParticipant,
@@ -407,11 +407,11 @@ where
         let f1_gone = storage
             .participants_1(i)
             .iter()
-            .any(|&p| p.compact(remap).is_none());
+            .any(|&p| p.compact(compaction).is_none());
         let f2_gone = storage
             .participants_2(i)
             .iter()
-            .any(|&p| p.compact(remap).is_none());
+            .any(|&p| p.compact(compaction).is_none());
         if f1_gone || f2_gone {
             removed.push(RelationId(i as u32));
         }
@@ -439,7 +439,7 @@ where
 
 fn fixed_relation_removed<P, O, D, const N: usize>(
     storage: &FixedSetStorage<P, O, D, N>,
-    remap: &Compaction,
+    compaction: &Compaction,
 ) -> Vec<RelationId>
 where
     P: RelationParticipant,
@@ -451,7 +451,7 @@ where
         if storage
             .participants(i)
             .iter()
-            .any(|&p| p.compact(remap).is_none())
+            .any(|&p| p.compact(compaction).is_none())
         {
             removed.push(RelationId(i as u32));
         }
@@ -461,7 +461,7 @@ where
 
 fn var_relation_removed<P, O, D>(
     storage: &VarSetStorage<P, O, D>,
-    remap: &Compaction,
+    compaction: &Compaction,
 ) -> Vec<RelationId>
 where
     P: RelationParticipant,
@@ -473,7 +473,7 @@ where
         if storage
             .participants(i)
             .iter()
-            .any(|&p| p.compact(remap).is_none())
+            .any(|&p| p.compact(compaction).is_none())
         {
             removed.push(RelationId(i as u32));
         }
@@ -652,7 +652,7 @@ impl MoleculeBuilder {
     // -- Attribute access -----------------------------------------------------
     //
     // Mutable views edit entity data in place. Structural add/remove stays on
-    // the builder itself because dense removal can remap many unrelated ids.
+    // the builder itself because dense removal can compact many unrelated ids.
 
     pub fn atom(&self, id: AtomId) -> AtomBuilderView<'_> {
         AtomBuilderView {
@@ -954,12 +954,12 @@ impl MoleculeBuilder {
 
     /// Remove dative-bond overlays directly from the builder.
     ///
-    /// This is a low-level dense removal primitive. It remaps molecule-level
+    /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
     pub fn remove_dative_bonds(&mut self, ids: &[DativeBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.dative_bonds.remove_relations(&raw);
-        let id_remap = IdCompaction::new(
+        let id_compaction = IdCompaction::new(
             Compaction::new(Vec::new(), Vec::new()),
             raw,
             Vec::new(),
@@ -968,17 +968,17 @@ impl MoleculeBuilder {
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.compact(&id_remap);
+        self.constraints.compact(&id_compaction);
     }
 
     /// Remove aromatic-system overlays directly from the builder.
     ///
-    /// This is a low-level dense removal primitive. It remaps molecule-level
+    /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
     pub fn remove_aromatic_systems(&mut self, ids: &[AromaticSystemId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.aromatic_systems.remove_relations(&raw);
-        let id_remap = IdCompaction::new(
+        let id_compaction = IdCompaction::new(
             Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             raw,
@@ -987,17 +987,17 @@ impl MoleculeBuilder {
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.compact(&id_remap);
+        self.constraints.compact(&id_compaction);
     }
 
     /// Remove multicenter-bond overlays directly from the builder.
     ///
-    /// This is a low-level dense removal primitive. It remaps molecule-level
+    /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
     pub fn remove_multicenter_bonds(&mut self, ids: &[MulticenterBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.multicenter_bonds.remove_relations(&raw);
-        let id_remap = IdCompaction::new(
+        let id_compaction = IdCompaction::new(
             Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
@@ -1006,17 +1006,17 @@ impl MoleculeBuilder {
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.compact(&id_remap);
+        self.constraints.compact(&id_compaction);
     }
 
     /// Remove noncovalent-bond overlays directly from the builder.
     ///
-    /// This is a low-level dense removal primitive. It remaps molecule-level
+    /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
     pub fn remove_noncovalent_bonds(&mut self, ids: &[NoncovalentBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.noncovalent_bonds.remove_relations(&raw);
-        let id_remap = IdCompaction::new(
+        let id_compaction = IdCompaction::new(
             Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
@@ -1025,17 +1025,17 @@ impl MoleculeBuilder {
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.compact(&id_remap);
+        self.constraints.compact(&id_compaction);
     }
 
     /// Remove stereo-atom overlays directly from the builder.
     ///
-    /// Low-level dense removal primitive; remaps molecule-level constraints but
+    /// Low-level dense removal primitive; compacts molecule-level constraints but
     /// does not build rollback data.
     pub fn remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_atoms.remove_relations(&raw);
-        let id_remap = IdCompaction::new(
+        let id_compaction = IdCompaction::new(
             Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
@@ -1044,17 +1044,17 @@ impl MoleculeBuilder {
             raw,
             Vec::new(),
         );
-        self.constraints.compact(&id_remap);
+        self.constraints.compact(&id_compaction);
     }
 
     /// Remove stereo-bond overlays directly from the builder.
     ///
-    /// Low-level dense removal primitive; remaps molecule-level constraints but
+    /// Low-level dense removal primitive; compacts molecule-level constraints but
     /// does not build rollback data.
     pub fn remove_stereo_bonds(&mut self, ids: &[StereoBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_bonds.remove_relations(&raw);
-        let id_remap = IdCompaction::new(
+        let id_compaction = IdCompaction::new(
             Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
@@ -1063,61 +1063,61 @@ impl MoleculeBuilder {
             Vec::new(),
             raw,
         );
-        self.constraints.compact(&id_remap);
+        self.constraints.compact(&id_compaction);
     }
 
     // -- Topological removal --------------------------------------------------
 
-    /// Remove topology directly from the builder and return the forward remap.
+    /// Remove topology directly from the builder and return the forward compaction.
     ///
     /// This is the low-level dense topology-removal primitive. It removes the
     /// requested atoms and bonds, cascades relations whose participants were
-    /// removed, remaps molecule-level constraints, and returns the forward
+    /// removed, compacts molecule-level constraints, and returns the forward
     /// `IdCompaction` for downstream id holders. It does not build rollback
     /// data; checked transactions capture the removed payloads before calling
     /// this method.
     pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> IdCompaction {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
-        let remap = self.graph.remove(&nodes, &edges);
+        let compaction = self.graph.remove(&nodes, &edges);
 
-        let new_atoms = compact_node_vec(&remap, &self.atoms);
-        let new_bonds = compact_edge_vec(&remap, &self.bonds);
+        let new_atoms = compact_node_vec(&compaction, &self.atoms);
+        let new_bonds = compact_edge_vec(&compaction, &self.bonds);
         self.atoms = Arc::new(new_atoms);
         self.bonds = Arc::new(new_bonds);
 
-        let removed_dative = birelation_removed(&self.dative_bonds, &remap);
-        let removed_aromatic = var_relation_removed(&self.aromatic_systems, &remap);
-        let removed_multicenter = var_relation_removed(&self.multicenter_bonds, &remap);
-        let removed_noncovalent = fixed_relation_removed(&self.noncovalent_bonds, &remap);
-        let removed_stereo_atoms = birelation_removed(&self.stereo_atoms, &remap);
-        let removed_stereo_bonds = birelation_removed(&self.stereo_bonds, &remap);
+        let removed_dative = birelation_removed(&self.dative_bonds, &compaction);
+        let removed_aromatic = var_relation_removed(&self.aromatic_systems, &compaction);
+        let removed_multicenter = var_relation_removed(&self.multicenter_bonds, &compaction);
+        let removed_noncovalent = fixed_relation_removed(&self.noncovalent_bonds, &compaction);
+        let removed_stereo_atoms = birelation_removed(&self.stereo_atoms, &compaction);
+        let removed_stereo_bonds = birelation_removed(&self.stereo_bonds, &compaction);
 
         let dative = mem::replace(
             &mut self.dative_bonds,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.dative_bonds = dative.apply_compaction(&remap);
+        self.dative_bonds = dative.apply_compaction(&compaction);
 
         let aromatic = mem::replace(
             &mut self.aromatic_systems,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
-        self.aromatic_systems = aromatic.apply_compaction(&remap);
+        self.aromatic_systems = aromatic.apply_compaction(&compaction);
 
         let multicenter = mem::replace(
             &mut self.multicenter_bonds,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
-        self.multicenter_bonds = multicenter.apply_compaction(&remap);
+        self.multicenter_bonds = multicenter.apply_compaction(&compaction);
 
         let noncovalent = mem::replace(
             &mut self.noncovalent_bonds,
             FixedSetStorage::Shared(Arc::new(FixedRelationSet::default())),
         );
-        self.noncovalent_bonds = noncovalent.apply_compaction(&remap);
+        self.noncovalent_bonds = noncovalent.apply_compaction(&compaction);
 
-        // Forward-remap stereo overlays: a stereo element whose site or any
+        // Forward-compact stereo overlays: a stereo element whose site or any
         // ligand atom/bond was removed drops out (cascade). The dropped ids
         // (computed above) feed `IdCompaction` so rollback (`restore_topology`)
         // can reinsert them.
@@ -1125,15 +1125,15 @@ impl MoleculeBuilder {
             &mut self.stereo_atoms,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.stereo_atoms = stereo_atoms.apply_compaction(&remap);
+        self.stereo_atoms = stereo_atoms.apply_compaction(&compaction);
         let stereo_bonds = mem::replace(
             &mut self.stereo_bonds,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.stereo_bonds = stereo_bonds.apply_compaction(&remap);
+        self.stereo_bonds = stereo_bonds.apply_compaction(&compaction);
 
-        let id_remap = IdCompaction::new(
-            remap,
+        let id_compaction = IdCompaction::new(
+            compaction,
             removed_dative,
             removed_aromatic,
             removed_multicenter,
@@ -1141,8 +1141,8 @@ impl MoleculeBuilder {
             removed_stereo_atoms,
             removed_stereo_bonds,
         );
-        self.constraints.compact(&id_remap);
-        id_remap
+        self.constraints.compact(&id_compaction);
+        id_compaction
     }
 
     // -- Undo of additions ----------------------------------------------------
@@ -1484,12 +1484,12 @@ mod tests {
             },
         ];
 
-        let remap = triatomic.remove(&[AtomId(1)], &[]);
+        let compaction = triatomic.remove(&[AtomId(1)], &[]);
         triatomic.restore_topology(
             removed_atoms,
             removed_bonds,
             RemovedOverlays::default(),
-            &remap.undo_compaction(),
+            &compaction.undo_compaction(),
             CascadedConstraints {
                 removed: vec![RemovedConstraint {
                     position: 0,
@@ -1562,7 +1562,7 @@ mod tests {
         assert_eq!(ast.edit().build(), ast);
     }
 
-    // `remove` forward-remaps stereo-atom node refs: removing a non-participant
+    // `remove` forward-compacts stereo-atom node refs: removing a non-participant
     // shifts the surviving site/ligand ids; removing the site drops the element.
     #[rstest]
     #[case::remaps_surviving(vec![AtomId(0)], vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]])]
@@ -1587,7 +1587,7 @@ mod tests {
         assert_eq!(surviving, expected);
     }
 
-    // `remove` forward-remaps the stereo-bond edge site: removing a non-site bond
+    // `remove` forward-compacts the stereo-bond edge site: removing a non-site bond
     // shifts the surviving site; removing the site bond drops the element.
     #[rstest]
     #[case::remaps_surviving(vec![BondId(0)], vec![BondId(0)])]

@@ -1,6 +1,6 @@
-//! AST-level id remappings between `MoleculeAst` id spaces.
+//! AST-level id mappings between `MoleculeAst` id spaces.
 //!
-//! [`IdCompaction`] is the removal/compaction remapping produced by
+//! [`IdCompaction`] is the removal compaction produced by
 //! `MoleculeBuilder::remove` (wraps `umol_graph_core::Compaction` for atom/bond
 //! and carries sorted removed-id lists for the six relation kinds; lookups are
 //! binary search + partition-point shift). [`IdRemapping`] is the general total
@@ -15,7 +15,7 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 
-/// Id remapping produced by `MoleculeBuilder::remove`. Translates
+/// Id compaction produced by `MoleculeBuilder::remove`. Translates
 /// pre-removal `AtomId` / `BondId` / relation ids to post-removal
 /// ids, or signals that an entity was removed. Used to rewrite stale
 /// id references against the new `MoleculeAst` layout.
@@ -301,7 +301,7 @@ mod tests {
     use super::*;
 
     #[fixture]
-    fn remapping() -> IdCompaction {
+    fn compaction() -> IdCompaction {
         IdCompaction::new(
             Compaction::new(vec![1, 3], vec![0, 2]),
             vec![RelationId(2), RelationId(0), RelationId(2)],
@@ -319,12 +319,12 @@ mod tests {
     #[case::between_removed(AtomId(2), Some(AtomId(1)))]
     #[case::removed_second(AtomId(3), None)]
     #[case::after_removed(AtomId(4), Some(AtomId(2)))]
-    fn test_id_remapping_atom(
-        remapping: IdCompaction,
+    fn test_id_compaction_atom(
+        compaction: IdCompaction,
         #[case] input: AtomId,
         #[case] expected: Option<AtomId>,
     ) {
-        assert_eq!(remapping.compact_atom(input), expected);
+        assert_eq!(compaction.compact_atom(input), expected);
     }
 
     #[rstest]
@@ -332,12 +332,12 @@ mod tests {
     #[case::between_removed(BondId(1), Some(BondId(0)))]
     #[case::removed_second(BondId(2), None)]
     #[case::after_removed(BondId(3), Some(BondId(1)))]
-    fn test_id_remapping_bond(
-        remapping: IdCompaction,
+    fn test_id_compaction_bond(
+        compaction: IdCompaction,
         #[case] input: BondId,
         #[case] expected: Option<BondId>,
     ) {
-        assert_eq!(remapping.compact_bond(input), expected);
+        assert_eq!(compaction.compact_bond(input), expected);
     }
 
     #[rstest]
@@ -351,14 +351,14 @@ mod tests {
     #[case::stereo_atom_shifted(StereoAtomId(2), Some(StereoAtomId(1)))]
     #[case::stereo_bond_removed(StereoBondId(2), None)]
     #[case::stereo_bond_shifted(StereoBondId(3), Some(StereoBondId(2)))]
-    fn test_id_remapping_relations<T>(
-        remapping: IdCompaction,
+    fn test_id_compaction_relations<T>(
+        compaction: IdCompaction,
         #[case] input: T,
         #[case] expected: Option<T>,
     ) where
         T: RelationCase,
     {
-        assert_eq!(input.compact(&remapping), expected);
+        assert_eq!(input.compact(&compaction), expected);
     }
 
     #[rstest]
@@ -366,22 +366,22 @@ mod tests {
     #[case::after_first_gap(AtomId(1), AtomId(2))]
     #[case::after_second_gap(AtomId(2), AtomId(4))]
     fn test_undo_compaction_atom(
-        remapping: IdCompaction,
+        compaction: IdCompaction,
         #[case] input: AtomId,
         #[case] expected: AtomId,
     ) {
-        assert_eq!(remapping.undo_compaction().uncompact_atom(input), expected);
+        assert_eq!(compaction.undo_compaction().uncompact_atom(input), expected);
     }
 
     #[rstest]
     #[case::after_first_gap(BondId(0), BondId(1))]
     #[case::after_second_gap(BondId(1), BondId(3))]
     fn test_undo_compaction_bond(
-        remapping: IdCompaction,
+        compaction: IdCompaction,
         #[case] input: BondId,
         #[case] expected: BondId,
     ) {
-        assert_eq!(UndoCompaction::from(&remapping).uncompact_bond(input), expected);
+        assert_eq!(UndoCompaction::from(&compaction).uncompact_bond(input), expected);
     }
 
     #[rstest]
@@ -393,77 +393,77 @@ mod tests {
     #[case::stereo_atom_after_gap(StereoAtomId(1), StereoAtomId(2))]
     #[case::stereo_bond_after_gap(StereoBondId(2), StereoBondId(3))]
     fn test_undo_compaction_relations<T>(
-        remapping: IdCompaction,
+        compaction: IdCompaction,
         #[case] input: T,
         #[case] expected: T,
     ) where
         T: RelationCase,
     {
-        assert_eq!(input.uncompact(&remapping.undo_compaction()), expected);
+        assert_eq!(input.uncompact(&compaction.undo_compaction()), expected);
     }
 
     trait RelationCase: Copy + PartialEq + Debug {
-        fn compact(self, remapping: &IdCompaction) -> Option<Self>;
-        fn uncompact(self, remapping: &UndoCompaction) -> Self;
+        fn compact(self, compaction: &IdCompaction) -> Option<Self>;
+        fn uncompact(self, compaction: &UndoCompaction) -> Self;
     }
 
     impl RelationCase for DativeBondId {
-        fn compact(self, remapping: &IdCompaction) -> Option<Self> {
-            remapping.compact_dative_bond(self)
+        fn compact(self, compaction: &IdCompaction) -> Option<Self> {
+            compaction.compact_dative_bond(self)
         }
 
-        fn uncompact(self, remapping: &UndoCompaction) -> Self {
-            remapping.uncompact_dative_bond(self)
+        fn uncompact(self, compaction: &UndoCompaction) -> Self {
+            compaction.uncompact_dative_bond(self)
         }
     }
 
     impl RelationCase for AromaticSystemId {
-        fn compact(self, remapping: &IdCompaction) -> Option<Self> {
-            remapping.compact_aromatic_system(self)
+        fn compact(self, compaction: &IdCompaction) -> Option<Self> {
+            compaction.compact_aromatic_system(self)
         }
 
-        fn uncompact(self, remapping: &UndoCompaction) -> Self {
-            remapping.uncompact_aromatic_system(self)
+        fn uncompact(self, compaction: &UndoCompaction) -> Self {
+            compaction.uncompact_aromatic_system(self)
         }
     }
 
     impl RelationCase for MulticenterBondId {
-        fn compact(self, remapping: &IdCompaction) -> Option<Self> {
-            remapping.compact_multicenter_bond(self)
+        fn compact(self, compaction: &IdCompaction) -> Option<Self> {
+            compaction.compact_multicenter_bond(self)
         }
 
-        fn uncompact(self, remapping: &UndoCompaction) -> Self {
-            remapping.uncompact_multicenter_bond(self)
+        fn uncompact(self, compaction: &UndoCompaction) -> Self {
+            compaction.uncompact_multicenter_bond(self)
         }
     }
 
     impl RelationCase for NoncovalentBondId {
-        fn compact(self, remapping: &IdCompaction) -> Option<Self> {
-            remapping.compact_noncovalent_bond(self)
+        fn compact(self, compaction: &IdCompaction) -> Option<Self> {
+            compaction.compact_noncovalent_bond(self)
         }
 
-        fn uncompact(self, remapping: &UndoCompaction) -> Self {
-            remapping.uncompact_noncovalent_bond(self)
+        fn uncompact(self, compaction: &UndoCompaction) -> Self {
+            compaction.uncompact_noncovalent_bond(self)
         }
     }
 
     impl RelationCase for StereoAtomId {
-        fn compact(self, remapping: &IdCompaction) -> Option<Self> {
-            remapping.compact_stereo_atom(self)
+        fn compact(self, compaction: &IdCompaction) -> Option<Self> {
+            compaction.compact_stereo_atom(self)
         }
 
-        fn uncompact(self, remapping: &UndoCompaction) -> Self {
-            remapping.uncompact_stereo_atom(self)
+        fn uncompact(self, compaction: &UndoCompaction) -> Self {
+            compaction.uncompact_stereo_atom(self)
         }
     }
 
     impl RelationCase for StereoBondId {
-        fn compact(self, remapping: &IdCompaction) -> Option<Self> {
-            remapping.compact_stereo_bond(self)
+        fn compact(self, compaction: &IdCompaction) -> Option<Self> {
+            compaction.compact_stereo_bond(self)
         }
 
-        fn uncompact(self, remapping: &UndoCompaction) -> Self {
-            remapping.uncompact_stereo_bond(self)
+        fn uncompact(self, compaction: &UndoCompaction) -> Self {
+            compaction.uncompact_stereo_bond(self)
         }
     }
 }

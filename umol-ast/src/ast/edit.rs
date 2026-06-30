@@ -640,7 +640,7 @@ pub enum Undo {
         atoms: Vec<RemovedAtom>,
         bonds: Vec<RemovedBond>,
         overlays: RemovedOverlays,
-        remapping: IdCompaction,
+        compaction: IdCompaction,
         undo_compaction: UndoCompaction,
         cascade: CascadedConstraints,
     },
@@ -711,9 +711,9 @@ pub enum Undo {
 }
 
 impl Undo {
-    pub fn id_remapping(&self) -> Option<&IdCompaction> {
+    pub fn id_compaction(&self) -> Option<&IdCompaction> {
         match self {
-            Self::RestoreRemovedTopology { remapping, .. } => Some(remapping),
+            Self::RestoreRemovedTopology { compaction, .. } => Some(compaction),
             _ => None,
         }
     }
