@@ -1,7 +1,7 @@
 //! Sequential reaction composition (A;B): the reaction whose application equals applying A then
 //! B. Per overlap of A's product `R_A` with B's reactant `L_B`, the composite is built in one
-//! frame and `canonicalize`d; overlaps with no `B.apply(A.apply(H))` witness (the DPO gluing
-//! conditions) are rejected. See doc 132 §W3 for the frame algebra.
+//! id space and `canonicalize`d; overlaps with no `B.apply(A.apply(H))` witness (the DPO gluing
+//! conditions) are rejected.
 
 use std::collections::{HashMap, HashSet};
 
@@ -13,6 +13,7 @@ use super::delta::{remap_delta, AtomDelta, BondDelta, Delta, Deltas};
 use super::id::{AtomId, BondId};
 use super::molecule::MoleculeAst;
 use super::reaction::ReactionAst;
+use super::remap::IdRemapping;
 use super::traits::{Canonicalize, Lattice};
 
 /// Which overlaps `compose` keeps.
@@ -72,32 +73,32 @@ fn compose_all(
     let n_b = l_b.atoms().count();
     let m_b = l_b.bonds().count();
 
-    // R_A id ⇒ A-frame id: the span union frame is `lhs_A` in place then A-created appended, and
-    // `right()` keeps the survivors in that order, so the k-th survivor's A-frame index is the
-    // A-frame id of R_A atom/bond k.
-    let ra_atom_aframe: Vec<usize> = span_a
+    // R_A id ⇒ A id: the span's union id space is `lhs_A` in place then A-created appended, and
+    // `right()` keeps the survivors in that order, so the k-th survivor's A-id index is the
+    // A id of R_A atom/bond k.
+    let ra_atom_a_id: Vec<usize> = span_a
         .atoms()
         .iter()
         .enumerate()
         .filter(|(_, change)| change.right().is_some())
-        .map(|(aframe, _)| aframe)
+        .map(|(a_id, _)| a_id)
         .collect();
-    let mut ra_bond_aframe: Vec<usize> = Vec::new();
-    for (aframe, change) in span_a.bonds().iter().enumerate() {
+    let mut ra_bond_a_id: Vec<usize> = Vec::new();
+    for (a_id, change) in span_a.bonds().iter().enumerate() {
         if change.right().is_none() {
             continue;
         }
-        let [x, y] = span_a.graph().edge_endpoints(EdgeId(aframe as u32));
+        let [x, y] = span_a.graph().edge_endpoints(EdgeId(a_id as u32));
         if span_a.atoms()[x.index()].right().is_some()
             && span_a.atoms()[y.index()].right().is_some()
         {
-            ra_bond_aframe.push(aframe);
+            ra_bond_a_id.push(a_id);
         }
     }
     let a_created_atoms = span_a.atoms().len() - n_a;
     let a_created_bonds = span_a.bonds().len() - m_a;
 
-    // A-created delta id ⇒ A-frame rank (the span appends them sorted by id).
+    // A-created delta id ⇒ A-id rank (the span appends them sorted by id).
     let a_atom_rank: HashMap<AtomId, usize> = created_atom_ids(&da)
         .into_iter()
         .enumerate()
@@ -110,35 +111,35 @@ fn compose_all(
         .collect();
 
     // Reaction center, projected onto R_A: A-created elements (all) plus `lhs_A` elements A
-    // modifies. A-frame id of a changed element → which R_A atoms/bonds it is.
-    let mut rc_aframe_atoms: HashSet<usize> = HashSet::new();
-    let mut rc_aframe_bonds: HashSet<usize> = HashSet::new();
+    // modifies. A id of a changed element → which R_A atoms/bonds it is.
+    let mut rc_a_atom_ids: HashSet<usize> = HashSet::new();
+    let mut rc_a_bond_ids: HashSet<usize> = HashSet::new();
     for delta in da.iter() {
         match delta {
             Delta::Atom(AtomDelta::ModifyField { id, .. })
             | Delta::Atom(AtomDelta::ModifyConstraint { id, .. }) => {
-                rc_aframe_atoms.insert(id.index());
+                rc_a_atom_ids.insert(id.index());
             }
             Delta::Atom(AtomDelta::Add { id, .. }) => {
-                rc_aframe_atoms.insert(n_a + a_atom_rank[id]);
+                rc_a_atom_ids.insert(n_a + a_atom_rank[id]);
             }
             Delta::Bond(BondDelta::ModifyField { id, .. })
             | Delta::Bond(BondDelta::ModifyConstraint { id, .. }) => {
-                rc_aframe_bonds.insert(id.index());
+                rc_a_bond_ids.insert(id.index());
             }
             Delta::Bond(BondDelta::Add { id, .. }) => {
-                rc_aframe_bonds.insert(m_a + a_bond_rank[id]);
+                rc_a_bond_ids.insert(m_a + a_bond_rank[id]);
             }
             _ => {}
         }
     }
-    let rc_ra_atoms: HashSet<AtomId> = (0..ra_atom_aframe.len() as u32)
+    let rc_ra_atoms: HashSet<AtomId> = (0..ra_atom_a_id.len() as u32)
         .map(AtomId)
-        .filter(|k| rc_aframe_atoms.contains(&ra_atom_aframe[k.index()]))
+        .filter(|k| rc_a_atom_ids.contains(&ra_atom_a_id[k.index()]))
         .collect();
-    let rc_ra_bonds: HashSet<BondId> = (0..ra_bond_aframe.len() as u32)
+    let rc_ra_bonds: HashSet<BondId> = (0..ra_bond_a_id.len() as u32)
         .map(BondId)
-        .filter(|k| rc_aframe_bonds.contains(&ra_bond_aframe[k.index()]))
+        .filter(|k| rc_a_bond_ids.contains(&ra_bond_a_id[k.index()]))
         .collect();
 
     let mut node_match = |ra: NodeId, lb: NodeId| {
@@ -210,7 +211,7 @@ fn compose_all(
             }
         }
 
-        let is_ra_created = |ra: AtomId| ra_atom_aframe[ra.index()] >= n_a;
+        let is_ra_created = |ra: AtomId| ra_atom_a_id[ra.index()] >= n_a;
 
         // Extra (non-overlap) L_B atoms → composite class 2 (`n_a..n_a+e`).
         let lb_extra: Vec<AtomId> = (0..n_b as u32)
@@ -255,7 +256,7 @@ fn compose_all(
             .map(|(rank, &x)| (x, m_a + rank))
             .collect();
 
-        // Combined-frame dangling: if B deletes a shared (overlap) atom, every R_A bond incident
+        // Composite-id-space dangling: if B deletes a shared (overlap) atom, every R_A bond incident
         // to its image must be an overlap bond B also deletes; an A-product bond B cannot see
         // would dangle.
         let mut dangling = false;
@@ -292,24 +293,24 @@ fn compose_all(
             continue;
         }
 
-        // Composite id maps. A-frame id → composite: `lhs_A`/`lhs_A`-bonds keep their id; A-created
+        // Composite id maps. A id → composite: `lhs_A`/`lhs_A`-bonds keep their id; A-created
         // shift past the appended extras (atoms by `e`, bonds by `f`).
-        let aframe_atom_comp = |aframe: usize| {
-            if aframe < n_a {
-                aframe
+        let composite_atom_id = |a_id: usize| {
+            if a_id < n_a {
+                a_id
             } else {
-                n_a + e + (aframe - n_a)
+                n_a + e + (a_id - n_a)
             }
         };
-        let aframe_bond_comp = |aframe: usize| {
-            if aframe < m_a {
-                aframe
+        let composite_bond_id = |a_id: usize| {
+            if a_id < m_a {
+                a_id
             } else {
-                m_a + f + (aframe - m_a)
+                m_a + f + (a_id - m_a)
             }
         };
-        let ra_atom_comp = |ra: AtomId| AtomId(aframe_atom_comp(ra_atom_aframe[ra.index()]) as u32);
-        let ra_bond_comp = |rb: BondId| BondId(aframe_bond_comp(ra_bond_aframe[rb.index()]) as u32);
+        let ra_atom_comp = |ra: AtomId| AtomId(composite_atom_id(ra_atom_a_id[ra.index()]) as u32);
+        let ra_bond_comp = |rb: BondId| BondId(composite_bond_id(ra_bond_a_id[rb.index()]) as u32);
 
         let mut da_atom: HashMap<AtomId, AtomId> =
             (0..n_a as u32).map(|i| (AtomId(i), AtomId(i))).collect();
@@ -383,12 +384,30 @@ fn compose_all(
         }
         let lhs_c = MoleculeAst::from_atoms_and_bonds(lc_atoms, lc_bonds);
 
+        // TODO(I3): overlay deltas need overlay-id maps from the composition's overlay overlap;
+        // empty maps suffice while compose handles only atom/bond reactions.
+        let da_map = IdRemapping::new(
+            da_atom,
+            da_bond,
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+        );
+        let db_map = IdRemapping::new(
+            db_atom,
+            db_bond,
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+        );
         let mut deltas: Vec<Delta> = Vec::with_capacity(da.len() + db.len());
         for delta in da.iter() {
-            deltas.push(remap_delta(delta.clone(), &da_atom, &da_bond));
+            deltas.push(remap_delta(delta.clone(), &da_map));
         }
         for delta in db.iter() {
-            deltas.push(remap_delta(delta.clone(), &db_atom, &db_bond));
+            deltas.push(remap_delta(delta.clone(), &db_map));
         }
         let Ok(deltas) = Deltas::from_iter(deltas).canonicalize() else {
             continue;

@@ -23,7 +23,7 @@ use super::super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::super::ligand::StereoLigand;
-use super::super::remap::IdRemapping;
+use super::super::remap::IdCompaction;
 use super::MoleculeBuilder;
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
@@ -716,17 +716,17 @@ impl MoleculeBuilder {
                 let remapping = if !atoms.is_empty() || !bonds.is_empty() {
                     self.remove(&atoms, &bonds)
                 } else {
-                    IdRemapping::empty()
+                    IdCompaction::empty()
                 };
                 let mut constraints = pre_constraints;
-                let cascade = constraints.remap_with_update(&remapping);
-                let undo_remapping = remapping.undo_remapping();
+                let cascade = constraints.compact_with_update(&remapping);
+                let undo_compaction = remapping.undo_compaction();
                 Ok(Undo::RestoreRemovedTopology {
                     atoms: removed_atoms,
                     bonds: removed_bonds,
                     overlays,
                     remapping,
-                    undo_remapping,
+                    undo_compaction,
                     cascade,
                 })
             }
@@ -801,7 +801,7 @@ impl MoleculeBuilder {
                 self.remove_dative_bonds(&[id]);
                 Ok(Undo::RestoreRemovedDativeBond {
                     removed,
-                    undo_remapping: IdRemapping::relations(
+                    undo_compaction: IdCompaction::relations(
                         vec![id.into()],
                         Vec::new(),
                         Vec::new(),
@@ -809,7 +809,7 @@ impl MoleculeBuilder {
                         Vec::new(),
                         Vec::new(),
                     )
-                    .undo_remapping(),
+                    .undo_compaction(),
                 })
             }
             Edit::ModifyDativeBondField { id, change } => {
@@ -865,7 +865,7 @@ impl MoleculeBuilder {
                 self.remove_aromatic_systems(&[id]);
                 Ok(Undo::RestoreRemovedAromaticSystem {
                     removed,
-                    undo_remapping: IdRemapping::relations(
+                    undo_compaction: IdCompaction::relations(
                         Vec::new(),
                         vec![id.into()],
                         Vec::new(),
@@ -873,7 +873,7 @@ impl MoleculeBuilder {
                         Vec::new(),
                         Vec::new(),
                     )
-                    .undo_remapping(),
+                    .undo_compaction(),
                 })
             }
             Edit::ModifyAromaticSystemField { id, change } => {
@@ -929,7 +929,7 @@ impl MoleculeBuilder {
                 self.remove_multicenter_bonds(&[id]);
                 Ok(Undo::RestoreRemovedMulticenterBond {
                     removed,
-                    undo_remapping: IdRemapping::relations(
+                    undo_compaction: IdCompaction::relations(
                         Vec::new(),
                         Vec::new(),
                         vec![id.into()],
@@ -937,7 +937,7 @@ impl MoleculeBuilder {
                         Vec::new(),
                         Vec::new(),
                     )
-                    .undo_remapping(),
+                    .undo_compaction(),
                 })
             }
             Edit::ModifyMulticenterBondField { id, change } => {
@@ -991,7 +991,7 @@ impl MoleculeBuilder {
                 self.remove_noncovalent_bonds(&[id]);
                 Ok(Undo::RestoreRemovedNoncovalentBond {
                     removed,
-                    undo_remapping: IdRemapping::relations(
+                    undo_compaction: IdCompaction::relations(
                         Vec::new(),
                         Vec::new(),
                         Vec::new(),
@@ -999,7 +999,7 @@ impl MoleculeBuilder {
                         Vec::new(),
                         Vec::new(),
                     )
-                    .undo_remapping(),
+                    .undo_compaction(),
                 })
             }
             Edit::ModifyNoncovalentBondField { id, change } => {
@@ -1054,7 +1054,7 @@ impl MoleculeBuilder {
                 self.remove_stereo_atoms(&[id]);
                 Ok(Undo::RestoreRemovedStereoAtom {
                     removed,
-                    undo_remapping: IdRemapping::relations(
+                    undo_compaction: IdCompaction::relations(
                         Vec::new(),
                         Vec::new(),
                         Vec::new(),
@@ -1062,7 +1062,7 @@ impl MoleculeBuilder {
                         vec![id.into()],
                         Vec::new(),
                     )
-                    .undo_remapping(),
+                    .undo_compaction(),
                 })
             }
             Edit::ModifyStereoAtomField { id, change } => {
@@ -1117,7 +1117,7 @@ impl MoleculeBuilder {
                 self.remove_stereo_bonds(&[id]);
                 Ok(Undo::RestoreRemovedStereoBond {
                     removed,
-                    undo_remapping: IdRemapping::relations(
+                    undo_compaction: IdCompaction::relations(
                         Vec::new(),
                         Vec::new(),
                         Vec::new(),
@@ -1125,7 +1125,7 @@ impl MoleculeBuilder {
                         Vec::new(),
                         vec![id.into()],
                     )
-                    .undo_remapping(),
+                    .undo_compaction(),
                 })
             }
             Edit::ModifyStereoBondField { id, change } => {
@@ -1751,42 +1751,42 @@ impl MoleculeBuilder {
                 atoms,
                 bonds,
                 overlays,
-                undo_remapping,
+                undo_compaction,
                 cascade,
                 ..
             } => {
-                self.restore_topology(atoms, bonds, overlays, &undo_remapping, cascade);
+                self.restore_topology(atoms, bonds, overlays, &undo_compaction, cascade);
             }
             Undo::RemoveAddedDativeBond(added) => self.remove_added_dative_bond(&added),
             Undo::RestoreRemovedDativeBond {
                 removed,
-                undo_remapping,
-            } => self.restore_dative_bond(removed, &undo_remapping),
+                undo_compaction,
+            } => self.restore_dative_bond(removed, &undo_compaction),
             Undo::RemoveAddedAromaticSystem(added) => self.remove_added_aromatic_system(&added),
             Undo::RestoreRemovedAromaticSystem {
                 removed,
-                undo_remapping,
-            } => self.restore_aromatic_system(removed, &undo_remapping),
+                undo_compaction,
+            } => self.restore_aromatic_system(removed, &undo_compaction),
             Undo::RemoveAddedMulticenterBond(added) => self.remove_added_multicenter_bond(&added),
             Undo::RestoreRemovedMulticenterBond {
                 removed,
-                undo_remapping,
-            } => self.restore_multicenter_bond(removed, &undo_remapping),
+                undo_compaction,
+            } => self.restore_multicenter_bond(removed, &undo_compaction),
             Undo::RemoveAddedNoncovalentBond(added) => self.remove_added_noncovalent_bond(&added),
             Undo::RestoreRemovedNoncovalentBond {
                 removed,
-                undo_remapping,
-            } => self.restore_noncovalent_bond(removed, &undo_remapping),
+                undo_compaction,
+            } => self.restore_noncovalent_bond(removed, &undo_compaction),
             Undo::RemoveAddedStereoAtom(added) => self.remove_added_stereo_atom(&added),
             Undo::RestoreRemovedStereoAtom {
                 removed,
-                undo_remapping,
-            } => self.restore_stereo_atom(removed, &undo_remapping),
+                undo_compaction,
+            } => self.restore_stereo_atom(removed, &undo_compaction),
             Undo::RemoveAddedStereoBond(added) => self.remove_added_stereo_bond(&added),
             Undo::RestoreRemovedStereoBond {
                 removed,
-                undo_remapping,
-            } => self.restore_stereo_bond(removed, &undo_remapping),
+                undo_compaction,
+            } => self.restore_stereo_bond(removed, &undo_compaction),
             Undo::ModifyAtomField { id, change } => self.apply_modify_atom_field(id, change)?,
             Undo::ModifyBondField { id, change } => self.apply_modify_bond_field(id, change)?,
             Undo::ModifyDativeBondField { id, change } => {
@@ -2042,7 +2042,7 @@ mod tests {
             vec![BondId(0)]
         );
         assert!(overlays.dative_bonds.is_empty());
-        assert_eq!(remapping.bond(BondId(0)), None);
+        assert_eq!(remapping.compact_bond(BondId(0)), None);
     }
 
     #[rstest]

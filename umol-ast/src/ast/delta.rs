@@ -1,7 +1,7 @@
 //! Resolved edit vocabulary: the `Delta` counterpart of the deferred `Edit`.
 //!
 //! A `Delta` is one resolved edit over a `MoleculeAst`, referencing entities by stable
-//! ids in the molecule's own frame (no positional `New`). The vocabulary is closed
+//! ids in the molecule's own id space (no positional `New`). The vocabulary is closed
 //! under inversion — every delta's inverse is another delta.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -9,14 +9,29 @@ use std::hash::Hash;
 use std::mem::{discriminant, Discriminant};
 use std::slice::{Iter, IterMut};
 
+use umol_graph_core::{FactorOrdering, Unordered};
+
+use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::constraint::{
-    AtomConstraint, AtomConstraintKey, BondConstraint, BondConstraintKey, Constraint,
+    AromaticSystemConstraint, AromaticSystemConstraintKey, AtomConstraint, AtomConstraintKey,
+    BondConstraint, BondConstraintKey, Constraint, DativeBondConstraint, DativeBondConstraintKey,
+    MulticenterBondConstraint, MulticenterBondConstraintKey, NoncovalentBondConstraint,
+    NoncovalentBondConstraintKey,
 };
-use super::edit::{AtomFieldChange, BondFieldChange};
+use super::dative::DativeBondAst;
+use super::edit::{
+    AromaticSystemFieldChange, AtomFieldChange, BondFieldChange, DativeBondFieldChange,
+    MulticenterBondFieldChange, NoncovalentBondFieldChange,
+};
 use super::error::Contradiction;
-use super::id::{AtomId, BondId};
+use super::id::{
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+};
+use super::multicenter::MulticenterBondAst;
+use super::noncovalent::NoncovalentBondAst;
+use super::remap::IdRemapping;
 use super::traits::{Canonicalize, EntityPatch};
 
 /// A resolved edit to a single atom.
@@ -102,6 +117,200 @@ impl BondDelta {
     }
 }
 
+/// A resolved edit to a single dative bond. `donors`/`acceptor` are the directed
+/// participants (structural payload, like `BondDelta::atoms`); identity is the id.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DativeBondDelta {
+    Add {
+        id: DativeBondId,
+        donors: Vec<AtomId>,
+        acceptor: AtomId,
+        ast: DativeBondAst,
+    },
+    Remove {
+        id: DativeBondId,
+        donors: Vec<AtomId>,
+        acceptor: AtomId,
+        ast: DativeBondAst,
+    },
+    ModifyField {
+        id: DativeBondId,
+        change: DativeBondFieldChange,
+    },
+    ModifyConstraint {
+        id: DativeBondId,
+        old: Option<DativeBondConstraint>,
+        new: Option<DativeBondConstraint>,
+    },
+}
+
+impl DativeBondDelta {
+    pub fn inverse(self) -> Self {
+        match self {
+            Self::Add {
+                id,
+                donors,
+                acceptor,
+                ast,
+            } => Self::Remove {
+                id,
+                donors,
+                acceptor,
+                ast,
+            },
+            Self::Remove {
+                id,
+                donors,
+                acceptor,
+                ast,
+            } => Self::Add {
+                id,
+                donors,
+                acceptor,
+                ast,
+            },
+            Self::ModifyField { id, change } => Self::ModifyField {
+                id,
+                change: change.inverse(),
+            },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id,
+                old: new,
+                new: old,
+            },
+        }
+    }
+}
+
+/// A resolved edit to a single aromatic system. `atoms` are the member atoms
+/// (structural payload); identity is the id.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AromaticSystemDelta {
+    Add {
+        id: AromaticSystemId,
+        atoms: Vec<AtomId>,
+        ast: AromaticSystemAst,
+    },
+    Remove {
+        id: AromaticSystemId,
+        atoms: Vec<AtomId>,
+        ast: AromaticSystemAst,
+    },
+    ModifyField {
+        id: AromaticSystemId,
+        change: AromaticSystemFieldChange,
+    },
+    ModifyConstraint {
+        id: AromaticSystemId,
+        old: Option<AromaticSystemConstraint>,
+        new: Option<AromaticSystemConstraint>,
+    },
+}
+
+impl AromaticSystemDelta {
+    pub fn inverse(self) -> Self {
+        match self {
+            Self::Add { id, atoms, ast } => Self::Remove { id, atoms, ast },
+            Self::Remove { id, atoms, ast } => Self::Add { id, atoms, ast },
+            Self::ModifyField { id, change } => Self::ModifyField {
+                id,
+                change: change.inverse(),
+            },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id,
+                old: new,
+                new: old,
+            },
+        }
+    }
+}
+
+/// A resolved edit to a single multicenter bond. `atoms` are the member atoms
+/// (structural payload); identity is the id.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MulticenterBondDelta {
+    Add {
+        id: MulticenterBondId,
+        atoms: Vec<AtomId>,
+        ast: MulticenterBondAst,
+    },
+    Remove {
+        id: MulticenterBondId,
+        atoms: Vec<AtomId>,
+        ast: MulticenterBondAst,
+    },
+    ModifyField {
+        id: MulticenterBondId,
+        change: MulticenterBondFieldChange,
+    },
+    ModifyConstraint {
+        id: MulticenterBondId,
+        old: Option<MulticenterBondConstraint>,
+        new: Option<MulticenterBondConstraint>,
+    },
+}
+
+impl MulticenterBondDelta {
+    pub fn inverse(self) -> Self {
+        match self {
+            Self::Add { id, atoms, ast } => Self::Remove { id, atoms, ast },
+            Self::Remove { id, atoms, ast } => Self::Add { id, atoms, ast },
+            Self::ModifyField { id, change } => Self::ModifyField {
+                id,
+                change: change.inverse(),
+            },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id,
+                old: new,
+                new: old,
+            },
+        }
+    }
+}
+
+/// A resolved edit to a single noncovalent bond. `atoms` are its two participants
+/// (structural payload); identity is the id.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum NoncovalentBondDelta {
+    Add {
+        id: NoncovalentBondId,
+        atoms: [AtomId; 2],
+        ast: NoncovalentBondAst,
+    },
+    Remove {
+        id: NoncovalentBondId,
+        atoms: [AtomId; 2],
+        ast: NoncovalentBondAst,
+    },
+    ModifyField {
+        id: NoncovalentBondId,
+        change: NoncovalentBondFieldChange,
+    },
+    ModifyConstraint {
+        id: NoncovalentBondId,
+        old: Option<NoncovalentBondConstraint>,
+        new: Option<NoncovalentBondConstraint>,
+    },
+}
+
+impl NoncovalentBondDelta {
+    pub fn inverse(self) -> Self {
+        match self {
+            Self::Add { id, atoms, ast } => Self::Remove { id, atoms, ast },
+            Self::Remove { id, atoms, ast } => Self::Add { id, atoms, ast },
+            Self::ModifyField { id, change } => Self::ModifyField {
+                id,
+                change: change.inverse(),
+            },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id,
+                old: new,
+                new: old,
+            },
+        }
+    }
+}
+
 /// A resolved change to the molecule-level constraint set, as a set-diff.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ConstraintDelta {
@@ -123,6 +332,10 @@ impl ConstraintDelta {
 pub enum Delta {
     Atom(AtomDelta),
     Bond(BondDelta),
+    DativeBond(DativeBondDelta),
+    AromaticSystem(AromaticSystemDelta),
+    MulticenterBond(MulticenterBondDelta),
+    NoncovalentBond(NoncovalentBondDelta),
     Constraint(ConstraintDelta),
 }
 
@@ -132,6 +345,10 @@ impl Delta {
         match self {
             Self::Atom(delta) => Self::Atom(delta.inverse()),
             Self::Bond(delta) => Self::Bond(delta.inverse()),
+            Self::DativeBond(delta) => Self::DativeBond(delta.inverse()),
+            Self::AromaticSystem(delta) => Self::AromaticSystem(delta.inverse()),
+            Self::MulticenterBond(delta) => Self::MulticenterBond(delta.inverse()),
+            Self::NoncovalentBond(delta) => Self::NoncovalentBond(delta.inverse()),
             Self::Constraint(delta) => Self::Constraint(delta.inverse()),
         }
     }
@@ -367,8 +584,8 @@ pub(crate) trait EntityFold: EntityPatch {
     }
 }
 
-/// Fold one entity's ops (input order) to its normal form. `created` (an `Add` is present)
-/// vs `preserved` paths per doc 131.
+/// Fold one entity's ops (input order) to its normal form, branching on the `created`
+/// (an `Add` is present) vs `preserved` (no `Add`) path.
 fn fold_group<F: EntityFold>(id: F::Id, group: Vec<F>) -> Result<Vec<F>, Contradiction> {
     let ops: Vec<EntityOp<F>> = group.into_iter().map(F::split).collect();
     let created = ops.iter().any(|op| matches!(op, EntityOp::Add { .. }));
@@ -675,6 +892,434 @@ impl EntityFold for BondDelta {
     });
 }
 
+impl EntityPatch for DativeBondDelta {
+    type Id = DativeBondId;
+    type Ast = DativeBondAst;
+    type FieldChange = DativeBondFieldChange;
+    type Constraint = DativeBondConstraint;
+
+    fn modify_field(id: DativeBondId, change: DativeBondFieldChange) -> Self {
+        DativeBondDelta::ModifyField { id, change }
+    }
+
+    fn modify_constraint(
+        id: DativeBondId,
+        old: Option<DativeBondConstraint>,
+        new: Option<DativeBondConstraint>,
+    ) -> Self {
+        DativeBondDelta::ModifyConstraint { id, old, new }
+    }
+
+    diff_field_ops!(DativeBondFieldChange, DativeBondAst, DativeBondConstraint, {
+        Order => order,
+    });
+
+    fn apply_constraint(
+        ast: &mut DativeBondAst,
+        old: Option<DativeBondConstraint>,
+        new: Option<DativeBondConstraint>,
+    ) -> Result<(), Contradiction> {
+        if let Some(old) = old {
+            if ast.constraints.remove_entry(&old).is_none() {
+                return Err(Contradiction);
+            }
+        }
+        if let Some(new) = new {
+            ast.constraints.add(new);
+        }
+        Ok(())
+    }
+}
+
+impl EntityFold for DativeBondDelta {
+    type ConstraintKey = DativeBondConstraintKey;
+    type Atoms = (Vec<AtomId>, AtomId);
+
+    fn id(&self) -> DativeBondId {
+        match self {
+            DativeBondDelta::Add { id, .. }
+            | DativeBondDelta::Remove { id, .. }
+            | DativeBondDelta::ModifyField { id, .. }
+            | DativeBondDelta::ModifyConstraint { id, .. } => *id,
+        }
+    }
+
+    fn split(self) -> EntityOp<Self> {
+        match self {
+            DativeBondDelta::Add {
+                donors,
+                acceptor,
+                ast,
+                ..
+            } => EntityOp::Add {
+                atoms: (donors, acceptor),
+                ast,
+            },
+            DativeBondDelta::Remove {
+                donors,
+                acceptor,
+                ast,
+                ..
+            } => EntityOp::Remove {
+                atoms: (donors, acceptor),
+                ast,
+            },
+            DativeBondDelta::ModifyField { change, .. } => EntityOp::ModifyField(change),
+            DativeBondDelta::ModifyConstraint { old, new, .. } => {
+                EntityOp::ModifyConstraint { old, new }
+            }
+        }
+    }
+
+    fn rebuild(id: DativeBondId, op: EntityOp<Self>) -> Self {
+        match op {
+            EntityOp::Add {
+                atoms: (donors, acceptor),
+                ast,
+            } => DativeBondDelta::Add {
+                id,
+                donors,
+                acceptor,
+                ast,
+            },
+            EntityOp::Remove {
+                atoms: (donors, acceptor),
+                ast,
+            } => DativeBondDelta::Remove {
+                id,
+                donors,
+                acceptor,
+                ast,
+            },
+            EntityOp::ModifyField(change) => Self::modify_field(id, change),
+            EntityOp::ModifyConstraint { old, new } => Self::modify_constraint(id, old, new),
+        }
+    }
+
+    fn into_delta(self) -> Delta {
+        Delta::DativeBond(self)
+    }
+
+    fn field_inverse(change: DativeBondFieldChange) -> DativeBondFieldChange {
+        change.inverse()
+    }
+
+    fn constraint_key(constraint: &DativeBondConstraint) -> DativeBondConstraintKey {
+        constraint.key()
+    }
+
+    fold_field_ops!(DativeBondFieldChange, { Order });
+}
+
+impl EntityPatch for AromaticSystemDelta {
+    type Id = AromaticSystemId;
+    type Ast = AromaticSystemAst;
+    type FieldChange = AromaticSystemFieldChange;
+    type Constraint = AromaticSystemConstraint;
+
+    fn modify_field(id: AromaticSystemId, change: AromaticSystemFieldChange) -> Self {
+        AromaticSystemDelta::ModifyField { id, change }
+    }
+
+    fn modify_constraint(
+        id: AromaticSystemId,
+        old: Option<AromaticSystemConstraint>,
+        new: Option<AromaticSystemConstraint>,
+    ) -> Self {
+        AromaticSystemDelta::ModifyConstraint { id, old, new }
+    }
+
+    diff_field_ops!(
+        AromaticSystemFieldChange,
+        AromaticSystemAst,
+        AromaticSystemConstraint,
+        {
+            Electrons => electrons,
+            Charge => charge,
+            Spin => spin,
+        }
+    );
+
+    fn apply_constraint(
+        ast: &mut AromaticSystemAst,
+        old: Option<AromaticSystemConstraint>,
+        new: Option<AromaticSystemConstraint>,
+    ) -> Result<(), Contradiction> {
+        if let Some(old) = old {
+            if ast.constraints.remove_by_key(old.key()).is_none() {
+                return Err(Contradiction);
+            }
+        }
+        if let Some(new) = new {
+            ast.constraints.add(new);
+        }
+        Ok(())
+    }
+}
+
+impl EntityFold for AromaticSystemDelta {
+    type ConstraintKey = AromaticSystemConstraintKey;
+    type Atoms = Vec<AtomId>;
+
+    fn id(&self) -> AromaticSystemId {
+        match self {
+            AromaticSystemDelta::Add { id, .. }
+            | AromaticSystemDelta::Remove { id, .. }
+            | AromaticSystemDelta::ModifyField { id, .. }
+            | AromaticSystemDelta::ModifyConstraint { id, .. } => *id,
+        }
+    }
+
+    fn split(self) -> EntityOp<Self> {
+        match self {
+            AromaticSystemDelta::Add { atoms, ast, .. } => EntityOp::Add { atoms, ast },
+            AromaticSystemDelta::Remove { atoms, ast, .. } => EntityOp::Remove { atoms, ast },
+            AromaticSystemDelta::ModifyField { change, .. } => EntityOp::ModifyField(change),
+            AromaticSystemDelta::ModifyConstraint { old, new, .. } => {
+                EntityOp::ModifyConstraint { old, new }
+            }
+        }
+    }
+
+    fn rebuild(id: AromaticSystemId, op: EntityOp<Self>) -> Self {
+        match op {
+            EntityOp::Add { atoms, ast } => AromaticSystemDelta::Add { id, atoms, ast },
+            EntityOp::Remove { atoms, ast } => AromaticSystemDelta::Remove { id, atoms, ast },
+            EntityOp::ModifyField(change) => Self::modify_field(id, change),
+            EntityOp::ModifyConstraint { old, new } => Self::modify_constraint(id, old, new),
+        }
+    }
+
+    fn into_delta(self) -> Delta {
+        Delta::AromaticSystem(self)
+    }
+
+    fn field_inverse(change: AromaticSystemFieldChange) -> AromaticSystemFieldChange {
+        change.inverse()
+    }
+
+    fn constraint_key(constraint: &AromaticSystemConstraint) -> AromaticSystemConstraintKey {
+        constraint.key()
+    }
+
+    fold_field_ops!(AromaticSystemFieldChange, { Electrons, Charge, Spin });
+}
+
+impl EntityPatch for MulticenterBondDelta {
+    type Id = MulticenterBondId;
+    type Ast = MulticenterBondAst;
+    type FieldChange = MulticenterBondFieldChange;
+    type Constraint = MulticenterBondConstraint;
+
+    fn modify_field(id: MulticenterBondId, change: MulticenterBondFieldChange) -> Self {
+        MulticenterBondDelta::ModifyField { id, change }
+    }
+
+    fn modify_constraint(
+        id: MulticenterBondId,
+        old: Option<MulticenterBondConstraint>,
+        new: Option<MulticenterBondConstraint>,
+    ) -> Self {
+        MulticenterBondDelta::ModifyConstraint { id, old, new }
+    }
+
+    diff_field_ops!(
+        MulticenterBondFieldChange,
+        MulticenterBondAst,
+        MulticenterBondConstraint,
+        {
+            Electrons => electrons,
+            Charge => charge,
+            Spin => spin,
+        }
+    );
+
+    fn apply_constraint(
+        ast: &mut MulticenterBondAst,
+        old: Option<MulticenterBondConstraint>,
+        new: Option<MulticenterBondConstraint>,
+    ) -> Result<(), Contradiction> {
+        if let Some(old) = old {
+            if ast.constraints.remove_by_key(old.key()).is_none() {
+                return Err(Contradiction);
+            }
+        }
+        if let Some(new) = new {
+            ast.constraints.add(new);
+        }
+        Ok(())
+    }
+}
+
+impl EntityFold for MulticenterBondDelta {
+    type ConstraintKey = MulticenterBondConstraintKey;
+    type Atoms = Vec<AtomId>;
+
+    fn id(&self) -> MulticenterBondId {
+        match self {
+            MulticenterBondDelta::Add { id, .. }
+            | MulticenterBondDelta::Remove { id, .. }
+            | MulticenterBondDelta::ModifyField { id, .. }
+            | MulticenterBondDelta::ModifyConstraint { id, .. } => *id,
+        }
+    }
+
+    fn split(self) -> EntityOp<Self> {
+        match self {
+            MulticenterBondDelta::Add { atoms, ast, .. } => EntityOp::Add { atoms, ast },
+            MulticenterBondDelta::Remove { atoms, ast, .. } => EntityOp::Remove { atoms, ast },
+            MulticenterBondDelta::ModifyField { change, .. } => EntityOp::ModifyField(change),
+            MulticenterBondDelta::ModifyConstraint { old, new, .. } => {
+                EntityOp::ModifyConstraint { old, new }
+            }
+        }
+    }
+
+    fn rebuild(id: MulticenterBondId, op: EntityOp<Self>) -> Self {
+        match op {
+            EntityOp::Add { atoms, ast } => MulticenterBondDelta::Add { id, atoms, ast },
+            EntityOp::Remove { atoms, ast } => MulticenterBondDelta::Remove { id, atoms, ast },
+            EntityOp::ModifyField(change) => Self::modify_field(id, change),
+            EntityOp::ModifyConstraint { old, new } => Self::modify_constraint(id, old, new),
+        }
+    }
+
+    fn into_delta(self) -> Delta {
+        Delta::MulticenterBond(self)
+    }
+
+    fn field_inverse(change: MulticenterBondFieldChange) -> MulticenterBondFieldChange {
+        change.inverse()
+    }
+
+    fn constraint_key(constraint: &MulticenterBondConstraint) -> MulticenterBondConstraintKey {
+        constraint.key()
+    }
+
+    fold_field_ops!(MulticenterBondFieldChange, { Electrons, Charge, Spin });
+}
+
+impl EntityPatch for NoncovalentBondDelta {
+    type Id = NoncovalentBondId;
+    type Ast = NoncovalentBondAst;
+    type FieldChange = NoncovalentBondFieldChange;
+    type Constraint = NoncovalentBondConstraint;
+
+    fn modify_field(id: NoncovalentBondId, change: NoncovalentBondFieldChange) -> Self {
+        NoncovalentBondDelta::ModifyField { id, change }
+    }
+
+    fn modify_constraint(
+        id: NoncovalentBondId,
+        old: Option<NoncovalentBondConstraint>,
+        new: Option<NoncovalentBondConstraint>,
+    ) -> Self {
+        NoncovalentBondDelta::ModifyConstraint { id, old, new }
+    }
+
+    // Hand-written (not `diff_field_ops!`): `NoncovalentBondConstraint` is uninhabited,
+    // so the macro's constraint loop would be unreachable code.
+    fn apply_field(
+        ast: &mut NoncovalentBondAst,
+        change: NoncovalentBondFieldChange,
+    ) -> Result<(), Contradiction> {
+        match change {
+            NoncovalentBondFieldChange::Kind { old, new } => {
+                if ast.kind != old {
+                    return Err(Contradiction);
+                }
+                ast.kind = new;
+            }
+        }
+        Ok(())
+    }
+
+    fn diff_field(
+        left: &NoncovalentBondAst,
+        right: &NoncovalentBondAst,
+    ) -> Vec<NoncovalentBondFieldChange> {
+        if left.kind != right.kind {
+            vec![NoncovalentBondFieldChange::Kind {
+                old: left.kind.clone(),
+                new: right.kind.clone(),
+            }]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn diff_constraints(
+        _left: &NoncovalentBondAst,
+        _right: &NoncovalentBondAst,
+    ) -> Vec<(
+        Option<NoncovalentBondConstraint>,
+        Option<NoncovalentBondConstraint>,
+    )> {
+        Vec::new()
+    }
+
+    /// `NoncovalentBondConstraint` is uninhabited, so `old`/`new` are always `None`.
+    fn apply_constraint(
+        _ast: &mut NoncovalentBondAst,
+        old: Option<NoncovalentBondConstraint>,
+        new: Option<NoncovalentBondConstraint>,
+    ) -> Result<(), Contradiction> {
+        debug_assert!(
+            old.is_none() && new.is_none(),
+            "noncovalent constraints are uninhabited"
+        );
+        Ok(())
+    }
+}
+
+impl EntityFold for NoncovalentBondDelta {
+    type ConstraintKey = NoncovalentBondConstraintKey;
+    type Atoms = [AtomId; 2];
+
+    fn id(&self) -> NoncovalentBondId {
+        match self {
+            NoncovalentBondDelta::Add { id, .. }
+            | NoncovalentBondDelta::Remove { id, .. }
+            | NoncovalentBondDelta::ModifyField { id, .. }
+            | NoncovalentBondDelta::ModifyConstraint { id, .. } => *id,
+        }
+    }
+
+    fn split(self) -> EntityOp<Self> {
+        match self {
+            NoncovalentBondDelta::Add { atoms, ast, .. } => EntityOp::Add { atoms, ast },
+            NoncovalentBondDelta::Remove { atoms, ast, .. } => EntityOp::Remove { atoms, ast },
+            NoncovalentBondDelta::ModifyField { change, .. } => EntityOp::ModifyField(change),
+            NoncovalentBondDelta::ModifyConstraint { old, new, .. } => {
+                EntityOp::ModifyConstraint { old, new }
+            }
+        }
+    }
+
+    fn rebuild(id: NoncovalentBondId, op: EntityOp<Self>) -> Self {
+        match op {
+            EntityOp::Add { atoms, ast } => NoncovalentBondDelta::Add { id, atoms, ast },
+            EntityOp::Remove { atoms, ast } => NoncovalentBondDelta::Remove { id, atoms, ast },
+            EntityOp::ModifyField(change) => Self::modify_field(id, change),
+            EntityOp::ModifyConstraint { old, new } => Self::modify_constraint(id, old, new),
+        }
+    }
+
+    fn into_delta(self) -> Delta {
+        Delta::NoncovalentBond(self)
+    }
+
+    fn field_inverse(change: NoncovalentBondFieldChange) -> NoncovalentBondFieldChange {
+        change.inverse()
+    }
+
+    fn constraint_key(constraint: &NoncovalentBondConstraint) -> NoncovalentBondConstraintKey {
+        constraint.key()
+    }
+
+    fold_field_ops!(NoncovalentBondFieldChange, { Kind });
+}
+
 /// Apply a resolved per-entity change to a value AST, reusing the `EntityPatch` apply that
 /// `canonicalize` uses. `ModifyField` / `ModifyConstraint` mutate the ast; `Add` / `Remove` are
 /// no-ops (they carry a whole ast, not a change). Materializes the right-hand value of a
@@ -703,48 +1348,233 @@ pub(crate) fn apply_bond_change(ast: &mut BondAst, delta: &BondDelta) -> Result<
     }
 }
 
-/// Re-anchor a delta's ids and bond atoms through total atom/bond id maps. Used to move
-/// deltas between frames (reverse re-anchoring, composition). The maps must cover every id the
-/// delta references.
-pub(crate) fn remap_delta(
-    delta: Delta,
-    atom: &HashMap<AtomId, AtomId>,
-    bond: &HashMap<BondId, BondId>,
-) -> Delta {
+pub(crate) fn apply_dative_change(
+    ast: &mut DativeBondAst,
+    delta: &DativeBondDelta,
+) -> Result<(), Contradiction> {
+    match delta {
+        DativeBondDelta::ModifyField { change, .. } => {
+            <DativeBondDelta as EntityPatch>::apply_field(ast, change.clone())
+        }
+        DativeBondDelta::ModifyConstraint { old, new, .. } => {
+            <DativeBondDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
+        }
+        DativeBondDelta::Add { .. } | DativeBondDelta::Remove { .. } => Ok(()),
+    }
+}
+
+pub(crate) fn apply_aromatic_change(
+    ast: &mut AromaticSystemAst,
+    delta: &AromaticSystemDelta,
+) -> Result<(), Contradiction> {
+    match delta {
+        AromaticSystemDelta::ModifyField { change, .. } => {
+            <AromaticSystemDelta as EntityPatch>::apply_field(ast, change.clone())
+        }
+        AromaticSystemDelta::ModifyConstraint { old, new, .. } => {
+            <AromaticSystemDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
+        }
+        AromaticSystemDelta::Add { .. } | AromaticSystemDelta::Remove { .. } => Ok(()),
+    }
+}
+
+pub(crate) fn apply_multicenter_change(
+    ast: &mut MulticenterBondAst,
+    delta: &MulticenterBondDelta,
+) -> Result<(), Contradiction> {
+    match delta {
+        MulticenterBondDelta::ModifyField { change, .. } => {
+            <MulticenterBondDelta as EntityPatch>::apply_field(ast, change.clone())
+        }
+        MulticenterBondDelta::ModifyConstraint { old, new, .. } => {
+            <MulticenterBondDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
+        }
+        MulticenterBondDelta::Add { .. } | MulticenterBondDelta::Remove { .. } => Ok(()),
+    }
+}
+
+pub(crate) fn apply_noncovalent_change(
+    ast: &mut NoncovalentBondAst,
+    delta: &NoncovalentBondDelta,
+) -> Result<(), Contradiction> {
+    match delta {
+        NoncovalentBondDelta::ModifyField { change, .. } => {
+            <NoncovalentBondDelta as EntityPatch>::apply_field(ast, change.clone())
+        }
+        NoncovalentBondDelta::ModifyConstraint { old, new, .. } => {
+            <NoncovalentBondDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
+        }
+        NoncovalentBondDelta::Add { .. } | NoncovalentBondDelta::Remove { .. } => Ok(()),
+    }
+}
+
+/// Re-anchor a delta's ids and participant atoms through a total id relabeling. Used to move
+/// deltas between id spaces (reverse re-anchoring, composition). The relabeling must cover every id
+/// the delta references. Overlay participants on `Unordered` factors are re-sorted to canonical
+/// order; aromatic/multicenter electrons are permuted to stay aligned with their atoms.
+pub(crate) fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
     match delta {
         Delta::Atom(a) => Delta::Atom(match a {
-            AtomDelta::Add { id, ast } => AtomDelta::Add { id: atom[&id], ast },
-            AtomDelta::Remove { id, ast } => AtomDelta::Remove { id: atom[&id], ast },
+            AtomDelta::Add { id, ast } => AtomDelta::Add {
+                id: map.map_atom(id),
+                ast,
+            },
+            AtomDelta::Remove { id, ast } => AtomDelta::Remove {
+                id: map.map_atom(id),
+                ast,
+            },
             AtomDelta::ModifyField { id, change } => AtomDelta::ModifyField {
-                id: atom[&id],
+                id: map.map_atom(id),
                 change,
             },
             AtomDelta::ModifyConstraint { id, old, new } => AtomDelta::ModifyConstraint {
-                id: atom[&id],
+                id: map.map_atom(id),
                 old,
                 new,
             },
         }),
         Delta::Bond(b) => Delta::Bond(match b {
             BondDelta::Add { id, atoms, ast } => BondDelta::Add {
-                id: bond[&id],
-                atoms: [atom[&atoms[0]], atom[&atoms[1]]],
+                id: map.map_bond(id),
+                atoms: [map.map_atom(atoms[0]), map.map_atom(atoms[1])],
                 ast,
             },
             BondDelta::Remove { id, atoms, ast } => BondDelta::Remove {
-                id: bond[&id],
-                atoms: [atom[&atoms[0]], atom[&atoms[1]]],
+                id: map.map_bond(id),
+                atoms: [map.map_atom(atoms[0]), map.map_atom(atoms[1])],
                 ast,
             },
             BondDelta::ModifyField { id, change } => BondDelta::ModifyField {
-                id: bond[&id],
+                id: map.map_bond(id),
                 change,
             },
             BondDelta::ModifyConstraint { id, old, new } => BondDelta::ModifyConstraint {
-                id: bond[&id],
+                id: map.map_bond(id),
                 old,
                 new,
             },
+        }),
+        Delta::DativeBond(d) => Delta::DativeBond(match d {
+            DativeBondDelta::Add {
+                id,
+                donors,
+                acceptor,
+                ast,
+            } => DativeBondDelta::Add {
+                id: map.map_dative(id),
+                donors: donors.iter().map(|a| map.map_atom(*a)).collect(),
+                acceptor: map.map_atom(acceptor),
+                ast,
+            },
+            DativeBondDelta::Remove {
+                id,
+                donors,
+                acceptor,
+                ast,
+            } => DativeBondDelta::Remove {
+                id: map.map_dative(id),
+                donors: donors.iter().map(|a| map.map_atom(*a)).collect(),
+                acceptor: map.map_atom(acceptor),
+                ast,
+            },
+            DativeBondDelta::ModifyField { id, change } => DativeBondDelta::ModifyField {
+                id: map.map_dative(id),
+                change,
+            },
+            DativeBondDelta::ModifyConstraint { id, old, new } => DativeBondDelta::ModifyConstraint {
+                id: map.map_dative(id),
+                old,
+                new,
+            },
+        }),
+        Delta::AromaticSystem(a) => Delta::AromaticSystem(match a {
+            AromaticSystemDelta::Add { id, atoms, mut ast } => {
+                let mut atoms: Vec<AtomId> = atoms.iter().map(|a| map.map_atom(*a)).collect();
+                let order = Unordered::canonicalize_positions(&mut atoms);
+                ast.permute(&order);
+                AromaticSystemDelta::Add {
+                    id: map.map_aromatic(id),
+                    atoms,
+                    ast,
+                }
+            }
+            AromaticSystemDelta::Remove { id, atoms, mut ast } => {
+                let mut atoms: Vec<AtomId> = atoms.iter().map(|a| map.map_atom(*a)).collect();
+                let order = Unordered::canonicalize_positions(&mut atoms);
+                ast.permute(&order);
+                AromaticSystemDelta::Remove {
+                    id: map.map_aromatic(id),
+                    atoms,
+                    ast,
+                }
+            }
+            AromaticSystemDelta::ModifyField { id, change } => AromaticSystemDelta::ModifyField {
+                id: map.map_aromatic(id),
+                change,
+            },
+            AromaticSystemDelta::ModifyConstraint { id, old, new } => {
+                AromaticSystemDelta::ModifyConstraint {
+                    id: map.map_aromatic(id),
+                    old,
+                    new,
+                }
+            }
+        }),
+        Delta::MulticenterBond(m) => Delta::MulticenterBond(match m {
+            MulticenterBondDelta::Add { id, atoms, mut ast } => {
+                let mut atoms: Vec<AtomId> = atoms.iter().map(|a| map.map_atom(*a)).collect();
+                let order = Unordered::canonicalize_positions(&mut atoms);
+                ast.permute(&order);
+                MulticenterBondDelta::Add {
+                    id: map.map_multicenter(id),
+                    atoms,
+                    ast,
+                }
+            }
+            MulticenterBondDelta::Remove { id, atoms, mut ast } => {
+                let mut atoms: Vec<AtomId> = atoms.iter().map(|a| map.map_atom(*a)).collect();
+                let order = Unordered::canonicalize_positions(&mut atoms);
+                ast.permute(&order);
+                MulticenterBondDelta::Remove {
+                    id: map.map_multicenter(id),
+                    atoms,
+                    ast,
+                }
+            }
+            MulticenterBondDelta::ModifyField { id, change } => MulticenterBondDelta::ModifyField {
+                id: map.map_multicenter(id),
+                change,
+            },
+            MulticenterBondDelta::ModifyConstraint { id, old, new } => {
+                MulticenterBondDelta::ModifyConstraint {
+                    id: map.map_multicenter(id),
+                    old,
+                    new,
+                }
+            }
+        }),
+        Delta::NoncovalentBond(n) => Delta::NoncovalentBond(match n {
+            NoncovalentBondDelta::Add { id, atoms, ast } => NoncovalentBondDelta::Add {
+                id: map.map_noncovalent(id),
+                atoms: [map.map_atom(atoms[0]), map.map_atom(atoms[1])],
+                ast,
+            },
+            NoncovalentBondDelta::Remove { id, atoms, ast } => NoncovalentBondDelta::Remove {
+                id: map.map_noncovalent(id),
+                atoms: [map.map_atom(atoms[0]), map.map_atom(atoms[1])],
+                ast,
+            },
+            NoncovalentBondDelta::ModifyField { id, change } => NoncovalentBondDelta::ModifyField {
+                id: map.map_noncovalent(id),
+                change,
+            },
+            NoncovalentBondDelta::ModifyConstraint { id, old, new } => {
+                NoncovalentBondDelta::ModifyConstraint {
+                    id: map.map_noncovalent(id),
+                    old,
+                    new,
+                }
+            }
         }),
         Delta::Constraint(c) => Delta::Constraint(c),
     }
@@ -799,11 +1629,19 @@ impl Canonicalize for Deltas {
     fn canonicalize(self) -> Result<Self, Contradiction> {
         let mut atoms: HashMap<AtomId, Vec<AtomDelta>> = HashMap::new();
         let mut bonds: HashMap<BondId, Vec<BondDelta>> = HashMap::new();
+        let mut dative: HashMap<DativeBondId, Vec<DativeBondDelta>> = HashMap::new();
+        let mut aromatic: HashMap<AromaticSystemId, Vec<AromaticSystemDelta>> = HashMap::new();
+        let mut multicenter: HashMap<MulticenterBondId, Vec<MulticenterBondDelta>> = HashMap::new();
+        let mut noncovalent: HashMap<NoncovalentBondId, Vec<NoncovalentBondDelta>> = HashMap::new();
         let mut constraints: Vec<ConstraintDelta> = Vec::new();
         for delta in self.0 {
             match delta {
                 Delta::Atom(d) => atoms.entry(d.id()).or_default().push(d),
                 Delta::Bond(d) => bonds.entry(d.id()).or_default().push(d),
+                Delta::DativeBond(d) => dative.entry(d.id()).or_default().push(d),
+                Delta::AromaticSystem(d) => aromatic.entry(d.id()).or_default().push(d),
+                Delta::MulticenterBond(d) => multicenter.entry(d.id()).or_default().push(d),
+                Delta::NoncovalentBond(d) => noncovalent.entry(d.id()).or_default().push(d),
                 Delta::Constraint(d) => constraints.push(d),
             }
         }
@@ -827,6 +1665,58 @@ impl Canonicalize for Deltas {
                 }
             }
             out.extend(folded.into_iter().map(Delta::Bond));
+        }
+        // Overlay families: same fold; a created overlay must not reference a net-removed atom.
+        for (id, group) in dative {
+            let folded = fold_group::<DativeBondDelta>(id, group)?;
+            for delta in &folded {
+                if let DativeBondDelta::Add {
+                    donors, acceptor, ..
+                } = delta
+                {
+                    if donors
+                        .iter()
+                        .chain(std::iter::once(acceptor))
+                        .any(|atom| removed_atoms.contains(atom))
+                    {
+                        return Err(Contradiction);
+                    }
+                }
+            }
+            out.extend(folded.into_iter().map(Delta::DativeBond));
+        }
+        for (id, group) in aromatic {
+            let folded = fold_group::<AromaticSystemDelta>(id, group)?;
+            for delta in &folded {
+                if let AromaticSystemDelta::Add { atoms, .. } = delta {
+                    if atoms.iter().any(|atom| removed_atoms.contains(atom)) {
+                        return Err(Contradiction);
+                    }
+                }
+            }
+            out.extend(folded.into_iter().map(Delta::AromaticSystem));
+        }
+        for (id, group) in multicenter {
+            let folded = fold_group::<MulticenterBondDelta>(id, group)?;
+            for delta in &folded {
+                if let MulticenterBondDelta::Add { atoms, .. } = delta {
+                    if atoms.iter().any(|atom| removed_atoms.contains(atom)) {
+                        return Err(Contradiction);
+                    }
+                }
+            }
+            out.extend(folded.into_iter().map(Delta::MulticenterBond));
+        }
+        for (id, group) in noncovalent {
+            let folded = fold_group::<NoncovalentBondDelta>(id, group)?;
+            for delta in &folded {
+                if let NoncovalentBondDelta::Add { atoms, .. } = delta {
+                    if atoms.iter().any(|atom| removed_atoms.contains(atom)) {
+                        return Err(Contradiction);
+                    }
+                }
+            }
+            out.extend(folded.into_iter().map(Delta::NoncovalentBond));
         }
         // Molecule-level constraints are a multiset: net multiplicity per constraint
         // (`Add`/`Remove` cancel one-for-one; duplicates are kept, not deduped).
@@ -862,6 +1752,7 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::super::constraint::MoleculeConstraint;
+    use super::super::noncovalent::NoncovalentBondKind;
     use super::super::value::ValueAst;
     use super::*;
     use crate::ast::BooleanAst;
@@ -992,6 +1883,129 @@ mod tests {
     #[case::removed(EntitySpan::Removed(7), None)]
     fn test_entity_span_right(#[case] state: EntitySpan<i32>, #[case] expected: Option<&i32>) {
         assert_eq!(state.right(), expected);
+    }
+
+    #[fixture]
+    fn remapping() -> IdRemapping {
+        IdRemapping::new(
+            HashMap::from([
+                (AtomId(0), AtomId(2)),
+                (AtomId(1), AtomId(0)),
+                (AtomId(2), AtomId(1)),
+            ]),
+            HashMap::from([(BondId(0), BondId(1)), (BondId(1), BondId(0))]),
+            HashMap::from([(DativeBondId(0), DativeBondId(1))]),
+            HashMap::from([(AromaticSystemId(0), AromaticSystemId(1))]),
+            HashMap::from([(MulticenterBondId(0), MulticenterBondId(1))]),
+            HashMap::from([(NoncovalentBondId(0), NoncovalentBondId(1))]),
+        )
+    }
+
+    #[rstest]
+    #[case::atom(
+        Delta::Atom(AtomDelta::Add { id: AtomId(1), ast: AtomAst::from_element(Element::C) }),
+        Delta::Atom(AtomDelta::Add { id: AtomId(0), ast: AtomAst::from_element(Element::C) })
+    )]
+    #[case::bond(
+        Delta::Bond(BondDelta::Add {
+            id: BondId(0),
+            atoms: [AtomId(2), AtomId(1)],
+            ast: BondAst::default(),
+        }),
+        Delta::Bond(BondDelta::Add {
+            id: BondId(1),
+            atoms: [AtomId(1), AtomId(0)],
+            ast: BondAst::default(),
+        })
+    )]
+    #[case::dative(
+        Delta::DativeBond(DativeBondDelta::Add {
+            id: DativeBondId(0),
+            donors: vec![AtomId(0), AtomId(2)],
+            acceptor: AtomId(1),
+            ast: DativeBondAst::from_order(1),
+        }),
+        Delta::DativeBond(DativeBondDelta::Add {
+            id: DativeBondId(1),
+            donors: vec![AtomId(2), AtomId(1)],
+            acceptor: AtomId(0),
+            ast: DativeBondAst::from_order(1),
+        })
+    )]
+    #[case::aromatic_resort_permute(
+        Delta::AromaticSystem(AromaticSystemDelta::Add {
+            id: AromaticSystemId(0),
+            atoms: vec![AtomId(0), AtomId(1)],
+            ast: AromaticSystemAst::from_electrons(vec![1, 2]),
+        }),
+        Delta::AromaticSystem(AromaticSystemDelta::Add {
+            id: AromaticSystemId(1),
+            atoms: vec![AtomId(0), AtomId(2)],
+            ast: AromaticSystemAst::from_electrons(vec![2, 1]),
+        })
+    )]
+    #[case::aromatic_remove(
+        Delta::AromaticSystem(AromaticSystemDelta::Remove {
+            id: AromaticSystemId(0),
+            atoms: vec![AtomId(0), AtomId(1)],
+            ast: AromaticSystemAst::from_electrons(vec![1, 2]),
+        }),
+        Delta::AromaticSystem(AromaticSystemDelta::Remove {
+            id: AromaticSystemId(1),
+            atoms: vec![AtomId(0), AtomId(2)],
+            ast: AromaticSystemAst::from_electrons(vec![2, 1]),
+        })
+    )]
+    #[case::multicenter_resort_permute(
+        Delta::MulticenterBond(MulticenterBondDelta::Add {
+            id: MulticenterBondId(0),
+            atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+            ast: MulticenterBondAst::from_electrons(vec![3, 5, 7]),
+        }),
+        Delta::MulticenterBond(MulticenterBondDelta::Add {
+            id: MulticenterBondId(1),
+            atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+            ast: MulticenterBondAst::from_electrons(vec![5, 7, 3]),
+        })
+    )]
+    #[case::noncovalent(
+        Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+            id: NoncovalentBondId(0),
+            atoms: [AtomId(2), AtomId(1)],
+            ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        }),
+        Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+            id: NoncovalentBondId(1),
+            atoms: [AtomId(1), AtomId(0)],
+            ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        })
+    )]
+    #[case::overlay_modify_field(
+        Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+            id: AromaticSystemId(0),
+            change: AromaticSystemFieldChange::Charge {
+                old: ValueAst::Lit(0),
+                new: ValueAst::Lit(1),
+            },
+        }),
+        Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+            id: AromaticSystemId(1),
+            change: AromaticSystemFieldChange::Charge {
+                old: ValueAst::Lit(0),
+                new: ValueAst::Lit(1),
+            },
+        })
+    )]
+    #[case::constraint(
+        Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) },
+        ))),
+        Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) },
+        )))
+    )]
+    fn test_remap_delta(remapping: IdRemapping, #[case] input: Delta, #[case] expected: Delta) {
+        assert_eq!(remap_delta(input, &remapping), expected);
     }
 
     fn charge_set(id: u32, old: i64, new: i64) -> Delta {

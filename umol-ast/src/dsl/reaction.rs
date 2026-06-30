@@ -825,6 +825,12 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 ));
                 i += 1;
             }
+            // TODO(I4): overlay-delta DSL rendering. Bridged so the lib links and the non-DSL
+            // tests run; no current test renders an overlay delta.
+            Delta::DativeBond(_)
+            | Delta::AromaticSystem(_)
+            | Delta::MulticenterBond(_)
+            | Delta::NoncovalentBond(_) => todo!("I4: overlay delta DSL rendering"),
         }
     }
     out

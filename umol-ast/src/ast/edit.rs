@@ -24,7 +24,7 @@ use super::id::{
 use super::ligand::{StereoLigand, StereoLigandKind};
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
-use super::remap::{IdRemapping, UndoRemapping};
+use super::remap::{IdCompaction, UndoCompaction};
 use super::spin::SpinStateAst;
 use super::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationAst};
 use super::value::ValueAst;
@@ -114,7 +114,7 @@ impl BondFieldChange {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DativeBondFieldChange {
     Order { old: ValueAst, new: ValueAst },
 }
@@ -127,7 +127,7 @@ impl DativeBondFieldChange {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AromaticSystemFieldChange {
     Electrons {
         old: ElectronCountsAst,
@@ -153,7 +153,7 @@ impl AromaticSystemFieldChange {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MulticenterBondFieldChange {
     Electrons {
         old: ElectronCountsAst,
@@ -179,7 +179,7 @@ impl MulticenterBondFieldChange {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NoncovalentBondFieldChange {
     Kind {
         old: NoncovalentBondKindAst,
@@ -640,39 +640,39 @@ pub enum Undo {
         atoms: Vec<RemovedAtom>,
         bonds: Vec<RemovedBond>,
         overlays: RemovedOverlays,
-        remapping: IdRemapping,
-        undo_remapping: UndoRemapping,
+        remapping: IdCompaction,
+        undo_compaction: UndoCompaction,
         cascade: CascadedConstraints,
     },
     RemoveAddedDativeBond(AddedDativeBond),
     RestoreRemovedDativeBond {
         removed: RemovedDativeBond,
-        undo_remapping: UndoRemapping,
+        undo_compaction: UndoCompaction,
     },
     RemoveAddedAromaticSystem(AddedAromaticSystem),
     RestoreRemovedAromaticSystem {
         removed: RemovedAromaticSystem,
-        undo_remapping: UndoRemapping,
+        undo_compaction: UndoCompaction,
     },
     RemoveAddedMulticenterBond(AddedMulticenterBond),
     RestoreRemovedMulticenterBond {
         removed: RemovedMulticenterBond,
-        undo_remapping: UndoRemapping,
+        undo_compaction: UndoCompaction,
     },
     RemoveAddedNoncovalentBond(AddedNoncovalentBond),
     RestoreRemovedNoncovalentBond {
         removed: RemovedNoncovalentBond,
-        undo_remapping: UndoRemapping,
+        undo_compaction: UndoCompaction,
     },
     RemoveAddedStereoAtom(AddedStereoAtom),
     RestoreRemovedStereoAtom {
         removed: RemovedStereoAtom,
-        undo_remapping: UndoRemapping,
+        undo_compaction: UndoCompaction,
     },
     RemoveAddedStereoBond(AddedStereoBond),
     RestoreRemovedStereoBond {
         removed: RemovedStereoBond,
-        undo_remapping: UndoRemapping,
+        undo_compaction: UndoCompaction,
     },
     ModifyAtomField {
         id: AtomId,
@@ -711,7 +711,7 @@ pub enum Undo {
 }
 
 impl Undo {
-    pub fn id_remapping(&self) -> Option<&IdRemapping> {
+    pub fn id_remapping(&self) -> Option<&IdCompaction> {
         match self {
             Self::RestoreRemovedTopology { remapping, .. } => Some(remapping),
             _ => None,

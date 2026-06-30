@@ -61,9 +61,9 @@ impl StereoLigandPosition {
     }
 }
 
-impl From<u32> for StereoLigandPosition {
-    fn from(v: u32) -> Self {
-        Self(v)
+impl From<usize> for StereoLigandPosition {
+    fn from(v: usize) -> Self {
+        Self(v as u32)
     }
 }
 

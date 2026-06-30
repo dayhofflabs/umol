@@ -34,8 +34,8 @@ pub use algorithms::toposort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::TraversalAlgorithm;
 pub use digraph::DiGraph;
 pub use graph::{
-    remove_edge_vec, remove_node_vec, EdgeId, Embedding, Graph, Neighbor, NodeId, Remapping,
-    RemovalRemapping,
+    compact_edge_vec, compact_node_vec, EdgeId, Embedding, Graph, Neighbor, NodeId, Remapping,
+    Compaction,
 };
 pub use relation::{
     FactorOrdering, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, Ordered,

@@ -11,8 +11,14 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm;
 
 use super::atom::AtomAst;
 use super::bond::BondAst;
-use super::delta::{AtomDelta, BondDelta, Delta, Deltas};
-use super::edit::{AddBond, AtomRef, BondRef, Edit};
+use super::delta::{
+    AromaticSystemDelta, AtomDelta, BondDelta, DativeBondDelta, Delta, Deltas, MulticenterBondDelta,
+    NoncovalentBondDelta,
+};
+use super::edit::{
+    AddBond, AromaticSystemRef, AtomRef, BondRef, DativeBondRef, Edit, MulticenterBondRef,
+    NoncovalentBondRef,
+};
 use super::embedding::MoleculeEmbedding;
 use super::error::{ApplyError, Contradiction};
 use super::id::{AtomId, BondId};
@@ -93,6 +99,65 @@ impl ReactionAst {
                         new: new.clone(),
                     })
                 }
+                Delta::DativeBond(d) => match d {
+                    DativeBondDelta::ModifyField { id, change } => {
+                        sets.push(Edit::ModifyDativeBondField {
+                            id: DativeBondRef::Id(m.host_dative_bond(*id)),
+                            change: change.clone(),
+                        })
+                    }
+                    DativeBondDelta::ModifyConstraint { id, old, new } => {
+                        sets.push(Edit::ModifyDativeBondConstraint {
+                            id: DativeBondRef::Id(m.host_dative_bond(*id)),
+                            old: old.clone(),
+                            new: new.clone(),
+                        })
+                    }
+                    DativeBondDelta::Add { .. } | DativeBondDelta::Remove { .. } => {}
+                },
+                Delta::AromaticSystem(a) => match a {
+                    AromaticSystemDelta::ModifyField { id, change } => {
+                        sets.push(Edit::ModifyAromaticSystemField {
+                            id: AromaticSystemRef::Id(m.host_aromatic_system(*id)),
+                            change: change.clone(),
+                        })
+                    }
+                    AromaticSystemDelta::ModifyConstraint { id, old, new } => {
+                        sets.push(Edit::ModifyAromaticSystemConstraint {
+                            id: AromaticSystemRef::Id(m.host_aromatic_system(*id)),
+                            old: old.clone(),
+                            new: new.clone(),
+                        })
+                    }
+                    AromaticSystemDelta::Add { .. } | AromaticSystemDelta::Remove { .. } => {}
+                },
+                Delta::MulticenterBond(mc) => match mc {
+                    MulticenterBondDelta::ModifyField { id, change } => {
+                        sets.push(Edit::ModifyMulticenterBondField {
+                            id: MulticenterBondRef::Id(m.host_multicenter_bond(*id)),
+                            change: change.clone(),
+                        })
+                    }
+                    MulticenterBondDelta::ModifyConstraint { id, old, new } => {
+                        sets.push(Edit::ModifyMulticenterBondConstraint {
+                            id: MulticenterBondRef::Id(m.host_multicenter_bond(*id)),
+                            old: old.clone(),
+                            new: new.clone(),
+                        })
+                    }
+                    MulticenterBondDelta::Add { .. } | MulticenterBondDelta::Remove { .. } => {}
+                },
+                Delta::NoncovalentBond(nc) => match nc {
+                    NoncovalentBondDelta::ModifyField { id, change } => {
+                        sets.push(Edit::ModifyNoncovalentBondField {
+                            id: NoncovalentBondRef::Id(m.host_noncovalent_bond(*id)),
+                            change: change.clone(),
+                        })
+                    }
+                    // `NoncovalentBondConstraint` is uninhabited — no `Edit` variant, no-op.
+                    NoncovalentBondDelta::ModifyConstraint { .. } => {}
+                    NoncovalentBondDelta::Add { .. } | NoncovalentBondDelta::Remove { .. } => {}
+                },
                 // Molecule-level constraints are deferred (see `to_reaction_span`).
                 Delta::Constraint(_) => {}
             }
@@ -118,6 +183,77 @@ impl ReactionAst {
             None => AtomRef::Id(m.host_atom(id)),
         };
 
+        // Overlay create/remove need `atom_ref` (created participants resolve to `New`), so they
+        // are lowered in a second pass: adds after the topology adds, removes before
+        // `RemoveTopology`. Dative `atoms` is `[donors…, acceptor]` (acceptor last, per transact).
+        let mut overlay_adds: Vec<Edit> = Vec::new();
+        let mut overlay_removes: Vec<Edit> = Vec::new();
+        for delta in deltas.iter() {
+            match delta {
+                Delta::DativeBond(DativeBondDelta::Add {
+                    donors, acceptor, ast, ..
+                }) => {
+                    let mut atoms: Vec<AtomRef> = donors.iter().map(|a| atom_ref(*a)).collect();
+                    atoms.push(atom_ref(*acceptor));
+                    overlay_adds.push(Edit::AddDativeBond {
+                        atoms,
+                        ast: ast.clone(),
+                    });
+                }
+                Delta::DativeBond(DativeBondDelta::Remove {
+                    id, donors, acceptor, ast,
+                }) => {
+                    let mut atoms: Vec<AtomRef> = donors.iter().map(|a| atom_ref(*a)).collect();
+                    atoms.push(atom_ref(*acceptor));
+                    overlay_removes.push(Edit::RemoveDativeBond {
+                        id: DativeBondRef::Id(m.host_dative_bond(*id)),
+                        atoms,
+                        ast: ast.clone(),
+                    });
+                }
+                Delta::AromaticSystem(AromaticSystemDelta::Add { atoms, ast, .. }) => {
+                    overlay_adds.push(Edit::AddAromaticSystem {
+                        atoms: atoms.iter().map(|a| atom_ref(*a)).collect(),
+                        ast: ast.clone(),
+                    });
+                }
+                Delta::AromaticSystem(AromaticSystemDelta::Remove { id, atoms, ast }) => {
+                    overlay_removes.push(Edit::RemoveAromaticSystem {
+                        id: AromaticSystemRef::Id(m.host_aromatic_system(*id)),
+                        atoms: atoms.iter().map(|a| atom_ref(*a)).collect(),
+                        ast: ast.clone(),
+                    });
+                }
+                Delta::MulticenterBond(MulticenterBondDelta::Add { atoms, ast, .. }) => {
+                    overlay_adds.push(Edit::AddMulticenterBond {
+                        atoms: atoms.iter().map(|a| atom_ref(*a)).collect(),
+                        ast: ast.clone(),
+                    });
+                }
+                Delta::MulticenterBond(MulticenterBondDelta::Remove { id, atoms, ast }) => {
+                    overlay_removes.push(Edit::RemoveMulticenterBond {
+                        id: MulticenterBondRef::Id(m.host_multicenter_bond(*id)),
+                        atoms: atoms.iter().map(|a| atom_ref(*a)).collect(),
+                        ast: ast.clone(),
+                    });
+                }
+                Delta::NoncovalentBond(NoncovalentBondDelta::Add { atoms, ast, .. }) => {
+                    overlay_adds.push(Edit::AddNoncovalentBond {
+                        atoms: [atom_ref(atoms[0]), atom_ref(atoms[1])],
+                        ast: ast.clone(),
+                    });
+                }
+                Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, atoms, ast }) => {
+                    overlay_removes.push(Edit::RemoveNoncovalentBond {
+                        id: NoncovalentBondRef::Id(m.host_noncovalent_bond(*id)),
+                        atoms: [atom_ref(atoms[0]), atom_ref(atoms[1])],
+                        ast: ast.clone(),
+                    });
+                }
+                _ => {}
+            }
+        }
+
         let mut edits: Vec<Edit> = Vec::new();
         if !created_atoms.is_empty() {
             edits.push(Edit::AddAtoms {
@@ -135,7 +271,9 @@ impl ReactionAst {
                     .collect(),
             });
         }
+        edits.extend(overlay_adds);
         edits.extend(sets);
+        edits.extend(overlay_removes);
         if !remove_atoms.is_empty() || !remove_bonds.is_empty() {
             edits.push(Edit::RemoveTopology {
                 atoms: remove_atoms,
@@ -164,7 +302,7 @@ impl ReactionAst {
 }
 
 impl Canonicalize for ReactionAst {
-    /// Value-level in a fixed atom frame: `deltas` are canonicalized (the #2 reduction);
+    /// Value-level in a fixed atom id space: `deltas` are canonicalized;
     /// `lhs` is passed through (`MoleculeAst` has no whole-molecule canonical form — its
     /// equality is structural). Equality up to atom renumbering is a separate `umol-graph`
     /// operation.

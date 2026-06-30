@@ -85,7 +85,7 @@ pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKi
 pub use operators::{MemOp, RelOp};
 pub use reaction::ReactionAst;
 pub use reaction_span::ReactionSpanAst;
-pub use remap::{IdRemapping, UndoRemapping};
+pub use remap::{IdCompaction, UndoCompaction};
 pub use ring::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
 pub use stereo::{

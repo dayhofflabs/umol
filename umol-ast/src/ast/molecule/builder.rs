@@ -11,8 +11,8 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    remove_edge_vec, remove_node_vec, EdgeId, FactorOrdering, FixedRelationSet,
-    FixedVarBirelationSet, Graph, NodeId, Ordered, RelationId, RelationParticipant, RemovalRemapping,
+    compact_edge_vec, compact_node_vec, EdgeId, FactorOrdering, FixedRelationSet,
+    FixedVarBirelationSet, Graph, NodeId, Ordered, RelationId, RelationParticipant, Compaction,
     Unordered, VarRelationSet,
 };
 
@@ -34,7 +34,7 @@ use super::super::id::{
 use super::super::ligand::StereoLigand;
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::NoncovalentBondAst;
-use super::super::remap::{IdRemapping, UndoRemapping};
+use super::super::remap::{IdCompaction, UndoCompaction};
 use super::super::stereo::{StereoAtomAst, StereoBondAst};
 use super::super::view::{
     AromaticSystemBuilderView, AromaticSystemBuilderViewMut, AtomBuilderView, AtomBuilderViewMut,
@@ -100,17 +100,17 @@ where
         }
     }
 
-    fn apply_removal_remapping(self, remap: &RemovalRemapping) -> Self {
+    fn apply_compaction(self, remap: &Compaction) -> Self {
         match self {
             FixedSetStorage::Shared(arc) => {
-                FixedSetStorage::Shared(Arc::new(arc.apply_removal_remapping(remap)))
+                FixedSetStorage::Shared(Arc::new(arc.apply_compaction(remap)))
             }
             FixedSetStorage::Mutable(vec) => {
                 let remapped: Vec<([P; N], D)> = vec
                     .into_iter()
                     .filter_map(|(mut participants, d)| {
                         for slot in &mut participants {
-                            *slot = (*slot).remap_removal(remap)?;
+                            *slot = (*slot).compact(remap)?;
                         }
                         Some((participants, d))
                     })
@@ -207,17 +207,17 @@ where
         }
     }
 
-    fn apply_removal_remapping(self, remap: &RemovalRemapping) -> Self {
+    fn apply_compaction(self, remap: &Compaction) -> Self {
         match self {
             VarSetStorage::Shared(arc) => {
-                VarSetStorage::Shared(Arc::new(arc.apply_removal_remapping(remap)))
+                VarSetStorage::Shared(Arc::new(arc.apply_compaction(remap)))
             }
             VarSetStorage::Mutable(vec) => {
                 let remapped: Vec<(Vec<P>, D)> = vec
                     .into_iter()
                     .filter_map(|(participants, d)| {
                         let mapped: Option<Vec<P>> =
-                            participants.into_iter().map(|p| p.remap_removal(remap)).collect();
+                            participants.into_iter().map(|p| p.compact(remap)).collect();
                         mapped.map(|p| (p, d))
                     })
                     .collect();
@@ -318,20 +318,20 @@ where
         }
     }
 
-    fn apply_removal_remapping(self, remap: &RemovalRemapping) -> Self {
+    fn apply_compaction(self, remap: &Compaction) -> Self {
         match self {
             FixedVarSetStorage::Shared(arc) => {
-                FixedVarSetStorage::Shared(Arc::new(arc.apply_removal_remapping(remap)))
+                FixedVarSetStorage::Shared(Arc::new(arc.apply_compaction(remap)))
             }
             FixedVarSetStorage::Mutable(vec) => {
                 let remapped: Vec<([L1; N1], Vec<L2>, D)> = vec
                     .into_iter()
                     .filter_map(|(mut participants_1, participants_2, d)| {
                         for slot in &mut participants_1 {
-                            *slot = (*slot).remap_removal(remap)?;
+                            *slot = (*slot).compact(remap)?;
                         }
                         let participants_2: Option<Vec<L2>> =
-                            participants_2.into_iter().map(|p| p.remap_removal(remap)).collect();
+                            participants_2.into_iter().map(|p| p.compact(remap)).collect();
                         Some((participants_1, participants_2?, d))
                     })
                     .collect();
@@ -393,7 +393,7 @@ where
 /// `remap` (i.e. dropped by the structural removal).
 fn birelation_removed<L1, O1, const N1: usize, L2, O2, D>(
     storage: &FixedVarSetStorage<L1, O1, N1, L2, O2, D>,
-    remap: &RemovalRemapping,
+    remap: &Compaction,
 ) -> Vec<RelationId>
 where
     L1: RelationParticipant,
@@ -407,11 +407,11 @@ where
         let f1_gone = storage
             .participants_1(i)
             .iter()
-            .any(|&p| p.remap_removal(remap).is_none());
+            .any(|&p| p.compact(remap).is_none());
         let f2_gone = storage
             .participants_2(i)
             .iter()
-            .any(|&p| p.remap_removal(remap).is_none());
+            .any(|&p| p.compact(remap).is_none());
         if f1_gone || f2_gone {
             removed.push(RelationId(i as u32));
         }
@@ -424,22 +424,22 @@ where
 fn restore_birelation_participants<L1, const N1: usize, L2>(
     participants_1: [L1; N1],
     participants_2: Vec<L2>,
-    undo_remapping: &UndoRemapping,
+    undo_compaction: &UndoCompaction,
 ) -> ([L1; N1], Vec<L2>)
 where
     L1: RelationParticipant,
     L2: RelationParticipant,
 {
-    let graph = undo_remapping.forward().graph();
+    let graph = undo_compaction.forward().graph();
     (
-        participants_1.map(|p| p.unmap_removal(graph)),
-        participants_2.into_iter().map(|p| p.unmap_removal(graph)).collect(),
+        participants_1.map(|p| p.uncompact(graph)),
+        participants_2.into_iter().map(|p| p.uncompact(graph)).collect(),
     )
 }
 
 fn fixed_relation_removed<P, O, D, const N: usize>(
     storage: &FixedSetStorage<P, O, D, N>,
-    remap: &RemovalRemapping,
+    remap: &Compaction,
 ) -> Vec<RelationId>
 where
     P: RelationParticipant,
@@ -451,7 +451,7 @@ where
         if storage
             .participants(i)
             .iter()
-            .any(|&p| p.remap_removal(remap).is_none())
+            .any(|&p| p.compact(remap).is_none())
         {
             removed.push(RelationId(i as u32));
         }
@@ -461,7 +461,7 @@ where
 
 fn var_relation_removed<P, O, D>(
     storage: &VarSetStorage<P, O, D>,
-    remap: &RemovalRemapping,
+    remap: &Compaction,
 ) -> Vec<RelationId>
 where
     P: RelationParticipant,
@@ -473,7 +473,7 @@ where
         if storage
             .participants(i)
             .iter()
-            .any(|&p| p.remap_removal(remap).is_none())
+            .any(|&p| p.compact(remap).is_none())
         {
             removed.push(RelationId(i as u32));
         }
@@ -483,18 +483,18 @@ where
 
 fn restore_var_participants<P: RelationParticipant>(
     parts: Vec<P>,
-    undo_remapping: &UndoRemapping,
+    undo_compaction: &UndoCompaction,
 ) -> Vec<P> {
-    let remapping = undo_remapping.forward().graph();
-    parts.into_iter().map(|p| p.unmap_removal(remapping)).collect()
+    let remapping = undo_compaction.forward().graph();
+    parts.into_iter().map(|p| p.uncompact(remapping)).collect()
 }
 
 fn restore_fixed_participants<P: RelationParticipant, const N: usize>(
     parts: [P; N],
-    undo_remapping: &UndoRemapping,
+    undo_compaction: &UndoCompaction,
 ) -> [P; N] {
-    let remapping = undo_remapping.forward().graph();
-    parts.map(|p| p.unmap_removal(remapping))
+    let remapping = undo_compaction.forward().graph();
+    parts.map(|p| p.uncompact(remapping))
 }
 
 /// Mutable builder for a `MoleculeAst`. Accumulates atoms, bonds, and
@@ -959,8 +959,8 @@ impl MoleculeBuilder {
     pub fn remove_dative_bonds(&mut self, ids: &[DativeBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.dative_bonds.remove_relations(&raw);
-        let id_remap = IdRemapping::new(
-            RemovalRemapping::new(Vec::new(), Vec::new()),
+        let id_remap = IdCompaction::new(
+            Compaction::new(Vec::new(), Vec::new()),
             raw,
             Vec::new(),
             Vec::new(),
@@ -968,7 +968,7 @@ impl MoleculeBuilder {
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.remap(&id_remap);
+        self.constraints.compact(&id_remap);
     }
 
     /// Remove aromatic-system overlays directly from the builder.
@@ -978,8 +978,8 @@ impl MoleculeBuilder {
     pub fn remove_aromatic_systems(&mut self, ids: &[AromaticSystemId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.aromatic_systems.remove_relations(&raw);
-        let id_remap = IdRemapping::new(
-            RemovalRemapping::new(Vec::new(), Vec::new()),
+        let id_remap = IdCompaction::new(
+            Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             raw,
             Vec::new(),
@@ -987,7 +987,7 @@ impl MoleculeBuilder {
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.remap(&id_remap);
+        self.constraints.compact(&id_remap);
     }
 
     /// Remove multicenter-bond overlays directly from the builder.
@@ -997,8 +997,8 @@ impl MoleculeBuilder {
     pub fn remove_multicenter_bonds(&mut self, ids: &[MulticenterBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.multicenter_bonds.remove_relations(&raw);
-        let id_remap = IdRemapping::new(
-            RemovalRemapping::new(Vec::new(), Vec::new()),
+        let id_remap = IdCompaction::new(
+            Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             raw,
@@ -1006,7 +1006,7 @@ impl MoleculeBuilder {
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.remap(&id_remap);
+        self.constraints.compact(&id_remap);
     }
 
     /// Remove noncovalent-bond overlays directly from the builder.
@@ -1016,8 +1016,8 @@ impl MoleculeBuilder {
     pub fn remove_noncovalent_bonds(&mut self, ids: &[NoncovalentBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.noncovalent_bonds.remove_relations(&raw);
-        let id_remap = IdRemapping::new(
-            RemovalRemapping::new(Vec::new(), Vec::new()),
+        let id_remap = IdCompaction::new(
+            Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1025,7 +1025,7 @@ impl MoleculeBuilder {
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.remap(&id_remap);
+        self.constraints.compact(&id_remap);
     }
 
     /// Remove stereo-atom overlays directly from the builder.
@@ -1035,8 +1035,8 @@ impl MoleculeBuilder {
     pub fn remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_atoms.remove_relations(&raw);
-        let id_remap = IdRemapping::new(
-            RemovalRemapping::new(Vec::new(), Vec::new()),
+        let id_remap = IdCompaction::new(
+            Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1044,7 +1044,7 @@ impl MoleculeBuilder {
             raw,
             Vec::new(),
         );
-        self.constraints.remap(&id_remap);
+        self.constraints.compact(&id_remap);
     }
 
     /// Remove stereo-bond overlays directly from the builder.
@@ -1054,8 +1054,8 @@ impl MoleculeBuilder {
     pub fn remove_stereo_bonds(&mut self, ids: &[StereoBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_bonds.remove_relations(&raw);
-        let id_remap = IdRemapping::new(
-            RemovalRemapping::new(Vec::new(), Vec::new()),
+        let id_remap = IdCompaction::new(
+            Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1063,7 +1063,7 @@ impl MoleculeBuilder {
             Vec::new(),
             raw,
         );
-        self.constraints.remap(&id_remap);
+        self.constraints.compact(&id_remap);
     }
 
     // -- Topological removal --------------------------------------------------
@@ -1073,16 +1073,16 @@ impl MoleculeBuilder {
     /// This is the low-level dense topology-removal primitive. It removes the
     /// requested atoms and bonds, cascades relations whose participants were
     /// removed, remaps molecule-level constraints, and returns the forward
-    /// `IdRemapping` for downstream id holders. It does not build rollback
+    /// `IdCompaction` for downstream id holders. It does not build rollback
     /// data; checked transactions capture the removed payloads before calling
     /// this method.
-    pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> IdRemapping {
+    pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> IdCompaction {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
         let remap = self.graph.remove(&nodes, &edges);
 
-        let new_atoms = remove_node_vec(&remap, &self.atoms);
-        let new_bonds = remove_edge_vec(&remap, &self.bonds);
+        let new_atoms = compact_node_vec(&remap, &self.atoms);
+        let new_bonds = compact_edge_vec(&remap, &self.bonds);
         self.atoms = Arc::new(new_atoms);
         self.bonds = Arc::new(new_bonds);
 
@@ -1097,42 +1097,42 @@ impl MoleculeBuilder {
             &mut self.dative_bonds,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.dative_bonds = dative.apply_removal_remapping(&remap);
+        self.dative_bonds = dative.apply_compaction(&remap);
 
         let aromatic = mem::replace(
             &mut self.aromatic_systems,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
-        self.aromatic_systems = aromatic.apply_removal_remapping(&remap);
+        self.aromatic_systems = aromatic.apply_compaction(&remap);
 
         let multicenter = mem::replace(
             &mut self.multicenter_bonds,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
-        self.multicenter_bonds = multicenter.apply_removal_remapping(&remap);
+        self.multicenter_bonds = multicenter.apply_compaction(&remap);
 
         let noncovalent = mem::replace(
             &mut self.noncovalent_bonds,
             FixedSetStorage::Shared(Arc::new(FixedRelationSet::default())),
         );
-        self.noncovalent_bonds = noncovalent.apply_removal_remapping(&remap);
+        self.noncovalent_bonds = noncovalent.apply_compaction(&remap);
 
         // Forward-remap stereo overlays: a stereo element whose site or any
         // ligand atom/bond was removed drops out (cascade). The dropped ids
-        // (computed above) feed `IdRemapping` so rollback (`restore_topology`)
+        // (computed above) feed `IdCompaction` so rollback (`restore_topology`)
         // can reinsert them.
         let stereo_atoms = mem::replace(
             &mut self.stereo_atoms,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.stereo_atoms = stereo_atoms.apply_removal_remapping(&remap);
+        self.stereo_atoms = stereo_atoms.apply_compaction(&remap);
         let stereo_bonds = mem::replace(
             &mut self.stereo_bonds,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.stereo_bonds = stereo_bonds.apply_removal_remapping(&remap);
+        self.stereo_bonds = stereo_bonds.apply_compaction(&remap);
 
-        let id_remap = IdRemapping::new(
+        let id_remap = IdCompaction::new(
             remap,
             removed_dative,
             removed_aromatic,
@@ -1141,7 +1141,7 @@ impl MoleculeBuilder {
             removed_stereo_atoms,
             removed_stereo_bonds,
         );
-        self.constraints.remap(&id_remap);
+        self.constraints.compact(&id_remap);
         id_remap
     }
 
@@ -1184,83 +1184,83 @@ impl MoleculeBuilder {
         atoms: Vec<RemovedAtom>,
         bonds: Vec<RemovedBond>,
         overlays: RemovedOverlays,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
         cascade: CascadedConstraints,
     ) {
-        self.restore_atoms(atoms, undo_remapping);
-        self.restore_bonds(bonds, undo_remapping);
-        self.restore_dative_bonds(overlays.dative_bonds, undo_remapping);
-        self.restore_aromatic_systems(overlays.aromatic_systems, undo_remapping);
-        self.restore_multicenter_bonds(overlays.multicenter_bonds, undo_remapping);
-        self.restore_noncovalent_bonds(overlays.noncovalent_bonds, undo_remapping);
-        self.restore_stereo_atoms(overlays.stereo_atoms, undo_remapping);
-        self.restore_stereo_bonds(overlays.stereo_bonds, undo_remapping);
+        self.restore_atoms(atoms, undo_compaction);
+        self.restore_bonds(bonds, undo_compaction);
+        self.restore_dative_bonds(overlays.dative_bonds, undo_compaction);
+        self.restore_aromatic_systems(overlays.aromatic_systems, undo_compaction);
+        self.restore_multicenter_bonds(overlays.multicenter_bonds, undo_compaction);
+        self.restore_noncovalent_bonds(overlays.noncovalent_bonds, undo_compaction);
+        self.restore_stereo_atoms(overlays.stereo_atoms, undo_compaction);
+        self.restore_stereo_bonds(overlays.stereo_bonds, undo_compaction);
         cascade.rollback_into(&mut self.constraints);
     }
 
     pub(super) fn restore_dative_bond(
         &mut self,
         removed: RemovedDativeBond,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
     ) {
-        self.restore_dative_bonds(vec![removed], undo_remapping);
+        self.restore_dative_bonds(vec![removed], undo_compaction);
     }
 
     pub(super) fn restore_aromatic_system(
         &mut self,
         removed: RemovedAromaticSystem,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
     ) {
-        self.restore_aromatic_systems(vec![removed], undo_remapping);
+        self.restore_aromatic_systems(vec![removed], undo_compaction);
     }
 
     pub(super) fn restore_multicenter_bond(
         &mut self,
         removed: RemovedMulticenterBond,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
     ) {
-        self.restore_multicenter_bonds(vec![removed], undo_remapping);
+        self.restore_multicenter_bonds(vec![removed], undo_compaction);
     }
 
     pub(super) fn restore_noncovalent_bond(
         &mut self,
         removed: RemovedNoncovalentBond,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
     ) {
-        self.restore_noncovalent_bonds(vec![removed], undo_remapping);
+        self.restore_noncovalent_bonds(vec![removed], undo_compaction);
     }
 
     pub(super) fn restore_stereo_atom(
         &mut self,
         removed: RemovedStereoAtom,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
     ) {
-        self.restore_stereo_atoms(vec![removed], undo_remapping);
+        self.restore_stereo_atoms(vec![removed], undo_compaction);
     }
 
     pub(super) fn restore_stereo_bond(
         &mut self,
         removed: RemovedStereoBond,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
     ) {
-        self.restore_stereo_bonds(vec![removed], undo_remapping);
+        self.restore_stereo_bonds(vec![removed], undo_compaction);
     }
 
     // -- Restore primitives ---------------------------------------------------
 
-    fn restore_atoms(&mut self, removed: Vec<RemovedAtom>, undo_remapping: &UndoRemapping) {
+    fn restore_atoms(&mut self, removed: Vec<RemovedAtom>, undo_compaction: &UndoCompaction) {
         let mut next = vec![None; self.atoms.len() + removed.len()];
         for removed in removed {
             next[removed.id.index()] = Some(removed.ast);
         }
         for (idx, atom) in self.atoms.iter().cloned().enumerate() {
-            let old = undo_remapping.atom(AtomId(idx as u32));
+            let old = undo_compaction.uncompact_atom(AtomId(idx as u32));
             next[old.index()] = Some(atom);
         }
         self.atoms = Arc::new(next.into_iter().map(Option::unwrap).collect());
     }
 
-    fn restore_bonds(&mut self, removed: Vec<RemovedBond>, undo_remapping: &UndoRemapping) {
+    fn restore_bonds(&mut self, removed: Vec<RemovedBond>, undo_compaction: &UndoCompaction) {
         let mut old_endpoints: Vec<Option<[AtomId; 2]>> =
             vec![None; self.bonds.len() + removed.len()];
         let mut old_bonds: Vec<Option<BondAst>> = vec![None; self.bonds.len() + removed.len()];
@@ -1269,11 +1269,11 @@ impl MoleculeBuilder {
             old_bonds[removed.id.index()] = Some(removed.ast);
         }
         for (idx, bond) in self.bonds.iter().cloned().enumerate() {
-            let old_id = undo_remapping.bond(BondId(idx as u32));
+            let old_id = undo_compaction.uncompact_bond(BondId(idx as u32));
             let endpoints = self.graph.edge_endpoints(EdgeId(idx as u32));
             old_endpoints[old_id.index()] = Some([
-                undo_remapping.atom(AtomId::from(endpoints[0])),
-                undo_remapping.atom(AtomId::from(endpoints[1])),
+                undo_compaction.uncompact_atom(AtomId::from(endpoints[0])),
+                undo_compaction.uncompact_atom(AtomId::from(endpoints[1])),
             ]);
             old_bonds[old_id.index()] = Some(bond);
         }
@@ -1291,14 +1291,14 @@ impl MoleculeBuilder {
     fn restore_dative_bonds(
         &mut self,
         removed: Vec<RemovedDativeBond>,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
     ) {
         let current = self.dative_bonds.entries();
         let mut next = vec![None; current.len() + removed.len()];
         for (idx, (acceptor, donors, data)) in current.into_iter().enumerate() {
-            let old_id = undo_remapping.dative_bond(DativeBondId(idx as u32));
+            let old_id = undo_compaction.uncompact_dative_bond(DativeBondId(idx as u32));
             let (acceptor, donors) =
-                restore_birelation_participants(acceptor, donors, undo_remapping);
+                restore_birelation_participants(acceptor, donors, undo_compaction);
             next[old_id.index()] = Some((acceptor, donors, data));
         }
         for removed in removed {
@@ -1319,13 +1319,13 @@ impl MoleculeBuilder {
     fn restore_aromatic_systems(
         &mut self,
         removed: Vec<RemovedAromaticSystem>,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
     ) {
         let current = self.aromatic_systems.entries();
         let mut next = vec![None; current.len() + removed.len()];
         for (idx, (parts, data)) in current.into_iter().enumerate() {
-            let old_id = undo_remapping.aromatic_system(AromaticSystemId(idx as u32));
-            next[old_id.index()] = Some((restore_var_participants(parts, undo_remapping), data));
+            let old_id = undo_compaction.uncompact_aromatic_system(AromaticSystemId(idx as u32));
+            next[old_id.index()] = Some((restore_var_participants(parts, undo_compaction), data));
         }
         for removed in removed {
             next[removed.id.index()] = Some((
@@ -1340,13 +1340,13 @@ impl MoleculeBuilder {
     fn restore_multicenter_bonds(
         &mut self,
         removed: Vec<RemovedMulticenterBond>,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
     ) {
         let current = self.multicenter_bonds.entries();
         let mut next = vec![None; current.len() + removed.len()];
         for (idx, (parts, data)) in current.into_iter().enumerate() {
-            let old_id = undo_remapping.multicenter_bond(MulticenterBondId(idx as u32));
-            next[old_id.index()] = Some((restore_var_participants(parts, undo_remapping), data));
+            let old_id = undo_compaction.uncompact_multicenter_bond(MulticenterBondId(idx as u32));
+            next[old_id.index()] = Some((restore_var_participants(parts, undo_compaction), data));
         }
         for removed in removed {
             next[removed.id.index()] = Some((
@@ -1361,13 +1361,13 @@ impl MoleculeBuilder {
     fn restore_noncovalent_bonds(
         &mut self,
         removed: Vec<RemovedNoncovalentBond>,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
     ) {
         let current = self.noncovalent_bonds.entries();
         let mut next = vec![None; current.len() + removed.len()];
         for (idx, (parts, data)) in current.into_iter().enumerate() {
-            let old_id = undo_remapping.noncovalent_bond(NoncovalentBondId(idx as u32));
-            next[old_id.index()] = Some((restore_fixed_participants(parts, undo_remapping), data));
+            let old_id = undo_compaction.uncompact_noncovalent_bond(NoncovalentBondId(idx as u32));
+            next[old_id.index()] = Some((restore_fixed_participants(parts, undo_compaction), data));
         }
         for removed in removed {
             next[removed.id.index()] = Some((
@@ -1385,13 +1385,13 @@ impl MoleculeBuilder {
     fn restore_stereo_atoms(
         &mut self,
         removed: Vec<RemovedStereoAtom>,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
     ) {
         let current = self.stereo_atoms.entries();
         let mut next = vec![None; current.len() + removed.len()];
         for (idx, (site, ligands, data)) in current.into_iter().enumerate() {
-            let old_id = undo_remapping.stereo_atom(StereoAtomId(idx as u32));
-            let (site, ligands) = restore_birelation_participants(site, ligands, undo_remapping);
+            let old_id = undo_compaction.uncompact_stereo_atom(StereoAtomId(idx as u32));
+            let (site, ligands) = restore_birelation_participants(site, ligands, undo_compaction);
             next[old_id.index()] = Some((site, ligands, data));
         }
         for removed in removed {
@@ -1405,13 +1405,13 @@ impl MoleculeBuilder {
     fn restore_stereo_bonds(
         &mut self,
         removed: Vec<RemovedStereoBond>,
-        undo_remapping: &UndoRemapping,
+        undo_compaction: &UndoCompaction,
     ) {
         let current = self.stereo_bonds.entries();
         let mut next = vec![None; current.len() + removed.len()];
         for (idx, (site, ligands, data)) in current.into_iter().enumerate() {
-            let old_id = undo_remapping.stereo_bond(StereoBondId(idx as u32));
-            let (site, ligands) = restore_birelation_participants(site, ligands, undo_remapping);
+            let old_id = undo_compaction.uncompact_stereo_bond(StereoBondId(idx as u32));
+            let (site, ligands) = restore_birelation_participants(site, ligands, undo_compaction);
             next[old_id.index()] = Some((site, ligands, data));
         }
         for removed in removed {
@@ -1489,7 +1489,7 @@ mod tests {
             removed_atoms,
             removed_bonds,
             RemovedOverlays::default(),
-            &remap.undo_remapping(),
+            &remap.undo_compaction(),
             CascadedConstraints {
                 removed: vec![RemovedConstraint {
                     position: 0,
@@ -1536,7 +1536,7 @@ mod tests {
         };
 
         b.remove_dative_bonds(&[DativeBondId(0)]);
-        let undo = IdRemapping::relations(
+        let undo = IdCompaction::relations(
             vec![removed.id.into()],
             Vec::new(),
             Vec::new(),
@@ -1544,7 +1544,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
         )
-        .undo_remapping();
+        .undo_compaction();
         b.restore_dative_bond(removed, &undo);
 
         assert_eq!(b.build(), expected);

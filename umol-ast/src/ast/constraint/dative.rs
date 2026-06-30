@@ -10,7 +10,7 @@ use strum::EnumDiscriminants;
 use super::super::boolean::BooleanAst;
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::Contradiction;
-use super::super::remap::IdRemapping;
+use super::super::remap::IdCompaction;
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
 
@@ -65,7 +65,7 @@ impl DativeBondConstraint {
         }
     }
 
-    pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
+    pub fn compact(self, _remap: &IdCompaction) -> Option<Self> {
         // Value-only: no indices to remap.
         Some(self)
     }
@@ -275,8 +275,8 @@ impl DativeBondConstraints {
         out
     }
 
-    pub fn remap(self, remap: &IdRemapping) -> Self {
-        Self(self.0.into_iter().filter_map(|c| c.remap(remap)).collect())
+    pub fn compact(self, remap: &IdCompaction) -> Self {
+        Self(self.0.into_iter().filter_map(|c| c.compact(remap)).collect())
     }
 }
 
@@ -405,7 +405,7 @@ impl From<Vec<DativeBondConstraint>> for DativeBondConstraints {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::RemovalRemapping;
+    use umol_graph_core::Compaction;
 
     use super::*;
     #[rustfmt::skip]
@@ -770,8 +770,8 @@ mod tests {
             DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
             DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
-        let remap = IdRemapping::new(
-            RemovalRemapping::new(vec![1], vec![1]),
+        let remap = IdCompaction::new(
+            Compaction::new(vec![1], vec![1]),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -779,7 +779,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        assert_eq!(cs.clone().remap(&remap), cs);
+        assert_eq!(cs.clone().compact(&remap), cs);
     }
 
     #[rustfmt::skip]

@@ -10,45 +10,114 @@
 // from ReactionAst.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::hash::Hash;
 
-use umol_graph_core::{EdgeId, Graph, RemovalRemapping};
+use umol_graph_core::{
+    Compaction, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered, Unordered,
+    VarRelationSet,
+};
 
+use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::constraint::{Constraint, Constraints};
+use super::dative::DativeBondAst;
 use super::delta::{
-    apply_atom_change, apply_bond_change, remap_delta, AtomDelta, BondDelta, ConstraintDelta,
-    ConstraintSpan, Delta, Deltas, EntityFold, EntitySpan,
+    apply_aromatic_change, apply_atom_change, apply_bond_change, apply_dative_change,
+    apply_multicenter_change, apply_noncovalent_change, remap_delta, AromaticSystemDelta, AtomDelta,
+    BondDelta, ConstraintDelta, ConstraintSpan, DativeBondDelta, Delta, Deltas, EntityFold,
+    EntitySpan, MulticenterBondDelta, NoncovalentBondDelta,
 };
 use super::error::Contradiction;
-use super::id::{AtomId, BondId};
+use super::id::{
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+};
+use super::ligand::StereoLigand;
 use super::molecule::MoleculeAst;
+use super::multicenter::MulticenterBondAst;
+use super::noncovalent::NoncovalentBondAst;
 use super::reaction::ReactionAst;
-use super::remap::IdRemapping;
+use super::remap::{IdCompaction, IdRemapping};
+use super::stereo::{StereoAtomAst, StereoBondAst};
 use super::traits::Canonicalize;
 
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
-/// topology is the `lhs` frame (deleted entities kept as nodes/edges) with created entities
+/// topology is the `lhs` id space (deleted entities kept as nodes/edges) with created entities
 /// appended; `atoms` / `bonds` are indexed parallel to the graph's nodes / edges.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReactionSpanAst {
     graph: Graph,
     atoms: Vec<EntitySpan<AtomAst>>,
     bonds: Vec<EntitySpan<BondAst>>,
+    dative_bonds:
+        FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, EntitySpan<DativeBondAst>>,
+    aromatic_systems: VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemAst>>,
+    multicenter_bonds: VarRelationSet<NodeId, Unordered, EntitySpan<MulticenterBondAst>>,
+    noncovalent_bonds: FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondAst>, 2>,
+    stereo_atoms: FixedVarBirelationSet<
+        NodeId,
+        Ordered,
+        1,
+        StereoLigand,
+        Ordered,
+        EntitySpan<StereoAtomAst>,
+    >,
+    stereo_bonds: FixedVarBirelationSet<
+        EdgeId,
+        Ordered,
+        1,
+        StereoLigand,
+        Ordered,
+        EntitySpan<StereoBondAst>,
+    >,
     constraints: Vec<ConstraintSpan>,
 }
 
+#[allow(clippy::type_complexity)]
 impl ReactionSpanAst {
     pub(crate) fn from_parts(
         graph: Graph,
         atoms: Vec<EntitySpan<AtomAst>>,
         bonds: Vec<EntitySpan<BondAst>>,
+        dative_bonds: FixedVarBirelationSet<
+            NodeId,
+            Ordered,
+            1,
+            NodeId,
+            Unordered,
+            EntitySpan<DativeBondAst>,
+        >,
+        aromatic_systems: VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemAst>>,
+        multicenter_bonds: VarRelationSet<NodeId, Unordered, EntitySpan<MulticenterBondAst>>,
+        noncovalent_bonds: FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondAst>, 2>,
+        stereo_atoms: FixedVarBirelationSet<
+            NodeId,
+            Ordered,
+            1,
+            StereoLigand,
+            Ordered,
+            EntitySpan<StereoAtomAst>,
+        >,
+        stereo_bonds: FixedVarBirelationSet<
+            EdgeId,
+            Ordered,
+            1,
+            StereoLigand,
+            Ordered,
+            EntitySpan<StereoBondAst>,
+        >,
         constraints: Vec<ConstraintSpan>,
     ) -> Self {
         Self {
             graph,
             atoms,
             bonds,
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
             constraints,
         }
     }
@@ -70,20 +139,20 @@ impl ReactionSpanAst {
     }
 
     /// The left-hand (reactant) molecule: every entity present on the left, in a compacted
-    /// frame (created entities dropped).
+    /// id space (created entities dropped).
     pub fn left(&self) -> MoleculeAst {
         self.project(|atom| atom.left(), |bond| bond.left(), |c| c.left())
     }
 
     /// The right-hand (product) molecule: every entity present on the right, in a compacted
-    /// frame (deleted entities dropped).
+    /// id space (deleted entities dropped).
     pub fn right(&self) -> MoleculeAst {
         self.project(|atom| atom.right(), |bond| bond.right(), |c| c.right())
     }
 
     /// Recover the operational `ReactionAst` from the span — the inverse of
     /// `ReactionAst::to_reaction_span`, up to delta normal form. `lhs = left()` (which preserves
-    /// the original lhs frame); each entity's `EntitySpan` yields its delta, a `Modified` one
+    /// the original lhs id space); each entity's `EntitySpan` yields its delta, a `Modified` one
     /// via an AST-diff of its left/right values.
     pub fn to_reaction(&self) -> ReactionAst {
         let mut deltas = AtomDelta::deltas_from_states(&self.atoms, |_| ());
@@ -137,8 +206,8 @@ impl ReactionSpanAst {
             }
         }
 
-        let remap = IdRemapping::new(
-            RemovalRemapping::new(removed_nodes, removed_edges),
+        let remap = IdCompaction::new(
+            Compaction::new(removed_nodes, removed_edges),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -152,7 +221,7 @@ impl ReactionSpanAst {
                 constraints.push(c.clone());
             }
         }
-        constraints.remap(&remap);
+        constraints.compact(&remap);
 
         MoleculeAst::from_parts(
             atoms,
@@ -170,7 +239,7 @@ impl ReactionSpanAst {
 
 impl ReactionAst {
     /// Materialize the superimposed reaction span. Canonicalizes the deltas, then annotates
-    /// each `lhs` entity (in its own frame) with its before/after state — `Removed` /
+    /// each `lhs` entity (in its own id space) with its before/after state — `Removed` /
     /// `Added` / `Modified` / `Unchanged` — appending created entities. A `Modified` entity's
     /// right value is its left value with the entity's field/constraint changes applied.
     /// `Err(Contradiction)` if the deltas are inconsistent (or inconsistent with `lhs`).
@@ -186,6 +255,25 @@ impl ReactionAst {
         let mut removed_bonds: HashMap<BondId, BondAst> = HashMap::new();
         let mut added_bonds: BTreeMap<BondId, ([AtomId; 2], BondAst)> = BTreeMap::new();
         let mut bond_changes: HashMap<BondId, Vec<BondDelta>> = HashMap::new();
+        let mut removed_aromatic: HashMap<AromaticSystemId, AromaticSystemAst> = HashMap::new();
+        let mut added_aromatic: BTreeMap<AromaticSystemId, (Vec<AtomId>, AromaticSystemAst)> =
+            BTreeMap::new();
+        let mut aromatic_changes: HashMap<AromaticSystemId, Vec<AromaticSystemDelta>> =
+            HashMap::new();
+        let mut removed_dative: HashMap<DativeBondId, DativeBondAst> = HashMap::new();
+        let mut added_dative: BTreeMap<DativeBondId, (Vec<AtomId>, AtomId, DativeBondAst)> =
+            BTreeMap::new();
+        let mut dative_changes: HashMap<DativeBondId, Vec<DativeBondDelta>> = HashMap::new();
+        let mut removed_multicenter: HashMap<MulticenterBondId, MulticenterBondAst> = HashMap::new();
+        let mut added_multicenter: BTreeMap<MulticenterBondId, (Vec<AtomId>, MulticenterBondAst)> =
+            BTreeMap::new();
+        let mut multicenter_changes: HashMap<MulticenterBondId, Vec<MulticenterBondDelta>> =
+            HashMap::new();
+        let mut removed_noncovalent: HashMap<NoncovalentBondId, NoncovalentBondAst> = HashMap::new();
+        let mut added_noncovalent: BTreeMap<NoncovalentBondId, ([AtomId; 2], NoncovalentBondAst)> =
+            BTreeMap::new();
+        let mut noncovalent_changes: HashMap<NoncovalentBondId, Vec<NoncovalentBondDelta>> =
+            HashMap::new();
         let mut added_constraints: Vec<Constraint> = Vec::new();
         let mut removed_constraints: Vec<Constraint> = Vec::new();
 
@@ -213,6 +301,59 @@ impl ReactionAst {
                         bond_changes.entry(*id).or_default().push(bond.clone());
                     }
                 },
+                Delta::AromaticSystem(aromatic) => match aromatic {
+                    AromaticSystemDelta::Remove { id, ast, .. } => {
+                        removed_aromatic.insert(*id, ast.clone());
+                    }
+                    AromaticSystemDelta::Add { id, atoms, ast } => {
+                        added_aromatic.insert(*id, (atoms.clone(), ast.clone()));
+                    }
+                    AromaticSystemDelta::ModifyField { id, .. }
+                    | AromaticSystemDelta::ModifyConstraint { id, .. } => {
+                        aromatic_changes.entry(*id).or_default().push(aromatic.clone());
+                    }
+                },
+                Delta::DativeBond(dative) => match dative {
+                    DativeBondDelta::Remove { id, ast, .. } => {
+                        removed_dative.insert(*id, ast.clone());
+                    }
+                    DativeBondDelta::Add {
+                        id,
+                        donors,
+                        acceptor,
+                        ast,
+                    } => {
+                        added_dative.insert(*id, (donors.clone(), *acceptor, ast.clone()));
+                    }
+                    DativeBondDelta::ModifyField { id, .. }
+                    | DativeBondDelta::ModifyConstraint { id, .. } => {
+                        dative_changes.entry(*id).or_default().push(dative.clone());
+                    }
+                },
+                Delta::MulticenterBond(multicenter) => match multicenter {
+                    MulticenterBondDelta::Remove { id, ast, .. } => {
+                        removed_multicenter.insert(*id, ast.clone());
+                    }
+                    MulticenterBondDelta::Add { id, atoms, ast } => {
+                        added_multicenter.insert(*id, (atoms.clone(), ast.clone()));
+                    }
+                    MulticenterBondDelta::ModifyField { id, .. }
+                    | MulticenterBondDelta::ModifyConstraint { id, .. } => {
+                        multicenter_changes.entry(*id).or_default().push(multicenter.clone());
+                    }
+                },
+                Delta::NoncovalentBond(noncovalent) => match noncovalent {
+                    NoncovalentBondDelta::Remove { id, ast, .. } => {
+                        removed_noncovalent.insert(*id, ast.clone());
+                    }
+                    NoncovalentBondDelta::Add { id, atoms, ast } => {
+                        added_noncovalent.insert(*id, (*atoms, ast.clone()));
+                    }
+                    NoncovalentBondDelta::ModifyField { id, .. }
+                    | NoncovalentBondDelta::ModifyConstraint { id, .. } => {
+                        noncovalent_changes.entry(*id).or_default().push(noncovalent.clone());
+                    }
+                },
                 Delta::Constraint(ConstraintDelta::Add(c)) => added_constraints.push(c.clone()),
                 Delta::Constraint(ConstraintDelta::Remove(c)) => {
                     removed_constraints.push(c.clone())
@@ -220,7 +361,7 @@ impl ReactionAst {
             }
         }
 
-        // Union node index per frame atom id: lhs atoms keep their id, created atoms append.
+        // Union node index keyed by atom id: lhs atoms keep their id, created atoms append.
         let mut atom_index: HashMap<AtomId, usize> =
             HashMap::with_capacity(atom_count + added_atoms.len());
         for node in 0..atom_count {
@@ -276,6 +417,143 @@ impl ReactionAst {
             bonds.push(EntitySpan::Added(ast));
         }
 
+        // Overlay columns: lhs overlays tagged by their fold (Removed/Modified/Unchanged),
+        // created overlays appended; participants mapped to the union id space via `atom_index`.
+        let mut aromatic_entries: Vec<(Vec<NodeId>, EntitySpan<AromaticSystemAst>)> = Vec::new();
+        for view in lhs.aromatic_systems().iter() {
+            let participants: Vec<NodeId> = view
+                .atom_ids()
+                .map(|a| NodeId(atom_index[&a] as u32))
+                .collect();
+            if let Some(ast) = removed_aromatic.get(&view.id) {
+                aromatic_entries.push((participants, EntitySpan::Removed(ast.clone())));
+            } else if let Some(changes) = aromatic_changes.get(&view.id) {
+                let left = view.ast.clone();
+                let mut right = left.clone();
+                for change in changes {
+                    apply_aromatic_change(&mut right, change)?;
+                }
+                aromatic_entries.push((participants, EntitySpan::Modified { left, right }));
+            } else {
+                aromatic_entries.push((participants, EntitySpan::Unchanged(view.ast.clone())));
+            }
+        }
+        for (atoms, ast) in added_aromatic.into_values() {
+            let participants: Vec<NodeId> =
+                atoms.iter().map(|a| NodeId(atom_index[a] as u32)).collect();
+            aromatic_entries.push((participants, EntitySpan::Added(ast)));
+        }
+        let aromatic_systems = VarRelationSet::new(aromatic_entries);
+
+        let mut multicenter_entries: Vec<(Vec<NodeId>, EntitySpan<MulticenterBondAst>)> = Vec::new();
+        for view in lhs.multicenter_bonds().iter() {
+            let participants: Vec<NodeId> = view
+                .atom_ids()
+                .map(|a| NodeId(atom_index[&a] as u32))
+                .collect();
+            if let Some(ast) = removed_multicenter.get(&view.id) {
+                multicenter_entries.push((participants, EntitySpan::Removed(ast.clone())));
+            } else if let Some(changes) = multicenter_changes.get(&view.id) {
+                let left = view.ast.clone();
+                let mut right = left.clone();
+                for change in changes {
+                    apply_multicenter_change(&mut right, change)?;
+                }
+                multicenter_entries.push((participants, EntitySpan::Modified { left, right }));
+            } else {
+                multicenter_entries.push((participants, EntitySpan::Unchanged(view.ast.clone())));
+            }
+        }
+        for (atoms, ast) in added_multicenter.into_values() {
+            let participants: Vec<NodeId> =
+                atoms.iter().map(|a| NodeId(atom_index[a] as u32)).collect();
+            multicenter_entries.push((participants, EntitySpan::Added(ast)));
+        }
+        let multicenter_bonds = VarRelationSet::new(multicenter_entries);
+
+        let mut noncovalent_entries: Vec<([NodeId; 2], EntitySpan<NoncovalentBondAst>)> = Vec::new();
+        for view in lhs.noncovalent_bonds().iter() {
+            let [a, b] = view.atom_ids();
+            let participants = [NodeId(atom_index[&a] as u32), NodeId(atom_index[&b] as u32)];
+            if let Some(ast) = removed_noncovalent.get(&view.id) {
+                noncovalent_entries.push((participants, EntitySpan::Removed(ast.clone())));
+            } else if let Some(changes) = noncovalent_changes.get(&view.id) {
+                let left = view.ast.clone();
+                let mut right = left.clone();
+                for change in changes {
+                    apply_noncovalent_change(&mut right, change)?;
+                }
+                noncovalent_entries.push((participants, EntitySpan::Modified { left, right }));
+            } else {
+                noncovalent_entries.push((participants, EntitySpan::Unchanged(view.ast.clone())));
+            }
+        }
+        for ([a, b], ast) in added_noncovalent.into_values() {
+            let participants = [NodeId(atom_index[&a] as u32), NodeId(atom_index[&b] as u32)];
+            noncovalent_entries.push((participants, EntitySpan::Added(ast)));
+        }
+        let noncovalent_bonds = FixedRelationSet::new(noncovalent_entries);
+
+        let mut dative_entries: Vec<([NodeId; 1], Vec<NodeId>, EntitySpan<DativeBondAst>)> =
+            Vec::new();
+        for view in lhs.dative_bonds().iter() {
+            let acceptor = [NodeId(atom_index[&view.acceptor_id()] as u32)];
+            let donors: Vec<NodeId> = view
+                .donor_ids()
+                .map(|a| NodeId(atom_index[&a] as u32))
+                .collect();
+            if let Some(ast) = removed_dative.get(&view.id) {
+                dative_entries.push((acceptor, donors, EntitySpan::Removed(ast.clone())));
+            } else if let Some(changes) = dative_changes.get(&view.id) {
+                let left = view.ast.clone();
+                let mut right = left.clone();
+                for change in changes {
+                    apply_dative_change(&mut right, change)?;
+                }
+                dative_entries.push((acceptor, donors, EntitySpan::Modified { left, right }));
+            } else {
+                dative_entries.push((acceptor, donors, EntitySpan::Unchanged(view.ast.clone())));
+            }
+        }
+        for (donors, acceptor, ast) in added_dative.into_values() {
+            let acceptor = [NodeId(atom_index[&acceptor] as u32)];
+            let donors: Vec<NodeId> = donors.iter().map(|a| NodeId(atom_index[a] as u32)).collect();
+            dative_entries.push((acceptor, donors, EntitySpan::Added(ast)));
+        }
+        let dative_bonds = FixedVarBirelationSet::new(dative_entries);
+
+        // Stereo overlays have no deltas yet (I6) — all lhs entities carry through Unchanged,
+        // their site/ligand atom ids already in the union id space (lhs ids are identity-mapped).
+        let mut stereo_atom_entries: Vec<(
+            [NodeId; 1],
+            Vec<StereoLigand>,
+            EntitySpan<StereoAtomAst>,
+        )> = Vec::new();
+        for view in lhs.stereo_atoms().iter() {
+            let site = [NodeId::from(view.site_id())];
+            stereo_atom_entries.push((
+                site,
+                view.ligand_frame(),
+                EntitySpan::Unchanged(view.ast.clone()),
+            ));
+        }
+        let stereo_atoms = FixedVarBirelationSet::new(stereo_atom_entries);
+
+        let mut stereo_bond_entries: Vec<(
+            [EdgeId; 1],
+            Vec<StereoLigand>,
+            EntitySpan<StereoBondAst>,
+        )> = Vec::new();
+        for view in lhs.stereo_bonds().iter() {
+            let site = [EdgeId::from(view.site_id())];
+            stereo_bond_entries.push((
+                site,
+                view.ligand_frame(),
+                EntitySpan::Unchanged(view.ast.clone()),
+            ));
+        }
+        let stereo_bonds = FixedVarBirelationSet::new(stereo_bond_entries);
+
         let mut constraints: Vec<ConstraintSpan> =
             Vec::with_capacity(lhs.constraints().len() + added_constraints.len());
         for c in lhs.constraints().iter() {
@@ -292,11 +570,22 @@ impl ReactionAst {
         }
 
         let graph = Graph::new(atoms.len(), &edges);
-        Ok(ReactionSpanAst::from_parts(graph, atoms, bonds, constraints))
+        Ok(ReactionSpanAst::from_parts(
+            graph,
+            atoms,
+            bonds,
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
+            constraints,
+        ))
     }
 
     /// The reverse reaction: the product becomes the reactant and every delta is inverted and
-    /// re-anchored to the product's (compacted) frame. `reverse().to_reaction_span()` swaps the
+    /// re-anchored to the product's (compacted) id space. `reverse().to_reaction_span()` swaps the
     /// sides of `self`'s span. `Err(Contradiction)` if the deltas are inconsistent.
     pub fn reverse(&self) -> Result<ReactionAst, Contradiction> {
         let deltas = self.deltas.clone().canonicalize()?;
@@ -308,48 +597,98 @@ impl ReactionAst {
         let mut created_atoms: Vec<AtomId> = Vec::new();
         let mut removed_bonds: Vec<BondId> = Vec::new();
         let mut created_bonds: Vec<BondId> = Vec::new();
+        let mut removed_dative: Vec<DativeBondId> = Vec::new();
+        let mut created_dative: Vec<DativeBondId> = Vec::new();
+        let mut removed_aromatic: Vec<AromaticSystemId> = Vec::new();
+        let mut created_aromatic: Vec<AromaticSystemId> = Vec::new();
+        let mut removed_multicenter: Vec<MulticenterBondId> = Vec::new();
+        let mut created_multicenter: Vec<MulticenterBondId> = Vec::new();
+        let mut removed_noncovalent: Vec<NoncovalentBondId> = Vec::new();
+        let mut created_noncovalent: Vec<NoncovalentBondId> = Vec::new();
         for delta in deltas.iter() {
             match delta {
                 Delta::Atom(AtomDelta::Remove { id, .. }) => removed_atoms.push(*id),
                 Delta::Atom(AtomDelta::Add { id, .. }) => created_atoms.push(*id),
                 Delta::Bond(BondDelta::Remove { id, .. }) => removed_bonds.push(*id),
                 Delta::Bond(BondDelta::Add { id, .. }) => created_bonds.push(*id),
+                Delta::DativeBond(DativeBondDelta::Remove { id, .. }) => removed_dative.push(*id),
+                Delta::DativeBond(DativeBondDelta::Add { id, .. }) => created_dative.push(*id),
+                Delta::AromaticSystem(AromaticSystemDelta::Remove { id, .. }) => {
+                    removed_aromatic.push(*id)
+                }
+                Delta::AromaticSystem(AromaticSystemDelta::Add { id, .. }) => {
+                    created_aromatic.push(*id)
+                }
+                Delta::MulticenterBond(MulticenterBondDelta::Remove { id, .. }) => {
+                    removed_multicenter.push(*id)
+                }
+                Delta::MulticenterBond(MulticenterBondDelta::Add { id, .. }) => {
+                    created_multicenter.push(*id)
+                }
+                Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, .. }) => {
+                    removed_noncovalent.push(*id)
+                }
+                Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, .. }) => {
+                    created_noncovalent.push(*id)
+                }
                 _ => {}
             }
         }
-        created_atoms.sort();
-        created_bonds.sort();
 
-        // Forward → reverse-frame maps, matching `right()`'s compaction: survivors take ids in
+        // Forward → reverse id-space maps, matching `right()`'s compaction: survivors take ids in
         // union order (lhs in place, created appended); deleted entities become created in the
         // reverse and take fresh ids after the survivors.
-        let removed_atom_set: HashSet<AtomId> = removed_atoms.iter().copied().collect();
-        let removed_bond_set: HashSet<BondId> = removed_bonds.iter().copied().collect();
-        let survivor_atoms = (0..atom_count as u32)
-            .map(AtomId)
-            .filter(|id| !removed_atom_set.contains(id))
-            .chain(created_atoms.iter().copied());
-        let rev_atom: HashMap<AtomId, AtomId> = survivor_atoms
-            .chain(removed_atoms.iter().copied())
-            .enumerate()
-            .map(|(rev, id)| (id, AtomId(rev as u32)))
-            .collect();
-        let survivor_bonds = (0..bond_count as u32)
-            .map(BondId)
-            .filter(|id| !removed_bond_set.contains(id))
-            .chain(created_bonds.iter().copied());
-        let rev_bond: HashMap<BondId, BondId> = survivor_bonds
-            .chain(removed_bonds.iter().copied())
-            .enumerate()
-            .map(|(rev, id)| (id, BondId(rev as u32)))
-            .collect();
+        let remapping = IdRemapping::new(
+            reverse_remapping(atom_count, &removed_atoms, &created_atoms),
+            reverse_remapping(bond_count, &removed_bonds, &created_bonds),
+            reverse_remapping(
+                self.lhs.dative_bonds().count(),
+                &removed_dative,
+                &created_dative,
+            ),
+            reverse_remapping(
+                self.lhs.aromatic_systems().count(),
+                &removed_aromatic,
+                &created_aromatic,
+            ),
+            reverse_remapping(
+                self.lhs.multicenter_bonds().count(),
+                &removed_multicenter,
+                &created_multicenter,
+            ),
+            reverse_remapping(
+                self.lhs.noncovalent_bonds().count(),
+                &removed_noncovalent,
+                &created_noncovalent,
+            ),
+        );
 
         let reversed: Deltas = deltas
             .iter()
-            .map(|delta| remap_delta(delta.clone().inverse(), &rev_atom, &rev_bond))
+            .map(|delta| remap_delta(delta.clone().inverse(), &remapping))
             .collect();
         Ok(ReactionAst::new(new_lhs, reversed))
     }
+}
+
+/// Build a forward → reverse id-space map for one entity kind: surviving lhs ids (those not in
+/// `removed`, in id order) then `created` (sorted) take reverse ids `0..k`; `removed` ids (which
+/// become created in the reverse) take fresh ids after the survivors.
+fn reverse_remapping<Id>(lhs_count: usize, removed: &[Id], created: &[Id]) -> HashMap<Id, Id>
+where
+    Id: Copy + Eq + Hash + Ord + From<usize>,
+{
+    let removed_set: HashSet<Id> = removed.iter().copied().collect();
+    let mut created: Vec<Id> = created.to_vec();
+    created.sort_unstable();
+    (0..lhs_count)
+        .map(Id::from)
+        .filter(|id| !removed_set.contains(id))
+        .chain(created)
+        .chain(removed.iter().copied())
+        .enumerate()
+        .map(|(rev, id)| (id, Id::from(rev)))
+        .collect()
 }
 
 #[cfg(test)]
@@ -531,6 +870,55 @@ mod tests {
         let span = forward.reverse().unwrap().to_reaction_span().unwrap();
         assert_eq!(span.left(), expected_reactant);
         assert_eq!(span.right(), expected_product);
+    }
+
+    #[rstest]
+    #[case::identity(
+        3,
+        vec![],
+        vec![],
+        HashMap::from([(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1)), (AtomId(2), AtomId(2))])
+    )]
+    #[case::removed_compacted(
+        4,
+        vec![AtomId(1), AtomId(3)],
+        vec![],
+        HashMap::from([
+            (AtomId(0), AtomId(0)),
+            (AtomId(2), AtomId(1)),
+            (AtomId(1), AtomId(2)),
+            (AtomId(3), AtomId(3)),
+        ])
+    )]
+    #[case::created_appended_sorted(
+        2,
+        vec![],
+        vec![AtomId(5), AtomId(4)],
+        HashMap::from([
+            (AtomId(0), AtomId(0)),
+            (AtomId(1), AtomId(1)),
+            (AtomId(4), AtomId(2)),
+            (AtomId(5), AtomId(3)),
+        ])
+    )]
+    #[case::removed_and_created(
+        3,
+        vec![AtomId(1)],
+        vec![AtomId(7)],
+        HashMap::from([
+            (AtomId(0), AtomId(0)),
+            (AtomId(2), AtomId(1)),
+            (AtomId(7), AtomId(2)),
+            (AtomId(1), AtomId(3)),
+        ])
+    )]
+    fn test_reverse_remapping(
+        #[case] lhs_count: usize,
+        #[case] removed: Vec<AtomId>,
+        #[case] created: Vec<AtomId>,
+        #[case] expected: HashMap<AtomId, AtomId>,
+    ) {
+        assert_eq!(reverse_remapping(lhs_count, &removed, &created), expected);
     }
 
     #[rstest]

@@ -81,6 +81,14 @@ impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
                 .iter()
                 .map(|span| map_span(span, |bond| BondDsl::from_ast(bond, &cfg.bond).0))
                 .collect(),
+            // TODO(I4): overlay span columns through the overlay DSL. Bridged empty so the lib
+            // links; the `ReactionSpanDsl` roundtrip drops overlay spans until I4.
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
             ast.constraints().to_vec(),
         );
         ReactionSpanDsl::from_parts(lowered, MoleculeMetadata::default())
@@ -102,6 +110,13 @@ impl IntoAst<ReactionSpanAst> for ReactionSpanDsl {
                 .iter()
                 .map(|span| map_span(span, |bond| BondDsl(bond.clone()).into_ast(&cfg.bond)))
                 .collect(),
+            // TODO(I4): overlay span columns through the overlay DSL (bridged empty).
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
             ast.constraints().to_vec(),
         )
     }
@@ -443,7 +458,19 @@ impl SpanInput {
 
         let graph = Graph::new(atom_count, &edges);
         Ok((
-            ReactionSpanAst::from_parts(graph, atoms, bonds, constraints),
+            // TODO(I4): overlay span columns from the parsed DSL (bridged empty).
+            ReactionSpanAst::from_parts(
+                graph,
+                atoms,
+                bonds,
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                constraints,
+            ),
             metadata,
         ))
     }
@@ -816,6 +843,12 @@ mod tests {
                 EntitySpan::Added(AtomAst::from_element(Element::O)),
             ],
             vec![EntitySpan::Added(BondAst::from_order(1))],
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
             vec![],
         ),
         MoleculeMetadata::new().with_atom_alias("nu", AtomDsl(AtomAst::from_element(Element::C))),
@@ -870,6 +903,12 @@ mod tests {
                     EntitySpan::Added(AtomAst::from_element(Element::O)),
                 ],
                 vec![EntitySpan::Added(BondAst::from_order(1))],
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                Default::default(),
                 vec![],
             ),
             MoleculeMetadata::new(),
@@ -885,6 +924,12 @@ mod tests {
                     EntitySpan::Unchanged(AtomAst::from_element(Element::O)),
                 ],
                 vec![EntitySpan::Unchanged(BondAst::from_order(1))],
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                Default::default(),
                 vec![],
             ),
             MoleculeMetadata::new(),

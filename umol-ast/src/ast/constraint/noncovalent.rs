@@ -4,7 +4,7 @@ use std::mem;
 use std::slice::Iter;
 
 use super::super::error::Contradiction;
-use super::super::remap::IdRemapping;
+use super::super::remap::IdCompaction;
 use super::super::traits::{Canonicalize, Lattice};
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
@@ -25,7 +25,7 @@ impl NoncovalentBondConstraint {
         match *self {}
     }
 
-    pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
+    pub fn compact(self, _remap: &IdCompaction) -> Option<Self> {
         match self {}
     }
 }
@@ -120,7 +120,7 @@ impl NoncovalentBondConstraints {
         mem::take(&mut self.0).into_iter()
     }
 
-    pub fn remap(self, _remap: &IdRemapping) -> Self {
+    pub fn compact(self, _remap: &IdCompaction) -> Self {
         self
     }
 }
@@ -170,7 +170,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::RemovalRemapping;
+    use umol_graph_core::Compaction;
 
     use super::*;
 
@@ -213,8 +213,8 @@ mod tests {
     #[rstest]
     fn test_noncovalent_bond_constraints_remap() {
         let cs = NoncovalentBondConstraints::new();
-        let remap = IdRemapping::new(
-            RemovalRemapping::new(Vec::new(), Vec::new()),
+        let remap = IdCompaction::new(
+            Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -222,7 +222,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        assert_eq!(cs.clone().remap(&remap), cs);
+        assert_eq!(cs.clone().compact(&remap), cs);
     }
 
     #[rstest]

@@ -7,7 +7,7 @@ use std::vec::IntoIter;
 use strum::EnumDiscriminants;
 
 use super::super::error::Contradiction;
-use super::super::remap::IdRemapping;
+use super::super::remap::IdCompaction;
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
 
@@ -48,7 +48,7 @@ impl AromaticSystemConstraint {
         }
     }
 
-    pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
+    pub fn compact(self, _remap: &IdCompaction) -> Option<Self> {
         // Value-only: no indices to remap.
         Some(self)
     }
@@ -225,8 +225,8 @@ impl AromaticSystemConstraints {
         out
     }
 
-    pub fn remap(self, remap: &IdRemapping) -> Self {
-        Self(self.0.into_iter().filter_map(|c| c.remap(remap)).collect())
+    pub fn compact(self, remap: &IdCompaction) -> Self {
+        Self(self.0.into_iter().filter_map(|c| c.compact(remap)).collect())
     }
 }
 
@@ -320,7 +320,7 @@ impl From<Vec<AromaticSystemConstraint>> for AromaticSystemConstraints {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::RemovalRemapping;
+    use umol_graph_core::Compaction;
 
     use super::*;
     #[rstest]
@@ -608,8 +608,8 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_constraints_remap() {
         let cs = AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6));
-        let remap = IdRemapping::new(
-            RemovalRemapping::new(vec![0, 1], vec![0]),
+        let remap = IdCompaction::new(
+            Compaction::new(vec![0, 1], vec![0]),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -617,7 +617,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        assert_eq!(cs.clone().remap(&remap), cs);
+        assert_eq!(cs.clone().compact(&remap), cs);
     }
 
     #[rustfmt::skip]

@@ -1,10 +1,14 @@
-//! AST-level id remapping produced by `MoleculeBuilder::remove`.
+//! AST-level id remappings between `MoleculeAst` id spaces.
 //!
-//! Wraps `umol_graph_core::RemovalRemapping` for node/edge (atom/bond) and carries
-//! sorted removed-id lists for the six relation kinds. Storage is O(removed)
-//! per kind; lookups are binary search + partition-point shift.
+//! [`IdCompaction`] is the removal/compaction remapping produced by
+//! `MoleculeBuilder::remove` (wraps `umol_graph_core::Compaction` for atom/bond
+//! and carries sorted removed-id lists for the six relation kinds; lookups are
+//! binary search + partition-point shift). [`IdRemapping`] is the general total
+//! relabeling used to move `Delta`s between id spaces (`reverse`, `compose`).
 
-use umol_graph_core::{EdgeId, NodeId, RelationId, RemovalRemapping};
+use std::collections::HashMap;
+
+use umol_graph_core::{Compaction, EdgeId, NodeId, RelationId};
 
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -16,8 +20,8 @@ use super::id::{
 /// ids, or signals that an entity was removed. Used to rewrite stale
 /// id references against the new `MoleculeAst` layout.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct IdRemapping {
-    graph: RemovalRemapping,
+pub struct IdCompaction {
+    graph: Compaction,
     removed_dative_bonds: Vec<RelationId>,
     removed_aromatic_systems: Vec<RelationId>,
     removed_multicenter_bonds: Vec<RelationId>,
@@ -26,18 +30,18 @@ pub struct IdRemapping {
     removed_stereo_bonds: Vec<RelationId>,
 }
 
-/// Inverse view of an [`IdRemapping`] for rollback. Translates surviving
+/// Inverse view of an [`IdCompaction`] for rollback. Translates surviving
 /// post-removal ids back into the pre-removal coordinate system; removed ids
 /// are restored from the explicit `Undo` payloads.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct UndoRemapping {
-    forward: IdRemapping,
+pub struct UndoCompaction {
+    forward: IdCompaction,
 }
 
-impl IdRemapping {
+impl IdCompaction {
     pub fn empty() -> Self {
         Self::new(
-            RemovalRemapping::new(Vec::new(), Vec::new()),
+            Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -57,7 +61,7 @@ impl IdRemapping {
         removed_stereo_bonds: Vec<RelationId>,
     ) -> Self {
         Self::new(
-            RemovalRemapping::new(Vec::new(), Vec::new()),
+            Compaction::new(Vec::new(), Vec::new()),
             removed_dative_bonds,
             removed_aromatic_systems,
             removed_multicenter_bonds,
@@ -69,7 +73,7 @@ impl IdRemapping {
 
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        graph: RemovalRemapping,
+        graph: Compaction,
         mut removed_dative_bonds: Vec<RelationId>,
         mut removed_aromatic_systems: Vec<RelationId>,
         mut removed_multicenter_bonds: Vec<RelationId>,
@@ -94,103 +98,103 @@ impl IdRemapping {
         }
     }
 
-    pub fn atom(&self, id: AtomId) -> Option<AtomId> {
-        self.graph.map_node(NodeId::from(id)).map(AtomId::from)
+    pub fn compact_atom(&self, id: AtomId) -> Option<AtomId> {
+        self.graph.compact_node(NodeId::from(id)).map(AtomId::from)
     }
 
-    pub fn bond(&self, id: BondId) -> Option<BondId> {
-        self.graph.map_edge(EdgeId::from(id)).map(BondId::from)
+    pub fn compact_bond(&self, id: BondId) -> Option<BondId> {
+        self.graph.compact_edge(EdgeId::from(id)).map(BondId::from)
     }
 
-    pub fn dative_bond(&self, id: DativeBondId) -> Option<DativeBondId> {
-        remap_relation(&self.removed_dative_bonds, id.into()).map(DativeBondId::from)
+    pub fn compact_dative_bond(&self, id: DativeBondId) -> Option<DativeBondId> {
+        compact_relation(&self.removed_dative_bonds, id.into()).map(DativeBondId::from)
     }
 
-    pub fn aromatic_system(&self, id: AromaticSystemId) -> Option<AromaticSystemId> {
-        remap_relation(&self.removed_aromatic_systems, id.into()).map(AromaticSystemId::from)
+    pub fn compact_aromatic_system(&self, id: AromaticSystemId) -> Option<AromaticSystemId> {
+        compact_relation(&self.removed_aromatic_systems, id.into()).map(AromaticSystemId::from)
     }
 
-    pub fn multicenter_bond(&self, id: MulticenterBondId) -> Option<MulticenterBondId> {
-        remap_relation(&self.removed_multicenter_bonds, id.into()).map(MulticenterBondId::from)
+    pub fn compact_multicenter_bond(&self, id: MulticenterBondId) -> Option<MulticenterBondId> {
+        compact_relation(&self.removed_multicenter_bonds, id.into()).map(MulticenterBondId::from)
     }
 
-    pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> Option<NoncovalentBondId> {
-        remap_relation(&self.removed_noncovalent_bonds, id.into()).map(NoncovalentBondId::from)
+    pub fn compact_noncovalent_bond(&self, id: NoncovalentBondId) -> Option<NoncovalentBondId> {
+        compact_relation(&self.removed_noncovalent_bonds, id.into()).map(NoncovalentBondId::from)
     }
 
-    pub fn stereo_atom(&self, id: StereoAtomId) -> Option<StereoAtomId> {
-        remap_relation(&self.removed_stereo_atoms, id.into()).map(StereoAtomId::from)
+    pub fn compact_stereo_atom(&self, id: StereoAtomId) -> Option<StereoAtomId> {
+        compact_relation(&self.removed_stereo_atoms, id.into()).map(StereoAtomId::from)
     }
 
-    pub fn stereo_bond(&self, id: StereoBondId) -> Option<StereoBondId> {
-        remap_relation(&self.removed_stereo_bonds, id.into()).map(StereoBondId::from)
+    pub fn compact_stereo_bond(&self, id: StereoBondId) -> Option<StereoBondId> {
+        compact_relation(&self.removed_stereo_bonds, id.into()).map(StereoBondId::from)
     }
 
-    pub fn graph(&self) -> &RemovalRemapping {
+    pub fn graph(&self) -> &Compaction {
         &self.graph
     }
 
-    pub fn undo_remapping(&self) -> UndoRemapping {
-        UndoRemapping::from(self)
+    pub fn undo_compaction(&self) -> UndoCompaction {
+        UndoCompaction::from(self)
     }
 }
 
-impl From<&IdRemapping> for UndoRemapping {
-    fn from(value: &IdRemapping) -> Self {
+impl From<&IdCompaction> for UndoCompaction {
+    fn from(value: &IdCompaction) -> Self {
         Self {
             forward: value.clone(),
         }
     }
 }
 
-impl UndoRemapping {
-    pub fn forward(&self) -> &IdRemapping {
+impl UndoCompaction {
+    pub fn forward(&self) -> &IdCompaction {
         &self.forward
     }
 
-    pub fn atom(&self, id: AtomId) -> AtomId {
-        AtomId::from(self.forward.graph.unmap_node(NodeId::from(id)))
+    pub fn uncompact_atom(&self, id: AtomId) -> AtomId {
+        AtomId::from(self.forward.graph.uncompact_node(NodeId::from(id)))
     }
 
-    pub fn bond(&self, id: BondId) -> BondId {
-        BondId::from(self.forward.graph.unmap_edge(EdgeId::from(id)))
+    pub fn uncompact_bond(&self, id: BondId) -> BondId {
+        BondId::from(self.forward.graph.uncompact_edge(EdgeId::from(id)))
     }
 
-    pub fn dative_bond(&self, id: DativeBondId) -> DativeBondId {
-        DativeBondId::from(unmap_dense(&self.forward.removed_dative_bonds, id.into()))
+    pub fn uncompact_dative_bond(&self, id: DativeBondId) -> DativeBondId {
+        DativeBondId::from(uncompact_dense(&self.forward.removed_dative_bonds, id.into()))
     }
 
-    pub fn aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemId {
-        AromaticSystemId::from(unmap_dense(
+    pub fn uncompact_aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemId {
+        AromaticSystemId::from(uncompact_dense(
             &self.forward.removed_aromatic_systems,
             id.into(),
         ))
     }
 
-    pub fn multicenter_bond(&self, id: MulticenterBondId) -> MulticenterBondId {
-        MulticenterBondId::from(unmap_dense(
+    pub fn uncompact_multicenter_bond(&self, id: MulticenterBondId) -> MulticenterBondId {
+        MulticenterBondId::from(uncompact_dense(
             &self.forward.removed_multicenter_bonds,
             id.into(),
         ))
     }
 
-    pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondId {
-        NoncovalentBondId::from(unmap_dense(
+    pub fn uncompact_noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondId {
+        NoncovalentBondId::from(uncompact_dense(
             &self.forward.removed_noncovalent_bonds,
             id.into(),
         ))
     }
 
-    pub fn stereo_atom(&self, id: StereoAtomId) -> StereoAtomId {
-        StereoAtomId::from(unmap_dense(&self.forward.removed_stereo_atoms, id.into()))
+    pub fn uncompact_stereo_atom(&self, id: StereoAtomId) -> StereoAtomId {
+        StereoAtomId::from(uncompact_dense(&self.forward.removed_stereo_atoms, id.into()))
     }
 
-    pub fn stereo_bond(&self, id: StereoBondId) -> StereoBondId {
-        StereoBondId::from(unmap_dense(&self.forward.removed_stereo_bonds, id.into()))
+    pub fn uncompact_stereo_bond(&self, id: StereoBondId) -> StereoBondId {
+        StereoBondId::from(uncompact_dense(&self.forward.removed_stereo_bonds, id.into()))
     }
 }
 
-fn remap_relation(removed: &[RelationId], old: RelationId) -> Option<RelationId> {
+fn compact_relation(removed: &[RelationId], old: RelationId) -> Option<RelationId> {
     if removed.binary_search(&old).is_ok() {
         return None;
     }
@@ -198,7 +202,7 @@ fn remap_relation(removed: &[RelationId], old: RelationId) -> Option<RelationId>
     Some(RelationId(old.0 - shift as u32))
 }
 
-fn unmap_dense(removed: &[RelationId], post: RelationId) -> RelationId {
+fn uncompact_dense(removed: &[RelationId], post: RelationId) -> RelationId {
     let mut old = post;
     loop {
         let next = RelationId(post.0 + removed.partition_point(|&r| r <= old) as u32);
@@ -214,19 +218,78 @@ fn normalize_removed(removed: &mut Vec<RelationId>) {
     removed.dedup();
 }
 
+/// Total id relabeling between two `MoleculeAst` id spaces — the general
+/// counterpart to [`IdCompaction`]. Maps every referenced atom / bond / overlay
+/// id to its image in the target id space; used to move `Delta`s between id spaces
+/// (`reverse`, `compose`). Every id a moved delta references must be present.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct IdRemapping {
+    atom: HashMap<AtomId, AtomId>,
+    bond: HashMap<BondId, BondId>,
+    dative: HashMap<DativeBondId, DativeBondId>,
+    aromatic: HashMap<AromaticSystemId, AromaticSystemId>,
+    multicenter: HashMap<MulticenterBondId, MulticenterBondId>,
+    noncovalent: HashMap<NoncovalentBondId, NoncovalentBondId>,
+}
+
+impl IdRemapping {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        atom: HashMap<AtomId, AtomId>,
+        bond: HashMap<BondId, BondId>,
+        dative: HashMap<DativeBondId, DativeBondId>,
+        aromatic: HashMap<AromaticSystemId, AromaticSystemId>,
+        multicenter: HashMap<MulticenterBondId, MulticenterBondId>,
+        noncovalent: HashMap<NoncovalentBondId, NoncovalentBondId>,
+    ) -> Self {
+        Self {
+            atom,
+            bond,
+            dative,
+            aromatic,
+            multicenter,
+            noncovalent,
+        }
+    }
+
+    pub(crate) fn map_atom(&self, id: AtomId) -> AtomId {
+        self.atom[&id]
+    }
+
+    pub(crate) fn map_bond(&self, id: BondId) -> BondId {
+        self.bond[&id]
+    }
+
+    pub(crate) fn map_dative(&self, id: DativeBondId) -> DativeBondId {
+        self.dative[&id]
+    }
+
+    pub(crate) fn map_aromatic(&self, id: AromaticSystemId) -> AromaticSystemId {
+        self.aromatic[&id]
+    }
+
+    pub(crate) fn map_multicenter(&self, id: MulticenterBondId) -> MulticenterBondId {
+        self.multicenter[&id]
+    }
+
+    pub(crate) fn map_noncovalent(&self, id: NoncovalentBondId) -> NoncovalentBondId {
+        self.noncovalent[&id]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fmt::Debug;
 
     use rstest::*;
-    use umol_graph_core::RemovalRemapping;
+    use umol_graph_core::Compaction;
 
     use super::*;
 
     #[fixture]
-    fn remapping() -> IdRemapping {
-        IdRemapping::new(
-            RemovalRemapping::new(vec![1, 3], vec![0, 2]),
+    fn remapping() -> IdCompaction {
+        IdCompaction::new(
+            Compaction::new(vec![1, 3], vec![0, 2]),
             vec![RelationId(2), RelationId(0), RelationId(2)],
             vec![RelationId(1)],
             vec![RelationId(3), RelationId(0)],
@@ -243,11 +306,11 @@ mod tests {
     #[case::removed_second(AtomId(3), None)]
     #[case::after_removed(AtomId(4), Some(AtomId(2)))]
     fn test_id_remapping_atom(
-        remapping: IdRemapping,
+        remapping: IdCompaction,
         #[case] input: AtomId,
         #[case] expected: Option<AtomId>,
     ) {
-        assert_eq!(remapping.atom(input), expected);
+        assert_eq!(remapping.compact_atom(input), expected);
     }
 
     #[rstest]
@@ -256,11 +319,11 @@ mod tests {
     #[case::removed_second(BondId(2), None)]
     #[case::after_removed(BondId(3), Some(BondId(1)))]
     fn test_id_remapping_bond(
-        remapping: IdRemapping,
+        remapping: IdCompaction,
         #[case] input: BondId,
         #[case] expected: Option<BondId>,
     ) {
-        assert_eq!(remapping.bond(input), expected);
+        assert_eq!(remapping.compact_bond(input), expected);
     }
 
     #[rstest]
@@ -275,36 +338,36 @@ mod tests {
     #[case::stereo_bond_removed(StereoBondId(2), None)]
     #[case::stereo_bond_shifted(StereoBondId(3), Some(StereoBondId(2)))]
     fn test_id_remapping_relations<T>(
-        remapping: IdRemapping,
+        remapping: IdCompaction,
         #[case] input: T,
         #[case] expected: Option<T>,
     ) where
         T: RelationCase,
     {
-        assert_eq!(input.map(&remapping), expected);
+        assert_eq!(input.compact(&remapping), expected);
     }
 
     #[rstest]
     #[case::before_gap(AtomId(0), AtomId(0))]
     #[case::after_first_gap(AtomId(1), AtomId(2))]
     #[case::after_second_gap(AtomId(2), AtomId(4))]
-    fn test_undo_remapping_atom(
-        remapping: IdRemapping,
+    fn test_undo_compaction_atom(
+        remapping: IdCompaction,
         #[case] input: AtomId,
         #[case] expected: AtomId,
     ) {
-        assert_eq!(remapping.undo_remapping().atom(input), expected);
+        assert_eq!(remapping.undo_compaction().uncompact_atom(input), expected);
     }
 
     #[rstest]
     #[case::after_first_gap(BondId(0), BondId(1))]
     #[case::after_second_gap(BondId(1), BondId(3))]
-    fn test_undo_remapping_bond(
-        remapping: IdRemapping,
+    fn test_undo_compaction_bond(
+        remapping: IdCompaction,
         #[case] input: BondId,
         #[case] expected: BondId,
     ) {
-        assert_eq!(UndoRemapping::from(&remapping).bond(input), expected);
+        assert_eq!(UndoCompaction::from(&remapping).uncompact_bond(input), expected);
     }
 
     #[rstest]
@@ -315,78 +378,78 @@ mod tests {
     #[case::noncovalent_after_gap(NoncovalentBondId(2), NoncovalentBondId(3))]
     #[case::stereo_atom_after_gap(StereoAtomId(1), StereoAtomId(2))]
     #[case::stereo_bond_after_gap(StereoBondId(2), StereoBondId(3))]
-    fn test_undo_remapping_relations<T>(
-        remapping: IdRemapping,
+    fn test_undo_compaction_relations<T>(
+        remapping: IdCompaction,
         #[case] input: T,
         #[case] expected: T,
     ) where
         T: RelationCase,
     {
-        assert_eq!(input.unmap(&remapping.undo_remapping()), expected);
+        assert_eq!(input.uncompact(&remapping.undo_compaction()), expected);
     }
 
     trait RelationCase: Copy + PartialEq + Debug {
-        fn map(self, remapping: &IdRemapping) -> Option<Self>;
-        fn unmap(self, remapping: &UndoRemapping) -> Self;
+        fn compact(self, remapping: &IdCompaction) -> Option<Self>;
+        fn uncompact(self, remapping: &UndoCompaction) -> Self;
     }
 
     impl RelationCase for DativeBondId {
-        fn map(self, remapping: &IdRemapping) -> Option<Self> {
-            remapping.dative_bond(self)
+        fn compact(self, remapping: &IdCompaction) -> Option<Self> {
+            remapping.compact_dative_bond(self)
         }
 
-        fn unmap(self, remapping: &UndoRemapping) -> Self {
-            remapping.dative_bond(self)
+        fn uncompact(self, remapping: &UndoCompaction) -> Self {
+            remapping.uncompact_dative_bond(self)
         }
     }
 
     impl RelationCase for AromaticSystemId {
-        fn map(self, remapping: &IdRemapping) -> Option<Self> {
-            remapping.aromatic_system(self)
+        fn compact(self, remapping: &IdCompaction) -> Option<Self> {
+            remapping.compact_aromatic_system(self)
         }
 
-        fn unmap(self, remapping: &UndoRemapping) -> Self {
-            remapping.aromatic_system(self)
+        fn uncompact(self, remapping: &UndoCompaction) -> Self {
+            remapping.uncompact_aromatic_system(self)
         }
     }
 
     impl RelationCase for MulticenterBondId {
-        fn map(self, remapping: &IdRemapping) -> Option<Self> {
-            remapping.multicenter_bond(self)
+        fn compact(self, remapping: &IdCompaction) -> Option<Self> {
+            remapping.compact_multicenter_bond(self)
         }
 
-        fn unmap(self, remapping: &UndoRemapping) -> Self {
-            remapping.multicenter_bond(self)
+        fn uncompact(self, remapping: &UndoCompaction) -> Self {
+            remapping.uncompact_multicenter_bond(self)
         }
     }
 
     impl RelationCase for NoncovalentBondId {
-        fn map(self, remapping: &IdRemapping) -> Option<Self> {
-            remapping.noncovalent_bond(self)
+        fn compact(self, remapping: &IdCompaction) -> Option<Self> {
+            remapping.compact_noncovalent_bond(self)
         }
 
-        fn unmap(self, remapping: &UndoRemapping) -> Self {
-            remapping.noncovalent_bond(self)
+        fn uncompact(self, remapping: &UndoCompaction) -> Self {
+            remapping.uncompact_noncovalent_bond(self)
         }
     }
 
     impl RelationCase for StereoAtomId {
-        fn map(self, remapping: &IdRemapping) -> Option<Self> {
-            remapping.stereo_atom(self)
+        fn compact(self, remapping: &IdCompaction) -> Option<Self> {
+            remapping.compact_stereo_atom(self)
         }
 
-        fn unmap(self, remapping: &UndoRemapping) -> Self {
-            remapping.stereo_atom(self)
+        fn uncompact(self, remapping: &UndoCompaction) -> Self {
+            remapping.uncompact_stereo_atom(self)
         }
     }
 
     impl RelationCase for StereoBondId {
-        fn map(self, remapping: &IdRemapping) -> Option<Self> {
-            remapping.stereo_bond(self)
+        fn compact(self, remapping: &IdCompaction) -> Option<Self> {
+            remapping.compact_stereo_bond(self)
         }
 
-        fn unmap(self, remapping: &UndoRemapping) -> Self {
-            remapping.stereo_bond(self)
+        fn uncompact(self, remapping: &UndoCompaction) -> Self {
+            remapping.uncompact_stereo_bond(self)
         }
     }
 }

@@ -3,7 +3,7 @@
 //! `Graph` stores only adjacency (offsets, neighbor lists, edge endpoints).
 //! Node and edge data live externally in `Vec`s indexed by `NodeId`/`EdgeId`.
 //! The CSR is wrapped in `Arc` for zero-cost cloning; mutations rebuild
-//! it and produce a `RemovalRemapping` for reindexing external data.
+//! it and produce a `Compaction` for reindexing external data.
 
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
@@ -195,7 +195,7 @@ impl Graph {
         new_id
     }
 
-    pub fn remove(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> RemovalRemapping {
+    pub fn remove(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> Compaction {
         let mut removed_nodes: Vec<u32> = nodes.iter().map(|n| n.0).collect();
         removed_nodes.sort_unstable();
         removed_nodes.dedup();
@@ -232,14 +232,14 @@ impl Graph {
             &kept_edges,
         ));
 
-        RemovalRemapping::new(removed_nodes, removed_edge_set)
+        Compaction::new(removed_nodes, removed_edge_set)
     }
 
-    pub fn remove_node(&mut self, id: NodeId) -> RemovalRemapping {
+    pub fn remove_node(&mut self, id: NodeId) -> Compaction {
         self.remove(&[id], &[])
     }
 
-    pub fn remove_edge(&mut self, id: EdgeId) -> RemovalRemapping {
+    pub fn remove_edge(&mut self, id: EdgeId) -> Compaction {
         self.remove(&[], &[id])
     }
 
@@ -382,12 +382,12 @@ impl Default for Graph {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RemovalRemapping {
+pub struct Compaction {
     removed_nodes: Vec<u32>,
     removed_edges: Vec<u32>,
 }
 
-impl RemovalRemapping {
+impl Compaction {
     pub fn new(mut removed_nodes: Vec<u32>, mut removed_edges: Vec<u32>) -> Self {
         removed_nodes.sort_unstable();
         removed_nodes.dedup();
@@ -399,7 +399,7 @@ impl RemovalRemapping {
         }
     }
 
-    pub fn map_node(&self, old: NodeId) -> Option<NodeId> {
+    pub fn compact_node(&self, old: NodeId) -> Option<NodeId> {
         if self.removed_nodes.binary_search(&old.0).is_ok() {
             return None;
         }
@@ -407,7 +407,7 @@ impl RemovalRemapping {
         Some(NodeId(old.0 - shift as u32))
     }
 
-    pub fn map_edge(&self, old: EdgeId) -> Option<EdgeId> {
+    pub fn compact_edge(&self, old: EdgeId) -> Option<EdgeId> {
         if self.removed_edges.binary_search(&old.0).is_ok() {
             return None;
         }
@@ -415,17 +415,17 @@ impl RemovalRemapping {
         Some(EdgeId(old.0 - shift as u32))
     }
 
-    pub fn unmap_node(&self, post: NodeId) -> NodeId {
-        NodeId(unmap_dense(&self.removed_nodes, post.0))
+    pub fn uncompact_node(&self, post: NodeId) -> NodeId {
+        NodeId(uncompact_dense(&self.removed_nodes, post.0))
     }
 
-    pub fn unmap_edge(&self, post: EdgeId) -> EdgeId {
-        EdgeId(unmap_dense(&self.removed_edges, post.0))
+    pub fn uncompact_edge(&self, post: EdgeId) -> EdgeId {
+        EdgeId(uncompact_dense(&self.removed_edges, post.0))
     }
 }
 
 // Inverse dense shift: re-add removed ids at or below the post index (fixpoint).
-fn unmap_dense(removed: &[u32], post: u32) -> u32 {
+fn uncompact_dense(removed: &[u32], post: u32) -> u32 {
     let mut old = post;
     loop {
         let next = post + removed.partition_point(|&r| r <= old) as u32;
@@ -437,25 +437,25 @@ fn unmap_dense(removed: &[u32], post: u32) -> u32 {
 }
 
 /// Compact a node-indexed data column to the post-removal layout (drop removed, keep order).
-pub fn remove_node_vec<T: Clone>(remapping: &RemovalRemapping, data: &[T]) -> Vec<T> {
+pub fn compact_node_vec<T: Clone>(compaction: &Compaction, data: &[T]) -> Vec<T> {
     data.iter()
         .enumerate()
-        .filter(|(i, _)| remapping.map_node(NodeId(*i as u32)).is_some())
+        .filter(|(i, _)| compaction.compact_node(NodeId(*i as u32)).is_some())
         .map(|(_, v)| v.clone())
         .collect()
 }
 
 /// Compact an edge-indexed data column to the post-removal layout (drop removed, keep order).
-pub fn remove_edge_vec<T: Clone>(remapping: &RemovalRemapping, data: &[T]) -> Vec<T> {
+pub fn compact_edge_vec<T: Clone>(compaction: &Compaction, data: &[T]) -> Vec<T> {
     data.iter()
         .enumerate()
-        .filter(|(i, _)| remapping.map_edge(EdgeId(*i as u32)).is_some())
+        .filter(|(i, _)| compaction.compact_edge(EdgeId(*i as u32)).is_some())
         .map(|(_, v)| v.clone())
         .collect()
 }
 
 /// General relabeling of node/edge ids: a **total** map old→new (no drops —
-/// removal is `RemovalRemapping`). Indexed by old id, so `map_node(NodeId(i))`
+/// removal is `Compaction`). Indexed by old id, so `map_node(NodeId(i))`
 /// is `nodes[i]`. The map may be an injection into a larger id space (e.g. a
 /// composition's merged frame), so it is not necessarily a bijection.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -754,9 +754,9 @@ mod tests {
         assert_eq!(remap.removed_edges, vec![0, 1]);
 
         // node 0 stays 0, node 2 becomes 1
-        assert_eq!(remap.map_node(NodeId(0)), Some(NodeId(0)));
-        assert_eq!(remap.map_node(NodeId(1)), None);
-        assert_eq!(remap.map_node(NodeId(2)), Some(NodeId(1)));
+        assert_eq!(remap.compact_node(NodeId(0)), Some(NodeId(0)));
+        assert_eq!(remap.compact_node(NodeId(1)), None);
+        assert_eq!(remap.compact_node(NodeId(2)), Some(NodeId(1)));
     }
 
     #[test]
@@ -771,9 +771,9 @@ mod tests {
         assert_eq!(remap.removed_edges, vec![0, 2]);
 
         // surviving edge (old 1) maps to new 0
-        assert_eq!(remap.map_edge(EdgeId(0)), None);
-        assert_eq!(remap.map_edge(EdgeId(1)), Some(EdgeId(0)));
-        assert_eq!(remap.map_edge(EdgeId(2)), None);
+        assert_eq!(remap.compact_edge(EdgeId(0)), None);
+        assert_eq!(remap.compact_edge(EdgeId(1)), Some(EdgeId(0)));
+        assert_eq!(remap.compact_edge(EdgeId(2)), None);
 
         // nodes 1,2 become 0,1
         assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
@@ -790,9 +790,9 @@ mod tests {
         assert_eq!(remap.removed_nodes, Vec::<u32>::new());
         assert_eq!(remap.removed_edges, vec![1]);
 
-        assert_eq!(remap.map_edge(EdgeId(0)), Some(EdgeId(0)));
-        assert_eq!(remap.map_edge(EdgeId(1)), None);
-        assert_eq!(remap.map_edge(EdgeId(2)), Some(EdgeId(1)));
+        assert_eq!(remap.compact_edge(EdgeId(0)), Some(EdgeId(0)));
+        assert_eq!(remap.compact_edge(EdgeId(1)), None);
+        assert_eq!(remap.compact_edge(EdgeId(2)), Some(EdgeId(1)));
 
         assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
         assert_eq!(g.edge_endpoints(EdgeId(1)), [NodeId(0), NodeId(2)]);
@@ -840,11 +840,11 @@ mod tests {
         // only none survive since every edge touches node 1 or 3
         assert_eq!(g.edge_count(), 0);
 
-        assert_eq!(remap.map_node(NodeId(0)), Some(NodeId(0)));
-        assert_eq!(remap.map_node(NodeId(1)), None);
-        assert_eq!(remap.map_node(NodeId(2)), Some(NodeId(1)));
-        assert_eq!(remap.map_node(NodeId(3)), None);
-        assert_eq!(remap.map_node(NodeId(4)), Some(NodeId(2)));
+        assert_eq!(remap.compact_node(NodeId(0)), Some(NodeId(0)));
+        assert_eq!(remap.compact_node(NodeId(1)), None);
+        assert_eq!(remap.compact_node(NodeId(2)), Some(NodeId(1)));
+        assert_eq!(remap.compact_node(NodeId(3)), None);
+        assert_eq!(remap.compact_node(NodeId(4)), Some(NodeId(2)));
     }
 
     #[test]
@@ -861,7 +861,7 @@ mod tests {
         assert_eq!(g.edge_count(), 1);
         assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(1), NodeId(2)]);
 
-        assert_eq!(remap.map_edge(EdgeId(2)), Some(EdgeId(0)));
+        assert_eq!(remap.compact_edge(EdgeId(2)), Some(EdgeId(0)));
     }
 
     #[rstest]
@@ -875,8 +875,8 @@ mod tests {
         #[case] removed: Vec<u32>,
         #[case] expected: Option<NodeId>,
     ) {
-        let remap = RemovalRemapping::new(removed, vec![]);
-        assert_eq!(remap.map_node(old), expected);
+        let remap = Compaction::new(removed, vec![]);
+        assert_eq!(remap.compact_node(old), expected);
     }
 
     #[rstest]
@@ -885,12 +885,12 @@ mod tests {
     #[case::at_gap(NodeId(2), vec![2], NodeId(3))]
     #[case::after_gap(NodeId(3), vec![2], NodeId(4))]
     #[case::multi_removed(NodeId(3), vec![1, 3], NodeId(5))]
-    fn test_remapping_unmap_node(
+    fn test_remapping_uncompact_node(
         #[case] post: NodeId,
         #[case] removed: Vec<u32>,
         #[case] expected: NodeId,
     ) {
-        let remap = RemovalRemapping::new(removed, vec![]);
-        assert_eq!(remap.unmap_node(post), expected);
+        let remap = Compaction::new(removed, vec![]);
+        assert_eq!(remap.uncompact_node(post), expected);
     }
 }

@@ -9,7 +9,7 @@ use strum::{EnumDiscriminants, EnumIter};
 use super::super::boolean::BooleanAst;
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::Contradiction;
-use super::super::remap::IdRemapping;
+use super::super::remap::IdCompaction;
 use super::super::stereo::CisTransStereoAst;
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
@@ -278,7 +278,7 @@ impl BondConstraints {
     }
 
     /// No-op: no `BondConstraint` variant carries an entity index.
-    pub fn remap(self, _remap: &IdRemapping) -> Self {
+    pub fn compact(self, _remap: &IdCompaction) -> Self {
         self
     }
 }
@@ -449,7 +449,7 @@ impl From<Vec<BondConstraint>> for BondConstraints {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::RemovalRemapping;
+    use umol_graph_core::Compaction;
 
     use super::*;
     use crate::ast::stereo::{StereoCosetAst, StereoTerm};
@@ -819,8 +819,8 @@ mod tests {
             BondConstraint::Aromatic(BooleanAst::Lit(true)),
             BondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
-        let remap = IdRemapping::new(
-            RemovalRemapping::new(vec![0, 1, 2], vec![0, 1]),
+        let remap = IdCompaction::new(
+            Compaction::new(vec![0, 1, 2], vec![0, 1]),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -828,7 +828,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        assert_eq!(cs.clone().remap(&remap), cs);
+        assert_eq!(cs.clone().compact(&remap), cs);
     }
 
     #[rustfmt::skip]
