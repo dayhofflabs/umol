@@ -393,10 +393,14 @@ fn compose_all(
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
         );
         let db_map = IdRemapping::new(
             db_atom,
             db_bond,
+            HashMap::new(),
+            HashMap::new(),
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),

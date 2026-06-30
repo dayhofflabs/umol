@@ -4,7 +4,7 @@ use std::mem;
 use std::slice::Iter;
 
 use super::super::error::Contradiction;
-use super::super::remap::IdCompaction;
+use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
@@ -26,6 +26,11 @@ impl NoncovalentBondConstraint {
     }
 
     pub fn compact(self, _remap: &IdCompaction) -> Option<Self> {
+        match self {}
+    }
+
+    /// Uninhabited — no `NoncovalentBondConstraint` value exists to remap.
+    pub(crate) fn remap(self, _map: &IdRemapping) -> Self {
         match self {}
     }
 }

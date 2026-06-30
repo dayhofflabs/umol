@@ -639,28 +639,31 @@ impl ReactionAst {
         // union order (lhs in place, created appended); deleted entities become created in the
         // reverse and take fresh ids after the survivors.
         let remapping = IdRemapping::new(
-            reverse_remapping(atom_count, &removed_atoms, &created_atoms),
-            reverse_remapping(bond_count, &removed_bonds, &created_bonds),
-            reverse_remapping(
+            reversed_remapping(atom_count, &removed_atoms, &created_atoms),
+            reversed_remapping(bond_count, &removed_bonds, &created_bonds),
+            reversed_remapping(
                 self.lhs.dative_bonds().count(),
                 &removed_dative,
                 &created_dative,
             ),
-            reverse_remapping(
+            reversed_remapping(
                 self.lhs.aromatic_systems().count(),
                 &removed_aromatic,
                 &created_aromatic,
             ),
-            reverse_remapping(
+            reversed_remapping(
                 self.lhs.multicenter_bonds().count(),
                 &removed_multicenter,
                 &created_multicenter,
             ),
-            reverse_remapping(
+            reversed_remapping(
                 self.lhs.noncovalent_bonds().count(),
                 &removed_noncovalent,
                 &created_noncovalent,
             ),
+            // No stereo deltas yet (I6) → the reversed deltas reference no stereo ids.
+            HashMap::new(),
+            HashMap::new(),
         );
 
         let reversed: Deltas = deltas
@@ -674,7 +677,7 @@ impl ReactionAst {
 /// Build a forward → reverse id-space map for one entity kind: surviving lhs ids (those not in
 /// `removed`, in id order) then `created` (sorted) take reverse ids `0..k`; `removed` ids (which
 /// become created in the reverse) take fresh ids after the survivors.
-fn reverse_remapping<Id>(lhs_count: usize, removed: &[Id], created: &[Id]) -> HashMap<Id, Id>
+fn reversed_remapping<Id>(lhs_count: usize, removed: &[Id], created: &[Id]) -> HashMap<Id, Id>
 where
     Id: Copy + Eq + Hash + Ord + From<usize>,
 {
@@ -912,13 +915,13 @@ mod tests {
             (AtomId(1), AtomId(3)),
         ])
     )]
-    fn test_reverse_remapping(
+    fn test_reversed_remapping(
         #[case] lhs_count: usize,
         #[case] removed: Vec<AtomId>,
         #[case] created: Vec<AtomId>,
         #[case] expected: HashMap<AtomId, AtomId>,
     ) {
-        assert_eq!(reverse_remapping(lhs_count, &removed, &created), expected);
+        assert_eq!(reversed_remapping(lhs_count, &removed, &created), expected);
     }
 
     #[rstest]

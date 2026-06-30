@@ -1898,6 +1898,8 @@ mod tests {
             HashMap::from([(AromaticSystemId(0), AromaticSystemId(1))]),
             HashMap::from([(MulticenterBondId(0), MulticenterBondId(1))]),
             HashMap::from([(NoncovalentBondId(0), NoncovalentBondId(1))]),
+            HashMap::new(),
+            HashMap::new(),
         )
     }
 

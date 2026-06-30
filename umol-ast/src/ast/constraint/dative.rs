@@ -10,7 +10,7 @@ use strum::EnumDiscriminants;
 use super::super::boolean::BooleanAst;
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::Contradiction;
-use super::super::remap::IdCompaction;
+use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
 
@@ -68,6 +68,11 @@ impl DativeBondConstraint {
     pub fn compact(self, _remap: &IdCompaction) -> Option<Self> {
         // Value-only: no indices to remap.
         Some(self)
+    }
+
+    /// Value-only: no indices to remap.
+    pub(crate) fn remap(self, _map: &IdRemapping) -> Self {
+        self
     }
 }
 

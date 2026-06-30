@@ -12,8 +12,8 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm;
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::delta::{
-    AromaticSystemDelta, AtomDelta, BondDelta, DativeBondDelta, Delta, Deltas, MulticenterBondDelta,
-    NoncovalentBondDelta,
+    AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
+    MulticenterBondDelta, NoncovalentBondDelta,
 };
 use super::edit::{
     AddBond, AromaticSystemRef, AtomRef, BondRef, DativeBondRef, Edit, MulticenterBondRef,
@@ -21,8 +21,12 @@ use super::edit::{
 };
 use super::embedding::MoleculeEmbedding;
 use super::error::{ApplyError, Contradiction};
-use super::id::{AtomId, BondId};
+use super::id::{
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
+};
 use super::molecule::MoleculeAst;
+use super::remap::IdRemapping;
 use super::substructure::SubstructureMatchAlgorithm;
 use super::traits::Canonicalize;
 
@@ -42,7 +46,8 @@ impl ReactionAst {
     /// transformed host. DPO: a deleted host atom must carry no localized bond the rule does not
     /// also delete (else `ApplyError::Dangling`). Created atoms/bonds are appended, preserved
     /// entities are mutated in place, deleted entities are removed (the host renumbers).
-    /// Molecule-level constraints are not applied (deferred with the span's overlay scope).
+    /// Molecule-level constraints are added/removed with their entity refs re-anchored through the
+    /// match (lhs → host, created → appended); transact's renumbering compacts them on removal.
     pub fn apply_at(&self, m: &MoleculeEmbedding) -> Result<MoleculeAst, ApplyError> {
         let deltas = self.deltas.clone().canonicalize()?;
         let host = m.ast();
@@ -54,6 +59,7 @@ impl ReactionAst {
         let mut remove_bonds: Vec<BondRef> = Vec::new();
         let mut removed_host_atoms: Vec<AtomId> = Vec::new();
         let mut removed_host_bonds: HashSet<BondId> = HashSet::new();
+        let mut constraint_deltas: Vec<ConstraintDelta> = Vec::new();
 
         for delta in deltas.iter() {
             match delta {
@@ -158,8 +164,7 @@ impl ReactionAst {
                     NoncovalentBondDelta::ModifyConstraint { .. } => {}
                     NoncovalentBondDelta::Add { .. } | NoncovalentBondDelta::Remove { .. } => {}
                 },
-                // Molecule-level constraints are deferred (see `to_reaction_span`).
-                Delta::Constraint(_) => {}
+                Delta::Constraint(c) => constraint_deltas.push(c.clone()),
             }
         }
 
@@ -254,6 +259,73 @@ impl ReactionAst {
             }
         }
 
+        // Molecule-level constraints lower to `Edit::{Add,Remove}MoleculeConstraint`, refs
+        // re-anchored through the match: lhs entities → host (via `m`), created atoms/bonds → their
+        // appended host id. Emitted before `RemoveTopology` so transact's renumbering compacts them
+        // (dropping any that reference a deleted atom). The overlay/stereo maps cover only `lhs`
+        // overlays — a constraint referencing a rule-created overlay is unsupported.
+        let mut constraint_edits: Vec<Edit> = Vec::new();
+        if !constraint_deltas.is_empty() {
+            let host_atom_count = host.atoms().count();
+            let host_bond_count = host.bonds().count();
+            let mut atom: HashMap<AtomId, AtomId> = (0..self.lhs.atoms().count() as u32)
+                .map(|i| (AtomId(i), m.host_atom(AtomId(i))))
+                .collect();
+            for (&created, &index) in &new_index {
+                atom.insert(created, AtomId((host_atom_count + index) as u32));
+            }
+            let mut bond: HashMap<BondId, BondId> = (0..self.lhs.bonds().count() as u32)
+                .map(|i| (BondId(i), m.host_bond(BondId(i))))
+                .collect();
+            for (index, &created) in created_bonds.keys().enumerate() {
+                bond.insert(created, BondId((host_bond_count + index) as u32));
+            }
+            let match_map = IdRemapping::new(
+                atom,
+                bond,
+                (0..self.lhs.dative_bonds().count() as u32)
+                    .map(|i| (DativeBondId(i), m.host_dative_bond(DativeBondId(i))))
+                    .collect(),
+                (0..self.lhs.aromatic_systems().count() as u32)
+                    .map(|i| (AromaticSystemId(i), m.host_aromatic_system(AromaticSystemId(i))))
+                    .collect(),
+                (0..self.lhs.multicenter_bonds().count() as u32)
+                    .map(|i| {
+                        (
+                            MulticenterBondId(i),
+                            m.host_multicenter_bond(MulticenterBondId(i)),
+                        )
+                    })
+                    .collect(),
+                (0..self.lhs.noncovalent_bonds().count() as u32)
+                    .map(|i| {
+                        (
+                            NoncovalentBondId(i),
+                            m.host_noncovalent_bond(NoncovalentBondId(i)),
+                        )
+                    })
+                    .collect(),
+                (0..self.lhs.stereo_atoms().count() as u32)
+                    .map(|i| (StereoAtomId(i), m.host_stereo_atom(StereoAtomId(i))))
+                    .collect(),
+                (0..self.lhs.stereo_bonds().count() as u32)
+                    .map(|i| (StereoBondId(i), m.host_stereo_bond(StereoBondId(i))))
+                    .collect(),
+            );
+            for delta in constraint_deltas {
+                match delta {
+                    ConstraintDelta::Add(c) => constraint_edits.push(Edit::AddMoleculeConstraint {
+                        constraint: c.remap(&match_map),
+                    }),
+                    ConstraintDelta::Remove(c) => {
+                        constraint_edits.push(Edit::RemoveMoleculeConstraint {
+                            constraint: c.remap(&match_map),
+                        })
+                    }
+                }
+            }
+        }
+
         let mut edits: Vec<Edit> = Vec::new();
         if !created_atoms.is_empty() {
             edits.push(Edit::AddAtoms {
@@ -274,6 +346,7 @@ impl ReactionAst {
         edits.extend(overlay_adds);
         edits.extend(sets);
         edits.extend(overlay_removes);
+        edits.extend(constraint_edits);
         if !remove_atoms.is_empty() || !remove_bonds.is_empty() {
             edits.push(Edit::RemoveTopology {
                 atoms: remove_atoms,
@@ -319,6 +392,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
+    use super::super::constraint::{Constraint, Constraints, MoleculeConstraint};
     use super::super::edit::{AtomFieldChange, BondFieldChange};
     use super::super::value::ValueAst;
     use super::*;
@@ -430,6 +504,57 @@ mod tests {
             Err(ApplyError::Dangling {
                 host_atom: AtomId(0),
             }),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_ast_apply_at_molecule_constraint() {
+        // A reaction adding a molecule-level `ChargeSum` over its lhs atoms; applied at a match
+        // that maps lhs atoms 0,1 → host atoms 1,2, the constraint's refs re-anchor to the host.
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::O),
+                ],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ),
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
+                MoleculeConstraint::ChargeSum {
+                    atoms: Some(vec![AtomId(0), AtomId(1)]),
+                    sum: ValueAst::Lit(0),
+                },
+            )))]),
+        );
+        let host = MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+            ],
+        );
+        let embedding = MoleculeEmbedding::from_match(
+            &host,
+            &reaction.lhs,
+            vec![AtomId(1), AtomId(2)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+        let result = reaction.apply_at(&embedding).unwrap();
+        assert_eq!(
+            result.constraints(),
+            &Constraints::from(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                atoms: Some(vec![AtomId(1), AtomId(2)]),
+                sum: ValueAst::Lit(0),
+            })),
         );
     }
 

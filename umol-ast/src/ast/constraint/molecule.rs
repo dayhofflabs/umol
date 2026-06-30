@@ -13,7 +13,7 @@ use super::super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::super::molecule::MoleculeAst;
-use super::super::remap::IdCompaction;
+use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::spin::SpinStateAst;
 use super::super::stereo::StereoKind;
 use super::super::traits::{Canonicalize, Lattice};
@@ -120,6 +120,41 @@ impl Constraint {
                 .collect::<Option<Vec<_>>>()
                 .map(Constraint::Or),
             Constraint::Not(x) => x.compact(remap).map(|c| Constraint::Not(Box::new(c))),
+        }
+    }
+
+    /// Re-anchor every entity ref through a total id remapping (match-based: lhs → host,
+    /// created → appended). Total — never drops (the parallel of `compact`, which compacts after
+    /// removal). Stays a separate flow from `compact`; the two are not bridged.
+    pub(crate) fn remap(self, map: &IdRemapping) -> Self {
+        match self {
+            Constraint::Atom(id, c) => Constraint::Atom(map.map_atom(id), c),
+            Constraint::Bond(id, c) => Constraint::Bond(map.map_bond(id), c),
+            Constraint::DativeBond(id, c) => {
+                Constraint::DativeBond(map.map_dative(id), c.remap(map))
+            }
+            Constraint::AromaticSystem(id, c) => {
+                Constraint::AromaticSystem(map.map_aromatic(id), c.remap(map))
+            }
+            Constraint::MulticenterBond(id, c) => {
+                Constraint::MulticenterBond(map.map_multicenter(id), c.remap(map))
+            }
+            Constraint::NoncovalentBond(id, c) => {
+                Constraint::NoncovalentBond(map.map_noncovalent(id), c.remap(map))
+            }
+            Constraint::StereoAtom(id, kind, c) => {
+                Constraint::StereoAtom(map.map_stereo_atom(id), kind, c.remap(map))
+            }
+            Constraint::StereoBond(id, kind, c) => {
+                Constraint::StereoBond(map.map_stereo_bond(id), kind, c.remap(map))
+            }
+            Constraint::Relational(r) => Constraint::Relational(r.remap(map)),
+            Constraint::Molecule(m) => Constraint::Molecule(m.remap(map)),
+            Constraint::And(xs) => {
+                Constraint::And(xs.into_iter().map(|c| c.remap(map)).collect())
+            }
+            Constraint::Or(xs) => Constraint::Or(xs.into_iter().map(|c| c.remap(map)).collect()),
+            Constraint::Not(x) => Constraint::Not(Box::new(x.remap(map))),
         }
     }
 }
@@ -357,6 +392,30 @@ impl MoleculeConstraint {
                 .map(|anchor| MoleculeConstraint::SubPattern { anchor, pattern }),
         }
     }
+
+    pub(crate) fn remap(self, map: &IdRemapping) -> Self {
+        match self {
+            MoleculeConstraint::ChargeSum { atoms, sum } => MoleculeConstraint::ChargeSum {
+                atoms: remap_atom_subset(atoms, map),
+                sum,
+            },
+            MoleculeConstraint::SpinSum { atoms, spin } => MoleculeConstraint::SpinSum {
+                atoms: remap_atom_subset(atoms, map),
+                spin,
+            },
+            MoleculeConstraint::BondOrderSum { bonds, sum } => MoleculeConstraint::BondOrderSum {
+                bonds: remap_bond_subset(bonds, map),
+                sum,
+            },
+            MoleculeConstraint::Connected { atoms } => MoleculeConstraint::Connected {
+                atoms: remap_atom_subset(atoms, map),
+            },
+            MoleculeConstraint::SubPattern { anchor, pattern } => MoleculeConstraint::SubPattern {
+                anchor: anchor.remap(map),
+                pattern,
+            },
+        }
+    }
 }
 
 impl Canonicalize for MoleculeConstraint {
@@ -477,6 +536,17 @@ fn compact_bond_subset(
             .collect::<Option<Vec<_>>>()
             .map(Some),
     }
+}
+
+/// Re-anchor an `Option<Vec<AtomId>>` through a total id remapping (the parallel of
+/// `compact_atom_subset`). `None` (all atoms) passes through; total — never drops.
+fn remap_atom_subset(atoms: Option<Vec<AtomId>>, map: &IdRemapping) -> Option<Vec<AtomId>> {
+    atoms.map(|vec| vec.into_iter().map(|a| map.map_atom(a)).collect())
+}
+
+/// Re-anchor an `Option<Vec<BondId>>`. Same semantics as `remap_atom_subset`.
+fn remap_bond_subset(bonds: Option<Vec<BondId>>, map: &IdRemapping) -> Option<Vec<BondId>> {
+    bonds.map(|vec| vec.into_iter().map(|b| map.map_bond(b)).collect())
 }
 
 /// Multi-correspondence anchor for a `SubPattern` constraint. Each vec carries
@@ -628,6 +698,53 @@ impl SubPatternAnchor {
             stereo_atoms: stereo_atoms?,
             stereo_bonds: stereo_bonds?,
         })
+    }
+
+    /// Re-anchor target-side indices through a total id remapping. Total — the parallel of
+    /// `compact`, never drops.
+    pub(crate) fn remap(self, map: &IdRemapping) -> Self {
+        Self {
+            atoms: self
+                .atoms
+                .into_iter()
+                .map(|(t, p)| (map.map_atom(t), p))
+                .collect(),
+            bonds: self
+                .bonds
+                .into_iter()
+                .map(|(t, p)| (map.map_bond(t), p))
+                .collect(),
+            dative_bonds: self
+                .dative_bonds
+                .into_iter()
+                .map(|(t, p)| (map.map_dative(t), p))
+                .collect(),
+            aromatic_systems: self
+                .aromatic_systems
+                .into_iter()
+                .map(|(t, p)| (map.map_aromatic(t), p))
+                .collect(),
+            multicenter_bonds: self
+                .multicenter_bonds
+                .into_iter()
+                .map(|(t, p)| (map.map_multicenter(t), p))
+                .collect(),
+            noncovalent_bonds: self
+                .noncovalent_bonds
+                .into_iter()
+                .map(|(t, p)| (map.map_noncovalent(t), p))
+                .collect(),
+            stereo_atoms: self
+                .stereo_atoms
+                .into_iter()
+                .map(|(t, p)| (map.map_stereo_atom(t), p))
+                .collect(),
+            stereo_bonds: self
+                .stereo_bonds
+                .into_iter()
+                .map(|(t, p)| (map.map_stereo_bond(t), p))
+                .collect(),
+        }
     }
 }
 
@@ -899,12 +1016,79 @@ mod tests {
         idx_remapping(vec![1], vec![]),
         None,
     )]
-    fn test_constraint_remap(
+    fn test_constraint_compact(
         #[case] c: Constraint,
         #[case] remap: IdCompaction,
         #[case] expected: Option<Constraint>,
     ) {
         assert_eq!(c.compact(&remap), expected);
+    }
+
+    fn id_remapping(atom: &[(u32, u32)], bond: &[(u32, u32)], dative: &[(u32, u32)]) -> IdRemapping {
+        IdRemapping::new(
+            atom.iter().map(|&(a, b)| (AtomId(a), AtomId(b))).collect(),
+            bond.iter().map(|&(a, b)| (BondId(a), BondId(b))).collect(),
+            dative
+                .iter()
+                .map(|&(a, b)| (DativeBondId(a), DativeBondId(b)))
+                .collect(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        )
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::atom(
+        Constraint::Atom(AtomId(2), AtomConstraint::valence(4)),
+        id_remapping(&[(2, 5)], &[], &[]),
+        Constraint::Atom(AtomId(5), AtomConstraint::valence(4)),
+    )]
+    #[case::bond(
+        Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
+        id_remapping(&[], &[(0, 3)], &[]),
+        Constraint::Bond(BondId(3), BondConstraint::Aromatic(BooleanAst::Lit(true))),
+    )]
+    #[case::dative_leaf(
+        Constraint::DativeBond(DativeBondId(1), DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
+        id_remapping(&[], &[], &[(1, 0)]),
+        Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
+    )]
+    #[case::molecule_charge_sum(
+        Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(2)]), sum: ValueAst::Lit(1) }),
+        id_remapping(&[(0, 3), (2, 4)], &[], &[]),
+        Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(3), AtomId(4)]), sum: ValueAst::Lit(1) }),
+    )]
+    #[case::relational_dative_donor(
+        Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(1), atom: AtomId(2) }),
+        id_remapping(&[(2, 5)], &[], &[(1, 0)]),
+        Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(0), atom: AtomId(5) }),
+    )]
+    #[case::and(
+        Constraint::And(vec![
+            Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
+            Constraint::Atom(AtomId(2), AtomConstraint::valence(2)),
+        ]),
+        id_remapping(&[(0, 1), (2, 3)], &[], &[]),
+        Constraint::And(vec![
+            Constraint::Atom(AtomId(1), AtomConstraint::valence(4)),
+            Constraint::Atom(AtomId(3), AtomConstraint::valence(2)),
+        ]),
+    )]
+    #[case::not(
+        Constraint::Not(Box::new(Constraint::Atom(AtomId(2), AtomConstraint::valence(4)))),
+        id_remapping(&[(2, 0)], &[], &[]),
+        Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)))),
+    )]
+    fn test_constraint_remap(
+        #[case] c: Constraint,
+        #[case] map: IdRemapping,
+        #[case] expected: Constraint,
+    ) {
+        assert_eq!(c.remap(&map), expected);
     }
 
     #[rstest]

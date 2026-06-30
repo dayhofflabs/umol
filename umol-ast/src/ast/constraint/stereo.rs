@@ -13,7 +13,7 @@ use umol_perm::{Orientation, Permutation};
 use super::super::error::Contradiction;
 use super::super::id::StereoLigandPosition;
 use super::super::operators::MemOp;
-use super::super::remap::IdCompaction;
+use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::stereo::{Stereogenicity, Topicity};
 use super::super::traits::{AsLit, Canonicalize, Lattice};
 
@@ -323,9 +323,14 @@ macro_rules! stereo_constraint {
                 }
             }
 
-            /// Frame-relative ligand positions carry no atom ids, so remap is a no-op.
+            /// Frame-relative ligand positions carry no atom ids, so compact is a no-op.
             pub fn compact(self, _remap: &IdCompaction) -> Option<Self> {
                 Some(self)
+            }
+
+            /// Frame-relative ligand positions carry no atom ids, so remap is a no-op.
+            pub(crate) fn remap(self, _map: &IdRemapping) -> Self {
+                self
             }
         }
 

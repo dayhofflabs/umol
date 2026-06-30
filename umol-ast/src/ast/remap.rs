@@ -230,6 +230,8 @@ pub(crate) struct IdRemapping {
     aromatic: HashMap<AromaticSystemId, AromaticSystemId>,
     multicenter: HashMap<MulticenterBondId, MulticenterBondId>,
     noncovalent: HashMap<NoncovalentBondId, NoncovalentBondId>,
+    stereo_atom: HashMap<StereoAtomId, StereoAtomId>,
+    stereo_bond: HashMap<StereoBondId, StereoBondId>,
 }
 
 impl IdRemapping {
@@ -241,6 +243,8 @@ impl IdRemapping {
         aromatic: HashMap<AromaticSystemId, AromaticSystemId>,
         multicenter: HashMap<MulticenterBondId, MulticenterBondId>,
         noncovalent: HashMap<NoncovalentBondId, NoncovalentBondId>,
+        stereo_atom: HashMap<StereoAtomId, StereoAtomId>,
+        stereo_bond: HashMap<StereoBondId, StereoBondId>,
     ) -> Self {
         Self {
             atom,
@@ -249,6 +253,8 @@ impl IdRemapping {
             aromatic,
             multicenter,
             noncovalent,
+            stereo_atom,
+            stereo_bond,
         }
     }
 
@@ -274,6 +280,14 @@ impl IdRemapping {
 
     pub(crate) fn map_noncovalent(&self, id: NoncovalentBondId) -> NoncovalentBondId {
         self.noncovalent[&id]
+    }
+
+    pub(crate) fn map_stereo_atom(&self, id: StereoAtomId) -> StereoAtomId {
+        self.stereo_atom[&id]
+    }
+
+    pub(crate) fn map_stereo_bond(&self, id: StereoBondId) -> StereoBondId {
+        self.stereo_bond[&id]
     }
 }
 
