@@ -1,6 +1,6 @@
 //! Stereo ligand AST: a ligand occupying a coordination position of a stereo site.
 
-use umol_graph_core::{NodeId, ParticipantRefs, RelationParticipant, RemovalRemapping};
+use umol_graph_core::{NodeId, ParticipantRefs, RelationParticipant, Remapping, RemovalRemapping};
 
 use super::id::AtomId;
 
@@ -26,16 +26,23 @@ impl StereoLigand {
 }
 
 impl RelationParticipant for StereoLigand {
-    fn remap(self, remapping: &RemovalRemapping) -> Option<Self> {
+    fn remap_removal(self, remapping: &RemovalRemapping) -> Option<Self> {
         Some(Self {
             atom_id: AtomId::from(remapping.map_node(NodeId::from(self.atom_id))?),
             kind: self.kind,
         })
     }
 
-    fn unmap(self, remapping: &RemovalRemapping) -> Self {
+    fn unmap_removal(self, remapping: &RemovalRemapping) -> Self {
         Self {
             atom_id: AtomId::from(remapping.unmap_node(NodeId::from(self.atom_id))),
+            kind: self.kind,
+        }
+    }
+
+    fn remap(self, remapping: &Remapping) -> Self {
+        Self {
+            atom_id: AtomId::from(remapping.map_node(NodeId::from(self.atom_id))),
             kind: self.kind,
         }
     }
@@ -80,7 +87,7 @@ mod tests {
         let remapping = RemovalRemapping::new(vec![1], Vec::new());
         let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen);
         assert_eq!(
-            ligand.remap(&remapping),
+            ligand.remap_removal(&remapping),
             Some(StereoLigand::new(
                 AtomId(2),
                 StereoLigandKind::ImplicitHydrogen
@@ -92,7 +99,7 @@ mod tests {
     fn test_stereo_ligand_remap_removed() {
         let remapping = RemovalRemapping::new(vec![3], Vec::new());
         let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::Atom);
-        assert_eq!(ligand.remap(&remapping), None);
+        assert_eq!(ligand.remap_removal(&remapping), None);
     }
 
     #[rstest]
@@ -100,7 +107,7 @@ mod tests {
         let remapping = RemovalRemapping::new(vec![1], Vec::new());
         let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::Atom);
         assert_eq!(
-            ligand.unmap(&remapping),
+            ligand.unmap_removal(&remapping),
             StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
         );
     }

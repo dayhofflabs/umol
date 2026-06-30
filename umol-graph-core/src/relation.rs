@@ -13,7 +13,7 @@
 use std::hash::Hash;
 use std::marker::PhantomData;
 
-use crate::graph::{EdgeId, NodeId, RemovalRemapping};
+use crate::graph::{EdgeId, NodeId, Remapping, RemovalRemapping};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RelationId(pub u32);
@@ -69,22 +69,28 @@ pub struct ParticipantRefs {
     pub edge: Option<EdgeId>,
 }
 
-/// A value that can occupy a relation factor: routes through a `RemovalRemapping` in
-/// both directions and exposes its node/edge refs for incidence. One impl per
-/// concrete id type — dispatch is static, since a factor is homogeneous.
+/// A value that can occupy a relation factor: routes through a `RemovalRemapping`
+/// (removal/compaction, both directions) and a `Remapping` (general relabel,
+/// forward), and exposes its node/edge refs for incidence. One impl per concrete
+/// id type — dispatch is static, since a factor is homogeneous.
 pub trait RelationParticipant: Copy + Ord + Hash {
-    fn remap(self, remapping: &RemovalRemapping) -> Option<Self>;
-    fn unmap(self, remapping: &RemovalRemapping) -> Self;
+    fn remap_removal(self, remapping: &RemovalRemapping) -> Option<Self>;
+    fn unmap_removal(self, remapping: &RemovalRemapping) -> Self;
+    fn remap(self, remapping: &Remapping) -> Self;
     fn refs(self) -> ParticipantRefs;
 }
 
 impl RelationParticipant for NodeId {
-    fn remap(self, remapping: &RemovalRemapping) -> Option<Self> {
+    fn remap_removal(self, remapping: &RemovalRemapping) -> Option<Self> {
         remapping.map_node(self)
     }
 
-    fn unmap(self, remapping: &RemovalRemapping) -> Self {
+    fn unmap_removal(self, remapping: &RemovalRemapping) -> Self {
         remapping.unmap_node(self)
+    }
+
+    fn remap(self, remapping: &Remapping) -> Self {
+        remapping.map_node(self)
     }
 
     fn refs(self) -> ParticipantRefs {
@@ -96,12 +102,16 @@ impl RelationParticipant for NodeId {
 }
 
 impl RelationParticipant for EdgeId {
-    fn remap(self, remapping: &RemovalRemapping) -> Option<Self> {
+    fn remap_removal(self, remapping: &RemovalRemapping) -> Option<Self> {
         remapping.map_edge(self)
     }
 
-    fn unmap(self, remapping: &RemovalRemapping) -> Self {
+    fn unmap_removal(self, remapping: &RemovalRemapping) -> Self {
         remapping.unmap_edge(self)
+    }
+
+    fn remap(self, remapping: &Remapping) -> Self {
+        remapping.map_edge(self)
     }
 
     fn refs(self) -> ParticipantRefs {
@@ -283,7 +293,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
                 let parts: Option<Vec<P>> = self
                     .participants(rid)
                     .iter()
-                    .map(|&p| p.remap(remapping))
+                    .map(|&p| p.remap_removal(remapping))
                     .collect();
                 let parts: [P; N] = parts?.try_into().ok()?;
                 Some((parts, self.data(rid).clone()))
@@ -417,7 +427,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
                 let parts: Option<Vec<P>> = self
                     .participants(rid)
                     .iter()
-                    .map(|&p| p.remap(remapping))
+                    .map(|&p| p.remap_removal(remapping))
                     .collect();
                 Some((parts?, self.data(rid).clone()))
             })
@@ -562,13 +572,13 @@ where
                 let f1: Option<Vec<L1>> = self
                     .participants_1(rid)
                     .iter()
-                    .map(|&p| p.remap(remapping))
+                    .map(|&p| p.remap_removal(remapping))
                     .collect();
                 let f1: [L1; N1] = f1?.try_into().ok()?;
                 let f2: Option<Vec<L2>> = self
                     .participants_2(rid)
                     .iter()
-                    .map(|&p| p.remap(remapping))
+                    .map(|&p| p.remap_removal(remapping))
                     .collect();
                 let f2: [L2; N2] = f2?.try_into().ok()?;
                 Some((f1, f2, self.data(rid).clone()))
@@ -724,13 +734,13 @@ where
                 let f1: Option<Vec<L1>> = self
                     .participants_1(rid)
                     .iter()
-                    .map(|&p| p.remap(remapping))
+                    .map(|&p| p.remap_removal(remapping))
                     .collect();
                 let f1: [L1; N1] = f1?.try_into().ok()?;
                 let f2: Option<Vec<L2>> = self
                     .participants_2(rid)
                     .iter()
-                    .map(|&p| p.remap(remapping))
+                    .map(|&p| p.remap_removal(remapping))
                     .collect();
                 Some((f1, f2?, self.data(rid).clone()))
             })
@@ -893,12 +903,12 @@ where
                 let f1: Option<Vec<L1>> = self
                     .participants_1(rid)
                     .iter()
-                    .map(|&p| p.remap(remapping))
+                    .map(|&p| p.remap_removal(remapping))
                     .collect();
                 let f2: Option<Vec<L2>> = self
                     .participants_2(rid)
                     .iter()
-                    .map(|&p| p.remap(remapping))
+                    .map(|&p| p.remap_removal(remapping))
                     .collect();
                 Some((f1?, f2?, self.data(rid).clone()))
             })
@@ -957,7 +967,7 @@ mod tests {
     #[case::after_removed(NodeId(2), Some(NodeId(1)))]
     fn test_node_id_remap(#[case] id: NodeId, #[case] expected: Option<NodeId>) {
         let remapping = RemovalRemapping::new(vec![1], vec![]);
-        assert_eq!(id.remap(&remapping), expected);
+        assert_eq!(id.remap_removal(&remapping), expected);
     }
 
     #[rstest]
@@ -965,7 +975,7 @@ mod tests {
     #[case::after_gap(NodeId(1), NodeId(2))]
     fn test_node_id_unmap(#[case] id: NodeId, #[case] expected: NodeId) {
         let remapping = RemovalRemapping::new(vec![1], vec![]);
-        assert_eq!(id.unmap(&remapping), expected);
+        assert_eq!(id.unmap_removal(&remapping), expected);
     }
 
     #[rstest]
@@ -984,7 +994,7 @@ mod tests {
     #[case::after_removed(EdgeId(2), Some(EdgeId(1)))]
     fn test_edge_id_remap(#[case] id: EdgeId, #[case] expected: Option<EdgeId>) {
         let remapping = RemovalRemapping::new(vec![], vec![0]);
-        assert_eq!(id.remap(&remapping), expected);
+        assert_eq!(id.remap_removal(&remapping), expected);
     }
 
     #[rstest]
@@ -992,7 +1002,7 @@ mod tests {
     #[case::after_gap(EdgeId(1), EdgeId(2))]
     fn test_edge_id_unmap(#[case] id: EdgeId, #[case] expected: EdgeId) {
         let remapping = RemovalRemapping::new(vec![], vec![1]);
-        assert_eq!(id.unmap(&remapping), expected);
+        assert_eq!(id.unmap_removal(&remapping), expected);
     }
 
     #[rstest]

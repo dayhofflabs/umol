@@ -110,7 +110,7 @@ where
                     .into_iter()
                     .filter_map(|(mut participants, d)| {
                         for slot in &mut participants {
-                            *slot = (*slot).remap(remap)?;
+                            *slot = (*slot).remap_removal(remap)?;
                         }
                         Some((participants, d))
                     })
@@ -217,7 +217,7 @@ where
                     .into_iter()
                     .filter_map(|(participants, d)| {
                         let mapped: Option<Vec<P>> =
-                            participants.into_iter().map(|p| p.remap(remap)).collect();
+                            participants.into_iter().map(|p| p.remap_removal(remap)).collect();
                         mapped.map(|p| (p, d))
                     })
                     .collect();
@@ -328,10 +328,10 @@ where
                     .into_iter()
                     .filter_map(|(mut participants_1, participants_2, d)| {
                         for slot in &mut participants_1 {
-                            *slot = (*slot).remap(remap)?;
+                            *slot = (*slot).remap_removal(remap)?;
                         }
                         let participants_2: Option<Vec<L2>> =
-                            participants_2.into_iter().map(|p| p.remap(remap)).collect();
+                            participants_2.into_iter().map(|p| p.remap_removal(remap)).collect();
                         Some((participants_1, participants_2?, d))
                     })
                     .collect();
@@ -407,11 +407,11 @@ where
         let f1_gone = storage
             .participants_1(i)
             .iter()
-            .any(|&p| p.remap(remap).is_none());
+            .any(|&p| p.remap_removal(remap).is_none());
         let f2_gone = storage
             .participants_2(i)
             .iter()
-            .any(|&p| p.remap(remap).is_none());
+            .any(|&p| p.remap_removal(remap).is_none());
         if f1_gone || f2_gone {
             removed.push(RelationId(i as u32));
         }
@@ -432,8 +432,8 @@ where
 {
     let graph = undo_remapping.forward().graph();
     (
-        participants_1.map(|p| p.unmap(graph)),
-        participants_2.into_iter().map(|p| p.unmap(graph)).collect(),
+        participants_1.map(|p| p.unmap_removal(graph)),
+        participants_2.into_iter().map(|p| p.unmap_removal(graph)).collect(),
     )
 }
 
@@ -451,7 +451,7 @@ where
         if storage
             .participants(i)
             .iter()
-            .any(|&p| p.remap(remap).is_none())
+            .any(|&p| p.remap_removal(remap).is_none())
         {
             removed.push(RelationId(i as u32));
         }
@@ -473,7 +473,7 @@ where
         if storage
             .participants(i)
             .iter()
-            .any(|&p| p.remap(remap).is_none())
+            .any(|&p| p.remap_removal(remap).is_none())
         {
             removed.push(RelationId(i as u32));
         }
@@ -486,7 +486,7 @@ fn restore_var_participants<P: RelationParticipant>(
     undo_remapping: &UndoRemapping,
 ) -> Vec<P> {
     let remapping = undo_remapping.forward().graph();
-    parts.into_iter().map(|p| p.unmap(remapping)).collect()
+    parts.into_iter().map(|p| p.unmap_removal(remapping)).collect()
 }
 
 fn restore_fixed_participants<P: RelationParticipant, const N: usize>(
@@ -494,7 +494,7 @@ fn restore_fixed_participants<P: RelationParticipant, const N: usize>(
     undo_remapping: &UndoRemapping,
 ) -> [P; N] {
     let remapping = undo_remapping.forward().graph();
-    parts.map(|p| p.unmap(remapping))
+    parts.map(|p| p.unmap_removal(remapping))
 }
 
 /// Mutable builder for a `MoleculeAst`. Accumulates atoms, bonds, and
@@ -959,7 +959,7 @@ impl MoleculeBuilder {
     pub fn remove_dative_bonds(&mut self, ids: &[DativeBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.dative_bonds.remove_relations(&raw);
-        let idx_remap = IdRemapping::new(
+        let id_remap = IdRemapping::new(
             RemovalRemapping::new(Vec::new(), Vec::new()),
             raw,
             Vec::new(),
@@ -968,7 +968,7 @@ impl MoleculeBuilder {
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.remap(&idx_remap);
+        self.constraints.remap(&id_remap);
     }
 
     /// Remove aromatic-system overlays directly from the builder.
@@ -978,7 +978,7 @@ impl MoleculeBuilder {
     pub fn remove_aromatic_systems(&mut self, ids: &[AromaticSystemId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.aromatic_systems.remove_relations(&raw);
-        let idx_remap = IdRemapping::new(
+        let id_remap = IdRemapping::new(
             RemovalRemapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             raw,
@@ -987,7 +987,7 @@ impl MoleculeBuilder {
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.remap(&idx_remap);
+        self.constraints.remap(&id_remap);
     }
 
     /// Remove multicenter-bond overlays directly from the builder.
@@ -997,7 +997,7 @@ impl MoleculeBuilder {
     pub fn remove_multicenter_bonds(&mut self, ids: &[MulticenterBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.multicenter_bonds.remove_relations(&raw);
-        let idx_remap = IdRemapping::new(
+        let id_remap = IdRemapping::new(
             RemovalRemapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
@@ -1006,7 +1006,7 @@ impl MoleculeBuilder {
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.remap(&idx_remap);
+        self.constraints.remap(&id_remap);
     }
 
     /// Remove noncovalent-bond overlays directly from the builder.
@@ -1016,7 +1016,7 @@ impl MoleculeBuilder {
     pub fn remove_noncovalent_bonds(&mut self, ids: &[NoncovalentBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.noncovalent_bonds.remove_relations(&raw);
-        let idx_remap = IdRemapping::new(
+        let id_remap = IdRemapping::new(
             RemovalRemapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
@@ -1025,7 +1025,7 @@ impl MoleculeBuilder {
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.remap(&idx_remap);
+        self.constraints.remap(&id_remap);
     }
 
     /// Remove stereo-atom overlays directly from the builder.
@@ -1035,7 +1035,7 @@ impl MoleculeBuilder {
     pub fn remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_atoms.remove_relations(&raw);
-        let idx_remap = IdRemapping::new(
+        let id_remap = IdRemapping::new(
             RemovalRemapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
@@ -1044,7 +1044,7 @@ impl MoleculeBuilder {
             raw,
             Vec::new(),
         );
-        self.constraints.remap(&idx_remap);
+        self.constraints.remap(&id_remap);
     }
 
     /// Remove stereo-bond overlays directly from the builder.
@@ -1054,7 +1054,7 @@ impl MoleculeBuilder {
     pub fn remove_stereo_bonds(&mut self, ids: &[StereoBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_bonds.remove_relations(&raw);
-        let idx_remap = IdRemapping::new(
+        let id_remap = IdRemapping::new(
             RemovalRemapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
@@ -1063,7 +1063,7 @@ impl MoleculeBuilder {
             Vec::new(),
             raw,
         );
-        self.constraints.remap(&idx_remap);
+        self.constraints.remap(&id_remap);
     }
 
     // -- Topological removal --------------------------------------------------
@@ -1132,7 +1132,7 @@ impl MoleculeBuilder {
         );
         self.stereo_bonds = stereo_bonds.apply_removal_remapping(&remap);
 
-        let idx_remap = IdRemapping::new(
+        let id_remap = IdRemapping::new(
             remap,
             removed_dative,
             removed_aromatic,
@@ -1141,8 +1141,8 @@ impl MoleculeBuilder {
             removed_stereo_atoms,
             removed_stereo_bonds,
         );
-        self.constraints.remap(&idx_remap);
-        idx_remap
+        self.constraints.remap(&id_remap);
+        id_remap
     }
 
     // -- Undo of additions ----------------------------------------------------

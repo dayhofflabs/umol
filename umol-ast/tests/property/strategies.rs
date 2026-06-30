@@ -761,7 +761,7 @@ pub(crate) fn mem_op_strategy() -> impl Strategy<Value = MemOp> {
 }
 
 pub(crate) fn ligand_pair_strategy(degree: usize) -> impl Strategy<Value = StereoLigandPair> {
-    (0..degree as u8, 0..degree as u8)
+    (0..degree as u32, 0..degree as u32)
         .prop_map(|(a, b)| StereoLigandPair::new(StereoLigandPosition(a), StereoLigandPosition(b)))
 }
 

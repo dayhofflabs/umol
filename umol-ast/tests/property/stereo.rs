@@ -99,7 +99,7 @@ proptest! {
 
     /// `StereoLigandPair::new` normalizes to `first <= second` and is symmetric.
     #[test]
-    fn test_ligand_pair_ast_normalization(a in 0u8..6, b in 0u8..6) {
+    fn test_ligand_pair_ast_normalization(a in 0u32..6, b in 0u32..6) {
         let pair = StereoLigandPair::new(StereoLigandPosition(a), StereoLigandPosition(b));
         prop_assert!(pair.first().0 <= pair.second().0);
         prop_assert_eq!(pair, StereoLigandPair::new(StereoLigandPosition(b), StereoLigandPosition(a)));
