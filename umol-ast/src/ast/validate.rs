@@ -1,6 +1,10 @@
 //! Tier-1 (data-integrity) validators: structural shape checks on per-relation
 //! entities, and cross-entity / molecule-scope constraint evaluation. Run at AST
 //! construction/raise and available standalone; never consult a chemistry model.
+//!
+//! [`dpo`] holds the tier-2 DPO reaction invariant (dangling-freedom).
+
+pub mod dpo;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 

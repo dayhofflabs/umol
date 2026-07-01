@@ -142,30 +142,6 @@ where
     Some((da, db, lc))
 }
 
-/// Whether `deltas` deletes an atom that carries an overlay in `m` — the narrow interim guard while
-/// overlay dangling (a removed atom leaving an overlay reference) is unimplemented (I3c).
-fn deletes_overlay_atom(m: &MoleculeAst, deltas: &Deltas) -> bool {
-    let removed: HashSet<AtomId> = deltas
-        .iter()
-        .filter_map(|d| match d {
-            Delta::Atom(AtomDelta::Remove { id, .. }) => Some(*id),
-            _ => None,
-        })
-        .collect();
-    m.dative_bonds()
-        .iter()
-        .any(|x| x.atom_ids().any(|a| removed.contains(&a)))
-        || m.aromatic_systems()
-            .iter()
-            .any(|x| x.atom_ids().any(|a| removed.contains(&a)))
-        || m.multicenter_bonds()
-            .iter()
-            .any(|x| x.atom_ids().any(|a| removed.contains(&a)))
-        || m.noncovalent_bonds()
-            .iter()
-            .any(|x| x.atom_ids().iter().any(|a| removed.contains(a)))
-}
-
 fn compose_all(
     a: &ReactionAst,
     b: &ReactionAst,
@@ -179,10 +155,6 @@ fn compose_all(
         || b.lhs.has_stereo_atoms()
         || b.lhs.has_stereo_bonds()
     {
-        return None;
-    }
-    // Narrow interim guard (full overlay dangling is I3c): a deleted overlay-bearing atom may dangle.
-    if deletes_overlay_atom(&a.lhs, &da) || deletes_overlay_atom(&b.lhs, &db) {
         return None;
     }
     let span_a = a.to_reaction_span().ok()?;
@@ -370,6 +342,48 @@ fn compose_all(
             _ => None,
         })
         .collect();
+    // Overlays B deletes, keyed by sorted L_B participant set (for the combined-frame overlay
+    // dangling check). A deleted shared atom's R_A overlay must correspond to one of these.
+    let sorted = |mut p: Vec<AtomId>| {
+        p.sort();
+        p
+    };
+    let b_removed_dative: HashSet<Vec<AtomId>> = db
+        .iter()
+        .filter_map(|d| match d {
+            Delta::DativeBond(DativeBondDelta::Remove {
+                donors, acceptor, ..
+            }) => Some(sorted(donors.iter().copied().chain([*acceptor]).collect())),
+            _ => None,
+        })
+        .collect();
+    let b_removed_aromatic: HashSet<Vec<AtomId>> = db
+        .iter()
+        .filter_map(|d| match d {
+            Delta::AromaticSystem(AromaticSystemDelta::Remove { atoms, .. }) => {
+                Some(sorted(atoms.clone()))
+            }
+            _ => None,
+        })
+        .collect();
+    let b_removed_multicenter: HashSet<Vec<AtomId>> = db
+        .iter()
+        .filter_map(|d| match d {
+            Delta::MulticenterBond(MulticenterBondDelta::Remove { atoms, .. }) => {
+                Some(sorted(atoms.clone()))
+            }
+            _ => None,
+        })
+        .collect();
+    let b_removed_noncovalent: HashSet<Vec<AtomId>> = db
+        .iter()
+        .filter_map(|d| match d {
+            Delta::NoncovalentBond(NoncovalentBondDelta::Remove { atoms, .. }) => {
+                Some(sorted(atoms.to_vec()))
+            }
+            _ => None,
+        })
+        .collect();
 
     let mut results = Vec::new();
     for overlap in overlaps {
@@ -441,10 +455,23 @@ fn compose_all(
             .map(|(rank, &x)| (x, m_a + rank))
             .collect();
 
-        // Composite-id-space dangling: if B deletes a shared (overlap) atom, every R_A bond incident
-        // to its image must be an overlap bond B also deletes; an A-product bond B cannot see
-        // would dangle.
+        // Composite-id-space dangling: if B deletes a shared (overlap) atom, every R_A bond or
+        // overlay incident to its image must be one B also deletes; an A-product bond/overlay B
+        // cannot see would dangle.
         let mut dangling = false;
+        // An R_A overlay on a deleted shared atom dangles unless all its participants are in the
+        // overlap and B removes the corresponding overlay (matched by sorted L_B participant set).
+        let overlay_dangles = |parts: Vec<AtomId>, removed: &HashSet<Vec<AtomId>>| -> bool {
+            let mut lb: Vec<AtomId> = Vec::with_capacity(parts.len());
+            for p in parts {
+                match ra_to_lb.get(&p) {
+                    Some(&id) => lb.push(id),
+                    None => return true,
+                }
+            }
+            lb.sort();
+            !removed.contains(&lb)
+        };
         for &u in &db_removed_atoms {
             if !overlap_lb.contains(&u) {
                 continue;
@@ -465,6 +492,46 @@ fn compose_all(
                 match l_b.raw_graph().find_edge(NodeId::from(u), NodeId::from(w)) {
                     Some(le) if db_removed_bonds.contains(&BondId::from(le)) => {}
                     _ => {
+                        dangling = true;
+                        break;
+                    }
+                }
+            }
+            if !dangling {
+                for od in r_a.atom(ru).dative_bond_ids() {
+                    if overlay_dangles(r_a.dative_bond(od).atom_ids().collect(), &b_removed_dative) {
+                        dangling = true;
+                        break;
+                    }
+                }
+            }
+            if !dangling {
+                if let Some(oa) = r_a.atom(ru).aromatic_system_id() {
+                    if overlay_dangles(
+                        r_a.aromatic_system(oa).atom_ids().collect(),
+                        &b_removed_aromatic,
+                    ) {
+                        dangling = true;
+                    }
+                }
+            }
+            if !dangling {
+                for om in r_a.atom(ru).multicenter_bond_ids() {
+                    if overlay_dangles(
+                        r_a.multicenter_bond(om).atom_ids().collect(),
+                        &b_removed_multicenter,
+                    ) {
+                        dangling = true;
+                        break;
+                    }
+                }
+            }
+            if !dangling {
+                for on in r_a.atom(ru).noncovalent_bond_ids() {
+                    if overlay_dangles(
+                        r_a.noncovalent_bond(on).atom_ids().to_vec(),
+                        &b_removed_noncovalent,
+                    ) {
                         dangling = true;
                         break;
                     }

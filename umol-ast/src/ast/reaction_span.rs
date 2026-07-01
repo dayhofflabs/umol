@@ -132,6 +132,31 @@ impl ReactionSpanAst {
         &self.bonds
     }
 
+    pub(crate) fn dative_bonds(
+        &self,
+    ) -> &FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, EntitySpan<DativeBondAst>>
+    {
+        &self.dative_bonds
+    }
+
+    pub(crate) fn aromatic_systems(
+        &self,
+    ) -> &VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemAst>> {
+        &self.aromatic_systems
+    }
+
+    pub(crate) fn multicenter_bonds(
+        &self,
+    ) -> &VarRelationSet<NodeId, Unordered, EntitySpan<MulticenterBondAst>> {
+        &self.multicenter_bonds
+    }
+
+    pub(crate) fn noncovalent_bonds(
+        &self,
+    ) -> &FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondAst>, 2> {
+        &self.noncovalent_bonds
+    }
+
     pub fn constraints(&self) -> &[ConstraintSpan] {
         &self.constraints
     }

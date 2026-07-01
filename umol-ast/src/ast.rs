@@ -97,6 +97,7 @@ pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{
     AsLit, Canonical, Canonicalize, EntityPatch, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst,
 };
+pub use validate::dpo::{DpoContradiction, DpoError, DpoValidator};
 pub use validate::{
     ConstraintContradiction, ConstraintError, ConstraintValidator, EntityStructureContradiction,
     EntityStructureError, EntityStructureValidator,
