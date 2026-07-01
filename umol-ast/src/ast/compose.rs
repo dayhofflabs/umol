@@ -455,6 +455,35 @@ fn compose_all(
             .map(|(rank, &x)| (x, m_a + rank))
             .collect();
 
+        // Overlay pushout-complement: a context overlay (≥1 participant off the overlap) whose
+        // overlap participant is A-created has no place in `lhs_c` (created atoms are not in `lhs_c`)
+        // → the overlap is inadmissible, mirroring the context-bond check above.
+        let overlay_context_inadmissible = |atoms: &[AtomId]| {
+            atoms.iter().any(|a| !overlap_lb.contains(a))
+                && atoms
+                    .iter()
+                    .any(|a| overlap_lb.contains(a) && is_ra_created(lb_to_ra[a]))
+        };
+        let inadmissible_overlay = l_b
+            .dative_bonds()
+            .iter()
+            .any(|x| overlay_context_inadmissible(&x.atom_ids().collect::<Vec<_>>()))
+            || l_b
+                .aromatic_systems()
+                .iter()
+                .any(|x| overlay_context_inadmissible(&x.atom_ids().collect::<Vec<_>>()))
+            || l_b
+                .multicenter_bonds()
+                .iter()
+                .any(|x| overlay_context_inadmissible(&x.atom_ids().collect::<Vec<_>>()))
+            || l_b
+                .noncovalent_bonds()
+                .iter()
+                .any(|x| overlay_context_inadmissible(&x.atom_ids()));
+        if inadmissible_overlay {
+            continue;
+        }
+
         // Composite-id-space dangling: if B deletes a shared (overlap) atom, every R_A bond or
         // overlay incident to its image must be one B also deletes; an A-product bond/overlay B
         // cannot see would dangle.
@@ -1592,6 +1621,80 @@ mod tests {
                 }),
             ]),
         )]
+    )]
+    // Disjoint reactants (C-C, N-N — no matchable atom): the only overlap is empty, so `Full` is the
+    // disjoint sum A ⊔ B — ids concatenated, both bond modifies relabeled (B's bond 0 → 1).
+    #[case::disjoint_sum(
+        ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+            })]),
+        ),
+        ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![AtomAst::from_element(Element::N), AtomAst::from_element(Element::N)],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+            })]),
+        ),
+        CompositionScope::Full,
+        vec![ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::N),
+                    AtomAst::from_element(Element::N),
+                ],
+                vec![
+                    (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                    (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                ],
+            ),
+            Deltas::from_iter([
+                Delta::Bond(BondDelta::ModifyField {
+                    id: BondId(0),
+                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                }),
+                Delta::Bond(BondDelta::ModifyField {
+                    id: BondId(1),
+                    change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                }),
+            ]),
+        )]
+    )]
+    // The empty overlap misses A's reaction center, so `RcAnchored` drops it — no composite.
+    #[case::disjoint_rc_anchored(
+        ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+            })]),
+        ),
+        ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![AtomAst::from_element(Element::N), AtomAst::from_element(Element::N)],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+            })]),
+        ),
+        CompositionScope::RcAnchored,
+        vec![]
     )]
     fn test_reaction_ast_compose(
         #[case] a: ReactionAst,

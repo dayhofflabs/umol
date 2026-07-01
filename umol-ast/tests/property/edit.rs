@@ -49,12 +49,12 @@ proptest! {
 
     #[test]
     fn test_molecule_builder_transact_rollback(
-        case in transaction_case_strategy(),
+        (base, edits) in transaction_edits_strategy(),
     ) {
-        let mut builder = case.base().edit();
+        let mut builder = base.edit();
         let before = builder.clone().build();
         let tx = builder
-            .transact(case.edits())
+            .transact(edits)
             .map_err(|e| TestCaseError::fail(format!("transact failed: {e}")))?;
 
         tx.rollback(&mut builder)
@@ -64,14 +64,13 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_builder_transact_unchecked(case in transaction_case_strategy()) {
-        let edits = case.edits();
-        let mut checked = case.base().edit();
+    fn test_molecule_builder_transact_unchecked((base, edits) in transaction_edits_strategy()) {
+        let mut checked = base.edit();
         checked
             .transact(edits.clone())
             .map_err(|e| TestCaseError::fail(format!("checked transact failed: {e}")))?;
 
-        let mut unchecked = case.base().edit();
+        let mut unchecked = base.edit();
         unchecked.transact_unchecked(edits);
 
         prop_assert_eq!(unchecked.build(), checked.build());

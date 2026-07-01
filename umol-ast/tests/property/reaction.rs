@@ -5,8 +5,12 @@
 
 use proptest::bool::weighted;
 use proptest::prelude::*;
-use umol_ast::ast::{AtomDelta, BondDelta, CompositionScope, Delta, Deltas, ReactionAst};
+use umol_ast::ast::{
+    AromaticSystemDelta, AtomDelta, BondDelta, CompositionScope, DativeBondDelta, Delta, Deltas,
+    DpoValidator, MulticenterBondDelta, NoncovalentBondDelta, ReactionAst,
+};
 use umol_graph_core::{EdgeId, SubgraphIsomorphismAlgorithm};
+use umol_utils::solution::Solution;
 
 use crate::strategies::*;
 
@@ -38,12 +42,125 @@ fn simple_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
         })
 }
 
-/// A valid reaction over a generated `lhs`: DPO-valid atom deletions (each removed atom takes its
-/// incident bonds), per-surviving-atom optional charge change and per-surviving-bond optional
-/// order change (the `old` read from `lhs`, so apply's precondition holds), plus up to two new
-/// atoms bonded to the lowest survivor. No dangling by construction.
 fn reaction_strategy() -> impl Strategy<Value = ReactionAst> {
-    simple_molecule_strategy()
+    reaction_over(simple_molecule_strategy())
+}
+
+/// A localized molecule with DAMN overlays (dative / aromatic / multicenter / noncovalent) — no
+/// stereo (stereo reaction deltas are I6, and compose bails on a stereo lhs) and no molecule
+/// constraints (orthogonal). 1–4 atoms; overlays generated as in `molecule_ast_strategy`, scoped.
+fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
+    (1usize..=4)
+        .prop_flat_map(|atom_count| {
+            (
+                Just(atom_count),
+                prop::collection::vec(
+                    element_strategy().prop_map(AtomAst::from_element),
+                    atom_count,
+                ),
+                edge_set_strategy(atom_count),
+            )
+        })
+        .prop_flat_map(|(atom_count, atoms, edges)| {
+            let orders = prop::collection::vec(1u8..=3, edges.len());
+            let datives = prop::collection::vec(
+                (
+                    distinct_atoms_strategy(atom_count, 2, 2),
+                    dative_bond_strategy(),
+                ),
+                0..=1,
+            );
+            let aromatics = prop::collection::vec(
+                distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3))).prop_flat_map(
+                    |atoms| {
+                        let n = atoms.len();
+                        (Just(atoms), aromatic_system_ast_for(n))
+                    },
+                ),
+                0..=1,
+            );
+            let multicenters = prop::collection::vec(
+                distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3))).prop_flat_map(
+                    |atoms| {
+                        let n = atoms.len();
+                        (Just(atoms), multicenter_bond_ast_for(n))
+                    },
+                ),
+                0..=1,
+            );
+            let noncovalents = prop::collection::vec(
+                (
+                    distinct_atoms_strategy(atom_count, 2, 2),
+                    noncovalent_bond_ast_strategy(),
+                ),
+                0..=1,
+            );
+            (
+                Just(atoms),
+                Just(edges),
+                orders,
+                datives,
+                aromatics,
+                multicenters,
+                noncovalents,
+            )
+        })
+        .prop_map(
+            |(atoms, edges, orders, datives, aromatics, multicenters, noncovalents)| {
+                let bonds = edges
+                    .iter()
+                    .zip(orders)
+                    .map(|(&[a, b], order)| (AtomId(a), AtomId(b), BondAst::from_order(order)))
+                    .collect();
+                let dative = datives
+                    .into_iter()
+                    .filter_map(|(atoms, data)| match atoms.as_slice() {
+                        [a, b] if a != b => Some((vec![*a], *b, data)),
+                        _ => None,
+                    })
+                    .collect();
+                let aromatic = aromatics
+                    .into_iter()
+                    .filter(|(atoms, _)| atoms.len() >= 3)
+                    .collect();
+                let multicenter = multicenters
+                    .into_iter()
+                    .filter(|(atoms, _)| atoms.len() >= 3)
+                    .collect();
+                let noncovalent = noncovalents
+                    .into_iter()
+                    .filter_map(|(atoms, data)| match atoms.as_slice() {
+                        [a, b] if a != b => Some((*a, *b, data)),
+                        _ => None,
+                    })
+                    .collect();
+                MoleculeAst::from_parts(
+                    atoms,
+                    bonds,
+                    dative,
+                    aromatic,
+                    multicenter,
+                    noncovalent,
+                    vec![],
+                    vec![],
+                    Constraints::new(),
+                )
+            },
+        )
+}
+
+/// A reaction whose `lhs` carries DAMN overlays — exercises overlay carry, correspondence, and
+/// co-deletion through compose.
+fn overlay_reaction_strategy() -> impl Strategy<Value = ReactionAst> {
+    reaction_over(overlay_molecule_strategy())
+}
+
+/// A valid reaction over any generated `lhs`: DPO-valid atom deletions (each removed atom takes its
+/// incident bonds and overlays), per-surviving-atom optional charge change and per-surviving-bond
+/// optional order change (the `old` read from `lhs`, so apply's precondition holds), plus up to two
+/// new atoms bonded to the lowest survivor. No dangling by construction.
+fn reaction_over(molecule: impl Strategy<Value = MoleculeAst>) -> impl Strategy<Value = ReactionAst> {
+    molecule
         .prop_flat_map(|lhs| {
             let atom_count = lhs.atoms().count();
             let bond_count = lhs.bonds().count();
@@ -97,6 +214,53 @@ fn build_reaction(
             id,
             atoms: [AtomId::from(x), AtomId::from(y)],
             ast: lhs.bond(id).ast.clone(),
+        }));
+    }
+    // A removed atom also takes its incident overlays (DPO-valid; apply never dangles on overlays).
+    let mut removed_dative: HashSet<DativeBondId> = HashSet::new();
+    let mut removed_aromatic: HashSet<AromaticSystemId> = HashSet::new();
+    let mut removed_multicenter: HashSet<MulticenterBondId> = HashSet::new();
+    let mut removed_noncovalent: HashSet<NoncovalentBondId> = HashSet::new();
+    for &id in &removed_atoms {
+        let view = lhs.atom(id);
+        removed_dative.extend(view.dative_bond_ids());
+        if let Some(system) = view.aromatic_system_id() {
+            removed_aromatic.insert(system);
+        }
+        removed_multicenter.extend(view.multicenter_bond_ids());
+        removed_noncovalent.extend(view.noncovalent_bond_ids());
+    }
+    for &id in &removed_dative {
+        let view = lhs.dative_bond(id);
+        deltas.push(Delta::DativeBond(DativeBondDelta::Remove {
+            id,
+            donors: view.donor_ids().collect(),
+            acceptor: view.acceptor_id(),
+            ast: view.ast.clone(),
+        }));
+    }
+    for &id in &removed_aromatic {
+        let view = lhs.aromatic_system(id);
+        deltas.push(Delta::AromaticSystem(AromaticSystemDelta::Remove {
+            id,
+            atoms: view.atom_ids().collect(),
+            ast: view.ast.clone(),
+        }));
+    }
+    for &id in &removed_multicenter {
+        let view = lhs.multicenter_bond(id);
+        deltas.push(Delta::MulticenterBond(MulticenterBondDelta::Remove {
+            id,
+            atoms: view.atom_ids().collect(),
+            ast: view.ast.clone(),
+        }));
+    }
+    for &id in &removed_noncovalent {
+        let view = lhs.noncovalent_bond(id);
+        deltas.push(Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
+            id,
+            atoms: view.atom_ids(),
+            ast: view.ast.clone(),
         }));
     }
     for (index, new_charge) in charges.into_iter().enumerate() {
@@ -234,5 +398,216 @@ proptest! {
         let twice = ReactionAst::from_edn(&once.to_edn())
             .map_err(|e| TestCaseError::fail(format!("second reparse failed: {e}")))?;
         prop_assert_eq!(once, twice);
+    }
+}
+
+// Overlay-bearing reactions (DAMN lhs, DPO-valid): the compose properties over the overlay carry /
+// correspondence / co-deletion machinery. `overlay_reaction_strategy` subsumes the atom/bond case
+// (overlay counts are 0..=1). Completeness (Full: sequential ⊆ composed) is a separate follow-on.
+proptest! {
+    /// Isolation probe: a plain overlay reaction's `apply` at its own `lhs` reproduces its
+    /// `right()`. If this fails, the discrepancy is in apply-vs-span for overlays, not compose.
+    #[test]
+    fn test_reaction_ast_apply_reproduces_right_overlay(reaction in overlay_reaction_strategy()) {
+        if let Ok(span) = reaction.to_reaction_span() {
+            let right = span.right();
+            prop_assert!(reaction.apply(&reaction.lhs, ALG).any(|product| product == right));
+        }
+    }
+
+    /// Every composite of two overlay reactions is a valid reaction: applying it at its own `lhs`
+    /// reproduces its `right()`. Catches overlay frame-algebra errors in the composite, and (the
+    /// reason it once failed) `apply_at` removing multiple same-kind overlays: composites routinely
+    /// remove ≥2 overlays of one kind, which the pre-batching single-id lowering mishandled.
+    #[test]
+    fn test_reaction_ast_compose_well_formed_overlay(
+        a in overlay_reaction_strategy(),
+        b in overlay_reaction_strategy(),
+    ) {
+        for composite in a.compose(&b, CompositionScope::Full) {
+            if let Ok(span) = composite.to_reaction_span() {
+                let right = span.right();
+                prop_assert!(composite.apply(&composite.lhs, ALG).any(|product| product == right));
+            }
+        }
+    }
+
+    /// Soundness with overlays: every product of a composite applied to A's reactant is also a
+    /// product of applying B after A — compose invents no reactions, overlays included.
+    #[test]
+    fn test_reaction_ast_compose_sound_overlay(
+        a in overlay_reaction_strategy(),
+        b in overlay_reaction_strategy(),
+    ) {
+        let host = a.lhs.clone();
+        let composed: Vec<MoleculeAst> = a
+            .compose(&b, CompositionScope::Full)
+            .iter()
+            .flat_map(|composite| composite.apply(&host, ALG))
+            .collect();
+
+        let intermediates: Vec<MoleculeAst> = a.apply(&host, ALG).collect();
+        let mut sequential: Vec<MoleculeAst> = Vec::new();
+        for intermediate in &intermediates {
+            sequential.extend(b.apply(intermediate, ALG));
+        }
+
+        for product in &composed {
+            prop_assert!(sequential.contains(product));
+        }
+    }
+
+    /// Every composite is DPO-valid — no deleted atom leaves a dangling bond or overlay. Confirms
+    /// the compose during-check yields dangling-free composites (via the tier-2 `DpoValidator`).
+    #[test]
+    fn test_reaction_ast_compose_dangling_free(
+        a in overlay_reaction_strategy(),
+        b in overlay_reaction_strategy(),
+    ) {
+        for composite in a.compose(&b, CompositionScope::Full) {
+            prop_assert_eq!(
+                DpoValidator.validate_reaction(&composite).unwrap(),
+                Solution::Determined(())
+            );
+        }
+    }
+
+    /// Reaction ↔ span roundtrip fidelity: recovering the reaction from a span and re-materializing
+    /// reproduces the span (`to_reaction` then `to_reaction_span` is the identity on spans),
+    /// exercising the overlay `EntitySpan` columns and the span→delta recovery in both directions.
+    #[test]
+    fn test_reaction_ast_span_roundtrip(reaction in overlay_reaction_strategy()) {
+        if let Ok(span) = reaction.to_reaction_span() {
+            if let Ok(rebuilt) = span.to_reaction().to_reaction_span() {
+                prop_assert_eq!(rebuilt, span);
+            }
+        }
+    }
+
+    /// `RcAnchored` is a sound filter: every RC-anchored composite is also a `Full` composite.
+    #[test]
+    fn test_reaction_ast_compose_rc_anchored_subset(
+        a in overlay_reaction_strategy(),
+        b in overlay_reaction_strategy(),
+    ) {
+        let full = a.compose(&b, CompositionScope::Full);
+        for composite in a.compose(&b, CompositionScope::RcAnchored) {
+            prop_assert!(full.contains(&composite));
+        }
+    }
+
+    /// P4 — determinism: `compose` returns the identical `Vec` on repeated calls, and is invariant
+    /// under pre-canonicalizing the inputs (compose canonicalizes the deltas itself).
+    #[test]
+    fn test_reaction_ast_compose_determinism(
+        a in overlay_reaction_strategy(),
+        b in overlay_reaction_strategy(),
+    ) {
+        prop_assert_eq!(
+            a.compose(&b, CompositionScope::Full),
+            a.compose(&b, CompositionScope::Full)
+        );
+        prop_assert_eq!(
+            a.compose(&b, CompositionScope::RcAnchored),
+            a.compose(&b, CompositionScope::RcAnchored)
+        );
+        if let (Ok(ac), Ok(bc)) = (a.clone().canonicalize(), b.clone().canonicalize()) {
+            prop_assert_eq!(
+                a.compose(&b, CompositionScope::Full),
+                ac.compose(&bc, CompositionScope::Full)
+            );
+        }
+    }
+
+    /// P3 — every composite's deltas are in canonical normal form.
+    #[test]
+    fn test_reaction_ast_compose_canonical_deltas(
+        a in overlay_reaction_strategy(),
+        b in overlay_reaction_strategy(),
+    ) {
+        for c in a.compose(&b, CompositionScope::Full) {
+            let canonical = c
+                .deltas
+                .clone()
+                .canonicalize()
+                .map_err(|e| TestCaseError::fail(format!("composite deltas not canonical: {e:?}")))?;
+            prop_assert_eq!(canonical, c.deltas);
+        }
+    }
+
+    /// P6 — no parallel overlays: within each kind a composite's overlays have distinct participant
+    /// sets, so correspondence reuses an id and never duplicates (spec §4.1).
+    #[test]
+    fn test_reaction_ast_compose_distinct_overlays(
+        a in overlay_reaction_strategy(),
+        b in overlay_reaction_strategy(),
+    ) {
+        for c in a.compose(&b, CompositionScope::Full) {
+            let m = &c.lhs;
+
+            let mut dative: Vec<(Vec<AtomId>, AtomId)> = m
+                .dative_bonds()
+                .iter()
+                .map(|x| {
+                    let mut donors: Vec<AtomId> = x.donor_ids().collect();
+                    donors.sort();
+                    (donors, x.acceptor_id())
+                })
+                .collect();
+            let dative_count = dative.len();
+            dative.sort();
+            dative.dedup();
+            prop_assert_eq!(dative.len(), dative_count, "duplicate dative bonds");
+
+            let mut aromatic: Vec<Vec<AtomId>> = m
+                .aromatic_systems()
+                .iter()
+                .map(|x| {
+                    let mut v: Vec<AtomId> = x.atom_ids().collect();
+                    v.sort();
+                    v
+                })
+                .collect();
+            let aromatic_count = aromatic.len();
+            aromatic.sort();
+            aromatic.dedup();
+            prop_assert_eq!(aromatic.len(), aromatic_count, "duplicate aromatic systems");
+
+            let mut multicenter: Vec<Vec<AtomId>> = m
+                .multicenter_bonds()
+                .iter()
+                .map(|x| {
+                    let mut v: Vec<AtomId> = x.atom_ids().collect();
+                    v.sort();
+                    v
+                })
+                .collect();
+            let multicenter_count = multicenter.len();
+            multicenter.sort();
+            multicenter.dedup();
+            prop_assert_eq!(
+                multicenter.len(),
+                multicenter_count,
+                "duplicate multicenter bonds"
+            );
+
+            let mut noncovalent: Vec<[AtomId; 2]> = m
+                .noncovalent_bonds()
+                .iter()
+                .map(|x| {
+                    let mut p = x.atom_ids();
+                    p.sort();
+                    p
+                })
+                .collect();
+            let noncovalent_count = noncovalent.len();
+            noncovalent.sort();
+            noncovalent.dedup();
+            prop_assert_eq!(
+                noncovalent.len(),
+                noncovalent_count,
+                "duplicate noncovalent bonds"
+            );
+        }
     }
 }

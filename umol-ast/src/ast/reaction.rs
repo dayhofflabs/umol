@@ -9,12 +9,16 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use umol_graph_core::SubgraphIsomorphismAlgorithm;
 
+use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
+use super::dative::DativeBondAst;
 use super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta,
 };
+use super::multicenter::MulticenterBondAst;
+use super::noncovalent::NoncovalentBondAst;
 use super::edit::{
     AddBond, AromaticSystemRef, AtomRef, BondRef, DativeBondRef, Edit, MulticenterBondRef,
     NoncovalentBondRef,
@@ -228,9 +232,18 @@ impl ReactionAst {
 
         // Overlay create/remove need `atom_ref` (created participants resolve to `New`), so they
         // are lowered in a second pass: adds after the topology adds, removes before
-        // `RemoveTopology`. Dative `atoms` is `[donors…, acceptor]` (acceptor last, per transact).
+        // `RemoveTopology`. Removes are collected per kind and emitted as one batched edit each,
+        // so each overlay id space is compacted once against the pre-removal state (a sequence of
+        // single-id removes would stale the not-yet-processed ids). Dative `atoms` is
+        // `[donors…, acceptor]` (acceptor last, per transact).
         let mut overlay_adds: Vec<Edit> = Vec::new();
-        let mut overlay_removes: Vec<Edit> = Vec::new();
+        let mut remove_dative: Vec<(DativeBondRef, Vec<AtomRef>, DativeBondAst)> = Vec::new();
+        let mut remove_aromatic: Vec<(AromaticSystemRef, Vec<AtomRef>, AromaticSystemAst)> =
+            Vec::new();
+        let mut remove_multicenter: Vec<(MulticenterBondRef, Vec<AtomRef>, MulticenterBondAst)> =
+            Vec::new();
+        let mut remove_noncovalent: Vec<(NoncovalentBondRef, [AtomRef; 2], NoncovalentBondAst)> =
+            Vec::new();
         for delta in deltas.iter() {
             match delta {
                 Delta::DativeBond(DativeBondDelta::Add {
@@ -248,11 +261,11 @@ impl ReactionAst {
                 }) => {
                     let mut atoms: Vec<AtomRef> = donors.iter().map(|a| atom_ref(*a)).collect();
                     atoms.push(atom_ref(*acceptor));
-                    overlay_removes.push(Edit::RemoveDativeBond {
-                        id: DativeBondRef::Id(m.host_dative_bond(*id)),
+                    remove_dative.push((
+                        DativeBondRef::Id(m.host_dative_bond(*id)),
                         atoms,
-                        ast: ast.clone(),
-                    });
+                        ast.clone(),
+                    ));
                 }
                 Delta::AromaticSystem(AromaticSystemDelta::Add { atoms, ast, .. }) => {
                     overlay_adds.push(Edit::AddAromaticSystem {
@@ -261,11 +274,11 @@ impl ReactionAst {
                     });
                 }
                 Delta::AromaticSystem(AromaticSystemDelta::Remove { id, atoms, ast }) => {
-                    overlay_removes.push(Edit::RemoveAromaticSystem {
-                        id: AromaticSystemRef::Id(m.host_aromatic_system(*id)),
-                        atoms: atoms.iter().map(|a| atom_ref(*a)).collect(),
-                        ast: ast.clone(),
-                    });
+                    remove_aromatic.push((
+                        AromaticSystemRef::Id(m.host_aromatic_system(*id)),
+                        atoms.iter().map(|a| atom_ref(*a)).collect(),
+                        ast.clone(),
+                    ));
                 }
                 Delta::MulticenterBond(MulticenterBondDelta::Add { atoms, ast, .. }) => {
                     overlay_adds.push(Edit::AddMulticenterBond {
@@ -274,11 +287,11 @@ impl ReactionAst {
                     });
                 }
                 Delta::MulticenterBond(MulticenterBondDelta::Remove { id, atoms, ast }) => {
-                    overlay_removes.push(Edit::RemoveMulticenterBond {
-                        id: MulticenterBondRef::Id(m.host_multicenter_bond(*id)),
-                        atoms: atoms.iter().map(|a| atom_ref(*a)).collect(),
-                        ast: ast.clone(),
-                    });
+                    remove_multicenter.push((
+                        MulticenterBondRef::Id(m.host_multicenter_bond(*id)),
+                        atoms.iter().map(|a| atom_ref(*a)).collect(),
+                        ast.clone(),
+                    ));
                 }
                 Delta::NoncovalentBond(NoncovalentBondDelta::Add { atoms, ast, .. }) => {
                     overlay_adds.push(Edit::AddNoncovalentBond {
@@ -287,21 +300,43 @@ impl ReactionAst {
                     });
                 }
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, atoms, ast }) => {
-                    overlay_removes.push(Edit::RemoveNoncovalentBond {
-                        id: NoncovalentBondRef::Id(m.host_noncovalent_bond(*id)),
-                        atoms: [atom_ref(atoms[0]), atom_ref(atoms[1])],
-                        ast: ast.clone(),
-                    });
+                    remove_noncovalent.push((
+                        NoncovalentBondRef::Id(m.host_noncovalent_bond(*id)),
+                        [atom_ref(atoms[0]), atom_ref(atoms[1])],
+                        ast.clone(),
+                    ));
                 }
                 _ => {}
             }
         }
+        let mut overlay_removes: Vec<Edit> = Vec::new();
+        if !remove_dative.is_empty() {
+            overlay_removes.push(Edit::RemoveDativeBonds {
+                removes: remove_dative,
+            });
+        }
+        if !remove_aromatic.is_empty() {
+            overlay_removes.push(Edit::RemoveAromaticSystems {
+                removes: remove_aromatic,
+            });
+        }
+        if !remove_multicenter.is_empty() {
+            overlay_removes.push(Edit::RemoveMulticenterBonds {
+                removes: remove_multicenter,
+            });
+        }
+        if !remove_noncovalent.is_empty() {
+            overlay_removes.push(Edit::RemoveNoncovalentBonds {
+                removes: remove_noncovalent,
+            });
+        }
 
         // Molecule-level constraints lower to `Edit::{Add,Remove}MoleculeConstraint`, refs
         // re-anchored through the match: lhs entities → host (via `m`), created atoms/bonds → their
-        // appended host id. Emitted before `RemoveTopology` so transact's renumbering compacts them
-        // (dropping any that reference a deleted atom). The overlay/stereo maps cover only `lhs`
-        // overlays — a constraint referencing a rule-created overlay is unsupported.
+        // appended host id. Emitted before all removals (overlay + topology) so each removal's
+        // constraint compaction updates them (remapping surviving refs, dropping refs to a deleted
+        // entity). The overlay/stereo maps cover only `lhs` overlays — a constraint referencing a
+        // rule-created overlay is unsupported.
         let mut constraint_edits: Vec<Edit> = Vec::new();
         if !constraint_deltas.is_empty() {
             let host_atom_count = host.atoms().count();
@@ -383,8 +418,11 @@ impl ReactionAst {
         }
         edits.extend(overlay_adds);
         edits.extend(sets);
-        edits.extend(overlay_removes);
+        // Constraints precede all removals (overlay and topology) so each removal's constraint
+        // compaction updates them — a constraint referencing a surviving overlay whose lower-id
+        // sibling is removed would otherwise carry a stale id.
         edits.extend(constraint_edits);
+        edits.extend(overlay_removes);
         if !remove_atoms.is_empty() || !remove_bonds.is_empty() {
             edits.push(Edit::RemoveTopology {
                 atoms: remove_atoms,

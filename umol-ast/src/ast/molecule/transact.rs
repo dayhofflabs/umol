@@ -383,21 +383,25 @@ impl MoleculeBuilder {
                 created.push(CreatedEntity::DativeBond(id));
                 Ok(())
             }
-            Edit::RemoveDativeBond { id, atoms, ast } => {
-                let id = created.dative_bond(id)?;
-                if id.index() >= self.dative_bond_count() {
-                    return Err(TransactionError::IdOutOfRange("dative bond"));
+            Edit::RemoveDativeBonds { removes } => {
+                let mut ids = Vec::with_capacity(removes.len());
+                for (id, atoms, ast) in removes {
+                    let id = created.dative_bond(id)?;
+                    if id.index() >= self.dative_bond_count() {
+                        return Err(TransactionError::IdOutOfRange("dative bond"));
+                    }
+                    let saved_atoms: Vec<AtomId> = atoms
+                        .iter()
+                        .map(|r| created.atom(r.clone()))
+                        .collect::<Result<_, _>>()?;
+                    let view = self.dative_bond(id);
+                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
+                    if view.ast != &ast || current_atoms != saved_atoms {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    ids.push(id);
                 }
-                let saved_atoms: Vec<AtomId> = atoms
-                    .iter()
-                    .map(|r| created.atom(r.clone()))
-                    .collect::<Result<_, _>>()?;
-                let view = self.dative_bond(id);
-                let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                if view.ast != &ast || current_atoms != saved_atoms {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                self.remove_dative_bonds(&[id]);
+                self.remove_dative_bonds(&ids);
                 Ok(())
             }
             Edit::ModifyDativeBondField { id, change } => {
@@ -421,21 +425,25 @@ impl MoleculeBuilder {
                 created.push(CreatedEntity::AromaticSystem(id));
                 Ok(())
             }
-            Edit::RemoveAromaticSystem { id, atoms, ast } => {
-                let id = created.aromatic_system(id)?;
-                if id.index() >= self.aromatic_system_count() {
-                    return Err(TransactionError::IdOutOfRange("aromatic system"));
+            Edit::RemoveAromaticSystems { removes } => {
+                let mut ids = Vec::with_capacity(removes.len());
+                for (id, atoms, ast) in removes {
+                    let id = created.aromatic_system(id)?;
+                    if id.index() >= self.aromatic_system_count() {
+                        return Err(TransactionError::IdOutOfRange("aromatic system"));
+                    }
+                    let saved_atoms: Vec<AtomId> = atoms
+                        .iter()
+                        .map(|r| created.atom(r.clone()))
+                        .collect::<Result<_, _>>()?;
+                    let view = self.aromatic_system(id);
+                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
+                    if view.ast != &ast || current_atoms != saved_atoms {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    ids.push(id);
                 }
-                let saved_atoms: Vec<AtomId> = atoms
-                    .iter()
-                    .map(|r| created.atom(r.clone()))
-                    .collect::<Result<_, _>>()?;
-                let view = self.aromatic_system(id);
-                let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                if view.ast != &ast || current_atoms != saved_atoms {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                self.remove_aromatic_systems(&[id]);
+                self.remove_aromatic_systems(&ids);
                 Ok(())
             }
             Edit::ModifyAromaticSystemField { id, change } => {
@@ -459,21 +467,25 @@ impl MoleculeBuilder {
                 created.push(CreatedEntity::MulticenterBond(id));
                 Ok(())
             }
-            Edit::RemoveMulticenterBond { id, atoms, ast } => {
-                let id = created.multicenter_bond(id)?;
-                if id.index() >= self.multicenter_bond_count() {
-                    return Err(TransactionError::IdOutOfRange("multicenter bond"));
+            Edit::RemoveMulticenterBonds { removes } => {
+                let mut ids = Vec::with_capacity(removes.len());
+                for (id, atoms, ast) in removes {
+                    let id = created.multicenter_bond(id)?;
+                    if id.index() >= self.multicenter_bond_count() {
+                        return Err(TransactionError::IdOutOfRange("multicenter bond"));
+                    }
+                    let saved_atoms: Vec<AtomId> = atoms
+                        .iter()
+                        .map(|r| created.atom(r.clone()))
+                        .collect::<Result<_, _>>()?;
+                    let view = self.multicenter_bond(id);
+                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
+                    if view.ast != &ast || current_atoms != saved_atoms {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    ids.push(id);
                 }
-                let saved_atoms: Vec<AtomId> = atoms
-                    .iter()
-                    .map(|r| created.atom(r.clone()))
-                    .collect::<Result<_, _>>()?;
-                let view = self.multicenter_bond(id);
-                let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                if view.ast != &ast || current_atoms != saved_atoms {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                self.remove_multicenter_bonds(&[id]);
+                self.remove_multicenter_bonds(&ids);
                 Ok(())
             }
             Edit::ModifyMulticenterBondField { id, change } => {
@@ -496,20 +508,24 @@ impl MoleculeBuilder {
                 created.push(CreatedEntity::NoncovalentBond(id));
                 Ok(())
             }
-            Edit::RemoveNoncovalentBond { id, atoms, ast } => {
-                let id = created.noncovalent_bond(id)?;
-                if id.index() >= self.noncovalent_bond_count() {
-                    return Err(TransactionError::IdOutOfRange("noncovalent bond"));
+            Edit::RemoveNoncovalentBonds { removes } => {
+                let mut ids = Vec::with_capacity(removes.len());
+                for (id, atoms, ast) in removes {
+                    let id = created.noncovalent_bond(id)?;
+                    if id.index() >= self.noncovalent_bond_count() {
+                        return Err(TransactionError::IdOutOfRange("noncovalent bond"));
+                    }
+                    let saved_atoms = [
+                        created.atom(atoms[0].clone())?,
+                        created.atom(atoms[1].clone())?,
+                    ];
+                    let view = self.noncovalent_bond(id);
+                    if view.ast != &ast || view.atoms != saved_atoms {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    ids.push(id);
                 }
-                let saved_atoms = [
-                    created.atom(atoms[0].clone())?,
-                    created.atom(atoms[1].clone())?,
-                ];
-                let view = self.noncovalent_bond(id);
-                if view.ast != &ast || view.atoms != saved_atoms {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                self.remove_noncovalent_bonds(&[id]);
+                self.remove_noncovalent_bonds(&ids);
                 Ok(())
             }
             Edit::ModifyNoncovalentBondField { id, change } => {
@@ -779,37 +795,45 @@ impl MoleculeBuilder {
                     ast: view.ast.clone(),
                 }))
             }
-            Edit::RemoveDativeBond { id, atoms, ast } => {
-                let id = created.dative_bond(id)?;
-                if id.index() >= self.dative_bond_count() {
-                    return Err(TransactionError::IdOutOfRange("dative bond"));
+            Edit::RemoveDativeBonds { removes } => {
+                let mut ids = Vec::with_capacity(removes.len());
+                let mut removed = Vec::with_capacity(removes.len());
+                for (id, atoms, ast) in removes {
+                    let id = created.dative_bond(id)?;
+                    if id.index() >= self.dative_bond_count() {
+                        return Err(TransactionError::IdOutOfRange("dative bond"));
+                    }
+                    let saved_atoms: Vec<AtomId> = atoms
+                        .iter()
+                        .map(|r| created.atom(r.clone()))
+                        .collect::<Result<_, _>>()?;
+                    let view = self.dative_bond(id);
+                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
+                    if view.ast != &ast || current_atoms != saved_atoms {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    removed.push(RemovedDativeBond {
+                        id,
+                        atoms: current_atoms,
+                        ast: view.ast.clone(),
+                    });
+                    ids.push(id);
                 }
-                let saved_atoms: Vec<AtomId> = atoms
-                    .iter()
-                    .map(|r| created.atom(r.clone()))
-                    .collect::<Result<_, _>>()?;
-                let view = self.dative_bond(id);
-                let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                if view.ast != &ast || current_atoms != saved_atoms {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                let removed = RemovedDativeBond {
-                    id,
-                    atoms: current_atoms,
-                    ast: view.ast.clone(),
-                };
-                self.remove_dative_bonds(&[id]);
-                Ok(Undo::RestoreRemovedDativeBond {
+                let forward = IdCompaction::relations(
+                    ids.iter().map(|&i| i.into()).collect(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                );
+                let mut pre_constraints = self.constraints().clone();
+                self.remove_dative_bonds(&ids);
+                let cascade = pre_constraints.compact_with_update(&forward);
+                Ok(Undo::RestoreRemovedDativeBonds {
                     removed,
-                    undo_compaction: IdCompaction::relations(
-                        vec![id.into()],
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                    )
-                    .undo_compaction(),
+                    undo_compaction: forward.undo_compaction(),
+                    cascade,
                 })
             }
             Edit::ModifyDativeBondField { id, change } => {
@@ -843,37 +867,45 @@ impl MoleculeBuilder {
                     ast: view.ast.clone(),
                 }))
             }
-            Edit::RemoveAromaticSystem { id, atoms, ast } => {
-                let id = created.aromatic_system(id)?;
-                if id.index() >= self.aromatic_system_count() {
-                    return Err(TransactionError::IdOutOfRange("aromatic system"));
+            Edit::RemoveAromaticSystems { removes } => {
+                let mut ids = Vec::with_capacity(removes.len());
+                let mut removed = Vec::with_capacity(removes.len());
+                for (id, atoms, ast) in removes {
+                    let id = created.aromatic_system(id)?;
+                    if id.index() >= self.aromatic_system_count() {
+                        return Err(TransactionError::IdOutOfRange("aromatic system"));
+                    }
+                    let saved_atoms: Vec<AtomId> = atoms
+                        .iter()
+                        .map(|r| created.atom(r.clone()))
+                        .collect::<Result<_, _>>()?;
+                    let view = self.aromatic_system(id);
+                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
+                    if view.ast != &ast || current_atoms != saved_atoms {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    removed.push(RemovedAromaticSystem {
+                        id,
+                        atoms: current_atoms,
+                        ast: view.ast.clone(),
+                    });
+                    ids.push(id);
                 }
-                let saved_atoms: Vec<AtomId> = atoms
-                    .iter()
-                    .map(|r| created.atom(r.clone()))
-                    .collect::<Result<_, _>>()?;
-                let view = self.aromatic_system(id);
-                let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                if view.ast != &ast || current_atoms != saved_atoms {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                let removed = RemovedAromaticSystem {
-                    id,
-                    atoms: current_atoms,
-                    ast: view.ast.clone(),
-                };
-                self.remove_aromatic_systems(&[id]);
-                Ok(Undo::RestoreRemovedAromaticSystem {
+                let forward = IdCompaction::relations(
+                    Vec::new(),
+                    ids.iter().map(|&i| i.into()).collect(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                );
+                let mut pre_constraints = self.constraints().clone();
+                self.remove_aromatic_systems(&ids);
+                let cascade = pre_constraints.compact_with_update(&forward);
+                Ok(Undo::RestoreRemovedAromaticSystems {
                     removed,
-                    undo_compaction: IdCompaction::relations(
-                        Vec::new(),
-                        vec![id.into()],
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                    )
-                    .undo_compaction(),
+                    undo_compaction: forward.undo_compaction(),
+                    cascade,
                 })
             }
             Edit::ModifyAromaticSystemField { id, change } => {
@@ -907,37 +939,45 @@ impl MoleculeBuilder {
                     ast: view.ast.clone(),
                 }))
             }
-            Edit::RemoveMulticenterBond { id, atoms, ast } => {
-                let id = created.multicenter_bond(id)?;
-                if id.index() >= self.multicenter_bond_count() {
-                    return Err(TransactionError::IdOutOfRange("multicenter bond"));
+            Edit::RemoveMulticenterBonds { removes } => {
+                let mut ids = Vec::with_capacity(removes.len());
+                let mut removed = Vec::with_capacity(removes.len());
+                for (id, atoms, ast) in removes {
+                    let id = created.multicenter_bond(id)?;
+                    if id.index() >= self.multicenter_bond_count() {
+                        return Err(TransactionError::IdOutOfRange("multicenter bond"));
+                    }
+                    let saved_atoms: Vec<AtomId> = atoms
+                        .iter()
+                        .map(|r| created.atom(r.clone()))
+                        .collect::<Result<_, _>>()?;
+                    let view = self.multicenter_bond(id);
+                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
+                    if view.ast != &ast || current_atoms != saved_atoms {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    removed.push(RemovedMulticenterBond {
+                        id,
+                        atoms: current_atoms,
+                        ast: view.ast.clone(),
+                    });
+                    ids.push(id);
                 }
-                let saved_atoms: Vec<AtomId> = atoms
-                    .iter()
-                    .map(|r| created.atom(r.clone()))
-                    .collect::<Result<_, _>>()?;
-                let view = self.multicenter_bond(id);
-                let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                if view.ast != &ast || current_atoms != saved_atoms {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                let removed = RemovedMulticenterBond {
-                    id,
-                    atoms: current_atoms,
-                    ast: view.ast.clone(),
-                };
-                self.remove_multicenter_bonds(&[id]);
-                Ok(Undo::RestoreRemovedMulticenterBond {
+                let forward = IdCompaction::relations(
+                    Vec::new(),
+                    Vec::new(),
+                    ids.iter().map(|&i| i.into()).collect(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                );
+                let mut pre_constraints = self.constraints().clone();
+                self.remove_multicenter_bonds(&ids);
+                let cascade = pre_constraints.compact_with_update(&forward);
+                Ok(Undo::RestoreRemovedMulticenterBonds {
                     removed,
-                    undo_compaction: IdCompaction::relations(
-                        Vec::new(),
-                        Vec::new(),
-                        vec![id.into()],
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                    )
-                    .undo_compaction(),
+                    undo_compaction: forward.undo_compaction(),
+                    cascade,
                 })
             }
             Edit::ModifyMulticenterBondField { id, change } => {
@@ -970,36 +1010,44 @@ impl MoleculeBuilder {
                     ast: view.ast.clone(),
                 }))
             }
-            Edit::RemoveNoncovalentBond { id, atoms, ast } => {
-                let id = created.noncovalent_bond(id)?;
-                if id.index() >= self.noncovalent_bond_count() {
-                    return Err(TransactionError::IdOutOfRange("noncovalent bond"));
+            Edit::RemoveNoncovalentBonds { removes } => {
+                let mut ids = Vec::with_capacity(removes.len());
+                let mut removed = Vec::with_capacity(removes.len());
+                for (id, atoms, ast) in removes {
+                    let id = created.noncovalent_bond(id)?;
+                    if id.index() >= self.noncovalent_bond_count() {
+                        return Err(TransactionError::IdOutOfRange("noncovalent bond"));
+                    }
+                    let saved_atoms = [
+                        created.atom(atoms[0].clone())?,
+                        created.atom(atoms[1].clone())?,
+                    ];
+                    let view = self.noncovalent_bond(id);
+                    if view.ast != &ast || view.atoms != saved_atoms {
+                        return Err(TransactionError::OldStateMismatch);
+                    }
+                    removed.push(RemovedNoncovalentBond {
+                        id,
+                        atoms: view.atoms,
+                        ast: view.ast.clone(),
+                    });
+                    ids.push(id);
                 }
-                let saved_atoms = [
-                    created.atom(atoms[0].clone())?,
-                    created.atom(atoms[1].clone())?,
-                ];
-                let view = self.noncovalent_bond(id);
-                if view.ast != &ast || view.atoms != saved_atoms {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                let removed = RemovedNoncovalentBond {
-                    id,
-                    atoms: view.atoms,
-                    ast: view.ast.clone(),
-                };
-                self.remove_noncovalent_bonds(&[id]);
-                Ok(Undo::RestoreRemovedNoncovalentBond {
+                let forward = IdCompaction::relations(
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    ids.iter().map(|&i| i.into()).collect(),
+                    Vec::new(),
+                    Vec::new(),
+                );
+                let mut pre_constraints = self.constraints().clone();
+                self.remove_noncovalent_bonds(&ids);
+                let cascade = pre_constraints.compact_with_update(&forward);
+                Ok(Undo::RestoreRemovedNoncovalentBonds {
                     removed,
-                    undo_compaction: IdCompaction::relations(
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                        vec![id.into()],
-                        Vec::new(),
-                        Vec::new(),
-                    )
-                    .undo_compaction(),
+                    undo_compaction: forward.undo_compaction(),
+                    cascade,
                 })
             }
             Edit::ModifyNoncovalentBondField { id, change } => {
@@ -1758,25 +1806,41 @@ impl MoleculeBuilder {
                 self.restore_topology(atoms, bonds, overlays, &undo_compaction, cascade);
             }
             Undo::RemoveAddedDativeBond(added) => self.remove_added_dative_bond(&added),
-            Undo::RestoreRemovedDativeBond {
+            Undo::RestoreRemovedDativeBonds {
                 removed,
                 undo_compaction,
-            } => self.restore_dative_bond(removed, &undo_compaction),
+                cascade,
+            } => {
+                self.restore_dative_bonds(removed, &undo_compaction);
+                cascade.rollback_into(self.constraints_mut());
+            }
             Undo::RemoveAddedAromaticSystem(added) => self.remove_added_aromatic_system(&added),
-            Undo::RestoreRemovedAromaticSystem {
+            Undo::RestoreRemovedAromaticSystems {
                 removed,
                 undo_compaction,
-            } => self.restore_aromatic_system(removed, &undo_compaction),
+                cascade,
+            } => {
+                self.restore_aromatic_systems(removed, &undo_compaction);
+                cascade.rollback_into(self.constraints_mut());
+            }
             Undo::RemoveAddedMulticenterBond(added) => self.remove_added_multicenter_bond(&added),
-            Undo::RestoreRemovedMulticenterBond {
+            Undo::RestoreRemovedMulticenterBonds {
                 removed,
                 undo_compaction,
-            } => self.restore_multicenter_bond(removed, &undo_compaction),
+                cascade,
+            } => {
+                self.restore_multicenter_bonds(removed, &undo_compaction);
+                cascade.rollback_into(self.constraints_mut());
+            }
             Undo::RemoveAddedNoncovalentBond(added) => self.remove_added_noncovalent_bond(&added),
-            Undo::RestoreRemovedNoncovalentBond {
+            Undo::RestoreRemovedNoncovalentBonds {
                 removed,
                 undo_compaction,
-            } => self.restore_noncovalent_bond(removed, &undo_compaction),
+                cascade,
+            } => {
+                self.restore_noncovalent_bonds(removed, &undo_compaction);
+                cascade.rollback_into(self.constraints_mut());
+            }
             Undo::RemoveAddedStereoAtom(added) => self.remove_added_stereo_atom(&added),
             Undo::RestoreRemovedStereoAtom {
                 removed,
@@ -2708,13 +2772,15 @@ mod tests {
         mut diatomic_with_overlays: MoleculeBuilder,
     ) {
         diatomic_with_overlays
-            .transact(vec![Edit::RemoveDativeBond {
-                id: DativeBondRef::Id(DativeBondId(0)),
-                atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
-                ast: DativeBondAst {
-                    order: ValueAst::Lit(1),
-                    constraints: Default::default(),
-                },
+            .transact(vec![Edit::RemoveDativeBonds {
+                removes: vec![(
+                    DativeBondRef::Id(DativeBondId(0)),
+                    vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    DativeBondAst {
+                        order: ValueAst::Lit(1),
+                        constraints: Default::default(),
+                    },
+                )],
             }])
             .unwrap();
         assert_eq!(diatomic_with_overlays.dative_bond_count(), 0);
@@ -2725,13 +2791,15 @@ mod tests {
         mut diatomic_with_overlays: MoleculeBuilder,
     ) {
         let err = diatomic_with_overlays
-            .transact(vec![Edit::RemoveDativeBond {
-                id: DativeBondRef::Id(DativeBondId(0)),
-                atoms: vec![AtomRef::Id(AtomId(1)), AtomRef::Id(AtomId(0))], // wrong order
-                ast: DativeBondAst {
-                    order: ValueAst::Lit(1),
-                    constraints: Default::default(),
-                },
+            .transact(vec![Edit::RemoveDativeBonds {
+                removes: vec![(
+                    DativeBondRef::Id(DativeBondId(0)),
+                    vec![AtomRef::Id(AtomId(1)), AtomRef::Id(AtomId(0))], // wrong order
+                    DativeBondAst {
+                        order: ValueAst::Lit(1),
+                        constraints: Default::default(),
+                    },
+                )],
             }])
             .unwrap_err();
         assert_eq!(err, TransactionError::OldStateMismatch);
@@ -2743,13 +2811,97 @@ mod tests {
         mut diatomic_with_overlays: MoleculeBuilder,
     ) {
         diatomic_with_overlays
-            .transact(vec![Edit::RemoveAromaticSystem {
-                id: AromaticSystemRef::Id(AromaticSystemId(0)),
-                atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
-                ast: AromaticSystemAst::default(),
+            .transact(vec![Edit::RemoveAromaticSystems {
+                removes: vec![(
+                    AromaticSystemRef::Id(AromaticSystemId(0)),
+                    vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    AromaticSystemAst::default(),
+                )],
             }])
             .unwrap();
         assert_eq!(diatomic_with_overlays.aromatic_system_count(), 0);
+    }
+
+    // Batch removal of non-contiguous same-kind ids (0 and 2) in one edit: ids resolve against the
+    // pre-removal state and compact once, so the survivor (former id 1) remaps to id 0. A single-id
+    // sequence would stale id 2 after removing id 0.
+    #[rstest]
+    fn test_molecule_builder_transact_remove_aromatic_systems() {
+        let mut b = MoleculeAst::default().edit();
+        for _ in 0..6 {
+            b.add_atom(AtomAst::from_element(Element::C));
+        }
+        b.add_aromatic_system(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default());
+        b.add_aromatic_system(vec![AtomId(2), AtomId(3)], AromaticSystemAst::default());
+        b.add_aromatic_system(vec![AtomId(4), AtomId(5)], AromaticSystemAst::default());
+        b.transact(vec![Edit::RemoveAromaticSystems {
+            removes: vec![
+                (
+                    AromaticSystemRef::Id(AromaticSystemId(0)),
+                    vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    AromaticSystemAst::default(),
+                ),
+                (
+                    AromaticSystemRef::Id(AromaticSystemId(2)),
+                    vec![AtomRef::Id(AtomId(4)), AtomRef::Id(AtomId(5))],
+                    AromaticSystemAst::default(),
+                ),
+            ],
+        }])
+        .unwrap();
+        assert_eq!(b.aromatic_system_count(), 1);
+        assert_eq!(
+            b.aromatic_system(AromaticSystemId(0))
+                .atom_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(2), AtomId(3)],
+        );
+    }
+
+    // Rolling back an aromatic-system removal restores a molecule constraint the removal dropped
+    // (`dropped`) or remapped (`remapped`) — the overlay-remove undo captures the constraint cascade.
+    #[rstest]
+    #[case::dropped(AromaticSystemId(0), 0)]
+    #[case::remapped(AromaticSystemId(1), 1)]
+    fn test_molecule_builder_transact_remove_aromatic_system_rollback(
+        #[case] constrained: AromaticSystemId,
+        #[case] forward_constraint_count: usize,
+    ) {
+        let mut b = MoleculeAst::default().edit();
+        for _ in 0..6 {
+            b.add_atom(AtomAst::from_element(Element::C));
+        }
+        b.add_aromatic_system(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemAst::default(),
+        );
+        b.add_aromatic_system(
+            vec![AtomId(3), AtomId(4), AtomId(5)],
+            AromaticSystemAst::default(),
+        );
+        b.transact(vec![Edit::AddMoleculeConstraint {
+            constraint: Constraint::AromaticSystem(
+                constrained,
+                AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6)),
+            ),
+        }])
+        .unwrap();
+        let before = b.clone().build();
+
+        let tx = b
+            .transact(vec![Edit::RemoveAromaticSystems {
+                removes: vec![(
+                    AromaticSystemRef::Id(AromaticSystemId(0)),
+                    vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1)), AtomRef::Id(AtomId(2))],
+                    AromaticSystemAst::default(),
+                )],
+            }])
+            .unwrap();
+        assert_eq!(b.aromatic_system_count(), 1);
+        assert_eq!(b.constraints().iter().count(), forward_constraint_count);
+
+        tx.rollback(&mut b).unwrap();
+        assert_eq!(b.build(), before);
     }
 
     #[rstest]
@@ -2757,10 +2909,12 @@ mod tests {
         mut diatomic_with_overlays: MoleculeBuilder,
     ) {
         diatomic_with_overlays
-            .transact(vec![Edit::RemoveMulticenterBond {
-                id: MulticenterBondRef::Id(MulticenterBondId(0)),
-                atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
-                ast: MulticenterBondAst::default(),
+            .transact(vec![Edit::RemoveMulticenterBonds {
+                removes: vec![(
+                    MulticenterBondRef::Id(MulticenterBondId(0)),
+                    vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    MulticenterBondAst::default(),
+                )],
             }])
             .unwrap();
         assert_eq!(diatomic_with_overlays.multicenter_bond_count(), 0);
@@ -2771,10 +2925,12 @@ mod tests {
         mut diatomic_with_overlays: MoleculeBuilder,
     ) {
         diatomic_with_overlays
-            .transact(vec![Edit::RemoveNoncovalentBond {
-                id: NoncovalentBondRef::Id(NoncovalentBondId(0)),
-                atoms: [AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
-                ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            .transact(vec![Edit::RemoveNoncovalentBonds {
+                removes: vec![(
+                    NoncovalentBondRef::Id(NoncovalentBondId(0)),
+                    [AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                )],
             }])
             .unwrap();
         assert_eq!(diatomic_with_overlays.noncovalent_bond_count(), 0);
@@ -2785,10 +2941,12 @@ mod tests {
         mut diatomic_with_overlays: MoleculeBuilder,
     ) {
         let err = diatomic_with_overlays
-            .transact(vec![Edit::RemoveNoncovalentBond {
-                id: NoncovalentBondRef::Id(NoncovalentBondId(0)),
-                atoms: [AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
-                ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic), // wrong
+            .transact(vec![Edit::RemoveNoncovalentBonds {
+                removes: vec![(
+                    NoncovalentBondRef::Id(NoncovalentBondId(0)),
+                    [AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic), // wrong
+                )],
             }])
             .unwrap_err();
         assert_eq!(err, TransactionError::OldStateMismatch);
@@ -3029,13 +3187,15 @@ mod tests {
                     atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
                     ast: DativeBondAst::from_order(1),
                 }],
-                RollbackCase::RemoveOverlay => vec![Edit::RemoveDativeBond {
-                    id: DativeBondRef::Id(DativeBondId(0)),
-                    atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
-                    ast: DativeBondAst {
-                        order: ValueAst::Lit(1),
-                        constraints: Default::default(),
-                    },
+                RollbackCase::RemoveOverlay => vec![Edit::RemoveDativeBonds {
+                    removes: vec![(
+                        DativeBondRef::Id(DativeBondId(0)),
+                        vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                        DativeBondAst {
+                            order: ValueAst::Lit(1),
+                            constraints: Default::default(),
+                        },
+                    )],
                 }],
                 RollbackCase::Constraint => vec![Edit::ModifyAtomConstraint {
                     id: AtomRef::Id(AtomId(0)),

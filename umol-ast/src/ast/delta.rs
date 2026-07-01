@@ -1456,28 +1456,38 @@ pub(crate) fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
             },
         }),
         Delta::DativeBond(d) => Delta::DativeBond(match d {
+            // Donors are the unordered factor with no per-participant ast data, so canonicalize the
+            // order after remap (acceptor is the single ordered factor). No permutation to track.
             DativeBondDelta::Add {
                 id,
                 donors,
                 acceptor,
                 ast,
-            } => DativeBondDelta::Add {
-                id: map.map_dative(id),
-                donors: donors.iter().map(|a| map.map_atom(*a)).collect(),
-                acceptor: map.map_atom(acceptor),
-                ast,
-            },
+            } => {
+                let mut donors: Vec<AtomId> = donors.iter().map(|a| map.map_atom(*a)).collect();
+                Unordered::canonicalize(&mut donors);
+                DativeBondDelta::Add {
+                    id: map.map_dative(id),
+                    donors,
+                    acceptor: map.map_atom(acceptor),
+                    ast,
+                }
+            }
             DativeBondDelta::Remove {
                 id,
                 donors,
                 acceptor,
                 ast,
-            } => DativeBondDelta::Remove {
-                id: map.map_dative(id),
-                donors: donors.iter().map(|a| map.map_atom(*a)).collect(),
-                acceptor: map.map_atom(acceptor),
-                ast,
-            },
+            } => {
+                let mut donors: Vec<AtomId> = donors.iter().map(|a| map.map_atom(*a)).collect();
+                Unordered::canonicalize(&mut donors);
+                DativeBondDelta::Remove {
+                    id: map.map_dative(id),
+                    donors,
+                    acceptor: map.map_atom(acceptor),
+                    ast,
+                }
+            }
             DativeBondDelta::ModifyField { id, change } => DativeBondDelta::ModifyField {
                 id: map.map_dative(id),
                 change,
@@ -1555,16 +1565,26 @@ pub(crate) fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
             }
         }),
         Delta::NoncovalentBond(n) => Delta::NoncovalentBond(match n {
-            NoncovalentBondDelta::Add { id, atoms, ast } => NoncovalentBondDelta::Add {
-                id: map.map_noncovalent(id),
-                atoms: [map.map_atom(atoms[0]), map.map_atom(atoms[1])],
-                ast,
-            },
-            NoncovalentBondDelta::Remove { id, atoms, ast } => NoncovalentBondDelta::Remove {
-                id: map.map_noncovalent(id),
-                atoms: [map.map_atom(atoms[0]), map.map_atom(atoms[1])],
-                ast,
-            },
+            // Both participants are the unordered factor with no per-participant ast data, so
+            // canonicalize the order after remap. No permutation to track.
+            NoncovalentBondDelta::Add { id, atoms, ast } => {
+                let mut atoms = [map.map_atom(atoms[0]), map.map_atom(atoms[1])];
+                Unordered::canonicalize(&mut atoms);
+                NoncovalentBondDelta::Add {
+                    id: map.map_noncovalent(id),
+                    atoms,
+                    ast,
+                }
+            }
+            NoncovalentBondDelta::Remove { id, atoms, ast } => {
+                let mut atoms = [map.map_atom(atoms[0]), map.map_atom(atoms[1])];
+                Unordered::canonicalize(&mut atoms);
+                NoncovalentBondDelta::Remove {
+                    id: map.map_noncovalent(id),
+                    atoms,
+                    ast,
+                }
+            }
             NoncovalentBondDelta::ModifyField { id, change } => NoncovalentBondDelta::ModifyField {
                 id: map.map_noncovalent(id),
                 change,
@@ -1921,7 +1941,7 @@ mod tests {
             ast: BondAst::default(),
         })
     )]
-    #[case::dative(
+    #[case::dative_resort(
         Delta::DativeBond(DativeBondDelta::Add {
             id: DativeBondId(0),
             donors: vec![AtomId(0), AtomId(2)],
@@ -1930,7 +1950,7 @@ mod tests {
         }),
         Delta::DativeBond(DativeBondDelta::Add {
             id: DativeBondId(1),
-            donors: vec![AtomId(2), AtomId(1)],
+            donors: vec![AtomId(1), AtomId(2)],
             acceptor: AtomId(0),
             ast: DativeBondAst::from_order(1),
         })
@@ -1971,7 +1991,7 @@ mod tests {
             ast: MulticenterBondAst::from_electrons(vec![5, 7, 3]),
         })
     )]
-    #[case::noncovalent(
+    #[case::noncovalent_resort(
         Delta::NoncovalentBond(NoncovalentBondDelta::Add {
             id: NoncovalentBondId(0),
             atoms: [AtomId(2), AtomId(1)],
@@ -1979,7 +1999,7 @@ mod tests {
         }),
         Delta::NoncovalentBond(NoncovalentBondDelta::Add {
             id: NoncovalentBondId(1),
-            atoms: [AtomId(1), AtomId(0)],
+            atoms: [AtomId(0), AtomId(1)],
             ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
         })
     )]

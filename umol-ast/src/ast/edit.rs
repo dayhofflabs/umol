@@ -269,10 +269,8 @@ pub enum Edit {
         atoms: Vec<AtomRef>,
         ast: DativeBondAst,
     },
-    RemoveDativeBond {
-        id: DativeBondRef,
-        atoms: Vec<AtomRef>,
-        ast: DativeBondAst,
+    RemoveDativeBonds {
+        removes: Vec<(DativeBondRef, Vec<AtomRef>, DativeBondAst)>,
     },
     ModifyDativeBondField {
         id: DativeBondRef,
@@ -284,10 +282,8 @@ pub enum Edit {
         atoms: Vec<AtomRef>,
         ast: AromaticSystemAst,
     },
-    RemoveAromaticSystem {
-        id: AromaticSystemRef,
-        atoms: Vec<AtomRef>,
-        ast: AromaticSystemAst,
+    RemoveAromaticSystems {
+        removes: Vec<(AromaticSystemRef, Vec<AtomRef>, AromaticSystemAst)>,
     },
     ModifyAromaticSystemField {
         id: AromaticSystemRef,
@@ -299,10 +295,8 @@ pub enum Edit {
         atoms: Vec<AtomRef>,
         ast: MulticenterBondAst,
     },
-    RemoveMulticenterBond {
-        id: MulticenterBondRef,
-        atoms: Vec<AtomRef>,
-        ast: MulticenterBondAst,
+    RemoveMulticenterBonds {
+        removes: Vec<(MulticenterBondRef, Vec<AtomRef>, MulticenterBondAst)>,
     },
     ModifyMulticenterBondField {
         id: MulticenterBondRef,
@@ -314,10 +308,8 @@ pub enum Edit {
         atoms: [AtomRef; 2],
         ast: NoncovalentBondAst,
     },
-    RemoveNoncovalentBond {
-        id: NoncovalentBondRef,
-        atoms: [AtomRef; 2],
-        ast: NoncovalentBondAst,
+    RemoveNoncovalentBonds {
+        removes: Vec<(NoncovalentBondRef, [AtomRef; 2], NoncovalentBondAst)>,
     },
     ModifyNoncovalentBondField {
         id: NoncovalentBondRef,
@@ -645,24 +637,28 @@ pub enum Undo {
         cascade: CascadedConstraints,
     },
     RemoveAddedDativeBond(AddedDativeBond),
-    RestoreRemovedDativeBond {
-        removed: RemovedDativeBond,
+    RestoreRemovedDativeBonds {
+        removed: Vec<RemovedDativeBond>,
         undo_compaction: UndoCompaction,
+        cascade: CascadedConstraints,
     },
     RemoveAddedAromaticSystem(AddedAromaticSystem),
-    RestoreRemovedAromaticSystem {
-        removed: RemovedAromaticSystem,
+    RestoreRemovedAromaticSystems {
+        removed: Vec<RemovedAromaticSystem>,
         undo_compaction: UndoCompaction,
+        cascade: CascadedConstraints,
     },
     RemoveAddedMulticenterBond(AddedMulticenterBond),
-    RestoreRemovedMulticenterBond {
-        removed: RemovedMulticenterBond,
+    RestoreRemovedMulticenterBonds {
+        removed: Vec<RemovedMulticenterBond>,
         undo_compaction: UndoCompaction,
+        cascade: CascadedConstraints,
     },
     RemoveAddedNoncovalentBond(AddedNoncovalentBond),
-    RestoreRemovedNoncovalentBond {
-        removed: RemovedNoncovalentBond,
+    RestoreRemovedNoncovalentBonds {
+        removed: Vec<RemovedNoncovalentBond>,
         undo_compaction: UndoCompaction,
+        cascade: CascadedConstraints,
     },
     RemoveAddedStereoAtom(AddedStereoAtom),
     RestoreRemovedStereoAtom {

@@ -12,15 +12,16 @@ use proptest::prelude::*;
 pub(crate) use umol_ast::ast::{
     AddBond, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKind,
     AromaticSystemConstraints, AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint,
-    AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomId, AtomRef, BondAst, BondConstraint,
-    BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef, BooleanAst,
-    Canonicalize, CisTransStereoAst, Constraint, Constraints, DativeBondAst, DativeBondConstraint,
-    DativeBondConstraintKind, DativeBondConstraints, DativeBondId, Edit, ElectronCountsAst,
-    ElementAst, FluxionalityAst, IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst,
-    MemOp, MoleculeAst, MoleculeConstraint, MulticenterBondAst, MulticenterBondConstraint,
-    MulticenterBondConstraintKind, MulticenterBondConstraints, MulticenterBondId,
-    MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId, NoncovalentBondKind,
-    NoncovalentBondKindAst, OrientedLigandPermutation, RelOp, RelationalConstraint, RingScope,
+    AromaticSystemRef, AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomId, AtomRef,
+    BondAst, BondConstraint, BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef,
+    BooleanAst, Canonicalize, CisTransStereoAst, Constraint, Constraints, DativeBondAst,
+    DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints, DativeBondId,
+    DativeBondRef, Edit, ElectronCountsAst, ElementAst, FluxionalityAst, IsotopeMassAst, Lattice,
+    LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint, MulticenterBondAst,
+    MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
+    MulticenterBondId, MulticenterBondRef, MulticenterValenceAst, NoncovalentBondAst,
+    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondRef, NoncovalentBondKindAst,
+    OrientedLigandPermutation, RelOp, RelationalConstraint, RingScope,
     SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomConstraints, StereoAtomId,
     StereoBondAst, StereoBondConstraint, StereoBondConstraints, StereoBondId,
     StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigand, StereoLigandPosition,
@@ -2043,5 +2044,192 @@ pub(crate) fn transaction_case_strategy() -> impl Strategy<Value = TransactionCa
                 acceptor,
             }
         }),
+    ]
+}
+
+// Overlay-transaction fixture: a fixed 6-carbon path carrying two overlays of each DAMN kind, so
+// the edit generator can remove ≥2 of one kind (the batched-remove path) and mix overlay removes
+// with atom appends and a topology removal in one transaction. Atom sets are the single source of
+// truth for both `overlay_transaction_base` and the remove edits, so the `OldState` check matches.
+const AROMATIC_SETS: [&[u32]; 2] = [&[0, 1, 2], &[3, 4, 5]];
+const MULTICENTER_SETS: [&[u32]; 2] = [&[1, 2, 3], &[0, 4, 5]];
+const DATIVE_DONORS: [&[u32]; 2] = [&[0], &[4]];
+const DATIVE_ACCEPTORS: [u32; 2] = [1, 5];
+const NONCOVALENT_PAIRS: [[u32; 2]; 2] = [[0, 2], [3, 5]];
+
+pub(crate) fn overlay_transaction_base() -> MoleculeAst {
+    let atoms: Vec<AtomAst> = (0..6).map(|_| AtomAst::from_element(Element::C)).collect();
+    let bonds = (0..5)
+        .map(|i| (AtomId(i), AtomId(i + 1), BondAst::from_order(1)))
+        .collect();
+    let dative = (0..2)
+        .map(|i| {
+            (
+                DATIVE_DONORS[i].iter().map(|&a| AtomId(a)).collect::<Vec<_>>(),
+                AtomId(DATIVE_ACCEPTORS[i]),
+                DativeBondAst::from_order(1),
+            )
+        })
+        .collect();
+    let aromatic = AROMATIC_SETS
+        .iter()
+        .map(|set| (set.iter().map(|&a| AtomId(a)).collect::<Vec<_>>(), AromaticSystemAst::default()))
+        .collect();
+    let multicenter = MULTICENTER_SETS
+        .iter()
+        .map(|set| (set.iter().map(|&a| AtomId(a)).collect::<Vec<_>>(), MulticenterBondAst::default()))
+        .collect();
+    let noncovalent = NONCOVALENT_PAIRS
+        .iter()
+        .map(|[a, b]| {
+            (
+                AtomId(*a),
+                AtomId(*b),
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )
+        })
+        .collect();
+    MoleculeAst::from_parts(
+        atoms,
+        bonds,
+        dative,
+        aromatic,
+        multicenter,
+        noncovalent,
+        vec![],
+        vec![],
+        Constraints::new(),
+    )
+}
+
+/// A valid transaction over `overlay_transaction_base`: optional atom appends, then one batched
+/// remove edit per DAMN kind (a chosen subset of that kind's two ids — exercises ≥2 same-kind
+/// removal), then a topology removal of a chosen atom subset (cascade-removes overlays not removed
+/// explicitly). Ordered adds → overlay removes → topology, mirroring `apply_at`; every id resolves
+/// against the pre-removal base state, so `transact` succeeds and the round-trip properties apply.
+pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeAst, Vec<Edit>)> {
+    (
+        prop::collection::vec(any::<bool>(), 2),
+        prop::collection::vec(any::<bool>(), 2),
+        prop::collection::vec(any::<bool>(), 2),
+        prop::collection::vec(any::<bool>(), 2),
+        0usize..=2,
+        prop::collection::vec(any::<bool>(), 6),
+        prop::collection::vec(any::<bool>(), 6),
+        prop::collection::vec(any::<bool>(), 2),
+        prop::collection::vec(any::<bool>(), 2),
+    )
+        .prop_map(
+            |(rm_ar, rm_mc, rm_dv, rm_nc, add, mod_at, rm_at, con_ar, con_mc)| {
+            let mut edits: Vec<Edit> = Vec::new();
+            if add > 0 {
+                edits.push(Edit::AddAtoms {
+                    atoms: (0..add).map(|_| AtomAst::from_element(Element::C)).collect(),
+                });
+            }
+            // Base carbons carry the default (`Undetermined`) charge, so that is the `old` value.
+            for i in (0..6).filter(|&i| mod_at[i]) {
+                edits.push(Edit::ModifyAtomField {
+                    id: AtomRef::Id(AtomId(i as u32)),
+                    change: AtomFieldChange::Charge {
+                        old: ValueAst::default(),
+                        new: ValueAst::Lit(1),
+                    },
+                });
+            }
+            // Molecule-level constraints referencing overlays, added before the removals so that
+            // removing a referenced overlay exercises constraint drop/remap + its rollback restore.
+            for i in (0..2).filter(|&i| con_ar[i]) {
+                edits.push(Edit::AddMoleculeConstraint {
+                    constraint: Constraint::AromaticSystem(
+                        AromaticSystemId(i as u32),
+                        AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6)),
+                    ),
+                });
+            }
+            for i in (0..2).filter(|&i| con_mc[i]) {
+                edits.push(Edit::AddMoleculeConstraint {
+                    constraint: Constraint::MulticenterBond(
+                        MulticenterBondId(i as u32),
+                        MulticenterBondConstraint::ElectronCount(ValueAst::Lit(4)),
+                    ),
+                });
+            }
+            let dative: Vec<_> = (0..2)
+                .filter(|&i| rm_dv[i])
+                .map(|i| {
+                    let mut atoms: Vec<AtomRef> =
+                        DATIVE_DONORS[i].iter().map(|&a| AtomRef::Id(AtomId(a))).collect();
+                    atoms.push(AtomRef::Id(AtomId(DATIVE_ACCEPTORS[i])));
+                    (DativeBondRef::Id(DativeBondId(i as u32)), atoms, DativeBondAst::from_order(1))
+                })
+                .collect();
+            if !dative.is_empty() {
+                edits.push(Edit::RemoveDativeBonds { removes: dative });
+            }
+            let aromatic: Vec<_> = (0..2)
+                .filter(|&i| rm_ar[i])
+                .map(|i| {
+                    let atoms = AROMATIC_SETS[i].iter().map(|&a| AtomRef::Id(AtomId(a))).collect();
+                    (
+                        AromaticSystemRef::Id(AromaticSystemId(i as u32)),
+                        atoms,
+                        AromaticSystemAst::default(),
+                    )
+                })
+                .collect();
+            if !aromatic.is_empty() {
+                edits.push(Edit::RemoveAromaticSystems { removes: aromatic });
+            }
+            let multicenter: Vec<_> = (0..2)
+                .filter(|&i| rm_mc[i])
+                .map(|i| {
+                    let atoms = MULTICENTER_SETS[i].iter().map(|&a| AtomRef::Id(AtomId(a))).collect();
+                    (
+                        MulticenterBondRef::Id(MulticenterBondId(i as u32)),
+                        atoms,
+                        MulticenterBondAst::default(),
+                    )
+                })
+                .collect();
+            if !multicenter.is_empty() {
+                edits.push(Edit::RemoveMulticenterBonds { removes: multicenter });
+            }
+            let noncovalent: Vec<_> = (0..2)
+                .filter(|&i| rm_nc[i])
+                .map(|i| {
+                    (
+                        NoncovalentBondRef::Id(NoncovalentBondId(i as u32)),
+                        [
+                            AtomRef::Id(AtomId(NONCOVALENT_PAIRS[i][0])),
+                            AtomRef::Id(AtomId(NONCOVALENT_PAIRS[i][1])),
+                        ],
+                        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                    )
+                })
+                .collect();
+            if !noncovalent.is_empty() {
+                edits.push(Edit::RemoveNoncovalentBonds { removes: noncovalent });
+            }
+            let atoms: Vec<AtomRef> = (0..6)
+                .filter(|&i| rm_at[i])
+                .map(|i| AtomRef::Id(AtomId(i as u32)))
+                .collect();
+            if !atoms.is_empty() {
+                edits.push(Edit::RemoveTopology {
+                    atoms,
+                    bonds: vec![],
+                });
+            }
+            (overlay_transaction_base(), edits)
+        })
+}
+
+/// `(base, edits)` pairs for the transact round-trip properties: the single-edit `TransactionCase`
+/// coverage plus the multi-edit overlay-removal sequences.
+pub(crate) fn transaction_edits_strategy() -> impl Strategy<Value = (MoleculeAst, Vec<Edit>)> {
+    prop_oneof![
+        transaction_case_strategy().prop_map(|case| (case.base(), case.edits())),
+        overlay_transaction_strategy(),
     ]
 }

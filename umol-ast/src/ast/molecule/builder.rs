@@ -1198,38 +1198,6 @@ impl MoleculeBuilder {
         cascade.rollback_into(&mut self.constraints);
     }
 
-    pub(super) fn restore_dative_bond(
-        &mut self,
-        removed: RemovedDativeBond,
-        undo_compaction: &UndoCompaction,
-    ) {
-        self.restore_dative_bonds(vec![removed], undo_compaction);
-    }
-
-    pub(super) fn restore_aromatic_system(
-        &mut self,
-        removed: RemovedAromaticSystem,
-        undo_compaction: &UndoCompaction,
-    ) {
-        self.restore_aromatic_systems(vec![removed], undo_compaction);
-    }
-
-    pub(super) fn restore_multicenter_bond(
-        &mut self,
-        removed: RemovedMulticenterBond,
-        undo_compaction: &UndoCompaction,
-    ) {
-        self.restore_multicenter_bonds(vec![removed], undo_compaction);
-    }
-
-    pub(super) fn restore_noncovalent_bond(
-        &mut self,
-        removed: RemovedNoncovalentBond,
-        undo_compaction: &UndoCompaction,
-    ) {
-        self.restore_noncovalent_bonds(vec![removed], undo_compaction);
-    }
-
     pub(super) fn restore_stereo_atom(
         &mut self,
         removed: RemovedStereoAtom,
@@ -1288,7 +1256,7 @@ impl MoleculeBuilder {
         self.bonds = Arc::new(old_bonds.into_iter().map(Option::unwrap).collect());
     }
 
-    fn restore_dative_bonds(
+    pub(super) fn restore_dative_bonds(
         &mut self,
         removed: Vec<RemovedDativeBond>,
         undo_compaction: &UndoCompaction,
@@ -1316,7 +1284,7 @@ impl MoleculeBuilder {
             FixedVarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
     }
 
-    fn restore_aromatic_systems(
+    pub(super) fn restore_aromatic_systems(
         &mut self,
         removed: Vec<RemovedAromaticSystem>,
         undo_compaction: &UndoCompaction,
@@ -1337,7 +1305,7 @@ impl MoleculeBuilder {
             VarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
     }
 
-    fn restore_multicenter_bonds(
+    pub(super) fn restore_multicenter_bonds(
         &mut self,
         removed: Vec<RemovedMulticenterBond>,
         undo_compaction: &UndoCompaction,
@@ -1358,7 +1326,7 @@ impl MoleculeBuilder {
             VarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
     }
 
-    fn restore_noncovalent_bonds(
+    pub(super) fn restore_noncovalent_bonds(
         &mut self,
         removed: Vec<RemovedNoncovalentBond>,
         undo_compaction: &UndoCompaction,
@@ -1545,7 +1513,7 @@ mod tests {
             Vec::new(),
         )
         .undo_compaction();
-        b.restore_dative_bond(removed, &undo);
+        b.restore_dative_bonds(vec![removed], &undo);
 
         assert_eq!(b.build(), expected);
     }
