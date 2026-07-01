@@ -15,8 +15,8 @@ pub use algorithms::auto::{AutoGroupOrder, Automorphism, AutomorphismAlgorithm};
 pub use algorithms::bcc::BiconnectedComponentsAlgorithm;
 pub use algorithms::coloring::BipartitionAlgorithm;
 pub use algorithms::common_subgraph::{
-    CommonSubgraph, CommonSubgraphEnumerationAlgorithm, McesAlgorithm, McisAlgorithm,
-    McsConnectivity,
+    CommonSubgraph, CommonSubgraphEnumerationAlgorithm, MaximalCommonSubgraphAlgorithm,
+    McesAlgorithm, McisAlgorithm, McsConnectivity,
 };
 pub use algorithms::connected::ConnectedComponentsAlgorithm;
 pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};

@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 use umol_graph_core::{
-    CommonSubgraphEnumerationAlgorithm, EdgeId, FactorOrdering, NodeId, Unordered,
+    EdgeId, FactorOrdering, MaximalCommonSubgraphAlgorithm, NodeId, Unordered,
 };
 
 use super::aromatic::AromaticSystemAst;
@@ -311,11 +311,13 @@ fn compose_all(
             .meet(l_b.bond(BondId::from(le)).ast)
             .is_some()
     };
-    let overlaps = r_a.raw_graph().enumerate_common_subgraphs(
+    // I3-prop noted this must become the complete enumeration (`enumerate_common_subgraphs`) for
+    // compose to be complete; using maximal-only for now (rewire is the next step).
+    let overlaps = r_a.raw_graph().maximal_common_subgraphs(
         l_b.raw_graph(),
         &mut node_match,
         &mut edge_match,
-        CommonSubgraphEnumerationAlgorithm::BronKerbosch,
+        MaximalCommonSubgraphAlgorithm::BronKerbosch,
     );
 
     let db_created_atom_rank: HashMap<AtomId, usize> = created_atom_ids(&db)
