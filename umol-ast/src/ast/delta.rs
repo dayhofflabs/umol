@@ -37,7 +37,7 @@ use super::ligand::StereoLigand;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 use super::remap::IdRemapping;
-use super::stereo::{StereoAtomAst, StereoBondAst};
+use super::stereo::{StereoAtomAst, StereoBondAst, StereoKind};
 use super::traits::{Canonicalize, EntityPatch};
 
 /// A resolved edit to a single atom.
@@ -346,13 +346,16 @@ pub enum StereoAtomDelta {
     },
     Apply {
         id: StereoAtomId,
-        relabeling: Permutation,
+        kind: StereoKind,
+        permutation: Permutation,
     },
     Swap {
         id: StereoAtomId,
+        kind: StereoKind,
     },
     Mirror {
         id: StereoAtomId,
+        kind: StereoKind,
     },
 }
 
@@ -390,12 +393,17 @@ impl StereoAtomDelta {
                 old: new,
                 new: old,
             },
-            Self::Apply { id, relabeling } => Self::Apply {
+            Self::Apply {
                 id,
-                relabeling: relabeling.inverse(),
+                kind,
+                permutation,
+            } => Self::Apply {
+                id,
+                kind,
+                permutation: permutation.inverse(),
             },
-            Self::Swap { id } => Self::Swap { id },
-            Self::Mirror { id } => Self::Mirror { id },
+            Self::Swap { id, kind } => Self::Swap { id, kind },
+            Self::Mirror { id, kind } => Self::Mirror { id, kind },
         }
     }
 }
@@ -427,13 +435,16 @@ pub enum StereoBondDelta {
     },
     Apply {
         id: StereoBondId,
-        relabeling: Permutation,
+        kind: StereoKind,
+        permutation: Permutation,
     },
     Swap {
         id: StereoBondId,
+        kind: StereoKind,
     },
     Mirror {
         id: StereoBondId,
+        kind: StereoKind,
     },
 }
 
@@ -471,12 +482,17 @@ impl StereoBondDelta {
                 old: new,
                 new: old,
             },
-            Self::Apply { id, relabeling } => Self::Apply {
+            Self::Apply {
                 id,
-                relabeling: relabeling.inverse(),
+                kind,
+                permutation,
+            } => Self::Apply {
+                id,
+                kind,
+                permutation: permutation.inverse(),
             },
-            Self::Swap { id } => Self::Swap { id },
-            Self::Mirror { id } => Self::Mirror { id },
+            Self::Swap { id, kind } => Self::Swap { id, kind },
+            Self::Mirror { id, kind } => Self::Mirror { id, kind },
         }
     }
 }
@@ -1490,6 +1506,87 @@ impl EntityFold for NoncovalentBondDelta {
     fold_field_ops!(NoncovalentBondFieldChange, { Kind });
 }
 
+// Stereo entities impl only `EntityPatch` (diff / apply of the four DAMN arms), not `EntityFold`:
+// the relative ops `Apply`/`Swap`/`Mirror` have no `EntityOp` image, so `canonicalize` folds stereo
+// on a bespoke path (the four arms still route through these `diff`/`apply` methods).
+impl EntityPatch for StereoAtomDelta {
+    type Id = StereoAtomId;
+    type Ast = StereoAtomAst;
+    type FieldChange = StereoAtomFieldChange;
+    type Constraint = StereoAtomConstraint;
+
+    fn modify_field(id: StereoAtomId, change: StereoAtomFieldChange) -> Self {
+        StereoAtomDelta::ModifyField { id, change }
+    }
+
+    fn modify_constraint(
+        id: StereoAtomId,
+        old: Option<StereoAtomConstraint>,
+        new: Option<StereoAtomConstraint>,
+    ) -> Self {
+        StereoAtomDelta::ModifyConstraint { id, old, new }
+    }
+
+    diff_field_ops!(StereoAtomFieldChange, StereoAtomAst, StereoAtomConstraint, {
+        Configuration => configuration,
+    });
+
+    fn apply_constraint(
+        ast: &mut StereoAtomAst,
+        old: Option<StereoAtomConstraint>,
+        new: Option<StereoAtomConstraint>,
+    ) -> Result<(), Contradiction> {
+        if let Some(old) = old {
+            if ast.constraints.remove_by_key(old.key()).is_none() {
+                return Err(Contradiction);
+            }
+        }
+        if let Some(new) = new {
+            ast.constraints.add(new);
+        }
+        Ok(())
+    }
+}
+
+impl EntityPatch for StereoBondDelta {
+    type Id = StereoBondId;
+    type Ast = StereoBondAst;
+    type FieldChange = StereoBondFieldChange;
+    type Constraint = StereoBondConstraint;
+
+    fn modify_field(id: StereoBondId, change: StereoBondFieldChange) -> Self {
+        StereoBondDelta::ModifyField { id, change }
+    }
+
+    fn modify_constraint(
+        id: StereoBondId,
+        old: Option<StereoBondConstraint>,
+        new: Option<StereoBondConstraint>,
+    ) -> Self {
+        StereoBondDelta::ModifyConstraint { id, old, new }
+    }
+
+    diff_field_ops!(StereoBondFieldChange, StereoBondAst, StereoBondConstraint, {
+        Configuration => configuration,
+    });
+
+    fn apply_constraint(
+        ast: &mut StereoBondAst,
+        old: Option<StereoBondConstraint>,
+        new: Option<StereoBondConstraint>,
+    ) -> Result<(), Contradiction> {
+        if let Some(old) = old {
+            if ast.constraints.remove_by_key(old.key()).is_none() {
+                return Err(Contradiction);
+            }
+        }
+        if let Some(new) = new {
+            ast.constraints.add(new);
+        }
+        Ok(())
+    }
+}
+
 /// Apply a resolved per-entity change to a value AST, reusing the `EntityPatch` apply that
 /// `canonicalize` uses. `ModifyField` / `ModifyConstraint` mutate the ast; `Add` / `Remove` are
 /// no-ops (they carry a whole ast, not a change). Materializes the right-hand value of a
@@ -2066,16 +2163,16 @@ mod tests {
         }
     )]
     #[case::apply(
-        StereoAtomDelta::Apply { id: StereoAtomId(3), relabeling: Permutation::from_image(4, &[1, 2, 0, 3]) },
-        StereoAtomDelta::Apply { id: StereoAtomId(3), relabeling: Permutation::from_image(4, &[2, 0, 1, 3]) }
+        StereoAtomDelta::Apply { id: StereoAtomId(3), kind: StereoKind::Tetrahedral, permutation: Permutation::from_image(4, &[1, 2, 0, 3]) },
+        StereoAtomDelta::Apply { id: StereoAtomId(3), kind: StereoKind::Tetrahedral, permutation: Permutation::from_image(4, &[2, 0, 1, 3]) }
     )]
     #[case::swap(
-        StereoAtomDelta::Swap { id: StereoAtomId(4) },
-        StereoAtomDelta::Swap { id: StereoAtomId(4) }
+        StereoAtomDelta::Swap { id: StereoAtomId(4), kind: StereoKind::Tetrahedral },
+        StereoAtomDelta::Swap { id: StereoAtomId(4), kind: StereoKind::Tetrahedral }
     )]
     #[case::mirror(
-        StereoAtomDelta::Mirror { id: StereoAtomId(5) },
-        StereoAtomDelta::Mirror { id: StereoAtomId(5) }
+        StereoAtomDelta::Mirror { id: StereoAtomId(5), kind: StereoKind::Tetrahedral },
+        StereoAtomDelta::Mirror { id: StereoAtomId(5), kind: StereoKind::Tetrahedral }
     )]
     fn test_stereo_atom_delta_inverse(#[case] input: StereoAtomDelta, #[case] expected: StereoAtomDelta) {
         assert_eq!(input.clone().inverse(), expected);
@@ -2098,20 +2195,67 @@ mod tests {
         }
     )]
     #[case::apply(
-        StereoBondDelta::Apply { id: StereoBondId(1), relabeling: Permutation::from_image(4, &[1, 2, 0, 3]) },
-        StereoBondDelta::Apply { id: StereoBondId(1), relabeling: Permutation::from_image(4, &[2, 0, 1, 3]) }
+        StereoBondDelta::Apply { id: StereoBondId(1), kind: StereoKind::CisTrans, permutation: Permutation::from_image(4, &[1, 2, 0, 3]) },
+        StereoBondDelta::Apply { id: StereoBondId(1), kind: StereoKind::CisTrans, permutation: Permutation::from_image(4, &[2, 0, 1, 3]) }
     )]
     #[case::swap(
-        StereoBondDelta::Swap { id: StereoBondId(2) },
-        StereoBondDelta::Swap { id: StereoBondId(2) }
+        StereoBondDelta::Swap { id: StereoBondId(2), kind: StereoKind::CisTrans },
+        StereoBondDelta::Swap { id: StereoBondId(2), kind: StereoKind::CisTrans }
     )]
     #[case::mirror(
-        StereoBondDelta::Mirror { id: StereoBondId(3) },
-        StereoBondDelta::Mirror { id: StereoBondId(3) }
+        StereoBondDelta::Mirror { id: StereoBondId(3), kind: StereoKind::CisTrans },
+        StereoBondDelta::Mirror { id: StereoBondId(3), kind: StereoKind::CisTrans }
     )]
     fn test_stereo_bond_delta_inverse(#[case] input: StereoBondDelta, #[case] expected: StereoBondDelta) {
         assert_eq!(input.clone().inverse(), expected);
         assert_eq!(input.clone().inverse().inverse(), input);
+    }
+
+    #[rstest]
+    fn test_stereo_atom_delta_diff() {
+        assert_eq!(
+            <StereoAtomDelta as EntityPatch>::diff(
+                StereoAtomId(0),
+                &StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+                &StereoAtomAst::new(StereoKind::Tetrahedral, 1u32),
+            ),
+            vec![StereoAtomDelta::ModifyField {
+                id: StereoAtomId(0),
+                change: StereoAtomFieldChange::Configuration {
+                    old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+                    new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                },
+            }],
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_delta_apply_field() {
+        let mut ast = StereoAtomAst::new(StereoKind::Tetrahedral, 0u32);
+        <StereoAtomDelta as EntityPatch>::apply_field(
+            &mut ast,
+            StereoAtomFieldChange::Configuration {
+                old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+                new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            },
+        )
+        .unwrap();
+        assert_eq!(ast, StereoAtomAst::new(StereoKind::Tetrahedral, 1u32));
+    }
+
+    #[rstest]
+    fn test_stereo_atom_delta_apply_field_error() {
+        let mut ast = StereoAtomAst::new(StereoKind::Tetrahedral, 1u32);
+        assert_eq!(
+            <StereoAtomDelta as EntityPatch>::apply_field(
+                &mut ast,
+                StereoAtomFieldChange::Configuration {
+                    old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+                    new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                },
+            ),
+            Err(Contradiction),
+        );
     }
 
     #[rstest]

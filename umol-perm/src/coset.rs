@@ -110,15 +110,15 @@ impl CosetSpace {
     }
 
     /// The arrangement number of configuration `index` after the neighbor list is
-    /// relabeled by `relabeling` (`relabeling(i)` is the original-list position of
+    /// relabeled by `permutation` (`permutation(i)` is the original-list position of
     /// the relabeled list's i-th neighbor), or `None` if `index >= count` or
-    /// `relabeling` is not in the parent group. Carries a parsed `@`-number into
+    /// `permutation` is not in the parent group. Carries a parsed `@`-number into
     /// umol's incidence order.
-    pub fn reindex(&self, index: u32, relabeling: Permutation) -> Option<u32> {
-        if !self.parent.contains(&relabeling) {
+    pub fn reindex(&self, index: u32, permutation: Permutation) -> Option<u32> {
+        if !self.parent.contains(&permutation) {
             return None;
         }
-        self.index(self.unindex(index)?.compose(relabeling))
+        self.index(self.unindex(index)?.compose(permutation))
     }
 
     /// The enantiomeric coset, or `None` if `index >= count`.

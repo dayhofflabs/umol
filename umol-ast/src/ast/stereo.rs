@@ -81,7 +81,7 @@ impl StereoKind {
     pub fn act(self, index: u32, permutation: Permutation) -> u32 {
         space(self.class_key())
             .reindex(index, permutation)
-            .expect("act: valid coset index and relabeling")
+            .expect("act: valid coset index and permutation")
     }
 }
 
@@ -147,8 +147,8 @@ impl StereoConfigurationAst {
     }
 
     /// Relabel the ligand positions (`^`); `Undetermined` is fixed.
-    pub fn apply(&self, relabeling: Permutation) -> Self {
-        self.map_kinded(|kind, coset| coset.apply(kind, relabeling))
+    pub fn apply(&self, permutation: Permutation) -> Self {
+        self.map_kinded(|kind, coset| coset.apply(kind, permutation))
     }
 
     /// The kind involution (`~`).
@@ -434,8 +434,8 @@ impl StereoCosetAst {
 
     /// Relabel the ligand positions (the `^` op): move each literal coset index through the kind's
     /// coset algebra, eager on `Lit`/`LitSet`; an open `Term` keeps the operator layer.
-    pub fn apply(&self, kind: StereoKind, relabeling: Permutation) -> Self {
-        self.map_index(|c| kind.act(c, relabeling), |t| StereoTerm::apply(t, relabeling))
+    pub fn apply(&self, kind: StereoKind, permutation: Permutation) -> Self {
+        self.map_index(|c| kind.act(c, permutation), |t| StereoTerm::apply(t, permutation))
     }
 
     /// The kind involution (the `~` op).
@@ -503,7 +503,7 @@ impl StereoKind {
         }
     }
 
-    /// Whether `g` and `h` induce the same coset relabeling for this kind.
+    /// Whether `g` and `h` induce the same coset permutation for this kind.
     fn coset_action_eq(self, g: Permutation, h: Permutation) -> bool {
         let s = space(self.class_key());
         (0..s.count() as u32).all(|i| s.reindex(i, g) == s.reindex(i, h))
@@ -736,9 +736,9 @@ macro_rules! stereo_element {
             }
 
             /// Relabel the ligand positions (`^`); constraints are positionless and unchanged.
-            pub fn apply(&self, relabeling: Permutation) -> Self {
+            pub fn apply(&self, permutation: Permutation) -> Self {
                 Self {
-                    configuration: self.configuration.apply(relabeling),
+                    configuration: self.configuration.apply(permutation),
                     constraints: self.constraints.clone(),
                 }
             }
@@ -1253,10 +1253,10 @@ mod tests {
     fn test_stereo_kind_act(
         #[case] kind: StereoKind,
         #[case] index: u32,
-        #[case] perm: Permutation,
+        #[case] permutation: Permutation,
         #[case] expected: u32,
     ) {
-        assert_eq!(kind.act(index, perm), expected);
+        assert_eq!(kind.act(index, permutation), expected);
     }
 
     #[rstest]
@@ -1268,10 +1268,10 @@ mod tests {
     fn test_stereo_coset_ast_apply(
         #[case] coset: StereoCosetAst,
         #[case] kind: StereoKind,
-        #[case] perm: Permutation,
+        #[case] permutation: Permutation,
         #[case] expected: StereoCosetAst,
     ) {
-        assert_eq!(coset.apply(kind, perm), expected);
+        assert_eq!(coset.apply(kind, permutation), expected);
     }
 
     #[rstest]
@@ -1306,10 +1306,10 @@ mod tests {
     #[case::kinded(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)), StereoKind::Tetrahedral.involution(), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
     fn test_stereo_configuration_ast_apply(
         #[case] config: StereoConfigurationAst,
-        #[case] perm: Permutation,
+        #[case] permutation: Permutation,
         #[case] expected: StereoConfigurationAst,
     ) {
-        assert_eq!(config.apply(perm), expected);
+        assert_eq!(config.apply(permutation), expected);
     }
 
     #[rstest]
@@ -1337,10 +1337,10 @@ mod tests {
     #[case::apply(StereoAtomAst::new(StereoKind::Tetrahedral, 0u32), StereoKind::Tetrahedral.involution(), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
     fn test_stereo_atom_ast_apply(
         #[case] input: StereoAtomAst,
-        #[case] perm: Permutation,
+        #[case] permutation: Permutation,
         #[case] expected: StereoAtomAst,
     ) {
-        assert_eq!(input.apply(perm), expected);
+        assert_eq!(input.apply(permutation), expected);
     }
 
     #[rstest]
