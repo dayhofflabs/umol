@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 use umol_graph_core::{
-    EdgeId, FactorOrdering, MaximalCommonSubgraphAlgorithm, NodeId, Unordered,
+    CommonSubgraphEnumerationAlgorithm, EdgeId, FactorOrdering, NodeId, Unordered,
 };
 
 use super::aromatic::AromaticSystemAst;
@@ -311,13 +311,14 @@ fn compose_all(
             .meet(l_b.bond(BondId::from(le)).ast)
             .is_some()
     };
-    // I3-prop noted this must become the complete enumeration (`enumerate_common_subgraphs`) for
-    // compose to be complete; using maximal-only for now (rewire is the next step).
-    let overlaps = r_a.raw_graph().maximal_common_subgraphs(
+    // Every overlap of R_A with L_B — the *complete* common-subgraph enumeration, not just the
+    // maximal ones: each distinct (incl. partial and empty) overlap is a distinct sequential
+    // composite, so completeness (`seq ⊆ composed`) requires all of them.
+    let overlaps = r_a.raw_graph().enumerate_common_subgraphs(
         l_b.raw_graph(),
         &mut node_match,
         &mut edge_match,
-        MaximalCommonSubgraphAlgorithm::BronKerbosch,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
     );
 
     let db_created_atom_rank: HashMap<AtomId, usize> = created_atom_ids(&db)
@@ -1624,8 +1625,29 @@ mod tests {
             ]),
         )]
     )]
-    // Disjoint reactants (C-C, N-N — no matchable atom): the only overlap is empty, so `Full` is the
-    // disjoint sum A ⊔ B — ids concatenated, both bond modifies relabeled (B's bond 0 → 1).
+    fn test_reaction_ast_compose(
+        #[case] a: ReactionAst,
+        #[case] b: ReactionAst,
+        #[case] scope: CompositionScope,
+        #[case] expected: Vec<ReactionAst>,
+    ) {
+        // Complete overlap enumeration returns a composite per overlap (partial and empty
+        // included), so each case pins that its specific composite is *among* the results; the
+        // whole set's soundness / completeness / well-formedness is the property suite's job.
+        let composites = a.compose(&b, scope);
+        for e in &expected {
+            assert!(
+                composites.contains(e),
+                "expected composite absent from compose result: {e:?}",
+            );
+        }
+    }
+
+    // Disjoint reactants (C-C, N-N — no matchable atom) have only the empty overlap, so `compose`
+    // is exactly the disjoint sum A ⊔ B under `Full` (ids concatenated, both bond modifies
+    // relabeled: B's bond 0 → 1), and empty under `RcAnchored` (it drops the RC-missing empty
+    // overlap) — an exact-set assertion.
+    #[rstest]
     #[case::disjoint_sum(
         ReactionAst::new(
             MoleculeAst::from_atoms_and_bonds(
@@ -1673,7 +1695,6 @@ mod tests {
             ]),
         )]
     )]
-    // The empty overlap misses A's reaction center, so `RcAnchored` drops it — no composite.
     #[case::disjoint_rc_anchored(
         ReactionAst::new(
             MoleculeAst::from_atoms_and_bonds(
@@ -1698,7 +1719,7 @@ mod tests {
         CompositionScope::RcAnchored,
         vec![]
     )]
-    fn test_reaction_ast_compose(
+    fn test_reaction_ast_compose_disjoint(
         #[case] a: ReactionAst,
         #[case] b: ReactionAst,
         #[case] scope: CompositionScope,

@@ -457,6 +457,47 @@ proptest! {
         }
     }
 
+    /// P1 completeness (`Full`): every sequential product (B applied after A) is also some
+    /// composite's product. Together with `compose_sound_overlay` (composed ⊆ seq) this is set
+    /// equality at `host = a.lhs`.
+    ///
+    /// IGNORED — completeness needs three coordinated compose fixes, none landed:
+    /// (1) **monomorphism overlaps** — compose enumerates *induced* common subgraphs but `apply` is a
+    ///     monomorphism, so an overlap where R_A carries a bond/overlay L_B lacks (context in A's
+    ///     product) is dropped, missing the sequential product B would produce over that structure;
+    /// (2) **`meet` interface** — `lhs_c`'s overlap entity is A's lhs only, so B's specificity there
+    ///     is lost unless (3) preserves it; it must be `meet(A-lhs, B-lhs)`;
+    /// (3) **delta rebasing** — B's overlap-entity delta carries B's lhs old-state, but in the
+    ///     composite it acts on A's product state, so the `Remove` ast / `ModifyField` `old` must be
+    ///     R_A's value for `canonicalize` to fold A's modify with B's op.
+    /// (3) alone is unsound (it drops B's constraints without (2)); they must land together.
+    #[test]
+    #[ignore = "compose completeness needs monomorphism overlaps + meet interface + delta rebasing together"]
+    fn test_reaction_ast_compose_complete_overlay(
+        a in overlay_reaction_strategy(),
+        b in overlay_reaction_strategy(),
+    ) {
+        let host = a.lhs.clone();
+        let composed: Vec<MoleculeAst> = a
+            .compose(&b, CompositionScope::Full)
+            .iter()
+            .flat_map(|composite| composite.apply(&host, ALG))
+            .collect();
+
+        let intermediates: Vec<MoleculeAst> = a.apply(&host, ALG).collect();
+        let mut sequential: Vec<MoleculeAst> = Vec::new();
+        for intermediate in &intermediates {
+            sequential.extend(b.apply(intermediate, ALG));
+        }
+
+        for product in &sequential {
+            prop_assert!(
+                composed.contains(product),
+                "sequential product missing from composed set (P1 completeness)"
+            );
+        }
+    }
+
     /// Every composite is DPO-valid — no deleted atom leaves a dangling bond or overlay. Confirms
     /// the compose during-check yields dangling-free composites (via the tier-2 `DpoValidator`).
     #[test]

@@ -904,12 +904,13 @@ fn render_atom_ref(id: AtomId, meta: &MoleculeMetadata) -> Edn<'static> {
     }
 }
 
-/// A bond entry — `[a b value]`, or `{:id … :atoms [a b] :type value}` when the bond has an id.
-/// `value` is the rendered `:type` (one bond-dsl, or a `[left right]` vector for a span `:modify`).
+/// A bond entry — `[a b type]`, or `{:id … :atoms [a b] :type type}` when the bond has an id.
+/// `type_edn` is the already-rendered `:type` Edn — one bond-dsl for a molecule, or a `[left right]`
+/// vector / op-wrapped map for a span entry; it is not an ast.
 pub(super) fn render_bond_entry(
     id: BondId,
     [a, b]: [AtomId; 2],
-    value: Edn<'static>,
+    type_edn: Edn<'static>,
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let first = render_atom_ref(a, meta);
@@ -925,10 +926,10 @@ pub(super) fn render_bond_entry(
                 Edn::keyword("atoms"),
                 Edn::Vector(vec![first, second].into()),
             );
-            m.insert(Edn::keyword("type"), value);
+            m.insert(Edn::keyword("type"), type_edn);
             Edn::Map(m)
         }
-        None => Edn::Vector(vec![first, second, value].into()),
+        None => Edn::Vector(vec![first, second, type_edn].into()),
     }
 }
 
@@ -948,41 +949,69 @@ fn render_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
-// TODO: the overlay renderers below (dative / aromatic / multicenter / noncovalent / stereo) build
-// their entries inline. When overlay spans land, factor each into a shared `render_<entity>_entry`
-// (parameterized by the rendered value, like `render_bond_entry`) so `reaction_span` can wrap them
-// with the span op wrappers instead of re-implementing the entry rendering.
+// Overlay entries: `render_<entity>_entry` builds one entry map (`:id`? + participants + `:type`),
+// with `:type` = the caller-supplied `type_edn`. `render_<entity>` passes the ast's rendered type;
+// the span renderers (reaction_span) pass a `{:add|:modify|:remove}`-wrapped type over the same entry.
+
+pub(super) fn render_dative_entry(
+    id: DativeBondId,
+    donors: impl Iterator<Item = AtomId>,
+    acceptor: AtomId,
+    type_edn: Edn<'static>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let mut m = EdnMap::with_capacity(4);
+    if let Some(id) = meta.dative_bond_id(id) {
+        m.insert(
+            Edn::keyword("id"),
+            Edn::Keyword(EdnKeyword::owned(id.to_string())),
+        );
+    }
+    m.insert(
+        Edn::keyword("donors"),
+        Edn::Vector(donors.map(|a| render_atom_ref(a, meta)).collect::<Vec<_>>().into()),
+    );
+    m.insert(Edn::keyword("acceptor"), render_atom_ref(acceptor, meta));
+    m.insert(Edn::keyword("type"), type_edn);
+    Edn::Map(m)
+}
+
 fn render_dative(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let entries: Vec<Edn<'static>> = ast
         .dative_bonds()
         .iter()
         .map(|view| {
-            let mut m = EdnMap::with_capacity(4);
-            if let Some(id) = meta.dative_bond_id(view.id) {
-                m.insert(
-                    Edn::keyword("id"),
-                    Edn::Keyword(EdnKeyword::owned(id.to_string())),
-                );
-            }
-            let donors = Edn::Vector(
-                view.donor_ids()
-                    .map(|a| render_atom_ref(a, meta))
-                    .collect::<Vec<_>>()
-                    .into(),
-            );
-            m.insert(Edn::keyword("donors"), donors);
-            m.insert(
-                Edn::keyword("acceptor"),
-                render_atom_ref(view.acceptor_id(), meta),
-            );
-            m.insert(
-                Edn::keyword("type"),
+            render_dative_entry(
+                view.id,
+                view.donor_ids(),
+                view.acceptor_id(),
                 DativeBondDsl::from_ref(view.ast).to_edn(),
-            );
-            Edn::Map(m)
+                meta,
+            )
         })
         .collect();
     Edn::Vector(entries.into())
+}
+
+pub(super) fn render_aromatic_entry(
+    id: AromaticSystemId,
+    atoms: impl Iterator<Item = AtomId>,
+    type_edn: Edn<'static>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let mut m = EdnMap::with_capacity(3);
+    if let Some(id) = meta.aromatic_system_id(id) {
+        m.insert(
+            Edn::keyword("id"),
+            Edn::Keyword(EdnKeyword::owned(id.to_string())),
+        );
+    }
+    m.insert(
+        Edn::keyword("atoms"),
+        Edn::Vector(atoms.map(|a| render_atom_ref(a, meta)).collect::<Vec<_>>().into()),
+    );
+    m.insert(Edn::keyword("type"), type_edn);
+    Edn::Map(m)
 }
 
 fn render_aromatic(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
@@ -990,26 +1019,36 @@ fn render_aromatic(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
         .aromatic_systems()
         .iter()
         .map(|view| {
-            let mut m = EdnMap::with_capacity(4);
-            if let Some(id) = meta.aromatic_system_id(view.id) {
-                m.insert(
-                    Edn::keyword("id"),
-                    Edn::Keyword(EdnKeyword::owned(id.to_string())),
-                );
-            }
-            let atoms: Vec<Edn<'static>> =
-                view.atom_ids().map(|a| render_atom_ref(a, meta)).collect();
-            m.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
-            m.insert(
-                Edn::keyword("type"),
-                Edn::Str(Cow::Owned(
-                    AromaticSystemDsl::from_ref(view.ast).to_string(),
-                )),
-            );
-            Edn::Map(m)
+            render_aromatic_entry(
+                view.id,
+                view.atom_ids(),
+                Edn::Str(Cow::Owned(AromaticSystemDsl::from_ref(view.ast).to_string())),
+                meta,
+            )
         })
         .collect();
     Edn::Vector(entries.into())
+}
+
+pub(super) fn render_multicenter_entry(
+    id: MulticenterBondId,
+    atoms: impl Iterator<Item = AtomId>,
+    type_edn: Edn<'static>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let mut m = EdnMap::with_capacity(3);
+    if let Some(id) = meta.multicenter_bond_id(id) {
+        m.insert(
+            Edn::keyword("id"),
+            Edn::Keyword(EdnKeyword::owned(id.to_string())),
+        );
+    }
+    m.insert(
+        Edn::keyword("atoms"),
+        Edn::Vector(atoms.map(|a| render_atom_ref(a, meta)).collect::<Vec<_>>().into()),
+    );
+    m.insert(Edn::keyword("type"), type_edn);
+    Edn::Map(m)
 }
 
 fn render_multicenter(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
@@ -1017,26 +1056,36 @@ fn render_multicenter(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static
         .multicenter_bonds()
         .iter()
         .map(|view| {
-            let mut m = EdnMap::with_capacity(4);
-            if let Some(id) = meta.multicenter_bond_id(view.id) {
-                m.insert(
-                    Edn::keyword("id"),
-                    Edn::Keyword(EdnKeyword::owned(id.to_string())),
-                );
-            }
-            let atoms: Vec<Edn<'static>> =
-                view.atom_ids().map(|a| render_atom_ref(a, meta)).collect();
-            m.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
-            m.insert(
-                Edn::keyword("type"),
-                Edn::Str(Cow::Owned(
-                    MulticenterBondDsl::from_ref(view.ast).to_string(),
-                )),
-            );
-            Edn::Map(m)
+            render_multicenter_entry(
+                view.id,
+                view.atom_ids(),
+                Edn::Str(Cow::Owned(MulticenterBondDsl::from_ref(view.ast).to_string())),
+                meta,
+            )
         })
         .collect();
     Edn::Vector(entries.into())
+}
+
+pub(super) fn render_noncovalent_entry(
+    id: NoncovalentBondId,
+    [a, b]: [AtomId; 2],
+    type_edn: Edn<'static>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let mut m = EdnMap::with_capacity(3);
+    if let Some(id) = meta.noncovalent_bond_id(id) {
+        m.insert(
+            Edn::keyword("id"),
+            Edn::Keyword(EdnKeyword::owned(id.to_string())),
+        );
+    }
+    m.insert(
+        Edn::keyword("atoms"),
+        Edn::Vector(vec![render_atom_ref(a, meta), render_atom_ref(b, meta)].into()),
+    );
+    m.insert(Edn::keyword("type"), type_edn);
+    Edn::Map(m)
 }
 
 fn render_noncovalent(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
@@ -1044,26 +1093,35 @@ fn render_noncovalent(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static
         .noncovalent_bonds()
         .iter()
         .map(|view| {
-            let mut m = EdnMap::with_capacity(4);
-            if let Some(id) = meta.noncovalent_bond_id(view.id) {
-                m.insert(
-                    Edn::keyword("id"),
-                    Edn::Keyword(EdnKeyword::owned(id.to_string())),
-                );
-            }
-            let [a, b] = view.atom_ids();
-            m.insert(
-                Edn::keyword("atoms"),
-                Edn::Vector(vec![render_atom_ref(a, meta), render_atom_ref(b, meta)].into()),
-            );
-            m.insert(
-                Edn::keyword("type"),
+            render_noncovalent_entry(
+                view.id,
+                view.atom_ids(),
                 NoncovalentBondDsl::from_ref(view.ast).to_edn(),
-            );
-            Edn::Map(m)
+                meta,
+            )
         })
         .collect();
     Edn::Vector(entries.into())
+}
+
+pub(super) fn render_stereo_atom_entry(
+    id: StereoAtomId,
+    site: AtomId,
+    ligands: Vec<Edn<'static>>,
+    type_edn: Edn<'static>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let mut m = EdnMap::with_capacity(4);
+    if let Some(id) = meta.stereo_atom_id(id) {
+        m.insert(
+            Edn::keyword("id"),
+            Edn::Keyword(EdnKeyword::owned(id.to_string())),
+        );
+    }
+    m.insert(Edn::keyword("site"), render_atom_ref(site, meta));
+    m.insert(Edn::keyword("ligands"), Edn::Vector(ligands.into()));
+    m.insert(Edn::keyword("type"), type_edn);
+    Edn::Map(m)
 }
 
 fn render_stereo_atoms(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
@@ -1071,27 +1129,36 @@ fn render_stereo_atoms(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'stati
         .stereo_atoms()
         .iter()
         .map(|view| {
-            let mut m = EdnMap::with_capacity(4);
-            if let Some(id) = meta.stereo_atom_id(view.id) {
-                m.insert(
-                    Edn::keyword("id"),
-                    Edn::Keyword(EdnKeyword::owned(id.to_string())),
-                );
-            }
-            m.insert(Edn::keyword("site"), render_atom_ref(view.site_id(), meta));
-            let ligands: Vec<Edn<'static>> = view
-                .ligands()
-                .map(|l| render_stereo_ligand(l, meta))
-                .collect();
-            m.insert(Edn::keyword("ligands"), Edn::Vector(ligands.into()));
-            m.insert(
-                Edn::keyword("type"),
+            render_stereo_atom_entry(
+                view.id,
+                view.site_id(),
+                view.ligands().map(|l| render_stereo_ligand(l, meta)).collect(),
                 StereoAtomDsl::from_ref(view.ast).to_edn(),
-            );
-            Edn::Map(m)
+                meta,
+            )
         })
         .collect();
     Edn::Vector(entries.into())
+}
+
+pub(super) fn render_stereo_bond_entry(
+    id: StereoBondId,
+    site: BondId,
+    ligands: Vec<Edn<'static>>,
+    type_edn: Edn<'static>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let mut m = EdnMap::with_capacity(4);
+    if let Some(id) = meta.stereo_bond_id(id) {
+        m.insert(
+            Edn::keyword("id"),
+            Edn::Keyword(EdnKeyword::owned(id.to_string())),
+        );
+    }
+    m.insert(Edn::keyword("site"), render_bond_ref(site, meta));
+    m.insert(Edn::keyword("ligands"), Edn::Vector(ligands.into()));
+    m.insert(Edn::keyword("type"), type_edn);
+    Edn::Map(m)
 }
 
 fn render_stereo_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
@@ -1099,24 +1166,13 @@ fn render_stereo_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'stati
         .stereo_bonds()
         .iter()
         .map(|view| {
-            let mut m = EdnMap::with_capacity(4);
-            if let Some(id) = meta.stereo_bond_id(view.id) {
-                m.insert(
-                    Edn::keyword("id"),
-                    Edn::Keyword(EdnKeyword::owned(id.to_string())),
-                );
-            }
-            m.insert(Edn::keyword("site"), render_bond_ref(view.site_id(), meta));
-            let ligands: Vec<Edn<'static>> = view
-                .ligands()
-                .map(|l| render_stereo_ligand(l, meta))
-                .collect();
-            m.insert(Edn::keyword("ligands"), Edn::Vector(ligands.into()));
-            m.insert(
-                Edn::keyword("type"),
+            render_stereo_bond_entry(
+                view.id,
+                view.site_id(),
+                view.ligands().map(|l| render_stereo_ligand(l, meta)).collect(),
                 StereoBondDsl::from_ref(view.ast).to_edn(),
-            );
-            Edn::Map(m)
+                meta,
+            )
         })
         .collect();
     Edn::Vector(entries.into())
