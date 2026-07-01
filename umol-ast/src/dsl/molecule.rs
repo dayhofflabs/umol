@@ -52,7 +52,6 @@ use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::noncovalent::NoncovalentBondAst;
 use crate::ast::stereo::{StereoAtomAst, StereoBondAst};
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::StereoLigandView;
 
 /// Surface DSL for a whole molecule. Pairs `MoleculeAst` with `MoleculeMetadata`;
 /// fields are private so metadata cannot drift onto a different AST.
@@ -1132,7 +1131,7 @@ fn render_stereo_atoms(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'stati
             render_stereo_atom_entry(
                 view.id,
                 view.site_id(),
-                view.ligands().map(|l| render_stereo_ligand(l, meta)).collect(),
+                view.ligand_frame().into_iter().map(|l| render_stereo_ligand(l, meta)).collect(),
                 StereoAtomDsl::from_ref(view.ast).to_edn(),
                 meta,
             )
@@ -1169,7 +1168,7 @@ fn render_stereo_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'stati
             render_stereo_bond_entry(
                 view.id,
                 view.site_id(),
-                view.ligands().map(|l| render_stereo_ligand(l, meta)).collect(),
+                view.ligand_frame().into_iter().map(|l| render_stereo_ligand(l, meta)).collect(),
                 StereoBondDsl::from_ref(view.ast).to_edn(),
                 meta,
             )
@@ -1178,9 +1177,9 @@ fn render_stereo_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'stati
     Edn::Vector(entries.into())
 }
 
-fn render_stereo_ligand(ligand: StereoLigandView<'_>, meta: &MoleculeMetadata) -> Edn<'static> {
-    let atom = render_atom_ref(ligand.atom_id(), meta);
-    match ligand.kind() {
+pub(super) fn render_stereo_ligand(ligand: StereoLigand, meta: &MoleculeMetadata) -> Edn<'static> {
+    let atom = render_atom_ref(ligand.atom_id, meta);
+    match ligand.kind {
         StereoLigandKind::Atom => atom,
         StereoLigandKind::ImplicitHydrogen => Edn::Vector(vec![Edn::keyword("h"), atom].into()),
         StereoLigandKind::LonePair => Edn::Vector(vec![Edn::keyword("lp"), atom].into()),
@@ -1685,7 +1684,7 @@ pub(super) fn parse_bond_entry(edn: &Edn<'_>) -> Result<BondEntryInput, DeError>
     }
 }
 
-fn parse_dative_bond_entry(edn: &Edn<'_>) -> Result<DativeBondEntryInput, DeError> {
+pub(super) fn parse_dative_bond_entry(edn: &Edn<'_>) -> Result<DativeBondEntryInput, DeError> {
     let m = expect_map(edn, "dative-bond-entry")?;
     let donors = parse_vec(
         required_key(m, "donors", "dative-bond-entry")?,
@@ -1700,7 +1699,7 @@ fn parse_dative_bond_entry(edn: &Edn<'_>) -> Result<DativeBondEntryInput, DeErro
     })
 }
 
-fn parse_aromatic_system_entry(edn: &Edn<'_>) -> Result<AromaticSystemEntryInput, DeError> {
+pub(super) fn parse_aromatic_system_entry(edn: &Edn<'_>) -> Result<AromaticSystemEntryInput, DeError> {
     let m = expect_map(edn, "aromatic-system-entry")?;
     let system = AromaticSystemDsl::from_edn(required_key(m, "type", "aromatic-system-entry")?)?;
     Ok(AromaticSystemEntryInput {
@@ -1714,7 +1713,7 @@ fn parse_aromatic_system_entry(edn: &Edn<'_>) -> Result<AromaticSystemEntryInput
     })
 }
 
-fn parse_multicenter_bond_entry(edn: &Edn<'_>) -> Result<MulticenterBondEntryInput, DeError> {
+pub(super) fn parse_multicenter_bond_entry(edn: &Edn<'_>) -> Result<MulticenterBondEntryInput, DeError> {
     let m = expect_map(edn, "multicenter-bond-entry")?;
     let bond = MulticenterBondDsl::from_edn(required_key(m, "type", "multicenter-bond-entry")?)?;
     Ok(MulticenterBondEntryInput {
@@ -1728,7 +1727,7 @@ fn parse_multicenter_bond_entry(edn: &Edn<'_>) -> Result<MulticenterBondEntryInp
     })
 }
 
-fn parse_noncovalent_bond_entry(edn: &Edn<'_>) -> Result<NoncovalentBondEntryInput, DeError> {
+pub(super) fn parse_noncovalent_bond_entry(edn: &Edn<'_>) -> Result<NoncovalentBondEntryInput, DeError> {
     let m = expect_map(edn, "noncovalent-bond-entry")?;
     let atoms = parse_vec(
         required_key(m, "atoms", "noncovalent-bond-entry")?,
@@ -1744,7 +1743,7 @@ fn parse_noncovalent_bond_entry(edn: &Edn<'_>) -> Result<NoncovalentBondEntryInp
     })
 }
 
-fn parse_stereo_ligand(edn: &Edn<'_>) -> Result<StereoLigandInput, DeError> {
+pub(super) fn parse_stereo_ligand(edn: &Edn<'_>) -> Result<StereoLigandInput, DeError> {
     match edn {
         Edn::Vector(v) if v.len() == 2 => {
             let Edn::Keyword(tag) = &v[0] else {
@@ -1766,7 +1765,7 @@ fn parse_stereo_ligand(edn: &Edn<'_>) -> Result<StereoLigandInput, DeError> {
     }
 }
 
-fn parse_stereo_atom_entry(edn: &Edn<'_>) -> Result<StereoAtomEntryInput, DeError> {
+pub(super) fn parse_stereo_atom_entry(edn: &Edn<'_>) -> Result<StereoAtomEntryInput, DeError> {
     let m = expect_map(edn, "stereo-atom-entry")?;
     Ok(StereoAtomEntryInput {
         id: optional_id(m)?,
@@ -1780,7 +1779,7 @@ fn parse_stereo_atom_entry(edn: &Edn<'_>) -> Result<StereoAtomEntryInput, DeErro
     })
 }
 
-fn parse_stereo_bond_entry(edn: &Edn<'_>) -> Result<StereoBondEntryInput, DeError> {
+pub(super) fn parse_stereo_bond_entry(edn: &Edn<'_>) -> Result<StereoBondEntryInput, DeError> {
     let m = expect_map(edn, "stereo-bond-entry")?;
     Ok(StereoBondEntryInput {
         id: optional_id(m)?,

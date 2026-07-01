@@ -77,8 +77,7 @@ impl StereoKind {
     }
 
     /// Act on coset index `index` by `permutation`, through the class's coset algebra.
-    #[allow(unused)]
-    fn act(self, index: u32, permutation: Permutation) -> u32 {
+    pub fn act(self, index: u32, permutation: Permutation) -> u32 {
         space(self.class_key())
             .reindex(index, permutation)
             .expect("act: valid coset index and relabeling")
@@ -143,6 +142,28 @@ impl StereoConfigurationAst {
         match self {
             Self::Kinded(_, coset) => Some(coset),
             Self::Undetermined => None,
+        }
+    }
+
+    /// Relabel the ligand positions (`^`); `Undetermined` is fixed.
+    pub fn apply(&self, relabeling: Permutation) -> Self {
+        self.map_kinded(|kind, coset| coset.apply(kind, relabeling))
+    }
+
+    /// The kind involution (`~`).
+    pub fn swap(&self) -> Self {
+        self.map_kinded(|kind, coset| coset.swap(kind))
+    }
+
+    /// The enantiomer / mirror (`'`).
+    pub fn mirror(&self) -> Self {
+        self.map_kinded(|kind, coset| coset.mirror(kind))
+    }
+
+    fn map_kinded(&self, f: impl FnOnce(StereoKind, &StereoCosetAst) -> StereoCosetAst) -> Self {
+        match self {
+            Self::Undetermined => Self::Undetermined,
+            Self::Kinded(kind, coset) => Self::Kinded(*kind, f(*kind, coset)),
         }
     }
 }
@@ -408,6 +429,37 @@ impl StereoCosetAst {
 
     pub fn term(term: StereoTerm) -> Self {
         Self::Term(Box::new(term))
+    }
+
+    /// Relabel the ligand positions (the `^` op): move each literal coset index through the kind's
+    /// coset algebra, eager on `Lit`/`LitSet`; an open `Term` keeps the operator layer.
+    pub fn apply(&self, kind: StereoKind, relabeling: Permutation) -> Self {
+        self.map_index(|c| kind.act(c, relabeling), |t| StereoTerm::apply(t, relabeling))
+    }
+
+    /// The kind involution (the `~` op).
+    pub fn swap(&self, kind: StereoKind) -> Self {
+        self.map_index(|c| kind.act(c, kind.involution()), StereoTerm::swap)
+    }
+
+    /// The enantiomer / mirror (the `'` op).
+    pub fn mirror(&self, kind: StereoKind) -> Self {
+        self.map_index(|c| kind.act(c, kind.mirror_permutation()), StereoTerm::mirror)
+    }
+
+    /// Map each literal index by `lit`; an open `Term` is wrapped by `term` (the only case that keeps
+    /// an operator layer — a bare variable cannot be evaluated). `Undetermined` is fixed.
+    fn map_index(
+        &self,
+        lit: impl Fn(u32) -> u32,
+        term: impl FnOnce(StereoTerm) -> StereoTerm,
+    ) -> Self {
+        match self {
+            Self::Undetermined => Self::Undetermined,
+            Self::Lit(c) => Self::Lit(lit(*c)),
+            Self::LitSet(s) => Self::LitSet(s.iter().map(|&c| lit(c)).collect()),
+            Self::Term(t) => Self::term(term((**t).clone())),
+        }
     }
 }
 
@@ -680,6 +732,30 @@ macro_rules! stereo_element {
             /// zero default; it is ground iff its coset is ground.
             pub fn into_ground(self) -> Self {
                 self
+            }
+
+            /// Relabel the ligand positions (`^`); constraints are positionless and unchanged.
+            pub fn apply(&self, relabeling: Permutation) -> Self {
+                Self {
+                    configuration: self.configuration.apply(relabeling),
+                    constraints: self.constraints.clone(),
+                }
+            }
+
+            /// The kind involution (`~`).
+            pub fn swap(&self) -> Self {
+                Self {
+                    configuration: self.configuration.swap(),
+                    constraints: self.constraints.clone(),
+                }
+            }
+
+            /// The enantiomer / mirror (`'`).
+            pub fn mirror(&self) -> Self {
+                Self {
+                    configuration: self.configuration.mirror(),
+                    constraints: self.constraints.clone(),
+                }
             }
         }
 
@@ -1156,5 +1232,120 @@ mod tests {
         #[case] expected: Result<StereoBondAst, Contradiction>,
     ) {
         assert_eq!(input.canonicalize(), expected);
+    }
+
+    #[rstest]
+    #[case::identity(StereoKind::Tetrahedral, 0, Permutation::identity(4), 0)]
+    #[case::involution(StereoKind::Tetrahedral, 0, StereoKind::Tetrahedral.involution(), 1)]
+    #[case::involution_back(StereoKind::Tetrahedral, 1, StereoKind::Tetrahedral.involution(), 0)]
+    fn test_stereo_kind_act(
+        #[case] kind: StereoKind,
+        #[case] index: u32,
+        #[case] perm: Permutation,
+        #[case] expected: u32,
+    ) {
+        assert_eq!(kind.act(index, perm), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(StereoCosetAst::Undetermined, StereoKind::Tetrahedral, Permutation::identity(4), StereoCosetAst::Undetermined)]
+    #[case::lit_identity(StereoCosetAst::Lit(0), StereoKind::Tetrahedral, Permutation::identity(4), StereoCosetAst::Lit(0))]
+    #[case::lit_involution(StereoCosetAst::Lit(0), StereoKind::Tetrahedral, StereoKind::Tetrahedral.involution(), StereoCosetAst::Lit(1))]
+    #[case::lit_set(StereoCosetAst::lit_set([0]), StereoKind::Tetrahedral, StereoKind::Tetrahedral.involution(), StereoCosetAst::lit_set([1]))]
+    #[case::term_layers(StereoCosetAst::term(StereoTerm::var("x")), StereoKind::Tetrahedral, Permutation::identity(4), StereoCosetAst::term(StereoTerm::apply(StereoTerm::var("x"), Permutation::identity(4))))]
+    fn test_stereo_coset_ast_apply(
+        #[case] coset: StereoCosetAst,
+        #[case] kind: StereoKind,
+        #[case] perm: Permutation,
+        #[case] expected: StereoCosetAst,
+    ) {
+        assert_eq!(coset.apply(kind, perm), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(StereoCosetAst::Undetermined, StereoKind::Tetrahedral, StereoCosetAst::Undetermined)]
+    #[case::tetrahedral_0(StereoCosetAst::Lit(0), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
+    #[case::tetrahedral_1(StereoCosetAst::Lit(1), StereoKind::Tetrahedral, StereoCosetAst::Lit(0))]
+    #[case::cis_trans(StereoCosetAst::Lit(0), StereoKind::CisTrans, StereoCosetAst::Lit(1))]
+    #[case::term_layers(StereoCosetAst::term(StereoTerm::var("x")), StereoKind::Tetrahedral, StereoCosetAst::term(StereoTerm::swap(StereoTerm::var("x"))))]
+    fn test_stereo_coset_ast_swap(
+        #[case] coset: StereoCosetAst,
+        #[case] kind: StereoKind,
+        #[case] expected: StereoCosetAst,
+    ) {
+        assert_eq!(coset.swap(kind), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(StereoCosetAst::Undetermined, StereoKind::Tetrahedral, StereoCosetAst::Undetermined)]
+    #[case::chiral(StereoCosetAst::Lit(0), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
+    #[case::achiral_noop(StereoCosetAst::Lit(0), StereoKind::CisTrans, StereoCosetAst::Lit(0))]
+    #[case::term_layers(StereoCosetAst::term(StereoTerm::var("x")), StereoKind::Tetrahedral, StereoCosetAst::term(StereoTerm::mirror(StereoTerm::var("x"))))]
+    fn test_stereo_coset_ast_mirror(
+        #[case] coset: StereoCosetAst,
+        #[case] kind: StereoKind,
+        #[case] expected: StereoCosetAst,
+    ) {
+        assert_eq!(coset.mirror(kind), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(StereoConfigurationAst::Undetermined, Permutation::identity(4), StereoConfigurationAst::Undetermined)]
+    #[case::kinded(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)), StereoKind::Tetrahedral.involution(), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
+    fn test_stereo_configuration_ast_apply(
+        #[case] config: StereoConfigurationAst,
+        #[case] perm: Permutation,
+        #[case] expected: StereoConfigurationAst,
+    ) {
+        assert_eq!(config.apply(perm), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(StereoConfigurationAst::Undetermined, StereoConfigurationAst::Undetermined)]
+    #[case::kinded(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
+    fn test_stereo_configuration_ast_swap(
+        #[case] config: StereoConfigurationAst,
+        #[case] expected: StereoConfigurationAst,
+    ) {
+        assert_eq!(config.swap(), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(StereoConfigurationAst::Undetermined, StereoConfigurationAst::Undetermined)]
+    #[case::chiral(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
+    #[case::achiral_noop(StereoConfigurationAst::Kinded(StereoKind::CisTrans, StereoCosetAst::Lit(0)), StereoConfigurationAst::Kinded(StereoKind::CisTrans, StereoCosetAst::Lit(0)))]
+    fn test_stereo_configuration_ast_mirror(
+        #[case] config: StereoConfigurationAst,
+        #[case] expected: StereoConfigurationAst,
+    ) {
+        assert_eq!(config.mirror(), expected);
+    }
+
+    #[rstest]
+    #[case::apply(StereoAtomAst::new(StereoKind::Tetrahedral, 0u32), StereoKind::Tetrahedral.involution(), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
+    fn test_stereo_atom_ast_apply(
+        #[case] input: StereoAtomAst,
+        #[case] perm: Permutation,
+        #[case] expected: StereoAtomAst,
+    ) {
+        assert_eq!(input.apply(perm), expected);
+    }
+
+    #[rstest]
+    #[case::tetrahedral(StereoAtomAst::new(StereoKind::Tetrahedral, 0u32), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
+    fn test_stereo_atom_ast_swap(#[case] input: StereoAtomAst, #[case] expected: StereoAtomAst) {
+        assert_eq!(input.swap(), expected);
+    }
+
+    #[rstest]
+    #[case::chiral(StereoAtomAst::new(StereoKind::Tetrahedral, 0u32), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
+    fn test_stereo_atom_ast_mirror(#[case] input: StereoAtomAst, #[case] expected: StereoAtomAst) {
+        assert_eq!(input.mirror(), expected);
+    }
+
+    #[rstest]
+    #[case::cis_trans(StereoBondAst::new(StereoKind::CisTrans, 0u32), StereoBondAst::new(StereoKind::CisTrans, 1u32))]
+    fn test_stereo_bond_ast_swap(#[case] input: StereoBondAst, #[case] expected: StereoBondAst) {
+        assert_eq!(input.swap(), expected);
     }
 }

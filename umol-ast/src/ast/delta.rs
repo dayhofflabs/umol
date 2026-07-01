@@ -11,6 +11,7 @@ use std::mem::{discriminant, Discriminant};
 use std::slice::{Iter, IterMut};
 
 use umol_graph_core::{FactorOrdering, Unordered};
+use umol_perm::Permutation;
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
@@ -19,20 +20,24 @@ use super::constraint::{
     AromaticSystemConstraint, AromaticSystemConstraintKey, AtomConstraint, AtomConstraintKey,
     BondConstraint, BondConstraintKey, Constraint, DativeBondConstraint, DativeBondConstraintKey,
     MulticenterBondConstraint, MulticenterBondConstraintKey, NoncovalentBondConstraint,
-    NoncovalentBondConstraintKey,
+    NoncovalentBondConstraintKey, StereoAtomConstraint, StereoBondConstraint,
 };
 use super::dative::DativeBondAst;
 use super::edit::{
     AromaticSystemFieldChange, AtomFieldChange, BondFieldChange, DativeBondFieldChange,
-    MulticenterBondFieldChange, NoncovalentBondFieldChange,
+    MulticenterBondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
+    StereoBondFieldChange,
 };
 use super::error::Contradiction;
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
+use super::ligand::StereoLigand;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 use super::remap::IdRemapping;
+use super::stereo::{StereoAtomAst, StereoBondAst};
 use super::traits::{Canonicalize, EntityPatch};
 
 /// A resolved edit to a single atom.
@@ -308,6 +313,170 @@ impl NoncovalentBondDelta {
                 old: new,
                 new: old,
             },
+        }
+    }
+}
+
+/// A resolved edit to a single stereo atom. `site` + `ligands` are the structural payload; identity
+/// is the id. `ModifyField`/`ModifyConstraint` are the absolute set-ops (as for DAMN); `Apply`,
+/// `Swap`, `Mirror` are the frame-relative coset ops — they carry no pre-state, resolving against
+/// the matched host configuration at apply.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum StereoAtomDelta {
+    Add {
+        id: StereoAtomId,
+        site: AtomId,
+        ligands: Vec<StereoLigand>,
+        ast: StereoAtomAst,
+    },
+    Remove {
+        id: StereoAtomId,
+        site: AtomId,
+        ligands: Vec<StereoLigand>,
+        ast: StereoAtomAst,
+    },
+    ModifyField {
+        id: StereoAtomId,
+        change: StereoAtomFieldChange,
+    },
+    ModifyConstraint {
+        id: StereoAtomId,
+        old: Option<StereoAtomConstraint>,
+        new: Option<StereoAtomConstraint>,
+    },
+    Apply {
+        id: StereoAtomId,
+        relabeling: Permutation,
+    },
+    Swap {
+        id: StereoAtomId,
+    },
+    Mirror {
+        id: StereoAtomId,
+    },
+}
+
+impl StereoAtomDelta {
+    pub fn inverse(self) -> Self {
+        match self {
+            Self::Add {
+                id,
+                site,
+                ligands,
+                ast,
+            } => Self::Remove {
+                id,
+                site,
+                ligands,
+                ast,
+            },
+            Self::Remove {
+                id,
+                site,
+                ligands,
+                ast,
+            } => Self::Add {
+                id,
+                site,
+                ligands,
+                ast,
+            },
+            Self::ModifyField { id, change } => Self::ModifyField {
+                id,
+                change: change.inverse(),
+            },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id,
+                old: new,
+                new: old,
+            },
+            Self::Apply { id, relabeling } => Self::Apply {
+                id,
+                relabeling: relabeling.inverse(),
+            },
+            Self::Swap { id } => Self::Swap { id },
+            Self::Mirror { id } => Self::Mirror { id },
+        }
+    }
+}
+
+/// A resolved edit to a single stereo bond. `site` (a bond) + `ligands` are the structural payload;
+/// identity is the id. Same op vocabulary as `StereoAtomDelta`.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum StereoBondDelta {
+    Add {
+        id: StereoBondId,
+        site: BondId,
+        ligands: Vec<StereoLigand>,
+        ast: StereoBondAst,
+    },
+    Remove {
+        id: StereoBondId,
+        site: BondId,
+        ligands: Vec<StereoLigand>,
+        ast: StereoBondAst,
+    },
+    ModifyField {
+        id: StereoBondId,
+        change: StereoBondFieldChange,
+    },
+    ModifyConstraint {
+        id: StereoBondId,
+        old: Option<StereoBondConstraint>,
+        new: Option<StereoBondConstraint>,
+    },
+    Apply {
+        id: StereoBondId,
+        relabeling: Permutation,
+    },
+    Swap {
+        id: StereoBondId,
+    },
+    Mirror {
+        id: StereoBondId,
+    },
+}
+
+impl StereoBondDelta {
+    pub fn inverse(self) -> Self {
+        match self {
+            Self::Add {
+                id,
+                site,
+                ligands,
+                ast,
+            } => Self::Remove {
+                id,
+                site,
+                ligands,
+                ast,
+            },
+            Self::Remove {
+                id,
+                site,
+                ligands,
+                ast,
+            } => Self::Add {
+                id,
+                site,
+                ligands,
+                ast,
+            },
+            Self::ModifyField { id, change } => Self::ModifyField {
+                id,
+                change: change.inverse(),
+            },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id,
+                old: new,
+                new: old,
+            },
+            Self::Apply { id, relabeling } => Self::Apply {
+                id,
+                relabeling: relabeling.inverse(),
+            },
+            Self::Swap { id } => Self::Swap { id },
+            Self::Mirror { id } => Self::Mirror { id },
         }
     }
 }
@@ -1776,7 +1945,10 @@ mod tests {
     use super::super::noncovalent::NoncovalentBondKind;
     use super::super::value::ValueAst;
     use super::*;
-    use crate::ast::BooleanAst;
+    use crate::ast::{
+        BooleanAst, StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigandKind,
+        StereogenicityAst,
+    };
 
     #[rstest]
     #[case::add_remove(
@@ -1846,6 +2018,98 @@ mod tests {
         }
     )]
     fn test_bond_delta_inverse(#[case] input: BondDelta, #[case] expected: BondDelta) {
+        assert_eq!(input.clone().inverse(), expected);
+        assert_eq!(input.clone().inverse().inverse(), input);
+    }
+
+    #[rstest]
+    #[case::add_remove(
+        StereoAtomDelta::Add {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+            ast: StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+        },
+        StereoAtomDelta::Remove {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+            ast: StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+        }
+    )]
+    #[case::set_field(
+        StereoAtomDelta::ModifyField {
+            id: StereoAtomId(1),
+            change: StereoAtomFieldChange::Configuration {
+                old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+                new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            },
+        },
+        StereoAtomDelta::ModifyField {
+            id: StereoAtomId(1),
+            change: StereoAtomFieldChange::Configuration {
+                old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+            },
+        }
+    )]
+    #[case::set_constraint(
+        StereoAtomDelta::ModifyConstraint {
+            id: StereoAtomId(2),
+            old: None,
+            new: Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Undetermined)),
+        },
+        StereoAtomDelta::ModifyConstraint {
+            id: StereoAtomId(2),
+            old: Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Undetermined)),
+            new: None,
+        }
+    )]
+    #[case::apply(
+        StereoAtomDelta::Apply { id: StereoAtomId(3), relabeling: Permutation::from_image(4, &[1, 2, 0, 3]) },
+        StereoAtomDelta::Apply { id: StereoAtomId(3), relabeling: Permutation::from_image(4, &[2, 0, 1, 3]) }
+    )]
+    #[case::swap(
+        StereoAtomDelta::Swap { id: StereoAtomId(4) },
+        StereoAtomDelta::Swap { id: StereoAtomId(4) }
+    )]
+    #[case::mirror(
+        StereoAtomDelta::Mirror { id: StereoAtomId(5) },
+        StereoAtomDelta::Mirror { id: StereoAtomId(5) }
+    )]
+    fn test_stereo_atom_delta_inverse(#[case] input: StereoAtomDelta, #[case] expected: StereoAtomDelta) {
+        assert_eq!(input.clone().inverse(), expected);
+        assert_eq!(input.clone().inverse().inverse(), input);
+    }
+
+    #[rstest]
+    #[case::add_remove(
+        StereoBondDelta::Add {
+            id: StereoBondId(0),
+            site: BondId(0),
+            ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+            ast: StereoBondAst::new(StereoKind::CisTrans, 0u32),
+        },
+        StereoBondDelta::Remove {
+            id: StereoBondId(0),
+            site: BondId(0),
+            ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+            ast: StereoBondAst::new(StereoKind::CisTrans, 0u32),
+        }
+    )]
+    #[case::apply(
+        StereoBondDelta::Apply { id: StereoBondId(1), relabeling: Permutation::from_image(4, &[1, 2, 0, 3]) },
+        StereoBondDelta::Apply { id: StereoBondId(1), relabeling: Permutation::from_image(4, &[2, 0, 1, 3]) }
+    )]
+    #[case::swap(
+        StereoBondDelta::Swap { id: StereoBondId(2) },
+        StereoBondDelta::Swap { id: StereoBondId(2) }
+    )]
+    #[case::mirror(
+        StereoBondDelta::Mirror { id: StereoBondId(3) },
+        StereoBondDelta::Mirror { id: StereoBondId(3) }
+    )]
+    fn test_stereo_bond_delta_inverse(#[case] input: StereoBondDelta, #[case] expected: StereoBondDelta) {
         assert_eq!(input.clone().inverse(), expected);
         assert_eq!(input.clone().inverse().inverse(), input);
     }

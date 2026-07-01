@@ -157,6 +157,20 @@ impl ReactionSpanAst {
         &self.noncovalent_bonds
     }
 
+    pub(crate) fn stereo_atoms(
+        &self,
+    ) -> &FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, EntitySpan<StereoAtomAst>>
+    {
+        &self.stereo_atoms
+    }
+
+    pub(crate) fn stereo_bonds(
+        &self,
+    ) -> &FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, EntitySpan<StereoBondAst>>
+    {
+        &self.stereo_bonds
+    }
+
     pub fn constraints(&self) -> &[ConstraintSpan] {
         &self.constraints
     }

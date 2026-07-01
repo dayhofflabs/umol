@@ -198,7 +198,7 @@ impl NoncovalentBondFieldChange {
 /// Per-field old/new payload for a stereo-atom mutation. Only `coset` is
 /// settable: `kind` fixes the coset's group, so changing it would desync the
 /// configuration — kind changes go through remove + add.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StereoAtomFieldChange {
     Configuration {
         old: StereoConfigurationAst,
@@ -216,7 +216,7 @@ impl StereoAtomFieldChange {
 
 /// Per-field old/new payload for a stereo-bond mutation. Coset-only, for the
 /// same reason as `StereoAtomFieldChange`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StereoBondFieldChange {
     Configuration {
         old: StereoConfigurationAst,

@@ -2,31 +2,52 @@
 //! complete before/after value (`EntitySpan`) rather than a delta. Entity ids, bond endpoints,
 //! and constraint topology refs are resolved in `into_ast`.
 
+use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use indexmap::IndexMap;
 use umol_edn::{read_string, DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
-use umol_graph_core::{EdgeId, Graph};
+use umol_graph_core::{
+    EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId,
+    RelationParticipant, VarRelationSet,
+};
 
+use super::aromatic::AromaticSystemDsl;
 use super::atom::AtomDsl;
 use super::bond::BondDsl;
 use super::config::MoleculeDefaults;
 use super::constraint::{ConstraintDsl, EntityCounts};
+use super::dative::DativeBondDsl;
 use super::edn_utils::{
     optional_id, pair, parse_vec, read_map, read_vec, required_key, single_key_map, two_atom_refs,
 };
 use super::error::ParseError;
 use super::molecule::{
-    parse_atom_aliases, parse_atom_entry, parse_bond_entry, read_atom_aliases, render_atom_value,
-    render_bond_entry, resolve_atom_spec, AtomSpecInput, MoleculeMetadata,
+    parse_aromatic_system_entry, parse_atom_aliases, parse_atom_entry, parse_bond_entry,
+    parse_dative_bond_entry, parse_multicenter_bond_entry, parse_noncovalent_bond_entry,
+    parse_stereo_atom_entry, parse_stereo_bond_entry, parse_stereo_ligand, read_atom_aliases,
+    render_aromatic_entry, render_atom_value, render_bond_entry, render_dative_entry,
+    render_multicenter_entry, render_noncovalent_entry, render_stereo_atom_entry,
+    render_stereo_bond_entry, render_stereo_ligand, resolve_atom_spec, AtomSpecInput,
+    MoleculeMetadata, StereoLigandInput,
 };
-use super::refs::AtomRef;
+use super::multicenter::MulticenterBondDsl;
+use super::noncovalent::NoncovalentBondDsl;
+use super::refs::{AtomRef, BondRef};
+use super::stereo::{StereoAtomDsl, StereoBondDsl};
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
-use crate::ast::id::{AtomId, BondId};
+use crate::ast::id::{
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
+};
+use crate::ast::ligand::StereoLigand;
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::{Constraint, ConstraintSpan, EntitySpan, ReactionSpanAst};
+use crate::ast::{
+    AromaticSystemAst, Constraint, ConstraintSpan, DativeBondAst, EntitySpan, MulticenterBondAst,
+    NoncovalentBondAst, ReactionSpanAst, StereoAtomAst, StereoBondAst,
+};
 
 /// Surface DSL for a reaction span. Pairs `ReactionSpanAst` with the `MoleculeMetadata` recording
 /// its span-frame id↔name bindings; fields private so metadata cannot drift onto a different AST.
@@ -67,6 +88,61 @@ fn map_span<T, U>(span: &EntitySpan<T>, f: impl Fn(&T) -> U) -> EntitySpan<U> {
     }
 }
 
+/// Rebuild an overlay relation set with its per-side payload mapped through `f`; participants
+/// (the overlay topology) carry through unchanged. One per relation-set shape.
+fn map_fixed_var_span<L1, O1, const N1: usize, L2, O2, T, U>(
+    set: &FixedVarBirelationSet<L1, O1, N1, L2, O2, EntitySpan<T>>,
+    f: impl Fn(&T) -> U,
+) -> FixedVarBirelationSet<L1, O1, N1, L2, O2, EntitySpan<U>>
+where
+    L1: RelationParticipant,
+    O1: FactorOrdering,
+    L2: RelationParticipant,
+    O2: FactorOrdering,
+{
+    FixedVarBirelationSet::new(
+        set.relation_ids()
+            .map(|rid| {
+                (
+                    *set.participants_1(rid),
+                    set.participants_2(rid).to_vec(),
+                    map_span(set.data(rid), &f),
+                )
+            })
+            .collect(),
+    )
+}
+
+fn map_var_span<P, O, T, U>(
+    set: &VarRelationSet<P, O, EntitySpan<T>>,
+    f: impl Fn(&T) -> U,
+) -> VarRelationSet<P, O, EntitySpan<U>>
+where
+    P: RelationParticipant,
+    O: FactorOrdering,
+{
+    VarRelationSet::new(
+        set.relation_ids()
+            .map(|rid| (set.participants(rid).to_vec(), map_span(set.data(rid), &f)))
+            .collect(),
+    )
+}
+
+fn map_fixed_span<P, O, const N: usize, T, U>(
+    set: &FixedRelationSet<P, O, EntitySpan<T>, N>,
+    f: impl Fn(&T) -> U,
+) -> FixedRelationSet<P, O, EntitySpan<U>, N>
+where
+    P: RelationParticipant,
+    O: FactorOrdering,
+{
+    FixedRelationSet::new(
+        set.relation_ids()
+            .map(|rid| (*set.participants(rid), map_span(set.data(rid), &f)))
+            .collect(),
+    )
+}
+
 impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
     type Ctx = MoleculeDefaults;
 
@@ -81,14 +157,24 @@ impl FromAst<ReactionSpanAst> for ReactionSpanDsl {
                 .iter()
                 .map(|span| map_span(span, |bond| BondDsl::from_ast(bond, &cfg.bond).0))
                 .collect(),
-            // TODO(I4): overlay span columns through the overlay DSL. Bridged empty so the lib
-            // links; the `ReactionSpanDsl` roundtrip drops overlay spans until I4.
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
+            map_fixed_var_span(ast.dative_bonds(), |b| {
+                DativeBondDsl::from_ast(b, &cfg.dative_bond).0
+            }),
+            map_var_span(ast.aromatic_systems(), |s| {
+                AromaticSystemDsl::from_ast(s, &cfg.aromatic_system).0
+            }),
+            map_var_span(ast.multicenter_bonds(), |b| {
+                MulticenterBondDsl::from_ast(b, &cfg.multicenter_bond).0
+            }),
+            map_fixed_span(ast.noncovalent_bonds(), |b| {
+                NoncovalentBondDsl::from_ast(b, &cfg.noncovalent_bond).0
+            }),
+            map_fixed_var_span(ast.stereo_atoms(), |s| {
+                StereoAtomDsl::from_ast(s, &cfg.stereo_atom).0
+            }),
+            map_fixed_var_span(ast.stereo_bonds(), |s| {
+                StereoBondDsl::from_ast(s, &cfg.stereo_bond).0
+            }),
             ast.constraints().to_vec(),
         );
         ReactionSpanDsl::from_parts(lowered, MoleculeMetadata::default())
@@ -110,13 +196,24 @@ impl IntoAst<ReactionSpanAst> for ReactionSpanDsl {
                 .iter()
                 .map(|span| map_span(span, |bond| BondDsl(bond.clone()).into_ast(&cfg.bond)))
                 .collect(),
-            // TODO(I4): overlay span columns through the overlay DSL (bridged empty).
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
+            map_fixed_var_span(ast.dative_bonds(), |b| {
+                DativeBondDsl(b.clone()).into_ast(&cfg.dative_bond)
+            }),
+            map_var_span(ast.aromatic_systems(), |s| {
+                AromaticSystemDsl(s.clone()).into_ast(&cfg.aromatic_system)
+            }),
+            map_var_span(ast.multicenter_bonds(), |b| {
+                MulticenterBondDsl(b.clone()).into_ast(&cfg.multicenter_bond)
+            }),
+            map_fixed_span(ast.noncovalent_bonds(), |b| {
+                NoncovalentBondDsl(b.clone()).into_ast(&cfg.noncovalent_bond)
+            }),
+            map_fixed_var_span(ast.stereo_atoms(), |s| {
+                StereoAtomDsl(s.clone()).into_ast(&cfg.stereo_atom)
+            }),
+            map_fixed_var_span(ast.stereo_bonds(), |s| {
+                StereoBondDsl(s.clone()).into_ast(&cfg.stereo_bond)
+            }),
             ast.constraints().to_vec(),
         )
     }
@@ -134,9 +231,16 @@ pub(crate) enum ConstraintSpanInput {
 /// (`Bare | Alias`) per `EntitySpan` side, each bond its endpoints + value, plus the `:atom-aliases`
 /// table. Aliases, bond endpoints, and constraint refs are resolved in `into_ast`.
 #[derive(Debug, PartialEq)]
+#[allow(clippy::type_complexity)]
 pub(crate) struct SpanInput {
     atoms: Vec<(Option<String>, EntitySpan<AtomSpecInput>)>,
     bonds: Vec<(Option<String>, [AtomRef; 2], EntitySpan<BondAst>)>,
+    dative_bonds: Vec<(Option<String>, Vec<AtomRef>, AtomRef, EntitySpan<DativeBondAst>)>,
+    aromatic_systems: Vec<(Option<String>, Vec<AtomRef>, EntitySpan<AromaticSystemAst>)>,
+    multicenter_bonds: Vec<(Option<String>, Vec<AtomRef>, EntitySpan<MulticenterBondAst>)>,
+    noncovalent_bonds: Vec<(Option<String>, [AtomRef; 2], EntitySpan<NoncovalentBondAst>)>,
+    stereo_atoms: Vec<(Option<String>, AtomRef, Vec<StereoLigandInput>, EntitySpan<StereoAtomAst>)>,
+    stereo_bonds: Vec<(Option<String>, BondRef, Vec<StereoLigandInput>, EntitySpan<StereoBondAst>)>,
     constraints: Vec<ConstraintSpanInput>,
     atom_aliases: Vec<(String, Box<AtomDsl>)>,
 }
@@ -264,6 +368,266 @@ fn parse_constraint_span_entry(edn: &Edn<'_>) -> Result<ConstraintSpanInput, DeE
     }
 }
 
+// Overlay span entries: a bare entry (`Unchanged`) or a `{:add|:modify|:remove <entry>}` wrapper,
+// over the shared `parse_<entity>_entry`. For `:add`/`:remove` and the bare form the entry's `:type`
+// is one dsl; for `:modify` it is a `[left right]` pair (participants are span-invariant).
+
+#[allow(clippy::type_complexity)]
+fn parse_dative_span_entry(
+    edn: &Edn<'_>,
+) -> Result<(Option<String>, Vec<AtomRef>, AtomRef, EntitySpan<DativeBondAst>), DeError> {
+    let full = |p: &Edn<'_>, wrap: fn(DativeBondAst) -> EntitySpan<DativeBondAst>| {
+        let e = parse_dative_bond_entry(p)?;
+        Ok::<_, DeError>((e.id, e.donors, e.acceptor, wrap(e.bond.0)))
+    };
+    match verb_wrapper(edn) {
+        None => full(edn, EntitySpan::Unchanged),
+        Some(("add", p)) => full(p, EntitySpan::Added),
+        Some(("remove", p)) => full(p, EntitySpan::Removed),
+        Some(("modify", p)) => {
+            let Edn::Map(m) = p else {
+                return Err(DeError::TypeMismatch {
+                    expected: "dative span map",
+                    got: p.kind(),
+                    path: vec!["dative span".into()],
+                });
+            };
+            let donors = parse_vec(required_key(m, "donors", "dative span")?, ":donors", |e| {
+                AtomRef::from_edn(e)
+            })?;
+            let acceptor = AtomRef::from_edn(required_key(m, "acceptor", "dative span")?)?;
+            let (left, right) = pair(required_key(m, "type", "dative span")?, "dative span :modify")?;
+            Ok((
+                optional_id(m)?,
+                donors,
+                acceptor,
+                EntitySpan::Modified {
+                    left: DativeBondDsl::from_edn(left)?.0,
+                    right: DativeBondDsl::from_edn(right)?.0,
+                },
+            ))
+        }
+        Some((verb, _)) => Err(DeError::Custom(format!("dative span: unexpected verb :{verb}"))),
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn parse_aromatic_span_entry(
+    edn: &Edn<'_>,
+) -> Result<(Option<String>, Vec<AtomRef>, EntitySpan<AromaticSystemAst>), DeError> {
+    let full = |p: &Edn<'_>, wrap: fn(AromaticSystemAst) -> EntitySpan<AromaticSystemAst>| {
+        let e = parse_aromatic_system_entry(p)?;
+        Ok::<_, DeError>((e.id, e.atoms, wrap(e.system.0)))
+    };
+    match verb_wrapper(edn) {
+        None => full(edn, EntitySpan::Unchanged),
+        Some(("add", p)) => full(p, EntitySpan::Added),
+        Some(("remove", p)) => full(p, EntitySpan::Removed),
+        Some(("modify", p)) => {
+            let Edn::Map(m) = p else {
+                return Err(DeError::TypeMismatch {
+                    expected: "aromatic span map",
+                    got: p.kind(),
+                    path: vec!["aromatic span".into()],
+                });
+            };
+            let atoms = parse_vec(required_key(m, "atoms", "aromatic span")?, ":atoms", |e| {
+                AtomRef::from_edn(e)
+            })?;
+            let (left, right) =
+                pair(required_key(m, "type", "aromatic span")?, "aromatic span :modify")?;
+            Ok((
+                optional_id(m)?,
+                atoms,
+                EntitySpan::Modified {
+                    left: AromaticSystemDsl::from_edn(left)?.0,
+                    right: AromaticSystemDsl::from_edn(right)?.0,
+                },
+            ))
+        }
+        Some((verb, _)) => Err(DeError::Custom(format!("aromatic span: unexpected verb :{verb}"))),
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn parse_multicenter_span_entry(
+    edn: &Edn<'_>,
+) -> Result<(Option<String>, Vec<AtomRef>, EntitySpan<MulticenterBondAst>), DeError> {
+    let full = |p: &Edn<'_>, wrap: fn(MulticenterBondAst) -> EntitySpan<MulticenterBondAst>| {
+        let e = parse_multicenter_bond_entry(p)?;
+        Ok::<_, DeError>((e.id, e.atoms, wrap(e.bond.0)))
+    };
+    match verb_wrapper(edn) {
+        None => full(edn, EntitySpan::Unchanged),
+        Some(("add", p)) => full(p, EntitySpan::Added),
+        Some(("remove", p)) => full(p, EntitySpan::Removed),
+        Some(("modify", p)) => {
+            let Edn::Map(m) = p else {
+                return Err(DeError::TypeMismatch {
+                    expected: "multicenter span map",
+                    got: p.kind(),
+                    path: vec!["multicenter span".into()],
+                });
+            };
+            let atoms = parse_vec(required_key(m, "atoms", "multicenter span")?, ":atoms", |e| {
+                AtomRef::from_edn(e)
+            })?;
+            let (left, right) = pair(
+                required_key(m, "type", "multicenter span")?,
+                "multicenter span :modify",
+            )?;
+            Ok((
+                optional_id(m)?,
+                atoms,
+                EntitySpan::Modified {
+                    left: MulticenterBondDsl::from_edn(left)?.0,
+                    right: MulticenterBondDsl::from_edn(right)?.0,
+                },
+            ))
+        }
+        Some((verb, _)) => Err(DeError::Custom(format!(
+            "multicenter span: unexpected verb :{verb}"
+        ))),
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn parse_noncovalent_span_entry(
+    edn: &Edn<'_>,
+) -> Result<(Option<String>, [AtomRef; 2], EntitySpan<NoncovalentBondAst>), DeError> {
+    let full = |p: &Edn<'_>, wrap: fn(NoncovalentBondAst) -> EntitySpan<NoncovalentBondAst>| {
+        let e = parse_noncovalent_bond_entry(p)?;
+        Ok::<_, DeError>((e.id, [e.first, e.second], wrap(e.bond.0)))
+    };
+    match verb_wrapper(edn) {
+        None => full(edn, EntitySpan::Unchanged),
+        Some(("add", p)) => full(p, EntitySpan::Added),
+        Some(("remove", p)) => full(p, EntitySpan::Removed),
+        Some(("modify", p)) => {
+            let Edn::Map(m) = p else {
+                return Err(DeError::TypeMismatch {
+                    expected: "noncovalent span map",
+                    got: p.kind(),
+                    path: vec!["noncovalent span".into()],
+                });
+            };
+            let atoms = two_atom_refs(
+                parse_vec(required_key(m, "atoms", "noncovalent span")?, ":atoms", |e| {
+                    AtomRef::from_edn(e)
+                })?,
+                "noncovalent span",
+            )?;
+            let (left, right) = pair(
+                required_key(m, "type", "noncovalent span")?,
+                "noncovalent span :modify",
+            )?;
+            Ok((
+                optional_id(m)?,
+                atoms,
+                EntitySpan::Modified {
+                    left: NoncovalentBondDsl::from_edn(left)?.0,
+                    right: NoncovalentBondDsl::from_edn(right)?.0,
+                },
+            ))
+        }
+        Some((verb, _)) => Err(DeError::Custom(format!(
+            "noncovalent span: unexpected verb :{verb}"
+        ))),
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn parse_stereo_atom_span_entry(
+    edn: &Edn<'_>,
+) -> Result<(Option<String>, AtomRef, Vec<StereoLigandInput>, EntitySpan<StereoAtomAst>), DeError> {
+    let full = |p: &Edn<'_>, wrap: fn(StereoAtomAst) -> EntitySpan<StereoAtomAst>| {
+        let e = parse_stereo_atom_entry(p)?;
+        Ok::<_, DeError>((e.id, e.site, e.ligands, wrap(e.stereo.0)))
+    };
+    match verb_wrapper(edn) {
+        None => full(edn, EntitySpan::Unchanged),
+        Some(("add", p)) => full(p, EntitySpan::Added),
+        Some(("remove", p)) => full(p, EntitySpan::Removed),
+        Some(("modify", p)) => {
+            let Edn::Map(m) = p else {
+                return Err(DeError::TypeMismatch {
+                    expected: "stereo-atom span map",
+                    got: p.kind(),
+                    path: vec!["stereo-atom span".into()],
+                });
+            };
+            let site = AtomRef::from_edn(required_key(m, "site", "stereo-atom span")?)?;
+            let ligands = parse_vec(
+                required_key(m, "ligands", "stereo-atom span")?,
+                ":ligands",
+                parse_stereo_ligand,
+            )?;
+            let (left, right) = pair(
+                required_key(m, "type", "stereo-atom span")?,
+                "stereo-atom span :modify",
+            )?;
+            Ok((
+                optional_id(m)?,
+                site,
+                ligands,
+                EntitySpan::Modified {
+                    left: StereoAtomDsl::from_edn(left)?.0,
+                    right: StereoAtomDsl::from_edn(right)?.0,
+                },
+            ))
+        }
+        Some((verb, _)) => Err(DeError::Custom(format!(
+            "stereo-atom span: unexpected verb :{verb}"
+        ))),
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn parse_stereo_bond_span_entry(
+    edn: &Edn<'_>,
+) -> Result<(Option<String>, BondRef, Vec<StereoLigandInput>, EntitySpan<StereoBondAst>), DeError> {
+    let full = |p: &Edn<'_>, wrap: fn(StereoBondAst) -> EntitySpan<StereoBondAst>| {
+        let e = parse_stereo_bond_entry(p)?;
+        Ok::<_, DeError>((e.id, e.site, e.ligands, wrap(e.stereo.0)))
+    };
+    match verb_wrapper(edn) {
+        None => full(edn, EntitySpan::Unchanged),
+        Some(("add", p)) => full(p, EntitySpan::Added),
+        Some(("remove", p)) => full(p, EntitySpan::Removed),
+        Some(("modify", p)) => {
+            let Edn::Map(m) = p else {
+                return Err(DeError::TypeMismatch {
+                    expected: "stereo-bond span map",
+                    got: p.kind(),
+                    path: vec!["stereo-bond span".into()],
+                });
+            };
+            let site = BondRef::from_edn(required_key(m, "site", "stereo-bond span")?)?;
+            let ligands = parse_vec(
+                required_key(m, "ligands", "stereo-bond span")?,
+                ":ligands",
+                parse_stereo_ligand,
+            )?;
+            let (left, right) = pair(
+                required_key(m, "type", "stereo-bond span")?,
+                "stereo-bond span :modify",
+            )?;
+            Ok((
+                optional_id(m)?,
+                site,
+                ligands,
+                EntitySpan::Modified {
+                    left: StereoBondDsl::from_edn(left)?.0,
+                    right: StereoBondDsl::from_edn(right)?.0,
+                },
+            ))
+        }
+        Some((verb, _)) => Err(DeError::Custom(format!(
+            "stereo-bond span: unexpected verb :{verb}"
+        ))),
+    }
+}
+
 /// Tree parse of a span map: `:atoms` / `:bonds` / `:constraints` via the entry parsers. A plain
 /// molecule map (all entries bare) parses as an all-`Unchanged` span.
 fn parse_span_input(edn: &Edn<'_>) -> Result<SpanInput, DeError> {
@@ -276,6 +640,12 @@ fn parse_span_input(edn: &Edn<'_>) -> Result<SpanInput, DeError> {
     };
     let mut atoms = Vec::new();
     let mut bonds = Vec::new();
+    let mut dative_bonds = Vec::new();
+    let mut aromatic_systems = Vec::new();
+    let mut multicenter_bonds = Vec::new();
+    let mut noncovalent_bonds = Vec::new();
+    let mut stereo_atoms = Vec::new();
+    let mut stereo_bonds = Vec::new();
     let mut constraints = Vec::new();
     let mut atom_aliases = Vec::new();
     for (key, value) in m.iter() {
@@ -289,6 +659,26 @@ fn parse_span_input(edn: &Edn<'_>) -> Result<SpanInput, DeError> {
         match key.name() {
             "atoms" => atoms = parse_vec(value, ":atoms", parse_atom_span_entry)?,
             "bonds" => bonds = parse_vec(value, ":bonds", parse_bond_span_entry)?,
+            "dative-bonds" => {
+                dative_bonds = parse_vec(value, ":dative-bonds", parse_dative_span_entry)?
+            }
+            "aromatic-systems" => {
+                aromatic_systems = parse_vec(value, ":aromatic-systems", parse_aromatic_span_entry)?
+            }
+            "multicenter-bonds" => {
+                multicenter_bonds =
+                    parse_vec(value, ":multicenter-bonds", parse_multicenter_span_entry)?
+            }
+            "noncovalent-bonds" => {
+                noncovalent_bonds =
+                    parse_vec(value, ":noncovalent-bonds", parse_noncovalent_span_entry)?
+            }
+            "stereo-atoms" => {
+                stereo_atoms = parse_vec(value, ":stereo-atoms", parse_stereo_atom_span_entry)?
+            }
+            "stereo-bonds" => {
+                stereo_bonds = parse_vec(value, ":stereo-bonds", parse_stereo_bond_span_entry)?
+            }
             "constraints" => {
                 constraints = parse_vec(value, ":constraints", parse_constraint_span_entry)?
             }
@@ -299,6 +689,12 @@ fn parse_span_input(edn: &Edn<'_>) -> Result<SpanInput, DeError> {
     Ok(SpanInput {
         atoms,
         bonds,
+        dative_bonds,
+        aromatic_systems,
+        multicenter_bonds,
+        noncovalent_bonds,
+        stereo_atoms,
+        stereo_bonds,
         constraints,
         atom_aliases,
     })
@@ -309,6 +705,12 @@ fn parse_span_input(edn: &Edn<'_>) -> Result<SpanInput, DeError> {
 fn read_span_input(de: &mut EdnStreamDeserializer<'_>) -> Result<SpanInput, EdnError> {
     let mut atoms = Vec::new();
     let mut bonds = Vec::new();
+    let mut dative_bonds = Vec::new();
+    let mut aromatic_systems = Vec::new();
+    let mut multicenter_bonds = Vec::new();
+    let mut noncovalent_bonds = Vec::new();
+    let mut stereo_atoms = Vec::new();
+    let mut stereo_bonds = Vec::new();
     let mut constraints = Vec::new();
     let mut atom_aliases = Vec::new();
     read_map(de, |de, key| {
@@ -321,6 +723,36 @@ fn read_span_input(de: &mut EdnStreamDeserializer<'_>) -> Result<SpanInput, EdnE
             "bonds" => {
                 bonds = read_vec(de, |de| {
                     Ok(parse_bond_span_entry(&read_string(de.read_value_slice()?)?)?)
+                })?
+            }
+            "dative-bonds" => {
+                dative_bonds = read_vec(de, |de| {
+                    Ok(parse_dative_span_entry(&read_string(de.read_value_slice()?)?)?)
+                })?
+            }
+            "aromatic-systems" => {
+                aromatic_systems = read_vec(de, |de| {
+                    Ok(parse_aromatic_span_entry(&read_string(de.read_value_slice()?)?)?)
+                })?
+            }
+            "multicenter-bonds" => {
+                multicenter_bonds = read_vec(de, |de| {
+                    Ok(parse_multicenter_span_entry(&read_string(de.read_value_slice()?)?)?)
+                })?
+            }
+            "noncovalent-bonds" => {
+                noncovalent_bonds = read_vec(de, |de| {
+                    Ok(parse_noncovalent_span_entry(&read_string(de.read_value_slice()?)?)?)
+                })?
+            }
+            "stereo-atoms" => {
+                stereo_atoms = read_vec(de, |de| {
+                    Ok(parse_stereo_atom_span_entry(&read_string(de.read_value_slice()?)?)?)
+                })?
+            }
+            "stereo-bonds" => {
+                stereo_bonds = read_vec(de, |de| {
+                    Ok(parse_stereo_bond_span_entry(&read_string(de.read_value_slice()?)?)?)
                 })?
             }
             "constraints" => {
@@ -336,6 +768,12 @@ fn read_span_input(de: &mut EdnStreamDeserializer<'_>) -> Result<SpanInput, EdnE
     Ok(SpanInput {
         atoms,
         bonds,
+        dative_bonds,
+        aromatic_systems,
+        multicenter_bonds,
+        noncovalent_bonds,
+        stereo_atoms,
+        stereo_bonds,
         constraints,
         atom_aliases,
     })
@@ -443,15 +881,187 @@ impl SpanInput {
             }
         }
 
+        // Overlay per-side ref consistency: an overlay present on a side needs every participant
+        // atom present on that side (the bond check above, generalized to overlay participants).
+        let side_ok = |left: bool,
+                       right: bool,
+                       participants: &[AtomId],
+                       kind: &str|
+         -> Result<(), ParseError> {
+            if left && participants.iter().any(|a| atoms[a.index()].left().is_none()) {
+                return Err(ParseError::InvalidValue(format!(
+                    "{kind} present on the left references an atom absent on the left"
+                )));
+            }
+            if right && participants.iter().any(|a| atoms[a.index()].right().is_none()) {
+                return Err(ParseError::InvalidValue(format!(
+                    "{kind} present on the right references an atom absent on the right"
+                )));
+            }
+            Ok(())
+        };
+
+        // Dative bonds: `[acceptor]` fixed side, donors var side.
+        let mut dative_entries: Vec<([NodeId; 1], Vec<NodeId>, EntitySpan<DativeBondAst>)> =
+            Vec::with_capacity(self.dative_bonds.len());
+        for (pos, (id, donors, acceptor, span)) in self.dative_bonds.into_iter().enumerate() {
+            if let Some(name) = &id {
+                if metadata.contains_id(name) {
+                    return Err(ParseError::DuplicateId(name.clone()));
+                }
+                metadata.set_dative_bond_id(DativeBondId(pos as u32), name.clone());
+            }
+            let acceptor_id = acceptor.into_ast(atom_count, &metadata)?;
+            let donor_ids: Vec<AtomId> = donors
+                .into_iter()
+                .map(|d| d.into_ast(atom_count, &metadata))
+                .collect::<Result<_, _>>()?;
+            let mut participants = Vec::with_capacity(donor_ids.len() + 1);
+            participants.push(acceptor_id);
+            participants.extend(donor_ids.iter().copied());
+            side_ok(span.left().is_some(), span.right().is_some(), &participants, "dative bond")?;
+            dative_entries.push((
+                [NodeId::from(acceptor_id)],
+                donor_ids.iter().map(|&a| NodeId::from(a)).collect(),
+                span,
+            ));
+        }
+        let dative_bonds = FixedVarBirelationSet::new(dative_entries);
+
+        // Aromatic systems.
+        let mut aromatic_entries: Vec<(Vec<NodeId>, EntitySpan<AromaticSystemAst>)> =
+            Vec::with_capacity(self.aromatic_systems.len());
+        for (pos, (id, atoms_ref, span)) in self.aromatic_systems.into_iter().enumerate() {
+            if let Some(name) = &id {
+                if metadata.contains_id(name) {
+                    return Err(ParseError::DuplicateId(name.clone()));
+                }
+                metadata.set_aromatic_system_id(AromaticSystemId(pos as u32), name.clone());
+            }
+            let atom_ids: Vec<AtomId> = atoms_ref
+                .into_iter()
+                .map(|r| r.into_ast(atom_count, &metadata))
+                .collect::<Result<_, _>>()?;
+            side_ok(span.left().is_some(), span.right().is_some(), &atom_ids, "aromatic system")?;
+            aromatic_entries.push((atom_ids.iter().map(|&a| NodeId::from(a)).collect(), span));
+        }
+        let aromatic_systems = VarRelationSet::new(aromatic_entries);
+
+        // Multicenter bonds.
+        let mut multicenter_entries: Vec<(Vec<NodeId>, EntitySpan<MulticenterBondAst>)> =
+            Vec::with_capacity(self.multicenter_bonds.len());
+        for (pos, (id, atoms_ref, span)) in self.multicenter_bonds.into_iter().enumerate() {
+            if let Some(name) = &id {
+                if metadata.contains_id(name) {
+                    return Err(ParseError::DuplicateId(name.clone()));
+                }
+                metadata.set_multicenter_bond_id(MulticenterBondId(pos as u32), name.clone());
+            }
+            let atom_ids: Vec<AtomId> = atoms_ref
+                .into_iter()
+                .map(|r| r.into_ast(atom_count, &metadata))
+                .collect::<Result<_, _>>()?;
+            side_ok(span.left().is_some(), span.right().is_some(), &atom_ids, "multicenter bond")?;
+            multicenter_entries.push((atom_ids.iter().map(|&a| NodeId::from(a)).collect(), span));
+        }
+        let multicenter_bonds = VarRelationSet::new(multicenter_entries);
+
+        // Noncovalent bonds.
+        let mut noncovalent_entries: Vec<([NodeId; 2], EntitySpan<NoncovalentBondAst>)> =
+            Vec::with_capacity(self.noncovalent_bonds.len());
+        for (pos, (id, [first, second], span)) in self.noncovalent_bonds.into_iter().enumerate() {
+            if let Some(name) = &id {
+                if metadata.contains_id(name) {
+                    return Err(ParseError::DuplicateId(name.clone()));
+                }
+                metadata.set_noncovalent_bond_id(NoncovalentBondId(pos as u32), name.clone());
+            }
+            let a = first.into_ast(atom_count, &metadata)?;
+            let b = second.into_ast(atom_count, &metadata)?;
+            side_ok(span.left().is_some(), span.right().is_some(), &[a, b], "noncovalent bond")?;
+            noncovalent_entries.push(([NodeId::from(a), NodeId::from(b)], span));
+        }
+        let noncovalent_bonds = FixedRelationSet::new(noncovalent_entries);
+
+        // Stereo atoms: `[site]` fixed side, ligand frame var side.
+        let mut stereo_atom_entries: Vec<(
+            [NodeId; 1],
+            Vec<StereoLigand>,
+            EntitySpan<StereoAtomAst>,
+        )> = Vec::with_capacity(self.stereo_atoms.len());
+        for (pos, (id, site, ligands, span)) in self.stereo_atoms.into_iter().enumerate() {
+            if let Some(name) = &id {
+                if metadata.contains_id(name) {
+                    return Err(ParseError::DuplicateId(name.clone()));
+                }
+                metadata.set_stereo_atom_id(StereoAtomId(pos as u32), name.clone());
+            }
+            let site_id = site.into_ast(atom_count, &metadata)?;
+            let mut participants = vec![site_id];
+            let mut ligand_frame = Vec::with_capacity(ligands.len());
+            for l in ligands {
+                let a = l.atom.into_ast(atom_count, &metadata)?;
+                participants.push(a);
+                ligand_frame.push(StereoLigand::new(a, l.kind));
+            }
+            side_ok(span.left().is_some(), span.right().is_some(), &participants, "stereo atom")?;
+            stereo_atom_entries.push(([NodeId::from(site_id)], ligand_frame, span));
+        }
+        let stereo_atoms = FixedVarBirelationSet::new(stereo_atom_entries);
+
+        // Stereo bonds: `[site]` fixed bond side, ligand frame var side. The site bond and every
+        // ligand atom must be present on any side the stereo bond is present.
+        let mut stereo_bond_entries: Vec<(
+            [EdgeId; 1],
+            Vec<StereoLigand>,
+            EntitySpan<StereoBondAst>,
+        )> = Vec::with_capacity(self.stereo_bonds.len());
+        for (pos, (id, site, ligands, span)) in self.stereo_bonds.into_iter().enumerate() {
+            if let Some(name) = &id {
+                if metadata.contains_id(name) {
+                    return Err(ParseError::DuplicateId(name.clone()));
+                }
+                metadata.set_stereo_bond_id(StereoBondId(pos as u32), name.clone());
+            }
+            let site_id = site.into_ast(bond_count, &metadata)?;
+            let mut ligand_atoms = Vec::with_capacity(ligands.len());
+            let mut ligand_frame = Vec::with_capacity(ligands.len());
+            for l in ligands {
+                let a = l.atom.into_ast(atom_count, &metadata)?;
+                ligand_atoms.push(a);
+                ligand_frame.push(StereoLigand::new(a, l.kind));
+            }
+            if span.left().is_some()
+                && (bonds[site_id.index()].left().is_none()
+                    || ligand_atoms.iter().any(|a| atoms[a.index()].left().is_none()))
+            {
+                return Err(ParseError::InvalidValue(
+                    "stereo bond present on the left references a bond or atom absent on the left"
+                        .into(),
+                ));
+            }
+            if span.right().is_some()
+                && (bonds[site_id.index()].right().is_none()
+                    || ligand_atoms.iter().any(|a| atoms[a.index()].right().is_none()))
+            {
+                return Err(ParseError::InvalidValue(
+                    "stereo bond present on the right references a bond or atom absent on the right"
+                        .into(),
+                ));
+            }
+            stereo_bond_entries.push(([EdgeId::from(site_id)], ligand_frame, span));
+        }
+        let stereo_bonds = FixedVarBirelationSet::new(stereo_bond_entries);
+
         let counts = EntityCounts {
             atom_count,
             bond_count,
-            dative_bond_count: 0,
-            aromatic_system_count: 0,
-            multicenter_bond_count: 0,
-            noncovalent_bond_count: 0,
-            stereo_atom_count: 0,
-            stereo_bond_count: 0,
+            dative_bond_count: dative_bonds.relation_count(),
+            aromatic_system_count: aromatic_systems.relation_count(),
+            multicenter_bond_count: multicenter_bonds.relation_count(),
+            noncovalent_bond_count: noncovalent_bonds.relation_count(),
+            stereo_atom_count: stereo_atoms.relation_count(),
+            stereo_bond_count: stereo_bonds.relation_count(),
         };
         let mut constraints: Vec<ConstraintSpan> = Vec::with_capacity(self.constraints.len());
         for input in self.constraints {
@@ -460,17 +1070,16 @@ impl SpanInput {
 
         let graph = Graph::new(atom_count, &edges);
         Ok((
-            // TODO(I4): overlay span columns from the parsed DSL (bridged empty).
             ReactionSpanAst::from_parts(
                 graph,
                 atoms,
                 bonds,
-                Default::default(),
-                Default::default(),
-                Default::default(),
-                Default::default(),
-                Default::default(),
-                Default::default(),
+                dative_bonds,
+                aromatic_systems,
+                multicenter_bonds,
+                noncovalent_bonds,
+                stereo_atoms,
+                stereo_bonds,
                 constraints,
             ),
             metadata,
@@ -552,6 +1161,137 @@ fn render_bond_span_entry(
     }
 }
 
+fn render_dative_span_entry(
+    id: DativeBondId,
+    donors: &[AtomId],
+    acceptor: AtomId,
+    span: &EntitySpan<DativeBondAst>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let value = |b: &DativeBondAst| DativeBondDsl::from_ref(b).to_edn();
+    let entry = |type_edn: Edn<'static>| {
+        render_dative_entry(id, donors.iter().copied(), acceptor, type_edn, meta)
+    };
+    match span {
+        EntitySpan::Unchanged(b) => entry(value(b)),
+        EntitySpan::Added(b) => single_key_map("add", entry(value(b))),
+        EntitySpan::Removed(b) => single_key_map("remove", entry(value(b))),
+        EntitySpan::Modified { left, right } => single_key_map(
+            "modify",
+            entry(Edn::Vector(vec![value(left), value(right)].into())),
+        ),
+    }
+}
+
+fn render_aromatic_span_entry(
+    id: AromaticSystemId,
+    atoms: &[AtomId],
+    span: &EntitySpan<AromaticSystemAst>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let value =
+        |s: &AromaticSystemAst| Edn::Str(Cow::Owned(AromaticSystemDsl::from_ref(s).to_string()));
+    let entry =
+        |type_edn: Edn<'static>| render_aromatic_entry(id, atoms.iter().copied(), type_edn, meta);
+    match span {
+        EntitySpan::Unchanged(s) => entry(value(s)),
+        EntitySpan::Added(s) => single_key_map("add", entry(value(s))),
+        EntitySpan::Removed(s) => single_key_map("remove", entry(value(s))),
+        EntitySpan::Modified { left, right } => single_key_map(
+            "modify",
+            entry(Edn::Vector(vec![value(left), value(right)].into())),
+        ),
+    }
+}
+
+fn render_multicenter_span_entry(
+    id: MulticenterBondId,
+    atoms: &[AtomId],
+    span: &EntitySpan<MulticenterBondAst>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let value =
+        |b: &MulticenterBondAst| Edn::Str(Cow::Owned(MulticenterBondDsl::from_ref(b).to_string()));
+    let entry =
+        |type_edn: Edn<'static>| render_multicenter_entry(id, atoms.iter().copied(), type_edn, meta);
+    match span {
+        EntitySpan::Unchanged(b) => entry(value(b)),
+        EntitySpan::Added(b) => single_key_map("add", entry(value(b))),
+        EntitySpan::Removed(b) => single_key_map("remove", entry(value(b))),
+        EntitySpan::Modified { left, right } => single_key_map(
+            "modify",
+            entry(Edn::Vector(vec![value(left), value(right)].into())),
+        ),
+    }
+}
+
+fn render_noncovalent_span_entry(
+    id: NoncovalentBondId,
+    atoms: [AtomId; 2],
+    span: &EntitySpan<NoncovalentBondAst>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let value = |b: &NoncovalentBondAst| NoncovalentBondDsl::from_ref(b).to_edn();
+    let entry = |type_edn: Edn<'static>| render_noncovalent_entry(id, atoms, type_edn, meta);
+    match span {
+        EntitySpan::Unchanged(b) => entry(value(b)),
+        EntitySpan::Added(b) => single_key_map("add", entry(value(b))),
+        EntitySpan::Removed(b) => single_key_map("remove", entry(value(b))),
+        EntitySpan::Modified { left, right } => single_key_map(
+            "modify",
+            entry(Edn::Vector(vec![value(left), value(right)].into())),
+        ),
+    }
+}
+
+fn render_stereo_atom_span_entry(
+    id: StereoAtomId,
+    site: AtomId,
+    ligands: &[StereoLigand],
+    span: &EntitySpan<StereoAtomAst>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let value = |s: &StereoAtomAst| StereoAtomDsl::from_ref(s).to_edn();
+    let ligand_edns: Vec<Edn<'static>> =
+        ligands.iter().map(|&l| render_stereo_ligand(l, meta)).collect();
+    let entry = |type_edn: Edn<'static>| {
+        render_stereo_atom_entry(id, site, ligand_edns.clone(), type_edn, meta)
+    };
+    match span {
+        EntitySpan::Unchanged(s) => entry(value(s)),
+        EntitySpan::Added(s) => single_key_map("add", entry(value(s))),
+        EntitySpan::Removed(s) => single_key_map("remove", entry(value(s))),
+        EntitySpan::Modified { left, right } => single_key_map(
+            "modify",
+            entry(Edn::Vector(vec![value(left), value(right)].into())),
+        ),
+    }
+}
+
+fn render_stereo_bond_span_entry(
+    id: StereoBondId,
+    site: BondId,
+    ligands: &[StereoLigand],
+    span: &EntitySpan<StereoBondAst>,
+    meta: &MoleculeMetadata,
+) -> Edn<'static> {
+    let value = |s: &StereoBondAst| StereoBondDsl::from_ref(s).to_edn();
+    let ligand_edns: Vec<Edn<'static>> =
+        ligands.iter().map(|&l| render_stereo_ligand(l, meta)).collect();
+    let entry = |type_edn: Edn<'static>| {
+        render_stereo_bond_entry(id, site, ligand_edns.clone(), type_edn, meta)
+    };
+    match span {
+        EntitySpan::Unchanged(s) => entry(value(s)),
+        EntitySpan::Added(s) => single_key_map("add", entry(value(s))),
+        EntitySpan::Removed(s) => single_key_map("remove", entry(value(s))),
+        EntitySpan::Modified { left, right } => single_key_map(
+            "modify",
+            entry(Edn::Vector(vec![value(left), value(right)].into())),
+        ),
+    }
+}
+
 fn render_constraint_span_entry(span: &ConstraintSpan, meta: &MoleculeMetadata) -> Edn<'static> {
     let render = |c: &Constraint| {
         ConstraintDsl::from_ast(c, meta)
@@ -587,6 +1327,115 @@ fn render_span_edn(ast: &ReactionSpanAst, meta: &MoleculeMetadata) -> Edn<'stati
         .collect();
     if !bonds.is_empty() {
         map.insert(Edn::keyword("bonds"), Edn::Vector(bonds.into()));
+    }
+
+    let dative = ast.dative_bonds();
+    let dative_bonds: Vec<Edn<'static>> = dative
+        .relation_ids()
+        .map(|rid| {
+            let acceptor = AtomId::from(dative.participants_1(rid)[0]);
+            let donors: Vec<AtomId> =
+                dative.participants_2(rid).iter().map(|&n| AtomId::from(n)).collect();
+            render_dative_span_entry(
+                DativeBondId(rid.index() as u32),
+                &donors,
+                acceptor,
+                dative.data(rid),
+                meta,
+            )
+        })
+        .collect();
+    if !dative_bonds.is_empty() {
+        map.insert(Edn::keyword("dative-bonds"), Edn::Vector(dative_bonds.into()));
+    }
+
+    let aromatic = ast.aromatic_systems();
+    let aromatic_systems: Vec<Edn<'static>> = aromatic
+        .relation_ids()
+        .map(|rid| {
+            let atoms: Vec<AtomId> =
+                aromatic.participants(rid).iter().map(|&n| AtomId::from(n)).collect();
+            render_aromatic_span_entry(
+                AromaticSystemId(rid.index() as u32),
+                &atoms,
+                aromatic.data(rid),
+                meta,
+            )
+        })
+        .collect();
+    if !aromatic_systems.is_empty() {
+        map.insert(Edn::keyword("aromatic-systems"), Edn::Vector(aromatic_systems.into()));
+    }
+
+    let multicenter = ast.multicenter_bonds();
+    let multicenter_bonds: Vec<Edn<'static>> = multicenter
+        .relation_ids()
+        .map(|rid| {
+            let atoms: Vec<AtomId> =
+                multicenter.participants(rid).iter().map(|&n| AtomId::from(n)).collect();
+            render_multicenter_span_entry(
+                MulticenterBondId(rid.index() as u32),
+                &atoms,
+                multicenter.data(rid),
+                meta,
+            )
+        })
+        .collect();
+    if !multicenter_bonds.is_empty() {
+        map.insert(Edn::keyword("multicenter-bonds"), Edn::Vector(multicenter_bonds.into()));
+    }
+
+    let noncovalent = ast.noncovalent_bonds();
+    let noncovalent_bonds: Vec<Edn<'static>> = noncovalent
+        .relation_ids()
+        .map(|rid| {
+            let [a, b] = noncovalent.participants(rid);
+            render_noncovalent_span_entry(
+                NoncovalentBondId(rid.index() as u32),
+                [AtomId::from(*a), AtomId::from(*b)],
+                noncovalent.data(rid),
+                meta,
+            )
+        })
+        .collect();
+    if !noncovalent_bonds.is_empty() {
+        map.insert(Edn::keyword("noncovalent-bonds"), Edn::Vector(noncovalent_bonds.into()));
+    }
+
+    let stereo_a = ast.stereo_atoms();
+    let stereo_atoms: Vec<Edn<'static>> = stereo_a
+        .relation_ids()
+        .map(|rid| {
+            let site = AtomId::from(stereo_a.participants_1(rid)[0]);
+            render_stereo_atom_span_entry(
+                StereoAtomId(rid.index() as u32),
+                site,
+                stereo_a.participants_2(rid),
+                stereo_a.data(rid),
+                meta,
+            )
+        })
+        .collect();
+    if !stereo_atoms.is_empty() {
+        map.insert(Edn::keyword("stereo-atoms"), Edn::Vector(stereo_atoms.into()));
+    }
+
+    let stereo_b = ast.stereo_bonds();
+    let stereo_bonds: Vec<Edn<'static>> = stereo_b
+        .relation_ids()
+        .map(|rid| {
+            let site = BondId::from(stereo_b.participants_1(rid)[0]);
+            render_stereo_bond_span_entry(
+                StereoBondId(rid.index() as u32),
+                site,
+                stereo_b.participants_2(rid),
+                stereo_b.data(rid),
+                meta,
+            )
+        })
+        .collect();
+    if !stereo_bonds.is_empty() {
+        map.insert(Edn::keyword("stereo-bonds"), Edn::Vector(stereo_bonds.into()));
     }
 
     let constraints: Vec<Edn<'static>> = ast
@@ -664,6 +1513,7 @@ mod tests {
     use super::*;
     use crate::ast::boolean::BooleanAst;
     use crate::ast::constraint::{BondConstraint, Constraint, Constraints, MoleculeConstraint};
+    use crate::ast::ligand::StereoLigandKind;
     use crate::ast::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
     use crate::ast::edit::BondFieldChange;
     use crate::ast::molecule::MoleculeAst;
@@ -780,6 +1630,150 @@ mod tests {
     }
 
     #[rstest]
+    #[case::unchanged(r#"{:donors [0] :acceptor 1 :type "1#R"}"#, (
+        None, vec![AtomRef::Index(0)], AtomRef::Index(1),
+        EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0),
+    ))]
+    #[case::add(r#"{:add {:donors [0] :acceptor 1 :type "1#R"}}"#, (
+        None, vec![AtomRef::Index(0)], AtomRef::Index(1),
+        EntitySpan::Added(DativeBondDsl::from_str("1#R").unwrap().0),
+    ))]
+    #[case::remove(r#"{:remove {:donors [0] :acceptor 1 :type "1#R"}}"#, (
+        None, vec![AtomRef::Index(0)], AtomRef::Index(1),
+        EntitySpan::Removed(DativeBondDsl::from_str("1#R").unwrap().0),
+    ))]
+    #[case::modify(r#"{:modify {:donors [0] :acceptor 1 :type ["1#R" "2#R"]}}"#, (
+        None, vec![AtomRef::Index(0)], AtomRef::Index(1),
+        EntitySpan::Modified {
+            left: DativeBondDsl::from_str("1#R").unwrap().0,
+            right: DativeBondDsl::from_str("2#R").unwrap().0,
+        },
+    ))]
+    #[case::with_id(r#"{:id :d1 :donors [0 2] :acceptor 1 :type "1#R"}"#, (
+        Some("d1".to_string()), vec![AtomRef::Index(0), AtomRef::Index(2)], AtomRef::Index(1),
+        EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0),
+    ))]
+    fn test_parse_dative_span_entry(
+        #[case] input: &str,
+        #[case] expected: (Option<String>, Vec<AtomRef>, AtomRef, EntitySpan<DativeBondAst>),
+    ) {
+        assert_eq!(parse_dative_span_entry(&read_string(input).unwrap()).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::unchanged(r#"{:atoms [0 1 2] :type "*#e6"}"#, (
+        None, vec![AtomRef::Index(0), AtomRef::Index(1), AtomRef::Index(2)],
+        EntitySpan::Unchanged(AromaticSystemDsl::from_str("*#e6").unwrap().0),
+    ))]
+    #[case::add(r#"{:add {:atoms [0 1] :type "*#e2"}}"#, (
+        None, vec![AtomRef::Index(0), AtomRef::Index(1)],
+        EntitySpan::Added(AromaticSystemDsl::from_str("*#e2").unwrap().0),
+    ))]
+    #[case::modify(r#"{:modify {:atoms [0 1] :type ["*#e2" "*#e4"]}}"#, (
+        None, vec![AtomRef::Index(0), AtomRef::Index(1)],
+        EntitySpan::Modified {
+            left: AromaticSystemDsl::from_str("*#e2").unwrap().0,
+            right: AromaticSystemDsl::from_str("*#e4").unwrap().0,
+        },
+    ))]
+    fn test_parse_aromatic_span_entry(
+        #[case] input: &str,
+        #[case] expected: (Option<String>, Vec<AtomRef>, EntitySpan<AromaticSystemAst>),
+    ) {
+        assert_eq!(parse_aromatic_span_entry(&read_string(input).unwrap()).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::unchanged(r#"{:atoms [0 1] :type "*#e2"}"#, (
+        None, vec![AtomRef::Index(0), AtomRef::Index(1)],
+        EntitySpan::Unchanged(MulticenterBondDsl::from_str("*#e2").unwrap().0),
+    ))]
+    #[case::remove(r#"{:remove {:atoms [0 1 2] :type "*#e3"}}"#, (
+        None, vec![AtomRef::Index(0), AtomRef::Index(1), AtomRef::Index(2)],
+        EntitySpan::Removed(MulticenterBondDsl::from_str("*#e3").unwrap().0),
+    ))]
+    #[case::modify(r#"{:modify {:atoms [0 1] :type ["*#e2" "*#e4"]}}"#, (
+        None, vec![AtomRef::Index(0), AtomRef::Index(1)],
+        EntitySpan::Modified {
+            left: MulticenterBondDsl::from_str("*#e2").unwrap().0,
+            right: MulticenterBondDsl::from_str("*#e4").unwrap().0,
+        },
+    ))]
+    fn test_parse_multicenter_span_entry(
+        #[case] input: &str,
+        #[case] expected: (Option<String>, Vec<AtomRef>, EntitySpan<MulticenterBondAst>),
+    ) {
+        assert_eq!(parse_multicenter_span_entry(&read_string(input).unwrap()).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::unchanged(r#"{:atoms [0 1] :type "Hbd"}"#, (
+        None, [AtomRef::Index(0), AtomRef::Index(1)],
+        EntitySpan::Unchanged(NoncovalentBondDsl::from_str("Hbd").unwrap().0),
+    ))]
+    #[case::remove(r#"{:remove {:atoms [0 1] :type "Hbd"}}"#, (
+        None, [AtomRef::Index(0), AtomRef::Index(1)],
+        EntitySpan::Removed(NoncovalentBondDsl::from_str("Hbd").unwrap().0),
+    ))]
+    fn test_parse_noncovalent_span_entry(
+        #[case] input: &str,
+        #[case] expected: (Option<String>, [AtomRef; 2], EntitySpan<NoncovalentBondAst>),
+    ) {
+        assert_eq!(parse_noncovalent_span_entry(&read_string(input).unwrap()).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::unchanged(r#"{:site 0 :ligands [1 2 3 4] :type "Th1"}"#, (
+        None, AtomRef::Index(0),
+        vec![
+            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(1) },
+            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(2) },
+            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(3) },
+            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(4) },
+        ],
+        EntitySpan::Unchanged(StereoAtomDsl::from_str("Th1").unwrap().0),
+    ))]
+    #[case::add(r#"{:add {:site 0 :ligands [1 2 [:h 3]] :type "Th1"}}"#, (
+        None, AtomRef::Index(0),
+        vec![
+            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(1) },
+            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(2) },
+            StereoLigandInput { kind: StereoLigandKind::ImplicitHydrogen, atom: AtomRef::Index(3) },
+        ],
+        EntitySpan::Added(StereoAtomDsl::from_str("Th1").unwrap().0),
+    ))]
+    fn test_parse_stereo_atom_span_entry(
+        #[case] input: &str,
+        #[case] expected: (Option<String>, AtomRef, Vec<StereoLigandInput>, EntitySpan<StereoAtomAst>),
+    ) {
+        assert_eq!(parse_stereo_atom_span_entry(&read_string(input).unwrap()).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::unchanged(r#"{:site 1 :ligands [0 3] :type "Ct1"}"#, (
+        None, BondRef::Index(1),
+        vec![
+            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(0) },
+            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(3) },
+        ],
+        EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0),
+    ))]
+    #[case::remove(r#"{:remove {:site 1 :ligands [0 3] :type "Ct1"}}"#, (
+        None, BondRef::Index(1),
+        vec![
+            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(0) },
+            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(3) },
+        ],
+        EntitySpan::Removed(StereoBondDsl::from_str("Ct1").unwrap().0),
+    ))]
+    fn test_parse_stereo_bond_span_entry(
+        #[case] input: &str,
+        #[case] expected: (Option<String>, BondRef, Vec<StereoLigandInput>, EntitySpan<StereoBondAst>),
+    ) {
+        assert_eq!(parse_stereo_bond_span_entry(&read_string(input).unwrap()).unwrap(), expected);
+    }
+
+    #[rstest]
     #[case::full(
         r#"{:atoms ["C" {:add "O"}] :bonds [[0 1 :single]] :constraints [{:connected {}}]}"#,
         SpanInput {
@@ -792,6 +1786,12 @@ mod tests {
                 [AtomRef::Index(0), AtomRef::Index(1)],
                 EntitySpan::Unchanged(BondAst::from_order(1)),
             )],
+            dative_bonds: vec![],
+            aromatic_systems: vec![],
+            multicenter_bonds: vec![],
+            noncovalent_bonds: vec![],
+            stereo_atoms: vec![],
+            stereo_bonds: vec![],
             constraints: vec![ConstraintSpanInput::Unchanged(
                 ConstraintDsl::from_edn(&read_string(r#"{:connected {}}"#).unwrap()).unwrap(),
             )],
@@ -810,6 +1810,12 @@ mod tests {
                 [AtomRef::Index(0), AtomRef::Index(1)],
                 EntitySpan::Unchanged(BondAst::from_order(1)),
             )],
+            dative_bonds: vec![],
+            aromatic_systems: vec![],
+            multicenter_bonds: vec![],
+            noncovalent_bonds: vec![],
+            stereo_atoms: vec![],
+            stereo_bonds: vec![],
             constraints: vec![],
             atom_aliases: vec![],
         },
@@ -822,6 +1828,12 @@ mod tests {
                 (None, EntitySpan::Added(AtomSpecInput::Bare(Box::new(AtomDsl(AtomAst::from_element(Element::O)))))),
             ],
             bonds: vec![],
+            dative_bonds: vec![],
+            aromatic_systems: vec![],
+            multicenter_bonds: vec![],
+            noncovalent_bonds: vec![],
+            stereo_atoms: vec![],
+            stereo_bonds: vec![],
             constraints: vec![],
             atom_aliases: vec![(
                 "nu".to_string(),
@@ -855,6 +1867,29 @@ mod tests {
         ),
         MoleculeMetadata::new().with_atom_alias("nu", AtomDsl(AtomAst::from_element(Element::C))),
     )]
+    #[case::dative_overlay(
+        r#"{:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :type "1#R"}]}"#,
+        ReactionSpanAst::from_parts(
+            Graph::new(2, &[]),
+            vec![
+                EntitySpan::Unchanged(AtomAst::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomAst::from_element(Element::N)),
+            ],
+            vec![],
+            FixedVarBirelationSet::new(vec![(
+                [NodeId(1)],
+                vec![NodeId(0)],
+                EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0),
+            )]),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            vec![],
+        ),
+        MoleculeMetadata::new().with_dative_bond_id(DativeBondId(0), "d1"),
+    )]
     fn test_span_input_into_ast(
         #[case] input: &str,
         #[case] expected_ast: ReactionSpanAst,
@@ -882,6 +1917,18 @@ mod tests {
         r#"{:atoms ["C" {:add "O"}] :bonds [[0 1 :single]]}"#,
         ParseError::InvalidValue(
             "bond present on the left references an atom absent on the left".to_string(),
+        ),
+    )]
+    #[case::overlay_left_inconsistent(
+        r#"{:atoms ["C" {:add "N"}] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}]}"#,
+        ParseError::InvalidValue(
+            "dative bond present on the left references an atom absent on the left".to_string(),
+        ),
+    )]
+    #[case::stereo_bond_left_inconsistent(
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:add [1 2 "2"]} [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#,
+        ParseError::InvalidValue(
+            "stereo bond present on the left references a bond or atom absent on the left".to_string(),
         ),
     )]
     fn test_span_input_into_ast_error(#[case] input: &str, #[case] expected: ParseError) {
@@ -994,6 +2041,109 @@ mod tests {
         );
     }
 
+    #[rstest]
+    #[case::unchanged(EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0), MoleculeMetadata::new(), r#"{:donors [0] :acceptor 1 :type "1#R"}"#)]
+    #[case::add(EntitySpan::Added(DativeBondDsl::from_str("1#R").unwrap().0), MoleculeMetadata::new(), r#"{:add {:donors [0] :acceptor 1 :type "1#R"}}"#)]
+    #[case::remove(EntitySpan::Removed(DativeBondDsl::from_str("1#R").unwrap().0), MoleculeMetadata::new(), r#"{:remove {:donors [0] :acceptor 1 :type "1#R"}}"#)]
+    #[case::modify(EntitySpan::Modified { left: DativeBondDsl::from_str("1#R").unwrap().0, right: DativeBondDsl::from_str("2#R").unwrap().0 }, MoleculeMetadata::new(), r#"{:modify {:donors [0] :acceptor 1 :type ["1#R" "2#R"]}}"#)]
+    #[case::with_id(EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0), MoleculeMetadata::new().with_dative_bond_id(DativeBondId(0), "d1"), r#"{:id :d1 :donors [0] :acceptor 1 :type "1#R"}"#)]
+    fn test_render_dative_span_entry(
+        #[case] span: EntitySpan<DativeBondAst>,
+        #[case] meta: MoleculeMetadata,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            render_dative_span_entry(DativeBondId(0), &[AtomId(0)], AtomId(1), &span, &meta),
+            read_string(expected).unwrap(),
+        );
+    }
+
+    #[rstest]
+    #[case::unchanged(EntitySpan::Unchanged(AromaticSystemDsl::from_str("*#e6").unwrap().0), MoleculeMetadata::new(), r#"{:atoms [0 1 2] :type "*#e6"}"#)]
+    #[case::add(EntitySpan::Added(AromaticSystemDsl::from_str("*#e6").unwrap().0), MoleculeMetadata::new(), r#"{:add {:atoms [0 1 2] :type "*#e6"}}"#)]
+    #[case::modify(EntitySpan::Modified { left: AromaticSystemDsl::from_str("*#e6").unwrap().0, right: AromaticSystemDsl::from_str("*#e2").unwrap().0 }, MoleculeMetadata::new(), r#"{:modify {:atoms [0 1 2] :type ["*#e6" "*#e2"]}}"#)]
+    #[case::with_id(EntitySpan::Unchanged(AromaticSystemDsl::from_str("*#e6").unwrap().0), MoleculeMetadata::new().with_aromatic_system_id(AromaticSystemId(0), "ar1"), r#"{:id :ar1 :atoms [0 1 2] :type "*#e6"}"#)]
+    fn test_render_aromatic_span_entry(
+        #[case] span: EntitySpan<AromaticSystemAst>,
+        #[case] meta: MoleculeMetadata,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            render_aromatic_span_entry(AromaticSystemId(0), &[AtomId(0), AtomId(1), AtomId(2)], &span, &meta),
+            read_string(expected).unwrap(),
+        );
+    }
+
+    #[rstest]
+    #[case::unchanged(EntitySpan::Unchanged(MulticenterBondDsl::from_str("*#e2").unwrap().0), MoleculeMetadata::new(), r#"{:atoms [0 1] :type "*#e2"}"#)]
+    #[case::remove(EntitySpan::Removed(MulticenterBondDsl::from_str("*#e2").unwrap().0), MoleculeMetadata::new(), r#"{:remove {:atoms [0 1] :type "*#e2"}}"#)]
+    #[case::modify(EntitySpan::Modified { left: MulticenterBondDsl::from_str("*#e2").unwrap().0, right: MulticenterBondDsl::from_str("*#e4").unwrap().0 }, MoleculeMetadata::new(), r#"{:modify {:atoms [0 1] :type ["*#e2" "*#e4"]}}"#)]
+    fn test_render_multicenter_span_entry(
+        #[case] span: EntitySpan<MulticenterBondAst>,
+        #[case] meta: MoleculeMetadata,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            render_multicenter_span_entry(MulticenterBondId(0), &[AtomId(0), AtomId(1)], &span, &meta),
+            read_string(expected).unwrap(),
+        );
+    }
+
+    #[rstest]
+    #[case::unchanged(EntitySpan::Unchanged(NoncovalentBondDsl::from_str("Hbd").unwrap().0), MoleculeMetadata::new(), r#"{:atoms [0 1] :type "Hbd"}"#)]
+    #[case::add(EntitySpan::Added(NoncovalentBondDsl::from_str("Hbd").unwrap().0), MoleculeMetadata::new(), r#"{:add {:atoms [0 1] :type "Hbd"}}"#)]
+    #[case::with_id(EntitySpan::Unchanged(NoncovalentBondDsl::from_str("Hbd").unwrap().0), MoleculeMetadata::new().with_noncovalent_bond_id(NoncovalentBondId(0), "nc1"), r#"{:id :nc1 :atoms [0 1] :type "Hbd"}"#)]
+    fn test_render_noncovalent_span_entry(
+        #[case] span: EntitySpan<NoncovalentBondAst>,
+        #[case] meta: MoleculeMetadata,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            render_noncovalent_span_entry(NoncovalentBondId(0), [AtomId(0), AtomId(1)], &span, &meta),
+            read_string(expected).unwrap(),
+        );
+    }
+
+    #[rstest]
+    #[case::unchanged(EntitySpan::Unchanged(StereoAtomDsl::from_str("Th1").unwrap().0), MoleculeMetadata::new(), r#"{:site 0 :ligands [1 2 3 4] :type :cw}"#)]
+    #[case::add(EntitySpan::Added(StereoAtomDsl::from_str("Th1").unwrap().0), MoleculeMetadata::new(), r#"{:add {:site 0 :ligands [1 2 3 4] :type :cw}}"#)]
+    #[case::with_id(EntitySpan::Unchanged(StereoAtomDsl::from_str("Th1").unwrap().0), MoleculeMetadata::new().with_stereo_atom_id(StereoAtomId(0), "s1"), r#"{:id :s1 :site 0 :ligands [1 2 3 4] :type :cw}"#)]
+    fn test_render_stereo_atom_span_entry(
+        #[case] span: EntitySpan<StereoAtomAst>,
+        #[case] meta: MoleculeMetadata,
+        #[case] expected: &str,
+    ) {
+        let ligands = vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        ];
+        assert_eq!(
+            render_stereo_atom_span_entry(StereoAtomId(0), AtomId(0), &ligands, &span, &meta),
+            read_string(expected).unwrap(),
+        );
+    }
+
+    #[rstest]
+    #[case::unchanged(EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0), MoleculeMetadata::new(), r#"{:site 1 :ligands [0 3] :type :e}"#)]
+    #[case::remove(EntitySpan::Removed(StereoBondDsl::from_str("Ct1").unwrap().0), MoleculeMetadata::new(), r#"{:remove {:site 1 :ligands [0 3] :type :e}}"#)]
+    #[case::with_id(EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0), MoleculeMetadata::new().with_stereo_bond_id(StereoBondId(0), "sb1"), r#"{:id :sb1 :site 1 :ligands [0 3] :type :e}"#)]
+    fn test_render_stereo_bond_span_entry(
+        #[case] span: EntitySpan<StereoBondAst>,
+        #[case] meta: MoleculeMetadata,
+        #[case] expected: &str,
+    ) {
+        let ligands = vec![
+            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        ];
+        assert_eq!(
+            render_stereo_bond_span_entry(StereoBondId(0), BondId(1), &ligands, &span, &meta),
+            read_string(expected).unwrap(),
+        );
+    }
+
     // `ReactionSpanDsl` (ast + metadata) round-trips through the EDN surface (render → reparse).
     #[rstest]
     #[case::plain_molecule(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
@@ -1001,6 +2151,14 @@ mod tests {
     #[case::add_remove(r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :single]}]}"#)]
     #[case::constraint(r#"{:atoms ["C"] :constraints [{:connected {}} {:add {:connected {}}}]}"#)]
     #[case::aliases(r#"{:atoms [:nu {:add "O"}] :atom-aliases [:nu "C"]}"#)]
+    #[case::dative(r#"{:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :type "1#R"}]}"#)]
+    #[case::dative_add(r#"{:atoms ["C" "N"] :dative-bonds [{:add {:donors [0] :acceptor 1 :type "1#R"}}]}"#)]
+    #[case::dative_modify(r#"{:atoms ["C" "N"] :dative-bonds [{:modify {:donors [0] :acceptor 1 :type ["1#R" "2#R"]}}]}"#)]
+    #[case::aromatic(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]}"#)]
+    #[case::multicenter(r#"{:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "*#e2"}]}"#)]
+    #[case::noncovalent(r#"{:atoms ["N" "H"] :noncovalent-bonds [{:remove {:atoms [0 1] :type "Hbd"}}]}"#)]
+    #[case::stereo_atom(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#)]
+    #[case::stereo_bond(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#)]
     fn test_reaction_span_dsl_to_edn(#[case] input: &str) {
         let dsl = ReactionSpanDsl::from_str(input).unwrap();
         assert_eq!(ReactionSpanDsl::from_edn(&dsl.to_edn()).unwrap(), dsl);
@@ -1011,6 +2169,13 @@ mod tests {
     #[case::plain_molecule(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
     #[case::modify(r#"{:atoms ["C" "C"] :bonds [{:modify [0 1 [:single :double]]}]}"#)]
     #[case::add_remove(r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :single]}]}"#)]
+    #[case::dative(r#"{:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}]}"#)]
+    #[case::dative_modify(r#"{:atoms ["C" "N"] :dative-bonds [{:modify {:donors [0] :acceptor 1 :type ["1#R" "2#R"]}}]}"#)]
+    #[case::aromatic(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]}"#)]
+    #[case::multicenter(r#"{:atoms ["C" "C"] :multicenter-bonds [{:add {:atoms [0 1] :type "*#e2"}}]}"#)]
+    #[case::noncovalent(r#"{:atoms ["N" "H"] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}]}"#)]
+    #[case::stereo_atom(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#)]
+    #[case::stereo_bond(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#)]
     fn test_reaction_span_ast_to_edn(#[case] input: &str) {
         let ast = ReactionSpanAst::from_str(input).unwrap();
         assert_eq!(ReactionSpanAst::from_edn(&ast.to_edn()).unwrap(), ast);
@@ -1037,4 +2202,5 @@ mod tests {
         assert_eq!(ast.left().constraints().as_slice(), left.as_slice());
         assert_eq!(ast.right().constraints().as_slice(), right.as_slice());
     }
+
 }
