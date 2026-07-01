@@ -17,6 +17,7 @@ use super::constraint::{
     StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
 };
 use super::error::Contradiction;
+use super::ligand::StereoLigand;
 use super::traits::{AsLit, Canonicalize, Lattice};
 
 /// Stereo kind: the atom-centered coordination geometries and the bond-centered cis/trans kind.
@@ -757,6 +758,15 @@ macro_rules! stereo_element {
                     constraints: self.constraints.clone(),
                 }
             }
+
+            /// Restate the coset in the `after` ligand frame given it was stated in `before` — the
+            /// coset action of the induced frame permutation. Mechanical bookkeeping for a relabel
+            /// that leaves the physical configuration unchanged; self-inverting. `before`/`after`
+            /// must be the same ligand multiset reordered (a genuine ligand-set change is membership,
+            /// not a frame permutation).
+            pub fn transform_frame(&self, before: &[StereoLigand], after: &[StereoLigand]) -> Self {
+                self.apply(Permutation::between(before, after))
+            }
         }
 
     };
@@ -779,6 +789,8 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use super::super::id::AtomId;
+    use super::super::ligand::StereoLigandKind;
     use super::*;
 
     #[rstest]
@@ -1347,5 +1359,59 @@ mod tests {
     #[case::cis_trans(StereoBondAst::new(StereoKind::CisTrans, 0u32), StereoBondAst::new(StereoKind::CisTrans, 1u32))]
     fn test_stereo_bond_ast_swap(#[case] input: StereoBondAst, #[case] expected: StereoBondAst) {
         assert_eq!(input.swap(), expected);
+    }
+
+    #[rstest]
+    #[case::identity(
+        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
+        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
+        0,
+    )]
+    #[case::transposition(
+        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
+        [StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
+        1,
+    )]
+    #[case::even_cycle(
+        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
+        [StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
+        0,
+    )]
+    #[case::virtual_explicit_swap(
+        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)],
+        [StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+        1,
+    )]
+    fn test_stereo_atom_ast_transform_frame(
+        #[case] before: [StereoLigand; 4],
+        #[case] after: [StereoLigand; 4],
+        #[case] expected_coset: u32,
+    ) {
+        let atom = StereoAtomAst::new(StereoKind::Tetrahedral, 0u32);
+        assert_eq!(
+            atom.transform_frame(&before, &after),
+            StereoAtomAst::new(StereoKind::Tetrahedral, expected_coset),
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_ast_transform_frame_self_inverse() {
+        let before = [
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        ];
+        let after = [
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        ];
+        let atom = StereoAtomAst::new(StereoKind::Tetrahedral, 0u32);
+        assert_eq!(
+            atom.transform_frame(&before, &after).transform_frame(&after, &before),
+            atom,
+        );
     }
 }
