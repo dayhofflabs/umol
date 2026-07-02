@@ -75,11 +75,7 @@ macro_rules! stereo_element {
                     }
                 }
                 Self {
-                    configuration: if other.configuration.is_undetermined() {
-                        self.configuration.clone()
-                    } else {
-                        other.configuration.clone()
-                    },
+                    configuration: self.configuration.update(&other.configuration),
                     constraints,
                 }
             }
@@ -317,6 +313,19 @@ impl StereoConfigurationAst {
         match self {
             Self::Undetermined => Self::Undetermined,
             Self::Kinded(kind, coset) => Self::Kinded(*kind, f(*kind, coset)),
+        }
+    }
+
+    /// Overwrite with `other`, field-wise: an `Undetermined` `other` keeps `self`; a same-kind
+    /// `other` with an `Undetermined` coset keeps `self`'s coset (a partial that fixes only the
+    /// kind); a differing kind or a determined coset overrides wholesale.
+    pub fn update(&self, other: &Self) -> Self {
+        match (self, other) {
+            (_, Self::Undetermined) => self.clone(),
+            (Self::Kinded(ks, cs), Self::Kinded(ko, StereoCosetAst::Undetermined)) if ks == ko => {
+                Self::Kinded(*ks, cs.clone())
+            }
+            (_, Self::Kinded(..)) => other.clone(),
         }
     }
 }
@@ -1370,6 +1379,35 @@ mod tests {
         #[case] expected: StereoConfigurationAst,
     ) {
         assert_eq!(config.mirror(), expected);
+    }
+
+    #[rstest]
+    #[case::other_undetermined_keeps_self(
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+        StereoConfigurationAst::Undetermined,
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
+    #[case::same_kind_undetermined_coset_keeps_coset(
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined),
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
+    #[case::same_kind_determined_coset_overrides(
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)))]
+    #[case::different_kind_overrides(
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+        StereoConfigurationAst::Kinded(StereoKind::CisTrans, StereoCosetAst::Undetermined),
+        StereoConfigurationAst::Kinded(StereoKind::CisTrans, StereoCosetAst::Undetermined))]
+    #[case::self_undetermined_takes_other(
+        StereoConfigurationAst::Undetermined,
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined),
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))]
+    fn test_stereo_configuration_ast_update(
+        #[case] base: StereoConfigurationAst,
+        #[case] other: StereoConfigurationAst,
+        #[case] expected: StereoConfigurationAst,
+    ) {
+        assert_eq!(base.update(&other), expected);
     }
 
     #[rstest]

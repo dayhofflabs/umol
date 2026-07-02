@@ -178,8 +178,33 @@ fn stereo_configuration(i: &mut &str) -> PResult<StereoConfigurationAst> {
     Ok(StereoConfigurationAst::kinded(kind, coset))
 }
 
+/// Partial-modify variant of `stereo_configuration`: the coset is optional (omitted =
+/// `Undetermined`, "coset unchanged"). So `*` alone, `<kind>`, or `<kind><coset>`; the kind is
+/// mandatory once anything past `*` appears.
+fn partial_stereo_configuration(i: &mut &str) -> PResult<StereoConfigurationAst> {
+    multispace0.parse_next(i)?;
+    if opt('*').parse_next(i)?.is_some() {
+        multispace0.parse_next(i)?;
+        return Ok(StereoConfigurationAst::Undetermined);
+    }
+    let kind = delimited(multispace0, stereo_kind, multispace0).parse_next(i)?;
+    let coset = opt(terminated(
+        move |i: &mut &str| stereo_coset(i, kind.degree()),
+        multispace0,
+    ))
+    .parse_next(i)?
+    .unwrap_or(StereoCosetAst::Undetermined);
+    Ok(StereoConfigurationAst::kinded(kind, coset))
+}
+
 pub(crate) fn stereo_atom(i: &mut &str) -> PResult<StereoAtomDsl> {
     let configuration = stereo_configuration(i)?;
+    stereo_atom_tail(i, configuration)
+}
+
+/// Parse the kind-scoped constraint predicates and trailing-input check given an already-parsed
+/// configuration. Shared by the full `stereo_atom` and the partial-modify parser.
+fn stereo_atom_tail(i: &mut &str, configuration: StereoConfigurationAst) -> PResult<StereoAtomDsl> {
     let mut constraints = StereoAtomConstraints::new();
     if let StereoConfigurationAst::Kinded(kind, _) = &configuration {
         let kind = *kind;
@@ -210,6 +235,11 @@ pub(crate) fn stereo_atom(i: &mut &str) -> PResult<StereoAtomDsl> {
         configuration,
         constraints,
     }))
+}
+
+fn partial_stereo_atom(i: &mut &str) -> PResult<StereoAtomDsl> {
+    let configuration = partial_stereo_configuration(i)?;
+    stereo_atom_tail(i, configuration)
 }
 
 /// Surface DSL wrapper for `StereoBondAst`
@@ -336,6 +366,12 @@ pub fn parse_stereo_bond(input: &str) -> Result<StereoBondDsl, ParseError> {
 
 pub(crate) fn stereo_bond(i: &mut &str) -> PResult<StereoBondDsl> {
     let configuration = stereo_configuration(i)?;
+    stereo_bond_tail(i, configuration)
+}
+
+/// Parse the kind-scoped constraint predicates and trailing-input check given an already-parsed
+/// configuration. Shared by the full `stereo_bond` and the partial-modify parser.
+fn stereo_bond_tail(i: &mut &str, configuration: StereoConfigurationAst) -> PResult<StereoBondDsl> {
     let mut constraints = StereoBondConstraints::new();
     if let StereoConfigurationAst::Kinded(kind, _) = &configuration {
         let kind = *kind;
@@ -366,6 +402,11 @@ pub(crate) fn stereo_bond(i: &mut &str) -> PResult<StereoBondDsl> {
         configuration,
         constraints,
     }))
+}
+
+fn partial_stereo_bond(i: &mut &str) -> PResult<StereoBondDsl> {
+    let configuration = partial_stereo_configuration(i)?;
+    stereo_bond_tail(i, configuration)
 }
 
 /// `Th` / `Ct` / `Sp` / `Tb` / `Oh` symbol → `StereoKind`.
@@ -782,11 +823,66 @@ pub(crate) fn fmt_stereo_bond(f: &mut fmt::Formatter<'_>, bond: &StereoBondAst) 
     Ok(())
 }
 
-/// Partial stereo atom for a reaction `:modify` payload: config (`*` = unchanged) + constraints,
-/// reusing the stereo-atom render/parse. Unlike the DAMN partials it cannot yet render an
-/// *undetermined* stereo constraint explicitly (the stereo constraint DSL has no per-constraint
-/// wildcard form), so constraint *removal* via `:modify` is not expressible here — tracked
-/// separately; config sets and constraint add/change round-trip.
+pub(crate) fn parse_partial_stereo_atom(input: &str) -> Result<StereoAtomAst, ParseError> {
+    partial_stereo_atom
+        .parse(input)
+        .map_err(|e| e.into_inner())
+        .map(|dsl| dsl.0)
+}
+
+pub(crate) fn parse_partial_stereo_bond(input: &str) -> Result<StereoBondAst, ParseError> {
+    partial_stereo_bond
+        .parse(input)
+        .map_err(|e| e.into_inner())
+        .map(|dsl| dsl.0)
+}
+
+/// Render the configuration head for a partial-modify payload: `*` for undetermined, else the kind
+/// with the coset *omitted* when undetermined ("coset unchanged") — the inverse of
+/// `partial_stereo_configuration`.
+fn fmt_partial_stereo_configuration(
+    f: &mut fmt::Formatter<'_>,
+    configuration: &StereoConfigurationAst,
+) -> fmt::Result {
+    match configuration {
+        StereoConfigurationAst::Undetermined => write!(f, "*"),
+        StereoConfigurationAst::Kinded(kind, coset) => {
+            fmt_stereo_kind(f, *kind)?;
+            if !matches!(coset, StereoCosetAst::Undetermined) {
+                fmt_stereo_coset(f, coset)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Render a partial-modify stereo atom: config (coset omitted when unchanged) plus *all*
+/// constraints, including undetermined ones (`#o(0,1)*`) so their removal round-trips.
+fn fmt_partial_stereo_atom(f: &mut fmt::Formatter<'_>, atom: &StereoAtomAst) -> fmt::Result {
+    fmt_partial_stereo_configuration(f, &atom.configuration)?;
+    if let StereoConfigurationAst::Kinded(kind, _) = &atom.configuration {
+        for c in atom.constraints.iter() {
+            fmt_stereo_atom_constraint(f, c, *kind)?;
+        }
+    }
+    Ok(())
+}
+
+/// Render a partial-modify stereo bond — the `fmt_partial_stereo_atom` twin.
+fn fmt_partial_stereo_bond(f: &mut fmt::Formatter<'_>, bond: &StereoBondAst) -> fmt::Result {
+    fmt_partial_stereo_configuration(f, &bond.configuration)?;
+    if let StereoConfigurationAst::Kinded(kind, _) = &bond.configuration {
+        for c in bond.constraints.iter() {
+            fmt_stereo_bond_constraint(f, c, *kind)?;
+        }
+    }
+    Ok(())
+}
+
+/// Partial stereo atom for a reaction `:modify` payload: `*` (undetermined), or `<kind>` with an
+/// optional coset (omitted = unchanged) followed by constraints. Renders *all* constraints
+/// (including undetermined `*` forms) so constraint removal round-trips; the kind is mandatory once
+/// a coset or constraint appears (`*#o…` is rejected).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PartialStereoAtomDsl(pub StereoAtomAst);
 
@@ -794,13 +890,13 @@ impl FromStr for PartialStereoAtomDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_stereo_atom(s)?.0))
+        Ok(Self(parse_partial_stereo_atom(s)?))
     }
 }
 
 impl Display for PartialStereoAtomDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_stereo_atom(f, &self.0)
+        fmt_partial_stereo_atom(f, &self.0)
     }
 }
 
@@ -831,13 +927,13 @@ impl FromStr for PartialStereoBondDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_stereo_bond(s)?.0))
+        Ok(Self(parse_partial_stereo_bond(s)?))
     }
 }
 
 impl Display for PartialStereoBondDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_stereo_bond(f, &self.0)
+        fmt_partial_stereo_bond(f, &self.0)
     }
 }
 
@@ -1740,6 +1836,45 @@ mod tests {
     #[case::undetermined_rejects_constraint("*#g/", ParseError::TrailingInput("#g/".to_string()))]
     fn test_parse_stereo_atom_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(parse_stereo_atom(input).unwrap_err(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined("*", StereoAtomAst::default())]
+    #[case::kind_and_coset("Th1", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
+    #[case::kind_only_coset_omitted("Th", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))]
+    fn test_parse_partial_stereo_atom(#[case] input: &str, #[case] expected: StereoAtomAst) {
+        assert_eq!(parse_partial_stereo_atom(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined_kind_with_constraint("*#o(0,1)=", ParseError::TrailingInput("#o(0,1)=".to_string()))]
+    fn test_parse_partial_stereo_atom_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(parse_partial_stereo_atom(input).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined("*")]
+    #[case::kind_and_coset("Th1")]
+    #[case::kind_only("Th")]
+    #[case::topicity_removal("Th#o(0,1)*")]
+    #[case::topicity_change("Th#o(0,1)/")]
+    #[case::ligand_symmetry_removal("Th#p(0,1)*")]
+    #[case::ligand_symmetry("Th#p(0,1)")]
+    fn test_partial_stereo_atom_dsl_roundtrip(#[case] s: &str) {
+        let dsl = PartialStereoAtomDsl(parse_partial_stereo_atom(s).unwrap());
+        assert_eq!(dsl.to_string(), s);
+        assert_eq!(parse_partial_stereo_atom(&dsl.to_string()).unwrap(), dsl.0);
+    }
+
+    #[rstest]
+    #[case::undetermined("*")]
+    #[case::kind_only("Ct")]
+    #[case::topicity_removal("Ct#o(0,1)*")]
+    fn test_partial_stereo_bond_dsl_roundtrip(#[case] s: &str) {
+        let dsl = PartialStereoBondDsl(parse_partial_stereo_bond(s).unwrap());
+        assert_eq!(dsl.to_string(), s);
+        assert_eq!(parse_partial_stereo_bond(&dsl.to_string()).unwrap(), dsl.0);
     }
 
     #[rustfmt::skip]

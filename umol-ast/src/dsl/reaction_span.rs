@@ -2181,6 +2181,26 @@ mod tests {
         assert_eq!(ReactionSpanAst::from_edn(&ast.to_edn()).unwrap(), ast);
     }
 
+    /// Every `fuzz_reaction_span` seed must parse and satisfy the fuzz invariant (streaming and tree
+    /// parsers agree) — guards the seed corpus against rot as the span DSL evolves.
+    #[rstest]
+    fn test_fuzz_reaction_span_seeds_valid() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fuzz/seeds/fuzz_reaction_span");
+        let mut count = 0;
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            let data = std::fs::read_to_string(&path).unwrap();
+            let stream = ReactionSpanDsl::from_edn_str(&data).ok();
+            let tree = read_string(&data)
+                .ok()
+                .and_then(|edn| ReactionSpanDsl::from_edn(&edn).ok());
+            assert!(stream.is_some(), "seed {path:?} failed to parse");
+            assert_eq!(stream, tree, "seed {path:?}: streaming and tree parsers disagree");
+            count += 1;
+        }
+        assert_eq!(count, 21);
+    }
+
     // An `:add` constraint lands on the right projection only; `:remove` on the left only.
     #[rstest]
     #[case::add(

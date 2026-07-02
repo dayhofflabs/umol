@@ -62,6 +62,8 @@ use crate::ast::edit::{
     MulticenterBondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
     StereoBondFieldChange,
 };
+use crate::ast::molecule::MoleculeAst;
+use crate::ast::stereo::{StereoConfigurationAst, StereoCosetAst};
 use crate::ast::{
     AromaticSystemAst, DativeBondAst, MulticenterBondAst, NoncovalentBondAst, StereoAtomAst,
     StereoBondAst, StereoKind, StereoLigand,
@@ -71,7 +73,7 @@ use crate::ast::id::{
     StereoAtomId, StereoBondId,
 };
 use crate::ast::reaction::ReactionAst;
-use crate::ast::traits::{FromAst, IntoAst};
+use crate::ast::traits::{FromAst, IntoAst, Lattice};
 use crate::ast::EntityPatch;
 use umol_perm::Permutation;
 
@@ -1733,7 +1735,7 @@ fn render_reaction_edn(ast: &ReactionAst, meta: &ReactionMetadata) -> Edn<'stati
     );
     map.insert(
         Edn::keyword("deltas"),
-        Edn::Vector(render_deltas(&ast.deltas, meta).into()),
+        Edn::Vector(render_deltas(&ast.deltas, &ast.lhs, meta).into()),
     );
     if meta.has_atom_aliases() {
         let mut pairs: Vec<Edn<'static>> = Vec::with_capacity(meta.atom_aliases_len() * 2);
@@ -1749,7 +1751,7 @@ fn render_reaction_edn(ast: &ReactionAst, meta: &ReactionMetadata) -> Edn<'stati
 /// Render `deltas` to the `:deltas` vector entries, resolving refs against the reaction `meta`.
 /// Consecutive `ModifyField` / `ModifyConstraint` for one atom coalesce into a single
 /// `{:atom {:modify [<ref> <partial>]}}`.
-fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> {
+fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) -> Vec<Edn<'static>> {
     let deltas = deltas.as_slice();
     let mut out = Vec::new();
     // Built once on the first constraint delta (constraint refs resolve against lhs ∪ created).
@@ -2198,6 +2200,14 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     }
                     i += 1;
                 }
+                // Constraints render against the config's kind. A constraint-only modify leaves the
+                // config undetermined, so borrow the kind from the lhs (coset stays unchanged).
+                if partial.configuration.is_undetermined() && !partial.constraints.is_empty() {
+                    partial.configuration = StereoConfigurationAst::kinded(
+                        lhs.stereo_atom(id).kind(),
+                        StereoCosetAst::Undetermined,
+                    );
+                }
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
@@ -2307,6 +2317,12 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                         _ => break,
                     }
                     i += 1;
+                }
+                if partial.configuration.is_undetermined() && !partial.constraints.is_empty() {
+                    partial.configuration = StereoConfigurationAst::kinded(
+                        lhs.stereo_bond(id).kind(),
+                        StereoCosetAst::Undetermined,
+                    );
                 }
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
@@ -3053,7 +3069,7 @@ mod tests {
     #[case::modify_remove_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraint::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#v*"]}}"##)]
     #[case::modify_coalesced(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Lit(-1) } }), Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraint::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#c-#v*"]}}"##)]
     fn test_render_deltas_atom(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
-        assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);
+        assert_eq!(render_deltas(&Deltas::from_iter(deltas), &MoleculeAst::default(), &meta), vec![read_string(expected).unwrap()]);
     }
 
     #[rustfmt::skip]
@@ -3063,7 +3079,7 @@ mod tests {
     #[case::modify_field(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) } })], r##"{:bond {:modify [:b1 "2"]}}"##)]
     #[case::modify_constraint(vec![Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: None, new: Some(BondConstraint::Aromatic(BooleanAst::Lit(true))) })], r##"{:bond {:modify [:b1 "#a"]}}"##)]
     fn test_render_deltas_bond(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
-        assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);
+        assert_eq!(render_deltas(&Deltas::from_iter(deltas), &MoleculeAst::default(), &meta), vec![read_string(expected).unwrap()]);
     }
 
     #[rustfmt::skip]
@@ -3072,7 +3088,7 @@ mod tests {
     #[case::add_entity_leaf(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(AtomId(2), AtomConstraint::Valence(ValueAst::Lit(2)))))], "{:constraint {:add {:atom [:n {:valence 2}]}}}")]
     #[case::remove(vec![Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:remove {:connected {}}}}")]
     fn test_render_deltas_constraint(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
-        assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);
+        assert_eq!(render_deltas(&Deltas::from_iter(deltas), &MoleculeAst::default(), &meta), vec![read_string(expected).unwrap()]);
     }
 
     #[rustfmt::skip]
@@ -3098,10 +3114,36 @@ mod tests {
     #[case::stereo_atom_apply(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:apply [0 :tetrahedral "(0,1)"]}}]}"##)]
     #[case::stereo_bond_add(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 3] :type "Ct1"}}}]}"##)]
     #[case::stereo_bond_remove(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]} :deltas [{:stereo-bond {:remove 0}}]}"##)]
+    #[case::dative_constraint_removal(r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#a"}]} :deltas [{:dative-bond {:modify [0 "1#a*"]}}]}"##)]
+    #[case::aromatic_constraint_removal(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]} :deltas [{:aromatic-system {:modify [0 "*#e*"]}}]}"##)]
+    #[case::multicenter_constraint_removal(r##"{:lhs {:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "*#e2"}]} :deltas [{:multicenter-bond {:modify [0 "*#e*"]}}]}"##)]
+    #[case::stereo_atom_topicity_removal(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#o(0,1)="}]} :deltas [{:stereo-atom {:modify [0 "Th#o(0,1)*"]}}]}"##)]
+    #[case::stereo_atom_topicity_change(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#o(0,1)="}]} :deltas [{:stereo-atom {:modify [0 "Th#o(0,1)/"]}}]}"##)]
+    #[case::stereo_atom_ligand_symmetry_removal(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#p(0,1)"}]} :deltas [{:stereo-atom {:modify [0 "Th#p(0,1)*"]}}]}"##)]
     fn test_reaction_dsl_from_edn_to_edn_roundtrip(#[case] input: &str) {
         let dsl = ReactionDsl::from_edn(&read_string(input).unwrap()).unwrap();
         let reparsed = ReactionDsl::from_edn(&dsl.to_edn()).unwrap();
         assert_eq!(reparsed, dsl);
+    }
+
+    /// Every `fuzz_reaction` seed must parse and satisfy the fuzz invariant (streaming and tree
+    /// parsers agree) — guards the seed corpus against rot as the DSL evolves.
+    #[rstest]
+    fn test_fuzz_reaction_seeds_valid() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fuzz/seeds/fuzz_reaction");
+        let mut count = 0;
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            let data = std::fs::read_to_string(&path).unwrap();
+            let stream = ReactionDsl::from_edn_str(&data).ok();
+            let tree = read_string(&data)
+                .ok()
+                .and_then(|edn| ReactionDsl::from_edn(&edn).ok());
+            assert!(stream.is_some(), "seed {path:?} failed to parse");
+            assert_eq!(stream, tree, "seed {path:?}: streaming and tree parsers disagree");
+            count += 1;
+        }
+        assert_eq!(count, 30);
     }
 
     #[rustfmt::skip]

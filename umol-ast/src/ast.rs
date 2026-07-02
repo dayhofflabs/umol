@@ -58,7 +58,8 @@ pub use constraint::{
 pub use dative::DativeBondAst;
 pub use delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, ConstraintSpan, DativeBondDelta,
-    Delta, Deltas, EntitySpan, MulticenterBondDelta, NoncovalentBondDelta,
+    Delta, Deltas, EntitySpan, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
+    StereoBondDelta,
 };
 pub use edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
