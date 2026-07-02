@@ -1,0 +1,1 @@
+{:lhs {:atoms ["C" "O"]} :deltas [{:bond {:add [0 1 "1"]}}]}

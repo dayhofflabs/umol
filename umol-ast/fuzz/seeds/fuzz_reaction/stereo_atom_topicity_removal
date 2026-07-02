@@ -1,0 +1,1 @@
+{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#o(0,1)="}]} :deltas [{:stereo-atom {:modify [0 "Th#o(0,1)*"]}}]}

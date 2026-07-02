@@ -1,0 +1,1 @@
+{:atoms ["C" "C"] :multicenter-bonds [{:add {:atoms [0 1] :type "*#e2"}}]}

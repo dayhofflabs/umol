@@ -41,3 +41,10 @@ path = "fuzz_targets/fuzz_reaction.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_reaction_span"
+path = "fuzz_targets/fuzz_reaction_span.rs"
+test = false
+doc = false
+bench = false

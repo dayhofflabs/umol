@@ -1,0 +1,1 @@
+{:lhs {:atoms ["C" "N"] :bonds [[0 1 "1"]]} :deltas [{:constraint {:add {:connected {}}}}]}

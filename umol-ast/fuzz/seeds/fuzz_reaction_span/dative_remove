@@ -1,0 +1,1 @@
+{:atoms ["C" "N"] :dative-bonds [{:remove {:donors [0] :acceptor 1 :type "1#R"}}]}

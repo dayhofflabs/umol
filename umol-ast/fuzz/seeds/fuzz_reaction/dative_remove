@@ -1,0 +1,1 @@
+{:lhs {:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}]} :deltas [{:dative-bond {:remove 0}}]}

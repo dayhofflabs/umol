@@ -1,0 +1,1 @@
+{:lhs {:atoms ["C" "C"]} :deltas [{:multicenter-bond {:add {:atoms [0 1] :type "*#e2"}}}]}
