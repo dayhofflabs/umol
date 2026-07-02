@@ -342,6 +342,10 @@ pub enum StereoAtomDelta {
     },
     ModifyConstraint {
         id: StereoAtomId,
+        /// Serialization context: the geometry kind the constraint renders/parses against (its
+        /// permutation degree, `~` shortcut). `None` for a kind-free constraint on an
+        /// `Undetermined`-geometry center. Not read by apply/canonicalize/diff.
+        kind: Option<StereoKind>,
         old: Option<StereoAtomConstraint>,
         new: Option<StereoAtomConstraint>,
     },
@@ -401,8 +405,14 @@ impl StereoAtomDelta {
                 id,
                 change: change.inverse(),
             },
-            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+            Self::ModifyConstraint {
                 id,
+                kind,
+                old,
+                new,
+            } => Self::ModifyConstraint {
+                id,
+                kind,
                 old: new,
                 new: old,
             },
@@ -443,6 +453,8 @@ pub enum StereoBondDelta {
     },
     ModifyConstraint {
         id: StereoBondId,
+        /// Serialization context — see `StereoAtomDelta::ModifyConstraint`.
+        kind: Option<StereoKind>,
         old: Option<StereoBondConstraint>,
         new: Option<StereoBondConstraint>,
     },
@@ -502,8 +514,14 @@ impl StereoBondDelta {
                 id,
                 change: change.inverse(),
             },
-            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+            Self::ModifyConstraint {
                 id,
+                kind,
+                old,
+                new,
+            } => Self::ModifyConstraint {
+                id,
+                kind,
                 old: new,
                 new: old,
             },
@@ -1548,17 +1566,43 @@ impl EntityPatch for StereoAtomDelta {
         StereoAtomDelta::ModifyField { id, change }
     }
 
+    /// Kind-less fallback (the trait signature has no kind); the real producer is the overridden
+    /// `diff`, which stamps `kind` from the entity's config. Stereo's flow never uses this arm.
     fn modify_constraint(
         id: StereoAtomId,
         old: Option<StereoAtomConstraint>,
         new: Option<StereoAtomConstraint>,
     ) -> Self {
-        StereoAtomDelta::ModifyConstraint { id, old, new }
+        StereoAtomDelta::ModifyConstraint {
+            id,
+            kind: None,
+            old,
+            new,
+        }
     }
 
     diff_field_ops!(StereoAtomFieldChange, StereoAtomAst, StereoAtomConstraint, {
         Configuration => configuration,
     });
+
+    /// Stamp each `ModifyConstraint` with the config's kind (the serialization context the
+    /// constraint needs) — the default `diff` routes through `modify_constraint`, which can't.
+    fn diff(id: StereoAtomId, left: &StereoAtomAst, right: &StereoAtomAst) -> Vec<Self> {
+        let kind = left
+            .configuration
+            .kind()
+            .or_else(|| right.configuration.kind());
+        let mut out: Vec<Self> = Self::diff_field(left, right)
+            .into_iter()
+            .map(|change| StereoAtomDelta::ModifyField { id, change })
+            .collect();
+        out.extend(
+            Self::diff_constraints(left, right)
+                .into_iter()
+                .map(|(old, new)| StereoAtomDelta::ModifyConstraint { id, kind, old, new }),
+        );
+        out
+    }
 
     fn apply_constraint(
         ast: &mut StereoAtomAst,
@@ -1587,17 +1631,41 @@ impl EntityPatch for StereoBondDelta {
         StereoBondDelta::ModifyField { id, change }
     }
 
+    /// Kind-less fallback — see `StereoAtomDelta::modify_constraint`.
     fn modify_constraint(
         id: StereoBondId,
         old: Option<StereoBondConstraint>,
         new: Option<StereoBondConstraint>,
     ) -> Self {
-        StereoBondDelta::ModifyConstraint { id, old, new }
+        StereoBondDelta::ModifyConstraint {
+            id,
+            kind: None,
+            old,
+            new,
+        }
     }
 
     diff_field_ops!(StereoBondFieldChange, StereoBondAst, StereoBondConstraint, {
         Configuration => configuration,
     });
+
+    /// Stamp each `ModifyConstraint` with the config's kind — see `StereoAtomDelta::diff`.
+    fn diff(id: StereoBondId, left: &StereoBondAst, right: &StereoBondAst) -> Vec<Self> {
+        let kind = left
+            .configuration
+            .kind()
+            .or_else(|| right.configuration.kind());
+        let mut out: Vec<Self> = Self::diff_field(left, right)
+            .into_iter()
+            .map(|change| StereoBondDelta::ModifyField { id, change })
+            .collect();
+        out.extend(
+            Self::diff_constraints(left, right)
+                .into_iter()
+                .map(|(old, new)| StereoBondDelta::ModifyConstraint { id, kind, old, new }),
+        );
+        out
+    }
 
     fn apply_constraint(
         ast: &mut StereoBondAst,
@@ -1914,7 +1982,13 @@ fn fold_stereo_atom_group(
                 kind = Some(k);
                 config_ops.push(StereoConfigOp::Relative(k.mirror_permutation()));
             }
-            StereoAtomDelta::ModifyConstraint { old, new, .. } => {
+            StereoAtomDelta::ModifyConstraint {
+                kind: constraint_kind,
+                old,
+                new,
+                ..
+            } => {
+                kind = kind.or(constraint_kind);
                 let key = match old.as_ref().or(new.as_ref()) {
                     Some(c) => c.key(),
                     None => continue,
@@ -1986,7 +2060,12 @@ fn fold_stereo_atom_group(
     }
     for (_key, (old, new)) in constraints {
         if old != new {
-            out.push(StereoAtomDelta::ModifyConstraint { id, old, new });
+            out.push(StereoAtomDelta::ModifyConstraint {
+                id,
+                kind,
+                old,
+                new,
+            });
         }
     }
     Ok(out)
@@ -2075,7 +2154,13 @@ fn fold_stereo_bond_group(
                 kind = Some(k);
                 config_ops.push(StereoConfigOp::Relative(k.mirror_permutation()));
             }
-            StereoBondDelta::ModifyConstraint { old, new, .. } => {
+            StereoBondDelta::ModifyConstraint {
+                kind: constraint_kind,
+                old,
+                new,
+                ..
+            } => {
+                kind = kind.or(constraint_kind);
                 let key = match old.as_ref().or(new.as_ref()) {
                     Some(c) => c.key(),
                     None => continue,
@@ -2147,7 +2232,12 @@ fn fold_stereo_bond_group(
     }
     for (_key, (old, new)) in constraints {
         if old != new {
-            out.push(StereoBondDelta::ModifyConstraint { id, old, new });
+            out.push(StereoBondDelta::ModifyConstraint {
+                id,
+                kind,
+                old,
+                new,
+            });
         }
     }
     Ok(out)
@@ -2379,13 +2469,17 @@ pub(crate) fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 id: map.map_stereo_atom(id),
                 change,
             },
-            StereoAtomDelta::ModifyConstraint { id, old, new } => {
-                StereoAtomDelta::ModifyConstraint {
-                    id: map.map_stereo_atom(id),
-                    old,
-                    new,
-                }
-            }
+            StereoAtomDelta::ModifyConstraint {
+                id,
+                kind,
+                old,
+                new,
+            } => StereoAtomDelta::ModifyConstraint {
+                id: map.map_stereo_atom(id),
+                kind,
+                old,
+                new,
+            },
             StereoAtomDelta::Apply {
                 id,
                 kind,
@@ -2437,13 +2531,17 @@ pub(crate) fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 id: map.map_stereo_bond(id),
                 change,
             },
-            StereoBondDelta::ModifyConstraint { id, old, new } => {
-                StereoBondDelta::ModifyConstraint {
-                    id: map.map_stereo_bond(id),
-                    old,
-                    new,
-                }
-            }
+            StereoBondDelta::ModifyConstraint {
+                id,
+                kind,
+                old,
+                new,
+            } => StereoBondDelta::ModifyConstraint {
+                id: map.map_stereo_bond(id),
+                kind,
+                old,
+                new,
+            },
             StereoBondDelta::Apply {
                 id,
                 kind,
@@ -2783,11 +2881,13 @@ mod tests {
     #[case::set_constraint(
         StereoAtomDelta::ModifyConstraint {
             id: StereoAtomId(2),
+            kind: Some(StereoKind::Tetrahedral),
             old: None,
             new: Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Undetermined)),
         },
         StereoAtomDelta::ModifyConstraint {
             id: StereoAtomId(2),
+            kind: Some(StereoKind::Tetrahedral),
             old: Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Undetermined)),
             new: None,
         }

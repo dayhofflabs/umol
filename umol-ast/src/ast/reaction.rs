@@ -199,7 +199,7 @@ impl ReactionAst {
                             change: change.clone(),
                         })
                     }
-                    StereoAtomDelta::ModifyConstraint { id, old, new } => {
+                    StereoAtomDelta::ModifyConstraint { id, old, new, .. } => {
                         sets.push(Edit::ModifyStereoAtomConstraint {
                             id: StereoAtomRef::Id(m.host_stereo_atom(*id)),
                             old: old.clone(),
@@ -254,7 +254,7 @@ impl ReactionAst {
                             change: change.clone(),
                         })
                     }
-                    StereoBondDelta::ModifyConstraint { id, old, new } => {
+                    StereoBondDelta::ModifyConstraint { id, old, new, .. } => {
                         sets.push(Edit::ModifyStereoBondConstraint {
                             id: StereoBondRef::Id(m.host_stereo_bond(*id)),
                             old: old.clone(),

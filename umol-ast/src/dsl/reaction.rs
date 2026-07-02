@@ -67,7 +67,6 @@ use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use crate::ast::molecule::MoleculeAst;
 use crate::ast::reaction::ReactionAst;
 use crate::ast::stereo::{StereoConfigurationAst, StereoCosetAst};
 use crate::ast::traits::{FromAst, IntoAst, Lattice};
@@ -1760,7 +1759,7 @@ fn render_reaction_edn(ast: &ReactionAst, meta: &ReactionMetadata) -> Edn<'stati
     );
     map.insert(
         Edn::keyword("deltas"),
-        Edn::Vector(render_deltas(&ast.deltas, &ast.lhs, meta).into()),
+        Edn::Vector(render_deltas(&ast.deltas, meta).into()),
     );
     if meta.has_atom_aliases() {
         let mut pairs: Vec<Edn<'static>> = Vec::with_capacity(meta.atom_aliases_len() * 2);
@@ -1776,7 +1775,7 @@ fn render_reaction_edn(ast: &ReactionAst, meta: &ReactionMetadata) -> Edn<'stati
 /// Render `deltas` to the `:deltas` vector entries, resolving refs against the reaction `meta`.
 /// Consecutive `ModifyField` / `ModifyConstraint` for one atom coalesce into a single
 /// `{:atom {:modify [<ref> <partial>]}}`.
-fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) -> Vec<Edn<'static>> {
+fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> {
     let deltas = deltas.as_slice();
     let mut out = Vec::new();
     // Built once on the first constraint delta (constraint refs resolve against lhs ∪ created).
@@ -2225,6 +2224,7 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
             ) => {
                 let id = *id;
                 let mut partial = StereoAtomAst::default();
+                let mut modify_kind: Option<StereoKind> = None;
                 while let Some(Delta::StereoAtom(delta)) = deltas.get(i) {
                     match delta {
                         StereoAtomDelta::ModifyField { id: j, change } if *j == id => {
@@ -2234,7 +2234,13 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                                 }
                             }
                         }
-                        StereoAtomDelta::ModifyConstraint { id: j, old, new } if *j == id => {
+                        StereoAtomDelta::ModifyConstraint {
+                            id: j,
+                            kind,
+                            old,
+                            new,
+                        } if *j == id => {
+                            modify_kind = modify_kind.or(*kind);
                             match new {
                                 Some(c) => {
                                     partial.constraints.add(c.clone());
@@ -2251,12 +2257,13 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     i += 1;
                 }
                 // Constraints render against the config's kind. A constraint-only modify leaves the
-                // config undetermined, so borrow the kind from the lhs (coset stays unchanged).
-                if partial.configuration.is_undetermined() && !partial.constraints.is_empty() {
-                    partial.configuration = StereoConfigurationAst::kinded(
-                        lhs.stereo_atom(id).kind(),
-                        StereoCosetAst::Undetermined,
-                    );
+                // config undetermined, so take the kind carried on the `ModifyConstraint` delta
+                // (coset stays unchanged). `None` = a kind-free constraint on an open geometry.
+                if partial.configuration.is_undetermined() {
+                    if let Some(kind) = modify_kind {
+                        partial.configuration =
+                            StereoConfigurationAst::kinded(kind, StereoCosetAst::Undetermined);
+                    }
                 }
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
@@ -2360,6 +2367,7 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
             ) => {
                 let id = *id;
                 let mut partial = StereoBondAst::default();
+                let mut modify_kind: Option<StereoKind> = None;
                 while let Some(Delta::StereoBond(delta)) = deltas.get(i) {
                     match delta {
                         StereoBondDelta::ModifyField { id: j, change } if *j == id => {
@@ -2369,7 +2377,13 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                                 }
                             }
                         }
-                        StereoBondDelta::ModifyConstraint { id: j, old, new } if *j == id => {
+                        StereoBondDelta::ModifyConstraint {
+                            id: j,
+                            kind,
+                            old,
+                            new,
+                        } if *j == id => {
+                            modify_kind = modify_kind.or(*kind);
                             match new {
                                 Some(c) => {
                                     partial.constraints.add(c.clone());
@@ -2385,11 +2399,11 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     }
                     i += 1;
                 }
-                if partial.configuration.is_undetermined() && !partial.constraints.is_empty() {
-                    partial.configuration = StereoConfigurationAst::kinded(
-                        lhs.stereo_bond(id).kind(),
-                        StereoCosetAst::Undetermined,
-                    );
+                if partial.configuration.is_undetermined() {
+                    if let Some(kind) = modify_kind {
+                        partial.configuration =
+                            StereoConfigurationAst::kinded(kind, StereoCosetAst::Undetermined);
+                    }
                 }
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
@@ -3150,7 +3164,7 @@ mod tests {
     #[case::modify_remove_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraint::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#v*"]}}"##)]
     #[case::modify_coalesced(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Lit(-1) } }), Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraint::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#c-#v*"]}}"##)]
     fn test_render_deltas_atom(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
-        assert_eq!(render_deltas(&Deltas::from_iter(deltas), &MoleculeAst::default(), &meta), vec![read_string(expected).unwrap()]);
+        assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);
     }
 
     #[rustfmt::skip]
@@ -3160,7 +3174,7 @@ mod tests {
     #[case::modify_field(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) } })], r##"{:bond {:modify [:b1 "2"]}}"##)]
     #[case::modify_constraint(vec![Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: None, new: Some(BondConstraint::Aromatic(BooleanAst::Lit(true))) })], r##"{:bond {:modify [:b1 "#a"]}}"##)]
     fn test_render_deltas_bond(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
-        assert_eq!(render_deltas(&Deltas::from_iter(deltas), &MoleculeAst::default(), &meta), vec![read_string(expected).unwrap()]);
+        assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);
     }
 
     #[rustfmt::skip]
@@ -3169,7 +3183,7 @@ mod tests {
     #[case::add_entity_leaf(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(AtomId(2), AtomConstraint::Valence(ValueAst::Lit(2)))))], "{:constraint {:add {:atom [:n {:valence 2}]}}}")]
     #[case::remove(vec![Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:remove {:connected {}}}}")]
     fn test_render_deltas_constraint(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
-        assert_eq!(render_deltas(&Deltas::from_iter(deltas), &MoleculeAst::default(), &meta), vec![read_string(expected).unwrap()]);
+        assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);
     }
 
     #[rustfmt::skip]
