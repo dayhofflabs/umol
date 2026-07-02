@@ -83,7 +83,47 @@ impl StereoKind {
             .reindex(index, permutation)
             .expect("act: valid coset index and permutation")
     }
+
+
+    /// The mirror (improper, μ) generator as a permutation: chiral kinds use the
+    /// orientation-reversing generator; achiral kinds act trivially on cosets.
+    pub fn mirror_permutation(self) -> Permutation {
+        if self.is_chiral_class() {
+            space(self.class_key()).improper()
+        } else {
+            Permutation::identity(self.degree())
+        }
+    }
+
+    /// Whether `g` and `h` induce the same coset permutation for this kind.
+    fn coset_action_eq(self, g: Permutation, h: Permutation) -> bool {
+        let s = space(self.class_key());
+        (0..s.count() as u32).all(|i| s.reindex(i, g) == s.reindex(i, h))
+    }
+
+    /// Canonicalize coset permutation, priority `Mirror > Swap > Apply`; `None`
+    /// when it acts as the identity on cosets.
+    pub fn canonicalize_permutation(self, g: Permutation) -> Option<CosetOp> {
+        if self.coset_action_eq(g, Permutation::identity(self.degree())) {
+            None
+        } else if self.is_chiral_class() && self.coset_action_eq(g, self.mirror_permutation()) {
+            Some(CosetOp::Mirror)
+        } else if self.coset_action_eq(g, self.involution()) {
+            Some(CosetOp::Swap)
+        } else {
+            Some(CosetOp::Apply(g))
+        }
+    }
 }
+
+/// Permutation in canonical priority form, `Mirror` > `Swap` > `Apply`, kind-dependent.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CosetOp {
+    Swap,
+    Mirror,
+    Apply(Permutation),
+}
+
 
 /// Topicity of two ligand positions of a stereo carrier (derived ground value).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, VariantArray)]
@@ -492,24 +532,6 @@ pub struct StereoConfiguration {
     pub coset: u32,
 }
 
-impl StereoKind {
-    /// The mirror (improper, μ) generator as a permutation: chiral kinds use the
-    /// orientation-reversing generator; achiral kinds act trivially on cosets.
-    pub(crate) fn mirror_permutation(self) -> Permutation {
-        if self.is_chiral_class() {
-            space(self.class_key()).improper()
-        } else {
-            Permutation::identity(self.degree())
-        }
-    }
-
-    /// Whether `g` and `h` induce the same coset permutation for this kind.
-    fn coset_action_eq(self, g: Permutation, h: Permutation) -> bool {
-        let s = space(self.class_key());
-        (0..s.count() as u32).all(|i| s.reindex(i, g) == s.reindex(i, h))
-    }
-}
-
 /// The literal coset-index set a positive coset denotes; `None` for the wildcard
 /// `Undetermined` and the symbolic `Term`. Used by `coset_meet`/`coset_join`
 /// after those two cases are handled.
@@ -567,17 +589,11 @@ pub(crate) fn canon_coset(
                         None => None,
                     };
                     let var = StereoTerm::Var(Box::new((v.0.clone(), domain)));
-                    let id = Permutation::identity(kind.degree());
-                    let term = if kind.coset_action_eq(g, id) {
-                        var
-                    } else if kind.is_chiral_class()
-                        && kind.coset_action_eq(g, kind.mirror_permutation())
-                    {
-                        StereoTerm::Mirror(Box::new(var))
-                    } else if kind.coset_action_eq(g, kind.involution()) {
-                        StereoTerm::Swap(Box::new(var))
-                    } else {
-                        StereoTerm::Apply(Box::new(var), g)
+                    let term = match kind.canonicalize_permutation(g) {
+                        None => var,
+                        Some(CosetOp::Mirror) => StereoTerm::Mirror(Box::new(var)),
+                        Some(CosetOp::Swap) => StereoTerm::Swap(Box::new(var)),
+                        Some(CosetOp::Apply(g)) => StereoTerm::Apply(Box::new(var), g),
                     };
                     return Ok(StereoCosetAst::term(term));
                 }

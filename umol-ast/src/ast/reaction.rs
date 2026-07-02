@@ -15,13 +15,15 @@ use super::bond::BondAst;
 use super::dative::DativeBondAst;
 use super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
-    MulticenterBondDelta, NoncovalentBondDelta,
+    MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
+use super::stereo::StereoConfigurationAst;
 use super::edit::{
     AddBond, AromaticSystemRef, AtomRef, BondRef, DativeBondRef, Edit, MulticenterBondRef,
-    NoncovalentBondRef,
+    NoncovalentBondRef, StereoAtomFieldChange, StereoAtomRef, StereoAtomRemoval,
+    StereoBondFieldChange, StereoBondRef, StereoBondRemoval,
 };
 use super::embedding::MoleculeEmbedding;
 use super::error::{ApplyError, Contradiction};
@@ -67,6 +69,8 @@ impl ReactionAst {
         let mut removed_host_aromatic: HashSet<AromaticSystemId> = HashSet::new();
         let mut removed_host_multicenter: HashSet<MulticenterBondId> = HashSet::new();
         let mut removed_host_noncovalent: HashSet<NoncovalentBondId> = HashSet::new();
+        let mut removed_host_stereo_atom: HashSet<StereoAtomId> = HashSet::new();
+        let mut removed_host_stereo_bond: HashSet<StereoBondId> = HashSet::new();
         let mut constraint_deltas: Vec<ConstraintDelta> = Vec::new();
 
         for delta in deltas.iter() {
@@ -184,12 +188,126 @@ impl ReactionAst {
                         removed_host_noncovalent.insert(m.host_noncovalent_bond(*id));
                     }
                 },
+                // Stereo: the four set-ops lower directly; the relative ops resolve against the
+                // matched host config (same frame — no reindex, like the other overlays) and emit an
+                // absolute `Configuration`. `Add` is lowered in the second pass; `Remove` tracks the
+                // host id for the DPO dangling check.
+                Delta::StereoAtom(s) => match s {
+                    StereoAtomDelta::ModifyField { id, change } => {
+                        sets.push(Edit::ModifyStereoAtomField {
+                            id: StereoAtomRef::Id(m.host_stereo_atom(*id)),
+                            change: change.clone(),
+                        })
+                    }
+                    StereoAtomDelta::ModifyConstraint { id, old, new } => {
+                        sets.push(Edit::ModifyStereoAtomConstraint {
+                            id: StereoAtomRef::Id(m.host_stereo_atom(*id)),
+                            old: old.clone(),
+                            new: new.clone(),
+                        })
+                    }
+                    StereoAtomDelta::Apply { id, kind, permutation } => {
+                        let host_id = m.host_stereo_atom(*id);
+                        let old = StereoConfigurationAst::Kinded(
+                            *kind,
+                            host.stereo_atom(host_id).coset().clone(),
+                        );
+                        let new = old.apply(*permutation);
+                        sets.push(Edit::ModifyStereoAtomField {
+                            id: StereoAtomRef::Id(host_id),
+                            change: StereoAtomFieldChange::Configuration { old, new },
+                        })
+                    }
+                    StereoAtomDelta::Swap { id, kind } => {
+                        let host_id = m.host_stereo_atom(*id);
+                        let old = StereoConfigurationAst::Kinded(
+                            *kind,
+                            host.stereo_atom(host_id).coset().clone(),
+                        );
+                        let new = old.swap();
+                        sets.push(Edit::ModifyStereoAtomField {
+                            id: StereoAtomRef::Id(host_id),
+                            change: StereoAtomFieldChange::Configuration { old, new },
+                        })
+                    }
+                    StereoAtomDelta::Mirror { id, kind } => {
+                        let host_id = m.host_stereo_atom(*id);
+                        let old = StereoConfigurationAst::Kinded(
+                            *kind,
+                            host.stereo_atom(host_id).coset().clone(),
+                        );
+                        let new = old.mirror();
+                        sets.push(Edit::ModifyStereoAtomField {
+                            id: StereoAtomRef::Id(host_id),
+                            change: StereoAtomFieldChange::Configuration { old, new },
+                        })
+                    }
+                    StereoAtomDelta::Add { .. } => {}
+                    StereoAtomDelta::Remove { id, .. } => {
+                        removed_host_stereo_atom.insert(m.host_stereo_atom(*id));
+                    }
+                },
+                Delta::StereoBond(s) => match s {
+                    StereoBondDelta::ModifyField { id, change } => {
+                        sets.push(Edit::ModifyStereoBondField {
+                            id: StereoBondRef::Id(m.host_stereo_bond(*id)),
+                            change: change.clone(),
+                        })
+                    }
+                    StereoBondDelta::ModifyConstraint { id, old, new } => {
+                        sets.push(Edit::ModifyStereoBondConstraint {
+                            id: StereoBondRef::Id(m.host_stereo_bond(*id)),
+                            old: old.clone(),
+                            new: new.clone(),
+                        })
+                    }
+                    StereoBondDelta::Apply { id, kind, permutation } => {
+                        let host_id = m.host_stereo_bond(*id);
+                        let old = StereoConfigurationAst::Kinded(
+                            *kind,
+                            host.stereo_bond(host_id).coset().clone(),
+                        );
+                        let new = old.apply(*permutation);
+                        sets.push(Edit::ModifyStereoBondField {
+                            id: StereoBondRef::Id(host_id),
+                            change: StereoBondFieldChange::Configuration { old, new },
+                        })
+                    }
+                    StereoBondDelta::Swap { id, kind } => {
+                        let host_id = m.host_stereo_bond(*id);
+                        let old = StereoConfigurationAst::Kinded(
+                            *kind,
+                            host.stereo_bond(host_id).coset().clone(),
+                        );
+                        let new = old.swap();
+                        sets.push(Edit::ModifyStereoBondField {
+                            id: StereoBondRef::Id(host_id),
+                            change: StereoBondFieldChange::Configuration { old, new },
+                        })
+                    }
+                    StereoBondDelta::Mirror { id, kind } => {
+                        let host_id = m.host_stereo_bond(*id);
+                        let old = StereoConfigurationAst::Kinded(
+                            *kind,
+                            host.stereo_bond(host_id).coset().clone(),
+                        );
+                        let new = old.mirror();
+                        sets.push(Edit::ModifyStereoBondField {
+                            id: StereoBondRef::Id(host_id),
+                            change: StereoBondFieldChange::Configuration { old, new },
+                        })
+                    }
+                    StereoBondDelta::Add { .. } => {}
+                    StereoBondDelta::Remove { id, .. } => {
+                        removed_host_stereo_bond.insert(m.host_stereo_bond(*id));
+                    }
+                },
                 Delta::Constraint(c) => constraint_deltas.push(c.clone()),
             }
         }
 
         // DPO gluing condition: a deleted host atom keeps no bond or overlay the rule does not
-        // also delete. (Stereo incidence is deferred to I6c, with stereo deltas.)
+        // also delete.
         for &host_atom in &removed_host_atoms {
             let atom = host.atom(host_atom);
             for bond in atom.bond_ids() {
@@ -217,6 +335,18 @@ impl ReactionAst {
                     return Err(ApplyError::Dangling { host_atom });
                 }
             }
+            // Stereo incidence (site or ligand) via the stereo views; a stereo bond's site is a bond,
+            // so a deleted atom touches a stereo bond only as a ligand — `incident_ids` covers both.
+            for stereo_atom in host.stereo_atoms().incident_ids(host_atom) {
+                if !removed_host_stereo_atom.contains(&stereo_atom) {
+                    return Err(ApplyError::Dangling { host_atom });
+                }
+            }
+            for stereo_bond in host.stereo_bonds().incident_ids(host_atom) {
+                if !removed_host_stereo_bond.contains(&stereo_bond) {
+                    return Err(ApplyError::Dangling { host_atom });
+                }
+            }
         }
 
         // `AddAtoms` is the first edit, so created atoms take `New(0..k)` in ascending id order.
@@ -228,6 +358,15 @@ impl ReactionAst {
         let atom_ref = |id: AtomId| match new_index.get(&id) {
             Some(&index) => AtomRef::New(index),
             None => AtomRef::Id(m.host_atom(id)),
+        };
+        let new_bond_index: HashMap<BondId, usize> = created_bonds
+            .keys()
+            .enumerate()
+            .map(|(index, &id)| (id, index))
+            .collect();
+        let bond_ref = |id: BondId| match new_bond_index.get(&id) {
+            Some(&index) => BondRef::New(index),
+            None => BondRef::Id(m.host_bond(id)),
         };
 
         // Overlay create/remove need `atom_ref` (created participants resolve to `New`), so they
@@ -244,6 +383,8 @@ impl ReactionAst {
             Vec::new();
         let mut remove_noncovalent: Vec<(NoncovalentBondRef, [AtomRef; 2], NoncovalentBondAst)> =
             Vec::new();
+        let mut remove_stereo_atom: Vec<StereoAtomRemoval> = Vec::new();
+        let mut remove_stereo_bond: Vec<StereoBondRemoval> = Vec::new();
         for delta in deltas.iter() {
             match delta {
                 Delta::DativeBond(DativeBondDelta::Add {
@@ -306,6 +447,44 @@ impl ReactionAst {
                         ast.clone(),
                     ));
                 }
+                Delta::StereoAtom(StereoAtomDelta::Add {
+                    site, ligands, ast, ..
+                }) => {
+                    overlay_adds.push(Edit::AddStereoAtom {
+                        site: atom_ref(*site),
+                        ligands: ligands.iter().map(|l| (atom_ref(l.atom_id), l.kind)).collect(),
+                        ast: ast.clone(),
+                    });
+                }
+                Delta::StereoAtom(StereoAtomDelta::Remove {
+                    id, site, ligands, ast,
+                }) => {
+                    remove_stereo_atom.push((
+                        StereoAtomRef::Id(m.host_stereo_atom(*id)),
+                        atom_ref(*site),
+                        ligands.iter().map(|l| (atom_ref(l.atom_id), l.kind)).collect(),
+                        ast.clone(),
+                    ));
+                }
+                Delta::StereoBond(StereoBondDelta::Add {
+                    site, ligands, ast, ..
+                }) => {
+                    overlay_adds.push(Edit::AddStereoBond {
+                        site: bond_ref(*site),
+                        ligands: ligands.iter().map(|l| (atom_ref(l.atom_id), l.kind)).collect(),
+                        ast: ast.clone(),
+                    });
+                }
+                Delta::StereoBond(StereoBondDelta::Remove {
+                    id, site, ligands, ast,
+                }) => {
+                    remove_stereo_bond.push((
+                        StereoBondRef::Id(m.host_stereo_bond(*id)),
+                        bond_ref(*site),
+                        ligands.iter().map(|l| (atom_ref(l.atom_id), l.kind)).collect(),
+                        ast.clone(),
+                    ));
+                }
                 _ => {}
             }
         }
@@ -328,6 +507,16 @@ impl ReactionAst {
         if !remove_noncovalent.is_empty() {
             overlay_removes.push(Edit::RemoveNoncovalentBonds {
                 removes: remove_noncovalent,
+            });
+        }
+        if !remove_stereo_atom.is_empty() {
+            overlay_removes.push(Edit::RemoveStereoAtoms {
+                removes: remove_stereo_atom,
+            });
+        }
+        if !remove_stereo_bond.is_empty() {
+            overlay_removes.push(Edit::RemoveStereoBonds {
+                removes: remove_stereo_bond,
             });
         }
 

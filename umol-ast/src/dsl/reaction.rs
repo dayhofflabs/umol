@@ -830,7 +830,9 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
             Delta::DativeBond(_)
             | Delta::AromaticSystem(_)
             | Delta::MulticenterBond(_)
-            | Delta::NoncovalentBond(_) => todo!("I4: overlay delta DSL rendering"),
+            | Delta::NoncovalentBond(_)
+            | Delta::StereoAtom(_)
+            | Delta::StereoBond(_) => todo!("overlay + stereo delta DSL rendering (I6d)"),
         }
     }
     out

@@ -1198,22 +1198,6 @@ impl MoleculeBuilder {
         cascade.rollback_into(&mut self.constraints);
     }
 
-    pub(super) fn restore_stereo_atom(
-        &mut self,
-        removed: RemovedStereoAtom,
-        undo_compaction: &UndoCompaction,
-    ) {
-        self.restore_stereo_atoms(vec![removed], undo_compaction);
-    }
-
-    pub(super) fn restore_stereo_bond(
-        &mut self,
-        removed: RemovedStereoBond,
-        undo_compaction: &UndoCompaction,
-    ) {
-        self.restore_stereo_bonds(vec![removed], undo_compaction);
-    }
-
     // -- Restore primitives ---------------------------------------------------
 
     fn restore_atoms(&mut self, removed: Vec<RemovedAtom>, undo_compaction: &UndoCompaction) {
@@ -1350,7 +1334,7 @@ impl MoleculeBuilder {
             FixedSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
     }
 
-    fn restore_stereo_atoms(
+    pub(super) fn restore_stereo_atoms(
         &mut self,
         removed: Vec<RemovedStereoAtom>,
         undo_compaction: &UndoCompaction,
@@ -1370,7 +1354,7 @@ impl MoleculeBuilder {
             FixedVarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
     }
 
-    fn restore_stereo_bonds(
+    pub(super) fn restore_stereo_bonds(
         &mut self,
         removed: Vec<RemovedStereoBond>,
         undo_compaction: &UndoCompaction,

@@ -21,13 +21,15 @@ use super::constraint::{Constraint, Constraints};
 use super::dative::DativeBondAst;
 use super::delta::{
     apply_aromatic_change, apply_atom_change, apply_bond_change, apply_dative_change,
-    apply_multicenter_change, apply_noncovalent_change, remap_delta, AromaticSystemDelta, AtomDelta,
-    BondDelta, ConstraintDelta, ConstraintSpan, DativeBondDelta, Delta, Deltas, EntityFold,
-    EntitySpan, MulticenterBondDelta, NoncovalentBondDelta,
+    apply_multicenter_change, apply_noncovalent_change, apply_stereo_atom_change,
+    apply_stereo_bond_change, remap_delta, AromaticSystemDelta, AtomDelta, BondDelta,
+    ConstraintDelta, ConstraintSpan, DativeBondDelta, Delta, Deltas, EntityFold, EntitySpan,
+    MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
 use super::error::Contradiction;
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
 use super::molecule::MoleculeAst;
@@ -476,6 +478,18 @@ impl ReactionAst {
             BTreeMap::new();
         let mut noncovalent_changes: HashMap<NoncovalentBondId, Vec<NoncovalentBondDelta>> =
             HashMap::new();
+        let mut removed_stereo_atom: HashMap<StereoAtomId, StereoAtomAst> = HashMap::new();
+        let mut added_stereo_atom: BTreeMap<
+            StereoAtomId,
+            (AtomId, Vec<StereoLigand>, StereoAtomAst),
+        > = BTreeMap::new();
+        let mut stereo_atom_changes: HashMap<StereoAtomId, Vec<StereoAtomDelta>> = HashMap::new();
+        let mut removed_stereo_bond: HashMap<StereoBondId, StereoBondAst> = HashMap::new();
+        let mut added_stereo_bond: BTreeMap<
+            StereoBondId,
+            (BondId, Vec<StereoLigand>, StereoBondAst),
+        > = BTreeMap::new();
+        let mut stereo_bond_changes: HashMap<StereoBondId, Vec<StereoBondDelta>> = HashMap::new();
         let mut added_constraints: Vec<Constraint> = Vec::new();
         let mut removed_constraints: Vec<Constraint> = Vec::new();
 
@@ -556,6 +570,40 @@ impl ReactionAst {
                         noncovalent_changes.entry(*id).or_default().push(noncovalent.clone());
                     }
                 },
+                Delta::StereoAtom(stereo) => match stereo {
+                    StereoAtomDelta::Remove { id, ast, .. } => {
+                        removed_stereo_atom.insert(*id, ast.clone());
+                    }
+                    StereoAtomDelta::Add {
+                        id, site, ligands, ast,
+                    } => {
+                        added_stereo_atom.insert(*id, (*site, ligands.clone(), ast.clone()));
+                    }
+                    StereoAtomDelta::ModifyField { id, .. }
+                    | StereoAtomDelta::ModifyConstraint { id, .. }
+                    | StereoAtomDelta::Apply { id, .. }
+                    | StereoAtomDelta::Swap { id, .. }
+                    | StereoAtomDelta::Mirror { id, .. } => {
+                        stereo_atom_changes.entry(*id).or_default().push(stereo.clone());
+                    }
+                },
+                Delta::StereoBond(stereo) => match stereo {
+                    StereoBondDelta::Remove { id, ast, .. } => {
+                        removed_stereo_bond.insert(*id, ast.clone());
+                    }
+                    StereoBondDelta::Add {
+                        id, site, ligands, ast,
+                    } => {
+                        added_stereo_bond.insert(*id, (*site, ligands.clone(), ast.clone()));
+                    }
+                    StereoBondDelta::ModifyField { id, .. }
+                    | StereoBondDelta::ModifyConstraint { id, .. }
+                    | StereoBondDelta::Apply { id, .. }
+                    | StereoBondDelta::Swap { id, .. }
+                    | StereoBondDelta::Mirror { id, .. } => {
+                        stereo_bond_changes.entry(*id).or_default().push(stereo.clone());
+                    }
+                },
                 Delta::Constraint(ConstraintDelta::Add(c)) => added_constraints.push(c.clone()),
                 Delta::Constraint(ConstraintDelta::Remove(c)) => {
                     removed_constraints.push(c.clone())
@@ -571,6 +619,15 @@ impl ReactionAst {
         }
         for (offset, &id) in added_atoms.keys().enumerate() {
             atom_index.insert(id, atom_count + offset);
+        }
+        // Union edge index keyed by bond id (for the stereo-bond site): lhs bonds keep their id,
+        // created bonds append — same shape as `atom_index`.
+        let mut bond_index: HashMap<BondId, usize> = HashMap::new();
+        for edge in 0..bond_count {
+            bond_index.insert(BondId(edge as u32), edge);
+        }
+        for (offset, &id) in added_bonds.keys().enumerate() {
+            bond_index.insert(id, bond_count + offset);
         }
 
         let mut atoms: Vec<EntitySpan<AtomAst>> =
@@ -724,8 +781,8 @@ impl ReactionAst {
         }
         let dative_bonds = FixedVarBirelationSet::new(dative_entries);
 
-        // Stereo overlays have no deltas yet (I6) — all lhs entities carry through Unchanged,
-        // their site/ligand atom ids already in the union id space (lhs ids are identity-mapped).
+        // Stereo overlays: lhs entities tagged by their fold (Removed/Modified/Unchanged), created
+        // ones appended. Site/ligand ids mapped to the union frame via `atom_index`/`bond_index`.
         let mut stereo_atom_entries: Vec<(
             [NodeId; 1],
             Vec<StereoLigand>,
@@ -733,11 +790,27 @@ impl ReactionAst {
         )> = Vec::new();
         for view in lhs.stereo_atoms().iter() {
             let site = [NodeId::from(view.site_id())];
-            stereo_atom_entries.push((
-                site,
-                view.ligand_frame(),
-                EntitySpan::Unchanged(view.ast.clone()),
-            ));
+            let ligands = view.ligand_frame();
+            if let Some(ast) = removed_stereo_atom.get(&view.id) {
+                stereo_atom_entries.push((site, ligands, EntitySpan::Removed(ast.clone())));
+            } else if let Some(changes) = stereo_atom_changes.get(&view.id) {
+                let left = view.ast.clone();
+                let mut right = left.clone();
+                for change in changes {
+                    apply_stereo_atom_change(&mut right, change)?;
+                }
+                stereo_atom_entries.push((site, ligands, EntitySpan::Modified { left, right }));
+            } else {
+                stereo_atom_entries.push((site, ligands, EntitySpan::Unchanged(view.ast.clone())));
+            }
+        }
+        for (site, ligands, ast) in added_stereo_atom.into_values() {
+            let site = [NodeId(atom_index[&site] as u32)];
+            let ligands: Vec<StereoLigand> = ligands
+                .iter()
+                .map(|l| StereoLigand::new(AtomId(atom_index[&l.atom_id] as u32), l.kind))
+                .collect();
+            stereo_atom_entries.push((site, ligands, EntitySpan::Added(ast)));
         }
         let stereo_atoms = FixedVarBirelationSet::new(stereo_atom_entries);
 
@@ -748,11 +821,27 @@ impl ReactionAst {
         )> = Vec::new();
         for view in lhs.stereo_bonds().iter() {
             let site = [EdgeId::from(view.site_id())];
-            stereo_bond_entries.push((
-                site,
-                view.ligand_frame(),
-                EntitySpan::Unchanged(view.ast.clone()),
-            ));
+            let ligands = view.ligand_frame();
+            if let Some(ast) = removed_stereo_bond.get(&view.id) {
+                stereo_bond_entries.push((site, ligands, EntitySpan::Removed(ast.clone())));
+            } else if let Some(changes) = stereo_bond_changes.get(&view.id) {
+                let left = view.ast.clone();
+                let mut right = left.clone();
+                for change in changes {
+                    apply_stereo_bond_change(&mut right, change)?;
+                }
+                stereo_bond_entries.push((site, ligands, EntitySpan::Modified { left, right }));
+            } else {
+                stereo_bond_entries.push((site, ligands, EntitySpan::Unchanged(view.ast.clone())));
+            }
+        }
+        for (site, ligands, ast) in added_stereo_bond.into_values() {
+            let site = [EdgeId(bond_index[&site] as u32)];
+            let ligands: Vec<StereoLigand> = ligands
+                .iter()
+                .map(|l| StereoLigand::new(AtomId(atom_index[&l.atom_id] as u32), l.kind))
+                .collect();
+            stereo_bond_entries.push((site, ligands, EntitySpan::Added(ast)));
         }
         let stereo_bonds = FixedVarBirelationSet::new(stereo_bond_entries);
 

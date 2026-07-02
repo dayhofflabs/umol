@@ -13,7 +13,7 @@ use super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::bond::BondAst;
 use super::constraint::{
     AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint, Constraints,
-    DativeBondConstraint, MulticenterBondConstraint,
+    DativeBondConstraint, MulticenterBondConstraint, StereoAtomConstraint, StereoBondConstraint,
 };
 use super::dative::DativeBondAst;
 use super::electrons::ElectronCountsAst;
@@ -28,6 +28,21 @@ use super::remap::{IdCompaction, UndoCompaction};
 use super::spin::SpinStateAst;
 use super::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationAst};
 use super::value::ValueAst;
+
+/// One stereo-atom removal in a batched `RemoveStereoAtoms`: id, site, ligand frame, recorded ast.
+pub type StereoAtomRemoval = (
+    StereoAtomRef,
+    AtomRef,
+    Vec<(AtomRef, StereoLigandKind)>,
+    StereoAtomAst,
+);
+/// One stereo-bond removal in a batched `RemoveStereoBonds`: id, site (a bond), ligand frame, ast.
+pub type StereoBondRemoval = (
+    StereoBondRef,
+    BondRef,
+    Vec<(AtomRef, StereoLigandKind)>,
+    StereoBondAst,
+);
 
 /// Symbolic reference to an atom: either an existing `AtomId` or the Nth
 /// atom-creating Edit earlier in the same transaction batch.
@@ -324,11 +339,8 @@ pub enum Edit {
         ligands: Vec<(AtomRef, StereoLigandKind)>,
         ast: StereoAtomAst,
     },
-    RemoveStereoAtom {
-        id: StereoAtomRef,
-        site: AtomRef,
-        ligands: Vec<(AtomRef, StereoLigandKind)>,
-        ast: StereoAtomAst,
+    RemoveStereoAtoms {
+        removes: Vec<StereoAtomRemoval>,
     },
     ModifyStereoAtomField {
         id: StereoAtomRef,
@@ -339,11 +351,8 @@ pub enum Edit {
         ligands: Vec<(AtomRef, StereoLigandKind)>,
         ast: StereoBondAst,
     },
-    RemoveStereoBond {
-        id: StereoBondRef,
-        site: BondRef,
-        ligands: Vec<(AtomRef, StereoLigandKind)>,
-        ast: StereoBondAst,
+    RemoveStereoBonds {
+        removes: Vec<StereoBondRemoval>,
     },
     ModifyStereoBondField {
         id: StereoBondRef,
@@ -376,6 +385,16 @@ pub enum Edit {
         id: MulticenterBondRef,
         old: Option<MulticenterBondConstraint>,
         new: Option<MulticenterBondConstraint>,
+    },
+    ModifyStereoAtomConstraint {
+        id: StereoAtomRef,
+        old: Option<StereoAtomConstraint>,
+        new: Option<StereoAtomConstraint>,
+    },
+    ModifyStereoBondConstraint {
+        id: StereoBondRef,
+        old: Option<StereoBondConstraint>,
+        new: Option<StereoBondConstraint>,
     },
 
     // Molecule-list constraints — a true multiset, so add/remove by value
@@ -661,14 +680,16 @@ pub enum Undo {
         cascade: CascadedConstraints,
     },
     RemoveAddedStereoAtom(AddedStereoAtom),
-    RestoreRemovedStereoAtom {
-        removed: RemovedStereoAtom,
+    RestoreRemovedStereoAtoms {
+        removed: Vec<RemovedStereoAtom>,
         undo_compaction: UndoCompaction,
+        cascade: CascadedConstraints,
     },
     RemoveAddedStereoBond(AddedStereoBond),
-    RestoreRemovedStereoBond {
-        removed: RemovedStereoBond,
+    RestoreRemovedStereoBonds {
+        removed: Vec<RemovedStereoBond>,
         undo_compaction: UndoCompaction,
+        cascade: CascadedConstraints,
     },
     ModifyAtomField {
         id: AtomId,
