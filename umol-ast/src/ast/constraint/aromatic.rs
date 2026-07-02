@@ -48,6 +48,13 @@ impl AromaticSystemConstraint {
         }
     }
 
+    /// The same kind with its value made `Undetermined` (the vacuous form).
+    pub fn as_undetermined(&self) -> Self {
+        match self {
+            Self::ElectronCount(_) => Self::ElectronCount(ValueAst::Undetermined),
+        }
+    }
+
     pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
         // Value-only: no indices to compact.
         Some(self)

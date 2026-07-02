@@ -243,6 +243,51 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
     }
 }
 
+/// Partial aromatic system for a reaction `:modify` payload: reuses the aromatic parser but renders
+/// an undetermined `#e` electron-count constraint explicitly (`#e*`) so its removal round-trips.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PartialAromaticSystemDsl(pub AromaticSystemAst);
+
+impl FromStr for PartialAromaticSystemDsl {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(parse_aromatic_system(s)?.0))
+    }
+}
+
+impl Display for PartialAromaticSystemDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt_electron_counts(f, &self.0.electrons)?;
+        fmt_charge(f, &self.0.charge)?;
+        fmt_spin_pair(f, &self.0.spin)?;
+        match electron_count_value(&self.0) {
+            Some(ValueAst::Undetermined) => write!(f, "#e*"),
+            Some(v) => fmt_electrons(f, v),
+            None => Ok(()),
+        }
+    }
+}
+
+impl<'de> FromEdn<'de> for PartialAromaticSystemDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        match edn {
+            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("aromatic-system", e)),
+            other => Err(DeError::TypeMismatch {
+                expected: "string",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl ToEdn for PartialAromaticSystemDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Str(Cow::Owned(self.to_string()))
+    }
+}
+
 fn raise_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaults) {
     let AromaticSystemAst {
         charge,

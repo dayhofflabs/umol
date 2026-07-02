@@ -20,6 +20,118 @@ use super::error::Contradiction;
 use super::ligand::StereoLigand;
 use super::traits::{AsLit, Canonicalize, Lattice};
 
+/// StereoAtomAst and StereoBondAst
+macro_rules! stereo_element {
+    (
+        $(#[doc = $doc:literal])+
+        $name:ident, $constraints:ident, $constraint:ident
+    ) => {
+        $(#[doc = $doc])+
+        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
+        pub struct $name {
+            pub configuration: StereoConfigurationAst,
+            pub constraints: $constraints,
+        }
+
+        impl $name {
+            pub fn new(kind: StereoKind, coset: impl Into<StereoCosetAst>) -> Self {
+                Self {
+                    configuration: StereoConfigurationAst::kinded(kind, coset),
+                    constraints: $constraints::new(),
+                }
+            }
+
+            /// Add a single constraint.
+            pub fn with_constraint(self, _constraint: impl Into<$constraint>) -> Self {
+                self
+            }
+
+            /// Add each constraint from iterator.
+            pub fn with_constraints<I>(mut self, constraints: I) -> Self
+            where
+                I: IntoIterator,
+                I::Item: Into<$constraint>,
+            {
+                self.constraints.extend(constraints.into_iter().map(Into::into));
+                self
+            }
+
+            /// No-op. A stereo element is always stereogenic, so its coset has no
+            /// zero default; it is ground iff its coset is ground.
+            pub fn into_ground(self) -> Self {
+                self
+            }
+
+            /// Overwrite with `other`, keeping the existing configuration when `other`'s is
+            /// undetermined, and merging constraints by key.
+            pub fn update(&self, other: &Self) -> Self {
+                let mut constraints = self.constraints.clone();
+                for c in other.constraints.iter() {
+                    constraints.remove_by_key(c.key());
+                }
+                for c in other.constraints.iter() {
+                    if !c.is_undetermined() {
+                        constraints.add(c.clone());
+                    }
+                }
+                Self {
+                    configuration: if other.configuration.is_undetermined() {
+                        self.configuration.clone()
+                    } else {
+                        other.configuration.clone()
+                    },
+                    constraints,
+                }
+            }
+
+            /// Relabel the ligand positions (`^`); constraints are positionless and unchanged.
+            pub fn apply(&self, permutation: Permutation) -> Self {
+                Self {
+                    configuration: self.configuration.apply(permutation),
+                    constraints: self.constraints.clone(),
+                }
+            }
+
+            /// The kind involution (`~`).
+            pub fn swap(&self) -> Self {
+                Self {
+                    configuration: self.configuration.swap(),
+                    constraints: self.constraints.clone(),
+                }
+            }
+
+            /// The enantiomer / mirror (`'`).
+            pub fn mirror(&self) -> Self {
+                Self {
+                    configuration: self.configuration.mirror(),
+                    constraints: self.constraints.clone(),
+                }
+            }
+
+            /// Restate the coset in the `after` ligand frame given it was stated in `before` — the
+            /// coset action of the induced frame permutation. Mechanical bookkeeping for a relabel
+            /// that leaves the physical configuration unchanged; self-inverting. `before`/`after`
+            /// must be the same ligand multiset reordered (a genuine ligand-set change is membership,
+            /// not a frame permutation).
+            pub fn transform_frame(&self, before: &[StereoLigand], after: &[StereoLigand]) -> Self {
+                self.apply(Permutation::between(before, after))
+            }
+        }
+
+    };
+}
+
+stereo_element! {
+    /// StereoAtomAst with geometry class, configuration, and per-site constraints.
+    StereoAtomAst, StereoAtomConstraints, StereoAtomConstraint
+}
+
+stereo_element! {
+    /// StereoBondAst with cis/trans configuration and per-site constraints.
+    StereoBondAst, StereoBondConstraints, StereoBondConstraint
+}
+
+
 /// Stereo kind: the atom-centered coordination geometries and the bond-centered cis/trans kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, strum::EnumCount)]
 pub enum StereoKind {
@@ -707,95 +819,6 @@ pub(crate) fn coset_apply_permutation(
             .unwrap_or(StereoCosetAst::Undetermined),
         ),
     }
-}
-
-/// StereoAtomAst and StereoBondAst generator
-macro_rules! stereo_element {
-    (
-        $(#[doc = $doc:literal])+
-        $name:ident, $constraints:ident, $constraint:ident
-    ) => {
-        $(#[doc = $doc])+
-        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
-        pub struct $name {
-            pub configuration: StereoConfigurationAst,
-            pub constraints: $constraints,
-        }
-
-        impl $name {
-            pub fn new(kind: StereoKind, coset: impl Into<StereoCosetAst>) -> Self {
-                Self {
-                    configuration: StereoConfigurationAst::kinded(kind, coset),
-                    constraints: $constraints::new(),
-                }
-            }
-
-            /// Add a single constraint.
-            pub fn with_constraint(self, _constraint: impl Into<$constraint>) -> Self {
-                self
-            }
-
-            /// Add each constraint from iterator.
-            pub fn with_constraints<I>(mut self, constraints: I) -> Self
-            where
-                I: IntoIterator,
-                I::Item: Into<$constraint>,
-            {
-                self.constraints.extend(constraints.into_iter().map(Into::into));
-                self
-            }
-
-            /// No-op. A stereo element is always stereogenic, so its coset has no
-            /// zero default; it is ground iff its coset is ground.
-            pub fn into_ground(self) -> Self {
-                self
-            }
-
-            /// Relabel the ligand positions (`^`); constraints are positionless and unchanged.
-            pub fn apply(&self, permutation: Permutation) -> Self {
-                Self {
-                    configuration: self.configuration.apply(permutation),
-                    constraints: self.constraints.clone(),
-                }
-            }
-
-            /// The kind involution (`~`).
-            pub fn swap(&self) -> Self {
-                Self {
-                    configuration: self.configuration.swap(),
-                    constraints: self.constraints.clone(),
-                }
-            }
-
-            /// The enantiomer / mirror (`'`).
-            pub fn mirror(&self) -> Self {
-                Self {
-                    configuration: self.configuration.mirror(),
-                    constraints: self.constraints.clone(),
-                }
-            }
-
-            /// Restate the coset in the `after` ligand frame given it was stated in `before` — the
-            /// coset action of the induced frame permutation. Mechanical bookkeeping for a relabel
-            /// that leaves the physical configuration unchanged; self-inverting. `before`/`after`
-            /// must be the same ligand multiset reordered (a genuine ligand-set change is membership,
-            /// not a frame permutation).
-            pub fn transform_frame(&self, before: &[StereoLigand], after: &[StereoLigand]) -> Self {
-                self.apply(Permutation::between(before, after))
-            }
-        }
-
-    };
-}
-
-stereo_element! {
-    /// StereoAtomAst with geometry class, configuration, and per-site constraints.
-    StereoAtomAst, StereoAtomConstraints, StereoAtomConstraint
-}
-
-stereo_element! {
-    /// StereoBondAst with cis/trans configuration and per-site constraints.
-    StereoBondAst, StereoBondConstraints, StereoBondConstraint
 }
 
 #[cfg(test)]

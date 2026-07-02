@@ -34,13 +34,17 @@ use super::stereo::{
     StereoCosetDsl,
 };
 use super::value::{parse_value, ValueDsl};
+use crate::ast::boolean::BooleanAst;
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, BondConstraint, Constraint, Constraints, FluxionalityAst,
     LigandPermutation, LigandSymmetryAst, MoleculeConstraint, MulticenterValenceAst,
     OrientedLigandPermutation, RingMembershipAst, RingScope, StereoAtomConstraint,
     StereoBondConstraint, StereoLigandPair, StereogenicityAst, SubPatternAnchor, TopicityAst,
 };
-use crate::ast::id::{AtomId, BondId, StereoLigandPosition};
+use crate::ast::id::{
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId, StereoLigandPosition,
+};
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::operators::MemOp;
 use crate::ast::spin::SpinStateAst;
@@ -90,6 +94,42 @@ impl EntityCounts {
     pub(crate) fn allocate_bond(&mut self) -> BondId {
         let id = BondId::from(self.bond_count);
         self.bond_count += 1;
+        id
+    }
+
+    pub(crate) fn allocate_dative_bond(&mut self) -> DativeBondId {
+        let id = DativeBondId(self.dative_bond_count as u32);
+        self.dative_bond_count += 1;
+        id
+    }
+
+    pub(crate) fn allocate_aromatic_system(&mut self) -> AromaticSystemId {
+        let id = AromaticSystemId(self.aromatic_system_count as u32);
+        self.aromatic_system_count += 1;
+        id
+    }
+
+    pub(crate) fn allocate_multicenter_bond(&mut self) -> MulticenterBondId {
+        let id = MulticenterBondId(self.multicenter_bond_count as u32);
+        self.multicenter_bond_count += 1;
+        id
+    }
+
+    pub(crate) fn allocate_noncovalent_bond(&mut self) -> NoncovalentBondId {
+        let id = NoncovalentBondId(self.noncovalent_bond_count as u32);
+        self.noncovalent_bond_count += 1;
+        id
+    }
+
+    pub(crate) fn allocate_stereo_atom(&mut self) -> StereoAtomId {
+        let id = StereoAtomId(self.stereo_atom_count as u32);
+        self.stereo_atom_count += 1;
+        id
+    }
+
+    pub(crate) fn allocate_stereo_bond(&mut self) -> StereoBondId {
+        let id = StereoBondId(self.stereo_bond_count as u32);
+        self.stereo_bond_count += 1;
         id
     }
 }
@@ -605,7 +645,7 @@ fn read_ligand_symmetry(
 ) -> Result<LigandSymmetryAst, EdnError> {
     let mut permutation = None;
     let mut orientation = Orientation::Proper;
-    let mut mem = MemOp::In;
+    let mut present = BooleanAst::Lit(true);
     read_map(de, |de, key| {
         match key {
             "permutation" => permutation = Some(read_permutation(de, kind.degree())?),
@@ -621,7 +661,7 @@ fn read_ligand_symmetry(
                     }
                 }
             }
-            "member" => mem = read_member(de)?,
+            "present" => present = read_boolean_dsl(de)?.0,
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -639,7 +679,35 @@ fn read_ligand_symmetry(
             permutation: LigandPermutation(permutation),
             orientation,
         },
-        member: mem,
+        present,
+    })
+}
+
+fn read_fluxionality(
+    de: &mut EdnStreamDeserializer<'_>,
+    kind: StereoKind,
+) -> Result<FluxionalityAst, EdnError> {
+    let mut permutation = None;
+    let mut present = BooleanAst::Lit(true);
+    read_map(de, |de, key| {
+        match key {
+            "permutation" => permutation = Some(read_permutation(de, kind.degree())?),
+            "present" => present = read_boolean_dsl(de)?.0,
+            other => {
+                return Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["fluxionality".into()],
+                }
+                .into())
+            }
+        }
+        Ok(())
+    })?;
+    let permutation =
+        permutation.ok_or_else(|| DeError::Custom("fluxionality missing :permutation".to_string()))?;
+    Ok(FluxionalityAst {
+        permutation: LigandPermutation(permutation),
+        present,
     })
 }
 
@@ -712,9 +780,7 @@ macro_rules! read_stereo_constraint_dsl {
             let key = read_single_key_map_header(de)?;
             let constraint = match key.as_str() {
                 "ligand-symmetry" => $constraint::LigandSymmetry(read_ligand_symmetry(de, kind)?),
-                "fluxionality" => $constraint::Fluxionality(FluxionalityAst {
-                    permutation: LigandPermutation(read_permutation(de, kind.degree())?),
-                }),
+                "fluxionality" => $constraint::Fluxionality(read_fluxionality(de, kind)?),
                 "topicity" => $constraint::Topicity(read_topicity(de)?),
                 "stereogenicity" => $constraint::Stereogenicity(read_stereogenicity(de)?),
                 other => {
@@ -2215,7 +2281,6 @@ mod tests {
         StereoBondId,
     };
     use crate::ast::molecule::MoleculeAst;
-    use crate::ast::operators::MemOp;
     use crate::ast::stereo::{
         CisTransStereoAst, StereoCosetAst, StereoKind, Stereogenicity, TetrahedralStereoAst,
         Topicity,
@@ -2268,19 +2333,23 @@ mod tests {
     #[rstest]
     #[case::fluxionality(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])) })),
-        "{:stereo-atom [0 [:tetrahedral {:fluxionality [[0 1]]}]]}")]
+            StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(true) })),
+        "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]]}}]]}")]
+    #[case::fluxionality_absent(
+        Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
+            StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(false) })),
+        "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]] :present false}}]]}")]
     #[case::ligand_symmetry(
         Constraint::StereoAtom(StereoAtomId(1), StereoKind::Tetrahedral,
             StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
                 permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Improper },
-                member: MemOp::NotIn })),
-        "{:stereo-atom [1 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :member :not-in}}]]}")]
+                present: BooleanAst::Lit(false) })),
+        "{:stereo-atom [1 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :present false}}]]}")]
     #[case::ligand_symmetry_defaults(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
             StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
                 permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper },
-                member: MemOp::In })),
+                present: BooleanAst::Lit(true) })),
         "{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]]}}]]}")]
     #[case::topicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Octahedral,

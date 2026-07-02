@@ -151,6 +151,53 @@ impl IntoAst<DativeBondAst> for DativeBondDsl {
     }
 }
 
+/// Partial dative bond for a reaction `:modify` payload: reuses the dative parser (order `*` =
+/// unchanged) but renders undetermined constraints explicitly (`#a*`) so a constraint-to-undetermined
+/// change round-trips, unlike `DativeBondDsl` which elides them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PartialDativeBondDsl(pub DativeBondAst);
+
+impl FromStr for PartialDativeBondDsl {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(parse_dative_bond(s)?.0))
+    }
+}
+
+impl Display for PartialDativeBondDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt_order(f, &self.0.order)?;
+        for c in self.0.constraints.iter() {
+            if c.is_undetermined() {
+                write!(f, "{}*", constraint_tag(c))?;
+            } else {
+                fmt_constraint(f, c)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<'de> FromEdn<'de> for PartialDativeBondDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        match edn {
+            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("dative", e)),
+            other => Err(DeError::TypeMismatch {
+                expected: "string",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl ToEdn for PartialDativeBondDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Str(Cow::Owned(self.to_string()))
+    }
+}
+
 impl FromStr for DativeBondAst {
     type Err = ParseError;
 

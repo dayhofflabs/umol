@@ -506,7 +506,7 @@ pub(super) fn read_bond_entry(
     }
 }
 
-fn read_dative_bond_entry(
+pub(super) fn read_dative_bond_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<DativeBondEntryInput, EdnError> {
     let mut id = None;
@@ -531,7 +531,7 @@ fn read_dative_bond_entry(
     })
 }
 
-fn read_aromatic_system_entry(
+pub(super) fn read_aromatic_system_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<AromaticSystemEntryInput, EdnError> {
     let mut id = None;
@@ -561,7 +561,7 @@ fn read_aromatic_system_entry(
     })
 }
 
-fn read_multicenter_bond_entry(
+pub(super) fn read_multicenter_bond_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<MulticenterBondEntryInput, EdnError> {
     let mut id = None;
@@ -591,7 +591,7 @@ fn read_multicenter_bond_entry(
     })
 }
 
-fn read_noncovalent_bond_entry(
+pub(super) fn read_noncovalent_bond_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<NoncovalentBondEntryInput, EdnError> {
     let mut id = None;
@@ -680,7 +680,7 @@ fn read_stereo_bond_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoBond
     }
 }
 
-fn read_stereo_atom_entry(
+pub(super) fn read_stereo_atom_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<StereoAtomEntryInput, EdnError> {
     let mut id = None;
@@ -705,7 +705,7 @@ fn read_stereo_atom_entry(
     })
 }
 
-fn read_stereo_bond_entry(
+pub(super) fn read_stereo_bond_entry(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<StereoBondEntryInput, EdnError> {
     let mut id = None;

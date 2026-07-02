@@ -75,6 +75,45 @@ impl MulticenterBondAst {
         self
     }
 
+    /// Overwrite with `other`, keeping existing values and constraints. Spin merges
+    /// field-wise (unpaired / multiplicity independently).
+    pub fn update(&self, other: &MulticenterBondAst) -> MulticenterBondAst {
+        let mut constraints = self.constraints.clone();
+        for c in other.constraints.iter() {
+            constraints.remove_by_key(c.key());
+        }
+        for c in other.constraints.iter() {
+            if !c.is_undetermined() {
+                constraints.add(c.clone());
+            }
+        }
+        MulticenterBondAst {
+            electrons: if other.electrons.is_undetermined() {
+                self.electrons.clone()
+            } else {
+                other.electrons.clone()
+            },
+            charge: if other.charge.is_undetermined() {
+                self.charge.clone()
+            } else {
+                other.charge.clone()
+            },
+            spin: SpinStateAst {
+                unpaired: if other.spin.unpaired.is_undetermined() {
+                    self.spin.unpaired.clone()
+                } else {
+                    other.spin.unpaired.clone()
+                },
+                multiplicity: if other.spin.multiplicity.is_undetermined() {
+                    self.spin.multiplicity.clone()
+                } else {
+                    other.spin.multiplicity.clone()
+                },
+            },
+            constraints,
+        }
+    }
+
     /// Reorder the positional `electrons` by `order`, tracking a participant
     /// reordering; charge / spin / constraints are positionless and unchanged.
     pub fn permute(&mut self, order: &[ParticipantPosition]) {

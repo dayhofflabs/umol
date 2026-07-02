@@ -183,6 +183,44 @@ fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentBondKindAst) -> fmt::R
     }
 }
 
+/// Partial noncovalent bond for a reaction `:modify` payload. The constraint set is uninhabited, so
+/// this is just the kind (`*` = unchanged) — a partial only for uniformity with the other overlays.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PartialNoncovalentBondDsl(pub NoncovalentBondAst);
+
+impl FromStr for PartialNoncovalentBondDsl {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(parse_noncovalent_bond(s)?.0))
+    }
+}
+
+impl Display for PartialNoncovalentBondDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt_noncovalent_bond_ast(f, &self.0)
+    }
+}
+
+impl<'de> FromEdn<'de> for PartialNoncovalentBondDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        match edn {
+            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("noncovalent-bond", e)),
+            other => Err(DeError::TypeMismatch {
+                expected: "string",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl ToEdn for PartialNoncovalentBondDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Str(Cow::Owned(self.to_string()))
+    }
+}
+
 /// Surface DSL wrapper around the narrow `NoncovalentBondConstraint`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum NoncovalentBondConstraintDsl {}

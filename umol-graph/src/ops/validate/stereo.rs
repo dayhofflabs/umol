@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AsLit, GraphSymmetry, Lattice, LigandSymmetryAst, MemOp, MoleculeAst, StereoAtomId,
+    AsLit, BooleanAst, GraphSymmetry, Lattice, LigandSymmetryAst, MoleculeAst, StereoAtomId,
     StereoBondId, StereoKind, StereoLigandPair, StereoSymmetry, Stereogenicity, StereogenicityAst,
     Topicity, TopicityAst, TopicityRelationAst,
 };
@@ -227,9 +227,10 @@ impl StereoConformanceValidator {
             let op =
                 OrientedPermutation::new(ls.permutation.permutation.0, ls.permutation.orientation);
             let in_group = sym.group().contains(op);
-            let holds = match ls.member {
-                MemOp::In => in_group,
-                MemOp::NotIn => !in_group,
+            let holds = match ls.present {
+                BooleanAst::Lit(true) => in_group,
+                BooleanAst::Lit(false) => !in_group,
+                BooleanAst::Undetermined => true,
             };
             if !holds {
                 return Solution::Contradictory(
@@ -363,7 +364,7 @@ mod tests {
                         permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                         orientation: Orientation::Proper,
                     },
-                    member: MemOp::In,
+                    present: BooleanAst::Lit(true),
                 }));
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::LigandSymmetryViolation {
@@ -372,7 +373,7 @@ mod tests {
                     permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                     orientation: Orientation::Proper,
                 },
-                member: MemOp::In,
+                present: BooleanAst::Lit(true),
             },
         }
     )]

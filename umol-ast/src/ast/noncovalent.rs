@@ -52,6 +52,19 @@ impl NoncovalentBondAst {
     pub fn into_ground(self) -> Self {
         self
     }
+
+    /// Overwrite with `other`, keeping the existing kind when `other`'s is
+    /// undetermined. Constraints are uninhabited, so preserved as-is.
+    pub fn update(&self, other: &NoncovalentBondAst) -> NoncovalentBondAst {
+        NoncovalentBondAst {
+            kind: if other.kind.is_undetermined() {
+                self.kind.clone()
+            } else {
+                other.kind.clone()
+            },
+            constraints: self.constraints.clone(),
+        }
+    }
 }
 
 /// Noncovalent interaction kind.

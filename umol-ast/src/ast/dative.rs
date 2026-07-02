@@ -3,6 +3,7 @@
 use umol_ast_macros::{Canonicalize, Lattice};
 
 use super::constraint::{DativeBondConstraint, DativeBondConstraints};
+use super::traits::Lattice;
 use super::value::ValueAst;
 
 /// Dative bond data: bond order (number of electron pairs donated) and
@@ -58,6 +59,27 @@ impl DativeBondAst {
     /// which is essential and never filled. Provided for API symmetry.
     pub fn into_ground(self) -> Self {
         self
+    }
+
+    /// Overwrite with `other`, keeping existing values and constraints.
+    pub fn update(&self, other: &DativeBondAst) -> DativeBondAst {
+        let mut constraints = self.constraints.clone();
+        for c in other.constraints.iter() {
+            constraints.remove_by_key(c.key());
+        }
+        for c in other.constraints.iter() {
+            if !c.is_undetermined() {
+                constraints.add(c.clone());
+            }
+        }
+        DativeBondAst {
+            order: if other.order.is_undetermined() {
+                self.order.clone()
+            } else {
+                other.order.clone()
+            },
+            constraints,
+        }
     }
 }
 
