@@ -1,1 +1,1 @@
-{:stereo-bond [0 {:kind :cis-trans :stereogenicity :stereogenic}]}
+{:stereo-bond [0 [:cis-trans {:stereogenicity {:relation :stereogenic}}]]}

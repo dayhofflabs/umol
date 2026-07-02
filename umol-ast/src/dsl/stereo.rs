@@ -1845,11 +1845,37 @@ stereo_site_dsl! {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_edn::read_string;
 
     use super::*;
+
+    /// Every `fuzz_entity_strings` stereo seed must parse with its stereo parser — guards the seed
+    /// corpus against notation rot.
+    #[rstest]
+    fn test_fuzz_entity_strings_stereo_seeds_valid() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fuzz/seeds/fuzz_entity_strings");
+        let mut failures: Vec<String> = Vec::new();
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            let data = fs::read_to_string(&path).unwrap();
+            let result = if name.starts_with("stereo_atom_") {
+                parse_stereo_atom(&data).map(|_| ())
+            } else if name.starts_with("stereo_bond_") {
+                parse_stereo_bond(&data).map(|_| ())
+            } else {
+                continue;
+            };
+            if let Err(e) = result {
+                failures.push(format!("{name}: {e:?}"));
+            }
+        }
+        assert!(failures.is_empty(), "invalid stereo seeds:\n{}", failures.join("\n"));
+    }
 
     #[rustfmt::skip]
     #[rstest]

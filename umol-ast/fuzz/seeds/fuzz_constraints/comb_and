@@ -1,1 +1,1 @@
-{:and [{:atom [0 {:valence 4}]} {:bond [0 :aromatic]}]}
+{:and [{:atom [0 {:valence 4}]} {:bond [0 {:aromatic true}]}]}

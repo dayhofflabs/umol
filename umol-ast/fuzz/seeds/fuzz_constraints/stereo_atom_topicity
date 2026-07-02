@@ -1,1 +1,1 @@
-{:stereo-atom [0 {:kind :octahedral :topicity {:pair [0 1] :relation #{:enantiotopic :diastereotopic}}}]}
+{:stereo-atom [0 [:octahedral {:topicity {:pair [0 1] :relation [:enantiotopic :diastereotopic]}}]]}

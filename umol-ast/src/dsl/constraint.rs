@@ -2264,6 +2264,8 @@ fn combinator_edn(key: &str, xs: &[ConstraintDsl]) -> Edn<'static> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_edn::read_string;
@@ -2287,6 +2289,27 @@ mod tests {
     };
     use crate::ast::value::ValueAst;
     use crate::ast::BooleanAst;
+
+    /// Every `fuzz_constraints` seed must parse as a `ConstraintDsl` or a `ConstraintsDsl` (tree) —
+    /// guards the seed corpus against rot as the constraint DSL evolves.
+    #[rstest]
+    fn test_fuzz_constraints_seeds_valid() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fuzz/seeds/fuzz_constraints");
+        let mut failures: Vec<String> = Vec::new();
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            let data = fs::read_to_string(&path).unwrap();
+            let Ok(edn) = read_string(&data) else {
+                failures.push(format!("{name}: not readable EDN"));
+                continue;
+            };
+            if ConstraintDsl::from_edn(&edn).is_err() && ConstraintsDsl::from_edn(&edn).is_err() {
+                failures.push(format!("{name}: neither ConstraintDsl nor ConstraintsDsl parses"));
+            }
+        }
+        assert!(failures.is_empty(), "invalid seeds:\n{}", failures.join("\n"));
+    }
 
     #[fixture]
     fn full_counts() -> EntityCounts {
