@@ -13,18 +13,19 @@ use std::str::FromStr;
 use bimap::BiBTreeMap;
 use indexmap::IndexMap;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_perm::Permutation;
 
+use super::aromatic::{AromaticSystemDsl, PartialAromaticSystemDsl};
 use super::atom::{lower_atom, raise_atom, AtomDsl, PartialAtomDsl};
 use super::bond::{lower_bond, raise_bond, BondDsl, PartialBondDsl};
 use super::config::{DeltaDefaults, ReactionDefaults};
 use super::constraint::{read_constraint_dsl, ConstraintDsl, EntityCounts};
+use super::dative::{DativeBondDsl, PartialDativeBondDsl};
 use super::edn_utils::{
     consume_single_key_map_close, missing, parse_single_key_map, parse_vec,
     read_single_key_map_header, read_vec, single_key_map,
 };
 use super::error::ParseError;
-use super::aromatic::{AromaticSystemDsl, PartialAromaticSystemDsl};
-use super::dative::{DativeBondDsl, PartialDativeBondDsl};
 use super::molecule::{
     parse_aromatic_system_entry, parse_atom_aliases, parse_atom_entry, parse_bond_entry,
     parse_dative_bond_entry, parse_molecule_input, parse_multicenter_bond_entry,
@@ -48,8 +49,8 @@ use super::refs::{
     NoncovalentBondRef, StereoAtomRef, StereoBondRef,
 };
 use super::stereo::{
-    parse_permutation, render_edn_stereo_kind, stereo_kind_from_name, StereoAtomDsl, StereoBondDsl,
-    PartialStereoAtomDsl, PartialStereoBondDsl,
+    parse_permutation, render_edn_stereo_kind, stereo_kind_from_name, PartialStereoAtomDsl,
+    PartialStereoBondDsl, StereoAtomDsl, StereoBondDsl,
 };
 use crate::ast::atom::{AtomAst, ElementAst};
 use crate::ast::bond::BondAst;
@@ -62,20 +63,18 @@ use crate::ast::edit::{
     MulticenterBondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
     StereoBondFieldChange,
 };
-use crate::ast::molecule::MoleculeAst;
-use crate::ast::stereo::{StereoConfigurationAst, StereoCosetAst};
-use crate::ast::{
-    AromaticSystemAst, DativeBondAst, MulticenterBondAst, NoncovalentBondAst, StereoAtomAst,
-    StereoBondAst, StereoKind, StereoLigand,
-};
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
+use crate::ast::molecule::MoleculeAst;
 use crate::ast::reaction::ReactionAst;
+use crate::ast::stereo::{StereoConfigurationAst, StereoCosetAst};
 use crate::ast::traits::{FromAst, IntoAst, Lattice};
-use crate::ast::EntityPatch;
-use umol_perm::Permutation;
+use crate::ast::{
+    AromaticSystemAst, DativeBondAst, EntityPatch, MulticenterBondAst, NoncovalentBondAst,
+    StereoAtomAst, StereoBondAst, StereoKind, StereoLigand,
+};
 
 /// Surface DSL for a reaction. Pairs `ReactionAst` with `ReactionMetadata`; fields are
 /// private so metadata cannot drift onto a different AST.
@@ -1120,7 +1119,9 @@ fn read_stereo_kind(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoKind, Ed
     stereo_kind_from_name(name.as_ref()).map_err(Into::into)
 }
 
-fn read_delta_dative_bond_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInput, EdnError> {
+fn read_delta_dative_bond_input(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<DeltaInput, EdnError> {
     let op = read_single_key_map_header(de)?;
     let input = match op.as_str() {
         "add" => DeltaInput::DativeBondAdd(read_dative_bond_entry(de)?),
@@ -1262,7 +1263,9 @@ fn read_delta_stereo_atom_input(
             let r = read_stereo_atom_ref(de)?;
             let kind = read_stereo_kind(de)?;
             if !de.try_consume_byte(b']')? {
-                return Err(DeError::Custom("stereo-atom :mirror expects [ref kind]".into()).into());
+                return Err(
+                    DeError::Custom("stereo-atom :mirror expects [ref kind]".into()).into(),
+                );
             }
             DeltaInput::StereoAtomMirror(r, kind)
         }
@@ -1320,7 +1323,9 @@ fn read_delta_stereo_bond_input(
             let r = read_stereo_bond_ref(de)?;
             let kind = read_stereo_kind(de)?;
             if !de.try_consume_byte(b']')? {
-                return Err(DeError::Custom("stereo-bond :mirror expects [ref kind]".into()).into());
+                return Err(
+                    DeError::Custom("stereo-bond :mirror expects [ref kind]".into()).into(),
+                );
             }
             DeltaInput::StereoBondMirror(r, kind)
         }
@@ -1442,7 +1447,9 @@ fn parse_delta_dative_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
     let (op, payload) = parse_single_key_map(edn, "dative-bond delta")?;
     match op {
         "add" => Ok(DeltaInput::DativeBondAdd(parse_dative_bond_entry(payload)?)),
-        "remove" => Ok(DeltaInput::DativeBondRemove(DativeBondRef::from_edn(payload)?)),
+        "remove" => Ok(DeltaInput::DativeBondRemove(DativeBondRef::from_edn(
+            payload,
+        )?)),
         "modify" => {
             let Edn::Vector(v) = payload else {
                 return Err(DeError::TypeMismatch {
@@ -1462,7 +1469,9 @@ fn parse_delta_dative_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
                 PartialDativeBondDsl::from_edn(&v[1])?.0,
             ))
         }
-        o => Err(DeError::Custom(format!("unknown dative-bond delta op :{o}"))),
+        o => Err(DeError::Custom(format!(
+            "unknown dative-bond delta op :{o}"
+        ))),
     }
 }
 
@@ -1494,7 +1503,9 @@ fn parse_delta_aromatic_system_input(edn: &Edn<'_>) -> Result<DeltaInput, DeErro
                 PartialAromaticSystemDsl::from_edn(&v[1])?.0,
             ))
         }
-        o => Err(DeError::Custom(format!("unknown aromatic-system delta op :{o}"))),
+        o => Err(DeError::Custom(format!(
+            "unknown aromatic-system delta op :{o}"
+        ))),
     }
 }
 
@@ -1526,7 +1537,9 @@ fn parse_delta_multicenter_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeErr
                 PartialMulticenterBondDsl::from_edn(&v[1])?.0,
             ))
         }
-        o => Err(DeError::Custom(format!("unknown multicenter-bond delta op :{o}"))),
+        o => Err(DeError::Custom(format!(
+            "unknown multicenter-bond delta op :{o}"
+        ))),
     }
 }
 
@@ -1558,7 +1571,9 @@ fn parse_delta_noncovalent_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeErr
                 PartialNoncovalentBondDsl::from_edn(&v[1])?.0,
             ))
         }
-        o => Err(DeError::Custom(format!("unknown noncovalent-bond delta op :{o}"))),
+        o => Err(DeError::Custom(format!(
+            "unknown noncovalent-bond delta op :{o}"
+        ))),
     }
 }
 
@@ -1590,7 +1605,10 @@ fn parse_delta_stereo_atom_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
         }
         "swap" => {
             let (r, kind) = parse_stereo_transform(payload, "stereo-atom :swap")?;
-            Ok(DeltaInput::StereoAtomSwap(StereoAtomRef::from_edn(r)?, kind))
+            Ok(DeltaInput::StereoAtomSwap(
+                StereoAtomRef::from_edn(r)?,
+                kind,
+            ))
         }
         "mirror" => {
             let (r, kind) = parse_stereo_transform(payload, "stereo-atom :mirror")?;
@@ -1607,7 +1625,9 @@ fn parse_delta_stereo_atom_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
                 permutation,
             ))
         }
-        o => Err(DeError::Custom(format!("unknown stereo-atom delta op :{o}"))),
+        o => Err(DeError::Custom(format!(
+            "unknown stereo-atom delta op :{o}"
+        ))),
     }
 }
 
@@ -1639,7 +1659,10 @@ fn parse_delta_stereo_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
         }
         "swap" => {
             let (r, kind) = parse_stereo_transform(payload, "stereo-bond :swap")?;
-            Ok(DeltaInput::StereoBondSwap(StereoBondRef::from_edn(r)?, kind))
+            Ok(DeltaInput::StereoBondSwap(
+                StereoBondRef::from_edn(r)?,
+                kind,
+            ))
         }
         "mirror" => {
             let (r, kind) = parse_stereo_transform(payload, "stereo-bond :mirror")?;
@@ -1656,7 +1679,9 @@ fn parse_delta_stereo_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
                 permutation,
             ))
         }
-        o => Err(DeError::Custom(format!("unknown stereo-bond delta op :{o}"))),
+        o => Err(DeError::Custom(format!(
+            "unknown stereo-bond delta op :{o}"
+        ))),
     }
 }
 
@@ -1903,15 +1928,20 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                 i += 1;
             }
             Delta::DativeBond(
-                DativeBondDelta::ModifyField { id, .. } | DativeBondDelta::ModifyConstraint { id, .. },
+                DativeBondDelta::ModifyField { id, .. }
+                | DativeBondDelta::ModifyConstraint { id, .. },
             ) => {
                 let id = *id;
                 let mut partial = DativeBondAst::default();
                 while let Some(Delta::DativeBond(delta)) = deltas.get(i) {
                     match delta {
-                        DativeBondDelta::ModifyField { id: j, change } if *j == id => match change {
-                            DativeBondFieldChange::Order { new, .. } => partial.order = new.clone(),
-                        },
+                        DativeBondDelta::ModifyField { id: j, change } if *j == id => {
+                            match change {
+                                DativeBondFieldChange::Order { new, .. } => {
+                                    partial.order = new.clone()
+                                }
+                            }
+                        }
                         DativeBondDelta::ModifyConstraint { id: j, old, new } if *j == id => {
                             match new {
                                 Some(c) => {
@@ -1936,7 +1966,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     ]
                     .into(),
                 );
-                out.push(single_key_map("dative-bond", single_key_map("modify", payload)));
+                out.push(single_key_map(
+                    "dative-bond",
+                    single_key_map("modify", payload),
+                ));
             }
             Delta::AromaticSystem(AromaticSystemDelta::Add { id, atoms, ast }) => {
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
@@ -1958,7 +1991,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 out.push(single_key_map(
                     "aromatic-system",
-                    single_key_map("remove", AromaticSystemRef::from_ast(*id, combined).to_edn()),
+                    single_key_map(
+                        "remove",
+                        AromaticSystemRef::from_ast(*id, combined).to_edn(),
+                    ),
                 ));
                 i += 1;
             }
@@ -2007,7 +2043,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     ]
                     .into(),
                 );
-                out.push(single_key_map("aromatic-system", single_key_map("modify", payload)));
+                out.push(single_key_map(
+                    "aromatic-system",
+                    single_key_map("modify", payload),
+                ));
             }
             Delta::MulticenterBond(MulticenterBondDelta::Add { id, atoms, ast }) => {
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
@@ -2081,7 +2120,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     ]
                     .into(),
                 );
-                out.push(single_key_map("multicenter-bond", single_key_map("modify", payload)));
+                out.push(single_key_map(
+                    "multicenter-bond",
+                    single_key_map("modify", payload),
+                ));
             }
             Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, atoms, ast }) => {
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
@@ -2139,7 +2181,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     ]
                     .into(),
                 );
-                out.push(single_key_map("noncovalent-bond", single_key_map("modify", payload)));
+                out.push(single_key_map(
+                    "noncovalent-bond",
+                    single_key_map("modify", payload),
+                ));
             }
             Delta::StereoAtom(StereoAtomDelta::Add {
                 id,
@@ -2155,7 +2200,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                         render_stereo_atom_entry(
                             *id,
                             *site,
-                            ligands.iter().map(|l| render_stereo_ligand(*l, combined)).collect(),
+                            ligands
+                                .iter()
+                                .map(|l| render_stereo_ligand(*l, combined))
+                                .collect(),
                             StereoAtomDsl::from_ref(ast).to_edn(),
                             combined,
                         ),
@@ -2179,11 +2227,13 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                 let mut partial = StereoAtomAst::default();
                 while let Some(Delta::StereoAtom(delta)) = deltas.get(i) {
                     match delta {
-                        StereoAtomDelta::ModifyField { id: j, change } if *j == id => match change {
-                            StereoAtomFieldChange::Configuration { new, .. } => {
-                                partial.configuration = new.clone()
+                        StereoAtomDelta::ModifyField { id: j, change } if *j == id => {
+                            match change {
+                                StereoAtomFieldChange::Configuration { new, .. } => {
+                                    partial.configuration = new.clone()
+                                }
                             }
-                        },
+                        }
                         StereoAtomDelta::ModifyConstraint { id: j, old, new } if *j == id => {
                             match new {
                                 Some(c) => {
@@ -2216,7 +2266,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     ]
                     .into(),
                 );
-                out.push(single_key_map("stereo-atom", single_key_map("modify", payload)));
+                out.push(single_key_map(
+                    "stereo-atom",
+                    single_key_map("modify", payload),
+                ));
             }
             Delta::StereoAtom(StereoAtomDelta::Swap { id, kind }) => {
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
@@ -2227,7 +2280,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     ]
                     .into(),
                 );
-                out.push(single_key_map("stereo-atom", single_key_map("swap", payload)));
+                out.push(single_key_map(
+                    "stereo-atom",
+                    single_key_map("swap", payload),
+                ));
                 i += 1;
             }
             Delta::StereoAtom(StereoAtomDelta::Mirror { id, kind }) => {
@@ -2239,7 +2295,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     ]
                     .into(),
                 );
-                out.push(single_key_map("stereo-atom", single_key_map("mirror", payload)));
+                out.push(single_key_map(
+                    "stereo-atom",
+                    single_key_map("mirror", payload),
+                ));
                 i += 1;
             }
             Delta::StereoAtom(StereoAtomDelta::Apply {
@@ -2256,7 +2315,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     ]
                     .into(),
                 );
-                out.push(single_key_map("stereo-atom", single_key_map("apply", payload)));
+                out.push(single_key_map(
+                    "stereo-atom",
+                    single_key_map("apply", payload),
+                ));
                 i += 1;
             }
             Delta::StereoBond(StereoBondDelta::Add {
@@ -2273,7 +2335,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                         render_stereo_bond_entry(
                             *id,
                             *site,
-                            ligands.iter().map(|l| render_stereo_ligand(*l, combined)).collect(),
+                            ligands
+                                .iter()
+                                .map(|l| render_stereo_ligand(*l, combined))
+                                .collect(),
                             StereoBondDsl::from_ref(ast).to_edn(),
                             combined,
                         ),
@@ -2297,11 +2362,13 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                 let mut partial = StereoBondAst::default();
                 while let Some(Delta::StereoBond(delta)) = deltas.get(i) {
                     match delta {
-                        StereoBondDelta::ModifyField { id: j, change } if *j == id => match change {
-                            StereoBondFieldChange::Configuration { new, .. } => {
-                                partial.configuration = new.clone()
+                        StereoBondDelta::ModifyField { id: j, change } if *j == id => {
+                            match change {
+                                StereoBondFieldChange::Configuration { new, .. } => {
+                                    partial.configuration = new.clone()
+                                }
                             }
-                        },
+                        }
                         StereoBondDelta::ModifyConstraint { id: j, old, new } if *j == id => {
                             match new {
                                 Some(c) => {
@@ -2332,7 +2399,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     ]
                     .into(),
                 );
-                out.push(single_key_map("stereo-bond", single_key_map("modify", payload)));
+                out.push(single_key_map(
+                    "stereo-bond",
+                    single_key_map("modify", payload),
+                ));
             }
             Delta::StereoBond(StereoBondDelta::Swap { id, kind }) => {
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
@@ -2343,7 +2413,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     ]
                     .into(),
                 );
-                out.push(single_key_map("stereo-bond", single_key_map("swap", payload)));
+                out.push(single_key_map(
+                    "stereo-bond",
+                    single_key_map("swap", payload),
+                ));
                 i += 1;
             }
             Delta::StereoBond(StereoBondDelta::Mirror { id, kind }) => {
@@ -2355,7 +2428,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     ]
                     .into(),
                 );
-                out.push(single_key_map("stereo-bond", single_key_map("mirror", payload)));
+                out.push(single_key_map(
+                    "stereo-bond",
+                    single_key_map("mirror", payload),
+                ));
                 i += 1;
             }
             Delta::StereoBond(StereoBondDelta::Apply {
@@ -2372,7 +2448,10 @@ fn render_deltas(deltas: &Deltas, lhs: &MoleculeAst, meta: &ReactionMetadata) ->
                     ]
                     .into(),
                 );
-                out.push(single_key_map("stereo-bond", single_key_map("apply", payload)));
+                out.push(single_key_map(
+                    "stereo-bond",
+                    single_key_map("apply", payload),
+                ));
                 i += 1;
             }
         }
@@ -2455,6 +2534,8 @@ fn render_bond_entry(
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
@@ -3132,15 +3213,18 @@ mod tests {
     fn test_fuzz_reaction_seeds_valid() {
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fuzz/seeds/fuzz_reaction");
         let mut count = 0;
-        for entry in std::fs::read_dir(dir).unwrap() {
+        for entry in fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
-            let data = std::fs::read_to_string(&path).unwrap();
+            let data = fs::read_to_string(&path).unwrap();
             let stream = ReactionDsl::from_edn_str(&data).ok();
             let tree = read_string(&data)
                 .ok()
                 .and_then(|edn| ReactionDsl::from_edn(&edn).ok());
             assert!(stream.is_some(), "seed {path:?} failed to parse");
-            assert_eq!(stream, tree, "seed {path:?}: streaming and tree parsers disagree");
+            assert_eq!(
+                stream, tree,
+                "seed {path:?}: streaming and tree parsers disagree"
+            );
             count += 1;
         }
         assert_eq!(count, 30);

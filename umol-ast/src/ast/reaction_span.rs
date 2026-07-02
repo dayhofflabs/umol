@@ -38,7 +38,7 @@ use super::noncovalent::NoncovalentBondAst;
 use super::reaction::ReactionAst;
 use super::remap::{IdCompaction, IdRemapping};
 use super::stereo::{StereoAtomAst, StereoBondAst};
-use super::traits::Canonicalize;
+use super::traits::{Canonicalize, EntityPatch};
 
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
 /// topology is the `lhs` id space (deleted entities kept as nodes/edges) with created entities
@@ -255,6 +255,61 @@ impl ReactionSpanAst {
                 [AtomId::from(a), AtomId::from(b)]
             },
         ));
+        // Stereo overlays have no `EntityFold`, so recover their deltas here: `Removed`/`Added` carry
+        // the relation's site + ligand frame; `Modified` is the field/constraint diff. Site/ligand
+        // ids are the union frame (lhs ids for preserved/removed entities).
+        for i in 0..self.stereo_atoms.relation_count() {
+            let rid = RelationId(i as u32);
+            let id = StereoAtomId::from(rid);
+            let site = AtomId::from(self.stereo_atoms.participants_1(rid)[0]);
+            let ligands = self.stereo_atoms.participants_2(rid).to_vec();
+            match self.stereo_atoms.data(rid) {
+                EntitySpan::Unchanged(_) => {}
+                EntitySpan::Added(ast) => deltas.push(Delta::StereoAtom(StereoAtomDelta::Add {
+                    id,
+                    site,
+                    ligands,
+                    ast: ast.clone(),
+                })),
+                EntitySpan::Removed(ast) => deltas.push(Delta::StereoAtom(StereoAtomDelta::Remove {
+                    id,
+                    site,
+                    ligands,
+                    ast: ast.clone(),
+                })),
+                EntitySpan::Modified { left, right } => deltas.extend(
+                    <StereoAtomDelta as EntityPatch>::diff(id, left, right)
+                        .into_iter()
+                        .map(Delta::StereoAtom),
+                ),
+            }
+        }
+        for i in 0..self.stereo_bonds.relation_count() {
+            let rid = RelationId(i as u32);
+            let id = StereoBondId::from(rid);
+            let site = BondId::from(self.stereo_bonds.participants_1(rid)[0]);
+            let ligands = self.stereo_bonds.participants_2(rid).to_vec();
+            match self.stereo_bonds.data(rid) {
+                EntitySpan::Unchanged(_) => {}
+                EntitySpan::Added(ast) => deltas.push(Delta::StereoBond(StereoBondDelta::Add {
+                    id,
+                    site,
+                    ligands,
+                    ast: ast.clone(),
+                })),
+                EntitySpan::Removed(ast) => deltas.push(Delta::StereoBond(StereoBondDelta::Remove {
+                    id,
+                    site,
+                    ligands,
+                    ast: ast.clone(),
+                })),
+                EntitySpan::Modified { left, right } => deltas.extend(
+                    <StereoBondDelta as EntityPatch>::diff(id, left, right)
+                        .into_iter()
+                        .map(Delta::StereoBond),
+                ),
+            }
+        }
         for span in &self.constraints {
             match span {
                 ConstraintSpan::Added(c) => {
@@ -994,6 +1049,9 @@ mod tests {
     use super::super::delta::Deltas;
     use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange};
     use super::super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindAst};
+    use super::super::edit::StereoAtomFieldChange;
+    use super::super::ligand::{StereoLigand, StereoLigandKind};
+    use super::super::stereo::{StereoConfigurationAst, StereoCosetAst, StereoKind};
     use super::super::value::ValueAst;
     use super::*;
 
@@ -1367,6 +1425,119 @@ mod tests {
                 old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
                 new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
             },
+        })]),
+    ))]
+    #[case::stereo_atom_add(ReactionAst::new(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::F),
+                AtomAst::from_element(Element::Cl),
+                AtomAst::from_element(Element::Br),
+                AtomAst::from_element(Element::I),
+            ],
+            vec![],
+        ),
+        Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Add {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+        })]),
+    ))]
+    #[case::stereo_atom_remove(ReactionAst::new(
+        MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::F),
+                AtomAst::from_element(Element::Cl),
+                AtomAst::from_element(Element::Br),
+                AtomAst::from_element(Element::I),
+            ],
+            vec![], vec![], vec![], vec![], vec![],
+            vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            )],
+            vec![],
+            Constraints::new(),
+        ),
+        Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+        })]),
+    ))]
+    #[case::stereo_atom_modify(ReactionAst::new(
+        MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::F),
+                AtomAst::from_element(Element::Cl),
+                AtomAst::from_element(Element::Br),
+                AtomAst::from_element(Element::I),
+            ],
+            vec![], vec![], vec![], vec![], vec![],
+            vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+            )],
+            vec![],
+            Constraints::new(),
+        ),
+        Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
+            id: StereoAtomId(0),
+            change: StereoAtomFieldChange::Configuration {
+                old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+                new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            },
+        })]),
+    ))]
+    #[case::stereo_bond_add(ReactionAst::new(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(2)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+            ],
+        ),
+        Deltas::from_iter([Delta::StereoBond(StereoBondDelta::Add {
+            id: StereoBondId(0),
+            site: BondId(1),
+            ligands: vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ],
+            ast: StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
         })]),
     ))]
     fn test_reaction_span_ast_to_reaction(#[case] reaction: ReactionAst) {

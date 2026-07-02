@@ -823,14 +823,14 @@ pub(crate) fn ligand_symmetry_strategy(degree: usize) -> impl Strategy<Value = L
     (
         permutation_strategy(degree),
         orientation_strategy(),
-        mem_op_strategy(),
+        any::<bool>(),
     )
-        .prop_map(|(permutation, orientation, member)| LigandSymmetryAst {
+        .prop_map(|(permutation, orientation, present)| LigandSymmetryAst {
             permutation: OrientedLigandPermutation {
                 permutation: LigandPermutation(permutation),
                 orientation,
             },
-            member,
+            present: BooleanAst::Lit(present),
         })
 }
 
@@ -895,22 +895,23 @@ macro_rules! stereo_constraint_strategy {
                 (
                     permutation_strategy(degree),
                     orientation_strategy(),
-                    mem_op_strategy()
+                    any::<bool>()
                 )
-                    .prop_map(|(permutation, orientation, member)| {
+                    .prop_map(|(permutation, orientation, present)| {
                         $constraint::LigandSymmetry(LigandSymmetryAst {
                             permutation: OrientedLigandPermutation {
                                 permutation: LigandPermutation(permutation),
                                 orientation,
                             },
-                            member,
+                            present: BooleanAst::Lit(present),
                         })
                     }),
-                permutation_strategy(degree).prop_map(|permutation| $constraint::Fluxionality(
-                    FluxionalityAst {
+                (permutation_strategy(degree), any::<bool>()).prop_map(|(permutation, present)| {
+                    $constraint::Fluxionality(FluxionalityAst {
                         permutation: LigandPermutation(permutation),
-                    }
-                )),
+                        present: BooleanAst::Lit(present),
+                    })
+                }),
                 (ligand_pair_strategy(degree), topicity_relation_strategy()).prop_map(
                     |(pair, relation)| $constraint::Topicity(TopicityAst { pair, relation })
                 ),

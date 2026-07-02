@@ -6,10 +6,15 @@
 use proptest::bool::weighted;
 use proptest::prelude::*;
 use umol_ast::ast::{
-    AromaticSystemDelta, AtomDelta, BondDelta, CompositionScope, DativeBondDelta, Delta, Deltas,
-    DpoValidator, MulticenterBondDelta, NoncovalentBondDelta, ReactionAst,
+    AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, BondDelta, CompositionScope,
+    DativeBondConstraint, DativeBondDelta, DativeBondFieldChange, Delta, Deltas, DpoValidator,
+    MulticenterBondDelta, MulticenterBondFieldChange, NoncovalentBondAst, NoncovalentBondDelta,
+    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, ReactionAst, StereoAtomAst,
+    StereoAtomDelta, StereoAtomFieldChange, StereoBondAst, StereoBondDelta, StereoBondFieldChange,
+    StereoConfigurationAst, StereoKind, StereoLigand,
 };
 use umol_graph_core::{EdgeId, SubgraphIsomorphismAlgorithm};
+use umol_perm::Permutation;
 use umol_utils::solution::Solution;
 
 use crate::strategies::*;
@@ -95,6 +100,18 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                 ),
                 0..=1,
             );
+            // A tetrahedral stereo atom: a site atom plus four ligands. Real atoms fill the first
+            // slots (ids need not be graph neighbors — tier-1 only requires the kind's ligand
+            // count); virtual implicit-H / lone-pair fills pad to `degree == 4`, all bearing the
+            // site atom. 0..=1 so many molecules have none.
+            let stereo_atoms = stereo_atom_overlay_strategy(atom_count);
+            // A cis/trans stereo bond: a bond as site plus two ligand atoms (padded with virtual
+            // fills to `degree == 4`). Requires a bond to name as site.
+            let stereo_bonds = if edges.is_empty() {
+                Just(Vec::new()).boxed()
+            } else {
+                stereo_bond_overlay_strategy(atom_count, edges.len())
+            };
             (
                 Just(atoms),
                 Just(edges),
@@ -103,10 +120,22 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                 aromatics,
                 multicenters,
                 noncovalents,
+                stereo_atoms,
+                stereo_bonds,
             )
         })
         .prop_map(
-            |(atoms, edges, orders, datives, aromatics, multicenters, noncovalents)| {
+            |(
+                atoms,
+                edges,
+                orders,
+                datives,
+                aromatics,
+                multicenters,
+                noncovalents,
+                stereo_atoms,
+                stereo_bonds,
+            )| {
                 let bonds = edges
                     .iter()
                     .zip(orders)
@@ -141,12 +170,109 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                     aromatic,
                     multicenter,
                     noncovalent,
-                    vec![],
-                    vec![],
+                    stereo_atoms,
+                    stereo_bonds,
                     Constraints::new(),
                 )
             },
         )
+}
+
+/// Cosets valid for `kind`: `Undetermined` or an in-range `Lit` index (`0..kind.count()`). Relative
+/// reaction ops (`Swap` / `Mirror` / `Apply`) act on the coset through the kind's algebra, which
+/// panics on an out-of-range index — so unlike the generic `stereo_coset_strategy`, indices are
+/// bounded by the kind's coset count.
+fn stereo_coset_for_kind(kind: StereoKind) -> impl Strategy<Value = StereoCosetAst> {
+    let count = kind.count() as u32;
+    prop_oneof![
+        Just(StereoCosetAst::Undetermined),
+        (0..count).prop_map(StereoCosetAst::Lit),
+    ]
+}
+
+/// A `degree`-length ligand frame of *distinct* `StereoLigand`s over `atom_count` atoms. The overlay
+/// matcher (`permutation_for_ligands`) rejects a non-unique frame, so `apply` finds no identity
+/// match — hence ligands must be unique. Real-atom ligands come first (distinct atoms); virtual
+/// implicit-H / lone-pair fills pad by distinct `(atom, kind)` pairs. A frame of `degree` unique
+/// ligands needs `atom_count * 3 >= degree`, so callers gate on `atom_count`.
+fn unique_ligand_frame(atom_count: usize, degree: usize) -> impl Strategy<Value = Vec<StereoLigand>> {
+    let pool: Vec<StereoLigand> = (0..atom_count as u32)
+        .flat_map(|a| {
+            [
+                StereoLigandKind::Atom,
+                StereoLigandKind::ImplicitHydrogen,
+                StereoLigandKind::LonePair,
+            ]
+            .into_iter()
+            .map(move |kind| StereoLigand::new(AtomId(a), kind))
+        })
+        .collect();
+    Just(pool)
+        .prop_shuffle()
+        .prop_map(move |mut pool| {
+            pool.truncate(degree);
+            pool
+        })
+}
+
+/// 0..=1 tetrahedral stereo atoms over an `atom_count`-atom molecule (needs `atom_count >= 2` for a
+/// `degree`-length unique ligand frame). Site is any atom; ligands are distinct real/virtual ligands
+/// whose atoms need not be graph neighbors (tier-1 requires only the ligand count for the kind).
+fn stereo_atom_overlay_strategy(
+    atom_count: usize,
+) -> BoxedStrategy<Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)>> {
+    let degree = StereoKind::Tetrahedral.degree();
+    if atom_count * 3 < degree {
+        return Just(Vec::new()).boxed();
+    }
+    prop::collection::vec(
+        (
+            0..atom_count as u32,
+            unique_ligand_frame(atom_count, degree),
+            stereo_coset_for_kind(StereoKind::Tetrahedral),
+        ),
+        0..=1,
+    )
+    .prop_map(move |entries| {
+        entries
+            .into_iter()
+            .map(|(site, ligands, coset)| {
+                let ast = StereoAtomAst::new(StereoKind::Tetrahedral, coset);
+                (AtomId(site), ligands, ast)
+            })
+            .collect()
+    })
+    .boxed()
+}
+
+/// 0..=1 cis/trans stereo bonds (needs `atom_count >= 2` for a `degree`-length unique frame). Site is
+/// any bond; ligands are distinct real/virtual ligands (their atoms need not be double-bond termini).
+fn stereo_bond_overlay_strategy(
+    atom_count: usize,
+    bond_count: usize,
+) -> BoxedStrategy<Vec<(BondId, Vec<StereoLigand>, StereoBondAst)>> {
+    let degree = StereoKind::CisTrans.degree();
+    if bond_count == 0 || atom_count * 3 < degree {
+        return Just(Vec::new()).boxed();
+    }
+    prop::collection::vec(
+        (
+            0..bond_count as u32,
+            unique_ligand_frame(atom_count, degree),
+            stereo_coset_for_kind(StereoKind::CisTrans),
+        ),
+        0..=1,
+    )
+    .prop_map(move |entries| {
+        entries
+            .into_iter()
+            .map(|(site, ligands, coset)| {
+                let ast = StereoBondAst::new(StereoKind::CisTrans, coset);
+                (BondId(site), ligands, ast)
+            })
+            .collect()
+    })
+    .boxed()
 }
 
 /// A reaction whose `lhs` carries DAMN overlays — exercises overlay carry, correspondence, and
@@ -155,27 +281,110 @@ fn overlay_reaction_strategy() -> impl Strategy<Value = ReactionAst> {
     reaction_over(overlay_molecule_strategy())
 }
 
+/// An optional edit to a surviving stereo entity. The relative ops (`Swap` / `Mirror` / `Apply`)
+/// resolve `old` from the matched host coset at apply, carrying no pre-state; `SetCoset` becomes a
+/// `ModifyField { Configuration }` whose `old` is read from `lhs`, so apply's precondition holds.
+#[derive(Clone, Debug)]
+enum StereoOp {
+    Swap,
+    Mirror,
+    Apply(Permutation),
+    SetCoset(StereoCosetAst),
+}
+
+/// Per-surviving-stereo-entity optional op: `Swap` / `Mirror` use the kind's in-group generators,
+/// `SetCoset` is bounded to the kind's in-range cosets, and `Apply` a permutation in the kind's
+/// parent group. The coset algebra rejects out-of-group permutations (`reindex` → `None`, which
+/// `act` unwraps), so `Apply` only draws arbitrary permutations for kinds whose parent is the full
+/// symmetric group (Tetrahedral); other kinds omit it and lean on the in-group `Swap` / `Mirror`.
+fn stereo_op_strategy(kind: StereoKind) -> impl Strategy<Value = Option<StereoOp>> {
+    let base = prop_oneof![
+        Just(StereoOp::Swap),
+        Just(StereoOp::Mirror),
+        stereo_coset_for_kind(kind).prop_map(StereoOp::SetCoset),
+    ]
+    .boxed();
+    let ops = if kind == StereoKind::Tetrahedral {
+        prop_oneof![
+            base,
+            permutation_strategy(kind.degree()).prop_map(StereoOp::Apply),
+        ]
+        .boxed()
+    } else {
+        base
+    };
+    prop::option::weighted(0.5, ops)
+}
+
 /// A valid reaction over any generated `lhs`: DPO-valid atom deletions (each removed atom takes its
-/// incident bonds and overlays), per-surviving-atom optional charge change and per-surviving-bond
-/// optional order change (the `old` read from `lhs`, so apply's precondition holds), plus up to two
-/// new atoms bonded to the lowest survivor. No dangling by construction.
+/// incident bonds, overlays, and stereo entities), per-surviving-entity optional field / relative
+/// edits (the absolute `old` read from `lhs`, so apply's precondition holds), plus up to two new
+/// atoms bonded to the lowest survivor. No dangling by construction.
 fn reaction_over(molecule: impl Strategy<Value = MoleculeAst>) -> impl Strategy<Value = ReactionAst> {
     molecule
         .prop_flat_map(|lhs| {
             let atom_count = lhs.atoms().count();
             let bond_count = lhs.bonds().count();
+            let dative_count = lhs.dative_bonds().count();
+            let aromatic_count = lhs.aromatic_systems().count();
+            let multicenter_count = lhs.multicenter_bonds().count();
+            let stereo_atom_count = lhs.stereo_atoms().count();
+            let stereo_bond_count = lhs.stereo_bonds().count();
             (
                 Just(lhs),
                 prop::collection::vec(weighted(0.25), atom_count),
                 prop::collection::vec(prop::option::of(-2i64..=2), atom_count),
                 prop::collection::vec(prop::option::of(1i64..=3), bond_count),
                 prop::collection::vec(element_strategy(), 0..=2),
+                (
+                    // Overlay `ModifyField` on survivors: dative order, aromatic / multicenter charge.
+                    prop::collection::vec(prop::option::of(1i64..=3), dative_count),
+                    prop::collection::vec(prop::option::of(-2i64..=2), aromatic_count),
+                    prop::collection::vec(prop::option::of(-2i64..=2), multicenter_count),
+                    // Add an `Aromatic` constraint to a surviving dative (guarded on absence).
+                    prop::collection::vec(weighted(0.3), dative_count),
+                    // Add a noncovalent overlay between the two newly-added atoms.
+                    weighted(0.4),
+                ),
+                (
+                    prop::collection::vec(
+                        stereo_op_strategy(StereoKind::Tetrahedral),
+                        stereo_atom_count,
+                    ),
+                    prop::collection::vec(
+                        stereo_op_strategy(StereoKind::CisTrans),
+                        stereo_bond_count,
+                    ),
+                ),
             )
         })
-        .prop_map(|(lhs, removals, charges, orders, additions)| {
-            build_reaction(lhs, removals, charges, orders, additions)
-        })
+        .prop_map(
+            |(lhs, removals, charges, orders, additions, overlay_ops, stereo_ops)| {
+                build_reaction(
+                    lhs,
+                    removals,
+                    charges,
+                    orders,
+                    additions,
+                    overlay_ops,
+                    stereo_ops,
+                )
+            },
+        )
 }
+
+/// Per-entity overlay `ModifyField` / `Add` / `ModifyConstraint` randomness: dative orders, aromatic
+/// charges, multicenter charges, dative-Aromatic-constraint flags, and the add-noncovalent flag.
+type OverlayOps = (
+    Vec<Option<i64>>,
+    Vec<Option<i64>>,
+    Vec<Option<i64>>,
+    Vec<bool>,
+    bool,
+);
+
+/// Per-stereo-entity optional op: stereo atoms, then stereo bonds.
+type StereoOps = (Vec<Option<StereoOp>>, Vec<Option<StereoOp>>);
 
 fn build_reaction(
     lhs: MoleculeAst,
@@ -183,6 +392,8 @@ fn build_reaction(
     charges: Vec<Option<i64>>,
     orders: Vec<Option<i64>>,
     additions: Vec<Element>,
+    overlay_ops: OverlayOps,
+    stereo_ops: StereoOps,
 ) -> ReactionAst {
     let atom_count = lhs.atoms().count();
     let bond_count = lhs.bonds().count();
@@ -263,6 +474,38 @@ fn build_reaction(
             ast: view.ast.clone(),
         }));
     }
+    // A removed atom also takes its incident stereo entities (site OR ligand incidence), else
+    // apply / span / DpoValidator dangle. `incident_ids` covers both.
+    let mut removed_stereo_atom: HashSet<StereoAtomId> = HashSet::new();
+    let mut removed_stereo_bond: HashSet<StereoBondId> = HashSet::new();
+    for &id in &removed_atoms {
+        removed_stereo_atom.extend(lhs.stereo_atoms().incident_ids(id));
+        removed_stereo_bond.extend(lhs.stereo_bonds().incident_ids(id));
+    }
+    for &id in &removed_stereo_atom {
+        let view = lhs.stereo_atom(id);
+        deltas.push(Delta::StereoAtom(StereoAtomDelta::Remove {
+            id,
+            site: view.site_id(),
+            ligands: view
+                .ligands()
+                .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
+                .collect(),
+            ast: view.ast.clone(),
+        }));
+    }
+    for &id in &removed_stereo_bond {
+        let view = lhs.stereo_bond(id);
+        deltas.push(Delta::StereoBond(StereoBondDelta::Remove {
+            id,
+            site: view.site_id(),
+            ligands: view
+                .ligands()
+                .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
+                .collect(),
+            ast: view.ast.clone(),
+        }));
+    }
     for (index, new_charge) in charges.into_iter().enumerate() {
         let id = AtomId(index as u32);
         if removed_atoms.contains(&id) {
@@ -293,12 +536,165 @@ fn build_reaction(
             }));
         }
     }
+    // Part A — overlay `ModifyField` on survivors: read `old` from `lhs`, emit only when it changes.
+    let (dative_orders, aromatic_charges, multicenter_charges, dative_aromatic_flags, add_noncovalent) =
+        overlay_ops;
+    for (index, new_order) in dative_orders.into_iter().enumerate() {
+        let id = DativeBondId(index as u32);
+        if removed_dative.contains(&id) {
+            continue;
+        }
+        let Some(order) = new_order else { continue };
+        let old = lhs.dative_bond(id).ast.order.clone();
+        let new = ValueAst::Lit(order);
+        if old != new {
+            deltas.push(Delta::DativeBond(DativeBondDelta::ModifyField {
+                id,
+                change: DativeBondFieldChange::Order { old, new },
+            }));
+        }
+    }
+    for (index, new_charge) in aromatic_charges.into_iter().enumerate() {
+        let id = AromaticSystemId(index as u32);
+        if removed_aromatic.contains(&id) {
+            continue;
+        }
+        let Some(charge) = new_charge else { continue };
+        let old = lhs.aromatic_system(id).ast.charge.clone();
+        let new = ValueAst::Lit(charge);
+        if old != new {
+            deltas.push(Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+                id,
+                change: AromaticSystemFieldChange::Charge { old, new },
+            }));
+        }
+    }
+    for (index, new_charge) in multicenter_charges.into_iter().enumerate() {
+        let id = MulticenterBondId(index as u32);
+        if removed_multicenter.contains(&id) {
+            continue;
+        }
+        let Some(charge) = new_charge else { continue };
+        let old = lhs.multicenter_bond(id).ast.charge.clone();
+        let new = ValueAst::Lit(charge);
+        if old != new {
+            deltas.push(Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
+                id,
+                change: MulticenterBondFieldChange::Charge { old, new },
+            }));
+        }
+    }
+    // Part A — add an `Aromatic` constraint to a surviving dative, guarded on its absence (apply's
+    // `old: None` precondition requires no existing constraint under that key).
+    for (index, add) in dative_aromatic_flags.into_iter().enumerate() {
+        let id = DativeBondId(index as u32);
+        if !add || removed_dative.contains(&id) {
+            continue;
+        }
+        let has_aromatic = lhs
+            .dative_bond(id)
+            .ast
+            .constraints
+            .iter()
+            .any(|c| matches!(c, DativeBondConstraint::Aromatic(_)));
+        if has_aromatic {
+            continue;
+        }
+        deltas.push(Delta::DativeBond(DativeBondDelta::ModifyConstraint {
+            id,
+            old: None,
+            new: Some(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
+        }));
+    }
+    // Part B — stereo edits on survivors. Relative ops resolve `old` from the host at apply;
+    // `SetCoset` reads `old` from `lhs`. Every op is emitted only when it *changes* the entity's
+    // configuration value: a value no-op (a relative op on an `Undetermined` coset, a `Mirror` on an
+    // achiral kind, a stabilizer permutation, or a `SetCoset` to the current value) would materialize
+    // a spurious `Modified { X, X }` span state that `to_reaction` diffs back to empty, breaking the
+    // span roundtrip.
+    let (stereo_atom_ops, stereo_bond_ops) = stereo_ops;
+    for (index, op) in stereo_atom_ops.into_iter().enumerate() {
+        let id = StereoAtomId(index as u32);
+        if removed_stereo_atom.contains(&id) {
+            continue;
+        }
+        let Some(op) = op else { continue };
+        let kind = lhs.stereo_atom(id).kind();
+        let old = lhs.stereo_atom(id).ast.configuration.clone();
+        let (new, delta) = match &op {
+            StereoOp::Swap => (old.swap(), StereoAtomDelta::Swap { id, kind }),
+            StereoOp::Mirror => (old.mirror(), StereoAtomDelta::Mirror { id, kind }),
+            StereoOp::Apply(permutation) => (
+                old.apply(*permutation),
+                StereoAtomDelta::Apply {
+                    id,
+                    kind,
+                    permutation: *permutation,
+                },
+            ),
+            StereoOp::SetCoset(coset) => {
+                let new = StereoConfigurationAst::kinded(kind, coset.clone());
+                (
+                    new.clone(),
+                    StereoAtomDelta::ModifyField {
+                        id,
+                        change: StereoAtomFieldChange::Configuration {
+                            old: old.clone(),
+                            new,
+                        },
+                    },
+                )
+            }
+        };
+        if new != old {
+            deltas.push(Delta::StereoAtom(delta));
+        }
+    }
+    for (index, op) in stereo_bond_ops.into_iter().enumerate() {
+        let id = StereoBondId(index as u32);
+        if removed_stereo_bond.contains(&id) {
+            continue;
+        }
+        let Some(op) = op else { continue };
+        let kind = lhs.stereo_bond(id).kind();
+        let old = lhs.stereo_bond(id).ast.configuration.clone();
+        let (new, delta) = match &op {
+            StereoOp::Swap => (old.swap(), StereoBondDelta::Swap { id, kind }),
+            StereoOp::Mirror => (old.mirror(), StereoBondDelta::Mirror { id, kind }),
+            StereoOp::Apply(permutation) => (
+                old.apply(*permutation),
+                StereoBondDelta::Apply {
+                    id,
+                    kind,
+                    permutation: *permutation,
+                },
+            ),
+            StereoOp::SetCoset(coset) => {
+                let new = StereoConfigurationAst::kinded(kind, coset.clone());
+                (
+                    new.clone(),
+                    StereoBondDelta::ModifyField {
+                        id,
+                        change: StereoBondFieldChange::Configuration {
+                            old: old.clone(),
+                            new,
+                        },
+                    },
+                )
+            }
+        };
+        if new != old {
+            deltas.push(Delta::StereoBond(delta));
+        }
+    }
     // Append atoms bonded to the lowest surviving atom (isolated if every atom is removed).
     let anchor = (0..atom_count as u32)
         .map(AtomId)
         .find(|id| !removed_atoms.contains(id));
+    let mut added_atom_ids: Vec<AtomId> = Vec::new();
     for (offset, element) in additions.into_iter().enumerate() {
         let atom = AtomId((atom_count + offset) as u32);
+        added_atom_ids.push(atom);
         deltas.push(Delta::Atom(AtomDelta::Add {
             id: atom,
             ast: AtomAst::from_element(element),
@@ -310,6 +706,18 @@ fn build_reaction(
                 ast: BondAst::from_order(1),
             }));
         }
+    }
+    // Part A — overlay `Add`: a noncovalent bond between the two newly-added atoms (both created in
+    // this reaction, so no dangling). Ids append past the lhs noncovalent count.
+    if add_noncovalent && added_atom_ids.len() >= 2 {
+        deltas.push(Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+            id: NoncovalentBondId(lhs.noncovalent_bonds().count() as u32),
+            atoms: [added_atom_ids[0], added_atom_ids[1]],
+            ast: NoncovalentBondAst {
+                kind: NoncovalentBondKindAst::Lit(NoncovalentBondKind::VanDerWaals),
+                constraints: Default::default(),
+            },
+        }));
     }
     ReactionAst::new(lhs, Deltas::from_iter(deltas))
 }
