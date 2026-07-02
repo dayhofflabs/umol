@@ -5,7 +5,6 @@ use std::collections::BTreeSet;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use strum::VariantArray;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 use umol_perm::{Orientation, Permutation};
 use winnow::ascii::{digit1, multispace0};
@@ -581,17 +580,40 @@ fn stereogenicity_char(i: &mut &str) -> PResult<Stereogenicity> {
     .parse_next(i)
 }
 
+/// Parse a `{ glyph (',' glyph)* }` glyph set — the `LitSet` / multi-`NotSet` body of a relation.
+fn char_set<T: Ord>(
+    i: &mut &str,
+    mut ch: impl FnMut(&mut &str) -> PResult<T>,
+) -> PResult<BTreeSet<T>> {
+    '{'.parse_next(i)?;
+    let mut set = BTreeSet::from([ch(i)?]);
+    while opt(',').parse_next(i)?.is_some() {
+        set.insert(ch(i)?);
+    }
+    '}'.parse_next(i)?;
+    Ok(set)
+}
+
 fn topicity_relation_inline(i: &mut &str) -> PResult<TopicityRelationAst> {
     if opt('*').parse_next(i)?.is_some() {
         return Ok(TopicityRelationAst::Undetermined);
     }
     let neg = opt('!').parse_next(i)?.is_some();
-    let v = topicity_char(i)?;
-    Ok(if neg {
-        TopicityRelationAst::NotSet(BTreeSet::from([v]))
+    if i.starts_with('{') {
+        let set = char_set(i, topicity_char)?;
+        Ok(if neg {
+            TopicityRelationAst::NotSet(set)
+        } else {
+            TopicityRelationAst::LitSet(set)
+        })
     } else {
-        TopicityRelationAst::Lit(v)
-    })
+        let v = topicity_char(i)?;
+        Ok(if neg {
+            TopicityRelationAst::NotSet(BTreeSet::from([v]))
+        } else {
+            TopicityRelationAst::Lit(v)
+        })
+    }
 }
 
 fn stereogenicity_relation_inline(i: &mut &str) -> PResult<StereogenicityAst> {
@@ -599,12 +621,21 @@ fn stereogenicity_relation_inline(i: &mut &str) -> PResult<StereogenicityAst> {
         return Ok(StereogenicityAst::Undetermined);
     }
     let neg = opt('!').parse_next(i)?.is_some();
-    let v = stereogenicity_char(i)?;
-    Ok(if neg {
-        StereogenicityAst::NotSet(BTreeSet::from([v]))
+    if i.starts_with('{') {
+        let set = char_set(i, stereogenicity_char)?;
+        Ok(if neg {
+            StereogenicityAst::NotSet(set)
+        } else {
+            StereogenicityAst::LitSet(set)
+        })
     } else {
-        StereogenicityAst::Lit(v)
-    })
+        let v = stereogenicity_char(i)?;
+        Ok(if neg {
+            StereogenicityAst::NotSet(BTreeSet::from([v]))
+        } else {
+            StereogenicityAst::Lit(v)
+        })
+    }
 }
 
 /// Parse one `#p`/`#f`/`#o`/`#g` predicate for `kind`. Atom and bond share the
@@ -697,43 +728,49 @@ fn write_stereogenicity_char(s: Stereogenicity) -> char {
     }
 }
 
-fn fmt_topicity_relation(f: &mut fmt::Formatter<'_>, rel: &TopicityRelationAst) -> fmt::Result {
-    let members = rel.to_set();
-    match members.len() {
-        1 => write!(
-            f,
-            "{}",
-            write_topicity_char(members.into_iter().next().unwrap())
-        ),
-        2 => {
-            let complement = Topicity::VARIANTS
-                .iter()
-                .copied()
-                .find(|v| !members.contains(v))
-                .unwrap();
-            write!(f, "!{}", write_topicity_char(complement))
+/// Write a `{ glyph,glyph,… }` glyph set (a `LitSet` body, or a multi-element `NotSet` after `!`).
+fn fmt_char_set<T: Copy>(
+    f: &mut fmt::Formatter<'_>,
+    set: &BTreeSet<T>,
+    ch: impl Fn(T) -> char,
+) -> fmt::Result {
+    write!(f, "{{")?;
+    for (idx, v) in set.iter().enumerate() {
+        if idx > 0 {
+            write!(f, ",")?;
         }
-        _ => f.write_str("*"),
+        write!(f, "{}", ch(*v))?;
+    }
+    write!(f, "}}")
+}
+
+fn fmt_topicity_relation(f: &mut fmt::Formatter<'_>, rel: &TopicityRelationAst) -> fmt::Result {
+    match rel {
+        TopicityRelationAst::Undetermined => f.write_str("*"),
+        TopicityRelationAst::Lit(t) => write!(f, "{}", write_topicity_char(*t)),
+        TopicityRelationAst::LitSet(s) => fmt_char_set(f, s, write_topicity_char),
+        TopicityRelationAst::NotSet(s) => {
+            write!(f, "!")?;
+            match s.iter().next() {
+                Some(&t) if s.len() == 1 => write!(f, "{}", write_topicity_char(t)),
+                _ => fmt_char_set(f, s, write_topicity_char),
+            }
+        }
     }
 }
 
 fn fmt_stereogenicity_relation(f: &mut fmt::Formatter<'_>, rel: &StereogenicityAst) -> fmt::Result {
-    let members = rel.to_set();
-    match members.len() {
-        1 => write!(
-            f,
-            "{}",
-            write_stereogenicity_char(members.into_iter().next().unwrap())
-        ),
-        2 => {
-            let complement = Stereogenicity::VARIANTS
-                .iter()
-                .copied()
-                .find(|v| !members.contains(v))
-                .unwrap();
-            write!(f, "!{}", write_stereogenicity_char(complement))
+    match rel {
+        StereogenicityAst::Undetermined => f.write_str("*"),
+        StereogenicityAst::Lit(s) => write!(f, "{}", write_stereogenicity_char(*s)),
+        StereogenicityAst::LitSet(set) => fmt_char_set(f, set, write_stereogenicity_char),
+        StereogenicityAst::NotSet(set) => {
+            write!(f, "!")?;
+            match set.iter().next() {
+                Some(&s) if set.len() == 1 => write!(f, "{}", write_stereogenicity_char(s)),
+                _ => fmt_char_set(f, set, write_stereogenicity_char),
+            }
         }
-        _ => f.write_str("*"),
     }
 }
 
@@ -1895,7 +1932,10 @@ mod tests {
     #[case::ligand_symmetry_explicit("Th1#p(0,1,2)")]
     #[case::topicity("Th1#o(0,1)=")]
     #[case::topicity_negated("Th1#o(0,1)!'")]
+    #[case::topicity_lit_set("Th1#o(0,1){=,'}")]
+    #[case::topicity_not_set("Th1#o(0,1)!{=,'}")]
     #[case::stereogenicity("Th1#g/")]
+    #[case::stereogenicity_lit_set("Th1#g{=,/}")]
     #[case::multiple("Th1#f(0,1,2)#o(0,1)=#g/")]
     fn test_stereo_atom_inline_render_identity(#[case] s: &str) {
         assert_eq!(parse_stereo_atom(s).unwrap().to_string(), s);
@@ -1925,6 +1965,10 @@ mod tests {
         StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_cycles(4, &[vec![0, 1, 2]])), present: BooleanAst::Lit(false) }))]
     #[case::topicity_negated("Th1#o(0,1)!'",
         StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Enantiotopic])) }))]
+    #[case::topicity_lit_set("Th1#o(0,1){=,'}",
+        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
+    #[case::topicity_not_set("Th1#o(0,1)!{=,'}",
+        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
     #[case::topicity_open("Th1#o(0,1)*",
         StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined }))]
     #[case::stereogenicity("Th1#g/",

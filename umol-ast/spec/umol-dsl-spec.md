@@ -1030,7 +1030,8 @@ stereo-predicate ::=
 presence    ::= '' | '+' | '!' | '*'                 (* '' / '+' asserted (true); '!' denied (false); '*' undetermined *)
 cycles      ::= '()' | ( '(' nat (',' nat)* ')' )+   (* disjoint cycles, 0-indexed, identity ()       *)
 ligand-pair ::= '(' nat ',' nat ')'                  (* two 0-indexed ligand-frame positions          *)
-relation    ::= '*' | ['!'] glyph                    (* * undetermined; ! set-complement; glyph singleton *)
+relation    ::= '*' | ['!'] ( glyph | glyph-set )    (* * undetermined; bare glyph = singleton; a set = members; ! = complement *)
+glyph-set   ::= '{' glyph (',' glyph)* '}'
 glyph       ::= '=' | '\'' | '/'
 ```
 
@@ -1060,7 +1061,7 @@ Each predicate places its **parameter** (the permutation for **`#p`** / **`#f`**
 
 **Disjoint-cycle notation.** **`cycles`** is a product of disjoint cycles **`(p0,p1,…)(q0,q1,…)`**, **0-indexed** over the ligand frame, each cycle mapping **`p0→p1→…→p0`**; the identity is **`()`**. Cycle points **MUST** be in range (**`< class degree`**) and disjoint. This is the same permutation the **`Permutation`** `Display` emits and the structured **`permutation-form`** (**§7.9**) encodes as a vector of cycles.
 
-**Relation completeness.** **`relation`** is **`*`** (**`Undetermined`** — the full domain), a single glyph (a **singleton**), or **`!`** + a glyph (the 2-element **complement** of that glyph's value). Over the 3-element topicity / stereogenicity domain these cover every non-empty subset. On serialization, a singleton renders as its glyph and a 2-element set as **`!`** + the complement glyph. A full-domain (**`Undetermined`**) relation is a **vacuous** predicate: like the atom **`#a*`** / **`#T*`** special forms (**§7.3**) it is **admissible on parse** but **elided** from the canonical rendered string (**§7.1**) — **`#o*`** / **`#g*`** are dropped on render, equivalent to omitting the predicate.
+**Relation forms.** A **`relation`** has four surface forms, each **faithful to its stored variant** (representation, not canonicalization): **`*`** (**`Undetermined`** — the full domain); a bare **`glyph`** (a **`Lit`** singleton, e.g. **`=`**); a **`glyph-set`** **`{a,b,…}`** (an explicit **`LitSet`** of members, e.g. **`{=,'}`**); or a leading **`!`** on a glyph or set (a **`NotSet`** — the **complement** of the named member(s): **`!/`** = not diastereotopic, **`!{=,'}`** = neither homotopic nor enantiotopic). This mirrors the EDN, which distinguishes the member vector **`[a b]`** (**`LitSet`**) from the complement **`[x] :member :not-in`** (**`NotSet`**, **§7.9**). Over the 3-element topicity / stereogenicity domain every non-empty subset is expressible several ways; **canonicalization** (a **separate** pass) reduces a set to the smaller of its positive / complement side — a 2-set to **`!x`**, a 1-set to a bare glyph — but the surface **round-trips whichever variant the AST holds**. A full-domain (**`Undetermined`**) relation is a **vacuous** predicate: like the atom **`#a*`** / **`#T*`** special forms (**§7.3**) it is **admissible on parse** but **elided** from the canonical rendered string (**§7.1**) — **`#o*`** / **`#g*`** are dropped on render, equivalent to omitting the predicate.
 
 **`~` rendering.** A **`#p`** / **`#f`** permutation equal to the class involution (and, for **`#p`**, matching the involution's orientation) renders as **`~`**; otherwise as explicit **`cycles`**.
 
