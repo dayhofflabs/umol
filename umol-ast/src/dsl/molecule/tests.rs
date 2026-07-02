@@ -1,3 +1,5 @@
+use std::fs;
+
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_chem::element::Element;
@@ -10,6 +12,32 @@ use crate::ast::electrons::ElectronCountsAst;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::value::ValueAst;
 use crate::{mol, mol_dsl};
+
+/// Every `fuzz_molecule` seed must parse (tree and streaming) — guards the seed corpus against
+/// rot as the molecule DSL evolves.
+#[rstest]
+fn test_fuzz_molecule_seeds_valid() {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fuzz/seeds/fuzz_molecule");
+    let mut count = 0;
+    let mut failures: Vec<String> = Vec::new();
+    for entry in fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        let data = fs::read_to_string(&path).unwrap();
+        if let Err(e) = MoleculeDsl::from_edn_str(&data) {
+            failures.push(format!("{name}: stream: {e:?}"));
+        }
+        let tree = read_string(&data)
+            .ok()
+            .and_then(|edn| MoleculeDsl::from_edn(&edn).ok());
+        if tree.is_none() {
+            failures.push(format!("{name}: tree parse failed"));
+        }
+        count += 1;
+    }
+    assert!(failures.is_empty(), "invalid seeds:\n{}", failures.join("\n"));
+    assert_eq!(count, 25);
+}
 
 #[rstest]
 fn test_metadata_new() {

@@ -129,11 +129,11 @@ stereo-keyword ::= :ccw | :cw | :z | :e
 
 **`:type` is mandatory.** Every structural entry that has a DSL surface — **`bond-entry`**, **`dative-bond-entry`**, **`aromatic-system-entry`**, **`multicenter-bond-entry`**, **`noncovalent-bond-entry`**, **`stereo-atom-entry`**, **`stereo-bond-entry`** — **MUST** carry a **`:type`** key. The payload is a subgrammar string (or its EDN-keyword shorthand where defined); an entry without **`:type`** is a parse error.
 
-Whether an empty string **`:type ""`** parses depends on the subgrammar:
+An empty string **`:type ""`** is a **parse error** for **every** structural subgrammar — each **requires** a leading inherent-field token:
 
-- **`aromatic-string`** (**§7.9**) and **`multicenter-string`** (**§7.10**) lead with an **electron counts** specification (**`*`** or a **`[n,n,…]`** vector) — the counterpart of the bond-string's order or the atom-string's element.
-- **`bond-string`** (**§7.5**), **`dative-string`** (**§7.11**), and **`noncovalent-string`** (**§7.12**) require a leading inherent-field token (bond order, dative order, noncovalent kind), so an empty payload is a parse error. Use the appropriate keyword shorthand (e.g. **`:single`**) or the literal token (e.g. **`"1"`**, **`"Hbd"`**).
-- **`stereo-string`** (**§7.14**) requires a leading **`class`** token (**`Th`** / **`Ct`** / **`Sp`** / **`Tb`** / **`Oh`**) followed by a **`coset`**, so an empty payload is a parse error. Use a literal token (e.g. **`"Th1"`**) or a **`stereo-keyword`** (**`:ccw`** / **`:cw`** / **`:z`** / **`:e`**).
+- **`aromatic-string`** (**§7.9**) and **`multicenter-string`** (**§7.10**) lead with an **electron counts** specification — **`*`** (undetermined) or a **`[n,n,…]`** vector (the counterpart of the bond-string's order or the atom-string's element). Empty is invalid; use **`"*"`** for undetermined counts.
+- **`bond-string`** (**§7.5**), **`dative-string`** (**§7.11**), and **`noncovalent-string`** (**§7.12**) require a leading inherent-field token (bond order, dative order, noncovalent kind). Use the appropriate keyword shorthand (e.g. **`:single`**) or the literal token (e.g. **`"1"`**, **`"Hbd"`**).
+- **`stereo-string`** (**§7.14**) requires a leading **`class`** token (**`Th`** / **`Ct`** / **`Sp`** / **`Tb`** / **`Oh`**) followed by a **`coset`**. Use a literal token (e.g. **`"Th1"`**) or a **`stereo-keyword`** (**`:ccw`** / **`:cw`** / **`:z`** / **`:e`**).
 
 **Dative bond entry.** A dative bond entry binds a **single acceptor** to **one or more donors** (a coordination center): **`:acceptor`** names the atom accepting the electron pair(s); **`:donors`** is a **vector** of one or more donating atoms. The leading **`order`** token of the **`dative-string`** payload (**§7.12**) records the number of donated pairs; one shared **`:type`** covers every donor→acceptor edge of the entry. The **`:acceptor`** and every donor **MUST** reference distinct atom sites. The mandatory **`:type`** slot carries a **`dative-string`** (**§7.12**) — order plus optional aromatic constraint (**`#a`**) and the ring-membership predicate (**`#R`**); its leading order parallels the bond-string's (**§7.5** / **§7.6**). The dative-string has **no** direction token — direction is expressed entirely by the **`:donors`** / **`:acceptor`** assignment.
 
@@ -781,7 +781,7 @@ stereo-bond-constraint-form ::= [ stereo-kind stereo-predicate-map ]
 
 stereo-predicate-map ::=
     { :ligand-symmetry ligand-symmetry-form }
-  | { :fluxionality    permutation-form }
+  | { :fluxionality    fluxionality-form }
   | { :topicity        topicity-form }
   | { :stereogenicity  stereogenicity-form }
 
@@ -789,12 +789,16 @@ stereo-kind          ::= :tetrahedral | :cis-trans | :axial | :square-planar
                        | :trigonal-bipyramidal | :octahedral
 permutation-form     ::= [ cycle* ]                 (* vector of disjoint cycles; identity [] *)
 cycle                ::= [ nat+ ]                    (* p0→p1→…→p0, 0-indexed positions *)
+presence             ::= true | false | :undetermined   (* the #p / #f trailing presence, §7.14 *)
 ligand-symmetry-form ::= { :permutation permutation-form [:orientation (:proper | :improper)]
-                                                         [:member (:in | :not-in)] }
+                                                         [:present presence] }
+fluxionality-form    ::= { :permutation permutation-form [:present presence] }
 ligand-pair          ::= [ nat nat ]                (* two ligand-frame positions *)
 topicity-form        ::= { :pair ligand-pair :relation topicity-relation [:member (:in | :not-in)] }
 stereogenicity-form  ::= { :relation stereogenicity-relation [:member (:in | :not-in)] }
-(* :member defaults to :in; :not-in negates a vector value (set complement).   *)
+(* :present is the #p / #f assertion (default true, omitted). It is distinct from :member, *)
+(* which survives only on topicity / stereogenicity as the relation's set-complement flag:  *)
+(* :member (default :in) with :not-in negates the :relation vector.                          *)
 topicity-relation       ::= :homotopic | :enantiotopic | :diastereotopic | [ keyword+ ] | :undetermined
 stereogenicity-relation ::= :symmetric | :prochiral | :stereogenic       | [ keyword+ ] | :undetermined
 
@@ -1018,11 +1022,12 @@ coset-expr ::= '~' coset-expr             (* involution operator             *)
 coset-set ::= '{' nat (',' nat)* '}'
 
 stereo-predicate ::=
-    '#p' ['!'] ( '~' | ['\''] cycles )    (* ligand symmetry: ! not-in, ' improper, ~ kind involution *)
-  | '#f' ( '~' | cycles )                 (* fluxionality (proper move); ~ kind involution            *)
-  | '#o' relation ligand-pair             (* topicity of a ligand pair                                *)
-  | '#g' relation                         (* stereogenicity classification                            *)
+    '#p' ( '~' | ['\''] cycles ) presence (* ligand symmetry: ' improper, ~ kind involution; presence trailing *)
+  | '#f' ( '~' | cycles ) presence        (* fluxionality (proper move); ~ kind involution; presence trailing  *)
+  | '#o' ligand-pair relation             (* topicity: ligand pair, then relation                             *)
+  | '#g' relation                         (* stereogenicity classification                                    *)
 
+presence    ::= '' | '+' | '!' | '*'                 (* '' / '+' asserted (true); '!' denied (false); '*' undetermined *)
 cycles      ::= '()' | ( '(' nat (',' nat)* ')' )+   (* disjoint cycles, 0-indexed, identity ()       *)
 ligand-pair ::= '(' nat ',' nat ')'                  (* two 0-indexed ligand-frame positions          *)
 relation    ::= '*' | ['!'] glyph                    (* * undetermined; ! set-complement; glyph singleton *)
@@ -1046,10 +1051,12 @@ A **`stereo-atom-entry`** / **`stereo-bond-entry`** **`:ligands`** vector **over
 
 **Inline predicates (`#p` / `#f` / `#o` / `#g`).** After the leading **`class coset`**, a **`stereo-string`** carries **zero or more** stereo predicates — the inline form of the per-element stereo constraints (the molecule-scope structured peers are **§7.9**). Each predicate's permutation degree is the **`class`** degree (number of ligand positions). The four predicates are:
 
-- **`#p`** — **ligand symmetry**: asserts a ligand permutation is (or, with **`!`**, is not) a symmetry of the element. Payload **`['!'] (['`''] cycles | '~')`**: **`!`** asserts **non**-membership (default: membership); **`'`** marks the permutation **improper** (orientation-reversing; default proper); **`cycles`** is the permutation in **disjoint-cycle notation** (below). The **`~`** sugar denotes the **class involution** (the orientation-reversing generator for chiral classes, the configuration-swapping ligand permutation for achiral classes) and already carries the class-appropriate orientation, so it is not combined with **`'`**.
-- **`#f`** — **fluxionality**: a proper ligand permutation realized by dynamics. Payload **`(cycles | '~')`**; no **`!`**/**`'`** (it is a bare proper move). **`~`** is the class involution.
-- **`#o`** — **topicity** of a ligand pair. Payload **`relation ligand-pair`** where **`ligand-pair`** is **`(i,j)`** (two 0-indexed positions in the **`:ligands`** frame). The glyphs are **`=`** homotopic, **`'`** enantiotopic, **`/`** diastereotopic.
+- **`#p`** — **ligand symmetry**: asserts whether a ligand permutation **is** (`presence` **`+`** or omitted), **is not** (**`!`**), or is **undetermined** (**`*`**) a symmetry of the element. Payload **`(['`''] cycles | '~') presence`**: **`'`** marks the permutation **improper** (orientation-reversing; default proper); **`cycles`** is the permutation in **disjoint-cycle notation** (below); the **trailing** **`presence`** is the assertion's truth value — a scalar polarity written **after** the permutation (**`+`** / omitted true, **`!`** false, **`*`** undetermined). The **`~`** sugar denotes the **class involution** (the orientation-reversing generator for chiral classes, the configuration-swapping ligand permutation for achiral classes) and already carries the class-appropriate orientation, so it is not combined with **`'`**.
+- **`#f`** — **fluxionality**: whether a proper ligand permutation is realized by dynamics. Payload **`(cycles | '~') presence`**; the permutation carries no **`'`** (it is a bare proper move), the **trailing** **`presence`** its truth value. **`~`** is the class involution.
+- **`#o`** — **topicity** of a ligand pair. Payload **`ligand-pair relation`** — the **`(i,j)`** pair (two 0-indexed positions in the **`:ligands`** frame) **first**, then the **`relation`**. Its negation is **not** a trailing polarity like **`#p`** / **`#f`**: the relation's set-complement is a **leading** **`!`** on the glyph (**`!/`** = not diastereotopic; **Relation completeness** below). The glyphs are **`=`** homotopic, **`'`** enantiotopic, **`/`** diastereotopic.
 - **`#g`** — **stereogenicity** classification. Payload **`relation`**: **`=`** symmetric, **`'`** prochiral, **`/`** stereogenic.
+
+Each predicate places its **parameter** (the permutation for **`#p`** / **`#f`**, the ligand pair for **`#o`**, none for **`#g`**) directly after the tag, then its **value**. The value forms differ: **`#p`** / **`#f`** take a **trailing** scalar **`presence`** — its negation marker **`!`** follows the permutation (**`#p(0,1)!`**); **`#o`** / **`#g`** take a **`relation`** whose set-complement is a **leading** **`!`** on the glyph (**`#o(0,1)!/`**). The two are different value types — a three-valued boolean vs. a set with complement — so the **`!`** trails on **`#p`** / **`#f`** but leads on **`#o`** / **`#g`**.
 
 **Disjoint-cycle notation.** **`cycles`** is a product of disjoint cycles **`(p0,p1,…)(q0,q1,…)`**, **0-indexed** over the ligand frame, each cycle mapping **`p0→p1→…→p0`**; the identity is **`()`**. Cycle points **MUST** be in range (**`< class degree`**) and disjoint. This is the same permutation the **`Permutation`** `Display` emits and the structured **`permutation-form`** (**§7.9**) encodes as a vector of cycles.
 
@@ -1076,9 +1083,15 @@ reaction-map ::=
       [:atom-aliases atom-alias-list]? }
 
 delta ::=
-    { :atom       atom-delta }
-  | { :bond       bond-delta }
-  | { :constraint constraint-delta }
+    { :atom             atom-delta }
+  | { :bond             bond-delta }
+  | { :dative-bond      dative-bond-delta }
+  | { :aromatic-system  aromatic-system-delta }
+  | { :multicenter-bond multicenter-bond-delta }
+  | { :noncovalent-bond noncovalent-bond-delta }
+  | { :stereo-atom      stereo-atom-delta }
+  | { :stereo-bond      stereo-bond-delta }
+  | { :constraint       constraint-delta }
 
 atom-delta ::=
     { :add    atom-entry }
@@ -1090,20 +1103,64 @@ bond-delta ::=
   | { :remove bond-ref }
   | { :modify [ bond-ref partial-bond-string ] }
 
+(* The four DAMN overlays share one delta shape (§7.9 refs, §4 entries, §7.11–7.13 partials). *)
+dative-bond-delta ::=
+    { :add    dative-bond-entry }
+  | { :remove dative-bond-ref }
+  | { :modify [ dative-bond-ref partial-dative-string ] }
+
+aromatic-system-delta ::=
+    { :add    aromatic-system-entry }
+  | { :remove aromatic-system-ref }
+  | { :modify [ aromatic-system-ref partial-aromatic-string ] }
+
+multicenter-bond-delta ::=
+    { :add    multicenter-bond-entry }
+  | { :remove multicenter-bond-ref }
+  | { :modify [ multicenter-bond-ref partial-multicenter-string ] }
+
+noncovalent-bond-delta ::=
+    { :add    noncovalent-bond-entry }
+  | { :remove noncovalent-bond-ref }
+  | { :modify [ noncovalent-bond-ref partial-noncovalent-string ] }
+
+(* Stereo adds three relative-op verbs; each carries an explicit stereo-kind (§7.9). *)
+stereo-atom-delta ::=
+    { :add    stereo-atom-entry }
+  | { :remove stereo-atom-ref }
+  | { :modify [ stereo-atom-ref partial-stereo-string ] }
+  | { :swap   [ stereo-atom-ref stereo-kind ] }
+  | { :mirror [ stereo-atom-ref stereo-kind ] }
+  | { :apply  [ stereo-atom-ref stereo-kind "cycles" ] }
+
+stereo-bond-delta ::=
+    { :add    stereo-bond-entry }
+  | { :remove stereo-bond-ref }
+  | { :modify [ stereo-bond-ref partial-stereo-string ] }
+  | { :swap   [ stereo-bond-ref stereo-kind ] }
+  | { :mirror [ stereo-bond-ref stereo-kind ] }
+  | { :apply  [ stereo-bond-ref stereo-kind "cycles" ] }
+
 constraint-delta ::=
     { :add    constraint-entry }
   | { :remove constraint-entry }
 ```
 
-**`:lhs`** is a **`molecule-map`** (**§4**); **`atom-entry`** / **`bond-entry`** are the **§4** entry forms (a bare spec, an **`[id spec]`** / **`[a b spec]`** vector, or the **`{:id … :atoms … :type …}`** map); **`constraint-entry`** is a single **§7.9** constraint (a per-entity narrow leaf, a relational leaf, a molecule-scope leaf, or a combinator). **`atom-ref`** / **`bond-ref`** are **§7.9** refs. **`:lhs`** and **`:deltas`** are **required**; **`:atom-aliases`** is **optional**.
+**`:lhs`** is a **`molecule-map`** (**§4**); **`atom-entry`** / **`bond-entry`** are the **§4** entry forms (a bare spec, an **`[id spec]`** / **`[a b spec]`** vector, or the **`{:id … :atoms … :type …}`** map); **`constraint-entry`** is a single **§7.9** constraint (a per-entity narrow leaf, a relational leaf, a molecule-scope leaf, or a combinator). **`atom-ref`** / **`bond-ref`** are **§7.9** refs. The **overlay** deltas reuse the same pieces per family: their **entries** are the **§4** overlay entry maps, their **`:modify`** **partials** are the **§7.11–7.14** compact strings, and their **refs** (**`dative-bond-ref`** … **`stereo-bond-ref`**) are **§7.9** refs. **`:lhs`** and **`:deltas`** are **required**; **`:atom-aliases`** is **optional**.
 
-**Reference frames.** A delta **`:remove`** / **`:modify`** target names an **existing lhs** entity, resolved in the **lhs frame** (positional index into **`:lhs`**'s **`:atoms`** / **`:bonds`**, or its declared **`:id`**). A created atom (**`:atom :add`**) **extends** the namespace; **bond endpoints** (in a **`:bond :add`**) and every **ref inside a `:constraint`** delta resolve against the **union** of lhs entities and reaction-created entities (lhs ∪ created). The same integer index that addresses an lhs entity in the lhs frame addresses a created entity once allocated: created atoms take indices continuing past the lhs atom count, in delta order.
+**Reference id spaces.** A delta **`:remove`** / **`:modify`** target names an **existing lhs** entity, resolved in the **lhs id space** (positional index into **`:lhs`**'s **`:atoms`** / **`:bonds`**, or its declared **`:id`**). A created atom (**`:atom :add`**) **extends** the namespace; **bond endpoints** (in a **`:bond :add`**) and every **ref inside a `:constraint`** delta resolve against the **union** of lhs entities and reaction-created entities (lhs ∪ created). The same integer index that addresses an lhs entity in the lhs id space addresses a created entity once allocated: created atoms take indices continuing past the lhs atom count, in delta order.
 
 **No forward references.** A delta **MAY** reference only entities present in **`:lhs`** or created by an **earlier** delta in **`:deltas`**. A reference to an entity created **later** is an error.
 
 **Create vs. edit.** **`:remove`** and **`:modify`** **MUST** target an **lhs** entity; removing or modifying an entity **created in the same reaction** is an error (collapse the creation into its final state instead). **`:add`** introduces a new entity.
 
-**`:modify` payload.** The **`partial-atom-string`** (**`partial-bond-string`**) is a compact **atom-string** (**bond-string**, **§7.3** / **§7.5**) carrying **only** the changes: a field left **`undetermined`** (e.g. an omitted element) keeps the lhs value; a field with a definite value **overwrites** it; a constraint predicate **sets** that constraint; an **undetermined** predicate written as **`#tag*`** **removes** it (**§7.1** — the same vacuous form that is elided on a full render is, on a **`:modify`** partial, the explicit **removal marker**). Consecutive **`:atom`** (or **`:bond`**) **`:modify`** edits to the **same** entity **coalesce** on serialization into a **single** **`:modify`** with one merged partial.
+**`:modify` payload.** The **`partial-atom-string`** (**`partial-bond-string`**) is a compact **atom-string** (**bond-string**, **§7.3** / **§7.5**) carrying **only** the changes: a field left **`undetermined`** (e.g. an omitted element) keeps the lhs value; a field with a definite value **overwrites** it; a constraint predicate **sets** that constraint; an **undetermined** predicate written as **`#tag*`** **removes** it (**§7.1** — the same vacuous form that is elided on a full render is, on a **`:modify`** partial, the explicit **removal marker**). Consecutive **`:modify`** edits to the **same** entity (of any family) **coalesce** on serialization into a **single** **`:modify`** with one merged partial. The overlay partials work the same way over their own strings (**§7.11–7.14**).
+
+**Overlay deltas.** The six overlay families — **`:dative-bond`**, **`:aromatic-system`**, **`:multicenter-bond`**, **`:noncovalent-bond`**, **`:stereo-atom`**, **`:stereo-bond`** — take **singular** delta keys, matching **`:atom`** / **`:bond`** (the **plural** **`:dative-bonds`** … keys name the **`:lhs`** molecule-map **collections**, **§4**, not deltas). Each shares the atom/bond delta shape: **`:add`** an entry, **`:remove`** a ref, **`:modify`** an **`[ref partial]`** pair. A **`:remove`** / **`:modify`** target resolves in the **lhs id space** of that family; **`:add`** allocates the next id of the family and (like a created atom) participants resolve against the lhs ∪ created union.
+
+**Stereo relative ops.** **`:stereo-atom`** / **`:stereo-bond`** add three verbs that transform the coset in place: **`:swap`** (the class involution), **`:mirror`** (the enantiomer), and **`:apply`** (a ligand-frame permutation in disjoint-cycle notation, **§7.14**). Each carries an **explicit `stereo-kind`** — **`[ref stereo-kind]`**, or **`[ref stereo-kind "cycles"]`** for **`:apply`**. The kind is mandatory because the coset algebra is parametrized by it (a relative op is uninterpretable without it) and carrying it makes the delta **self-contained** — independent of the lhs entity, so it is well-formed even when the lhs coset is open. The **`"cycles"`** permutation's degree is the **`stereo-kind`** degree (**§7.14**).
+
+**Stereo `:modify` partial.** The **`partial-stereo-string`** is the modify-variant of the stereo-string (**§7.14**): the **`coset`** is **optional** (omitted = unchanged — it keeps the lhs coset), but the **`class`** becomes **mandatory** once a coset or predicate appears, since the predicates render and parse against it. So **`"*"`** alone (undetermined, no predicates), or **`"Th"`** / **`"Th1"`** / **`"Th#o(0,1)="`** — but **`"*#o…"`** (a predicate with no class) is a parse error.
 
 **`:constraint` deltas.** **`{:constraint {:add …}}`** / **`{:constraint {:remove …}}`** add or remove one molecule-scope or per-entity constraint (**§7.9**); refs inside the **`constraint-entry`** resolve against the lhs ∪ created union.
 
@@ -1115,10 +1172,16 @@ constraint-delta ::=
 
 ```
 span-map ::=
-    { :atoms        [ atom-span* ]
-      [:bonds        [ bond-span* ]]?
-      [:constraints  [ constraint-span* ]]?
-      [:atom-aliases atom-alias-list]? }
+    { :atoms             [ atom-span* ]
+      [:bonds            [ bond-span* ]]?
+      [:dative-bonds     [ dative-bond-span* ]]?
+      [:aromatic-systems [ aromatic-system-span* ]]?
+      [:multicenter-bonds [ multicenter-bond-span* ]]?
+      [:noncovalent-bonds [ noncovalent-bond-span* ]]?
+      [:stereo-atoms     [ stereo-atom-span* ]]?
+      [:stereo-bonds     [ stereo-bond-span* ]]?
+      [:constraints      [ constraint-span* ]]?
+      [:atom-aliases     atom-alias-list]? }
 
 atom-span      ::= atom-span-body | [ keyword-id atom-span-body ]
 atom-span-body ::=
@@ -1134,21 +1197,38 @@ bond-span ::=
   | { :modify ( [ atom-ref atom-ref [ bond-value bond-value ] ]
               | { [:id keyword]? :atoms [ atom-ref atom-ref ] :type [ bond-value bond-value ] } ) }
 
+(* The six overlay spans mirror bond-span: a bare §4 entry (Unchanged), or an :add / :remove /   *)
+(* :modify wrapper. :modify restates the entry map with a two-element [left right] :type pair    *)
+(* (participants once). <x>-value is the family's :type string (§7.11–7.14).                     *)
+dative-bond-span      ::= dative-bond-entry      | { :add dative-bond-entry }      | { :remove dative-bond-entry }      | { :modify dative-bond-modify }
+aromatic-system-span  ::= aromatic-system-entry  | { :add aromatic-system-entry }  | { :remove aromatic-system-entry }  | { :modify aromatic-system-modify }
+multicenter-bond-span ::= multicenter-bond-entry | { :add multicenter-bond-entry } | { :remove multicenter-bond-entry } | { :modify multicenter-bond-modify }
+noncovalent-bond-span ::= noncovalent-bond-entry | { :add noncovalent-bond-entry } | { :remove noncovalent-bond-entry } | { :modify noncovalent-bond-modify }
+stereo-atom-span      ::= stereo-atom-entry      | { :add stereo-atom-entry }      | { :remove stereo-atom-entry }      | { :modify stereo-atom-modify }
+stereo-bond-span      ::= stereo-bond-entry      | { :add stereo-bond-entry }      | { :remove stereo-bond-entry }      | { :modify stereo-bond-modify }
+
+dative-bond-modify      ::= { [:id keyword]? :donors [ atom-ref+ ] :acceptor atom-ref :type [ dative-value dative-value ] }
+aromatic-system-modify  ::= { [:id keyword]? :atoms  [ atom-ref+ ]                   :type [ aromatic-value aromatic-value ] }
+multicenter-bond-modify ::= { [:id keyword]? :atoms  [ atom-ref+ ]                   :type [ multicenter-value multicenter-value ] }
+noncovalent-bond-modify ::= { [:id keyword]? :atoms  [ atom-ref atom-ref ]           :type [ noncovalent-value noncovalent-value ] }
+stereo-atom-modify      ::= { [:id keyword]? :site atom-ref :ligands [ ligand+ ]     :type [ stereo-value stereo-value ] }
+stereo-bond-modify      ::= { [:id keyword]? :site bond-ref :ligands [ ligand+ ]     :type [ stereo-value stereo-value ] }
+
 constraint-span ::=
     constraint-entry                        (* Unchanged *)
   | { :add    constraint-entry }
   | { :remove constraint-entry }            (* no :modify — constraints are a by-value multiset *)
 ```
 
-**`atom-value`** is an atom literal or an **`:atom-aliases`** keyword (the value position of a **§4** atom entry); **`bond-value`** is a **`bond-string`** / **`bond-keyword`** (a bond entry's **`:type`**); **`atom-entry`** / **`bond-entry`** / **`constraint-entry`** are the **§4** / **§7.9** forms.
+**`atom-value`** is an atom literal or an **`:atom-aliases`** keyword (the value position of a **§4** atom entry); **`bond-value`** is a **`bond-string`** / **`bond-keyword`** (a bond entry's **`:type`**); each **`<x>-value`** is the corresponding overlay's **`:type`** payload (**`dative-value`** a **`dative-string`**, **`aromatic-value`** an **`aromatic-string`**, and so on, **§7.11–7.14**); **`atom-entry`** / **`bond-entry`** / the overlay entries / **`constraint-entry`** are the **§4** / **§7.9** forms; **`ligand`** is a **§4** stereo ligand.
 
-**Union frame.** Span entries are in the **union frame** (`L ∪ R`): every entity — unchanged, added, removed, or modified — occupies a slot, and positions are the ids (no allocation, unlike the operational form). An atom's optional **`[:id …]`** and a bond's **`:id`** name it; refs (bond endpoints, constraint refs) resolve against this single frame.
+**Union id space.** Span entries are in the **union id space** (`L ∪ R`): every entity — unchanged, added, removed, or modified — occupies a slot, and positions are the ids (no allocation, unlike the operational form). An atom's optional **`[:id …]`** and a bond's **`:id`** name it; refs (bond endpoints, constraint refs) resolve against this single id space.
 
 **`:modify` carries both sides** — `[left right]`, **complete** values (atoms `[left right]`; bonds carry endpoints once, `[a b [left right]]`). This is the one place the span differs from the operational **`:modify`**, which carries only the new value: the span is **self-contained** (it has no **`:lhs`** to recover the old value from).
 
 **Constraints** are a by-value multiset — bare = unchanged, **`{:add c}`** / **`{:remove c}`**; there is **no** **`:modify`**.
 
-**Per-side consistency.** The **left** projection (unchanged ∪ removed ∪ modified-left) and the **right** projection (unchanged ∪ added ∪ modified-right) must **each** be a valid molecule — every ref a side uses **MUST** resolve within that side (e.g. a bond present on the left must have both endpoints present on the left).
+**Per-side consistency.** The **left** projection (unchanged ∪ removed ∪ modified-left) and the **right** projection (unchanged ∪ added ∪ modified-right) must **each** be a valid molecule — every ref a side uses **MUST** resolve within that side (e.g. a bond present on the left must have both endpoints present on the left; an overlay present on a side must have all its participants — donors/acceptor, atoms, endpoints, or stereo site + ligands — present on that side; a stereo bond's site bond must be present too).
 
 **Homoiconicity.** A plain molecule map (every entry bare) is a valid span — the identity reaction; the molecule *is* the span.
 
@@ -1203,8 +1283,8 @@ The **`H`** atom here represents an **explicit** hydrogen (e.g. a hydroxyl H one
          [:C3a :C7a :single] [:C7a :N :single] [:C3a :C4 :single]
          [:C4 :C5 :double] [:C5 :C6 :single] [:C6 :C7 :double]
          [:C7 :C7a :single]]
- :aromatic-systems [{:id :ar1 :atoms [:N :C2 :C3 :C3a :C7a] :type ""}
-            {:id :ar2 :atoms [:C3a :C4 :C5 :C6 :C7 :C7a] :type ""}]}
+ :aromatic-systems [{:id :ar1 :atoms [:N :C2 :C3 :C3a :C7a] :type "*"}
+            {:id :ar2 :atoms [:C3a :C4 :C5 :C6 :C7 :C7a] :type "*"}]}
 ```
 
 Localized bonds carry the σ-skeleton orders; the aromatic π system is expressed in **`:aromatic-systems`**.

@@ -1,1 +1,1 @@
-{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :electrons [:undetermined :undetermined] :type ""}]}
+{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type "*"}]}

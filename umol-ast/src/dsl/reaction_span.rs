@@ -1505,6 +1505,8 @@ impl ToEdn for ReactionSpanAst {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use rstest::*;
     use umol_chem::element::Element;
 
@@ -2187,9 +2189,9 @@ mod tests {
     fn test_fuzz_reaction_span_seeds_valid() {
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fuzz/seeds/fuzz_reaction_span");
         let mut count = 0;
-        for entry in std::fs::read_dir(dir).unwrap() {
+        for entry in fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
-            let data = std::fs::read_to_string(&path).unwrap();
+            let data = fs::read_to_string(&path).unwrap();
             let stream = ReactionSpanDsl::from_edn_str(&data).ok();
             let tree = read_string(&data)
                 .ok()
