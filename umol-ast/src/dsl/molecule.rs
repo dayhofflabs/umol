@@ -35,6 +35,7 @@ use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
 use super::noncovalent::NoncovalentBondDsl;
 use super::refs::{read_atom_ref, read_bond_ref, AtomRef, BondRef};
+use super::registry::EntityRegistry;
 use super::stereo::{
     expand_stereo_atom_keyword, expand_stereo_bond_keyword, StereoAtomDsl, StereoBondDsl,
 };
@@ -1379,8 +1380,10 @@ impl MoleculeInput {
         // Atoms: materialize AtomAst from each entry; collect ids.
         let mut atoms: Vec<AtomAst> = Vec::with_capacity(atom_entries.len());
         let mut metadata = MoleculeMetadata::new();
+        let mut registry = EntityRegistry::default();
         let mut atom_id_to_idx: IndexMap<String, AtomId> = IndexMap::new();
         for (pos, entry) in atom_entries.into_iter().enumerate() {
+            registry.register_atom(entry.id.clone());
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
                 atom_id_to_idx.insert(id.clone(), AtomId(pos as u32));
@@ -1396,6 +1399,7 @@ impl MoleculeInput {
         let mut entry_ids: IndexMap<String, ()> = IndexMap::new();
         let mut bond_id_to_idx: IndexMap<String, BondId> = IndexMap::new();
         for (pos, entry) in bond_entries.into_iter().enumerate() {
+            let id_name = entry.id.clone();
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
                 if entry_ids.insert(id.clone(), ()).is_some() {
@@ -1406,6 +1410,7 @@ impl MoleculeInput {
             }
             let a = entry.first.resolve(atom_count, &atom_id_to_idx)?;
             let b = entry.second.resolve(atom_count, &atom_id_to_idx)?;
+            registry.register_bond(id_name, a, b);
             bonds.push((a, b, entry.bond.0));
         }
 
@@ -1413,6 +1418,7 @@ impl MoleculeInput {
         let mut dative_list: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> =
             Vec::with_capacity(dative_entries.len());
         for (pos, entry) in dative_entries.into_iter().enumerate() {
+            let id_name = entry.id.clone();
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
                 if entry_ids.insert(id.clone(), ()).is_some() {
@@ -1431,6 +1437,7 @@ impl MoleculeInput {
                 ));
             }
             let acceptor = entry.acceptor.resolve(atom_count, &atom_id_to_idx)?;
+            registry.register_dative_bond(id_name, &donors, acceptor);
             dative_list.push((donors, acceptor, entry.bond.0));
         }
 
@@ -1438,6 +1445,7 @@ impl MoleculeInput {
         let mut aromatic_list: Vec<(Vec<AtomId>, AromaticSystemAst)> =
             Vec::with_capacity(aromatic_entries.len());
         for (pos, entry) in aromatic_entries.into_iter().enumerate() {
+            let id_name = entry.id.clone();
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
                 if entry_ids.insert(id.clone(), ()).is_some() {
@@ -1450,6 +1458,7 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|r| r.resolve(atom_count, &atom_id_to_idx))
                 .collect::<Result<_, _>>()?;
+            registry.register_aromatic_system(id_name, &atoms_resolved);
             aromatic_list.push((atoms_resolved, entry.system.0));
         }
 
@@ -1457,6 +1466,7 @@ impl MoleculeInput {
         let mut multicenter_list: Vec<(Vec<AtomId>, MulticenterBondAst)> =
             Vec::with_capacity(multicenter_entries.len());
         for (pos, entry) in multicenter_entries.into_iter().enumerate() {
+            let id_name = entry.id.clone();
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
                 if entry_ids.insert(id.clone(), ()).is_some() {
@@ -1469,6 +1479,7 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|r| r.resolve(atom_count, &atom_id_to_idx))
                 .collect::<Result<_, _>>()?;
+            registry.register_multicenter_bond(id_name, &atoms_resolved);
             multicenter_list.push((atoms_resolved, entry.bond.0));
         }
 
@@ -1476,6 +1487,7 @@ impl MoleculeInput {
         let mut noncovalent_list: Vec<(AtomId, AtomId, NoncovalentBondAst)> =
             Vec::with_capacity(noncovalent_entries.len());
         for (pos, entry) in noncovalent_entries.into_iter().enumerate() {
+            let id_name = entry.id.clone();
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
                 if entry_ids.insert(id.clone(), ()).is_some() {
@@ -1485,6 +1497,7 @@ impl MoleculeInput {
             }
             let first = entry.first.resolve(atom_count, &atom_id_to_idx)?;
             let second = entry.second.resolve(atom_count, &atom_id_to_idx)?;
+            registry.register_noncovalent_bond(id_name, first, second);
             noncovalent_list.push((first, second, entry.bond.0));
         }
 
@@ -1493,6 +1506,7 @@ impl MoleculeInput {
         let mut stereo_atom_list: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> =
             Vec::with_capacity(stereo_atom_entries.len());
         for (pos, entry) in stereo_atom_entries.into_iter().enumerate() {
+            let id_name = entry.id.clone();
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
                 if entry_ids.insert(id.clone(), ()).is_some() {
@@ -1511,6 +1525,7 @@ impl MoleculeInput {
                     ))
                 })
                 .collect::<Result<_, ParseError>>()?;
+            registry.register_stereo_atom(id_name, site);
             stereo_atom_list.push((site, ligands, entry.stereo.0));
         }
 
@@ -1518,6 +1533,7 @@ impl MoleculeInput {
         let mut stereo_bond_list: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)> =
             Vec::with_capacity(stereo_bond_entries.len());
         for (pos, entry) in stereo_bond_entries.into_iter().enumerate() {
+            let id_name = entry.id.clone();
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
                 if entry_ids.insert(id.clone(), ()).is_some() {
@@ -1536,6 +1552,7 @@ impl MoleculeInput {
                     ))
                 })
                 .collect::<Result<_, ParseError>>()?;
+            registry.register_stereo_bond(id_name, site);
             stereo_bond_list.push((site, ligands, entry.stereo.0));
         }
 
@@ -1546,16 +1563,17 @@ impl MoleculeInput {
             metadata.add_atom_alias(name, *dsl);
         }
 
-        // Resolve constraint refs against the final metadata + counts.
+        // Resolve constraint refs against the final metadata + counts (the registry's running
+        // counts, grown as each entity was parsed).
         let counts = EntityCounts {
-            atom_count,
-            bond_count: bonds.len(),
-            dative_bond_count: dative_list.len(),
-            aromatic_system_count: aromatic_list.len(),
-            multicenter_bond_count: multicenter_list.len(),
-            noncovalent_bond_count: noncovalent_list.len(),
-            stereo_atom_count: stereo_atom_list.len(),
-            stereo_bond_count: stereo_bond_list.len(),
+            atom_count: registry.atom_count(),
+            bond_count: registry.bond_count(),
+            dative_bond_count: registry.dative_bond_count(),
+            aromatic_system_count: registry.aromatic_system_count(),
+            multicenter_bond_count: registry.multicenter_bond_count(),
+            noncovalent_bond_count: registry.noncovalent_bond_count(),
+            stereo_atom_count: registry.stereo_atom_count(),
+            stereo_bond_count: registry.stereo_bond_count(),
         };
         let constraints = ConstraintsDsl(constraint_dsls).into_ast(&counts, &metadata)?;
 

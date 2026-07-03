@@ -271,7 +271,7 @@ Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (
   alone (drop `kind`); `NoncovalentBondsParallel` drops its `kind` field; update the §4.1 tier-1 note.
   **breaking (red→green)** — deliberate semantic change, migrate its `#[case]`s. `[dep: —]`
 
-**S1 — shared participant parsers (dsl)** — additive
+**S1 — shared participant parsers (dsl)** — additive **Done**
 - **S1a** `dsl`: extract the participant-key readers from the entry parsers — `:atoms [..]`
   (bond/noncovalent/aromatic/multicenter), `:donors [..] :acceptor _` (dative), `:site _ :ligands [..]`
   (stereo) — into shared `read_*` fns; entry parsers delegate. **additive (green)**,
@@ -282,10 +282,10 @@ Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (
   participant lookup (bond `(min,max)→BondId`; overlays index their small collections for
   `find_by_participants`); `register_<entity>(id_name?, participants) -> Id`,
   `find_<entity>_by_participants(..) -> Option<Id>`, count/name accessors; counts preserved; mechanical
-  `EntityCounts` rename folded in. **additive (green)** — queries unused yet. `[dep: —]`
+  `EntityCounts` rename folded in. **additive (green)** — queries unused yet. `[dep: —]` **Done**
 - **S2b** `dsl`: grow the registry's participant data incrementally in `MoleculeInput::into_ast`
   (register each entity as parsed, so mid-build sites see it). Counts/results unchanged. **green.**
-  `[dep: S2a]`
+  `[dep: S2a]` **Done**
 - **S2c** `dsl`: grow/shrink the registry in the reaction delta loop + reaction-span build (register on
   `Add`; unregister + compact on `Remove`, riding `IdCompaction`). **green.** `[dep: S2a]`
 
