@@ -670,7 +670,12 @@ impl Graph {
         let mut cliques = Vec::new();
         match alg {
             CommonSubgraphEnumerationAlgorithm::Backtracking => {
-                all_cliques(&neighbors, &mut Vec::new(), bitvec![1; pairs.len()], &mut cliques);
+                all_cliques(
+                    &neighbors,
+                    &mut Vec::new(),
+                    bitvec![1; pairs.len()],
+                    &mut cliques,
+                );
             }
         }
         subgraphs_from_cliques(cliques, &pairs, self, other)
@@ -1273,9 +1278,15 @@ mod tests {
             MaximalCommonSubgraphAlgorithm::BronKerbosch,
         );
         assert!(all.len() > maximal.len());
-        assert!(all.contains(&CommonSubgraph { mapping: vec![], edge_count: 0 }));
+        assert!(all.contains(&CommonSubgraph {
+            mapping: vec![],
+            edge_count: 0
+        }));
         for m in &maximal {
-            assert!(all.contains(m), "maximal subgraph {m:?} missing from complete enumeration");
+            assert!(
+                all.contains(m),
+                "maximal subgraph {m:?} missing from complete enumeration"
+            );
         }
     }
 }

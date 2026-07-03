@@ -40,7 +40,13 @@ fn sorted_matches(
     let mut occurrences: Vec<Vec<AtomId>> = pattern
         .substructure_matches(host, strategy, subiso)
         .iter()
-        .map(|e| e.host_atoms().to_vec())
+        .map(|c| {
+            c.atoms()
+                .mates()
+                .iter()
+                .map(|&(_, host)| AtomId::from(host))
+                .collect()
+        })
         .collect();
     occurrences.sort();
     occurrences
@@ -80,7 +86,7 @@ proptest! {
         // the generator may emit constraints inconsistent with the topology — e.g. a
         // stored valence differing from the derived one — so a self-match is not
         // guaranteed; only cross-strategy / cross-algorithm agreement is.)
-        let pattern = host.induced_subgraph(&subset).extract();
+        let pattern = host.extract(&host.induced_subgraph(&subset));
         let reference = sorted_matches(&pattern, &host, GraphAndOverlays, Vf2);
         for strategy in STRATEGIES {
             for subiso in SUBISO {

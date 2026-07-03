@@ -1,22 +1,22 @@
 //! Molecule structural AST.
 
-use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::ops::Index;
 use std::sync::{Arc, OnceLock};
 
 pub use builder::MoleculeBuilder;
 use umol_graph_core::{
-    EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered, RelationId, Unordered,
-    VarRelationSet,
+    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
+    RelationId, Unordered, VarRelationSet,
 };
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::constraint::{Constraint, Constraints};
+use super::correspondence::MoleculeCorrespondence;
 use super::dative::DativeBondAst;
-use super::embedding::MoleculeEmbedding;
+use super::edit::{AtomRef, BondRef, Edit};
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -394,16 +394,17 @@ impl MoleculeAst {
             .expect("stereo bond id must refer to a stereo bond in this molecule")
     }
 
-    pub fn induced_subgraph(&self, atoms: &[AtomId]) -> MoleculeEmbedding<'_> {
+    /// The subgraph induced by `atoms` (deduplicated, host order preserved), as an injective
+    /// sub→host [`MoleculeCorrespondence`]: sub entity `i` maps to its host id. `extract` / `edits`
+    /// materialize it. A bond/overlay is included iff all its participants are in `atoms`.
+    pub fn induced_subgraph(&self, atoms: &[AtomId]) -> MoleculeCorrespondence {
         let mut host_atoms: Vec<AtomId> = Vec::with_capacity(atoms.len());
-        let mut sub_atoms: HashMap<AtomId, AtomId> = HashMap::with_capacity(atoms.len());
+        let mut atom_set: HashSet<AtomId> = HashSet::with_capacity(atoms.len());
         for &a in atoms {
-            if let Entry::Vacant(entry) = sub_atoms.entry(a) {
-                entry.insert(AtomId(host_atoms.len() as u32));
+            if atom_set.insert(a) {
                 host_atoms.push(a);
             }
         }
-        let atom_set: HashSet<AtomId> = host_atoms.iter().copied().collect();
 
         let host_bonds: Vec<BondId> = self
             .bonds()
@@ -454,18 +455,75 @@ impl MoleculeAst {
             .map(|v| v.id)
             .collect();
 
-        MoleculeEmbedding::new(
-            host_atoms,
-            host_bonds,
-            host_dative_bonds,
-            host_aromatic_systems,
-            host_multicenter_bonds,
-            host_noncovalent_bonds,
-            host_stereo_atoms,
-            host_stereo_bonds,
-            sub_atoms,
-            self,
+        let atom_images: Vec<NodeId> = host_atoms.iter().map(|&a| NodeId::from(a)).collect();
+        MoleculeCorrespondence::new(
+            Correspondence::from_images(&atom_images, self.atoms().count()),
+            Correspondence::from_images(&host_bonds, self.bonds().count()),
+            Correspondence::from_images(&host_dative_bonds, self.dative_bonds().count()),
+            Correspondence::from_images(&host_aromatic_systems, self.aromatic_systems().count()),
+            Correspondence::from_images(&host_multicenter_bonds, self.multicenter_bonds().count()),
+            Correspondence::from_images(&host_noncovalent_bonds, self.noncovalent_bonds().count()),
+            Correspondence::from_images(&host_stereo_atoms, self.stereo_atoms().count()),
+            Correspondence::from_images(&host_stereo_bonds, self.stereo_bonds().count()),
         )
+    }
+
+    /// Materialize an induced-subgraph correspondence `sub` (over `self` as host) as a standalone
+    /// molecule: drop every host atom/bond absent from `sub`. Host order preserved, gaps compacted;
+    /// overlay drops cascade through the builder.
+    pub fn extract(&self, sub: &MoleculeCorrespondence) -> MoleculeAst {
+        let kept: HashSet<AtomId> = sub
+            .atoms()
+            .mates()
+            .iter()
+            .map(|&(_, host)| AtomId::from(host))
+            .collect();
+        let remove_atoms: Vec<AtomId> = (0..self.atoms().count())
+            .map(AtomId::from)
+            .filter(|a| !kept.contains(a))
+            .collect();
+        let remove_bonds: Vec<BondId> = self
+            .bonds()
+            .iter()
+            .filter(|b| {
+                let [a, b_end] = b.atom_ids();
+                !kept.contains(&a) || !kept.contains(&b_end)
+            })
+            .map(|b| b.id)
+            .collect();
+        let mut builder = self.edit();
+        builder.remove(&remove_atoms, &remove_bonds);
+        builder.build()
+    }
+
+    /// Edits transforming `self` into the extracted subgraph `sub`: one `RemoveTopology` over the
+    /// host atoms/bonds not in `sub` (empty when `sub` covers the whole molecule).
+    pub fn edits(&self, sub: &MoleculeCorrespondence) -> Vec<Edit> {
+        let kept: HashSet<AtomId> = sub
+            .atoms()
+            .mates()
+            .iter()
+            .map(|&(_, host)| AtomId::from(host))
+            .collect();
+        let kept_bonds: HashSet<BondId> =
+            sub.bonds().mates().iter().map(|&(_, host)| host).collect();
+        let removed_atoms: Vec<AtomRef> = (0..self.atoms().count())
+            .map(AtomId::from)
+            .filter(|a| !kept.contains(a))
+            .map(AtomRef::Id)
+            .collect();
+        let removed_bonds: Vec<BondRef> = (0..self.bonds().count())
+            .map(BondId::from)
+            .filter(|b| !kept_bonds.contains(b))
+            .map(BondRef::Id)
+            .collect();
+        if removed_atoms.is_empty() && removed_bonds.is_empty() {
+            return Vec::new();
+        }
+        vec![Edit::RemoveTopology {
+            atoms: removed_atoms,
+            bonds: removed_bonds,
+        }]
     }
 
     pub fn is_ground(&self) -> bool {

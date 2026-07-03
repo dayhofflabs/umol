@@ -812,21 +812,32 @@ mod tests {
 
     #[fixture]
     fn remapping() -> Remapping {
-        Remapping::new(vec![NodeId(2), NodeId(0), NodeId(5)], vec![EdgeId(3), EdgeId(1)])
+        Remapping::new(
+            vec![NodeId(2), NodeId(0), NodeId(5)],
+            vec![EdgeId(3), EdgeId(1)],
+        )
     }
 
     #[rstest]
     #[case::first(NodeId(0), NodeId(2))]
     #[case::middle(NodeId(1), NodeId(0))]
     #[case::last(NodeId(2), NodeId(5))]
-    fn test_remapping_map_node(remapping: Remapping, #[case] old: NodeId, #[case] expected: NodeId) {
+    fn test_remapping_map_node(
+        remapping: Remapping,
+        #[case] old: NodeId,
+        #[case] expected: NodeId,
+    ) {
         assert_eq!(remapping.map_node(old), expected);
     }
 
     #[rstest]
     #[case::relabel(EdgeId(0), EdgeId(3))]
     #[case::fixed(EdgeId(1), EdgeId(1))]
-    fn test_remapping_map_edge(remapping: Remapping, #[case] old: EdgeId, #[case] expected: EdgeId) {
+    fn test_remapping_map_edge(
+        remapping: Remapping,
+        #[case] old: EdgeId,
+        #[case] expected: EdgeId,
+    ) {
         assert_eq!(remapping.map_edge(old), expected);
     }
 

@@ -5,12 +5,11 @@
 
 use umol_chem::element::Element;
 use umol_chem::units::length::Length;
-use umol_params::covalent_radii::covalent_radii;
-
 use umol_geometric::algorithms::optimization::{
     lagrangian_relaxation, Constraint, LagrangianConfig, Variable,
 };
 use umol_geometric::molecule::Molecule;
+use umol_params::covalent_radii::covalent_radii;
 
 /// Maximum bond order considered.
 const MAX_ORDER: usize = 3;

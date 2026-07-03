@@ -1,6 +1,6 @@
 //! Substructure matching: occurrences of a pattern `MoleculeAst` within a host
-//! `MoleculeAst`, as [`MoleculeEmbedding`]s. The receiver is the pattern, so it
-//! parallels `pattern.matches(target)`: `pattern.substructure_matches(host, ...)`.
+//! `MoleculeAst`, each an injective pattern→host [`MoleculeCorrespondence`]. The receiver is the
+//! pattern, so it parallels `pattern.matches(target)`: `pattern.substructure_matches(host, ...)`.
 //!
 //! Two strategies compose over the chosen subgraph-isomorphism algorithm:
 //! `GraphAndOverlays` matches the localized atom-bond skeleton then post-verifies
@@ -9,11 +9,11 @@
 
 use std::borrow::Cow;
 
-use umol_graph_core::{NodeId, SubgraphIsomorphismAlgorithm};
+use umol_graph_core::{Correspondence, NodeId, SubgraphIsomorphismAlgorithm};
 
 use super::atom::AtomAst;
 use super::bond::BondAst;
-use super::embedding::MoleculeEmbedding;
+use super::correspondence::MoleculeCorrespondence;
 use super::entity::Entity;
 use super::id::{AtomId, BondId};
 use super::incidence::IncidenceNodeSelection;
@@ -35,16 +35,16 @@ pub enum SubstructureMatchAlgorithm {
 }
 
 impl MoleculeAst {
-    /// Occurrences of `self` (the pattern) within `host`, one [`MoleculeEmbedding`]
-    /// per occurrence. Pattern predicates are evaluated as `pattern.matches(host)`
-    /// against the host atom/bond augmented with its derived topological
+    /// Occurrences of `self` (the pattern) within `host`, one injective pattern→host
+    /// [`MoleculeCorrespondence`] per occurrence. Pattern predicates are evaluated as
+    /// `pattern.matches(host)` against the host atom/bond augmented with its derived topological
     /// constraints.
-    pub fn substructure_matches<'h>(
+    pub fn substructure_matches(
         &self,
-        host: &'h MoleculeAst,
+        host: &MoleculeAst,
         strategy: SubstructureMatchAlgorithm,
         subiso: SubgraphIsomorphismAlgorithm,
-    ) -> Vec<MoleculeEmbedding<'h>> {
+    ) -> Vec<MoleculeCorrespondence> {
         match strategy {
             SubstructureMatchAlgorithm::GraphAndOverlays => {
                 self.substructure_matches_graph_and_overlays(host, subiso)
@@ -91,11 +91,11 @@ impl MoleculeAst {
         (host_atoms, host_bonds)
     }
 
-    fn substructure_matches_graph_and_overlays<'h>(
+    fn substructure_matches_graph_and_overlays(
         &self,
-        host: &'h MoleculeAst,
+        host: &MoleculeAst,
         subiso: SubgraphIsomorphismAlgorithm,
-    ) -> Vec<MoleculeEmbedding<'h>> {
+    ) -> Vec<MoleculeCorrespondence> {
         let pattern = self;
         if pattern.atoms().count() > host.atoms().count() {
             return Vec::new();
@@ -130,11 +130,11 @@ impl MoleculeAst {
     /// degrades on. The Levi subiso supplies only the atom correspondence; the same
     /// exact `verify_overlays` then filters and builds the embedding, so this returns
     /// the identical match set as `GraphAndOverlays`.
-    fn substructure_matches_incidence<'h>(
+    fn substructure_matches_incidence(
         &self,
-        host: &'h MoleculeAst,
+        host: &MoleculeAst,
         subiso: SubgraphIsomorphismAlgorithm,
-    ) -> Vec<MoleculeEmbedding<'h>> {
+    ) -> Vec<MoleculeCorrespondence> {
         let pattern = self;
         if pattern.atoms().count() > host.atoms().count() {
             return Vec::new();
@@ -177,15 +177,15 @@ impl MoleculeAst {
     }
 
     /// Post-verify a skeleton occurrence's overlays against the atom correspondence,
-    /// returning the enriched embedding or `None` if any pattern overlay has no
-    /// matching host overlay. Each N-ary / special overlay is located by **exact
-    /// participant set** (`connecting`); dative donor/acceptor roles are checked
-    /// explicitly. Stereo overlays are deferred to the coset post-filter.
-    fn verify_overlays<'h>(
+    /// returning the injective pattern→host correspondence or `None` if any pattern overlay has no
+    /// matching host overlay. Each N-ary / special overlay is located by **exact participant set**
+    /// (`connecting`); dative donor/acceptor roles are checked explicitly. Stereo overlays are
+    /// deferred to the coset post-filter.
+    fn verify_overlays(
         &self,
-        host: &'h MoleculeAst,
+        host: &MoleculeAst,
         atom_map: Vec<AtomId>,
-    ) -> Option<MoleculeEmbedding<'h>> {
+    ) -> Option<MoleculeCorrespondence> {
         let pattern = self;
 
         let mut dative = Vec::new();
@@ -284,18 +284,52 @@ impl MoleculeAst {
             stereo_bonds.push(sh.id);
         }
 
-        Some(MoleculeEmbedding::from_match(
-            host,
-            pattern,
-            atom_map,
-            dative,
-            aromatic,
-            multicenter,
-            noncovalent,
-            stereo_atoms,
-            stereo_bonds,
+        let atoms = Correspondence::new(
+            atom_map
+                .iter()
+                .enumerate()
+                .map(|(sub, &host_atom)| (NodeId(sub as u32), NodeId::from(host_atom)))
+                .collect(),
+            pattern.atoms().count(),
+            host.atoms().count(),
+        );
+        let bonds = Correspondence::new(
+            atoms
+                .edge_mates(pattern.raw_graph(), host.raw_graph())
+                .into_iter()
+                .map(|(l, r)| (BondId::from(l), BondId::from(r)))
+                .collect(),
+            pattern.bonds().count(),
+            host.bonds().count(),
+        );
+        Some(MoleculeCorrespondence::new(
+            atoms,
+            bonds,
+            injective_correspondence(&dative, host.dative_bonds().count()),
+            injective_correspondence(&aromatic, host.aromatic_systems().count()),
+            injective_correspondence(&multicenter, host.multicenter_bonds().count()),
+            injective_correspondence(&noncovalent, host.noncovalent_bonds().count()),
+            injective_correspondence(&stereo_atoms, host.stereo_atoms().count()),
+            injective_correspondence(&stereo_bonds, host.stereo_bonds().count()),
         ))
     }
+}
+
+/// The injective correspondence a successful match induces for one overlay family: pattern entity
+/// `i` (`0..host_ids.len()`, all mated) maps to `host_ids[i]`.
+fn injective_correspondence<Id: Copy + Ord + From<usize>>(
+    host_ids: &[Id],
+    right_count: usize,
+) -> Correspondence<Id> {
+    Correspondence::new(
+        host_ids
+            .iter()
+            .enumerate()
+            .map(|(sub, &host)| (Id::from(sub), host))
+            .collect(),
+        host_ids.len(),
+        right_count,
+    )
 }
 
 #[cfg(test)]
@@ -391,7 +425,13 @@ mod tests {
                 let mut occurrences: Vec<Vec<AtomId>> = pattern
                     .substructure_matches(&host, strategy, subiso)
                     .iter()
-                    .map(|e| e.host_atoms().to_vec())
+                    .map(|c| {
+                        c.atoms()
+                            .mates()
+                            .iter()
+                            .map(|&(_, host)| AtomId::from(host))
+                            .collect()
+                    })
                     .collect();
                 occurrences.sort();
                 assert_eq!(occurrences, expected, "{strategy:?}/{subiso:?}");

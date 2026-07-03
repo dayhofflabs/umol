@@ -16,7 +16,7 @@
 
 use std::sync::LazyLock;
 
-use umol_ast::ast::{AsLit, BondId, MoleculeAst, SubstructureMatchAlgorithm};
+use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst, SubstructureMatchAlgorithm};
 use umol_ast::mol;
 use umol_graph_core::{NodeId, SubgraphIsomorphismAlgorithm};
 
@@ -67,9 +67,14 @@ impl PatternFingerprinter {
                 count_id = gboost_combine(count_id, COUNT_SALT);
                 ids.push(u64::from(count_id));
 
-                let host = embedding.host_atoms();
+                let host: Vec<AtomId> = embedding
+                    .atoms()
+                    .mates()
+                    .iter()
+                    .map(|&(_, host)| AtomId::from(host))
+                    .collect();
                 let mut bit_id = template.index;
-                for &atom in host {
+                for &atom in &host {
                     let atomic_number = mol
                         .atom(atom)
                         .element()

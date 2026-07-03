@@ -12,7 +12,6 @@ pub(crate) mod dative;
 pub(crate) mod delta;
 pub(crate) mod edit;
 pub(crate) mod electrons;
-pub(crate) mod embedding;
 pub(crate) mod entity;
 pub(crate) mod error;
 pub(crate) mod id;
@@ -75,7 +74,6 @@ pub use edit::{
     StereoAtomFieldChange, StereoAtomRef, StereoBondFieldChange, StereoBondRef, Undo,
 };
 pub use electrons::ElectronCountsAst;
-pub use embedding::MoleculeEmbedding;
 pub use entity::{Entity, EntityKind};
 pub use error::{ApplyError, Contradiction};
 pub use id::{

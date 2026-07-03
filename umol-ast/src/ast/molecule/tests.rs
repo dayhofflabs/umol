@@ -1116,7 +1116,7 @@ fn test_molecule_ast_subgraph_isomorphisms_at() {
 #[rstest]
 fn test_molecule_ast_induced_subgraph(#[from(rich_molecule)] ast: MoleculeAst) {
     let sub = ast.induced_subgraph(&[AtomId(0), AtomId(1), AtomId(2)]);
-    let extracted = sub.extract();
+    let extracted = ast.extract(&sub);
     let atom_elements: Vec<_> = extracted
         .atoms()
         .iter()
@@ -1142,20 +1142,48 @@ fn test_molecule_ast_induced_subgraph(#[from(rich_molecule)] ast: MoleculeAst) {
             (AtomId(1), AtomId(2), ValueAst::Lit(2)),
         ]
     );
-    assert_eq!(sub.host_atoms(), &[AtomId(0), AtomId(1), AtomId(2)]);
-    assert_eq!(sub.host_bonds(), &[BondId(0), BondId(1)]);
-    assert_eq!(sub.host_aromatic_systems(), &[AromaticSystemId(0)]);
-    assert_eq!(sub.host_multicenter_bonds(), &[MulticenterBondId(0)]);
-    assert_eq!(sub.host_dative_bonds(), &[] as &[DativeBondId]);
-    assert_eq!(sub.host_noncovalent_bonds(), &[] as &[NoncovalentBondId]);
+    assert_eq!(
+        sub.atoms().mates(),
+        &[
+            (NodeId(0), NodeId(0)),
+            (NodeId(1), NodeId(1)),
+            (NodeId(2), NodeId(2))
+        ]
+    );
+    assert_eq!(
+        sub.bonds().mates(),
+        &[(BondId(0), BondId(0)), (BondId(1), BondId(1))]
+    );
+    assert_eq!(
+        sub.aromatic_systems().mates(),
+        &[(AromaticSystemId(0), AromaticSystemId(0))]
+    );
+    assert_eq!(
+        sub.multicenter_bonds().mates(),
+        &[(MulticenterBondId(0), MulticenterBondId(0))]
+    );
+    assert_eq!(
+        sub.dative_bonds().mates(),
+        &[] as &[(DativeBondId, DativeBondId)]
+    );
+    assert_eq!(
+        sub.noncovalent_bonds().mates(),
+        &[] as &[(NoncovalentBondId, NoncovalentBondId)]
+    );
 }
 
 #[rstest]
 fn test_molecule_ast_induced_subgraph_preserves_dative(#[from(rich_molecule)] ast: MoleculeAst) {
     let sub = ast.induced_subgraph(&[AtomId(2), AtomId(3)]);
-    assert_eq!(sub.host_atoms(), &[AtomId(2), AtomId(3)]);
-    assert_eq!(sub.host_dative_bonds(), &[DativeBondId(0)]);
-    let extracted = sub.extract();
+    assert_eq!(
+        sub.atoms().mates(),
+        &[(NodeId(0), NodeId(2)), (NodeId(1), NodeId(3))]
+    );
+    assert_eq!(
+        sub.dative_bonds().mates(),
+        &[(DativeBondId(0), DativeBondId(0))]
+    );
+    let extracted = ast.extract(&sub);
     let dv = extracted.dative_bond(DativeBondId(0));
     assert_eq!(dv.acceptor_id(), AtomId(1));
     assert_eq!(dv.donor_ids().collect::<Vec<_>>(), vec![AtomId(0)]);
@@ -1163,11 +1191,11 @@ fn test_molecule_ast_induced_subgraph_preserves_dative(#[from(rich_molecule)] as
 }
 
 #[rstest]
-fn test_molecule_embedding_edits(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_ast_edits(#[from(rich_molecule)] ast: MoleculeAst) {
     use super::super::edit::{AtomRef, BondRef, Edit};
     let sub = ast.induced_subgraph(&[AtomId(0), AtomId(1), AtomId(2)]);
     assert_eq!(
-        sub.edits(),
+        ast.edits(&sub),
         vec![Edit::RemoveTopology {
             atoms: vec![AtomRef::Id(AtomId(3))],
             bonds: vec![BondRef::Id(BondId(2))],
@@ -1176,16 +1204,16 @@ fn test_molecule_embedding_edits(#[from(rich_molecule)] ast: MoleculeAst) {
 }
 
 #[rstest]
-fn test_molecule_embedding_edits_identity(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_ast_edits_identity(#[from(rich_molecule)] ast: MoleculeAst) {
     let atom_ids: Vec<AtomId> = ast.atoms().iter().map(|v| v.id).collect();
     let sub = ast.induced_subgraph(&atom_ids);
-    assert_eq!(sub.edits(), Vec::new());
+    assert_eq!(ast.edits(&sub), Vec::new());
 }
 
 #[rstest]
-fn test_molecule_embedding_extract(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_ast_extract(#[from(rich_molecule)] ast: MoleculeAst) {
     let sub = ast.induced_subgraph(&[AtomId(0), AtomId(1)]);
-    let extracted = sub.extract();
+    let extracted = ast.extract(&sub);
     assert_eq!(extracted.atoms().count(), 2);
 }
 

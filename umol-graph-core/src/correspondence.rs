@@ -36,6 +36,21 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
         }
     }
 
+    /// A correspondence whose left space is dense (`0..images.len()`), pairing each left id `i` with
+    /// `images[i]` — the shape a subgraph match / embedding induces (query index → host id). Already
+    /// sorted by left, so no sort. Injectivity is a property of `images`, not enforced (as in `new`).
+    pub fn from_images(images: &[Id], right_count: usize) -> Self {
+        Self {
+            mates: images
+                .iter()
+                .enumerate()
+                .map(|(left, &right)| (Id::from(left), right))
+                .collect(),
+            left_count: images.len(),
+            right_count,
+        }
+    }
+
     /// The mated `(left, right)` pairs (sorted by left) — the shared interface.
     pub fn mates(&self) -> &[(Id, Id)] {
         &self.mates
@@ -183,6 +198,16 @@ mod tests {
         let c = Correspondence::new(vec![(n(2), n(0)), (n(0), n(3)), (n(1), n(1))], 3, 4);
         assert_eq!(c.mates(), &[(n(0), n(3)), (n(1), n(1)), (n(2), n(0))]);
         assert_eq!(c.right_of(n(2)), Some(n(0)));
+    }
+
+    #[rstest]
+    fn test_correspondence_from_images() {
+        // dense left 0,1,2 → images 3,1,0; every left mated, host id 2 right-exposed.
+        let c = Correspondence::from_images(&[n(3), n(1), n(0)], 4);
+        assert_eq!(c.mates(), &[(n(0), n(3)), (n(1), n(1)), (n(2), n(0))]);
+        assert_eq!(c.mate_count(), 3);
+        assert_eq!(c.left_exposed(), Vec::<NodeId>::new());
+        assert_eq!(c.right_exposed(), vec![n(2)]);
     }
 
     #[rstest]

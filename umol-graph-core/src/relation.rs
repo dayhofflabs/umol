@@ -13,7 +13,7 @@
 use std::hash::Hash;
 use std::marker::PhantomData;
 
-use crate::graph::{EdgeId, NodeId, Remapping, Compaction};
+use crate::graph::{Compaction, EdgeId, NodeId, Remapping};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RelationId(pub u32);
@@ -337,9 +337,11 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
             Some(ParticipantAnchor::Node(node)) => {
                 self.incident(node).iter().copied().find(|&id| matches(id))
             }
-            Some(ParticipantAnchor::Edge(edge)) => {
-                self.incident_edge(edge).iter().copied().find(|&id| matches(id))
-            }
+            Some(ParticipantAnchor::Edge(edge)) => self
+                .incident_edge(edge)
+                .iter()
+                .copied()
+                .find(|&id| matches(id)),
             None => self.relation_ids().find(|&id| matches(id)),
         }
     }
@@ -507,9 +509,11 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
             Some(ParticipantAnchor::Node(node)) => {
                 self.incident(node).iter().copied().find(|&id| matches(id))
             }
-            Some(ParticipantAnchor::Edge(edge)) => {
-                self.incident_edge(edge).iter().copied().find(|&id| matches(id))
-            }
+            Some(ParticipantAnchor::Edge(edge)) => self
+                .incident_edge(edge)
+                .iter()
+                .copied()
+                .find(|&id| matches(id)),
             None => self.relation_ids().find(|&id| matches(id)),
         }
     }
@@ -694,9 +698,11 @@ where
             Some(ParticipantAnchor::Node(node)) => {
                 self.incident(node).iter().copied().find(|&id| matches(id))
             }
-            Some(ParticipantAnchor::Edge(edge)) => {
-                self.incident_edge(edge).iter().copied().find(|&id| matches(id))
-            }
+            Some(ParticipantAnchor::Edge(edge)) => self
+                .incident_edge(edge)
+                .iter()
+                .copied()
+                .find(|&id| matches(id)),
             None => self.relation_ids().find(|&id| matches(id)),
         }
     }
@@ -910,9 +916,11 @@ where
             Some(ParticipantAnchor::Node(node)) => {
                 self.incident(node).iter().copied().find(|&id| matches(id))
             }
-            Some(ParticipantAnchor::Edge(edge)) => {
-                self.incident_edge(edge).iter().copied().find(|&id| matches(id))
-            }
+            Some(ParticipantAnchor::Edge(edge)) => self
+                .incident_edge(edge)
+                .iter()
+                .copied()
+                .find(|&id| matches(id)),
             None => self.relation_ids().find(|&id| matches(id)),
         }
     }
@@ -1130,9 +1138,11 @@ where
             Some(ParticipantAnchor::Node(node)) => {
                 self.incident(node).iter().copied().find(|&id| matches(id))
             }
-            Some(ParticipantAnchor::Edge(edge)) => {
-                self.incident_edge(edge).iter().copied().find(|&id| matches(id))
-            }
+            Some(ParticipantAnchor::Edge(edge)) => self
+                .incident_edge(edge)
+                .iter()
+                .copied()
+                .find(|&id| matches(id)),
             None => self.relation_ids().find(|&id| matches(id)),
         }
     }
@@ -1904,7 +1914,10 @@ mod tests {
         #[case] expected: Option<RelationId>,
     ) {
         let rs: FixedFixedBirelationSet<NodeId, Unordered, 2, NodeId, Unordered, 1, ()> =
-            FixedFixedBirelationSet::new(vec![([n(0), n(1)], [n(2)], ()), ([n(3), n(4)], [n(5)], ())]);
+            FixedFixedBirelationSet::new(vec![
+                ([n(0), n(1)], [n(2)], ()),
+                ([n(3), n(4)], [n(5)], ()),
+            ]);
         assert_eq!(rs.find_by_participants(&query_1, &query_2), expected);
     }
 

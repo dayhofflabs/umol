@@ -122,11 +122,16 @@ impl Kekulizer {
             let atoms: Vec<AtomId> = view.atom_ids().collect();
             let bonds: Vec<BondId> = view.bond_ids().collect();
 
-            let embedding = ast.induced_subgraph(&atoms);
-            let extracted = embedding.extract();
+            let subgraph = ast.induced_subgraph(&atoms);
+            let extracted = ast.extract(&subgraph);
 
             // extracted has atoms in host-id order; build host→sub map.
-            let mut sorted_host = embedding.host_atoms().to_vec();
+            let mut sorted_host: Vec<AtomId> = subgraph
+                .atoms()
+                .mates()
+                .iter()
+                .map(|&(_, host)| AtomId::from(host))
+                .collect();
             sorted_host.sort_unstable();
             let host_to_sub: HashMap<AtomId, AtomId> = sorted_host
                 .iter()
@@ -141,9 +146,13 @@ impl Kekulizer {
                 .filter_map(|a| host_to_sub.get(&a).copied())
                 .collect();
 
-            // Bonds in extracted preserve host-bond-id order, matching the
-            // order of embedding.host_bonds().
-            let host_bonds = embedding.host_bonds();
+            // Bonds in extracted preserve host-bond-id order, matching the sub→host bond images.
+            let host_bonds: Vec<BondId> = subgraph
+                .bonds()
+                .mates()
+                .iter()
+                .map(|&(_, host)| host)
+                .collect();
             let matched: HashSet<BondId> = extracted
                 .graph()
                 .perfect_matching(&sub_order, self.model.algorithm)

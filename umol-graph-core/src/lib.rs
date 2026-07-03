@@ -20,7 +20,6 @@ pub use algorithms::common_subgraph::{
     McesAlgorithm, McisAlgorithm, McsConnectivity,
 };
 pub use algorithms::connected::ConnectedComponentsAlgorithm;
-pub use correspondence::Correspondence;
 pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
 pub use algorithms::enumeration::{PathEnumerationAlgorithm, SubgraphEnumerationAlgorithm};
 pub use algorithms::matching::{
@@ -34,10 +33,11 @@ pub use algorithms::refine::{
 pub use algorithms::subiso::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
 pub use algorithms::toposort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::TraversalAlgorithm;
+pub use correspondence::Correspondence;
 pub use digraph::DiGraph;
 pub use graph::{
-    compact_edge_vec, compact_node_vec, EdgeId, Embedding, Graph, Neighbor, NodeId, Remapping,
-    Compaction,
+    compact_edge_vec, compact_node_vec, Compaction, EdgeId, Embedding, Graph, Neighbor, NodeId,
+    Remapping,
 };
 pub use relation::{
     FactorOrdering, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, Ordered,

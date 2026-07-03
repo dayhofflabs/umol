@@ -113,7 +113,9 @@ mod tests {
         // Water: O-H 0.96 Å, H-O-H 104.5°; both O-H bonds single.
         let water = Molecule::from_cartesian_angstrom(
             vec![O, H, H],
-            &[0.000, 0.000, 0.000, 0.960, 0.000, 0.000, -0.240, 0.930, 0.000],
+            &[
+                0.000, 0.000, 0.000, 0.960, 0.000, 0.000, -0.240, 0.930, 0.000,
+            ],
             0,
             SpinMultiplicity::Singlet,
         );
