@@ -1,13 +1,6 @@
-//! Tier-2 DPO validator: a reaction's deletions must be *dangling-free* — deleting an atom must
-//! also delete every bond and overlay incident to it, else the deltas do not correspond to a valid
-//! DPO span. Model-free (a graph invariant, no chemistry model) and requested, never run at
-//! construction — a dangling reaction is constructible, just tier-2-invalid until validated.
-//!
-//! Two entry points, checking the same invariant on the two representations (per repetition being
-//! acceptable when it avoids a conversion): [`DpoValidator::validate_reaction`] reads a
-//! [`ReactionAst`]'s lhs incidences against its delta Remove sets (no span materialization);
-//! [`DpoValidator::validate_reaction_span`] scans a [`ReactionSpanAst`] for a `Removed` atom
-//! carrying a surviving (non-`Removed`) incidence. Stereo overlays are deferred to I6.
+//! Tier-2 (invariant) DPO validator: a reaction's deletions must be dangling-free, that is
+//! deleting an atom must also delete every bond and overlay incident to it.
+//! Operates on both the reaction AST and the reaction span AST.
 
 use std::collections::HashSet;
 use std::hash::Hash;
