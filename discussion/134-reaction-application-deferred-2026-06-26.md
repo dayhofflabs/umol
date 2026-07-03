@@ -354,8 +354,8 @@ Coverage as of 2026-07-01 (tests in `umol-ast/tests/property/reaction.rs` unless
 - I4d — dsl/reaction_span.rs (stream): streaming `read_*` for overlay span entries. `[I4b]` **Done 2026-07-01** — the span entry grammar is tree-only (reuses the molecule entry parsers), so `read_span_input` buffers each overlay section element to an `Edn` and dispatches to the tree `parse_<entity>_span_entry`, same as atoms/bonds.
 - I4e — dsl/reaction_span.rs (traits): extend `ReactionSpanDsl` `FromEdn`/`ToEdn`/`FromStr`/`Display` over overlays. `[I4b, I4c, I4d]` **Done 2026-07-01** — `SpanInput::into_ast` registers overlay `:id`s, resolves refs (`.into_ast`), builds the six relation-set span columns, enforces per-side participant consistency (the bond check generalized to overlay participants; stereo-bond also checks its site bond), and fills `EntityCounts`. The `FromAst`/`IntoAst` config bridge maps each overlay set's `EntitySpan` payload through the overlay `*Dsl` (three generic `map_*_span` rebuild helpers, one per relation-set shape; participants carry through). Tests: six `test_parse_<entity>_span_entry`, six `test_render_<entity>_span_entry`, overlay cases across both roundtrips, a dative `into_ast` build case, and two per-side-consistency error cases. umol-ast 4048 lib green; workspace builds clean.
 
-**I5 — structural entity refs (item 3)** `[I2c, I4]`
-- I5a — dsl: the uniform `<entity>-ref` structural-map variant + per-entity resolution by constituents (item 3); six of its seven forms are overlays and ride here. `[item 3]`
+**I5 — structural entity refs (item 3)** `[I2c, I4]` — same kernel as I7; design in §7.
+- I5a — dsl: the uniform `<entity>-ref` structural-map variant + per-entity resolution by constituents (item 3); six of its seven forms are overlays and ride here. Resolution = the §7.3 `find_by_participants` kernel. `[item 3]`
 
 **I6 — stereo deltas (the novel part)** `[I1, I2a]` **Done**
 - I6a — delta.rs: `StereoAtomDelta`/`StereoBondDelta` — membership `Add`/`Remove` plus relative ops `Permute`/`Mirror`/`Swap`; lower at apply to `SetStereoAtomField::Configuration{matched, perm·matched}` via the umol-perm coset algebra. `[I1b, I2a]` **Core done 2026-07-01; Delta-sum wiring → I6c.** Settled shape (sign-off 2026-07-01): the relative ops are **eager coset-algebra methods on the AST**, not lazy operator chains and not via `canonicalize` — `StereoCosetAst::{apply(kind, σ), swap(kind), mirror(kind)}` map through the variants (`Lit`/`LitSet` move eagerly via `StereoKind::act` = `space.reindex`; `Undetermined` fixed; an open `Term(Var)` keeps one operator layer), lifted through `StereoConfigurationAst` and `StereoAtomAst`/`StereoBondAst` (constraints untouched — the aromatic/multicenter `permute` parallel). Named `apply` (the `^` op), **not** `permute` (that's the electron-reorder word). `Swap` = the kind involution (`StereoKind::involution`, π-independent, no arg — not a `{a,b}` transposition); `Mirror` = enantiomer (`mirror_permutation`, π-independent). `StereoKind::act` made `pub` (`#[allow(unused)]` dropped). Delta enums = `Add`/`Remove`/`ModifyField`/`ModifyConstraint` (the DAMN set-ops) + the relative ops `Apply{kind, permutation}`/`Swap{kind}`/`Mirror{kind}` (no pre-state) with `inverse` (`Apply(σ)→Apply(σ⁻¹)`, `Swap`/`Mirror` self-inverse). The relative ops **carry `kind: StereoKind`** (sign-off 2026-07-01: the coset algebra is parametrized by kind, so a relative op is uninterpretable without it, and the absolute arms carry the kind inside their config/ast) — this makes every stereo delta kind-determinate and lets `canonicalize` fully compose them. Field named `permutation`, not `perm`/`relabeling` (no abbreviations; "relabel" is the id-remap word — sign-off 2026-07-01; `Coset::reindex`'s parameter renamed to match). `StereoAtomFieldChange`/`StereoBondFieldChange` gained `PartialOrd, Ord` (needed for the delta's `Ord`; the DAMN field-changes got it in I1b). 30 unit tests, umol-ast 4091 green. **Not** wired into the `Delta` sum: the DAMN deltas integrate via the `EntityPatch`/`EntityFold` traits (canonicalize-fold / `remap_delta` / diff / apply all dispatch through them), built around exactly the four DAMN arms; the relative ops don't fit, so the sum extension + `From` + the relative-op flow through canonicalize/remap/apply is I6c's substance and lands there.
@@ -397,6 +397,241 @@ Coverage as of 2026-07-01 (tests in `umol-ast/tests/property/reaction.rs` unless
   - **Stereo `:modify` kind-carry** (the hard case: stereo constraints render/parse against the config's kind, which a constraint-only modify leaves unchanged): a *separate* partial parser (`partial_stereo_{atom,bond}` via `partial_stereo_configuration`) makes the coset **optional** (omitted = unchanged) and the kind mandatory once anything else appears (`"*"` alone, or `"Th#o(0,1)="`; `*#o…` rejected). `StereoConfigurationAst::update` merges config field-wise (an undetermined coset in the partial keeps the base coset), so restating the coset isn't required. The partial renderer omits the unchanged coset and renders *all* constraints (incl. undetermined). Tests: stereo topicity removal/change + ligand-symmetry removal round-trips, `StereoConfigurationAst::update` (5 cases), partial parser/render (14 cases).
   - **`kind` on `ModifyConstraint`** (sign-off 2026-07-01, superseding the render-time lhs borrow): stereo constraints render/parse against the config's kind, and a constraint-only modify's `ModifyConstraint` carried neither the kind nor a config to derive it from — so the first cut borrowed it from the lhs at render (`render_deltas(lhs, …)` with `lhs.stereo_atom(id).kind()`, which `.expect`s a concrete kind → **panics** on an `Undetermined`-geometry center with a kind-free `Topicity`/`Stereogenicity` constraint). Instead `Stereo{Atom,Bond}Delta::ModifyConstraint` now carries `kind: Option<StereoKind>` (like the relative ops carry `kind`, but `Option` — a kind-free constraint on an open geometry genuinely has none). `EntityPatch::modify_constraint` can't supply it (no config in the signature), so the two stereo deltas **override `EntityPatch::diff`** to stamp `kind` from the entity's config; the canonicalize fold threads it through the constraint group, `inverse`/`remap` carry it. Render reads it off the delta — no lhs param, no panic. `apply`/`canonicalize`/`diff` ignore it (serialization-only). The `Undetermined`+kind-free-constraint case degrades (constraint elided, no round-trip) instead of panicking — full support would ungate the kind-free constraint renderer.
 
-**I7 — standalone fragment diff** `[I2f]`
-- I7a — reaction_span.rs: lift `to_reaction`'s AST-diff into a standalone `diff(MoleculeAst, MoleculeAst, correspondence) -> Deltas` — the model-blind substrate for umol-graph de-aromatization (doc 131). `[I2f]`
+**I7 — standalone fragment diff** `[I2f]` — unified with I5; design in §7.
+- I7a — reaction_span.rs: `MoleculeAst::diff(&other, &MoleculeCorrespondence) -> Deltas` (= `align` → `to_reaction`) — the model-blind substrate for umol-graph de-aromatization (doc 131). `[I2f]`
+- I7b — graph-core: the correspondence carrier + `find_by_participants` kernel (§7.3). `[I2f]`
+- I7c — umol-ast: `MoleculeCorrespondence` (base + `Total` wrapper + embedding view), `induce`/`from_maps`, surface syntax (§7.4). `[I7b]`
+- I7d — the `align` span constructor + `Sp::correspondence()` + `ReactionAst` import constructor (§7.5). `[I7c]`
+
+## 7 — Correspondence & diff: I5 + I7 unified (design)
+
+I5 (structural entity refs) and I7 (standalone diff) are one kernel seen twice: **resolve an entity by its constituent atoms**. I5 does it in one molecule (a `<entity>-ref` names a bond by its endpoints); I7 does it across two molecules under an atom mapping (a left bond corresponds to the right bond over the mapped endpoints). `substructure::verify_overlays` already runs this kernel for the embedding case: given a subiso `atom_map`, it matches each pattern overlay to a host overlay via `<collection>.connecting(mapped_atoms)`. So I7 generalizes existing code and I5 re-exposes it as a DSL surface.
+
+### 7.1 Shared model — the correspondence, its producers, and the span
+
+graph-core already names the object: `CommonSubgraph` is *"a vertex correspondence between two graphs"* — `mapping: Vec<(NodeId, NodeId)>` + `edge_count`. Every common-subgraph task produces one:
+
+| producer | shape | correspondence character |
+|---|---|---|
+| `subgraph_isomorphisms` (VF2/Ullmann/RI/…) | `Vec<Vec<usize>>` | total on the query, injective (an **embedding**) |
+| `maximum_common_induced/edge_subgraph[s]` (McGregor) | `CommonSubgraph` | maximal-size partial bijection |
+| `maximal_common_subgraphs` (Bron–Kerbosch) | `Vec<CommonSubgraph>` | every non-extendable partial bijection |
+| `enumerate_common_subgraphs` (backtracking) | `Vec<CommonSubgraph>` | every partial bijection |
+| (future) MCS-derived atom map | `CommonSubgraph` | the reaction atom map when none is supplied |
+
+All five yield **a partial bijection between two node id spaces**, differing only in totality / injectivity / maximality, not in kind. They return different shapes today (`CommonSubgraph` from MCS, raw `Vec<usize>` from subiso); the unification is one carrier — `Correspondence` (§7.3) — that all producers emit (MCES wrapping it in `Mcs` to cache its edge-count objective), plus the §7.2 reads.
+
+The umol-ast **span** (`EntitySpan`, `ReactionSpanAst`) is *not* a fourth producer — it is the correspondence **lifted with values and a direction**:
+
+| correspondence (graph-core: valueless, undirected) | span (umol-ast: AST-valued, L→R) |
+|---|---|
+| mated pair `(l, r)` | `Unchanged` (values equal) / `Modified{left,right}` (differ) |
+| left-exposed `l` | `Removed` |
+| right-exposed `r` | `Added` |
+
+`align(L, R, corr)` = **lift** (refine each mated pair by comparing AST values, orient each exposed node); `Sp::correspondence()` = **forget** (drop values, merge Unchanged/Modified back to mated). The correspondence is the transformation-free substrate; the span is its reaction-specific enrichment. This is why the span carries `Added`/`Removed` (a direction) and the correspondence must not.
+
+### 7.2 Vocabulary for the two-sided membership — matching-theoretic (settled)
+
+`Presence` / `classify` are too generic and lack two-sidedness. **Frame the correspondence as a matching in the bipartite graph `L ⊔ R`** (left nodes on one side, right nodes on the other, an edge per corresponding pair). Then the standard matching vocabulary names all three classes of `L ⊔ R`:
+
+- **mated** — paired with a partner on the other side (the DPO interface K);
+- **left-exposed** / **right-exposed** — unpaired, present on only one side. *Exposed* is the matching-theory term for an unmatched vertex; the bipartite framing makes it read naturally.
+
+**Matching subsumes the partial-function view rather than competing with it.** A correspondence *is* a partial bijection `L ⇀ R`, and `mate(x) -> Option<NodeId>` *is* that partial function — `Some` = in the domain, `None` = exposed. So the natural "apply a partial map" intuition survives (via `mate`), and matching *adds* the two nouns partial-fn lacks (`exposed`, split by side); partial-fn would name only `domain`/`image` — two projections of the mated class — and force `L∖domain` / `R∖image` set-diffs for the two classes a diff most cares about. No tradeoff; matching dominates. Consistent with graph-core's existing `Matching` (`mate`/`is_matched`).
+
+**Excluded: `deleted` / `created`** (DPO). They name the same three classes but presuppose *direction* — they are the span's `Removed` / `Added`. The correspondence is transformation-free (§7.1), so its class names must be direction-free; `exposed` says "unpaired," not "deleted."
+
+**Surface — three accessors, mapped 1:1 to the span build** (the primary form; the per-element enum `{ Mated { left, right }, LeftExposed(NodeId), RightExposed(NodeId) }` / `mate(x)` is the secondary "what is this id" query):
+
+| accessor | yields | span lift (`align`) |
+|---|---|---|
+| `mates()` | `&[(left, right)]` | compare AST values → `Unchanged` / `Modified` |
+| `left_exposed()` | `&[NodeId]` | `Removed` |
+| `right_exposed()` | `&[NodeId]` | `Added` |
+
+`classify` (the membership walk) is dropped in favor of these three accessors.
+
+### 7.3 graph-core primitive (point 4)
+
+Two reusable additions, consumed by I5, I7 `induce`, and `verify_overlays`:
+
+1. **structural-match kernel — `find_by_participants`, per relation-set type and per factor.** Relations (one factor, fixed or variable arity): `find_by_participants(&self, &[P]) -> Option<RelationId>`. Birelations (two factors): `find_by_participants(&self, &[P1], &[P2]) -> Option<RelationId>` — one slice per factor, in factor order (dative `(acceptor, donors)`, stereo `(site, ligands)`). Participant type is generic per factor (`P` = `NodeId` / `EdgeId` / `StereoLigand`; stereo-atom is `(&[NodeId], &[StereoLigand])`). Uniqueness (§4.1) ⇒ ≤1 hit. Inherent methods per relation-set type, called from the caller's per-family arms (`verify_overlays` / `induce`) — no unifying trait. Ad hoc today as `<collection>.connecting(atoms)` in umol-ast; lift to graph-core.
+
+   - **Per-factor, never the flat union.** Matching the union of all participants across factors is unsound — it can't tell donors from acceptor, `A→B` from `B→A`. The two-factor structure must be respected.
+   - **Each factor matched as an unordered *multiset* — key on identity, not the storage marker.** Every current overlay identifies by its participant multiset: the five `Unordered` factors trivially, and stereo (the one `Ordered`-with-multiplicity factor) too — its ligand order is the coset **frame** (a *value*), the stereo atom's identity being the ligand **bag** (§4.1). So the kernel keys on the participant *multiset*, **deliberately ignoring** the factor's `Ordered`/`Unordered` marker. **Multiset, not set:** virtual ligands (implicit H, lone pairs) legitimately repeat — duplicate virtuals give a valid coset (vacuous in Th, not Ct); only duplicate *explicit* ligands are an error (caught at stereo construction). Multiplicity is real data; a set would collapse it. **Comparison = sort-both-and-compare** (= multiset equality): canonicalize a *copy* of the query and of the stored participants by the factor's total order (`StereoLigand: Ord`) and compare element-wise — exactly `Unordered::canonicalize` (`sort_unstable`), applied to a copy so the stored `Ordered` frame stays intact. Node/edge factors never have duplicates (a repeated node is an error, like a repeated explicit ligand), so there multiset = set — one uniform rule, no dedup. **No `as_ordered` argument:** it is redundant with the marker, *and* following the marker would wrongly order-match stereo (a query in a different frame order would miss the center). Ordered *match* (order-is-identity) is the faithful lookup only for a relation whose order genuinely is its identity (a directed / sequenced hyperedge) — umol has none, so it is not provided.
+   - **Distinct from the reverse read** `incident_ids(node) → relations` (unordered union — removal cascades). Three directions total: `participants_1/2(rel) → nodes`, `incident_ids(node) → relations`, `find_by_participants(factors) → Option<RelationId>`.
+
+   *Note (resolved):* `Ordered::canonicalize` is a no-op ("position is the datum", relation.rs), so the stereo relation set keys by exact ligand order rather than structurally enforcing §4.1 set-uniqueness — but that is not a problem: the multiset match is frame-order-independent (finds the center regardless of stored frame order), duplicate *explicit* ligands are a construction error, and duplicate *virtual* ligands (implicit H / lone pairs) are valid (vacuous in Th, not Ct).
+2. **`Correspondence` carrier + reads** — its own module (not limited to common subgraphs): the vertex-level partial bijection over two graphs, the §7.2 mated/exposed membership, the induced edge correspondence (an edge is mated iff its endpoints are mated to an edge on the other side — `find_by_participants` under the node map), and derived reads `node_count() = mates().len()`, `shared_edge_count(&a, &b)` (edge count is a projection onto the graphs — line 767's loop — not stored). Producers:
+   - **subiso** → `Vec<Correspondence>` — the total-on-left, injective case (`left_exposed()` empty, `right_exposed()` = host outside the match);
+   - **MCIS**, **maximal / complete enumeration** → `Correspondence` / `Vec<Correspondence>` — objective is vertex count (`= mates().len()`, already on the correspondence) or none;
+   - **MCES** → `Mcs { correspondence, edge_count }` — the *only* producer whose objective isn't free on the correspondence; branch-and-bound already holds `edge_count`, so `Mcs` caches it (delegates `mates()`/`node_count()`, adds `edge_count()`);
+   - an MCS-based atom-map derivation → `Correspondence`.
+
+   `CommonSubgraph` **retires** — split into `Correspondence` (the general common subgraph) and `Mcs` (the MCES objective-result). `Matching` is *not* a producer — a single-graph matching (`edges()`, `is_perfect`), vocabulary donor only. Keep `Correspondence` lightweight (pairing + derived-on-demand reads) so subiso emits one per match on the hot enumeration path.
+
+### 7.4 `MoleculeCorrespondence` (umol-ast)
+
+Name: `MoleculeCorrespondence`.
+
+**Shape.** A per-entity partial bijection between two `MoleculeAst` id spaces — atoms + bonds + six overlays, exactly `MoleculeEmbedding`'s eight `host_*` fields but *partial on both sides* (not total-on-sub). The **atom** part is a node-level vertex correspondence — a set of `(AtomId, AtomId)` pairs, the same shape as `CommonSubgraph::mapping()`; the seven entity parts are **induced** from it by structural match. `MoleculeCorrespondence` layers the atom-map derivation and the entity induction on top of the graph-core carrier.
+
+**One type, three cases** (point iv — combine, don't fork; point v — a marker wrapper, not a type per case, per the MoleculeAst-wrapper experience):
+
+- `MoleculeCorrespondence` — general, partial on both sides.
+- `Total(MoleculeCorrespondence)` — balanced (atom-count-preserving); no exposed nodes, so a diff through it emits **no** structural `Add`/`Remove` and needs **no union frame** (R's ids map 1:1 into L's). The de-aromatization fast path (doc 131) — same atoms, only bonds/overlays move. General degrades correctly to this (the exposed branches are O(1) dead checks); the only total-only saving is skipping union-frame construction.
+- the **embedding** (injective, total-on-one-side) case is what `MoleculeEmbedding` already is; it folds in as a view/wrapper, retiring the standalone struct (subiso + `verify_overlays` build a `MoleculeCorrespondence` directly).
+
+**Constructors.**
+- `induce(L, R, atom_map) -> MoleculeCorrespondence` — derive the seven entity maps from the atom pairs by structural match (the I5 / `verify_overlays` kernel). SMIRKS / GML / map-number **import entry point**.
+- `from_maps(…)` — the fully-explicit per-entity form `induce` materializes.
+
+**Surface syntax (settled).** EDN-shaped (top-level key), following the span precedent but collapsing to **atom mated-pairs only**:
+
+```clojure
+{:correspondence {:atoms [[0 3] [1 1] [:c4 :c9]]}}
+```
+
+- A vec of `[left-ref right-ref]` **mated** pairs; each ref is the standard `<entity>-ref` (`int | keyword`, mixable). The `:atoms` wrapper is kept (explicit, room to grow) even though the surface is atoms-only.
+- **No exposed entries, no per-family keys, no `nil`.** The whole surface is the atom map because everything else is derived at resolution: exposed atoms are inferred (every non-mated atom *is* exposed), and bond/overlay maps are `induce`d (determined by the atom map — a bond mates iff its mapped endpoints mate).
+- **Two-phase, dissolving the parse-time L/R dependence** (the `*Input` pattern, cf. `SpanInput::into_ast`): parse → `MoleculeCorrespondenceInput { atoms: Vec<(AtomRef, AtomRef)> }` (no L/R needed) → `resolve(L, R)` does keyword→id, infers exposed, and induces every entity map. Resolution is where L/R legitimately enter.
+- **Structural-ref pairs (once I5) are allowed but tautological.** Atoms are the base (no structural form), so a structural-map ref could only name an *entity-level* pair (bond/overlay by constituents) — which `induce` already derives, and which (endpoints being unordered) can't even fix the atom bijection, only restate it. If written, `resolve` treats it as a **consistency assertion** against the induced correspondence (a contradicting one is an error), never a silent override. Nothing to build beyond the uniform ref grammar.
+
+### 7.5 The primitive set and its operations (point iii)
+
+Six objects:
+
+- **`MoleculeAst`** `M` — a graph state.
+- **`MoleculeCorrespondence`** `C` — a partial bijection `M ⇀ M` (+ induced entity maps), valueless. Atom slice = a graph-core `Correspondence` (accessor `atom_correspondence()`).
+- **`Deltas`** `D` — the difference: self-contained, invertible, canonical.
+- **`ReactionAst`** `Rx` = `(lhs: M, deltas: D)` — the lhs-anchored operational store.
+- **`ReactionSpanAst`** `Sp` — the hub / generalized CGR: the superimposed union graph with `EntitySpan` columns.
+- **`ReactionDerivation<'a>`** `Der` = `(host: &'a M, product: M, comap: C)` — a production fired once; `apply`'s codomain (§7.7 #5). Host borrowed, product/comap owned.
+
+Names: `superimpose` / `difference_to` are proposed (2026-07-02, §7.5 review); `atom_map` was a placeholder for the atom `Correspondence`.
+
+| op | signature | status |
+|---|---|---|
+| induce | `(M, M, atom: Correspondence) → C` | new (I5/I7 kernel) |
+| `superimpose` (was `align`) | `Sp::superimpose(L: M, R: M, C) → Sp` | new — lift correspondence + values → span |
+| `difference_to` (was `diff`) | `L: M::difference_to(R: &M, &C) → D` | new = `superimpose(L,R,C).to_reaction().deltas()`; receiver = source (lhs), fixed by the apply law |
+| `from_sides` (was `from_lhs_rhs_map`) | `Rx::from_sides(L: M, R: M, atom: Correspondence) → Rx` | new = `Rx::new(L, L.difference_to(R, induce(L,R,atom)))` — SMIRKS import |
+| replay | `Rx::to_reaction_span() → Sp` | done — store → hub |
+| read-off | `Sp::to_reaction() → Rx` | done (I2f/I6c) — hub → store |
+| project | `Sp::left()/right() → M` | done |
+| recover corr | `Sp::correspondence() → C` | new — forget values (K interface) |
+| apply | `Rx::apply(host, match) → Der` | change (was `→ M`; the comap is `Der`'s second half) |
+| reverse | `Rx::reverse() → Rx` = `Sp` swap sides → read-off | (131) |
+| compose (rule∘rule) | `Rx::compose(&Rx) → impl Iterator<Rx>` | (131) — via the hub; the *reserved* `compose` |
+| inverse / compose | `D::inverse()`, `D::compose` (`D∘D`) | done |
+| derivation accessors | `Der::product() → M`, `Der::comap() → C` | new |
+| derivation abstract | `Der::to_reaction() → Rx` (= `difference_to` under `comap`) | new |
+| correspondence compose | `C::compose(&C) → C` | new — relational `A⇌B` ∘ `B⇌C`; substrate for `Der::chain`; receiver disambiguates from `Rx::compose` |
+| derivation chain | `Der::chain(Der) → Der` (comaps `compose` = pathway atom-map) | new |
+| derivation reverse | `Der::reverse() → Der` | new |
+
+`Sp` is the pivot `apply` and `difference_to` route through, and `Sp ↔ (L, R, C)` is a two-way bridge — `superimpose` builds `Sp` from a pair + correspondence; `correspondence()`+`left()`+`right()` read them back. `C` sits on **both sides** of the algebra: consumed by `superimpose`/`difference_to`, produced by `induce`, `Sp::correspondence()`, and `apply` (the `Der` comap). The two import paths share `induce`: `induce`→`difference_to`→`Rx` (deltas store) and `induce`→`superimpose`→`Sp` (CGR / SMIRKS working form).
+
+**Laws** (diff ⊣ apply): `apply(L, L.diff(R, C)) ≡ R` under `C`; `L.diff(L, identity) = ∅`; `L.diff(R, C).inverse() ≡ R.diff(L, C⁻¹)` (= `reverse`); `diff = canonicalize ∘ raw`, so `L.diff(apply(L, d)) = canonicalize(d)`, identity only up to normalization.
+
+**Semantic factoring (where the seams are).** Denotationally — independent of how anything is stored — the five are **four kinds** (DPO / patch-theory):
+
+- **State** — `MoleculeAst`; an object.
+- **Correspondence** — `MoleculeCorrespondence`; a valueless partial iso (`K↪L`, `K↪R`), a *relation*.
+- **Patch** — `Deltas`; a self-contained, invertible arrow carrying `old→new`, its implicit domain only its *read-set*.
+- **Production** — a matchable rule `L←K→R` with `L ⊇` read-set (carries preserved application-context).
+
+`ReactionAst` and `ReactionSpanAst` **denote the same kind — a production** — in two presentations: operational-oriented `(lhs, deltas)` vs the symmetric attributed span (the CGR). Mutually determined (the lossless hub round-trip, 131); every difference — orientation, `K` explicit-vs-derived, which native op is cheap (apply vs compose/CGR) — is *representational*.
+
+The three distinctions among the other kinds are semantic and firm: **Correspondence vs Patch** (valueless relation vs valued arrow); **Patch vs Production** (`Deltas ⊊ Production` — a production carries an arbitrary `L ⊇` read-set as application-context and is *matched* into a host, not applied in a known frame); **State** is the base object.
+
+This **keeps all five** — the `ReactionAst`/`ReactionSpanAst` split is justified operationally (131: apply-native store vs compose/CGR working form) — but the seam is that that split is representational, not semantic; if operational needs ever changed, demoting `ReactionSpanAst` to a non-public transient is where the pressure would legitimately land. If *direction* is taken as semantic (a reaction *means* reactants→products), `ReactionAst` = *oriented* production and `ReactionSpanAst` = *symmetric* production — but even then one is the other decorated with a side, not an independent kind.
+
+**The other direction — what's missing is `apply`'s discarded output.** A correspondence sits on *both* sides of the algebra: supplied to `diff` (`diff(L, R, C) → Deltas`), and *produced* by `apply` (`apply(P, host, match) → product` **plus the host↔product comap** — preserved atoms mated, deleted left-exposed, created right-exposed). The set makes the input side first-class (`MoleculeCorrespondence` feeds `diff`) but **drops the output side**: `apply` returns a bare `MoleculeAst`, discarding the comap it just built. That comap *is* the per-step atom map; 131 recomputes atom maps lazily "from (educts, rule, match)", but they are produced *during* `apply` (like MCES's `edge_count` during search) — re-deriving is the same waste.
+
+So the missing representation is a **`Derivation` = `(product: MoleculeAst, comap: MoleculeCorrespondence)`** — the DPO direct derivation `G⇒H` reduced to its externally-useful data. It is the **instance** of a `Production` (rule : derivation ∷ function : one evaluation): a production is a matchable schema, a derivation is one concrete firing carrying its *ground-truth* map (its value over a post-hoc `diff(host, product)` is that `apply` *knows* the exact map — it created the atoms — where a later diff would have to reconstruct the correspondence). Its data is a *composition* of two existing kinds (State + Correspondence), but it denotes a role the four kinds don't name (the applied-rule 2-cell). It round-trips the rule layer: `ReactionAst::apply → Derivation` instantiates, `Derivation::to_reaction → ReactionAst` abstracts back (host as lhs, `diff(host, product, comap)`).
+
+Compositions that are real but belong **one layer up** (the reaction-network / DG layer — built *from* the five, not peers): the **hyperedge** `(educts, rule, match)` (the compact form a `Derivation` expands from), the **pathway** (ordered productions, comaps composed = multi-step atom-map propagation), **molecule collections** / **rule systems**. Not missing from the algebra; the network on top of it.
+
+Confirmed not-missing: match = injective `Correspondence`; CGR = `ReactionSpanAst`; multi-component = disconnected `MoleculeAst`; pattern = lattice `MoleculeAst`; reverse = `Production` reverse; symmetry = graph-core `Automorphism` (§7.6).
+
+### 7.6 Kernel vs aggregation — where automorphism fits
+
+The §7.1 producers share one primitive — a structure-preserving node map, lifted to entities by `find_by_participants` (§7.3) — but diverge in how node maps are **aggregated** and whether the result carries a transformation:
+
+| aggregation | producer | object | transformation? |
+|---|---|---|---|
+| one partial bijection | MCS / enumeration / diff | correspondence → span | diff only (`align`) |
+| a set of embeddings | subiso | `Vec<embedding>` | no |
+| a group | automorphism (`auto.rs`, nauty) | `Automorphism` (generators, orbits, canonical labeling, order) | no |
+
+**Automorphism** is the group aggregation over `L = L`. A single element is the endomorphic, total, structure-preserving special case of a correspondence (`Total` + endo + iso), and its `Vec<NodeId>` image is the `(i, perm[i])` pair form — but `Automorphism` deliberately stores the *group* (generators + orbits), not a bag of elements; folding it into the correspondence carrier would discard that. It stays its own type. It **reuses the kernel** — the `find_by_participants` induction lifts an atom permutation to a consistent bond/overlay permutation, needed the day symmetry must act on overlays (stereo coset frames, a full-molecule canonical key; `auto.rs` is node/edge-only today) — but **not** `align`/diff: a structure-preserving map has ∅ self-diff, and the §7.2 mated/exposed membership degenerates (one id space, all mated).
+
+Shared model: **the node-map + induction kernel is common; the correspondence carrier, the embedding set, and the automorphism group are three aggregations over it, and only the correspondence carries a transformation (the span).**
+
+### 7.7 Open decisions
+
+1. ~~graph-core carrier~~ **settled** (§7.3): `CommonSubgraph` retires → `Correspondence` (its own module; subiso / MCIS / maximal / complete enumeration emit it) + `Mcs { correspondence, edge_count }` (MCES only, caching its objective). `edge_count`/`node_count` are derived `Correspondence` reads; kept lightweight for the enumeration path; `Matching` donates vocabulary only. Membership matching-theoretic mated/exposed (§7.2).
+2. ~~`align` / import names~~ **settled** (§7.5): `superimpose` (span constructor), `difference_to` (diff, receiver = source), `from_sides` (import), `Correspondence::compose`, `Der::chain`.
+3. ~~`MoleculeCorrespondence` surface syntax~~ **settled** (§7.4): atom mated-pair vec under `:atoms` (`int | keyword` refs); `MoleculeCorrespondenceInput` → `resolve(L, R)` (keyword→id, infer exposed, induce entities); structural-ref pairs allowed-but-tautological (consistency-checked).
+4. ~~`MoleculeEmbedding` retirement~~ **settled**: yes — it retires into the injective `MoleculeCorrespondence` view (subiso emits a graph-core `Correspondence`; `verify_overlays` becomes the entity-map induction). No standalone `MoleculeEmbedding` struct.
+5. ~~`ReactionDerivation`~~ **settled** — added; `apply`'s codomain is `ReactionDerivation`, not a bare product (the comap is computed during `apply` regardless — 131's lazy-map storage is orthogonal).
+   - **name — `ReactionDerivation`**, no `Ast` (the `Ast` discriminator is **lattice structure**, not DSL-presence — `MoleculeAst` is lattice-valued, `Deltas`/`MoleculeCorrespondence`/`ReactionDerivation` are not; which of the six keep `Ast` is a separate audit pass). *Not* `ProductDerivation` (misweights the product half).
+   - **shape — borrowed** `ReactionDerivation<'a> { host: &'a MoleculeAst, product: MoleculeAst, comap: MoleculeCorrespondence }` (the `MoleculeEmbedding<'a>` precedent). Only the host borrows; `product`/`comap` are owned, so `reverse`/`to_reaction` are self-contained while the borrow lives, and persisting past the host is a drop to owned `(product, comap)`. Lifetime-bound — fits the transient-right-after-`apply` pattern; the network stores the `(educts, rule, match)` hyperedge and recomputes, so it never holds a `ReactionDerivation` long-term.
+   - **API beyond accessors** (`product()`/`comap()`/`atom_map()`): `chain` (`G⇒H` ∘ `H⇒J` → `G⇒J`, comaps `compose` = pathway atom-map propagation), `reverse` (`H⇒G`, comap inverse), `to_reaction`/`to_reaction_span` (abstract back to the rule layer).
+
+### 7.8 Naming principle (settled)
+
+**`Name = [primary-noun]? + concept-word [+ Ast if lattice-valued]`.** The qualifier appears **iff** the bare concept-word is generic or collides (with another layer, or another umol domain); it is the concept's **primary noun** — what the type is fundamentally about — never decorative or for family-grouping.
+
+The six under the rule:
+
+| type | why the qualifier (or not) |
+|---|---|
+| `MoleculeAst`, `ReactionAst` | concept-word *is* the noun; `Ast` = lattice-valued (§7.7 #5) |
+| `MoleculeCorrespondence` | `Correspondence` collides with graph-core `Correspondence` and is generic → `Molecule` (a rule-free relation *between molecules*) |
+| `ReactionSpanAst` | bare `Span` collides broadly → `Reaction`; `Ast` per lattice |
+| `ReactionDerivation` | `Derivation` is generic and collides with spectroscopic *derivatives* → `Reaction` (the *firing of a rule*); non-lattice, no `Ast` |
+| `Deltas` | specific plural, field-faithful (`Constraints` precedent), and *not* reaction-specific (`diff` returns it bare) → **bare** |
+
+Corollary: `Correspondence`→`Molecule` but `Derivation`→`Reaction` because their primary nouns differ (a relation is about its operands; an instance is about its rule) — one rule, different outputs, not an inconsistency. `ReactionDeltas` declined: family-grouping is not a reason to qualify, and it would mislabel a fundamental cross-layer type as reaction-specific.
+
+Two seams deliberately *not* name-encoded: `span ⊃ correspondence` is a derivation, expressed by `Sp.correspondence()` (they are different *kinds* — valueless relation vs valued production — not two sizes of one thing); `Deltas` is off the categorical *Patch* vocabulary but on the codebase's own (`Delta` enum, `diff`→`Deltas`).
+
+### 7.9 Staged implementation plan
+
+Modules top-down: **graph-core** (foundation) → **umol-ast `ast`** → **umol-ast `dsl`** (surface). Additive subitems keep the tree green; only breaking ones (signature / return-type change, type retirement) go red, and every stage ends green.
+
+**S0 — graph-core foundation** (additive)
+- **S0a** graph-core: `find_by_participants` on `FixedRelationSet` / `VarRelationSet` / `FixedVarBirelationSet` — per-factor (`&[P]` / `&[P1], &[P2]`), unordered-multiset via sort-both-compare (§7.3.1). `[dep: —]` **Done**
+- **S0b** graph-core: `Correspondence` module — struct + `mates` / `left_exposed` / `right_exposed` / `node_count` / `shared_edge_count` / induced-edge reads (§7.2, §7.3.2). `[dep: —]`
+
+**S1 — `MoleculeCorrespondence` + constructors** (additive)
+- **S1a** ast: `MoleculeCorrespondence` struct (8 families) + `atom_correspondence()` + reads. `[dep: S0b]`
+- **S1b** ast: `induce(L, R, atom: Correspondence)` — entity-map induction via `find_by_participants`. `[dep: S1a, S0a, S0b]`
+- **S1c** ast: `from_maps`. `[dep: S1a]`
+- **S1d** ast: `MoleculeCorrespondence::compose`. `[dep: S1a]`
+- **S1e** ast: `Total(MoleculeCorrespondence)` marker wrapper. (The general path subsumes it; the union-frame-skip fast path is a later optimization.) `[dep: S1a]`
+
+**S2 — diff / span / import ops** (additive)
+- **S2a** ast: `ReactionSpanAst::superimpose(L, R, C)` — build the union-frame span from a pair + correspondence. `[dep: S1a]`
+- **S2b** ast: `ReactionSpanAst::correspondence()` — recover `C` (forget values). `[dep: S1a]`
+- **S2c** ast: `MoleculeAst::difference_to(&R, &C)` = `superimpose` → `to_reaction` → `deltas`. `[dep: S2a]`
+- **S2d** ast: `ReactionAst::from_sides(L, R, atom)` = `induce` + `difference_to` + `new`. `[dep: S1b, S2c]`
+
+**S3 — `ReactionDerivation` + `apply` codomain**
+- **S3a** ast: `ReactionDerivation<'a>` struct + `product` / `comap` / `atom_map` + `to_reaction` / `reverse` / `chain`. Additive. `[dep: S1a, S1d, S2c]`
+- **S3b** ast: change `ReactionAst::apply` / `apply_at` codomain `M → ReactionDerivation`; migrate callers to `.product()`. **red→green**. `[dep: S3a]`
+
+**S4 — retire `MoleculeEmbedding`**
+- **S4a** ast: subiso / `verify_overlays` build a `MoleculeCorrespondence` (injective view); `apply_at` takes `&MoleculeCorrespondence`; drop the `MoleculeEmbedding` struct; migrate `substructure.rs` + `reaction.rs` + tests. **red→green**. `[dep: S1b, S3b]`
+
+**S5 — DSL surface** (additive)
+- **S5a** dsl: `MoleculeCorrespondenceInput { atoms }` + `FromEdn` / `ToEdn` + `resolve(L, R)` (keyword→id, infer exposed, induce entities); `:correspondence {:atoms […]}`. `[dep: S1b]`
+
+**S6 — graph-core producer unification** (deferrable — core S0–S5 works without it: the atom `Correspondence` is built directly / converted at the boundary)
+- **S6a** graph-core: `Mcs { correspondence, edge_count }`; MCES→`Mcs`, MCIS / maximal / complete→`Correspondence`, subiso→`Vec<Correspondence>`; retire `CommonSubgraph`; migrate callers (incl. `substructure.rs` subiso usage). **red→green**. `[dep: S0b; sequence after S4]`
+
+Critical path **S0 → S1 → S2 → S3 → S4**. S5 rides after S1 (parallel to S2–S4). S6 is graph-core-only and deferrable; place last.
 

@@ -39,7 +39,7 @@ pub use graph::{
 };
 pub use relation::{
     FactorOrdering, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, Ordered,
-    ParticipantPosition, ParticipantRefs, RelationId, RelationParticipant, Unordered,
-    VarRelationSet, VarVarBirelationSet,
+    ParticipantAnchor, ParticipantPosition, ParticipantRefs, RelationId, RelationParticipant,
+    Unordered, VarRelationSet, VarVarBirelationSet,
 };
 pub use union_find::UnionFind;

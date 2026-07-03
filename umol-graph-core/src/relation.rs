@@ -89,6 +89,14 @@ pub struct ParticipantRefs {
     pub edge: Option<EdgeId>,
 }
 
+/// A single node or edge to route a participant through the incidence index — the resolved,
+/// exactly-one form of `ParticipantRefs`, used to narrow `find_by_participants` candidates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParticipantAnchor {
+    Node(NodeId),
+    Edge(EdgeId),
+}
+
 /// A value that can occupy a relation factor: routes through a `Compaction`
 /// (removal/compaction, both directions) and a `Remapping` (general relabel,
 /// forward), and exposes its node/edge refs for incidence. One impl per concrete
@@ -98,6 +106,10 @@ pub trait RelationParticipant: Copy + Ord + Hash {
     fn uncompact(self, compaction: &Compaction) -> Self;
     fn remap(self, remapping: &Remapping) -> Self;
     fn refs(self) -> ParticipantRefs;
+
+    /// The node or edge to route this participant through the incidence index, if any — narrows
+    /// `find_by_participants` candidates (`None` falls back to a linear scan).
+    fn anchor(self) -> Option<ParticipantAnchor>;
 }
 
 impl RelationParticipant for NodeId {
@@ -119,6 +131,10 @@ impl RelationParticipant for NodeId {
             edge: None,
         }
     }
+
+    fn anchor(self) -> Option<ParticipantAnchor> {
+        Some(ParticipantAnchor::Node(self))
+    }
 }
 
 impl RelationParticipant for EdgeId {
@@ -139,6 +155,10 @@ impl RelationParticipant for EdgeId {
             node: None,
             edge: Some(self),
         }
+    }
+
+    fn anchor(self) -> Option<ParticipantAnchor> {
+        Some(ParticipantAnchor::Edge(self))
     }
 }
 
@@ -253,6 +273,18 @@ where
     (relabeled, positions)
 }
 
+/// Multiset equality of a stored factor slice against a pre-sorted query — sort a copy of
+/// `stored` and compare (the stored `Ordered` frame is left intact). Matches on identity (the
+/// participant multiset), independent of the factor's ordering marker.
+fn participants_match<P: RelationParticipant>(stored: &[P], sorted_query: &[P]) -> bool {
+    if stored.len() != sorted_query.len() {
+        return false;
+    }
+    let mut sorted_stored: Vec<P> = stored.to_vec();
+    sorted_stored.sort_unstable();
+    sorted_stored.as_slice() == sorted_query
+}
+
 impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelationSet<P, O, D, N> {
     pub fn new(entries: Vec<([P; N], D)>) -> Self {
         let mut participants = Vec::with_capacity(entries.len());
@@ -293,6 +325,23 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
 
     pub fn participants(&self, id: RelationId) -> &[P; N] {
         &self.participants[id.index()]
+    }
+
+    /// Id of the relation whose participants equal `query` as a multiset (order-independent),
+    /// if any. §4.1 uniqueness ⇒ at most one hit.
+    pub fn find_by_participants(&self, query: &[P]) -> Option<RelationId> {
+        let mut sorted_query: Vec<P> = query.to_vec();
+        sorted_query.sort_unstable();
+        let matches = |id: RelationId| participants_match(self.participants(id), &sorted_query);
+        match query.iter().find_map(|p| p.anchor()) {
+            Some(ParticipantAnchor::Node(node)) => {
+                self.incident(node).iter().copied().find(|&id| matches(id))
+            }
+            Some(ParticipantAnchor::Edge(edge)) => {
+                self.incident_edge(edge).iter().copied().find(|&id| matches(id))
+            }
+            None => self.relation_ids().find(|&id| matches(id)),
+        }
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -446,6 +495,23 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         let start = self.offsets[id.index()] as usize;
         let end = self.offsets[id.index() + 1] as usize;
         &self.participants[start..end]
+    }
+
+    /// Id of the relation whose participants equal `query` as a multiset (order-independent),
+    /// if any. §4.1 uniqueness ⇒ at most one hit.
+    pub fn find_by_participants(&self, query: &[P]) -> Option<RelationId> {
+        let mut sorted_query: Vec<P> = query.to_vec();
+        sorted_query.sort_unstable();
+        let matches = |id: RelationId| participants_match(self.participants(id), &sorted_query);
+        match query.iter().find_map(|p| p.anchor()) {
+            Some(ParticipantAnchor::Node(node)) => {
+                self.incident(node).iter().copied().find(|&id| matches(id))
+            }
+            Some(ParticipantAnchor::Edge(edge)) => {
+                self.incident_edge(edge).iter().copied().find(|&id| matches(id))
+            }
+            None => self.relation_ids().find(|&id| matches(id)),
+        }
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -607,6 +673,32 @@ where
 
     pub fn participants_2(&self, id: RelationId) -> &[L2; N2] {
         &self.participants_2[id.index()]
+    }
+
+    /// Id of the relation whose two factors equal `query_1` / `query_2` as multisets
+    /// (order-independent per factor), if any. §4.1 uniqueness ⇒ at most one hit.
+    pub fn find_by_participants(&self, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
+        let mut sorted_1: Vec<L1> = query_1.to_vec();
+        sorted_1.sort_unstable();
+        let mut sorted_2: Vec<L2> = query_2.to_vec();
+        sorted_2.sort_unstable();
+        let matches = |id: RelationId| {
+            participants_match(self.participants_1(id), &sorted_1)
+                && participants_match(self.participants_2(id), &sorted_2)
+        };
+        match query_1
+            .iter()
+            .find_map(|p| p.anchor())
+            .or_else(|| query_2.iter().find_map(|p| p.anchor()))
+        {
+            Some(ParticipantAnchor::Node(node)) => {
+                self.incident(node).iter().copied().find(|&id| matches(id))
+            }
+            Some(ParticipantAnchor::Edge(edge)) => {
+                self.incident_edge(edge).iter().copied().find(|&id| matches(id))
+            }
+            None => self.relation_ids().find(|&id| matches(id)),
+        }
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -797,6 +889,32 @@ where
         let start = self.f2_offsets[id.index()] as usize;
         let end = self.f2_offsets[id.index() + 1] as usize;
         &self.participants_2[start..end]
+    }
+
+    /// Id of the relation whose two factors equal `query_1` / `query_2` as multisets
+    /// (order-independent per factor), if any. §4.1 uniqueness ⇒ at most one hit.
+    pub fn find_by_participants(&self, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
+        let mut sorted_1: Vec<L1> = query_1.to_vec();
+        sorted_1.sort_unstable();
+        let mut sorted_2: Vec<L2> = query_2.to_vec();
+        sorted_2.sort_unstable();
+        let matches = |id: RelationId| {
+            participants_match(self.participants_1(id), &sorted_1)
+                && participants_match(self.participants_2(id), &sorted_2)
+        };
+        match query_1
+            .iter()
+            .find_map(|p| p.anchor())
+            .or_else(|| query_2.iter().find_map(|p| p.anchor()))
+        {
+            Some(ParticipantAnchor::Node(node)) => {
+                self.incident(node).iter().copied().find(|&id| matches(id))
+            }
+            Some(ParticipantAnchor::Edge(edge)) => {
+                self.incident_edge(edge).iter().copied().find(|&id| matches(id))
+            }
+            None => self.relation_ids().find(|&id| matches(id)),
+        }
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -991,6 +1109,32 @@ where
         let start = self.f2_offsets[id.index()] as usize;
         let end = self.f2_offsets[id.index() + 1] as usize;
         &self.participants_2[start..end]
+    }
+
+    /// Id of the relation whose two factors equal `query_1` / `query_2` as multisets
+    /// (order-independent per factor), if any. §4.1 uniqueness ⇒ at most one hit.
+    pub fn find_by_participants(&self, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
+        let mut sorted_1: Vec<L1> = query_1.to_vec();
+        sorted_1.sort_unstable();
+        let mut sorted_2: Vec<L2> = query_2.to_vec();
+        sorted_2.sort_unstable();
+        let matches = |id: RelationId| {
+            participants_match(self.participants_1(id), &sorted_1)
+                && participants_match(self.participants_2(id), &sorted_2)
+        };
+        match query_1
+            .iter()
+            .find_map(|p| p.anchor())
+            .or_else(|| query_2.iter().find_map(|p| p.anchor()))
+        {
+            Some(ParticipantAnchor::Node(node)) => {
+                self.incident(node).iter().copied().find(|&id| matches(id))
+            }
+            Some(ParticipantAnchor::Edge(edge)) => {
+                self.incident_edge(edge).iter().copied().find(|&id| matches(id))
+            }
+            None => self.relation_ids().find(|&id| matches(id)),
+        }
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -1717,5 +1861,103 @@ mod tests {
         let rs = VarVarBirelationSet::<NodeId, Unordered, EdgeId, Unordered, ()>::default();
         assert_eq!(rs.relation_count(), 0);
         assert!(!rs.has_incident(n(0)));
+    }
+
+    #[rstest]
+    #[case::exact(vec![n(0), n(1)], Some(RelationId(0)))]
+    #[case::reordered(vec![n(1), n(0)], Some(RelationId(0)))]
+    #[case::second(vec![n(2), n(3)], Some(RelationId(1)))]
+    #[case::absent(vec![n(0), n(3)], None)]
+    #[case::wrong_arity(vec![n(0)], None)]
+    fn test_fixed_relation_set_find_by_participants(
+        #[case] query: Vec<NodeId>,
+        #[case] expected: Option<RelationId>,
+    ) {
+        let rs: FixedRelationSet<NodeId, Unordered, (), 2> =
+            FixedRelationSet::new(vec![([n(0), n(1)], ()), ([n(2), n(3)], ())]);
+        assert_eq!(rs.find_by_participants(&query), expected);
+    }
+
+    #[rstest]
+    #[case::exact(vec![n(0), n(1), n(2)], Some(RelationId(0)))]
+    #[case::reordered(vec![n(2), n(0), n(1)], Some(RelationId(0)))]
+    #[case::second(vec![n(3), n(4)], Some(RelationId(1)))]
+    #[case::subset(vec![n(0), n(1)], None)]
+    #[case::superset(vec![n(0), n(1), n(2), n(3)], None)]
+    fn test_var_relation_set_find_by_participants(
+        #[case] query: Vec<NodeId>,
+        #[case] expected: Option<RelationId>,
+    ) {
+        let rs: VarRelationSet<NodeId, Unordered, ()> =
+            VarRelationSet::new(vec![(vec![n(0), n(1), n(2)], ()), (vec![n(3), n(4)], ())]);
+        assert_eq!(rs.find_by_participants(&query), expected);
+    }
+
+    #[rstest]
+    #[case::exact(vec![n(0), n(1)], vec![n(2)], Some(RelationId(0)))]
+    #[case::reordered_factor(vec![n(1), n(0)], vec![n(2)], Some(RelationId(0)))]
+    #[case::second(vec![n(3), n(4)], vec![n(5)], Some(RelationId(1)))]
+    #[case::absent(vec![n(0), n(1)], vec![n(9)], None)]
+    fn test_fixed_fixed_birelation_set_find_by_participants(
+        #[case] query_1: Vec<NodeId>,
+        #[case] query_2: Vec<NodeId>,
+        #[case] expected: Option<RelationId>,
+    ) {
+        let rs: FixedFixedBirelationSet<NodeId, Unordered, 2, NodeId, Unordered, 1, ()> =
+            FixedFixedBirelationSet::new(vec![([n(0), n(1)], [n(2)], ()), ([n(3), n(4)], [n(5)], ())]);
+        assert_eq!(rs.find_by_participants(&query_1, &query_2), expected);
+    }
+
+    #[rstest]
+    #[case::exact(vec![n(0)], vec![n(1)], Some(RelationId(0)))]
+    #[case::role_swap(vec![n(1)], vec![n(0)], None)]
+    #[case::multiset_reordered(vec![n(3)], vec![n(5), n(4), n(4)], Some(RelationId(1)))]
+    #[case::wrong_multiplicity(vec![n(3)], vec![n(4), n(5)], None)]
+    #[case::absent(vec![n(0)], vec![n(2)], None)]
+    fn test_fixed_var_birelation_set_find_by_participants(
+        #[case] query_1: Vec<NodeId>,
+        #[case] query_2: Vec<NodeId>,
+        #[case] expected: Option<RelationId>,
+    ) {
+        // Factor2 `Ordered` (a coset frame) yet matched as a multiset: duplicate `n(4)` and the
+        // role-swap case exercise the key semantics.
+        let rs: FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Ordered, ()> =
+            FixedVarBirelationSet::new(vec![
+                ([n(0)], vec![n(1)], ()),
+                ([n(3)], vec![n(4), n(4), n(5)], ()),
+            ]);
+        assert_eq!(rs.find_by_participants(&query_1, &query_2), expected);
+    }
+
+    #[rstest]
+    #[case::exact(vec![n(1), n(2)], Some(RelationId(0)))]
+    #[case::reordered(vec![n(2), n(1)], Some(RelationId(0)))]
+    #[case::absent(vec![n(1), n(3)], None)]
+    fn test_fixed_var_birelation_set_find_by_participants_edge_anchor(
+        #[case] ligands: Vec<NodeId>,
+        #[case] expected: Option<RelationId>,
+    ) {
+        // Stereo-bond-like: factor1 is an `EdgeId` site, so the anchor routes through `incident_edge`.
+        let rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, ()> =
+            FixedVarBirelationSet::new(vec![([EdgeId(0)], vec![n(1), n(2)], ())]);
+        assert_eq!(rs.find_by_participants(&[EdgeId(0)], &ligands), expected);
+    }
+
+    #[rstest]
+    #[case::exact(vec![n(0), n(1)], vec![n(2), n(3)], Some(RelationId(0)))]
+    #[case::reordered(vec![n(1), n(0)], vec![n(3), n(2)], Some(RelationId(0)))]
+    #[case::role_swap(vec![n(2), n(3)], vec![n(0), n(1)], None)]
+    #[case::absent(vec![n(0), n(1)], vec![n(2), n(9)], None)]
+    fn test_var_var_birelation_set_find_by_participants(
+        #[case] query_1: Vec<NodeId>,
+        #[case] query_2: Vec<NodeId>,
+        #[case] expected: Option<RelationId>,
+    ) {
+        let rs: VarVarBirelationSet<NodeId, Unordered, NodeId, Unordered, ()> =
+            VarVarBirelationSet::new(vec![
+                (vec![n(0), n(1)], vec![n(2), n(3)], ()),
+                (vec![n(4)], vec![n(5)], ()),
+            ]);
+        assert_eq!(rs.find_by_participants(&query_1, &query_2), expected);
     }
 }
