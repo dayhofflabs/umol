@@ -337,8 +337,12 @@ Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (
   take its id from `register_*` and is the same delta-loop surgery S3d does for resolution, so folding it
   into S3d rewrites the loop once, not twice. `[dep: S2c]` **Done**
 - **S2e** `dsl`: reaction-span build (`SpanInput::into_ast`) is molecule-shaped and **self-contained**
-  (ids are molecule-shaped; it embeds no lhs molecule parse), so it builds its **own** namespace
-  (parallel-grow like S2b) and projects its own metadata. `[dep: S2b]`
+  (ids are molecule-shaped; it embeds no lhs molecule parse), so it builds its **own** namespace —
+  **purely additive/green, done** (like S2d): grow it in parallel (register each atom/alias/bond/overlay
+  as resolved), leaving the span's incremental `MoleculeMetadata` and its `EntityCounts` untouched. The
+  namespace is grown but read by nothing yet. S3 resolves the span's structural refs (stereo-bond
+  `:site`, constraints) against it, derives its metadata as its roundtrip projection
+  (`MoleculeMetadata::from`), and drops its `EntityCounts` (S3e). `[dep: S2b]` **Done**
 
   *Note (metadata ⊂ namespace).* `MoleculeMetadata` is the roundtrip-relevant subset of the namespace:
   its eight `id→name` maps are the exact inverse of the namespace's `by_name`, and `atom_aliases` moves

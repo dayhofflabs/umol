@@ -35,6 +35,7 @@ use super::molecule::{
     MoleculeMetadata, StereoLigandInput,
 };
 use super::multicenter::MulticenterBondDsl;
+use super::namespace::MoleculeNamespace;
 use super::noncovalent::NoncovalentBondDsl;
 use super::refs::{AtomRef, BondRef};
 use super::stereo::{StereoAtomDsl, StereoBondDsl};
@@ -908,8 +909,12 @@ impl SpanInput {
         let bond_count = self.bonds.len();
 
         // Namespace: inline ids onto the union positions, then the bijective alias table.
+        // `namespace` (grown alongside `metadata`) is this span's own parse-time namespace — S2e
+        // grows it so S3 can resolve structural refs against it; nothing reads it yet.
         let mut metadata = MoleculeMetadata::default();
+        let mut namespace = MoleculeNamespace::default();
         for (index, (id, _)) in self.atoms.iter().enumerate() {
+            namespace.register_atom(id.clone());
             if let Some(name) = id {
                 if metadata.contains_id(name) {
                     return Err(ParseError::DuplicateId(name.clone()));
@@ -936,6 +941,7 @@ impl SpanInput {
                 ));
             }
             metadata.add_atom_alias(name.clone(), (*dsl).clone());
+            namespace.register_atom_alias(name.clone(), dsl.clone());
             aliases.insert(name, dsl);
         }
 
@@ -947,9 +953,10 @@ impl SpanInput {
         let mut bonds: Vec<EntitySpan<BondAst>> = Vec::with_capacity(bond_count);
         let mut endpoints: Vec<[AtomId; 2]> = Vec::with_capacity(bond_count);
         let mut edges: Vec<[u32; 2]> = Vec::with_capacity(bond_count);
-        for (_, [ref_a, ref_b], span) in self.bonds {
+        for (id_name, [ref_a, ref_b], span) in self.bonds {
             let a = ref_a.into_ast(atom_count, &metadata)?;
             let b = ref_b.into_ast(atom_count, &metadata)?;
+            namespace.register_bond(id_name, a, b);
             edges.push([a.index() as u32, b.index() as u32]);
             endpoints.push([a, b]);
             bonds.push(span);
@@ -1022,6 +1029,7 @@ impl SpanInput {
                 &participants,
                 "dative bond",
             )?;
+            namespace.register_dative_bond(id, &donor_ids, acceptor_id);
             dative_entries.push((
                 [NodeId::from(acceptor_id)],
                 donor_ids.iter().map(|&a| NodeId::from(a)).collect(),
@@ -1050,6 +1058,7 @@ impl SpanInput {
                 &atom_ids,
                 "aromatic system",
             )?;
+            namespace.register_aromatic_system(id, &atom_ids);
             aromatic_entries.push((atom_ids.iter().map(|&a| NodeId::from(a)).collect(), span));
         }
         let aromatic_systems = VarRelationSet::new(aromatic_entries);
@@ -1074,6 +1083,7 @@ impl SpanInput {
                 &atom_ids,
                 "multicenter bond",
             )?;
+            namespace.register_multicenter_bond(id, &atom_ids);
             multicenter_entries.push((atom_ids.iter().map(|&a| NodeId::from(a)).collect(), span));
         }
         let multicenter_bonds = VarRelationSet::new(multicenter_entries);
@@ -1096,6 +1106,7 @@ impl SpanInput {
                 &[a, b],
                 "noncovalent bond",
             )?;
+            namespace.register_noncovalent_bond(id, a, b);
             noncovalent_entries.push(([NodeId::from(a), NodeId::from(b)], span));
         }
         let noncovalent_bonds = FixedRelationSet::new(noncovalent_entries);
@@ -1127,6 +1138,7 @@ impl SpanInput {
                 &participants,
                 "stereo atom",
             )?;
+            namespace.register_stereo_atom(id, site_id);
             stereo_atom_entries.push(([NodeId::from(site_id)], ligand_frame, span));
         }
         let stereo_atoms = FixedVarBirelationSet::new(stereo_atom_entries);
@@ -1175,6 +1187,7 @@ impl SpanInput {
                         .into(),
                 ));
             }
+            namespace.register_stereo_bond(id, site_id);
             stereo_bond_entries.push(([EdgeId::from(site_id)], ligand_frame, span));
         }
         let stereo_bonds = FixedVarBirelationSet::new(stereo_bond_entries);
