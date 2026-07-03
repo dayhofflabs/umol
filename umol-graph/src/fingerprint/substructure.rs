@@ -10,7 +10,7 @@
 //! change with context and would break the subset test.
 
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
-use umol_graph_core::{AutomorphismAlgorithm, Embedding, SubgraphEnumerationAlgorithm};
+use umol_graph_core::{AutomorphismAlgorithm, GraphCorrespondence, SubgraphEnumerationAlgorithm};
 
 use super::feature_set::FeatureSet;
 use super::featurizer::FingerprintError;
@@ -48,14 +48,18 @@ impl SubstructureFeaturizer {
     }
 }
 
-/// Exact canonical key of `embedding`: its nauty canonical form with bond orders
-/// carried as label-colored vertices. Two subgraphs collide iff they are
-/// isomorphic as element/charge/bond-order-labeled graphs.
-fn canonical_key(mol: &MoleculeAst, embedding: &Embedding) -> Vec<u8> {
-    let subgraph = embedding.extract();
+/// Exact canonical key of the subgraph correspondence `sub`: its nauty canonical form with bond
+/// orders carried as label-colored vertices. Two subgraphs collide iff they are isomorphic as
+/// element/charge/bond-order-labeled graphs.
+fn canonical_key(mol: &MoleculeAst, sub: &GraphCorrespondence) -> Vec<u8> {
+    let subgraph = mol.raw_graph().extract(sub);
     subgraph.canonical_key(
         |node| {
-            let id = AtomId::from(embedding.host_node(node));
+            let id = AtomId::from(
+                sub.nodes()
+                    .right_of(node)
+                    .expect("subgraph node maps to a host node"),
+            );
             let view = mol.atom(id);
             let atomic_number = view
                 .element()
@@ -69,7 +73,11 @@ fn canonical_key(mol: &MoleculeAst, embedding: &Embedding) -> Vec<u8> {
             color
         },
         |edge| {
-            let id = BondId::from(embedding.host_edge(edge));
+            let id = BondId::from(
+                sub.edges()
+                    .right_of(edge)
+                    .expect("subgraph edge maps to a host edge"),
+            );
             let order = mol.bond(id).order().as_lit().expect("ground bond") as u16;
             order.to_le_bytes().to_vec()
         },

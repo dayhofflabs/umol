@@ -5,9 +5,10 @@
 //! The CSR is wrapped in `Arc` for zero-cost cloning; mutations rebuild
 //! it and produce a `Compaction` for reindexing external data.
 
-use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
+
+use crate::correspondence::{Correspondence, GraphCorrespondence};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NodeId(pub u32);
@@ -257,46 +258,37 @@ impl Graph {
 
     /// Build an induced subgraph from a subset of nodes.
     ///
-    /// Returns the subgraph (with contiguous node/edge IDs starting at 0)
-    /// and mappings from new IDs back to original IDs.
-    /// Induced subgraph over `nodes` in caller-supplied order. Duplicates in
-    /// `nodes` are deduplicated (first occurrence wins). Sub node ids
-    /// 0..len(deduplicated nodes) correspond positionally to the deduplicated
-    /// input. The returned [`Embedding`] borrows `self`; call
-    /// [`Embedding::extract`] to materialize the sub `Graph` when needed.
-    pub fn induced_subgraph(&self, nodes: &[NodeId]) -> Embedding<'_> {
+    /// Induced subgraph over `nodes` (deduplicated, first occurrence wins), as an injective sub→host
+    /// [`GraphCorrespondence`]: sub node `i` is `nodes[i]`, edges are *all* host edges among the node
+    /// set. [`Graph::extract`] materializes it.
+    pub fn induced_subgraph(&self, nodes: &[NodeId]) -> GraphCorrespondence {
         let mut host_nodes: Vec<NodeId> = Vec::with_capacity(nodes.len());
-        let mut sub_nodes: HashMap<NodeId, NodeId> = HashMap::with_capacity(nodes.len());
+        let mut node_set: HashSet<NodeId> = HashSet::with_capacity(nodes.len());
         for &node in nodes {
-            if let Entry::Vacant(entry) = sub_nodes.entry(node) {
-                entry.insert(NodeId(host_nodes.len() as u32));
+            if node_set.insert(node) {
                 host_nodes.push(node);
             }
         }
-
-        let mut host_edges = Vec::new();
-        for eid in self.edge_ids() {
-            let [a, b] = self.edge_endpoints(eid);
-            if sub_nodes.contains_key(&a) && sub_nodes.contains_key(&b) {
-                host_edges.push(eid);
-            }
-        }
-
-        Embedding {
-            host_nodes,
-            host_edges,
-            sub_nodes,
-            graph: self,
-        }
+        let host_edges: Vec<EdgeId> = self
+            .edge_ids()
+            .filter(|&eid| {
+                let [a, b] = self.edge_endpoints(eid);
+                node_set.contains(&a) && node_set.contains(&b)
+            })
+            .collect();
+        GraphCorrespondence::new(
+            Correspondence::from_images(&host_nodes, self.node_count()),
+            Correspondence::from_images(&host_edges, self.edge_count()),
+        )
     }
 
     /// Subgraph induced by an edge subset: nodes are the endpoints of `edges`,
     /// edges are exactly `edges` (deduped, first occurrence kept). Unlike
     /// [`Graph::induced_subgraph`], chords among the endpoints are excluded, so a
     /// path and a chorded ring on the same atoms stay distinct.
-    pub fn edge_induced_subgraph(&self, edges: &[EdgeId]) -> Embedding<'_> {
+    pub fn edge_induced_subgraph(&self, edges: &[EdgeId]) -> GraphCorrespondence {
         let mut host_nodes: Vec<NodeId> = Vec::new();
-        let mut sub_nodes: HashMap<NodeId, NodeId> = HashMap::new();
+        let mut node_set: HashSet<NodeId> = HashSet::new();
         let mut host_edges: Vec<EdgeId> = Vec::with_capacity(edges.len());
         let mut seen_edges: HashSet<EdgeId> = HashSet::with_capacity(edges.len());
         for &eid in edges {
@@ -305,19 +297,39 @@ impl Graph {
             }
             host_edges.push(eid);
             for node in self.edge_endpoints(eid) {
-                if let Entry::Vacant(entry) = sub_nodes.entry(node) {
-                    entry.insert(NodeId(host_nodes.len() as u32));
+                if node_set.insert(node) {
                     host_nodes.push(node);
                 }
             }
         }
+        GraphCorrespondence::new(
+            Correspondence::from_images(&host_nodes, self.node_count()),
+            Correspondence::from_images(&host_edges, self.edge_count()),
+        )
+    }
 
-        Embedding {
-            host_nodes,
-            host_edges,
-            sub_nodes,
-            graph: self,
-        }
+    /// Materialize the subgraph `sub` (over `self` as host) as an owned `Graph` with node ids
+    /// `0..node_count` and edge ids `0..edge_count`; edge endpoints are remapped host→sub through the
+    /// node correspondence.
+    pub fn extract(&self, sub: &GraphCorrespondence) -> Graph {
+        let sub_edges: Vec<[u32; 2]> = sub
+            .edges()
+            .mates()
+            .iter()
+            .map(|&(_, host_edge)| {
+                let [ha, hb] = self.edge_endpoints(host_edge);
+                let sa = sub
+                    .nodes()
+                    .left_of(ha)
+                    .expect("subgraph edge endpoint is a subgraph node");
+                let sb = sub
+                    .nodes()
+                    .left_of(hb)
+                    .expect("subgraph edge endpoint is a subgraph node");
+                [sa.0, sb.0]
+            })
+            .collect();
+        Graph::new(sub.nodes().mate_count(), &sub_edges)
     }
 
     fn build_csr(node_count: usize, edges: &[[u32; 2]]) -> Csr {
@@ -490,64 +502,6 @@ impl Remapping {
     }
 }
 
-/// Subgraph induced by a node subset, borrowing the host `Graph`. Holds
-/// sub→host index maps and a host→sub inverse for O(1) translation; the sub
-/// `Graph` is materialized on demand via [`Embedding::extract`].
-#[derive(Clone, Debug)]
-pub struct Embedding<'a> {
-    host_nodes: Vec<NodeId>,
-    host_edges: Vec<EdgeId>,
-    sub_nodes: HashMap<NodeId, NodeId>,
-    graph: &'a Graph,
-}
-
-impl<'a> Embedding<'a> {
-    pub fn graph(&self) -> &'a Graph {
-        self.graph
-    }
-
-    pub fn host_nodes(&self) -> &[NodeId] {
-        &self.host_nodes
-    }
-
-    pub fn host_edges(&self) -> &[EdgeId] {
-        &self.host_edges
-    }
-
-    pub fn host_node(&self, sub: NodeId) -> NodeId {
-        self.host_nodes[sub.index()]
-    }
-
-    pub fn host_edge(&self, sub: EdgeId) -> EdgeId {
-        self.host_edges[sub.index()]
-    }
-
-    pub fn sub_node(&self, host: NodeId) -> Option<NodeId> {
-        self.sub_nodes.get(&host).copied()
-    }
-
-    pub fn node_count(&self) -> usize {
-        self.host_nodes.len()
-    }
-
-    pub fn edge_count(&self) -> usize {
-        self.host_edges.len()
-    }
-
-    /// Materialize the embedded substructure as an owned `Graph` with node
-    /// ids 0..node_count and edge ids 0..edge_count.
-    pub fn extract(&self) -> Graph {
-        let mut sub_edges = Vec::with_capacity(self.host_edges.len());
-        for &eid in &self.host_edges {
-            let [ha, hb] = self.graph.edge_endpoints(eid);
-            let sa = self.sub_nodes[&ha];
-            let sb = self.sub_nodes[&hb];
-            sub_edges.push([sa.0, sb.0]);
-        }
-        Graph::new(self.host_nodes.len(), &sub_edges)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -665,11 +619,36 @@ mod tests {
         let node_count = edges.iter().flat_map(|e| e.iter()).max().unwrap() + 1;
         let g = Graph::new(node_count as usize, edges);
         let subset_edges: Vec<EdgeId> = subset.iter().map(|&e| EdgeId(e)).collect();
-        let embedding = g.edge_induced_subgraph(&subset_edges);
-        assert_eq!(embedding.host_edges(), expected_edges.as_slice());
-        let mut nodes = embedding.host_nodes().to_vec();
+        let sub = g.edge_induced_subgraph(&subset_edges);
+        let host_edges: Vec<EdgeId> = sub.edges().mates().iter().map(|&(_, h)| h).collect();
+        assert_eq!(host_edges, expected_edges);
+        let mut nodes: Vec<NodeId> = sub.nodes().mates().iter().map(|&(_, h)| h).collect();
         nodes.sort_unstable();
         assert_eq!(nodes, expected_nodes);
+    }
+
+    #[rstest]
+    fn test_graph_induced_subgraph() {
+        // triangle 0-1-2; induce {0, 1}: the chord to 2 is dropped, only edge 0 (0-1) survives.
+        let g = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
+        let sub = g.induced_subgraph(&[NodeId(0), NodeId(1)]);
+        assert_eq!(
+            sub.nodes().mates(),
+            &[(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))]
+        );
+        assert_eq!(sub.edges().mates(), &[(EdgeId(0), EdgeId(0))]);
+    }
+
+    #[rstest]
+    fn test_graph_extract() {
+        // extract {0,1,2} of path 0-1-2-3 → path 0-1-2 with endpoints remapped host→sub.
+        let g = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
+        let sub = g.induced_subgraph(&[NodeId(0), NodeId(1), NodeId(2)]);
+        let extracted = g.extract(&sub);
+        assert_eq!(extracted.node_count(), 3);
+        assert_eq!(extracted.edge_count(), 2);
+        assert_eq!(extracted.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
+        assert_eq!(extracted.edge_endpoints(EdgeId(1)), [NodeId(1), NodeId(2)]);
     }
 
     #[test]

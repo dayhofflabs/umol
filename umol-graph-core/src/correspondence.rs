@@ -141,6 +141,30 @@ impl Correspondence<NodeId> {
     }
 }
 
+/// A subgraph↔host correspondence over a `Graph`: its node and edge families. The graph-core base
+/// that the molecule-level `MoleculeCorrespondence` (atoms + bonds + overlays) extends — produced by
+/// induced subgraphs, subiso matches, and common-subgraph search. The objective of each is a family
+/// size: `nodes().mate_count()` (induced / MCIS), `edges().mate_count()` (MCES).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GraphCorrespondence {
+    nodes: Correspondence<NodeId>,
+    edges: Correspondence<EdgeId>,
+}
+
+impl GraphCorrespondence {
+    pub fn new(nodes: Correspondence<NodeId>, edges: Correspondence<EdgeId>) -> Self {
+        Self { nodes, edges }
+    }
+
+    pub fn nodes(&self) -> &Correspondence<NodeId> {
+        &self.nodes
+    }
+
+    pub fn edges(&self) -> &Correspondence<EdgeId> {
+        &self.edges
+    }
+}
+
 /// The ids `0..count` absent from `sorted_mated` (which must be ascending, no duplicates) — a
 /// single merge pass, no per-id search.
 fn exposed<Id: Copy + Ord + From<usize>>(
@@ -208,6 +232,16 @@ mod tests {
         assert_eq!(c.mate_count(), 3);
         assert_eq!(c.left_exposed(), Vec::<NodeId>::new());
         assert_eq!(c.right_exposed(), vec![n(2)]);
+    }
+
+    #[rstest]
+    fn test_graph_correspondence() {
+        let c = GraphCorrespondence::new(
+            Correspondence::from_images(&[n(1), n(0)], 3),
+            Correspondence::from_images(&[e(2)], 4),
+        );
+        assert_eq!(c.nodes().mates(), &[(n(0), n(1)), (n(1), n(0))]);
+        assert_eq!(c.edges().mates(), &[(e(0), e(2))]);
     }
 
     #[rstest]

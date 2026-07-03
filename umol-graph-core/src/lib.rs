@@ -33,11 +33,10 @@ pub use algorithms::refine::{
 pub use algorithms::subiso::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
 pub use algorithms::toposort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::TraversalAlgorithm;
-pub use correspondence::Correspondence;
+pub use correspondence::{Correspondence, GraphCorrespondence};
 pub use digraph::DiGraph;
 pub use graph::{
-    compact_edge_vec, compact_node_vec, Compaction, EdgeId, Embedding, Graph, Neighbor, NodeId,
-    Remapping,
+    compact_edge_vec, compact_node_vec, Compaction, EdgeId, Graph, Neighbor, NodeId, Remapping,
 };
 pub use relation::{
     FactorOrdering, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, Ordered,

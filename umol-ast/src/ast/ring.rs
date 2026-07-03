@@ -130,8 +130,14 @@ impl RingSet {
         let use_subgraph = filtered_nodes.len() < graph.node_count();
 
         let (sub, host_nodes) = if use_subgraph {
-            let embedding = graph.induced_subgraph(&filtered_nodes);
-            (embedding.extract(), embedding.host_nodes().to_vec())
+            let subgraph = graph.induced_subgraph(&filtered_nodes);
+            let host_nodes: Vec<NodeId> = subgraph
+                .nodes()
+                .mates()
+                .iter()
+                .map(|&(_, host)| host)
+                .collect();
+            (graph.extract(&subgraph), host_nodes)
         } else {
             let host_nodes: Vec<NodeId> = graph.node_ids().collect();
             (graph.clone(), host_nodes)
