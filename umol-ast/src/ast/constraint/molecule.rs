@@ -89,23 +89,28 @@ impl Constraint {
             }
             Constraint::AromaticSystem(id, c) => {
                 let i = compaction.compact_aromatic_system(id)?;
-                c.compact(compaction).map(|c| Constraint::AromaticSystem(i, c))
+                c.compact(compaction)
+                    .map(|c| Constraint::AromaticSystem(i, c))
             }
             Constraint::MulticenterBond(id, c) => {
                 let i = compaction.compact_multicenter_bond(id)?;
-                c.compact(compaction).map(|c| Constraint::MulticenterBond(i, c))
+                c.compact(compaction)
+                    .map(|c| Constraint::MulticenterBond(i, c))
             }
             Constraint::NoncovalentBond(id, c) => {
                 let i = compaction.compact_noncovalent_bond(id)?;
-                c.compact(compaction).map(|c| Constraint::NoncovalentBond(i, c))
+                c.compact(compaction)
+                    .map(|c| Constraint::NoncovalentBond(i, c))
             }
             Constraint::StereoAtom(id, kind, c) => {
                 let i = compaction.compact_stereo_atom(id)?;
-                c.compact(compaction).map(|c| Constraint::StereoAtom(i, kind, c))
+                c.compact(compaction)
+                    .map(|c| Constraint::StereoAtom(i, kind, c))
             }
             Constraint::StereoBond(id, kind, c) => {
                 let i = compaction.compact_stereo_bond(id)?;
-                c.compact(compaction).map(|c| Constraint::StereoBond(i, kind, c))
+                c.compact(compaction)
+                    .map(|c| Constraint::StereoBond(i, kind, c))
             }
             Constraint::Relational(r) => r.compact(compaction).map(Constraint::Relational),
             Constraint::Molecule(m) => m.compact(compaction).map(Constraint::Molecule),
@@ -150,9 +155,7 @@ impl Constraint {
             }
             Constraint::Relational(r) => Constraint::Relational(r.remap(map)),
             Constraint::Molecule(m) => Constraint::Molecule(m.remap(map)),
-            Constraint::And(xs) => {
-                Constraint::And(xs.into_iter().map(|c| c.remap(map)).collect())
-            }
+            Constraint::And(xs) => Constraint::And(xs.into_iter().map(|c| c.remap(map)).collect()),
             Constraint::Or(xs) => Constraint::Or(xs.into_iter().map(|c| c.remap(map)).collect()),
             Constraint::Not(x) => Constraint::Not(Box::new(x.remap(map))),
         }
@@ -754,7 +757,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{RelationId, Compaction};
+    use umol_graph_core::{Compaction, RelationId};
 
     use super::*;
     use crate::ast::atom::AtomAst;
@@ -1024,7 +1027,11 @@ mod tests {
         assert_eq!(c.compact(&compaction), expected);
     }
 
-    fn id_remapping(atom: &[(u32, u32)], bond: &[(u32, u32)], dative: &[(u32, u32)]) -> IdRemapping {
+    fn id_remapping(
+        atom: &[(u32, u32)],
+        bond: &[(u32, u32)],
+        dative: &[(u32, u32)],
+    ) -> IdRemapping {
         IdRemapping::new(
             atom.iter().map(|&(a, b)| (AtomId(a), AtomId(b))).collect(),
             bond.iter().map(|&(a, b)| (BondId(a), BondId(b))).collect(),

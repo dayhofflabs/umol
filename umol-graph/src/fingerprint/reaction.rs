@@ -1,6 +1,6 @@
 //! Reaction fingerprints: a molecular featurizer applied to each side of a
 //! reaction, then combined across roles. The product side is derived from the
-//! reactant (`lhs`) and the `deltas` via `to_reaction_span().right()`. `Difference`
+//! reactant (`lhs`) and the `deltas` via `to_reaction_span().rhs()`. `Difference`
 //! computes counts difference (product minus reactant); `DisjointUnion` side-tags
 //! each feature and unions both sides.
 
@@ -31,7 +31,7 @@ pub enum ReactionFingerprint {
 }
 
 /// Featurize `reaction` by applying `featurizer` to the reactant (`lhs`) and the derived
-/// product (`to_reaction_span().right()`), then combining per `combinator`.
+/// product (`to_reaction_span().rhs()`), then combining per `combinator`.
 /// `Inconsistent` if the deltas cannot be resolved to a product.
 pub fn featurize_reaction(
     reaction: &ReactionAst,
@@ -41,7 +41,7 @@ pub fn featurize_reaction(
     let product = reaction
         .to_reaction_span()
         .map_err(|_| FingerprintError::Inconsistent)?
-        .right();
+        .rhs();
     Ok(match combinator {
         ReactionCombinator::Difference => {
             let reactants = featurizer.featurize_counted(&reaction.lhs)?;

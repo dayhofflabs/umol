@@ -53,116 +53,119 @@ impl MoleculeCorrespondence {
         }
     }
 
-    /// Derive the full per-entity correspondence between `left` and `right` from their atom
-    /// correspondence. Bonds are the induced edge correspondence; each overlay's left entities are
-    /// matched to a right entity by their atom constituents mapped through `atoms`. An entity whose
+    /// Derive the full per-entity correspondence between `lhs` and `rhs` from their atom
+    /// correspondence. Bonds are the induced edge correspondence; each overlay's lhs entities are
+    /// matched to an rhs entity by their atom constituents mapped through `atoms`. An entity whose
     /// constituents are not all mated is exposed (not matched).
-    pub fn induce(left: &MoleculeAst, right: &MoleculeAst, atoms: Correspondence<NodeId>) -> Self {
+    pub fn induce(lhs: &MoleculeAst, rhs: &MoleculeAst, atoms: Correspondence<NodeId>) -> Self {
         let bonds = Correspondence::new(
             atoms
-                .edge_mates(left.raw_graph(), right.raw_graph())
+                .edge_mates(lhs.raw_graph(), rhs.raw_graph())
                 .into_iter()
                 .map(|(l, r)| (BondId::from(l), BondId::from(r)))
                 .collect(),
-            left.bonds().count(),
-            right.bonds().count(),
+            lhs.bonds().count(),
+            rhs.bonds().count(),
         );
 
         let mut dative = Vec::new();
-        for d in left.dative_bonds().iter() {
-            let (Some(acceptor), Some(donors)) =
-                (map_atom(&atoms, d.acceptor_id()), map_atoms(&atoms, d.donor_ids()))
-            else {
+        for d in lhs.dative_bonds().iter() {
+            let (Some(acceptor), Some(donors)) = (
+                map_atom(&atoms, d.acceptor_id()),
+                map_atoms(&atoms, d.donor_ids()),
+            ) else {
                 continue;
             };
-            if let Some(id) = right.dative_bonds().connecting_id(acceptor, &donors) {
+            if let Some(id) = rhs.dative_bonds().connecting_id(acceptor, &donors) {
                 dative.push((d.id, id));
             }
         }
         let dative_bonds = Correspondence::new(
             dative,
-            left.dative_bonds().count(),
-            right.dative_bonds().count(),
+            lhs.dative_bonds().count(),
+            rhs.dative_bonds().count(),
         );
 
         let mut aromatic = Vec::new();
-        for a in left.aromatic_systems().iter() {
+        for a in lhs.aromatic_systems().iter() {
             let Some(mapped) = map_atoms(&atoms, a.atom_ids()) else {
                 continue;
             };
-            if let Some(id) = right.aromatic_systems().connecting_id(mapped) {
+            if let Some(id) = rhs.aromatic_systems().connecting_id(mapped) {
                 aromatic.push((a.id, id));
             }
         }
         let aromatic_systems = Correspondence::new(
             aromatic,
-            left.aromatic_systems().count(),
-            right.aromatic_systems().count(),
+            lhs.aromatic_systems().count(),
+            rhs.aromatic_systems().count(),
         );
 
         let mut multicenter = Vec::new();
-        for m in left.multicenter_bonds().iter() {
+        for m in lhs.multicenter_bonds().iter() {
             let Some(mapped) = map_atoms(&atoms, m.atom_ids()) else {
                 continue;
             };
-            if let Some(id) = right.multicenter_bonds().connecting_id(mapped) {
+            if let Some(id) = rhs.multicenter_bonds().connecting_id(mapped) {
                 multicenter.push((m.id, id));
             }
         }
         let multicenter_bonds = Correspondence::new(
             multicenter,
-            left.multicenter_bonds().count(),
-            right.multicenter_bonds().count(),
+            lhs.multicenter_bonds().count(),
+            rhs.multicenter_bonds().count(),
         );
 
         let mut noncovalent = Vec::new();
-        for nc in left.noncovalent_bonds().iter() {
+        for nc in lhs.noncovalent_bonds().iter() {
             let [a, b] = nc.atom_ids();
             let (Some(first), Some(second)) = (map_atom(&atoms, a), map_atom(&atoms, b)) else {
                 continue;
             };
-            if let Some(id) = right.noncovalent_bonds().connecting_id(first, second) {
+            if let Some(id) = rhs.noncovalent_bonds().connecting_id(first, second) {
                 noncovalent.push((nc.id, id));
             }
         }
         let noncovalent_bonds = Correspondence::new(
             noncovalent,
-            left.noncovalent_bonds().count(),
-            right.noncovalent_bonds().count(),
+            lhs.noncovalent_bonds().count(),
+            rhs.noncovalent_bonds().count(),
         );
 
         let mut stereo_atom = Vec::new();
-        for sp in left.stereo_atoms().iter() {
-            let (Some(site), Some(ligands)) =
-                (map_atom(&atoms, sp.site_id()), map_ligands(&atoms, sp.ligand_frame()))
-            else {
+        for sp in lhs.stereo_atoms().iter() {
+            let (Some(site), Some(ligands)) = (
+                map_atom(&atoms, sp.site_id()),
+                map_ligands(&atoms, sp.ligand_frame()),
+            ) else {
                 continue;
             };
-            if let Some(id) = right.stereo_atoms().connecting_id(site, &ligands) {
+            if let Some(id) = rhs.stereo_atoms().connecting_id(site, &ligands) {
                 stereo_atom.push((sp.id, id));
             }
         }
         let stereo_atoms = Correspondence::new(
             stereo_atom,
-            left.stereo_atoms().count(),
-            right.stereo_atoms().count(),
+            lhs.stereo_atoms().count(),
+            rhs.stereo_atoms().count(),
         );
 
         let mut stereo_bond = Vec::new();
-        for sp in left.stereo_bonds().iter() {
-            let (Some(site), Some(ligands)) =
-                (bonds.right_of(sp.site_id()), map_ligands(&atoms, sp.ligand_frame()))
-            else {
+        for sp in lhs.stereo_bonds().iter() {
+            let (Some(site), Some(ligands)) = (
+                bonds.right_of(sp.site_id()),
+                map_ligands(&atoms, sp.ligand_frame()),
+            ) else {
                 continue;
             };
-            if let Some(id) = right.stereo_bonds().connecting_id(site, &ligands) {
+            if let Some(id) = rhs.stereo_bonds().connecting_id(site, &ligands) {
                 stereo_bond.push((sp.id, id));
             }
         }
         let stereo_bonds = Correspondence::new(
             stereo_bond,
-            left.stereo_bonds().count(),
-            right.stereo_bonds().count(),
+            lhs.stereo_bonds().count(),
+            rhs.stereo_bonds().count(),
         );
 
         Self::new(
@@ -177,8 +180,8 @@ impl MoleculeCorrespondence {
         )
     }
 
-    /// Relational composition, per entity family: `self` (left↔middle) followed by `other`
-    /// (middle↔right), yielding a left↔right correspondence.
+    /// Relational composition, per entity family: `self` (lhs↔middle) followed by `other`
+    /// (middle↔rhs), yielding a lhs↔rhs correspondence.
     pub fn compose(&self, other: &MoleculeCorrespondence) -> MoleculeCorrespondence {
         MoleculeCorrespondence::new(
             self.atoms.compose(&other.atoms),
@@ -192,7 +195,7 @@ impl MoleculeCorrespondence {
         )
     }
 
-    /// The inverse correspondence (right↔left), per entity family: each family's `reverse`.
+    /// The inverse correspondence (rhs↔lhs), per entity family: each family's `reverse`.
     pub fn reverse(&self) -> MoleculeCorrespondence {
         MoleculeCorrespondence::new(
             self.atoms.reverse(),
@@ -247,20 +250,20 @@ impl MoleculeCorrespondence {
     }
 }
 
-/// The right partner of a left atom under the atom correspondence, if mated.
+/// The rhs partner of a lhs atom under the atom correspondence, if mated.
 fn map_atom(atoms: &Correspondence<NodeId>, atom: AtomId) -> Option<AtomId> {
     atoms.right_of(NodeId::from(atom)).map(AtomId::from)
 }
 
-/// The right partners of a set of left atoms, or `None` if any is exposed.
+/// The rhs partners of a set of lhs atoms, or `None` if any is exposed.
 fn map_atoms(
     atoms: &Correspondence<NodeId>,
-    left: impl IntoIterator<Item = AtomId>,
+    lhs: impl IntoIterator<Item = AtomId>,
 ) -> Option<Vec<AtomId>> {
-    left.into_iter().map(|a| map_atom(atoms, a)).collect()
+    lhs.into_iter().map(|a| map_atom(atoms, a)).collect()
 }
 
-/// The right-frame ligands (each ligand's atom mapped, its kind kept), or `None` if any ligand's
+/// The rhs-frame ligands (each ligand's atom mapped, its kind kept), or `None` if any ligand's
 /// atom is exposed.
 fn map_ligands(
     atoms: &Correspondence<NodeId>,
@@ -331,8 +334,8 @@ mod tests {
 
     #[rstest]
     fn test_molecule_correspondence_induce() {
-        // left C-C-C with a dative (donor 2 → acceptor 1); right adds a fourth atom + bond.
-        let left = MoleculeAst::from_parts(
+        // lhs C-C-C with a dative (donor 2 → acceptor 1); rhs adds a fourth atom + bond.
+        let lhs = MoleculeAst::from_parts(
             vec![AtomAst::from_element(Element::C); 3],
             vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -346,7 +349,7 @@ mod tests {
             vec![],
             Constraints::default(),
         );
-        let right = MoleculeAst::from_parts(
+        let rhs = MoleculeAst::from_parts(
             vec![AtomAst::from_element(Element::C); 4],
             vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
@@ -362,16 +365,24 @@ mod tests {
             Constraints::default(),
         );
         let atoms = Correspondence::new(
-            vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1)), (NodeId(2), NodeId(2))],
+            vec![
+                (NodeId(0), NodeId(0)),
+                (NodeId(1), NodeId(1)),
+                (NodeId(2), NodeId(2)),
+            ],
             3,
             4,
         );
 
-        let c = MoleculeCorrespondence::induce(&left, &right, atoms);
+        let c = MoleculeCorrespondence::induce(&lhs, &rhs, atoms);
 
         assert_eq!(
             c.atoms().mates(),
-            &[(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1)), (NodeId(2), NodeId(2))]
+            &[
+                (NodeId(0), NodeId(0)),
+                (NodeId(1), NodeId(1)),
+                (NodeId(2), NodeId(2))
+            ]
         );
         assert_eq!(
             c.bonds().mates(),
@@ -412,7 +423,10 @@ mod tests {
 
         assert_eq!(ac.atoms().mates(), &[(NodeId(0), NodeId(2))]);
         assert_eq!(ac.bonds().mates(), &[(BondId(0), BondId(2))]);
-        assert_eq!(ac.dative_bonds().mates(), &[(DativeBondId(0), DativeBondId(2))]);
+        assert_eq!(
+            ac.dative_bonds().mates(),
+            &[(DativeBondId(0), DativeBondId(2))]
+        );
         assert_eq!(
             ac.aromatic_systems().mates(),
             &[(AromaticSystemId(0), AromaticSystemId(2))]
@@ -425,8 +439,14 @@ mod tests {
             ac.noncovalent_bonds().mates(),
             &[(NoncovalentBondId(0), NoncovalentBondId(2))]
         );
-        assert_eq!(ac.stereo_atoms().mates(), &[(StereoAtomId(0), StereoAtomId(2))]);
-        assert_eq!(ac.stereo_bonds().mates(), &[(StereoBondId(0), StereoBondId(2))]);
+        assert_eq!(
+            ac.stereo_atoms().mates(),
+            &[(StereoAtomId(0), StereoAtomId(2))]
+        );
+        assert_eq!(
+            ac.stereo_bonds().mates(),
+            &[(StereoBondId(0), StereoBondId(2))]
+        );
     }
 
     #[rstest]
@@ -458,7 +478,7 @@ mod tests {
             reversed.stereo_bonds().mates(),
             &[(StereoBondId(8), StereoBondId(0))]
         );
-        // counts swap too: atoms went left_count 1 / right_count 2, so the new left id 0 is exposed.
+        // counts swap too: atoms went lhs_count 1 / rhs_count 2, so the new lhs id 0 is exposed.
         assert_eq!(reversed.atoms().left_exposed(), vec![NodeId(0)]);
     }
 }

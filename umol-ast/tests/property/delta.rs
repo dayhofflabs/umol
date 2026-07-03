@@ -126,11 +126,11 @@ proptest! {
         }
     }
 
-    /// `apply(left, diff(left, right)) == right` for atoms — the patch algebra law.
+    /// `apply(lhs, diff(lhs, rhs)) == rhs` for atoms — the patch algebra law.
     #[test]
-    fn test_atom_delta_diff_apply(left in atom_ast_strategy(), right in atom_ast_strategy()) {
-        let diff = AtomDelta::diff(AtomId(0), &left, &right);
-        prop_assert_eq!(apply_atom_diff(left, diff), right);
+    fn test_atom_delta_diff_apply(lhs in atom_ast_strategy(), rhs in atom_ast_strategy()) {
+        let diff = AtomDelta::diff(AtomId(0), &lhs, &rhs);
+        prop_assert_eq!(apply_atom_diff(lhs, diff), rhs);
     }
 
     /// `diff(x, x)` is empty and applying it is the identity (atoms).
@@ -141,11 +141,11 @@ proptest! {
         prop_assert_eq!(apply_atom_diff(atom.clone(), diff), atom);
     }
 
-    /// `apply(left, diff(left, right)) == right` for bonds.
+    /// `apply(lhs, diff(lhs, rhs)) == rhs` for bonds.
     #[test]
-    fn test_bond_delta_diff_apply(left in bond_ast_strategy(), right in bond_ast_strategy()) {
-        let diff = BondDelta::diff(BondId(0), &left, &right);
-        prop_assert_eq!(apply_bond_diff(left, diff), right);
+    fn test_bond_delta_diff_apply(lhs in bond_ast_strategy(), rhs in bond_ast_strategy()) {
+        let diff = BondDelta::diff(BondId(0), &lhs, &rhs);
+        prop_assert_eq!(apply_bond_diff(lhs, diff), rhs);
     }
 
     /// `diff(x, x)` is empty and applying it is the identity (bonds).

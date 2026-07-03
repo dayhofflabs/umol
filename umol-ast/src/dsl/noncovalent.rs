@@ -205,7 +205,9 @@ impl Display for PartialNoncovalentBondDsl {
 impl<'de> FromEdn<'de> for PartialNoncovalentBondDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
-            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("noncovalent-bond", e)),
+            Edn::Str(s) => s
+                .parse()
+                .map_err(|e| DeError::subgrammar("noncovalent-bond", e)),
             other => Err(DeError::TypeMismatch {
                 expected: "string",
                 got: other.kind(),

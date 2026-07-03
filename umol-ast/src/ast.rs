@@ -57,6 +57,7 @@ pub use constraint::{
     StereoBondConstraint, StereoBondConstraintKey, StereoBondConstraints, StereoLigandPair,
     StereogenicityAst, SubPatternAnchor, TopicityAst, TopicityRelationAst,
 };
+pub use correspondence::MoleculeCorrespondence;
 pub use dative::DativeBondAst;
 pub use delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, ConstraintSpan, DativeBondDelta,
@@ -74,7 +75,6 @@ pub use edit::{
     StereoAtomFieldChange, StereoAtomRef, StereoBondFieldChange, StereoBondRef, Undo,
 };
 pub use electrons::ElectronCountsAst;
-pub use correspondence::MoleculeCorrespondence;
 pub use embedding::MoleculeEmbedding;
 pub use entity::{Entity, EntityKind};
 pub use error::{ApplyError, Contradiction};

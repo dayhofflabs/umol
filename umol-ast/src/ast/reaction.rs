@@ -18,9 +18,6 @@ use super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
-use super::multicenter::MulticenterBondAst;
-use super::noncovalent::NoncovalentBondAst;
-use super::stereo::StereoConfigurationAst;
 use super::edit::{
     AddBond, AromaticSystemRef, AtomRef, BondRef, DativeBondRef, Edit, MulticenterBondRef,
     NoncovalentBondRef, StereoAtomFieldChange, StereoAtomRef, StereoAtomRemoval,
@@ -33,7 +30,11 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::molecule::MoleculeAst;
+use super::multicenter::MulticenterBondAst;
+use super::noncovalent::NoncovalentBondAst;
+use super::reaction_derivation::ReactionDerivation;
 use super::remap::IdRemapping;
+use super::stereo::StereoConfigurationAst;
 use super::substructure::SubstructureMatchAlgorithm;
 use super::traits::Canonicalize;
 
@@ -49,22 +50,26 @@ impl ReactionAst {
         Self { lhs, deltas }
     }
 
-    /// The reaction transforming `left` into `right` under the atom correspondence `atom`: induce the
-    /// full per-entity correspondence, diff the two sides into deltas, and pair them with `left`. The
+    /// The reaction transforming `lhs` into `rhs` under the atom correspondence `atom`: induce the
+    /// full per-entity correspondence, diff the two sides into deltas, and pair them with `lhs`. The
     /// inverse of reading a reaction's two sides back off its span.
-    pub fn from_sides(left: MoleculeAst, right: MoleculeAst, atom: Correspondence<NodeId>) -> Self {
-        let correspondence = MoleculeCorrespondence::induce(&left, &right, atom);
-        let deltas = left.difference_to(&right, &correspondence);
-        Self::new(left, deltas)
+    pub fn from_sides(lhs: MoleculeAst, rhs: MoleculeAst, atom: Correspondence<NodeId>) -> Self {
+        let correspondence = MoleculeCorrespondence::induce(&lhs, &rhs, atom);
+        let deltas = lhs.difference_to(&rhs, &correspondence);
+        Self::new(lhs, deltas)
     }
 
-    /// Apply the reaction at one match `m` of `lhs` into a host (`m.ast()`), producing the
-    /// transformed host. DPO: a deleted host atom must carry no localized bond the rule does not
-    /// also delete (else `ApplyError::Dangling`). Created atoms/bonds are appended, preserved
-    /// entities are mutated in place, deleted entities are removed (the host renumbers).
-    /// Molecule-level constraints are added/removed with their entity refs re-anchored through the
-    /// match (lhs → host, created → appended); transact's renumbering compacts them on removal.
-    pub fn apply_at(&self, m: &MoleculeEmbedding) -> Result<MoleculeAst, ApplyError> {
+    /// Apply the reaction at one match `m` of `lhs` into a host (`m.ast()`), producing the derivation
+    /// `host ⇒ product` (the transformed host plus the host↔product comap). DPO: a deleted host atom
+    /// must carry no localized bond the rule does not also delete (else `ApplyError::Dangling`).
+    /// Created atoms/bonds are appended, preserved entities are mutated in place, deleted entities are
+    /// removed (the host renumbers). Molecule-level constraints are added/removed with their entity
+    /// refs re-anchored through the match (lhs → host, created → appended); transact's renumbering
+    /// compacts them on removal.
+    pub fn apply_at<'m>(
+        &self,
+        m: &MoleculeEmbedding<'m>,
+    ) -> Result<ReactionDerivation<'m>, ApplyError> {
         let deltas = self.deltas.clone().canonicalize()?;
         let host = m.ast();
 
@@ -216,7 +221,11 @@ impl ReactionAst {
                             new: new.clone(),
                         })
                     }
-                    StereoAtomDelta::Apply { id, kind, permutation } => {
+                    StereoAtomDelta::Apply {
+                        id,
+                        kind,
+                        permutation,
+                    } => {
                         let host_id = m.host_stereo_atom(*id);
                         let old = StereoConfigurationAst::Kinded(
                             *kind,
@@ -271,7 +280,11 @@ impl ReactionAst {
                             new: new.clone(),
                         })
                     }
-                    StereoBondDelta::Apply { id, kind, permutation } => {
+                    StereoBondDelta::Apply {
+                        id,
+                        kind,
+                        permutation,
+                    } => {
                         let host_id = m.host_stereo_bond(*id);
                         let old = StereoConfigurationAst::Kinded(
                             *kind,
@@ -398,7 +411,10 @@ impl ReactionAst {
         for delta in deltas.iter() {
             match delta {
                 Delta::DativeBond(DativeBondDelta::Add {
-                    donors, acceptor, ast, ..
+                    donors,
+                    acceptor,
+                    ast,
+                    ..
                 }) => {
                     let mut atoms: Vec<AtomRef> = donors.iter().map(|a| atom_ref(*a)).collect();
                     atoms.push(atom_ref(*acceptor));
@@ -408,7 +424,10 @@ impl ReactionAst {
                     });
                 }
                 Delta::DativeBond(DativeBondDelta::Remove {
-                    id, donors, acceptor, ast,
+                    id,
+                    donors,
+                    acceptor,
+                    ast,
                 }) => {
                     let mut atoms: Vec<AtomRef> = donors.iter().map(|a| atom_ref(*a)).collect();
                     atoms.push(atom_ref(*acceptor));
@@ -462,17 +481,26 @@ impl ReactionAst {
                 }) => {
                     overlay_adds.push(Edit::AddStereoAtom {
                         site: atom_ref(*site),
-                        ligands: ligands.iter().map(|l| (atom_ref(l.atom_id), l.kind)).collect(),
+                        ligands: ligands
+                            .iter()
+                            .map(|l| (atom_ref(l.atom_id), l.kind))
+                            .collect(),
                         ast: ast.clone(),
                     });
                 }
                 Delta::StereoAtom(StereoAtomDelta::Remove {
-                    id, site, ligands, ast,
+                    id,
+                    site,
+                    ligands,
+                    ast,
                 }) => {
                     remove_stereo_atom.push((
                         StereoAtomRef::Id(m.host_stereo_atom(*id)),
                         atom_ref(*site),
-                        ligands.iter().map(|l| (atom_ref(l.atom_id), l.kind)).collect(),
+                        ligands
+                            .iter()
+                            .map(|l| (atom_ref(l.atom_id), l.kind))
+                            .collect(),
                         ast.clone(),
                     ));
                 }
@@ -481,17 +509,26 @@ impl ReactionAst {
                 }) => {
                     overlay_adds.push(Edit::AddStereoBond {
                         site: bond_ref(*site),
-                        ligands: ligands.iter().map(|l| (atom_ref(l.atom_id), l.kind)).collect(),
+                        ligands: ligands
+                            .iter()
+                            .map(|l| (atom_ref(l.atom_id), l.kind))
+                            .collect(),
                         ast: ast.clone(),
                     });
                 }
                 Delta::StereoBond(StereoBondDelta::Remove {
-                    id, site, ligands, ast,
+                    id,
+                    site,
+                    ligands,
+                    ast,
                 }) => {
                     remove_stereo_bond.push((
                         StereoBondRef::Id(m.host_stereo_bond(*id)),
                         bond_ref(*site),
-                        ligands.iter().map(|l| (atom_ref(l.atom_id), l.kind)).collect(),
+                        ligands
+                            .iter()
+                            .map(|l| (atom_ref(l.atom_id), l.kind))
+                            .collect(),
                         ast.clone(),
                     ));
                 }
@@ -559,7 +596,12 @@ impl ReactionAst {
                     .map(|i| (DativeBondId(i), m.host_dative_bond(DativeBondId(i))))
                     .collect(),
                 (0..self.lhs.aromatic_systems().count() as u32)
-                    .map(|i| (AromaticSystemId(i), m.host_aromatic_system(AromaticSystemId(i))))
+                    .map(|i| {
+                        (
+                            AromaticSystemId(i),
+                            m.host_aromatic_system(AromaticSystemId(i)),
+                        )
+                    })
                     .collect(),
                 (0..self.lhs.multicenter_bonds().count() as u32)
                     .map(|i| {
@@ -631,7 +673,25 @@ impl ReactionAst {
 
         let mut builder = host.edit();
         builder.transact(edits)?;
-        Ok(builder.build())
+        let product = builder.build();
+
+        // The host↔product comap: preserved host atoms mate to their compacted product id (survivors
+        // keep ascending order), removed atoms are left-exposed, created atoms right-exposed. `induce`
+        // derives the bond and overlay correspondences from this atom map.
+        let removed: HashSet<AtomId> = removed_host_atoms.iter().copied().collect();
+        let mut atom_mates: Vec<(NodeId, NodeId)> = Vec::new();
+        let mut product_atom = 0u32;
+        for host_atom in 0..host.atoms().count() as u32 {
+            if removed.contains(&AtomId(host_atom)) {
+                continue;
+            }
+            atom_mates.push((NodeId(host_atom), NodeId(product_atom)));
+            product_atom += 1;
+        }
+        let atom_map =
+            Correspondence::new(atom_mates, host.atoms().count(), product.atoms().count());
+        let comap = MoleculeCorrespondence::induce(host, &product, atom_map);
+        Ok(ReactionDerivation::new(host, product, comap))
     }
 
     /// Every product of applying the reaction to `host`: one per injective match of `lhs` into
@@ -641,7 +701,7 @@ impl ReactionAst {
         &'h self,
         host: &'h MoleculeAst,
         subiso: SubgraphIsomorphismAlgorithm,
-    ) -> impl Iterator<Item = MoleculeAst> + 'h {
+    ) -> impl Iterator<Item = ReactionDerivation<'h>> + 'h {
         self.lhs
             .substructure_matches(host, SubstructureMatchAlgorithm::GraphAndOverlays, subiso)
             .into_iter()
@@ -802,7 +862,7 @@ mod tests {
             vec![],
             vec![],
         );
-        assert_eq!(reaction.apply_at(&embedding).unwrap(), expected);
+        assert_eq!(reaction.apply_at(&embedding).unwrap().rhs(), &expected);
     }
 
     #[rstest]
@@ -849,10 +909,10 @@ mod tests {
             vec![],
         );
         assert_eq!(
-            reaction.apply_at(&embedding),
-            Err(ApplyError::Dangling {
+            reaction.apply_at(&embedding).unwrap_err(),
+            ApplyError::Dangling {
                 host_atom: AtomId(0),
-            }),
+            },
         );
     }
 
@@ -868,12 +928,12 @@ mod tests {
                 ],
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ),
-            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
-                MoleculeConstraint::ChargeSum {
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
+                Constraint::Molecule(MoleculeConstraint::ChargeSum {
                     atoms: Some(vec![AtomId(0), AtomId(1)]),
                     sum: ValueAst::Lit(0),
-                },
-            )))]),
+                }),
+            ))]),
         );
         let host = MoleculeAst::from_atoms_and_bonds(
             vec![
@@ -899,7 +959,7 @@ mod tests {
         );
         let result = reaction.apply_at(&embedding).unwrap();
         assert_eq!(
-            result.constraints(),
+            result.rhs().constraints(),
             &Constraints::from(Constraint::Molecule(MoleculeConstraint::ChargeSum {
                 atoms: Some(vec![AtomId(1), AtomId(2)]),
                 sum: ValueAst::Lit(0),
@@ -934,6 +994,7 @@ mod tests {
         );
         let products: Vec<MoleculeAst> = reaction
             .apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
+            .map(|derivation| derivation.rhs().clone())
             .collect();
         assert_eq!(
             products,
@@ -945,5 +1006,56 @@ mod tests {
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
             )],
         );
+    }
+
+    #[rstest]
+    fn test_reaction_ast_apply_at_comap() {
+        // Remove atom O (id 1) and its bond: host C-O ⇒ product C. Atom 0 is preserved (mated), atom
+        // 1 is deleted (left-exposed), so the comap's atom map records exactly that.
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::O),
+                ],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ),
+            Deltas::from_iter([
+                Delta::Bond(BondDelta::Remove {
+                    id: BondId(0),
+                    atoms: [AtomId(0), AtomId(1)],
+                    ast: BondAst::from_order(1),
+                }),
+                Delta::Atom(AtomDelta::Remove {
+                    id: AtomId(1),
+                    ast: AtomAst::from_element(Element::O),
+                }),
+            ]),
+        );
+        let host = MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        );
+        let embedding = MoleculeEmbedding::from_match(
+            &host,
+            &reaction.lhs,
+            vec![AtomId(0), AtomId(1)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+        let derivation = reaction.apply_at(&embedding).unwrap();
+        assert_eq!(
+            derivation.rhs(),
+            &MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], vec![])
+        );
+        assert_eq!(derivation.atom_map().mates(), &[(NodeId(0), NodeId(0))]);
+        assert_eq!(derivation.atom_map().left_exposed(), vec![NodeId(1)]);
     }
 }

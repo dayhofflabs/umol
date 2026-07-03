@@ -1200,9 +1200,16 @@ mod tests {
             view.topicity(StereoLigandPosition(0), StereoLigandPosition(1), &symmetry),
             Topicity::Diastereotopic,
         );
-        assert!(view.is_diastereotopic(StereoLigandPosition(0), StereoLigandPosition(1), &symmetry));
+        assert!(view.is_diastereotopic(
+            StereoLigandPosition(0),
+            StereoLigandPosition(1),
+            &symmetry
+        ));
         assert_eq!(view.ligand_symmetry(&symmetry).order(), 1);
-        assert_eq!(view.ligand_position(AtomId(2)), Some(StereoLigandPosition(1)));
+        assert_eq!(
+            view.ligand_position(AtomId(2)),
+            Some(StereoLigandPosition(1))
+        );
         assert_eq!(view.ligand_position(AtomId(99)), None);
         assert_eq!(view.ligand_frame().len(), 4);
     }

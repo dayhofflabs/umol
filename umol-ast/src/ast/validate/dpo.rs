@@ -18,7 +18,7 @@ use umol_graph_core::{EdgeId, RelationId};
 use umol_utils::solution::Solution;
 
 use super::super::delta::{
-    AtomDelta, BondDelta, Delta, Deltas, DativeBondDelta, EntitySpan, AromaticSystemDelta,
+    AromaticSystemDelta, AtomDelta, BondDelta, DativeBondDelta, Delta, Deltas, EntitySpan,
     MulticenterBondDelta, NoncovalentBondDelta,
 };
 use super::super::id::{
@@ -102,7 +102,10 @@ impl DpoValidator {
             }
             if let Some(system) = view.aromatic_system_id() {
                 if !removed_aromatic.contains(&system) {
-                    return contradiction(DpoContradiction::DanglingAromaticSystem { atom, system });
+                    return contradiction(DpoContradiction::DanglingAromaticSystem {
+                        atom,
+                        system,
+                    });
                 }
             }
             for multicenter in view.multicenter_bond_ids() {
@@ -227,13 +230,13 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element;
 
+    use super::super::super::aromatic::AromaticSystemAst;
     use super::super::super::atom::AtomAst;
     use super::super::super::bond::BondAst;
     use super::super::super::constraint::Constraints;
     use super::super::super::dative::DativeBondAst;
-    use super::super::super::aromatic::AromaticSystemAst;
-    use super::super::super::multicenter::MulticenterBondAst;
     use super::super::super::molecule::MoleculeAst;
+    use super::super::super::multicenter::MulticenterBondAst;
     use super::super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use super::*;
 
@@ -369,7 +372,10 @@ mod tests {
     fn test_dpo_validator_validate_reaction_span() {
         let span = ReactionAst::new(
             MoleculeAst::from_atoms_and_bonds(
-                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::O),
+                ],
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ),
             Deltas::from_iter([
@@ -398,7 +404,10 @@ mod tests {
         // bond.
         let span = ReactionAst::new(
             MoleculeAst::from_atoms_and_bonds(
-                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::O),
+                ],
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {

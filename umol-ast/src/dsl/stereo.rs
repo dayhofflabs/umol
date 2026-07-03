@@ -1549,9 +1549,7 @@ macro_rules! stereo_constraint_dsl {
                     $constraint::LigandSymmetry(ls) => {
                         ("ligand-symmetry", render_edn_ligand_symmetry(ls))
                     }
-                    $constraint::Fluxionality(f) => {
-                        ("fluxionality", render_edn_fluxionality(f))
-                    }
+                    $constraint::Fluxionality(f) => ("fluxionality", render_edn_fluxionality(f)),
                     $constraint::Topicity(t) => ("topicity", TopicityDsl(t.clone()).to_edn()),
                     $constraint::Stereogenicity(g) => {
                         ("stereogenicity", StereogenicityDsl(g.clone()).to_edn())
@@ -1857,7 +1855,10 @@ mod tests {
     /// corpus against notation rot.
     #[rstest]
     fn test_fuzz_entity_strings_stereo_seeds_valid() {
-        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fuzz/seeds/fuzz_entity_strings");
+        let dir = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/fuzz/seeds/fuzz_entity_strings"
+        );
         let mut failures: Vec<String> = Vec::new();
         for entry in fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
@@ -1874,7 +1875,11 @@ mod tests {
                 failures.push(format!("{name}: {e:?}"));
             }
         }
-        assert!(failures.is_empty(), "invalid stereo seeds:\n{}", failures.join("\n"));
+        assert!(
+            failures.is_empty(),
+            "invalid stereo seeds:\n{}",
+            failures.join("\n")
+        );
     }
 
     #[rustfmt::skip]

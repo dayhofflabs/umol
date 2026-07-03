@@ -11,9 +11,9 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    compact_edge_vec, compact_node_vec, EdgeId, FactorOrdering, FixedRelationSet,
-    FixedVarBirelationSet, Graph, NodeId, Ordered, RelationId, RelationParticipant, Compaction,
-    Unordered, VarRelationSet,
+    compact_edge_vec, compact_node_vec, Compaction, EdgeId, FactorOrdering, FixedRelationSet,
+    FixedVarBirelationSet, Graph, NodeId, Ordered, RelationId, RelationParticipant, Unordered,
+    VarRelationSet,
 };
 
 use super::super::aromatic::AromaticSystemAst;
@@ -216,8 +216,10 @@ where
                 let compacted: Vec<(Vec<P>, D)> = vec
                     .into_iter()
                     .filter_map(|(participants, d)| {
-                        let mapped: Option<Vec<P>> =
-                            participants.into_iter().map(|p| p.compact(compaction)).collect();
+                        let mapped: Option<Vec<P>> = participants
+                            .into_iter()
+                            .map(|p| p.compact(compaction))
+                            .collect();
                         mapped.map(|p| (p, d))
                     })
                     .collect();
@@ -330,8 +332,10 @@ where
                         for slot in &mut participants_1 {
                             *slot = (*slot).compact(compaction)?;
                         }
-                        let participants_2: Option<Vec<L2>> =
-                            participants_2.into_iter().map(|p| p.compact(compaction)).collect();
+                        let participants_2: Option<Vec<L2>> = participants_2
+                            .into_iter()
+                            .map(|p| p.compact(compaction))
+                            .collect();
                         Some((participants_1, participants_2?, d))
                     })
                     .collect();
@@ -433,7 +437,10 @@ where
     let graph = undo_compaction.forward().graph();
     (
         participants_1.map(|p| p.uncompact(graph)),
-        participants_2.into_iter().map(|p| p.uncompact(graph)).collect(),
+        participants_2
+            .into_iter()
+            .map(|p| p.uncompact(graph))
+            .collect(),
     )
 }
 

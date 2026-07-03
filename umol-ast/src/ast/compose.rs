@@ -158,7 +158,7 @@ fn compose_all(
         return None;
     }
     let span_a = a.to_reaction_span().ok()?;
-    let r_a = span_a.right();
+    let r_a = span_a.rhs();
     let l_b = &b.lhs;
     let n_a = a.lhs.atoms().count();
     let m_a = a.lhs.bonds().count();
@@ -172,18 +172,16 @@ fn compose_all(
         .atoms()
         .iter()
         .enumerate()
-        .filter(|(_, change)| change.right().is_some())
+        .filter(|(_, change)| change.rhs().is_some())
         .map(|(a_id, _)| a_id)
         .collect();
     let mut ra_bond_a_id: Vec<usize> = Vec::new();
     for (a_id, change) in span_a.bonds().iter().enumerate() {
-        if change.right().is_none() {
+        if change.rhs().is_none() {
             continue;
         }
         let [x, y] = span_a.graph().edge_endpoints(EdgeId(a_id as u32));
-        if span_a.atoms()[x.index()].right().is_some()
-            && span_a.atoms()[y.index()].right().is_some()
-        {
+        if span_a.atoms()[x.index()].rhs().is_some() && span_a.atoms()[y.index()].rhs().is_some() {
             ra_bond_a_id.push(a_id);
         }
     }
@@ -531,7 +529,8 @@ fn compose_all(
             }
             if !dangling {
                 for od in r_a.atom(ru).dative_bond_ids() {
-                    if overlay_dangles(r_a.dative_bond(od).atom_ids().collect(), &b_removed_dative) {
+                    if overlay_dangles(r_a.dative_bond(od).atom_ids().collect(), &b_removed_dative)
+                    {
                         dangling = true;
                         break;
                     }
@@ -716,7 +715,8 @@ fn compose_all(
                 let acceptor = x.acceptor_id();
                 let atoms: Vec<AtomId> = x.atom_ids().collect();
                 let in_overlap = atoms.iter().all(|a| overlap_lb.contains(a));
-                let donors: Vec<AtomId> = atoms.iter().copied().filter(|a| *a != acceptor).collect();
+                let donors: Vec<AtomId> =
+                    atoms.iter().copied().filter(|a| *a != acceptor).collect();
                 let mut key: Vec<AtomId> = atoms.iter().map(|a| db_atom[a]).collect();
                 key.sort();
                 (x.id, key, (donors, acceptor, x.ast.clone()), in_overlap)
@@ -845,15 +845,15 @@ fn compose_all(
         a_created_m.sort_by_key(|(id, _)| *id);
         let lb_m = l_b
             .multicenter_bonds()
-                .iter()
-                .map(|x| {
-                    let atoms: Vec<AtomId> = x.atom_ids().collect();
-                    let in_overlap = atoms.iter().all(|a| overlap_lb.contains(a));
-                    let mut key: Vec<AtomId> = atoms.iter().map(|a| db_atom[a]).collect();
-                    key.sort();
-                    (x.id, key, (atoms, x.ast.clone()), in_overlap)
-                })
-                .collect();
+            .iter()
+            .map(|x| {
+                let atoms: Vec<AtomId> = x.atom_ids().collect();
+                let in_overlap = atoms.iter().all(|a| overlap_lb.contains(a));
+                let mut key: Vec<AtomId> = atoms.iter().map(|a| db_atom[a]).collect();
+                key.sort();
+                (x.id, key, (atoms, x.ast.clone()), in_overlap)
+            })
+            .collect();
         let mut b_created_m: Vec<MulticenterBondId> = db
             .iter()
             .filter_map(|d| match d {
@@ -912,15 +912,15 @@ fn compose_all(
         a_created_n.sort_by_key(|(id, _)| *id);
         let lb_n = l_b
             .noncovalent_bonds()
-                .iter()
-                .map(|x| {
-                    let [u, v] = x.atom_ids();
-                    let in_overlap = overlap_lb.contains(&u) && overlap_lb.contains(&v);
-                    let mut key = vec![db_atom[&u], db_atom[&v]];
-                    key.sort();
-                    (x.id, key, (u, v, x.ast.clone()), in_overlap)
-                })
-                .collect();
+            .iter()
+            .map(|x| {
+                let [u, v] = x.atom_ids();
+                let in_overlap = overlap_lb.contains(&u) && overlap_lb.contains(&v);
+                let mut key = vec![db_atom[&u], db_atom[&v]];
+                key.sort();
+                (x.id, key, (u, v, x.ast.clone()), in_overlap)
+            })
+            .collect();
         let mut b_created_n: Vec<NoncovalentBondId> = db
             .iter()
             .filter_map(|d| match d {
@@ -996,7 +996,9 @@ mod tests {
 
     use super::super::constraint::Constraints;
     use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange};
-    use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
+    use super::super::noncovalent::{
+        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
+    };
     use super::super::value::ValueAst;
     use super::*;
 
@@ -1733,26 +1735,41 @@ mod tests {
         // compose(A,B).apply(H) == B.apply(A.apply(H)): C-O 1→2 then 2→3 on host C-O order 1.
         let a = ReactionAst::new(
             MoleculeAst::from_atoms_and_bonds(
-                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::O),
+                ],
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+                change: BondFieldChange::Order {
+                    old: ValueAst::Lit(1),
+                    new: ValueAst::Lit(2),
+                },
             })]),
         );
         let b = ReactionAst::new(
             MoleculeAst::from_atoms_and_bonds(
-                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::O),
+                ],
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
             ),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
+                change: BondFieldChange::Order {
+                    old: ValueAst::Lit(2),
+                    new: ValueAst::Lit(3),
+                },
             })]),
         );
         let host = MoleculeAst::from_atoms_and_bonds(
-            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
+            ],
             vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
         );
 
@@ -1760,21 +1777,26 @@ mod tests {
             .compose(&b, CompositionScope::Full)
             .iter()
             .flat_map(|c| c.apply(&host, SubgraphIsomorphismAlgorithm::Vf2))
+            .map(|derivation| derivation.rhs().clone())
             .collect();
         let sequential: Vec<MoleculeAst> = a
             .apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
+            .map(|derivation| derivation.rhs().clone())
             .flat_map(|intermediate| {
                 b.apply(&intermediate, SubgraphIsomorphismAlgorithm::Vf2)
+                    .map(|derivation| derivation.rhs().clone())
                     .collect::<Vec<_>>()
             })
             .collect();
 
         let product = MoleculeAst::from_atoms_and_bonds(
-            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
+            ],
             vec![(AtomId(0), AtomId(1), BondAst::from_order(3))],
         );
         assert_eq!(composed, vec![product.clone()]);
         assert_eq!(sequential, vec![product]);
     }
-
 }

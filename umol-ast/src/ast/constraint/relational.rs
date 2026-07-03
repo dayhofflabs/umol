@@ -211,7 +211,10 @@ impl RelationalConstraint {
         Some(match self {
             Self::DativeBondDonors { bond, atoms } => {
                 let bond = compaction.compact_dative_bond(bond)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
+                let atoms: Option<Vec<_>> = atoms
+                    .into_iter()
+                    .map(|a| compaction.compact_atom(a))
+                    .collect();
                 Self::DativeBondDonors {
                     bond,
                     atoms: atoms?,
@@ -223,7 +226,10 @@ impl RelationalConstraint {
             },
             Self::DativeBondContainsAllDonors { bond, atoms } => {
                 let bond = compaction.compact_dative_bond(bond)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
+                let atoms: Option<Vec<_>> = atoms
+                    .into_iter()
+                    .map(|a| compaction.compact_atom(a))
+                    .collect();
                 Self::DativeBondContainsAllDonors {
                     bond,
                     atoms: atoms?,
@@ -253,7 +259,10 @@ impl RelationalConstraint {
             },
             Self::AromaticSystemAtoms { system, atoms } => {
                 let system = compaction.compact_aromatic_system(system)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
+                let atoms: Option<Vec<_>> = atoms
+                    .into_iter()
+                    .map(|a| compaction.compact_atom(a))
+                    .collect();
                 Self::AromaticSystemAtoms {
                     system,
                     atoms: atoms?,
@@ -265,7 +274,10 @@ impl RelationalConstraint {
             },
             Self::AromaticSystemContainsAll { system, atoms } => {
                 let system = compaction.compact_aromatic_system(system)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
+                let atoms: Option<Vec<_>> = atoms
+                    .into_iter()
+                    .map(|a| compaction.compact_atom(a))
+                    .collect();
                 Self::AromaticSystemContainsAll {
                     system,
                     atoms: atoms?,
@@ -281,7 +293,10 @@ impl RelationalConstraint {
             },
             Self::MulticenterBondAtoms { bond, atoms } => {
                 let bond = compaction.compact_multicenter_bond(bond)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
+                let atoms: Option<Vec<_>> = atoms
+                    .into_iter()
+                    .map(|a| compaction.compact_atom(a))
+                    .collect();
                 Self::MulticenterBondAtoms {
                     bond,
                     atoms: atoms?,
@@ -293,7 +308,10 @@ impl RelationalConstraint {
             },
             Self::MulticenterBondContainsAll { bond, atoms } => {
                 let bond = compaction.compact_multicenter_bond(bond)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
+                let atoms: Option<Vec<_>> = atoms
+                    .into_iter()
+                    .map(|a| compaction.compact_atom(a))
+                    .collect();
                 Self::MulticenterBondContainsAll {
                     bond,
                     atoms: atoms?,
@@ -335,7 +353,10 @@ impl RelationalConstraint {
             },
             Self::StereoAtomLigands { stereo_atom, atoms } => {
                 let stereo_atom = compaction.compact_stereo_atom(stereo_atom)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
+                let atoms: Option<Vec<_>> = atoms
+                    .into_iter()
+                    .map(|a| compaction.compact_atom(a))
+                    .collect();
                 Self::StereoAtomLigands {
                     stereo_atom,
                     atoms: atoms?,
@@ -365,7 +386,10 @@ impl RelationalConstraint {
             },
             Self::StereoBondLigands { stereo_bond, atoms } => {
                 let stereo_bond = compaction.compact_stereo_bond(stereo_bond)?;
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| compaction.compact_atom(a)).collect();
+                let atoms: Option<Vec<_>> = atoms
+                    .into_iter()
+                    .map(|a| compaction.compact_atom(a))
+                    .collect();
                 Self::StereoBondLigands {
                     stereo_bond,
                     atoms: atoms?,
@@ -436,12 +460,10 @@ impl RelationalConstraint {
                 system: map.map_aromatic(system),
                 atom: map.map_atom(atom),
             },
-            Self::AromaticSystemContainsAll { system, atoms } => {
-                Self::AromaticSystemContainsAll {
-                    system: map.map_aromatic(system),
-                    atoms: atoms.into_iter().map(|a| map.map_atom(a)).collect(),
-                }
-            }
+            Self::AromaticSystemContainsAll { system, atoms } => Self::AromaticSystemContainsAll {
+                system: map.map_aromatic(system),
+                atoms: atoms.into_iter().map(|a| map.map_atom(a)).collect(),
+            },
             Self::AromaticSystemAllAtoms { system, predicate } => Self::AromaticSystemAllAtoms {
                 system: map.map_aromatic(system),
                 predicate,
@@ -458,12 +480,10 @@ impl RelationalConstraint {
                 bond: map.map_multicenter(bond),
                 atom: map.map_atom(atom),
             },
-            Self::MulticenterBondContainsAll { bond, atoms } => {
-                Self::MulticenterBondContainsAll {
-                    bond: map.map_multicenter(bond),
-                    atoms: atoms.into_iter().map(|a| map.map_atom(a)).collect(),
-                }
-            }
+            Self::MulticenterBondContainsAll { bond, atoms } => Self::MulticenterBondContainsAll {
+                bond: map.map_multicenter(bond),
+                atoms: atoms.into_iter().map(|a| map.map_atom(a)).collect(),
+            },
             Self::MulticenterBondAllAtoms { bond, predicate } => Self::MulticenterBondAllAtoms {
                 bond: map.map_multicenter(bond),
                 predicate,
@@ -645,7 +665,7 @@ impl Canonicalize for RelationalConstraint {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{RelationId, Compaction};
+    use umol_graph_core::{Compaction, RelationId};
 
     use super::*;
     use crate::ast::value::ValueAst;

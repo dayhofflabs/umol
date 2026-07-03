@@ -432,8 +432,10 @@ impl StereoSymmetry {
         let degree = self.kind.degree();
         (0..degree).any(|a| {
             (a + 1..degree).any(|b| {
-                self.topicity(StereoLigandPosition(a as u32), StereoLigandPosition(b as u32))
-                    == Topicity::Enantiotopic
+                self.topicity(
+                    StereoLigandPosition(a as u32),
+                    StereoLigandPosition(b as u32),
+                ) == Topicity::Enantiotopic
             })
         })
     }

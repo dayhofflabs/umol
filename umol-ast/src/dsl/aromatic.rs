@@ -272,7 +272,9 @@ impl Display for PartialAromaticSystemDsl {
 impl<'de> FromEdn<'de> for PartialAromaticSystemDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
-            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("aromatic-system", e)),
+            Edn::Str(s) => s
+                .parse()
+                .map_err(|e| DeError::subgrammar("aromatic-system", e)),
             other => Err(DeError::TypeMismatch {
                 expected: "string",
                 got: other.kind(),

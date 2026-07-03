@@ -10,9 +10,8 @@ use umol_ast::ast::{
     DativeBondConstraint, DativeBondDelta, DativeBondFieldChange, Delta, Deltas, DpoValidator,
     MulticenterBondDelta, MulticenterBondFieldChange, NoncovalentBondAst, NoncovalentBondDelta,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, ReactionAst, ReactionSpanAst,
-    StereoAtomAst,
-    StereoAtomDelta, StereoAtomFieldChange, StereoBondAst, StereoBondDelta, StereoBondFieldChange,
-    StereoConfigurationAst, StereoKind, StereoLigand,
+    StereoAtomAst, StereoAtomDelta, StereoAtomFieldChange, StereoBondAst, StereoBondDelta,
+    StereoBondFieldChange, StereoConfigurationAst, StereoKind, StereoLigand,
 };
 use umol_graph_core::{EdgeId, SubgraphIsomorphismAlgorithm};
 use umol_perm::Permutation;
@@ -196,7 +195,10 @@ fn stereo_coset_for_kind(kind: StereoKind) -> impl Strategy<Value = StereoCosetA
 /// match — hence ligands must be unique. Real-atom ligands come first (distinct atoms); virtual
 /// implicit-H / lone-pair fills pad by distinct `(atom, kind)` pairs. A frame of `degree` unique
 /// ligands needs `atom_count * 3 >= degree`, so callers gate on `atom_count`.
-fn unique_ligand_frame(atom_count: usize, degree: usize) -> impl Strategy<Value = Vec<StereoLigand>> {
+fn unique_ligand_frame(
+    atom_count: usize,
+    degree: usize,
+) -> impl Strategy<Value = Vec<StereoLigand>> {
     let pool: Vec<StereoLigand> = (0..atom_count as u32)
         .flat_map(|a| {
             [
@@ -208,12 +210,10 @@ fn unique_ligand_frame(atom_count: usize, degree: usize) -> impl Strategy<Value 
             .map(move |kind| StereoLigand::new(AtomId(a), kind))
         })
         .collect();
-    Just(pool)
-        .prop_shuffle()
-        .prop_map(move |mut pool| {
-            pool.truncate(degree);
-            pool
-        })
+    Just(pool).prop_shuffle().prop_map(move |mut pool| {
+        pool.truncate(degree);
+        pool
+    })
 }
 
 /// 0..=1 tetrahedral stereo atoms over an `atom_count`-atom molecule (needs `atom_count >= 2` for a
@@ -321,7 +321,9 @@ fn stereo_op_strategy(kind: StereoKind) -> impl Strategy<Value = Option<StereoOp
 /// incident bonds, overlays, and stereo entities), per-surviving-entity optional field / relative
 /// edits (the absolute `old` read from `lhs`, so apply's precondition holds), plus up to two new
 /// atoms bonded to the lowest survivor. No dangling by construction.
-fn reaction_over(molecule: impl Strategy<Value = MoleculeAst>) -> impl Strategy<Value = ReactionAst> {
+fn reaction_over(
+    molecule: impl Strategy<Value = MoleculeAst>,
+) -> impl Strategy<Value = ReactionAst> {
     molecule
         .prop_flat_map(|lhs| {
             let atom_count = lhs.atoms().count();
@@ -538,8 +540,13 @@ fn build_reaction(
         }
     }
     // Part A — overlay `ModifyField` on survivors: read `old` from `lhs`, emit only when it changes.
-    let (dative_orders, aromatic_charges, multicenter_charges, dative_aromatic_flags, add_noncovalent) =
-        overlay_ops;
+    let (
+        dative_orders,
+        aromatic_charges,
+        multicenter_charges,
+        dative_aromatic_flags,
+        add_noncovalent,
+    ) = overlay_ops;
     for (index, new_order) in dative_orders.into_iter().enumerate() {
         let id = DativeBondId(index as u32);
         if removed_dative.contains(&id) {
@@ -729,8 +736,8 @@ proptest! {
     #[test]
     fn test_reaction_ast_apply_reproduces_right(reaction in reaction_strategy()) {
         if let Ok(span) = reaction.to_reaction_span() {
-            let right = span.right();
-            prop_assert!(reaction.apply(&reaction.lhs, ALG).any(|product| product == right));
+            let right = span.rhs();
+            prop_assert!(reaction.apply(&reaction.lhs, ALG).any(|derivation| derivation.rhs() == &right));
         }
     }
 
@@ -741,7 +748,7 @@ proptest! {
     fn test_reaction_span_ast_superimpose_matches_delta_path(reaction in reaction_strategy()) {
         if let Ok(span) = reaction.to_reaction_span() {
             let rebuilt =
-                ReactionSpanAst::superimpose(&span.left(), &span.right(), &span.correspondence());
+                ReactionSpanAst::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
             prop_assert_eq!(rebuilt, span);
         }
     }
@@ -754,9 +761,9 @@ proptest! {
     fn test_reaction_ast_reverse_swaps_sides(reaction in reaction_strategy()) {
         if let (Ok(span), Ok(reverse)) = (reaction.to_reaction_span(), reaction.reverse()) {
             if let Ok(reverse_span) = reverse.to_reaction_span() {
-                prop_assert_eq!(reverse_span.left(), span.right());
-                let forward_reactant = span.left();
-                let reverse_product = reverse_span.right();
+                prop_assert_eq!(reverse_span.lhs(), span.rhs());
+                let forward_reactant = span.lhs();
+                let reverse_product = reverse_span.rhs();
                 prop_assert_eq!(
                     reverse_product.atoms().count(),
                     forward_reactant.atoms().count()
@@ -778,8 +785,8 @@ proptest! {
     ) {
         for composite in a.compose(&b, CompositionScope::Full) {
             if let Ok(span) = composite.to_reaction_span() {
-                let right = span.right();
-                prop_assert!(composite.apply(&composite.lhs, ALG).any(|product| product == right));
+                let right = span.rhs();
+                prop_assert!(composite.apply(&composite.lhs, ALG).any(|derivation| derivation.rhs() == &right));
             }
         }
     }
@@ -796,12 +803,19 @@ proptest! {
         let composed: Vec<MoleculeAst> = composites
             .iter()
             .flat_map(|composite| composite.apply(&host, ALG))
+            .map(|derivation| derivation.rhs().clone())
             .collect();
 
-        let intermediates: Vec<MoleculeAst> = a.apply(&host, ALG).collect();
+        let intermediates: Vec<MoleculeAst> = a
+            .apply(&host, ALG)
+            .map(|derivation| derivation.rhs().clone())
+            .collect();
         let mut sequential: Vec<MoleculeAst> = Vec::new();
         for intermediate in &intermediates {
-            sequential.extend(b.apply(intermediate, ALG));
+            sequential.extend(
+                b.apply(intermediate, ALG)
+                    .map(|derivation| derivation.rhs().clone()),
+            );
         }
 
         for product in &composed {
@@ -831,8 +845,8 @@ proptest! {
     #[test]
     fn test_reaction_ast_apply_reproduces_right_overlay(reaction in overlay_reaction_strategy()) {
         if let Ok(span) = reaction.to_reaction_span() {
-            let right = span.right();
-            prop_assert!(reaction.apply(&reaction.lhs, ALG).any(|product| product == right));
+            let right = span.rhs();
+            prop_assert!(reaction.apply(&reaction.lhs, ALG).any(|derivation| derivation.rhs() == &right));
         }
     }
 
@@ -844,7 +858,7 @@ proptest! {
     ) {
         if let Ok(span) = reaction.to_reaction_span() {
             let rebuilt =
-                ReactionSpanAst::superimpose(&span.left(), &span.right(), &span.correspondence());
+                ReactionSpanAst::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
             prop_assert_eq!(rebuilt, span);
         }
     }
@@ -860,8 +874,8 @@ proptest! {
     ) {
         for composite in a.compose(&b, CompositionScope::Full) {
             if let Ok(span) = composite.to_reaction_span() {
-                let right = span.right();
-                prop_assert!(composite.apply(&composite.lhs, ALG).any(|product| product == right));
+                let right = span.rhs();
+                prop_assert!(composite.apply(&composite.lhs, ALG).any(|derivation| derivation.rhs() == &right));
             }
         }
     }
@@ -878,12 +892,19 @@ proptest! {
             .compose(&b, CompositionScope::Full)
             .iter()
             .flat_map(|composite| composite.apply(&host, ALG))
+            .map(|derivation| derivation.rhs().clone())
             .collect();
 
-        let intermediates: Vec<MoleculeAst> = a.apply(&host, ALG).collect();
+        let intermediates: Vec<MoleculeAst> = a
+            .apply(&host, ALG)
+            .map(|derivation| derivation.rhs().clone())
+            .collect();
         let mut sequential: Vec<MoleculeAst> = Vec::new();
         for intermediate in &intermediates {
-            sequential.extend(b.apply(intermediate, ALG));
+            sequential.extend(
+                b.apply(intermediate, ALG)
+                    .map(|derivation| derivation.rhs().clone()),
+            );
         }
 
         for product in &composed {
@@ -916,12 +937,19 @@ proptest! {
             .compose(&b, CompositionScope::Full)
             .iter()
             .flat_map(|composite| composite.apply(&host, ALG))
+            .map(|derivation| derivation.rhs().clone())
             .collect();
 
-        let intermediates: Vec<MoleculeAst> = a.apply(&host, ALG).collect();
+        let intermediates: Vec<MoleculeAst> = a
+            .apply(&host, ALG)
+            .map(|derivation| derivation.rhs().clone())
+            .collect();
         let mut sequential: Vec<MoleculeAst> = Vec::new();
         for intermediate in &intermediates {
-            sequential.extend(b.apply(intermediate, ALG));
+            sequential.extend(
+                b.apply(intermediate, ALG)
+                    .map(|derivation| derivation.rhs().clone()),
+            );
         }
 
         for product in &sequential {

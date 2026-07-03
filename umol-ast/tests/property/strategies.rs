@@ -11,28 +11,28 @@ pub(crate) use std::ops::RangeInclusive;
 use proptest::prelude::*;
 pub(crate) use umol_ast::ast::{
     AddBond, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKind,
-    AromaticSystemConstraints, AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint,
-    AromaticSystemRef, AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomId, AtomRef,
-    BondAst, BondConstraint, BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef,
+    AromaticSystemConstraints, AromaticSystemId, AromaticSystemRef, AromaticValenceAst, AtomAst,
+    AtomConstraint, AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomId, AtomRef, BondAst,
+    BondConstraint, BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef,
     BooleanAst, Canonicalize, CisTransStereoAst, Constraint, Constraints, DativeBondAst,
     DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints, DativeBondId,
     DativeBondRef, Edit, ElectronCountsAst, ElementAst, FluxionalityAst, IsotopeMassAst, Lattice,
-    LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint, MulticenterBondAst,
-    MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
-    MulticenterBondId, MulticenterBondRef, MulticenterValenceAst, NoncovalentBondAst,
-    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondRef, NoncovalentBondKindAst,
-    OrientedLigandPermutation, RelOp, RelationalConstraint, RingScope,
+    LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint,
+    MulticenterBondAst, MulticenterBondConstraint, MulticenterBondConstraintKind,
+    MulticenterBondConstraints, MulticenterBondId, MulticenterBondRef, MulticenterValenceAst,
+    NoncovalentBondAst, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst,
+    NoncovalentBondRef, OrientedLigandPermutation, RelOp, RelationalConstraint, RingScope,
     SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomConstraints, StereoAtomId,
     StereoBondAst, StereoBondConstraint, StereoBondConstraints, StereoBondId,
-    StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigand, StereoLigandPosition,
-    StereoLigandKind, StereoLigandPair, Stereogenicity, StereogenicityAst, SubPatternAnchor,
+    StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind,
+    StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
     TetrahedralStereoAst, Topicity, TopicityAst, TopicityRelationAst, ValueAst, ValuePredicate,
     ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, MoleculeDsl, MoleculeMetadata,
-    MulticenterBondDsl, NoncovalentBondDsl, PartialAtomDsl, PartialBondDsl, StereoAtomConstraintDsl,
-    StereoAtomDsl, StereoBondConstraintDsl, StereoBondDsl, ValueDsl,
+    MulticenterBondDsl, NoncovalentBondDsl, PartialAtomDsl, PartialBondDsl,
+    StereoAtomConstraintDsl, StereoAtomDsl, StereoBondConstraintDsl, StereoBondDsl, ValueDsl,
 };
 pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
@@ -2066,7 +2066,10 @@ pub(crate) fn overlay_transaction_base() -> MoleculeAst {
     let dative = (0..2)
         .map(|i| {
             (
-                DATIVE_DONORS[i].iter().map(|&a| AtomId(a)).collect::<Vec<_>>(),
+                DATIVE_DONORS[i]
+                    .iter()
+                    .map(|&a| AtomId(a))
+                    .collect::<Vec<_>>(),
                 AtomId(DATIVE_ACCEPTORS[i]),
                 DativeBondAst::from_order(1),
             )
@@ -2074,11 +2077,21 @@ pub(crate) fn overlay_transaction_base() -> MoleculeAst {
         .collect();
     let aromatic = AROMATIC_SETS
         .iter()
-        .map(|set| (set.iter().map(|&a| AtomId(a)).collect::<Vec<_>>(), AromaticSystemAst::default()))
+        .map(|set| {
+            (
+                set.iter().map(|&a| AtomId(a)).collect::<Vec<_>>(),
+                AromaticSystemAst::default(),
+            )
+        })
         .collect();
     let multicenter = MULTICENTER_SETS
         .iter()
-        .map(|set| (set.iter().map(|&a| AtomId(a)).collect::<Vec<_>>(), MulticenterBondAst::default()))
+        .map(|set| {
+            (
+                set.iter().map(|&a| AtomId(a)).collect::<Vec<_>>(),
+                MulticenterBondAst::default(),
+            )
+        })
         .collect();
     let noncovalent = NONCOVALENT_PAIRS
         .iter()
@@ -2122,108 +2135,127 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
     )
         .prop_map(
             |(rm_ar, rm_mc, rm_dv, rm_nc, add, mod_at, rm_at, con_ar, con_mc)| {
-            let mut edits: Vec<Edit> = Vec::new();
-            if add > 0 {
-                edits.push(Edit::AddAtoms {
-                    atoms: (0..add).map(|_| AtomAst::from_element(Element::C)).collect(),
-                });
-            }
-            // Base carbons carry the default (`Undetermined`) charge, so that is the `old` value.
-            for i in (0..6).filter(|&i| mod_at[i]) {
-                edits.push(Edit::ModifyAtomField {
-                    id: AtomRef::Id(AtomId(i as u32)),
-                    change: AtomFieldChange::Charge {
-                        old: ValueAst::default(),
-                        new: ValueAst::Lit(1),
-                    },
-                });
-            }
-            // Molecule-level constraints referencing overlays, added before the removals so that
-            // removing a referenced overlay exercises constraint drop/remap + its rollback restore.
-            for i in (0..2).filter(|&i| con_ar[i]) {
-                edits.push(Edit::AddMoleculeConstraint {
-                    constraint: Constraint::AromaticSystem(
-                        AromaticSystemId(i as u32),
-                        AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6)),
-                    ),
-                });
-            }
-            for i in (0..2).filter(|&i| con_mc[i]) {
-                edits.push(Edit::AddMoleculeConstraint {
-                    constraint: Constraint::MulticenterBond(
-                        MulticenterBondId(i as u32),
-                        MulticenterBondConstraint::ElectronCount(ValueAst::Lit(4)),
-                    ),
-                });
-            }
-            let dative: Vec<_> = (0..2)
-                .filter(|&i| rm_dv[i])
-                .map(|i| {
-                    let mut atoms: Vec<AtomRef> =
-                        DATIVE_DONORS[i].iter().map(|&a| AtomRef::Id(AtomId(a))).collect();
-                    atoms.push(AtomRef::Id(AtomId(DATIVE_ACCEPTORS[i])));
-                    (DativeBondRef::Id(DativeBondId(i as u32)), atoms, DativeBondAst::from_order(1))
-                })
-                .collect();
-            if !dative.is_empty() {
-                edits.push(Edit::RemoveDativeBonds { removes: dative });
-            }
-            let aromatic: Vec<_> = (0..2)
-                .filter(|&i| rm_ar[i])
-                .map(|i| {
-                    let atoms = AROMATIC_SETS[i].iter().map(|&a| AtomRef::Id(AtomId(a))).collect();
-                    (
-                        AromaticSystemRef::Id(AromaticSystemId(i as u32)),
+                let mut edits: Vec<Edit> = Vec::new();
+                if add > 0 {
+                    edits.push(Edit::AddAtoms {
+                        atoms: (0..add)
+                            .map(|_| AtomAst::from_element(Element::C))
+                            .collect(),
+                    });
+                }
+                // Base carbons carry the default (`Undetermined`) charge, so that is the `old` value.
+                for i in (0..6).filter(|&i| mod_at[i]) {
+                    edits.push(Edit::ModifyAtomField {
+                        id: AtomRef::Id(AtomId(i as u32)),
+                        change: AtomFieldChange::Charge {
+                            old: ValueAst::default(),
+                            new: ValueAst::Lit(1),
+                        },
+                    });
+                }
+                // Molecule-level constraints referencing overlays, added before the removals so that
+                // removing a referenced overlay exercises constraint drop/remap + its rollback restore.
+                for i in (0..2).filter(|&i| con_ar[i]) {
+                    edits.push(Edit::AddMoleculeConstraint {
+                        constraint: Constraint::AromaticSystem(
+                            AromaticSystemId(i as u32),
+                            AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6)),
+                        ),
+                    });
+                }
+                for i in (0..2).filter(|&i| con_mc[i]) {
+                    edits.push(Edit::AddMoleculeConstraint {
+                        constraint: Constraint::MulticenterBond(
+                            MulticenterBondId(i as u32),
+                            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(4)),
+                        ),
+                    });
+                }
+                let dative: Vec<_> = (0..2)
+                    .filter(|&i| rm_dv[i])
+                    .map(|i| {
+                        let mut atoms: Vec<AtomRef> = DATIVE_DONORS[i]
+                            .iter()
+                            .map(|&a| AtomRef::Id(AtomId(a)))
+                            .collect();
+                        atoms.push(AtomRef::Id(AtomId(DATIVE_ACCEPTORS[i])));
+                        (
+                            DativeBondRef::Id(DativeBondId(i as u32)),
+                            atoms,
+                            DativeBondAst::from_order(1),
+                        )
+                    })
+                    .collect();
+                if !dative.is_empty() {
+                    edits.push(Edit::RemoveDativeBonds { removes: dative });
+                }
+                let aromatic: Vec<_> = (0..2)
+                    .filter(|&i| rm_ar[i])
+                    .map(|i| {
+                        let atoms = AROMATIC_SETS[i]
+                            .iter()
+                            .map(|&a| AtomRef::Id(AtomId(a)))
+                            .collect();
+                        (
+                            AromaticSystemRef::Id(AromaticSystemId(i as u32)),
+                            atoms,
+                            AromaticSystemAst::default(),
+                        )
+                    })
+                    .collect();
+                if !aromatic.is_empty() {
+                    edits.push(Edit::RemoveAromaticSystems { removes: aromatic });
+                }
+                let multicenter: Vec<_> = (0..2)
+                    .filter(|&i| rm_mc[i])
+                    .map(|i| {
+                        let atoms = MULTICENTER_SETS[i]
+                            .iter()
+                            .map(|&a| AtomRef::Id(AtomId(a)))
+                            .collect();
+                        (
+                            MulticenterBondRef::Id(MulticenterBondId(i as u32)),
+                            atoms,
+                            MulticenterBondAst::default(),
+                        )
+                    })
+                    .collect();
+                if !multicenter.is_empty() {
+                    edits.push(Edit::RemoveMulticenterBonds {
+                        removes: multicenter,
+                    });
+                }
+                let noncovalent: Vec<_> = (0..2)
+                    .filter(|&i| rm_nc[i])
+                    .map(|i| {
+                        (
+                            NoncovalentBondRef::Id(NoncovalentBondId(i as u32)),
+                            [
+                                AtomRef::Id(AtomId(NONCOVALENT_PAIRS[i][0])),
+                                AtomRef::Id(AtomId(NONCOVALENT_PAIRS[i][1])),
+                            ],
+                            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                        )
+                    })
+                    .collect();
+                if !noncovalent.is_empty() {
+                    edits.push(Edit::RemoveNoncovalentBonds {
+                        removes: noncovalent,
+                    });
+                }
+                let atoms: Vec<AtomRef> = (0..6)
+                    .filter(|&i| rm_at[i])
+                    .map(|i| AtomRef::Id(AtomId(i as u32)))
+                    .collect();
+                if !atoms.is_empty() {
+                    edits.push(Edit::RemoveTopology {
                         atoms,
-                        AromaticSystemAst::default(),
-                    )
-                })
-                .collect();
-            if !aromatic.is_empty() {
-                edits.push(Edit::RemoveAromaticSystems { removes: aromatic });
-            }
-            let multicenter: Vec<_> = (0..2)
-                .filter(|&i| rm_mc[i])
-                .map(|i| {
-                    let atoms = MULTICENTER_SETS[i].iter().map(|&a| AtomRef::Id(AtomId(a))).collect();
-                    (
-                        MulticenterBondRef::Id(MulticenterBondId(i as u32)),
-                        atoms,
-                        MulticenterBondAst::default(),
-                    )
-                })
-                .collect();
-            if !multicenter.is_empty() {
-                edits.push(Edit::RemoveMulticenterBonds { removes: multicenter });
-            }
-            let noncovalent: Vec<_> = (0..2)
-                .filter(|&i| rm_nc[i])
-                .map(|i| {
-                    (
-                        NoncovalentBondRef::Id(NoncovalentBondId(i as u32)),
-                        [
-                            AtomRef::Id(AtomId(NONCOVALENT_PAIRS[i][0])),
-                            AtomRef::Id(AtomId(NONCOVALENT_PAIRS[i][1])),
-                        ],
-                        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
-                    )
-                })
-                .collect();
-            if !noncovalent.is_empty() {
-                edits.push(Edit::RemoveNoncovalentBonds { removes: noncovalent });
-            }
-            let atoms: Vec<AtomRef> = (0..6)
-                .filter(|&i| rm_at[i])
-                .map(|i| AtomRef::Id(AtomId(i as u32)))
-                .collect();
-            if !atoms.is_empty() {
-                edits.push(Edit::RemoveTopology {
-                    atoms,
-                    bonds: vec![],
-                });
-            }
-            (overlay_transaction_base(), edits)
-        })
+                        bonds: vec![],
+                    });
+                }
+                (overlay_transaction_base(), edits)
+            },
+        )
 }
 
 /// `(base, edits)` pairs for the transact round-trip properties: the single-edit `TransactionCase`

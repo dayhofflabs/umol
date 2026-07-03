@@ -35,7 +35,11 @@ fn test_fuzz_molecule_seeds_valid() {
         }
         count += 1;
     }
-    assert!(failures.is_empty(), "invalid seeds:\n{}", failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "invalid seeds:\n{}",
+        failures.join("\n")
+    );
     assert_eq!(count, 25);
 }
 
@@ -997,7 +1001,10 @@ fn test_render_atom_value(#[case] alias: bool, #[case] expected: &str) {
     if alias {
         meta.add_atom_alias("x", atom.clone());
     }
-    assert_eq!(render_atom_value(&atom, &meta), read_string(expected).unwrap());
+    assert_eq!(
+        render_atom_value(&atom, &meta),
+        read_string(expected).unwrap()
+    );
 }
 
 #[rstest]

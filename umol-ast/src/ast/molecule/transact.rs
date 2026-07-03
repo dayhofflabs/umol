@@ -3014,7 +3014,11 @@ mod tests {
             .transact(vec![Edit::RemoveAromaticSystems {
                 removes: vec![(
                     AromaticSystemRef::Id(AromaticSystemId(0)),
-                    vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1)), AtomRef::Id(AtomId(2))],
+                    vec![
+                        AtomRef::Id(AtomId(0)),
+                        AtomRef::Id(AtomId(1)),
+                        AtomRef::Id(AtomId(2)),
+                    ],
                     AromaticSystemAst::default(),
                 )],
             }])

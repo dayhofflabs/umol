@@ -417,16 +417,16 @@ fn not_expr(i: &mut &str) -> PResult<Parsed> {
 }
 
 fn rel_expr(i: &mut &str) -> PResult<Parsed> {
-    let left = mem_expr.parse_next(i)?;
-    let right = opt(preceded(
+    let lhs = mem_expr.parse_next(i)?;
+    let rhs = opt(preceded(
         multispace0,
         (rel_op, preceded(multispace0, mem_expr)),
     ))
     .parse_next(i)?;
-    match right {
-        None => Ok(left),
+    match rhs {
+        None => Ok(lhs),
         Some((op, r)) => {
-            let l = require_term(left)?;
+            let l = require_term(lhs)?;
             let r = require_term(r)?;
             Ok(Parsed::Predicate(ValuePredicate::Rel(l, op, r)))
         }

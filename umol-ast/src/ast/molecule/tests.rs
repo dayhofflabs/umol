@@ -397,7 +397,10 @@ fn test_dative_bond_views_connecting_id(
     #[case] donors: Vec<AtomId>,
     #[case] expected: Option<DativeBondId>,
 ) {
-    assert_eq!(ast.dative_bonds().connecting_id(acceptor, &donors), expected);
+    assert_eq!(
+        ast.dative_bonds().connecting_id(acceptor, &donors),
+        expected
+    );
 }
 
 #[rstest]
@@ -566,7 +569,9 @@ fn test_dative_bond_views_connecting(
     #[case] expected: Option<DativeBondId>,
 ) {
     assert_eq!(
-        ast.dative_bonds().connecting(acceptor, &donors).map(|v| v.id),
+        ast.dative_bonds()
+            .connecting(acceptor, &donors)
+            .map(|v| v.id),
         expected
     );
 }

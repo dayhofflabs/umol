@@ -703,8 +703,8 @@ fn read_fluxionality(
         }
         Ok(())
     })?;
-    let permutation =
-        permutation.ok_or_else(|| DeError::Custom("fluxionality missing :permutation".to_string()))?;
+    let permutation = permutation
+        .ok_or_else(|| DeError::Custom("fluxionality missing :permutation".to_string()))?;
     Ok(FluxionalityAst {
         permutation: LigandPermutation(permutation),
         present,
@@ -2305,10 +2305,16 @@ mod tests {
                 continue;
             };
             if ConstraintDsl::from_edn(&edn).is_err() && ConstraintsDsl::from_edn(&edn).is_err() {
-                failures.push(format!("{name}: neither ConstraintDsl nor ConstraintsDsl parses"));
+                failures.push(format!(
+                    "{name}: neither ConstraintDsl nor ConstraintsDsl parses"
+                ));
             }
         }
-        assert!(failures.is_empty(), "invalid seeds:\n{}", failures.join("\n"));
+        assert!(
+            failures.is_empty(),
+            "invalid seeds:\n{}",
+            failures.join("\n")
+        );
     }
 
     #[fixture]

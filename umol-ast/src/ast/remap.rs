@@ -161,7 +161,10 @@ impl UndoCompaction {
     }
 
     pub fn uncompact_dative_bond(&self, id: DativeBondId) -> DativeBondId {
-        DativeBondId::from(uncompact_dense(&self.forward.removed_dative_bonds, id.into()))
+        DativeBondId::from(uncompact_dense(
+            &self.forward.removed_dative_bonds,
+            id.into(),
+        ))
     }
 
     pub fn uncompact_aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemId {
@@ -186,11 +189,17 @@ impl UndoCompaction {
     }
 
     pub fn uncompact_stereo_atom(&self, id: StereoAtomId) -> StereoAtomId {
-        StereoAtomId::from(uncompact_dense(&self.forward.removed_stereo_atoms, id.into()))
+        StereoAtomId::from(uncompact_dense(
+            &self.forward.removed_stereo_atoms,
+            id.into(),
+        ))
     }
 
     pub fn uncompact_stereo_bond(&self, id: StereoBondId) -> StereoBondId {
-        StereoBondId::from(uncompact_dense(&self.forward.removed_stereo_bonds, id.into()))
+        StereoBondId::from(uncompact_dense(
+            &self.forward.removed_stereo_bonds,
+            id.into(),
+        ))
     }
 }
 
@@ -381,7 +390,10 @@ mod tests {
         #[case] input: BondId,
         #[case] expected: BondId,
     ) {
-        assert_eq!(UndoCompaction::from(&compaction).uncompact_bond(input), expected);
+        assert_eq!(
+            UndoCompaction::from(&compaction).uncompact_bond(input),
+            expected
+        );
     }
 
     #[rstest]

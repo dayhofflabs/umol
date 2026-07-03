@@ -108,7 +108,9 @@ macro_rules! stereo_constraint {
                         pair: t.pair,
                         relation: TopicityRelationAst::Undetermined,
                     }),
-                    Self::Stereogenicity(_) => Self::Stereogenicity(StereogenicityAst::Undetermined),
+                    Self::Stereogenicity(_) => {
+                        Self::Stereogenicity(StereogenicityAst::Undetermined)
+                    }
                 }
             }
 

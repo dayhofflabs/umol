@@ -405,12 +405,7 @@ impl StereoAtomDelta {
                 id,
                 change: change.inverse(),
             },
-            Self::ModifyConstraint {
-                id,
-                kind,
-                old,
-                new,
-            } => Self::ModifyConstraint {
+            Self::ModifyConstraint { id, kind, old, new } => Self::ModifyConstraint {
                 id,
                 kind,
                 old: new,
@@ -514,12 +509,7 @@ impl StereoBondDelta {
                 id,
                 change: change.inverse(),
             },
-            Self::ModifyConstraint {
-                id,
-                kind,
-                old,
-                new,
-            } => Self::ModifyConstraint {
+            Self::ModifyConstraint { id, kind, old, new } => Self::ModifyConstraint {
                 id,
                 kind,
                 old: new,
@@ -605,13 +595,13 @@ macro_rules! diff_field_ops {
             Ok(())
         }
 
-        fn diff_field(left: &$ast, right: &$ast) -> Vec<$change> {
+        fn diff_field(lhs: &$ast, rhs: &$ast) -> Vec<$change> {
             let mut out = Vec::new();
             $(
-                if left.$field != right.$field {
+                if lhs.$field != rhs.$field {
                     out.push($change::$variant {
-                        old: left.$field.clone(),
-                        new: right.$field.clone(),
+                        old: lhs.$field.clone(),
+                        new: rhs.$field.clone(),
                     });
                 }
             )+
@@ -620,23 +610,23 @@ macro_rules! diff_field_ops {
 
         #[allow(clippy::type_complexity)]
         fn diff_constraints(
-            left: &$ast,
-            right: &$ast,
+            lhs: &$ast,
+            rhs: &$ast,
         ) -> Vec<(Option<$constraint>, Option<$constraint>)> {
-            let mut left_by_key: HashMap<_, $constraint> = HashMap::new();
-            for constraint in left.constraints.iter() {
-                left_by_key.insert(constraint.key(), constraint.clone());
+            let mut lhs_by_key: HashMap<_, $constraint> = HashMap::new();
+            for constraint in lhs.constraints.iter() {
+                lhs_by_key.insert(constraint.key(), constraint.clone());
             }
-            let mut right_by_key: HashMap<_, $constraint> = HashMap::new();
-            for constraint in right.constraints.iter() {
-                right_by_key.insert(constraint.key(), constraint.clone());
+            let mut rhs_by_key: HashMap<_, $constraint> = HashMap::new();
+            for constraint in rhs.constraints.iter() {
+                rhs_by_key.insert(constraint.key(), constraint.clone());
             }
-            let mut keys: HashSet<_> = left_by_key.keys().cloned().collect();
-            keys.extend(right_by_key.keys().cloned());
+            let mut keys: HashSet<_> = lhs_by_key.keys().cloned().collect();
+            keys.extend(rhs_by_key.keys().cloned());
             let mut out = Vec::new();
             for key in keys {
-                let l = left_by_key.get(&key).cloned();
-                let r = right_by_key.get(&key).cloned();
+                let l = lhs_by_key.get(&key).cloned();
+                let r = rhs_by_key.get(&key).cloned();
                 if l != r {
                     out.push((l, r));
                 }
@@ -672,13 +662,13 @@ macro_rules! fold_field_ops {
 }
 
 /// One entity's span across a reaction — its slice of the superimposed `L`∪`K`∪`R`. A *state*, not
-/// an operation (unlike `Edit` / `Delta`). `left()` / `right()` read the side values.
+/// an operation (unlike `Edit` / `Delta`). `lhs()` / `rhs()` read the side values.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EntitySpan<T> {
     /// In the interface `K` — present and identical on both sides.
     Unchanged(T),
     /// In the interface `K` — present on both sides but relabeled (a dynamic entity).
-    Modified { left: T, right: T },
+    Modified { lhs: T, rhs: T },
     /// In `R` only — created.
     Added(T),
     /// In `L` only — deleted.
@@ -686,20 +676,20 @@ pub enum EntitySpan<T> {
 }
 
 impl<T> EntitySpan<T> {
-    /// The left-side (`L`) value, or `None` if the entity is created.
-    pub fn left(&self) -> Option<&T> {
+    /// The lhs (`L`) value, or `None` if the entity is created.
+    pub fn lhs(&self) -> Option<&T> {
         match self {
-            Self::Unchanged(value) | Self::Removed(value) | Self::Modified { left: value, .. } => {
+            Self::Unchanged(value) | Self::Removed(value) | Self::Modified { lhs: value, .. } => {
                 Some(value)
             }
             Self::Added(_) => None,
         }
     }
 
-    /// The right-side (`R`) value, or `None` if the entity is deleted.
-    pub fn right(&self) -> Option<&T> {
+    /// The rhs (`R`) value, or `None` if the entity is deleted.
+    pub fn rhs(&self) -> Option<&T> {
         match self {
-            Self::Unchanged(value) | Self::Added(value) | Self::Modified { right: value, .. } => {
+            Self::Unchanged(value) | Self::Added(value) | Self::Modified { rhs: value, .. } => {
                 Some(value)
             }
             Self::Removed(_) => None,
@@ -708,22 +698,22 @@ impl<T> EntitySpan<T> {
 }
 
 impl<T: PartialEq> EntitySpan<T> {
-    /// Superimpose an entity's optional left and right values into a span — the per-entity kernel of
+    /// Superimpose an entity's optional lhs and rhs values into a span — the per-entity kernel of
     /// `ReactionSpanAst::superimpose`: present-both maps to `Unchanged` (equal) or `Modified`,
-    /// left-only to `Removed`, right-only to `Added`, neither to `None`.
-    pub fn superimpose(left: Option<T>, right: Option<T>) -> Option<Self> {
-        match (left, right) {
-            (Some(left), Some(right)) if left == right => Some(Self::Unchanged(left)),
-            (Some(left), Some(right)) => Some(Self::Modified { left, right }),
-            (Some(left), None) => Some(Self::Removed(left)),
-            (None, Some(right)) => Some(Self::Added(right)),
+    /// lhs-only to `Removed`, rhs-only to `Added`, neither to `None`.
+    pub fn superimpose(lhs: Option<T>, rhs: Option<T>) -> Option<Self> {
+        match (lhs, rhs) {
+            (Some(lhs), Some(rhs)) if lhs == rhs => Some(Self::Unchanged(lhs)),
+            (Some(lhs), Some(rhs)) => Some(Self::Modified { lhs, rhs }),
+            (Some(lhs), None) => Some(Self::Removed(lhs)),
+            (None, Some(rhs)) => Some(Self::Added(rhs)),
             (None, None) => None,
         }
     }
 }
 
 /// A molecule-level constraint's span across a reaction — its slice of the superimposed `L`∪`K`∪`R`.
-/// A *state*, not an operation (unlike `ConstraintDelta`). `left()` / `right()` read the side values.
+/// A *state*, not an operation (unlike `ConstraintDelta`). `lhs()` / `rhs()` read the side values.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ConstraintSpan {
     /// In the interface `K` — present and identical on both sides.
@@ -735,16 +725,16 @@ pub enum ConstraintSpan {
 }
 
 impl ConstraintSpan {
-    /// The left-side (`L`) value, or `None` if the constraint is created.
-    pub fn left(&self) -> Option<&Constraint> {
+    /// The lhs (`L`) value, or `None` if the constraint is created.
+    pub fn lhs(&self) -> Option<&Constraint> {
         match self {
             Self::Unchanged(value) | Self::Removed(value) => Some(value),
             Self::Added(_) => None,
         }
     }
 
-    /// The right-side (`R`) value, or `None` if the constraint is deleted.
-    pub fn right(&self) -> Option<&Constraint> {
+    /// The rhs (`R`) value, or `None` if the constraint is deleted.
+    pub fn rhs(&self) -> Option<&Constraint> {
         match self {
             Self::Unchanged(value) | Self::Added(value) => Some(value),
             Self::Removed(_) => None,
@@ -787,7 +777,7 @@ pub(crate) trait EntityFold: EntityPatch {
     fn field_inverse(change: Self::FieldChange) -> Self::FieldChange;
     fn constraint_key(constraint: &Self::Constraint) -> Self::ConstraintKey;
 
-    /// Recover this kind's deltas from its left/right state column: `Added`/`Removed` become
+    /// Recover this kind's deltas from its lhs/rhs state column: `Added`/`Removed` become
     /// structural `Add`/`Remove` (their `atoms` from `atoms(index)`), `Modified` becomes the
     /// field/constraint `diff`. The id of entity `i` is `i` (the column is id-indexed).
     fn deltas_from_states(
@@ -819,12 +809,8 @@ pub(crate) trait EntityFold: EntityPatch {
                     )
                     .into_delta(),
                 ),
-                EntitySpan::Modified { left, right } => {
-                    out.extend(
-                        Self::diff(id, left, right)
-                            .into_iter()
-                            .map(Self::into_delta),
-                    );
+                EntitySpan::Modified { lhs, rhs } => {
+                    out.extend(Self::diff(id, lhs, rhs).into_iter().map(Self::into_delta));
                 }
             }
         }
@@ -1483,13 +1469,13 @@ impl EntityPatch for NoncovalentBondDelta {
     }
 
     fn diff_field(
-        left: &NoncovalentBondAst,
-        right: &NoncovalentBondAst,
+        lhs: &NoncovalentBondAst,
+        rhs: &NoncovalentBondAst,
     ) -> Vec<NoncovalentBondFieldChange> {
-        if left.kind != right.kind {
+        if lhs.kind != rhs.kind {
             vec![NoncovalentBondFieldChange::Kind {
-                old: left.kind.clone(),
-                new: right.kind.clone(),
+                old: lhs.kind.clone(),
+                new: rhs.kind.clone(),
             }]
         } else {
             Vec::new()
@@ -1497,8 +1483,8 @@ impl EntityPatch for NoncovalentBondDelta {
     }
 
     fn diff_constraints(
-        _left: &NoncovalentBondAst,
-        _right: &NoncovalentBondAst,
+        _lhs: &NoncovalentBondAst,
+        _rhs: &NoncovalentBondAst,
     ) -> Vec<(
         Option<NoncovalentBondConstraint>,
         Option<NoncovalentBondConstraint>,
@@ -1602,17 +1588,17 @@ impl EntityPatch for StereoAtomDelta {
 
     /// Stamp each `ModifyConstraint` with the config's kind (the serialization context the
     /// constraint needs) — the default `diff` routes through `modify_constraint`, which can't.
-    fn diff(id: StereoAtomId, left: &StereoAtomAst, right: &StereoAtomAst) -> Vec<Self> {
-        let kind = left
+    fn diff(id: StereoAtomId, lhs: &StereoAtomAst, rhs: &StereoAtomAst) -> Vec<Self> {
+        let kind = lhs
             .configuration
             .kind()
-            .or_else(|| right.configuration.kind());
-        let mut out: Vec<Self> = Self::diff_field(left, right)
+            .or_else(|| rhs.configuration.kind());
+        let mut out: Vec<Self> = Self::diff_field(lhs, rhs)
             .into_iter()
             .map(|change| StereoAtomDelta::ModifyField { id, change })
             .collect();
         out.extend(
-            Self::diff_constraints(left, right)
+            Self::diff_constraints(lhs, rhs)
                 .into_iter()
                 .map(|(old, new)| StereoAtomDelta::ModifyConstraint { id, kind, old, new }),
         );
@@ -1665,17 +1651,17 @@ impl EntityPatch for StereoBondDelta {
     });
 
     /// Stamp each `ModifyConstraint` with the config's kind — see `StereoAtomDelta::diff`.
-    fn diff(id: StereoBondId, left: &StereoBondAst, right: &StereoBondAst) -> Vec<Self> {
-        let kind = left
+    fn diff(id: StereoBondId, lhs: &StereoBondAst, rhs: &StereoBondAst) -> Vec<Self> {
+        let kind = lhs
             .configuration
             .kind()
-            .or_else(|| right.configuration.kind());
-        let mut out: Vec<Self> = Self::diff_field(left, right)
+            .or_else(|| rhs.configuration.kind());
+        let mut out: Vec<Self> = Self::diff_field(lhs, rhs)
             .into_iter()
             .map(|change| StereoBondDelta::ModifyField { id, change })
             .collect();
         out.extend(
-            Self::diff_constraints(left, right)
+            Self::diff_constraints(lhs, rhs)
                 .into_iter()
                 .map(|(old, new)| StereoBondDelta::ModifyConstraint { id, kind, old, new }),
         );
@@ -1701,7 +1687,7 @@ impl EntityPatch for StereoBondDelta {
 
 /// Apply a resolved per-entity change to a value AST, reusing the `EntityPatch` apply that
 /// `canonicalize` uses. `ModifyField` / `ModifyConstraint` mutate the ast; `Add` / `Remove` are
-/// no-ops (they carry a whole ast, not a change). Materializes the right-hand value of a
+/// no-ops (they carry a whole ast, not a change). Materializes the rhs-hand value of a
 /// preserved entity for a `ReactionSpanAst`.
 pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<(), Contradiction> {
     match delta {
@@ -2075,12 +2061,7 @@ fn fold_stereo_atom_group(
     }
     for (_key, (old, new)) in constraints {
         if old != new {
-            out.push(StereoAtomDelta::ModifyConstraint {
-                id,
-                kind,
-                old,
-                new,
-            });
+            out.push(StereoAtomDelta::ModifyConstraint { id, kind, old, new });
         }
     }
     Ok(out)
@@ -2247,12 +2228,7 @@ fn fold_stereo_bond_group(
     }
     for (_key, (old, new)) in constraints {
         if old != new {
-            out.push(StereoBondDelta::ModifyConstraint {
-                id,
-                kind,
-                old,
-                new,
-            });
+            out.push(StereoBondDelta::ModifyConstraint { id, kind, old, new });
         }
     }
     Ok(out)
@@ -2484,17 +2460,14 @@ pub(crate) fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 id: map.map_stereo_atom(id),
                 change,
             },
-            StereoAtomDelta::ModifyConstraint {
-                id,
-                kind,
-                old,
-                new,
-            } => StereoAtomDelta::ModifyConstraint {
-                id: map.map_stereo_atom(id),
-                kind,
-                old,
-                new,
-            },
+            StereoAtomDelta::ModifyConstraint { id, kind, old, new } => {
+                StereoAtomDelta::ModifyConstraint {
+                    id: map.map_stereo_atom(id),
+                    kind,
+                    old,
+                    new,
+                }
+            }
             StereoAtomDelta::Apply {
                 id,
                 kind,
@@ -2546,17 +2519,14 @@ pub(crate) fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 id: map.map_stereo_bond(id),
                 change,
             },
-            StereoBondDelta::ModifyConstraint {
-                id,
-                kind,
-                old,
-                new,
-            } => StereoBondDelta::ModifyConstraint {
-                id: map.map_stereo_bond(id),
-                kind,
-                old,
-                new,
-            },
+            StereoBondDelta::ModifyConstraint { id, kind, old, new } => {
+                StereoBondDelta::ModifyConstraint {
+                    id: map.map_stereo_bond(id),
+                    kind,
+                    old,
+                    new,
+                }
+            }
             StereoBondDelta::Apply {
                 id,
                 kind,
@@ -3164,20 +3134,20 @@ mod tests {
 
     #[rstest]
     #[case::unchanged(EntitySpan::Unchanged(5), Some(&5))]
-    #[case::modified(EntitySpan::Modified { left: 1, right: 2 }, Some(&1))]
+    #[case::modified(EntitySpan::Modified { lhs: 1, rhs: 2 }, Some(&1))]
     #[case::removed(EntitySpan::Removed(7), Some(&7))]
     #[case::added(EntitySpan::Added(9), None)]
-    fn test_entity_span_left(#[case] state: EntitySpan<i32>, #[case] expected: Option<&i32>) {
-        assert_eq!(state.left(), expected);
+    fn test_entity_span_lhs(#[case] state: EntitySpan<i32>, #[case] expected: Option<&i32>) {
+        assert_eq!(state.lhs(), expected);
     }
 
     #[rstest]
     #[case::unchanged(EntitySpan::Unchanged(5), Some(&5))]
-    #[case::modified(EntitySpan::Modified { left: 1, right: 2 }, Some(&2))]
+    #[case::modified(EntitySpan::Modified { lhs: 1, rhs: 2 }, Some(&2))]
     #[case::added(EntitySpan::Added(9), Some(&9))]
     #[case::removed(EntitySpan::Removed(7), None)]
-    fn test_entity_span_right(#[case] state: EntitySpan<i32>, #[case] expected: Option<&i32>) {
-        assert_eq!(state.right(), expected);
+    fn test_entity_span_rhs(#[case] state: EntitySpan<i32>, #[case] expected: Option<&i32>) {
+        assert_eq!(state.rhs(), expected);
     }
 
     #[fixture]

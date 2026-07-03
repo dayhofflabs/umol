@@ -968,7 +968,12 @@ pub(super) fn render_dative_entry(
     }
     m.insert(
         Edn::keyword("donors"),
-        Edn::Vector(donors.map(|a| render_atom_ref(a, meta)).collect::<Vec<_>>().into()),
+        Edn::Vector(
+            donors
+                .map(|a| render_atom_ref(a, meta))
+                .collect::<Vec<_>>()
+                .into(),
+        ),
     );
     m.insert(Edn::keyword("acceptor"), render_atom_ref(acceptor, meta));
     m.insert(Edn::keyword("type"), type_edn);
@@ -1007,7 +1012,12 @@ pub(super) fn render_aromatic_entry(
     }
     m.insert(
         Edn::keyword("atoms"),
-        Edn::Vector(atoms.map(|a| render_atom_ref(a, meta)).collect::<Vec<_>>().into()),
+        Edn::Vector(
+            atoms
+                .map(|a| render_atom_ref(a, meta))
+                .collect::<Vec<_>>()
+                .into(),
+        ),
     );
     m.insert(Edn::keyword("type"), type_edn);
     Edn::Map(m)
@@ -1021,7 +1031,9 @@ fn render_aromatic(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static> {
             render_aromatic_entry(
                 view.id,
                 view.atom_ids(),
-                Edn::Str(Cow::Owned(AromaticSystemDsl::from_ref(view.ast).to_string())),
+                Edn::Str(Cow::Owned(
+                    AromaticSystemDsl::from_ref(view.ast).to_string(),
+                )),
                 meta,
             )
         })
@@ -1044,7 +1056,12 @@ pub(super) fn render_multicenter_entry(
     }
     m.insert(
         Edn::keyword("atoms"),
-        Edn::Vector(atoms.map(|a| render_atom_ref(a, meta)).collect::<Vec<_>>().into()),
+        Edn::Vector(
+            atoms
+                .map(|a| render_atom_ref(a, meta))
+                .collect::<Vec<_>>()
+                .into(),
+        ),
     );
     m.insert(Edn::keyword("type"), type_edn);
     Edn::Map(m)
@@ -1058,7 +1075,9 @@ fn render_multicenter(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'static
             render_multicenter_entry(
                 view.id,
                 view.atom_ids(),
-                Edn::Str(Cow::Owned(MulticenterBondDsl::from_ref(view.ast).to_string())),
+                Edn::Str(Cow::Owned(
+                    MulticenterBondDsl::from_ref(view.ast).to_string(),
+                )),
                 meta,
             )
         })
@@ -1131,7 +1150,10 @@ fn render_stereo_atoms(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'stati
             render_stereo_atom_entry(
                 view.id,
                 view.site_id(),
-                view.ligand_frame().into_iter().map(|l| render_stereo_ligand(l, meta)).collect(),
+                view.ligand_frame()
+                    .into_iter()
+                    .map(|l| render_stereo_ligand(l, meta))
+                    .collect(),
                 StereoAtomDsl::from_ref(view.ast).to_edn(),
                 meta,
             )
@@ -1168,7 +1190,10 @@ fn render_stereo_bonds(ast: &MoleculeAst, meta: &MoleculeMetadata) -> Edn<'stati
             render_stereo_bond_entry(
                 view.id,
                 view.site_id(),
-                view.ligand_frame().into_iter().map(|l| render_stereo_ligand(l, meta)).collect(),
+                view.ligand_frame()
+                    .into_iter()
+                    .map(|l| render_stereo_ligand(l, meta))
+                    .collect(),
                 StereoBondDsl::from_ref(view.ast).to_edn(),
                 meta,
             )
@@ -1247,7 +1272,9 @@ pub(super) fn resolve_atom_spec(
         AtomSpecInput::Bare(dsl) => Ok(dsl.0),
         AtomSpecInput::Alias(name) => match aliases.get(&name) {
             Some(dsl) => Ok(dsl.0.clone()),
-            None => Err(ParseError::InvalidValue(format!("unknown atom alias :{name}"))),
+            None => Err(ParseError::InvalidValue(format!(
+                "unknown atom alias :{name}"
+            ))),
         },
     }
 }
@@ -1699,7 +1726,9 @@ pub(super) fn parse_dative_bond_entry(edn: &Edn<'_>) -> Result<DativeBondEntryIn
     })
 }
 
-pub(super) fn parse_aromatic_system_entry(edn: &Edn<'_>) -> Result<AromaticSystemEntryInput, DeError> {
+pub(super) fn parse_aromatic_system_entry(
+    edn: &Edn<'_>,
+) -> Result<AromaticSystemEntryInput, DeError> {
     let m = expect_map(edn, "aromatic-system-entry")?;
     let system = AromaticSystemDsl::from_edn(required_key(m, "type", "aromatic-system-entry")?)?;
     Ok(AromaticSystemEntryInput {
@@ -1713,7 +1742,9 @@ pub(super) fn parse_aromatic_system_entry(edn: &Edn<'_>) -> Result<AromaticSyste
     })
 }
 
-pub(super) fn parse_multicenter_bond_entry(edn: &Edn<'_>) -> Result<MulticenterBondEntryInput, DeError> {
+pub(super) fn parse_multicenter_bond_entry(
+    edn: &Edn<'_>,
+) -> Result<MulticenterBondEntryInput, DeError> {
     let m = expect_map(edn, "multicenter-bond-entry")?;
     let bond = MulticenterBondDsl::from_edn(required_key(m, "type", "multicenter-bond-entry")?)?;
     Ok(MulticenterBondEntryInput {
@@ -1727,7 +1758,9 @@ pub(super) fn parse_multicenter_bond_entry(edn: &Edn<'_>) -> Result<MulticenterB
     })
 }
 
-pub(super) fn parse_noncovalent_bond_entry(edn: &Edn<'_>) -> Result<NoncovalentBondEntryInput, DeError> {
+pub(super) fn parse_noncovalent_bond_entry(
+    edn: &Edn<'_>,
+) -> Result<NoncovalentBondEntryInput, DeError> {
     let m = expect_map(edn, "noncovalent-bond-entry")?;
     let atoms = parse_vec(
         required_key(m, "atoms", "noncovalent-bond-entry")?,

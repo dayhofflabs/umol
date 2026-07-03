@@ -238,7 +238,12 @@ impl AromaticSystemConstraints {
     }
 
     pub fn compact(self, compaction: &IdCompaction) -> Self {
-        Self(self.0.into_iter().filter_map(|c| c.compact(compaction)).collect())
+        Self(
+            self.0
+                .into_iter()
+                .filter_map(|c| c.compact(compaction))
+                .collect(),
+        )
     }
 }
 
