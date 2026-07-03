@@ -9,6 +9,17 @@ Doc 134's I3-prop split this into P1 (apply-equivalence), P2 (`RcAnchored` filte
 P4 (determinism), P5 (empty overlap), P6 (correspondence). This doc is about the one still-open half:
 **P1 completeness**, `seq ⊆ composed`.
 
+**Set vs multiset comparison.** The target property compares the two product collections **as sets**
+of canonical products. Multiset (multiplicity) equality — each product arising the same *number* of
+ways on both sides — is the stronger statement worth attempting, but duplicate overlaps or symmetric
+automorphisms can make one side produce a given product more than once, so exact multiplicity need
+not hold even when the sets coincide. Land set equality first (`compose_complete_overlay`); if
+multiplicity diverges, keep set equality as the master property and assert multiplicity separately
+(likely narrower — e.g. modulo automorphism).
+
+**Scope (extended 2026-07-03).** Beyond P1 completeness, this doc also tracks **I5 — structural
+entity refs**, reopened from 134: genuinely not built. See the final section.
+
 ## Current state
 
 Everything compose emits is correct; the emitted set is not yet everything it should emit.
@@ -171,3 +182,127 @@ the span approach may be both cleaner and closer to the DPO concurrency construc
 - Whether the monomorphism enumeration's exponential blowup matters for real reaction pairs (compose
   overlaps are the small localized `R_A ∩ L_B` fragments, so likely not — but the subgraph edge rule
   admits *more* cliques than induced).
+
+## Structural entity refs (I5)
+
+Reopened from 134 §3 — genuinely not built. Today every `<entity>-ref` in the reaction / constraint
+surface is `int | keyword` (position or id): a bond or overlay with no `:id` can only be named by
+position. **Want:** name a non-atom entity by its *constituents* — a bond by its endpoints, an
+aromatic / multicenter system by its members, a dative bond by donors + acceptor, a stereo element by
+site + ligands (atoms are the base; no structural form).
+
+**Form** — a uniform structural-map variant, the §4-entry form minus `:type`/`:id`:
+`<entity>-ref ::= int | keyword | <structural-map>`, where the map is `{:atoms [..]}` (bond,
+noncovalent, aromatic, multicenter), `{:donors [..] :acceptor _}` (dative), or
+`{:site _ [:ligands [..]]}` (stereo). Map form (not a bare vector) keeps it self-delimiting where refs
+nest inside other vectors (anchor pairs, relational `[ref target]`).
+
+**What exists.** The resolution kernel is done: `find_by_participants` (graph-core, S0a) / the
+`<collection>.connecting(participants)` matchers, already driving `induce` and
+`substructure::verify_overlays`. §4.1 uniqueness (no two same-constituent entries — extended to
+noncovalent + multicenter, decided 2026-06-29) makes each structural match ≤1 hit.
+
+**What remains** — the DSL surface + resolver. Extend the ref grammar with the structural-map variant
+in one shared production so it reaches every non-atom ref site at once (reaction `:remove`/`:modify`,
+entity + relational constraints, `:bond-order-sum :bonds`, anchor pairs, stereo-bond `:site`), and
+resolve the structural variant per entity by its constituent payload (`[AtomRef; 2]` /
+`Vec<AtomRef>` / donors + acceptor / site + ligands) through the kernel above. Not a `define_ref`
+tweak — the structural variant carries a per-entity payload and a per-entity resolution, so the code
+shape is the work.
+
+Structural refs used as an *atom-map* input are tautological — a bond/overlay pair, endpoints being
+unordered, only restates the atom bijection `induce` already derives — so `resolve` treats such a
+pair as a consistency assertion against the induced correspondence (a contradicting one is an error),
+never an override. The useful surface is naming an id-less entity by its parts.
+
+### Resolution — the growing entity registry
+
+Refs resolve during `*Input` → AST conversion, and at that point **there is no built `MoleculeAst`**:
+`molecule.rs`'s `into_ast` collects entities into `Vec<(participants, ast)>` and calls `from_parts`
+*last*, after constraints resolve; reaction deltas resolve against evolving state (lhs + deltas so
+far), held as counts + metadata, not a queryable structure. So structural resolution can't call the
+AST-level `find_by_participants` on a finished molecule — it resolves against the state built so far.
+
+`EntityCounts` (per-kind running counts, already grown by the delta loop via `allocate_*`) reshapes
+into an **`EntityRegistry`**: per kind a running count + name→id map + a **participant lookup**, grown
+incrementally during molecule parsing (unifying with the delta loop). This also enables index-range
+checks *as you parse* rather than only at the end. Structural resolution = resolve the inner
+atom/bond refs → form the participant key → look up (≤1 hit).
+
+Cost splits by kind, so the hot path stays cheap:
+
+| kind | count | structural lookup | cost |
+|---|---|---|---|
+| **atom** | many | none — no structural form (base) | free, untouched |
+| **bond** | many | `(min,max) → BondId` endpoint map, one insert per bond | O(1) insert, O(1) query |
+| **overlays** (D/A/M/N/S) | few | `find_by_participants` over the small collection | O(few) |
+
+The only numerous kind that takes a structural ref is the bond, and a bond is named by its endpoints —
+an O(1) endpoint map, never a scan. Atoms have no structural form. Overlays are few, so they reuse the
+`find_by_participants` kernel directly. Growing + querying is compatible because refs only ever point
+**backward** (atoms before bonds before overlays before constraints; deltas at current state), so a
+query always sees its target already registered; removal in the delta loop rides the existing
+`IdCompaction`. The one honest asymmetry: bonds use a parse-time endpoint map (a bond is a graph edge,
+not a relation set) while overlays call `find_by_participants`.
+
+The resolution context unifies onto `&EntityRegistry`: `resolve(&registry)` replaces today's
+`resolve(count, id_to_idx)` / `into_ast(count, metadata)` at every ref site, which is what makes all
+sites light up from one change. `Structural` is **input-only** — the AST stores the resolved id with
+no memory of structural authoring, so `ToEdn`/`from_ast` still render `Index`/`Id` (same lossiness as
+writing index `3` for an entity that has an `:id`).
+
+### Precondition — noncovalent uniqueness by endpoints alone
+
+For a noncovalent structural ref to be unambiguous, noncovalent bonds must be disambiguated by their
+**endpoints alone** — no two parallel noncovalent bonds of different kinds on the same pair (dropping
+the current §4.1 allowance). The tier-1 entity-structure validator's `noncovalent_structure_check`
+currently keys the parallel check on `(pair, kind)`; it must key on the unordered pair alone, and
+`NoncovalentBondsParallel` drops its `kind` field. This is the doc-134 §3 decision (2026-06-29) and a
+hard precondition. (`:electrons` is independent — structural refs read only participant keys, so the
+electron-encoding relocation is an orthogonal cleanup, not a blocker.)
+
+### Implementation plan
+
+Modules: **ast** (precondition) → **dsl foundation** (registry, parsers) → **dsl surface** (refs).
+Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (resolve signature).
+
+**S0 — precondition (ast)** — independent, land by S3b
+- **S0a** `ast/validate/entity.rs`: `noncovalent_structure_check` keys on the unordered atom pair
+  alone (drop `kind`); `NoncovalentBondsParallel` drops its `kind` field; update the §4.1 tier-1 note.
+  **breaking (red→green)** — deliberate semantic change, migrate its `#[case]`s. `[dep: —]`
+
+**S1 — shared participant parsers (dsl)** — additive
+- **S1a** `dsl`: extract the participant-key readers from the entry parsers — `:atoms [..]`
+  (bond/noncovalent/aromatic/multicenter), `:donors [..] :acceptor _` (dative), `:site _ :ligands [..]`
+  (stereo) — into shared `read_*` fns; entry parsers delegate. **additive (green)**,
+  behavior-preserving. `[dep: —]`
+
+**S2 — entity registry (dsl)** — additive + internal restructure
+- **S2a** `dsl`: `EntityRegistry` (reshape of `EntityCounts`) — per kind: running count, name→id map,
+  participant lookup (bond `(min,max)→BondId`; overlays index their small collections for
+  `find_by_participants`); `register_<entity>(id_name?, participants) -> Id`,
+  `find_<entity>_by_participants(..) -> Option<Id>`, count/name accessors; counts preserved; mechanical
+  `EntityCounts` rename folded in. **additive (green)** — queries unused yet. `[dep: —]`
+- **S2b** `dsl`: grow the registry's participant data incrementally in `MoleculeInput::into_ast`
+  (register each entity as parsed, so mid-build sites see it). Counts/results unchanged. **green.**
+  `[dep: S2a]`
+- **S2c** `dsl`: grow/shrink the registry in the reaction delta loop + reaction-span build (register on
+  `Add`; unregister + compact on `Remove`, riding `IdCompaction`). **green.** `[dep: S2a]`
+
+**S3 — structural refs (dsl)** — the breaking rewire that lights up every site
+- **S3a** `dsl/refs.rs`: add `Structural(payload)` to the 7 non-atom refs (parametrize `define_ref!`
+  with the per-entity payload + participant-resolution; `AtomRef` unchanged); `FromEdn` gains the
+  `Edn::Map` arm reusing S1a's readers (rejecting `:type`/`:id`); `resolve` becomes
+  `resolve(&EntityRegistry)` — `Index`/`Id` via count + name map, `Structural` resolves inner atom/bond
+  refs then `find_*_by_participants` (`StereoBondRef` nests a `BondRef`, one level). `ToEdn`/`from_ast`
+  unchanged. **breaking (resolve signature + enum).** `[dep: S1a, S2a]`
+- **S3b** `dsl`: migrate every resolution site to `resolve(&registry)` and drop the per-loop
+  `id_to_idx` maps — entity entries (stereo-bond `:site`), `constraint.rs`, `relational.rs` (18
+  variants), `SubPatternAnchorDsl`, `:bond-order-sum :bonds`, `reaction.rs` deltas, `reaction_span.rs`.
+  **red→green.** `[dep: S3a, S2b, S2c, S0a]`
+
+**Critical path** S2a → S2b/S2c → S3a → S3b; S0 and S1 are independent foundations. **Deferrable within
+S3b**: the stereo-bond *entry* `:site` structural form is the only mid-build site (the sole reason S2b
+grows the registry incrementally rather than at end); if fiddly, ship the reference sites first and add
+the entry-site form after. **Confirm before S3a**: stereo resolution keys on **site** (unique per the
+validator), so `:ligands` is then an optional frame assertion vs required-match.

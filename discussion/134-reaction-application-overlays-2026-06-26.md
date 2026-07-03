@@ -1,4 +1,4 @@
-# 134 — Reaction-application: deferred items
+# 134 — Reaction-application: overlays
 
 Five items were left to work out while landing the `Edit`/`Delta`/`Undo` vocabulary refactor
 (`Add`/`Modify`/`Remove` ↔ `Added`/`Modified`/`Removed`, key-based `ModifyConstraint`, by-value
@@ -354,7 +354,7 @@ Coverage as of 2026-07-01 (tests in `umol-ast/tests/property/reaction.rs` unless
 - I4d — dsl/reaction_span.rs (stream): streaming `read_*` for overlay span entries. `[I4b]` **Done 2026-07-01** — the span entry grammar is tree-only (reuses the molecule entry parsers), so `read_span_input` buffers each overlay section element to an `Edn` and dispatches to the tree `parse_<entity>_span_entry`, same as atoms/bonds.
 - I4e — dsl/reaction_span.rs (traits): extend `ReactionSpanDsl` `FromEdn`/`ToEdn`/`FromStr`/`Display` over overlays. `[I4b, I4c, I4d]` **Done 2026-07-01** — `SpanInput::into_ast` registers overlay `:id`s, resolves refs (`.into_ast`), builds the six relation-set span columns, enforces per-side participant consistency (the bond check generalized to overlay participants; stereo-bond also checks its site bond), and fills `EntityCounts`. The `FromAst`/`IntoAst` config bridge maps each overlay set's `EntitySpan` payload through the overlay `*Dsl` (three generic `map_*_span` rebuild helpers, one per relation-set shape; participants carry through). Tests: six `test_parse_<entity>_span_entry`, six `test_render_<entity>_span_entry`, overlay cases across both roundtrips, a dative `into_ast` build case, and two per-side-consistency error cases. umol-ast 4048 lib green; workspace builds clean.
 
-**I5 — structural entity refs (item 3)** `[I2c, I4]` — same kernel as I7; design in §7.
+**I5 — structural entity refs (item 3)** `[I2c, I4]` — same kernel as I7; design in §7. **Not built; reopened and tracked in doc 135.**
 - I5a — dsl: the uniform `<entity>-ref` structural-map variant + per-entity resolution by constituents (item 3); six of its seven forms are overlays and ride here. Resolution = the §7.3 `find_by_participants` kernel. `[item 3]`
 
 **I6 — stereo deltas (the novel part)** `[I1, I2a]` **Done**

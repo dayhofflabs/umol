@@ -9,7 +9,6 @@ use umol_utils::solution::Solution;
 use super::super::electrons::ElectronCountsAst;
 use super::super::id::{AtomId, BondId};
 use super::super::molecule::MoleculeAst;
-use super::super::noncovalent::NoncovalentBondKindAst;
 
 /// Structural shape checks on per-relation entities: per-relation participant
 /// well-formedness (no self-loops, no duplicate or role-conflicting
@@ -49,11 +48,8 @@ pub enum EntityStructureContradiction {
     },
     #[error("noncovalent bond: self-loop on atom {atom:?}")]
     NoncovalentBondSelfLoop { atom: AtomId },
-    #[error("noncovalent bond: parallel {kind:?} bonds on atoms {atoms:?}")]
-    NoncovalentBondsParallel {
-        atoms: [AtomId; 2],
-        kind: NoncovalentBondKindAst,
-    },
+    #[error("noncovalent bond: parallel bonds on atoms {atoms:?}")]
+    NoncovalentBondsParallel { atoms: [AtomId; 2] },
     #[error("aromatic system: participant {atom:?} duplicated")]
     AromaticSystemDuplicateParticipant { atom: AtomId },
     #[error("aromatic systems: overlap on atom {atom:?}")]
@@ -150,21 +146,19 @@ fn dative_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradict
     None
 }
 
-/// Noncovalent bonds: endpoints distinct, no two of the same kind on one pair.
+/// Noncovalent bonds: endpoints distinct, at most one interaction per unordered atom pair
+/// (parallel bonds of any kind are forbidden — the uniqueness that makes structural refs
+/// unambiguous).
 fn noncovalent_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradiction> {
-    let mut seen: HashSet<([AtomId; 2], NoncovalentBondKindAst)> = HashSet::new();
+    let mut seen: HashSet<[AtomId; 2]> = HashSet::new();
     for nc in ast.noncovalent_bonds().iter() {
         let [a, b] = nc.atom_ids();
         if a == b {
             return Some(EntityStructureContradiction::NoncovalentBondSelfLoop { atom: a });
         }
         let pair = if a <= b { [a, b] } else { [b, a] };
-        let kind = nc.ast.kind.clone();
-        if !seen.insert((pair, kind.clone())) {
-            return Some(EntityStructureContradiction::NoncovalentBondsParallel {
-                atoms: pair,
-                kind,
-            });
+        if !seen.insert(pair) {
+            return Some(EntityStructureContradiction::NoncovalentBondsParallel { atoms: pair });
         }
     }
     None
@@ -259,7 +253,6 @@ mod tests {
 
     use super::super::super::id::{AtomId, BondId};
     use super::super::super::molecule::MoleculeAst;
-    use super::super::super::noncovalent::NoncovalentBondKind;
     use super::*;
     use crate::mol;
 
@@ -269,7 +262,6 @@ mod tests {
     #[case::dative_shared_acceptor_disjoint_donors(mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donors [1] :acceptor 0 :type "1"} {:donors [2] :acceptor 0 :type "1"}]}"#))]
     #[case::dative_shared_donors_distinct_acceptors(mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donors [2] :acceptor 0 :type "1"} {:donors [2] :acceptor 1 :type "1"}]}"#))]
     #[case::multicenter_partial_overlap(mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "*"} {:atoms [1 2 3] :type "*"}]}"#))]
-    #[case::noncovalent_distinct_kinds(mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"} {:atoms [0 1] :type "Vdw"}]}"#))]
     fn test_entity_structure_validator_validate(#[case] ast: MoleculeAst) {
         assert_eq!(
             EntityStructureValidator.validate(ast).unwrap(),
@@ -308,10 +300,11 @@ mod tests {
     )]
     #[case::noncovalent_parallel(
         mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"} {:atoms [0 1] :type "Hbd"}]}"#),
-        EntityStructureContradiction::NoncovalentBondsParallel {
-            atoms: [AtomId(0), AtomId(1)],
-            kind: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-        }
+        EntityStructureContradiction::NoncovalentBondsParallel { atoms: [AtomId(0), AtomId(1)] }
+    )]
+    #[case::noncovalent_parallel_distinct_kinds(
+        mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"} {:atoms [0 1] :type "Vdw"}]}"#),
+        EntityStructureContradiction::NoncovalentBondsParallel { atoms: [AtomId(0), AtomId(1)] }
     )]
     #[case::aromatic_duplicate_participant(
         mol!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 1] :type "*"}]}"#),
