@@ -87,6 +87,14 @@ impl<'a> StereoAtomViews<'a> {
             .map(|&rid| StereoAtomId::from(rid))
     }
 
+    /// Id of the stereo atom on `site` with exactly this ligand multiset, if any. Ligands are a
+    /// multiset (virtual ligands repeat); their frame order is not matched.
+    pub fn connecting_id(&self, site: AtomId, ligands: &[StereoLigand]) -> Option<StereoAtomId> {
+        self.stereo_atoms
+            .find_by_participants(&[NodeId::from(site)], ligands)
+            .map(StereoAtomId::from)
+    }
+
     /// Any stereo atom is incident on `atom` (site or ligand).
     pub fn has_incident(&self, atom: AtomId) -> bool {
         self.stereo_atoms.has_incident(NodeId::from(atom))
@@ -366,6 +374,14 @@ impl<'a> StereoBondViews<'a> {
 
     pub fn ids(&self) -> impl Iterator<Item = StereoBondId> {
         self.stereo_bonds.relation_ids().map(StereoBondId::from)
+    }
+
+    /// Id of the stereo bond on `site` with exactly this ligand multiset, if any. Ligands are a
+    /// multiset (virtual ligands repeat); their frame order is not matched.
+    pub fn connecting_id(&self, site: BondId, ligands: &[StereoLigand]) -> Option<StereoBondId> {
+        self.stereo_bonds
+            .find_by_participants(&[EdgeId::from(site)], ligands)
+            .map(StereoBondId::from)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = StereoBondView<'a>> {
@@ -1834,6 +1850,82 @@ mod tests {
         assert_eq!(
             &molecule.stereo_bonds()[StereoBondId(0)],
             &StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+        );
+    }
+
+    #[rstest]
+    #[case::exact(
+        AtomId(0),
+        vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        ],
+        Some(StereoAtomId(0))
+    )]
+    #[case::reordered(
+        AtomId(0),
+        vec![
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+        ],
+        Some(StereoAtomId(0))
+    )]
+    #[case::wrong_site(
+        AtomId(6),
+        vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        ],
+        None
+    )]
+    fn test_stereo_atom_views_connecting_id(
+        molecule: MoleculeAst,
+        #[case] site: AtomId,
+        #[case] ligands: Vec<StereoLigand>,
+        #[case] expected: Option<StereoAtomId>,
+    ) {
+        assert_eq!(
+            molecule.stereo_atoms().connecting_id(site, &ligands),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::exact(
+        BondId(1),
+        vec![
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+        ],
+        Some(StereoBondId(0))
+    )]
+    #[case::wrong_site(
+        BondId(0),
+        vec![
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+        ],
+        None
+    )]
+    fn test_stereo_bond_views_connecting_id(
+        molecule: MoleculeAst,
+        #[case] site: BondId,
+        #[case] ligands: Vec<StereoLigand>,
+        #[case] expected: Option<StereoBondId>,
+    ) {
+        assert_eq!(
+            molecule.stereo_bonds().connecting_id(site, &ligands),
+            expected
         );
     }
 }

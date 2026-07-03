@@ -106,29 +106,18 @@ impl<'a> DativeBondViews<'a> {
         })
     }
 
-    /// Id of the dative bond whose participant set equals `atoms`, if any.
-    pub fn connecting_id(&self, atoms: impl IntoIterator<Item = AtomId>) -> Option<DativeBondId> {
-        let target: HashSet<AtomId> = atoms.into_iter().collect();
-        let &first = target.iter().next()?;
-        self.incident_ids(first).find(|&id| {
-            let rid = RelationId::from(id);
-            let parts: HashSet<AtomId> = self
-                .dative_bonds
-                .participants_1(rid)
-                .iter()
-                .chain(self.dative_bonds.participants_2(rid))
-                .map(|&n| AtomId::from(n))
-                .collect();
-            parts == target
-        })
+    /// Id of the dative bond with exactly this acceptor and donor set, if any. Per-factor: the
+    /// donor/acceptor roles are matched, not the merged atom set.
+    pub fn connecting_id(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondId> {
+        let donor_nodes: Vec<NodeId> = donors.iter().map(|&a| NodeId::from(a)).collect();
+        self.dative_bonds
+            .find_by_participants(&[NodeId::from(acceptor)], &donor_nodes)
+            .map(DativeBondId::from)
     }
 
-    /// View of the dative bond whose participant set equals `atoms`, if any.
-    pub fn connecting(
-        &self,
-        atoms: impl IntoIterator<Item = AtomId>,
-    ) -> Option<DativeBondView<'a>> {
-        self.connecting_id(atoms).map(|id| {
+    /// View of the dative bond with exactly this acceptor and donor set, if any.
+    pub fn connecting(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondView<'a>> {
+        self.connecting_id(acceptor, donors).map(|id| {
             self.get(id).expect(
                 "dative bond id from relation set must refer to a dative bond in this molecule",
             )

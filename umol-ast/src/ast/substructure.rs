@@ -8,7 +8,6 @@
 //! connectivity.
 
 use std::borrow::Cow;
-use std::collections::HashSet;
 
 use umol_graph_core::{NodeId, SubgraphIsomorphismAlgorithm};
 
@@ -191,16 +190,10 @@ impl MoleculeAst {
 
         let mut dative = Vec::new();
         for d in pattern.dative_bonds().iter() {
-            let host_dative = host
-                .dative_bonds()
-                .connecting(d.atom_ids().map(|a| atom_map[a.index()]))?;
-            if atom_map[d.acceptor_id().index()] != host_dative.acceptor_id() {
-                return None;
-            }
-            let pattern_donors: HashSet<AtomId> =
-                d.donor_ids().map(|a| atom_map[a.index()]).collect();
-            let host_donors: HashSet<AtomId> = host_dative.donor_ids().collect();
-            if pattern_donors != host_donors || !d.ast.matches(host_dative.ast) {
+            let acceptor = atom_map[d.acceptor_id().index()];
+            let donors: Vec<AtomId> = d.donor_ids().map(|a| atom_map[a.index()]).collect();
+            let host_dative = host.dative_bonds().connecting(acceptor, &donors)?;
+            if !d.ast.matches(host_dative.ast) {
                 return None;
             }
             dative.push(host_dative.id);

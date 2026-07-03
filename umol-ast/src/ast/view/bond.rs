@@ -70,17 +70,17 @@ impl<'a> BondViews<'a> {
         })
     }
 
-    /// Id of the bond between `a` and `b`, if any.
-    pub fn connecting_id(&self, a: AtomId, b: AtomId) -> Option<BondId> {
+    /// Id of the bond between `first` and `second`, if any.
+    pub fn connecting_id(&self, first: AtomId, second: AtomId) -> Option<BondId> {
         self.molecule
             .raw_graph()
-            .find_edge(NodeId::from(a), NodeId::from(b))
+            .find_edge(NodeId::from(first), NodeId::from(second))
             .map(BondId::from)
     }
 
-    /// View of the bond between `a` and `b`, if any.
-    pub fn connecting(&self, a: AtomId, b: AtomId) -> Option<BondView<'a>> {
-        self.connecting_id(a, b).map(|id| {
+    /// View of the bond between `first` and `second`, if any.
+    pub fn connecting(&self, first: AtomId, second: AtomId) -> Option<BondView<'a>> {
+        self.connecting_id(first, second).map(|id| {
             self.get(id)
                 .expect("bond id from graph must refer to a bond in this molecule")
         })

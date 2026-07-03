@@ -7,6 +7,7 @@ pub(crate) mod boolean;
 pub(crate) mod coloring;
 pub(crate) mod compose;
 pub(crate) mod constraint;
+pub(crate) mod correspondence;
 pub(crate) mod dative;
 pub(crate) mod delta;
 pub(crate) mod edit;
@@ -72,6 +73,7 @@ pub use edit::{
     StereoAtomFieldChange, StereoAtomRef, StereoBondFieldChange, StereoBondRef, Undo,
 };
 pub use electrons::ElectronCountsAst;
+pub use correspondence::MoleculeCorrespondence;
 pub use embedding::MoleculeEmbedding;
 pub use entity::{Entity, EntityKind};
 pub use error::{ApplyError, Contradiction};

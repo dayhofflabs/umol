@@ -27,9 +27,21 @@ impl NodeId {
     }
 }
 
+impl From<usize> for NodeId {
+    fn from(index: usize) -> Self {
+        Self(index as u32)
+    }
+}
+
 impl EdgeId {
     pub fn index(self) -> usize {
         self.0 as usize
+    }
+}
+
+impl From<usize> for EdgeId {
+    fn from(index: usize) -> Self {
+        Self(index as u32)
     }
 }
 

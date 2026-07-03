@@ -480,7 +480,7 @@ Name: `MoleculeCorrespondence`.
 **One type, three cases** (point iv — combine, don't fork; point v — a marker wrapper, not a type per case, per the MoleculeAst-wrapper experience):
 
 - `MoleculeCorrespondence` — general, partial on both sides.
-- `Total(MoleculeCorrespondence)` — balanced (atom-count-preserving); no exposed nodes, so a diff through it emits **no** structural `Add`/`Remove` and needs **no union frame** (R's ids map 1:1 into L's). The de-aromatization fast path (doc 131) — same atoms, only bonds/overlays move. General degrades correctly to this (the exposed branches are O(1) dead checks); the only total-only saving is skipping union-frame construction.
+- **Total is a predicate, not a wrapper** (settled 2026-07-02). `Correspondence::is_total()` — `mate_count == left_count == right_count`, no exposed on either side, O(1) — marks the balanced case: same atoms, so a diff needs **no union frame** (R's atoms map 1:1 into L's; bonds/overlays still move within the shared frame — de-aromatization, doc 131). The general path subsumes it (the exposed branches are O(1) dead checks); the union-frame skip is a fast-path branch keyed on `atoms().is_total()`. A `Total(_)` wrapper would add only a *compile-time* no-Add/Remove guarantee for a caller that needs it — none does yet, so a predicate suffices; add the wrapper later if one appears.
 - the **embedding** (injective, total-on-one-side) case is what `MoleculeEmbedding` already is; it folds in as a view/wrapper, retiring the standalone struct (subiso + `verify_overlays` build a `MoleculeCorrespondence` directly).
 
 **Constructors.**
@@ -607,12 +607,12 @@ Modules top-down: **graph-core** (foundation) → **umol-ast `ast`** → **umol-
 - **S0a** graph-core: `find_by_participants` on `FixedRelationSet` / `VarRelationSet` / `FixedVarBirelationSet` — per-factor (`&[P]` / `&[P1], &[P2]`), unordered-multiset via sort-both-compare (§7.3.1). `[dep: —]` **Done**
 - **S0b** graph-core: `Correspondence` module — struct + `mates` / `left_exposed` / `right_exposed` / `node_count` / `shared_edge_count` / induced-edge reads (§7.2, §7.3.2). `[dep: —]` **Done**
 
-**S1 — `MoleculeCorrespondence` + constructors** (additive)
-- **S1a** ast: `MoleculeCorrespondence` struct (8 families) + `atom_correspondence()` + reads. `[dep: S0b]`
-- **S1b** ast: `induce(L, R, atom: Correspondence)` — entity-map induction via `find_by_participants`. `[dep: S1a, S0a, S0b]`
-- **S1c** ast: `from_maps`. `[dep: S1a]`
-- **S1d** ast: `MoleculeCorrespondence::compose`. `[dep: S1a]`
-- **S1e** ast: `Total(MoleculeCorrespondence)` marker wrapper. (The general path subsumes it; the union-frame-skip fast path is a later optimization.) `[dep: S1a]`
+**S1 — `MoleculeCorrespondence` + constructors** (additive) **Done**
+- **S1a** ast: `MoleculeCorrespondence` struct (8 families) + `atom_correspondence()` + reads. `[dep: S0b]` **Done**
+- **S1b** ast: `induce(L, R, atom: Correspondence)` — entity-map induction via `find_by_participants`. `[dep: S1a, S0a, S0b]` **Done**
+- **S1c** ast: `from_maps`. `[dep: S1a]` **Skipped**
+- **S1d** ast: `MoleculeCorrespondence::compose`. `[dep: S1a]` **Done**
+- **S1e** graph-core: `Correspondence::is_total()` predicate (`mate_count == left_count == right_count`) instead of a `Total(_)` wrapper — the fast path branches on `atoms().is_total()`; union-frame skip is a later optimization. `[dep: S0b]` **Done**
 
 **S2 — diff / span / import ops** (additive)
 - **S2a** ast: `ReactionSpanAst::superimpose(L, R, C)` — build the union-frame span from a pair + correspondence. `[dep: S1a]`

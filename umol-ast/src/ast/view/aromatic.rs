@@ -106,17 +106,10 @@ impl<'a> AromaticSystemViews<'a> {
         &self,
         atoms: impl IntoIterator<Item = AtomId>,
     ) -> Option<AromaticSystemId> {
-        let target: HashSet<AtomId> = atoms.into_iter().collect();
-        let &first = target.iter().next()?;
-        self.incident_ids(first).find(|&id| {
-            let parts: HashSet<AtomId> = self
-                .aromatic_systems
-                .participants(RelationId::from(id))
-                .iter()
-                .map(|&n| AtomId::from(n))
-                .collect();
-            parts == target
-        })
+        let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
+        self.aromatic_systems
+            .find_by_participants(&nodes)
+            .map(AromaticSystemId::from)
     }
 
     /// View of the aromatic system whose atom set equals `atoms`, if any.

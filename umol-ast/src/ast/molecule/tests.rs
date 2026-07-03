@@ -388,15 +388,16 @@ fn test_bond_views_connecting_id(
 }
 
 #[rstest]
-#[case::full_match(HashSet::from([AtomId(2), AtomId(3)]), Some(DativeBondId(0)))]
-#[case::subset(HashSet::from([AtomId(2)]), None)]
-#[case::disjoint(HashSet::from([AtomId(0), AtomId(1)]), None)]
+#[case::matched(AtomId(3), vec![AtomId(2)], Some(DativeBondId(0)))]
+#[case::role_swap(AtomId(2), vec![AtomId(3)], None)]
+#[case::wrong_donor(AtomId(3), vec![AtomId(1)], None)]
 fn test_dative_bond_views_connecting_id(
     #[from(rich_molecule)] ast: MoleculeAst,
-    #[case] atoms: HashSet<AtomId>,
+    #[case] acceptor: AtomId,
+    #[case] donors: Vec<AtomId>,
     #[case] expected: Option<DativeBondId>,
 ) {
-    assert_eq!(ast.dative_bonds().connecting_id(atoms), expected);
+    assert_eq!(ast.dative_bonds().connecting_id(acceptor, &donors), expected);
 }
 
 #[rstest]
@@ -556,14 +557,18 @@ fn test_dative_bond_views_incident(
 }
 
 #[rstest]
-#[case::full_match(HashSet::from([AtomId(2), AtomId(3)]), Some(DativeBondId(0)))]
-#[case::subset(HashSet::from([AtomId(2)]), None)]
+#[case::matched(AtomId(3), vec![AtomId(2)], Some(DativeBondId(0)))]
+#[case::role_swap(AtomId(2), vec![AtomId(3)], None)]
 fn test_dative_bond_views_connecting(
     #[from(rich_molecule)] ast: MoleculeAst,
-    #[case] atoms: HashSet<AtomId>,
+    #[case] acceptor: AtomId,
+    #[case] donors: Vec<AtomId>,
     #[case] expected: Option<DativeBondId>,
 ) {
-    assert_eq!(ast.dative_bonds().connecting(atoms).map(|v| v.id), expected);
+    assert_eq!(
+        ast.dative_bonds().connecting(acceptor, &donors).map(|v| v.id),
+        expected
+    );
 }
 
 #[rstest]

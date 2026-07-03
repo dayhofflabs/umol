@@ -104,17 +104,10 @@ impl<'a> MulticenterBondViews<'a> {
         &self,
         atoms: impl IntoIterator<Item = AtomId>,
     ) -> Option<MulticenterBondId> {
-        let target: HashSet<AtomId> = atoms.into_iter().collect();
-        let &first = target.iter().next()?;
-        self.incident_ids(first).find(|&id| {
-            let parts: HashSet<AtomId> = self
-                .multicenter_bonds
-                .participants(RelationId::from(id))
-                .iter()
-                .map(|&n| AtomId::from(n))
-                .collect();
-            parts == target
-        })
+        let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
+        self.multicenter_bonds
+            .find_by_participants(&nodes)
+            .map(MulticenterBondId::from)
     }
 
     /// View of the multicenter bond whose participant set equals `atoms`, if any.

@@ -1,32 +1,53 @@
-//! A partial bijection between the node id spaces of two graphs.
+//! A partial bijection between two id spaces.
 //!
-//! Framed as a matching in the bipartite graph over the two node sets: a node is **mated** (paired
+//! Framed as a matching in the bipartite graph over the two id sets: an id is **mated** (paired
 //! with a partner on the other side — the shared interface) or **exposed** (unpaired, present on
-//! only one side).
+//! only one side). Generic in the id type, so the same carrier serves node correspondences (atoms)
+//! and every entity family (bonds, overlays) one layer up; `Correspondence<NodeId>` additionally
+//! exposes the induced edge correspondence over the two graphs.
 
 use crate::graph::{EdgeId, Graph, NodeId};
 
-/// A partial bijection between two graphs' node id spaces: the **mated** `(left, right)` pairs;
-/// every unmated node is **exposed** on its side. Only the mated pairs are stored — exposed nodes
-/// and the induced edge correspondence are derived on demand, so the carrier stays cheap to produce
-/// on the hot enumeration path.
+/// The ids `0..count` absent from `sorted_mated` (which must be ascending, no duplicates) — a
+/// single merge pass, no per-id search.
+fn exposed<Id: Copy + Ord + From<usize>>(
+    count: usize,
+    sorted_mated: impl Iterator<Item = Id>,
+) -> Vec<Id> {
+    let mut mated = sorted_mated.peekable();
+    (0..count)
+        .map(Id::from)
+        .filter(|node| {
+            if mated.peek() == Some(node) {
+                mated.next();
+                false
+            } else {
+                true
+            }
+        })
+        .collect()
+}
+
+/// A partial bijection between two `Id` spaces: the **mated** `(left, right)` pairs; every unmated
+/// id is **exposed** on its side. Only the mated pairs are stored — exposed ids are derived on
+/// demand, so the carrier stays cheap to produce on the hot enumeration path.
 ///
-/// Invariant: `mates` is sorted by left node (no duplicate lefts — it is a bijection), so `right_of`
+/// Invariant: `mates` is sorted by left id (no duplicate lefts — it is a bijection), so `right_of`
 /// is a binary search and `left_exposed` a single merge. Producers already emit this order (a
 /// subgraph-isomorphism match is query-index order; a maximum-common-subgraph is sorted by the first
 /// graph's node), so `new` only confirms it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Correspondence {
-    mates: Vec<(NodeId, NodeId)>,
+pub struct Correspondence<Id> {
+    mates: Vec<(Id, Id)>,
     left_count: usize,
     right_count: usize,
 }
 
-impl Correspondence {
-    /// A correspondence from its mated `(left, right)` pairs over two graphs with the given node
-    /// counts. Every node of either graph not appearing in `mates` is exposed on its side. The
-    /// pairs are sorted by left node to establish the lookup invariant (cheap when already sorted).
-    pub fn new(mut mates: Vec<(NodeId, NodeId)>, left_count: usize, right_count: usize) -> Self {
+impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
+    /// A correspondence from its mated `(left, right)` pairs over two id spaces of the given sizes.
+    /// Every id of either side not appearing in `mates` is exposed on that side. The pairs are
+    /// sorted by left id to establish the lookup invariant (cheap when already sorted).
+    pub fn new(mut mates: Vec<(Id, Id)>, left_count: usize, right_count: usize) -> Self {
         mates.sort_unstable_by_key(|&(left, _)| left);
         Self {
             mates,
@@ -36,45 +57,65 @@ impl Correspondence {
     }
 
     /// The mated `(left, right)` pairs (sorted by left) — the shared interface.
-    pub fn mates(&self) -> &[(NodeId, NodeId)] {
+    pub fn mates(&self) -> &[(Id, Id)] {
         &self.mates
     }
 
     /// The number of mated pairs (the interface size).
-    pub fn node_count(&self) -> usize {
+    pub fn mate_count(&self) -> usize {
         self.mates.len()
     }
 
-    /// The right partner of a left node, if mated. Binary search (mates sorted by left).
-    pub fn right_of(&self, left: NodeId) -> Option<NodeId> {
+    /// Whether every id on both sides is mated — a total bijection with no exposed ids. A diff
+    /// through such a correspondence adds and removes nothing.
+    pub fn is_total(&self) -> bool {
+        self.mates.len() == self.left_count && self.mates.len() == self.right_count
+    }
+
+    /// The right partner of a left id, if mated. Binary search (mates sorted by left).
+    pub fn right_of(&self, left: Id) -> Option<Id> {
         self.mates
             .binary_search_by_key(&left, |&(l, _)| l)
             .ok()
             .map(|index| self.mates[index].1)
     }
 
-    /// The left partner of a right node, if mated. Linear — the un-indexed reverse direction.
-    pub fn left_of(&self, right: NodeId) -> Option<NodeId> {
+    /// The left partner of a right id, if mated. Linear — the un-indexed reverse direction.
+    pub fn left_of(&self, right: Id) -> Option<Id> {
         self.mates
             .iter()
             .find(|&&(_, r)| r == right)
             .map(|&(l, _)| l)
     }
 
-    /// Left nodes with no partner — the ones deleted when read as a transformation. Merge over the
+    /// Left ids with no partner — the ones deleted when read as a transformation. Merge over the
     /// sorted left column.
-    pub fn left_exposed(&self) -> Vec<NodeId> {
+    pub fn left_exposed(&self) -> Vec<Id> {
         exposed(self.left_count, self.mates.iter().map(|&(left, _)| left))
     }
 
-    /// Right nodes with no partner — the ones created when read as a transformation. Sorts the right
+    /// Right ids with no partner — the ones created when read as a transformation. Sorts the right
     /// column (unindexed) once, then merges.
-    pub fn right_exposed(&self) -> Vec<NodeId> {
-        let mut rights: Vec<NodeId> = self.mates.iter().map(|&(_, right)| right).collect();
+    pub fn right_exposed(&self) -> Vec<Id> {
+        let mut rights: Vec<Id> = self.mates.iter().map(|&(_, right)| right).collect();
         rights.sort_unstable();
         exposed(self.right_count, rights.into_iter())
     }
 
+    /// Relational composition: `self` (left↔middle) followed by `other` (middle↔right), yielding a
+    /// left↔right correspondence. A left id mated to a middle id that `other` leaves exposed becomes
+    /// exposed. `self`'s right space and `other`'s left space must be the same.
+    pub fn compose(&self, other: &Correspondence<Id>) -> Correspondence<Id> {
+        let mates = self
+            .mates
+            .iter()
+            .filter_map(|&(left, middle)| other.right_of(middle).map(|right| (left, right)))
+            .collect();
+        Correspondence::new(mates, self.left_count, other.right_count)
+    }
+}
+
+impl Correspondence<NodeId> {
     /// The induced edge correspondence: `(left_edge, right_edge)` pairs whose endpoints are mated
     /// to an edge on the other side.
     pub fn edge_mates(&self, left: &Graph, right: &Graph) -> Vec<(EdgeId, EdgeId)> {
@@ -93,23 +134,6 @@ impl Correspondence {
     }
 }
 
-/// The nodes `0..count` absent from `sorted_mated` (which must be ascending, no duplicates) — a
-/// single merge pass, no per-node search.
-fn exposed(count: usize, sorted_mated: impl Iterator<Item = NodeId>) -> Vec<NodeId> {
-    let mut mated = sorted_mated.peekable();
-    (0..count as u32)
-        .map(NodeId)
-        .filter(|&node| {
-            if mated.peek() == Some(&node) {
-                mated.next();
-                false
-            } else {
-                true
-            }
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -126,7 +150,7 @@ mod tests {
     }
 
     #[fixture]
-    fn paths() -> (Graph, Graph, Correspondence) {
+    fn paths() -> (Graph, Graph, Correspondence<NodeId>) {
         // left path 0-1-2 mapped onto the interior of right path 0-1-2-3; right node 0 exposed.
         (
             Graph::new(3, &[[0, 1], [1, 2]]),
@@ -139,7 +163,7 @@ mod tests {
     fn test_correspondence_mates() {
         let c = Correspondence::new(vec![(n(0), n(2)), (n(1), n(3))], 3, 4);
         assert_eq!(c.mates(), &[(n(0), n(2)), (n(1), n(3))]);
-        assert_eq!(c.node_count(), 2);
+        assert_eq!(c.mate_count(), 2);
     }
 
     #[rstest]
@@ -180,17 +204,40 @@ mod tests {
     }
 
     #[rstest]
-    fn test_correspondence_edge_mates(paths: (Graph, Graph, Correspondence)) {
+    fn test_correspondence_edge_mates(paths: (Graph, Graph, Correspondence<NodeId>)) {
         let (left, right, c) = paths;
+        assert_eq!(c.edge_mates(&left, &right), vec![(e(0), e(1)), (e(1), e(2))]);
+    }
+
+    #[rstest]
+    fn test_correspondence_shared_edge_count(paths: (Graph, Graph, Correspondence<NodeId>)) {
+        let (left, right, c) = paths;
+        assert_eq!(c.shared_edge_count(&left, &right), 2);
+    }
+
+    #[rstest]
+    #[case::total(vec![(n(0), n(0)), (n(1), n(1))], 2, 2, true)]
+    #[case::left_exposed(vec![(n(0), n(0))], 2, 1, false)]
+    #[case::right_exposed(vec![(n(0), n(0))], 1, 2, false)]
+    fn test_correspondence_is_total(
+        #[case] mates: Vec<(NodeId, NodeId)>,
+        #[case] left_count: usize,
+        #[case] right_count: usize,
+        #[case] expected: bool,
+    ) {
         assert_eq!(
-            c.edge_mates(&left, &right),
-            vec![(e(0), e(1)), (e(1), e(2))]
+            Correspondence::new(mates, left_count, right_count).is_total(),
+            expected
         );
     }
 
     #[rstest]
-    fn test_correspondence_shared_edge_count(paths: (Graph, Graph, Correspondence)) {
-        let (left, right, c) = paths;
-        assert_eq!(c.shared_edge_count(&left, &right), 2);
+    fn test_correspondence_compose() {
+        // A⇌B then B⇌C; A-node 2 maps to B-node 12, which B⇌C leaves exposed, so 2 drops out.
+        let ab = Correspondence::new(vec![(n(0), n(10)), (n(1), n(11)), (n(2), n(12))], 3, 13);
+        let bc = Correspondence::new(vec![(n(10), n(100)), (n(11), n(101))], 13, 102);
+        let ac = ab.compose(&bc);
+        assert_eq!(ac.mates(), &[(n(0), n(100)), (n(1), n(101))]);
+        assert_eq!(ac.left_exposed(), vec![n(2)]);
     }
 }
