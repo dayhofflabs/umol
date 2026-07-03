@@ -7,11 +7,12 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use umol_graph_core::SubgraphIsomorphismAlgorithm;
+use umol_graph_core::{Correspondence, NodeId, SubgraphIsomorphismAlgorithm};
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
+use super::correspondence::MoleculeCorrespondence;
 use super::dative::DativeBondAst;
 use super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
@@ -46,6 +47,15 @@ pub struct ReactionAst {
 impl ReactionAst {
     pub fn new(lhs: MoleculeAst, deltas: Deltas) -> Self {
         Self { lhs, deltas }
+    }
+
+    /// The reaction transforming `left` into `right` under the atom correspondence `atom`: induce the
+    /// full per-entity correspondence, diff the two sides into deltas, and pair them with `left`. The
+    /// inverse of reading a reaction's two sides back off its span.
+    pub fn from_sides(left: MoleculeAst, right: MoleculeAst, atom: Correspondence<NodeId>) -> Self {
+        let correspondence = MoleculeCorrespondence::induce(&left, &right, atom);
+        let deltas = left.difference_to(&right, &correspondence);
+        Self::new(left, deltas)
     }
 
     /// Apply the reaction at one match `m` of `lhs` into a host (`m.ast()`), producing the
@@ -671,6 +681,39 @@ mod tests {
                 new: ValueAst::Lit(new),
             },
         })
+    }
+
+    #[rstest]
+    fn test_reaction_ast_from_sides() {
+        // C-C (order 1) → C-C (order 2) under the total atom correspondence: one bond-order modify.
+        let left = MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        );
+        let right = MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+        );
+        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2);
+        assert_eq!(
+            ReactionAst::from_sides(left.clone(), right, atoms),
+            ReactionAst::new(
+                left,
+                Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                    id: BondId(0),
+                    change: BondFieldChange::Order {
+                        old: ValueAst::Lit(1),
+                        new: ValueAst::Lit(2),
+                    },
+                })]),
+            ),
+        );
     }
 
     #[rstest]

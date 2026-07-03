@@ -110,6 +110,21 @@ where
     Correspondence::new(mates, left, right)
 }
 
+impl MoleculeAst {
+    /// The deltas transforming `self` (`L`) into `right` (`R`) under the per-entity correspondence
+    /// `correspondence`: superimpose the two sides into a span, then read off its operational
+    /// reaction. Applying the result to `self` reconstructs `right` (up to appended-atom renumbering).
+    pub fn difference_to(
+        &self,
+        right: &MoleculeAst,
+        correspondence: &MoleculeCorrespondence,
+    ) -> Deltas {
+        ReactionSpanAst::superimpose(self, right, correspondence)
+            .to_reaction()
+            .deltas
+    }
+}
+
 #[allow(clippy::type_complexity)]
 impl ReactionSpanAst {
     #[allow(clippy::too_many_arguments)]
@@ -2037,6 +2052,37 @@ mod tests {
         assert_eq!(
             ReactionSpanAst::superimpose(&span.left(), &span.right(), &span.correspondence()),
             span
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_ast_difference_to() {
+        // C-C (order 1) → C-C (order 2), total correspondence: a single bond-order modify.
+        let left = MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        );
+        let right = MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+        );
+        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2);
+        let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
+        assert_eq!(
+            left.difference_to(&right, &correspondence),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order {
+                    old: ValueAst::Lit(1),
+                    new: ValueAst::Lit(2),
+                },
+            })]),
         );
     }
 
