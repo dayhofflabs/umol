@@ -6,6 +6,7 @@
 //! components, cycle enumeration, maximum independent set).
 
 pub mod algorithms;
+pub(crate) mod correspondence;
 pub(crate) mod digraph;
 pub(crate) mod graph;
 pub(crate) mod relation;
@@ -19,6 +20,7 @@ pub use algorithms::common_subgraph::{
     McesAlgorithm, McisAlgorithm, McsConnectivity,
 };
 pub use algorithms::connected::ConnectedComponentsAlgorithm;
+pub use correspondence::Correspondence;
 pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
 pub use algorithms::enumeration::{PathEnumerationAlgorithm, SubgraphEnumerationAlgorithm};
 pub use algorithms::matching::{

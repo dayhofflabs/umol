@@ -603,9 +603,9 @@ Two seams deliberately *not* name-encoded: `span ⊃ correspondence` is a deriva
 
 Modules top-down: **graph-core** (foundation) → **umol-ast `ast`** → **umol-ast `dsl`** (surface). Additive subitems keep the tree green; only breaking ones (signature / return-type change, type retirement) go red, and every stage ends green.
 
-**S0 — graph-core foundation** (additive)
+**S0 — graph-core foundation** (additive) **Done**
 - **S0a** graph-core: `find_by_participants` on `FixedRelationSet` / `VarRelationSet` / `FixedVarBirelationSet` — per-factor (`&[P]` / `&[P1], &[P2]`), unordered-multiset via sort-both-compare (§7.3.1). `[dep: —]` **Done**
-- **S0b** graph-core: `Correspondence` module — struct + `mates` / `left_exposed` / `right_exposed` / `node_count` / `shared_edge_count` / induced-edge reads (§7.2, §7.3.2). `[dep: —]`
+- **S0b** graph-core: `Correspondence` module — struct + `mates` / `left_exposed` / `right_exposed` / `node_count` / `shared_edge_count` / induced-edge reads (§7.2, §7.3.2). `[dep: —]` **Done**
 
 **S1 — `MoleculeCorrespondence` + constructors** (additive)
 - **S1a** ast: `MoleculeCorrespondence` struct (8 families) + `atom_correspondence()` + reads. `[dep: S0b]`
