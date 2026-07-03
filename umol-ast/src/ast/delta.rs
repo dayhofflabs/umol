@@ -707,6 +707,21 @@ impl<T> EntitySpan<T> {
     }
 }
 
+impl<T: PartialEq> EntitySpan<T> {
+    /// Superimpose an entity's optional left and right values into a span — the per-entity kernel of
+    /// `ReactionSpanAst::superimpose`: present-both maps to `Unchanged` (equal) or `Modified`,
+    /// left-only to `Removed`, right-only to `Added`, neither to `None`.
+    pub fn superimpose(left: Option<T>, right: Option<T>) -> Option<Self> {
+        match (left, right) {
+            (Some(left), Some(right)) if left == right => Some(Self::Unchanged(left)),
+            (Some(left), Some(right)) => Some(Self::Modified { left, right }),
+            (Some(left), None) => Some(Self::Removed(left)),
+            (None, Some(right)) => Some(Self::Added(right)),
+            (None, None) => None,
+        }
+    }
+}
+
 /// A molecule-level constraint's span across a reaction — its slice of the superimposed `L`∪`K`∪`R`.
 /// A *state*, not an operation (unlike `ConstraintDelta`). `left()` / `right()` read the side values.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

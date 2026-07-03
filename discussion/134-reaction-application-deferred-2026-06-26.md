@@ -615,10 +615,11 @@ Modules top-down: **graph-core** (foundation) → **umol-ast `ast`** → **umol-
 - **S1e** graph-core: `Correspondence::is_total()` predicate (`mate_count == left_count == right_count`) instead of a `Total(_)` wrapper — the fast path branches on `atoms().is_total()`; union-frame skip is a later optimization. `[dep: S0b]` **Done**
 
 **S2 — diff / span / import ops** (additive)
-- **S2a** ast: `ReactionSpanAst::superimpose(L, R, C)` — build the union-frame span from a pair + correspondence. `[dep: S1a]`
+- **S2a** ast: `ReactionSpanAst::superimpose(L, R, C)` — build the union-frame span from a pair + correspondence. `[dep: S1a]` **Done**
 - **S2b** ast: `ReactionSpanAst::correspondence()` — recover `C` (forget values). `[dep: S1a]`
 - **S2c** ast: `MoleculeAst::difference_to(&R, &C)` = `superimpose` → `to_reaction` → `deltas`. `[dep: S2a]`
 - **S2d** ast: `ReactionAst::from_sides(L, R, atom)` = `induce` + `difference_to` + `new`. `[dep: S1b, S2c]`
+- **S2e** ast (property test, feature `proptest`): cross-validate the two span constructions — `superimpose(L, R, C)` (Strategy A, direct) **==** the delta path (`to_reaction_span` of the deltas). Off a generated reaction span take `L = lhs`, `R = right()`, `C = correspondence()`, and assert `superimpose(L, R, C) == span`. A mismatch flags a `diff`-completeness or frame gap — the whole point of building A independently (two paths, assert equality; cf. doc 135, where testing an unrelated method surfaced a real compose gap). `[dep: S2a, S2b]`
 
 **S3 — `ReactionDerivation` + `apply` codomain**
 - **S3a** ast: `ReactionDerivation<'a>` struct + `product` / `comap` / `atom_map` + `to_reaction` / `reverse` / `chain`. Additive. `[dep: S1a, S1d, S2c]`
