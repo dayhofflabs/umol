@@ -33,9 +33,9 @@ use super::edn_utils::{
 };
 use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
+use super::namespace::MoleculeNamespace;
 use super::noncovalent::NoncovalentBondDsl;
 use super::refs::{read_atom_ref, read_bond_ref, AtomRef, BondRef};
-use super::registry::EntityRegistry;
 use super::stereo::{
     expand_stereo_atom_keyword, expand_stereo_bond_keyword, StereoAtomDsl, StereoBondDsl,
 };
@@ -105,12 +105,12 @@ impl Display for MoleculeDsl {
 impl<'de> FromEdn<'de> for MoleculeDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let input = parse_molecule_input(edn)?;
-        let (ast, registry) = input
+        let (ast, namespace) = input
             .into_ast()
             .map_err(|e| DeError::Custom(e.to_string()))?;
         Ok(MoleculeDsl::from_parts(
             ast,
-            MoleculeMetadata::from(&registry),
+            MoleculeMetadata::from(&namespace),
         ))
     }
 
@@ -118,10 +118,10 @@ impl<'de> FromEdn<'de> for MoleculeDsl {
         let mut de = EdnStreamDeserializer::new(input);
         let mi = read_molecule_input(&mut de)?;
         de.expect_eof()?;
-        let (ast, registry) = mi.into_ast().map_err(|e| DeError::Custom(e.to_string()))?;
+        let (ast, namespace) = mi.into_ast().map_err(|e| DeError::Custom(e.to_string()))?;
         Ok(MoleculeDsl::from_parts(
             ast,
-            MoleculeMetadata::from(&registry),
+            MoleculeMetadata::from(&namespace),
         ))
     }
 }
@@ -312,37 +312,37 @@ impl MoleculeMetadata {
     }
 }
 
-impl From<&EntityRegistry> for MoleculeMetadata {
-    /// Project the registry to its roundtrip subset: the eight `id → name` maps (the inverse of the
-    /// registry's `by_name`) plus the atom aliases. The registry is the source of truth; this is the
+impl From<&MoleculeNamespace> for MoleculeMetadata {
+    /// Project the namespace to its roundtrip subset: the eight `id → name` maps (the inverse of the
+    /// namespace's `by_name`) plus the atom aliases. The namespace is the source of truth; this is the
     /// derived view — parse-only data (participant indexes, counts) is dropped.
-    fn from(registry: &EntityRegistry) -> Self {
+    fn from(namespace: &MoleculeNamespace) -> Self {
         let mut metadata = MoleculeMetadata::new();
-        for (id, name) in registry.atom_names() {
+        for (id, name) in namespace.atom_names() {
             metadata.set_atom_id(id, name);
         }
-        for (id, name) in registry.bond_names() {
+        for (id, name) in namespace.bond_names() {
             metadata.set_bond_id(id, name);
         }
-        for (id, name) in registry.dative_bond_names() {
+        for (id, name) in namespace.dative_bond_names() {
             metadata.set_dative_bond_id(id, name);
         }
-        for (id, name) in registry.aromatic_system_names() {
+        for (id, name) in namespace.aromatic_system_names() {
             metadata.set_aromatic_system_id(id, name);
         }
-        for (id, name) in registry.multicenter_bond_names() {
+        for (id, name) in namespace.multicenter_bond_names() {
             metadata.set_multicenter_bond_id(id, name);
         }
-        for (id, name) in registry.noncovalent_bond_names() {
+        for (id, name) in namespace.noncovalent_bond_names() {
             metadata.set_noncovalent_bond_id(id, name);
         }
-        for (id, name) in registry.stereo_atom_names() {
+        for (id, name) in namespace.stereo_atom_names() {
             metadata.set_stereo_atom_id(id, name);
         }
-        for (id, name) in registry.stereo_bond_names() {
+        for (id, name) in namespace.stereo_bond_names() {
             metadata.set_stereo_bond_id(id, name);
         }
-        for (name, dsl) in registry.iter_atom_aliases() {
+        for (name, dsl) in namespace.iter_atom_aliases() {
             metadata.add_atom_alias(name, dsl.clone());
         }
         metadata
@@ -1390,7 +1390,7 @@ impl MoleculeInput {
     /// Destructive lowering: consumes the input, resolves refs against the
     /// built id scopes, and produces the final `MoleculeAst` with its
     /// `MoleculeMetadata`. Called from `FromEdn::from_edn` and the streaming path.
-    pub(crate) fn into_ast(self) -> Result<(MoleculeAst, EntityRegistry), ParseError> {
+    pub(crate) fn into_ast(self) -> Result<(MoleculeAst, MoleculeNamespace), ParseError> {
         let MoleculeInput {
             atoms: atom_entries,
             bonds: bond_entries,
@@ -1422,10 +1422,10 @@ impl MoleculeInput {
 
         // Atoms: materialize AtomAst from each entry; collect ids.
         let mut atoms: Vec<AtomAst> = Vec::with_capacity(atom_entries.len());
-        let mut registry = EntityRegistry::default();
+        let mut namespace = MoleculeNamespace::default();
         let mut atom_id_to_idx: IndexMap<String, AtomId> = IndexMap::new();
         for (pos, entry) in atom_entries.into_iter().enumerate() {
-            registry.register_atom(entry.id.clone());
+            namespace.register_atom(entry.id.clone());
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
                 atom_id_to_idx.insert(id, AtomId(pos as u32));
@@ -1450,7 +1450,7 @@ impl MoleculeInput {
             }
             let a = entry.first.resolve(atom_count, &atom_id_to_idx)?;
             let b = entry.second.resolve(atom_count, &atom_id_to_idx)?;
-            registry.register_bond(id_name, a, b);
+            namespace.register_bond(id_name, a, b);
             bonds.push((a, b, entry.bond.0));
         }
 
@@ -1476,7 +1476,7 @@ impl MoleculeInput {
                 ));
             }
             let acceptor = entry.acceptor.resolve(atom_count, &atom_id_to_idx)?;
-            registry.register_dative_bond(id_name, &donors, acceptor);
+            namespace.register_dative_bond(id_name, &donors, acceptor);
             dative_list.push((donors, acceptor, entry.bond.0));
         }
 
@@ -1496,7 +1496,7 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|r| r.resolve(atom_count, &atom_id_to_idx))
                 .collect::<Result<_, _>>()?;
-            registry.register_aromatic_system(id_name, &atoms_resolved);
+            namespace.register_aromatic_system(id_name, &atoms_resolved);
             aromatic_list.push((atoms_resolved, entry.system.0));
         }
 
@@ -1516,7 +1516,7 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|r| r.resolve(atom_count, &atom_id_to_idx))
                 .collect::<Result<_, _>>()?;
-            registry.register_multicenter_bond(id_name, &atoms_resolved);
+            namespace.register_multicenter_bond(id_name, &atoms_resolved);
             multicenter_list.push((atoms_resolved, entry.bond.0));
         }
 
@@ -1533,7 +1533,7 @@ impl MoleculeInput {
             }
             let first = entry.first.resolve(atom_count, &atom_id_to_idx)?;
             let second = entry.second.resolve(atom_count, &atom_id_to_idx)?;
-            registry.register_noncovalent_bond(id_name, first, second);
+            namespace.register_noncovalent_bond(id_name, first, second);
             noncovalent_list.push((first, second, entry.bond.0));
         }
 
@@ -1560,7 +1560,7 @@ impl MoleculeInput {
                     ))
                 })
                 .collect::<Result<_, ParseError>>()?;
-            registry.register_stereo_atom(id_name, site);
+            namespace.register_stereo_atom(id_name, site);
             stereo_atom_list.push((site, ligands, entry.stereo.0));
         }
 
@@ -1586,31 +1586,31 @@ impl MoleculeInput {
                     ))
                 })
                 .collect::<Result<_, ParseError>>()?;
-            registry.register_stereo_bond(id_name, site);
+            namespace.register_stereo_bond(id_name, site);
             stereo_bond_list.push((site, ligands, entry.stereo.0));
         }
 
         // Atom aliases. Names are guaranteed unique by the upstream
-        // `parse_aliases` dedup; the registry's `BiBTreeMap` is last-wins on
+        // `parse_aliases` dedup; the namespace's `BiBTreeMap` is last-wins on
         // duplicate atom-dsl, which can't fire here.
         for (name, dsl) in alias_table {
-            registry.register_atom_alias(name, dsl);
+            namespace.register_atom_alias(name, dsl);
         }
 
-        // The registry is now complete; `MoleculeMetadata` is its roundtrip projection. Constraint
-        // resolution still takes `&metadata` + `&counts` (both sourced from the registry) until S3
-        // moves it onto the registry directly.
+        // The namespace is now complete; `MoleculeMetadata` is its roundtrip projection. Constraint
+        // resolution still takes `&metadata` + `&counts` (both sourced from the namespace) until S3
+        // moves it onto the namespace directly.
         let counts = EntityCounts {
-            atom_count: registry.atom_count(),
-            bond_count: registry.bond_count(),
-            dative_bond_count: registry.dative_bond_count(),
-            aromatic_system_count: registry.aromatic_system_count(),
-            multicenter_bond_count: registry.multicenter_bond_count(),
-            noncovalent_bond_count: registry.noncovalent_bond_count(),
-            stereo_atom_count: registry.stereo_atom_count(),
-            stereo_bond_count: registry.stereo_bond_count(),
+            atom_count: namespace.atom_count(),
+            bond_count: namespace.bond_count(),
+            dative_bond_count: namespace.dative_bond_count(),
+            aromatic_system_count: namespace.aromatic_system_count(),
+            multicenter_bond_count: namespace.multicenter_bond_count(),
+            noncovalent_bond_count: namespace.noncovalent_bond_count(),
+            stereo_atom_count: namespace.stereo_atom_count(),
+            stereo_bond_count: namespace.stereo_bond_count(),
         };
-        let metadata = MoleculeMetadata::from(&registry);
+        let metadata = MoleculeMetadata::from(&namespace);
         let constraints = ConstraintsDsl(constraint_dsls).into_ast(&counts, &metadata)?;
 
         let ast = MoleculeAst::from_parts(
@@ -1624,7 +1624,7 @@ impl MoleculeInput {
             stereo_bond_list,
             constraints,
         );
-        Ok((ast, registry))
+        Ok((ast, namespace))
     }
 }
 

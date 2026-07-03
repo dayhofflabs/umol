@@ -215,7 +215,7 @@ unordered, only restates the atom bijection `induce` already derives — so `res
 pair as a consistency assertion against the induced correspondence (a contradicting one is an error),
 never an override. The useful surface is naming an id-less entity by its parts.
 
-### Resolution — the growing entity registry
+### Resolution — the growing entity namespace
 
 Refs resolve during `*Input` → AST conversion, and at that point **there is no built `MoleculeAst`**:
 `molecule.rs`'s `into_ast` collects entities into `Vec<(participants, ast)>` and calls `from_parts`
@@ -224,7 +224,7 @@ far), held as counts + metadata, not a queryable structure. So structural resolu
 AST-level `find_by_participants` on a finished molecule — it resolves against the state built so far.
 
 `EntityCounts` (per-kind running counts, already grown by the delta loop via `allocate_*`) reshapes
-into an **`EntityRegistry`**: per kind a running count + name→id map + a **participant lookup**, grown
+into an **`MoleculeNamespace`**: per kind a running count + name→id map + a **participant lookup**, grown
 incrementally during molecule parsing (unifying with the delta loop). This also enables index-range
 checks *as you parse* rather than only at the end. Structural resolution = resolve the inner
 atom/bond refs → form the participant key → look up (≤1 hit).
@@ -245,7 +245,7 @@ query always sees its target already registered; removal in the delta loop rides
 `IdCompaction`. The one honest asymmetry: bonds use a parse-time endpoint map (a bond is a graph edge,
 not a relation set) while overlays call `find_by_participants`.
 
-The resolution context unifies onto `&EntityRegistry`: `resolve(&registry)` replaces today's
+The resolution context unifies onto `&MoleculeNamespace`: `resolve(&namespace)` replaces today's
 `resolve(count, id_to_idx)` / `into_ast(count, metadata)` at every ref site, which is what makes all
 sites light up from one change. `Structural` is **input-only** — the AST stores the resolved id with
 no memory of structural authoring, so `ToEdn`/`from_ast` still render `Index`/`Id` (same lossiness as
@@ -285,7 +285,7 @@ lights up with S3):
 
 ### Implementation plan
 
-Modules: **ast** (precondition) → **dsl foundation** (registry, parsers) → **dsl surface** (refs).
+Modules: **ast** (precondition) → **dsl foundation** (namespace, parsers) → **dsl surface** (refs).
 Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (resolve signature).
 
 **S0 — precondition (ast)** — independent, land by S3b **Done**
@@ -299,65 +299,121 @@ Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (
   (stereo) — into shared `read_*` fns; entry parsers delegate. **additive (green)**,
   behavior-preserving. `[dep: —]`
 
-**S2 — entity registry (dsl)** — additive + internal restructure
-- **S2a** `dsl`: `EntityRegistry` — a **new** type in `dsl/registry.rs` (not an in-place `EntityCounts`
+**S2 — entity namespace (dsl)** — additive + internal restructure
+- **S2a** `dsl`: `MoleculeNamespace` — a **new** type in `dsl/namespace.rs` (not an in-place `EntityCounts`
   rename, which would break the molecule end-of-parse struct literal). Per kind: running count, name→id
   map, participant lookup (bond `(min,max)→BondId`; overlays index their small collections), via
   private `NamedRegistry`/`KeyedRegistry`. `register_<entity>(name?, participants) -> Id`,
   `<entity>_by_participants(..)`, count/name accessors. Introduced alongside `EntityCounts`; the latter
-  retires in S3 when resolution moves onto the registry. **additive (green)** — module `#[allow(dead_code)]`
+  retires in S3 when resolution moves onto the namespace. **additive (green)** — module `#[allow(dead_code)]`
   until wired. `[dep: —]` **Done**
-- **S2b** `dsl`: grow the registry's participant data incrementally in `MoleculeInput::into_ast`
+- **S2b** `dsl`: grow the namespace's participant data incrementally in `MoleculeInput::into_ast`
   (register each entity as parsed, so mid-build sites see it). Counts/results unchanged. **green.**
   `[dep: S2a]` **Done**
-- **S2c** `dsl`: make the registry the **source of truth for naming**, `MoleculeMetadata` a derived
-  view (metadata ⊂ registry — see the note below). Registry gains the **atom-alias table** (aliases and
-  entity ids share one namespace, enforced by `check_id_disjoint`); add `MoleculeMetadata::from(&EntityRegistry)`
+- **S2c** `dsl`: make the namespace the **source of truth for naming**, `MoleculeMetadata` a derived
+  view (metadata ⊂ namespace — see the note below). Registry gains the **atom-alias table** (aliases and
+  entity ids share one namespace, enforced by `check_id_disjoint`); add `MoleculeMetadata::from(&MoleculeNamespace)`
   (id→name by inverting `by_name`; aliases read directly). Change `MoleculeInput::into_ast →
-  (MoleculeAst, EntityRegistry)` (an internal method, no trait constraint); `MoleculeDsl` formation
+  (MoleculeAst, MoleculeNamespace)` (an internal method, no trait constraint); `MoleculeDsl` formation
   derives the metadata via the projection. **breaking (into_ast return + MoleculeDsl formation),
-  internal.** `[dep: S2b]`
-- **S2d** `dsl`: reaction delta loop (`ReactionInput::into_ast`) **reuses the returned lhs registry**
-  (no rebuild — the delta namespace *is* the lhs namespace continued) and grows it in delta order:
-  register on `Add`. **Monotonic — no shrink**: `Remove`/`Modify` only resolve a ref and are restricted
-  to lhs entities (`id.index() >= lhs_count` is an error), so the DSL delta pass never compacts —
-  compaction is apply-time, not parse-time. Derive `ReactionMetadata` from the registry (lhs vs created
-  via the existing id-range guards); retire `EntityCounts::from_ast`. `[dep: S2c]`
+  internal.** `[dep: S2b]` **Done**
+- **S2d** `dsl`: reaction delta loop (`ReactionInput::into_ast`) — **phase A: grow `delta_namespace`,
+  additively. Done.** `lhs_namespace` (returned by `into_ast`, S2c) stays as the lhs namespace,
+  immutable through the deltas; build `delta_namespace = MoleculeNamespace::continuation(&lhs_namespace)` —
+  a new ctor that copies the lhs per-kind counts (via `NamedRegistry`/`KeyedRegistry::with_count`) so
+  `register_*` hands out **global** ids continuing the lhs id space, with empty name/participant/alias
+  maps, so it holds only the delta-created entities. Grow it on each `Add` arm
+  (`delta_namespace.register_<entity>(name, participants)`), monotonically — `Remove`/`Modify` never
+  shrink it (the DSL delta pass never compacts — that's apply-time). **Purely additive/green** —
+  `delta_namespace` is grown in parallel to everything else and read by nothing yet; `EntityCounts`,
+  `from_ast`, the reaction's `namespace`, and the incremental `ReactionMetadata` are all left untouched.
+  **Handoff to S3d + S3e (explicit, survives compaction):** S2d leaves in place, unchanged, the live
+  `counts` (`EntityCounts`, still the id allocator + resolution bound), the reaction's `namespace` (a
+  `MoleculeMetadata` clone grown on `Add`, still what resolution uses), and the **incremental
+  `ReactionMetadata` building** (still the roundtrip artifact). `delta_namespace` is grown but read by
+  nothing. **S3e** eliminates `EntityCounts` (below). **S3d** does one delta-loop rewrite: sole counter →
+  `delta_namespace`, resolution → the two-namespace pair (drop `namespace`), `ReactionMetadata` → derived.
+  The single-counter rewire is deliberately *not* done in S2d — it means reordering every `Add` arm to
+  take its id from `register_*` and is the same delta-loop surgery S3d does for resolution, so folding it
+  into S3d rewrites the loop once, not twice. `[dep: S2c]` **Done**
 - **S2e** `dsl`: reaction-span build (`SpanInput::into_ast`) is molecule-shaped and **self-contained**
-  (ids are molecule-shaped; it embeds no lhs molecule parse), so it builds its **own** registry
+  (ids are molecule-shaped; it embeds no lhs molecule parse), so it builds its **own** namespace
   (parallel-grow like S2b) and projects its own metadata. `[dep: S2b]`
 
-  *Note (metadata ⊂ registry).* `MoleculeMetadata` is the roundtrip-relevant subset of the registry:
-  its eight `id→name` maps are the exact inverse of the registry's `by_name`, and `atom_aliases` moves
-  into the registry. Everything else the registry holds (name→id, participant indexes, counts) is
+  *Note (metadata ⊂ namespace).* `MoleculeMetadata` is the roundtrip-relevant subset of the namespace:
+  its eight `id→name` maps are the exact inverse of the namespace's `by_name`, and `atom_aliases` moves
+  into the namespace. Everything else the namespace holds (name→id, participant indexes, counts) is
   parse-only and derivable from `ast + metadata`, so it never belongs in the persistent public type.
-  Hence the registry is the source and metadata a boundary projection — not a merged union, and not
+  Hence the namespace is the source and metadata a boundary projection — not a merged union, and not
   rebuilt from metadata.
 
 **S3 — structural refs (dsl)** — the breaking rewire that lights up every site
 - **S3a** `dsl/refs.rs`: add `Structural(payload)` to the 7 non-atom refs (parametrize `define_ref!`
   with the per-entity payload + participant-resolution; `AtomRef` unchanged); `FromEdn` gains the
   `Edn::Map` arm reusing S1a's readers (rejecting `:type`/`:id`); `resolve` becomes
-  `resolve(&EntityRegistry)` — `Index`/`Id` via count + name map, `Structural` resolves inner atom/bond
+  `resolve(&MoleculeNamespace)` — `Index`/`Id` via count + name map, `Structural` resolves inner atom/bond
   refs then `find_*_by_participants` (`StereoBondRef` nests a `BondRef`, one level). `ToEdn`/`from_ast`
   unchanged. **breaking (resolve signature + enum).** `[dep: S1a, S2a]`
-- **S3b** `dsl`: migrate every resolution site to `resolve(&registry)` and drop the per-loop
+- **S3b** `dsl`: migrate every resolution site to `resolve(&namespace)` and drop the per-loop
   `id_to_idx` maps — entity entries (stereo-bond `:site`), `constraint.rs`, `relational.rs` (18
   variants), `SubPatternAnchorDsl`, `:bond-order-sum :bonds`, `reaction.rs` deltas, `reaction_span.rs`.
   **red→green.** `[dep: S3a, S2b, S2d, S2e, S0a]`
-- **S3c** `dsl`: centralize id-namespace uniqueness on the registry. Today the build enforces
+- **S3c** `dsl`: centralize id-namespace uniqueness on the namespace. Today the build enforces
   "every id keyword is unique across {atom ids, non-atom entity ids, alias names}" through three
   scattered locals — the free fn `check_id_disjoint` (id vs atom-ids + aliases), the `entry_ids` set
-  (id vs non-atom ids), and atom self-uniqueness via `atom_id_to_idx`. Now that the registry owns the
+  (id vs non-atom ids), and atom self-uniqueness via `atom_id_to_idx`. Now that the namespace owns the
   whole namespace (all eight `by_name` + `atom_aliases`), fold this in: `register_*` (or a `reserve`)
   checks the candidate name against every kind + aliases and returns `Err(DuplicateId)` on collision.
   Removes `check_id_disjoint` and `entry_ids`; the parallel `atom_id_to_idx`/`bond_id_to_idx` are
   already gone (S3b). Note: the check moves to register-time (after participant resolution), a minor
   error-ordering change to accept. `[dep: S3b]`
+- **S3d** `dsl`: **reaction resolution + `ReactionMetadata` onto two registries; retire `namespace`.**
+  This is phase B of the reaction namespace work (S2d was phase A). A reaction has **two id
+  namespaces** — the lhs molecule (given, immutable) and the entities the deltas *create* — combined
+  for *resolution* (a delta ref may name either) but kept **separate for roundtrip**: `ReactionMetadata`
+  is `lhs: MoleculeMetadata` + created id maps + created `atom_aliases`, because the lhs re-renders as a
+  molecule and the deltas re-render with their created ids. Model them as the two registries S2d already
+  built: `lhs_namespace` (from `into_ast`) + `delta_namespace` (continuing the lhs id space, holding only
+  created entities).
+  - **Why two registries, not one merged + an id-range split.** Id-indexed entities *do* have a clean
+    boundary (`id.index() >= lhs_namespace.<kind>_count()`), so a single grown namespace would split fine
+    for atoms/bonds/overlays. But **aliases are name-indexed with no id boundary** — in a merged
+    namespace `atom_aliases = lhs ∪ created`, and recovering the created aliases needs a set-difference
+    against the lhs aliases. Two registries give `delta_namespace.atom_aliases = created` for free. The
+    created **alias** namespace is the reason two beats one-plus-filter. (`ReactionMetadata` is still
+    *entirely* derivable from namespace data — there is no "more" — it just needs the data kept in two
+    registries.)
+  - **Resolution.** A `ReactionNamespace { lhs: &MoleculeNamespace, delta: &MoleculeNamespace }` wrapper (or
+    resolve inline against both) exposing `by_name` / `count` / `by_participants` that try lhs then
+    delta; reaction ref sites `resolve` against it (the S3a/S3b `resolve(&…)` rewire, over the pair).
+    The reaction's `namespace` (the `MoleculeMetadata` clone) retires.
+  - **`ReactionMetadata` derivation.** `.lhs = MoleculeMetadata::from(&lhs_namespace)`; the created id
+    maps + `atom_aliases` project from `delta_namespace` (its `by_name` / `atom_aliases` are exactly the
+    created set). Remove the incremental `metadata.set_*` in the `Add` arms.
+  `[dep: S2d, S3a, S3b]`
+- **S3e** `dsl`: **eliminate `EntityCounts` — all callers adjusted.** Its data (the eight per-kind
+  counts) is a strict subset of `MoleculeNamespace`, so it goes entirely; nothing keeps it around. Every
+  count-consumer takes the count from a `&MoleculeNamespace` (`.<kind>_count()`) instead:
+  - **constraint resolution** — `ConstraintsDsl::into_ast`, `SubPatternAnchorDsl`,
+    `RelationalConstraintDsl::into_ast`, and the ref `resolve(count, …)` bounds: swap the `&EntityCounts`
+    parameter for `&MoleculeNamespace` (this is the count side of the S3a/S3b resolve rewire).
+  - **molecule build** (`MoleculeInput::into_ast`): drop the `EntityCounts { … }` literal; pass
+    `&namespace` to constraint resolution.
+  - **reaction delta loop**: `counts.allocate_*` → `delta_namespace.register_*`,
+    `counts.<kind>_count` → `delta_namespace.<kind>_count()`, guards via `lhs_namespace.<kind>_count()`
+    (rides S3d's one loop rewrite).
+  - **reaction-span build** (`SpanInput::into_ast`): same, over its own namespace (S2e).
+  - **`SubPatternAnchor` pattern counts** (`EntityCounts::from_ast(&pattern)`): the pattern's counts come
+    from *its* `MoleculeNamespace`. *(Open: the pattern is a `MoleculeAst` here — either thread its parse
+    namespace in, or add a counts-only namespace-from-ast ctor. Decide when implementing.)*
+  - **tests**: the `full_counts()` helpers / `#[from(full_counts)]` fixtures in `constraint.rs` /
+    `relational.rs` build a `MoleculeNamespace` instead.
+  - remove `EntityCounts` (struct + `from_ast` + `allocate_*` + reads) from `constraint.rs`.
+  `[dep: S3b, S3d]`
 
 **Critical path** S2a → S2b → S2c → {S2d, S2e} → S3a → S3b; S0 and S1 are independent foundations.
 **Deferrable within
 S3b**: the stereo-bond *entry* `:site` structural form is the only mid-build site (the sole reason S2b
-grows the registry incrementally rather than at end); if fiddly, ship the reference sites first and add
+grows the namespace incrementally rather than at end); if fiddly, ship the reference sites first and add
 the entry-site form after. **Confirm before S3a**: stereo resolution keys on **site** (unique per the
 validator), so `:ligands` is then an optional frame assertion vs required-match.

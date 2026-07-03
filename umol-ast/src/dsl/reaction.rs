@@ -41,6 +41,7 @@ use super::molecule::{
     StereoBondEntryInput,
 };
 use super::multicenter::{MulticenterBondDsl, PartialMulticenterBondDsl};
+use super::namespace::MoleculeNamespace;
 use super::noncovalent::{NoncovalentBondDsl, PartialNoncovalentBondDsl};
 use super::refs::{
     read_aromatic_system_ref, read_atom_ref, read_bond_ref, read_dative_bond_ref,
@@ -384,8 +385,8 @@ impl ReactionInput {
             atom_aliases,
             deltas,
         } = self;
-        let (lhs, lhs_registry) = lhs.into_ast()?;
-        let lhs_meta = MoleculeMetadata::from(&lhs_registry);
+        let (lhs, lhs_namespace) = lhs.into_ast()?;
+        let lhs_meta = MoleculeMetadata::from(&lhs_namespace);
 
         // Alias table for `:add` = lhs aliases ∪ reaction aliases (bijective; collisions error).
         let mut aliases: IndexMap<String, Box<AtomDsl>> = lhs_meta
@@ -414,6 +415,10 @@ impl ReactionInput {
         // constraint — resolves against this pair; `metadata` separately records created-entity ids
         // for roundtrip. No forward refs: only adds processed earlier are visible.
         let mut counts = EntityCounts::from_ast(&lhs);
+        // Phase A (S2d): the delta namespace continues the lhs id space, grown on `Add` so structural
+        // refs (S3) to created entities resolve. `counts` remains the live counter here — it and every
+        // other `EntityCounts` user are retired onto the namespace at the S3 elimination point.
+        let mut delta_namespace = MoleculeNamespace::continuation(&lhs_namespace);
         let mut namespace = metadata.lhs().clone();
         let lhs_atom_count = counts.atom_count;
         let lhs_bond_count = counts.bond_count;
@@ -429,6 +434,7 @@ impl ReactionInput {
             match delta {
                 DeltaInput::AtomAdd(entry) => {
                     let id = counts.allocate_atom();
+                    let id_name = entry.id.clone();
                     if let Some(name) = entry.id {
                         if namespace.contains_id(&name) || aliases.contains_key(&name) {
                             return Err(ParseError::DuplicateId(name));
@@ -437,6 +443,7 @@ impl ReactionInput {
                         metadata.set_atom_id(id, name);
                     }
                     let ast = resolve_atom_spec(entry.spec, &aliases)?;
+                    delta_namespace.register_atom(id_name);
                     resolved.push(Delta::Atom(AtomDelta::Add { id, ast }));
                 }
                 DeltaInput::AtomRemove(r) => {
@@ -467,6 +474,7 @@ impl ReactionInput {
                 }
                 DeltaInput::BondAdd(entry) => {
                     let id = counts.allocate_bond();
+                    let id_name = entry.id.clone();
                     if let Some(name) = entry.id {
                         if namespace.contains_id(&name) || aliases.contains_key(&name) {
                             return Err(ParseError::DuplicateId(name));
@@ -476,6 +484,7 @@ impl ReactionInput {
                     }
                     let a = entry.first.into_ast(counts.atom_count, &namespace)?;
                     let b = entry.second.into_ast(counts.atom_count, &namespace)?;
+                    delta_namespace.register_bond(id_name, a, b);
                     resolved.push(Delta::Bond(BondDelta::Add {
                         id,
                         atoms: [a, b],
@@ -511,6 +520,7 @@ impl ReactionInput {
                 }
                 DeltaInput::DativeBondAdd(entry) => {
                     let id = counts.allocate_dative_bond();
+                    let id_name = entry.id.clone();
                     if let Some(name) = entry.id {
                         if namespace.contains_id(&name) || aliases.contains_key(&name) {
                             return Err(ParseError::DuplicateId(name));
@@ -524,6 +534,7 @@ impl ReactionInput {
                         .map(|d| d.into_ast(counts.atom_count, &namespace))
                         .collect::<Result<Vec<_>, _>>()?;
                     let acceptor = entry.acceptor.into_ast(counts.atom_count, &namespace)?;
+                    delta_namespace.register_dative_bond(id_name, &donors, acceptor);
                     resolved.push(Delta::DativeBond(DativeBondDelta::Add {
                         id,
                         donors,
@@ -562,6 +573,7 @@ impl ReactionInput {
                 }
                 DeltaInput::AromaticSystemAdd(entry) => {
                     let id = counts.allocate_aromatic_system();
+                    let id_name = entry.id.clone();
                     if let Some(name) = entry.id {
                         if namespace.contains_id(&name) || aliases.contains_key(&name) {
                             return Err(ParseError::DuplicateId(name));
@@ -574,6 +586,7 @@ impl ReactionInput {
                         .into_iter()
                         .map(|a| a.into_ast(counts.atom_count, &namespace))
                         .collect::<Result<Vec<_>, _>>()?;
+                    delta_namespace.register_aromatic_system(id_name, &atoms);
                     resolved.push(Delta::AromaticSystem(AromaticSystemDelta::Add {
                         id,
                         atoms,
@@ -610,6 +623,7 @@ impl ReactionInput {
                 }
                 DeltaInput::MulticenterBondAdd(entry) => {
                     let id = counts.allocate_multicenter_bond();
+                    let id_name = entry.id.clone();
                     if let Some(name) = entry.id {
                         if namespace.contains_id(&name) || aliases.contains_key(&name) {
                             return Err(ParseError::DuplicateId(name));
@@ -622,6 +636,7 @@ impl ReactionInput {
                         .into_iter()
                         .map(|a| a.into_ast(counts.atom_count, &namespace))
                         .collect::<Result<Vec<_>, _>>()?;
+                    delta_namespace.register_multicenter_bond(id_name, &atoms);
                     resolved.push(Delta::MulticenterBond(MulticenterBondDelta::Add {
                         id,
                         atoms,
@@ -658,6 +673,7 @@ impl ReactionInput {
                 }
                 DeltaInput::NoncovalentBondAdd(entry) => {
                     let id = counts.allocate_noncovalent_bond();
+                    let id_name = entry.id.clone();
                     if let Some(name) = entry.id {
                         if namespace.contains_id(&name) || aliases.contains_key(&name) {
                             return Err(ParseError::DuplicateId(name));
@@ -667,6 +683,7 @@ impl ReactionInput {
                     }
                     let first = entry.first.into_ast(counts.atom_count, &namespace)?;
                     let second = entry.second.into_ast(counts.atom_count, &namespace)?;
+                    delta_namespace.register_noncovalent_bond(id_name, first, second);
                     resolved.push(Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                         id,
                         atoms: [first, second],
@@ -702,6 +719,7 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoAtomAdd(entry) => {
                     let id = counts.allocate_stereo_atom();
+                    let id_name = entry.id.clone();
                     if let Some(name) = entry.id {
                         if namespace.contains_id(&name) || aliases.contains_key(&name) {
                             return Err(ParseError::DuplicateId(name));
@@ -720,6 +738,7 @@ impl ReactionInput {
                             ))
                         })
                         .collect::<Result<Vec<_>, ParseError>>()?;
+                    delta_namespace.register_stereo_atom(id_name, site);
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Add {
                         id,
                         site,
@@ -795,6 +814,7 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoBondAdd(entry) => {
                     let id = counts.allocate_stereo_bond();
+                    let id_name = entry.id.clone();
                     if let Some(name) = entry.id {
                         if namespace.contains_id(&name) || aliases.contains_key(&name) {
                             return Err(ParseError::DuplicateId(name));
@@ -813,6 +833,7 @@ impl ReactionInput {
                             ))
                         })
                         .collect::<Result<Vec<_>, ParseError>>()?;
+                    delta_namespace.register_stereo_bond(id_name, site);
                     resolved.push(Delta::StereoBond(StereoBondDelta::Add {
                         id,
                         site,

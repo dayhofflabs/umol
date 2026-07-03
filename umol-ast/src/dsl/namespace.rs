@@ -1,16 +1,16 @@
-//! Growing per-entity registry built while parsing a molecule (or applying reaction deltas): a
-//! running count, an id-keyword lookup, and a participant lookup for each entity kind. Reshapes the
-//! former `EntityCounts` so index bounds are checked as entities are parsed rather than only at the
-//! end, and structural refs (a non-atom entity named by its constituent atoms/bonds) resolve
-//! against it.
+//! A molecule's parse-time **namespace**: per entity kind, a running count, an id-keyword lookup, and
+//! a participant lookup, plus the atom-alias table. Grown while parsing a molecule (or applying
+//! reaction deltas); the roundtrip subset projects out as [`MoleculeMetadata`]. Reshapes the former
+//! `EntityCounts` so index bounds are checked as entities are parsed rather than only at the end, and
+//! structural refs (a non-atom entity named by its constituent atoms/bonds) resolve against it.
 //!
 //! Cost splits by kind: atoms carry no participant lookup (the base kind), bonds an O(1)
 //! `(min,max) → id` endpoint map (a bond is a graph edge), the five overlays a participant index
 //! over their small collections. §4.1 uniqueness (no two same-constituent entries) makes every
 //! participant lookup a ≤1 hit.
 
-// Wired into molecule parsing (S2b) and the reaction delta loop (S2c); until then the registry API
-// is exercised only by the unit tests below.
+// Wired into molecule parsing (S2b) and the reaction delta loop (S2d); until then the participant/name
+// query surface is exercised only by the unit tests below.
 #![allow(dead_code)]
 
 use std::collections::{BTreeSet, HashMap};
@@ -66,6 +66,15 @@ impl<Id: Copy + From<usize>> NamedRegistry<Id> {
     fn count(&self) -> usize {
         self.count
     }
+
+    /// A registry whose count starts at `count` (so `register` hands out ids from there on) with an
+    /// empty name map — the shape a delta namespace takes over its lhs's id space.
+    fn with_count(count: usize) -> Self {
+        Self {
+            count,
+            by_name: IndexMap::new(),
+        }
+    }
 }
 
 /// Count + id-keyword + participant lookup for one non-atom entity kind. `Key` is the entity's
@@ -109,6 +118,13 @@ impl<Id: Copy + From<usize>, Key: Eq + Hash> KeyedRegistry<Id, Key> {
     fn count(&self) -> usize {
         self.named.count()
     }
+
+    fn with_count(count: usize) -> Self {
+        Self {
+            named: NamedRegistry::with_count(count),
+            by_participants: HashMap::new(),
+        }
+    }
 }
 
 /// The unordered endpoint pair of a bond / noncovalent bond, in ascending order — the canonical key.
@@ -122,7 +138,7 @@ fn atom_pair_key(a: AtomId, b: AtomId) -> [AtomId; 2] {
 
 /// The eight per-kind registries built while parsing a molecule or applying reaction deltas.
 #[derive(Debug, Default)]
-pub(crate) struct EntityRegistry {
+pub(crate) struct MoleculeNamespace {
     atoms: NamedRegistry<AtomId>,
     bonds: KeyedRegistry<BondId, [AtomId; 2]>,
     dative_bonds: KeyedRegistry<DativeBondId, (BTreeSet<AtomId>, AtomId)>,
@@ -132,11 +148,28 @@ pub(crate) struct EntityRegistry {
     stereo_atoms: KeyedRegistry<StereoAtomId, AtomId>,
     stereo_bonds: KeyedRegistry<StereoBondId, BondId>,
     /// The bijective atom-alias table (name ↔ atom-spec template) — part of the atom name namespace
-    /// (an `:id` may not collide with an alias name), so the registry owns it.
+    /// (an `:id` may not collide with an alias name), so the namespace owns it.
     atom_aliases: BiBTreeMap<String, Box<AtomDsl>>,
 }
 
-impl EntityRegistry {
+impl MoleculeNamespace {
+    /// A namespace continuing another's id space: each kind's count starts at `other`'s count (so
+    /// `register_*` hands out ids following it), with empty name / participant / alias maps — it holds
+    /// only the entities registered into it. Used for a reaction's delta namespace over its lhs.
+    pub(crate) fn continuation(other: &MoleculeNamespace) -> Self {
+        Self {
+            atoms: NamedRegistry::with_count(other.atoms.count()),
+            bonds: KeyedRegistry::with_count(other.bonds.count()),
+            dative_bonds: KeyedRegistry::with_count(other.dative_bonds.count()),
+            aromatic_systems: KeyedRegistry::with_count(other.aromatic_systems.count()),
+            multicenter_bonds: KeyedRegistry::with_count(other.multicenter_bonds.count()),
+            noncovalent_bonds: KeyedRegistry::with_count(other.noncovalent_bonds.count()),
+            stereo_atoms: KeyedRegistry::with_count(other.stereo_atoms.count()),
+            stereo_bonds: KeyedRegistry::with_count(other.stereo_bonds.count()),
+            atom_aliases: BiBTreeMap::new(),
+        }
+    }
+
     pub(crate) fn register_atom(&mut self, name: Option<String>) -> AtomId {
         self.atoms.register(name)
     }
@@ -358,143 +391,166 @@ mod tests {
     use super::*;
 
     #[rstest]
-    fn test_entity_registry_register_atom() {
-        let mut registry = EntityRegistry::default();
-        assert_eq!(registry.register_atom(None), AtomId(0));
-        assert_eq!(registry.register_atom(Some("c1".into())), AtomId(1));
-        assert_eq!(registry.register_atom(None), AtomId(2));
-        assert_eq!(registry.atom_count(), 3);
-        assert_eq!(registry.atom_by_name("c1"), Some(AtomId(1)));
-        assert_eq!(registry.atom_by_name("nope"), None);
+    fn test_molecule_namespace_register_atom() {
+        let mut namespace = MoleculeNamespace::default();
+        assert_eq!(namespace.register_atom(None), AtomId(0));
+        assert_eq!(namespace.register_atom(Some("c1".into())), AtomId(1));
+        assert_eq!(namespace.register_atom(None), AtomId(2));
+        assert_eq!(namespace.atom_count(), 3);
+        assert_eq!(namespace.atom_by_name("c1"), Some(AtomId(1)));
+        assert_eq!(namespace.atom_by_name("nope"), None);
     }
 
     #[rstest]
-    fn test_entity_registry_register_bond() {
-        let mut registry = EntityRegistry::default();
+    fn test_molecule_namespace_continuation() {
+        let mut lhs = MoleculeNamespace::default();
+        lhs.register_atom(None);
+        lhs.register_atom(Some("c1".into()));
+        lhs.register_bond(None, AtomId(0), AtomId(1));
+
+        let mut delta = MoleculeNamespace::continuation(&lhs);
+        // Counts continue the lhs id space; names/participants start empty.
+        assert_eq!(delta.atom_count(), 2);
+        assert_eq!(delta.bond_count(), 1);
+        assert_eq!(delta.atom_by_name("c1"), None);
+        assert_eq!(delta.bond_by_participants(AtomId(0), AtomId(1)), None);
+        // `register_*` hands out global ids following the lhs.
+        assert_eq!(delta.register_atom(None), AtomId(2));
+        assert_eq!(delta.register_bond(None, AtomId(0), AtomId(2)), BondId(1));
+        assert_eq!(delta.atom_count(), 3);
         assert_eq!(
-            registry.register_bond(None, AtomId(2), AtomId(0)),
+            delta.bond_by_participants(AtomId(0), AtomId(2)),
+            Some(BondId(1))
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_namespace_register_bond() {
+        let mut namespace = MoleculeNamespace::default();
+        assert_eq!(
+            namespace.register_bond(None, AtomId(2), AtomId(0)),
             BondId(0)
         );
         assert_eq!(
-            registry.register_bond(Some("b1".into()), AtomId(1), AtomId(3)),
+            namespace.register_bond(Some("b1".into()), AtomId(1), AtomId(3)),
             BondId(1)
         );
-        assert_eq!(registry.bond_count(), 2);
-        assert_eq!(registry.bond_by_name("b1"), Some(BondId(1)));
+        assert_eq!(namespace.bond_count(), 2);
+        assert_eq!(namespace.bond_by_name("b1"), Some(BondId(1)));
         // Endpoint key is order-independent.
         assert_eq!(
-            registry.bond_by_participants(AtomId(0), AtomId(2)),
+            namespace.bond_by_participants(AtomId(0), AtomId(2)),
             Some(BondId(0))
         );
         assert_eq!(
-            registry.bond_by_participants(AtomId(2), AtomId(0)),
+            namespace.bond_by_participants(AtomId(2), AtomId(0)),
             Some(BondId(0))
         );
-        assert_eq!(registry.bond_by_participants(AtomId(0), AtomId(4)), None);
+        assert_eq!(namespace.bond_by_participants(AtomId(0), AtomId(4)), None);
     }
 
     #[rstest]
-    fn test_entity_registry_register_dative_bond() {
-        let mut registry = EntityRegistry::default();
+    fn test_molecule_namespace_register_dative_bond() {
+        let mut namespace = MoleculeNamespace::default();
         assert_eq!(
-            registry.register_dative_bond(None, &[AtomId(1), AtomId(2)], AtomId(0)),
+            namespace.register_dative_bond(None, &[AtomId(1), AtomId(2)], AtomId(0)),
             DativeBondId(0)
         );
-        assert_eq!(registry.dative_bond_count(), 1);
+        assert_eq!(namespace.dative_bond_count(), 1);
         // Donor set is order-independent; the acceptor is distinguished.
         assert_eq!(
-            registry.dative_bond_by_participants(&[AtomId(2), AtomId(1)], AtomId(0)),
+            namespace.dative_bond_by_participants(&[AtomId(2), AtomId(1)], AtomId(0)),
             Some(DativeBondId(0))
         );
         assert_eq!(
-            registry.dative_bond_by_participants(&[AtomId(1), AtomId(2)], AtomId(3)),
+            namespace.dative_bond_by_participants(&[AtomId(1), AtomId(2)], AtomId(3)),
             None
         );
     }
 
     #[rstest]
-    fn test_entity_registry_register_aromatic_system() {
-        let mut registry = EntityRegistry::default();
+    fn test_molecule_namespace_register_aromatic_system() {
+        let mut namespace = MoleculeNamespace::default();
         assert_eq!(
-            registry.register_aromatic_system(None, &[AtomId(2), AtomId(0), AtomId(1)]),
+            namespace.register_aromatic_system(None, &[AtomId(2), AtomId(0), AtomId(1)]),
             AromaticSystemId(0)
         );
-        assert_eq!(registry.aromatic_system_count(), 1);
+        assert_eq!(namespace.aromatic_system_count(), 1);
         // Atom set is order-independent.
         assert_eq!(
-            registry.aromatic_system_by_participants(&[AtomId(0), AtomId(1), AtomId(2)]),
+            namespace.aromatic_system_by_participants(&[AtomId(0), AtomId(1), AtomId(2)]),
             Some(AromaticSystemId(0))
         );
         assert_eq!(
-            registry.aromatic_system_by_participants(&[AtomId(0), AtomId(1)]),
+            namespace.aromatic_system_by_participants(&[AtomId(0), AtomId(1)]),
             None
         );
     }
 
     #[rstest]
-    fn test_entity_registry_register_multicenter_bond() {
-        let mut registry = EntityRegistry::default();
+    fn test_molecule_namespace_register_multicenter_bond() {
+        let mut namespace = MoleculeNamespace::default();
         assert_eq!(
-            registry
+            namespace
                 .register_multicenter_bond(Some("m".into()), &[AtomId(0), AtomId(1), AtomId(2)]),
             MulticenterBondId(0)
         );
-        assert_eq!(registry.multicenter_bond_count(), 1);
+        assert_eq!(namespace.multicenter_bond_count(), 1);
         assert_eq!(
-            registry.multicenter_bond_by_name("m"),
+            namespace.multicenter_bond_by_name("m"),
             Some(MulticenterBondId(0))
         );
         assert_eq!(
-            registry.multicenter_bond_by_participants(&[AtomId(2), AtomId(1), AtomId(0)]),
+            namespace.multicenter_bond_by_participants(&[AtomId(2), AtomId(1), AtomId(0)]),
             Some(MulticenterBondId(0))
         );
     }
 
     #[rstest]
-    fn test_entity_registry_register_noncovalent_bond() {
-        let mut registry = EntityRegistry::default();
+    fn test_molecule_namespace_register_noncovalent_bond() {
+        let mut namespace = MoleculeNamespace::default();
         assert_eq!(
-            registry.register_noncovalent_bond(None, AtomId(3), AtomId(1)),
+            namespace.register_noncovalent_bond(None, AtomId(3), AtomId(1)),
             NoncovalentBondId(0)
         );
-        assert_eq!(registry.noncovalent_bond_count(), 1);
+        assert_eq!(namespace.noncovalent_bond_count(), 1);
         assert_eq!(
-            registry.noncovalent_bond_by_participants(AtomId(1), AtomId(3)),
+            namespace.noncovalent_bond_by_participants(AtomId(1), AtomId(3)),
             Some(NoncovalentBondId(0))
         );
         assert_eq!(
-            registry.noncovalent_bond_by_participants(AtomId(1), AtomId(2)),
+            namespace.noncovalent_bond_by_participants(AtomId(1), AtomId(2)),
             None
         );
     }
 
     #[rstest]
-    fn test_entity_registry_register_stereo_atom() {
-        let mut registry = EntityRegistry::default();
+    fn test_molecule_namespace_register_stereo_atom() {
+        let mut namespace = MoleculeNamespace::default();
         assert_eq!(
-            registry.register_stereo_atom(None, AtomId(4)),
+            namespace.register_stereo_atom(None, AtomId(4)),
             StereoAtomId(0)
         );
-        assert_eq!(registry.stereo_atom_count(), 1);
+        assert_eq!(namespace.stereo_atom_count(), 1);
         assert_eq!(
-            registry.stereo_atom_by_participants(AtomId(4)),
+            namespace.stereo_atom_by_participants(AtomId(4)),
             Some(StereoAtomId(0))
         );
-        assert_eq!(registry.stereo_atom_by_participants(AtomId(0)), None);
+        assert_eq!(namespace.stereo_atom_by_participants(AtomId(0)), None);
     }
 
     #[rstest]
-    fn test_entity_registry_register_stereo_bond() {
-        let mut registry = EntityRegistry::default();
+    fn test_molecule_namespace_register_stereo_bond() {
+        let mut namespace = MoleculeNamespace::default();
         assert_eq!(
-            registry.register_stereo_bond(None, BondId(2)),
+            namespace.register_stereo_bond(None, BondId(2)),
             StereoBondId(0)
         );
-        assert_eq!(registry.stereo_bond_count(), 1);
+        assert_eq!(namespace.stereo_bond_count(), 1);
         assert_eq!(
-            registry.stereo_bond_by_participants(BondId(2)),
+            namespace.stereo_bond_by_participants(BondId(2)),
             Some(StereoBondId(0))
         );
-        assert_eq!(registry.stereo_bond_by_participants(BondId(0)), None);
+        assert_eq!(namespace.stereo_bond_by_participants(BondId(0)), None);
     }
 }
