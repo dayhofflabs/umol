@@ -1,16 +1,12 @@
 # 126 — Fingerprint facility: design
 
-Status: Closed
-Date: 2026-06-22
-
-**Closed 2026-06-23.** Built: WL, ECFP, fold→`BitFp`, Morgan (RDKit-exact),
+**Competed as of 2026-06-23**: WL, ECFP, fold→`BitFp`, Morgan (RDKit-exact),
 substructure direction A (unhashed) and direction B (RDKit `PatternFingerprint`
 replica for acyclic + single rings), the counts layer (`CountedFeatureSet` /
 `SignedFeatureSet` / `featurize_counted`), and reaction FPs (`Difference` /
 `DisjointUnion`). Deferred with their blockers tracked elsewhere: slice-5 B
 ring-junction templates (doc 128 — derived-predicate matching), slice 7 DRFP and
-slice 8 BRIDGIT (both need SMILES rendering / canonicalization). Open: placement of
-the shared frozen RDKit boost hash (interim domain-private duplicate).
+slice 8 BRIDGIT (both need SMILES rendering / canonicalization).
 
 ## Goals
 

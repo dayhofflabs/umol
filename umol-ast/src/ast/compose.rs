@@ -388,7 +388,7 @@ fn compose_all(
 
     let mut results = Vec::new();
     for overlap in overlaps {
-        let mapping = overlap.mapping();
+        let mapping = overlap.nodes().mates();
         let lb_to_ra: HashMap<AtomId, AtomId> = mapping
             .iter()
             .map(|&(ra, lb)| (AtomId::from(lb), AtomId::from(ra)))

@@ -20,6 +20,7 @@
 
 use bitvec::prelude::*;
 
+use crate::correspondence::{Correspondence, GraphCorrespondence};
 use crate::graph::{EdgeId, Graph, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -54,77 +55,13 @@ pub enum MaximalCommonSubgraphAlgorithm {
     BronKerbosch,
 }
 
-/// One common subgraph: a vertex correspondence between the two graphs (sorted by
-/// the first graph's node) and the number of edges it shares.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CommonSubgraph {
-    mapping: Vec<(NodeId, NodeId)>,
-    edge_count: usize,
-}
-
-impl CommonSubgraph {
-    pub fn mapping(&self) -> &[(NodeId, NodeId)] {
-        &self.mapping
-    }
-
-    pub fn node_count(&self) -> usize {
-        self.mapping.len()
-    }
-
-    pub fn edge_count(&self) -> usize {
-        self.edge_count
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.mapping.is_empty()
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum McsAlgorithmKind {
     Induced,
     Edge,
 }
 
-// Return one maximum or all maximum common subgraphs.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Enumerate {
-    Single,
-    All,
-}
-
-fn into_single(results: Vec<CommonSubgraph>) -> CommonSubgraph {
-    results
-        .into_iter()
-        .next()
-        .expect("a maximum common subgraph always exists (empty at worst)")
-}
-
 impl Graph {
-    /// The maximum common induced subgraph (largest vertex set inducing isomorphic
-    /// subgraphs). Always exists — empty at worst.
-    pub fn maximum_common_induced_subgraph(
-        &self,
-        other: &Graph,
-        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
-        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-        connectivity: McsConnectivity,
-        alg: McisAlgorithm,
-    ) -> CommonSubgraph {
-        match alg {
-            McisAlgorithm::McGregor => into_single(self.mcs_mcgregor(
-                other,
-                node_match,
-                edge_match,
-                &[],
-                &[],
-                connectivity,
-                Enumerate::Single,
-                McsAlgorithmKind::Induced,
-            )),
-        }
-    }
-
     /// Every maximum common induced subgraph (all of the largest size).
     pub fn maximum_common_induced_subgraphs(
         &self,
@@ -133,7 +70,7 @@ impl Graph {
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
         connectivity: McsConnectivity,
         alg: McisAlgorithm,
-    ) -> Vec<CommonSubgraph> {
+    ) -> Vec<GraphCorrespondence> {
         match alg {
             McisAlgorithm::McGregor => self.mcs_mcgregor(
                 other,
@@ -142,33 +79,8 @@ impl Graph {
                 &[],
                 &[],
                 connectivity,
-                Enumerate::All,
                 McsAlgorithmKind::Induced,
             ),
-        }
-    }
-
-    /// The maximum common edge subgraph (largest shared edge set). Always exists —
-    /// empty at worst.
-    pub fn maximum_common_edge_subgraph(
-        &self,
-        other: &Graph,
-        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
-        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-        connectivity: McsConnectivity,
-        alg: McesAlgorithm,
-    ) -> CommonSubgraph {
-        match alg {
-            McesAlgorithm::McGregor => into_single(self.mcs_mcgregor(
-                other,
-                node_match,
-                edge_match,
-                &[],
-                &[],
-                connectivity,
-                Enumerate::Single,
-                McsAlgorithmKind::Edge,
-            )),
         }
     }
 
@@ -180,7 +92,7 @@ impl Graph {
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
         connectivity: McsConnectivity,
         alg: McesAlgorithm,
-    ) -> Vec<CommonSubgraph> {
+    ) -> Vec<GraphCorrespondence> {
         match alg {
             McesAlgorithm::McGregor => self.mcs_mcgregor(
                 other,
@@ -189,42 +101,14 @@ impl Graph {
                 &[],
                 &[],
                 connectivity,
-                Enumerate::All,
                 McsAlgorithmKind::Edge,
             ),
         }
     }
 
-    /// Seeded maximum common edge subgraph. `anchor` pairs are forced into the
-    /// result and never skipped; `hint` pairs warm-start the incumbent bound (may be
-    /// discarded). Either may be empty.
-    #[allow(clippy::too_many_arguments)]
-    pub fn maximum_common_edge_subgraph_seeded(
-        &self,
-        other: &Graph,
-        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
-        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
-        anchor: &[(NodeId, NodeId)],
-        hint: &[(NodeId, NodeId)],
-        connectivity: McsConnectivity,
-        alg: McesAlgorithm,
-    ) -> CommonSubgraph {
-        match alg {
-            McesAlgorithm::McGregor => into_single(self.mcs_mcgregor(
-                other,
-                node_match,
-                edge_match,
-                anchor,
-                hint,
-                connectivity,
-                Enumerate::Single,
-                McsAlgorithmKind::Edge,
-            )),
-        }
-    }
-
-    /// Every seeded maximum common edge subgraph. See
-    /// [`Graph::maximum_common_edge_subgraph_seeded`] for `anchor`/`hint`.
+    /// Every seeded maximum common edge subgraph. `anchor` pairs are forced into the result and
+    /// never skipped; `hint` pairs warm-start the incumbent bound (may be discarded). Either may be
+    /// empty.
     #[allow(clippy::too_many_arguments)]
     pub fn maximum_common_edge_subgraphs_seeded(
         &self,
@@ -235,7 +119,7 @@ impl Graph {
         hint: &[(NodeId, NodeId)],
         connectivity: McsConnectivity,
         alg: McesAlgorithm,
-    ) -> Vec<CommonSubgraph> {
+    ) -> Vec<GraphCorrespondence> {
         match alg {
             McesAlgorithm::McGregor => self.mcs_mcgregor(
                 other,
@@ -244,7 +128,6 @@ impl Graph {
                 anchor,
                 hint,
                 connectivity,
-                Enumerate::All,
                 McsAlgorithmKind::Edge,
             ),
         }
@@ -259,25 +142,24 @@ impl Graph {
         anchor: &[(NodeId, NodeId)],
         hint: &[(NodeId, NodeId)],
         connectivity: McsConnectivity,
-        enumerate: Enumerate,
         kind: McsAlgorithmKind,
-    ) -> Vec<CommonSubgraph>
+    ) -> Vec<GraphCorrespondence>
     where
         N: FnMut(NodeId, NodeId) -> bool,
         E: FnMut(EdgeId, EdgeId) -> bool,
     {
-        let mut state = McsState::new(self, other, kind, connectivity, enumerate);
+        let mut state = McsState::new(self, other, kind, connectivity);
         if !state.place_anchor(anchor, node_match, edge_match) {
             return Vec::new();
         }
         state.seed_hint(hint, node_match, edge_match);
         state.search(node_match, edge_match);
         if state.best.is_empty() {
-            let fallback = state.subgraph_from(&state.pairs, state.edges, edge_match);
+            let fallback = state.subgraph_from(&state.pairs, edge_match);
             state.best.push(fallback);
         }
         let mut best = state.best;
-        best.sort_by(|x, y| x.mapping.cmp(&y.mapping));
+        best.sort_by(|x, y| x.nodes().mates().cmp(y.nodes().mates()));
         best.dedup();
         best
     }
@@ -288,7 +170,6 @@ struct McsState<'g> {
     b: &'g Graph,
     kind: McsAlgorithmKind,
     connectivity: McsConnectivity,
-    enumerate: Enumerate,
     a_to_b: Vec<Option<NodeId>>,
     b_used: Vec<bool>,
     decided: Vec<bool>,
@@ -296,7 +177,7 @@ struct McsState<'g> {
     pairs: Vec<(NodeId, NodeId)>,
     edges: usize,
     best_score: usize,
-    best: Vec<CommonSubgraph>,
+    best: Vec<GraphCorrespondence>,
 }
 
 impl<'g> McsState<'g> {
@@ -305,14 +186,12 @@ impl<'g> McsState<'g> {
         b: &'g Graph,
         kind: McsAlgorithmKind,
         connectivity: McsConnectivity,
-        enumerate: Enumerate,
     ) -> Self {
         Self {
             a,
             b,
             kind,
             connectivity,
-            enumerate,
             a_to_b: vec![None; a.node_count()],
             b_used: vec![false; b.node_count()],
             decided: vec![false; a.node_count()],
@@ -486,7 +365,7 @@ impl<'g> McsState<'g> {
             McsAlgorithmKind::Edge => edges,
         };
         if score > self.best_score {
-            let cs = self.subgraph_from(&pairs, edges, edge_match);
+            let cs = self.subgraph_from(&pairs, edge_match);
             self.best_score = score;
             self.best = vec![cs];
         }
@@ -531,11 +410,8 @@ impl<'g> McsState<'g> {
         N: FnMut(NodeId, NodeId) -> bool,
         E: FnMut(EdgeId, EdgeId) -> bool,
     {
-        let threshold = match self.enumerate {
-            Enumerate::Single => self.best_score,
-            Enumerate::All => self.best_score.saturating_sub(1),
-        };
-        if self.bound() <= threshold {
+        // Enumerate all maxima: keep ties (bound at best − 1), not just the first.
+        if self.bound() <= self.best_score.saturating_sub(1) {
             return;
         }
 
@@ -597,12 +473,12 @@ impl<'g> McsState<'g> {
             return;
         }
         if score > self.best_score {
-            let cs = self.subgraph_from(&self.pairs, self.edges, edge_match);
+            let cs = self.subgraph_from(&self.pairs, edge_match);
             self.best_score = score;
             self.best.clear();
             self.best.push(cs);
-        } else if score == self.best_score && self.enumerate == Enumerate::All {
-            let cs = self.subgraph_from(&self.pairs, self.edges, edge_match);
+        } else if score == self.best_score {
+            let cs = self.subgraph_from(&self.pairs, edge_match);
             self.best.push(cs);
         }
     }
@@ -610,40 +486,38 @@ impl<'g> McsState<'g> {
     fn subgraph_from<E: FnMut(EdgeId, EdgeId) -> bool>(
         &self,
         pairs: &[(NodeId, NodeId)],
-        edges: usize,
         edge_match: &mut E,
-    ) -> CommonSubgraph {
-        let mut mapping: Vec<(NodeId, NodeId)> = match self.kind {
-            McsAlgorithmKind::Induced => pairs.to_vec(),
-            McsAlgorithmKind::Edge => {
-                let mut incident = vec![false; pairs.len()];
-                for i in 0..pairs.len() {
-                    for j in (i + 1)..pairs.len() {
-                        let (ui, vi) = pairs[i];
-                        let (uj, vj) = pairs[j];
-                        if let (Some(ea), Some(eb)) =
-                            (self.a.find_edge(ui, uj), self.b.find_edge(vi, vj))
-                        {
-                            if edge_match(ea, eb) {
-                                incident[i] = true;
-                                incident[j] = true;
-                            }
-                        }
+    ) -> GraphCorrespondence {
+        // The matched edge pairs over the correspondence (edge-predicate-filtered), and the nodes
+        // they touch (an edge-subgraph mapping keeps only edge-incident nodes).
+        let mut edges: Vec<(EdgeId, EdgeId)> = Vec::new();
+        let mut incident = vec![false; pairs.len()];
+        for i in 0..pairs.len() {
+            for j in (i + 1)..pairs.len() {
+                let (ui, vi) = pairs[i];
+                let (uj, vj) = pairs[j];
+                if let (Some(ea), Some(eb)) = (self.a.find_edge(ui, uj), self.b.find_edge(vi, vj)) {
+                    if edge_match(ea, eb) {
+                        incident[i] = true;
+                        incident[j] = true;
+                        edges.push((ea, eb));
                     }
                 }
-                pairs
-                    .iter()
-                    .enumerate()
-                    .filter(|&(i, _)| incident[i])
-                    .map(|(_, &p)| p)
-                    .collect()
             }
-        };
-        mapping.sort_unstable_by_key(|&(u, _)| u.0);
-        CommonSubgraph {
-            mapping,
-            edge_count: edges,
         }
+        let mapping: Vec<(NodeId, NodeId)> = match self.kind {
+            McsAlgorithmKind::Induced => pairs.to_vec(),
+            McsAlgorithmKind::Edge => pairs
+                .iter()
+                .enumerate()
+                .filter(|&(i, _)| incident[i])
+                .map(|(_, &p)| p)
+                .collect(),
+        };
+        GraphCorrespondence::new(
+            Correspondence::new(mapping, self.a.node_count(), self.b.node_count()),
+            Correspondence::new(edges, self.a.edge_count(), self.b.edge_count()),
+        )
     }
 }
 
@@ -661,7 +535,7 @@ impl Graph {
         node_match: &mut N,
         edge_match: &mut E,
         alg: CommonSubgraphEnumerationAlgorithm,
-    ) -> Vec<CommonSubgraph>
+    ) -> Vec<GraphCorrespondence>
     where
         N: FnMut(NodeId, NodeId) -> bool,
         E: FnMut(EdgeId, EdgeId) -> bool,
@@ -689,7 +563,7 @@ impl Graph {
         node_match: &mut N,
         edge_match: &mut E,
         alg: MaximalCommonSubgraphAlgorithm,
-    ) -> Vec<CommonSubgraph>
+    ) -> Vec<GraphCorrespondence>
     where
         N: FnMut(NodeId, NodeId) -> bool,
         E: FnMut(EdgeId, EdgeId) -> bool,
@@ -765,29 +639,28 @@ fn subgraphs_from_cliques(
     pairs: &[(NodeId, NodeId)],
     a: &Graph,
     b: &Graph,
-) -> Vec<CommonSubgraph> {
-    let mut subgraphs: Vec<CommonSubgraph> = cliques
+) -> Vec<GraphCorrespondence> {
+    let mut subgraphs: Vec<GraphCorrespondence> = cliques
         .into_iter()
         .map(|clique| {
-            let mut edge_count = 0;
+            let mut edges: Vec<(EdgeId, EdgeId)> = Vec::new();
             for x in 0..clique.len() {
                 for y in (x + 1)..clique.len() {
                     let (a1, b1) = pairs[clique[x]];
                     let (a2, b2) = pairs[clique[y]];
-                    if a.find_edge(a1, a2).is_some() && b.find_edge(b1, b2).is_some() {
-                        edge_count += 1;
+                    if let (Some(ea), Some(eb)) = (a.find_edge(a1, a2), b.find_edge(b1, b2)) {
+                        edges.push((ea, eb));
                     }
                 }
             }
-            let mut mapping: Vec<(NodeId, NodeId)> = clique.iter().map(|&i| pairs[i]).collect();
-            mapping.sort_unstable_by_key(|&(a, _)| a.0);
-            CommonSubgraph {
-                mapping,
-                edge_count,
-            }
+            let mapping: Vec<(NodeId, NodeId)> = clique.iter().map(|&i| pairs[i]).collect();
+            GraphCorrespondence::new(
+                Correspondence::new(mapping, a.node_count(), b.node_count()),
+                Correspondence::new(edges, a.edge_count(), b.edge_count()),
+            )
         })
         .collect();
-    subgraphs.sort_by(|x, y| x.mapping.cmp(&y.mapping));
+    subgraphs.sort_by(|x, y| x.nodes().mates().cmp(y.nodes().mates()));
     subgraphs.dedup();
     subgraphs
 }
@@ -858,6 +731,10 @@ mod tests {
 
     use super::*;
 
+    fn summary(c: &GraphCorrespondence) -> (Vec<(NodeId, NodeId)>, usize) {
+        (c.nodes().mates().to_vec(), c.edges().mate_count())
+    }
+
     fn any_node(_: NodeId, _: NodeId) -> bool {
         true
     }
@@ -883,15 +760,19 @@ mod tests {
         #[case] nodes: usize,
         #[case] edges: usize,
     ) {
-        let r = a.maximum_common_induced_subgraph(
-            &b,
-            &mut any_node,
-            &mut any_edge,
-            McsConnectivity::Disconnected,
-            McisAlgorithm::McGregor,
-        );
-        assert_eq!(r.node_count(), nodes);
-        assert_eq!(r.edge_count(), edges);
+        let r = a
+            .maximum_common_induced_subgraphs(
+                &b,
+                &mut any_node,
+                &mut any_edge,
+                McsConnectivity::Disconnected,
+                McisAlgorithm::McGregor,
+            )
+            .into_iter()
+            .next()
+            .unwrap();
+        assert_eq!(r.nodes().mate_count(), nodes);
+        assert_eq!(r.edges().mate_count(), edges);
     }
 
     #[rstest]
@@ -906,15 +787,19 @@ mod tests {
         #[case] nodes: usize,
         #[case] edges: usize,
     ) {
-        let r = a.maximum_common_edge_subgraph(
-            &b,
-            &mut any_node,
-            &mut any_edge,
-            connectivity,
-            McesAlgorithm::McGregor,
-        );
-        assert_eq!(r.node_count(), nodes);
-        assert_eq!(r.edge_count(), edges);
+        let r = a
+            .maximum_common_edge_subgraphs(
+                &b,
+                &mut any_node,
+                &mut any_edge,
+                connectivity,
+                McesAlgorithm::McGregor,
+            )
+            .into_iter()
+            .next()
+            .unwrap();
+        assert_eq!(r.nodes().mate_count(), nodes);
+        assert_eq!(r.edges().mate_count(), edges);
     }
 
     #[rstest]
@@ -928,24 +813,24 @@ mod tests {
             McesAlgorithm::McGregor,
         );
         assert_eq!(
-            all,
+            all.iter().map(summary).collect::<Vec<_>>(),
             vec![
-                CommonSubgraph {
-                    mapping: vec![
+                (
+                    vec![
                         (NodeId(0), NodeId(0)),
                         (NodeId(1), NodeId(1)),
                         (NodeId(2), NodeId(2))
                     ],
-                    edge_count: 2,
-                },
-                CommonSubgraph {
-                    mapping: vec![
+                    2
+                ),
+                (
+                    vec![
                         (NodeId(0), NodeId(2)),
                         (NodeId(1), NodeId(1)),
                         (NodeId(2), NodeId(0))
                     ],
-                    edge_count: 2,
-                },
+                    2
+                ),
             ]
         );
     }
@@ -953,34 +838,39 @@ mod tests {
     #[rstest]
     fn test_graph_maximum_common_induced_subgraph_node_filter() {
         let e = Graph::new(2, &[[0, 1]]);
-        let r = e.maximum_common_induced_subgraph(
-            &e,
-            &mut cross,
-            &mut any_edge,
-            McsConnectivity::Disconnected,
-            McisAlgorithm::McGregor,
-        );
+        let r = e
+            .maximum_common_induced_subgraphs(
+                &e,
+                &mut cross,
+                &mut any_edge,
+                McsConnectivity::Disconnected,
+                McisAlgorithm::McGregor,
+            )
+            .into_iter()
+            .next()
+            .unwrap();
         assert_eq!(
-            r,
-            CommonSubgraph {
-                mapping: vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
-                edge_count: 1,
-            }
+            summary(&r),
+            (vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))], 1)
         );
     }
 
     #[rstest]
     fn test_graph_maximum_common_induced_subgraph_edge_filter() {
         let tri = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
-        let r = tri.maximum_common_induced_subgraph(
-            &tri,
-            &mut any_node,
-            &mut reject_edge,
-            McsConnectivity::Disconnected,
-            McisAlgorithm::McGregor,
-        );
-        assert_eq!(r.node_count(), 1);
-        assert_eq!(r.edge_count(), 0);
+        let r = tri
+            .maximum_common_induced_subgraphs(
+                &tri,
+                &mut any_node,
+                &mut reject_edge,
+                McsConnectivity::Disconnected,
+                McisAlgorithm::McGregor,
+            )
+            .into_iter()
+            .next()
+            .unwrap();
+        assert_eq!(r.nodes().mate_count(), 1);
+        assert_eq!(r.edges().mate_count(), 0);
     }
 
     #[rstest]
@@ -998,9 +888,9 @@ mod tests {
         );
         assert_eq!(r.len(), 2);
         for cs in &r {
-            assert!(cs.mapping().contains(&(NodeId(0), NodeId(1))));
-            assert_eq!(cs.node_count(), 3);
-            assert_eq!(cs.edge_count(), 3);
+            assert!(cs.nodes().mates().contains(&(NodeId(0), NodeId(1))));
+            assert_eq!(cs.nodes().mate_count(), 3);
+            assert_eq!(cs.edges().mate_count(), 3);
         }
     }
 
@@ -1028,7 +918,7 @@ mod tests {
         assert_eq!(unseeded.len(), 2);
         assert!(unseeded
             .iter()
-            .all(|cs| cs.node_count() == 4 && cs.edge_count() == 3));
+            .all(|cs| cs.nodes().mate_count() == 4 && cs.edges().mate_count() == 3));
     }
 
     #[rstest]
@@ -1058,21 +948,19 @@ mod tests {
     fn test_graph_maximum_common_induced_subgraph_empty() {
         let tri = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
         let empty = Graph::default();
-        let r = tri.maximum_common_induced_subgraph(
-            &empty,
-            &mut any_node,
-            &mut any_edge,
-            McsConnectivity::Disconnected,
-            McisAlgorithm::McGregor,
-        );
-        assert_eq!(
-            r,
-            CommonSubgraph {
-                mapping: vec![],
-                edge_count: 0,
-            }
-        );
-        assert!(r.is_empty());
+        let r = tri
+            .maximum_common_induced_subgraphs(
+                &empty,
+                &mut any_node,
+                &mut any_edge,
+                McsConnectivity::Disconnected,
+                McisAlgorithm::McGregor,
+            )
+            .into_iter()
+            .next()
+            .unwrap();
+        assert_eq!(summary(&r), (vec![], 0));
+        assert!(r.nodes().mates().is_empty());
     }
 
     #[rstest]
@@ -1080,28 +968,19 @@ mod tests {
         Graph::new(2, &[[0, 1]]),
         Graph::new(2, &[[0, 1]]),
         vec![
-            CommonSubgraph {
-                mapping: vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
-                edge_count: 1,
-            },
-            CommonSubgraph {
-                mapping: vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
-                edge_count: 1,
-            },
+            (vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 1),
+            (vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))], 1),
         ]
     )]
     #[case::single_node(
         Graph::new(1, &[]),
         Graph::new(1, &[]),
-        vec![CommonSubgraph {
-            mapping: vec![(NodeId(0), NodeId(0))],
-            edge_count: 0,
-        }]
+        vec![(vec![(NodeId(0), NodeId(0))], 0)]
     )]
     fn test_graph_maximal_common_subgraphs(
         #[case] a: Graph,
         #[case] b: Graph,
-        #[case] expected: Vec<CommonSubgraph>,
+        #[case] expected: Vec<(Vec<(NodeId, NodeId)>, usize)>,
     ) {
         assert_eq!(
             a.maximal_common_subgraphs(
@@ -1109,7 +988,10 @@ mod tests {
                 &mut any_node,
                 &mut any_edge,
                 MaximalCommonSubgraphAlgorithm::BronKerbosch,
-            ),
+            )
+            .iter()
+            .map(summary)
+            .collect::<Vec<_>>(),
             expected,
         );
     }
@@ -1120,36 +1002,36 @@ mod tests {
         vec![0u8, 1, 2],
         Graph::new(3, &[[0, 1], [1, 2]]),
         vec![0u8, 1, 2],
-        vec![CommonSubgraph {
-            mapping: vec![
+        vec![(
+            vec![
                 (NodeId(0), NodeId(0)),
                 (NodeId(1), NodeId(1)),
                 (NodeId(2), NodeId(2)),
             ],
-            edge_count: 2,
-        }]
+            2
+        )]
     )]
     #[case::disjoint_edges(
         Graph::new(4, &[[0, 1], [2, 3]]),
         vec![0u8, 1, 2, 3],
         Graph::new(4, &[[0, 1], [2, 3]]),
         vec![0u8, 1, 2, 3],
-        vec![CommonSubgraph {
-            mapping: vec![
+        vec![(
+            vec![
                 (NodeId(0), NodeId(0)),
                 (NodeId(1), NodeId(1)),
                 (NodeId(2), NodeId(2)),
                 (NodeId(3), NodeId(3)),
             ],
-            edge_count: 2,
-        }]
+            2
+        )]
     )]
     fn test_graph_maximal_common_subgraphs_labeled(
         #[case] a: Graph,
         #[case] labels_a: Vec<u8>,
         #[case] b: Graph,
         #[case] labels_b: Vec<u8>,
-        #[case] expected: Vec<CommonSubgraph>,
+        #[case] expected: Vec<(Vec<(NodeId, NodeId)>, usize)>,
     ) {
         let mut node_match = |x: NodeId, y: NodeId| labels_a[x.index()] == labels_b[y.index()];
         assert_eq!(
@@ -1158,7 +1040,10 @@ mod tests {
                 &mut node_match,
                 &mut any_edge,
                 MaximalCommonSubgraphAlgorithm::BronKerbosch,
-            ),
+            )
+            .iter()
+            .map(summary)
+            .collect::<Vec<_>>(),
             expected,
         );
     }
@@ -1172,24 +1057,15 @@ mod tests {
                 &mut any_node,
                 &mut reject_edge,
                 MaximalCommonSubgraphAlgorithm::BronKerbosch,
-            ),
+            )
+            .iter()
+            .map(summary)
+            .collect::<Vec<_>>(),
             vec![
-                CommonSubgraph {
-                    mapping: vec![(NodeId(0), NodeId(0))],
-                    edge_count: 0,
-                },
-                CommonSubgraph {
-                    mapping: vec![(NodeId(0), NodeId(1))],
-                    edge_count: 0,
-                },
-                CommonSubgraph {
-                    mapping: vec![(NodeId(1), NodeId(0))],
-                    edge_count: 0,
-                },
-                CommonSubgraph {
-                    mapping: vec![(NodeId(1), NodeId(1))],
-                    edge_count: 0,
-                },
+                (vec![(NodeId(0), NodeId(0))], 0),
+                (vec![(NodeId(0), NodeId(1))], 0),
+                (vec![(NodeId(1), NodeId(0))], 0),
+                (vec![(NodeId(1), NodeId(1))], 0),
             ],
         );
     }
@@ -1204,11 +1080,11 @@ mod tests {
                 &mut cross,
                 &mut any_edge,
                 MaximalCommonSubgraphAlgorithm::BronKerbosch,
-            ),
-            vec![CommonSubgraph {
-                mapping: vec![],
-                edge_count: 0,
-            }],
+            )
+            .iter()
+            .map(summary)
+            .collect::<Vec<_>>(),
+            vec![(vec![], 0)],
         );
     }
 
@@ -1220,33 +1096,27 @@ mod tests {
         Graph::new(1, &[]),
         Graph::new(1, &[]),
         vec![
-            CommonSubgraph { mapping: vec![], edge_count: 0 },
-            CommonSubgraph { mapping: vec![(NodeId(0), NodeId(0))], edge_count: 0 },
+            (vec![], 0),
+            (vec![(NodeId(0), NodeId(0))], 0),
         ]
     )]
     #[case::edge(
         Graph::new(2, &[[0, 1]]),
         Graph::new(2, &[[0, 1]]),
         vec![
-            CommonSubgraph { mapping: vec![], edge_count: 0 },
-            CommonSubgraph { mapping: vec![(NodeId(0), NodeId(0))], edge_count: 0 },
-            CommonSubgraph {
-                mapping: vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
-                edge_count: 1,
-            },
-            CommonSubgraph { mapping: vec![(NodeId(0), NodeId(1))], edge_count: 0 },
-            CommonSubgraph {
-                mapping: vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
-                edge_count: 1,
-            },
-            CommonSubgraph { mapping: vec![(NodeId(1), NodeId(0))], edge_count: 0 },
-            CommonSubgraph { mapping: vec![(NodeId(1), NodeId(1))], edge_count: 0 },
+            (vec![], 0),
+            (vec![(NodeId(0), NodeId(0))], 0),
+            (vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 1),
+            (vec![(NodeId(0), NodeId(1))], 0),
+            (vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))], 1),
+            (vec![(NodeId(1), NodeId(0))], 0),
+            (vec![(NodeId(1), NodeId(1))], 0),
         ]
     )]
     fn test_graph_enumerate_common_subgraphs(
         #[case] a: Graph,
         #[case] b: Graph,
-        #[case] expected: Vec<CommonSubgraph>,
+        #[case] expected: Vec<(Vec<(NodeId, NodeId)>, usize)>,
     ) {
         assert_eq!(
             a.enumerate_common_subgraphs(
@@ -1254,7 +1124,10 @@ mod tests {
                 &mut any_node,
                 &mut any_edge,
                 CommonSubgraphEnumerationAlgorithm::Backtracking,
-            ),
+            )
+            .iter()
+            .map(summary)
+            .collect::<Vec<_>>(),
             expected,
         );
     }
@@ -1278,10 +1151,7 @@ mod tests {
             MaximalCommonSubgraphAlgorithm::BronKerbosch,
         );
         assert!(all.len() > maximal.len());
-        assert!(all.contains(&CommonSubgraph {
-            mapping: vec![],
-            edge_count: 0
-        }));
+        assert!(all.iter().map(summary).any(|s| s == (vec![], 0)));
         for m in &maximal {
             assert!(
                 all.contains(m),

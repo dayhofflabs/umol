@@ -58,79 +58,11 @@ impl MoleculeCorrespondence {
     /// matched to an rhs entity by their atom constituents mapped through `atoms`. An entity whose
     /// constituents are not all mated is exposed (not matched).
     pub fn induce(lhs: &MoleculeAst, rhs: &MoleculeAst, atoms: Correspondence<NodeId>) -> Self {
-        let bonds = Correspondence::new(
-            atoms
-                .edge_mates(lhs.raw_graph(), rhs.raw_graph())
-                .into_iter()
-                .map(|(l, r)| (BondId::from(l), BondId::from(r)))
-                .collect(),
-            lhs.bonds().count(),
-            rhs.bonds().count(),
-        );
-
-        let mut dative = Vec::new();
-        for d in lhs.dative_bonds().iter() {
-            let (Some(acceptor), Some(donors)) = (
-                map_atom(&atoms, d.acceptor_id()),
-                map_atoms(&atoms, d.donor_ids()),
-            ) else {
-                continue;
-            };
-            if let Some(id) = rhs.dative_bonds().connecting_id(acceptor, &donors) {
-                dative.push((d.id, id));
-            }
-        }
-        let dative_bonds = Correspondence::new(
-            dative,
-            lhs.dative_bonds().count(),
-            rhs.dative_bonds().count(),
-        );
-
-        let mut aromatic = Vec::new();
-        for a in lhs.aromatic_systems().iter() {
-            let Some(mapped) = map_atoms(&atoms, a.atom_ids()) else {
-                continue;
-            };
-            if let Some(id) = rhs.aromatic_systems().connecting_id(mapped) {
-                aromatic.push((a.id, id));
-            }
-        }
-        let aromatic_systems = Correspondence::new(
-            aromatic,
-            lhs.aromatic_systems().count(),
-            rhs.aromatic_systems().count(),
-        );
-
-        let mut multicenter = Vec::new();
-        for m in lhs.multicenter_bonds().iter() {
-            let Some(mapped) = map_atoms(&atoms, m.atom_ids()) else {
-                continue;
-            };
-            if let Some(id) = rhs.multicenter_bonds().connecting_id(mapped) {
-                multicenter.push((m.id, id));
-            }
-        }
-        let multicenter_bonds = Correspondence::new(
-            multicenter,
-            lhs.multicenter_bonds().count(),
-            rhs.multicenter_bonds().count(),
-        );
-
-        let mut noncovalent = Vec::new();
-        for nc in lhs.noncovalent_bonds().iter() {
-            let [a, b] = nc.atom_ids();
-            let (Some(first), Some(second)) = (map_atom(&atoms, a), map_atom(&atoms, b)) else {
-                continue;
-            };
-            if let Some(id) = rhs.noncovalent_bonds().connecting_id(first, second) {
-                noncovalent.push((nc.id, id));
-            }
-        }
-        let noncovalent_bonds = Correspondence::new(
-            noncovalent,
-            lhs.noncovalent_bonds().count(),
-            rhs.noncovalent_bonds().count(),
-        );
+        let bonds = induced_bonds(lhs, rhs, &atoms);
+        let dative_bonds = induced_dative_bonds(lhs, rhs, &atoms);
+        let aromatic_systems = induced_aromatic_systems(lhs, rhs, &atoms);
+        let multicenter_bonds = induced_multicenter_bonds(lhs, rhs, &atoms);
+        let noncovalent_bonds = induced_noncovalent_bonds(lhs, rhs, &atoms);
 
         let mut stereo_atom = Vec::new();
         for sp in lhs.stereo_atoms().iter() {
@@ -250,8 +182,122 @@ impl MoleculeCorrespondence {
     }
 }
 
+/// The bond correspondence induced by an atom correspondence: the two molecular graphs' edge
+/// correspondence under `atoms`.
+pub(crate) fn induced_bonds(
+    left: &MoleculeAst,
+    right: &MoleculeAst,
+    atoms: &Correspondence<NodeId>,
+) -> Correspondence<BondId> {
+    Correspondence::new(
+        atoms
+            .edge_mates(left.raw_graph(), right.raw_graph())
+            .into_iter()
+            .map(|(l, r)| (BondId::from(l), BondId::from(r)))
+            .collect(),
+        left.bonds().count(),
+        right.bonds().count(),
+    )
+}
+
+/// The dative-bond correspondence induced by an atom correspondence: each left dative bond whose
+/// acceptor and donors are all mated pairs with the right dative bond over the same roles.
+pub(crate) fn induced_dative_bonds(
+    left: &MoleculeAst,
+    right: &MoleculeAst,
+    atoms: &Correspondence<NodeId>,
+) -> Correspondence<DativeBondId> {
+    let mut mates = Vec::new();
+    for d in left.dative_bonds().iter() {
+        let (Some(acceptor), Some(donors)) = (
+            map_atom(atoms, d.acceptor_id()),
+            map_atoms(atoms, d.donor_ids()),
+        ) else {
+            continue;
+        };
+        if let Some(id) = right.dative_bonds().connecting_id(acceptor, &donors) {
+            mates.push((d.id, id));
+        }
+    }
+    Correspondence::new(
+        mates,
+        left.dative_bonds().count(),
+        right.dative_bonds().count(),
+    )
+}
+
+/// The aromatic-system correspondence induced by an atom correspondence: each left system whose
+/// atoms are all mated pairs with the right system over the same atom set.
+pub(crate) fn induced_aromatic_systems(
+    left: &MoleculeAst,
+    right: &MoleculeAst,
+    atoms: &Correspondence<NodeId>,
+) -> Correspondence<AromaticSystemId> {
+    let mut mates = Vec::new();
+    for a in left.aromatic_systems().iter() {
+        let Some(mapped) = map_atoms(atoms, a.atom_ids()) else {
+            continue;
+        };
+        if let Some(id) = right.aromatic_systems().connecting_id(mapped) {
+            mates.push((a.id, id));
+        }
+    }
+    Correspondence::new(
+        mates,
+        left.aromatic_systems().count(),
+        right.aromatic_systems().count(),
+    )
+}
+
+/// The multicenter-bond correspondence induced by an atom correspondence: each left bond whose
+/// atoms are all mated pairs with the right bond over the same atom set.
+pub(crate) fn induced_multicenter_bonds(
+    left: &MoleculeAst,
+    right: &MoleculeAst,
+    atoms: &Correspondence<NodeId>,
+) -> Correspondence<MulticenterBondId> {
+    let mut mates = Vec::new();
+    for m in left.multicenter_bonds().iter() {
+        let Some(mapped) = map_atoms(atoms, m.atom_ids()) else {
+            continue;
+        };
+        if let Some(id) = right.multicenter_bonds().connecting_id(mapped) {
+            mates.push((m.id, id));
+        }
+    }
+    Correspondence::new(
+        mates,
+        left.multicenter_bonds().count(),
+        right.multicenter_bonds().count(),
+    )
+}
+
+/// The noncovalent-bond correspondence induced by an atom correspondence: each left bond whose two
+/// atoms are both mated pairs with the right bond over the same atom pair.
+pub(crate) fn induced_noncovalent_bonds(
+    left: &MoleculeAst,
+    right: &MoleculeAst,
+    atoms: &Correspondence<NodeId>,
+) -> Correspondence<NoncovalentBondId> {
+    let mut mates = Vec::new();
+    for nc in left.noncovalent_bonds().iter() {
+        let [a, b] = nc.atom_ids();
+        let (Some(first), Some(second)) = (map_atom(atoms, a), map_atom(atoms, b)) else {
+            continue;
+        };
+        if let Some(id) = right.noncovalent_bonds().connecting_id(first, second) {
+            mates.push((nc.id, id));
+        }
+    }
+    Correspondence::new(
+        mates,
+        left.noncovalent_bonds().count(),
+        right.noncovalent_bonds().count(),
+    )
+}
+
 /// The rhs partner of a lhs atom under the atom correspondence, if mated.
-fn map_atom(atoms: &Correspondence<NodeId>, atom: AtomId) -> Option<AtomId> {
+pub(crate) fn map_atom(atoms: &Correspondence<NodeId>, atom: AtomId) -> Option<AtomId> {
     atoms.right_of(NodeId::from(atom)).map(AtomId::from)
 }
 
@@ -265,7 +311,7 @@ fn map_atoms(
 
 /// The rhs-frame ligands (each ligand's atom mapped, its kind kept), or `None` if any ligand's
 /// atom is exposed.
-fn map_ligands(
+pub(crate) fn map_ligands(
     atoms: &Correspondence<NodeId>,
     ligands: Vec<StereoLigand>,
 ) -> Option<Vec<StereoLigand>> {

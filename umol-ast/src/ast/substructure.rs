@@ -13,11 +13,13 @@ use umol_graph_core::{Correspondence, NodeId, SubgraphIsomorphismAlgorithm};
 
 use super::atom::AtomAst;
 use super::bond::BondAst;
-use super::correspondence::MoleculeCorrespondence;
+use super::correspondence::{
+    induced_aromatic_systems, induced_bonds, induced_dative_bonds, induced_multicenter_bonds,
+    induced_noncovalent_bonds, map_atom, map_ligands, MoleculeCorrespondence,
+};
 use super::entity::Entity;
 use super::id::{AtomId, BondId};
 use super::incidence::IncidenceNodeSelection;
-use super::ligand::StereoLigand;
 use super::molecule::MoleculeAst;
 use super::stereo::coset_matches;
 use super::traits::Lattice;
@@ -102,25 +104,25 @@ impl MoleculeAst {
         }
         let (host_atoms, host_bonds) = pattern.host_match_targets(host);
 
-        host.graph()
+        host.raw_graph()
             .subgraph_isomorphisms(
-                &pattern.graph(),
-                &mut |query_atom, host_atom| {
+                pattern.raw_graph(),
+                &mut |query_node, host_node| {
                     pattern
-                        .atom(query_atom)
+                        .atom(AtomId::from(query_node))
                         .ast
-                        .matches(&host_atoms[host_atom.index()])
+                        .matches(&host_atoms[host_node.index()])
                 },
-                &mut |query_bond, host_bond| {
+                &mut |query_edge, host_edge| {
                     pattern
-                        .bond(query_bond)
+                        .bond(BondId::from(query_edge))
                         .ast
-                        .matches(&host_bonds[host_bond.index()])
+                        .matches(&host_bonds[host_edge.index()])
                 },
                 subiso,
             )
             .into_iter()
-            .filter_map(|atom_map| pattern.verify_overlays(host, atom_map))
+            .filter_map(|atoms| pattern.verify_overlays(host, atoms))
             .collect()
     }
 
@@ -164,73 +166,91 @@ impl MoleculeAst {
                 subiso,
             )
             .into_iter()
-            .filter_map(|m| {
-                let atom_map: Vec<AtomId> = (0..atom_count)
-                    .map(|a| match host_levi.entity(NodeId(m[a] as u32)) {
-                        Entity::Atom(id) => id,
-                        _ => unreachable!("a pattern atom node maps to a host atom node"),
-                    })
-                    .collect();
-                pattern.verify_overlays(host, atom_map)
+            .filter_map(|levi_match| {
+                let atoms = Correspondence::new(
+                    (0..atom_count as u32)
+                        .map(|a| {
+                            let host_node = levi_match
+                                .right_of(NodeId(a))
+                                .expect("a pattern atom node is mated");
+                            match host_levi.entity(host_node) {
+                                Entity::Atom(id) => (NodeId(a), NodeId::from(id)),
+                                _ => unreachable!("a pattern atom node maps to a host atom node"),
+                            }
+                        })
+                        .collect(),
+                    pattern.atoms().count(),
+                    host.atoms().count(),
+                );
+                pattern.verify_overlays(host, atoms)
             })
             .collect()
     }
 
-    /// Post-verify a skeleton occurrence's overlays against the atom correspondence,
-    /// returning the injective pattern→host correspondence or `None` if any pattern overlay has no
+    /// Post-verify a skeleton occurrence's overlays against the atom correspondence, returning the
+    /// injective pattern→host [`MoleculeCorrespondence`] or `None` if any pattern overlay has no
     /// matching host overlay. Each N-ary / special overlay is located by **exact participant set**
-    /// (`connecting`); dative donor/acceptor roles are checked explicitly. Stereo overlays are
-    /// deferred to the coset post-filter.
+    /// via the per-family inducer (which already checks dative donor/acceptor roles); the pattern
+    /// overlay's predicate is then required to match the located host overlay's, and every pattern
+    /// overlay must be mated. Stereo overlays are matched by the bespoke coset filter.
     fn verify_overlays(
         &self,
         host: &MoleculeAst,
-        atom_map: Vec<AtomId>,
+        atoms: Correspondence<NodeId>,
     ) -> Option<MoleculeCorrespondence> {
         let pattern = self;
+        let bonds = induced_bonds(pattern, host, &atoms);
 
-        let mut dative = Vec::new();
-        for d in pattern.dative_bonds().iter() {
-            let acceptor = atom_map[d.acceptor_id().index()];
-            let donors: Vec<AtomId> = d.donor_ids().map(|a| atom_map[a.index()]).collect();
-            let host_dative = host.dative_bonds().connecting(acceptor, &donors)?;
-            if !d.ast.matches(host_dative.ast) {
+        let dative_bonds = induced_dative_bonds(pattern, host, &atoms);
+        if dative_bonds.mate_count() != pattern.dative_bonds().count() {
+            return None;
+        }
+        for &(p, h) in dative_bonds.mates() {
+            if !pattern.dative_bond(p).ast.matches(host.dative_bond(h).ast) {
                 return None;
             }
-            dative.push(host_dative.id);
         }
 
-        let mut noncovalent = Vec::new();
-        for nc in pattern.noncovalent_bonds().iter() {
-            let [a, b] = nc.atom_ids();
-            let host_nc = host
-                .noncovalent_bonds()
-                .connecting(atom_map[a.index()], atom_map[b.index()])?;
-            if !nc.ast.matches(host_nc.ast) {
+        let aromatic_systems = induced_aromatic_systems(pattern, host, &atoms);
+        if aromatic_systems.mate_count() != pattern.aromatic_systems().count() {
+            return None;
+        }
+        for &(p, h) in aromatic_systems.mates() {
+            if !pattern
+                .aromatic_system(p)
+                .ast
+                .matches(host.aromatic_system(h).ast)
+            {
                 return None;
             }
-            noncovalent.push(host_nc.id);
         }
 
-        let mut aromatic = Vec::new();
-        for ar in pattern.aromatic_systems().iter() {
-            let host_ar = host
-                .aromatic_systems()
-                .connecting(ar.atom_ids().map(|a| atom_map[a.index()]))?;
-            if !ar.ast.matches(host_ar.ast) {
+        let multicenter_bonds = induced_multicenter_bonds(pattern, host, &atoms);
+        if multicenter_bonds.mate_count() != pattern.multicenter_bonds().count() {
+            return None;
+        }
+        for &(p, h) in multicenter_bonds.mates() {
+            if !pattern
+                .multicenter_bond(p)
+                .ast
+                .matches(host.multicenter_bond(h).ast)
+            {
                 return None;
             }
-            aromatic.push(host_ar.id);
         }
 
-        let mut multicenter = Vec::new();
-        for mc in pattern.multicenter_bonds().iter() {
-            let host_mc = host
-                .multicenter_bonds()
-                .connecting(mc.atom_ids().map(|a| atom_map[a.index()]))?;
-            if !mc.ast.matches(host_mc.ast) {
+        let noncovalent_bonds = induced_noncovalent_bonds(pattern, host, &atoms);
+        if noncovalent_bonds.mate_count() != pattern.noncovalent_bonds().count() {
+            return None;
+        }
+        for &(p, h) in noncovalent_bonds.mates() {
+            if !pattern
+                .noncovalent_bond(p)
+                .ast
+                .matches(host.noncovalent_bond(h).ast)
+            {
                 return None;
             }
-            multicenter.push(host_mc.id);
         }
 
         // Stereo: a pattern stereo overlay matches iff the corresponding host site
@@ -241,95 +261,62 @@ impl MoleculeAst {
         // /bond constraints rather than a `:stereo-atoms`/`:stereo-bonds` overlay is
         // not handled here — that needs the pattern run through stereo perception
         // (but not grounding, so no valence resolution).
-        let mut stereo_atoms = Vec::new();
+        let mut stereo_atom = Vec::new();
         for sp in pattern.stereo_atoms().iter() {
-            let host_atom = atom_map[sp.site_id().index()];
-            let sh = host.stereo_atoms().incident(host_atom).next()?;
+            let host_site =
+                map_atom(&atoms, sp.site_id()).expect("a matched pattern atom is mated");
+            let sh = host.stereo_atoms().incident(host_site).next()?;
             if sp.kind() != sh.kind() {
                 return None;
             }
-            let frame = sp.ligand_frame().into_iter().map(|l| StereoLigand {
-                atom_id: atom_map[l.atom_id.index()],
-                kind: l.kind,
-            });
+            let frame =
+                map_ligands(&atoms, sp.ligand_frame()).expect("matched pattern ligands are mated");
             let host_coset = sh.coset_for(frame)?;
             if !coset_matches(sp.coset(), &host_coset, sp.kind()) {
                 return None;
             }
-            stereo_atoms.push(sh.id);
+            stereo_atom.push((sp.id, sh.id));
         }
+        let stereo_atoms = Correspondence::new(
+            stereo_atom,
+            pattern.stereo_atoms().count(),
+            host.stereo_atoms().count(),
+        );
 
-        let mut stereo_bonds = Vec::new();
+        let mut stereo_bond = Vec::new();
         for sp in pattern.stereo_bonds().iter() {
-            let [a, b] = pattern.bond(sp.site_id()).atom_ids();
-            let host_edge = host
-                .raw_graph()
-                .find_edge(
-                    NodeId::from(atom_map[a.index()]),
-                    NodeId::from(atom_map[b.index()]),
-                )
-                .expect("a matched query bond maps to a host bond");
-            let sh = host.bond(BondId::from(host_edge)).cis_trans_stereo()?;
+            let host_site = bonds
+                .right_of(sp.site_id())
+                .expect("a matched pattern bond is mated");
+            let sh = host.bond(host_site).cis_trans_stereo()?;
             if sp.kind() != sh.kind() {
                 return None;
             }
-            let frame = sp.ligand_frame().into_iter().map(|l| StereoLigand {
-                atom_id: atom_map[l.atom_id.index()],
-                kind: l.kind,
-            });
+            let frame =
+                map_ligands(&atoms, sp.ligand_frame()).expect("matched pattern ligands are mated");
             let host_coset = sh.coset_for(frame)?;
             if !coset_matches(sp.coset(), &host_coset, sp.kind()) {
                 return None;
             }
-            stereo_bonds.push(sh.id);
+            stereo_bond.push((sp.id, sh.id));
         }
+        let stereo_bonds = Correspondence::new(
+            stereo_bond,
+            pattern.stereo_bonds().count(),
+            host.stereo_bonds().count(),
+        );
 
-        let atoms = Correspondence::new(
-            atom_map
-                .iter()
-                .enumerate()
-                .map(|(sub, &host_atom)| (NodeId(sub as u32), NodeId::from(host_atom)))
-                .collect(),
-            pattern.atoms().count(),
-            host.atoms().count(),
-        );
-        let bonds = Correspondence::new(
-            atoms
-                .edge_mates(pattern.raw_graph(), host.raw_graph())
-                .into_iter()
-                .map(|(l, r)| (BondId::from(l), BondId::from(r)))
-                .collect(),
-            pattern.bonds().count(),
-            host.bonds().count(),
-        );
         Some(MoleculeCorrespondence::new(
             atoms,
             bonds,
-            injective_correspondence(&dative, host.dative_bonds().count()),
-            injective_correspondence(&aromatic, host.aromatic_systems().count()),
-            injective_correspondence(&multicenter, host.multicenter_bonds().count()),
-            injective_correspondence(&noncovalent, host.noncovalent_bonds().count()),
-            injective_correspondence(&stereo_atoms, host.stereo_atoms().count()),
-            injective_correspondence(&stereo_bonds, host.stereo_bonds().count()),
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
         ))
     }
-}
-
-/// The injective correspondence a successful match induces for one overlay family: pattern entity
-/// `i` (`0..host_ids.len()`, all mated) maps to `host_ids[i]`.
-fn injective_correspondence<Id: Copy + Ord + From<usize>>(
-    host_ids: &[Id],
-    right_count: usize,
-) -> Correspondence<Id> {
-    Correspondence::new(
-        host_ids
-            .iter()
-            .enumerate()
-            .map(|(sub, &host)| (Id::from(sub), host))
-            .collect(),
-        host_ids.len(),
-        right_count,
-    )
 }
 
 #[cfg(test)]

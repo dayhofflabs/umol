@@ -1,5 +1,17 @@
 # Four-Domains Semantic Model
 
+## Note 2026-07-03
+
+* The distinction between structures, models, instances, and properties still stands. The
+  current implementation represents model classes by separate crates (umol-graph, umol-geometric),
+  the specific model parameters by explicit model objects (ChemistryModel in umol-graph).
+  Conversion between instances of different model classes is placed in separate bridge crates
+  (umol-geometric-graph), either direction is fallible and one-to-many when it succeeds.
+* The ontological structure does not currently exist, requires connecting to an existing
+  ontology or separate research work.
+* Should revisit trait-based capabilities (which property can be calculationed on which instance),
+  more relevant in umol-geometric and related.
+
 ## Model
 
 The semantic model consists of four domains, each with its own conceptual role and relationships.

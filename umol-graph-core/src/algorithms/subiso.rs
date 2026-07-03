@@ -5,6 +5,7 @@
 use std::cmp::Reverse;
 use std::collections::HashMap;
 
+use crate::correspondence::Correspondence;
 use crate::graph::{EdgeId, Graph, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,8 +47,8 @@ impl Graph {
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
         alg: SubgraphIsomorphismAlgorithm,
-    ) -> Vec<Vec<usize>> {
-        match alg {
+    ) -> Vec<Correspondence<NodeId>> {
+        let embeddings = match alg {
             SubgraphIsomorphismAlgorithm::Vf2 => {
                 self.subgraph_isomorphisms_vf2(query, node_match, edge_match)
             }
@@ -66,7 +67,23 @@ impl Graph {
             SubgraphIsomorphismAlgorithm::RayKirsch => {
                 self.subgraph_isomorphisms_rk(query, node_match, edge_match)
             }
-        }
+        };
+        self.embeddings_to_correspondences(embeddings)
+    }
+
+    /// Lift each `query→host` embedding (dense left space `0..query.node_count()`) to a
+    /// [`Correspondence`] over the host's node id space.
+    fn embeddings_to_correspondences(
+        &self,
+        embeddings: Vec<Vec<usize>>,
+    ) -> Vec<Correspondence<NodeId>> {
+        embeddings
+            .into_iter()
+            .map(|embedding| {
+                let images: Vec<NodeId> = embedding.into_iter().map(NodeId::from).collect();
+                Correspondence::from_images(&images, self.node_count())
+            })
+            .collect()
     }
 
     pub fn subgraph_isomorphisms_at(
@@ -76,8 +93,8 @@ impl Graph {
         node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
         edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
         alg: SubgraphIsomorphismAlgorithm,
-    ) -> Vec<Vec<usize>> {
-        match alg {
+    ) -> Vec<Correspondence<NodeId>> {
+        let embeddings = match alg {
             SubgraphIsomorphismAlgorithm::Vf2 => {
                 self.subgraph_isomorphisms_at_vf2(query, anchor, node_match, edge_match)
             }
@@ -101,7 +118,8 @@ impl Graph {
             SubgraphIsomorphismAlgorithm::RayKirsch => {
                 self.subgraph_isomorphisms_at_rk(query, anchor, node_match, edge_match)
             }
-        }
+        };
+        self.embeddings_to_correspondences(embeddings)
     }
 
     // Cordella et al. 2004 "A (sub)graph isomorphism algorithm for matching large graphs".
@@ -1858,7 +1876,11 @@ mod tests {
             Vf2Rdkit,
             RayKirsch,
         ] {
-            let mut r = target.subgraph_isomorphisms(&query, &mut node_match, &mut edge_match, alg);
+            let mut r: Vec<Vec<usize>> = target
+                .subgraph_isomorphisms(&query, &mut node_match, &mut edge_match, alg)
+                .iter()
+                .map(|c| c.mates().iter().map(|&(_, host)| host.index()).collect())
+                .collect();
             r.sort();
             assert_eq!(r, expected, "algorithm {alg:?}");
         }
@@ -1893,13 +1915,11 @@ mod tests {
             Vf2Rdkit,
             RayKirsch,
         ] {
-            let mut r = target.subgraph_isomorphisms_at(
-                &query,
-                anchor,
-                &mut node_match,
-                &mut edge_match,
-                alg,
-            );
+            let mut r: Vec<Vec<usize>> = target
+                .subgraph_isomorphisms_at(&query, anchor, &mut node_match, &mut edge_match, alg)
+                .iter()
+                .map(|c| c.mates().iter().map(|&(_, host)| host.index()).collect())
+                .collect();
             r.sort();
             assert_eq!(r, expected, "algorithm {alg:?}");
         }
@@ -1916,12 +1936,16 @@ mod tests {
         let graph = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
         let mut node_match = any_node;
         let mut edge_match = any_edge;
-        let mut r = graph.subgraph_isomorphisms(
-            &graph,
-            &mut node_match,
-            &mut edge_match,
-            ArcMatch { path_length },
-        );
+        let mut r: Vec<Vec<usize>> = graph
+            .subgraph_isomorphisms(
+                &graph,
+                &mut node_match,
+                &mut edge_match,
+                ArcMatch { path_length },
+            )
+            .iter()
+            .map(|c| c.mates().iter().map(|&(_, host)| host.index()).collect())
+            .collect();
         r.sort();
         assert_eq!(
             r,
@@ -1991,7 +2015,11 @@ mod tests {
     fn test_arcmatch_path_reduction_safety(#[case] query: Graph, #[case] target: Graph) {
         let mut nm: fn(NodeId, NodeId) -> bool = any_node;
         let mut em: fn(EdgeId, EdgeId) -> bool = any_edge;
-        let matches = target.subgraph_isomorphisms(&query, &mut nm, &mut em, Vf2);
+        let matches: Vec<Vec<usize>> = target
+            .subgraph_isomorphisms(&query, &mut nm, &mut em, Vf2)
+            .iter()
+            .map(|c| c.mates().iter().map(|&(_, host)| host.index()).collect())
+            .collect();
         assert!(!matches.is_empty(), "fixture should have matches");
 
         let mut vertex = arcmatch_vertex_domains(&query, &target, &mut nm);

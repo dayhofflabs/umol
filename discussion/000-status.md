@@ -16,7 +16,7 @@
 | [012-molecular-representations-2025-03-01.md](012-molecular-representations-2025-03-01.md)                       | Informational | 2026-02-17   |
 | [013-substructure-match-2025-03-02.md](013-substructure-match-2025-03-02.md)                                     | Informational | 2026-02-17   |
 | [014-aromaticity-2025-03-08.md](014-aromaticity-2025-03-08.md)                                                   | Outdated      | 2026-03-11   |
-| [015-semantic-model-2025-03-10.md](015-semantic-model-2025-03-10.md)                                             | Active        | 2026-02-17   |
+| [015-semantic-model-2025-03-10.md](015-semantic-model-2025-03-10.md)                                             | Informational | 2026-07-03   |
 | [016-hypergraphs-2025-03-10.md](016-hypergraphs-2025-03-10.md)                                                   | Informational | 2026-02-17   |
 | [017-molecular-builder-api-2025-03-15.md](017-molecular-builder-api-2025-03-15.md)                               | Informational | 2026-02-17   |
 | [018-atomic-encoding-2025-03-19.md](018-atomic-encoding-2025-03-19.md)                                           | Outdated      | 2026-02-17   |
@@ -127,7 +127,7 @@
 | [123-ast-allocation-survey-2026-06-21.md](123-ast-allocation-survey-2026-06-21.md)                               | Active        | 2026-06-21   |
 | [124-tier1-structural-wellformedness-2026-06-21.md](124-tier1-structural-wellformedness-2026-06-21.md)           | Active        | 2026-06-21   |
 | [125-constraints-as-projections-2026-06-22.md](125-constraints-as-projections-2026-06-22.md)                     | Active        | 2026-06-22   |
-| [126-fingerprint-facility-2026-06-22.md](126-fingerprint-facility-2026-06-22.md)                                 | Closed        | 2026-06-23   |
+| [126-fingerprint-facility-2026-06-22.md](126-fingerprint-facility-2026-06-22.md)                                 | Active        | 2026-06-23   |
 | [127-reaction-ast-interim-stereo-2026-06-22.md](127-reaction-ast-interim-stereo-2026-06-22.md)                   | Active        | 2026-06-22   |
 | [128-substructure-derived-predicates-2026-06-23.md](128-substructure-derived-predicates-2026-06-23.md)           | Active        | 2026-06-23   |
 | [129-crate-organization-2026-06-24.md](129-crate-organization-2026-06-24.md)                                     | Completed     | 2026-06-24   |

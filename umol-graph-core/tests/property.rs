@@ -96,10 +96,12 @@ fn matches(
         |q: NodeId, t: NodeId| query.node_labels[q.index()] == target.node_labels[t.index()];
     let mut edge_match =
         |qe: EdgeId, te: EdgeId| query.edge_labels[qe.index()] == target.edge_labels[te.index()];
-    let mut found =
-        target
-            .graph
-            .subgraph_isomorphisms(&query.graph, &mut node_match, &mut edge_match, alg);
+    let mut found: Vec<Vec<usize>> = target
+        .graph
+        .subgraph_isomorphisms(&query.graph, &mut node_match, &mut edge_match, alg)
+        .iter()
+        .map(|c| c.mates().iter().map(|&(_, t)| t.index()).collect())
+        .collect();
     found.sort();
     found
 }

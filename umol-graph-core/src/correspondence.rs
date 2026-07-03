@@ -156,6 +156,20 @@ impl GraphCorrespondence {
         Self { nodes, edges }
     }
 
+    /// The graph correspondence a node correspondence induces over `left` / `right`: its edge family
+    /// is the induced edge correspondence (an edge mated when both endpoints are mated). Exact for a
+    /// subiso match or a common *induced* subgraph — the two cases where every structurally-mated edge
+    /// is admissible; not for an edge-subgraph result under a nontrivial edge predicate (there the
+    /// producer supplies the edge family directly).
+    pub fn induced(left: &Graph, right: &Graph, nodes: Correspondence<NodeId>) -> Self {
+        let edges = Correspondence::new(
+            nodes.edge_mates(left, right),
+            left.edge_count(),
+            right.edge_count(),
+        );
+        Self { nodes, edges }
+    }
+
     pub fn nodes(&self) -> &Correspondence<NodeId> {
         &self.nodes
     }

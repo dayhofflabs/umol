@@ -150,7 +150,12 @@ impl<'a> GraphView<'a> {
                 alg,
             )
             .into_iter()
-            .map(|m| m.into_iter().map(AtomId::from).collect())
+            .map(|c| {
+                c.mates()
+                    .iter()
+                    .map(|&(_, host)| AtomId::from(host))
+                    .collect()
+            })
             .collect()
     }
 
@@ -177,7 +182,12 @@ impl<'a> GraphView<'a> {
                 alg,
             )
             .into_iter()
-            .map(|m| m.into_iter().map(AtomId::from).collect())
+            .map(|c| {
+                c.mates()
+                    .iter()
+                    .map(|&(_, host)| AtomId::from(host))
+                    .collect()
+            })
             .collect()
     }
 }
