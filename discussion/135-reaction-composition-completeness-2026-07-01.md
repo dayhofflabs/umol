@@ -266,7 +266,7 @@ electron-encoding relocation is an orthogonal cleanup, not a blocker.)
 Modules: **ast** (precondition) → **dsl foundation** (registry, parsers) → **dsl surface** (refs).
 Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (resolve signature).
 
-**S0 — precondition (ast)** — independent, land by S3b
+**S0 — precondition (ast)** — independent, land by S3b **Done**
 - **S0a** `ast/validate/entity.rs`: `noncovalent_structure_check` keys on the unordered atom pair
   alone (drop `kind`); `NoncovalentBondsParallel` drops its `kind` field; update the §4.1 tier-1 note.
   **breaking (red→green)** — deliberate semantic change, migrate its `#[case]`s. `[dep: —]`

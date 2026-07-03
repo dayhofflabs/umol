@@ -1,6 +1,6 @@
 //! Content-independent EDN serialization helpers shared across the DSL boundary types.
 
-use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer};
+use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn};
 
 use super::refs::AtomRef;
 
@@ -17,6 +17,21 @@ pub(super) fn two_atom_refs(
             "{entry} :atoms must have exactly 2 atoms, got {}",
             v.len()
         ))
+    })
+}
+
+/// The `:atoms` key of an entry / structural map as exactly two atom refs (bond, noncovalent).
+pub(super) fn atoms_pair(m: &EdnMap<'_>, context: &'static str) -> Result<[AtomRef; 2], DeError> {
+    let atoms = parse_vec(required_key(m, "atoms", context)?, ":atoms", |e| {
+        AtomRef::from_edn(e)
+    })?;
+    two_atom_refs(atoms, context)
+}
+
+/// The `:atoms` key of an entry / structural map as a vector of atom refs (aromatic, multicenter).
+pub(super) fn atoms_vec(m: &EdnMap<'_>, context: &'static str) -> Result<Vec<AtomRef>, DeError> {
+    parse_vec(required_key(m, "atoms", context)?, ":atoms", |e| {
+        AtomRef::from_edn(e)
     })
 }
 

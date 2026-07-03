@@ -17,6 +17,7 @@ mod predicates;
 pub(crate) mod reaction;
 pub(crate) mod reaction_span;
 pub(crate) mod refs;
+pub(crate) mod registry;
 pub(crate) mod relational;
 pub(crate) mod stereo;
 pub(crate) mod value;

@@ -28,8 +28,8 @@ use super::config::MoleculeDefaults;
 use super::constraint::{read_constraints_dsl, ConstraintDsl, ConstraintsDsl, EntityCounts};
 use super::dative::DativeBondDsl;
 use super::edn_utils::{
-    eof_err, missing, optional_id, parse_vec, read_map, read_vec, required_key, two_atom_refs,
-    unexpected_byte_kind,
+    atoms_pair, atoms_vec, eof_err, missing, optional_id, parse_vec, read_map, read_vec,
+    required_key, two_atom_refs, unexpected_byte_kind,
 };
 use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
@@ -1692,10 +1692,7 @@ pub(super) fn parse_bond_entry(edn: &Edn<'_>) -> Result<BondEntryInput, DeError>
             bond: BondDsl::from_edn(&v[2])?,
         }),
         Edn::Map(m) => {
-            let atoms = parse_vec(required_key(m, "atoms", "bond-entry")?, ":atoms", |e| {
-                AtomRef::from_edn(e)
-            })?;
-            let [a, b] = two_atom_refs(atoms, "bond-entry")?;
+            let [a, b] = atoms_pair(m, "bond-entry")?;
             Ok(BondEntryInput {
                 id: optional_id(m)?,
                 first: a,
@@ -1733,11 +1730,7 @@ pub(super) fn parse_aromatic_system_entry(
     let system = AromaticSystemDsl::from_edn(required_key(m, "type", "aromatic-system-entry")?)?;
     Ok(AromaticSystemEntryInput {
         id: optional_id(m)?,
-        atoms: parse_vec(
-            required_key(m, "atoms", "aromatic-system-entry")?,
-            ":atoms",
-            |e| AtomRef::from_edn(e),
-        )?,
+        atoms: atoms_vec(m, "aromatic-system-entry")?,
         system,
     })
 }
@@ -1749,11 +1742,7 @@ pub(super) fn parse_multicenter_bond_entry(
     let bond = MulticenterBondDsl::from_edn(required_key(m, "type", "multicenter-bond-entry")?)?;
     Ok(MulticenterBondEntryInput {
         id: optional_id(m)?,
-        atoms: parse_vec(
-            required_key(m, "atoms", "multicenter-bond-entry")?,
-            ":atoms",
-            |e| AtomRef::from_edn(e),
-        )?,
+        atoms: atoms_vec(m, "multicenter-bond-entry")?,
         bond,
     })
 }
@@ -1762,12 +1751,7 @@ pub(super) fn parse_noncovalent_bond_entry(
     edn: &Edn<'_>,
 ) -> Result<NoncovalentBondEntryInput, DeError> {
     let m = expect_map(edn, "noncovalent-bond-entry")?;
-    let atoms = parse_vec(
-        required_key(m, "atoms", "noncovalent-bond-entry")?,
-        ":atoms",
-        |e| AtomRef::from_edn(e),
-    )?;
-    let [a, b] = two_atom_refs(atoms, "noncovalent-bond-entry")?;
+    let [a, b] = atoms_pair(m, "noncovalent-bond-entry")?;
     Ok(NoncovalentBondEntryInput {
         id: optional_id(m)?,
         first: a,
