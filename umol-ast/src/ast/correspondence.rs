@@ -192,6 +192,20 @@ impl MoleculeCorrespondence {
         )
     }
 
+    /// The inverse correspondence (right↔left), per entity family: each family's `reverse`.
+    pub fn reverse(&self) -> MoleculeCorrespondence {
+        MoleculeCorrespondence::new(
+            self.atoms.reverse(),
+            self.bonds.reverse(),
+            self.dative_bonds.reverse(),
+            self.aromatic_systems.reverse(),
+            self.multicenter_bonds.reverse(),
+            self.noncovalent_bonds.reverse(),
+            self.stereo_atoms.reverse(),
+            self.stereo_bonds.reverse(),
+        )
+    }
+
     /// The atom correspondence (node-level — the spine the other families are induced from).
     pub fn atoms(&self) -> &Correspondence<NodeId> {
         &self.atoms
@@ -413,5 +427,38 @@ mod tests {
         );
         assert_eq!(ac.stereo_atoms().mates(), &[(StereoAtomId(0), StereoAtomId(2))]);
         assert_eq!(ac.stereo_bonds().mates(), &[(StereoBondId(0), StereoBondId(2))]);
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_reverse(correspondence: MoleculeCorrespondence) {
+        let reversed = correspondence.reverse();
+        assert_eq!(reversed.atoms().mates(), &[(NodeId(1), NodeId(0))]);
+        assert_eq!(reversed.bonds().mates(), &[(BondId(2), BondId(0))]);
+        assert_eq!(
+            reversed.dative_bonds().mates(),
+            &[(DativeBondId(3), DativeBondId(0))]
+        );
+        assert_eq!(
+            reversed.aromatic_systems().mates(),
+            &[(AromaticSystemId(4), AromaticSystemId(0))]
+        );
+        assert_eq!(
+            reversed.multicenter_bonds().mates(),
+            &[(MulticenterBondId(5), MulticenterBondId(0))]
+        );
+        assert_eq!(
+            reversed.noncovalent_bonds().mates(),
+            &[(NoncovalentBondId(6), NoncovalentBondId(0))]
+        );
+        assert_eq!(
+            reversed.stereo_atoms().mates(),
+            &[(StereoAtomId(7), StereoAtomId(0))]
+        );
+        assert_eq!(
+            reversed.stereo_bonds().mates(),
+            &[(StereoBondId(8), StereoBondId(0))]
+        );
+        // counts swap too: atoms went left_count 1 / right_count 2, so the new left id 0 is exposed.
+        assert_eq!(reversed.atoms().left_exposed(), vec![NodeId(0)]);
     }
 }

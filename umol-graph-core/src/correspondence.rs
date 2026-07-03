@@ -8,26 +8,6 @@
 
 use crate::graph::{EdgeId, Graph, NodeId};
 
-/// The ids `0..count` absent from `sorted_mated` (which must be ascending, no duplicates) — a
-/// single merge pass, no per-id search.
-fn exposed<Id: Copy + Ord + From<usize>>(
-    count: usize,
-    sorted_mated: impl Iterator<Item = Id>,
-) -> Vec<Id> {
-    let mut mated = sorted_mated.peekable();
-    (0..count)
-        .map(Id::from)
-        .filter(|node| {
-            if mated.peek() == Some(node) {
-                mated.next();
-                false
-            } else {
-                true
-            }
-        })
-        .collect()
-}
-
 /// A partial bijection between two `Id` spaces: the **mated** `(left, right)` pairs; every unmated
 /// id is **exposed** on its side. Only the mated pairs are stored — exposed ids are derived on
 /// demand, so the carrier stays cheap to produce on the hot enumeration path.
@@ -113,6 +93,18 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
             .collect();
         Correspondence::new(mates, self.left_count, other.right_count)
     }
+
+    /// The inverse correspondence (right↔left): each mated pair swapped and the two id-space sizes
+    /// exchanged. A left-exposed id becomes right-exposed and vice versa, since the exposed sets
+    /// follow the swapped counts.
+    pub fn reverse(&self) -> Correspondence<Id> {
+        let mates = self
+            .mates
+            .iter()
+            .map(|&(left, right)| (right, left))
+            .collect();
+        Correspondence::new(mates, self.right_count, self.left_count)
+    }
 }
 
 impl Correspondence<NodeId> {
@@ -132,6 +124,26 @@ impl Correspondence<NodeId> {
     pub fn shared_edge_count(&self, left: &Graph, right: &Graph) -> usize {
         self.edge_mates(left, right).len()
     }
+}
+
+/// The ids `0..count` absent from `sorted_mated` (which must be ascending, no duplicates) — a
+/// single merge pass, no per-id search.
+fn exposed<Id: Copy + Ord + From<usize>>(
+    count: usize,
+    sorted_mated: impl Iterator<Item = Id>,
+) -> Vec<Id> {
+    let mut mated = sorted_mated.peekable();
+    (0..count)
+        .map(Id::from)
+        .filter(|node| {
+            if mated.peek() == Some(node) {
+                mated.next();
+                false
+            } else {
+                true
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -206,7 +218,10 @@ mod tests {
     #[rstest]
     fn test_correspondence_edge_mates(paths: (Graph, Graph, Correspondence<NodeId>)) {
         let (left, right, c) = paths;
-        assert_eq!(c.edge_mates(&left, &right), vec![(e(0), e(1)), (e(1), e(2))]);
+        assert_eq!(
+            c.edge_mates(&left, &right),
+            vec![(e(0), e(1)), (e(1), e(2))]
+        );
     }
 
     #[rstest]
@@ -239,5 +254,15 @@ mod tests {
         let ac = ab.compose(&bc);
         assert_eq!(ac.mates(), &[(n(0), n(100)), (n(1), n(101))]);
         assert_eq!(ac.left_exposed(), vec![n(2)]);
+    }
+
+    #[rstest]
+    fn test_correspondence_reverse() {
+        // pairs and counts swap; the left-exposed id 2 becomes right-exposed.
+        let c = Correspondence::new(vec![(n(0), n(3)), (n(1), n(1))], 3, 4);
+        let reversed = c.reverse();
+        assert_eq!(reversed.mates(), &[(n(1), n(1)), (n(3), n(0))]);
+        assert_eq!(reversed.left_exposed(), vec![n(0), n(2)]);
+        assert_eq!(reversed.right_exposed(), vec![n(2)]);
     }
 }

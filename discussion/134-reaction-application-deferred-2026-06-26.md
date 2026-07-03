@@ -614,7 +614,7 @@ Modules top-down: **graph-core** (foundation) → **umol-ast `ast`** → **umol-
 - **S1d** ast: `MoleculeCorrespondence::compose`. `[dep: S1a]` **Done**
 - **S1e** graph-core: `Correspondence::is_total()` predicate (`mate_count == left_count == right_count`) instead of a `Total(_)` wrapper — the fast path branches on `atoms().is_total()`; union-frame skip is a later optimization. `[dep: S0b]` **Done**
 
-**S2 — diff / span / import ops** (additive)
+**S2 — diff / span / import ops** (additive) **Done**
 - **S2a** ast: `ReactionSpanAst::superimpose(L, R, C)` — build the union-frame span from a pair + correspondence. `[dep: S1a]` **Done**
 - **S2b** ast: `ReactionSpanAst::correspondence()` — recover `C` (forget values). `[dep: S1a]` **Done**
 - **S2c** ast: `MoleculeAst::difference_to(&R, &C)` = `superimpose` → `to_reaction` → `deltas`. `[dep: S2a]` **Done** — inherent method in reaction_span.rs (not molecule.rs, avoiding a foundational-module upward import; same split-impl pattern as substructure/symmetry/incidence).
@@ -622,7 +622,7 @@ Modules top-down: **graph-core** (foundation) → **umol-ast `ast`** → **umol-
 - **S2e** ast (property test, feature `proptest`): cross-validate the two span constructions — `superimpose(L, R, C)` (Strategy A, direct) **==** the delta path (`to_reaction_span` of the deltas). Off a generated reaction span take `L = lhs`, `R = right()`, `C = correspondence()`, and assert `superimpose(L, R, C) == span`. A mismatch flags a `diff`-completeness or frame gap — the whole point of building A independently (two paths, assert equality; cf. doc 135, where testing an unrelated method surfaced a real compose gap). `[dep: S2a, S2b]` **Done** — plain + overlay variants (`test_reaction_span_ast_superimpose_matches_delta_path{,_overlay}`); both paths agree on all generated reactions, no gap surfaced.
 
 **S3 — `ReactionDerivation` + `apply` codomain**
-- **S3a** ast: `ReactionDerivation<'a>` struct + `product` / `comap` / `atom_map` + `to_reaction` / `reverse` / `chain`. Additive. `[dep: S1a, S1d, S2c]`
+- **S3a** ast: `ReactionDerivation<'a>` struct + `product` / `comap` / `atom_map` + `to_reaction` / `reverse` / `chain`. Additive. `[dep: S1a, S1d, S2c]` **Done** — new `reaction_derivation.rs`; needed `Correspondence::reverse` (graph-core) + `MoleculeCorrespondence::reverse` (comap inversion). `pub(crate) new` reads dead until S3b constructs it in `apply`.
 - **S3b** ast: change `ReactionAst::apply` / `apply_at` codomain `M → ReactionDerivation`; migrate callers to `.product()`. **red→green**. `[dep: S3a]`
 
 **S4 — retire `MoleculeEmbedding`**
