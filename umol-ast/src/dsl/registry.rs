@@ -16,8 +16,10 @@
 use std::collections::{BTreeSet, HashMap};
 use std::hash::Hash;
 
+use bimap::BiBTreeMap;
 use indexmap::IndexMap;
 
+use super::atom::AtomDsl;
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -53,6 +55,12 @@ impl<Id: Copy + From<usize>> NamedRegistry<Id> {
 
     fn by_name(&self, name: &str) -> Option<Id> {
         self.by_name.get(name).copied()
+    }
+
+    /// The named entities of this kind as `(id, name)` pairs — the inverse of `by_name`, the
+    /// projection `MoleculeMetadata` needs for rendering.
+    fn names(&self) -> impl Iterator<Item = (Id, &str)> {
+        self.by_name.iter().map(|(name, &id)| (id, name.as_str()))
     }
 
     fn count(&self) -> usize {
@@ -94,6 +102,10 @@ impl<Id: Copy + From<usize>, Key: Eq + Hash> KeyedRegistry<Id, Key> {
         self.named.by_name(name)
     }
 
+    fn names(&self) -> impl Iterator<Item = (Id, &str)> {
+        self.named.names()
+    }
+
     fn count(&self) -> usize {
         self.named.count()
     }
@@ -119,6 +131,9 @@ pub(crate) struct EntityRegistry {
     noncovalent_bonds: KeyedRegistry<NoncovalentBondId, [AtomId; 2]>,
     stereo_atoms: KeyedRegistry<StereoAtomId, AtomId>,
     stereo_bonds: KeyedRegistry<StereoBondId, BondId>,
+    /// The bijective atom-alias table (name ↔ atom-spec template) — part of the atom name namespace
+    /// (an `:id` may not collide with an alias name), so the registry owns it.
+    atom_aliases: BiBTreeMap<String, Box<AtomDsl>>,
 }
 
 impl EntityRegistry {
@@ -290,6 +305,48 @@ impl EntityRegistry {
 
     pub(crate) fn stereo_bond_by_participants(&self, site: BondId) -> Option<StereoBondId> {
         self.stereo_bonds.by_participants(&site)
+    }
+
+    pub(crate) fn register_atom_alias(&mut self, name: String, dsl: Box<AtomDsl>) {
+        self.atom_aliases.insert(name, dsl);
+    }
+
+    pub(crate) fn atom_names(&self) -> impl Iterator<Item = (AtomId, &str)> {
+        self.atoms.names()
+    }
+
+    pub(crate) fn bond_names(&self) -> impl Iterator<Item = (BondId, &str)> {
+        self.bonds.names()
+    }
+
+    pub(crate) fn dative_bond_names(&self) -> impl Iterator<Item = (DativeBondId, &str)> {
+        self.dative_bonds.names()
+    }
+
+    pub(crate) fn aromatic_system_names(&self) -> impl Iterator<Item = (AromaticSystemId, &str)> {
+        self.aromatic_systems.names()
+    }
+
+    pub(crate) fn multicenter_bond_names(&self) -> impl Iterator<Item = (MulticenterBondId, &str)> {
+        self.multicenter_bonds.names()
+    }
+
+    pub(crate) fn noncovalent_bond_names(&self) -> impl Iterator<Item = (NoncovalentBondId, &str)> {
+        self.noncovalent_bonds.names()
+    }
+
+    pub(crate) fn stereo_atom_names(&self) -> impl Iterator<Item = (StereoAtomId, &str)> {
+        self.stereo_atoms.names()
+    }
+
+    pub(crate) fn stereo_bond_names(&self) -> impl Iterator<Item = (StereoBondId, &str)> {
+        self.stereo_bonds.names()
+    }
+
+    pub(crate) fn iter_atom_aliases(&self) -> impl Iterator<Item = (&str, &AtomDsl)> {
+        self.atom_aliases
+            .iter()
+            .map(|(name, dsl)| (name.as_str(), dsl.as_ref()))
     }
 }
 

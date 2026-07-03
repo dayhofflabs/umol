@@ -261,6 +261,28 @@ currently keys the parallel check on `(pair, kind)`; it must key on the unordere
 hard precondition. (`:electrons` is independent — structural refs read only participant keys, so the
 electron-encoding relocation is an orthogonal cleanup, not a blocker.)
 
+### Ref-emission priority (roundtrip normalization) — to formalize
+
+A use-site ref is not stored as authored; it is re-derived on render from its target (`render_atom_ref`
+→ `Ref::from_ast` = the target's `:id` keyword if it has one, else its positional index). So ref
+*form* is normalized on roundtrip: index-vs-keyword already collapses to keyword-if-named-else-index,
+and mixed positional/keyword usage does not roundtrip to its authored mix. This is a designed
+normalization, not a bug — but it is currently implicit and untested.
+
+Formalize it as one rule: **a use site is emitted in the highest-priority form its target supports,
+`keyword > positional > structural`** — descending specificity of what the ref denotes (a deliberate
+label on *this* entity > *this* entity by slot > its participants, not the entity itself). Positional
+is universal, so the emitted form is always keyword-else-positional; **structural, being lowest, is
+never emitted — it is input-only** (this is *why* structural refs don't roundtrip, not a carve-out).
+Consequence: I5 needs zero render/roundtrip work — structural is a parse-side-only input form.
+
+**S-notation** (independent of the I5 dependency chain; pins existing behavior now, the structural row
+lights up with S3):
+- **Sn** spec + tests: state the use-site emission priority in `umol-ast/spec/umol-dsl-spec.md` (the
+  ref-grammar section), and add a roundtrip test asserting the collapse — an entity referenced by a
+  mix of positional + keyword renders to the keyword (extend with a structural ref once S3 lands). No
+  `render_structural` path — it is dead by construction.
+
 ### Implementation plan
 
 Modules: **ast** (precondition) → **dsl foundation** (registry, parsers) → **dsl surface** (refs).
@@ -278,16 +300,39 @@ Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (
   behavior-preserving. `[dep: —]`
 
 **S2 — entity registry (dsl)** — additive + internal restructure
-- **S2a** `dsl`: `EntityRegistry` (reshape of `EntityCounts`) — per kind: running count, name→id map,
-  participant lookup (bond `(min,max)→BondId`; overlays index their small collections for
-  `find_by_participants`); `register_<entity>(id_name?, participants) -> Id`,
-  `find_<entity>_by_participants(..) -> Option<Id>`, count/name accessors; counts preserved; mechanical
-  `EntityCounts` rename folded in. **additive (green)** — queries unused yet. `[dep: —]` **Done**
+- **S2a** `dsl`: `EntityRegistry` — a **new** type in `dsl/registry.rs` (not an in-place `EntityCounts`
+  rename, which would break the molecule end-of-parse struct literal). Per kind: running count, name→id
+  map, participant lookup (bond `(min,max)→BondId`; overlays index their small collections), via
+  private `NamedRegistry`/`KeyedRegistry`. `register_<entity>(name?, participants) -> Id`,
+  `<entity>_by_participants(..)`, count/name accessors. Introduced alongside `EntityCounts`; the latter
+  retires in S3 when resolution moves onto the registry. **additive (green)** — module `#[allow(dead_code)]`
+  until wired. `[dep: —]` **Done**
 - **S2b** `dsl`: grow the registry's participant data incrementally in `MoleculeInput::into_ast`
   (register each entity as parsed, so mid-build sites see it). Counts/results unchanged. **green.**
   `[dep: S2a]` **Done**
-- **S2c** `dsl`: grow/shrink the registry in the reaction delta loop + reaction-span build (register on
-  `Add`; unregister + compact on `Remove`, riding `IdCompaction`). **green.** `[dep: S2a]`
+- **S2c** `dsl`: make the registry the **source of truth for naming**, `MoleculeMetadata` a derived
+  view (metadata ⊂ registry — see the note below). Registry gains the **atom-alias table** (aliases and
+  entity ids share one namespace, enforced by `check_id_disjoint`); add `MoleculeMetadata::from(&EntityRegistry)`
+  (id→name by inverting `by_name`; aliases read directly). Change `MoleculeInput::into_ast →
+  (MoleculeAst, EntityRegistry)` (an internal method, no trait constraint); `MoleculeDsl` formation
+  derives the metadata via the projection. **breaking (into_ast return + MoleculeDsl formation),
+  internal.** `[dep: S2b]`
+- **S2d** `dsl`: reaction delta loop (`ReactionInput::into_ast`) **reuses the returned lhs registry**
+  (no rebuild — the delta namespace *is* the lhs namespace continued) and grows it in delta order:
+  register on `Add`. **Monotonic — no shrink**: `Remove`/`Modify` only resolve a ref and are restricted
+  to lhs entities (`id.index() >= lhs_count` is an error), so the DSL delta pass never compacts —
+  compaction is apply-time, not parse-time. Derive `ReactionMetadata` from the registry (lhs vs created
+  via the existing id-range guards); retire `EntityCounts::from_ast`. `[dep: S2c]`
+- **S2e** `dsl`: reaction-span build (`SpanInput::into_ast`) is molecule-shaped and **self-contained**
+  (ids are molecule-shaped; it embeds no lhs molecule parse), so it builds its **own** registry
+  (parallel-grow like S2b) and projects its own metadata. `[dep: S2b]`
+
+  *Note (metadata ⊂ registry).* `MoleculeMetadata` is the roundtrip-relevant subset of the registry:
+  its eight `id→name` maps are the exact inverse of the registry's `by_name`, and `atom_aliases` moves
+  into the registry. Everything else the registry holds (name→id, participant indexes, counts) is
+  parse-only and derivable from `ast + metadata`, so it never belongs in the persistent public type.
+  Hence the registry is the source and metadata a boundary projection — not a merged union, and not
+  rebuilt from metadata.
 
 **S3 — structural refs (dsl)** — the breaking rewire that lights up every site
 - **S3a** `dsl/refs.rs`: add `Structural(payload)` to the 7 non-atom refs (parametrize `define_ref!`
@@ -299,9 +344,19 @@ Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (
 - **S3b** `dsl`: migrate every resolution site to `resolve(&registry)` and drop the per-loop
   `id_to_idx` maps — entity entries (stereo-bond `:site`), `constraint.rs`, `relational.rs` (18
   variants), `SubPatternAnchorDsl`, `:bond-order-sum :bonds`, `reaction.rs` deltas, `reaction_span.rs`.
-  **red→green.** `[dep: S3a, S2b, S2c, S0a]`
+  **red→green.** `[dep: S3a, S2b, S2d, S2e, S0a]`
+- **S3c** `dsl`: centralize id-namespace uniqueness on the registry. Today the build enforces
+  "every id keyword is unique across {atom ids, non-atom entity ids, alias names}" through three
+  scattered locals — the free fn `check_id_disjoint` (id vs atom-ids + aliases), the `entry_ids` set
+  (id vs non-atom ids), and atom self-uniqueness via `atom_id_to_idx`. Now that the registry owns the
+  whole namespace (all eight `by_name` + `atom_aliases`), fold this in: `register_*` (or a `reserve`)
+  checks the candidate name against every kind + aliases and returns `Err(DuplicateId)` on collision.
+  Removes `check_id_disjoint` and `entry_ids`; the parallel `atom_id_to_idx`/`bond_id_to_idx` are
+  already gone (S3b). Note: the check moves to register-time (after participant resolution), a minor
+  error-ordering change to accept. `[dep: S3b]`
 
-**Critical path** S2a → S2b/S2c → S3a → S3b; S0 and S1 are independent foundations. **Deferrable within
+**Critical path** S2a → S2b → S2c → {S2d, S2e} → S3a → S3b; S0 and S1 are independent foundations.
+**Deferrable within
 S3b**: the stereo-bond *entry* `:site` structural form is the only mid-build site (the sole reason S2b
 grows the registry incrementally rather than at end); if fiddly, ship the reference sites first and add
 the entry-site form after. **Confirm before S3a**: stereo resolution keys on **site** (unique per the

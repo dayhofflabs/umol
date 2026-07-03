@@ -384,7 +384,8 @@ impl ReactionInput {
             atom_aliases,
             deltas,
         } = self;
-        let (lhs, lhs_meta) = lhs.into_ast()?;
+        let (lhs, lhs_registry) = lhs.into_ast()?;
+        let lhs_meta = MoleculeMetadata::from(&lhs_registry);
 
         // Alias table for `:add` = lhs aliases ∪ reaction aliases (bijective; collisions error).
         let mut aliases: IndexMap<String, Box<AtomDsl>> = lhs_meta
