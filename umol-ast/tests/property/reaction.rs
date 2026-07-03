@@ -9,7 +9,8 @@ use umol_ast::ast::{
     AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, BondDelta, CompositionScope,
     DativeBondConstraint, DativeBondDelta, DativeBondFieldChange, Delta, Deltas, DpoValidator,
     MulticenterBondDelta, MulticenterBondFieldChange, NoncovalentBondAst, NoncovalentBondDelta,
-    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, ReactionAst, StereoAtomAst,
+    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, ReactionAst, ReactionSpanAst,
+    StereoAtomAst,
     StereoAtomDelta, StereoAtomFieldChange, StereoBondAst, StereoBondDelta, StereoBondFieldChange,
     StereoConfigurationAst, StereoKind, StereoLigand,
 };
@@ -733,6 +734,18 @@ proptest! {
         }
     }
 
+    /// Cross-validate the two span constructions: the direct `superimpose` (Strategy A) reproduces
+    /// the span the delta path (`to_reaction_span`) builds. Recover `(L, R, C)` from the delta-path
+    /// span and reassemble; a mismatch flags a diff-completeness or frame gap between the paths.
+    #[test]
+    fn test_reaction_span_ast_superimpose_matches_delta_path(reaction in reaction_strategy()) {
+        if let Ok(span) = reaction.to_reaction_span() {
+            let rebuilt =
+                ReactionSpanAst::superimpose(&span.left(), &span.right(), &span.correspondence());
+            prop_assert_eq!(rebuilt, span);
+        }
+    }
+
     /// `reverse` swaps the span's sides. The reverse reaction's reactant is *exactly* the forward
     /// product. Its product is the forward reactant only up to atom renumbering (re-added atoms
     /// append rather than reoccupy their original ids), so structurally we check the reconstructed
@@ -820,6 +833,19 @@ proptest! {
         if let Ok(span) = reaction.to_reaction_span() {
             let right = span.right();
             prop_assert!(reaction.apply(&reaction.lhs, ALG).any(|product| product == right));
+        }
+    }
+
+    /// Cross-validate the two span constructions with overlays present: the direct `superimpose`
+    /// reassembles the delta-path span across all overlay families, not just atoms/bonds.
+    #[test]
+    fn test_reaction_span_ast_superimpose_matches_delta_path_overlay(
+        reaction in overlay_reaction_strategy(),
+    ) {
+        if let Ok(span) = reaction.to_reaction_span() {
+            let rebuilt =
+                ReactionSpanAst::superimpose(&span.left(), &span.right(), &span.correspondence());
+            prop_assert_eq!(rebuilt, span);
         }
     }
 

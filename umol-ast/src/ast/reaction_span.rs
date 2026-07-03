@@ -86,6 +86,30 @@ fn union_map<Id: Copy + Ord + Hash + From<usize>>(
     map
 }
 
+/// Recover one family's correspondence from its span column (union order): each `Unchanged`/`Modified`
+/// pairs the running left/right ids, `Removed` advances only left, `Added` only right.
+fn recover_correspondence<'a, Id, T: 'a>(
+    column: impl Iterator<Item = &'a EntitySpan<T>>,
+) -> Correspondence<Id>
+where
+    Id: Copy + Ord + From<usize>,
+{
+    let mut mates = Vec::new();
+    let (mut left, mut right) = (0usize, 0usize);
+    for span in column {
+        match span {
+            EntitySpan::Unchanged(_) | EntitySpan::Modified { .. } => {
+                mates.push((Id::from(left), Id::from(right)));
+                left += 1;
+                right += 1;
+            }
+            EntitySpan::Removed(_) => left += 1,
+            EntitySpan::Added(_) => right += 1,
+        }
+    }
+    Correspondence::new(mates, left, right)
+}
+
 #[allow(clippy::type_complexity)]
 impl ReactionSpanAst {
     #[allow(clippy::too_many_arguments)]
@@ -339,6 +363,28 @@ impl ReactionSpanAst {
             stereo_atoms,
             stereo_bonds,
             constraints,
+        )
+    }
+
+    /// Recover the per-family correspondence between the two sides, forgetting the values — the
+    /// inverse of `superimpose`: `superimpose(self.left(), self.right(), &self.correspondence())`
+    /// reproduces `self`.
+    pub fn correspondence(&self) -> MoleculeCorrespondence {
+        MoleculeCorrespondence::new(
+            recover_correspondence(self.atoms.iter()),
+            recover_correspondence(self.bonds.iter()),
+            recover_correspondence(self.dative_bonds.relation_ids().map(|r| self.dative_bonds.data(r))),
+            recover_correspondence(
+                self.aromatic_systems.relation_ids().map(|r| self.aromatic_systems.data(r)),
+            ),
+            recover_correspondence(
+                self.multicenter_bonds.relation_ids().map(|r| self.multicenter_bonds.data(r)),
+            ),
+            recover_correspondence(
+                self.noncovalent_bonds.relation_ids().map(|r| self.noncovalent_bonds.data(r)),
+            ),
+            recover_correspondence(self.stereo_atoms.relation_ids().map(|r| self.stereo_atoms.data(r))),
+            recover_correspondence(self.stereo_bonds.relation_ids().map(|r| self.stereo_bonds.data(r))),
         )
     }
 
@@ -1950,6 +1996,48 @@ mod tests {
 
         assert_eq!(span.left(), left);
         assert_eq!(span.right(), right);
+    }
+
+    #[rstest]
+    fn test_reaction_span_ast_correspondence() {
+        // atom 0 unchanged, 1 modified (C→N), 2 removed (left) with 2 added (right O): all four
+        // EntitySpan variants in the atom column.
+        let left = MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::C); 3],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        let right = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 3, 3);
+        let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
+        let span = ReactionSpanAst::superimpose(&left, &right, &correspondence);
+
+        // recovers the input correspondence, and inverts `superimpose`.
+        assert_eq!(span.correspondence(), correspondence);
+        assert_eq!(
+            ReactionSpanAst::superimpose(&span.left(), &span.right(), &span.correspondence()),
+            span
+        );
     }
 
     #[rstest]
