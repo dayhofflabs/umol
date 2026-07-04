@@ -145,7 +145,7 @@ macro_rules! define_ref {
 define_ref!(
     AtomRef,
     AtomId,
-    atom_id,
+    atom_keyword,
     "atom",
     read_atom_ref,
     atom_count,
@@ -154,7 +154,7 @@ define_ref!(
 define_ref!(
     BondRef,
     BondId,
-    bond_id,
+    bond_keyword,
     "bond",
     read_bond_ref,
     bond_count,
@@ -166,7 +166,7 @@ define_ref!(
 define_ref!(
     DativeBondRef,
     DativeBondId,
-    dative_bond_id,
+    dative_bond_keyword,
     "dative-bond",
     read_dative_bond_ref,
     dative_bond_count,
@@ -176,19 +176,19 @@ define_ref!(
     resolve_dative_structural
 );
 define_ref!(
-    AromaticSystemRef, AromaticSystemId, aromatic_system_id, "aromatic-system",
+    AromaticSystemRef, AromaticSystemId, aromatic_system_keyword, "aromatic-system",
     read_aromatic_system_ref, aromatic_system_count, find_aromatic_system_by_keyword,
     structural = Vec<AtomRef>, parse_aromatic_structural, resolve_aromatic_structural
 );
 define_ref!(
-    MulticenterBondRef, MulticenterBondId, multicenter_bond_id, "multicenter-bond",
+    MulticenterBondRef, MulticenterBondId, multicenter_bond_keyword, "multicenter-bond",
     read_multicenter_bond_ref, multicenter_bond_count, find_multicenter_bond_by_keyword,
     structural = Vec<AtomRef>, parse_multicenter_structural, resolve_multicenter_structural
 );
 define_ref!(
     NoncovalentBondRef,
     NoncovalentBondId,
-    noncovalent_bond_id,
+    noncovalent_bond_keyword,
     "noncovalent-bond",
     read_noncovalent_bond_ref,
     noncovalent_bond_count,
@@ -200,7 +200,7 @@ define_ref!(
 define_ref!(
     StereoAtomRef,
     StereoAtomId,
-    stereo_atom_id,
+    stereo_atom_keyword,
     "stereo-atom",
     read_stereo_atom_ref,
     stereo_atom_count,
@@ -212,7 +212,7 @@ define_ref!(
 define_ref!(
     StereoBondRef,
     StereoBondId,
-    stereo_bond_id,
+    stereo_bond_keyword,
     "stereo-bond",
     read_stereo_bond_ref,
     stereo_bond_count,
@@ -492,7 +492,7 @@ mod tests {
 
     #[fixture]
     fn meta_with_atom_id() -> MoleculeMetadata {
-        MoleculeMetadata::new().with_atom_id(AtomId(2), "c1")
+        MoleculeMetadata::new().with_atom_keyword(AtomId(2), "c1")
     }
 
     #[fixture]

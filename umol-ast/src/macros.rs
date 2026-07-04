@@ -276,7 +276,7 @@ mod tests {
                 vec![AtomAst::from_element(Element::C); 2],
                 vec![],
             ),
-            MoleculeMetadata::new().with_atom_id(AtomId(0), "a").with_atom_id(AtomId(1), "b"),
+            MoleculeMetadata::new().with_atom_keyword(AtomId(0), "a").with_atom_keyword(AtomId(1), "b"),
         ),
     )]
     fn test_dsl_macro(#[case] input: &str, #[case] expected: MoleculeDsl) {

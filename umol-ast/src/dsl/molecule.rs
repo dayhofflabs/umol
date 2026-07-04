@@ -165,35 +165,35 @@ impl MoleculeMetadata {
             && self.atom_aliases.is_empty()
     }
 
-    pub fn atom_id(&self, id: AtomId) -> Option<&str> {
+    pub fn atom_keyword(&self, id: AtomId) -> Option<&str> {
         self.atom_ids.get(&id).map(String::as_str)
     }
 
-    pub fn bond_id(&self, id: BondId) -> Option<&str> {
+    pub fn bond_keyword(&self, id: BondId) -> Option<&str> {
         self.bond_ids.get(&id).map(String::as_str)
     }
 
-    pub fn dative_bond_id(&self, id: DativeBondId) -> Option<&str> {
+    pub fn dative_bond_keyword(&self, id: DativeBondId) -> Option<&str> {
         self.dative_bond_ids.get(&id).map(String::as_str)
     }
 
-    pub fn aromatic_system_id(&self, id: AromaticSystemId) -> Option<&str> {
+    pub fn aromatic_system_keyword(&self, id: AromaticSystemId) -> Option<&str> {
         self.aromatic_system_ids.get(&id).map(String::as_str)
     }
 
-    pub fn multicenter_bond_id(&self, id: MulticenterBondId) -> Option<&str> {
+    pub fn multicenter_bond_keyword(&self, id: MulticenterBondId) -> Option<&str> {
         self.multicenter_bond_ids.get(&id).map(String::as_str)
     }
 
-    pub fn noncovalent_bond_id(&self, id: NoncovalentBondId) -> Option<&str> {
+    pub fn noncovalent_bond_keyword(&self, id: NoncovalentBondId) -> Option<&str> {
         self.noncovalent_bond_ids.get(&id).map(String::as_str)
     }
 
-    pub fn stereo_atom_id(&self, id: StereoAtomId) -> Option<&str> {
+    pub fn stereo_atom_keyword(&self, id: StereoAtomId) -> Option<&str> {
         self.stereo_atom_ids.get(&id).map(String::as_str)
     }
 
-    pub fn stereo_bond_id(&self, id: StereoBondId) -> Option<&str> {
+    pub fn stereo_bond_keyword(&self, id: StereoBondId) -> Option<&str> {
         self.stereo_bond_ids.get(&id).map(String::as_str)
     }
 
@@ -232,35 +232,35 @@ impl MoleculeMetadata {
             .map(|(k, v)| (k.as_str(), v.as_ref()))
     }
 
-    pub fn set_atom_id(&mut self, id: AtomId, name: impl Into<String>) {
+    pub fn set_atom_keyword(&mut self, id: AtomId, name: impl Into<String>) {
         self.atom_ids.insert(id, name.into());
     }
 
-    pub fn set_bond_id(&mut self, id: BondId, name: impl Into<String>) {
+    pub fn set_bond_keyword(&mut self, id: BondId, name: impl Into<String>) {
         self.bond_ids.insert(id, name.into());
     }
 
-    pub fn set_dative_bond_id(&mut self, id: DativeBondId, name: impl Into<String>) {
+    pub fn set_dative_bond_keyword(&mut self, id: DativeBondId, name: impl Into<String>) {
         self.dative_bond_ids.insert(id, name.into());
     }
 
-    pub fn set_aromatic_system_id(&mut self, id: AromaticSystemId, name: impl Into<String>) {
+    pub fn set_aromatic_system_keyword(&mut self, id: AromaticSystemId, name: impl Into<String>) {
         self.aromatic_system_ids.insert(id, name.into());
     }
 
-    pub fn set_multicenter_bond_id(&mut self, id: MulticenterBondId, name: impl Into<String>) {
+    pub fn set_multicenter_bond_keyword(&mut self, id: MulticenterBondId, name: impl Into<String>) {
         self.multicenter_bond_ids.insert(id, name.into());
     }
 
-    pub fn set_noncovalent_bond_id(&mut self, id: NoncovalentBondId, name: impl Into<String>) {
+    pub fn set_noncovalent_bond_keyword(&mut self, id: NoncovalentBondId, name: impl Into<String>) {
         self.noncovalent_bond_ids.insert(id, name.into());
     }
 
-    pub fn set_stereo_atom_id(&mut self, id: StereoAtomId, name: impl Into<String>) {
+    pub fn set_stereo_atom_keyword(&mut self, id: StereoAtomId, name: impl Into<String>) {
         self.stereo_atom_ids.insert(id, name.into());
     }
 
-    pub fn set_stereo_bond_id(&mut self, id: StereoBondId, name: impl Into<String>) {
+    pub fn set_stereo_bond_keyword(&mut self, id: StereoBondId, name: impl Into<String>) {
         self.stereo_bond_ids.insert(id, name.into());
     }
 
@@ -272,55 +272,55 @@ impl MoleculeMetadata {
         self.atom_aliases.insert(name.into(), Box::new(atom.into()));
     }
 
-    pub fn with_atom_id(mut self, id: AtomId, name: impl Into<String>) -> Self {
-        self.set_atom_id(id, name);
+    pub fn with_atom_keyword(mut self, id: AtomId, name: impl Into<String>) -> Self {
+        self.set_atom_keyword(id, name);
         self
     }
 
-    pub fn with_bond_id(mut self, id: BondId, name: impl Into<String>) -> Self {
-        self.set_bond_id(id, name);
+    pub fn with_bond_keyword(mut self, id: BondId, name: impl Into<String>) -> Self {
+        self.set_bond_keyword(id, name);
         self
     }
 
-    pub fn with_dative_bond_id(mut self, id: DativeBondId, name: impl Into<String>) -> Self {
-        self.set_dative_bond_id(id, name);
+    pub fn with_dative_bond_keyword(mut self, id: DativeBondId, name: impl Into<String>) -> Self {
+        self.set_dative_bond_keyword(id, name);
         self
     }
 
-    pub fn with_aromatic_system_id(
+    pub fn with_aromatic_system_keyword(
         mut self,
         id: AromaticSystemId,
         name: impl Into<String>,
     ) -> Self {
-        self.set_aromatic_system_id(id, name);
+        self.set_aromatic_system_keyword(id, name);
         self
     }
 
-    pub fn with_multicenter_bond_id(
+    pub fn with_multicenter_bond_keyword(
         mut self,
         id: MulticenterBondId,
         name: impl Into<String>,
     ) -> Self {
-        self.set_multicenter_bond_id(id, name);
+        self.set_multicenter_bond_keyword(id, name);
         self
     }
 
-    pub fn with_noncovalent_bond_id(
+    pub fn with_noncovalent_bond_keyword(
         mut self,
         id: NoncovalentBondId,
         name: impl Into<String>,
     ) -> Self {
-        self.set_noncovalent_bond_id(id, name);
+        self.set_noncovalent_bond_keyword(id, name);
         self
     }
 
-    pub fn with_stereo_atom_id(mut self, id: StereoAtomId, name: impl Into<String>) -> Self {
-        self.set_stereo_atom_id(id, name);
+    pub fn with_stereo_atom_keyword(mut self, id: StereoAtomId, name: impl Into<String>) -> Self {
+        self.set_stereo_atom_keyword(id, name);
         self
     }
 
-    pub fn with_stereo_bond_id(mut self, id: StereoBondId, name: impl Into<String>) -> Self {
-        self.set_stereo_bond_id(id, name);
+    pub fn with_stereo_bond_keyword(mut self, id: StereoBondId, name: impl Into<String>) -> Self {
+        self.set_stereo_bond_keyword(id, name);
         self
     }
 
@@ -335,40 +335,40 @@ impl MoleculeMetadata {
 /// later a reaction's `ReactionMetadata`. `from_ast` never emits the structural form, so `Metadata`
 /// carries no participant index — it is a subset of the namespace surface.
 pub trait Metadata {
-    fn atom_id(&self, id: AtomId) -> Option<&str>;
-    fn bond_id(&self, id: BondId) -> Option<&str>;
-    fn dative_bond_id(&self, id: DativeBondId) -> Option<&str>;
-    fn aromatic_system_id(&self, id: AromaticSystemId) -> Option<&str>;
-    fn multicenter_bond_id(&self, id: MulticenterBondId) -> Option<&str>;
-    fn noncovalent_bond_id(&self, id: NoncovalentBondId) -> Option<&str>;
-    fn stereo_atom_id(&self, id: StereoAtomId) -> Option<&str>;
-    fn stereo_bond_id(&self, id: StereoBondId) -> Option<&str>;
+    fn atom_keyword(&self, id: AtomId) -> Option<&str>;
+    fn bond_keyword(&self, id: BondId) -> Option<&str>;
+    fn dative_bond_keyword(&self, id: DativeBondId) -> Option<&str>;
+    fn aromatic_system_keyword(&self, id: AromaticSystemId) -> Option<&str>;
+    fn multicenter_bond_keyword(&self, id: MulticenterBondId) -> Option<&str>;
+    fn noncovalent_bond_keyword(&self, id: NoncovalentBondId) -> Option<&str>;
+    fn stereo_atom_keyword(&self, id: StereoAtomId) -> Option<&str>;
+    fn stereo_bond_keyword(&self, id: StereoBondId) -> Option<&str>;
 }
 
 impl Metadata for MoleculeMetadata {
-    fn atom_id(&self, id: AtomId) -> Option<&str> {
-        self.atom_id(id)
+    fn atom_keyword(&self, id: AtomId) -> Option<&str> {
+        self.atom_keyword(id)
     }
-    fn bond_id(&self, id: BondId) -> Option<&str> {
-        self.bond_id(id)
+    fn bond_keyword(&self, id: BondId) -> Option<&str> {
+        self.bond_keyword(id)
     }
-    fn dative_bond_id(&self, id: DativeBondId) -> Option<&str> {
-        self.dative_bond_id(id)
+    fn dative_bond_keyword(&self, id: DativeBondId) -> Option<&str> {
+        self.dative_bond_keyword(id)
     }
-    fn aromatic_system_id(&self, id: AromaticSystemId) -> Option<&str> {
-        self.aromatic_system_id(id)
+    fn aromatic_system_keyword(&self, id: AromaticSystemId) -> Option<&str> {
+        self.aromatic_system_keyword(id)
     }
-    fn multicenter_bond_id(&self, id: MulticenterBondId) -> Option<&str> {
-        self.multicenter_bond_id(id)
+    fn multicenter_bond_keyword(&self, id: MulticenterBondId) -> Option<&str> {
+        self.multicenter_bond_keyword(id)
     }
-    fn noncovalent_bond_id(&self, id: NoncovalentBondId) -> Option<&str> {
-        self.noncovalent_bond_id(id)
+    fn noncovalent_bond_keyword(&self, id: NoncovalentBondId) -> Option<&str> {
+        self.noncovalent_bond_keyword(id)
     }
-    fn stereo_atom_id(&self, id: StereoAtomId) -> Option<&str> {
-        self.stereo_atom_id(id)
+    fn stereo_atom_keyword(&self, id: StereoAtomId) -> Option<&str> {
+        self.stereo_atom_keyword(id)
     }
-    fn stereo_bond_id(&self, id: StereoBondId) -> Option<&str> {
-        self.stereo_bond_id(id)
+    fn stereo_bond_keyword(&self, id: StereoBondId) -> Option<&str> {
+        self.stereo_bond_keyword(id)
     }
 }
 
@@ -379,28 +379,28 @@ impl From<&MoleculeNamespace> for MoleculeMetadata {
     fn from(namespace: &MoleculeNamespace) -> Self {
         let mut metadata = MoleculeMetadata::new();
         for (id, keyword) in namespace.atom_keywords() {
-            metadata.set_atom_id(id, keyword);
+            metadata.set_atom_keyword(id, keyword);
         }
         for (id, keyword) in namespace.bond_keywords() {
-            metadata.set_bond_id(id, keyword);
+            metadata.set_bond_keyword(id, keyword);
         }
         for (id, keyword) in namespace.dative_bond_keywords() {
-            metadata.set_dative_bond_id(id, keyword);
+            metadata.set_dative_bond_keyword(id, keyword);
         }
         for (id, keyword) in namespace.aromatic_system_keywords() {
-            metadata.set_aromatic_system_id(id, keyword);
+            metadata.set_aromatic_system_keyword(id, keyword);
         }
         for (id, keyword) in namespace.multicenter_bond_keywords() {
-            metadata.set_multicenter_bond_id(id, keyword);
+            metadata.set_multicenter_bond_keyword(id, keyword);
         }
         for (id, keyword) in namespace.noncovalent_bond_keywords() {
-            metadata.set_noncovalent_bond_id(id, keyword);
+            metadata.set_noncovalent_bond_keyword(id, keyword);
         }
         for (id, keyword) in namespace.stereo_atom_keywords() {
-            metadata.set_stereo_atom_id(id, keyword);
+            metadata.set_stereo_atom_keyword(id, keyword);
         }
         for (id, keyword) in namespace.stereo_bond_keywords() {
-            metadata.set_stereo_bond_id(id, keyword);
+            metadata.set_stereo_bond_keyword(id, keyword);
         }
         for (name, dsl) in namespace.atom_aliases() {
             metadata.add_atom_alias(name, dsl.clone());
@@ -969,14 +969,14 @@ pub(super) fn render_atom_value(atom: &AtomAst, meta: &MoleculeMetadata) -> Edn<
 
 fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &MoleculeMetadata) -> Edn<'static> {
     let spec = render_atom_value(atom, meta);
-    match meta.atom_id(id) {
+    match meta.atom_keyword(id) {
         Some(id) => Edn::Vector(vec![Edn::Keyword(EdnKeyword::owned(id.to_string())), spec].into()),
         None => spec,
     }
 }
 
 fn render_atom_ref(id: AtomId, meta: &MoleculeMetadata) -> Edn<'static> {
-    match meta.atom_id(id) {
+    match meta.atom_keyword(id) {
         Some(id) => Edn::Keyword(EdnKeyword::owned(id.to_string())),
         None => Edn::Int(id.index() as i64),
     }
@@ -993,7 +993,7 @@ pub(super) fn render_bond_entry(
 ) -> Edn<'static> {
     let first = render_atom_ref(a, meta);
     let second = render_atom_ref(b, meta);
-    match meta.bond_id(id) {
+    match meta.bond_keyword(id) {
         Some(name) => {
             let mut m = EdnMap::with_capacity(3);
             m.insert(
@@ -1039,7 +1039,7 @@ pub(super) fn render_dative_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(4);
-    if let Some(id) = meta.dative_bond_id(id) {
+    if let Some(id) = meta.dative_bond_keyword(id) {
         m.insert(
             Edn::keyword("id"),
             Edn::Keyword(EdnKeyword::owned(id.to_string())),
@@ -1083,7 +1083,7 @@ pub(super) fn render_aromatic_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(3);
-    if let Some(id) = meta.aromatic_system_id(id) {
+    if let Some(id) = meta.aromatic_system_keyword(id) {
         m.insert(
             Edn::keyword("id"),
             Edn::Keyword(EdnKeyword::owned(id.to_string())),
@@ -1127,7 +1127,7 @@ pub(super) fn render_multicenter_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(3);
-    if let Some(id) = meta.multicenter_bond_id(id) {
+    if let Some(id) = meta.multicenter_bond_keyword(id) {
         m.insert(
             Edn::keyword("id"),
             Edn::Keyword(EdnKeyword::owned(id.to_string())),
@@ -1171,7 +1171,7 @@ pub(super) fn render_noncovalent_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(3);
-    if let Some(id) = meta.noncovalent_bond_id(id) {
+    if let Some(id) = meta.noncovalent_bond_keyword(id) {
         m.insert(
             Edn::keyword("id"),
             Edn::Keyword(EdnKeyword::owned(id.to_string())),
@@ -1209,7 +1209,7 @@ pub(super) fn render_stereo_atom_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(4);
-    if let Some(id) = meta.stereo_atom_id(id) {
+    if let Some(id) = meta.stereo_atom_keyword(id) {
         m.insert(
             Edn::keyword("id"),
             Edn::Keyword(EdnKeyword::owned(id.to_string())),
@@ -1249,7 +1249,7 @@ pub(super) fn render_stereo_bond_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(4);
-    if let Some(id) = meta.stereo_bond_id(id) {
+    if let Some(id) = meta.stereo_bond_keyword(id) {
         m.insert(
             Edn::keyword("id"),
             Edn::Keyword(EdnKeyword::owned(id.to_string())),
@@ -1291,7 +1291,7 @@ pub(super) fn render_stereo_ligand(ligand: StereoLigand, meta: &MoleculeMetadata
 }
 
 fn render_bond_ref(id: BondId, meta: &MoleculeMetadata) -> Edn<'static> {
-    match meta.bond_id(id) {
+    match meta.bond_keyword(id) {
         Some(id) => Edn::Keyword(EdnKeyword::owned(id.to_string())),
         None => Edn::Int(id.index() as i64),
     }

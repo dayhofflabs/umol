@@ -90,7 +90,7 @@ fn test_constraint_ref_uses_keyword_when_metadata_id_present() {
     );
 
     let mut metadata = MoleculeMetadata::new();
-    metadata.set_atom_id(AtomId(0), "carbon".to_string());
+    metadata.set_atom_keyword(AtomId(0), "carbon".to_string());
 
     let dsl = MoleculeDsl::from_parts(ast, metadata);
     let rendered = dsl.to_edn().to_string();

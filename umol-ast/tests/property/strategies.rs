@@ -1809,22 +1809,22 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
                 let mut meta = MoleculeMetadata::new();
                 for (i, slot) in atoms.iter().enumerate() {
                     if slot.is_some() {
-                        meta.set_atom_id(AtomId(i as u32), format!("atom{i}"));
+                        meta.set_atom_keyword(AtomId(i as u32), format!("atom{i}"));
                     }
                 }
                 for (i, slot) in bonds.iter().enumerate() {
                     if slot.is_some() {
-                        meta.set_bond_id(BondId(i as u32), format!("bond{i}"));
+                        meta.set_bond_keyword(BondId(i as u32), format!("bond{i}"));
                     }
                 }
                 for (i, slot) in datives.iter().enumerate() {
                     if slot.is_some() {
-                        meta.set_dative_bond_id(DativeBondId(i as u32), format!("dative{i}"));
+                        meta.set_dative_bond_keyword(DativeBondId(i as u32), format!("dative{i}"));
                     }
                 }
                 for (i, slot) in aromatics.iter().enumerate() {
                     if slot.is_some() {
-                        meta.set_aromatic_system_id(
+                        meta.set_aromatic_system_keyword(
                             AromaticSystemId(i as u32),
                             format!("aromatic{i}"),
                         );
@@ -1832,7 +1832,7 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
                 }
                 for (i, slot) in multicenters.iter().enumerate() {
                     if slot.is_some() {
-                        meta.set_multicenter_bond_id(
+                        meta.set_multicenter_bond_keyword(
                             MulticenterBondId(i as u32),
                             format!("multicenter{i}"),
                         );
@@ -1840,7 +1840,7 @@ pub(crate) fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<MoleculeMe
                 }
                 for (i, slot) in noncovalents.iter().enumerate() {
                     if slot.is_some() {
-                        meta.set_noncovalent_bond_id(
+                        meta.set_noncovalent_bond_keyword(
                             NoncovalentBondId(i as u32),
                             format!("noncovalent{i}"),
                         );
