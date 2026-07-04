@@ -30,10 +30,10 @@ use super::molecule::{
     parse_stereo_atom_entry, parse_stereo_bond_entry, read_atom_aliases, render_aromatic_entry,
     render_atom_value, render_bond_entry, render_dative_entry, render_multicenter_entry,
     render_noncovalent_entry, render_stereo_atom_entry, render_stereo_bond_entry,
-    render_stereo_ligand, AtomSpecInput, MoleculeMetadata,
+    render_stereo_ligand, resolve_atom_spec, AtomSpecInput, MoleculeMetadata,
 };
 use super::multicenter::MulticenterBondDsl;
-use super::namespace::{MoleculeNamespace, Namespace};
+use super::namespace::MoleculeNamespace;
 use super::noncovalent::NoncovalentBondDsl;
 use super::refs::{parse_stereo_ligand, AtomRef, BondRef, StereoLigandRef};
 use super::stereo::{StereoAtomDsl, StereoBondDsl};
@@ -869,27 +869,16 @@ fn resolve_atom_span(
     span: EntitySpan<AtomSpecInput>,
     namespace: &MoleculeNamespace,
 ) -> Result<EntitySpan<AtomAst>, ParseError> {
-    let resolve = |spec: AtomSpecInput| -> Result<AtomAst, ParseError> {
-        match spec {
-            AtomSpecInput::Bare(dsl) => Ok(dsl.0),
-            AtomSpecInput::Alias(name) => match namespace.find_atom_alias(&name) {
-                Some(dsl) => Ok(dsl.0.clone()),
-                None => Err(ParseError::InvalidValue(format!(
-                    "unknown atom alias :{name}"
-                ))),
-            },
-        }
-    };
     Ok(match span {
-        EntitySpan::Unchanged(s) => EntitySpan::Unchanged(resolve(s)?),
-        EntitySpan::Added(s) => EntitySpan::Added(resolve(s)?),
-        EntitySpan::Removed(s) => EntitySpan::Removed(resolve(s)?),
+        EntitySpan::Unchanged(s) => EntitySpan::Unchanged(resolve_atom_spec(s, namespace)?),
+        EntitySpan::Added(s) => EntitySpan::Added(resolve_atom_spec(s, namespace)?),
+        EntitySpan::Removed(s) => EntitySpan::Removed(resolve_atom_spec(s, namespace)?),
         EntitySpan::Modified {
             lhs: left,
             rhs: right,
         } => EntitySpan::Modified {
-            lhs: resolve(left)?,
-            rhs: resolve(right)?,
+            lhs: resolve_atom_spec(left, namespace)?,
+            rhs: resolve_atom_spec(right, namespace)?,
         },
     })
 }

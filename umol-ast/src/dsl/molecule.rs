@@ -33,7 +33,7 @@ use super::edn_utils::{
 };
 use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
-use super::namespace::MoleculeNamespace;
+use super::namespace::{MoleculeNamespace, Namespace};
 use super::noncovalent::NoncovalentBondDsl;
 use super::refs::{
     parse_stereo_ligand, read_atom_ref, read_bond_ref, read_stereo_ligand, AtomRef, BondRef,
@@ -1331,11 +1331,11 @@ pub(crate) enum AtomSpecInput {
 /// table (unknown → error). Shared by the molecule, reaction, and span `into_ast` paths.
 pub(super) fn resolve_atom_spec(
     spec: AtomSpecInput,
-    aliases: &IndexMap<String, Box<AtomDsl>>,
+    namespace: &impl Namespace,
 ) -> Result<AtomAst, ParseError> {
     match spec {
         AtomSpecInput::Bare(dsl) => Ok(dsl.0),
-        AtomSpecInput::Alias(name) => match aliases.get(&name) {
+        AtomSpecInput::Alias(name) => match namespace.find_atom_alias(&name) {
             Some(dsl) => Ok(dsl.0.clone()),
             None => Err(ParseError::InvalidValue(format!(
                 "unknown atom alias :{name}"
@@ -1416,51 +1416,23 @@ impl MoleculeInput {
             constraints: constraint_dsls,
         } = self;
 
-        // Alias table: bijective. The parser enforces both directions —
-        // duplicate names and duplicate atom-dsls are rejected at parse
-        // time. Programmatic `MoleculeMetadata::add_atom_alias` is last-wins.
-        let mut alias_table: IndexMap<String, Box<AtomDsl>> = IndexMap::new();
-        for (name, dsl) in alias_entries {
-            if alias_table.contains_key(&name) {
-                return Err(ParseError::DuplicateId(name));
-            }
-            if alias_table.values().any(|existing| existing == &dsl) {
-                return Err(ParseError::InvalidValue(
-                    "atom-aliases must be bijective: two names map to the same atom".into(),
-                ));
-            }
-            alias_table.insert(name, dsl);
-        }
-
-        // Atoms: materialize AtomAst from each entry; collect ids.
-        let mut atoms: Vec<AtomAst> = Vec::with_capacity(atom_entries.len());
+        // Register atoms (positions + keywords), then the bijective aliases. `register_*` enforces
+        // id-disjointness (across every entity kind + aliases) and alias bijectivity as it goes, so
+        // there are no side tables; atom specs resolve against the namespace once it is complete.
         let mut namespace = MoleculeNamespace::default();
-        let mut atom_id_to_idx: IndexMap<String, AtomId> = IndexMap::new();
-        for (pos, entry) in atom_entries.into_iter().enumerate() {
+        for entry in &atom_entries {
             namespace.register_atom(entry.id.clone())?;
-            if let Some(id) = entry.id {
-                check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
-                atom_id_to_idx.insert(id, AtomId(pos as u32));
-            }
-            atoms.push(resolve_atom_spec(entry.spec, &alias_table)?);
+        }
+        for (name, dsl) in alias_entries {
+            namespace.register_atom_alias(name, dsl)?;
         }
 
         // Bonds.
         let mut bonds: Vec<(AtomId, AtomId, BondAst)> = Vec::with_capacity(bond_entries.len());
-        let mut entry_ids: IndexMap<String, ()> = IndexMap::new();
-        let mut bond_id_to_idx: IndexMap<String, BondId> = IndexMap::new();
-        for (pos, entry) in bond_entries.into_iter().enumerate() {
-            let id_name = entry.id.clone();
-            if let Some(id) = entry.id {
-                check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
-                if entry_ids.insert(id.clone(), ()).is_some() {
-                    return Err(ParseError::DuplicateId(id));
-                }
-                bond_id_to_idx.insert(id, BondId(pos as u32));
-            }
+        for entry in bond_entries {
             let a = entry.first.resolve(&namespace)?;
             let b = entry.second.resolve(&namespace)?;
-            namespace.register_bond(id_name, a, b)?;
+            namespace.register_bond(entry.id, a, b)?;
             bonds.push((a, b, entry.bond.0));
         }
 
@@ -1468,13 +1440,6 @@ impl MoleculeInput {
         let mut dative_list: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> =
             Vec::with_capacity(dative_entries.len());
         for entry in dative_entries {
-            let id_name = entry.id.clone();
-            if let Some(id) = entry.id {
-                check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
-                if entry_ids.insert(id.clone(), ()).is_some() {
-                    return Err(ParseError::DuplicateId(id));
-                }
-            }
             let donors = entry
                 .donors
                 .into_iter()
@@ -1486,7 +1451,7 @@ impl MoleculeInput {
                 ));
             }
             let acceptor = entry.acceptor.resolve(&namespace)?;
-            namespace.register_dative_bond(id_name, &donors, acceptor)?;
+            namespace.register_dative_bond(entry.id, &donors, acceptor)?;
             dative_list.push((donors, acceptor, entry.bond.0));
         }
 
@@ -1494,19 +1459,12 @@ impl MoleculeInput {
         let mut aromatic_list: Vec<(Vec<AtomId>, AromaticSystemAst)> =
             Vec::with_capacity(aromatic_entries.len());
         for entry in aromatic_entries {
-            let id_name = entry.id.clone();
-            if let Some(id) = entry.id {
-                check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
-                if entry_ids.insert(id.clone(), ()).is_some() {
-                    return Err(ParseError::DuplicateId(id));
-                }
-            }
             let atoms_resolved: Vec<AtomId> = entry
                 .atoms
                 .into_iter()
                 .map(|r| r.resolve(&namespace))
                 .collect::<Result<_, _>>()?;
-            namespace.register_aromatic_system(id_name, &atoms_resolved)?;
+            namespace.register_aromatic_system(entry.id, &atoms_resolved)?;
             aromatic_list.push((atoms_resolved, entry.system.0));
         }
 
@@ -1514,19 +1472,12 @@ impl MoleculeInput {
         let mut multicenter_list: Vec<(Vec<AtomId>, MulticenterBondAst)> =
             Vec::with_capacity(multicenter_entries.len());
         for entry in multicenter_entries {
-            let id_name = entry.id.clone();
-            if let Some(id) = entry.id {
-                check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
-                if entry_ids.insert(id.clone(), ()).is_some() {
-                    return Err(ParseError::DuplicateId(id));
-                }
-            }
             let atoms_resolved: Vec<AtomId> = entry
                 .atoms
                 .into_iter()
                 .map(|r| r.resolve(&namespace))
                 .collect::<Result<_, _>>()?;
-            namespace.register_multicenter_bond(id_name, &atoms_resolved)?;
+            namespace.register_multicenter_bond(entry.id, &atoms_resolved)?;
             multicenter_list.push((atoms_resolved, entry.bond.0));
         }
 
@@ -1534,16 +1485,9 @@ impl MoleculeInput {
         let mut noncovalent_list: Vec<(AtomId, AtomId, NoncovalentBondAst)> =
             Vec::with_capacity(noncovalent_entries.len());
         for entry in noncovalent_entries {
-            let id_name = entry.id.clone();
-            if let Some(id) = entry.id {
-                check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
-                if entry_ids.insert(id.clone(), ()).is_some() {
-                    return Err(ParseError::DuplicateId(id));
-                }
-            }
             let first = entry.first.resolve(&namespace)?;
             let second = entry.second.resolve(&namespace)?;
-            namespace.register_noncovalent_bond(id_name, first, second)?;
+            namespace.register_noncovalent_bond(entry.id, first, second)?;
             noncovalent_list.push((first, second, entry.bond.0));
         }
 
@@ -1551,20 +1495,13 @@ impl MoleculeInput {
         let mut stereo_atom_list: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> =
             Vec::with_capacity(stereo_atom_entries.len());
         for entry in stereo_atom_entries {
-            let id_name = entry.id.clone();
-            if let Some(id) = entry.id {
-                check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
-                if entry_ids.insert(id.clone(), ()).is_some() {
-                    return Err(ParseError::DuplicateId(id));
-                }
-            }
             let site = entry.site.resolve(&namespace)?;
             let ligands: Vec<StereoLigand> = entry
                 .ligands
                 .into_iter()
                 .map(|l| Ok(StereoLigand::new(l.atom.resolve(&namespace)?, l.kind)))
                 .collect::<Result<_, ParseError>>()?;
-            namespace.register_stereo_atom(id_name, site, &ligands)?;
+            namespace.register_stereo_atom(entry.id, site, &ligands)?;
             stereo_atom_list.push((site, ligands, entry.stereo.0));
         }
 
@@ -1572,29 +1509,22 @@ impl MoleculeInput {
         let mut stereo_bond_list: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)> =
             Vec::with_capacity(stereo_bond_entries.len());
         for entry in stereo_bond_entries {
-            let id_name = entry.id.clone();
-            if let Some(id) = entry.id {
-                check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
-                if entry_ids.insert(id.clone(), ()).is_some() {
-                    return Err(ParseError::DuplicateId(id));
-                }
-            }
             let site = entry.site.resolve(&namespace)?;
             let ligands: Vec<StereoLigand> = entry
                 .ligands
                 .into_iter()
                 .map(|l| Ok(StereoLigand::new(l.atom.resolve(&namespace)?, l.kind)))
                 .collect::<Result<_, ParseError>>()?;
-            namespace.register_stereo_bond(id_name, site, &ligands)?;
+            namespace.register_stereo_bond(entry.id, site, &ligands)?;
             stereo_bond_list.push((site, ligands, entry.stereo.0));
         }
 
-        // Atom aliases. Names are guaranteed unique by the upstream
-        // `parse_aliases` dedup; the namespace's `BiBTreeMap` is last-wins on
-        // duplicate atom-dsl, which can't fire here.
-        for (name, dsl) in alias_table {
-            namespace.register_atom_alias(name, dsl)?;
-        }
+        // Atom specs resolve last, against the complete namespace — a `<alias>` spec finds its
+        // template through `find_atom_alias`.
+        let atoms: Vec<AtomAst> = atom_entries
+            .into_iter()
+            .map(|entry| resolve_atom_spec(entry.spec, &namespace))
+            .collect::<Result<_, _>>()?;
 
         // The namespace is complete; constraints resolve against it directly. `MoleculeMetadata` is
         // projected only at the DSL boundary, not here.
@@ -1873,18 +1803,6 @@ fn expect_map<'e>(edn: &'e Edn<'e>, context: &'static str) -> Result<&'e EdnMap<
             path: vec![context.into()],
         }),
     }
-}
-
-/// Check that `id` is not already claimed by an atom id or alias name.
-pub(super) fn check_id_disjoint(
-    id: &str,
-    atom_id_to_idx: &IndexMap<String, AtomId>,
-    alias_table: &IndexMap<String, Box<AtomDsl>>,
-) -> Result<(), ParseError> {
-    if atom_id_to_idx.contains_key(id) || alias_table.contains_key(id) {
-        return Err(ParseError::DuplicateId(id.to_string()));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

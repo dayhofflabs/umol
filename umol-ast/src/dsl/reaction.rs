@@ -35,9 +35,10 @@ use super::molecule::{
     read_noncovalent_bond_entry, read_stereo_atom_entry, read_stereo_bond_entry,
     render_aromatic_entry, render_dative_entry, render_molecule_edn, render_multicenter_entry,
     render_noncovalent_entry, render_stereo_atom_entry, render_stereo_bond_entry,
-    render_stereo_ligand, AromaticSystemEntryInput, AtomEntryInput, AtomSpecInput, BondEntryInput,
-    DativeBondEntryInput, MoleculeDsl, MoleculeInput, MoleculeMetadata, MulticenterBondEntryInput,
-    NoncovalentBondEntryInput, StereoAtomEntryInput, StereoBondEntryInput,
+    render_stereo_ligand, resolve_atom_spec, AromaticSystemEntryInput, AtomEntryInput,
+    BondEntryInput, DativeBondEntryInput, MoleculeDsl, MoleculeInput, MoleculeMetadata,
+    MulticenterBondEntryInput, NoncovalentBondEntryInput, StereoAtomEntryInput,
+    StereoBondEntryInput,
 };
 use super::multicenter::{MulticenterBondDsl, PartialMulticenterBondDsl};
 use super::namespace::{MoleculeNamespace, Namespace};
@@ -720,17 +721,7 @@ impl ReactionInput {
         for delta in deltas {
             match delta {
                 DeltaInput::AtomAdd(entry) => {
-                    let ast = match entry.spec {
-                        AtomSpecInput::Bare(dsl) => dsl.0,
-                        AtomSpecInput::Alias(name) => match ns.find_atom_alias(&name) {
-                            Some(dsl) => dsl.0.clone(),
-                            None => {
-                                return Err(ParseError::InvalidValue(format!(
-                                    "unknown atom alias :{name}"
-                                )))
-                            }
-                        },
-                    };
+                    let ast = resolve_atom_spec(entry.spec, &ns)?;
                     let id = ns.register_atom(entry.id)?;
                     resolved.push(Delta::Atom(AtomDelta::Add { id, ast }));
                 }
