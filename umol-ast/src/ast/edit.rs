@@ -4,7 +4,7 @@
 //! `Edit` is caller-facing mutation data; realized rollback data belongs to
 //! the `Undo` journal.
 //!
-//! Refs (`AtomRef`, `BondRef`, ...) are symbolic and appear only inside
+//! Refs (`AtomHandle`, `BondHandle`, ...) are symbolic and appear only inside
 //! `Edit`. `Id(_)` references an existing entity; `New(N)` references the
 //! entity created by the Nth Edit earlier in the same batch.
 
@@ -31,30 +31,31 @@ use super::value::ValueAst;
 
 /// One stereo-atom removal in a batched `RemoveStereoAtoms`: id, site, ligand frame, recorded ast.
 pub type StereoAtomRemoval = (
-    StereoAtomRef,
-    AtomRef,
-    Vec<(AtomRef, StereoLigandKind)>,
+    StereoAtomHandle,
+    AtomHandle,
+    Vec<(AtomHandle, StereoLigandKind)>,
     StereoAtomAst,
 );
 /// One stereo-bond removal in a batched `RemoveStereoBonds`: id, site (a bond), ligand frame, ast.
 pub type StereoBondRemoval = (
-    StereoBondRef,
-    BondRef,
-    Vec<(AtomRef, StereoLigandKind)>,
+    StereoBondHandle,
+    BondHandle,
+    Vec<(AtomHandle, StereoLigandKind)>,
     StereoBondAst,
 );
 
-/// Symbolic reference to an atom: either an existing `AtomId` or the Nth
-/// atom-creating Edit earlier in the same transaction batch.
+/// Handle to an atom within an edit batch: either an existing `AtomId` or the
+/// Nth atom-creating Edit earlier in the same transaction batch.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum AtomRef {
+pub enum AtomHandle {
     Id(AtomId),
     New(usize),
 }
 
-/// Symbolic reference to a bond.
+/// Handle to a bond within an edit batch (an existing `BondId` or the Nth
+/// bond-creating Edit earlier in the batch).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum BondRef {
+pub enum BondHandle {
     Id(BondId),
     New(usize),
 }
@@ -250,7 +251,7 @@ impl StereoBondFieldChange {
 /// Single bond addition inside an `Edit::AddBonds` batch.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddBond {
-    pub endpoints: [AtomRef; 2],
+    pub endpoints: [AtomHandle; 2],
     pub ast: BondAst,
 }
 
@@ -267,132 +268,132 @@ pub enum Edit {
         bonds: Vec<AddBond>,
     },
     RemoveTopology {
-        atoms: Vec<AtomRef>,
-        bonds: Vec<BondRef>,
+        atoms: Vec<AtomHandle>,
+        bonds: Vec<BondHandle>,
     },
     ModifyAtomField {
-        id: AtomRef,
+        id: AtomHandle,
         change: AtomFieldChange,
     },
     ModifyBondField {
-        id: BondRef,
+        id: BondHandle,
         change: BondFieldChange,
     },
 
     // Dative bonds
     AddDativeBond {
-        atoms: Vec<AtomRef>,
+        atoms: Vec<AtomHandle>,
         ast: DativeBondAst,
     },
     RemoveDativeBonds {
-        removes: Vec<(DativeBondRef, Vec<AtomRef>, DativeBondAst)>,
+        removes: Vec<(DativeBondHandle, Vec<AtomHandle>, DativeBondAst)>,
     },
     ModifyDativeBondField {
-        id: DativeBondRef,
+        id: DativeBondHandle,
         change: DativeBondFieldChange,
     },
 
     // Aromatic systems
     AddAromaticSystem {
-        atoms: Vec<AtomRef>,
+        atoms: Vec<AtomHandle>,
         ast: AromaticSystemAst,
     },
     RemoveAromaticSystems {
-        removes: Vec<(AromaticSystemRef, Vec<AtomRef>, AromaticSystemAst)>,
+        removes: Vec<(AromaticSystemHandle, Vec<AtomHandle>, AromaticSystemAst)>,
     },
     ModifyAromaticSystemField {
-        id: AromaticSystemRef,
+        id: AromaticSystemHandle,
         change: AromaticSystemFieldChange,
     },
 
     // Multicenter bonds
     AddMulticenterBond {
-        atoms: Vec<AtomRef>,
+        atoms: Vec<AtomHandle>,
         ast: MulticenterBondAst,
     },
     RemoveMulticenterBonds {
-        removes: Vec<(MulticenterBondRef, Vec<AtomRef>, MulticenterBondAst)>,
+        removes: Vec<(MulticenterBondHandle, Vec<AtomHandle>, MulticenterBondAst)>,
     },
     ModifyMulticenterBondField {
-        id: MulticenterBondRef,
+        id: MulticenterBondHandle,
         change: MulticenterBondFieldChange,
     },
 
     // Noncovalent bonds
     AddNoncovalentBond {
-        atoms: [AtomRef; 2],
+        atoms: [AtomHandle; 2],
         ast: NoncovalentBondAst,
     },
     RemoveNoncovalentBonds {
-        removes: Vec<(NoncovalentBondRef, [AtomRef; 2], NoncovalentBondAst)>,
+        removes: Vec<(NoncovalentBondHandle, [AtomHandle; 2], NoncovalentBondAst)>,
     },
     ModifyNoncovalentBondField {
-        id: NoncovalentBondRef,
+        id: NoncovalentBondHandle,
         change: NoncovalentBondFieldChange,
     },
 
-    // Stereo elements. `ligands` carry their atom as an `AtomRef` (Id or
+    // Stereo elements. `ligands` carry their atom as an `AtomHandle` (Id or
     // same-batch New) plus the ligand kind; `site` is the atom/bond the
     // element is sited on.
     AddStereoAtom {
-        site: AtomRef,
-        ligands: Vec<(AtomRef, StereoLigandKind)>,
+        site: AtomHandle,
+        ligands: Vec<(AtomHandle, StereoLigandKind)>,
         ast: StereoAtomAst,
     },
     RemoveStereoAtoms {
         removes: Vec<StereoAtomRemoval>,
     },
     ModifyStereoAtomField {
-        id: StereoAtomRef,
+        id: StereoAtomHandle,
         change: StereoAtomFieldChange,
     },
     AddStereoBond {
-        site: BondRef,
-        ligands: Vec<(AtomRef, StereoLigandKind)>,
+        site: BondHandle,
+        ligands: Vec<(AtomHandle, StereoLigandKind)>,
         ast: StereoBondAst,
     },
     RemoveStereoBonds {
         removes: Vec<StereoBondRemoval>,
     },
     ModifyStereoBondField {
-        id: StereoBondRef,
+        id: StereoBondHandle,
         change: StereoBondFieldChange,
     },
 
     // Entity-inline constraints — keyed (one per `key()`), so a single modify
     // (old → new) covers add (old None), remove (new None), and replace.
     ModifyAtomConstraint {
-        id: AtomRef,
+        id: AtomHandle,
         old: Option<AtomConstraint>,
         new: Option<AtomConstraint>,
     },
     ModifyBondConstraint {
-        id: BondRef,
+        id: BondHandle,
         old: Option<BondConstraint>,
         new: Option<BondConstraint>,
     },
     ModifyDativeBondConstraint {
-        id: DativeBondRef,
+        id: DativeBondHandle,
         old: Option<DativeBondConstraint>,
         new: Option<DativeBondConstraint>,
     },
     ModifyAromaticSystemConstraint {
-        id: AromaticSystemRef,
+        id: AromaticSystemHandle,
         old: Option<AromaticSystemConstraint>,
         new: Option<AromaticSystemConstraint>,
     },
     ModifyMulticenterBondConstraint {
-        id: MulticenterBondRef,
+        id: MulticenterBondHandle,
         old: Option<MulticenterBondConstraint>,
         new: Option<MulticenterBondConstraint>,
     },
     ModifyStereoAtomConstraint {
-        id: StereoAtomRef,
+        id: StereoAtomHandle,
         old: Option<StereoAtomConstraint>,
         new: Option<StereoAtomConstraint>,
     },
     ModifyStereoBondConstraint {
-        id: StereoBondRef,
+        id: StereoBondHandle,
         old: Option<StereoBondConstraint>,
         new: Option<StereoBondConstraint>,
     },
@@ -412,7 +413,7 @@ impl Edit {
         Self::AddAtoms { atoms: vec![ast] }
     }
 
-    pub fn add_bond(first: AtomRef, second: AtomRef, ast: BondAst) -> Self {
+    pub fn add_bond(first: AtomHandle, second: AtomHandle, ast: BondAst) -> Self {
         Self::AddBonds {
             bonds: vec![AddBond {
                 endpoints: [first, second],
@@ -421,14 +422,14 @@ impl Edit {
         }
     }
 
-    pub fn remove_atom(id: AtomRef) -> Self {
+    pub fn remove_atom(id: AtomHandle) -> Self {
         Self::RemoveTopology {
             atoms: vec![id],
             bonds: Vec::new(),
         }
     }
 
-    pub fn remove_bond(id: BondRef) -> Self {
+    pub fn remove_bond(id: BondHandle) -> Self {
         Self::RemoveTopology {
             atoms: Vec::new(),
             bonds: vec![id],
@@ -436,39 +437,39 @@ impl Edit {
     }
 }
 
-// Symbolic refs for overlay relations.
+// Handles for overlay relations (an existing id or the Nth created earlier in the batch).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum DativeBondRef {
+pub enum DativeBondHandle {
     Id(DativeBondId),
     New(usize),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum AromaticSystemRef {
+pub enum AromaticSystemHandle {
     Id(AromaticSystemId),
     New(usize),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum MulticenterBondRef {
+pub enum MulticenterBondHandle {
     Id(MulticenterBondId),
     New(usize),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum NoncovalentBondRef {
+pub enum NoncovalentBondHandle {
     Id(NoncovalentBondId),
     New(usize),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum StereoAtomRef {
+pub enum StereoAtomHandle {
     Id(StereoAtomId),
     New(usize),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum StereoBondRef {
+pub enum StereoBondHandle {
     Id(StereoBondId),
     New(usize),
 }
@@ -758,16 +759,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case::id(AtomRef::Id(AtomId(3)))]
-    #[case::new(AtomRef::New(2))]
-    fn test_atom_ref_variants(#[case] r: AtomRef) {
+    #[case::id(AtomHandle::Id(AtomId(3)))]
+    #[case::new(AtomHandle::New(2))]
+    fn test_atom_ref_variants(#[case] r: AtomHandle) {
         assert_eq!(r.clone(), r);
     }
 
     #[rstest]
-    #[case::id(BondRef::Id(BondId(5)))]
-    #[case::new(BondRef::New(0))]
-    fn test_bond_ref_variants(#[case] r: BondRef) {
+    #[case::id(BondHandle::Id(BondId(5)))]
+    #[case::new(BondHandle::New(0))]
+    fn test_bond_ref_variants(#[case] r: BondHandle) {
         assert_eq!(r.clone(), r);
     }
 
@@ -852,13 +853,13 @@ mod tests {
     fn test_edit_add_bond(single_bond: BondAst) {
         assert_eq!(
             Edit::add_bond(
-                AtomRef::Id(AtomId(0)),
-                AtomRef::Id(AtomId(1)),
+                AtomHandle::Id(AtomId(0)),
+                AtomHandle::Id(AtomId(1)),
                 single_bond.clone()
             ),
             Edit::AddBonds {
                 bonds: vec![AddBond {
-                    endpoints: [AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                     ast: single_bond,
                 }],
             },
@@ -868,9 +869,9 @@ mod tests {
     #[rstest]
     fn test_edit_remove_atom() {
         assert_eq!(
-            Edit::remove_atom(AtomRef::Id(AtomId(2))),
+            Edit::remove_atom(AtomHandle::Id(AtomId(2))),
             Edit::RemoveTopology {
-                atoms: vec![AtomRef::Id(AtomId(2))],
+                atoms: vec![AtomHandle::Id(AtomId(2))],
                 bonds: Vec::new(),
             },
         );
@@ -879,10 +880,10 @@ mod tests {
     #[rstest]
     fn test_edit_remove_bond() {
         assert_eq!(
-            Edit::remove_bond(BondRef::Id(BondId(4))),
+            Edit::remove_bond(BondHandle::Id(BondId(4))),
             Edit::RemoveTopology {
                 atoms: Vec::new(),
-                bonds: vec![BondRef::Id(BondId(4))],
+                bonds: vec![BondHandle::Id(BondId(4))],
             },
         );
     }

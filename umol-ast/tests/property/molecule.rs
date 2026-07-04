@@ -1,6 +1,6 @@
 use proptest::prelude::*;
 use rstest::rstest;
-// The DSL ref family (with `Structural` + `resolve`), shadowing the `ast` refs the glob brings in.
+// The DSL ref family (`Structural` + `resolve`), distinct from the `ast::edit` handles.
 use umol_ast::dsl::{
     AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
     StereoAtomRef, StereoBondRef,

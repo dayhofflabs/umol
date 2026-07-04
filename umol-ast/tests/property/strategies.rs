@@ -11,17 +11,17 @@ pub(crate) use std::ops::RangeInclusive;
 use proptest::prelude::*;
 pub(crate) use umol_ast::ast::{
     AddBond, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKind,
-    AromaticSystemConstraints, AromaticSystemId, AromaticSystemRef, AromaticValenceAst, AtomAst,
-    AtomConstraint, AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomId, AtomRef, BondAst,
-    BondConstraint, BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef,
-    BooleanAst, Canonicalize, CisTransStereoAst, Constraint, Constraints, DativeBondAst,
-    DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints, DativeBondId,
-    DativeBondRef, Edit, ElectronCountsAst, ElementAst, FluxionalityAst, IsotopeMassAst, Lattice,
+    AromaticSystemConstraints, AromaticSystemHandle, AromaticSystemId, AromaticValenceAst, AtomAst,
+    AtomConstraint, AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomHandle, AtomId,
+    BondAst, BondConstraint, BondConstraintKind, BondConstraints, BondFieldChange, BondHandle,
+    BondId, BooleanAst, Canonicalize, CisTransStereoAst, Constraint, Constraints, DativeBondAst,
+    DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints, DativeBondHandle,
+    DativeBondId, Edit, ElectronCountsAst, ElementAst, FluxionalityAst, IsotopeMassAst, Lattice,
     LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint,
     MulticenterBondAst, MulticenterBondConstraint, MulticenterBondConstraintKind,
-    MulticenterBondConstraints, MulticenterBondId, MulticenterBondRef, MulticenterValenceAst,
-    NoncovalentBondAst, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst,
-    NoncovalentBondRef, OrientedLigandPermutation, RelOp, RelationalConstraint, RingScope,
+    MulticenterBondConstraints, MulticenterBondHandle, MulticenterBondId, MulticenterValenceAst,
+    NoncovalentBondAst, NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind,
+    NoncovalentBondKindAst, OrientedLigandPermutation, RelOp, RelationalConstraint, RingScope,
     SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomConstraints, StereoAtomId,
     StereoBondAst, StereoBondConstraint, StereoBondConstraints, StereoBondId,
     StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind,
@@ -1882,8 +1882,8 @@ pub(crate) fn transaction_path_bonds(count: usize) -> Vec<AddBond> {
     (0..count.saturating_sub(1))
         .map(|id| {
             Edit::add_bond(
-                AtomRef::New(id),
-                AtomRef::New(id + 1),
+                AtomHandle::New(id),
+                AtomHandle::New(id + 1),
                 BondAst::from_order((id % 3 + 1) as u8),
             )
         })
@@ -1971,14 +1971,16 @@ impl TransactionCase {
         match self {
             Self::AddPath { count } => transaction_add_path_edits(*count),
             Self::RemoveAtom { count, id } => {
-                vec![Edit::remove_atom(AtomRef::Id(AtomId((id % count) as u32)))]
+                vec![Edit::remove_atom(AtomHandle::Id(AtomId(
+                    (id % count) as u32,
+                )))]
             }
-            Self::RemoveBond { count, id } => vec![Edit::remove_bond(BondRef::Id(BondId(
+            Self::RemoveBond { count, id } => vec![Edit::remove_bond(BondHandle::Id(BondId(
                 (id % (count - 1)) as u32,
             )))],
             Self::SetAtomCharge { count, id, charge } => {
                 vec![Edit::ModifyAtomField {
-                    id: AtomRef::Id(AtomId((id % count) as u32)),
+                    id: AtomHandle::Id(AtomId((id % count) as u32)),
                     change: AtomFieldChange::Charge {
                         old: ValueAst::default(),
                         new: ValueAst::Lit(*charge),
@@ -1988,7 +1990,7 @@ impl TransactionCase {
             Self::SetBondOrder { count, id, order } => {
                 let bond_id = id % (count - 1);
                 vec![Edit::ModifyBondField {
-                    id: BondRef::Id(BondId(bond_id as u32)),
+                    id: BondHandle::Id(BondId(bond_id as u32)),
                     change: BondFieldChange::Order {
                         old: ValueAst::Lit((bond_id % 3 + 1) as i64),
                         new: ValueAst::Lit(*order as i64),
@@ -1997,7 +1999,7 @@ impl TransactionCase {
             }
             Self::AddAtomConstraint { count, id, size } => {
                 vec![Edit::ModifyAtomConstraint {
-                    id: AtomRef::Id(AtomId((id % count) as u32)),
+                    id: AtomHandle::Id(AtomId((id % count) as u32)),
                     old: None,
                     new: Some(AtomConstraint::ring_membership(
                         RingScope::Size(*size as u8),
@@ -2017,8 +2019,8 @@ impl TransactionCase {
                 }
                 vec![Edit::AddDativeBond {
                     atoms: vec![
-                        AtomRef::Id(AtomId(donor as u32)),
-                        AtomRef::Id(AtomId(acceptor as u32)),
+                        AtomHandle::Id(AtomId(donor as u32)),
+                        AtomHandle::Id(AtomId(acceptor as u32)),
                     ],
                     ast: DativeBondAst::from_order(1),
                 }]
@@ -2148,7 +2150,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                 // Base carbons carry the default (`Undetermined`) charge, so that is the `old` value.
                 for i in (0..6).filter(|&i| mod_at[i]) {
                     edits.push(Edit::ModifyAtomField {
-                        id: AtomRef::Id(AtomId(i as u32)),
+                        id: AtomHandle::Id(AtomId(i as u32)),
                         change: AtomFieldChange::Charge {
                             old: ValueAst::default(),
                             new: ValueAst::Lit(1),
@@ -2176,13 +2178,13 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                 let dative: Vec<_> = (0..2)
                     .filter(|&i| rm_dv[i])
                     .map(|i| {
-                        let mut atoms: Vec<AtomRef> = DATIVE_DONORS[i]
+                        let mut atoms: Vec<AtomHandle> = DATIVE_DONORS[i]
                             .iter()
-                            .map(|&a| AtomRef::Id(AtomId(a)))
+                            .map(|&a| AtomHandle::Id(AtomId(a)))
                             .collect();
-                        atoms.push(AtomRef::Id(AtomId(DATIVE_ACCEPTORS[i])));
+                        atoms.push(AtomHandle::Id(AtomId(DATIVE_ACCEPTORS[i])));
                         (
-                            DativeBondRef::Id(DativeBondId(i as u32)),
+                            DativeBondHandle::Id(DativeBondId(i as u32)),
                             atoms,
                             DativeBondAst::from_order(1),
                         )
@@ -2196,10 +2198,10 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                     .map(|i| {
                         let atoms = AROMATIC_SETS[i]
                             .iter()
-                            .map(|&a| AtomRef::Id(AtomId(a)))
+                            .map(|&a| AtomHandle::Id(AtomId(a)))
                             .collect();
                         (
-                            AromaticSystemRef::Id(AromaticSystemId(i as u32)),
+                            AromaticSystemHandle::Id(AromaticSystemId(i as u32)),
                             atoms,
                             AromaticSystemAst::default(),
                         )
@@ -2213,10 +2215,10 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                     .map(|i| {
                         let atoms = MULTICENTER_SETS[i]
                             .iter()
-                            .map(|&a| AtomRef::Id(AtomId(a)))
+                            .map(|&a| AtomHandle::Id(AtomId(a)))
                             .collect();
                         (
-                            MulticenterBondRef::Id(MulticenterBondId(i as u32)),
+                            MulticenterBondHandle::Id(MulticenterBondId(i as u32)),
                             atoms,
                             MulticenterBondAst::default(),
                         )
@@ -2231,10 +2233,10 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                     .filter(|&i| rm_nc[i])
                     .map(|i| {
                         (
-                            NoncovalentBondRef::Id(NoncovalentBondId(i as u32)),
+                            NoncovalentBondHandle::Id(NoncovalentBondId(i as u32)),
                             [
-                                AtomRef::Id(AtomId(NONCOVALENT_PAIRS[i][0])),
-                                AtomRef::Id(AtomId(NONCOVALENT_PAIRS[i][1])),
+                                AtomHandle::Id(AtomId(NONCOVALENT_PAIRS[i][0])),
+                                AtomHandle::Id(AtomId(NONCOVALENT_PAIRS[i][1])),
                             ],
                             NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
                         )
@@ -2245,9 +2247,9 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                         removes: noncovalent,
                     });
                 }
-                let atoms: Vec<AtomRef> = (0..6)
+                let atoms: Vec<AtomHandle> = (0..6)
                     .filter(|&i| rm_at[i])
-                    .map(|i| AtomRef::Id(AtomId(i as u32)))
+                    .map(|i| AtomHandle::Id(AtomId(i as u32)))
                     .collect();
                 if !atoms.is_empty() {
                     edits.push(Edit::RemoveTopology {

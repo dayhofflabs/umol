@@ -1192,13 +1192,13 @@ fn test_molecule_ast_induced_subgraph_preserves_dative(#[from(rich_molecule)] as
 
 #[rstest]
 fn test_molecule_ast_edits(#[from(rich_molecule)] ast: MoleculeAst) {
-    use super::super::edit::{AtomRef, BondRef, Edit};
+    use super::super::edit::{AtomHandle, BondHandle, Edit};
     let sub = ast.induced_subgraph(&[AtomId(0), AtomId(1), AtomId(2)]);
     assert_eq!(
         ast.edits(&sub),
         vec![Edit::RemoveTopology {
-            atoms: vec![AtomRef::Id(AtomId(3))],
-            bonds: vec![BondRef::Id(BondId(2))],
+            atoms: vec![AtomHandle::Id(AtomId(3))],
+            bonds: vec![BondHandle::Id(BondId(2))],
         }]
     );
 }

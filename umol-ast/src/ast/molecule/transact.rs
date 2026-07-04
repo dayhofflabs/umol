@@ -11,12 +11,13 @@ use thiserror::Error;
 use super::super::edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
-    AromaticSystemRef, AtomFieldChange, AtomRef, BondFieldChange, BondRef, CascadedConstraints,
-    DativeBondFieldChange, DativeBondRef, Edit, MulticenterBondFieldChange, MulticenterBondRef,
-    NoncovalentBondFieldChange, NoncovalentBondRef, RemovedAromaticSystem, RemovedAtom,
-    RemovedBond, RemovedConstraint, RemovedDativeBond, RemovedMulticenterBond,
-    RemovedNoncovalentBond, RemovedOverlays, RemovedStereoAtom, RemovedStereoBond,
-    StereoAtomFieldChange, StereoAtomRef, StereoBondFieldChange, StereoBondRef, Undo,
+    AromaticSystemHandle, AtomFieldChange, AtomHandle, BondFieldChange, BondHandle,
+    CascadedConstraints, DativeBondFieldChange, DativeBondHandle, Edit, MulticenterBondFieldChange,
+    MulticenterBondHandle, NoncovalentBondFieldChange, NoncovalentBondHandle,
+    RemovedAromaticSystem, RemovedAtom, RemovedBond, RemovedConstraint, RemovedDativeBond,
+    RemovedMulticenterBond, RemovedNoncovalentBond, RemovedOverlays, RemovedStereoAtom,
+    RemovedStereoBond, StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange,
+    StereoBondHandle, Undo,
 };
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -139,10 +140,10 @@ impl CreatedEntities {
             .ok_or(TransactionError::RefOutOfRange(idx, self.0.len()))
     }
 
-    fn atom(&self, r: AtomRef) -> Result<AtomId, TransactionError> {
+    fn atom(&self, r: AtomHandle) -> Result<AtomId, TransactionError> {
         match r {
-            AtomRef::Id(id) => Ok(id),
-            AtomRef::New(n) => match self.get(n)? {
+            AtomHandle::Id(id) => Ok(id),
+            AtomHandle::New(n) => match self.get(n)? {
                 CreatedEntity::Atom(id) => Ok(id),
                 other => Err(TransactionError::RefTypeMismatch {
                     expected: "Atom",
@@ -152,10 +153,10 @@ impl CreatedEntities {
         }
     }
 
-    fn bond(&self, r: BondRef) -> Result<BondId, TransactionError> {
+    fn bond(&self, r: BondHandle) -> Result<BondId, TransactionError> {
         match r {
-            BondRef::Id(id) => Ok(id),
-            BondRef::New(n) => match self.get(n)? {
+            BondHandle::Id(id) => Ok(id),
+            BondHandle::New(n) => match self.get(n)? {
                 CreatedEntity::Bond(id) => Ok(id),
                 other => Err(TransactionError::RefTypeMismatch {
                     expected: "Bond",
@@ -165,10 +166,10 @@ impl CreatedEntities {
         }
     }
 
-    fn dative_bond(&self, r: DativeBondRef) -> Result<DativeBondId, TransactionError> {
+    fn dative_bond(&self, r: DativeBondHandle) -> Result<DativeBondId, TransactionError> {
         match r {
-            DativeBondRef::Id(id) => Ok(id),
-            DativeBondRef::New(n) => match self.get(n)? {
+            DativeBondHandle::Id(id) => Ok(id),
+            DativeBondHandle::New(n) => match self.get(n)? {
                 CreatedEntity::DativeBond(id) => Ok(id),
                 other => Err(TransactionError::RefTypeMismatch {
                     expected: "DativeBond",
@@ -178,10 +179,13 @@ impl CreatedEntities {
         }
     }
 
-    fn aromatic_system(&self, r: AromaticSystemRef) -> Result<AromaticSystemId, TransactionError> {
+    fn aromatic_system(
+        &self,
+        r: AromaticSystemHandle,
+    ) -> Result<AromaticSystemId, TransactionError> {
         match r {
-            AromaticSystemRef::Id(id) => Ok(id),
-            AromaticSystemRef::New(n) => match self.get(n)? {
+            AromaticSystemHandle::Id(id) => Ok(id),
+            AromaticSystemHandle::New(n) => match self.get(n)? {
                 CreatedEntity::AromaticSystem(id) => Ok(id),
                 other => Err(TransactionError::RefTypeMismatch {
                     expected: "AromaticSystem",
@@ -193,11 +197,11 @@ impl CreatedEntities {
 
     fn multicenter_bond(
         &self,
-        r: MulticenterBondRef,
+        r: MulticenterBondHandle,
     ) -> Result<MulticenterBondId, TransactionError> {
         match r {
-            MulticenterBondRef::Id(id) => Ok(id),
-            MulticenterBondRef::New(n) => match self.get(n)? {
+            MulticenterBondHandle::Id(id) => Ok(id),
+            MulticenterBondHandle::New(n) => match self.get(n)? {
                 CreatedEntity::MulticenterBond(id) => Ok(id),
                 other => Err(TransactionError::RefTypeMismatch {
                     expected: "MulticenterBond",
@@ -209,11 +213,11 @@ impl CreatedEntities {
 
     fn noncovalent_bond(
         &self,
-        r: NoncovalentBondRef,
+        r: NoncovalentBondHandle,
     ) -> Result<NoncovalentBondId, TransactionError> {
         match r {
-            NoncovalentBondRef::Id(id) => Ok(id),
-            NoncovalentBondRef::New(n) => match self.get(n)? {
+            NoncovalentBondHandle::Id(id) => Ok(id),
+            NoncovalentBondHandle::New(n) => match self.get(n)? {
                 CreatedEntity::NoncovalentBond(id) => Ok(id),
                 other => Err(TransactionError::RefTypeMismatch {
                     expected: "NoncovalentBond",
@@ -223,10 +227,10 @@ impl CreatedEntities {
         }
     }
 
-    fn stereo_atom(&self, r: StereoAtomRef) -> Result<StereoAtomId, TransactionError> {
+    fn stereo_atom(&self, r: StereoAtomHandle) -> Result<StereoAtomId, TransactionError> {
         match r {
-            StereoAtomRef::Id(id) => Ok(id),
-            StereoAtomRef::New(n) => match self.get(n)? {
+            StereoAtomHandle::Id(id) => Ok(id),
+            StereoAtomHandle::New(n) => match self.get(n)? {
                 CreatedEntity::StereoAtom(id) => Ok(id),
                 other => Err(TransactionError::RefTypeMismatch {
                     expected: "StereoAtom",
@@ -236,10 +240,10 @@ impl CreatedEntities {
         }
     }
 
-    fn stereo_bond(&self, r: StereoBondRef) -> Result<StereoBondId, TransactionError> {
+    fn stereo_bond(&self, r: StereoBondHandle) -> Result<StereoBondId, TransactionError> {
         match r {
-            StereoBondRef::Id(id) => Ok(id),
-            StereoBondRef::New(n) => match self.get(n)? {
+            StereoBondHandle::Id(id) => Ok(id),
+            StereoBondHandle::New(n) => match self.get(n)? {
                 CreatedEntity::StereoBond(id) => Ok(id),
                 other => Err(TransactionError::RefTypeMismatch {
                     expected: "StereoBond",
@@ -251,7 +255,7 @@ impl CreatedEntities {
 
     fn stereo_ligands(
         &self,
-        ligands: Vec<(AtomRef, super::super::ligand::StereoLigandKind)>,
+        ligands: Vec<(AtomHandle, super::super::ligand::StereoLigandKind)>,
     ) -> Result<Vec<StereoLigand>, TransactionError> {
         ligands
             .into_iter()
@@ -1212,7 +1216,7 @@ impl MoleculeBuilder {
                     return Err(TransactionError::IdOutOfRange("atom"));
                 }
                 let undo = Undo::ApplyEdit(Box::new(Edit::ModifyAtomConstraint {
-                    id: AtomRef::Id(id),
+                    id: AtomHandle::Id(id),
                     old: new.clone(),
                     new: old.clone(),
                 }));
@@ -1225,7 +1229,7 @@ impl MoleculeBuilder {
                     return Err(TransactionError::IdOutOfRange("bond"));
                 }
                 let undo = Undo::ApplyEdit(Box::new(Edit::ModifyBondConstraint {
-                    id: BondRef::Id(id),
+                    id: BondHandle::Id(id),
                     old: new.clone(),
                     new: old.clone(),
                 }));
@@ -1238,7 +1242,7 @@ impl MoleculeBuilder {
                     return Err(TransactionError::IdOutOfRange("dative bond"));
                 }
                 let undo = Undo::ApplyEdit(Box::new(Edit::ModifyDativeBondConstraint {
-                    id: DativeBondRef::Id(id),
+                    id: DativeBondHandle::Id(id),
                     old: new.clone(),
                     new: old.clone(),
                 }));
@@ -1251,7 +1255,7 @@ impl MoleculeBuilder {
                     return Err(TransactionError::IdOutOfRange("aromatic system"));
                 }
                 let undo = Undo::ApplyEdit(Box::new(Edit::ModifyAromaticSystemConstraint {
-                    id: AromaticSystemRef::Id(id),
+                    id: AromaticSystemHandle::Id(id),
                     old: new.clone(),
                     new: old.clone(),
                 }));
@@ -1264,7 +1268,7 @@ impl MoleculeBuilder {
                     return Err(TransactionError::IdOutOfRange("multicenter bond"));
                 }
                 let undo = Undo::ApplyEdit(Box::new(Edit::ModifyMulticenterBondConstraint {
-                    id: MulticenterBondRef::Id(id),
+                    id: MulticenterBondHandle::Id(id),
                     old: new.clone(),
                     new: old.clone(),
                 }));
@@ -1277,7 +1281,7 @@ impl MoleculeBuilder {
                     return Err(TransactionError::IdOutOfRange("stereo atom"));
                 }
                 let undo = Undo::ApplyEdit(Box::new(Edit::ModifyStereoAtomConstraint {
-                    id: StereoAtomRef::Id(id),
+                    id: StereoAtomHandle::Id(id),
                     old: new.clone(),
                     new: old.clone(),
                 }));
@@ -1290,7 +1294,7 @@ impl MoleculeBuilder {
                     return Err(TransactionError::IdOutOfRange("stereo bond"));
                 }
                 let undo = Undo::ApplyEdit(Box::new(Edit::ModifyStereoBondConstraint {
-                    id: StereoBondRef::Id(id),
+                    id: StereoBondHandle::Id(id),
                     old: new.clone(),
                     new: old.clone(),
                 }));
@@ -2102,7 +2106,11 @@ mod tests {
                         AtomAst::from_element(Element::C),
                     ],
                 },
-                Edit::add_bond(AtomRef::New(0), AtomRef::New(1), BondAst::from_order(1)),
+                Edit::add_bond(
+                    AtomHandle::New(0),
+                    AtomHandle::New(1),
+                    BondAst::from_order(1),
+                ),
             ])
             .unwrap();
         assert!(matches!(
@@ -2124,7 +2132,7 @@ mod tests {
         let err = one_atom
             .transact(vec![
                 Edit::add_atom(AtomAst::from_element(Element::N)),
-                Edit::remove_atom(AtomRef::Id(AtomId(99))),
+                Edit::remove_atom(AtomHandle::Id(AtomId(99))),
             ])
             .unwrap_err();
         assert_eq!(err, TransactionError::IdOutOfRange("atom"));
@@ -2135,7 +2143,7 @@ mod tests {
     fn test_molecule_builder_transact_set_atom_field(mut one_atom: MoleculeBuilder) {
         let tx = one_atom
             .transact(vec![Edit::ModifyAtomField {
-                id: AtomRef::Id(AtomId(0)),
+                id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::Charge {
                     old: ValueAst::default(),
                     new: ValueAst::Lit(1),
@@ -2162,7 +2170,7 @@ mod tests {
     fn test_molecule_builder_transact_set_atom_field_error(mut one_atom: MoleculeBuilder) {
         let err = one_atom
             .transact(vec![Edit::ModifyAtomField {
-                id: AtomRef::Id(AtomId(0)),
+                id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::Charge {
                     old: ValueAst::Lit(99),
                     new: ValueAst::Lit(1),
@@ -2175,8 +2183,8 @@ mod tests {
     #[rstest]
     #[case::ref_out_of_range(
         vec![Edit::add_bond(
-            AtomRef::New(5),
-            AtomRef::New(6),
+            AtomHandle::New(5),
+            AtomHandle::New(6),
             BondAst::default(),
         )],
         TransactionError::RefOutOfRange(5, 0),
@@ -2184,7 +2192,7 @@ mod tests {
     #[case::ref_type_mismatch(
         vec![
             Edit::add_atom(AtomAst::from_element(Element::C)),
-            Edit::remove_bond(BondRef::New(0)),
+            Edit::remove_bond(BondHandle::New(0)),
         ],
         TransactionError::RefTypeMismatch { expected: "Bond", got: "Atom" },
     )]
@@ -2201,7 +2209,7 @@ mod tests {
         let tx = diatomic
             .transact(vec![Edit::RemoveTopology {
                 atoms: Vec::new(),
-                bonds: vec![BondRef::Id(BondId(0))],
+                bonds: vec![BondHandle::Id(BondId(0))],
             }])
             .unwrap();
 
@@ -2230,12 +2238,12 @@ mod tests {
         one_atom
             .transact(vec![
                 Edit::ModifyAtomConstraint {
-                    id: AtomRef::Id(AtomId(0)),
+                    id: AtomHandle::Id(AtomId(0)),
                     old: None,
                     new: Some(AtomConstraint::ring_membership(RingScope::Size(5), 1)),
                 },
                 Edit::ModifyAtomConstraint {
-                    id: AtomRef::Id(AtomId(0)),
+                    id: AtomHandle::Id(AtomId(0)),
                     old: None,
                     new: Some(AtomConstraint::ring_membership(RingScope::Size(6), 1)),
                 },
@@ -2264,7 +2272,7 @@ mod tests {
     ) {
         let err = one_atom
             .transact(vec![Edit::ModifyAtomConstraint {
-                id: AtomRef::Id(AtomId(0)),
+                id: AtomHandle::Id(AtomId(0)),
                 old: Some(AtomConstraint::ring_membership(RingScope::Size(5), 1)),
                 new: None,
             }])
@@ -2291,7 +2299,7 @@ mod tests {
         }
         one_atom
             .transact(vec![Edit::ModifyAtomConstraint {
-                id: AtomRef::Id(AtomId(0)),
+                id: AtomHandle::Id(AtomId(0)),
                 old,
                 new,
             }])
@@ -2306,7 +2314,7 @@ mod tests {
     fn test_molecule_builder_transact_set_bond_constraint(mut diatomic: MoleculeBuilder) {
         diatomic
             .transact(vec![Edit::ModifyBondConstraint {
-                id: BondRef::Id(BondId(0)),
+                id: BondHandle::Id(BondId(0)),
                 old: None,
                 new: Some(BondConstraint::Aromatic(BooleanAst::Lit(true))),
             }])
@@ -2362,7 +2370,7 @@ mod tests {
     #[rstest]
     fn test_molecule_builder_transact_remove_topology_atom_error(mut one_atom: MoleculeBuilder) {
         let err = one_atom
-            .transact(vec![Edit::remove_atom(AtomRef::Id(AtomId(9)))])
+            .transact(vec![Edit::remove_atom(AtomHandle::Id(AtomId(9)))])
             .unwrap_err();
         assert_eq!(err, TransactionError::IdOutOfRange("atom"));
         assert_eq!(one_atom.atom_count(), 1);
@@ -2371,7 +2379,7 @@ mod tests {
     #[rstest]
     fn test_molecule_builder_transact_remove_topology_bond_error(mut diatomic: MoleculeBuilder) {
         let err = diatomic
-            .transact(vec![Edit::remove_bond(BondRef::Id(BondId(9)))])
+            .transact(vec![Edit::remove_bond(BondHandle::Id(BondId(9)))])
             .unwrap_err();
         assert_eq!(err, TransactionError::IdOutOfRange("bond"));
         assert_eq!(diatomic.bond_count(), 1);
@@ -2394,7 +2402,7 @@ mod tests {
     fn test_molecule_builder_transact_set_bond_field(mut diatomic: MoleculeBuilder) {
         diatomic
             .transact(vec![Edit::ModifyBondField {
-                id: BondRef::Id(BondId(0)),
+                id: BondHandle::Id(BondId(0)),
                 change: BondFieldChange::Order {
                     old: ValueAst::Lit(1),
                     new: ValueAst::Lit(2),
@@ -2408,7 +2416,7 @@ mod tests {
     fn test_molecule_builder_transact_set_bond_field_error(mut diatomic: MoleculeBuilder) {
         let err = diatomic
             .transact(vec![Edit::ModifyBondField {
-                id: BondRef::Id(BondId(0)),
+                id: BondHandle::Id(BondId(0)),
                 change: BondFieldChange::Order {
                     old: ValueAst::Lit(99),
                     new: ValueAst::Lit(2),
@@ -2444,9 +2452,9 @@ mod tests {
         let before = stereo_atom_skeleton.clone().build();
         let tx = stereo_atom_skeleton
             .transact(vec![Edit::AddStereoAtom {
-                site: AtomRef::Id(AtomId(0)),
+                site: AtomHandle::Id(AtomId(0)),
                 ligands: (1u32..=4)
-                    .map(|t| (AtomRef::Id(AtomId(t)), StereoLigandKind::Atom))
+                    .map(|t| (AtomHandle::Id(AtomId(t)), StereoLigandKind::Atom))
                     .collect(),
                 ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
             }])
@@ -2469,10 +2477,10 @@ mod tests {
         let tx = stereo_atom_skeleton
             .transact(vec![Edit::RemoveStereoAtoms {
                 removes: vec![(
-                    StereoAtomRef::Id(StereoAtomId(0)),
-                    AtomRef::Id(AtomId(0)),
+                    StereoAtomHandle::Id(StereoAtomId(0)),
+                    AtomHandle::Id(AtomId(0)),
                     (1u32..=4)
-                        .map(|t| (AtomRef::Id(AtomId(t)), StereoLigandKind::Atom))
+                        .map(|t| (AtomHandle::Id(AtomId(t)), StereoLigandKind::Atom))
                         .collect(),
                     StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
                 )],
@@ -2495,10 +2503,10 @@ mod tests {
         let err = stereo_atom_skeleton
             .transact(vec![Edit::RemoveStereoAtoms {
                 removes: vec![(
-                    StereoAtomRef::Id(StereoAtomId(0)),
-                    AtomRef::Id(AtomId(0)),
+                    StereoAtomHandle::Id(StereoAtomId(0)),
+                    AtomHandle::Id(AtomId(0)),
                     (1u32..=4)
-                        .map(|t| (AtomRef::Id(AtomId(t)), StereoLigandKind::Atom))
+                        .map(|t| (AtomHandle::Id(AtomId(t)), StereoLigandKind::Atom))
                         .collect(),
                     // Wrong recorded coset (Th0 vs the stored Th1).
                     StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
@@ -2521,7 +2529,7 @@ mod tests {
         // Removing a ligand atom cascades the stereo element away.
         let tx = stereo_atom_skeleton
             .transact(vec![Edit::RemoveTopology {
-                atoms: vec![AtomRef::Id(AtomId(1))],
+                atoms: vec![AtomHandle::Id(AtomId(1))],
                 bonds: Vec::new(),
             }])
             .unwrap();
@@ -2547,10 +2555,10 @@ mod tests {
         let before = stereo_bond_skeleton.clone().build();
         let tx = stereo_bond_skeleton
             .transact(vec![Edit::AddStereoBond {
-                site: BondRef::Id(BondId(1)),
+                site: BondHandle::Id(BondId(1)),
                 ligands: vec![
-                    (AtomRef::Id(AtomId(0)), StereoLigandKind::Atom),
-                    (AtomRef::Id(AtomId(3)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
                 ],
                 ast: StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
             }])
@@ -2576,11 +2584,11 @@ mod tests {
         let tx = stereo_bond_skeleton
             .transact(vec![Edit::RemoveStereoBonds {
                 removes: vec![(
-                    StereoBondRef::Id(StereoBondId(0)),
-                    BondRef::Id(BondId(1)),
+                    StereoBondHandle::Id(StereoBondId(0)),
+                    BondHandle::Id(BondId(1)),
                     vec![
-                        (AtomRef::Id(AtomId(0)), StereoLigandKind::Atom),
-                        (AtomRef::Id(AtomId(3)), StereoLigandKind::Atom),
+                        (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                        (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
                     ],
                     StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
                 )],
@@ -2603,7 +2611,7 @@ mod tests {
         let before = stereo_atom_skeleton.clone().build();
         let tx = stereo_atom_skeleton
             .transact(vec![Edit::ModifyStereoAtomField {
-                id: StereoAtomRef::Id(StereoAtomId(0)),
+                id: StereoAtomHandle::Id(StereoAtomId(0)),
                 change: StereoAtomFieldChange::Configuration {
                     old: StereoConfigurationAst::kinded(
                         StereoKind::Tetrahedral,
@@ -2638,7 +2646,7 @@ mod tests {
         );
         let err = stereo_atom_skeleton
             .transact(vec![Edit::ModifyStereoAtomField {
-                id: StereoAtomRef::Id(StereoAtomId(0)),
+                id: StereoAtomHandle::Id(StereoAtomId(0)),
                 change: StereoAtomFieldChange::Configuration {
                     // Wrong recorded coset (Th0 vs the stored Th1).
                     old: StereoConfigurationAst::kinded(
@@ -2670,7 +2678,7 @@ mod tests {
         let before = stereo_bond_skeleton.clone().build();
         let tx = stereo_bond_skeleton
             .transact(vec![Edit::ModifyStereoBondField {
-                id: StereoBondRef::Id(StereoBondId(0)),
+                id: StereoBondHandle::Id(StereoBondId(0)),
                 change: StereoBondFieldChange::Configuration {
                     old: StereoConfigurationAst::kinded(
                         StereoKind::CisTrans,
@@ -2708,7 +2716,7 @@ mod tests {
         );
         let err = stereo_bond_skeleton
             .transact(vec![Edit::ModifyStereoBondField {
-                id: StereoBondRef::Id(StereoBondId(0)),
+                id: StereoBondHandle::Id(StereoBondId(0)),
                 change: StereoBondFieldChange::Configuration {
                     // Wrong recorded coset (vs the stored 1).
                     old: StereoConfigurationAst::kinded(
@@ -2747,7 +2755,7 @@ mod tests {
     ) {
         diatomic_with_overlays
             .transact(vec![Edit::ModifyDativeBondField {
-                id: DativeBondRef::Id(DativeBondId(0)),
+                id: DativeBondHandle::Id(DativeBondId(0)),
                 change: DativeBondFieldChange::Order {
                     old: ValueAst::Lit(1),
                     new: ValueAst::Lit(2),
@@ -2769,7 +2777,7 @@ mod tests {
     ) {
         diatomic_with_overlays
             .transact(vec![Edit::ModifyAromaticSystemField {
-                id: AromaticSystemRef::Id(AromaticSystemId(0)),
+                id: AromaticSystemHandle::Id(AromaticSystemId(0)),
                 change: AromaticSystemFieldChange::Charge {
                     old: ValueAst::default(),
                     new: ValueAst::Lit(1),
@@ -2791,7 +2799,7 @@ mod tests {
     ) {
         diatomic_with_overlays
             .transact(vec![Edit::ModifyMulticenterBondField {
-                id: MulticenterBondRef::Id(MulticenterBondId(0)),
+                id: MulticenterBondHandle::Id(MulticenterBondId(0)),
                 change: MulticenterBondFieldChange::Charge {
                     old: ValueAst::default(),
                     new: ValueAst::Lit(-1),
@@ -2813,7 +2821,7 @@ mod tests {
     ) {
         diatomic_with_overlays
             .transact(vec![Edit::ModifyNoncovalentBondField {
-                id: NoncovalentBondRef::Id(NoncovalentBondId(0)),
+                id: NoncovalentBondHandle::Id(NoncovalentBondId(0)),
                 change: NoncovalentBondFieldChange::Kind {
                     old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
                     new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
@@ -2833,7 +2841,7 @@ mod tests {
     fn test_molecule_builder_transact_add_dative_bond(mut diatomic: MoleculeBuilder) {
         let tx = diatomic
             .transact(vec![Edit::AddDativeBond {
-                atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                 ast: DativeBondAst::from_order(1),
             }])
             .unwrap();
@@ -2848,7 +2856,7 @@ mod tests {
     fn test_molecule_builder_transact_add_aromatic_system(mut diatomic: MoleculeBuilder) {
         let tx = diatomic
             .transact(vec![Edit::AddAromaticSystem {
-                atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                 ast: AromaticSystemAst::default(),
             }])
             .unwrap();
@@ -2863,7 +2871,7 @@ mod tests {
     fn test_molecule_builder_transact_add_multicenter_bond(mut diatomic: MoleculeBuilder) {
         let tx = diatomic
             .transact(vec![Edit::AddMulticenterBond {
-                atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                 ast: MulticenterBondAst::default(),
             }])
             .unwrap();
@@ -2878,7 +2886,7 @@ mod tests {
     fn test_molecule_builder_transact_add_noncovalent_bond(mut diatomic: MoleculeBuilder) {
         let tx = diatomic
             .transact(vec![Edit::AddNoncovalentBond {
-                atoms: [AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                atoms: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                 ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
             }])
             .unwrap();
@@ -2896,8 +2904,8 @@ mod tests {
         diatomic_with_overlays
             .transact(vec![Edit::RemoveDativeBonds {
                 removes: vec![(
-                    DativeBondRef::Id(DativeBondId(0)),
-                    vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    DativeBondHandle::Id(DativeBondId(0)),
+                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                     DativeBondAst {
                         order: ValueAst::Lit(1),
                         constraints: Default::default(),
@@ -2915,8 +2923,8 @@ mod tests {
         let err = diatomic_with_overlays
             .transact(vec![Edit::RemoveDativeBonds {
                 removes: vec![(
-                    DativeBondRef::Id(DativeBondId(0)),
-                    vec![AtomRef::Id(AtomId(1)), AtomRef::Id(AtomId(0))], // wrong order
+                    DativeBondHandle::Id(DativeBondId(0)),
+                    vec![AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(0))], // wrong order
                     DativeBondAst {
                         order: ValueAst::Lit(1),
                         constraints: Default::default(),
@@ -2935,8 +2943,8 @@ mod tests {
         diatomic_with_overlays
             .transact(vec![Edit::RemoveAromaticSystems {
                 removes: vec![(
-                    AromaticSystemRef::Id(AromaticSystemId(0)),
-                    vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    AromaticSystemHandle::Id(AromaticSystemId(0)),
+                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                     AromaticSystemAst::default(),
                 )],
             }])
@@ -2959,13 +2967,13 @@ mod tests {
         b.transact(vec![Edit::RemoveAromaticSystems {
             removes: vec![
                 (
-                    AromaticSystemRef::Id(AromaticSystemId(0)),
-                    vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    AromaticSystemHandle::Id(AromaticSystemId(0)),
+                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                     AromaticSystemAst::default(),
                 ),
                 (
-                    AromaticSystemRef::Id(AromaticSystemId(2)),
-                    vec![AtomRef::Id(AtomId(4)), AtomRef::Id(AtomId(5))],
+                    AromaticSystemHandle::Id(AromaticSystemId(2)),
+                    vec![AtomHandle::Id(AtomId(4)), AtomHandle::Id(AtomId(5))],
                     AromaticSystemAst::default(),
                 ),
             ],
@@ -3013,11 +3021,11 @@ mod tests {
         let tx = b
             .transact(vec![Edit::RemoveAromaticSystems {
                 removes: vec![(
-                    AromaticSystemRef::Id(AromaticSystemId(0)),
+                    AromaticSystemHandle::Id(AromaticSystemId(0)),
                     vec![
-                        AtomRef::Id(AtomId(0)),
-                        AtomRef::Id(AtomId(1)),
-                        AtomRef::Id(AtomId(2)),
+                        AtomHandle::Id(AtomId(0)),
+                        AtomHandle::Id(AtomId(1)),
+                        AtomHandle::Id(AtomId(2)),
                     ],
                     AromaticSystemAst::default(),
                 )],
@@ -3037,8 +3045,8 @@ mod tests {
         diatomic_with_overlays
             .transact(vec![Edit::RemoveMulticenterBonds {
                 removes: vec![(
-                    MulticenterBondRef::Id(MulticenterBondId(0)),
-                    vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    MulticenterBondHandle::Id(MulticenterBondId(0)),
+                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                     MulticenterBondAst::default(),
                 )],
             }])
@@ -3053,8 +3061,8 @@ mod tests {
         diatomic_with_overlays
             .transact(vec![Edit::RemoveNoncovalentBonds {
                 removes: vec![(
-                    NoncovalentBondRef::Id(NoncovalentBondId(0)),
-                    [AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+                    [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                     NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
                 )],
             }])
@@ -3069,8 +3077,8 @@ mod tests {
         let err = diatomic_with_overlays
             .transact(vec![Edit::RemoveNoncovalentBonds {
                 removes: vec![(
-                    NoncovalentBondRef::Id(NoncovalentBondId(0)),
-                    [AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+                    [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                     NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic), // wrong
                 )],
             }])
@@ -3084,7 +3092,7 @@ mod tests {
     ) {
         diatomic
             .transact(vec![Edit::ModifyBondConstraint {
-                id: BondRef::Id(BondId(0)),
+                id: BondHandle::Id(BondId(0)),
                 old: None,
                 new: Some(BondConstraint::cis_trans_stereo(
                     CisTransStereoAst::NotStereo,
@@ -3109,7 +3117,7 @@ mod tests {
     fn test_molecule_builder_transact_add_bond_constraint(mut diatomic: MoleculeBuilder) {
         diatomic
             .transact(vec![Edit::ModifyBondConstraint {
-                id: BondRef::Id(BondId(0)),
+                id: BondHandle::Id(BondId(0)),
                 old: None,
                 new: Some(BondConstraint::ring_membership(RingScope::Size(5), 1)),
             }])
@@ -3128,7 +3136,7 @@ mod tests {
     ) {
         let err = diatomic
             .transact(vec![Edit::ModifyBondConstraint {
-                id: BondRef::Id(BondId(0)),
+                id: BondHandle::Id(BondId(0)),
                 old: Some(BondConstraint::ring_membership(RingScope::Size(5), 1)),
                 new: None,
             }])
@@ -3142,7 +3150,7 @@ mod tests {
     ) {
         diatomic_with_overlays
             .transact(vec![Edit::ModifyDativeBondConstraint {
-                id: DativeBondRef::Id(DativeBondId(0)),
+                id: DativeBondHandle::Id(DativeBondId(0)),
                 old: None,
                 new: Some(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
             }])
@@ -3161,7 +3169,7 @@ mod tests {
     ) {
         diatomic_with_overlays
             .transact(vec![Edit::ModifyAromaticSystemConstraint {
-                id: AromaticSystemRef::Id(AromaticSystemId(0)),
+                id: AromaticSystemHandle::Id(AromaticSystemId(0)),
                 old: None,
                 new: Some(AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))),
             }])
@@ -3184,7 +3192,7 @@ mod tests {
     ) {
         diatomic_with_overlays
             .transact(vec![Edit::ModifyMulticenterBondConstraint {
-                id: MulticenterBondRef::Id(MulticenterBondId(0)),
+                id: MulticenterBondHandle::Id(MulticenterBondId(0)),
                 old: None,
                 new: Some(MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))),
             }])
@@ -3286,12 +3294,12 @@ mod tests {
             let before = builder.clone().build();
             let edits = match case {
                 RollbackCase::RemoveTopology => vec![Edit::RemoveTopology {
-                    atoms: vec![AtomRef::Id(AtomId(1))],
+                    atoms: vec![AtomHandle::Id(AtomId(1))],
                     bonds: vec![],
                 }],
                 RollbackCase::RemoveBond => vec![Edit::RemoveTopology {
                     atoms: Vec::new(),
-                    bonds: vec![BondRef::Id(BondId(0))],
+                    bonds: vec![BondHandle::Id(BondId(0))],
                 }],
                 RollbackCase::AddTopology => vec![
                     Edit::AddAtoms {
@@ -3300,23 +3308,27 @@ mod tests {
                             AtomAst::from_element(Element::O),
                         ],
                     },
-                    Edit::add_bond(AtomRef::New(0), AtomRef::New(1), BondAst::from_order(2)),
+                    Edit::add_bond(
+                        AtomHandle::New(0),
+                        AtomHandle::New(1),
+                        BondAst::from_order(2),
+                    ),
                 ],
                 RollbackCase::Field => vec![Edit::ModifyAtomField {
-                    id: AtomRef::Id(AtomId(0)),
+                    id: AtomHandle::Id(AtomId(0)),
                     change: AtomFieldChange::Charge {
                         old: ValueAst::default(),
                         new: ValueAst::Lit(1),
                     },
                 }],
                 RollbackCase::AddOverlay => vec![Edit::AddDativeBond {
-                    atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                     ast: DativeBondAst::from_order(1),
                 }],
                 RollbackCase::RemoveOverlay => vec![Edit::RemoveDativeBonds {
                     removes: vec![(
-                        DativeBondRef::Id(DativeBondId(0)),
-                        vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                        DativeBondHandle::Id(DativeBondId(0)),
+                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
                         DativeBondAst {
                             order: ValueAst::Lit(1),
                             constraints: Default::default(),
@@ -3324,12 +3336,12 @@ mod tests {
                     )],
                 }],
                 RollbackCase::Constraint => vec![Edit::ModifyAtomConstraint {
-                    id: AtomRef::Id(AtomId(0)),
+                    id: AtomHandle::Id(AtomId(0)),
                     old: None,
                     new: Some(AtomConstraint::ring_membership(RingScope::Size(5), 1)),
                 }],
                 RollbackCase::CascadedConstraints => vec![Edit::RemoveTopology {
-                    atoms: vec![AtomRef::Id(AtomId(1))],
+                    atoms: vec![AtomHandle::Id(AtomId(1))],
                     bonds: Vec::new(),
                 }],
             };
@@ -3344,7 +3356,7 @@ mod tests {
         ) {
             let tx = triatomic_with_overlays
                 .transact(vec![Edit::RemoveTopology {
-                    atoms: vec![AtomRef::Id(AtomId(0))],
+                    atoms: vec![AtomHandle::Id(AtomId(0))],
                     bonds: vec![],
                 }])
                 .unwrap();
@@ -3372,7 +3384,7 @@ mod tests {
         #[rstest]
         #[should_panic(expected = "invalid unchecked transaction edit")]
         fn test_molecule_builder_transact_unchecked_error(mut empty: MoleculeBuilder) {
-            empty.transact_unchecked(vec![Edit::remove_atom(AtomRef::Id(AtomId(0)))]);
+            empty.transact_unchecked(vec![Edit::remove_atom(AtomHandle::Id(AtomId(0)))]);
         }
     }
 }

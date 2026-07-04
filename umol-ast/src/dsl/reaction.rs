@@ -343,7 +343,7 @@ pub struct ReactionNamespace {
 
 /// Where a reaction id came from: an entity of the lhs molecule, or one introduced by a delta.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum EntityOrigin {
+enum EntityScope {
     Lhs,
     Deltas,
 }
@@ -514,36 +514,36 @@ impl ReactionNamespace {
 
     /// Classify a reaction id by kind: `Lhs` if its index is below the lhs count for that kind
     /// (an lhs entity), `Deltas` if at or above (a delta introduced it).
-    fn origin(index: usize, lhs_count: usize) -> EntityOrigin {
+    fn scope(index: usize, lhs_count: usize) -> EntityScope {
         if index < lhs_count {
-            EntityOrigin::Lhs
+            EntityScope::Lhs
         } else {
-            EntityOrigin::Deltas
+            EntityScope::Deltas
         }
     }
-    fn atom_origin(&self, id: AtomId) -> EntityOrigin {
-        Self::origin(id.index(), self.lhs.atom_count())
+    fn atom_scope(&self, id: AtomId) -> EntityScope {
+        Self::scope(id.index(), self.lhs.atom_count())
     }
-    fn bond_origin(&self, id: BondId) -> EntityOrigin {
-        Self::origin(id.index(), self.lhs.bond_count())
+    fn bond_scope(&self, id: BondId) -> EntityScope {
+        Self::scope(id.index(), self.lhs.bond_count())
     }
-    fn dative_bond_origin(&self, id: DativeBondId) -> EntityOrigin {
-        Self::origin(id.index(), self.lhs.dative_bond_count())
+    fn dative_bond_scope(&self, id: DativeBondId) -> EntityScope {
+        Self::scope(id.index(), self.lhs.dative_bond_count())
     }
-    fn aromatic_system_origin(&self, id: AromaticSystemId) -> EntityOrigin {
-        Self::origin(id.index(), self.lhs.aromatic_system_count())
+    fn aromatic_system_scope(&self, id: AromaticSystemId) -> EntityScope {
+        Self::scope(id.index(), self.lhs.aromatic_system_count())
     }
-    fn multicenter_bond_origin(&self, id: MulticenterBondId) -> EntityOrigin {
-        Self::origin(id.index(), self.lhs.multicenter_bond_count())
+    fn multicenter_bond_scope(&self, id: MulticenterBondId) -> EntityScope {
+        Self::scope(id.index(), self.lhs.multicenter_bond_count())
     }
-    fn noncovalent_bond_origin(&self, id: NoncovalentBondId) -> EntityOrigin {
-        Self::origin(id.index(), self.lhs.noncovalent_bond_count())
+    fn noncovalent_bond_scope(&self, id: NoncovalentBondId) -> EntityScope {
+        Self::scope(id.index(), self.lhs.noncovalent_bond_count())
     }
-    fn stereo_atom_origin(&self, id: StereoAtomId) -> EntityOrigin {
-        Self::origin(id.index(), self.lhs.stereo_atom_count())
+    fn stereo_atom_scope(&self, id: StereoAtomId) -> EntityScope {
+        Self::scope(id.index(), self.lhs.stereo_atom_count())
     }
-    fn stereo_bond_origin(&self, id: StereoBondId) -> EntityOrigin {
-        Self::origin(id.index(), self.lhs.stereo_bond_count())
+    fn stereo_bond_scope(&self, id: StereoBondId) -> EntityScope {
+        Self::scope(id.index(), self.lhs.stereo_bond_count())
     }
 }
 
@@ -799,7 +799,7 @@ impl ReactionInput {
                 }
                 DeltaInput::AtomRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if ns.atom_origin(id) == EntityOrigin::Deltas {
+                    if ns.atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "atom",
@@ -813,7 +813,7 @@ impl ReactionInput {
                 }
                 DeltaInput::AtomModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if ns.atom_origin(id) == EntityOrigin::Deltas {
+                    if ns.atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "atom",
@@ -837,7 +837,7 @@ impl ReactionInput {
                 }
                 DeltaInput::BondRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if ns.bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "bond",
@@ -852,7 +852,7 @@ impl ReactionInput {
                 }
                 DeltaInput::BondModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if ns.bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "bond",
@@ -881,7 +881,7 @@ impl ReactionInput {
                 }
                 DeltaInput::DativeBondRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if ns.dative_bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.dative_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "dative bond",
@@ -898,7 +898,7 @@ impl ReactionInput {
                 }
                 DeltaInput::DativeBondModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if ns.dative_bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.dative_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "dative bond",
@@ -925,7 +925,7 @@ impl ReactionInput {
                 }
                 DeltaInput::AromaticSystemRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if ns.aromatic_system_origin(id) == EntityOrigin::Deltas {
+                    if ns.aromatic_system_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "aromatic system",
@@ -941,7 +941,7 @@ impl ReactionInput {
                 }
                 DeltaInput::AromaticSystemModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if ns.aromatic_system_origin(id) == EntityOrigin::Deltas {
+                    if ns.aromatic_system_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "aromatic system",
@@ -968,7 +968,7 @@ impl ReactionInput {
                 }
                 DeltaInput::MulticenterBondRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if ns.multicenter_bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.multicenter_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "multicenter bond",
@@ -984,7 +984,7 @@ impl ReactionInput {
                 }
                 DeltaInput::MulticenterBondModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if ns.multicenter_bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.multicenter_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "multicenter bond",
@@ -1008,7 +1008,7 @@ impl ReactionInput {
                 }
                 DeltaInput::NoncovalentBondRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if ns.noncovalent_bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.noncovalent_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "noncovalent bond",
@@ -1023,7 +1023,7 @@ impl ReactionInput {
                 }
                 DeltaInput::NoncovalentBondModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if ns.noncovalent_bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.noncovalent_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "noncovalent bond",
@@ -1052,7 +1052,7 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoAtomRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if ns.stereo_atom_origin(id) == EntityOrigin::Deltas {
+                    if ns.stereo_atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "stereo atom",
@@ -1072,7 +1072,7 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoAtomModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if ns.stereo_atom_origin(id) == EntityOrigin::Deltas {
+                    if ns.stereo_atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "stereo atom",
@@ -1086,7 +1086,7 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoAtomSwap(r, kind) => {
                     let id = r.resolve(&ns)?;
-                    if ns.stereo_atom_origin(id) == EntityOrigin::Deltas {
+                    if ns.stereo_atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "transform",
                             kind: "stereo atom",
@@ -1097,7 +1097,7 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoAtomMirror(r, kind) => {
                     let id = r.resolve(&ns)?;
-                    if ns.stereo_atom_origin(id) == EntityOrigin::Deltas {
+                    if ns.stereo_atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "transform",
                             kind: "stereo atom",
@@ -1108,7 +1108,7 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoAtomApply(r, kind, permutation) => {
                     let id = r.resolve(&ns)?;
-                    if ns.stereo_atom_origin(id) == EntityOrigin::Deltas {
+                    if ns.stereo_atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "transform",
                             kind: "stereo atom",
@@ -1138,7 +1138,7 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoBondRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if ns.stereo_bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.stereo_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "remove",
                             kind: "stereo bond",
@@ -1158,7 +1158,7 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoBondModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if ns.stereo_bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.stereo_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "modify",
                             kind: "stereo bond",
@@ -1172,7 +1172,7 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoBondSwap(r, kind) => {
                     let id = r.resolve(&ns)?;
-                    if ns.stereo_bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.stereo_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "transform",
                             kind: "stereo bond",
@@ -1183,7 +1183,7 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoBondMirror(r, kind) => {
                     let id = r.resolve(&ns)?;
-                    if ns.stereo_bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.stereo_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "transform",
                             kind: "stereo bond",
@@ -1194,7 +1194,7 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoBondApply(r, kind, permutation) => {
                     let id = r.resolve(&ns)?;
-                    if ns.stereo_bond_origin(id) == EntityOrigin::Deltas {
+                    if ns.stereo_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
                             action: "transform",
                             kind: "stereo bond",

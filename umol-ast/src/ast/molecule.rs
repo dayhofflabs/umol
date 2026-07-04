@@ -16,7 +16,7 @@ use super::bond::BondAst;
 use super::constraint::{Constraint, Constraints};
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::DativeBondAst;
-use super::edit::{AtomRef, BondRef, Edit};
+use super::edit::{AtomHandle, BondHandle, Edit};
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -507,15 +507,15 @@ impl MoleculeAst {
             .collect();
         let kept_bonds: HashSet<BondId> =
             sub.bonds().mates().iter().map(|&(_, host)| host).collect();
-        let removed_atoms: Vec<AtomRef> = (0..self.atoms().count())
+        let removed_atoms: Vec<AtomHandle> = (0..self.atoms().count())
             .map(AtomId::from)
             .filter(|a| !kept.contains(a))
-            .map(AtomRef::Id)
+            .map(AtomHandle::Id)
             .collect();
-        let removed_bonds: Vec<BondRef> = (0..self.bonds().count())
+        let removed_bonds: Vec<BondHandle> = (0..self.bonds().count())
             .map(BondId::from)
             .filter(|b| !kept_bonds.contains(b))
-            .map(BondRef::Id)
+            .map(BondHandle::Id)
             .collect();
         if removed_atoms.is_empty() && removed_bonds.is_empty() {
             return Vec::new();
