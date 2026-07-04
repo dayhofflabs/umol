@@ -7,7 +7,8 @@ use umol_edn::read_string;
 
 use super::*;
 use crate::ast::atom::AtomAst;
-use crate::ast::constraint::{Constraint, MoleculeConstraint};
+use crate::ast::boolean::BooleanAst;
+use crate::ast::constraint::{BondConstraint, Constraint, MoleculeConstraint};
 use crate::ast::electrons::ElectronCountsAst;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::value::ValueAst;
@@ -581,6 +582,22 @@ fn test_molecule_dsl_edn_roundtrip_connected_all_atoms() {
     let edn = read_string(source).unwrap();
     let dsl = MoleculeDsl::from_edn(&edn).unwrap();
     assert_eq!(dsl.to_edn(), edn);
+}
+
+#[rstest]
+fn test_molecule_ast_from_edn_structural_bond_ref() {
+    // A structural bond ref ({:atoms [0 1]}) names the bond by its endpoints, resolved against the
+    // namespace's participant lookup.
+    let source = r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [{:atoms [0 1]} {:aromatic true}]}]}"#;
+    let ast = MoleculeAst::from_edn(&read_string(source).unwrap()).unwrap();
+    let constraints: Vec<Constraint> = ast.constraints().iter().cloned().collect();
+    assert_eq!(
+        constraints,
+        vec![Constraint::Bond(
+            BondId(0),
+            BondConstraint::Aromatic(BooleanAst::Lit(true)),
+        )]
+    );
 }
 
 #[rstest]

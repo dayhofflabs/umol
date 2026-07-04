@@ -3328,6 +3328,24 @@ mod tests {
     }
 
     #[rstest]
+    fn test_reaction_input_into_ast_constraint_structural_bond_ref() {
+        // A structural bond ref ({:atoms [0 1]}) names the lhs bond by its endpoints, resolved
+        // against the namespace's participant lookup.
+        let input = r##"{:lhs {:atoms ["C" "C"] :bonds [[0 1 "1"]]} :deltas [{:constraint {:add {:bond [{:atoms [0 1]} {:aromatic true}]}}}]}"##;
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(Constraint::Bond(
+                BondId(0),
+                BondConstraint::Aromatic(BooleanAst::Lit(true)),
+            )))]),
+        );
+    }
+
+    #[rstest]
     #[case::atom_modify(
         r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##,
         ReactionAst {

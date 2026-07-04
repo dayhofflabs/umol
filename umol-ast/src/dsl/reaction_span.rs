@@ -2077,6 +2077,24 @@ mod tests {
     }
 
     #[rstest]
+    fn test_span_input_into_ast_structural_bond_ref() {
+        // A structural bond ref ({:atoms [0 1]}) names the bond by its endpoints, resolved against
+        // the namespace's participant lookup.
+        let input = r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [{:atoms [0 1]} {:aromatic true}]}]}"#;
+        let (ast, _) = parse_span_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.constraints().to_vec(),
+            vec![ConstraintSpan::Unchanged(Constraint::Bond(
+                BondId(0),
+                BondConstraint::Aromatic(BooleanAst::Lit(true)),
+            ))]
+        );
+    }
+
+    #[rstest]
     #[case::unknown_alias(
         r#"{:atoms [:nu]}"#,
         ParseError::InvalidValue("unknown atom alias :nu".to_string()),
