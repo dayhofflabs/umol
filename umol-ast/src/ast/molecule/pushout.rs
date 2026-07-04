@@ -1,5 +1,5 @@
 //! The attributed pushout of two molecules: glue `self` and `other` on a shared subgraph, meeting
-//! atom / bond data (and, later, overlays and constraints) where they coincide — the umol-ast
+//! atom / bond / overlay data and combining molecule constraints where they coincide — the umol-ast
 //! attribute layer over graph-core's structural `pushout`. A child of `molecule` so it reaches the
 //! private overlay relation-sets directly, without exposing raw accessors.
 
@@ -15,6 +15,7 @@ use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::DativeBondAst;
 use super::super::id::{AtomId, BondId};
 use super::super::noncovalent::NoncovalentBondAst;
+use super::super::remap::IdRemapping;
 use super::super::traits::Lattice;
 use super::MoleculeAst;
 
@@ -30,9 +31,9 @@ pub struct MoleculePushout {
 
 impl MoleculeAst {
     /// Glue `self` (left) and `other` (right) over `overlap` (a common subgraph — its edges the
-    /// coincident bonds), meeting atom and bond data at coincident entities; `None` when any
-    /// coincident `meet` is `⊥` (the overlap is inadmissible). Node/edge layer only — overlays and
-    /// molecule constraints are not yet carried.
+    /// coincident bonds), meeting atom / bond / overlay data at coincident entities and combining the
+    /// two molecule-constraint sets; `None` when any coincident `meet` is `⊥` (the overlap is
+    /// inadmissible). Stereo overlays are not yet carried.
     #[allow(dead_code)]
     pub fn meet_pushout(
         &self,
@@ -158,7 +159,7 @@ impl MoleculeAst {
             })
             .collect();
 
-        let object = MoleculeAst::from_parts(
+        let mut object = MoleculeAst::from_parts(
             atoms,
             bonds,
             dative,
@@ -172,6 +173,33 @@ impl MoleculeAst {
 
         let left = MoleculeCorrespondence::induce(self, &object, po.left.nodes().clone());
         let right = MoleculeCorrespondence::induce(other, &object, po.right.nodes().clone());
+
+        // Molecule-level constraints: `self`'s hold in the glue as-is (it keeps `self`'s ids); `other`'s
+        // are re-anchored through the `right` embedding. Conjunction, deduplicated.
+        let remapping = IdRemapping::new(
+            right
+                .atoms()
+                .mates()
+                .iter()
+                .map(|&(o, g)| (AtomId::from(o), AtomId::from(g)))
+                .collect(),
+            right.bonds().mates().iter().copied().collect(),
+            right.dative_bonds().mates().iter().copied().collect(),
+            right.aromatic_systems().mates().iter().copied().collect(),
+            right.multicenter_bonds().mates().iter().copied().collect(),
+            right.noncovalent_bonds().mates().iter().copied().collect(),
+            right.stereo_atoms().mates().iter().copied().collect(),
+            right.stereo_bonds().mates().iter().copied().collect(),
+        );
+        let mut constraints = self.constraints.clone();
+        for c in other.constraints.iter() {
+            let remapped = c.clone().remap(&remapping);
+            if !constraints.iter().any(|existing| existing == &remapped) {
+                constraints.push(remapped);
+            }
+        }
+        object.constraints = constraints;
+
         Some(MoleculePushout {
             object,
             left,
@@ -233,6 +261,7 @@ mod tests {
     use umol_graph_core::Correspondence;
 
     use super::super::super::aromatic::AromaticSystemAst;
+    use super::super::super::constraint::{AtomConstraint, Constraint};
     use super::*;
 
     // A single shared atom (node 0 ↔ node 0), no shared bond; each side has one exposed atom.
@@ -308,10 +337,11 @@ mod tests {
         assert!(left.meet_pushout(&right, &overlap).is_none());
     }
 
-    // Overlays glue over the same pushout: a system shared on the same atoms coincides (met to one),
-    // one on other atoms is context (kept) — both sides' overlays survive.
+    // Overlays glue over the same pushout: `right`'s system on the shared atoms {0,1} coincides (met to
+    // one), its system on `context` atoms is kept (context) — both sides' overlays survive.
     #[rstest]
-    fn test_molecule_ast_meet_pushout_overlays() {
+    #[case::aromatic_context_1_2(vec![AtomId(1), AtomId(2)])]
+    fn test_molecule_ast_meet_pushout_overlays(#[case] context: Vec<AtomId>) {
         let full_overlap = GraphCorrespondence::new(
             Correspondence::new(
                 vec![
@@ -324,7 +354,6 @@ mod tests {
             ),
             Correspondence::new(vec![(EdgeId(0), EdgeId(0)), (EdgeId(1), EdgeId(1))], 2, 2),
         );
-        // left aromatic on {0,1}; right aromatic on {0,1} (coincides) and {1,2} (context).
         let left = MoleculeAst::from_parts(
             vec![AtomAst::from_element(Element::C); 3],
             vec![
@@ -348,7 +377,7 @@ mod tests {
             vec![],
             vec![
                 (vec![AtomId(0), AtomId(1)], AromaticSystemAst::default()),
-                (vec![AtomId(1), AtomId(2)], AromaticSystemAst::default()),
+                (context.clone(), AromaticSystemAst::default()),
             ],
             vec![],
             vec![],
@@ -365,7 +394,7 @@ mod tests {
             vec![],
             vec![
                 (vec![AtomId(0), AtomId(1)], AromaticSystemAst::default()),
-                (vec![AtomId(1), AtomId(2)], AromaticSystemAst::default()),
+                (context, AromaticSystemAst::default()),
             ],
             vec![],
             vec![],
@@ -375,6 +404,78 @@ mod tests {
         );
         assert_eq!(
             left.meet_pushout(&right, &full_overlap)
+                .expect("admissible")
+                .object,
+            expected,
+        );
+    }
+
+    // Molecule-level constraints are carried and re-anchored: `self`'s stay put; `other`'s are remapped
+    // through the embedding — `other`'s atom 1 becomes glue atom 2.
+    #[rstest]
+    #[case::atom_valences(4, 2)]
+    fn test_molecule_ast_meet_pushout_constraints(
+        overlap: GraphCorrespondence,
+        #[case] left_valence: i64,
+        #[case] right_valence: i64,
+    ) {
+        let left = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::from(vec![Constraint::Atom(
+                AtomId(0),
+                AtomConstraint::valence(left_valence),
+            )]),
+        );
+        let right = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::from(vec![Constraint::Atom(
+                AtomId(1),
+                AtomConstraint::valence(right_valence),
+            )]),
+        );
+        let expected = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(0), AtomId(2), BondAst::from_order(1)),
+            ],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::from(vec![
+                Constraint::Atom(AtomId(0), AtomConstraint::valence(left_valence)),
+                Constraint::Atom(AtomId(2), AtomConstraint::valence(right_valence)),
+            ]),
+        );
+        assert_eq!(
+            left.meet_pushout(&right, &overlap)
                 .expect("admissible")
                 .object,
             expected,
