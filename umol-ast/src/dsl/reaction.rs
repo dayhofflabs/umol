@@ -3175,6 +3175,29 @@ mod tests {
         assert!(matches!(err, ParseError::InvalidValue(_)));
     }
 
+    // A delta :id must be disjoint from every id already bound — lhs entities and earlier deltas alike.
+    #[rstest]
+    #[case::collides_with_lhs(
+        r##"{:lhs {:atoms [[:a "C"]]} :deltas [{:atom {:add [:a "O"]}}]}"##,
+        ParseError::DuplicateId("a".to_string()),
+    )]
+    #[case::collides_with_prior_delta(
+        r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:a "O"]}} {:atom {:add [:a "N"]}}]}"##,
+        ParseError::DuplicateId("a".to_string()),
+    )]
+    fn test_reaction_input_into_ast_duplicate_id_error(
+        #[case] input: &str,
+        #[case] expected: ParseError,
+    ) {
+        assert_eq!(
+            parse_reaction_input(&read_string(input).unwrap())
+                .unwrap()
+                .into_ast()
+                .unwrap_err(),
+            expected,
+        );
+    }
+
     #[rstest]
     fn test_reaction_input_into_ast_atom_modify() {
         // lhs :br is Br#c0; modify charge to -1 → one ModifyField (old recovered from lhs).

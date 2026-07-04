@@ -2096,6 +2096,10 @@ mod tests {
         r#"{:atoms ["C"] :bonds [[0 5 :single]]}"#,
         ParseError::InvalidRef { kind: "atom", value: "5".to_string() },
     )]
+    #[case::duplicate_id(
+        r#"{:atoms [[:a "C"] [:a "O"]]}"#,
+        ParseError::DuplicateId("a".to_string()),
+    )]
     #[case::left_inconsistent(
         r#"{:atoms ["C" {:add "O"}] :bonds [[0 1 :single]]}"#,
         ParseError::InvalidValue(

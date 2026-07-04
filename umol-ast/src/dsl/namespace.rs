@@ -689,6 +689,23 @@ mod tests {
     }
 
     #[rstest]
+    fn test_molecule_namespace_register_atom_error() {
+        let mut namespace = MoleculeNamespace::default();
+        namespace.register_atom(Some("a".into())).unwrap();
+        assert_eq!(
+            namespace.register_atom(Some("a".into())).unwrap_err(),
+            ParseError::DuplicateId("a".into())
+        );
+        // The disjointness check spans the whole namespace: a bond may not reuse the atom's keyword.
+        assert_eq!(
+            namespace
+                .register_bond(Some("a".into()), AtomId(0), AtomId(0))
+                .unwrap_err(),
+            ParseError::DuplicateId("a".into())
+        );
+    }
+
+    #[rstest]
     fn test_molecule_namespace_register_bond() {
         let mut namespace = MoleculeNamespace::default();
         assert_eq!(
@@ -847,6 +864,87 @@ mod tests {
             Some(StereoBondId(1))
         );
         assert_eq!(namespace.find_stereo_bond_by_keyword("nope"), None);
+    }
+
+    #[rstest]
+    fn test_molecule_namespace_register_atom_alias() {
+        let mut namespace = MoleculeNamespace::default();
+        let dsl = Box::new("C".parse::<AtomDsl>().unwrap());
+        namespace
+            .register_atom_alias("me".into(), dsl.clone())
+            .unwrap();
+        assert_eq!(namespace.find_atom_alias("me"), Some(dsl.as_ref()));
+        assert!(namespace.contains_id("me"));
+        assert_eq!(namespace.find_atom_alias("nope"), None);
+    }
+
+    #[rstest]
+    #[case::name_taken_by_entity("a", "N", ParseError::DuplicateId("a".into()))]
+    #[case::name_taken_by_alias("me", "O", ParseError::DuplicateId("me".into()))]
+    #[case::duplicate_spec(
+        "me2",
+        "C",
+        ParseError::InvalidValue(
+            "atom-aliases must be bijective: two names map to the same atom".into()
+        )
+    )]
+    fn test_molecule_namespace_register_atom_alias_error(
+        #[case] name: &str,
+        #[case] spec: &str,
+        #[case] expected: ParseError,
+    ) {
+        let mut namespace = MoleculeNamespace::default();
+        namespace.register_atom(Some("a".into())).unwrap();
+        namespace
+            .register_atom_alias("me".into(), Box::new("C".parse::<AtomDsl>().unwrap()))
+            .unwrap();
+        assert_eq!(
+            namespace
+                .register_atom_alias(name.into(), Box::new(spec.parse::<AtomDsl>().unwrap()))
+                .unwrap_err(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::atom("a", true)]
+    #[case::bond("b", true)]
+    #[case::dative_bond("d", true)]
+    #[case::aromatic_system("ar", true)]
+    #[case::multicenter_bond("m", true)]
+    #[case::noncovalent_bond("nc", true)]
+    #[case::stereo_atom("sa", true)]
+    #[case::stereo_bond("sb", true)]
+    #[case::alias("al", true)]
+    #[case::absent("nope", false)]
+    fn test_molecule_namespace_contains_id(#[case] id: &str, #[case] expected: bool) {
+        let mut namespace = MoleculeNamespace::default();
+        namespace.register_atom(Some("a".into())).unwrap();
+        namespace
+            .register_bond(Some("b".into()), AtomId(0), AtomId(0))
+            .unwrap();
+        namespace
+            .register_dative_bond(Some("d".into()), &[AtomId(0)], AtomId(0))
+            .unwrap();
+        namespace
+            .register_aromatic_system(Some("ar".into()), &[AtomId(0)])
+            .unwrap();
+        namespace
+            .register_multicenter_bond(Some("m".into()), &[AtomId(0)])
+            .unwrap();
+        namespace
+            .register_noncovalent_bond(Some("nc".into()), AtomId(0), AtomId(0))
+            .unwrap();
+        namespace
+            .register_stereo_atom(Some("sa".into()), AtomId(0), &[])
+            .unwrap();
+        namespace
+            .register_stereo_bond(Some("sb".into()), BondId(0), &[])
+            .unwrap();
+        namespace
+            .register_atom_alias("al".into(), Box::new("C".parse::<AtomDsl>().unwrap()))
+            .unwrap();
+        assert_eq!(namespace.contains_id(id), expected);
     }
 
     #[rstest]
