@@ -341,6 +341,13 @@ pub(crate) struct ReactionNamespace {
     atom_aliases: BiBTreeMap<String, Box<AtomDsl>>,
 }
 
+/// Where a reaction id came from: an entity of the lhs molecule, or one introduced by a delta.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EntityOrigin {
+    Lhs,
+    Deltas,
+}
+
 impl ReactionNamespace {
     fn new(lhs: MoleculeNamespace) -> Self {
         let deltas = MoleculeNamespace::continuation(&lhs);
@@ -461,6 +468,40 @@ impl ReactionNamespace {
         self.atom_aliases
             .iter()
             .map(|(name, dsl)| (name.as_str(), dsl.as_ref()))
+    }
+
+    /// Classify a reaction id by kind: `Lhs` if its index is below the lhs count for that kind
+    /// (an lhs entity), `Deltas` if at or above (a delta introduced it).
+    fn origin(index: usize, lhs_count: usize) -> EntityOrigin {
+        if index < lhs_count {
+            EntityOrigin::Lhs
+        } else {
+            EntityOrigin::Deltas
+        }
+    }
+    fn atom_origin(&self, id: AtomId) -> EntityOrigin {
+        Self::origin(id.index(), self.lhs.atom_count())
+    }
+    fn bond_origin(&self, id: BondId) -> EntityOrigin {
+        Self::origin(id.index(), self.lhs.bond_count())
+    }
+    fn dative_bond_origin(&self, id: DativeBondId) -> EntityOrigin {
+        Self::origin(id.index(), self.lhs.dative_bond_count())
+    }
+    fn aromatic_system_origin(&self, id: AromaticSystemId) -> EntityOrigin {
+        Self::origin(id.index(), self.lhs.aromatic_system_count())
+    }
+    fn multicenter_bond_origin(&self, id: MulticenterBondId) -> EntityOrigin {
+        Self::origin(id.index(), self.lhs.multicenter_bond_count())
+    }
+    fn noncovalent_bond_origin(&self, id: NoncovalentBondId) -> EntityOrigin {
+        Self::origin(id.index(), self.lhs.noncovalent_bond_count())
+    }
+    fn stereo_atom_origin(&self, id: StereoAtomId) -> EntityOrigin {
+        Self::origin(id.index(), self.lhs.stereo_atom_count())
+    }
+    fn stereo_bond_origin(&self, id: StereoBondId) -> EntityOrigin {
+        Self::origin(id.index(), self.lhs.stereo_bond_count())
     }
 }
 
@@ -694,17 +735,6 @@ impl ReactionInput {
         } = self;
         let (lhs, lhs_namespace) = lhs.into_ast()?;
 
-        // The lhs entity counts bound the delta id space: an id at or above a kind's lhs count was
-        // created in this reaction, which remove / modify / transform reject.
-        let lhs_atom_count = lhs_namespace.atom_count();
-        let lhs_bond_count = lhs_namespace.bond_count();
-        let lhs_dative_bond_count = lhs_namespace.dative_bond_count();
-        let lhs_aromatic_system_count = lhs_namespace.aromatic_system_count();
-        let lhs_multicenter_bond_count = lhs_namespace.multicenter_bond_count();
-        let lhs_noncovalent_bond_count = lhs_namespace.noncovalent_bond_count();
-        let lhs_stereo_atom_count = lhs_namespace.stereo_atom_count();
-        let lhs_stereo_bond_count = lhs_namespace.stereo_bond_count();
-
         // The single resolution namespace: lhs entities, the delta namespace continuing its id space,
         // and the reaction's top-level aliases. Every ref — entity and constraint — resolves against
         // it; `register_*` advances the delta counter and `ReactionMetadata` is projected from it at
@@ -727,11 +757,12 @@ impl ReactionInput {
                 }
                 DeltaInput::AtomRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_atom_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot remove atom :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.atom_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "remove",
+                            kind: "atom",
+                            index: id.index(),
+                        });
                     }
                     resolved.push(Delta::Atom(AtomDelta::Remove {
                         id,
@@ -740,11 +771,12 @@ impl ReactionInput {
                 }
                 DeltaInput::AtomModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_atom_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot modify atom :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.atom_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "modify",
+                            kind: "atom",
+                            index: id.index(),
+                        });
                     }
                     let new = lhs[id].update(&rhs);
                     for d in AtomDelta::diff(id, &lhs[id], &new) {
@@ -763,11 +795,12 @@ impl ReactionInput {
                 }
                 DeltaInput::BondRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot remove bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "remove",
+                            kind: "bond",
+                            index: id.index(),
+                        });
                     }
                     resolved.push(Delta::Bond(BondDelta::Remove {
                         id,
@@ -777,11 +810,12 @@ impl ReactionInput {
                 }
                 DeltaInput::BondModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot modify bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "modify",
+                            kind: "bond",
+                            index: id.index(),
+                        });
                     }
                     let new = lhs[id].update(&rhs);
                     for d in BondDelta::diff(id, &lhs[id], &new) {
@@ -805,11 +839,12 @@ impl ReactionInput {
                 }
                 DeltaInput::DativeBondRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_dative_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot remove dative bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.dative_bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "remove",
+                            kind: "dative bond",
+                            index: id.index(),
+                        });
                     }
                     let view = lhs.dative_bond(id);
                     resolved.push(Delta::DativeBond(DativeBondDelta::Remove {
@@ -821,11 +856,12 @@ impl ReactionInput {
                 }
                 DeltaInput::DativeBondModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_dative_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot modify dative bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.dative_bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "modify",
+                            kind: "dative bond",
+                            index: id.index(),
+                        });
                     }
                     let new = lhs[id].update(&rhs);
                     for d in DativeBondDelta::diff(id, &lhs[id], &new) {
@@ -847,11 +883,12 @@ impl ReactionInput {
                 }
                 DeltaInput::AromaticSystemRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_aromatic_system_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot remove aromatic system :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.aromatic_system_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "remove",
+                            kind: "aromatic system",
+                            index: id.index(),
+                        });
                     }
                     let view = lhs.aromatic_system(id);
                     resolved.push(Delta::AromaticSystem(AromaticSystemDelta::Remove {
@@ -862,11 +899,12 @@ impl ReactionInput {
                 }
                 DeltaInput::AromaticSystemModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_aromatic_system_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot modify aromatic system :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.aromatic_system_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "modify",
+                            kind: "aromatic system",
+                            index: id.index(),
+                        });
                     }
                     let new = lhs[id].update(&rhs);
                     for d in AromaticSystemDelta::diff(id, &lhs[id], &new) {
@@ -888,11 +926,12 @@ impl ReactionInput {
                 }
                 DeltaInput::MulticenterBondRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_multicenter_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot remove multicenter bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.multicenter_bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "remove",
+                            kind: "multicenter bond",
+                            index: id.index(),
+                        });
                     }
                     let view = lhs.multicenter_bond(id);
                     resolved.push(Delta::MulticenterBond(MulticenterBondDelta::Remove {
@@ -903,11 +942,12 @@ impl ReactionInput {
                 }
                 DeltaInput::MulticenterBondModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_multicenter_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot modify multicenter bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.multicenter_bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "modify",
+                            kind: "multicenter bond",
+                            index: id.index(),
+                        });
                     }
                     let new = lhs[id].update(&rhs);
                     for d in MulticenterBondDelta::diff(id, &lhs[id], &new) {
@@ -926,11 +966,12 @@ impl ReactionInput {
                 }
                 DeltaInput::NoncovalentBondRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_noncovalent_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot remove noncovalent bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.noncovalent_bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "remove",
+                            kind: "noncovalent bond",
+                            index: id.index(),
+                        });
                     }
                     resolved.push(Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                         id,
@@ -940,11 +981,12 @@ impl ReactionInput {
                 }
                 DeltaInput::NoncovalentBondModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_noncovalent_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot modify noncovalent bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.noncovalent_bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "modify",
+                            kind: "noncovalent bond",
+                            index: id.index(),
+                        });
                     }
                     let new = lhs[id].update(&rhs);
                     for d in NoncovalentBondDelta::diff(id, &lhs[id], &new) {
@@ -968,11 +1010,12 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoAtomRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_stereo_atom_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot remove stereo atom :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.stereo_atom_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "remove",
+                            kind: "stereo atom",
+                            index: id.index(),
+                        });
                     }
                     let view = lhs.stereo_atom(id);
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Remove {
@@ -987,11 +1030,12 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoAtomModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_stereo_atom_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot modify stereo atom :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.stereo_atom_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "modify",
+                            kind: "stereo atom",
+                            index: id.index(),
+                        });
                     }
                     let new = lhs[id].update(&rhs);
                     for d in StereoAtomDelta::diff(id, &lhs[id], &new) {
@@ -1000,31 +1044,34 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoAtomSwap(r, kind) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_stereo_atom_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot transform stereo atom :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.stereo_atom_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "transform",
+                            kind: "stereo atom",
+                            index: id.index(),
+                        });
                     }
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Swap { id, kind }));
                 }
                 DeltaInput::StereoAtomMirror(r, kind) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_stereo_atom_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot transform stereo atom :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.stereo_atom_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "transform",
+                            kind: "stereo atom",
+                            index: id.index(),
+                        });
                     }
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Mirror { id, kind }));
                 }
                 DeltaInput::StereoAtomApply(r, kind, permutation) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_stereo_atom_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot transform stereo atom :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.stereo_atom_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "transform",
+                            kind: "stereo atom",
+                            index: id.index(),
+                        });
                     }
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Apply {
                         id,
@@ -1049,11 +1096,12 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoBondRemove(r) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_stereo_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot remove stereo bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.stereo_bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "remove",
+                            kind: "stereo bond",
+                            index: id.index(),
+                        });
                     }
                     let view = lhs.stereo_bond(id);
                     resolved.push(Delta::StereoBond(StereoBondDelta::Remove {
@@ -1068,11 +1116,12 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoBondModify(r, rhs) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_stereo_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot modify stereo bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.stereo_bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "modify",
+                            kind: "stereo bond",
+                            index: id.index(),
+                        });
                     }
                     let new = lhs[id].update(&rhs);
                     for d in StereoBondDelta::diff(id, &lhs[id], &new) {
@@ -1081,31 +1130,34 @@ impl ReactionInput {
                 }
                 DeltaInput::StereoBondSwap(r, kind) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_stereo_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot transform stereo bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.stereo_bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "transform",
+                            kind: "stereo bond",
+                            index: id.index(),
+                        });
                     }
                     resolved.push(Delta::StereoBond(StereoBondDelta::Swap { id, kind }));
                 }
                 DeltaInput::StereoBondMirror(r, kind) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_stereo_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot transform stereo bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.stereo_bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "transform",
+                            kind: "stereo bond",
+                            index: id.index(),
+                        });
                     }
                     resolved.push(Delta::StereoBond(StereoBondDelta::Mirror { id, kind }));
                 }
                 DeltaInput::StereoBondApply(r, kind, permutation) => {
                     let id = r.resolve(&ns)?;
-                    if id.index() >= lhs_stereo_bond_count {
-                        return Err(ParseError::InvalidValue(format!(
-                            "cannot transform stereo bond :{} added in the same reaction",
-                            id.index()
-                        )));
+                    if ns.stereo_bond_origin(id) == EntityOrigin::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "transform",
+                            kind: "stereo bond",
+                            index: id.index(),
+                        });
                     }
                     resolved.push(Delta::StereoBond(StereoBondDelta::Apply {
                         id,
@@ -3154,7 +3206,14 @@ mod tests {
             .unwrap()
             .into_ast()
             .unwrap_err();
-        assert!(matches!(err, ParseError::InvalidValue(_)));
+        assert_eq!(
+            err,
+            ParseError::DeltaTargetAdded {
+                action: "remove",
+                kind: "atom",
+                index: 1
+            }
+        );
     }
 
     // A delta :id must be disjoint from every id already bound — lhs entities and earlier deltas alike.
@@ -3250,7 +3309,14 @@ mod tests {
             .unwrap()
             .into_ast()
             .unwrap_err();
-        assert!(matches!(err, ParseError::InvalidValue(_)));
+        assert_eq!(
+            err,
+            ParseError::DeltaTargetAdded {
+                action: "remove",
+                kind: "bond",
+                index: 0
+            }
+        );
     }
 
     #[rstest]

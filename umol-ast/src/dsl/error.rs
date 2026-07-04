@@ -63,6 +63,12 @@ pub enum ParseError {
     InvalidValue(String),
     #[error("invalid {kind} ref: {value}")]
     InvalidRef { kind: &'static str, value: String },
+    #[error("cannot {action} {kind} :{index} added in the same reaction")]
+    DeltaTargetAdded {
+        action: &'static str,
+        kind: &'static str,
+        index: usize,
+    },
     #[error("{field}: expected {expected}")]
     WrongFieldType { field: String, expected: String },
 }
