@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use rstest::rstest;
-use umol_edn::{read_string, Edn, FromEdn, ToEdn};
+use umol_edn::{read_string, DeError, Edn, FromEdn, ToEdn};
 
 // ---------------------------------------------------------------------------
 // Unit enum
@@ -179,7 +179,7 @@ fn test_struct_missing_required_field() {
 struct Priority(u8);
 
 impl<'de> FromEdn<'de> for Priority {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, umol_edn::DeError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         Ok(Priority(u8::from_edn(edn)?))
     }
 }

@@ -6,7 +6,6 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use indexmap::IndexMap;
 use umol_edn::{
     read_string, DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn,
 };
@@ -19,7 +18,7 @@ use super::aromatic::AromaticSystemDsl;
 use super::atom::AtomDsl;
 use super::bond::BondDsl;
 use super::config::MoleculeDefaults;
-use super::constraint::{ConstraintDsl, EntityCounts};
+use super::constraint::ConstraintDsl;
 use super::dative::DativeBondDsl;
 use super::edn_utils::{
     optional_id, pair, parse_vec, read_map, read_vec, required_key, single_key_map, two_atom_refs,
@@ -31,10 +30,10 @@ use super::molecule::{
     parse_stereo_atom_entry, parse_stereo_bond_entry, read_atom_aliases, render_aromatic_entry,
     render_atom_value, render_bond_entry, render_dative_entry, render_multicenter_entry,
     render_noncovalent_entry, render_stereo_atom_entry, render_stereo_bond_entry,
-    render_stereo_ligand, resolve_atom_spec, AtomSpecInput, MoleculeMetadata,
+    render_stereo_ligand, AtomSpecInput, MoleculeMetadata,
 };
 use super::multicenter::MulticenterBondDsl;
-use super::namespace::MoleculeNamespace;
+use super::namespace::{MoleculeNamespace, Namespace};
 use super::noncovalent::NoncovalentBondDsl;
 use super::refs::{parse_stereo_ligand, AtomRef, BondRef, StereoLigandRef};
 use super::stereo::{StereoAtomDsl, StereoBondDsl};
@@ -868,33 +867,41 @@ fn read_span_input(de: &mut EdnStreamDeserializer<'_>) -> Result<SpanInput, EdnE
 
 fn resolve_atom_span(
     span: EntitySpan<AtomSpecInput>,
-    aliases: &IndexMap<String, Box<AtomDsl>>,
+    namespace: &MoleculeNamespace,
 ) -> Result<EntitySpan<AtomAst>, ParseError> {
+    let resolve = |spec: AtomSpecInput| -> Result<AtomAst, ParseError> {
+        match spec {
+            AtomSpecInput::Bare(dsl) => Ok(dsl.0),
+            AtomSpecInput::Alias(name) => match namespace.find_atom_alias(&name) {
+                Some(dsl) => Ok(dsl.0.clone()),
+                None => Err(ParseError::InvalidValue(format!(
+                    "unknown atom alias :{name}"
+                ))),
+            },
+        }
+    };
     Ok(match span {
-        EntitySpan::Unchanged(s) => EntitySpan::Unchanged(resolve_atom_spec(s, aliases)?),
-        EntitySpan::Added(s) => EntitySpan::Added(resolve_atom_spec(s, aliases)?),
-        EntitySpan::Removed(s) => EntitySpan::Removed(resolve_atom_spec(s, aliases)?),
+        EntitySpan::Unchanged(s) => EntitySpan::Unchanged(resolve(s)?),
+        EntitySpan::Added(s) => EntitySpan::Added(resolve(s)?),
+        EntitySpan::Removed(s) => EntitySpan::Removed(resolve(s)?),
         EntitySpan::Modified {
             lhs: left,
             rhs: right,
         } => EntitySpan::Modified {
-            lhs: resolve_atom_spec(left, aliases)?,
-            rhs: resolve_atom_spec(right, aliases)?,
+            lhs: resolve(left)?,
+            rhs: resolve(right)?,
         },
     })
 }
 
 fn resolve_constraint_span(
     input: ConstraintSpanInput,
-    counts: &EntityCounts,
-    meta: &MoleculeMetadata,
+    namespace: &MoleculeNamespace,
 ) -> Result<ConstraintSpan, ParseError> {
     Ok(match input {
-        ConstraintSpanInput::Unchanged(dsl) => {
-            ConstraintSpan::Unchanged(dsl.into_ast(counts, meta)?)
-        }
-        ConstraintSpanInput::Added(dsl) => ConstraintSpan::Added(dsl.into_ast(counts, meta)?),
-        ConstraintSpanInput::Removed(dsl) => ConstraintSpan::Removed(dsl.into_ast(counts, meta)?),
+        ConstraintSpanInput::Unchanged(dsl) => ConstraintSpan::Unchanged(dsl.into_ast(namespace)?),
+        ConstraintSpanInput::Added(dsl) => ConstraintSpan::Added(dsl.into_ast(namespace)?),
+        ConstraintSpanInput::Removed(dsl) => ConstraintSpan::Removed(dsl.into_ast(namespace)?),
     })
 }
 
@@ -907,55 +914,29 @@ impl SpanInput {
         let atom_count = self.atoms.len();
         let bond_count = self.bonds.len();
 
-        // Namespace: inline ids onto the union positions, then the bijective alias table.
-        // `namespace` (grown alongside `metadata`) is this span's own parse-time namespace — S2e
-        // grows it so S3 can resolve structural refs against it; nothing reads it yet.
-        let mut metadata = MoleculeMetadata::default();
+        // The span's namespace: atoms take the union positions as their ids, then the bijective
+        // aliases. Every ref resolves against it; `register_*` enforces id-disjointness, and the
+        // roundtrip `MoleculeMetadata` is projected from it at the end.
         let mut namespace = MoleculeNamespace::default();
-        for (index, (id, _)) in self.atoms.iter().enumerate() {
-            namespace.register_atom(id.clone());
-            if let Some(name) = id {
-                if metadata.contains_id(name) {
-                    return Err(ParseError::DuplicateId(name.clone()));
-                }
-                metadata.set_atom_id(AtomId(index as u32), name.clone());
-            }
+        for (id, _) in self.atoms.iter() {
+            namespace.register_atom(id.clone())?;
         }
-        for (index, (id, _, _)) in self.bonds.iter().enumerate() {
-            if let Some(name) = id {
-                if metadata.contains_id(name) {
-                    return Err(ParseError::DuplicateId(name.clone()));
-                }
-                metadata.set_bond_id(BondId(index as u32), name.clone());
-            }
-        }
-        let mut aliases: IndexMap<String, Box<AtomDsl>> = IndexMap::new();
         for (name, dsl) in self.atom_aliases {
-            if aliases.contains_key(&name) || metadata.contains_id(&name) {
-                return Err(ParseError::DuplicateId(name));
-            }
-            if aliases.values().any(|existing| existing == &dsl) {
-                return Err(ParseError::InvalidValue(
-                    "atom-aliases must be bijective: two names map to the same atom".into(),
-                ));
-            }
-            metadata.add_atom_alias(name.clone(), (*dsl).clone());
-            namespace.register_atom_alias(name.clone(), dsl.clone());
-            aliases.insert(name, dsl);
+            namespace.register_atom_alias(name, dsl)?;
         }
 
         // Resolve atoms (alias → AtomAst), bonds (endpoints + value), constraints.
         let mut atoms: Vec<EntitySpan<AtomAst>> = Vec::with_capacity(atom_count);
         for (_, span) in self.atoms {
-            atoms.push(resolve_atom_span(span, &aliases)?);
+            atoms.push(resolve_atom_span(span, &namespace)?);
         }
         let mut bonds: Vec<EntitySpan<BondAst>> = Vec::with_capacity(bond_count);
         let mut endpoints: Vec<[AtomId; 2]> = Vec::with_capacity(bond_count);
         let mut edges: Vec<[u32; 2]> = Vec::with_capacity(bond_count);
         for (id_name, [ref_a, ref_b], span) in self.bonds {
-            let a = ref_a.into_ast(atom_count, &metadata)?;
-            let b = ref_b.into_ast(atom_count, &metadata)?;
-            namespace.register_bond(id_name, a, b);
+            let a = ref_a.resolve(&namespace)?;
+            let b = ref_b.resolve(&namespace)?;
+            namespace.register_bond(id_name, a, b)?;
             edges.push([a.index() as u32, b.index() as u32]);
             endpoints.push([a, b]);
             bonds.push(span);
@@ -1007,17 +988,11 @@ impl SpanInput {
         // Dative bonds: `[acceptor]` fixed side, donors var side.
         let mut dative_entries: Vec<([NodeId; 1], Vec<NodeId>, EntitySpan<DativeBondAst>)> =
             Vec::with_capacity(self.dative_bonds.len());
-        for (pos, (id, donors, acceptor, span)) in self.dative_bonds.into_iter().enumerate() {
-            if let Some(name) = &id {
-                if metadata.contains_id(name) {
-                    return Err(ParseError::DuplicateId(name.clone()));
-                }
-                metadata.set_dative_bond_id(DativeBondId(pos as u32), name.clone());
-            }
-            let acceptor_id = acceptor.into_ast(atom_count, &metadata)?;
+        for (id, donors, acceptor, span) in self.dative_bonds {
+            let acceptor_id = acceptor.resolve(&namespace)?;
             let donor_ids: Vec<AtomId> = donors
                 .into_iter()
-                .map(|d| d.into_ast(atom_count, &metadata))
+                .map(|d| d.resolve(&namespace))
                 .collect::<Result<_, _>>()?;
             let mut participants = Vec::with_capacity(donor_ids.len() + 1);
             participants.push(acceptor_id);
@@ -1028,7 +1003,7 @@ impl SpanInput {
                 &participants,
                 "dative bond",
             )?;
-            namespace.register_dative_bond(id, &donor_ids, acceptor_id);
+            namespace.register_dative_bond(id, &donor_ids, acceptor_id)?;
             dative_entries.push((
                 [NodeId::from(acceptor_id)],
                 donor_ids.iter().map(|&a| NodeId::from(a)).collect(),
@@ -1040,16 +1015,10 @@ impl SpanInput {
         // Aromatic systems.
         let mut aromatic_entries: Vec<(Vec<NodeId>, EntitySpan<AromaticSystemAst>)> =
             Vec::with_capacity(self.aromatic_systems.len());
-        for (pos, (id, atoms_ref, span)) in self.aromatic_systems.into_iter().enumerate() {
-            if let Some(name) = &id {
-                if metadata.contains_id(name) {
-                    return Err(ParseError::DuplicateId(name.clone()));
-                }
-                metadata.set_aromatic_system_id(AromaticSystemId(pos as u32), name.clone());
-            }
+        for (id, atoms_ref, span) in self.aromatic_systems {
             let atom_ids: Vec<AtomId> = atoms_ref
                 .into_iter()
-                .map(|r| r.into_ast(atom_count, &metadata))
+                .map(|r| r.resolve(&namespace))
                 .collect::<Result<_, _>>()?;
             side_ok(
                 span.lhs().is_some(),
@@ -1057,7 +1026,7 @@ impl SpanInput {
                 &atom_ids,
                 "aromatic system",
             )?;
-            namespace.register_aromatic_system(id, &atom_ids);
+            namespace.register_aromatic_system(id, &atom_ids)?;
             aromatic_entries.push((atom_ids.iter().map(|&a| NodeId::from(a)).collect(), span));
         }
         let aromatic_systems = VarRelationSet::new(aromatic_entries);
@@ -1065,16 +1034,10 @@ impl SpanInput {
         // Multicenter bonds.
         let mut multicenter_entries: Vec<(Vec<NodeId>, EntitySpan<MulticenterBondAst>)> =
             Vec::with_capacity(self.multicenter_bonds.len());
-        for (pos, (id, atoms_ref, span)) in self.multicenter_bonds.into_iter().enumerate() {
-            if let Some(name) = &id {
-                if metadata.contains_id(name) {
-                    return Err(ParseError::DuplicateId(name.clone()));
-                }
-                metadata.set_multicenter_bond_id(MulticenterBondId(pos as u32), name.clone());
-            }
+        for (id, atoms_ref, span) in self.multicenter_bonds {
             let atom_ids: Vec<AtomId> = atoms_ref
                 .into_iter()
-                .map(|r| r.into_ast(atom_count, &metadata))
+                .map(|r| r.resolve(&namespace))
                 .collect::<Result<_, _>>()?;
             side_ok(
                 span.lhs().is_some(),
@@ -1082,7 +1045,7 @@ impl SpanInput {
                 &atom_ids,
                 "multicenter bond",
             )?;
-            namespace.register_multicenter_bond(id, &atom_ids);
+            namespace.register_multicenter_bond(id, &atom_ids)?;
             multicenter_entries.push((atom_ids.iter().map(|&a| NodeId::from(a)).collect(), span));
         }
         let multicenter_bonds = VarRelationSet::new(multicenter_entries);
@@ -1090,22 +1053,16 @@ impl SpanInput {
         // Noncovalent bonds.
         let mut noncovalent_entries: Vec<([NodeId; 2], EntitySpan<NoncovalentBondAst>)> =
             Vec::with_capacity(self.noncovalent_bonds.len());
-        for (pos, (id, [first, second], span)) in self.noncovalent_bonds.into_iter().enumerate() {
-            if let Some(name) = &id {
-                if metadata.contains_id(name) {
-                    return Err(ParseError::DuplicateId(name.clone()));
-                }
-                metadata.set_noncovalent_bond_id(NoncovalentBondId(pos as u32), name.clone());
-            }
-            let a = first.into_ast(atom_count, &metadata)?;
-            let b = second.into_ast(atom_count, &metadata)?;
+        for (id, [first, second], span) in self.noncovalent_bonds {
+            let a = first.resolve(&namespace)?;
+            let b = second.resolve(&namespace)?;
             side_ok(
                 span.lhs().is_some(),
                 span.rhs().is_some(),
                 &[a, b],
                 "noncovalent bond",
             )?;
-            namespace.register_noncovalent_bond(id, a, b);
+            namespace.register_noncovalent_bond(id, a, b)?;
             noncovalent_entries.push(([NodeId::from(a), NodeId::from(b)], span));
         }
         let noncovalent_bonds = FixedRelationSet::new(noncovalent_entries);
@@ -1116,18 +1073,12 @@ impl SpanInput {
             Vec<StereoLigand>,
             EntitySpan<StereoAtomAst>,
         )> = Vec::with_capacity(self.stereo_atoms.len());
-        for (pos, (id, site, ligands, span)) in self.stereo_atoms.into_iter().enumerate() {
-            if let Some(name) = &id {
-                if metadata.contains_id(name) {
-                    return Err(ParseError::DuplicateId(name.clone()));
-                }
-                metadata.set_stereo_atom_id(StereoAtomId(pos as u32), name.clone());
-            }
-            let site_id = site.into_ast(atom_count, &metadata)?;
+        for (id, site, ligands, span) in self.stereo_atoms {
+            let site_id = site.resolve(&namespace)?;
             let mut participants = vec![site_id];
             let mut ligand_frame = Vec::with_capacity(ligands.len());
             for l in ligands {
-                let a = l.atom.into_ast(atom_count, &metadata)?;
+                let a = l.atom.resolve(&namespace)?;
                 participants.push(a);
                 ligand_frame.push(StereoLigand::new(a, l.kind));
             }
@@ -1137,7 +1088,7 @@ impl SpanInput {
                 &participants,
                 "stereo atom",
             )?;
-            namespace.register_stereo_atom(id, site_id, &ligand_frame);
+            namespace.register_stereo_atom(id, site_id, &ligand_frame)?;
             stereo_atom_entries.push(([NodeId::from(site_id)], ligand_frame, span));
         }
         let stereo_atoms = FixedVarBirelationSet::new(stereo_atom_entries);
@@ -1149,18 +1100,12 @@ impl SpanInput {
             Vec<StereoLigand>,
             EntitySpan<StereoBondAst>,
         )> = Vec::with_capacity(self.stereo_bonds.len());
-        for (pos, (id, site, ligands, span)) in self.stereo_bonds.into_iter().enumerate() {
-            if let Some(name) = &id {
-                if metadata.contains_id(name) {
-                    return Err(ParseError::DuplicateId(name.clone()));
-                }
-                metadata.set_stereo_bond_id(StereoBondId(pos as u32), name.clone());
-            }
-            let site_id = site.into_ast(bond_count, &metadata)?;
+        for (id, site, ligands, span) in self.stereo_bonds {
+            let site_id = site.resolve(&namespace)?;
             let mut ligand_atoms = Vec::with_capacity(ligands.len());
             let mut ligand_frame = Vec::with_capacity(ligands.len());
             for l in ligands {
-                let a = l.atom.into_ast(atom_count, &metadata)?;
+                let a = l.atom.resolve(&namespace)?;
                 ligand_atoms.push(a);
                 ligand_frame.push(StereoLigand::new(a, l.kind));
             }
@@ -1186,27 +1131,18 @@ impl SpanInput {
                         .into(),
                 ));
             }
-            namespace.register_stereo_bond(id, site_id, &ligand_frame);
+            namespace.register_stereo_bond(id, site_id, &ligand_frame)?;
             stereo_bond_entries.push(([EdgeId::from(site_id)], ligand_frame, span));
         }
         let stereo_bonds = FixedVarBirelationSet::new(stereo_bond_entries);
 
-        let counts = EntityCounts {
-            atom_count,
-            bond_count,
-            dative_bond_count: dative_bonds.relation_count(),
-            aromatic_system_count: aromatic_systems.relation_count(),
-            multicenter_bond_count: multicenter_bonds.relation_count(),
-            noncovalent_bond_count: noncovalent_bonds.relation_count(),
-            stereo_atom_count: stereo_atoms.relation_count(),
-            stereo_bond_count: stereo_bonds.relation_count(),
-        };
         let mut constraints: Vec<ConstraintSpan> = Vec::with_capacity(self.constraints.len());
         for input in self.constraints {
-            constraints.push(resolve_constraint_span(input, &counts, &metadata)?);
+            constraints.push(resolve_constraint_span(input, &namespace)?);
         }
 
         let graph = Graph::new(atom_count, &edges);
+        let metadata = MoleculeMetadata::from(&namespace);
         Ok((
             ReactionSpanAst::from_parts(
                 graph,

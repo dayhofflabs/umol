@@ -3,6 +3,7 @@
 use std::ptr::eq;
 
 use nalgebra::{Matrix3, Vector3};
+use umol_msym_sys::{MSYM_INVALID_SUBGROUPS, MSYM_POINT_GROUP_ERROR};
 
 use crate::basis::{BasisFunction, IrrepBasis, Salc, SalcBasis};
 use crate::context::Context;
@@ -56,7 +57,7 @@ pub fn detect_symmetry(
     ctx.set_thresholds(&thresholds)?;
     match ctx.find_symmetry() {
         Ok(()) => {}
-        Err(e) if e.code == umol_msym_sys::MSYM_POINT_GROUP_ERROR => {
+        Err(e) if e.code == MSYM_POINT_GROUP_ERROR => {
             return Ok(c1_result(centers));
         }
         Err(e) => return Err(e),
@@ -88,7 +89,7 @@ pub fn symmetrize(
     ctx.set_thresholds(&thresholds)?;
     match ctx.find_symmetry() {
         Ok(()) => {}
-        Err(e) if e.code == umol_msym_sys::MSYM_POINT_GROUP_ERROR => {
+        Err(e) if e.code == MSYM_POINT_GROUP_ERROR => {
             return Ok(c1_result(centers));
         }
         Err(e) => return Err(e),
@@ -216,7 +217,7 @@ pub fn lower_symmetry(
         let detected = ctx2.point_group_symbol()?;
         if detected != target {
             return Err(MsymError {
-                code: umol_msym_sys::MSYM_INVALID_SUBGROUPS,
+                code: MSYM_INVALID_SUBGROUPS,
                 message: format!(
                     "{target} is not a subgroup of {}, or the molecule cannot be perceived under it",
                     parent_group.symbol()
@@ -244,7 +245,7 @@ pub fn lower_symmetry(
         .iter()
         .find(|sg| sg.symbol() == target)
         .ok_or_else(|| MsymError {
-            code: umol_msym_sys::MSYM_INVALID_SUBGROUPS,
+            code: MSYM_INVALID_SUBGROUPS,
             message: format!("{target} is not a subgroup of {}", parent_group.symbol()),
         })?
         .clone();

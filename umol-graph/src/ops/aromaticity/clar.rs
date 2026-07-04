@@ -12,7 +12,7 @@ use umol_ast::ast::{
     AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet, SpinStateAst,
 };
 use umol_chem::element::Element;
-use umol_graph_core::Graph;
+use umol_graph_core::{Graph, MaxIndependentSetAlgorithm};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ClarError {
@@ -117,8 +117,8 @@ fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingId]) -> Vec<RingId
     }
 
     let conflict_graph = Graph::new(n, &edges);
-    let selected = conflict_graph
-        .maximum_independent_set(umol_graph_core::MaxIndependentSetAlgorithm::BranchAndBound);
+    let selected =
+        conflict_graph.maximum_independent_set(MaxIndependentSetAlgorithm::BranchAndBound);
     selected
         .into_iter()
         .map(|node_id| candidates[node_id.index()])

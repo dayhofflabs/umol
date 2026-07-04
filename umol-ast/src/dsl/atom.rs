@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use strum::IntoEnumIterator;
 use umol_chem::element::Element;
-use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::{dec_uint, multispace0};
 use winnow::combinator::{alt, delimited, empty, opt, preceded, repeat, separated, terminated};
 use winnow::error::{ErrMode, ParserError};
@@ -994,10 +994,10 @@ impl ToEdn for AromaticValenceDsl {
     fn to_edn(&self) -> Edn<'static> {
         match &self.0 {
             AromaticValenceAst::Undetermined => {
-                Edn::Keyword(umol_edn::EdnKeyword::owned("undetermined".into()))
+                Edn::Keyword(EdnKeyword::owned("undetermined".into()))
             }
             AromaticValenceAst::NotAromatic => {
-                Edn::Keyword(umol_edn::EdnKeyword::owned("not-aromatic".into()))
+                Edn::Keyword(EdnKeyword::owned("not-aromatic".into()))
             }
             AromaticValenceAst::Aromatic(v) => {
                 single_key_map("aromatic", ValueDsl::from_ast(v, &()).to_edn())
@@ -1068,10 +1068,10 @@ impl ToEdn for MulticenterValenceDsl {
     fn to_edn(&self) -> Edn<'static> {
         match &self.0 {
             MulticenterValenceAst::Undetermined => {
-                Edn::Keyword(umol_edn::EdnKeyword::owned("undetermined".into()))
+                Edn::Keyword(EdnKeyword::owned("undetermined".into()))
             }
             MulticenterValenceAst::NotMulticenter => {
-                Edn::Keyword(umol_edn::EdnKeyword::owned("not-multicenter".into()))
+                Edn::Keyword(EdnKeyword::owned("not-multicenter".into()))
             }
             MulticenterValenceAst::Multicenter(v) => {
                 single_key_map("multicenter", ValueDsl::from_ast(v, &()).to_edn())

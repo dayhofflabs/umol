@@ -25,7 +25,7 @@ use super::aromatic::AromaticSystemDsl;
 use super::atom::AtomDsl;
 use super::bond::{expand_bond_keyword, BondDsl};
 use super::config::MoleculeDefaults;
-use super::constraint::{read_constraints_dsl, ConstraintDsl, ConstraintsDsl, EntityCounts};
+use super::constraint::{read_constraints_dsl, ConstraintDsl, ConstraintsDsl};
 use super::dative::DativeBondDsl;
 use super::edn_utils::{
     atoms_pair, atoms_vec, eof_err, missing, optional_id, parse_vec, read_map, read_vec,
@@ -132,6 +132,7 @@ impl<'de> FromEdn<'de> for MoleculeDsl {
 /// Surface-form metadata paired with a `MoleculeAst`. Records entity ids, atom aliases,
 /// entity ids, `MoleculeDsl` keeps both fields private and rewraps atomically
 /// through `from_parts`.
+/// TODO: Review API, harmonize with `MoleculeNamespace`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MoleculeMetadata {
     atom_ids: IndexMap<AtomId, String>,
@@ -315,37 +316,79 @@ impl MoleculeMetadata {
     }
 }
 
+/// The **render** query surface — `ref::from_ast` reads this to turn an AST id back into a surface
+/// ref (id → keyword, else index). The mirror of `Namespace`: `MoleculeMetadata` implements it, and
+/// later a reaction's `ReactionMetadata`. `from_ast` never emits the structural form, so `Metadata`
+/// carries no participant index — it is a subset of the namespace surface.
+pub trait Metadata {
+    fn atom_id(&self, id: AtomId) -> Option<&str>;
+    fn bond_id(&self, id: BondId) -> Option<&str>;
+    fn dative_bond_id(&self, id: DativeBondId) -> Option<&str>;
+    fn aromatic_system_id(&self, id: AromaticSystemId) -> Option<&str>;
+    fn multicenter_bond_id(&self, id: MulticenterBondId) -> Option<&str>;
+    fn noncovalent_bond_id(&self, id: NoncovalentBondId) -> Option<&str>;
+    fn stereo_atom_id(&self, id: StereoAtomId) -> Option<&str>;
+    fn stereo_bond_id(&self, id: StereoBondId) -> Option<&str>;
+}
+
+impl Metadata for MoleculeMetadata {
+    fn atom_id(&self, id: AtomId) -> Option<&str> {
+        self.atom_id(id)
+    }
+    fn bond_id(&self, id: BondId) -> Option<&str> {
+        self.bond_id(id)
+    }
+    fn dative_bond_id(&self, id: DativeBondId) -> Option<&str> {
+        self.dative_bond_id(id)
+    }
+    fn aromatic_system_id(&self, id: AromaticSystemId) -> Option<&str> {
+        self.aromatic_system_id(id)
+    }
+    fn multicenter_bond_id(&self, id: MulticenterBondId) -> Option<&str> {
+        self.multicenter_bond_id(id)
+    }
+    fn noncovalent_bond_id(&self, id: NoncovalentBondId) -> Option<&str> {
+        self.noncovalent_bond_id(id)
+    }
+    fn stereo_atom_id(&self, id: StereoAtomId) -> Option<&str> {
+        self.stereo_atom_id(id)
+    }
+    fn stereo_bond_id(&self, id: StereoBondId) -> Option<&str> {
+        self.stereo_bond_id(id)
+    }
+}
+
 impl From<&MoleculeNamespace> for MoleculeMetadata {
-    /// Project the namespace to its roundtrip subset: the eight `id → name` maps (the inverse of the
-    /// namespace's `by_name`) plus the atom aliases. The namespace is the source of truth; this is the
-    /// derived view — parse-only data (participant indexes, counts) is dropped.
+    /// Project the namespace to its roundtrip subset: the eight `id → keyword` maps (the inverse of
+    /// the namespace's `find_by_keyword`) plus the atom aliases. The namespace is the source of truth;
+    /// this is the derived view — parse-only data (participant indexes, counts) is dropped.
     fn from(namespace: &MoleculeNamespace) -> Self {
         let mut metadata = MoleculeMetadata::new();
-        for (id, name) in namespace.atom_names() {
-            metadata.set_atom_id(id, name);
+        for (id, keyword) in namespace.atom_keywords() {
+            metadata.set_atom_id(id, keyword);
         }
-        for (id, name) in namespace.bond_names() {
-            metadata.set_bond_id(id, name);
+        for (id, keyword) in namespace.bond_keywords() {
+            metadata.set_bond_id(id, keyword);
         }
-        for (id, name) in namespace.dative_bond_names() {
-            metadata.set_dative_bond_id(id, name);
+        for (id, keyword) in namespace.dative_bond_keywords() {
+            metadata.set_dative_bond_id(id, keyword);
         }
-        for (id, name) in namespace.aromatic_system_names() {
-            metadata.set_aromatic_system_id(id, name);
+        for (id, keyword) in namespace.aromatic_system_keywords() {
+            metadata.set_aromatic_system_id(id, keyword);
         }
-        for (id, name) in namespace.multicenter_bond_names() {
-            metadata.set_multicenter_bond_id(id, name);
+        for (id, keyword) in namespace.multicenter_bond_keywords() {
+            metadata.set_multicenter_bond_id(id, keyword);
         }
-        for (id, name) in namespace.noncovalent_bond_names() {
-            metadata.set_noncovalent_bond_id(id, name);
+        for (id, keyword) in namespace.noncovalent_bond_keywords() {
+            metadata.set_noncovalent_bond_id(id, keyword);
         }
-        for (id, name) in namespace.stereo_atom_names() {
-            metadata.set_stereo_atom_id(id, name);
+        for (id, keyword) in namespace.stereo_atom_keywords() {
+            metadata.set_stereo_atom_id(id, keyword);
         }
-        for (id, name) in namespace.stereo_bond_names() {
-            metadata.set_stereo_bond_id(id, name);
+        for (id, keyword) in namespace.stereo_bond_keywords() {
+            metadata.set_stereo_bond_id(id, keyword);
         }
-        for (name, dsl) in namespace.iter_atom_aliases() {
+        for (name, dsl) in namespace.atom_aliases() {
             metadata.add_atom_alias(name, dsl.clone());
         }
         metadata
@@ -1394,7 +1437,7 @@ impl MoleculeInput {
         let mut namespace = MoleculeNamespace::default();
         let mut atom_id_to_idx: IndexMap<String, AtomId> = IndexMap::new();
         for (pos, entry) in atom_entries.into_iter().enumerate() {
-            namespace.register_atom(entry.id.clone());
+            namespace.register_atom(entry.id.clone())?;
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
                 atom_id_to_idx.insert(id, AtomId(pos as u32));
@@ -1417,7 +1460,7 @@ impl MoleculeInput {
             }
             let a = entry.first.resolve(&namespace)?;
             let b = entry.second.resolve(&namespace)?;
-            namespace.register_bond(id_name, a, b);
+            namespace.register_bond(id_name, a, b)?;
             bonds.push((a, b, entry.bond.0));
         }
 
@@ -1443,7 +1486,7 @@ impl MoleculeInput {
                 ));
             }
             let acceptor = entry.acceptor.resolve(&namespace)?;
-            namespace.register_dative_bond(id_name, &donors, acceptor);
+            namespace.register_dative_bond(id_name, &donors, acceptor)?;
             dative_list.push((donors, acceptor, entry.bond.0));
         }
 
@@ -1463,7 +1506,7 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|r| r.resolve(&namespace))
                 .collect::<Result<_, _>>()?;
-            namespace.register_aromatic_system(id_name, &atoms_resolved);
+            namespace.register_aromatic_system(id_name, &atoms_resolved)?;
             aromatic_list.push((atoms_resolved, entry.system.0));
         }
 
@@ -1483,7 +1526,7 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|r| r.resolve(&namespace))
                 .collect::<Result<_, _>>()?;
-            namespace.register_multicenter_bond(id_name, &atoms_resolved);
+            namespace.register_multicenter_bond(id_name, &atoms_resolved)?;
             multicenter_list.push((atoms_resolved, entry.bond.0));
         }
 
@@ -1500,7 +1543,7 @@ impl MoleculeInput {
             }
             let first = entry.first.resolve(&namespace)?;
             let second = entry.second.resolve(&namespace)?;
-            namespace.register_noncovalent_bond(id_name, first, second);
+            namespace.register_noncovalent_bond(id_name, first, second)?;
             noncovalent_list.push((first, second, entry.bond.0));
         }
 
@@ -1521,7 +1564,7 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|l| Ok(StereoLigand::new(l.atom.resolve(&namespace)?, l.kind)))
                 .collect::<Result<_, ParseError>>()?;
-            namespace.register_stereo_atom(id_name, site, &ligands);
+            namespace.register_stereo_atom(id_name, site, &ligands)?;
             stereo_atom_list.push((site, ligands, entry.stereo.0));
         }
 
@@ -1542,7 +1585,7 @@ impl MoleculeInput {
                 .into_iter()
                 .map(|l| Ok(StereoLigand::new(l.atom.resolve(&namespace)?, l.kind)))
                 .collect::<Result<_, ParseError>>()?;
-            namespace.register_stereo_bond(id_name, site, &ligands);
+            namespace.register_stereo_bond(id_name, site, &ligands)?;
             stereo_bond_list.push((site, ligands, entry.stereo.0));
         }
 
@@ -1550,24 +1593,12 @@ impl MoleculeInput {
         // `parse_aliases` dedup; the namespace's `BiBTreeMap` is last-wins on
         // duplicate atom-dsl, which can't fire here.
         for (name, dsl) in alias_table {
-            namespace.register_atom_alias(name, dsl);
+            namespace.register_atom_alias(name, dsl)?;
         }
 
-        // The namespace is now complete; `MoleculeMetadata` is its roundtrip projection. Constraint
-        // resolution still takes `&metadata` + `&counts` (both sourced from the namespace) until S3
-        // moves it onto the namespace directly.
-        let counts = EntityCounts {
-            atom_count: namespace.atom_count(),
-            bond_count: namespace.bond_count(),
-            dative_bond_count: namespace.dative_bond_count(),
-            aromatic_system_count: namespace.aromatic_system_count(),
-            multicenter_bond_count: namespace.multicenter_bond_count(),
-            noncovalent_bond_count: namespace.noncovalent_bond_count(),
-            stereo_atom_count: namespace.stereo_atom_count(),
-            stereo_bond_count: namespace.stereo_bond_count(),
-        };
-        let metadata = MoleculeMetadata::from(&namespace);
-        let constraints = ConstraintsDsl(constraint_dsls).into_ast(&counts, &metadata)?;
+        // The namespace is complete; constraints resolve against it directly. `MoleculeMetadata` is
+        // projected only at the DSL boundary, not here.
+        let constraints = ConstraintsDsl(constraint_dsls).into_ast(&namespace)?;
 
         let ast = MoleculeAst::from_parts(
             atoms,

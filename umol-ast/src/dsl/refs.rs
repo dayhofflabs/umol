@@ -1,22 +1,22 @@
 //! Surface-level entity references. Each ref is a positional index (`Edn::Int`),
 //! a symbolic id keyword (`Edn::Keyword`), or — for non-atom entities — a
 //! *structural* form (`Edn::Map`) naming the entity by its constituent atoms /
-//! bonds. `resolve` turns a ref into an AST id against the parse-time
-//! `MoleculeNamespace` (count for index bounds, `by_name` for id keywords,
-//! `by_participants` for the structural form); `from_ast` renders an id back to a
-//! ref against the `MoleculeMetadata` roundtrip projection.
+//! bonds. `resolve` turns a ref into an AST id against any parse-time `Namespace`
+//! (count for index bounds, `find_by_keyword` for id keywords,
+//! `find_by_participants` for the structural form); `from_ast` renders an id back
+//! to a ref against the `MoleculeMetadata` roundtrip projection.
 
 // Only atom- and bond-ref resolution (the molecule entry loops) consumes the namespace path so far;
 // the other five refs' `resolve` and their structural resolvers are wired when constraint /
 // relational / reaction resolution migrates off `into_ast(metadata)`.
 #![allow(dead_code)]
 
-use umol_edn::{DeError, Edn, EdnError, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
 use super::edn_utils::{atoms_pair, atoms_vec, eof_err, parse_vec, required_key};
 use super::error::ParseError;
-use super::molecule::MoleculeMetadata;
-use super::namespace::MoleculeNamespace;
+use super::molecule::{Metadata, MoleculeMetadata};
+use super::namespace::Namespace;
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -25,7 +25,7 @@ use crate::ast::ligand::{StereoLigand, StereoLigandKind};
 
 macro_rules! define_ref {
     ($name:ident, $id:ident, $accessor:ident, $kind:literal, $reader:ident,
-        $count:ident, $by_name:ident
+        $count:ident, $find_by_keyword:ident
         $(, structural = $payload:ty, $parse_structural:ident, $resolve_structural:ident)?) => {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         pub enum $name {
@@ -37,7 +37,7 @@ macro_rules! define_ref {
         impl $name {
             /// Build a ref from an AST index, preferring an id from `metadata`
             /// if one is recorded for this index.
-            pub fn from_ast(id: $id, metadata: &MoleculeMetadata) -> Self {
+            pub fn from_ast<M: Metadata>(id: $id, metadata: &M) -> Self {
                 if let Some(name) = metadata.$accessor(id) {
                     Self::Id(name.to_string())
                 } else {
@@ -88,7 +88,7 @@ macro_rules! define_ref {
             /// Resolve this ref to an AST id against the parse-time `namespace`
             /// (the source of truth: count for index bounds, `by_name` for id
             /// keywords, `by_participants` for the structural form).
-            pub(crate) fn resolve(self, namespace: &MoleculeNamespace) -> Result<$id, ParseError> {
+            pub fn resolve<N: Namespace>(self, namespace: &N) -> Result<$id, ParseError> {
                 match self {
                     Self::Index(i) => {
                         if i < namespace.$count() {
@@ -100,11 +100,13 @@ macro_rules! define_ref {
                             })
                         }
                     }
-                    Self::Id(name) => {
-                        namespace.$by_name(&name).ok_or(ParseError::InvalidRef {
-                            kind: $kind,
-                            value: name,
-                        })
+                    Self::Id(keyword) => {
+                        namespace
+                            .$find_by_keyword(&keyword)
+                            .ok_or(ParseError::InvalidRef {
+                                kind: $kind,
+                                value: keyword,
+                            })
                     }
                     $( Self::Structural(participants) => {
                         $resolve_structural(participants, namespace)
@@ -155,7 +157,7 @@ macro_rules! define_ref {
             fn to_edn(&self) -> Edn<'static> {
                 match self {
                     Self::Index(i) => Edn::Int(*i as i64),
-                    Self::Id(name) => Edn::Keyword(umol_edn::EdnKeyword::owned(name.clone())),
+                    Self::Id(name) => Edn::Keyword(EdnKeyword::owned(name.clone())),
                     $( Self::Structural(_) => {
                         let _phantom: fn($payload) = |_| {};
                         unreachable!(concat!(
@@ -191,7 +193,7 @@ define_ref!(
     "atom",
     read_atom_ref,
     atom_count,
-    atom_by_name
+    find_atom_by_keyword
 );
 define_ref!(
     BondRef,
@@ -200,7 +202,7 @@ define_ref!(
     "bond",
     read_bond_ref,
     bond_count,
-    bond_by_name,
+    find_bond_by_keyword,
     structural = [AtomRef; 2],
     parse_bond_structural,
     resolve_bond_structural
@@ -212,19 +214,19 @@ define_ref!(
     "dative-bond",
     read_dative_bond_ref,
     dative_bond_count,
-    dative_bond_by_name,
+    find_dative_bond_by_keyword,
     structural = DativeBondParticipants,
     parse_dative_structural,
     resolve_dative_structural
 );
 define_ref!(
     AromaticSystemRef, AromaticSystemId, aromatic_system_id, "aromatic-system",
-    read_aromatic_system_ref, aromatic_system_count, aromatic_system_by_name,
+    read_aromatic_system_ref, aromatic_system_count, find_aromatic_system_by_keyword,
     structural = Vec<AtomRef>, parse_aromatic_structural, resolve_aromatic_structural
 );
 define_ref!(
     MulticenterBondRef, MulticenterBondId, multicenter_bond_id, "multicenter-bond",
-    read_multicenter_bond_ref, multicenter_bond_count, multicenter_bond_by_name,
+    read_multicenter_bond_ref, multicenter_bond_count, find_multicenter_bond_by_keyword,
     structural = Vec<AtomRef>, parse_multicenter_structural, resolve_multicenter_structural
 );
 define_ref!(
@@ -234,7 +236,7 @@ define_ref!(
     "noncovalent-bond",
     read_noncovalent_bond_ref,
     noncovalent_bond_count,
-    noncovalent_bond_by_name,
+    find_noncovalent_bond_by_keyword,
     structural = [AtomRef; 2],
     parse_noncovalent_structural,
     resolve_noncovalent_structural
@@ -246,7 +248,7 @@ define_ref!(
     "stereo-atom",
     read_stereo_atom_ref,
     stereo_atom_count,
-    stereo_atom_by_name,
+    find_stereo_atom_by_keyword,
     structural = StereoAtomParticipants,
     parse_stereo_atom_structural,
     resolve_stereo_atom_structural
@@ -258,7 +260,7 @@ define_ref!(
     "stereo-bond",
     read_stereo_bond_ref,
     stereo_bond_count,
-    stereo_bond_by_name,
+    find_stereo_bond_by_keyword,
     structural = StereoBondParticipants,
     parse_stereo_bond_structural,
     resolve_stereo_bond_structural
@@ -339,17 +341,17 @@ fn parse_stereo_bond_structural(m: &EdnMap<'_>) -> Result<StereoBondParticipants
 }
 
 /// Resolve a vector of atom refs against the namespace, preserving order.
-fn resolve_atom_refs(
+fn resolve_atom_refs<N: Namespace>(
     refs: Vec<AtomRef>,
-    namespace: &MoleculeNamespace,
+    namespace: &N,
 ) -> Result<Vec<AtomId>, ParseError> {
     refs.into_iter().map(|r| r.resolve(namespace)).collect()
 }
 
 /// Resolve a stereo ligand frame (each ligand keeps its kind) against the namespace.
-fn resolve_ligands(
+fn resolve_ligands<N: Namespace>(
     ligands: Vec<StereoLigandRef>,
-    namespace: &MoleculeNamespace,
+    namespace: &N,
 ) -> Result<Vec<StereoLigand>, ParseError> {
     ligands
         .into_iter()
@@ -366,98 +368,98 @@ fn format_atom_ids(ids: &[AtomId]) -> String {
     format!("[{joined}]")
 }
 
-fn resolve_bond_structural(
+fn resolve_bond_structural<N: Namespace>(
     atoms: [AtomRef; 2],
-    namespace: &MoleculeNamespace,
+    namespace: &N,
 ) -> Result<BondId, ParseError> {
     let [a, b] = atoms;
     let a = a.resolve(namespace)?;
     let b = b.resolve(namespace)?;
     namespace
-        .bond_by_participants(a, b)
+        .find_bond_by_participants(a, b)
         .ok_or_else(|| ParseError::InvalidRef {
             kind: "bond",
             value: format_atom_ids(&[a, b]),
         })
 }
 
-fn resolve_noncovalent_structural(
+fn resolve_noncovalent_structural<N: Namespace>(
     atoms: [AtomRef; 2],
-    namespace: &MoleculeNamespace,
+    namespace: &N,
 ) -> Result<NoncovalentBondId, ParseError> {
     let [a, b] = atoms;
     let a = a.resolve(namespace)?;
     let b = b.resolve(namespace)?;
     namespace
-        .noncovalent_bond_by_participants(a, b)
+        .find_noncovalent_bond_by_participants(a, b)
         .ok_or_else(|| ParseError::InvalidRef {
             kind: "noncovalent-bond",
             value: format_atom_ids(&[a, b]),
         })
 }
 
-fn resolve_aromatic_structural(
+fn resolve_aromatic_structural<N: Namespace>(
     atoms: Vec<AtomRef>,
-    namespace: &MoleculeNamespace,
+    namespace: &N,
 ) -> Result<AromaticSystemId, ParseError> {
     let atoms = resolve_atom_refs(atoms, namespace)?;
     namespace
-        .aromatic_system_by_participants(&atoms)
+        .find_aromatic_system_by_participants(&atoms)
         .ok_or_else(|| ParseError::InvalidRef {
             kind: "aromatic-system",
             value: format_atom_ids(&atoms),
         })
 }
 
-fn resolve_multicenter_structural(
+fn resolve_multicenter_structural<N: Namespace>(
     atoms: Vec<AtomRef>,
-    namespace: &MoleculeNamespace,
+    namespace: &N,
 ) -> Result<MulticenterBondId, ParseError> {
     let atoms = resolve_atom_refs(atoms, namespace)?;
     namespace
-        .multicenter_bond_by_participants(&atoms)
+        .find_multicenter_bond_by_participants(&atoms)
         .ok_or_else(|| ParseError::InvalidRef {
             kind: "multicenter-bond",
             value: format_atom_ids(&atoms),
         })
 }
 
-fn resolve_dative_structural(
+fn resolve_dative_structural<N: Namespace>(
     participants: DativeBondParticipants,
-    namespace: &MoleculeNamespace,
+    namespace: &N,
 ) -> Result<DativeBondId, ParseError> {
     let donors = resolve_atom_refs(participants.donors, namespace)?;
     let acceptor = participants.acceptor.resolve(namespace)?;
     namespace
-        .dative_bond_by_participants(&donors, acceptor)
+        .find_dative_bond_by_participants(&donors, acceptor)
         .ok_or_else(|| ParseError::InvalidRef {
             kind: "dative-bond",
             value: format_atom_ids(&donors),
         })
 }
 
-fn resolve_stereo_atom_structural(
+fn resolve_stereo_atom_structural<N: Namespace>(
     participants: StereoAtomParticipants,
-    namespace: &MoleculeNamespace,
+    namespace: &N,
 ) -> Result<StereoAtomId, ParseError> {
     let site = participants.site.resolve(namespace)?;
     let ligands = resolve_ligands(participants.ligands, namespace)?;
     namespace
-        .stereo_atom_by_participants(site, &ligands)
+        .find_stereo_atom_by_participants(site, &ligands)
         .ok_or_else(|| ParseError::InvalidRef {
             kind: "stereo-atom",
             value: format!("site {}", site.index()),
         })
 }
 
-fn resolve_stereo_bond_structural(
+fn resolve_stereo_bond_structural<N: Namespace>(
     participants: StereoBondParticipants,
-    namespace: &MoleculeNamespace,
+    namespace: &N,
 ) -> Result<StereoBondId, ParseError> {
     let site = participants.site.resolve(namespace)?;
     let ligands = resolve_ligands(participants.ligands, namespace)?;
     namespace
-        .stereo_bond_by_participants(site, &ligands)
+        .find_stereo_bond_by_participants(site, &ligands)
         .ok_or_else(|| ParseError::InvalidRef {
             kind: "stereo-bond",
             value: format!("site {}", site.index()),
@@ -528,6 +530,7 @@ mod tests {
     use rstest::*;
     use umol_edn::{read_string, EdnKeyword};
 
+    use super::super::namespace::MoleculeNamespace;
     use super::*;
 
     #[fixture]
@@ -650,9 +653,9 @@ mod tests {
     #[rstest]
     fn test_bond_ref_resolve_structural() {
         let mut ns = MoleculeNamespace::default();
-        ns.register_atom(None);
-        ns.register_atom(None);
-        ns.register_bond(None, AtomId(0), AtomId(1));
+        ns.register_atom(None).unwrap();
+        ns.register_atom(None).unwrap();
+        ns.register_bond(None, AtomId(0), AtomId(1)).unwrap();
         // Endpoint order is immaterial.
         let r = BondRef::Structural([AtomRef::Index(1), AtomRef::Index(0)]);
         assert_eq!(r.resolve(&ns).unwrap(), BondId(0));
@@ -667,8 +670,8 @@ mod tests {
         #[case] value: &str,
     ) {
         let mut ns = MoleculeNamespace::default();
-        ns.register_atom(None);
-        ns.register_atom(None);
+        ns.register_atom(None).unwrap();
+        ns.register_atom(None).unwrap();
         assert_eq!(
             BondRef::Structural(atoms).resolve(&ns).unwrap_err(),
             ParseError::InvalidRef {
@@ -694,9 +697,10 @@ mod tests {
     fn test_dative_bond_ref_resolve_structural() {
         let mut ns = MoleculeNamespace::default();
         for _ in 0..3 {
-            ns.register_atom(None);
+            ns.register_atom(None).unwrap();
         }
-        ns.register_dative_bond(None, &[AtomId(1), AtomId(2)], AtomId(0));
+        ns.register_dative_bond(None, &[AtomId(1), AtomId(2)], AtomId(0))
+            .unwrap();
         let r = DativeBondRef::Structural(DativeBondParticipants {
             donors: vec![AtomRef::Index(2), AtomRef::Index(1)],
             acceptor: AtomRef::Index(0),
@@ -721,9 +725,10 @@ mod tests {
     fn test_aromatic_system_ref_resolve_structural() {
         let mut ns = MoleculeNamespace::default();
         for _ in 0..3 {
-            ns.register_atom(None);
+            ns.register_atom(None).unwrap();
         }
-        ns.register_aromatic_system(None, &[AtomId(2), AtomId(0), AtomId(1)]);
+        ns.register_aromatic_system(None, &[AtomId(2), AtomId(0), AtomId(1)])
+            .unwrap();
         // Atom order is immaterial.
         let r = AromaticSystemRef::Structural(vec![
             AtomRef::Index(0),
@@ -750,9 +755,10 @@ mod tests {
     fn test_multicenter_bond_ref_resolve_structural() {
         let mut ns = MoleculeNamespace::default();
         for _ in 0..3 {
-            ns.register_atom(None);
+            ns.register_atom(None).unwrap();
         }
-        ns.register_multicenter_bond(None, &[AtomId(0), AtomId(1), AtomId(2)]);
+        ns.register_multicenter_bond(None, &[AtomId(0), AtomId(1), AtomId(2)])
+            .unwrap();
         let r = MulticenterBondRef::Structural(vec![
             AtomRef::Index(2),
             AtomRef::Index(1),
@@ -774,9 +780,10 @@ mod tests {
     fn test_noncovalent_bond_ref_resolve_structural() {
         let mut ns = MoleculeNamespace::default();
         for _ in 0..4 {
-            ns.register_atom(None);
+            ns.register_atom(None).unwrap();
         }
-        ns.register_noncovalent_bond(None, AtomId(3), AtomId(1));
+        ns.register_noncovalent_bond(None, AtomId(3), AtomId(1))
+            .unwrap();
         let r = NoncovalentBondRef::Structural([AtomRef::Index(1), AtomRef::Index(3)]);
         assert_eq!(r.resolve(&ns).unwrap(), NoncovalentBondId(0));
     }
@@ -810,13 +817,13 @@ mod tests {
     fn test_stereo_atom_ref_resolve_structural() {
         let mut ns = MoleculeNamespace::default();
         for _ in 0..5 {
-            ns.register_atom(None);
+            ns.register_atom(None).unwrap();
         }
         let ligands = [
             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
         ];
-        ns.register_stereo_atom(None, AtomId(4), &ligands);
+        ns.register_stereo_atom(None, AtomId(4), &ligands).unwrap();
         // Ligand frame order is immaterial.
         let r = StereoAtomRef::Structural(StereoAtomParticipants {
             site: AtomRef::Index(4),
@@ -838,13 +845,13 @@ mod tests {
     fn test_stereo_atom_ref_resolve_structural_error() {
         let mut ns = MoleculeNamespace::default();
         for _ in 0..5 {
-            ns.register_atom(None);
+            ns.register_atom(None).unwrap();
         }
         let ligands = [
             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
         ];
-        ns.register_stereo_atom(None, AtomId(4), &ligands);
+        ns.register_stereo_atom(None, AtomId(4), &ligands).unwrap();
         // Same site, wrong ligand set.
         let r = StereoAtomRef::Structural(StereoAtomParticipants {
             site: AtomRef::Index(4),
@@ -887,11 +894,11 @@ mod tests {
     fn test_stereo_bond_ref_resolve_structural() {
         let mut ns = MoleculeNamespace::default();
         for _ in 0..4 {
-            ns.register_atom(None);
+            ns.register_atom(None).unwrap();
         }
-        ns.register_bond(None, AtomId(0), AtomId(1));
+        ns.register_bond(None, AtomId(0), AtomId(1)).unwrap();
         let ligands = [StereoLigand::new(AtomId(3), StereoLigandKind::Atom)];
-        ns.register_stereo_bond(None, BondId(0), &ligands);
+        ns.register_stereo_bond(None, BondId(0), &ligands).unwrap();
         let r = StereoBondRef::Structural(StereoBondParticipants {
             site: BondRef::Index(0),
             ligands: vec![StereoLigandRef {

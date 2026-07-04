@@ -18,8 +18,9 @@ use super::edn_utils::{
     unexpected_byte_kind,
 };
 use super::error::ParseError;
-use super::molecule::{read_molecule_input, MoleculeDsl, MoleculeMetadata};
+use super::molecule::{read_molecule_input, Metadata, MoleculeDsl, MoleculeMetadata};
 use super::multicenter::MulticenterBondConstraintDsl;
+use super::namespace::Namespace;
 use super::noncovalent::NoncovalentBondConstraintDsl;
 use super::refs::{
     read_aromatic_system_ref, read_atom_ref, read_bond_ref, read_dative_bond_ref,
@@ -1286,72 +1287,64 @@ pub enum MoleculeConstraintDsl {
     },
 }
 
-fn atom_subset_from_ast(
-    atoms: &Option<Vec<AtomId>>,
-    meta: &MoleculeMetadata,
-) -> Option<Vec<AtomRef>> {
+fn denote_atom_subset<M: Metadata>(atoms: &Option<Vec<AtomId>>, meta: &M) -> Option<Vec<AtomRef>> {
     atoms
         .as_ref()
         .map(|v| v.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
 }
 
-fn bond_subset_from_ast(
-    bonds: &Option<Vec<BondId>>,
-    meta: &MoleculeMetadata,
-) -> Option<Vec<BondRef>> {
+fn denote_bond_subset<M: Metadata>(bonds: &Option<Vec<BondId>>, meta: &M) -> Option<Vec<BondRef>> {
     bonds
         .as_ref()
         .map(|v| v.iter().map(|&b| BondRef::from_ast(b, meta)).collect())
 }
 
-fn atom_subset_into_ast(
+fn resolve_atom_subset<N: Namespace>(
     atoms: Option<Vec<AtomRef>>,
-    count: usize,
-    meta: &MoleculeMetadata,
+    namespace: &N,
 ) -> Result<Option<Vec<AtomId>>, ParseError> {
     atoms
         .map(|v| {
             v.into_iter()
-                .map(|r| r.into_ast(count, meta))
+                .map(|r| r.resolve(namespace))
                 .collect::<Result<Vec<_>, _>>()
         })
         .transpose()
 }
 
-fn bond_subset_into_ast(
+fn resolve_bond_subset<N: Namespace>(
     bonds: Option<Vec<BondRef>>,
-    count: usize,
-    meta: &MoleculeMetadata,
+    namespace: &N,
 ) -> Result<Option<Vec<BondId>>, ParseError> {
     bonds
         .map(|v| {
             v.into_iter()
-                .map(|r| r.into_ast(count, meta))
+                .map(|r| r.resolve(namespace))
                 .collect::<Result<Vec<_>, _>>()
         })
         .transpose()
 }
 
 impl MoleculeConstraintDsl {
-    pub(crate) fn from_ast(
+    pub(crate) fn from_ast<M: Metadata>(
         c: &MoleculeConstraint,
-        meta: &MoleculeMetadata,
+        meta: &M,
     ) -> Result<Self, ParseError> {
         Ok(match c {
             MoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum {
-                atoms: atom_subset_from_ast(atoms, meta),
+                atoms: denote_atom_subset(atoms, meta),
                 sum: ValueDsl::from_ast(sum, &()),
             },
             MoleculeConstraint::SpinSum { atoms, spin } => Self::SpinSum {
-                atoms: atom_subset_from_ast(atoms, meta),
+                atoms: denote_atom_subset(atoms, meta),
                 spin: spin.clone(),
             },
             MoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum {
-                bonds: bond_subset_from_ast(bonds, meta),
+                bonds: denote_bond_subset(bonds, meta),
                 sum: ValueDsl::from_ast(sum, &()),
             },
             MoleculeConstraint::Connected { atoms } => Self::Connected {
-                atoms: atom_subset_from_ast(atoms, meta),
+                atoms: denote_atom_subset(atoms, meta),
             },
             MoleculeConstraint::SubPattern { anchor, pattern } => {
                 let pattern_meta = MoleculeMetadata::default();
@@ -1364,32 +1357,30 @@ impl MoleculeConstraintDsl {
         })
     }
 
-    pub(crate) fn into_ast(
+    pub(crate) fn into_ast<N: Namespace>(
         self,
-        counts: &EntityCounts,
-        meta: &MoleculeMetadata,
+        namespace: &N,
     ) -> Result<MoleculeConstraint, ParseError> {
         Ok(match self {
             Self::ChargeSum { atoms, sum } => MoleculeConstraint::ChargeSum {
-                atoms: atom_subset_into_ast(atoms, counts.atom_count, meta)?,
+                atoms: resolve_atom_subset(atoms, namespace)?,
                 sum: sum.into_ast(&()),
             },
             Self::SpinSum { atoms, spin } => MoleculeConstraint::SpinSum {
-                atoms: atom_subset_into_ast(atoms, counts.atom_count, meta)?,
+                atoms: resolve_atom_subset(atoms, namespace)?,
                 spin,
             },
             Self::BondOrderSum { bonds, sum } => MoleculeConstraint::BondOrderSum {
-                bonds: bond_subset_into_ast(bonds, counts.bond_count, meta)?,
+                bonds: resolve_bond_subset(bonds, namespace)?,
                 sum: sum.into_ast(&()),
             },
             Self::Connected { atoms } => MoleculeConstraint::Connected {
-                atoms: atom_subset_into_ast(atoms, counts.atom_count, meta)?,
+                atoms: resolve_atom_subset(atoms, namespace)?,
             },
             Self::SubPattern { anchor, pattern } => {
                 let pattern_counts = EntityCounts::from_ast(&pattern);
                 let pattern_meta = MoleculeMetadata::default();
-                let anchor_ast =
-                    anchor.into_ast_pair(counts, meta, &pattern_counts, &pattern_meta)?;
+                let anchor_ast = anchor.into_ast_pair(namespace, &pattern_counts, &pattern_meta)?;
                 MoleculeConstraint::SubPattern {
                     anchor: anchor_ast,
                     pattern,
@@ -1536,9 +1527,9 @@ pub struct SubPatternAnchorDsl {
 impl SubPatternAnchorDsl {
     /// Build from an AST anchor. `target_meta` is the outer molecule's
     /// metadata; `pattern_meta` is the pattern molecule's metadata.
-    pub fn from_ast_pair(
+    pub fn from_ast_pair<M: Metadata>(
         anchor: &SubPatternAnchor,
-        target_meta: &MoleculeMetadata,
+        target_meta: &M,
         pattern_meta: &MoleculeMetadata,
     ) -> Self {
         Self {
@@ -1626,60 +1617,61 @@ impl SubPatternAnchorDsl {
     }
 
     /// Resolve to an AST anchor. `target_*` carry outer-molecule counts +
-    /// metadata; `pattern_*` carry pattern-molecule counts + metadata.
-    pub(crate) fn into_ast_pair(
+    /// Resolve to an AST anchor. `host` is the enclosing molecule/reaction namespace (target side);
+    /// `pattern_*` are the pattern molecule's counts + metadata — a stopgap until the pattern namespace
+    /// is built (S3f).
+    pub(crate) fn into_ast_pair<N: Namespace>(
         self,
-        target_counts: &EntityCounts,
-        target_meta: &MoleculeMetadata,
+        host: &N,
         pattern_counts: &EntityCounts,
         pattern_meta: &MoleculeMetadata,
     ) -> Result<SubPatternAnchor, ParseError> {
         let mut anchor = SubPatternAnchor::new();
         for (t, p) in self.atoms {
             anchor.push_atom(
-                t.into_ast(target_counts.atom_count, target_meta)?,
+                t.resolve(host)?,
                 p.into_ast(pattern_counts.atom_count, pattern_meta)?,
             );
         }
         for (t, p) in self.bonds {
             anchor.push_bond(
-                t.into_ast(target_counts.bond_count, target_meta)?,
+                t.resolve(host)?,
                 p.into_ast(pattern_counts.bond_count, pattern_meta)?,
             );
         }
         for (t, p) in self.dative_bonds {
             anchor.push_dative_bond(
-                t.into_ast(target_counts.dative_bond_count, target_meta)?,
+                t.resolve(host)?,
                 p.into_ast(pattern_counts.dative_bond_count, pattern_meta)?,
             );
         }
         for (t, p) in self.aromatic_systems {
             anchor.push_aromatic_system(
-                t.into_ast(target_counts.aromatic_system_count, target_meta)?,
+                t.resolve(host)?,
                 p.into_ast(pattern_counts.aromatic_system_count, pattern_meta)?,
             );
         }
         for (t, p) in self.multicenter_bonds {
             anchor.push_multicenter_bond(
-                t.into_ast(target_counts.multicenter_bond_count, target_meta)?,
+                t.resolve(host)?,
                 p.into_ast(pattern_counts.multicenter_bond_count, pattern_meta)?,
             );
         }
         for (t, p) in self.noncovalent_bonds {
             anchor.push_noncovalent_bond(
-                t.into_ast(target_counts.noncovalent_bond_count, target_meta)?,
+                t.resolve(host)?,
                 p.into_ast(pattern_counts.noncovalent_bond_count, pattern_meta)?,
             );
         }
         for (t, p) in self.stereo_atoms {
             anchor.push_stereo_atom(
-                t.into_ast(target_counts.stereo_atom_count, target_meta)?,
+                t.resolve(host)?,
                 p.into_ast(pattern_counts.stereo_atom_count, pattern_meta)?,
             );
         }
         for (t, p) in self.stereo_bonds {
             anchor.push_stereo_bond(
-                t.into_ast(target_counts.stereo_bond_count, target_meta)?,
+                t.resolve(host)?,
                 p.into_ast(pattern_counts.stereo_bond_count, pattern_meta)?,
             );
         }
@@ -2057,7 +2049,7 @@ impl ToEdn for ConstraintDsl {
 }
 
 impl ConstraintDsl {
-    pub(crate) fn from_ast(c: &Constraint, meta: &MoleculeMetadata) -> Result<Self, ParseError> {
+    pub(crate) fn from_ast<M: Metadata>(c: &Constraint, meta: &M) -> Result<Self, ParseError> {
         Ok(match c {
             Constraint::Atom(id, c) => Self::Atom(
                 AtomRef::from_ast(*id, meta),
@@ -2106,49 +2098,37 @@ impl ConstraintDsl {
         })
     }
 
-    pub(crate) fn into_ast(
-        self,
-        counts: &EntityCounts,
-        meta: &MoleculeMetadata,
-    ) -> Result<Constraint, ParseError> {
+    pub(crate) fn into_ast<N: Namespace>(self, namespace: &N) -> Result<Constraint, ParseError> {
         Ok(match self {
-            Self::Atom(r, c) => {
-                Constraint::Atom(r.into_ast(counts.atom_count, meta)?, c.into_ast(&()))
+            Self::Atom(r, c) => Constraint::Atom(r.resolve(namespace)?, c.into_ast(&())),
+            Self::Bond(r, c) => Constraint::Bond(r.resolve(namespace)?, c.into_ast(&())),
+            Self::DativeBond(r, c) => Constraint::DativeBond(r.resolve(namespace)?, c.into_ast()),
+            Self::AromaticSystem(r, c) => {
+                Constraint::AromaticSystem(r.resolve(namespace)?, c.into_ast())
             }
-            Self::Bond(r, c) => {
-                Constraint::Bond(r.into_ast(counts.bond_count, meta)?, c.into_ast(&()))
+            Self::MulticenterBond(r, c) => {
+                Constraint::MulticenterBond(r.resolve(namespace)?, c.into_ast())
             }
-            Self::DativeBond(r, c) => {
-                Constraint::DativeBond(r.into_ast(counts.dative_bond_count, meta)?, c.into_ast())
-            }
-            Self::AromaticSystem(r, c) => Constraint::AromaticSystem(
-                r.into_ast(counts.aromatic_system_count, meta)?,
-                c.into_ast(),
-            ),
-            Self::MulticenterBond(r, c) => Constraint::MulticenterBond(
-                r.into_ast(counts.multicenter_bond_count, meta)?,
-                c.into_ast(),
-            ),
             Self::NoncovalentBond(_, c) => match c {},
             Self::StereoAtom(r, StereoAtomConstraintDsl(kind, c)) => {
-                Constraint::StereoAtom(r.into_ast(counts.stereo_atom_count, meta)?, kind, c)
+                Constraint::StereoAtom(r.resolve(namespace)?, kind, c)
             }
             Self::StereoBond(r, StereoBondConstraintDsl(kind, c)) => {
-                Constraint::StereoBond(r.into_ast(counts.stereo_bond_count, meta)?, kind, c)
+                Constraint::StereoBond(r.resolve(namespace)?, kind, c)
             }
-            Self::Relational(r) => Constraint::Relational(r.into_ast(counts, meta)?),
-            Self::Molecule(m) => Constraint::Molecule(m.into_ast(counts, meta)?),
+            Self::Relational(r) => Constraint::Relational(r.into_ast(namespace)?),
+            Self::Molecule(m) => Constraint::Molecule(m.into_ast(namespace)?),
             Self::And(xs) => Constraint::And(
                 xs.into_iter()
-                    .map(|c| c.into_ast(counts, meta))
+                    .map(|c| c.into_ast(namespace))
                     .collect::<Result<_, _>>()?,
             ),
             Self::Or(xs) => Constraint::Or(
                 xs.into_iter()
-                    .map(|c| c.into_ast(counts, meta))
+                    .map(|c| c.into_ast(namespace))
                     .collect::<Result<_, _>>()?,
             ),
-            Self::Not(c) => Constraint::Not(Box::new(c.into_ast(counts, meta)?)),
+            Self::Not(c) => Constraint::Not(Box::new(c.into_ast(namespace)?)),
         })
     }
 }
@@ -2186,7 +2166,7 @@ impl ConstraintsDsl {
     /// during the AST → DSL lowering, matching the canonical-rendering
     /// rule: a constraint that asserts nothing does not appear in the
     /// canonical surface form.
-    pub(crate) fn from_ast(cs: &Constraints, meta: &MoleculeMetadata) -> Result<Self, ParseError> {
+    pub(crate) fn from_ast<M: Metadata>(cs: &Constraints, meta: &M) -> Result<Self, ParseError> {
         Ok(Self(
             cs.iter()
                 .filter(|c| !c.is_vacuous())
@@ -2195,14 +2175,10 @@ impl ConstraintsDsl {
         ))
     }
 
-    pub(crate) fn into_ast(
-        self,
-        counts: &EntityCounts,
-        meta: &MoleculeMetadata,
-    ) -> Result<Constraints, ParseError> {
+    pub(crate) fn into_ast<N: Namespace>(self, namespace: &N) -> Result<Constraints, ParseError> {
         let mut out = Constraints::new();
         for c in self.0 {
-            out.push(c.into_ast(counts, meta)?);
+            out.push(c.into_ast(namespace)?);
         }
         Ok(out)
     }
@@ -2271,6 +2247,7 @@ mod tests {
     use umol_edn::read_string;
     use umol_perm::{Orientation, Permutation};
 
+    use super::super::namespace::MoleculeNamespace;
     use super::*;
     use crate::ast::constraint::{
         AromaticValenceAst, AtomConstraint, BondConstraint, DativeBondConstraint, FluxionalityAst,
@@ -2331,6 +2308,37 @@ mod tests {
         }
     }
 
+    /// A namespace with ten entities of each kind, so index refs up to 9 resolve.
+    #[fixture]
+    fn full_namespace() -> MoleculeNamespace {
+        let mut namespace = MoleculeNamespace::default();
+        for _ in 0..10 {
+            namespace.register_atom(None).unwrap();
+        }
+        for _ in 0..10 {
+            namespace.register_bond(None, AtomId(0), AtomId(1)).unwrap();
+            namespace
+                .register_dative_bond(None, &[AtomId(0)], AtomId(1))
+                .unwrap();
+            namespace
+                .register_aromatic_system(None, &[AtomId(0)])
+                .unwrap();
+            namespace
+                .register_multicenter_bond(None, &[AtomId(0)])
+                .unwrap();
+            namespace
+                .register_noncovalent_bond(None, AtomId(0), AtomId(1))
+                .unwrap();
+            namespace
+                .register_stereo_atom(None, AtomId(0), &[])
+                .unwrap();
+            namespace
+                .register_stereo_bond(None, BondId(0), &[])
+                .unwrap();
+        }
+        namespace
+    }
+
     #[rustfmt::skip]
     #[rstest]
     #[case::charge_sum(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: ValueAst::Lit(0) }, "{:charge-sum {:atoms [0 1] :sum 0}}")]
@@ -2344,7 +2352,7 @@ mod tests {
     #[case::connected(MoleculeConstraint::Connected { atoms: Some(vec![AtomId(0), AtomId(1), AtomId(2)]) }, "{:connected {:atoms [0 1 2]}}")]
     #[case::connected_all(MoleculeConstraint::Connected { atoms: None }, "{:connected {}}")]
     fn test_molecule_constraint_dsl_roundtrip(
-        #[from(full_counts)] counts: EntityCounts,
+        #[from(full_namespace)] namespace: MoleculeNamespace,
         #[case] input: MoleculeConstraint,
         #[case] edn_source: &str,
     ) {
@@ -2354,7 +2362,7 @@ mod tests {
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = MoleculeConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&counts, &meta).unwrap();
+        let back = parsed.into_ast(&namespace).unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
 
@@ -2391,7 +2399,7 @@ mod tests {
             StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
         "{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation :stereogenic}}]]}")]
     fn test_constraint_dsl_stereo_atom_roundtrip(
-        #[from(full_counts)] counts: EntityCounts,
+        #[from(full_namespace)] namespace: MoleculeNamespace,
         #[case] input: Constraint,
         #[case] edn_source: &str,
     ) {
@@ -2401,7 +2409,7 @@ mod tests {
         assert_eq!(edn, read_string(edn_source).unwrap(), "render mismatch");
         let back = ConstraintDsl::from_edn(&edn)
             .unwrap()
-            .into_ast(&counts, &meta)
+            .into_ast(&namespace)
             .unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
@@ -2427,7 +2435,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_sub_pattern_anchor_dsl_empty_roundtrip(#[from(full_counts)] counts: EntityCounts) {
+    fn test_sub_pattern_anchor_dsl_empty_roundtrip(
+        #[from(full_namespace)] namespace: MoleculeNamespace,
+        #[from(full_counts)] counts: EntityCounts,
+    ) {
         let meta = MoleculeMetadata::default();
         let anchor = SubPatternAnchor::new();
         let dsl = SubPatternAnchorDsl::from_ast_pair(&anchor, &meta, &meta);
@@ -2435,14 +2446,15 @@ mod tests {
         // Empty anchor renders as an empty map.
         assert_eq!(edn, read_string("{}").unwrap());
         let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
-        let back = parsed
-            .into_ast_pair(&counts, &meta, &counts, &meta)
-            .unwrap();
+        let back = parsed.into_ast_pair(&namespace, &counts, &meta).unwrap();
         assert_eq!(back, anchor);
     }
 
     #[rstest]
-    fn test_sub_pattern_anchor_dsl_atoms_roundtrip(#[from(full_counts)] counts: EntityCounts) {
+    fn test_sub_pattern_anchor_dsl_atoms_roundtrip(
+        #[from(full_namespace)] namespace: MoleculeNamespace,
+        #[from(full_counts)] counts: EntityCounts,
+    ) {
         let meta = MoleculeMetadata::default();
         let mut anchor = SubPatternAnchor::new();
         anchor.push_atom(AtomId(3), AtomId(0));
@@ -2451,14 +2463,15 @@ mod tests {
         let edn = dsl.to_edn();
         assert_eq!(edn, read_string("{:atoms [[3 0] [5 1]]}").unwrap());
         let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
-        let back = parsed
-            .into_ast_pair(&counts, &meta, &counts, &meta)
-            .unwrap();
+        let back = parsed.into_ast_pair(&namespace, &counts, &meta).unwrap();
         assert_eq!(back, anchor);
     }
 
     #[rstest]
-    fn test_sub_pattern_anchor_dsl_stereo_roundtrip(#[from(full_counts)] counts: EntityCounts) {
+    fn test_sub_pattern_anchor_dsl_stereo_roundtrip(
+        #[from(full_namespace)] namespace: MoleculeNamespace,
+        #[from(full_counts)] counts: EntityCounts,
+    ) {
         let meta = MoleculeMetadata::default();
         let mut anchor = SubPatternAnchor::new();
         anchor.push_stereo_atom(StereoAtomId(2), StereoAtomId(0));
@@ -2470,9 +2483,7 @@ mod tests {
             read_string("{:stereo-atoms [[2 0]] :stereo-bonds [[4 1]]}").unwrap()
         );
         let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
-        let back = parsed
-            .into_ast_pair(&counts, &meta, &counts, &meta)
-            .unwrap();
+        let back = parsed.into_ast_pair(&namespace, &counts, &meta).unwrap();
         assert_eq!(back, anchor);
     }
 
@@ -2538,7 +2549,7 @@ mod tests {
     #[case::or(Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraint::Degree(ValueAst::Lit(3))), Constraint::Atom(AtomId(0), AtomConstraint::Degree(ValueAst::Lit(4)))]),
         "{:or [{:atom [0 {:degree 3}]} {:atom [0 {:degree 4}]}]}")]
     fn test_constraint_dsl_roundtrip(
-        #[from(full_counts)] counts: EntityCounts,
+        #[from(full_namespace)] namespace: MoleculeNamespace,
         #[case] input: Constraint,
         #[case] edn_source: &str,
     ) {
@@ -2548,7 +2559,7 @@ mod tests {
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = ConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&counts, &meta).unwrap();
+        let back = parsed.into_ast(&namespace).unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
 
@@ -2595,7 +2606,7 @@ mod tests {
     #[case::cis_trans_stereo_not_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), "{:bond [0 {:cis-trans-stereo :not-stereo}]}")]
     #[case::cis_trans_stereo_lit(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:bond [0 {:cis-trans-stereo {:stereo 1}}]}")]
     fn test_bond_constraint_dsl_roundtrip(
-        #[from(full_counts)] counts: EntityCounts,
+        #[from(full_namespace)] namespace: MoleculeNamespace,
         #[case] input: BondConstraint,
         #[case] edn_source: &str,
     ) {
@@ -2606,7 +2617,7 @@ mod tests {
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected);
         let parsed = ConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&counts, &meta).unwrap();
+        let back = parsed.into_ast(&namespace).unwrap();
         assert_eq!(back, wrapped);
     }
 
@@ -2648,19 +2659,19 @@ mod tests {
     }
 
     #[rstest]
-    fn test_constraints_dsl_empty_roundtrip(#[from(full_counts)] counts: EntityCounts) {
+    fn test_constraints_dsl_empty_roundtrip(#[from(full_namespace)] namespace: MoleculeNamespace) {
         let meta = MoleculeMetadata::default();
         let cs = Constraints::new();
         let dsl = ConstraintsDsl::from_ast(&cs, &meta).unwrap();
         let edn = dsl.to_edn();
         assert_eq!(edn, read_string("[]").unwrap());
         let parsed = ConstraintsDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&counts, &meta).unwrap();
+        let back = parsed.into_ast(&namespace).unwrap();
         assert_eq!(back, cs);
     }
 
     #[rstest]
-    fn test_constraints_dsl_multi_roundtrip(#[from(full_counts)] counts: EntityCounts) {
+    fn test_constraints_dsl_multi_roundtrip(#[from(full_namespace)] namespace: MoleculeNamespace) {
         let meta = MoleculeMetadata::default();
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(
@@ -2676,7 +2687,7 @@ mod tests {
             read_string("[{:atom [0 {:valence 4}]} {:connected {:atoms [0 1]}}]").unwrap();
         assert_eq!(edn, expected);
         let parsed = ConstraintsDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&counts, &meta).unwrap();
+        let back = parsed.into_ast(&namespace).unwrap();
         assert_eq!(back, cs);
     }
 }

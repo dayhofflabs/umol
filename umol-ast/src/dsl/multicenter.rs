@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
 use winnow::combinator::{repeat, terminated};
 use winnow::error::ErrMode;
@@ -394,9 +394,9 @@ impl ToEdn for MulticenterBondConstraintDsl {
         match self {
             Self::ElectronCount(v) => {
                 let value_edn = ValueDsl(v.clone()).to_edn();
-                let mut map = umol_edn::EdnMap::with_capacity(1);
+                let mut map = EdnMap::with_capacity(1);
                 map.insert(
-                    Edn::Keyword(umol_edn::EdnKeyword::owned("electron-count".to_string())),
+                    Edn::Keyword(EdnKeyword::owned("electron-count".to_string())),
                     value_edn,
                 );
                 Edn::Map(map)

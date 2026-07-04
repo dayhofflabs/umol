@@ -19,7 +19,7 @@ use super::aromatic::{AromaticSystemDsl, PartialAromaticSystemDsl};
 use super::atom::{lower_atom, raise_atom, AtomDsl, PartialAtomDsl};
 use super::bond::{lower_bond, raise_bond, BondDsl, PartialBondDsl};
 use super::config::{DeltaDefaults, ReactionDefaults};
-use super::constraint::{read_constraint_dsl, ConstraintDsl, EntityCounts};
+use super::constraint::{read_constraint_dsl, ConstraintDsl};
 use super::dative::{DativeBondDsl, PartialDativeBondDsl};
 use super::edn_utils::{
     consume_single_key_map_close, missing, parse_single_key_map, parse_vec,
@@ -35,13 +35,12 @@ use super::molecule::{
     read_noncovalent_bond_entry, read_stereo_atom_entry, read_stereo_bond_entry,
     render_aromatic_entry, render_dative_entry, render_molecule_edn, render_multicenter_entry,
     render_noncovalent_entry, render_stereo_atom_entry, render_stereo_bond_entry,
-    render_stereo_ligand, resolve_atom_spec, AromaticSystemEntryInput, AtomEntryInput,
-    BondEntryInput, DativeBondEntryInput, MoleculeDsl, MoleculeInput, MoleculeMetadata,
-    MulticenterBondEntryInput, NoncovalentBondEntryInput, StereoAtomEntryInput,
-    StereoBondEntryInput,
+    render_stereo_ligand, AromaticSystemEntryInput, AtomEntryInput, AtomSpecInput, BondEntryInput,
+    DativeBondEntryInput, MoleculeDsl, MoleculeInput, MoleculeMetadata, MulticenterBondEntryInput,
+    NoncovalentBondEntryInput, StereoAtomEntryInput, StereoBondEntryInput,
 };
 use super::multicenter::{MulticenterBondDsl, PartialMulticenterBondDsl};
-use super::namespace::MoleculeNamespace;
+use super::namespace::{MoleculeNamespace, Namespace};
 use super::noncovalent::{NoncovalentBondDsl, PartialNoncovalentBondDsl};
 use super::refs::{
     read_aromatic_system_ref, read_atom_ref, read_bond_ref, read_dative_bond_ref,
@@ -329,6 +328,313 @@ impl ReactionMetadata {
     }
 }
 
+/// The reaction's resolution namespace: the lhs molecule's namespace, the delta namespace continuing
+/// its id space (holding every entity a delta binds — its own alias map stays empty), and the
+/// reaction's top-level atom aliases in a field of their own. A ref resolves against the union: an id
+/// or participant key is looked up in `deltas` first, then `lhs` (the id spaces are disjoint, so at
+/// most one hits). Counts come from `deltas`, which continues `lhs` and so carries the reaction-wide
+/// total — the single running counter that hands out delta ids on `register_*`.
+pub(crate) struct ReactionNamespace {
+    lhs: MoleculeNamespace,
+    deltas: MoleculeNamespace,
+    atom_aliases: BiBTreeMap<String, Box<AtomDsl>>,
+}
+
+impl ReactionNamespace {
+    fn new(lhs: MoleculeNamespace) -> Self {
+        let deltas = MoleculeNamespace::continuation(&lhs);
+        Self {
+            lhs,
+            deltas,
+            atom_aliases: BiBTreeMap::new(),
+        }
+    }
+
+    /// Whether a keyword is free in the lhs + reaction-alias scope. The delta scope is checked by the
+    /// delegated `deltas.register_*`; the two together cover the whole reaction namespace.
+    fn check_keyword_free(&self, keyword: Option<&str>) -> Result<(), ParseError> {
+        match keyword {
+            Some(kw) if self.lhs.contains_id(kw) || self.atom_aliases.contains_left(kw) => {
+                Err(ParseError::DuplicateId(kw.to_string()))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn register_atom(&mut self, keyword: Option<String>) -> Result<AtomId, ParseError> {
+        self.check_keyword_free(keyword.as_deref())?;
+        self.deltas.register_atom(keyword)
+    }
+    fn register_bond(
+        &mut self,
+        keyword: Option<String>,
+        a: AtomId,
+        b: AtomId,
+    ) -> Result<BondId, ParseError> {
+        self.check_keyword_free(keyword.as_deref())?;
+        self.deltas.register_bond(keyword, a, b)
+    }
+    fn register_dative_bond(
+        &mut self,
+        keyword: Option<String>,
+        donors: &[AtomId],
+        acceptor: AtomId,
+    ) -> Result<DativeBondId, ParseError> {
+        self.check_keyword_free(keyword.as_deref())?;
+        self.deltas.register_dative_bond(keyword, donors, acceptor)
+    }
+    fn register_aromatic_system(
+        &mut self,
+        keyword: Option<String>,
+        atoms: &[AtomId],
+    ) -> Result<AromaticSystemId, ParseError> {
+        self.check_keyword_free(keyword.as_deref())?;
+        self.deltas.register_aromatic_system(keyword, atoms)
+    }
+    fn register_multicenter_bond(
+        &mut self,
+        keyword: Option<String>,
+        atoms: &[AtomId],
+    ) -> Result<MulticenterBondId, ParseError> {
+        self.check_keyword_free(keyword.as_deref())?;
+        self.deltas.register_multicenter_bond(keyword, atoms)
+    }
+    fn register_noncovalent_bond(
+        &mut self,
+        keyword: Option<String>,
+        a: AtomId,
+        b: AtomId,
+    ) -> Result<NoncovalentBondId, ParseError> {
+        self.check_keyword_free(keyword.as_deref())?;
+        self.deltas.register_noncovalent_bond(keyword, a, b)
+    }
+    fn register_stereo_atom(
+        &mut self,
+        keyword: Option<String>,
+        site: AtomId,
+        ligands: &[StereoLigand],
+    ) -> Result<StereoAtomId, ParseError> {
+        self.check_keyword_free(keyword.as_deref())?;
+        self.deltas.register_stereo_atom(keyword, site, ligands)
+    }
+    fn register_stereo_bond(
+        &mut self,
+        keyword: Option<String>,
+        site: BondId,
+        ligands: &[StereoLigand],
+    ) -> Result<StereoBondId, ParseError> {
+        self.check_keyword_free(keyword.as_deref())?;
+        self.deltas.register_stereo_bond(keyword, site, ligands)
+    }
+
+    /// Bind a top-level reaction atom alias, erroring if the name is already taken (any entity or
+    /// alias, lhs or reaction) or the atom-spec is already aliased (bijectivity).
+    fn register_atom_alias(&mut self, name: String, dsl: Box<AtomDsl>) -> Result<(), ParseError> {
+        if self.contains_id(&name) {
+            return Err(ParseError::DuplicateId(name));
+        }
+        if self.alias_targets(&dsl) {
+            return Err(ParseError::InvalidValue(
+                "atom-aliases must be bijective: two names map to the same atom".into(),
+            ));
+        }
+        self.atom_aliases.insert(name, dsl);
+        Ok(())
+    }
+
+    /// Whether `dsl` is already some reaction or lhs alias's target — the bijection check.
+    fn alias_targets(&self, dsl: &AtomDsl) -> bool {
+        self.atom_aliases
+            .iter()
+            .any(|(_, existing)| existing.as_ref() == dsl)
+            || self.lhs.atom_aliases().any(|(_, existing)| existing == dsl)
+    }
+
+    fn lhs(&self) -> &MoleculeNamespace {
+        &self.lhs
+    }
+    fn deltas(&self) -> &MoleculeNamespace {
+        &self.deltas
+    }
+    fn atom_aliases(&self) -> impl Iterator<Item = (&str, &AtomDsl)> {
+        self.atom_aliases
+            .iter()
+            .map(|(name, dsl)| (name.as_str(), dsl.as_ref()))
+    }
+}
+
+impl Namespace for ReactionNamespace {
+    fn atom_count(&self) -> usize {
+        self.deltas.atom_count()
+    }
+    fn bond_count(&self) -> usize {
+        self.deltas.bond_count()
+    }
+    fn dative_bond_count(&self) -> usize {
+        self.deltas.dative_bond_count()
+    }
+    fn aromatic_system_count(&self) -> usize {
+        self.deltas.aromatic_system_count()
+    }
+    fn multicenter_bond_count(&self) -> usize {
+        self.deltas.multicenter_bond_count()
+    }
+    fn noncovalent_bond_count(&self) -> usize {
+        self.deltas.noncovalent_bond_count()
+    }
+    fn stereo_atom_count(&self) -> usize {
+        self.deltas.stereo_atom_count()
+    }
+    fn stereo_bond_count(&self) -> usize {
+        self.deltas.stereo_bond_count()
+    }
+
+    fn find_atom_by_keyword(&self, keyword: &str) -> Option<AtomId> {
+        self.deltas
+            .find_atom_by_keyword(keyword)
+            .or_else(|| self.lhs.find_atom_by_keyword(keyword))
+    }
+    fn find_bond_by_keyword(&self, keyword: &str) -> Option<BondId> {
+        self.deltas
+            .find_bond_by_keyword(keyword)
+            .or_else(|| self.lhs.find_bond_by_keyword(keyword))
+    }
+    fn find_dative_bond_by_keyword(&self, keyword: &str) -> Option<DativeBondId> {
+        self.deltas
+            .find_dative_bond_by_keyword(keyword)
+            .or_else(|| self.lhs.find_dative_bond_by_keyword(keyword))
+    }
+    fn find_aromatic_system_by_keyword(&self, keyword: &str) -> Option<AromaticSystemId> {
+        self.deltas
+            .find_aromatic_system_by_keyword(keyword)
+            .or_else(|| self.lhs.find_aromatic_system_by_keyword(keyword))
+    }
+    fn find_multicenter_bond_by_keyword(&self, keyword: &str) -> Option<MulticenterBondId> {
+        self.deltas
+            .find_multicenter_bond_by_keyword(keyword)
+            .or_else(|| self.lhs.find_multicenter_bond_by_keyword(keyword))
+    }
+    fn find_noncovalent_bond_by_keyword(&self, keyword: &str) -> Option<NoncovalentBondId> {
+        self.deltas
+            .find_noncovalent_bond_by_keyword(keyword)
+            .or_else(|| self.lhs.find_noncovalent_bond_by_keyword(keyword))
+    }
+    fn find_stereo_atom_by_keyword(&self, keyword: &str) -> Option<StereoAtomId> {
+        self.deltas
+            .find_stereo_atom_by_keyword(keyword)
+            .or_else(|| self.lhs.find_stereo_atom_by_keyword(keyword))
+    }
+    fn find_stereo_bond_by_keyword(&self, keyword: &str) -> Option<StereoBondId> {
+        self.deltas
+            .find_stereo_bond_by_keyword(keyword)
+            .or_else(|| self.lhs.find_stereo_bond_by_keyword(keyword))
+    }
+
+    fn find_bond_by_participants(&self, a: AtomId, b: AtomId) -> Option<BondId> {
+        self.deltas
+            .find_bond_by_participants(a, b)
+            .or_else(|| self.lhs.find_bond_by_participants(a, b))
+    }
+    fn find_dative_bond_by_participants(
+        &self,
+        donors: &[AtomId],
+        acceptor: AtomId,
+    ) -> Option<DativeBondId> {
+        self.deltas
+            .find_dative_bond_by_participants(donors, acceptor)
+            .or_else(|| self.lhs.find_dative_bond_by_participants(donors, acceptor))
+    }
+    fn find_aromatic_system_by_participants(&self, atoms: &[AtomId]) -> Option<AromaticSystemId> {
+        self.deltas
+            .find_aromatic_system_by_participants(atoms)
+            .or_else(|| self.lhs.find_aromatic_system_by_participants(atoms))
+    }
+    fn find_multicenter_bond_by_participants(&self, atoms: &[AtomId]) -> Option<MulticenterBondId> {
+        self.deltas
+            .find_multicenter_bond_by_participants(atoms)
+            .or_else(|| self.lhs.find_multicenter_bond_by_participants(atoms))
+    }
+    fn find_noncovalent_bond_by_participants(
+        &self,
+        a: AtomId,
+        b: AtomId,
+    ) -> Option<NoncovalentBondId> {
+        self.deltas
+            .find_noncovalent_bond_by_participants(a, b)
+            .or_else(|| self.lhs.find_noncovalent_bond_by_participants(a, b))
+    }
+    fn find_stereo_atom_by_participants(
+        &self,
+        site: AtomId,
+        ligands: &[StereoLigand],
+    ) -> Option<StereoAtomId> {
+        self.deltas
+            .find_stereo_atom_by_participants(site, ligands)
+            .or_else(|| self.lhs.find_stereo_atom_by_participants(site, ligands))
+    }
+    fn find_stereo_bond_by_participants(
+        &self,
+        site: BondId,
+        ligands: &[StereoLigand],
+    ) -> Option<StereoBondId> {
+        self.deltas
+            .find_stereo_bond_by_participants(site, ligands)
+            .or_else(|| self.lhs.find_stereo_bond_by_participants(site, ligands))
+    }
+
+    fn contains_id(&self, id: &str) -> bool {
+        self.deltas.contains_id(id)
+            || self.lhs.contains_id(id)
+            || self.atom_aliases.contains_left(id)
+    }
+
+    fn find_atom_alias(&self, name: &str) -> Option<&AtomDsl> {
+        self.atom_aliases
+            .get_by_left(name)
+            .map(|dsl| dsl.as_ref())
+            .or_else(|| self.lhs.find_atom_alias(name))
+    }
+}
+
+impl From<&ReactionNamespace> for ReactionMetadata {
+    /// Project the roundtrip metadata: the lhs molecule's metadata, the delta-introduced entity
+    /// keywords (any delta that binds a name, not only `:add`), and the reaction's top-level aliases.
+    fn from(ns: &ReactionNamespace) -> Self {
+        let mut metadata = ReactionMetadata {
+            lhs: MoleculeMetadata::from(ns.lhs()),
+            ..Default::default()
+        };
+        for (id, name) in ns.deltas().atom_keywords() {
+            metadata.set_atom_id(id, name);
+        }
+        for (id, name) in ns.deltas().bond_keywords() {
+            metadata.set_bond_id(id, name);
+        }
+        for (id, name) in ns.deltas().dative_bond_keywords() {
+            metadata.set_dative_bond_id(id, name);
+        }
+        for (id, name) in ns.deltas().aromatic_system_keywords() {
+            metadata.set_aromatic_system_id(id, name);
+        }
+        for (id, name) in ns.deltas().multicenter_bond_keywords() {
+            metadata.set_multicenter_bond_id(id, name);
+        }
+        for (id, name) in ns.deltas().noncovalent_bond_keywords() {
+            metadata.set_noncovalent_bond_id(id, name);
+        }
+        for (id, name) in ns.deltas().stereo_atom_keywords() {
+            metadata.set_stereo_atom_id(id, name);
+        }
+        for (id, name) in ns.deltas().stereo_bond_keywords() {
+            metadata.set_stereo_bond_id(id, name);
+        }
+        for (name, dsl) in ns.atom_aliases() {
+            metadata.add_atom_alias(name.to_string(), dsl.clone());
+        }
+        metadata
+    }
+}
+
 /// One unresolved delta parsed from a `:deltas` entry. Refs stay symbolic
 /// (`AtomRef`/`BondRef`) and an `:add` carries the molecule entry verbatim
 /// (bare atom / alias / created-id resolved in R7); a `:modify` RHS is a
@@ -386,68 +692,50 @@ impl ReactionInput {
             deltas,
         } = self;
         let (lhs, lhs_namespace) = lhs.into_ast()?;
-        let lhs_meta = MoleculeMetadata::from(&lhs_namespace);
 
-        // Alias table for `:add` = lhs aliases ∪ reaction aliases (bijective; collisions error).
-        let mut aliases: IndexMap<String, Box<AtomDsl>> = lhs_meta
-            .iter_atom_aliases()
-            .map(|(name, dsl)| (name.to_string(), Box::new(dsl.clone())))
-            .collect();
-        let mut metadata = ReactionMetadata {
-            lhs: lhs_meta,
-            ..Default::default()
-        };
+        // The lhs entity counts bound the delta id space: an id at or above a kind's lhs count was
+        // created in this reaction, which remove / modify / transform reject.
+        let lhs_atom_count = lhs_namespace.atom_count();
+        let lhs_bond_count = lhs_namespace.bond_count();
+        let lhs_dative_bond_count = lhs_namespace.dative_bond_count();
+        let lhs_aromatic_system_count = lhs_namespace.aromatic_system_count();
+        let lhs_multicenter_bond_count = lhs_namespace.multicenter_bond_count();
+        let lhs_noncovalent_bond_count = lhs_namespace.noncovalent_bond_count();
+        let lhs_stereo_atom_count = lhs_namespace.stereo_atom_count();
+        let lhs_stereo_bond_count = lhs_namespace.stereo_bond_count();
+
+        // The single resolution namespace: lhs entities, the delta namespace continuing its id space,
+        // and the reaction's top-level aliases. Every ref — entity and constraint — resolves against
+        // it; `register_*` advances the delta counter and `ReactionMetadata` is projected from it at
+        // the end. No forward refs: only entities bound earlier in delta order are visible.
+        let mut ns = ReactionNamespace::new(lhs_namespace);
+
+        // Top-level reaction aliases, bijective (a name colliding with an lhs alias, or a target
+        // already aliased, errors); they resolve in delta atom-specs alongside the lhs aliases.
         for (name, dsl) in atom_aliases {
-            if aliases.contains_key(&name) {
-                return Err(ParseError::DuplicateId(name));
-            }
-            if aliases.values().any(|existing| existing == &dsl) {
-                return Err(ParseError::InvalidValue(
-                    "atom-aliases must be bijective: two names map to the same atom".into(),
-                ));
-            }
-            metadata.add_atom_alias(name.clone(), (*dsl).clone());
-            aliases.insert(name, dsl);
+            ns.register_atom_alias(name, dsl)?;
         }
-
-        // Resolution namespace: lhs entity ids (all kinds) and running counts, both seeded from the
-        // lhs molecule and grown in delta order as entities are defined. Every ref — entity and
-        // constraint — resolves against this pair; `metadata` separately records created-entity ids
-        // for roundtrip. No forward refs: only adds processed earlier are visible.
-        let mut counts = EntityCounts::from_ast(&lhs);
-        // Phase A (S2d): the delta namespace continues the lhs id space, grown on `Add` so structural
-        // refs (S3) to created entities resolve. `counts` remains the live counter here — it and every
-        // other `EntityCounts` user are retired onto the namespace at the S3 elimination point.
-        let mut delta_namespace = MoleculeNamespace::continuation(&lhs_namespace);
-        let mut namespace = metadata.lhs().clone();
-        let lhs_atom_count = counts.atom_count;
-        let lhs_bond_count = counts.bond_count;
-        let lhs_dative_bond_count = counts.dative_bond_count;
-        let lhs_aromatic_system_count = counts.aromatic_system_count;
-        let lhs_multicenter_bond_count = counts.multicenter_bond_count;
-        let lhs_noncovalent_bond_count = counts.noncovalent_bond_count;
-        let lhs_stereo_atom_count = counts.stereo_atom_count;
-        let lhs_stereo_bond_count = counts.stereo_bond_count;
 
         let mut resolved = Deltas::new();
         for delta in deltas {
             match delta {
                 DeltaInput::AtomAdd(entry) => {
-                    let id = counts.allocate_atom();
-                    let id_name = entry.id.clone();
-                    if let Some(name) = entry.id {
-                        if namespace.contains_id(&name) || aliases.contains_key(&name) {
-                            return Err(ParseError::DuplicateId(name));
-                        }
-                        namespace.set_atom_id(id, name.clone());
-                        metadata.set_atom_id(id, name);
-                    }
-                    let ast = resolve_atom_spec(entry.spec, &aliases)?;
-                    delta_namespace.register_atom(id_name);
+                    let ast = match entry.spec {
+                        AtomSpecInput::Bare(dsl) => dsl.0,
+                        AtomSpecInput::Alias(name) => match ns.find_atom_alias(&name) {
+                            Some(dsl) => dsl.0.clone(),
+                            None => {
+                                return Err(ParseError::InvalidValue(format!(
+                                    "unknown atom alias :{name}"
+                                )))
+                            }
+                        },
+                    };
+                    let id = ns.register_atom(entry.id)?;
                     resolved.push(Delta::Atom(AtomDelta::Add { id, ast }));
                 }
                 DeltaInput::AtomRemove(r) => {
-                    let id = r.into_ast(counts.atom_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_atom_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot remove atom :{} added in the same reaction",
@@ -460,7 +748,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::AtomModify(r, rhs) => {
-                    let id = r.into_ast(counts.atom_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_atom_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot modify atom :{} added in the same reaction",
@@ -473,18 +761,9 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::BondAdd(entry) => {
-                    let id = counts.allocate_bond();
-                    let id_name = entry.id.clone();
-                    if let Some(name) = entry.id {
-                        if namespace.contains_id(&name) || aliases.contains_key(&name) {
-                            return Err(ParseError::DuplicateId(name));
-                        }
-                        namespace.set_bond_id(id, name.clone());
-                        metadata.set_bond_id(id, name);
-                    }
-                    let a = entry.first.into_ast(counts.atom_count, &namespace)?;
-                    let b = entry.second.into_ast(counts.atom_count, &namespace)?;
-                    delta_namespace.register_bond(id_name, a, b);
+                    let a = entry.first.resolve(&ns)?;
+                    let b = entry.second.resolve(&ns)?;
+                    let id = ns.register_bond(entry.id, a, b)?;
                     resolved.push(Delta::Bond(BondDelta::Add {
                         id,
                         atoms: [a, b],
@@ -492,7 +771,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::BondRemove(r) => {
-                    let id = r.into_ast(counts.bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot remove bond :{} added in the same reaction",
@@ -506,7 +785,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::BondModify(r, rhs) => {
-                    let id = r.into_ast(counts.bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot modify bond :{} added in the same reaction",
@@ -519,22 +798,13 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::DativeBondAdd(entry) => {
-                    let id = counts.allocate_dative_bond();
-                    let id_name = entry.id.clone();
-                    if let Some(name) = entry.id {
-                        if namespace.contains_id(&name) || aliases.contains_key(&name) {
-                            return Err(ParseError::DuplicateId(name));
-                        }
-                        namespace.set_dative_bond_id(id, name.clone());
-                        metadata.set_dative_bond_id(id, name);
-                    }
                     let donors = entry
                         .donors
                         .into_iter()
-                        .map(|d| d.into_ast(counts.atom_count, &namespace))
+                        .map(|d| d.resolve(&ns))
                         .collect::<Result<Vec<_>, _>>()?;
-                    let acceptor = entry.acceptor.into_ast(counts.atom_count, &namespace)?;
-                    delta_namespace.register_dative_bond(id_name, &donors, acceptor);
+                    let acceptor = entry.acceptor.resolve(&ns)?;
+                    let id = ns.register_dative_bond(entry.id, &donors, acceptor)?;
                     resolved.push(Delta::DativeBond(DativeBondDelta::Add {
                         id,
                         donors,
@@ -543,7 +813,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::DativeBondRemove(r) => {
-                    let id = r.into_ast(counts.dative_bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_dative_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot remove dative bond :{} added in the same reaction",
@@ -559,7 +829,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::DativeBondModify(r, rhs) => {
-                    let id = r.into_ast(counts.dative_bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_dative_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot modify dative bond :{} added in the same reaction",
@@ -572,21 +842,12 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::AromaticSystemAdd(entry) => {
-                    let id = counts.allocate_aromatic_system();
-                    let id_name = entry.id.clone();
-                    if let Some(name) = entry.id {
-                        if namespace.contains_id(&name) || aliases.contains_key(&name) {
-                            return Err(ParseError::DuplicateId(name));
-                        }
-                        namespace.set_aromatic_system_id(id, name.clone());
-                        metadata.set_aromatic_system_id(id, name);
-                    }
                     let atoms = entry
                         .atoms
                         .into_iter()
-                        .map(|a| a.into_ast(counts.atom_count, &namespace))
+                        .map(|a| a.resolve(&ns))
                         .collect::<Result<Vec<_>, _>>()?;
-                    delta_namespace.register_aromatic_system(id_name, &atoms);
+                    let id = ns.register_aromatic_system(entry.id, &atoms)?;
                     resolved.push(Delta::AromaticSystem(AromaticSystemDelta::Add {
                         id,
                         atoms,
@@ -594,7 +855,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::AromaticSystemRemove(r) => {
-                    let id = r.into_ast(counts.aromatic_system_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_aromatic_system_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot remove aromatic system :{} added in the same reaction",
@@ -609,7 +870,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::AromaticSystemModify(r, rhs) => {
-                    let id = r.into_ast(counts.aromatic_system_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_aromatic_system_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot modify aromatic system :{} added in the same reaction",
@@ -622,21 +883,12 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::MulticenterBondAdd(entry) => {
-                    let id = counts.allocate_multicenter_bond();
-                    let id_name = entry.id.clone();
-                    if let Some(name) = entry.id {
-                        if namespace.contains_id(&name) || aliases.contains_key(&name) {
-                            return Err(ParseError::DuplicateId(name));
-                        }
-                        namespace.set_multicenter_bond_id(id, name.clone());
-                        metadata.set_multicenter_bond_id(id, name);
-                    }
                     let atoms = entry
                         .atoms
                         .into_iter()
-                        .map(|a| a.into_ast(counts.atom_count, &namespace))
+                        .map(|a| a.resolve(&ns))
                         .collect::<Result<Vec<_>, _>>()?;
-                    delta_namespace.register_multicenter_bond(id_name, &atoms);
+                    let id = ns.register_multicenter_bond(entry.id, &atoms)?;
                     resolved.push(Delta::MulticenterBond(MulticenterBondDelta::Add {
                         id,
                         atoms,
@@ -644,7 +896,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::MulticenterBondRemove(r) => {
-                    let id = r.into_ast(counts.multicenter_bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_multicenter_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot remove multicenter bond :{} added in the same reaction",
@@ -659,7 +911,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::MulticenterBondModify(r, rhs) => {
-                    let id = r.into_ast(counts.multicenter_bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_multicenter_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot modify multicenter bond :{} added in the same reaction",
@@ -672,18 +924,9 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::NoncovalentBondAdd(entry) => {
-                    let id = counts.allocate_noncovalent_bond();
-                    let id_name = entry.id.clone();
-                    if let Some(name) = entry.id {
-                        if namespace.contains_id(&name) || aliases.contains_key(&name) {
-                            return Err(ParseError::DuplicateId(name));
-                        }
-                        namespace.set_noncovalent_bond_id(id, name.clone());
-                        metadata.set_noncovalent_bond_id(id, name);
-                    }
-                    let first = entry.first.into_ast(counts.atom_count, &namespace)?;
-                    let second = entry.second.into_ast(counts.atom_count, &namespace)?;
-                    delta_namespace.register_noncovalent_bond(id_name, first, second);
+                    let first = entry.first.resolve(&ns)?;
+                    let second = entry.second.resolve(&ns)?;
+                    let id = ns.register_noncovalent_bond(entry.id, first, second)?;
                     resolved.push(Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                         id,
                         atoms: [first, second],
@@ -691,7 +934,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::NoncovalentBondRemove(r) => {
-                    let id = r.into_ast(counts.noncovalent_bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_noncovalent_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot remove noncovalent bond :{} added in the same reaction",
@@ -705,7 +948,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::NoncovalentBondModify(r, rhs) => {
-                    let id = r.into_ast(counts.noncovalent_bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_noncovalent_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot modify noncovalent bond :{} added in the same reaction",
@@ -718,27 +961,13 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::StereoAtomAdd(entry) => {
-                    let id = counts.allocate_stereo_atom();
-                    let id_name = entry.id.clone();
-                    if let Some(name) = entry.id {
-                        if namespace.contains_id(&name) || aliases.contains_key(&name) {
-                            return Err(ParseError::DuplicateId(name));
-                        }
-                        namespace.set_stereo_atom_id(id, name.clone());
-                        metadata.set_stereo_atom_id(id, name);
-                    }
-                    let site = entry.site.into_ast(counts.atom_count, &namespace)?;
+                    let site = entry.site.resolve(&ns)?;
                     let ligands = entry
                         .ligands
                         .into_iter()
-                        .map(|l| {
-                            Ok(StereoLigand::new(
-                                l.atom.into_ast(counts.atom_count, &namespace)?,
-                                l.kind,
-                            ))
-                        })
+                        .map(|l| Ok(StereoLigand::new(l.atom.resolve(&ns)?, l.kind)))
                         .collect::<Result<Vec<_>, ParseError>>()?;
-                    delta_namespace.register_stereo_atom(id_name, site, &ligands);
+                    let id = ns.register_stereo_atom(entry.id, site, &ligands)?;
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Add {
                         id,
                         site,
@@ -747,7 +976,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::StereoAtomRemove(r) => {
-                    let id = r.into_ast(counts.stereo_atom_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_stereo_atom_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot remove stereo atom :{} added in the same reaction",
@@ -766,7 +995,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::StereoAtomModify(r, rhs) => {
-                    let id = r.into_ast(counts.stereo_atom_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_stereo_atom_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot modify stereo atom :{} added in the same reaction",
@@ -779,7 +1008,7 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::StereoAtomSwap(r, kind) => {
-                    let id = r.into_ast(counts.stereo_atom_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_stereo_atom_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot transform stereo atom :{} added in the same reaction",
@@ -789,7 +1018,7 @@ impl ReactionInput {
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Swap { id, kind }));
                 }
                 DeltaInput::StereoAtomMirror(r, kind) => {
-                    let id = r.into_ast(counts.stereo_atom_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_stereo_atom_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot transform stereo atom :{} added in the same reaction",
@@ -799,7 +1028,7 @@ impl ReactionInput {
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Mirror { id, kind }));
                 }
                 DeltaInput::StereoAtomApply(r, kind, permutation) => {
-                    let id = r.into_ast(counts.stereo_atom_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_stereo_atom_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot transform stereo atom :{} added in the same reaction",
@@ -813,27 +1042,13 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::StereoBondAdd(entry) => {
-                    let id = counts.allocate_stereo_bond();
-                    let id_name = entry.id.clone();
-                    if let Some(name) = entry.id {
-                        if namespace.contains_id(&name) || aliases.contains_key(&name) {
-                            return Err(ParseError::DuplicateId(name));
-                        }
-                        namespace.set_stereo_bond_id(id, name.clone());
-                        metadata.set_stereo_bond_id(id, name);
-                    }
-                    let site = entry.site.into_ast(counts.bond_count, &namespace)?;
+                    let site = entry.site.resolve(&ns)?;
                     let ligands = entry
                         .ligands
                         .into_iter()
-                        .map(|l| {
-                            Ok(StereoLigand::new(
-                                l.atom.into_ast(counts.atom_count, &namespace)?,
-                                l.kind,
-                            ))
-                        })
+                        .map(|l| Ok(StereoLigand::new(l.atom.resolve(&ns)?, l.kind)))
                         .collect::<Result<Vec<_>, ParseError>>()?;
-                    delta_namespace.register_stereo_bond(id_name, site, &ligands);
+                    let id = ns.register_stereo_bond(entry.id, site, &ligands)?;
                     resolved.push(Delta::StereoBond(StereoBondDelta::Add {
                         id,
                         site,
@@ -842,7 +1057,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::StereoBondRemove(r) => {
-                    let id = r.into_ast(counts.stereo_bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_stereo_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot remove stereo bond :{} added in the same reaction",
@@ -861,7 +1076,7 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::StereoBondModify(r, rhs) => {
-                    let id = r.into_ast(counts.stereo_bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_stereo_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot modify stereo bond :{} added in the same reaction",
@@ -874,7 +1089,7 @@ impl ReactionInput {
                     }
                 }
                 DeltaInput::StereoBondSwap(r, kind) => {
-                    let id = r.into_ast(counts.stereo_bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_stereo_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot transform stereo bond :{} added in the same reaction",
@@ -884,7 +1099,7 @@ impl ReactionInput {
                     resolved.push(Delta::StereoBond(StereoBondDelta::Swap { id, kind }));
                 }
                 DeltaInput::StereoBondMirror(r, kind) => {
-                    let id = r.into_ast(counts.stereo_bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_stereo_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot transform stereo bond :{} added in the same reaction",
@@ -894,7 +1109,7 @@ impl ReactionInput {
                     resolved.push(Delta::StereoBond(StereoBondDelta::Mirror { id, kind }));
                 }
                 DeltaInput::StereoBondApply(r, kind, permutation) => {
-                    let id = r.into_ast(counts.stereo_bond_count, &namespace)?;
+                    let id = r.resolve(&ns)?;
                     if id.index() >= lhs_stereo_bond_count {
                         return Err(ParseError::InvalidValue(format!(
                             "cannot transform stereo bond :{} added in the same reaction",
@@ -908,15 +1123,16 @@ impl ReactionInput {
                     }));
                 }
                 DeltaInput::ConstraintAdd(dsl) => {
-                    let c = dsl.into_ast(&counts, &namespace)?;
+                    let c = dsl.into_ast(&ns)?;
                     resolved.push(Delta::Constraint(ConstraintDelta::Add(c)));
                 }
                 DeltaInput::ConstraintRemove(dsl) => {
-                    let c = dsl.into_ast(&counts, &namespace)?;
+                    let c = dsl.into_ast(&ns)?;
                     resolved.push(Delta::Constraint(ConstraintDelta::Remove(c)));
                 }
             }
         }
+        let metadata = ReactionMetadata::from(&ns);
         Ok((
             ReactionAst {
                 lhs,

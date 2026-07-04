@@ -15,9 +15,9 @@
 use umol_edn::{DeError, Edn, EdnKeyword, EdnMap, FromEdn, ToEdn};
 
 use super::atom::AtomConstraintDsl;
-use super::constraint::EntityCounts;
 use super::error::ParseError;
-use super::molecule::MoleculeMetadata;
+use super::molecule::Metadata;
+use super::namespace::Namespace;
 use super::refs::{
     AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
     StereoAtomRef, StereoBondRef,
@@ -263,7 +263,7 @@ impl ToEdn for RelationalConstraintDsl {
 }
 
 impl RelationalConstraintDsl {
-    pub(crate) fn from_ast(rel: &RelationalConstraint, meta: &MoleculeMetadata) -> Self {
+    pub(crate) fn from_ast<M: Metadata>(rel: &RelationalConstraint, meta: &M) -> Self {
         use RelationalConstraint::*;
         match rel {
             DativeBondDonors { bond, atoms } => Self::DativeBondDonors {
@@ -411,202 +411,198 @@ impl RelationalConstraintDsl {
         }
     }
 
-    pub(crate) fn into_ast(
+    pub(crate) fn into_ast<N: Namespace>(
         self,
-        counts: &EntityCounts,
-        meta: &MoleculeMetadata,
+        namespace: &N,
     ) -> Result<RelationalConstraint, ParseError> {
         use RelationalConstraintDsl::*;
         Ok(match self {
             DativeBondDonors { bond, atoms } => RelationalConstraint::DativeBondDonors {
-                bond: bond.into_ast(counts.dative_bond_count, meta)?,
+                bond: bond.resolve(namespace)?,
                 atoms: atoms
                     .into_iter()
-                    .map(|a| a.into_ast(counts.atom_count, meta))
+                    .map(|a| a.resolve(namespace))
                     .collect::<Result<_, _>>()?,
             },
             DativeBondDonor { bond, atom } => RelationalConstraint::DativeBondDonor {
-                bond: bond.into_ast(counts.dative_bond_count, meta)?,
-                atom: atom.into_ast(counts.atom_count, meta)?,
+                bond: bond.resolve(namespace)?,
+                atom: atom.resolve(namespace)?,
             },
             DativeBondContainsAllDonors { bond, atoms } => {
                 RelationalConstraint::DativeBondContainsAllDonors {
-                    bond: bond.into_ast(counts.dative_bond_count, meta)?,
+                    bond: bond.resolve(namespace)?,
                     atoms: atoms
                         .into_iter()
-                        .map(|a| a.into_ast(counts.atom_count, meta))
+                        .map(|a| a.resolve(namespace))
                         .collect::<Result<_, _>>()?,
                 }
             }
             DativeBondAllDonors { bond, predicate } => RelationalConstraint::DativeBondAllDonors {
-                bond: bond.into_ast(counts.dative_bond_count, meta)?,
+                bond: bond.resolve(namespace)?,
                 predicate: Box::new(predicate.into_ast(&())),
             },
             DativeBondAnyDonor { bond, predicate } => RelationalConstraint::DativeBondAnyDonor {
-                bond: bond.into_ast(counts.dative_bond_count, meta)?,
+                bond: bond.resolve(namespace)?,
                 predicate: Box::new(predicate.into_ast(&())),
             },
             DativeBondAcceptor { bond, atom } => RelationalConstraint::DativeBondAcceptor {
-                bond: bond.into_ast(counts.dative_bond_count, meta)?,
-                atom: atom.into_ast(counts.atom_count, meta)?,
+                bond: bond.resolve(namespace)?,
+                atom: atom.resolve(namespace)?,
             },
             DativeBondAcceptorSatisfies { bond, predicate } => {
                 RelationalConstraint::DativeBondAcceptorSatisfies {
-                    bond: bond.into_ast(counts.dative_bond_count, meta)?,
+                    bond: bond.resolve(namespace)?,
                     predicate: Box::new(predicate.into_ast(&())),
                 }
             }
             DativeBondParallels { dative, parallel } => RelationalConstraint::DativeBondParallels {
-                dative: dative.into_ast(counts.dative_bond_count, meta)?,
-                parallel: parallel.into_ast(counts.bond_count, meta)?,
+                dative: dative.resolve(namespace)?,
+                parallel: parallel.resolve(namespace)?,
             },
             AromaticSystemAtoms { system, atoms } => RelationalConstraint::AromaticSystemAtoms {
-                system: system.into_ast(counts.aromatic_system_count, meta)?,
+                system: system.resolve(namespace)?,
                 atoms: atoms
                     .into_iter()
-                    .map(|a| a.into_ast(counts.atom_count, meta))
+                    .map(|a| a.resolve(namespace))
                     .collect::<Result<_, _>>()?,
             },
             AromaticSystemContains { system, atom } => {
                 RelationalConstraint::AromaticSystemContains {
-                    system: system.into_ast(counts.aromatic_system_count, meta)?,
-                    atom: atom.into_ast(counts.atom_count, meta)?,
+                    system: system.resolve(namespace)?,
+                    atom: atom.resolve(namespace)?,
                 }
             }
             AromaticSystemContainsAll { system, atoms } => {
                 RelationalConstraint::AromaticSystemContainsAll {
-                    system: system.into_ast(counts.aromatic_system_count, meta)?,
+                    system: system.resolve(namespace)?,
                     atoms: atoms
                         .into_iter()
-                        .map(|a| a.into_ast(counts.atom_count, meta))
+                        .map(|a| a.resolve(namespace))
                         .collect::<Result<_, _>>()?,
                 }
             }
             AromaticSystemAllAtoms { system, predicate } => {
                 RelationalConstraint::AromaticSystemAllAtoms {
-                    system: system.into_ast(counts.aromatic_system_count, meta)?,
+                    system: system.resolve(namespace)?,
                     predicate: Box::new(predicate.into_ast(&())),
                 }
             }
             AromaticSystemAnyAtom { system, predicate } => {
                 RelationalConstraint::AromaticSystemAnyAtom {
-                    system: system.into_ast(counts.aromatic_system_count, meta)?,
+                    system: system.resolve(namespace)?,
                     predicate: Box::new(predicate.into_ast(&())),
                 }
             }
             MulticenterBondAtoms { bond, atoms } => RelationalConstraint::MulticenterBondAtoms {
-                bond: bond.into_ast(counts.multicenter_bond_count, meta)?,
+                bond: bond.resolve(namespace)?,
                 atoms: atoms
                     .into_iter()
-                    .map(|a| a.into_ast(counts.atom_count, meta))
+                    .map(|a| a.resolve(namespace))
                     .collect::<Result<_, _>>()?,
             },
             MulticenterBondContains { bond, atom } => {
                 RelationalConstraint::MulticenterBondContains {
-                    bond: bond.into_ast(counts.multicenter_bond_count, meta)?,
-                    atom: atom.into_ast(counts.atom_count, meta)?,
+                    bond: bond.resolve(namespace)?,
+                    atom: atom.resolve(namespace)?,
                 }
             }
             MulticenterBondContainsAll { bond, atoms } => {
                 RelationalConstraint::MulticenterBondContainsAll {
-                    bond: bond.into_ast(counts.multicenter_bond_count, meta)?,
+                    bond: bond.resolve(namespace)?,
                     atoms: atoms
                         .into_iter()
-                        .map(|a| a.into_ast(counts.atom_count, meta))
+                        .map(|a| a.resolve(namespace))
                         .collect::<Result<_, _>>()?,
                 }
             }
             MulticenterBondAllAtoms { bond, predicate } => {
                 RelationalConstraint::MulticenterBondAllAtoms {
-                    bond: bond.into_ast(counts.multicenter_bond_count, meta)?,
+                    bond: bond.resolve(namespace)?,
                     predicate: Box::new(predicate.into_ast(&())),
                 }
             }
             MulticenterBondAnyAtom { bond, predicate } => {
                 RelationalConstraint::MulticenterBondAnyAtom {
-                    bond: bond.into_ast(counts.multicenter_bond_count, meta)?,
+                    bond: bond.resolve(namespace)?,
                     predicate: Box::new(predicate.into_ast(&())),
                 }
             }
             NoncovalentBondEnds { bond, atoms } => {
                 let [a, b] = atoms;
                 RelationalConstraint::NoncovalentBondEnds {
-                    bond: bond.into_ast(counts.noncovalent_bond_count, meta)?,
-                    atoms: [
-                        a.into_ast(counts.atom_count, meta)?,
-                        b.into_ast(counts.atom_count, meta)?,
-                    ],
+                    bond: bond.resolve(namespace)?,
+                    atoms: [a.resolve(namespace)?, b.resolve(namespace)?],
                 }
             }
             NoncovalentBondContains { bond, atom } => {
                 RelationalConstraint::NoncovalentBondContains {
-                    bond: bond.into_ast(counts.noncovalent_bond_count, meta)?,
-                    atom: atom.into_ast(counts.atom_count, meta)?,
+                    bond: bond.resolve(namespace)?,
+                    atom: atom.resolve(namespace)?,
                 }
             }
             NoncovalentBondEndsSatisfy { bond, predicates } => {
                 let [a, b] = predicates;
                 RelationalConstraint::NoncovalentBondEndsSatisfy {
-                    bond: bond.into_ast(counts.noncovalent_bond_count, meta)?,
+                    bond: bond.resolve(namespace)?,
                     predicates: [Box::new(a.into_ast(&())), Box::new(b.into_ast(&()))],
                 }
             }
             StereoAtomSite { stereo_atom, atom } => RelationalConstraint::StereoAtomSite {
-                stereo_atom: stereo_atom.into_ast(counts.stereo_atom_count, meta)?,
-                atom: atom.into_ast(counts.atom_count, meta)?,
+                stereo_atom: stereo_atom.resolve(namespace)?,
+                atom: atom.resolve(namespace)?,
             },
             StereoAtomContains { stereo_atom, atom } => RelationalConstraint::StereoAtomContains {
-                stereo_atom: stereo_atom.into_ast(counts.stereo_atom_count, meta)?,
-                atom: atom.into_ast(counts.atom_count, meta)?,
+                stereo_atom: stereo_atom.resolve(namespace)?,
+                atom: atom.resolve(namespace)?,
             },
             StereoAtomLigands { stereo_atom, atoms } => RelationalConstraint::StereoAtomLigands {
-                stereo_atom: stereo_atom.into_ast(counts.stereo_atom_count, meta)?,
+                stereo_atom: stereo_atom.resolve(namespace)?,
                 atoms: atoms
                     .into_iter()
-                    .map(|a| a.into_ast(counts.atom_count, meta))
+                    .map(|a| a.resolve(namespace))
                     .collect::<Result<_, _>>()?,
             },
             StereoAtomAllLigands {
                 stereo_atom,
                 predicate,
             } => RelationalConstraint::StereoAtomAllLigands {
-                stereo_atom: stereo_atom.into_ast(counts.stereo_atom_count, meta)?,
+                stereo_atom: stereo_atom.resolve(namespace)?,
                 predicate: Box::new(predicate.into_ast(&())),
             },
             StereoAtomAnyLigand {
                 stereo_atom,
                 predicate,
             } => RelationalConstraint::StereoAtomAnyLigand {
-                stereo_atom: stereo_atom.into_ast(counts.stereo_atom_count, meta)?,
+                stereo_atom: stereo_atom.resolve(namespace)?,
                 predicate: Box::new(predicate.into_ast(&())),
             },
             StereoBondSite { stereo_bond, bond } => RelationalConstraint::StereoBondSite {
-                stereo_bond: stereo_bond.into_ast(counts.stereo_bond_count, meta)?,
-                bond: bond.into_ast(counts.bond_count, meta)?,
+                stereo_bond: stereo_bond.resolve(namespace)?,
+                bond: bond.resolve(namespace)?,
             },
             StereoBondContains { stereo_bond, atom } => RelationalConstraint::StereoBondContains {
-                stereo_bond: stereo_bond.into_ast(counts.stereo_bond_count, meta)?,
-                atom: atom.into_ast(counts.atom_count, meta)?,
+                stereo_bond: stereo_bond.resolve(namespace)?,
+                atom: atom.resolve(namespace)?,
             },
             StereoBondLigands { stereo_bond, atoms } => RelationalConstraint::StereoBondLigands {
-                stereo_bond: stereo_bond.into_ast(counts.stereo_bond_count, meta)?,
+                stereo_bond: stereo_bond.resolve(namespace)?,
                 atoms: atoms
                     .into_iter()
-                    .map(|a| a.into_ast(counts.atom_count, meta))
+                    .map(|a| a.resolve(namespace))
                     .collect::<Result<_, _>>()?,
             },
             StereoBondAllLigands {
                 stereo_bond,
                 predicate,
             } => RelationalConstraint::StereoBondAllLigands {
-                stereo_bond: stereo_bond.into_ast(counts.stereo_bond_count, meta)?,
+                stereo_bond: stereo_bond.resolve(namespace)?,
                 predicate: Box::new(predicate.into_ast(&())),
             },
             StereoBondAnyLigand {
                 stereo_bond,
                 predicate,
             } => RelationalConstraint::StereoBondAnyLigand {
-                stereo_bond: stereo_bond.into_ast(counts.stereo_bond_count, meta)?,
+                stereo_bond: stereo_bond.resolve(namespace)?,
                 predicate: Box::new(predicate.into_ast(&())),
             },
         })
@@ -1049,6 +1045,8 @@ mod tests {
     use rstest::*;
     use umol_edn::read_string;
 
+    use super::super::molecule::MoleculeMetadata;
+    use super::super::namespace::MoleculeNamespace;
     use super::*;
     use crate::ast::constraint::AtomConstraint;
     use crate::ast::id::{
@@ -1062,18 +1060,35 @@ mod tests {
         MoleculeMetadata::default()
     }
 
+    /// A namespace with ten entities of each kind, so index refs up to 9 resolve.
     #[fixture]
-    fn full_counts() -> EntityCounts {
-        EntityCounts {
-            atom_count: 10,
-            bond_count: 10,
-            dative_bond_count: 10,
-            aromatic_system_count: 10,
-            multicenter_bond_count: 10,
-            noncovalent_bond_count: 10,
-            stereo_atom_count: 10,
-            stereo_bond_count: 10,
+    fn full_namespace() -> MoleculeNamespace {
+        let mut namespace = MoleculeNamespace::default();
+        for _ in 0..10 {
+            namespace.register_atom(None).unwrap();
         }
+        for _ in 0..10 {
+            namespace.register_bond(None, AtomId(0), AtomId(1)).unwrap();
+            namespace
+                .register_dative_bond(None, &[AtomId(0)], AtomId(1))
+                .unwrap();
+            namespace
+                .register_aromatic_system(None, &[AtomId(0)])
+                .unwrap();
+            namespace
+                .register_multicenter_bond(None, &[AtomId(0)])
+                .unwrap();
+            namespace
+                .register_noncovalent_bond(None, AtomId(0), AtomId(1))
+                .unwrap();
+            namespace
+                .register_stereo_atom(None, AtomId(0), &[])
+                .unwrap();
+            namespace
+                .register_stereo_bond(None, BondId(0), &[])
+                .unwrap();
+        }
+        namespace
     }
 
     #[rustfmt::skip]
@@ -1137,7 +1152,7 @@ mod tests {
         "{:stereo-bond-any-ligand [0 {:degree 3}]}")]
     fn test_relational_constraint_dsl_roundtrip(
         meta: MoleculeMetadata,
-        full_counts: EntityCounts,
+        #[from(full_namespace)] namespace: MoleculeNamespace,
         #[case] input: RelationalConstraint,
         #[case] edn_source: &str,
     ) {
@@ -1146,7 +1161,7 @@ mod tests {
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = RelationalConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&full_counts, &meta).unwrap();
+        let back = parsed.into_ast(&namespace).unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
 
@@ -1178,22 +1193,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_relational_constraint_dsl_rejects_out_of_range_atom(meta: MoleculeMetadata) {
-        let counts = EntityCounts {
-            atom_count: 2,
-            bond_count: 0,
-            dative_bond_count: 1,
-            aromatic_system_count: 0,
-            multicenter_bond_count: 0,
-            noncovalent_bond_count: 0,
-            stereo_atom_count: 0,
-            stereo_bond_count: 0,
-        };
+    fn test_relational_constraint_dsl_rejects_out_of_range_atom() {
+        let mut namespace = MoleculeNamespace::default();
+        namespace.register_atom(None).unwrap();
+        namespace.register_atom(None).unwrap();
+        namespace
+            .register_dative_bond(None, &[AtomId(0)], AtomId(1))
+            .unwrap();
         let dsl = RelationalConstraintDsl::DativeBondDonor {
             bond: DativeBondRef::Index(0),
             atom: AtomRef::Index(99),
         };
-        let err = dsl.into_ast(&counts, &meta).unwrap_err();
+        let err = dsl.into_ast(&namespace).unwrap_err();
         assert_eq!(
             err,
             ParseError::InvalidRef {
@@ -1204,22 +1215,21 @@ mod tests {
     }
 
     #[rstest]
-    fn test_relational_constraint_dsl_rejects_out_of_range_bond(meta: MoleculeMetadata) {
-        let counts = EntityCounts {
-            atom_count: 5,
-            bond_count: 0,
-            dative_bond_count: 5,
-            aromatic_system_count: 0,
-            multicenter_bond_count: 0,
-            noncovalent_bond_count: 0,
-            stereo_atom_count: 0,
-            stereo_bond_count: 0,
-        };
+    fn test_relational_constraint_dsl_rejects_out_of_range_bond() {
+        let mut namespace = MoleculeNamespace::default();
+        for _ in 0..5 {
+            namespace.register_atom(None).unwrap();
+        }
+        for _ in 0..5 {
+            namespace
+                .register_dative_bond(None, &[AtomId(0)], AtomId(1))
+                .unwrap();
+        }
         let dsl = RelationalConstraintDsl::DativeBondDonor {
             bond: DativeBondRef::Index(99),
             atom: AtomRef::Index(0),
         };
-        let err = dsl.into_ast(&counts, &meta).unwrap_err();
+        let err = dsl.into_ast(&namespace).unwrap_err();
         assert_eq!(
             err,
             ParseError::InvalidRef {
