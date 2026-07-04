@@ -261,3 +261,141 @@ consumes **C0–C-b and C-f**, and is where `compose` flips to `EmbeddingKind::M
 overlap bond mapping's meet-interface + delta-rebasing rewrite, the three fixes the ignored
 `compose_complete_overlay` names, must land together. C-c and C-d complete the relation-set surface
 (additive) and do not gate Part D.
+
+## Part D — reaction-composition completeness: span-based compose (umol-ast)
+
+Commits to the **span approach** (§172's targeted-vs-span, resolved: span — the C0–C-f DPO primitives
+were built for glue+diff, and the spike confirmed the wiring). Instead of R2+R3 as per-field delta
+surgery, each overlap builds the **composite span**: glue `R_A` and `L_B` over the overlap `E`, then
+read off `L_c → R_c`. The glue computes the R2 interface `meet` and the side-diff computes the R3
+rebased deltas **uniformly** — no hand-rewriting of `old` fields per variant. Consumes graph-core
+C0–C-f. All work is in `umol-ast`; the span primitives already exist —
+`ReactionSpanAst::reverse` (→ `ReactionAst`), `ReactionAst::apply_at` / `from_sides`,
+`MoleculeCorrespondence::induce` / `reverse`, per-entity `Lattice::meet`, `difference_to` — so the one
+new primitive is `meet_pushout`.
+
+*Non-stereo core:*
+
+- **D-a1 — `MoleculePushout` + `meet_pushout` node/edge layer. (additive)** `ast/compose.rs`:
+  `MoleculePushout { object: MoleculeAst, left, right: MoleculeCorrespondence }` (fields mirror
+  graph-core `Pushout`) + `meet_pushout(left, right, overlap: &MoleculeCorrespondence)
+  -> Option<MoleculePushout>` over topology only — graph-core `pushout(left.raw_graph(),
+  right.raw_graph(), overlap.atoms())`, each glued atom/bond datum copied from its origin side and, at a
+  coincident entity, `Lattice::meet` (`⊥ → None`, the R2-inadmissible overlap). Tests: shared atom folds
+  the two `AtomAst`s; conflicting shared atom `⊥ → None`. `[dep: graph-core C-b (done)]`
+
+- **D-a2 — DAMN overlay gluing in `meet_pushout`. (additive)** The four/aromatic overlays via graph-core
+  relation `pushout` with `combine = |x, y| x.meet(y)`; non-coinciding overlays kept as context
+  (present-absent under monomorphism). Tests: an overlap carrying an overlay (met) and a context overlay
+  (kept). `[dep: D-a1]`
+
+- **D-b1 — `compose_overlay` (non-stereo). (additive)** `compose_overlay(span_a, a_inverse, b, overlap)
+  -> Option<ReactionAst>`: `meet_pushout(span_a.rhs(), &b.lhs, overlap)?` → `L_c =
+  a_inverse.apply_at(&glue.object, &glue.left)?.rhs()`, `R_c = b.apply_at(&glue.object,
+  &glue.right)?.rhs()` → `ReactionAst::from_sides(L_c, R_c, corr)`, `corr` recovered from the two
+  `ReactionDerivation` comaps (verify the accessor here). `a_inverse = span_a.reverse()?` hoisted once.
+  R2 lives in the glue, R3 in `from_sides`' diff. Tests: the §R1 F–Cl pair. `[dep: D-a2]`
+
+- **D-c1 — rewire `compose_all`, flip to `Monomorphism`, un-ignore. (breaking→green)** Enumerate with
+  `EmbeddingKind::Monomorphism` (compose.rs:315), map each overlap through `compose_overlay`, collect;
+  delete the superseded manual machinery (`created_atom_ids` / `db_atom` / `db_bond` / `lc_atoms` / the
+  `ra_*` plumbing). Un-`#[ignore]` `compose_complete_overlay` (non-stereo generator). Milestone:
+  **non-stereo completeness** — `sound` / `complete_overlay` / `dangling_free` / `well_formed` /
+  `determinism` green. `[dep: D-b1]`
+
+*Stereo (see "Part D stereo — design"):*
+
+- **D-b0 — `ReactionSpanAst::reverse` stereo remappings. (additive)** reaction_span.rs:1468: build the
+  two stereo `reversed_remapping`s (created↔removed swap) like the other families; deltas invert via I6a.
+  Test: reverse of a stereo-carrying span. `[dep: —]`
+
+- **D-a3 — stereo overlay gluing in `meet_pushout`. (additive)** Canonicalize each stereo overlay's
+  ligand order (`transform_frame`, coset carried) → full-participant relation `pushout` over the two
+  `FixedVarBirelationSet` families with `combine = StereoAtomAst` / `StereoBondAst::meet`. Test: two
+  frames of one stereo center (reordered) glue + meet; contradictory cosets `⊥`. `[dep: D-a1]`
+
+- **D-b2 — `compose_overlay` stereo. (additive)** Pre-apply `transform_frame` of `A⁻¹` / `B`'s stereo
+  overlays into the glue's canonical frame before `apply_at` (rule-AST, per overlap). Test: a stereo
+  compose pair (e.g. the cis/trans C=C carbon-swap overlap). `[dep: D-b1, D-a3, D-b0]`
+
+- **D-c2 — drop the stereo bail + sample stereo. (breaking→green)** Remove the `has_stereo_*` +
+  stereo-delta bail in `compose_all`; extend `overlay_reaction_strategy` to sample stereo overlays;
+  `compose_complete_overlay` now covers stereo. Milestone: **stereo completeness** — full suite green.
+  `[dep: D-c1, D-b2]`
+
+**Stages** (green after each) — non-stereo phase: **S0** = {D-a1, D-a2}; **S1** = {D-b1}; **S2** =
+{D-c1} → non-stereo completeness. Stereo phase: **S3** = {D-b0, D-a3}; **S4** = {D-b2}; **S5** = {D-c2}
+→ stereo completeness. **Critical path** D-a1 → D-a2 → D-b1 → D-c1, then D-b0/D-a3 → D-b2 → D-c2; S3
+needs only S0, so it can begin any time after S0 (parallel to S1/S2). Additive subitems carry a transient
+`#[allow(dead_code)]` until wired.
+
+**Stereo is in scope** — the `has_stereo_*` bail is *not* stale (I6 built single-reaction stereo but
+deliberately deferred *compose*-stereo). Folding it into Part D adds `ReactionSpanAst::reverse` stereo
+coverage, a frame-canonical stereo path in `meet_pushout`, and dropping the bail + sampling stereo in
+the compose generator — see **Part D stereo — design** below for the frame-threading and the
+differing-ligand-set decision.
+
+**Opens** — #1 (glue name/shape) **resolved**: `MoleculePushout { object, left, right }` + `meet_pushout`
+(placement: `compose.rs`; promote to `ast/glue.rs` only if it grows). #2 (interface op) **resolved**:
+`meet` — the combined *value*, not `is_compatible`'s bool — per-entity `Lattice::meet` + the
+relation-pushout `combine`; this is the R2 pullback (`R_A` is A's product state, overlap value =
+`meet(R_A, L_B)`). #3: the `L_c`↔`R_c` correspondence recovery from each `ReactionDerivation`'s
+glue↔result comap — verify in source at D-b. Remaining opens are the **stereo** decisions below.
+
+## Part D stereo — design
+
+Resolves the compose-stereo pieces I6 deferred, for the span approach.
+
+**Where the frame lives.** `StereoAtomAst = { configuration: StereoConfigurationAst, constraints }`
+(stereo.rs, `stereo_element!`; it *does* derive `Lattice`). The site atom and the **ligand frame** (the
+`Ordered` `StereoLigand` list) are the overlay *participants*
+(`FixedVarBirelationSet<NodeId, …, StereoLigand, …, EntitySpan<StereoAtomAst>>`), **not** the data. So
+the coset in `configuration` is stated **relative to that participant frame**, and the derived
+(site-less) `StereoAtomAst::meet` meets `configuration` + `constraints` field-wise — **correct only when
+the two frames coincide** (cosets are frame-relative).
+
+**The frame-threading problem.** Two sites need a common frame:
+- *`meet_pushout` coincidence* — the relation pushout coincides overlays by *participant* equality, so
+  the same stereo center stated in a different ligand *order* on the two sides has different
+  participants: it won't coincide (lands as two stereo entities on one site), and a forced field-wise
+  config-meet across differing frames is meaningless.
+- *`apply_at` at the glue* — stereo apply is "same-frame, no reconciliation" (I6c / doc 104): it
+  sets / relative-ops the host config in the *rule's* frame. Applying `A⁻¹` / `B` (stated in the
+  `R_A` / `L_B` frames) at the glue (a third frame) breaks that.
+
+**Approach — one canonical frame per shared stereo site.** Pick a deterministic ligand order per stereo
+site in the glue (ascending glue atom id). Then all realignment localizes to `transform_frame`:
+1. *Glue build (`meet_pushout`).* Relabel each side's stereo overlays into glue ids;
+   `transform_frame(side_frame, canonical_frame)` each `configuration` so the coset follows the reorder
+   (physical config fixed); now same-site / same-ligands specs share participants → the relation
+   pushout coincides them → `combine = StereoAtomAst::meet` in the shared frame (`⊥ → None`, the same
+   inadmissibility as atoms/bonds).
+2. *Rule application (`apply_at`).* Pre-transform `A⁻¹` / `B`'s stereo overlays into the glue's
+   canonical frame (the AST `transform_frame`, per overlap — the frame permutation comes from the
+   overlap correspondence) so `apply_at`'s same-frame lowering holds. This keeps the realignment on the
+   *rule AST* and needs **no** `Edit::TransformFrameStereo*` transact variant (that stays deferred).
+
+**No differing-coordination case.** A stereo center is fully coordinated (virtual ligands — implicit-H,
+lone pair — are site properties), and every explicit ligand is named in the rule's L/R, so there are
+**no context ligands**. In an atom-admissible glue the shared site's explicit ligand *set* is therefore
+identical on both sides — an extra / different explicit ligand would give the site a 5th neighbour →
+**over-coordinated → atom-level `⊥`**, rejected before stereo is consulted. So the two overlays always
+carry the *same* ligand atoms, differing only in *order* (the overlap's induced permutation), which
+step 1's `transform_frame` canonicalization removes → **full-participant** coincidence (site **and**
+ligands, exactly as `find_by_participants` keys it) → `meet`. The only stereo `⊥` is a genuine geometric
+contradiction (the two cosets disagree in the shared frame). No union-frame-lift / admissibility choice.
+
+**`reverse` stereo gap.** `ReactionSpanAst::reverse` (reaction_span.rs:1468) passes empty stereo
+remappings. Fix: build the two stereo `reversed_remapping`s like the other families (created↔removed
+swap); the span's stereo columns exist (I6c) and stereo deltas already invert (I6a `inverse`:
+`Apply(σ) → Apply(σ⁻¹)`, `Swap` / `Mirror` self-inverse).
+
+**New Part D pieces (fold in):** `meet_pushout` stereo path (per-site canonical frame + `transform_frame`
++ `StereoAtomAst`/`StereoBondAst::meet` over the two `FixedVarBirelationSet` families) → **D-a**;
+pre-apply rule-stereo `transform_frame` → **D-b**; `ReactionSpanAst::reverse` stereo remappings → a
+prereq of **D-b**; drop the `has_stereo_*` + stereo-delta bail and sample stereo in the compose
+generator → **D-c**.
+
+**No decision needed** — settled by this pass: canonical-frame threading → full-participant coincidence
+→ `meet`; the `reverse` fix; no `Edit::TransformFrame` variant. Stereo folds into D-a/D-b/D-c as listed;
+a differing explicit ligand is an atom-level `⊥`, never a stereo one.
