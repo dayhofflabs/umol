@@ -278,16 +278,26 @@ new primitive is `meet_pushout`.
 
 - **D-a1 — `MoleculePushout` + `meet_pushout` node/edge layer. (additive)** `ast/compose.rs`:
   `MoleculePushout { object: MoleculeAst, left, right: MoleculeCorrespondence }` (fields mirror
-  graph-core `Pushout`) + `meet_pushout(left, right, overlap: &MoleculeCorrespondence)
+  graph-core `Pushout`) + `meet_pushout(left, right, overlap: &GraphCorrespondence)
   -> Option<MoleculePushout>` over topology only — graph-core `pushout(left.raw_graph(),
-  right.raw_graph(), overlap.atoms())`, each glued atom/bond datum copied from its origin side and, at a
-  coincident entity, `Lattice::meet` (`⊥ → None`, the R2-inadmissible overlap). Tests: shared atom folds
-  the two `AtomAst`s; conflicting shared atom `⊥ → None`. `[dep: graph-core C-b (done)]`
+  right.raw_graph(), overlap)` (the overlap is the `GraphCorrespondence` `enumerate_common_subgraphs`
+  returns — coincident node+edge sets directly); each glued atom/bond datum copied from its origin side
+  and, at a coincident entity, `Lattice::meet` (`⊥ → None`, the R2-inadmissible overlap); embeddings via
+  `MoleculeCorrespondence::induce`. Overlays (D-a2/D-a4) and molecule-level constraints (D-a3) not yet carried.
+  Tests: shared atom folds the two `AtomAst`s; conflicting shared atom `⊥ → None`.
+  `[dep: graph-core C-b (done)]` **Done**
 
 - **D-a2 — DAMN overlay gluing in `meet_pushout`. (additive)** The four/aromatic overlays via graph-core
   relation `pushout` with `combine = |x, y| x.meet(y)`; non-coinciding overlays kept as context
   (present-absent under monomorphism). Tests: an overlap carrying an overlay (met) and a context overlay
   (kept). `[dep: D-a1]`
+
+- **D-a3 — molecule-level constraint gluing in `meet_pushout`. (additive)** The glue's `Constraints` =
+  `left`'s (refs already in the glue id space — `object` keeps left's ids) ++ `right`'s, the latter's
+  entity refs re-anchored through the `right` embedding (the per-family ref remap). Flat `Vec<Constraint>`
+  = conjunction (both sides' constraints must hold); replaces the D-a1 `Constraints::new()` placeholder.
+  Test: a left-only and a right-only molecule constraint both survive, the right one re-anchored.
+  `[dep: D-a1]`
 
 - **D-b1 — `compose_overlay` (non-stereo). (additive)** `compose_overlay(span_a, a_inverse, b, overlap)
   -> Option<ReactionAst>`: `meet_pushout(span_a.rhs(), &b.lhs, overlap)?` → `L_c =
@@ -309,25 +319,25 @@ new primitive is `meet_pushout`.
   two stereo `reversed_remapping`s (created↔removed swap) like the other families; deltas invert via I6a.
   Test: reverse of a stereo-carrying span. `[dep: —]`
 
-- **D-a3 — stereo overlay gluing in `meet_pushout`. (additive)** Canonicalize each stereo overlay's
+- **D-a4 — stereo overlay gluing in `meet_pushout`. (additive)** Canonicalize each stereo overlay's
   ligand order (`transform_frame`, coset carried) → full-participant relation `pushout` over the two
   `FixedVarBirelationSet` families with `combine = StereoAtomAst` / `StereoBondAst::meet`. Test: two
   frames of one stereo center (reordered) glue + meet; contradictory cosets `⊥`. `[dep: D-a1]`
 
 - **D-b2 — `compose_overlay` stereo. (additive)** Pre-apply `transform_frame` of `A⁻¹` / `B`'s stereo
   overlays into the glue's canonical frame before `apply_at` (rule-AST, per overlap). Test: a stereo
-  compose pair (e.g. the cis/trans C=C carbon-swap overlap). `[dep: D-b1, D-a3, D-b0]`
+  compose pair (e.g. the cis/trans C=C carbon-swap overlap). `[dep: D-b1, D-a4, D-b0]`
 
 - **D-c2 — drop the stereo bail + sample stereo. (breaking→green)** Remove the `has_stereo_*` +
   stereo-delta bail in `compose_all`; extend `overlay_reaction_strategy` to sample stereo overlays;
   `compose_complete_overlay` now covers stereo. Milestone: **stereo completeness** — full suite green.
   `[dep: D-c1, D-b2]`
 
-**Stages** (green after each) — non-stereo phase: **S0** = {D-a1, D-a2}; **S1** = {D-b1}; **S2** =
-{D-c1} → non-stereo completeness. Stereo phase: **S3** = {D-b0, D-a3}; **S4** = {D-b2}; **S5** = {D-c2}
-→ stereo completeness. **Critical path** D-a1 → D-a2 → D-b1 → D-c1, then D-b0/D-a3 → D-b2 → D-c2; S3
-needs only S0, so it can begin any time after S0 (parallel to S1/S2). Additive subitems carry a transient
-`#[allow(dead_code)]` until wired.
+**Stages** (green after each) — non-stereo phase: **S0** = {D-a1, D-a2, D-a3}; **S1** = {D-b1}; **S2** =
+{D-c1} → non-stereo completeness. Stereo phase: **S3** = {D-b0, D-a4}; **S4** = {D-b2}; **S5** = {D-c2}
+→ stereo completeness. **Critical path** D-a1 → D-a2 → D-b1 → D-c1, then D-b0/D-a4 → D-b2 → D-c2 (D-a3
+rides S0 in parallel); S3 needs only S0, so it can begin any time after S0 (parallel to S1/S2). Additive
+subitems carry a transient `#[allow(dead_code)]` until wired.
 
 **Stereo is in scope** — the `has_stereo_*` bail is *not* stale (I6 built single-reaction stereo but
 deliberately deferred *compose*-stereo). Folding it into Part D adds `ReactionSpanAst::reverse` stereo
