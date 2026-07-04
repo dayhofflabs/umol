@@ -132,133 +132,134 @@ impl Graph {
             right: right_map,
         }
     }
-}
 
-/// Delete `matched`(`L\K`) from `host`, keeping the context — the pushout complement of the left DPO
-/// square (Def. 9.8, Fact 9.9). `matched` is the match `L → host`, `interface` the preserved
-/// `K → L`. `None` when the gluing (dangling) condition fails.
-pub fn pushout_complement(
-    host: &Graph,
-    matched: &GraphCorrespondence,
-    interface: &GraphCorrespondence,
-) -> Option<PushoutComplement> {
-    // The deleted host items: L\K (interface-exposed on the L side), carried through the match.
-    let deleted_nodes: Vec<NodeId> = interface
-        .nodes()
-        .right_exposed()
-        .into_iter()
-        .filter_map(|l| matched.nodes().right_of(l))
-        .collect();
-    let deleted_edges: Vec<EdgeId> = interface
-        .edges()
-        .right_exposed()
-        .into_iter()
-        .filter_map(|le| matched.edges().right_of(le))
-        .collect();
-
-    let mut object = host.clone();
-    let compaction = object.try_remove(&deleted_nodes, &deleted_edges)?;
-
-    let host_to_d_nodes = Correspondence::new(
-        (0..host.node_count())
-            .filter_map(|h| {
-                let host_node = NodeId::from(h);
-                compaction.compact_node(host_node).map(|d| (host_node, d))
-            })
-            .collect(),
-        host.node_count(),
-        object.node_count(),
-    );
-    let host_to_d_edges = Correspondence::new(
-        (0..host.edge_count())
-            .filter_map(|e| {
-                let host_edge = EdgeId::from(e);
-                compaction.compact_edge(host_edge).map(|d| (host_edge, d))
-            })
-            .collect(),
-        host.edge_count(),
-        object.edge_count(),
-    );
-
-    let context = GraphCorrespondence::new(host_to_d_nodes.reverse(), host_to_d_edges.reverse());
-    let interface_to_d = GraphCorrespondence::new(
-        interface
+    /// Delete `matched`(`L\K`) from `self`, keeping the context — the pushout complement of the left
+    /// DPO square (Def. 9.8, Fact 9.9). `matched` is the match `L → self`, `interface` the preserved
+    /// `K → L`. `None` when the gluing (dangling) condition fails.
+    pub fn pushout_complement(
+        &self,
+        matched: &GraphCorrespondence,
+        interface: &GraphCorrespondence,
+    ) -> Option<PushoutComplement> {
+        // The deleted host items: L\K (interface-exposed on the L side), carried through the match.
+        let deleted_nodes: Vec<NodeId> = interface
             .nodes()
-            .compose(matched.nodes())
-            .compose(&host_to_d_nodes),
-        interface
+            .right_exposed()
+            .into_iter()
+            .filter_map(|l| matched.nodes().right_of(l))
+            .collect();
+        let deleted_edges: Vec<EdgeId> = interface
             .edges()
-            .compose(matched.edges())
-            .compose(&host_to_d_edges),
-    );
+            .right_exposed()
+            .into_iter()
+            .filter_map(|le| matched.edges().right_of(le))
+            .collect();
 
-    Some(PushoutComplement {
-        object,
-        context,
-        interface: interface_to_d,
-    })
-}
+        let mut object = self.clone();
+        let compaction = object.try_remove(&deleted_nodes, &deleted_edges)?;
 
-/// The shared preimage of `left → E` and `right → E` — the pullback of the cospan (Def. 2.22): the
-/// largest subgraph of both that maps consistently into `E`, with its two projections. Used to build
-/// a composite rule's interface (`K = C₁ ×_E C₂`, Def. 9.25).
-pub fn pullback(
-    left: &Graph,
-    right: &Graph,
-    left_into: &GraphCorrespondence,
-    right_into: &GraphCorrespondence,
-) -> Pullback {
-    // left ↔ right over the common E: mate a left item to the right item sharing its E-image.
-    let node_mates = left_into
-        .nodes()
-        .compose(&right_into.nodes().reverse())
-        .mates()
-        .to_vec();
-    let edge_mates = left_into
-        .edges()
-        .compose(&right_into.edges().reverse())
-        .mates()
-        .to_vec();
+        let host_to_d_nodes = Correspondence::new(
+            (0..self.node_count())
+                .filter_map(|h| {
+                    let host_node = NodeId::from(h);
+                    compaction.compact_node(host_node).map(|d| (host_node, d))
+                })
+                .collect(),
+            self.node_count(),
+            object.node_count(),
+        );
+        let host_to_d_edges = Correspondence::new(
+            (0..self.edge_count())
+                .filter_map(|e| {
+                    let host_edge = EdgeId::from(e);
+                    compaction.compact_edge(host_edge).map(|d| (host_edge, d))
+                })
+                .collect(),
+            self.edge_count(),
+            object.edge_count(),
+        );
 
-    let left_to_k: HashMap<NodeId, NodeId> = node_mates
-        .iter()
-        .enumerate()
-        .map(|(i, &(l, _))| (l, NodeId::from(i)))
-        .collect();
-    let edges: Vec<[u32; 2]> = edge_mates
-        .iter()
-        .map(|&(le, _)| {
-            let [a, b] = left.edge_endpoints(le);
-            [left_to_k[&a].0, left_to_k[&b].0]
+        let context =
+            GraphCorrespondence::new(host_to_d_nodes.reverse(), host_to_d_edges.reverse());
+        let interface_to_d = GraphCorrespondence::new(
+            interface
+                .nodes()
+                .compose(matched.nodes())
+                .compose(&host_to_d_nodes),
+            interface
+                .edges()
+                .compose(matched.edges())
+                .compose(&host_to_d_edges),
+        );
+
+        Some(PushoutComplement {
+            object,
+            context,
+            interface: interface_to_d,
         })
-        .collect();
-    let object = Graph::new(node_mates.len(), &edges);
+    }
 
-    let left_map = GraphCorrespondence::new(
-        Correspondence::from_images(
-            &node_mates.iter().map(|&(l, _)| l).collect::<Vec<_>>(),
-            left.node_count(),
-        ),
-        Correspondence::from_images(
-            &edge_mates.iter().map(|&(le, _)| le).collect::<Vec<_>>(),
-            left.edge_count(),
-        ),
-    );
-    let right_map = GraphCorrespondence::new(
-        Correspondence::from_images(
-            &node_mates.iter().map(|&(_, r)| r).collect::<Vec<_>>(),
-            right.node_count(),
-        ),
-        Correspondence::from_images(
-            &edge_mates.iter().map(|&(_, re)| re).collect::<Vec<_>>(),
-            right.edge_count(),
-        ),
-    );
+    /// The shared preimage of `self → E` and `right → E` — the pullback of the cospan (Def. 2.22): the
+    /// largest subgraph of both that maps consistently into `E`, with its two projections. Used to
+    /// build a composite rule's interface (`K = C₁ ×_E C₂`, Def. 9.25).
+    pub fn pullback(
+        &self,
+        right: &Graph,
+        left_into: &GraphCorrespondence,
+        right_into: &GraphCorrespondence,
+    ) -> Pullback {
+        // self ↔ right over the common E: mate a self item to the right item sharing its E-image.
+        let node_mates = left_into
+            .nodes()
+            .compose(&right_into.nodes().reverse())
+            .mates()
+            .to_vec();
+        let edge_mates = left_into
+            .edges()
+            .compose(&right_into.edges().reverse())
+            .mates()
+            .to_vec();
 
-    Pullback {
-        object,
-        left: left_map,
-        right: right_map,
+        let left_to_k: HashMap<NodeId, NodeId> = node_mates
+            .iter()
+            .enumerate()
+            .map(|(i, &(l, _))| (l, NodeId::from(i)))
+            .collect();
+        let edges: Vec<[u32; 2]> = edge_mates
+            .iter()
+            .map(|&(le, _)| {
+                let [a, b] = self.edge_endpoints(le);
+                [left_to_k[&a].0, left_to_k[&b].0]
+            })
+            .collect();
+        let object = Graph::new(node_mates.len(), &edges);
+
+        let left_map = GraphCorrespondence::new(
+            Correspondence::from_images(
+                &node_mates.iter().map(|&(l, _)| l).collect::<Vec<_>>(),
+                self.node_count(),
+            ),
+            Correspondence::from_images(
+                &edge_mates.iter().map(|&(le, _)| le).collect::<Vec<_>>(),
+                self.edge_count(),
+            ),
+        );
+        let right_map = GraphCorrespondence::new(
+            Correspondence::from_images(
+                &node_mates.iter().map(|&(_, r)| r).collect::<Vec<_>>(),
+                right.node_count(),
+            ),
+            Correspondence::from_images(
+                &edge_mates.iter().map(|&(_, re)| re).collect::<Vec<_>>(),
+                right.edge_count(),
+            ),
+        );
+
+        Pullback {
+            object,
+            left: left_map,
+            right: right_map,
+        }
     }
 }
 
@@ -322,7 +323,9 @@ mod tests {
             Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(2))], 2, 3),
             Correspondence::new(vec![], 0, 2),
         );
-        let pc = pushout_complement(&host, &matched, &interface).expect("no dangling");
+        let pc = host
+            .pushout_complement(&matched, &interface)
+            .expect("no dangling");
         assert_eq!(pc.object.node_count(), 3);
         assert_eq!(pc.object.edge_count(), 1);
         // host node 3 survives as D node 2; the K endpoint (host node 2) as D node 1.
@@ -344,7 +347,7 @@ mod tests {
             Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(2))], 2, 3),
             Correspondence::new(vec![(EdgeId(0), EdgeId(0)), (EdgeId(1), EdgeId(1))], 2, 2),
         );
-        assert_eq!(pushout_complement(&host, &matched, &interface), None);
+        assert_eq!(host.pushout_complement(&matched, &interface), None);
     }
 
     #[rstest]
@@ -362,7 +365,7 @@ mod tests {
             Correspondence::new(vec![(NodeId(1), NodeId(0)), (NodeId(2), NodeId(1))], 3, 2),
             Correspondence::new(vec![(EdgeId(1), EdgeId(0))], 2, 1),
         );
-        let pb = pullback(&left, &right, &left_into, &right_into);
+        let pb = left.pullback(&right, &left_into, &right_into);
         assert_eq!(pb.object.node_count(), 2);
         assert_eq!(pb.object.edge_count(), 1);
         assert_eq!(pb.left.nodes().right_of(NodeId(0)), Some(NodeId(0)));
