@@ -495,7 +495,10 @@ Three arrangements of the same two traits — resolution and render each written
 - **S3k — fuzz seeds with structural refs.** Add corpus seeds exercising the `{:atoms […]}` /
   `{:donors … :acceptor …}` / `{:site … :ligands […]}` structural forms to the `umol-ast` targets whose
   grammar admits them — `fuzz_molecule`, `fuzz_reaction`, `fuzz_reaction_span`, `fuzz_constraints` — so the
-  full parse→resolve path is fuzzed on the new arm. `[dep: S3c, S3d, S3e]` **Done**
+  full parse→resolve path is fuzzed on the new arm. `[dep: S3c, S3d, S3e]` **Done** — surfaced that S3c
+  had wired the structural arm into the **tree** parser only; the streaming reader (`refs.rs` `$reader`)
+  gained a `{` arm + per-kind streaming structural parsers (`read_<e>_structural`), so molecule / reaction /
+  span stream-parse structural refs too (streaming == tree, covered by a consistency test).
 
 - **S3m — rename the keyword-returning metadata accessors `<kind>_id` → `<kind>_keyword`.** Deferred out
   of S3b (it cascades past the trait work). Scope: the eight getters on `MoleculeMetadata` **and**
