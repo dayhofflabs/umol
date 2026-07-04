@@ -330,9 +330,9 @@ impl MoleculeMetadata {
     }
 }
 
-/// The **render** query surface — `ref::from_ast` reads this to turn an AST id back into a surface
+/// The **render** query surface — `ref::denote` reads this to turn an AST id back into a surface
 /// ref (id → keyword, else index). The mirror of `Namespace`: `MoleculeMetadata` implements it, and
-/// later a reaction's `ReactionMetadata`. `from_ast` never emits the structural form, so `Metadata`
+/// later a reaction's `ReactionMetadata`. `denote` never emits the structural form, so `Metadata`
 /// carries no participant index — it is a subset of the namespace surface.
 pub trait Metadata {
     fn atom_keyword(&self, id: AtomId) -> Option<&str>;

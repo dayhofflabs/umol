@@ -335,7 +335,7 @@ impl ReactionMetadata {
 /// or participant key is looked up in `deltas` first, then `lhs` (the id spaces are disjoint, so at
 /// most one hits). Counts come from `deltas`, which continues `lhs` and so carries the reaction-wide
 /// total — the single running counter that hands out delta ids on `register_*`.
-pub(crate) struct ReactionNamespace {
+pub struct ReactionNamespace {
     lhs: MoleculeNamespace,
     deltas: MoleculeNamespace,
     atom_aliases: BiBTreeMap<String, Box<AtomDsl>>,
@@ -356,6 +356,48 @@ impl ReactionNamespace {
             deltas,
             atom_aliases: BiBTreeMap::new(),
         }
+    }
+
+    /// The namespace of an already-resolved reaction: the lhs molecule's namespace plus every entity
+    /// an `Add` delta introduces, registered anonymously with its participants in delta order (which
+    /// reproduces the per-kind delta ids). Refs resolve against it as they did at parse time.
+    pub fn from_ast(reaction: &ReactionAst) -> Self {
+        let free = "anonymous delta entity registration never collides";
+        let mut ns = Self::new(MoleculeNamespace::from_ast(&reaction.lhs));
+        for delta in reaction.deltas.iter() {
+            match delta {
+                Delta::Atom(AtomDelta::Add { .. }) => {
+                    ns.register_atom(None).expect(free);
+                }
+                Delta::Bond(BondDelta::Add { atoms, .. }) => {
+                    ns.register_bond(None, atoms[0], atoms[1]).expect(free);
+                }
+                Delta::DativeBond(DativeBondDelta::Add {
+                    donors, acceptor, ..
+                }) => {
+                    ns.register_dative_bond(None, donors, *acceptor)
+                        .expect(free);
+                }
+                Delta::AromaticSystem(AromaticSystemDelta::Add { atoms, .. }) => {
+                    ns.register_aromatic_system(None, atoms).expect(free);
+                }
+                Delta::MulticenterBond(MulticenterBondDelta::Add { atoms, .. }) => {
+                    ns.register_multicenter_bond(None, atoms).expect(free);
+                }
+                Delta::NoncovalentBond(NoncovalentBondDelta::Add { atoms, .. }) => {
+                    ns.register_noncovalent_bond(None, atoms[0], atoms[1])
+                        .expect(free);
+                }
+                Delta::StereoAtom(StereoAtomDelta::Add { site, ligands, .. }) => {
+                    ns.register_stereo_atom(None, *site, ligands).expect(free);
+                }
+                Delta::StereoBond(StereoBondDelta::Add { site, ligands, .. }) => {
+                    ns.register_stereo_bond(None, *site, ligands).expect(free);
+                }
+                _ => {}
+            }
+        }
+        ns
     }
 
     /// Whether a keyword is free in the lhs + reaction-alias scope. The delta scope is checked by the
@@ -2841,6 +2883,7 @@ mod tests {
     use crate::dsl::bond::BondDsl;
     use crate::dsl::constraint::MoleculeConstraintDsl;
     use crate::dsl::molecule::AtomSpecInput;
+    use crate::dsl::refs::{AtomRef, BondRef};
     use crate::mol;
 
     #[rstest]
@@ -3584,5 +3627,33 @@ mod tests {
         let ast = ReactionAst::from_edn(&read_string(input).unwrap()).unwrap();
         let reparsed = ReactionAst::from_edn(&ast.to_edn()).unwrap();
         assert_eq!(reparsed, ast);
+    }
+
+    /// lhs C(0)–O(1) with bond 0; deltas add N(2) then the bond (1, 2) as delta bond 1.
+    #[fixture]
+    fn add_bond_reaction() -> ReactionNamespace {
+        let input = r##"{:lhs {:atoms ["C" "O"] :bonds [[0 1 "1"]]} :deltas [{:atom {:add [:x "N"]}} {:bond {:add [1 :x "1"]}}]}"##;
+        let reaction = ReactionAst::from_edn(&read_string(input).unwrap()).unwrap();
+        ReactionNamespace::from_ast(&reaction)
+    }
+
+    // `from_ast` reproduces the parse-time namespace across both regions: a structural bond ref to an
+    // lhs pair resolves to its lhs id, to a delta-added pair to its delta id, and to a non-pair fails.
+    #[rstest]
+    #[case::lhs_bond(0, 1, Ok(BondId(0)))]
+    #[case::delta_bond(1, 2, Ok(BondId(1)))]
+    #[case::self_pair(
+        0,
+        0,
+        Err(ParseError::InvalidRef { kind: "bond", value: "[0 0]".to_string() })
+    )]
+    fn test_reaction_namespace_from_ast(
+        #[from(add_bond_reaction)] ns: ReactionNamespace,
+        #[case] a: usize,
+        #[case] b: usize,
+        #[case] expected: Result<BondId, ParseError>,
+    ) {
+        let structural = BondRef::Structural([AtomRef::Index(a), AtomRef::Index(b)]);
+        assert_eq!(structural.resolve(&ns), expected);
     }
 }

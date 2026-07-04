@@ -440,7 +440,7 @@ Three arrangements of the same two traits — resolution and render each written
   metadata. `ref::into_ast` (metadata-scan resolution) is *not* deleted here — the `SubPattern`
   pattern-side stopgap (`into_ast_pair` resolving pattern refs via `into_ast`) keeps it alive; it goes in
   S3f. `constraint.rs`/`relational.rs` test fixtures build a `MoleculeNamespace`. Reaction/span callers
-  break here, restored in S3d/e. `[dep: S3b]`
+  break here, restored in S3d/e. `[dep: S3b]` **Done**
 
 - **S3d — reaction (breaking → green).** `dsl/reaction.rs`. `ReactionNamespace { lhs: MoleculeNamespace,
   delta: MoleculeNamespace }` `impl Namespace` (delta-then-lhs, count = delta's); `ReactionMetadata { lhs:
@@ -451,11 +451,11 @@ Three arrangements of the same two traits — resolution and render each written
   `metadata.set_*_id` grow) and `EntityCounts`. At the boundary: `ReactionMetadata.lhs =
   MoleculeMetadata::from(&lhs_namespace)`, `.created = MoleculeMetadata::from(&delta)` — both projected
   once, no incremental writes; reaction aliases are `delta`'s, lhs aliases render inside `.lhs`. `[dep:
-  S3c]`
+  S3c]` **Done**
 
 - **S3e — reaction-span (breaking → green).** `dsl/reaction_span.rs`. Same shape over its own
   `ReactionNamespace`/`ReactionMetadata` (or `MoleculeNamespace`/`MoleculeMetadata` where a span side is a
-  plain molecule — settle when implementing). `[dep: S3d]`
+  plain molecule — settle when implementing). `[dep: S3d]` **Done**
 
 - **S3f — sub-pattern (breaking → green).** `constraint.rs`, `dsl/namespace.rs`.
   `MoleculeNamespace::from_ast(&MoleculeAst)` — walk the AST entities, register each anonymously (counts +
@@ -467,23 +467,23 @@ Three arrangements of the same two traits — resolution and render each written
   render leaf `ref::from_ast` → `ref::denote`** (the macro's `id → ref`, all eight refs — co-located with
   `into_ast`/`resolve`) and its render call sites. This is *not* `MoleculeNamespace::from_ast` (the
   pattern-namespace ctor above, a distinct AST→namespace constructor) nor/te value-DSL `FromAst`
-  `from_ast` — those keep their names. `[dep: S3c]`
+  `from_ast` — those keep their names. `[dep: S3c]` **Done**
 
 - **S3g — eliminate `EntityCounts` (cleanup, green).** Every remaining count reads the `Namespace`
   trait's `<kind>_count`; delete the struct + `from_ast` + `allocate_*` from `constraint.rs`. (Most users
-  already gone in S3c/d/e/f.) `[dep: S3d, S3e, S3f]`
-
+  already gone in S3c/d/e/f.) `[dep: S3d, S3e, S3f]` **Done**
+ 
 - **S3h — id-uniqueness on the namespace (cleanup, green).** Molecule build's scattered locals
   (`check_id_disjoint`, `entry_ids`, `atom_id_to_idx`/`bond_id_to_idx`) collapse onto
   `Namespace::contains_id` (or a register-time check returning `Err(DuplicateId)`); remove the
   `id_to_idx` maps (last use). Minor error-ordering change (check at register-time, after participant
-  resolution). `[dep: S3c]`
+  resolution). `[dep: S3c]` **Done**
 
 - **S3i — proptest: structural refs resolve (feature `proptest`).** Off a generated molecule / reaction,
   pick each non-atom entity and form a *structural* ref to it (its constituent atom/bond refs) beside the
   positional ref; assert both resolve to the same id, and that a structural ref over the wrong constituent
   set fails. Cross-checks the `resolve_<e>_structural` path against positional resolution across all seven
-  kinds (incl. the stereo `(site, ligand-multiset)` key). `[dep: S3c, S3d]`
+  kinds (incl. the stereo `(site, ligand-multiset)` key). `[dep: S3c, S3d]` **Done**
 
 - **S3j — proptest: `keyword > positional > structural` emission on roundtrip (feature `proptest`).** The
   render priority: a ref to a *named* entity re-emits as its keyword, to an unnamed entity as its index,
@@ -505,7 +505,7 @@ Three arrangements of the same two traits — resolution and render each written
   projection is the only builder). **Do not touch** the AST-view `.<kind>_id()` methods
   (`atom.aromatic_system_id()`, `neighbor.bond_id()`, `StereoLigand.atom_id()`, …) — those return actual
   ids and are correctly named; distinguish by the argument (metadata getters take an id, view methods
-  don't). Green (pure rename). `[dep: S3d]`
+  don't). Green (pure rename). `[dep: S3d]` **Done**
 
 - **S3l — update `umol-ast/spec/umol-dsl-spec.md`.** Document: the structural ref forms per kind and that
   they are accepted wherever a ref is (entries, entity/relational/molecule constraints, sub-pattern

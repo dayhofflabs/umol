@@ -225,23 +225,23 @@ define_ref!(
 /// The constituent atoms of a dative bond named structurally (`{:donors [..] :acceptor a}`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DativeBondParticipants {
-    pub(crate) donors: Vec<AtomRef>,
-    pub(crate) acceptor: AtomRef,
+    pub donors: Vec<AtomRef>,
+    pub acceptor: AtomRef,
 }
 
 /// The site + ligand frame of a stereo atom named structurally (`{:site a :ligands [..]}`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StereoAtomParticipants {
-    pub(crate) site: AtomRef,
-    pub(crate) ligands: Vec<StereoLigandRef>,
+    pub site: AtomRef,
+    pub ligands: Vec<StereoLigandRef>,
 }
 
 /// The site bond + ligand frame of a stereo bond named structurally
 /// (`{:site bond-ref :ligands [..]}`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StereoBondParticipants {
-    pub(crate) site: BondRef,
-    pub(crate) ligands: Vec<StereoLigandRef>,
+    pub site: BondRef,
+    pub ligands: Vec<StereoLigandRef>,
 }
 
 fn parse_bond_structural(m: &EdnMap<'_>) -> Result<[AtomRef; 2], DeError> {
@@ -426,9 +426,9 @@ fn resolve_stereo_bond_structural<N: Namespace>(
 /// (`Atom` for a plain `<atom-ref>`, `ImplicitHydrogen` for `[:h <ref>]`,
 /// `LonePair` for `[:lp <ref>]`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct StereoLigandRef {
-    pub(crate) kind: StereoLigandKind,
-    pub(crate) atom: AtomRef,
+pub struct StereoLigandRef {
+    pub kind: StereoLigandKind,
+    pub atom: AtomRef,
 }
 
 fn stereo_ligand_kind(tag: &str) -> Result<StereoLigandKind, DeError> {

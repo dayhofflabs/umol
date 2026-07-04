@@ -606,6 +606,26 @@ fn test_molecule_ast_from_edn_structural_bond_ref() {
     );
 }
 
+// A structural ref is input-only: parsing one and rendering yields the keyword-else-positional form
+// (never structural), so it renders identically to the equivalent keyword / positional input.
+#[rstest]
+#[case::unnamed_bond_renders_positional(
+    r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [{:atoms [0 1]} {:aromatic true}]}]}"#,
+    r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:aromatic true}]}]}"#,
+)]
+#[case::named_bond_renders_keyword(
+    r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type "1"}] :constraints [{:bond [{:atoms [0 1]} {:aromatic true}]}]}"#,
+    r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type "1"}] :constraints [{:bond [:b1 {:aromatic true}]}]}"#,
+)]
+fn test_molecule_dsl_to_edn_structural_ref(#[case] structural: &str, #[case] canonical: &str) {
+    let via_structural = MoleculeDsl::from_edn(&read_string(structural).unwrap()).unwrap();
+    let via_canonical = MoleculeDsl::from_edn(&read_string(canonical).unwrap()).unwrap();
+    assert_eq!(
+        via_structural.to_edn().to_string(),
+        via_canonical.to_edn().to_string(),
+    );
+}
+
 #[rstest]
 fn test_molecule_dsl_edn_roundtrip_bond_order_sum_by_id() {
     let source = r##"{:atoms ["C" "C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single} {:id :b2 :atoms [1 2] :type :single}] :constraints [{:bond-order-sum {:bonds [:b1 :b2] :sum 2}}]}"##;

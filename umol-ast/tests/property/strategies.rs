@@ -30,9 +30,11 @@ pub(crate) use umol_ast::ast::{
     ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
-    parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, MoleculeDsl, MoleculeMetadata,
-    MulticenterBondDsl, NoncovalentBondDsl, PartialAtomDsl, PartialBondDsl,
-    StereoAtomConstraintDsl, StereoAtomDsl, StereoBondConstraintDsl, StereoBondDsl, ValueDsl,
+    parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, DativeBondParticipants,
+    MoleculeDsl, MoleculeMetadata, MoleculeNamespace, MulticenterBondDsl, NoncovalentBondDsl,
+    ParseError, PartialAtomDsl, PartialBondDsl, StereoAtomConstraintDsl, StereoAtomDsl,
+    StereoAtomParticipants, StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants,
+    StereoLigandRef, ValueDsl,
 };
 pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};

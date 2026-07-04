@@ -50,11 +50,14 @@ pub use multicenter::{
     parse_multicenter_bond, MulticenterBondConstraintDsl, MulticenterBondDsl,
     MulticenterBondPredicate,
 };
+pub use namespace::{MoleculeNamespace, Namespace};
 pub use noncovalent::{parse_noncovalent_bond, NoncovalentBondConstraintDsl, NoncovalentBondDsl};
-pub use reaction::{ReactionDsl, ReactionMetadata};
+pub use reaction::{ReactionDsl, ReactionMetadata, ReactionNamespace};
 pub use reaction_span::ReactionSpanDsl;
 pub use refs::{
-    AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
+    AromaticSystemRef, AtomRef, BondRef, DativeBondParticipants, DativeBondRef, MulticenterBondRef,
+    NoncovalentBondRef, StereoAtomParticipants, StereoAtomRef, StereoBondParticipants,
+    StereoBondRef, StereoLigandRef,
 };
 pub use relational::RelationalConstraintDsl;
 pub use stereo::{

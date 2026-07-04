@@ -123,7 +123,7 @@ impl MoleculeNamespace {
     /// The namespace of an already-resolved molecule: every entity registered anonymously (no
     /// keyword) with its participants, so a sub-pattern's index and structural refs resolve against
     /// it. The ids are anonymous, so registration cannot collide.
-    pub(crate) fn from_ast(ast: &MoleculeAst) -> Self {
+    pub fn from_ast(ast: &MoleculeAst) -> Self {
         let free = "anonymous entity registration never collides";
         let mut ns = Self::default();
         for _ in ast.atoms().ids() {
