@@ -179,3 +179,60 @@ the span approach may be both cleaner and closer to the DPO concurrency construc
 - Whether the monomorphism enumeration's exponential blowup matters for real reaction pairs (compose
   overlaps are the small localized `R_A ∩ L_B` fragments, so likely not — but the subgraph edge rule
   admits *more* cliques than induced).
+
+## Part C — core structural DPO primitives (umol-graph-core)
+
+The chemistry-agnostic pushout / pushout-complement / pullback over the adhesive category a molecule
+lives in — `Graph` (atoms + bonds) and the relation-set families (`FixedRelationSet`,
+`VarRelationSet`, `FixedVarBirelationSet`, …: typed attributed hyperedges, generic over an opaque data
+`D`). The attribute/overlay asts are the `D`; the `meet` enters only through a caller-supplied
+`combine: FnMut(&D,&D) -> Option<D>` (`None` = ⊥), so graph-core never inspects `D`. Every primitive
+returns the object **plus its morphisms** — the bridge umol-ast reads to meet attributes and track
+ids. All of Part C is **additive/green** (new methods; nothing existing changes signature).
+
+- **C0 — graph-level primitives. Done (2026-07-04), green.** `graph.rs`: the `remove` split —
+  `remove_cascading` (SqPO) + `try_remove` (DPO, `Option`, dangling check); `remove_node`/`remove_edge`
+  → `_cascading`. `algorithms/rewriting.rs`: `pushout` / `pushout_complement` (on `try_remove`) /
+  `pullback` over `Graph` + `GraphCorrespondence`, each returning object + morphisms. `[dep: —]`
+
+- **C-a — `Correspondence<Id>::to_remapping()`.** `correspondence.rs`: a total-on-left correspondence
+  (every left id mated) as a `Remapping` (left id → partner). Feeds a pushout's node morphism into the
+  relation-set pushout, which relabels participants via `apply_remapping` (a `Remapping`). Additive.
+  `[dep: C0]`
+
+- **C-b — relation-set `pushout` on the overlay families.** `relation.rs`:
+  `pushout(&self, right: &Self, combine: impl FnMut(&D,&D) -> Option<D>) ->
+  Option<RelationPushout { object: Self, left: Correspondence<RelationId>, right: Correspondence<RelationId> }>`
+  on `FixedRelationSet` (noncovalent), `VarRelationSet` (aromatic, multicenter), and
+  `FixedVarBirelationSet` (dative, stereo-atom, stereo-bond). **Same-space contract (documented on the
+  method): `self` and `right` must already be in the object participant id-space — the caller relabels
+  each side with the existing `apply_remapping` and re-indexes its `D` to the new frame first.** This
+  matters because `apply_remapping` re-canonicalizes participants (an `Unordered` factor re-sorts) and
+  leaves `D` in the old frame — re-aligning per-participant data (aromatic/multicenter electron counts)
+  to the new order is ast-specific, so it stays in umol-ast (the established `apply_remapping` +
+  re-index pattern). The pushout is then the **same-space merge**: the overlap is implicit (two
+  relations coincide iff their participants match — `find_by_participants`); union, `combine` the `D`
+  of each coincidence (any `None` ⇒ inadmissible ⇒ `None`), append the rest. So `meet_glue`'s overlay
+  half = `apply_remapping ×2 + umol-ast re-index + this pushout` — exactly parallel to the graph
+  pushout (graph-core structure, umol-ast `meet`). Additive. `[dep: C-a]`
+
+  Pushout-complement over relations **reuses the existing `apply_compaction`** — the SqPO overlay
+  cascade (an overlay whose participant is deleted drops out); no new op. This is sound because
+  **incidence is one-directional: an overlay references nodes/edges as participants, and nothing
+  references an overlay.** So deletion only ever cascades *up* the hierarchy (node → its edges → the
+  overlays on them), never back down. The DPO dangling discipline (`try_remove`) is therefore needed
+  only in the node/edge layer, where an edge's survival constrains its endpoints; overlays, depended
+  on by nothing, follow freely by `apply_compaction`.
+
+- **C-c — complete the relation-set pushout surface.** `relation.rs`: the same `pushout` on
+  `FixedFixedBirelationSet` and `VarVarBirelationSet` — the uniform library surface (no overlay uses
+  these families yet, but the primitive is complete across the families). `[dep: C-b]`
+
+- **C-d — relation-set `pullback`.** `relation.rs`: the shared-hyperedge intersection over the
+  families, symmetric with the graph `pullback` (C0). Its named consumer is the composite interface
+  and any future rule-conflict/dependency analysis; under the operational compose the interface `K`
+  otherwise emerges from `A⁻¹`/`B` on the glue. `[dep: C-b]`
+
+**Critical path** C0 (done) → C-a → C-b. C-c and C-d are additive and land after C-b to complete the
+family/primitive surface, but do not gate the compose application (Part D — the `meet_glue` +
+Concurrency-Theorem realization), which needs only C0–C-b.

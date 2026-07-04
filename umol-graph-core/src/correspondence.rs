@@ -6,7 +6,7 @@
 //! and every entity family (bonds, overlays) one layer up; `Correspondence<NodeId>` additionally
 //! exposes the induced edge correspondence over the two graphs.
 
-use crate::graph::{EdgeId, Graph, NodeId};
+use crate::graph::{EdgeId, Graph, NodeId, Remapping};
 
 /// A partial bijection between two `Id` spaces: the **mated** `(left, right)` pairs; every unmated
 /// id is **exposed** on its side. Only the mated pairs are stored — exposed ids are derived on
@@ -59,6 +59,16 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
     /// The number of mated pairs (the interface size).
     pub fn mate_count(&self) -> usize {
         self.mates.len()
+    }
+
+    /// The size of the left id space.
+    pub fn left_count(&self) -> usize {
+        self.left_count
+    }
+
+    /// The size of the right id space.
+    pub fn right_count(&self) -> usize {
+        self.right_count
     }
 
     /// Whether every id on both sides is mated — a total bijection with no exposed ids. A diff
@@ -177,6 +187,28 @@ impl GraphCorrespondence {
     pub fn edges(&self) -> &Correspondence<EdgeId> {
         &self.edges
     }
+
+    /// This correspondence as a [`Remapping`] — a dense old→new relabel of both id spaces. Requires
+    /// it be **total on the left** (every left id mated), as a pushout's coprojection is: left id `i`
+    /// maps to its partner.
+    pub fn to_remapping(&self) -> Remapping {
+        Remapping::new(dense_images(&self.nodes), dense_images(&self.edges))
+    }
+}
+
+/// The image column of a total-on-left correspondence: `out[i]` is the partner of left id `i` (the
+/// mates are sorted by left, and totality fills `0..left_count`).
+fn dense_images<Id: Copy + Ord + From<usize>>(correspondence: &Correspondence<Id>) -> Vec<Id> {
+    debug_assert_eq!(
+        correspondence.mate_count(),
+        correspondence.left_count(),
+        "to_remapping requires a total-on-left correspondence",
+    );
+    correspondence
+        .mates()
+        .iter()
+        .map(|&(_, right)| right)
+        .collect()
 }
 
 /// The ids `0..count` absent from `sorted_mated` (which must be ascending, no duplicates) — a
@@ -256,6 +288,21 @@ mod tests {
         );
         assert_eq!(c.nodes().mates(), &[(n(0), n(1)), (n(1), n(0))]);
         assert_eq!(c.edges().mates(), &[(e(0), e(2))]);
+    }
+
+    #[rstest]
+    fn test_graph_correspondence_to_remapping() {
+        // total-on-left node map 0→2, 1→0, 2→1 and edge map 0→1, 1→0.
+        let c = GraphCorrespondence::new(
+            Correspondence::from_images(&[n(2), n(0), n(1)], 3),
+            Correspondence::from_images(&[e(1), e(0)], 2),
+        );
+        let remapping = c.to_remapping();
+        assert_eq!(remapping.map_node(n(0)), n(2));
+        assert_eq!(remapping.map_node(n(1)), n(0));
+        assert_eq!(remapping.map_node(n(2)), n(1));
+        assert_eq!(remapping.map_edge(e(0)), e(1));
+        assert_eq!(remapping.map_edge(e(1)), e(0));
     }
 
     #[rstest]

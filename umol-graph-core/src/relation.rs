@@ -13,6 +13,7 @@
 use std::hash::Hash;
 use std::marker::PhantomData;
 
+use crate::correspondence::Correspondence;
 use crate::graph::{Compaction, EdgeId, NodeId, Remapping};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -21,6 +22,40 @@ pub struct RelationId(pub u32);
 impl RelationId {
     pub fn index(self) -> usize {
         self.0 as usize
+    }
+}
+
+impl From<usize> for RelationId {
+    fn from(index: usize) -> Self {
+        Self(index as u32)
+    }
+}
+
+/// The glued relation set and its two relation-level coprojections — the result of a same-space
+/// relation-set [`pushout`](FixedRelationSet::pushout).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelationPushout<S> {
+    pub object: S,
+    /// `self` relation → object relation (identity — the object keeps `self`'s relation ids).
+    pub left: Correspondence<RelationId>,
+    /// `right` relation → object relation (a coincidence folds onto its `self` partner; the rest are
+    /// appended after `self`).
+    pub right: Correspondence<RelationId>,
+}
+
+/// The two coprojections of a relation pushout: `self` is the identity prefix `0..self_count`,
+/// `right` follows `right_map`. Both over the object relation space of size `object_count`.
+fn relation_pushout<S>(
+    object: S,
+    self_count: usize,
+    object_count: usize,
+    right_map: Vec<RelationId>,
+) -> RelationPushout<S> {
+    let left: Vec<RelationId> = (0..self_count).map(RelationId::from).collect();
+    RelationPushout {
+        object,
+        left: Correspondence::from_images(&left, object_count),
+        right: Correspondence::from_images(&right_map, object_count),
     }
 }
 
@@ -407,6 +442,48 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
             .collect();
         (Self::new(entries), positions)
     }
+
+    /// Glue `self` and `right`, both **already in the same participant id-space**, identifying
+    /// coinciding relations (equal participants) — the same-space relation pushout. `combine` merges
+    /// the data of a coincidence (`None` = ⊥ ⇒ the whole glue is inadmissible ⇒ `None`); every other
+    /// relation is carried. `self`'s ids are the identity prefix of the object, `right`'s
+    /// non-coinciding relations are appended. The caller brings both sides into the common space with
+    /// [`apply_remapping`](Self::apply_remapping) and re-indexes its `D` first.
+    pub fn pushout(
+        &self,
+        right: &Self,
+        mut combine: impl FnMut(&D, &D) -> Option<D>,
+    ) -> Option<RelationPushout<Self>>
+    where
+        D: Clone,
+    {
+        let mut entries: Vec<([P; N], D)> = self
+            .relation_ids()
+            .map(|id| (*self.participants(id), self.data(id).clone()))
+            .collect();
+        let self_count = entries.len();
+        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.relation_count());
+        for id in right.relation_ids() {
+            match self.find_by_participants(right.participants(id)) {
+                Some(hit) => {
+                    let merged = combine(&entries[hit.index()].1, right.data(id))?;
+                    entries[hit.index()].1 = merged;
+                    right_map.push(hit);
+                }
+                None => {
+                    right_map.push(RelationId(entries.len() as u32));
+                    entries.push((*right.participants(id), right.data(id).clone()));
+                }
+            }
+        }
+        let object_count = entries.len();
+        Some(relation_pushout(
+            Self::new(entries),
+            self_count,
+            object_count,
+            right_map,
+        ))
+    }
 }
 
 impl<P, O, D, const N: usize> Default for FixedRelationSet<P, O, D, N> {
@@ -574,6 +651,43 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
             })
             .collect();
         (Self::new(entries), positions)
+    }
+
+    /// Same-space relation pushout — see [`FixedRelationSet::pushout`].
+    pub fn pushout(
+        &self,
+        right: &Self,
+        mut combine: impl FnMut(&D, &D) -> Option<D>,
+    ) -> Option<RelationPushout<Self>>
+    where
+        D: Clone,
+    {
+        let mut entries: Vec<(Vec<P>, D)> = self
+            .relation_ids()
+            .map(|id| (self.participants(id).to_vec(), self.data(id).clone()))
+            .collect();
+        let self_count = entries.len();
+        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.relation_count());
+        for id in right.relation_ids() {
+            match self.find_by_participants(right.participants(id)) {
+                Some(hit) => {
+                    let merged = combine(&entries[hit.index()].1, right.data(id))?;
+                    entries[hit.index()].1 = merged;
+                    right_map.push(hit);
+                }
+                None => {
+                    right_map.push(RelationId(entries.len() as u32));
+                    entries.push((right.participants(id).to_vec(), right.data(id).clone()));
+                }
+            }
+        }
+        let object_count = entries.len();
+        Some(relation_pushout(
+            Self::new(entries),
+            self_count,
+            object_count,
+            right_map,
+        ))
     }
 }
 
@@ -996,6 +1110,54 @@ where
             })
             .collect();
         (Self::new(entries), positions_1, positions_2)
+    }
+
+    /// Same-space relation pushout — see [`FixedRelationSet::pushout`]. Coincidence is equality of
+    /// **both** factors' participants.
+    pub fn pushout(
+        &self,
+        right: &Self,
+        mut combine: impl FnMut(&D, &D) -> Option<D>,
+    ) -> Option<RelationPushout<Self>>
+    where
+        D: Clone,
+    {
+        let mut entries: Vec<([L1; N1], Vec<L2>, D)> = self
+            .relation_ids()
+            .map(|id| {
+                (
+                    *self.participants_1(id),
+                    self.participants_2(id).to_vec(),
+                    self.data(id).clone(),
+                )
+            })
+            .collect();
+        let self_count = entries.len();
+        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.relation_count());
+        for id in right.relation_ids() {
+            match self.find_by_participants(right.participants_1(id), right.participants_2(id)) {
+                Some(hit) => {
+                    let merged = combine(&entries[hit.index()].2, right.data(id))?;
+                    entries[hit.index()].2 = merged;
+                    right_map.push(hit);
+                }
+                None => {
+                    right_map.push(RelationId(entries.len() as u32));
+                    entries.push((
+                        *right.participants_1(id),
+                        right.participants_2(id).to_vec(),
+                        right.data(id).clone(),
+                    ));
+                }
+            }
+        }
+        let object_count = entries.len();
+        Some(relation_pushout(
+            Self::new(entries),
+            self_count,
+            object_count,
+            right_map,
+        ))
     }
 }
 
@@ -1972,5 +2134,82 @@ mod tests {
                 (vec![n(4)], vec![n(5)], ()),
             ]);
         assert_eq!(rs.find_by_participants(&query_1, &query_2), expected);
+    }
+
+    #[rstest]
+    fn test_fixed_relation_set_pushout() {
+        // same-space glue: self {01}=10 {23}=20 ; right {01}=5 (coincides) {45}=30 (new); combine=sum.
+        let left = FixedRelationSet::<NodeId, Unordered, i32, 2>::new(vec![
+            ([n(0), n(1)], 10),
+            ([n(2), n(3)], 20),
+        ]);
+        let right = FixedRelationSet::<NodeId, Unordered, i32, 2>::new(vec![
+            ([n(0), n(1)], 5),
+            ([n(4), n(5)], 30),
+        ]);
+        let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
+        assert_eq!(glue.object.relation_count(), 3);
+        let value = |q: [NodeId; 2]| {
+            glue.object
+                .find_by_participants(&q)
+                .map(|id| *glue.object.data(id))
+        };
+        assert_eq!(value([n(0), n(1)]), Some(15)); // coincidence combined
+        assert_eq!(value([n(2), n(3)]), Some(20)); // self-only carried
+        assert_eq!(value([n(4), n(5)]), Some(30)); // right-only appended
+        assert_eq!(glue.left.right_of(RelationId(0)), Some(RelationId(0))); // self identity
+        assert_eq!(glue.right.right_of(RelationId(0)), Some(RelationId(0))); // right {01} folds onto self
+        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(2))); // right {45} appended
+    }
+
+    #[rstest]
+    fn test_fixed_relation_set_pushout_bottom() {
+        // combine returns ⊥ on the coincidence → the whole glue is inadmissible.
+        let left = FixedRelationSet::<NodeId, Unordered, i32, 2>::new(vec![([n(0), n(1)], 10)]);
+        let right = FixedRelationSet::<NodeId, Unordered, i32, 2>::new(vec![([n(0), n(1)], 5)]);
+        assert_eq!(left.pushout(&right, |_, _| None), None);
+    }
+
+    #[rstest]
+    fn test_var_relation_set_pushout() {
+        let left =
+            VarRelationSet::<NodeId, Unordered, i32>::new(vec![(vec![n(0), n(1), n(2)], 10)]);
+        let right = VarRelationSet::<NodeId, Unordered, i32>::new(vec![
+            (vec![n(0), n(1), n(2)], 5),
+            (vec![n(3), n(4)], 20),
+        ]);
+        let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
+        assert_eq!(glue.object.relation_count(), 2);
+        assert_eq!(
+            glue.object
+                .find_by_participants(&[n(0), n(1), n(2)])
+                .map(|id| *glue.object.data(id)),
+            Some(15),
+        );
+        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1))); // {34} appended
+    }
+
+    #[rstest]
+    fn test_fixed_var_birelation_set_pushout() {
+        // coincidence requires *both* factors equal (site + members).
+        let left =
+            FixedVarBirelationSet::<NodeId, Ordered, 1, NodeId, Unordered, i32>::new(vec![(
+                [n(0)],
+                vec![n(1), n(2)],
+                10,
+            )]);
+        let right = FixedVarBirelationSet::<NodeId, Ordered, 1, NodeId, Unordered, i32>::new(vec![
+            ([n(0)], vec![n(1), n(2)], 5),
+            ([n(3)], vec![n(4), n(5)], 20),
+        ]);
+        let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
+        assert_eq!(glue.object.relation_count(), 2);
+        assert_eq!(
+            glue.object
+                .find_by_participants(&[n(0)], &[n(1), n(2)])
+                .map(|id| *glue.object.data(id)),
+            Some(15),
+        );
+        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1))); // appended
     }
 }
