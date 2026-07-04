@@ -28,16 +28,15 @@ use super::error::ParseError;
 use super::molecule::{
     parse_aromatic_system_entry, parse_atom_aliases, parse_atom_entry, parse_bond_entry,
     parse_dative_bond_entry, parse_multicenter_bond_entry, parse_noncovalent_bond_entry,
-    parse_stereo_atom_entry, parse_stereo_bond_entry, parse_stereo_ligand, read_atom_aliases,
-    render_aromatic_entry, render_atom_value, render_bond_entry, render_dative_entry,
-    render_multicenter_entry, render_noncovalent_entry, render_stereo_atom_entry,
-    render_stereo_bond_entry, render_stereo_ligand, resolve_atom_spec, AtomSpecInput,
-    MoleculeMetadata, StereoLigandInput,
+    parse_stereo_atom_entry, parse_stereo_bond_entry, read_atom_aliases, render_aromatic_entry,
+    render_atom_value, render_bond_entry, render_dative_entry, render_multicenter_entry,
+    render_noncovalent_entry, render_stereo_atom_entry, render_stereo_bond_entry,
+    render_stereo_ligand, resolve_atom_spec, AtomSpecInput, MoleculeMetadata,
 };
 use super::multicenter::MulticenterBondDsl;
 use super::namespace::MoleculeNamespace;
 use super::noncovalent::NoncovalentBondDsl;
-use super::refs::{AtomRef, BondRef};
+use super::refs::{parse_stereo_ligand, AtomRef, BondRef, StereoLigandRef};
 use super::stereo::{StereoAtomDsl, StereoBondDsl};
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
@@ -253,13 +252,13 @@ pub(crate) struct SpanInput {
     stereo_atoms: Vec<(
         Option<String>,
         AtomRef,
-        Vec<StereoLigandInput>,
+        Vec<StereoLigandRef>,
         EntitySpan<StereoAtomAst>,
     )>,
     stereo_bonds: Vec<(
         Option<String>,
         BondRef,
-        Vec<StereoLigandInput>,
+        Vec<StereoLigandRef>,
         EntitySpan<StereoBondAst>,
     )>,
     constraints: Vec<ConstraintSpanInput>,
@@ -597,7 +596,7 @@ fn parse_stereo_atom_span_entry(
     (
         Option<String>,
         AtomRef,
-        Vec<StereoLigandInput>,
+        Vec<StereoLigandRef>,
         EntitySpan<StereoAtomAst>,
     ),
     DeError,
@@ -651,7 +650,7 @@ fn parse_stereo_bond_span_entry(
     (
         Option<String>,
         BondRef,
-        Vec<StereoLigandInput>,
+        Vec<StereoLigandRef>,
         EntitySpan<StereoBondAst>,
     ),
     DeError,
@@ -1138,7 +1137,7 @@ impl SpanInput {
                 &participants,
                 "stereo atom",
             )?;
-            namespace.register_stereo_atom(id, site_id);
+            namespace.register_stereo_atom(id, site_id, &ligand_frame);
             stereo_atom_entries.push(([NodeId::from(site_id)], ligand_frame, span));
         }
         let stereo_atoms = FixedVarBirelationSet::new(stereo_atom_entries);
@@ -1187,7 +1186,7 @@ impl SpanInput {
                         .into(),
                 ));
             }
-            namespace.register_stereo_bond(id, site_id);
+            namespace.register_stereo_bond(id, site_id, &ligand_frame);
             stereo_bond_entries.push(([EdgeId::from(site_id)], ligand_frame, span));
         }
         let stereo_bonds = FixedVarBirelationSet::new(stereo_bond_entries);
@@ -1955,19 +1954,19 @@ mod tests {
     #[case::unchanged(r#"{:site 0 :ligands [1 2 3 4] :type "Th1"}"#, (
         None, AtomRef::Index(0),
         vec![
-            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(1) },
-            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(2) },
-            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(3) },
-            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(4) },
+            StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(1) },
+            StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(2) },
+            StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(3) },
+            StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(4) },
         ],
         EntitySpan::Unchanged(StereoAtomDsl::from_str("Th1").unwrap().0),
     ))]
     #[case::add(r#"{:add {:site 0 :ligands [1 2 [:h 3]] :type "Th1"}}"#, (
         None, AtomRef::Index(0),
         vec![
-            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(1) },
-            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(2) },
-            StereoLigandInput { kind: StereoLigandKind::ImplicitHydrogen, atom: AtomRef::Index(3) },
+            StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(1) },
+            StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(2) },
+            StereoLigandRef { kind: StereoLigandKind::ImplicitHydrogen, atom: AtomRef::Index(3) },
         ],
         EntitySpan::Added(StereoAtomDsl::from_str("Th1").unwrap().0),
     ))]
@@ -1976,7 +1975,7 @@ mod tests {
         #[case] expected: (
             Option<String>,
             AtomRef,
-            Vec<StereoLigandInput>,
+            Vec<StereoLigandRef>,
             EntitySpan<StereoAtomAst>,
         ),
     ) {
@@ -1990,16 +1989,16 @@ mod tests {
     #[case::unchanged(r#"{:site 1 :ligands [0 3] :type "Ct1"}"#, (
         None, BondRef::Index(1),
         vec![
-            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(0) },
-            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(3) },
+            StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(0) },
+            StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(3) },
         ],
         EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0),
     ))]
     #[case::remove(r#"{:remove {:site 1 :ligands [0 3] :type "Ct1"}}"#, (
         None, BondRef::Index(1),
         vec![
-            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(0) },
-            StereoLigandInput { kind: StereoLigandKind::Atom, atom: AtomRef::Index(3) },
+            StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(0) },
+            StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(3) },
         ],
         EntitySpan::Removed(StereoBondDsl::from_str("Ct1").unwrap().0),
     ))]
@@ -2008,7 +2007,7 @@ mod tests {
         #[case] expected: (
             Option<String>,
             BondRef,
-            Vec<StereoLigandInput>,
+            Vec<StereoLigandRef>,
             EntitySpan<StereoBondAst>,
         ),
     ) {

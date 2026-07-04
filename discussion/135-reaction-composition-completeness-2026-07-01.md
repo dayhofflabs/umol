@@ -351,17 +351,32 @@ Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (
   Hence the namespace is the source and metadata a boundary projection — not a merged union, and not
   rebuilt from metadata.
 
-**S3 — structural refs (dsl)** — the breaking rewire that lights up every site
-- **S3a** `dsl/refs.rs`: add `Structural(payload)` to the 7 non-atom refs (parametrize `define_ref!`
-  with the per-entity payload + participant-resolution; `AtomRef` unchanged); `FromEdn` gains the
-  `Edn::Map` arm reusing S1a's readers (rejecting `:type`/`:id`); `resolve` becomes
-  `resolve(&MoleculeNamespace)` — `Index`/`Id` via count + name map, `Structural` resolves inner atom/bond
-  refs then `find_*_by_participants` (`StereoBondRef` nests a `BondRef`, one level). `ToEdn`/`from_ast`
-  unchanged. **breaking (resolve signature + enum).** `[dep: S1a, S2a]`
-- **S3b** `dsl`: migrate every resolution site to `resolve(&namespace)` and drop the per-loop
-  `id_to_idx` maps — entity entries (stereo-bond `:site`), `constraint.rs`, `relational.rs` (18
-  variants), `SubPatternAnchorDsl`, `:bond-order-sum :bonds`, `reaction.rs` deltas, `reaction_span.rs`.
-  **red→green.** `[dep: S3a, S2b, S2d, S2e, S0a]`
+**S3 — structural refs (dsl)** — the rewire that points resolution at the namespace and lights up
+every site. **Resolution consults the namespace, not `MoleculeMetadata`.** `MoleculeMetadata` is the
+roundtrip *projection* (`id → name`, for rendering via `from_ast`); the namespace is the parse-time
+source of truth (`<kind>_by_name` O(1), counts, `<kind>_by_participants`). The old
+`into_ast(count, &metadata)` scanned the projection `name → id` because it predated the namespace —
+that is the artifact S3 retires. `from_ast(id, &metadata)` stays (rendering).
+
+- **S3a — done (2026-07-03).** `dsl/refs.rs`: `Structural(payload)` on the 7 non-atom refs via a single
+  `define_ref!` arm with an optional `structural = <payload>, <parse>, <resolve>` tail (`AtomRef`
+  unchanged); payloads mirror each entry's participant portion — `[AtomRef; 2]` (bond, noncovalent),
+  `Vec<AtomRef>` (aromatic, multicenter), and the named `DativeBondParticipants` /
+  `StereoAtomParticipants` / `StereoBondParticipants` (stereo ligands = `StereoLigandRef`, moved into
+  `refs.rs` from molecule.rs). `FromEdn` gains the `Edn::Map` arm (reuses S1a `atoms_pair`/`atoms_vec`,
+  rejects `:type`/`:id`). **`resolve` becomes `resolve(&MoleculeNamespace)`** — `Index` via
+  `<kind>_count`, `Id` via `<kind>_by_name`, `Structural` via a per-kind `resolve_<e>_structural`
+  (resolve inner refs → `<kind>_by_participants`; `StereoBondRef` nests a `BondRef`). The molecule.rs
+  entity loops (which already build the namespace, S2b) migrate off `resolve(count, id_to_idx)`; the
+  `id_to_idx` maps stay only for `check_id_disjoint` (folded away in S3c). `into_ast`/`from_ast`/`ToEdn`
+  unchanged (`Structural` gets a transitional `into_ast` error arm; input-only, so `ToEdn` is
+  `unreachable!`). The other five refs' `resolve` + structural resolvers are dead until S3b (module
+  `#[allow(dead_code)]` with a note). Green. `[dep: S1a, S2a, S2b]`
+- **S3b** `dsl`: migrate every site still resolving via `into_ast(count, &metadata)` to
+  `resolve(&namespace)`, then **delete `into_ast`** and the per-loop `id_to_idx` maps — entity entries
+  (stereo-bond `:site`), `constraint.rs`, `relational.rs` (18 variants), `SubPatternAnchorDsl`,
+  `:bond-order-sum :bonds`, `reaction.rs` deltas, `reaction_span.rs`. Lift the refs' `#[allow(dead_code)]`.
+  **red→green.** `[dep: S3a, S2d, S2e, S0a]`
 - **S3c** `dsl`: centralize id-namespace uniqueness on the namespace. Today the build enforces
   "every id keyword is unique across {atom ids, non-atom entity ids, alias names}" through three
   scattered locals — the free fn `check_id_disjoint` (id vs atom-ids + aliases), the `entry_ids` set
@@ -419,5 +434,8 @@ Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (
 **Deferrable within
 S3b**: the stereo-bond *entry* `:site` structural form is the only mid-build site (the sole reason S2b
 grows the namespace incrementally rather than at end); if fiddly, ship the reference sites first and add
-the entry-site form after. **Confirm before S3a**: stereo resolution keys on **site** (unique per the
-validator), so `:ligands` is then an optional frame assertion vs required-match.
+the entry-site form after. **Stereo structural refs (settled 2026-07-03):** resolved by **(site,
+ligand multiset)** — both are part of the resolution, matching `connecting_id` (same site + same
+ligand multiset, frame order not matched, repeats significant). The namespace keys stereo elements by
+`(site, Vec<StereoLigand>)` (sorted), and the `:ligands` are required in the structural form, not an
+assertion tacked on after a site-only lookup.

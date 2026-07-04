@@ -100,6 +100,7 @@ fn arith_expr_heavy() -> MoleculeAst {
 
 // Silence `unused` warnings on pre-switch build: `AtomConstraint` is kept
 // here for future bench cases involving atom-constraint patterns.
+// TODO: Add constraints or remove this piece
 #[allow(dead_code)]
 fn _keep_import(c: AtomConstraint) -> AtomConstraint {
     c

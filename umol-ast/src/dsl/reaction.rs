@@ -738,7 +738,7 @@ impl ReactionInput {
                             ))
                         })
                         .collect::<Result<Vec<_>, ParseError>>()?;
-                    delta_namespace.register_stereo_atom(id_name, site);
+                    delta_namespace.register_stereo_atom(id_name, site, &ligands);
                     resolved.push(Delta::StereoAtom(StereoAtomDelta::Add {
                         id,
                         site,
@@ -833,7 +833,7 @@ impl ReactionInput {
                             ))
                         })
                         .collect::<Result<Vec<_>, ParseError>>()?;
-                    delta_namespace.register_stereo_bond(id_name, site);
+                    delta_namespace.register_stereo_bond(id_name, site, &ligands);
                     resolved.push(Delta::StereoBond(StereoBondDelta::Add {
                         id,
                         site,

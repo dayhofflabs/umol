@@ -35,7 +35,10 @@ use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
 use super::namespace::MoleculeNamespace;
 use super::noncovalent::NoncovalentBondDsl;
-use super::refs::{read_atom_ref, read_bond_ref, AtomRef, BondRef};
+use super::refs::{
+    parse_stereo_ligand, read_atom_ref, read_bond_ref, read_stereo_ligand, AtomRef, BondRef,
+    StereoLigandRef,
+};
 use super::stereo::{
     expand_stereo_atom_keyword, expand_stereo_bond_keyword, StereoAtomDsl, StereoBondDsl,
 };
@@ -665,31 +668,6 @@ pub(super) fn read_noncovalent_bond_entry(
         second: b,
         bond: bond.ok_or_else(|| missing("type", "noncovalent-bond-entry"))?,
     })
-}
-
-fn stereo_ligand_kind(tag: &str) -> Result<StereoLigandKind, DeError> {
-    match tag {
-        "h" => Ok(StereoLigandKind::ImplicitHydrogen),
-        "lp" => Ok(StereoLigandKind::LonePair),
-        other => Err(DeError::Custom(format!(
-            "unknown stereo ligand tag :{other}"
-        ))),
-    }
-}
-
-fn read_stereo_ligand(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoLigandInput, EdnError> {
-    if de.peek_byte()?.ok_or_else(eof_err)? == b'[' {
-        de.consume_byte(b'[')?;
-        let kind = stereo_ligand_kind(de.read_keyword_name()?.as_ref())?;
-        let atom = read_atom_ref(de)?;
-        de.consume_byte(b']')?;
-        Ok(StereoLigandInput { kind, atom })
-    } else {
-        Ok(StereoLigandInput {
-            kind: StereoLigandKind::Atom,
-            atom: read_atom_ref(de)?,
-        })
-    }
 }
 
 fn read_stereo_atom_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoAtomDsl, EdnError> {
@@ -1361,20 +1339,11 @@ pub(crate) struct NoncovalentBondEntryInput {
     pub(crate) bond: NoncovalentBondDsl,
 }
 
-/// One ligand of a stereo element: an atom ref tagged with its kind
-/// (`Atom` for a plain `<atom-ref>`, `ImplicitHydrogen` for `[:h <ref>]`,
-/// `LonePair` for `[:lp <ref>]`).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct StereoLigandInput {
-    pub(crate) kind: StereoLigandKind,
-    pub(crate) atom: AtomRef,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StereoAtomEntryInput {
     pub(crate) id: Option<String>,
     pub(crate) site: AtomRef,
-    pub(crate) ligands: Vec<StereoLigandInput>,
+    pub(crate) ligands: Vec<StereoLigandRef>,
     pub(crate) stereo: StereoAtomDsl,
 }
 
@@ -1382,7 +1351,7 @@ pub(crate) struct StereoAtomEntryInput {
 pub(crate) struct StereoBondEntryInput {
     pub(crate) id: Option<String>,
     pub(crate) site: BondRef,
-    pub(crate) ligands: Vec<StereoLigandInput>,
+    pub(crate) ligands: Vec<StereoLigandRef>,
     pub(crate) stereo: StereoBondDsl,
 }
 
@@ -1433,8 +1402,6 @@ impl MoleculeInput {
             atoms.push(resolve_atom_spec(entry.spec, &alias_table)?);
         }
 
-        let atom_count = atoms.len();
-
         // Bonds.
         let mut bonds: Vec<(AtomId, AtomId, BondAst)> = Vec::with_capacity(bond_entries.len());
         let mut entry_ids: IndexMap<String, ()> = IndexMap::new();
@@ -1448,8 +1415,8 @@ impl MoleculeInput {
                 }
                 bond_id_to_idx.insert(id, BondId(pos as u32));
             }
-            let a = entry.first.resolve(atom_count, &atom_id_to_idx)?;
-            let b = entry.second.resolve(atom_count, &atom_id_to_idx)?;
+            let a = entry.first.resolve(&namespace)?;
+            let b = entry.second.resolve(&namespace)?;
             namespace.register_bond(id_name, a, b);
             bonds.push((a, b, entry.bond.0));
         }
@@ -1468,14 +1435,14 @@ impl MoleculeInput {
             let donors = entry
                 .donors
                 .into_iter()
-                .map(|d| d.resolve(atom_count, &atom_id_to_idx))
+                .map(|d| d.resolve(&namespace))
                 .collect::<Result<Vec<_>, _>>()?;
             if donors.is_empty() {
                 return Err(ParseError::InvalidValue(
                     "dative bond requires at least one donor".to_string(),
                 ));
             }
-            let acceptor = entry.acceptor.resolve(atom_count, &atom_id_to_idx)?;
+            let acceptor = entry.acceptor.resolve(&namespace)?;
             namespace.register_dative_bond(id_name, &donors, acceptor);
             dative_list.push((donors, acceptor, entry.bond.0));
         }
@@ -1494,7 +1461,7 @@ impl MoleculeInput {
             let atoms_resolved: Vec<AtomId> = entry
                 .atoms
                 .into_iter()
-                .map(|r| r.resolve(atom_count, &atom_id_to_idx))
+                .map(|r| r.resolve(&namespace))
                 .collect::<Result<_, _>>()?;
             namespace.register_aromatic_system(id_name, &atoms_resolved);
             aromatic_list.push((atoms_resolved, entry.system.0));
@@ -1514,7 +1481,7 @@ impl MoleculeInput {
             let atoms_resolved: Vec<AtomId> = entry
                 .atoms
                 .into_iter()
-                .map(|r| r.resolve(atom_count, &atom_id_to_idx))
+                .map(|r| r.resolve(&namespace))
                 .collect::<Result<_, _>>()?;
             namespace.register_multicenter_bond(id_name, &atoms_resolved);
             multicenter_list.push((atoms_resolved, entry.bond.0));
@@ -1531,14 +1498,13 @@ impl MoleculeInput {
                     return Err(ParseError::DuplicateId(id));
                 }
             }
-            let first = entry.first.resolve(atom_count, &atom_id_to_idx)?;
-            let second = entry.second.resolve(atom_count, &atom_id_to_idx)?;
+            let first = entry.first.resolve(&namespace)?;
+            let second = entry.second.resolve(&namespace)?;
             namespace.register_noncovalent_bond(id_name, first, second);
             noncovalent_list.push((first, second, entry.bond.0));
         }
 
         // Stereo atoms.
-        let bond_count = bonds.len();
         let mut stereo_atom_list: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> =
             Vec::with_capacity(stereo_atom_entries.len());
         for entry in stereo_atom_entries {
@@ -1549,18 +1515,13 @@ impl MoleculeInput {
                     return Err(ParseError::DuplicateId(id));
                 }
             }
-            let site = entry.site.resolve(atom_count, &atom_id_to_idx)?;
+            let site = entry.site.resolve(&namespace)?;
             let ligands: Vec<StereoLigand> = entry
                 .ligands
                 .into_iter()
-                .map(|l| {
-                    Ok(StereoLigand::new(
-                        l.atom.resolve(atom_count, &atom_id_to_idx)?,
-                        l.kind,
-                    ))
-                })
+                .map(|l| Ok(StereoLigand::new(l.atom.resolve(&namespace)?, l.kind)))
                 .collect::<Result<_, ParseError>>()?;
-            namespace.register_stereo_atom(id_name, site);
+            namespace.register_stereo_atom(id_name, site, &ligands);
             stereo_atom_list.push((site, ligands, entry.stereo.0));
         }
 
@@ -1575,18 +1536,13 @@ impl MoleculeInput {
                     return Err(ParseError::DuplicateId(id));
                 }
             }
-            let site = entry.site.resolve(bond_count, &bond_id_to_idx)?;
+            let site = entry.site.resolve(&namespace)?;
             let ligands: Vec<StereoLigand> = entry
                 .ligands
                 .into_iter()
-                .map(|l| {
-                    Ok(StereoLigand::new(
-                        l.atom.resolve(atom_count, &atom_id_to_idx)?,
-                        l.kind,
-                    ))
-                })
+                .map(|l| Ok(StereoLigand::new(l.atom.resolve(&namespace)?, l.kind)))
                 .collect::<Result<_, ParseError>>()?;
-            namespace.register_stereo_bond(id_name, site);
+            namespace.register_stereo_bond(id_name, site, &ligands);
             stereo_bond_list.push((site, ligands, entry.stereo.0));
         }
 
@@ -1812,28 +1768,6 @@ pub(super) fn parse_noncovalent_bond_entry(
         second: b,
         bond: NoncovalentBondDsl::from_edn(required_key(m, "type", "noncovalent-bond-entry")?)?,
     })
-}
-
-pub(super) fn parse_stereo_ligand(edn: &Edn<'_>) -> Result<StereoLigandInput, DeError> {
-    match edn {
-        Edn::Vector(v) if v.len() == 2 => {
-            let Edn::Keyword(tag) = &v[0] else {
-                return Err(DeError::TypeMismatch {
-                    expected: "ligand tag keyword",
-                    got: v[0].kind(),
-                    path: vec!["stereo-ligand".into()],
-                });
-            };
-            Ok(StereoLigandInput {
-                kind: stereo_ligand_kind(tag.name())?,
-                atom: AtomRef::from_edn(&v[1])?,
-            })
-        }
-        _ => Ok(StereoLigandInput {
-            kind: StereoLigandKind::Atom,
-            atom: AtomRef::from_edn(edn)?,
-        }),
-    }
 }
 
 pub(super) fn parse_stereo_atom_entry(edn: &Edn<'_>) -> Result<StereoAtomEntryInput, DeError> {

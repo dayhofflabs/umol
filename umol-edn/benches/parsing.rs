@@ -189,7 +189,6 @@ fn bench_roundtrip(c: &mut Criterion) {
     group.finish();
 }
 
-#[allow(dead_code)]
 #[derive(Deserialize, Serialize)]
 struct Molecule {
     atoms: Vec<String>,

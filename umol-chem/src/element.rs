@@ -155,7 +155,6 @@ pub const MAX_GROUP_NUMBER: [u8; 8] = [0, 2, 8, 8, 18, 18, 32, 32];
 
 /// Element array indexed by atomic number - 1
 #[rustfmt::skip]
-#[allow(dead_code)]
 static ELEMENTS: [Element; 118] = [
     Element::H, Element::He, Element::Li, Element::Be, Element::B, Element::C,
     Element::N, Element::O, Element::F, Element::Ne, Element::Na, Element::Mg,

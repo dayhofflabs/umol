@@ -1269,18 +1269,6 @@ mod tests {
         }
     }
 
-    #[allow(dead_code)]
-    #[rustfmt::skip]
-    fn methane() -> Molecule {
-        mol(&[C, H, H, H, H], &[
-            0.000,  0.000,  0.000,
-            0.629,  0.629,  0.629,
-           -0.629, -0.629,  0.629,
-           -0.629,  0.629, -0.629,
-            0.629, -0.629, -0.629,
-        ])
-    }
-
     #[rstest]
     #[case(SchoenfliesSymbol::Cs, "Cs")]
     #[case(SchoenfliesSymbol::Cn(2), "C2")]
