@@ -816,16 +816,18 @@ anchor-spec ::=
       [:stereo-bonds      [[stereo-bond-ref stereo-bond-ref]+]]? }
 
 atom-ref             ::= int | keyword
-bond-ref             ::= int | keyword
-dative-bond-ref      ::= int | keyword
-aromatic-system-ref  ::= int | keyword
-multicenter-bond-ref ::= int | keyword
-noncovalent-bond-ref ::= int | keyword
-stereo-atom-ref      ::= int | keyword
-stereo-bond-ref      ::= int | keyword
+bond-ref             ::= int | keyword | { :atoms [atom-ref atom-ref] }
+dative-bond-ref      ::= int | keyword | { :donors [atom-ref+] :acceptor atom-ref }
+aromatic-system-ref  ::= int | keyword | { :atoms [atom-ref+] }
+multicenter-bond-ref ::= int | keyword | { :atoms [atom-ref+] }
+noncovalent-bond-ref ::= int | keyword | { :atoms [atom-ref atom-ref] }
+stereo-atom-ref      ::= int | keyword | { :site atom-ref :ligands [ligand-ref+] }
+stereo-bond-ref      ::= int | keyword | { :site bond-ref :ligands [ligand-ref+] }
 ```
 
 **Ref resolution.** An integer ref is the **positional** index into the corresponding entity vector on the molecule map: **`atom-ref`** → **`:atoms`**, **`bond-ref`** → **`:bonds`**, **`dative-bond-ref`** → **`:dative-bonds`**, **`aromatic-system-ref`** → **`:aromatic-systems`**, **`multicenter-bond-ref`** → **`:multicenter-bonds`**, **`noncovalent-bond-ref`** → **`:noncovalent-bonds`**, **`stereo-atom-ref`** → **`:stereo-atoms`**, **`stereo-bond-ref`** → **`:stereo-bonds`**. A keyword ref resolves against the **`:id`** declared on the corresponding entry (**§4**). On serialization, implementations **MUST** emit the **`:id`** keyword when one is declared on the referenced entry, falling back to the positional integer otherwise.
+
+**Structural refs.** The **map** form of a **non-atom** ref names the entity by its **participants** instead of by position or id: **`:atoms`** for a bond / noncovalent bond (a 2-vector) or an aromatic system / multicenter bond (the atom set); **`:donors`** + **`:acceptor`** for a dative bond; **`:site`** + **`:ligands`** for a stereo atom / stereo bond (the bearing site plus the ordered ligand frame — the same **`(site, ligand-multiset)`** key that identifies the element). It resolves by looking the participant key up among the entities of that kind; because each kind's participants are unique on a molecule (**§4.1**), at most one entity matches, and an **unmatched** key is a **parse error**. A structural ref map **MUST NOT** carry **`:type`** or **`:id`** (those mark an entity *definition*, not a ref). **`atom-ref`** has **no** structural form. Structural refs are **accepted wherever a ref is** — entity entries (a **`stereo-*-entry`** **`:site`**), entity / relational / molecule-scope constraints, sub-pattern anchor pairs, **`:bond-order-sum`** **`:bonds`**, reaction deltas, and reaction-span refs — and by **both** the tree and streaming parsers. They are **input-only**: the emission priority is **keyword > positional**, and a structural ref is **never** re-emitted (serialization produces only the **`:id`** keyword or the positional integer).
 
 **Narrow inner forms for DAMN entities.** **`:aromatic-system`** and **`:multicenter-bond`** narrow leaves carry only the **`:electron-count`** value-only variant; every other predicate on those entities is a relational leaf instead. **`:noncovalent-bond`** narrow leaves have no inhabited inner form yet; every noncovalent predicate is a relational leaf.
 
@@ -836,6 +838,8 @@ stereo-bond-ref      ::= int | keyword
 **Molecule-scope subset selectors.** `:charge-sum`, `:spin-sum`, `:bond-order-sum`, and `:connected` accept an **optional** `:atoms` (or `:bonds`) vector. When **omitted**, the predicate ranges over **every** atom (or bond) in the molecule, including atoms added by future structural growth. When **present**, the predicate ranges over the listed entities only. An empty vector `[]` is **distinct** from omission: it selects no entities.
 
 **Sub-pattern materialization.** A **`:sub-pattern`** **`:pattern`** is a full **molecule-map**; its inner constraints are evaluated independently from the outer constraint tree. The pattern carries **no defaults** — values pass through verbatim — so a pattern's atom **`charge: undetermined`** stays **`undetermined`** at match time and behaves as a wildcard (**§5.4**); zero-defaulting that would apply to a ground input does **not** apply inside a pattern.
+
+**Anonymous patterns.** A sub-pattern **`:pattern`** **MUST** be **anonymous**: no entry may carry **`:id`** and the map may not declare **`:atom-aliases`**. Pattern entities are named positionally (or structurally) by the anchor and the pattern's inner constraints, so a symbolic namespace inside the pattern is meaningless; a pattern with either is a **parse error**.
 
 **Sugar (inline string equivalents).** Narrow leaves whose entity has a string subgrammar admit two interchangeable serializations:
 
