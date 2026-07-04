@@ -7,15 +7,13 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 use umol_graph_core::{
-    pushout, CommonSubgraphEnumerationAlgorithm, EdgeId, EmbeddingKind, FactorOrdering,
-    GraphCorrespondence, NodeId, Unordered,
+    CommonSubgraphEnumerationAlgorithm, EdgeId, EmbeddingKind, FactorOrdering, NodeId, Unordered,
 };
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::constraint::Constraints;
-use super::correspondence::MoleculeCorrespondence;
 use super::dative::DativeBondAst;
 use super::delta::{
     remap_delta, AromaticSystemDelta, AtomDelta, BondDelta, DativeBondDelta, Delta, Deltas,
@@ -47,86 +45,6 @@ impl ReactionAst {
     pub fn compose(&self, other: &ReactionAst, scope: CompositionScope) -> Vec<ReactionAst> {
         compose_all(self, other, scope).unwrap_or_default()
     }
-}
-
-/// The attributed pushout of two molecules over a graph `overlap`: `left` and `right` glued on their
-/// shared subgraph, with atom/bond data `meet`-combined where they coincide. `object` keeps `left`'s
-/// ids; `left` / `right` embed each side into it.
-#[allow(dead_code)]
-pub(crate) struct MoleculePushout {
-    pub object: MoleculeAst,
-    pub left: MoleculeCorrespondence,
-    pub right: MoleculeCorrespondence,
-}
-
-/// Glue `left` and `right` over `overlap` (a common subgraph — its edges the coincident bonds),
-/// meeting atom and bond data at coincident entities; `None` when any coincident `meet` is `⊥` (the
-/// overlap is inadmissible). Node/edge layer only — overlays and molecule constraints are not yet
-/// carried.
-#[allow(dead_code)]
-pub(crate) fn meet_pushout(
-    left: &MoleculeAst,
-    right: &MoleculeAst,
-    overlap: &GraphCorrespondence,
-) -> Option<MoleculePushout> {
-    let po = pushout(left.raw_graph(), right.raw_graph(), overlap);
-
-    let mut atoms: Vec<AtomAst> = Vec::with_capacity(po.object.node_count());
-    for node in 0..po.object.node_count() as u32 {
-        let object = NodeId(node);
-        let atom = match (
-            po.left.nodes().left_of(object),
-            po.right.nodes().left_of(object),
-        ) {
-            (Some(l), Some(r)) => left
-                .atom(AtomId::from(l))
-                .ast
-                .meet(right.atom(AtomId::from(r)).ast)?,
-            (Some(l), None) => left.atom(AtomId::from(l)).ast.clone(),
-            (None, Some(r)) => right.atom(AtomId::from(r)).ast.clone(),
-            (None, None) => unreachable!("a glued node originates from a side"),
-        };
-        atoms.push(atom);
-    }
-
-    let mut bonds: Vec<(AtomId, AtomId, BondAst)> = Vec::with_capacity(po.object.edge_count());
-    for edge in 0..po.object.edge_count() as u32 {
-        let object = EdgeId(edge);
-        let [u, v] = po.object.edge_endpoints(object);
-        let bond = match (
-            po.left.edges().left_of(object),
-            po.right.edges().left_of(object),
-        ) {
-            (Some(l), Some(r)) => left
-                .bond(BondId::from(l))
-                .ast
-                .meet(right.bond(BondId::from(r)).ast)?,
-            (Some(l), None) => left.bond(BondId::from(l)).ast.clone(),
-            (None, Some(r)) => right.bond(BondId::from(r)).ast.clone(),
-            (None, None) => unreachable!("a glued edge originates from a side"),
-        };
-        bonds.push((AtomId::from(u), AtomId::from(v), bond));
-    }
-
-    let object = MoleculeAst::from_parts(
-        atoms,
-        bonds,
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Constraints::new(),
-    );
-
-    let left_embedding = MoleculeCorrespondence::induce(left, &object, po.left.nodes().clone());
-    let right_embedding = MoleculeCorrespondence::induce(right, &object, po.right.nodes().clone());
-    Some(MoleculePushout {
-        object,
-        left: left_embedding,
-        right: right_embedding,
-    })
 }
 
 fn created_atom_ids(deltas: &Deltas) -> Vec<AtomId> {
@@ -1077,7 +995,7 @@ fn compose_all(
 mod tests {
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::{Correspondence, SubgraphIsomorphismAlgorithm};
+    use umol_graph_core::SubgraphIsomorphismAlgorithm;
 
     use super::super::constraint::Constraints;
     use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange};
@@ -1883,78 +1801,5 @@ mod tests {
         );
         assert_eq!(composed, vec![product.clone()]);
         assert_eq!(sequential, vec![product]);
-    }
-
-    // A single shared atom (node 0 ↔ node 0), no shared bond; each side has one exposed atom.
-    #[fixture]
-    fn overlap() -> GraphCorrespondence {
-        GraphCorrespondence::new(
-            Correspondence::new(vec![(NodeId(0), NodeId(0))], 2, 2),
-            Correspondence::new(vec![], 1, 1),
-        )
-    }
-
-    // meet_pushout glues over the shared atom: `object` keeps left's ids, appends right's exposed
-    // atom, and the shared atom carries the two sides' meet (either order → the more specific).
-    #[rstest]
-    #[case::top_meets_element(AtomAst::default(), AtomAst::from_element(Element::C), Element::C)]
-    #[case::element_meets_top(AtomAst::from_element(Element::C), AtomAst::default(), Element::C)]
-    fn test_meet_pushout(
-        overlap: GraphCorrespondence,
-        #[case] left_shared: AtomAst,
-        #[case] right_shared: AtomAst,
-        #[case] shared_element: Element,
-    ) {
-        let left = MoleculeAst::from_atoms_and_bonds(
-            vec![left_shared, AtomAst::from_element(Element::N)],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        );
-        let right = MoleculeAst::from_atoms_and_bonds(
-            vec![right_shared, AtomAst::from_element(Element::O)],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        );
-        let expected = MoleculeAst::from_atoms_and_bonds(
-            vec![
-                AtomAst::from_element(shared_element),
-                AtomAst::from_element(Element::N),
-                AtomAst::from_element(Element::O),
-            ],
-            vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(0), AtomId(2), BondAst::from_order(1)),
-            ],
-        );
-        assert_eq!(
-            meet_pushout(&left, &right, &overlap)
-                .expect("admissible glue")
-                .object,
-            expected,
-        );
-    }
-
-    // A conflicting shared atom (meet = ⊥) makes the whole glue inadmissible.
-    #[rstest]
-    #[case::carbon_nitrogen(Element::C, Element::N)]
-    #[case::oxygen_nitrogen(Element::O, Element::N)]
-    fn test_meet_pushout_inadmissible(
-        overlap: GraphCorrespondence,
-        #[case] left_element: Element,
-        #[case] right_element: Element,
-    ) {
-        let left = MoleculeAst::from_atoms_and_bonds(
-            vec![
-                AtomAst::from_element(left_element),
-                AtomAst::from_element(Element::N),
-            ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        );
-        let right = MoleculeAst::from_atoms_and_bonds(
-            vec![
-                AtomAst::from_element(right_element),
-                AtomAst::from_element(Element::O),
-            ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        );
-        assert!(meet_pushout(&left, &right, &overlap).is_none());
     }
 }

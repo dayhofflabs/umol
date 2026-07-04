@@ -60,75 +60,77 @@ fn identity<Id: Copy + Ord + From<usize>>(count: usize) -> Vec<Id> {
     (0..count).map(Id::from).collect()
 }
 
-/// Glue `left` and `right` identifying the mated pairs of `overlap` (a partial `left ↔ right`
-/// correspondence): the pushout of the span it denotes (Def. 2.16). `left` keeps its ids; `right`'s
-/// exposed nodes/edges are appended. An appended edge whose endpoints already carry one is identified
-/// with it (simple-graph pushout).
-pub fn pushout(left: &Graph, right: &Graph, overlap: &GraphCorrespondence) -> Pushout {
-    let n_left = left.node_count();
-    let m_left = left.edge_count();
+impl Graph {
+    /// Glue `self` and `right` identifying the mated pairs of `overlap` (a partial `self ↔ right`
+    /// correspondence): the pushout of the span it denotes (Def. 2.16). `self` keeps its ids; `right`'s
+    /// exposed nodes/edges are appended. An appended edge whose endpoints already carry one is identified
+    /// with it (simple-graph pushout).
+    pub fn pushout(&self, right: &Graph, overlap: &GraphCorrespondence) -> Pushout {
+        let n_left = self.node_count();
+        let m_left = self.edge_count();
 
-    // right node → object node: mated fold onto their left partner, exposed append after `left`.
-    let exposed_nodes = overlap.nodes().right_exposed();
-    let mut right_node: HashMap<NodeId, NodeId> = overlap
-        .nodes()
-        .mates()
-        .iter()
-        .map(|&(l, r)| (r, l))
-        .collect();
-    for (rank, &r) in exposed_nodes.iter().enumerate() {
-        right_node.insert(r, NodeId::from(n_left + rank));
-    }
-    let object_node_count = n_left + exposed_nodes.len();
+        // right node → object node: mated fold onto their left partner, exposed append after `left`.
+        let exposed_nodes = overlap.nodes().right_exposed();
+        let mut right_node: HashMap<NodeId, NodeId> = overlap
+            .nodes()
+            .mates()
+            .iter()
+            .map(|&(l, r)| (r, l))
+            .collect();
+        for (rank, &r) in exposed_nodes.iter().enumerate() {
+            right_node.insert(r, NodeId::from(n_left + rank));
+        }
+        let object_node_count = n_left + exposed_nodes.len();
 
-    // Object edges: `left`'s verbatim, then `right`'s exposed (endpoints relabelled), collapsing a
-    // parallel onto the existing edge.
-    let mut edges: Vec<[u32; 2]> = Vec::with_capacity(m_left);
-    let mut by_pair: HashMap<[u32; 2], EdgeId> = HashMap::new();
-    for j in 0..m_left {
-        let [a, b] = left.edge_endpoints(EdgeId::from(j));
-        by_pair.insert(sorted([a.0, b.0]), EdgeId::from(j));
-        edges.push([a.0, b.0]);
-    }
-    let mut right_edge: HashMap<EdgeId, EdgeId> = overlap
-        .edges()
-        .mates()
-        .iter()
-        .map(|&(le, re)| (re, le))
-        .collect();
-    for re in overlap.edges().right_exposed() {
-        let [u, v] = right.edge_endpoints(re);
-        let ends = [right_node[&u].0, right_node[&v].0];
-        let object_edge = *by_pair.entry(sorted(ends)).or_insert_with(|| {
-            let id = EdgeId::from(edges.len());
-            edges.push(ends);
-            id
-        });
-        right_edge.insert(re, object_edge);
-    }
+        // Object edges: `left`'s verbatim, then `right`'s exposed (endpoints relabelled), collapsing a
+        // parallel onto the existing edge.
+        let mut edges: Vec<[u32; 2]> = Vec::with_capacity(m_left);
+        let mut by_pair: HashMap<[u32; 2], EdgeId> = HashMap::new();
+        for j in 0..m_left {
+            let [a, b] = self.edge_endpoints(EdgeId::from(j));
+            by_pair.insert(sorted([a.0, b.0]), EdgeId::from(j));
+            edges.push([a.0, b.0]);
+        }
+        let mut right_edge: HashMap<EdgeId, EdgeId> = overlap
+            .edges()
+            .mates()
+            .iter()
+            .map(|&(le, re)| (re, le))
+            .collect();
+        for re in overlap.edges().right_exposed() {
+            let [u, v] = right.edge_endpoints(re);
+            let ends = [right_node[&u].0, right_node[&v].0];
+            let object_edge = *by_pair.entry(sorted(ends)).or_insert_with(|| {
+                let id = EdgeId::from(edges.len());
+                edges.push(ends);
+                id
+            });
+            right_edge.insert(re, object_edge);
+        }
 
-    let object = Graph::new(object_node_count, &edges);
-    let object_edge_count = edges.len();
+        let object = Graph::new(object_node_count, &edges);
+        let object_edge_count = edges.len();
 
-    let left_map = GraphCorrespondence::new(
-        Correspondence::from_images(&identity::<NodeId>(n_left), object_node_count),
-        Correspondence::from_images(&identity::<EdgeId>(m_left), object_edge_count),
-    );
-    let right_node_images: Vec<NodeId> = (0..right.node_count())
-        .map(|r| right_node[&NodeId::from(r)])
-        .collect();
-    let right_edge_images: Vec<EdgeId> = (0..right.edge_count())
-        .map(|e| right_edge[&EdgeId::from(e)])
-        .collect();
-    let right_map = GraphCorrespondence::new(
-        Correspondence::from_images(&right_node_images, object_node_count),
-        Correspondence::from_images(&right_edge_images, object_edge_count),
-    );
+        let left_map = GraphCorrespondence::new(
+            Correspondence::from_images(&identity::<NodeId>(n_left), object_node_count),
+            Correspondence::from_images(&identity::<EdgeId>(m_left), object_edge_count),
+        );
+        let right_node_images: Vec<NodeId> = (0..right.node_count())
+            .map(|r| right_node[&NodeId::from(r)])
+            .collect();
+        let right_edge_images: Vec<EdgeId> = (0..right.edge_count())
+            .map(|e| right_edge[&EdgeId::from(e)])
+            .collect();
+        let right_map = GraphCorrespondence::new(
+            Correspondence::from_images(&right_node_images, object_node_count),
+            Correspondence::from_images(&right_edge_images, object_edge_count),
+        );
 
-    Pushout {
-        object,
-        left: left_map,
-        right: right_map,
+        Pushout {
+            object,
+            left: left_map,
+            right: right_map,
+        }
     }
 }
 
@@ -282,7 +284,7 @@ mod tests {
         let left = Graph::new(2, &[[0, 1]]);
         let right = Graph::new(2, &[[0, 1]]);
         let overlap = node_overlap(vec![(1, 0)], &left, &right);
-        let po = pushout(&left, &right, &overlap);
+        let po = left.pushout(&right, &overlap);
         assert_eq!(po.object.node_count(), 3);
         assert_eq!(po.object.edge_count(), 2);
         assert_eq!(po.object.edge_endpoints(EdgeId(1)), [NodeId(1), NodeId(2)]);
@@ -298,7 +300,7 @@ mod tests {
         let r_a = Graph::new(2, &[[0, 1]]);
         let l_b = Graph::new(2, &[]);
         let overlap = node_overlap(vec![(0, 0), (1, 1)], &r_a, &l_b);
-        let po = pushout(&r_a, &l_b, &overlap);
+        let po = r_a.pushout(&l_b, &overlap);
         assert_eq!(po.object.node_count(), 2);
         assert_eq!(po.object.edge_count(), 1);
         assert_eq!(po.object.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);

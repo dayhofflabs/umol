@@ -44,5 +44,5 @@ pub use relation::{
     ParticipantAnchor, ParticipantPosition, ParticipantRefs, RelationId, RelationParticipant,
     RelationPullback, RelationPushout, Unordered, VarRelationSet, VarVarBirelationSet,
 };
-pub use rewriting::{pullback, pushout, pushout_complement, Pullback, Pushout, PushoutComplement};
+pub use rewriting::{pullback, pushout_complement, Pullback, Pushout, PushoutComplement};
 pub use union_find::UnionFind;
