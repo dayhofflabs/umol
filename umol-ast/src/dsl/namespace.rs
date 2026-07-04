@@ -26,6 +26,7 @@ use crate::ast::id::{
     StereoAtomId, StereoBondId,
 };
 use crate::ast::ligand::StereoLigand;
+use crate::ast::molecule::MoleculeAst;
 
 /// The eight per-kind registries built while parsing a molecule or applying reaction deltas. Atoms —
 /// the base kind, no participants — use a [`KeywordRegistry`]; the seven non-atom kinds use an
@@ -117,6 +118,55 @@ impl MoleculeNamespace {
             stereo_bonds: EntityRegistry::from_count(other.stereo_bonds.count()),
             atom_aliases: BiBTreeMap::new(),
         }
+    }
+
+    /// The namespace of an already-resolved molecule: every entity registered anonymously (no
+    /// keyword) with its participants, so a sub-pattern's index and structural refs resolve against
+    /// it. The ids are anonymous, so registration cannot collide.
+    pub(crate) fn from_ast(ast: &MoleculeAst) -> Self {
+        let free = "anonymous entity registration never collides";
+        let mut ns = Self::default();
+        for _ in ast.atoms().ids() {
+            ns.register_atom(None).expect(free);
+        }
+        for view in ast.bonds().iter() {
+            let [a, b] = view.atom_ids();
+            ns.register_bond(None, a, b).expect(free);
+        }
+        for view in ast.dative_bonds().iter() {
+            let donors: Vec<AtomId> = view.donor_ids().collect();
+            ns.register_dative_bond(None, &donors, view.acceptor_id())
+                .expect(free);
+        }
+        for view in ast.aromatic_systems().iter() {
+            let atoms: Vec<AtomId> = view.atom_ids().collect();
+            ns.register_aromatic_system(None, &atoms).expect(free);
+        }
+        for view in ast.multicenter_bonds().iter() {
+            let atoms: Vec<AtomId> = view.atom_ids().collect();
+            ns.register_multicenter_bond(None, &atoms).expect(free);
+        }
+        for view in ast.noncovalent_bonds().iter() {
+            let [a, b] = view.atom_ids();
+            ns.register_noncovalent_bond(None, a, b).expect(free);
+        }
+        for view in ast.stereo_atoms().iter() {
+            let ligands: Vec<StereoLigand> = view
+                .ligands()
+                .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
+                .collect();
+            ns.register_stereo_atom(None, view.site_id(), &ligands)
+                .expect(free);
+        }
+        for view in ast.stereo_bonds().iter() {
+            let ligands: Vec<StereoLigand> = view
+                .ligands()
+                .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
+                .collect();
+            ns.register_stereo_bond(None, view.site_id(), &ligands)
+                .expect(free);
+        }
+        ns
     }
 
     /// Whether a keyword is free across the whole namespace (every entity kind + aliases) — the

@@ -15,7 +15,7 @@ use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer
 
 use super::edn_utils::{atoms_pair, atoms_vec, eof_err, parse_vec, required_key};
 use super::error::ParseError;
-use super::molecule::{Metadata, MoleculeMetadata};
+use super::molecule::Metadata;
 use super::namespace::Namespace;
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -35,53 +35,14 @@ macro_rules! define_ref {
         }
 
         impl $name {
-            /// Build a ref from an AST index, preferring an id from `metadata`
-            /// if one is recorded for this index.
-            pub fn from_ast<M: Metadata>(id: $id, metadata: &M) -> Self {
+            /// Render an AST id back to a ref: its id keyword from `metadata` if one is recorded for
+            /// this index, else the bare index. The `id → ref` inverse of `resolve` over the
+            /// id↔keyword bijection.
+            pub fn denote<M: Metadata>(id: $id, metadata: &M) -> Self {
                 if let Some(name) = metadata.$accessor(id) {
                     Self::Id(name.to_string())
                 } else {
                     Self::Index(id.index())
-                }
-            }
-
-            /// Resolve this ref to an AST index against `metadata`. Fails on
-            /// unknown id or out-of-range numeric index.
-            pub fn into_ast(
-                self,
-                count: usize,
-                metadata: &MoleculeMetadata,
-            ) -> Result<$id, ParseError> {
-                match self {
-                    Self::Index(i) => {
-                        if i < count {
-                            Ok($id::from(i))
-                        } else {
-                            Err(ParseError::InvalidRef {
-                                kind: $kind,
-                                value: i.to_string(),
-                            })
-                        }
-                    }
-                    Self::Id(name) => {
-                        for i in 0..count {
-                            let id = $id::from(i);
-                            if metadata.$accessor(id) == Some(name.as_str()) {
-                                return Ok(id);
-                            }
-                        }
-                        Err(ParseError::InvalidRef {
-                            kind: $kind,
-                            value: name,
-                        })
-                    }
-                    $( Self::Structural(_) => {
-                        let _phantom: fn($payload) = |_| {};
-                        Err(ParseError::InvalidRef {
-                            kind: $kind,
-                            value: "structural".to_string(),
-                        })
-                    } )?
                 }
             }
 
@@ -532,10 +493,20 @@ mod tests {
 
     use super::super::namespace::MoleculeNamespace;
     use super::*;
+    use super::super::molecule::MoleculeMetadata;
 
     #[fixture]
     fn meta_with_atom_id() -> MoleculeMetadata {
         MoleculeMetadata::new().with_atom_id(AtomId(2), "c1")
+    }
+
+    #[fixture]
+    fn namespace_with_atom_id() -> MoleculeNamespace {
+        let mut ns = MoleculeNamespace::default();
+        for i in 0..5 {
+            ns.register_atom((i == 2).then(|| "c1".to_string())).unwrap();
+        }
+        ns
     }
 
     #[rstest]
@@ -577,55 +548,40 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_ref_from_ast_uses_id_when_present(meta_with_atom_id: MoleculeMetadata) {
-        let r = AtomRef::from_ast(AtomId(2), &meta_with_atom_id);
-        assert_eq!(r, AtomRef::Id("c1".into()));
+    #[case::id_present(AtomId(2), AtomRef::Id("c1".into()))]
+    #[case::no_id(AtomId(4), AtomRef::Index(4))]
+    fn test_atom_ref_denote(
+        meta_with_atom_id: MoleculeMetadata,
+        #[case] id: AtomId,
+        #[case] expected: AtomRef,
+    ) {
+        assert_eq!(AtomRef::denote(id, &meta_with_atom_id), expected);
     }
 
     #[rstest]
-    fn test_atom_ref_from_ast_falls_back_to_index_without_id(meta_with_atom_id: MoleculeMetadata) {
-        let r = AtomRef::from_ast(AtomId(4), &meta_with_atom_id);
-        assert_eq!(r, AtomRef::Index(4));
+    #[case::id(AtomRef::Id("c1".into()), AtomId(2))]
+    #[case::index(AtomRef::Index(3), AtomId(3))]
+    fn test_atom_ref_resolve(
+        namespace_with_atom_id: MoleculeNamespace,
+        #[case] r: AtomRef,
+        #[case] expected: AtomId,
+    ) {
+        assert_eq!(r.resolve(&namespace_with_atom_id).unwrap(), expected);
     }
 
     #[rstest]
-    fn test_atom_ref_into_ast_resolves_id(meta_with_atom_id: MoleculeMetadata) {
-        let id = AtomRef::Id("c1".into())
-            .into_ast(5, &meta_with_atom_id)
-            .unwrap();
-        assert_eq!(id, AtomId(2));
-    }
-
-    #[rstest]
-    fn test_atom_ref_into_ast_resolves_index(meta_with_atom_id: MoleculeMetadata) {
-        let id = AtomRef::Index(3).into_ast(5, &meta_with_atom_id).unwrap();
-        assert_eq!(id, AtomId(3));
-    }
-
-    #[rstest]
-    fn test_atom_ref_into_ast_out_of_range_index(meta_with_atom_id: MoleculeMetadata) {
-        let err = AtomRef::Index(9)
-            .into_ast(5, &meta_with_atom_id)
-            .unwrap_err();
+    #[case::out_of_range_index(AtomRef::Index(9), "9")]
+    #[case::unknown_id(AtomRef::Id("nope".into()), "nope")]
+    fn test_atom_ref_resolve_error(
+        namespace_with_atom_id: MoleculeNamespace,
+        #[case] r: AtomRef,
+        #[case] value: &str,
+    ) {
         assert_eq!(
-            err,
+            r.resolve(&namespace_with_atom_id).unwrap_err(),
             ParseError::InvalidRef {
                 kind: "atom",
-                value: "9".into(),
-            }
-        );
-    }
-
-    #[rstest]
-    fn test_atom_ref_into_ast_unknown_id(meta_with_atom_id: MoleculeMetadata) {
-        let err = AtomRef::Id("nope".into())
-            .into_ast(5, &meta_with_atom_id)
-            .unwrap_err();
-        assert_eq!(
-            err,
-            ParseError::InvalidRef {
-                kind: "atom",
-                value: "nope".into(),
+                value: value.into(),
             }
         );
     }

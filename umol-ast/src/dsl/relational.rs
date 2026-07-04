@@ -267,145 +267,145 @@ impl RelationalConstraintDsl {
         use RelationalConstraint::*;
         match rel {
             DativeBondDonors { bond, atoms } => Self::DativeBondDonors {
-                bond: DativeBondRef::from_ast(*bond, meta),
-                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+                bond: DativeBondRef::denote(*bond, meta),
+                atoms: atoms.iter().map(|&a| AtomRef::denote(a, meta)).collect(),
             },
             DativeBondDonor { bond, atom } => Self::DativeBondDonor {
-                bond: DativeBondRef::from_ast(*bond, meta),
-                atom: AtomRef::from_ast(*atom, meta),
+                bond: DativeBondRef::denote(*bond, meta),
+                atom: AtomRef::denote(*atom, meta),
             },
             DativeBondContainsAllDonors { bond, atoms } => Self::DativeBondContainsAllDonors {
-                bond: DativeBondRef::from_ast(*bond, meta),
-                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+                bond: DativeBondRef::denote(*bond, meta),
+                atoms: atoms.iter().map(|&a| AtomRef::denote(a, meta)).collect(),
             },
             DativeBondAllDonors { bond, predicate } => Self::DativeBondAllDonors {
-                bond: DativeBondRef::from_ast(*bond, meta),
+                bond: DativeBondRef::denote(*bond, meta),
                 predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             DativeBondAnyDonor { bond, predicate } => Self::DativeBondAnyDonor {
-                bond: DativeBondRef::from_ast(*bond, meta),
+                bond: DativeBondRef::denote(*bond, meta),
                 predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             DativeBondAcceptor { bond, atom } => Self::DativeBondAcceptor {
-                bond: DativeBondRef::from_ast(*bond, meta),
-                atom: AtomRef::from_ast(*atom, meta),
+                bond: DativeBondRef::denote(*bond, meta),
+                atom: AtomRef::denote(*atom, meta),
             },
             DativeBondAcceptorSatisfies { bond, predicate } => Self::DativeBondAcceptorSatisfies {
-                bond: DativeBondRef::from_ast(*bond, meta),
+                bond: DativeBondRef::denote(*bond, meta),
                 predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             DativeBondParallels { dative, parallel } => Self::DativeBondParallels {
-                dative: DativeBondRef::from_ast(*dative, meta),
-                parallel: BondRef::from_ast(*parallel, meta),
+                dative: DativeBondRef::denote(*dative, meta),
+                parallel: BondRef::denote(*parallel, meta),
             },
             AromaticSystemAtoms { system, atoms } => Self::AromaticSystemAtoms {
-                system: AromaticSystemRef::from_ast(*system, meta),
-                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+                system: AromaticSystemRef::denote(*system, meta),
+                atoms: atoms.iter().map(|&a| AtomRef::denote(a, meta)).collect(),
             },
             AromaticSystemContains { system, atom } => Self::AromaticSystemContains {
-                system: AromaticSystemRef::from_ast(*system, meta),
-                atom: AtomRef::from_ast(*atom, meta),
+                system: AromaticSystemRef::denote(*system, meta),
+                atom: AtomRef::denote(*atom, meta),
             },
             AromaticSystemContainsAll { system, atoms } => Self::AromaticSystemContainsAll {
-                system: AromaticSystemRef::from_ast(*system, meta),
-                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+                system: AromaticSystemRef::denote(*system, meta),
+                atoms: atoms.iter().map(|&a| AtomRef::denote(a, meta)).collect(),
             },
             AromaticSystemAllAtoms { system, predicate } => Self::AromaticSystemAllAtoms {
-                system: AromaticSystemRef::from_ast(*system, meta),
+                system: AromaticSystemRef::denote(*system, meta),
                 predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             AromaticSystemAnyAtom { system, predicate } => Self::AromaticSystemAnyAtom {
-                system: AromaticSystemRef::from_ast(*system, meta),
+                system: AromaticSystemRef::denote(*system, meta),
                 predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             MulticenterBondAtoms { bond, atoms } => Self::MulticenterBondAtoms {
-                bond: MulticenterBondRef::from_ast(*bond, meta),
-                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+                bond: MulticenterBondRef::denote(*bond, meta),
+                atoms: atoms.iter().map(|&a| AtomRef::denote(a, meta)).collect(),
             },
             MulticenterBondContains { bond, atom } => Self::MulticenterBondContains {
-                bond: MulticenterBondRef::from_ast(*bond, meta),
-                atom: AtomRef::from_ast(*atom, meta),
+                bond: MulticenterBondRef::denote(*bond, meta),
+                atom: AtomRef::denote(*atom, meta),
             },
             MulticenterBondContainsAll { bond, atoms } => Self::MulticenterBondContainsAll {
-                bond: MulticenterBondRef::from_ast(*bond, meta),
-                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+                bond: MulticenterBondRef::denote(*bond, meta),
+                atoms: atoms.iter().map(|&a| AtomRef::denote(a, meta)).collect(),
             },
             MulticenterBondAllAtoms { bond, predicate } => Self::MulticenterBondAllAtoms {
-                bond: MulticenterBondRef::from_ast(*bond, meta),
+                bond: MulticenterBondRef::denote(*bond, meta),
                 predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             MulticenterBondAnyAtom { bond, predicate } => Self::MulticenterBondAnyAtom {
-                bond: MulticenterBondRef::from_ast(*bond, meta),
+                bond: MulticenterBondRef::denote(*bond, meta),
                 predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             NoncovalentBondEnds { bond, atoms } => Self::NoncovalentBondEnds {
-                bond: NoncovalentBondRef::from_ast(*bond, meta),
+                bond: NoncovalentBondRef::denote(*bond, meta),
                 atoms: [
-                    AtomRef::from_ast(atoms[0], meta),
-                    AtomRef::from_ast(atoms[1], meta),
+                    AtomRef::denote(atoms[0], meta),
+                    AtomRef::denote(atoms[1], meta),
                 ],
             },
             NoncovalentBondContains { bond, atom } => Self::NoncovalentBondContains {
-                bond: NoncovalentBondRef::from_ast(*bond, meta),
-                atom: AtomRef::from_ast(*atom, meta),
+                bond: NoncovalentBondRef::denote(*bond, meta),
+                atom: AtomRef::denote(*atom, meta),
             },
             NoncovalentBondEndsSatisfy { bond, predicates } => Self::NoncovalentBondEndsSatisfy {
-                bond: NoncovalentBondRef::from_ast(*bond, meta),
+                bond: NoncovalentBondRef::denote(*bond, meta),
                 predicates: [
                     Box::new(AtomConstraintDsl::from_ast(&predicates[0], &())),
                     Box::new(AtomConstraintDsl::from_ast(&predicates[1], &())),
                 ],
             },
             StereoAtomSite { stereo_atom, atom } => Self::StereoAtomSite {
-                stereo_atom: StereoAtomRef::from_ast(*stereo_atom, meta),
-                atom: AtomRef::from_ast(*atom, meta),
+                stereo_atom: StereoAtomRef::denote(*stereo_atom, meta),
+                atom: AtomRef::denote(*atom, meta),
             },
             StereoAtomContains { stereo_atom, atom } => Self::StereoAtomContains {
-                stereo_atom: StereoAtomRef::from_ast(*stereo_atom, meta),
-                atom: AtomRef::from_ast(*atom, meta),
+                stereo_atom: StereoAtomRef::denote(*stereo_atom, meta),
+                atom: AtomRef::denote(*atom, meta),
             },
             StereoAtomLigands { stereo_atom, atoms } => Self::StereoAtomLigands {
-                stereo_atom: StereoAtomRef::from_ast(*stereo_atom, meta),
-                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+                stereo_atom: StereoAtomRef::denote(*stereo_atom, meta),
+                atoms: atoms.iter().map(|&a| AtomRef::denote(a, meta)).collect(),
             },
             StereoAtomAllLigands {
                 stereo_atom,
                 predicate,
             } => Self::StereoAtomAllLigands {
-                stereo_atom: StereoAtomRef::from_ast(*stereo_atom, meta),
+                stereo_atom: StereoAtomRef::denote(*stereo_atom, meta),
                 predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             StereoAtomAnyLigand {
                 stereo_atom,
                 predicate,
             } => Self::StereoAtomAnyLigand {
-                stereo_atom: StereoAtomRef::from_ast(*stereo_atom, meta),
+                stereo_atom: StereoAtomRef::denote(*stereo_atom, meta),
                 predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             StereoBondSite { stereo_bond, bond } => Self::StereoBondSite {
-                stereo_bond: StereoBondRef::from_ast(*stereo_bond, meta),
-                bond: BondRef::from_ast(*bond, meta),
+                stereo_bond: StereoBondRef::denote(*stereo_bond, meta),
+                bond: BondRef::denote(*bond, meta),
             },
             StereoBondContains { stereo_bond, atom } => Self::StereoBondContains {
-                stereo_bond: StereoBondRef::from_ast(*stereo_bond, meta),
-                atom: AtomRef::from_ast(*atom, meta),
+                stereo_bond: StereoBondRef::denote(*stereo_bond, meta),
+                atom: AtomRef::denote(*atom, meta),
             },
             StereoBondLigands { stereo_bond, atoms } => Self::StereoBondLigands {
-                stereo_bond: StereoBondRef::from_ast(*stereo_bond, meta),
-                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+                stereo_bond: StereoBondRef::denote(*stereo_bond, meta),
+                atoms: atoms.iter().map(|&a| AtomRef::denote(a, meta)).collect(),
             },
             StereoBondAllLigands {
                 stereo_bond,
                 predicate,
             } => Self::StereoBondAllLigands {
-                stereo_bond: StereoBondRef::from_ast(*stereo_bond, meta),
+                stereo_bond: StereoBondRef::denote(*stereo_bond, meta),
                 predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             StereoBondAnyLigand {
                 stereo_bond,
                 predicate,
             } => Self::StereoBondAnyLigand {
-                stereo_bond: StereoBondRef::from_ast(*stereo_bond, meta),
+                stereo_bond: StereoBondRef::denote(*stereo_bond, meta),
                 predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
         }

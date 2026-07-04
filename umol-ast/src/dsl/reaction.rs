@@ -2151,7 +2151,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 out.push(single_key_map(
                     "dative-bond",
-                    single_key_map("remove", DativeBondRef::from_ast(*id, combined).to_edn()),
+                    single_key_map("remove", DativeBondRef::denote(*id, combined).to_edn()),
                 ));
                 i += 1;
             }
@@ -2189,7 +2189,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
-                        DativeBondRef::from_ast(id, combined).to_edn(),
+                        DativeBondRef::denote(id, combined).to_edn(),
                         PartialDativeBondDsl(partial).to_edn(),
                     ]
                     .into(),
@@ -2221,7 +2221,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     "aromatic-system",
                     single_key_map(
                         "remove",
-                        AromaticSystemRef::from_ast(*id, combined).to_edn(),
+                        AromaticSystemRef::denote(*id, combined).to_edn(),
                     ),
                 ));
                 i += 1;
@@ -2266,7 +2266,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
-                        AromaticSystemRef::from_ast(id, combined).to_edn(),
+                        AromaticSystemRef::denote(id, combined).to_edn(),
                         PartialAromaticSystemDsl(partial).to_edn(),
                     ]
                     .into(),
@@ -2298,7 +2298,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     "multicenter-bond",
                     single_key_map(
                         "remove",
-                        MulticenterBondRef::from_ast(*id, combined).to_edn(),
+                        MulticenterBondRef::denote(*id, combined).to_edn(),
                     ),
                 ));
                 i += 1;
@@ -2343,7 +2343,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
-                        MulticenterBondRef::from_ast(id, combined).to_edn(),
+                        MulticenterBondRef::denote(id, combined).to_edn(),
                         PartialMulticenterBondDsl(partial).to_edn(),
                     ]
                     .into(),
@@ -2375,7 +2375,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     "noncovalent-bond",
                     single_key_map(
                         "remove",
-                        NoncovalentBondRef::from_ast(*id, combined).to_edn(),
+                        NoncovalentBondRef::denote(*id, combined).to_edn(),
                     ),
                 ));
                 i += 1;
@@ -2404,7 +2404,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
-                        NoncovalentBondRef::from_ast(id, combined).to_edn(),
+                        NoncovalentBondRef::denote(id, combined).to_edn(),
                         PartialNoncovalentBondDsl(partial).to_edn(),
                     ]
                     .into(),
@@ -2443,7 +2443,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 out.push(single_key_map(
                     "stereo-atom",
-                    single_key_map("remove", StereoAtomRef::from_ast(*id, combined).to_edn()),
+                    single_key_map("remove", StereoAtomRef::denote(*id, combined).to_edn()),
                 ));
                 i += 1;
             }
@@ -2497,7 +2497,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
-                        StereoAtomRef::from_ast(id, combined).to_edn(),
+                        StereoAtomRef::denote(id, combined).to_edn(),
                         PartialStereoAtomDsl(partial).to_edn(),
                     ]
                     .into(),
@@ -2511,7 +2511,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
-                        StereoAtomRef::from_ast(*id, combined).to_edn(),
+                        StereoAtomRef::denote(*id, combined).to_edn(),
                         render_edn_stereo_kind(*kind),
                     ]
                     .into(),
@@ -2526,7 +2526,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
-                        StereoAtomRef::from_ast(*id, combined).to_edn(),
+                        StereoAtomRef::denote(*id, combined).to_edn(),
                         render_edn_stereo_kind(*kind),
                     ]
                     .into(),
@@ -2545,7 +2545,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
-                        StereoAtomRef::from_ast(*id, combined).to_edn(),
+                        StereoAtomRef::denote(*id, combined).to_edn(),
                         render_edn_stereo_kind(*kind),
                         Edn::Str(Cow::Owned(permutation.to_string())),
                     ]
@@ -2586,7 +2586,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 out.push(single_key_map(
                     "stereo-bond",
-                    single_key_map("remove", StereoBondRef::from_ast(*id, combined).to_edn()),
+                    single_key_map("remove", StereoBondRef::denote(*id, combined).to_edn()),
                 ));
                 i += 1;
             }
@@ -2637,7 +2637,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
-                        StereoBondRef::from_ast(id, combined).to_edn(),
+                        StereoBondRef::denote(id, combined).to_edn(),
                         PartialStereoBondDsl(partial).to_edn(),
                     ]
                     .into(),
@@ -2651,7 +2651,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
-                        StereoBondRef::from_ast(*id, combined).to_edn(),
+                        StereoBondRef::denote(*id, combined).to_edn(),
                         render_edn_stereo_kind(*kind),
                     ]
                     .into(),
@@ -2666,7 +2666,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
-                        StereoBondRef::from_ast(*id, combined).to_edn(),
+                        StereoBondRef::denote(*id, combined).to_edn(),
                         render_edn_stereo_kind(*kind),
                     ]
                     .into(),
@@ -2685,7 +2685,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
-                        StereoBondRef::from_ast(*id, combined).to_edn(),
+                        StereoBondRef::denote(*id, combined).to_edn(),
                         render_edn_stereo_kind(*kind),
                         Edn::Str(Cow::Owned(permutation.to_string())),
                     ]

@@ -151,6 +151,20 @@ impl MoleculeMetadata {
         Self::default()
     }
 
+    /// Whether this metadata binds no `:id` keywords and no atom aliases — the shape an anonymous
+    /// molecule (e.g. a sub-pattern) projects.
+    pub fn is_empty(&self) -> bool {
+        self.atom_ids.is_empty()
+            && self.bond_ids.is_empty()
+            && self.dative_bond_ids.is_empty()
+            && self.aromatic_system_ids.is_empty()
+            && self.multicenter_bond_ids.is_empty()
+            && self.noncovalent_bond_ids.is_empty()
+            && self.stereo_atom_ids.is_empty()
+            && self.stereo_bond_ids.is_empty()
+            && self.atom_aliases.is_empty()
+    }
+
     pub fn atom_id(&self, id: AtomId) -> Option<&str> {
         self.atom_ids.get(&id).map(String::as_str)
     }
@@ -1427,6 +1441,12 @@ impl MoleculeInput {
             namespace.register_atom_alias(name, dsl)?;
         }
 
+        // Resolve atom aliases.
+        let atoms: Vec<AtomAst> = atom_entries
+            .into_iter()
+            .map(|entry| resolve_atom_spec(entry.spec, &namespace))
+            .collect::<Result<_, _>>()?;
+
         // Bonds.
         let mut bonds: Vec<(AtomId, AtomId, BondAst)> = Vec::with_capacity(bond_entries.len());
         for entry in bond_entries {
@@ -1518,13 +1538,6 @@ impl MoleculeInput {
             namespace.register_stereo_bond(entry.id, site, &ligands)?;
             stereo_bond_list.push((site, ligands, entry.stereo.0));
         }
-
-        // Atom specs resolve last, against the complete namespace — a `<alias>` spec finds its
-        // template through `find_atom_alias`.
-        let atoms: Vec<AtomAst> = atom_entries
-            .into_iter()
-            .map(|entry| resolve_atom_spec(entry.spec, &namespace))
-            .collect::<Result<_, _>>()?;
 
         // The namespace is complete; constraints resolve against it directly. `MoleculeMetadata` is
         // projected only at the DSL boundary, not here.
