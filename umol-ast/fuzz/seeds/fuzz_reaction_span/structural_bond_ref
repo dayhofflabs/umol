@@ -1,0 +1,1 @@
+{:atoms ["C" "N"] :bonds [[0 1 "1"]] :constraints [{:add {:bond [{:atoms [0 1]} {:aromatic true}]}}]}

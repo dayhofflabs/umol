@@ -3614,7 +3614,7 @@ mod tests {
             );
             count += 1;
         }
-        assert_eq!(count, 30);
+        assert_eq!(count, 31);
     }
 
     #[rustfmt::skip]

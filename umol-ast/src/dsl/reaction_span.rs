@@ -2445,7 +2445,7 @@ mod tests {
             );
             count += 1;
         }
-        assert_eq!(count, 21);
+        assert_eq!(count, 22);
     }
 
     // An `:add` constraint lands on the right projection only; `:remove` on the left only.

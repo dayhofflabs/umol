@@ -1,0 +1,1 @@
+{:lhs {:atoms ["C" "N"] :bonds [[0 1 "1"]]} :deltas [{:constraint {:add {:bond [{:atoms [0 1]} {:aromatic true}]}}}]}

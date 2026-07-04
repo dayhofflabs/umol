@@ -41,7 +41,7 @@ fn test_fuzz_molecule_seeds_valid() {
         "invalid seeds:\n{}",
         failures.join("\n")
     );
-    assert_eq!(count, 25);
+    assert_eq!(count, 28);
 }
 
 #[rstest]
@@ -624,6 +624,18 @@ fn test_molecule_dsl_to_edn_structural_ref(#[case] structural: &str, #[case] can
         via_structural.to_edn().to_string(),
         via_canonical.to_edn().to_string(),
     );
+}
+
+// The streaming parser accepts structural refs identically to the tree parser, across the three
+// structural map forms (`:atoms`, `:donors`/`:acceptor`, `:site`/`:ligands`).
+#[rstest]
+#[case::bond(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [{:atoms [0 1]} {:aromatic true}]}]}"#)]
+#[case::dative(r#"{:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}] :constraints [{:dative-bond [{:donors [0] :acceptor 1} {:ring-membership {:count 1}}]}]}"#)]
+#[case::stereo(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}] :constraints [{:stereo-atom [{:site 0 :ligands [1 2 3 4]} [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :present false}}]]}]}"#)]
+fn test_molecule_dsl_from_edn_str_structural_ref(#[case] input: &str) {
+    let via_stream = MoleculeDsl::from_edn_str(input).unwrap();
+    let via_tree = MoleculeDsl::from_edn(&read_string(input).unwrap()).unwrap();
+    assert_eq!(via_stream, via_tree);
 }
 
 #[rstest]

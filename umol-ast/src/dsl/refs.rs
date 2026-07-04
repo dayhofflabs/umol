@@ -8,7 +8,9 @@
 
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
-use super::edn_utils::{atoms_pair, atoms_vec, eof_err, parse_vec, required_key};
+use super::edn_utils::{
+    atoms_pair, atoms_vec, eof_err, parse_vec, read_map, read_vec, required_key, two_atom_refs,
+};
 use super::error::ParseError;
 use super::molecule::Metadata;
 use super::namespace::Namespace;
@@ -21,7 +23,7 @@ use crate::ast::ligand::{StereoLigand, StereoLigandKind};
 macro_rules! define_ref {
     ($name:ident, $id:ident, $accessor:ident, $kind:literal, $reader:ident,
         $count:ident, $find_by_keyword:ident
-        $(, structural = $payload:ty, $parse_structural:ident, $resolve_structural:ident)?) => {
+        $(, structural = $payload:ty, $parse_structural:ident, $read_structural:ident, $resolve_structural:ident)?) => {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         pub enum $name {
             Index(usize),
@@ -128,6 +130,7 @@ macro_rules! define_ref {
         pub(super) fn $reader(de: &mut EdnStreamDeserializer<'_>) -> Result<$name, EdnError> {
             match de.peek_byte()?.ok_or_else(eof_err)? {
                 b':' => Ok($name::Id(de.read_keyword_name()?.into_owned())),
+                $( b'{' => Ok($name::Structural($read_structural(de)?)), )?
                 _ => {
                     let n = de.read_i64()?;
                     let i = usize::try_from(n).map_err(|_| DeError::OutOfRange {
@@ -161,6 +164,7 @@ define_ref!(
     find_bond_by_keyword,
     structural = [AtomRef; 2],
     parse_bond_structural,
+    read_bond_structural,
     resolve_bond_structural
 );
 define_ref!(
@@ -173,17 +177,18 @@ define_ref!(
     find_dative_bond_by_keyword,
     structural = DativeBondParticipants,
     parse_dative_structural,
+    read_dative_structural,
     resolve_dative_structural
 );
 define_ref!(
     AromaticSystemRef, AromaticSystemId, aromatic_system_keyword, "aromatic-system",
     read_aromatic_system_ref, aromatic_system_count, find_aromatic_system_by_keyword,
-    structural = Vec<AtomRef>, parse_aromatic_structural, resolve_aromatic_structural
+    structural = Vec<AtomRef>, parse_aromatic_structural, read_aromatic_structural, resolve_aromatic_structural
 );
 define_ref!(
     MulticenterBondRef, MulticenterBondId, multicenter_bond_keyword, "multicenter-bond",
     read_multicenter_bond_ref, multicenter_bond_count, find_multicenter_bond_by_keyword,
-    structural = Vec<AtomRef>, parse_multicenter_structural, resolve_multicenter_structural
+    structural = Vec<AtomRef>, parse_multicenter_structural, read_multicenter_structural, resolve_multicenter_structural
 );
 define_ref!(
     NoncovalentBondRef,
@@ -195,6 +200,7 @@ define_ref!(
     find_noncovalent_bond_by_keyword,
     structural = [AtomRef; 2],
     parse_noncovalent_structural,
+    read_noncovalent_structural,
     resolve_noncovalent_structural
 );
 define_ref!(
@@ -207,6 +213,7 @@ define_ref!(
     find_stereo_atom_by_keyword,
     structural = StereoAtomParticipants,
     parse_stereo_atom_structural,
+    read_stereo_atom_structural,
     resolve_stereo_atom_structural
 );
 define_ref!(
@@ -219,6 +226,7 @@ define_ref!(
     find_stereo_bond_by_keyword,
     structural = StereoBondParticipants,
     parse_stereo_bond_structural,
+    read_stereo_bond_structural,
     resolve_stereo_bond_structural
 );
 
@@ -293,6 +301,133 @@ fn parse_stereo_bond_structural(m: &EdnMap<'_>) -> Result<StereoBondParticipants
             ":ligands",
             parse_stereo_ligand,
         )?,
+    })
+}
+
+// The streaming counterparts of the `parse_*_structural` tree readers, over the deserializer cursor
+// (they must not delegate to the tree path). Each reads the structural map's keys in order, rejecting
+// an entity map's `:type` / `:id` (the same guard as `from_edn`).
+
+fn reject_structural_key(key: &str, context: &'static str) -> EdnError {
+    if key == "type" || key == "id" {
+        DeError::Custom(format!("{context} must not carry :type or :id")).into()
+    } else {
+        DeError::Custom(format!("unexpected key :{key} in {context}")).into()
+    }
+}
+
+fn missing_structural_key(key: &'static str, context: &'static str) -> EdnError {
+    DeError::MissingField {
+        key: key.to_string(),
+        path: vec![context.into()],
+    }
+    .into()
+}
+
+/// The `:atoms` key of a structural map as a vector of atom refs (streaming).
+fn read_structural_atoms(
+    de: &mut EdnStreamDeserializer<'_>,
+    context: &'static str,
+) -> Result<Vec<AtomRef>, EdnError> {
+    let mut atoms: Option<Vec<AtomRef>> = None;
+    read_map(de, |de, key| match key {
+        "atoms" => {
+            atoms = Some(read_vec(de, read_atom_ref)?);
+            Ok(())
+        }
+        other => Err(reject_structural_key(other, context)),
+    })?;
+    atoms.ok_or_else(|| missing_structural_key("atoms", context))
+}
+
+fn read_bond_structural(de: &mut EdnStreamDeserializer<'_>) -> Result<[AtomRef; 2], EdnError> {
+    let atoms = read_structural_atoms(de, "bond structural ref")?;
+    two_atom_refs(atoms, "bond structural ref").map_err(Into::into)
+}
+
+fn read_noncovalent_structural(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<[AtomRef; 2], EdnError> {
+    let atoms = read_structural_atoms(de, "noncovalent-bond structural ref")?;
+    two_atom_refs(atoms, "noncovalent-bond structural ref").map_err(Into::into)
+}
+
+fn read_aromatic_structural(de: &mut EdnStreamDeserializer<'_>) -> Result<Vec<AtomRef>, EdnError> {
+    read_structural_atoms(de, "aromatic-system structural ref")
+}
+
+fn read_multicenter_structural(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<Vec<AtomRef>, EdnError> {
+    read_structural_atoms(de, "multicenter-bond structural ref")
+}
+
+fn read_dative_structural(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<DativeBondParticipants, EdnError> {
+    let context = "dative-bond structural ref";
+    let mut donors: Option<Vec<AtomRef>> = None;
+    let mut acceptor: Option<AtomRef> = None;
+    read_map(de, |de, key| match key {
+        "donors" => {
+            donors = Some(read_vec(de, read_atom_ref)?);
+            Ok(())
+        }
+        "acceptor" => {
+            acceptor = Some(read_atom_ref(de)?);
+            Ok(())
+        }
+        other => Err(reject_structural_key(other, context)),
+    })?;
+    Ok(DativeBondParticipants {
+        donors: donors.ok_or_else(|| missing_structural_key("donors", context))?,
+        acceptor: acceptor.ok_or_else(|| missing_structural_key("acceptor", context))?,
+    })
+}
+
+fn read_stereo_atom_structural(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<StereoAtomParticipants, EdnError> {
+    let context = "stereo-atom structural ref";
+    let mut site: Option<AtomRef> = None;
+    let mut ligands: Option<Vec<StereoLigandRef>> = None;
+    read_map(de, |de, key| match key {
+        "site" => {
+            site = Some(read_atom_ref(de)?);
+            Ok(())
+        }
+        "ligands" => {
+            ligands = Some(read_vec(de, read_stereo_ligand)?);
+            Ok(())
+        }
+        other => Err(reject_structural_key(other, context)),
+    })?;
+    Ok(StereoAtomParticipants {
+        site: site.ok_or_else(|| missing_structural_key("site", context))?,
+        ligands: ligands.ok_or_else(|| missing_structural_key("ligands", context))?,
+    })
+}
+
+fn read_stereo_bond_structural(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<StereoBondParticipants, EdnError> {
+    let context = "stereo-bond structural ref";
+    let mut site: Option<BondRef> = None;
+    let mut ligands: Option<Vec<StereoLigandRef>> = None;
+    read_map(de, |de, key| match key {
+        "site" => {
+            site = Some(read_bond_ref(de)?);
+            Ok(())
+        }
+        "ligands" => {
+            ligands = Some(read_vec(de, read_stereo_ligand)?);
+            Ok(())
+        }
+        other => Err(reject_structural_key(other, context)),
+    })?;
+    Ok(StereoBondParticipants {
+        site: site.ok_or_else(|| missing_structural_key("site", context))?,
+        ligands: ligands.ok_or_else(|| missing_structural_key("ligands", context))?,
     })
 }
 

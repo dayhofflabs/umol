@@ -490,12 +490,12 @@ Three arrangements of the same two traits — resolution and render each written
   and a *structural* ref is **never** re-emitted as structural (input-only — `from_ast` produces only
   `Index`/`Id`). Property: parse a DSL form with mixed positional / keyword / structural refs, roundtrip
   (parse → resolve → `from_ast` → render), and assert the rendered refs follow keyword-else-positional and
-  carry no `Structural`. `[dep: S3c, S3d]`
+  carry no `Structural`. `[dep: S3c, S3d]` **Done** as unit test
 
 - **S3k — fuzz seeds with structural refs.** Add corpus seeds exercising the `{:atoms […]}` /
   `{:donors … :acceptor …}` / `{:site … :ligands […]}` structural forms to the `umol-ast` targets whose
   grammar admits them — `fuzz_molecule`, `fuzz_reaction`, `fuzz_reaction_span`, `fuzz_constraints` — so the
-  full parse→resolve path is fuzzed on the new arm. `[dep: S3c, S3d, S3e]`
+  full parse→resolve path is fuzzed on the new arm. `[dep: S3c, S3d, S3e]` **Done**
 
 - **S3m — rename the keyword-returning metadata accessors `<kind>_id` → `<kind>_keyword`.** Deferred out
   of S3b (it cascades past the trait work). Scope: the eight getters on `MoleculeMetadata` **and**
@@ -511,7 +511,7 @@ Three arrangements of the same two traits — resolution and render each written
   they are accepted wherever a ref is (entries, entity/relational/molecule constraints, sub-pattern
   anchors, reaction deltas); the `keyword > positional > structural` emission rule with structural
   input-only; and anonymous sub-patterns (no `:id`, no `:atom-aliases`, rejected with `InvalidValue`).
-  `[dep: S3c–S3f]`
+  `[dep: S3c–S3f]` **Done**
 
 **Critical path** S2a → S2b → {S2d, S2e} → S3a → S3b → S3c → {S3d, S3f, S3h} → S3e → S3g. S3b is a green,
 transparent foundation; S3c is the first breaking cut (molecule green, reaction/span red until S3d/e).
