@@ -10,7 +10,6 @@ pub mod enumeration;
 pub mod matching;
 pub mod mis;
 pub mod refine;
-pub mod rewriting;
 pub mod subiso;
 pub mod toposort;
 pub mod traversal;

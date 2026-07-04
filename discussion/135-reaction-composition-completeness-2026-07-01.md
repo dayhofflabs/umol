@@ -180,7 +180,7 @@ the span approach may be both cleaner and closer to the DPO concurrency construc
   overlaps are the small localized `R_A ∩ L_B` fragments, so likely not — but the subgraph edge rule
   admits *more* cliques than induced).
 
-## Part C — core structural DPO primitives (umol-graph-core)
+## Part C — core graph-core work: DPO primitives + R1 overlap enumeration (umol-graph-core)
 
 The chemistry-agnostic pushout / pushout-complement / pullback over the adhesive category a molecule
 lives in — `Graph` (atoms + bonds) and the relation-set families (`FixedRelationSet`,
@@ -233,6 +233,31 @@ ids. All of Part C is **additive/green** (new methods; nothing existing changes 
   and any future rule-conflict/dependency analysis; under the operational compose the interface `K`
   otherwise emerges from `A⁻¹`/`B` on the glue. `[dep: C-b]`
 
-**Critical path** C0 (done) → C-a → C-b. C-c and C-d are additive and land after C-b to complete the
-family/primitive surface, but do not gate the compose application (Part D — the `meet_glue` +
-Concurrency-Theorem realization), which needs only C0–C-b.
+- **C-e — `EmbeddingKind` + the monomorphism edge rule in `modular_product` (R1, internal). (done)**
+  `algorithms/common_subgraph.rs`: an `EmbeddingKind { Induced, Monomorphism }` enum + an `embedding`
+  parameter on the private `modular_product`, branching its adjacency edge rule — the
+  `(Some, None) | (None, Some)` arm becomes **allowed** under `Monomorphism` (`E` omits the edge; it is
+  context in one graph) and stays **rejected** under `Induced` (edge-iff-edge, today's behaviour). The
+  two entries pass `Induced` for now, so behaviour is unchanged. The Bron–Kerbosch / backtracking walks
+  are untouched — a new *mode*, not a new algorithm, and **not** an `Algorithm` enum (no algorithm
+  choice — it flips one match arm; §R1). This is the `modular_product` path, **not** `McsAlgorithmKind`
+  / `pair_feasible` (that serves the separate *maximum*-search; compose uses
+  `enumerate_common_subgraphs`). Additive/green. `[dep: —]`
+
+- **C-f — thread `EmbeddingKind` through the two entries (R1, surface). (done)**
+  `algorithms/common_subgraph.rs`: add the `EmbeddingKind` argument to `enumerate_common_subgraphs` and
+  `maximal_common_subgraphs` (forwarded to `modular_product`). The {maximal, complete} × {induced,
+  monomorphism} 2×2 is then **two methods × this one parameter** — the walk `match alg` untouched, no
+  new entries (per no-YAGNI the parameter completes the surface). Migrate **all** callers to `Induced`
+  (behaviour-preserving), `compose` (compose.rs:315) included — it stays `Induced` here: its overlap
+  bond mapping asserts an overlap bond coincides in R_A (`.expect("an induced overlap bond exists in
+  R_A")`, compose.rs:634), so it *panics* on a monomorphism overlap and cannot flip until Part D. Add
+  the §R1 **F–Cl** graph-core unit test (the monomorphism overlap the induced rule drops). Breaking→green
+  (entry-signature change + caller migration land together). `[dep: C-e]`
+
+**Critical path** C0 (done) → C-a → C-b (the DPO primitives) and, independently, C-e → C-f (R1
+enumeration) — **all of C0–C-f done**. Part D (`meet_glue` + the Concurrency-Theorem realization)
+consumes **C0–C-b and C-f**, and is where `compose` flips to `EmbeddingKind::Monomorphism` — the
+overlap bond mapping's meet-interface + delta-rebasing rewrite, the three fixes the ignored
+`compose_complete_overlay` names, must land together. C-c and C-d complete the relation-set surface
+(additive) and do not gate Part D.

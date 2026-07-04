@@ -10,14 +10,15 @@ pub(crate) mod correspondence;
 pub(crate) mod digraph;
 pub(crate) mod graph;
 pub(crate) mod relation;
+pub(crate) mod rewriting;
 pub(crate) mod union_find;
 
 pub use algorithms::auto::{AutoGroupOrder, Automorphism, AutomorphismAlgorithm};
 pub use algorithms::bcc::BiconnectedComponentsAlgorithm;
 pub use algorithms::coloring::BipartitionAlgorithm;
 pub use algorithms::common_subgraph::{
-    CommonSubgraphEnumerationAlgorithm, MaximalCommonSubgraphAlgorithm, McesAlgorithm,
-    McisAlgorithm, McsConnectivity,
+    CommonSubgraphEnumerationAlgorithm, EmbeddingKind, MaximalCommonSubgraphAlgorithm,
+    McesAlgorithm, McisAlgorithm, McsConnectivity,
 };
 pub use algorithms::connected::ConnectedComponentsAlgorithm;
 pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
@@ -30,9 +31,6 @@ pub use algorithms::refine::{
     CircularRefinementAlgorithm, CircularRefinementHash, Refinement, RefinementAlgorithm,
     RefinementHash, RefinementRounds,
 };
-pub use algorithms::rewriting::{
-    pullback, pushout, pushout_complement, Pullback, Pushout, PushoutComplement,
-};
 pub use algorithms::subiso::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
 pub use algorithms::toposort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::TraversalAlgorithm;
@@ -44,6 +42,7 @@ pub use graph::{
 pub use relation::{
     FactorOrdering, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, Ordered,
     ParticipantAnchor, ParticipantPosition, ParticipantRefs, RelationId, RelationParticipant,
-    RelationPushout, Unordered, VarRelationSet, VarVarBirelationSet,
+    RelationPullback, RelationPushout, Unordered, VarRelationSet, VarVarBirelationSet,
 };
+pub use rewriting::{pullback, pushout, pushout_complement, Pullback, Pushout, PushoutComplement};
 pub use union_find::UnionFind;

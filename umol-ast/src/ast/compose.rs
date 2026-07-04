@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 use umol_graph_core::{
-    CommonSubgraphEnumerationAlgorithm, EdgeId, FactorOrdering, NodeId, Unordered,
+    CommonSubgraphEnumerationAlgorithm, EdgeId, EmbeddingKind, FactorOrdering, NodeId, Unordered,
 };
 
 use super::aromatic::AromaticSystemAst;
@@ -311,11 +311,14 @@ fn compose_all(
     };
     // Every overlap of R_A with L_B — the *complete* common-subgraph enumeration, not just the
     // maximal ones: each distinct (incl. partial and empty) overlap is a distinct sequential
-    // composite, so completeness (`seq ⊆ composed`) requires all of them.
+    // composite, so completeness (`seq ⊆ composed`) requires all of them. Induced for now: the
+    // R_A bond lookup below assumes overlap bonds coincide in R_A. Widening to monomorphism overlaps
+    // (keeping R_A context bonds) needs the meet-interface + delta-rebasing rewrite to land together.
     let overlaps = r_a.raw_graph().enumerate_common_subgraphs(
         l_b.raw_graph(),
         &mut node_match,
         &mut edge_match,
+        EmbeddingKind::Induced,
         CommonSubgraphEnumerationAlgorithm::Backtracking,
     );
 

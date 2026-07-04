@@ -59,6 +59,32 @@ fn relation_pushout<S>(
     }
 }
 
+/// The shared-relation intersection and its two projections — the result of a same-space relation
+/// [`pullback`](FixedRelationSet::pullback).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelationPullback<S> {
+    pub object: S,
+    /// object relation → `self` relation.
+    pub left: Correspondence<RelationId>,
+    /// object relation → `right` relation.
+    pub right: Correspondence<RelationId>,
+}
+
+/// The two projections of a relation pullback, each mapping a shared relation to its original.
+fn relation_pullback<S>(
+    object: S,
+    left_images: Vec<RelationId>,
+    right_images: Vec<RelationId>,
+    self_count: usize,
+    right_count: usize,
+) -> RelationPullback<S> {
+    RelationPullback {
+        object,
+        left: Correspondence::from_images(&left_images, self_count),
+        right: Correspondence::from_images(&right_images, right_count),
+    }
+}
+
 /// Position of a participant within a single relation's tuple — local to the
 /// relation (frame-relative), distinct from the global `NodeId`/`EdgeId`/`RelationId`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -484,6 +510,38 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
             right_map,
         ))
     }
+
+    /// Same-space relation pullback — the shared relations (coinciding participants), data
+    /// combined by `combine` (`None` = ⊥ ⇒ inadmissible); non-coinciding relations are dropped.
+    /// Its two projections map each shared relation to its `self` / `right` original. Same-space
+    /// contract as [`FixedRelationSet::pushout`].
+    pub fn pullback(
+        &self,
+        right: &Self,
+        mut combine: impl FnMut(&D, &D) -> Option<D>,
+    ) -> Option<RelationPullback<Self>>
+    where
+        D: Clone,
+    {
+        let mut entries: Vec<([P; N], D)> = Vec::new();
+        let mut left_images: Vec<RelationId> = Vec::new();
+        let mut right_images: Vec<RelationId> = Vec::new();
+        for id in self.relation_ids() {
+            if let Some(hit) = right.find_by_participants(self.participants(id)) {
+                let merged = combine(self.data(id), right.data(hit))?;
+                entries.push((*self.participants(id), merged));
+                left_images.push(id);
+                right_images.push(hit);
+            }
+        }
+        Some(relation_pullback(
+            Self::new(entries),
+            left_images,
+            right_images,
+            self.relation_count(),
+            right.relation_count(),
+        ))
+    }
 }
 
 impl<P, O, D, const N: usize> Default for FixedRelationSet<P, O, D, N> {
@@ -687,6 +745,35 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
             self_count,
             object_count,
             right_map,
+        ))
+    }
+
+    /// Same-space relation pullback — see [`FixedRelationSet::pullback`].
+    pub fn pullback(
+        &self,
+        right: &Self,
+        mut combine: impl FnMut(&D, &D) -> Option<D>,
+    ) -> Option<RelationPullback<Self>>
+    where
+        D: Clone,
+    {
+        let mut entries: Vec<(Vec<P>, D)> = Vec::new();
+        let mut left_images: Vec<RelationId> = Vec::new();
+        let mut right_images: Vec<RelationId> = Vec::new();
+        for id in self.relation_ids() {
+            if let Some(hit) = right.find_by_participants(self.participants(id)) {
+                let merged = combine(self.data(id), right.data(hit))?;
+                entries.push((self.participants(id).to_vec(), merged));
+                left_images.push(id);
+                right_images.push(hit);
+            }
+        }
+        Some(relation_pullback(
+            Self::new(entries),
+            left_images,
+            right_images,
+            self.relation_count(),
+            right.relation_count(),
         ))
     }
 }
@@ -896,6 +983,85 @@ where
             })
             .collect();
         (Self::new(entries), positions_1, positions_2)
+    }
+
+    /// Same-space relation pushout — see [`FixedRelationSet::pushout`]. Coincidence is equality of
+    /// both factors' participants.
+    pub fn pushout(
+        &self,
+        right: &Self,
+        mut combine: impl FnMut(&D, &D) -> Option<D>,
+    ) -> Option<RelationPushout<Self>>
+    where
+        D: Clone,
+    {
+        let mut entries: Vec<([L1; N1], [L2; N2], D)> = self
+            .relation_ids()
+            .map(|id| {
+                (
+                    *self.participants_1(id),
+                    *self.participants_2(id),
+                    self.data(id).clone(),
+                )
+            })
+            .collect();
+        let self_count = entries.len();
+        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.relation_count());
+        for id in right.relation_ids() {
+            match self.find_by_participants(right.participants_1(id), right.participants_2(id)) {
+                Some(hit) => {
+                    let merged = combine(&entries[hit.index()].2, right.data(id))?;
+                    entries[hit.index()].2 = merged;
+                    right_map.push(hit);
+                }
+                None => {
+                    right_map.push(RelationId(entries.len() as u32));
+                    entries.push((
+                        *right.participants_1(id),
+                        *right.participants_2(id),
+                        right.data(id).clone(),
+                    ));
+                }
+            }
+        }
+        let object_count = entries.len();
+        Some(relation_pushout(
+            Self::new(entries),
+            self_count,
+            object_count,
+            right_map,
+        ))
+    }
+
+    /// Same-space relation pullback — see [`FixedRelationSet::pullback`].
+    pub fn pullback(
+        &self,
+        right: &Self,
+        mut combine: impl FnMut(&D, &D) -> Option<D>,
+    ) -> Option<RelationPullback<Self>>
+    where
+        D: Clone,
+    {
+        let mut entries: Vec<([L1; N1], [L2; N2], D)> = Vec::new();
+        let mut left_images: Vec<RelationId> = Vec::new();
+        let mut right_images: Vec<RelationId> = Vec::new();
+        for id in self.relation_ids() {
+            if let Some(hit) =
+                right.find_by_participants(self.participants_1(id), self.participants_2(id))
+            {
+                let merged = combine(self.data(id), right.data(hit))?;
+                entries.push((*self.participants_1(id), *self.participants_2(id), merged));
+                left_images.push(id);
+                right_images.push(hit);
+            }
+        }
+        Some(relation_pullback(
+            Self::new(entries),
+            left_images,
+            right_images,
+            self.relation_count(),
+            right.relation_count(),
+        ))
     }
 }
 
@@ -1159,6 +1325,41 @@ where
             right_map,
         ))
     }
+
+    /// Same-space relation pullback — see [`FixedRelationSet::pullback`].
+    pub fn pullback(
+        &self,
+        right: &Self,
+        mut combine: impl FnMut(&D, &D) -> Option<D>,
+    ) -> Option<RelationPullback<Self>>
+    where
+        D: Clone,
+    {
+        let mut entries: Vec<([L1; N1], Vec<L2>, D)> = Vec::new();
+        let mut left_images: Vec<RelationId> = Vec::new();
+        let mut right_images: Vec<RelationId> = Vec::new();
+        for id in self.relation_ids() {
+            if let Some(hit) =
+                right.find_by_participants(self.participants_1(id), self.participants_2(id))
+            {
+                let merged = combine(self.data(id), right.data(hit))?;
+                entries.push((
+                    *self.participants_1(id),
+                    self.participants_2(id).to_vec(),
+                    merged,
+                ));
+                left_images.push(id);
+                right_images.push(hit);
+            }
+        }
+        Some(relation_pullback(
+            Self::new(entries),
+            left_images,
+            right_images,
+            self.relation_count(),
+            right.relation_count(),
+        ))
+    }
 }
 
 impl<L1, O1, const N1: usize, L2, O2, D> Default for FixedVarBirelationSet<L1, O1, N1, L2, O2, D> {
@@ -1376,6 +1577,89 @@ where
             })
             .collect();
         (Self::new(entries), positions_1, positions_2)
+    }
+
+    /// Same-space relation pushout — see [`FixedRelationSet::pushout`]. Coincidence is equality of
+    /// both factors' participants.
+    pub fn pushout(
+        &self,
+        right: &Self,
+        mut combine: impl FnMut(&D, &D) -> Option<D>,
+    ) -> Option<RelationPushout<Self>>
+    where
+        D: Clone,
+    {
+        let mut entries: Vec<(Vec<L1>, Vec<L2>, D)> = self
+            .relation_ids()
+            .map(|id| {
+                (
+                    self.participants_1(id).to_vec(),
+                    self.participants_2(id).to_vec(),
+                    self.data(id).clone(),
+                )
+            })
+            .collect();
+        let self_count = entries.len();
+        let mut right_map: Vec<RelationId> = Vec::with_capacity(right.relation_count());
+        for id in right.relation_ids() {
+            match self.find_by_participants(right.participants_1(id), right.participants_2(id)) {
+                Some(hit) => {
+                    let merged = combine(&entries[hit.index()].2, right.data(id))?;
+                    entries[hit.index()].2 = merged;
+                    right_map.push(hit);
+                }
+                None => {
+                    right_map.push(RelationId(entries.len() as u32));
+                    entries.push((
+                        right.participants_1(id).to_vec(),
+                        right.participants_2(id).to_vec(),
+                        right.data(id).clone(),
+                    ));
+                }
+            }
+        }
+        let object_count = entries.len();
+        Some(relation_pushout(
+            Self::new(entries),
+            self_count,
+            object_count,
+            right_map,
+        ))
+    }
+
+    /// Same-space relation pullback — see [`FixedRelationSet::pullback`].
+    pub fn pullback(
+        &self,
+        right: &Self,
+        mut combine: impl FnMut(&D, &D) -> Option<D>,
+    ) -> Option<RelationPullback<Self>>
+    where
+        D: Clone,
+    {
+        let mut entries: Vec<(Vec<L1>, Vec<L2>, D)> = Vec::new();
+        let mut left_images: Vec<RelationId> = Vec::new();
+        let mut right_images: Vec<RelationId> = Vec::new();
+        for id in self.relation_ids() {
+            if let Some(hit) =
+                right.find_by_participants(self.participants_1(id), self.participants_2(id))
+            {
+                let merged = combine(self.data(id), right.data(hit))?;
+                entries.push((
+                    self.participants_1(id).to_vec(),
+                    self.participants_2(id).to_vec(),
+                    merged,
+                ));
+                left_images.push(id);
+                right_images.push(hit);
+            }
+        }
+        Some(relation_pullback(
+            Self::new(entries),
+            left_images,
+            right_images,
+            self.relation_count(),
+            right.relation_count(),
+        ))
     }
 }
 
@@ -2211,5 +2495,90 @@ mod tests {
             Some(15),
         );
         assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1))); // appended
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_pushout() {
+        let left = FixedFixedBirelationSet::<NodeId, Ordered, 1, NodeId, Unordered, 2, i32>::new(
+            vec![([n(0)], [n(1), n(2)], 10)],
+        );
+        let right =
+            FixedFixedBirelationSet::<NodeId, Ordered, 1, NodeId, Unordered, 2, i32>::new(vec![
+                ([n(0)], [n(1), n(2)], 5),
+                ([n(3)], [n(4), n(5)], 20),
+            ]);
+        let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
+        assert_eq!(glue.object.relation_count(), 2);
+        assert_eq!(
+            glue.object
+                .find_by_participants(&[n(0)], &[n(1), n(2)])
+                .map(|id| *glue.object.data(id)),
+            Some(15),
+        );
+        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1)));
+    }
+
+    #[rstest]
+    fn test_var_var_birelation_set_pushout() {
+        let left = VarVarBirelationSet::<NodeId, Unordered, NodeId, Unordered, i32>::new(vec![(
+            vec![n(0), n(1)],
+            vec![n(2), n(3)],
+            10,
+        )]);
+        let right = VarVarBirelationSet::<NodeId, Unordered, NodeId, Unordered, i32>::new(vec![
+            (vec![n(0), n(1)], vec![n(2), n(3)], 5),
+            (vec![n(4)], vec![n(5)], 20),
+        ]);
+        let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
+        assert_eq!(glue.object.relation_count(), 2);
+        assert_eq!(
+            glue.object
+                .find_by_participants(&[n(0), n(1)], &[n(2), n(3)])
+                .map(|id| *glue.object.data(id)),
+            Some(15),
+        );
+        assert_eq!(glue.right.right_of(RelationId(1)), Some(RelationId(1)));
+    }
+
+    #[rstest]
+    fn test_fixed_relation_set_pullback() {
+        // intersection: self {01}=10 {23}=20 ; right {01}=5 {45}=30 — only {01} is shared.
+        let left = FixedRelationSet::<NodeId, Unordered, i32, 2>::new(vec![
+            ([n(0), n(1)], 10),
+            ([n(2), n(3)], 20),
+        ]);
+        let right = FixedRelationSet::<NodeId, Unordered, i32, 2>::new(vec![
+            ([n(0), n(1)], 5),
+            ([n(4), n(5)], 30),
+        ]);
+        let pb = left.pullback(&right, |a, b| Some(a + b)).expect("no ⊥");
+        assert_eq!(pb.object.relation_count(), 1); // self-only and right-only dropped
+        assert_eq!(*pb.object.data(RelationId(0)), 15);
+        assert_eq!(pb.left.right_of(RelationId(0)), Some(RelationId(0))); // → self {01}
+        assert_eq!(pb.right.right_of(RelationId(0)), Some(RelationId(0))); // → right {01}
+    }
+
+    #[rstest]
+    fn test_fixed_relation_set_pullback_bottom() {
+        let left = FixedRelationSet::<NodeId, Unordered, i32, 2>::new(vec![([n(0), n(1)], 10)]);
+        let right = FixedRelationSet::<NodeId, Unordered, i32, 2>::new(vec![([n(0), n(1)], 5)]);
+        assert_eq!(left.pullback(&right, |_, _| None), None);
+    }
+
+    #[rstest]
+    fn test_fixed_var_birelation_set_pullback() {
+        let left = FixedVarBirelationSet::<NodeId, Ordered, 1, NodeId, Unordered, i32>::new(vec![
+            ([n(0)], vec![n(1), n(2)], 10),
+            ([n(3)], vec![n(4)], 20),
+        ]);
+        let right =
+            FixedVarBirelationSet::<NodeId, Ordered, 1, NodeId, Unordered, i32>::new(vec![(
+                [n(0)],
+                vec![n(1), n(2)],
+                5,
+            )]);
+        let pb = left.pullback(&right, |a, b| Some(a + b)).expect("no ⊥");
+        assert_eq!(pb.object.relation_count(), 1); // only the shared ([0],[1,2])
+        assert_eq!(*pb.object.data(RelationId(0)), 15);
     }
 }

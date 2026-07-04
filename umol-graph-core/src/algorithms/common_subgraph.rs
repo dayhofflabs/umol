@@ -1,8 +1,8 @@
 //! Common subgraphs of two graphs. Three distinct tasks, each with its own entry point and
 //! algorithm enum: the **maximum** (single largest) via McGregor, the **maximal**
 //! (non-extendable) enumeration via Bron–Kerbosch, and the **complete** enumeration of *all*
-//! common induced subgraphs by backtracking. All three treat cliques of the modular product
-//! (Levi, Calcolo 9 (1973) 341–352) as the common induced subgraphs.
+//! common subgraphs by backtracking. All three build on cliques of the modular product
+//! (Levi, Calcolo 9 (1973) 341–352).
 //!
 //! Maximum (`Mcis`/`Mces`) — McGregor's vertex-mapping search (J. J. McGregor,
 //! "Backtrack search algorithms and the maximal common subgraph problem", Software:
@@ -12,11 +12,14 @@
 //! (edge-iff-edge) constraint; MCES maximizes shared edges with no induced constraint.
 //!
 //! Maximal (`maximal_common_subgraphs`, `MaximalCommonSubgraphAlgorithm`) — every maximal
-//! (non-extendable) common induced subgraph, as a maximal clique of the modular product.
+//! (non-extendable) common subgraph, as a maximal clique of the modular product.
 //!
 //! Complete (`enumerate_common_subgraphs`, `CommonSubgraphEnumerationAlgorithm`) — *every*
-//! common induced subgraph, the empty one included, as *every* clique of the modular product.
-//! Its result contains the maximal enumeration's; exponential in the worst case.
+//! common subgraph, the empty one included, as *every* clique of the modular product. Its result
+//! contains the maximal enumeration's; exponential in the worst case.
+//!
+//! Both Maximal and Complete take an [`EmbeddingKind`]: induced (edge-iff-edge) or monomorphism
+//! (an edge present in one graph may be absent — context — in the other).
 
 use bitvec::prelude::*;
 
@@ -39,7 +42,7 @@ pub enum McesAlgorithm {
     McGregor,
 }
 
-/// Algorithm for the **complete** enumeration of all common induced subgraphs.
+/// Algorithm for the **complete** enumeration of all common subgraphs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommonSubgraphEnumerationAlgorithm {
     /// Every clique of the modular product by recursive backtracking — each clique reported
@@ -47,12 +50,25 @@ pub enum CommonSubgraphEnumerationAlgorithm {
     Backtracking,
 }
 
-/// Algorithm for the **maximal** (non-extendable) common induced subgraphs.
+/// Algorithm for the **maximal** (non-extendable) common subgraphs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaximalCommonSubgraphAlgorithm {
     /// Bron–Kerbosch maximal-clique enumeration over the modular product (Bron &
     /// Kerbosch, CACM 16 (1973) 575–577).
     BronKerbosch,
+}
+
+/// Which subgraph relation the common-subgraph search enforces on each edge: the shared object is an
+/// **induced** subgraph of both graphs, or only **embeds** into them by a monomorphism. Selects the
+/// modular-product edge rule, not an algorithm.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EmbeddingKind {
+    /// Edge-iff-edge: two mated pairs stay adjacent only when both graphs agree on the edge between
+    /// them (both present and `edge_match`-compatible, or both absent).
+    Induced,
+    /// Edge-implies-edge: an edge present in one graph but absent in the other is allowed — context
+    /// the shared object omits. Each side sees the object as a (non-induced) subgraph.
+    Monomorphism,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -526,21 +542,22 @@ impl Graph {
     /// non-extendable vertex correspondence under `node_match`, with an edge present
     /// iff present (and `edge_match`-compatible) in both graphs. Unlike the maximum,
     /// this enumerates *all* maximal overlaps, disconnected ones included.
-    /// Enumerate **every** common induced subgraph (the empty one included) — every clique of the
-    /// modular product. Its result contains [`maximal_common_subgraphs`](Self::maximal_common_subgraphs)';
-    /// exponential in the worst case.
+    /// Enumerate **every** common subgraph of the kind `embedding` selects (the empty one included) —
+    /// every clique of the modular product. Its result contains
+    /// [`maximal_common_subgraphs`](Self::maximal_common_subgraphs)'; exponential in the worst case.
     pub fn enumerate_common_subgraphs<N, E>(
         &self,
         other: &Graph,
         node_match: &mut N,
         edge_match: &mut E,
+        embedding: EmbeddingKind,
         alg: CommonSubgraphEnumerationAlgorithm,
     ) -> Vec<GraphCorrespondence>
     where
         N: FnMut(NodeId, NodeId) -> bool,
         E: FnMut(EdgeId, EdgeId) -> bool,
     {
-        let (pairs, neighbors) = self.modular_product(other, node_match, edge_match);
+        let (pairs, neighbors) = self.modular_product(other, node_match, edge_match, embedding);
         let mut cliques = Vec::new();
         match alg {
             CommonSubgraphEnumerationAlgorithm::Backtracking => {
@@ -555,20 +572,21 @@ impl Graph {
         subgraphs_from_cliques(cliques, &pairs, self, other)
     }
 
-    /// Enumerate the **maximal** (non-extendable) common induced subgraphs — the maximal cliques of
-    /// the modular product.
+    /// Enumerate the **maximal** (non-extendable) common subgraphs of the kind `embedding` selects —
+    /// the maximal cliques of the modular product.
     pub fn maximal_common_subgraphs<N, E>(
         &self,
         other: &Graph,
         node_match: &mut N,
         edge_match: &mut E,
+        embedding: EmbeddingKind,
         alg: MaximalCommonSubgraphAlgorithm,
     ) -> Vec<GraphCorrespondence>
     where
         N: FnMut(NodeId, NodeId) -> bool,
         E: FnMut(EdgeId, EdgeId) -> bool,
     {
-        let (pairs, neighbors) = self.modular_product(other, node_match, edge_match);
+        let (pairs, neighbors) = self.modular_product(other, node_match, edge_match, embedding);
         let count = pairs.len();
         let mut cliques = Vec::new();
         match alg {
@@ -584,15 +602,17 @@ impl Graph {
     }
 
     /// The modular product of `self` and `other` under the match predicates — its cliques are the
-    /// common induced subgraphs. Vertices are the `node_match`-compatible node pairs; two distinct
-    /// pairs are adjacent iff their edges agree (both present and `edge_match`-compatible, or both
-    /// absent). Pairs sharing a node stay non-adjacent, enforcing injectivity. Returns the pair
-    /// list and its per-vertex adjacency bitsets.
+    /// common subgraphs of the kind `embedding` selects. Vertices are the `node_match`-compatible node
+    /// pairs; two distinct pairs are adjacent iff their edges are compatible under `embedding` (both
+    /// present and `edge_match`-compatible, both absent, or — `Monomorphism` only — one present and one
+    /// absent, kept as context). Pairs sharing a node stay non-adjacent, enforcing injectivity. Returns
+    /// the pair list and its per-vertex adjacency bitsets.
     fn modular_product<N, E>(
         &self,
         other: &Graph,
         node_match: &mut N,
         edge_match: &mut E,
+        embedding: EmbeddingKind,
     ) -> (Vec<(NodeId, NodeId)>, Vec<BitVec>)
     where
         N: FnMut(NodeId, NodeId) -> bool,
@@ -619,7 +639,7 @@ impl Graph {
                 let agree = match (self.find_edge(a1, a2), other.find_edge(b1, b2)) {
                     (Some(ea), Some(eb)) => edge_match(ea, eb),
                     (None, None) => true,
-                    _ => false,
+                    _ => matches!(embedding, EmbeddingKind::Monomorphism),
                 };
                 if agree {
                     neighbors[i].set(j, true);
@@ -987,6 +1007,7 @@ mod tests {
                 &b,
                 &mut any_node,
                 &mut any_edge,
+                EmbeddingKind::Induced,
                 MaximalCommonSubgraphAlgorithm::BronKerbosch,
             )
             .iter()
@@ -1039,6 +1060,7 @@ mod tests {
                 &b,
                 &mut node_match,
                 &mut any_edge,
+                EmbeddingKind::Induced,
                 MaximalCommonSubgraphAlgorithm::BronKerbosch,
             )
             .iter()
@@ -1056,6 +1078,7 @@ mod tests {
                 &edge,
                 &mut any_node,
                 &mut reject_edge,
+                EmbeddingKind::Induced,
                 MaximalCommonSubgraphAlgorithm::BronKerbosch,
             )
             .iter()
@@ -1079,6 +1102,7 @@ mod tests {
                 &b,
                 &mut cross,
                 &mut any_edge,
+                EmbeddingKind::Induced,
                 MaximalCommonSubgraphAlgorithm::BronKerbosch,
             )
             .iter()
@@ -1123,6 +1147,7 @@ mod tests {
                 &b,
                 &mut any_node,
                 &mut any_edge,
+                EmbeddingKind::Induced,
                 CommonSubgraphEnumerationAlgorithm::Backtracking,
             )
             .iter()
@@ -1130,6 +1155,41 @@ mod tests {
             .collect::<Vec<_>>(),
             expected,
         );
+    }
+
+    // The R1 (F–Cl) case: A's edge (1,2) is present, B's is absent. Under monomorphism the full
+    // identity overlap survives (that edge is context in A); under induced it is dropped.
+    #[rstest]
+    fn test_graph_enumerate_common_subgraphs_monomorphism() {
+        let a = Graph::new(3, &[[0, 1], [1, 2]]);
+        let b = Graph::new(3, &[[0, 1]]);
+        let full = vec![
+            (NodeId(0), NodeId(0)),
+            (NodeId(1), NodeId(1)),
+            (NodeId(2), NodeId(2)),
+        ];
+        let monomorphism = a.enumerate_common_subgraphs(
+            &b,
+            &mut any_node,
+            &mut any_edge,
+            EmbeddingKind::Monomorphism,
+            CommonSubgraphEnumerationAlgorithm::Backtracking,
+        );
+        let induced = a.enumerate_common_subgraphs(
+            &b,
+            &mut any_node,
+            &mut any_edge,
+            EmbeddingKind::Induced,
+            CommonSubgraphEnumerationAlgorithm::Backtracking,
+        );
+        assert!(monomorphism
+            .iter()
+            .map(summary)
+            .any(|(mapping, edges)| mapping == full && edges == 1));
+        assert!(!induced
+            .iter()
+            .map(summary)
+            .any(|(mapping, _)| mapping == full));
     }
 
     // The complete enumeration is a superset of the maximal one, and every maximal subgraph appears
@@ -1142,12 +1202,14 @@ mod tests {
             &b,
             &mut any_node,
             &mut any_edge,
+            EmbeddingKind::Induced,
             CommonSubgraphEnumerationAlgorithm::Backtracking,
         );
         let maximal = a.maximal_common_subgraphs(
             &b,
             &mut any_node,
             &mut any_edge,
+            EmbeddingKind::Induced,
             MaximalCommonSubgraphAlgorithm::BronKerbosch,
         );
         assert!(all.len() > maximal.len());
@@ -1158,5 +1220,33 @@ mod tests {
                 "maximal subgraph {m:?} missing from complete enumeration"
             );
         }
+    }
+
+    // A has the edge, B does not: the two "diagonal" mappings conflict on it. Induced drops them
+    // (edge-iff-edge); Monomorphism keeps them adjacent (the edge is context in A).
+    #[rstest]
+    #[case::induced(EmbeddingKind::Induced, vec![])]
+    #[case::monomorphism(EmbeddingKind::Monomorphism, vec![(0, 3), (1, 2)])]
+    fn test_graph_modular_product(
+        #[case] embedding: EmbeddingKind,
+        #[case] expected_adjacency: Vec<(usize, usize)>,
+    ) {
+        let a = Graph::new(2, &[[0, 1]]);
+        let b = Graph::new(2, &[]);
+        let (pairs, neighbors) = a.modular_product(&b, &mut any_node, &mut any_edge, embedding);
+        assert_eq!(
+            pairs,
+            vec![
+                (NodeId(0), NodeId(0)),
+                (NodeId(0), NodeId(1)),
+                (NodeId(1), NodeId(0)),
+                (NodeId(1), NodeId(1)),
+            ],
+        );
+        let adjacency: Vec<(usize, usize)> = (0..pairs.len())
+            .flat_map(|i| ((i + 1)..pairs.len()).map(move |j| (i, j)))
+            .filter(|&(i, j)| neighbors[i][j])
+            .collect();
+        assert_eq!(adjacency, expected_adjacency);
     }
 }
