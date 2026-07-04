@@ -639,3 +639,343 @@ Modules top-down: **graph-core** (foundation) → **umol-ast `ast`** → **umol-
 
 Critical path **S0 → S1 → S2 → S3 → S4**. S5 rides after S1 (parallel to S2–S4). S6 is graph-core-only; place last.
 
+## Structural entity refs (I5)
+
+Reopened from 134 §3 — genuinely not built. Today every `<entity>-ref` in the reaction / constraint
+surface is `int | keyword` (position or id): a bond or overlay with no `:id` can only be named by
+position. **Want:** name a non-atom entity by its *constituents* — a bond by its endpoints, an
+aromatic / multicenter system by its members, a dative bond by donors + acceptor, a stereo element by
+site + ligands (atoms are the base; no structural form).
+
+**Form** — a uniform structural-map variant, the §4-entry form minus `:type`/`:id`:
+`<entity>-ref ::= int | keyword | <structural-map>`, where the map is `{:atoms [..]}` (bond,
+noncovalent, aromatic, multicenter), `{:donors [..] :acceptor _}` (dative), or
+`{:site _ [:ligands [..]]}` (stereo). Map form (not a bare vector) keeps it self-delimiting where refs
+nest inside other vectors (anchor pairs, relational `[ref target]`).
+
+**What exists.** The resolution kernel is done: `find_by_participants` (graph-core, S0a) / the
+`<collection>.connecting(participants)` matchers, already driving `induce` and
+`substructure::verify_overlays`. §4.1 uniqueness (no two same-constituent entries — extended to
+noncovalent + multicenter, decided 2026-06-29) makes each structural match ≤1 hit.
+
+**What remains** — the DSL surface + resolver. Extend the ref grammar with the structural-map variant
+in one shared production so it reaches every non-atom ref site at once (reaction `:remove`/`:modify`,
+entity + relational constraints, `:bond-order-sum :bonds`, anchor pairs, stereo-bond `:site`), and
+resolve the structural variant per entity by its constituent payload (`[AtomRef; 2]` /
+`Vec<AtomRef>` / donors + acceptor / site + ligands) through the kernel above. Not a `define_ref`
+tweak — the structural variant carries a per-entity payload and a per-entity resolution, so the code
+shape is the work.
+
+Structural refs used as an *atom-map* input are tautological — a bond/overlay pair, endpoints being
+unordered, only restates the atom bijection `induce` already derives — so `resolve` treats such a
+pair as a consistency assertion against the induced correspondence (a contradicting one is an error),
+never an override. The useful surface is naming an id-less entity by its parts.
+
+### Resolution — the growing entity namespace
+
+Refs resolve during `*Input` → AST conversion, and at that point **there is no built `MoleculeAst`**:
+`molecule.rs`'s `into_ast` collects entities into `Vec<(participants, ast)>` and calls `from_parts`
+*last*, after constraints resolve; reaction deltas resolve against evolving state (lhs + deltas so
+far), held as counts + metadata, not a queryable structure. So structural resolution can't call the
+AST-level `find_by_participants` on a finished molecule — it resolves against the state built so far.
+
+`EntityCounts` (per-kind running counts, already grown by the delta loop via `allocate_*`) reshapes
+into an **`MoleculeNamespace`**: per kind a running count + name→id map + a **participant lookup**, grown
+incrementally during molecule parsing (unifying with the delta loop). This also enables index-range
+checks *as you parse* rather than only at the end. Structural resolution = resolve the inner
+atom/bond refs → form the participant key → look up (≤1 hit).
+
+Cost splits by kind, so the hot path stays cheap:
+
+| kind | count | structural lookup | cost |
+|---|---|---|---|
+| **atom** | many | none — no structural form (base) | free, untouched |
+| **bond** | many | `(min,max) → BondId` endpoint map, one insert per bond | O(1) insert, O(1) query |
+| **overlays** (D/A/M/N/S) | few | `find_by_participants` over the small collection | O(few) |
+
+The only numerous kind that takes a structural ref is the bond, and a bond is named by its endpoints —
+an O(1) endpoint map, never a scan. Atoms have no structural form. Overlays are few, so they reuse the
+`find_by_participants` kernel directly. Growing + querying is compatible because refs only ever point
+**backward** (atoms before bonds before overlays before constraints; deltas at current state), so a
+query always sees its target already registered; removal in the delta loop rides the existing
+`IdCompaction`. The one honest asymmetry: bonds use a parse-time endpoint map (a bond is a graph edge,
+not a relation set) while overlays call `find_by_participants`.
+
+The resolution context unifies onto `&MoleculeNamespace`: `resolve(&namespace)` replaces today's
+`resolve(count, id_to_idx)` / `into_ast(count, metadata)` at every ref site, which is what makes all
+sites light up from one change. `Structural` is **input-only** — the AST stores the resolved id with
+no memory of structural authoring, so `ToEdn`/`from_ast` still render `Index`/`Id` (same lossiness as
+writing index `3` for an entity that has an `:id`).
+
+### Precondition — noncovalent uniqueness by endpoints alone
+
+For a noncovalent structural ref to be unambiguous, noncovalent bonds must be disambiguated by their
+**endpoints alone** — no two parallel noncovalent bonds of different kinds on the same pair (dropping
+the current §4.1 allowance). The tier-1 entity-structure validator's `noncovalent_structure_check`
+currently keys the parallel check on `(pair, kind)`; it must key on the unordered pair alone, and
+`NoncovalentBondsParallel` drops its `kind` field. This is the doc-134 §3 decision (2026-06-29) and a
+hard precondition. (`:electrons` is independent — structural refs read only participant keys, so the
+electron-encoding relocation is an orthogonal cleanup, not a blocker.)
+
+### Ref-emission priority (roundtrip normalization) — to formalize
+
+A use-site ref is not stored as authored; it is re-derived on render from its target (`render_atom_ref`
+→ `Ref::from_ast` = the target's `:id` keyword if it has one, else its positional index). So ref
+*form* is normalized on roundtrip: index-vs-keyword already collapses to keyword-if-named-else-index,
+and mixed positional/keyword usage does not roundtrip to its authored mix. This is a designed
+normalization, not a bug — but it is currently implicit and untested.
+
+Formalize it as one rule: **a use site is emitted in the highest-priority form its target supports,
+`keyword > positional > structural`** — descending specificity of what the ref denotes (a deliberate
+label on *this* entity > *this* entity by slot > its participants, not the entity itself). Positional
+is universal, so the emitted form is always keyword-else-positional; **structural, being lowest, is
+never emitted — it is input-only** (this is *why* structural refs don't roundtrip, not a carve-out).
+Consequence: I5 needs zero render/roundtrip work — structural is a parse-side-only input form.
+
+**S-notation** (independent of the I5 dependency chain; pins existing behavior now, the structural row
+lights up with S3):
+- **Sn** spec + tests: state the use-site emission priority in `umol-ast/spec/umol-dsl-spec.md` (the
+  ref-grammar section), and add a roundtrip test asserting the collapse — an entity referenced by a
+  mix of positional + keyword renders to the keyword (extend with a structural ref once S3 lands). No
+  `render_structural` path — it is dead by construction.
+
+### Implementation plan
+
+Modules: **ast** (precondition) → **dsl foundation** (namespace, parsers) → **dsl surface** (refs).
+Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (resolve signature).
+
+**S0 — precondition (ast)** — independent, land by S3b **Done**
+- **S0a** `ast/validate/entity.rs`: `noncovalent_structure_check` keys on the unordered atom pair
+  alone (drop `kind`); `NoncovalentBondsParallel` drops its `kind` field; update the §4.1 tier-1 note.
+  **breaking (red→green)** — deliberate semantic change, migrate its `#[case]`s. `[dep: —]`
+
+**S1 — shared participant parsers (dsl)** — additive **Done**
+- **S1a** `dsl`: extract the participant-key readers from the entry parsers — `:atoms [..]`
+  (bond/noncovalent/aromatic/multicenter), `:donors [..] :acceptor _` (dative), `:site _ :ligands [..]`
+  (stereo) — into shared `read_*` fns; entry parsers delegate. **additive (green)**,
+  behavior-preserving. `[dep: —]`
+
+**S2 — entity namespace (dsl)** — additive + internal restructure
+- **S2a** `dsl`: `MoleculeNamespace` — a **new** type in `dsl/namespace.rs` (not an in-place `EntityCounts`
+  rename, which would break the molecule end-of-parse struct literal). Per kind: running count, name→id
+  map, participant lookup (bond `(min,max)→BondId`; overlays index their small collections), via
+  private `NamedRegistry`/`KeyedRegistry`. `register_<entity>(name?, participants) -> Id`,
+  `<entity>_by_participants(..)`, count/name accessors. Introduced alongside `EntityCounts`; the latter
+  retires in S3 when resolution moves onto the namespace. **additive (green)** — module `#[allow(dead_code)]`
+  until wired. `[dep: —]` **Done**
+- **S2b** `dsl`: grow the namespace's participant data incrementally in `MoleculeInput::into_ast`
+  (register each entity as parsed, so mid-build sites see it). Counts/results unchanged. **green.**
+  `[dep: S2a]` **Done**
+- **S2c** `dsl`: make the namespace the **source of truth for naming**, `MoleculeMetadata` a derived
+  view (metadata ⊂ namespace — see the note below). Registry gains the **atom-alias table** (aliases and
+  entity ids share one namespace, enforced by `check_id_disjoint`); add `MoleculeMetadata::from(&MoleculeNamespace)`
+  (id→name by inverting `by_name`; aliases read directly). Change `MoleculeInput::into_ast →
+  (MoleculeAst, MoleculeNamespace)` (an internal method, no trait constraint); `MoleculeDsl` formation
+  derives the metadata via the projection. **breaking (into_ast return + MoleculeDsl formation),
+  internal.** `[dep: S2b]` **Done**
+- **S2d** `dsl`: reaction delta loop (`ReactionInput::into_ast`) — **phase A: grow `delta_namespace`,
+  additively. Done.** `lhs_namespace` (returned by `into_ast`, S2c) stays as the lhs namespace,
+  immutable through the deltas; build `delta_namespace = MoleculeNamespace::continuation(&lhs_namespace)` —
+  a new ctor that copies the lhs per-kind counts (via `NamedRegistry`/`KeyedRegistry::with_count`) so
+  `register_*` hands out **global** ids continuing the lhs id space, with empty name/participant/alias
+  maps, so it holds only the delta-created entities. Grow it on each `Add` arm
+  (`delta_namespace.register_<entity>(name, participants)`), monotonically — `Remove`/`Modify` never
+  shrink it (the DSL delta pass never compacts — that's apply-time). **Purely additive/green** —
+  `delta_namespace` is grown in parallel to everything else and read by nothing yet; `EntityCounts`,
+  `from_ast`, the reaction's `namespace`, and the incremental `ReactionMetadata` are all left untouched.
+  **Handoff to S3d + S3e (explicit, survives compaction):** S2d leaves in place, unchanged, the live
+  `counts` (`EntityCounts`, still the id allocator + resolution bound), the reaction's `namespace` (a
+  `MoleculeMetadata` clone grown on `Add`, still what resolution uses), and the **incremental
+  `ReactionMetadata` building** (still the roundtrip artifact). `delta_namespace` is grown but read by
+  nothing. **S3e** eliminates `EntityCounts` (below). **S3d** does one delta-loop rewrite: sole counter →
+  `delta_namespace`, resolution → the two-namespace pair (drop `namespace`), `ReactionMetadata` → derived.
+  The single-counter rewire is deliberately *not* done in S2d — it means reordering every `Add` arm to
+  take its id from `register_*` and is the same delta-loop surgery S3d does for resolution, so folding it
+  into S3d rewrites the loop once, not twice. `[dep: S2c]` **Done**
+- **S2e** `dsl`: reaction-span build (`SpanInput::into_ast`) is molecule-shaped and **self-contained**
+  (ids are molecule-shaped; it embeds no lhs molecule parse), so it builds its **own** namespace —
+  **purely additive/green, done** (like S2d): grow it in parallel (register each atom/alias/bond/overlay
+  as resolved), leaving the span's incremental `MoleculeMetadata` and its `EntityCounts` untouched. The
+  namespace is grown but read by nothing yet. S3 resolves the span's structural refs (stereo-bond
+  `:site`, constraints) against it, derives its metadata as its roundtrip projection
+  (`MoleculeMetadata::from`), and drops its `EntityCounts` (S3e). `[dep: S2b]` **Done**
+
+  *Note (metadata ⊂ namespace).* `MoleculeMetadata` is the roundtrip-relevant subset of the namespace:
+  its eight `id→name` maps are the exact inverse of the namespace's `by_name`, and `atom_aliases` moves
+  into the namespace. Everything else the namespace holds (name→id, participant indexes, counts) is
+  parse-only and derivable from `ast + metadata`, so it never belongs in the persistent public type.
+  Hence the namespace is the source and metadata a boundary projection — not a merged union, and not
+  rebuilt from metadata.
+
+**S3 — resolution & render on the `Namespace` / `Metadata` traits (dsl)** — the rewire that gives
+molecule, reaction, and sub-pattern a *single* resolution and a *single* render, so the three can never
+diverge. This supersedes the earlier "one grown namespace + stashed counts" sketch, which failed on the
+reaction: it could not separate lhs from created at render without either a parallel structure or a
+loose-counts boundary. The trait removes the tension entirely.
+
+### The model — the parse/render asymmetry (settled 2026-07-03)
+
+The DSL reads like a program: **a name is defined before it is used** — refs resolve in document order
+against what already exists (no forward refs). Render is the inverse and is **order-agnostic** — it
+substitutes an `id` by its keyword through the `id ↔ keyword` bijection, recording no provenance. Two
+directions of the same bijection, so two matched traits:
+
+| method | direction | trait | reads |
+|---|---|---|---|
+| `ref::resolve` | keyword / index / participants → id | **`Namespace`** | `<kind>_count`, `find_<kind>_by_keyword`, `find_<kind>_by_participants`, `contains_id`, `find_atom_alias` |
+| `ref::from_ast` | id → keyword / index | **`Metadata`** | `<kind>_keyword(id)` (id→keyword) |
+
+`from_ast` never emits `Structural`, so `Metadata` needs no participant index — that asymmetry *is* the
+"metadata is a subset of the namespace" you noted. Both traits and the concrete `*Namespace` types are
+**`pub`** — they are general lookup tools, not crate-private plumbing.
+
+Three arrangements of the same two traits — resolution and render each written once, generic:
+- **Molecule** — one `MoleculeNamespace` / `MoleculeMetadata`.
+- **Reaction** — `ReactionNamespace { lhs, delta }` / `ReactionMetadata { lhs, created }`. `delta =
+  MoleculeNamespace::continuation(&lhs)` (created-only, counts continuing lhs). Each trait method is
+  delta-then-lhs (ids are unique across the reaction, so at most one hit); `<kind>_count` is `delta`'s
+  (continuation carries the running total). **Provenance is intrinsic** — lhs entities live in `lhs`,
+  created in `delta` — so the boundary needs no stashed counts and roundtrip needs no set-difference; the
+  loop grows exactly one structure (`delta`).
+- **Sub-pattern** — a molecule inside a constraint, so a *pair* of namespaces used per-side:
+  `into_ast_pair(host: &impl Namespace, pattern: &impl Namespace)` resolves the target ref against the
+  enclosing `host` (itself generic — `MoleculeNamespace` or `ReactionNamespace`) and the pattern ref
+  against the pattern's. **Patterns are anonymous** (no `:id`, no `:atom-aliases`), so the pattern's
+  namespace is derived on demand as `MoleculeNamespace::from_ast(&pattern_ast)` (counts + participants,
+  no keyword map) and render is index-only against an empty `Metadata` — nothing to carry upward, no
+  recursive metadata. Anonymity is a *stated rule*: the pattern parses through the molecule parser, then
+  its namespace must have empty keyword maps and no aliases, else `ParseError::InvalidValue` ("a
+  sub-pattern must not name entities (`:id`) or define `:atom-aliases`"). This turns today's silent drop
+  of pattern `:id`s into a loud rejection; no new error variant.
+
+### Subitems
+
+- **S3a — done (2026-07-03).** `dsl/refs.rs`: `Structural(payload)` on the 7 non-atom refs via a single
+  `define_ref!` arm with an optional `structural = <payload>, <parse>, <resolve>` tail (`AtomRef`
+  unchanged); payloads mirror each entry's participant portion — `[AtomRef; 2]` (bond, noncovalent),
+  `Vec<AtomRef>` (aromatic, multicenter), and the named `DativeBondParticipants` /
+  `StereoAtomParticipants` / `StereoBondParticipants` (stereo ligands = `StereoLigandRef`, moved into
+  `refs.rs` from molecule.rs). `FromEdn` gains the `Edn::Map` arm (reuses S1a `atoms_pair`/`atoms_vec`,
+  rejects `:type`/`:id`). `resolve(&MoleculeNamespace)` implemented — `Index` via `<kind>_count`, `Id`
+  via `find_<kind>_by_keyword`, `Structural` via a per-kind `resolve_<e>_structural` (resolve inner refs
+  → `find_<kind>_by_participants`; `StereoBondRef` nests a `BondRef`). The molecule.rs entity loops
+  migrate off `resolve(count, id_to_idx)`; the `id_to_idx` maps stay only for `check_id_disjoint`
+  (folded away in S3h). `resolve` becomes trait-generic in S3b. Green. `[dep: S1a, S2a, S2b]`
+  Also done alongside: `MoleculeNamespace` rename — `NamedRegistry`→`KeywordRegistry`,
+  `KeyedRegistry`→`EntityRegistry` (flat, no wrap), `by_name`→`find_by_keyword`, `by_participants`→
+  `find_by_participants`, `names`→`keywords`, `with_count`→`from_count`, `<kind>_by_name`→
+  `find_<kind>_by_keyword`, `iter_atom_aliases`→`atom_aliases`; `MoleculeNamespace` moved to file top.
+
+- **S3b — done (2026-07-03).** The two traits, green/transparent. `dsl/namespace.rs`,
+  `dsl/molecule.rs`, `dsl/refs.rs`.
+  - `pub trait Namespace` (namespace.rs): the 25-method query surface — per kind `<kind>_count`,
+    `find_<kind>_by_keyword`, `find_<kind>_by_participants`, plus `contains_id(&str)` (id-uniqueness
+    across all eight kinds + alias names) and `find_atom_alias(&str) -> Option<&AtomDsl>`.
+    `impl Namespace for MoleculeNamespace` **delegates** to the existing inherent methods (inherent
+    methods shadow trait methods, so `self.foo()` in the impl hits the inherent — no recursion); the two
+    new members are direct over the maps. `MoleculeNamespace` is now `pub`.
+  - `pub trait Metadata` (molecule.rs): `<kind>_id(&self, id) -> Option<&str>` per kind (the render
+    surface). `impl Metadata for MoleculeMetadata` delegates.
+  - `ref::resolve` → `pub fn resolve<N: Namespace>(self, &N)` (its structural resolvers `<N: Namespace>`
+    too); `ref::from_ast` → `pub fn from_ast<M: Metadata>(id, &M)`. `into_ast` (metadata-scan) left
+    concrete — deleted in S3f (it is the last caller — the `SubPattern` stopgap — that keeps it alive).
+    Transparent: callers pass `MoleculeNamespace`/`MoleculeMetadata`.
+  - **Deferred (not S3b):** renaming `MoleculeMetadata`'s `<kind>_id` accessors → `<kind>_keyword` and
+    retiring `set_*_id`. Attempted; it cascades far past the trait work — `ReactionMetadata` carries
+    parallel `<kind>_id` getters (delegating to `.lhs()`), and reaction/span render + the property tests
+    call them pervasively, tangled with AST-view `.<kind>_id()` methods of the *same spelling*. Split out
+    as **S3m** (below); the `Metadata` trait keeps the current `<kind>_id` names until then. `[dep: S3a]`
+
+- **S3c — molecule-side resolution + render onto the traits (breaking → green).** `constraint.rs`,
+  `relational.rs`, `molecule.rs`. Redo of the reverted S3b-a/b, now generic. Resolution methods
+  (`MoleculeConstraintDsl`/`ConstraintDsl`/`ConstraintsDsl`/`RelationalConstraintDsl::into_ast`, the
+  `atom_subset`/`bond_subset` helpers) drop `(counts, meta)` for a single `namespace: &impl Namespace`;
+  leaf `ref.into_ast(count, meta)` → `ref.resolve(namespace)`. Render methods (`*::from_ast`,
+  `*_subset_from_ast`) take `&impl Metadata`. `molecule.rs` resolves constraints against its
+  `MoleculeNamespace`, renders against `MoleculeMetadata`; drop the mid-parse `EntityCounts` literal +
+  metadata. `ref::into_ast` (metadata-scan resolution) is *not* deleted here — the `SubPattern`
+  pattern-side stopgap (`into_ast_pair` resolving pattern refs via `into_ast`) keeps it alive; it goes in
+  S3f. `constraint.rs`/`relational.rs` test fixtures build a `MoleculeNamespace`. Reaction/span callers
+  break here, restored in S3d/e. `[dep: S3b]` **Done**
+
+- **S3d — reaction (breaking → green).** `dsl/reaction.rs`. `ReactionNamespace { lhs: MoleculeNamespace,
+  delta: MoleculeNamespace }` `impl Namespace` (delta-then-lhs, count = delta's); `ReactionMetadata { lhs:
+  MoleculeMetadata, created: MoleculeMetadata }` `impl Metadata` (created-then-lhs). The delta loop: seed
+  `delta = continuation(lhs_namespace)`; per `Add`, resolve participants against the `ReactionNamespace`
+  then `delta.register_<kind>(...)` (the register return is the id — retire `counts.allocate_*`); dup-check
+  via `ReactionNamespace::contains_id`. **Delete** the resolution `MoleculeMetadata` clone (the
+  `metadata.set_*_id` grow) and `EntityCounts`. At the boundary: `ReactionMetadata.lhs =
+  MoleculeMetadata::from(&lhs_namespace)`, `.created = MoleculeMetadata::from(&delta)` — both projected
+  once, no incremental writes; reaction aliases are `delta`'s, lhs aliases render inside `.lhs`. `[dep:
+  S3c]` **Done**
+
+- **S3e — reaction-span (breaking → green).** `dsl/reaction_span.rs`. Same shape over its own
+  `ReactionNamespace`/`ReactionMetadata` (or `MoleculeNamespace`/`MoleculeMetadata` where a span side is a
+  plain molecule — settle when implementing). `[dep: S3d]` **Done**
+
+- **S3f — sub-pattern (breaking → green).** `constraint.rs`, `dsl/namespace.rs`.
+  `MoleculeNamespace::from_ast(&MoleculeAst)` — walk the AST entities, register each anonymously (counts +
+  participants, empty keyword maps). `into_ast_pair(host: &impl Namespace, pattern: &impl Namespace)`
+  (pattern = `from_ast(&pattern_ast)`); `from_ast_pair(host: &impl Metadata, …)` renders the pattern side
+  index-only (empty `Metadata`). Add the anonymity check at the sub-pattern parse (pattern namespace must
+  have empty keyword maps + no aliases → `InvalidValue`). Delete the S3c stopgap **and `ref::into_ast`
+  itself (+ its tests)** — the stopgap was its last caller. In the same `define_ref!` edit, **rename the
+  render leaf `ref::from_ast` → `ref::denote`** (the macro's `id → ref`, all eight refs — co-located with
+  `into_ast`/`resolve`) and its render call sites. This is *not* `MoleculeNamespace::from_ast` (the
+  pattern-namespace ctor above, a distinct AST→namespace constructor) nor/te value-DSL `FromAst`
+  `from_ast` — those keep their names. `[dep: S3c]` **Done**
+
+- **S3g — eliminate `EntityCounts` (cleanup, green).** Every remaining count reads the `Namespace`
+  trait's `<kind>_count`; delete the struct + `from_ast` + `allocate_*` from `constraint.rs`. (Most users
+  already gone in S3c/d/e/f.) `[dep: S3d, S3e, S3f]` **Done**
+ 
+- **S3h — id-uniqueness on the namespace (cleanup, green).** Molecule build's scattered locals
+  (`check_id_disjoint`, `entry_ids`, `atom_id_to_idx`/`bond_id_to_idx`) collapse onto
+  `Namespace::contains_id` (or a register-time check returning `Err(DuplicateId)`); remove the
+  `id_to_idx` maps (last use). Minor error-ordering change (check at register-time, after participant
+  resolution). `[dep: S3c]` **Done**
+
+- **S3i — proptest: structural refs resolve (feature `proptest`).** Off a generated molecule / reaction,
+  pick each non-atom entity and form a *structural* ref to it (its constituent atom/bond refs) beside the
+  positional ref; assert both resolve to the same id, and that a structural ref over the wrong constituent
+  set fails. Cross-checks the `resolve_<e>_structural` path against positional resolution across all seven
+  kinds (incl. the stereo `(site, ligand-multiset)` key). `[dep: S3c, S3d]` **Done**
+
+- **S3j — proptest: `keyword > positional > structural` emission on roundtrip (feature `proptest`).** The
+  render priority: a ref to a *named* entity re-emits as its keyword, to an unnamed entity as its index,
+  and a *structural* ref is **never** re-emitted as structural (input-only — `from_ast` produces only
+  `Index`/`Id`). Property: parse a DSL form with mixed positional / keyword / structural refs, roundtrip
+  (parse → resolve → `from_ast` → render), and assert the rendered refs follow keyword-else-positional and
+  carry no `Structural`. `[dep: S3c, S3d]` **Done** as unit test
+
+- **S3k — fuzz seeds with structural refs.** Add corpus seeds exercising the `{:atoms […]}` /
+  `{:donors … :acceptor …}` / `{:site … :ligands […]}` structural forms to the `umol-ast` targets whose
+  grammar admits them — `fuzz_molecule`, `fuzz_reaction`, `fuzz_reaction_span`, `fuzz_constraints` — so the
+  full parse→resolve path is fuzzed on the new arm. `[dep: S3c, S3d, S3e]` **Done** — surfaced that S3c
+  had wired the structural arm into the **tree** parser only; the streaming reader (`refs.rs` `$reader`)
+  gained a `{` arm + per-kind streaming structural parsers (`read_<e>_structural`), so molecule / reaction /
+  span stream-parse structural refs too (streaming == tree, covered by a consistency test).
+
+- **S3m — rename the keyword-returning metadata accessors `<kind>_id` → `<kind>_keyword`.** Deferred out
+  of S3b (it cascades past the trait work). Scope: the eight getters on `MoleculeMetadata` **and**
+  `ReactionMetadata` that return `Option<&str>` (a keyword), their callers (molecule / reaction / span
+  render fns, the property tests), the `Metadata` trait methods, and the `define_ref!` `$accessor`. The
+  `set_<kind>_id` setters follow (either renamed `set_<kind>_keyword` or retired once `From`/boundary
+  projection is the only builder). **Do not touch** the AST-view `.<kind>_id()` methods
+  (`atom.aromatic_system_id()`, `neighbor.bond_id()`, `StereoLigand.atom_id()`, …) — those return actual
+  ids and are correctly named; distinguish by the argument (metadata getters take an id, view methods
+  don't). Green (pure rename). `[dep: S3d]` **Done**
+
+- **S3l — update `umol-ast/spec/umol-dsl-spec.md`.** Document: the structural ref forms per kind and that
+  they are accepted wherever a ref is (entries, entity/relational/molecule constraints, sub-pattern
+  anchors, reaction deltas); the `keyword > positional > structural` emission rule with structural
+  input-only; and anonymous sub-patterns (no `:id`, no `:atom-aliases`, rejected with `InvalidValue`).
+  `[dep: S3c–S3f]` **Done**
+
+**Critical path** S2a → S2b → {S2d, S2e} → S3a → S3b → S3c → {S3d, S3f, S3h} → S3e → S3g. S3b is a green,
+transparent foundation; S3c is the first breaking cut (molecule green, reaction/span red until S3d/e).
+
+**Stereo structural refs (settled 2026-07-03):** resolved by **(site, ligand multiset)** — both part of
+the resolution, matching `connecting_id` (same site + same ligand multiset, frame order not matched,
+repeats significant). The namespace keys stereo elements by `(site, Vec<StereoLigand>)` (sorted), and the
+`:ligands` are required in the structural form, not an assertion tacked on after a site-only lookup.

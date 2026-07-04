@@ -1086,7 +1086,7 @@ impl MoleculeBuilder {
     pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> IdCompaction {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
-        let compaction = self.graph.remove(&nodes, &edges);
+        let compaction = self.graph.remove_cascading(&nodes, &edges);
 
         let new_atoms = compact_node_vec(&compaction, &self.atoms);
         let new_bonds = compact_edge_vec(&compaction, &self.bonds);

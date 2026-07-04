@@ -30,6 +30,9 @@ pub use algorithms::refine::{
     CircularRefinementAlgorithm, CircularRefinementHash, Refinement, RefinementAlgorithm,
     RefinementHash, RefinementRounds,
 };
+pub use algorithms::rewriting::{
+    pullback, pushout, pushout_complement, Pullback, Pushout, PushoutComplement,
+};
 pub use algorithms::subiso::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
 pub use algorithms::toposort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::TraversalAlgorithm;

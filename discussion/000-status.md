@@ -137,3 +137,4 @@
 | [133-reaction-edn-surface-2026-06-26.md](133-reaction-edn-surface-2026-06-26.md)                                 | Completed     | 2026-06-29   |
 | [134-reaction-application-overlays-2026-06-26.md](134-reaction-application-overlays-2026-06-26.md)               | Completed     | 2026-07-02   |
 | [135-reaction-composition-completeness-2026-07-01.md](135-reaction-composition-completeness-2026-07-01.md)       | Active        | 2026-07-01   |
+| [136-dpo-primitives-2026-07-04.md](136-dpo-primitives-2026-07-04.md)                                             | Active        | 2026-07-04   |
