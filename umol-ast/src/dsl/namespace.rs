@@ -1,8 +1,8 @@
 //! A molecule's parse-time **namespace**: per entity kind, a running count, an id-keyword lookup, and
 //! a participant lookup, plus the atom-alias table. Grown while parsing a molecule (or applying
-//! reaction deltas); the roundtrip subset projects out as [`MoleculeMetadata`]. Reshapes the former
-//! `EntityCounts` so index bounds are checked as entities are parsed rather than only at the end, and
-//! structural refs (a non-atom entity named by its constituent atoms/bonds) resolve against it.
+//! reaction deltas); the roundtrip subset projects out as [`MoleculeMetadata`]. Index bounds are
+//! checked as entities are registered (not only at the end), and structural refs (a non-atom entity
+//! named by its constituent atoms/bonds) resolve against it.
 //!
 //! Cost splits by kind: atoms carry no participant lookup (the base kind), bonds an O(1)
 //! `(min,max) → id` endpoint map (a bond is a graph edge), the five overlays a participant index

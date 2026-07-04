@@ -2219,10 +2219,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 out.push(single_key_map(
                     "aromatic-system",
-                    single_key_map(
-                        "remove",
-                        AromaticSystemRef::denote(*id, combined).to_edn(),
-                    ),
+                    single_key_map("remove", AromaticSystemRef::denote(*id, combined).to_edn()),
                 ));
                 i += 1;
             }
@@ -2296,10 +2293,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 out.push(single_key_map(
                     "multicenter-bond",
-                    single_key_map(
-                        "remove",
-                        MulticenterBondRef::denote(*id, combined).to_edn(),
-                    ),
+                    single_key_map("remove", MulticenterBondRef::denote(*id, combined).to_edn()),
                 ));
                 i += 1;
             }
@@ -2373,10 +2367,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 out.push(single_key_map(
                     "noncovalent-bond",
-                    single_key_map(
-                        "remove",
-                        NoncovalentBondRef::denote(*id, combined).to_edn(),
-                    ),
+                    single_key_map("remove", NoncovalentBondRef::denote(*id, combined).to_edn()),
                 ));
                 i += 1;
             }

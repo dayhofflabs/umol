@@ -42,98 +42,13 @@ use crate::ast::constraint::{
     OrientedLigandPermutation, RingMembershipAst, RingScope, StereoAtomConstraint,
     StereoBondConstraint, StereoLigandPair, StereogenicityAst, SubPatternAnchor, TopicityAst,
 };
-use crate::ast::id::{
-    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-    StereoAtomId, StereoBondId, StereoLigandPosition,
-};
+use crate::ast::id::{AtomId, BondId, StereoLigandPosition};
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::operators::MemOp;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::stereo::{CisTransStereoAst, StereoCosetAst, StereoKind, TetrahedralStereoAst};
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
-
-/// Per-entity counts for numeric-index bounds checking during constraint
-/// resolution (DSL → AST). `from_ast` (AST → DSL) does not read counts.
-///
-/// Crate-internal. `Copy` (48 B of primitives) — callers pass by reference
-/// for consistency with `MoleculeMetadata`, not for cost reasons.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct EntityCounts {
-    pub(crate) atom_count: usize,
-    pub(crate) bond_count: usize,
-    pub(crate) dative_bond_count: usize,
-    pub(crate) aromatic_system_count: usize,
-    pub(crate) multicenter_bond_count: usize,
-    pub(crate) noncovalent_bond_count: usize,
-    pub(crate) stereo_atom_count: usize,
-    pub(crate) stereo_bond_count: usize,
-}
-
-impl EntityCounts {
-    pub(crate) fn from_ast(ast: &MoleculeAst) -> Self {
-        Self {
-            atom_count: ast.atoms().count(),
-            bond_count: ast.bonds().count(),
-            dative_bond_count: ast.dative_bonds().count(),
-            aromatic_system_count: ast.aromatic_systems().count(),
-            multicenter_bond_count: ast.multicenter_bonds().count(),
-            noncovalent_bond_count: ast.noncovalent_bonds().count(),
-            stereo_atom_count: ast.stereo_atoms().count(),
-            stereo_bond_count: ast.stereo_bonds().count(),
-        }
-    }
-
-    /// Reserve the next atom id and grow the count.
-    pub(crate) fn allocate_atom(&mut self) -> AtomId {
-        let id = AtomId::from(self.atom_count);
-        self.atom_count += 1;
-        id
-    }
-
-    /// Reserve the next bond id and grow the count.
-    pub(crate) fn allocate_bond(&mut self) -> BondId {
-        let id = BondId::from(self.bond_count);
-        self.bond_count += 1;
-        id
-    }
-
-    pub(crate) fn allocate_dative_bond(&mut self) -> DativeBondId {
-        let id = DativeBondId(self.dative_bond_count as u32);
-        self.dative_bond_count += 1;
-        id
-    }
-
-    pub(crate) fn allocate_aromatic_system(&mut self) -> AromaticSystemId {
-        let id = AromaticSystemId(self.aromatic_system_count as u32);
-        self.aromatic_system_count += 1;
-        id
-    }
-
-    pub(crate) fn allocate_multicenter_bond(&mut self) -> MulticenterBondId {
-        let id = MulticenterBondId(self.multicenter_bond_count as u32);
-        self.multicenter_bond_count += 1;
-        id
-    }
-
-    pub(crate) fn allocate_noncovalent_bond(&mut self) -> NoncovalentBondId {
-        let id = NoncovalentBondId(self.noncovalent_bond_count as u32);
-        self.noncovalent_bond_count += 1;
-        id
-    }
-
-    pub(crate) fn allocate_stereo_atom(&mut self) -> StereoAtomId {
-        let id = StereoAtomId(self.stereo_atom_count as u32);
-        self.stereo_atom_count += 1;
-        id
-    }
-
-    pub(crate) fn allocate_stereo_bond(&mut self) -> StereoBondId {
-        let id = StereoBondId(self.stereo_bond_count as u32);
-        self.stereo_bond_count += 1;
-        id
-    }
-}
 
 pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<ValueDsl, EdnError> {
     match de.peek_byte()?.ok_or_else(eof_err)? {
@@ -2273,20 +2188,6 @@ mod tests {
         );
     }
 
-    #[fixture]
-    fn full_counts() -> EntityCounts {
-        EntityCounts {
-            atom_count: 10,
-            bond_count: 10,
-            dative_bond_count: 10,
-            aromatic_system_count: 10,
-            multicenter_bond_count: 10,
-            noncovalent_bond_count: 10,
-            stereo_atom_count: 10,
-            stereo_bond_count: 10,
-        }
-    }
-
     /// A namespace with ten entities of each kind, so index refs up to 9 resolve.
     #[fixture]
     fn full_namespace() -> MoleculeNamespace {
@@ -2417,8 +2318,8 @@ mod tests {
     #[case::named_entity(r#"{:sub-pattern {:anchor {} :pattern {:atoms [[:a "C"]]}}}"#)]
     #[case::aliased(r#"{:sub-pattern {:anchor {} :pattern {:atoms [:x] :atom-aliases [:x "C"]}}}"#)]
     fn test_molecule_constraint_dsl_sub_pattern_rejects_named_pattern(#[case] input: &str) {
-        let DeError::Custom(msg) = MoleculeConstraintDsl::from_edn(&read_string(input).unwrap())
-            .unwrap_err()
+        let DeError::Custom(msg) =
+            MoleculeConstraintDsl::from_edn(&read_string(input).unwrap()).unwrap_err()
         else {
             panic!("expected a Custom error");
         };

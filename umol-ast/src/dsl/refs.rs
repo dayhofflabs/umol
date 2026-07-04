@@ -3,13 +3,8 @@
 //! *structural* form (`Edn::Map`) naming the entity by its constituent atoms /
 //! bonds. `resolve` turns a ref into an AST id against any parse-time `Namespace`
 //! (count for index bounds, `find_by_keyword` for id keywords,
-//! `find_by_participants` for the structural form); `from_ast` renders an id back
+//! `find_by_participants` for the structural form); `denote` renders an id back
 //! to a ref against the `MoleculeMetadata` roundtrip projection.
-
-// Only atom- and bond-ref resolution (the molecule entry loops) consumes the namespace path so far;
-// the other five refs' `resolve` and their structural resolvers are wired when constraint /
-// relational / reaction resolution migrates off `into_ast(metadata)`.
-#![allow(dead_code)]
 
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
@@ -491,9 +486,9 @@ mod tests {
     use rstest::*;
     use umol_edn::{read_string, EdnKeyword};
 
+    use super::super::molecule::MoleculeMetadata;
     use super::super::namespace::MoleculeNamespace;
     use super::*;
-    use super::super::molecule::MoleculeMetadata;
 
     #[fixture]
     fn meta_with_atom_id() -> MoleculeMetadata {
@@ -504,7 +499,8 @@ mod tests {
     fn namespace_with_atom_id() -> MoleculeNamespace {
         let mut ns = MoleculeNamespace::default();
         for i in 0..5 {
-            ns.register_atom((i == 2).then(|| "c1".to_string())).unwrap();
+            ns.register_atom((i == 2).then(|| "c1".to_string()))
+                .unwrap();
         }
         ns
     }
