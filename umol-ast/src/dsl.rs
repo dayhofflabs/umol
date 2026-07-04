@@ -14,7 +14,7 @@ pub(crate) mod molecule;
 pub(crate) mod multicenter;
 pub(crate) mod namespace;
 pub(crate) mod noncovalent;
-mod predicates;
+mod predicate;
 pub(crate) mod reaction;
 pub(crate) mod reaction_span;
 pub(crate) mod refs;

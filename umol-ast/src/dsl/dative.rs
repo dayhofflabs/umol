@@ -16,7 +16,7 @@ use super::config::DativeBondDefaults;
 use super::constraint::RingMembershipDsl;
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
-use super::predicates::{fmt_ring_membership, ring_membership};
+use super::predicate::{fmt_ring_membership, ring_membership};
 use super::value::{fmt_value, value};
 use crate::ast::boolean::BooleanAst;
 use crate::ast::constraint::{DativeBondConstraint, RingMembershipAst};

@@ -14,7 +14,7 @@ use winnow::Parser;
 use super::config::{AromaticSystemDefaults, NumericDefault};
 use super::electrons::{electron_counts, fmt_electron_counts};
 use super::error::{PResult, ParseError};
-use super::predicates::{
+use super::predicate::{
     apply_spin_pair, charge, fmt_charge, fmt_spin_pair, lower_spin, optional_value, raise_spin,
     SpinPredicate,
 };

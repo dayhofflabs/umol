@@ -17,7 +17,7 @@ use super::config::{BondDefaults, NumericDefault, StereoDefault};
 use super::constraint::RingMembershipDsl;
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
-use super::predicates::{
+use super::predicate::{
     apply_spin_pair, charge, fmt_charge, fmt_ring_membership, fmt_spin_pair, lower_spin,
     optional_value, raise_spin, ring_membership, SpinPredicate,
 };
