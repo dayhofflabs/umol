@@ -1409,6 +1409,10 @@ impl ReactionAst {
         let mut created_multicenter: Vec<MulticenterBondId> = Vec::new();
         let mut removed_noncovalent: Vec<NoncovalentBondId> = Vec::new();
         let mut created_noncovalent: Vec<NoncovalentBondId> = Vec::new();
+        let mut removed_stereo_atom: Vec<StereoAtomId> = Vec::new();
+        let mut created_stereo_atom: Vec<StereoAtomId> = Vec::new();
+        let mut removed_stereo_bond: Vec<StereoBondId> = Vec::new();
+        let mut created_stereo_bond: Vec<StereoBondId> = Vec::new();
         for delta in deltas.iter() {
             match delta {
                 Delta::Atom(AtomDelta::Remove { id, .. }) => removed_atoms.push(*id),
@@ -1434,6 +1438,18 @@ impl ReactionAst {
                 }
                 Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, .. }) => {
                     created_noncovalent.push(*id)
+                }
+                Delta::StereoAtom(StereoAtomDelta::Remove { id, .. }) => {
+                    removed_stereo_atom.push(*id)
+                }
+                Delta::StereoAtom(StereoAtomDelta::Add { id, .. }) => {
+                    created_stereo_atom.push(*id)
+                }
+                Delta::StereoBond(StereoBondDelta::Remove { id, .. }) => {
+                    removed_stereo_bond.push(*id)
+                }
+                Delta::StereoBond(StereoBondDelta::Add { id, .. }) => {
+                    created_stereo_bond.push(*id)
                 }
                 _ => {}
             }
@@ -1465,9 +1481,16 @@ impl ReactionAst {
                 &removed_noncovalent,
                 &created_noncovalent,
             ),
-            // No stereo deltas yet (I6) → the reversed deltas reference no stereo ids.
-            HashMap::new(),
-            HashMap::new(),
+            reversed_remapping(
+                self.lhs.stereo_atoms().count(),
+                &removed_stereo_atom,
+                &created_stereo_atom,
+            ),
+            reversed_remapping(
+                self.lhs.stereo_bonds().count(),
+                &removed_stereo_bond,
+                &created_stereo_bond,
+            ),
         );
 
         let reversed: Deltas = deltas
@@ -1668,6 +1691,75 @@ mod tests {
                 AtomAst::from_element(Element::O),
             ],
             vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ),
+    )]
+    #[case::stereo_atom(
+        ReactionAst::new(
+            MoleculeAst::from_parts(
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::F),
+                    AtomAst::from_element(Element::Cl),
+                    AtomAst::from_element(Element::Br),
+                    AtomAst::from_element(Element::I),
+                ],
+                vec![], vec![], vec![], vec![], vec![],
+                vec![(
+                    AtomId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    ],
+                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                )],
+                vec![],
+                Constraints::new(),
+            ),
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
+                id: StereoAtomId(0),
+                site: AtomId(0),
+                ligands: vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            })]),
+        ),
+        MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::F),
+                AtomAst::from_element(Element::Cl),
+                AtomAst::from_element(Element::Br),
+                AtomAst::from_element(Element::I),
+            ],
+            vec![],
+        ),
+        MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::F),
+                AtomAst::from_element(Element::Cl),
+                AtomAst::from_element(Element::Br),
+                AtomAst::from_element(Element::I),
+            ],
+            vec![], vec![], vec![], vec![], vec![],
+            vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            )],
+            vec![],
+            Constraints::new(),
         ),
     )]
     fn test_reaction_ast_reverse(

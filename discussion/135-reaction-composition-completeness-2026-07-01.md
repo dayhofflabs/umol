@@ -321,7 +321,7 @@ new primitive is `meet_pushout`.
 
 - **D-b0 — `ReactionSpanAst::reverse` stereo remappings. (additive)** reaction_span.rs:1468: build the
   two stereo `reversed_remapping`s (created↔removed swap) like the other families; deltas invert via I6a.
-  Test: reverse of a stereo-carrying span. `[dep: —]`
+  Test: reverse of a stereo-carrying span. `[dep: —]` **Done**
 
 - **D-a4 — stereo overlay gluing in `meet_pushout`. (additive)** Canonicalize each stereo overlay's
   ligand order (`transform_frame`, coset carried) → full-participant relation `pushout` over the two
