@@ -4,6 +4,7 @@
 # Specfics
 materials/
 scratch/
+whitepaper
 
 ### Emacs ###
 # -*- mode: gitignore; -*-
