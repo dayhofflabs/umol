@@ -167,7 +167,9 @@ impl MoleculeAst {
         // ligand frame as-is; `other`'s overlays are relabeled into the glue space and, where one
         // coincides with a `self` site (same site + ligand multiset), its coset is aligned to `self`'s
         // frame (`transform_frame`) before the full-participant relation `pushout` `meet`s the two
-        // (`⊥ → None`). `other`-only sites keep their own (relabeled) frame.
+        // (`⊥ → None`). `other`-only sites keep their own (relabeled) frame. A same-site/different-ligand
+        // collision leaves two overlays on one site — over-coordination, rejected by the `has_conflict`
+        // gate below.
         let map_edge = |e: EdgeId| po.right.edges().right_of(e).expect("right total on other edges");
         let map_ligand_atom = |a: AtomId| AtomId::from(map_node(NodeId::from(a)));
 
@@ -252,6 +254,14 @@ impl MoleculeAst {
         }
         object.constraints = constraints;
 
+        // Emit-compliance: the glue is a generated molecule, so it must not carry two stereo centers on
+        // one site (over-coordination from a same-site/different-ligand collision). The per-entity
+        // `has_conflict` primitive is the shared gate (also consulted by the validator and `apply_at`);
+        // this is enforced per generating op pending a single central emit gate.
+        if object.stereo_atoms().has_conflict() || object.stereo_bonds().has_conflict() {
+            return None;
+        }
+
         Some(MoleculePushout {
             object,
             left,
@@ -311,7 +321,9 @@ fn glue_var_overlays<D: Lattice + RelationData>(
 /// site (same site + ligand multiset) — aligned to `left`'s ligand frame, carrying the coset there via
 /// `transform` (`transform_frame`). `right`-only specs keep their own relabeled frame. `left` itself
 /// enters the `pushout` unchanged (a pure id-remap leaves the coset untouched), so the glue holds
-/// `self`'s frame and coincident cosets `meet` in it.
+/// `self`'s frame and coincident cosets `meet` in it. A `right` spec whose site collides with a `left`
+/// site under a *different* ligand set is left as a second overlay on that site; `meet_pushout` rejects
+/// the resulting over-coordination via the `has_conflict` emit-compliance gate.
 fn stereo_glue_entries<S, D>(
     left: &FixedVarBirelationSet<S, Ordered, 1, StereoLigand, Ordered, D>,
     right: &FixedVarBirelationSet<S, Ordered, 1, StereoLigand, Ordered, D>,

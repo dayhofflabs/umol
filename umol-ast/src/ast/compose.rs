@@ -89,14 +89,6 @@ fn compose_all(
     scope: CompositionScope,
 ) -> Option<Vec<ReactionAst>> {
     let da = a.deltas.clone().canonicalize().ok()?;
-    // Stereo overlays arrive in I6; bail if either reactant carries one.
-    if a.lhs.has_stereo_atoms()
-        || a.lhs.has_stereo_bonds()
-        || b.lhs.has_stereo_atoms()
-        || b.lhs.has_stereo_bonds()
-    {
-        return None;
-    }
     let span_a = a.to_reaction_span().ok()?;
     let r_a = span_a.rhs();
     let l_b = &b.lhs;

@@ -51,9 +51,9 @@ fn reaction_strategy() -> impl Strategy<Value = ReactionAst> {
     reaction_over(simple_molecule_strategy())
 }
 
-/// A localized molecule with DAMN overlays (dative / aromatic / multicenter / noncovalent) — no
-/// stereo (stereo reaction deltas are I6, and compose bails on a stereo lhs) and no molecule
-/// constraints (orthogonal). 1–4 atoms; overlays generated as in `molecule_ast_strategy`, scoped.
+/// A localized molecule with DAMN overlays (dative / aromatic / multicenter / noncovalent) plus
+/// stereo (tetrahedral atoms / cis-trans bonds) and no molecule constraints (orthogonal). 1–4 atoms;
+/// overlays generated as in `molecule_ast_strategy`, scoped.
 fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
     (1usize..=4)
         .prop_flat_map(|atom_count| {
@@ -914,22 +914,13 @@ proptest! {
 
     /// P1 completeness (`Full`): every sequential product (B applied after A) is also some
     /// composite's product. Together with `compose_sound_overlay` (composed ⊆ seq) this is set
-    /// equality at `host = a.lhs`.
-    ///
-    /// Non-stereo only: compose bails on stereo overlays (the stereo compose phase is not yet
-    /// implemented), so stereo reactants would leave `composed` empty and spuriously fail; they are
-    /// skipped here until that phase lands.
+    /// equality at `host = a.lhs`. Covers stereo: the reactants carry stereo overlays and the deltas
+    /// stereo ops, glued and applied across ligand frames by `meet_pushout` / `apply_at`.
     #[test]
     fn test_reaction_ast_compose_complete_overlay(
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
-        prop_assume!(
-            !a.lhs.has_stereo_atoms()
-                && !a.lhs.has_stereo_bonds()
-                && !b.lhs.has_stereo_atoms()
-                && !b.lhs.has_stereo_bonds()
-        );
         let host = a.lhs.clone();
         let composed: Vec<MoleculeAst> = a
             .compose(&b, CompositionScope::Full)

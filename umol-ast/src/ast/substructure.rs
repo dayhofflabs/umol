@@ -267,7 +267,12 @@ impl MoleculeAst {
         for sp in pattern.stereo_atoms().iter() {
             let host_site =
                 map_atom(&atoms, sp.site_id()).expect("a matched pattern atom is mated");
-            let sh = host.stereo_atoms().incident(host_site).next()?;
+            // `incident` returns stereo atoms where `host_site` is the site *or* a ligand; select the
+            // one it is the site of (≤1 by the site-uniqueness invariant), not merely the first.
+            let sh = host
+                .stereo_atoms()
+                .incident(host_site)
+                .find(|sh| sh.site_id() == host_site)?;
             if sp.kind() != sh.kind() {
                 return None;
             }

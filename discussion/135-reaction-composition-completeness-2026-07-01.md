@@ -340,7 +340,7 @@ new primitive is `meet_pushout`.
   stereo), so it lives in `apply_at` — the one path every `apply` and `compose` goes through — not in
   `compose_overlap`. The relative ops (`Apply`/`Swap`/`Mirror`) resolve against the host coset
   (frame-agnostic); `Add` is a fresh overlay; stereo constraints are positionless — none reframed.
-  `[dep: D-a4, D-b0]`
+  `[dep: D-a4, D-b0]` **Done**
 
   - **D-b2a — `reframe_stereo(&mut Deltas, lhs, host, correspondence)` + wire into `apply_at`.**
     (additive) After `canonicalize`, reframe each `ModifyField`/`Remove` stereo delta: `before` = rule
@@ -367,7 +367,7 @@ new primitive is `meet_pushout`.
   stereo-delta bail in `compose_all`; extend `overlay_reaction_strategy` to sample stereo overlays;
   `compose_complete_overlay` now covers stereo. No generator frame constraint needed — `apply_at`'s
   reframe (D-b2) makes both the sequential and composed sides frame-correct. Milestone: **stereo
-  completeness** — full suite green. `[dep: D-c1, D-b2]`
+  completeness** — full suite green. `[dep: D-c1, D-b2]` **Done**
 
 **Stages** (green after each) — non-stereo phase: **S0** = {D-a1, D-a2, D-a3}; **S1** = {D-b1}; **S2** =
 {D-c1} → non-stereo completeness. Stereo phase: **S3** = {D-b0, D-a4}; **S4** = {D-b2a, D-b2b, D-b2c};

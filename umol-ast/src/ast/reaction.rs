@@ -429,26 +429,28 @@ impl ReactionAst {
         }
 
         // `AddAtoms` is the first edit, so created atoms take `New(0..k)` in ascending id order.
-        let new_index: HashMap<AtomId, usize> = created_atoms
+        let new_atom_index: HashMap<AtomId, usize> = created_atoms
             .keys()
             .enumerate()
             .map(|(index, &id)| (id, index))
             .collect();
-        let atom_ref = |id: AtomId| match new_index.get(&id) {
+        let atom_handle = |id: AtomId| match new_atom_index.get(&id) {
             Some(&index) => AtomHandle::New(index),
             None => AtomHandle::Id(host_atom(id)),
         };
+        // `AddBonds` follows `AddAtoms`, so a created bond continues the shared `New(..)` created-entity
+        // numbering after the created atoms (a stereo bond's `New` site indexes this joint list).
         let new_bond_index: HashMap<BondId, usize> = created_bonds
             .keys()
             .enumerate()
-            .map(|(index, &id)| (id, index))
+            .map(|(index, &id)| (id, created_atoms.len() + index))
             .collect();
-        let bond_ref = |id: BondId| match new_bond_index.get(&id) {
+        let bond_handle = |id: BondId| match new_bond_index.get(&id) {
             Some(&index) => BondHandle::New(index),
             None => BondHandle::Id(host_bond(id)),
         };
 
-        // Overlay create/remove need `atom_ref` (created participants resolve to `New`), so they
+        // Overlay create/remove need `atom_handle` (created participants resolve to `New`), so they
         // are lowered in a second pass: adds after the topology adds, removes before
         // `RemoveTopology`. Removes are collected per kind and emitted as one batched edit each,
         // so each overlay id space is compacted once against the pre-removal state (a sequence of
@@ -478,8 +480,9 @@ impl ReactionAst {
                     ast,
                     ..
                 }) => {
-                    let mut atoms: Vec<AtomHandle> = donors.iter().map(|a| atom_ref(*a)).collect();
-                    atoms.push(atom_ref(*acceptor));
+                    let mut atoms: Vec<AtomHandle> =
+                        donors.iter().map(|a| atom_handle(*a)).collect();
+                    atoms.push(atom_handle(*acceptor));
                     overlay_adds.push(Edit::AddDativeBond {
                         atoms,
                         ast: ast.clone(),
@@ -491,8 +494,9 @@ impl ReactionAst {
                     acceptor,
                     ast,
                 }) => {
-                    let mut atoms: Vec<AtomHandle> = donors.iter().map(|a| atom_ref(*a)).collect();
-                    atoms.push(atom_ref(*acceptor));
+                    let mut atoms: Vec<AtomHandle> =
+                        donors.iter().map(|a| atom_handle(*a)).collect();
+                    atoms.push(atom_handle(*acceptor));
                     remove_dative.push((
                         DativeBondHandle::Id(host_dative(*id)),
                         atoms,
@@ -501,40 +505,40 @@ impl ReactionAst {
                 }
                 Delta::AromaticSystem(AromaticSystemDelta::Add { atoms, ast, .. }) => {
                     overlay_adds.push(Edit::AddAromaticSystem {
-                        atoms: atoms.iter().map(|a| atom_ref(*a)).collect(),
+                        atoms: atoms.iter().map(|a| atom_handle(*a)).collect(),
                         ast: ast.clone(),
                     });
                 }
                 Delta::AromaticSystem(AromaticSystemDelta::Remove { id, atoms, ast }) => {
                     remove_aromatic.push((
                         AromaticSystemHandle::Id(host_aromatic(*id)),
-                        atoms.iter().map(|a| atom_ref(*a)).collect(),
+                        atoms.iter().map(|a| atom_handle(*a)).collect(),
                         ast.clone(),
                     ));
                 }
                 Delta::MulticenterBond(MulticenterBondDelta::Add { atoms, ast, .. }) => {
                     overlay_adds.push(Edit::AddMulticenterBond {
-                        atoms: atoms.iter().map(|a| atom_ref(*a)).collect(),
+                        atoms: atoms.iter().map(|a| atom_handle(*a)).collect(),
                         ast: ast.clone(),
                     });
                 }
                 Delta::MulticenterBond(MulticenterBondDelta::Remove { id, atoms, ast }) => {
                     remove_multicenter.push((
                         MulticenterBondHandle::Id(host_multicenter(*id)),
-                        atoms.iter().map(|a| atom_ref(*a)).collect(),
+                        atoms.iter().map(|a| atom_handle(*a)).collect(),
                         ast.clone(),
                     ));
                 }
                 Delta::NoncovalentBond(NoncovalentBondDelta::Add { atoms, ast, .. }) => {
                     overlay_adds.push(Edit::AddNoncovalentBond {
-                        atoms: [atom_ref(atoms[0]), atom_ref(atoms[1])],
+                        atoms: [atom_handle(atoms[0]), atom_handle(atoms[1])],
                         ast: ast.clone(),
                     });
                 }
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, atoms, ast }) => {
                     remove_noncovalent.push((
                         NoncovalentBondHandle::Id(host_noncovalent(*id)),
-                        [atom_ref(atoms[0]), atom_ref(atoms[1])],
+                        [atom_handle(atoms[0]), atom_handle(atoms[1])],
                         ast.clone(),
                     ));
                 }
@@ -542,10 +546,10 @@ impl ReactionAst {
                     site, ligands, ast, ..
                 }) => {
                     overlay_adds.push(Edit::AddStereoAtom {
-                        site: atom_ref(*site),
+                        site: atom_handle(*site),
                         ligands: ligands
                             .iter()
-                            .map(|l| (atom_ref(l.atom_id), l.kind))
+                            .map(|l| (atom_handle(l.atom_id), l.kind))
                             .collect(),
                         ast: ast.clone(),
                     });
@@ -558,10 +562,10 @@ impl ReactionAst {
                 }) => {
                     remove_stereo_atom.push((
                         StereoAtomHandle::Id(host_stereo_atom(*id)),
-                        atom_ref(*site),
+                        atom_handle(*site),
                         ligands
                             .iter()
-                            .map(|l| (atom_ref(l.atom_id), l.kind))
+                            .map(|l| (atom_handle(l.atom_id), l.kind))
                             .collect(),
                         ast.clone(),
                     ));
@@ -570,10 +574,10 @@ impl ReactionAst {
                     site, ligands, ast, ..
                 }) => {
                     overlay_adds.push(Edit::AddStereoBond {
-                        site: bond_ref(*site),
+                        site: bond_handle(*site),
                         ligands: ligands
                             .iter()
-                            .map(|l| (atom_ref(l.atom_id), l.kind))
+                            .map(|l| (atom_handle(l.atom_id), l.kind))
                             .collect(),
                         ast: ast.clone(),
                     });
@@ -586,10 +590,10 @@ impl ReactionAst {
                 }) => {
                     remove_stereo_bond.push((
                         StereoBondHandle::Id(host_stereo_bond(*id)),
-                        bond_ref(*site),
+                        bond_handle(*site),
                         ligands
                             .iter()
-                            .map(|l| (atom_ref(l.atom_id), l.kind))
+                            .map(|l| (atom_handle(l.atom_id), l.kind))
                             .collect(),
                         ast.clone(),
                     ));
@@ -642,7 +646,7 @@ impl ReactionAst {
             let mut atom: HashMap<AtomId, AtomId> = (0..self.lhs.atoms().count() as u32)
                 .map(|i| (AtomId(i), host_atom(AtomId(i))))
                 .collect();
-            for (&created, &index) in &new_index {
+            for (&created, &index) in &new_atom_index {
                 atom.insert(created, AtomId((host_atom_count + index) as u32));
             }
             let mut bond: HashMap<BondId, BondId> = (0..self.lhs.bonds().count() as u32)
@@ -698,7 +702,7 @@ impl ReactionAst {
                 bonds: created_bonds
                     .values()
                     .map(|(atoms, ast)| AddBond {
-                        endpoints: [atom_ref(atoms[0]), atom_ref(atoms[1])],
+                        endpoints: [atom_handle(atoms[0]), atom_handle(atoms[1])],
                         ast: ast.clone(),
                     })
                     .collect(),
@@ -721,6 +725,15 @@ impl ReactionAst {
         let mut builder = host.edit();
         builder.transact(edits)?;
         let product = builder.build();
+
+        // Emit-compliance: the product is a generated molecule, so a rule whose adds land a second
+        // stereo center on an occupied site (the Remove⁻¹ path in compose) must fail rather than emit
+        // an over-coordinated molecule. `has_conflict` is the shared per-entity primitive (also
+        // consulted by the validator and `meet_pushout`); enforced per generating op pending a single
+        // central emit gate.
+        if product.stereo_atoms().has_conflict() || product.stereo_bonds().has_conflict() {
+            return Err(ApplyError::OverCoordinated);
+        }
 
         // The host↔product comap: preserved host atoms mate to their compacted product id (survivors
         // keep ascending order), removed atoms are left-exposed, created atoms right-exposed. `induce`
@@ -874,7 +887,7 @@ mod tests {
     use super::super::edit::{AtomFieldChange, BondFieldChange};
     use super::super::ligand::StereoLigandKind;
     use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
-    use super::super::stereo::{StereoAtomAst, StereoCosetAst, StereoKind};
+    use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
     use super::super::value::ValueAst;
     use super::*;
 
@@ -1263,6 +1276,71 @@ mod tests {
             .apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
             .next()
             .expect("the inversion rule matches the host")
+            .rhs()
+            .clone();
+        assert_eq!(rhs, expected);
+    }
+
+    // Adding a stereo bond whose site is a rule-created bond: the site resolves through a `New` handle
+    // into the shared created-entity list, which `AddBonds` fills after `AddAtoms` — so the created
+    // bond's `New` index must clear the created atoms. Regression for the stereo-bond-only compose
+    // failure (a created-bond `New` site aliasing a created atom → `RefTypeMismatch`).
+    #[rstest]
+    fn test_reaction_ast_apply_stereo_bond_created_site() {
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], vec![]),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(1),
+                    ast: AtomAst::from_element(Element::C),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(0),
+                    atoms: [AtomId(0), AtomId(1)],
+                    ast: BondAst::from_order(2),
+                }),
+                Delta::StereoBond(StereoBondDelta::Add {
+                    id: StereoBondId(0),
+                    site: BondId(0),
+                    ligands: vec![
+                        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    ],
+                    ast: StereoBondAst::new(StereoKind::CisTrans, 0u32),
+                }),
+            ]),
+        );
+        let host =
+            MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], vec![]);
+        let expected = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoBondAst::new(StereoKind::CisTrans, 0u32),
+            )],
+            Constraints::new(),
+        );
+        let rhs = reaction
+            .apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
+            .next()
+            .expect("the reaction applies to a lone carbon")
             .rhs()
             .clone();
         assert_eq!(rhs, expected);

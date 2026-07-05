@@ -227,22 +227,29 @@ fn multicenter_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContr
     None
 }
 
-/// Stereo overlays: stereo-atom sites pairwise distinct, stereo-bond sites
-/// pairwise distinct.
+/// Stereo overlays: stereo-atom sites pairwise distinct, stereo-bond sites pairwise distinct. The
+/// conflict predicate is the per-entity `has_conflict` primitive (also consulted by `apply_at` /
+/// `meet_pushout`); the detailed contradiction locates the offending site.
 fn stereo_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradiction> {
-    let mut atom_sites: HashSet<AtomId> = HashSet::new();
-    for sp in ast.stereo_atoms().iter() {
-        let atom = sp.site_id();
-        if !atom_sites.insert(atom) {
-            return Some(EntityStructureContradiction::StereoAtomSitesDuplicate { atom });
-        }
+    if ast.stereo_atoms().has_conflict() {
+        let mut sites: HashSet<AtomId> = HashSet::new();
+        let atom = ast
+            .stereo_atoms()
+            .iter()
+            .map(|sp| sp.site_id())
+            .find(|&atom| !sites.insert(atom))
+            .expect("has_conflict reports a repeated stereo-atom site");
+        return Some(EntityStructureContradiction::StereoAtomSitesDuplicate { atom });
     }
-    let mut bond_sites: HashSet<BondId> = HashSet::new();
-    for sp in ast.stereo_bonds().iter() {
-        let bond = sp.site_id();
-        if !bond_sites.insert(bond) {
-            return Some(EntityStructureContradiction::StereoBondSitesDuplicate { bond });
-        }
+    if ast.stereo_bonds().has_conflict() {
+        let mut sites: HashSet<BondId> = HashSet::new();
+        let bond = ast
+            .stereo_bonds()
+            .iter()
+            .map(|sp| sp.site_id())
+            .find(|&bond| !sites.insert(bond))
+            .expect("has_conflict reports a repeated stereo-bond site");
+        return Some(EntityStructureContradiction::StereoBondSitesDuplicate { bond });
     }
     None
 }
