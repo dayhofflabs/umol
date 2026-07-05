@@ -862,9 +862,9 @@ pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
         a.canonical().map(|c| c.into_owned()),
         a.clone().canonicalize()
     );
-    // `equiv` is canonical equality.
+    // `canonical_eq` is canonical equality.
     prop_assert_eq!(
-        a.equiv(b),
+        a.canonical_eq(b),
         a.clone().canonicalize().ok() == b.clone().canonicalize().ok()
     );
     Ok(())

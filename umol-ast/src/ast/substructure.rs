@@ -9,7 +9,9 @@
 
 use std::borrow::Cow;
 
-use umol_graph_core::{Correspondence, NodeId, SubgraphIsomorphismAlgorithm};
+use umol_graph_core::{
+    Correspondence, NodeId, ParticipantPosition, RelationData, SubgraphIsomorphismAlgorithm,
+};
 
 use super::atom::AtomAst;
 use super::bond::BondAst;
@@ -216,11 +218,11 @@ impl MoleculeAst {
             return None;
         }
         for &(p, h) in aromatic_systems.mates() {
-            if !pattern
-                .aromatic_system(p)
-                .ast
-                .matches(host.aromatic_system(h).ast)
-            {
+            let p_view = pattern.aromatic_system(p);
+            let h_view = host.aromatic_system(h);
+            let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
+            let host_atoms: Vec<AtomId> = h_view.atom_ids().collect();
+            if !overlay_matches(p_view.ast, h_view.ast, &pat_atoms, &host_atoms, &atoms) {
                 return None;
             }
         }
@@ -230,11 +232,11 @@ impl MoleculeAst {
             return None;
         }
         for &(p, h) in multicenter_bonds.mates() {
-            if !pattern
-                .multicenter_bond(p)
-                .ast
-                .matches(host.multicenter_bond(h).ast)
-            {
+            let p_view = pattern.multicenter_bond(p);
+            let h_view = host.multicenter_bond(h);
+            let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
+            let host_atoms: Vec<AtomId> = h_view.atom_ids().collect();
+            if !overlay_matches(p_view.ast, h_view.ast, &pat_atoms, &host_atoms, &atoms) {
                 return None;
             }
         }
@@ -317,6 +319,42 @@ impl MoleculeAst {
             stereo_bonds,
         ))
     }
+}
+
+/// `pattern_ast` matches `host_ast` for an overlay whose payload is position-indexed by member
+/// (aromatic / multicenter electron counts). The two overlays store their members in their own
+/// participant order and `matches` compares the count vector whole, so the pattern payload is first
+/// reindexed into the host's member order (via the atom correspondence) with
+/// [`RelationData::on_permutation`].
+fn overlay_matches<D: Lattice + RelationData>(
+    pattern_ast: &D,
+    host_ast: &D,
+    pattern_atoms: &[AtomId],
+    host_atoms: &[AtomId],
+    atoms: &Correspondence<NodeId>,
+) -> bool {
+    if pattern_ast.is_permutation_invariant() {
+        return pattern_ast.matches(host_ast);
+    }
+    let order: Vec<ParticipantPosition> = host_atoms
+        .iter()
+        .map(|&host_atom| {
+            let pattern_atom = AtomId::from(
+                atoms
+                    .left_of(NodeId::from(host_atom))
+                    .expect("host overlay atom is matched"),
+            );
+            ParticipantPosition(
+                pattern_atoms
+                    .iter()
+                    .position(|&a| a == pattern_atom)
+                    .expect("host member maps to a pattern member") as u32,
+            )
+        })
+        .collect();
+    let mut probe = pattern_ast.clone();
+    probe.on_permutation(&order);
+    probe.matches(host_ast)
 }
 
 #[cfg(test)]

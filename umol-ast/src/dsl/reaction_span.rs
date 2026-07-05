@@ -10,8 +10,8 @@ use umol_edn::{
     read_string, DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn,
 };
 use umol_graph_core::{
-    EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId,
-    RelationParticipant, VarRelationSet,
+    BiRelationData, EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId,
+    RelationData, RelationParticipant, VarRelationSet,
 };
 
 use super::aromatic::AromaticSystemDsl;
@@ -103,6 +103,8 @@ where
     O1: FactorOrdering,
     L2: RelationParticipant,
     O2: FactorOrdering,
+    T: BiRelationData + Clone,
+    U: BiRelationData + Clone,
 {
     FixedVarBirelationSet::new(
         set.relation_ids()
@@ -124,6 +126,8 @@ fn map_var_span<P, O, T, U>(
 where
     P: RelationParticipant,
     O: FactorOrdering,
+    T: RelationData + Clone,
+    U: RelationData + Clone,
 {
     VarRelationSet::new(
         set.relation_ids()
@@ -139,6 +143,8 @@ fn map_fixed_span<P, O, const N: usize, T, U>(
 where
     P: RelationParticipant,
     O: FactorOrdering,
+    T: RelationData + Clone,
+    U: RelationData + Clone,
 {
     FixedRelationSet::new(
         set.relation_ids()

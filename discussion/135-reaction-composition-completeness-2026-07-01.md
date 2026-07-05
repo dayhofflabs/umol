@@ -290,24 +290,28 @@ new primitive is `meet_pushout`.
 - **D-a2 — DAMN overlay gluing in `meet_pushout`. (additive)** The four/aromatic overlays via graph-core
   relation `pushout` with `combine = |x, y| x.meet(y)`; non-coinciding overlays kept as context
   (present-absent under monomorphism). Tests: an overlap carrying an overlay (met) and a context overlay
-  (kept). `[dep: D-a1]`
+  (kept). `[dep: D-a1]` **Done**
 
 - **D-a3 — molecule-level constraint gluing in `meet_pushout`. (additive)** The glue's `Constraints` =
   `left`'s (refs already in the glue id space — `object` keeps left's ids) ++ `right`'s, the latter's
   entity refs re-anchored through the `right` embedding (the per-family ref remap). Flat `Vec<Constraint>`
   = conjunction (both sides' constraints must hold); replaces the D-a1 `Constraints::new()` placeholder.
   Test: a left-only and a right-only molecule constraint both survive, the right one re-anchored.
-  `[dep: D-a1]`
+  `[dep: D-a1]` **Done**
 
-- **D-b1 — `compose_overlay` (non-stereo). (additive)** `compose_overlay(span_a, a_inverse, b, overlap)
-  -> Option<ReactionAst>`: `meet_pushout(span_a.rhs(), &b.lhs, overlap)?` → `L_c =
-  a_inverse.apply_at(&glue.object, &glue.left)?.rhs()`, `R_c = b.apply_at(&glue.object,
-  &glue.right)?.rhs()` → `ReactionAst::from_sides(L_c, R_c, corr)`, `corr` recovered from the two
-  `ReactionDerivation` comaps (verify the accessor here). `a_inverse = span_a.reverse()?` hoisted once.
-  R2 lives in the glue, R3 in `from_sides`' diff. Tests: the §R1 F–Cl pair. `[dep: D-a2]`
+- **D-b1 — `compose_overlap` (non-stereo). (additive, done)** `compose_overlap(a_inverse, b, overlap)
+  -> Option<ReactionAst>`: `a_inverse.lhs.meet_pushout(&b.lhs, overlap)?` (`a_inverse.lhs` = `R_A`) →
+  `L_c = a_inverse.apply_at(&glue.object, &glue.left)?.rhs()`, `R_c = b.apply_at(&glue.object,
+  &glue.right)?.rhs()` → `ReactionAst::from_sides(L_c, R_c, corr)`, `corr =
+  deriv_a.comap().reverse().compose(deriv_b.comap()).atoms()` (`L_c → glue → R_c`). `a_inverse =
+  a.reverse()?` (`reverse` is on `ReactionAst`) hoisted once by the caller. R2 lives in the glue, R3 in
+  `from_sides`' diff. `MoleculePushout`'s `pub` fields read fine cross-module via the value — no
+  re-export needed. Test: order-fuse pair (C–O `1→2` then `2→3`), apply-equivalence
+  `composite(host) = B(A(host))`; the R1 context bond is covered by `meet_pushout`'s context test and
+  D-c1's completeness. `[dep: D-a2]` **Done**
 
 - **D-c1 — rewire `compose_all`, flip to `Monomorphism`, un-ignore. (breaking→green)** Enumerate with
-  `EmbeddingKind::Monomorphism` (compose.rs:315), map each overlap through `compose_overlay`, collect;
+  `EmbeddingKind::Monomorphism` (compose.rs:315), map each overlap through `compose_overlap`, collect;
   delete the superseded manual machinery (`created_atom_ids` / `db_atom` / `db_bond` / `lc_atoms` / the
   `ra_*` plumbing). Un-`#[ignore]` `compose_complete_overlay` (non-stereo generator). Milestone:
   **non-stereo completeness** — `sound` / `complete_overlay` / `dangling_free` / `well_formed` /
@@ -324,7 +328,7 @@ new primitive is `meet_pushout`.
   `FixedVarBirelationSet` families with `combine = StereoAtomAst` / `StereoBondAst::meet`. Test: two
   frames of one stereo center (reordered) glue + meet; contradictory cosets `⊥`. `[dep: D-a1]`
 
-- **D-b2 — `compose_overlay` stereo. (additive)** Pre-apply `transform_frame` of `A⁻¹` / `B`'s stereo
+- **D-b2 — `compose_overlap` stereo. (additive)** Pre-apply `transform_frame` of `A⁻¹` / `B`'s stereo
   overlays into the glue's canonical frame before `apply_at` (rule-AST, per overlap). Test: a stereo
   compose pair (e.g. the cis/trans C=C carbon-swap overlap). `[dep: D-b1, D-a4, D-b0]`
 
@@ -408,4 +412,105 @@ generator → **D-c**.
 
 **No decision needed** — settled by this pass: canonical-frame threading → full-participant coincidence
 → `meet`; the `reverse` fix; no `Edit::TransformFrame` variant. Stereo folds into D-a/D-b/D-c as listed;
+folded into D-a/D-b/D-c above.
+
+## Part D landing status + the completeness-failure root cause (2026-07-04)
+
+**D-a/D-b/D-c1 (non-stereo span compose) implemented.** `MoleculeAst::meet_pushout` (glue via graph-core
+DPO + `Lattice::meet`), `Graph::pushout`/`pushout_complement`/`pullback` as methods, `compose_overlap`
+(span composite: `A⁻¹` then `B` at the glue, `from_sides`, canonicalize), and `compose_all` rewired to
+`EmbeddingKind::Monomorphism`. All compose properties pass (**sound**, well-formed, dangling-free,
+determinism, both `_overlay` soundness) **except** `test_reaction_ast_compose_complete_overlay`.
+
+**The completeness failure is a pre-existing `transact.rs` bug, NOT a compose bug.** Shrunk case: `a` =
+pure deletion (removes atom F, the H–F bond, and an F···Cl HydrogenBond); `b` = identity on a single Cl.
+`a.compose(b, Full)` correctly produces the composite equal to `A` (verified: it **self-applies** — applies
+to its own `lhs`). But `apply` cannot place it on `host = a.lhs`: `apply_at` returns
+`Transaction(OldStateMismatch)`.
+
+Root cause — `transact.rs` `Edit::RemoveNoncovalentBonds` (and the sibling `RemoveAromaticSystems`,
+`RemoveMulticenterBonds`, `RemoveDativeBonds`) old-state check compares participant atoms **order-sensitively**:
+```rust
+if view.ast != &ast || view.atoms != saved_atoms { return Err(OldStateMismatch); }
+```
+`saved_atoms` is the delta's participants mapped through the match correspondence (pattern order); `view.atoms`
+is the host's stored order. Noncovalent / aromatic / multicenter bonds are **unordered** relations, so for a
+match that maps the participants in a different order than the host stores them the arrays differ
+(`[3,1] != [1,3]`) and the removal spuriously fails. Direct apply-to-own-lhs (identity match) preserves order,
+so it never fired before; compose exposes it because the span **renumbers** atoms (R_A compacts, re-adds the
+deleted atom at the end), producing a match whose overlay participants are in a different order than the host.
+
+**Fix (proposed).** Make the participant comparison **order-insensitive** for the unordered overlays
+(noncovalent, aromatic, multicenter — sort/set-compare both sides). Dative needs care (acceptor is
+distinguished from the unordered donor set); **stereo overlays keep order** (coset is position-relative, frame-
+relative — do NOT sort). This is load-bearing `transact.rs` code touching several remove handlers, so pending
+sign-off before landing. Once fixed, `compose_complete_overlay` should pass for the non-stereo span; the
+stereo phase (D-a stereo path, D-b pre-apply `transform_frame`, `reverse` stereo remappings, D-c drop bail)
+remains as specified above.
 a differing explicit ligand is an atom-level `⊥`, never a stereo one.
+
+## Resolution: `RelationData` and the three reindex sites (2026-07-04, landed)
+
+The order-sensitivity above turned out to be one face of a deeper issue: a relation's **payload** can be
+coupled to its **participant order** (multicenter/aromatic per-member electron counts are a positional
+vector), and graph-core treated the payload `D` as fully opaque, so nothing kept the two consistent under a
+canonicalizing reorder. This surfaced a **pre-existing construction bug**: `VarRelationSet::new` sorts
+participants (`FactorOrdering::canonicalize`) but never permuted the electron vector — so a multicenter built
+with unsorted participants stored electrons pointing at the wrong atoms, independent of compose.
+
+**The abstraction.** Add `RelationData` (single-factor) and `BiRelationData` (birelation) in graph-core — the
+payload-side mirror of `RelationParticipant`. `RelationParticipant` couples a participant to the *id space*
+(`remap`/`compact`/`refs`/`anchor`); `RelationData` couples the payload to the *position space*:
+- `on_permute(σ)` (required — the coupling is explicit at every payload type; a no-op where the payload is not
+  positional), `equiv(other)` (semantic payload equality, defaults to structural `==`, overridden to
+  `Canonicalize::equiv` for the asts), and a defaulted `equiv_under(other, σ)` = clone + `on_permute` + `equiv`.
+- Relation-set `new` now reindexes on construct (`canonicalize_positions` → σ, `d.on_permute(σ)`), and the
+  relation-set `equiv(id, participants…, data)` is the single can't-forget canonicalizing compare
+  (canonicalize the query participants, reindex the query payload, compare participants + `equiv_under`).
+
+**Three sites needed the reindex**, all now routed through the one primitive:
+1. **Construction** — graph-core `new` (single + birelation) applies `on_permute` next to the participant
+   sort. Fixes the latent electron-misalignment bug; stored form is always canonical.
+2. **Transact old-state check** — `transact.rs` remove/modify handlers call per-entity `*_equiv` on
+   `MoleculeAst`/`MoleculeBuilder`, which delegate to the relation-set/storage `equiv`. This is what the
+   noncovalent completeness case needed (unordered participants under a renumbering match).
+3. **Matcher `verify_overlays`** — `substructure.rs` compared multicenter/aromatic payloads with `matches`
+   position-sensitively; a renumbering match failed. Fixed with `overlay_matches`, which reindexes the pattern
+   payload into the host member order (via `on_permute`) before `matches`. This was the multicenter blocker.
+
+Payload impls: aromatic/multicenter `on_permute` = `electrons.permute(σ)`; noncovalent/dative `on_permute` =
+no-op (kind / bond-order are scalar); stereo `on_permute` = no-op (ligands are an `Ordered` factor, so σ is
+always identity). `EntitySpan<U>` (the `ReactionSpanAst` overlay payload) implements both traits by delegating
+to `U` per present side. `ElectronCountsAst::permute` now no-ops on a length mismatch (a malformed count vector
+is left for structure validation to reject, rather than asserting at construct time).
+
+**Outcome.** `test_reaction_ast_compose_complete_overlay` **passes** for the non-stereo span (stereo reactants
+are skipped via `prop_assume!` — the compose stereo phase is still deferred). `compose_sound_overlay` and the
+rest of the property + lib suites are green; graph-core 377, umol-ast property 109, lib 4269, clippy clean. The
+`Names/RelationData`/`on_permute` naming and the "explicit required coupling" were settled with the user. The
+stereo compose phase (D-a stereo path, D-b pre-apply `transform_frame`, `reverse` stereo remappings, drop the
+`has_stereo_*` bail, remove the `prop_assume!`) remains as specified above — **D-c2, still deferred**.
+
+### Trait design, final form (reworked)
+
+The first cut folded a single `RelationData::equiv` over both a *structural* (participant topology) and a
+*canonical* (payload value) notion, and cloned on every overlay match. Reworked to separate the two orthogonal
+axes and keep the hot path clean:
+
+- **`RelationData` / `BiRelationData`** (graph-core) = the *position coupling only*: `on_permutation(σ)`
+  (required; no-op where non-positional) + `is_permutation_invariant()` (guard, default `false`). No `equiv`;
+  no `PartialEq`/`Clone` supertraits.
+- **`participant_permutation(id, query…) -> Option<σ>`** (graph-core relation set) = the *structural* half —
+  the σ-keeping, known-id sibling of `find_by_participants` (which discards σ). Builder storage has its own,
+  by direct alignment to stored order (mutable storage isn't canonical).
+- **`Canonicalize::canonical_eq`** (renamed from `equiv`) = frameless *value* equivalence (atom typing uses it
+  directly; atoms are `Canonicalize`, never `RelationData`).
+- **`Equiv: RelationData + Canonicalize`** / **`BiEquiv`** (umol-ast, blanket) = the layering: `equiv =
+  canonical_eq`; `equiv_under(other, σ) = is_permutation_invariant ? canonical_eq : {clone; on_permutation(σ);
+  canonical_eq}` — the `is_permutation_invariant` guard is what keeps `overlay_matches` from cloning on the
+  hot path.
+
+A full relation compare is the explicit conjunction, written where both notions are in scope (umol-ast):
+`set.participant_permutation(id, q).is_some_and(|σ| payload.equiv_under(set.data(id), &σ))` — structural ∧
+canonical. The six `pub` per-entity `*_equiv` on `MoleculeAst` are gone; the builder-side ones are `pub(crate)`.
+All suites green after the rework: graph-core 377, umol-ast lib 4266, property 109, clippy clean.

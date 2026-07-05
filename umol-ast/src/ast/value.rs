@@ -16,7 +16,7 @@ use super::traits::{AsLit, Canonicalize, Lattice};
 /// mass, valence, bond order, etc.
 ///
 /// Equality is **lazy**: derived `Eq`/`Hash`/`Ord` are structural ("same
-/// tree"); semantic equality is `Canonicalize::equiv`, which compares canonical
+/// tree"); semantic equality is `Canonicalize::canonical_eq`, which compares canonical
 /// forms.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ValueAst {

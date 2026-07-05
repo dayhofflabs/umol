@@ -40,9 +40,10 @@ pub use graph::{
     compact_edge_vec, compact_node_vec, Compaction, EdgeId, Graph, Neighbor, NodeId, Remapping,
 };
 pub use relation::{
-    FactorOrdering, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, Ordered,
-    ParticipantAnchor, ParticipantPosition, ParticipantRefs, RelationId, RelationParticipant,
-    RelationPullback, RelationPushout, Unordered, VarRelationSet, VarVarBirelationSet,
+    BiRelationData, FactorOrdering, FixedFixedBirelationSet, FixedRelationSet,
+    FixedVarBirelationSet, Ordered, ParticipantAnchor, ParticipantPosition, ParticipantRefs,
+    RelationData, RelationId, RelationParticipant, RelationPullback, RelationPushout, Unordered,
+    VarRelationSet, VarVarBirelationSet,
 };
 pub use rewriting::{Pullback, Pushout, PushoutComplement};
 pub use union_find::UnionFind;

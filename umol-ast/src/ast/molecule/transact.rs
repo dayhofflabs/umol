@@ -398,9 +398,12 @@ impl MoleculeBuilder {
                         .iter()
                         .map(|r| created.atom(r.clone()))
                         .collect::<Result<_, _>>()?;
-                    let view = self.dative_bond(id);
-                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                    if view.ast != &ast || current_atoms != saved_atoms {
+                    let (acceptor, donors) = saved_atoms.split_last().ok_or(
+                        TransactionError::MalformedEdit(
+                            "RemoveDativeBond requires at least one participant atom",
+                        ),
+                    )?;
+                    if !self.dative_bond_equiv(id, *acceptor, donors, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     ids.push(id);
@@ -440,9 +443,7 @@ impl MoleculeBuilder {
                         .iter()
                         .map(|r| created.atom(r.clone()))
                         .collect::<Result<_, _>>()?;
-                    let view = self.aromatic_system(id);
-                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                    if view.ast != &ast || current_atoms != saved_atoms {
+                    if !self.aromatic_system_equiv(id, &saved_atoms, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     ids.push(id);
@@ -482,9 +483,7 @@ impl MoleculeBuilder {
                         .iter()
                         .map(|r| created.atom(r.clone()))
                         .collect::<Result<_, _>>()?;
-                    let view = self.multicenter_bond(id);
-                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                    if view.ast != &ast || current_atoms != saved_atoms {
+                    if !self.multicenter_bond_equiv(id, &saved_atoms, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     ids.push(id);
@@ -523,8 +522,7 @@ impl MoleculeBuilder {
                         created.atom(atoms[0].clone())?,
                         created.atom(atoms[1].clone())?,
                     ];
-                    let view = self.noncovalent_bond(id);
-                    if view.ast != &ast || view.atoms != saved_atoms {
+                    if !self.noncovalent_bond_equiv(id, saved_atoms, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     ids.push(id);
@@ -558,8 +556,7 @@ impl MoleculeBuilder {
                     }
                     let site = created.atom(site)?;
                     let ligands = created.stereo_ligands(ligands)?;
-                    let view = self.stereo_atom(id);
-                    if view.ast != &ast || view.site != site || view.ligands != ligands.as_slice() {
+                    if !self.stereo_atom_equiv(id, site, &ligands, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     ids.push(id);
@@ -593,8 +590,7 @@ impl MoleculeBuilder {
                     }
                     let site = created.bond(site)?;
                     let ligands = created.stereo_ligands(ligands)?;
-                    let view = self.stereo_bond(id);
-                    if view.ast != &ast || view.site != site || view.ligands != ligands.as_slice() {
+                    if !self.stereo_bond_equiv(id, site, &ligands, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
                     ids.push(id);
@@ -823,11 +819,16 @@ impl MoleculeBuilder {
                         .iter()
                         .map(|r| created.atom(r.clone()))
                         .collect::<Result<_, _>>()?;
-                    let view = self.dative_bond(id);
-                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                    if view.ast != &ast || current_atoms != saved_atoms {
+                    let (acceptor, donors) = saved_atoms.split_last().ok_or(
+                        TransactionError::MalformedEdit(
+                            "RemoveDativeBond requires at least one participant atom",
+                        ),
+                    )?;
+                    if !self.dative_bond_equiv(id, *acceptor, donors, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
+                    let view = self.dative_bond(id);
+                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
                     removed.push(RemovedDativeBond {
                         id,
                         atoms: current_atoms,
@@ -895,11 +896,11 @@ impl MoleculeBuilder {
                         .iter()
                         .map(|r| created.atom(r.clone()))
                         .collect::<Result<_, _>>()?;
-                    let view = self.aromatic_system(id);
-                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                    if view.ast != &ast || current_atoms != saved_atoms {
+                    if !self.aromatic_system_equiv(id, &saved_atoms, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
+                    let view = self.aromatic_system(id);
+                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
                     removed.push(RemovedAromaticSystem {
                         id,
                         atoms: current_atoms,
@@ -967,11 +968,11 @@ impl MoleculeBuilder {
                         .iter()
                         .map(|r| created.atom(r.clone()))
                         .collect::<Result<_, _>>()?;
-                    let view = self.multicenter_bond(id);
-                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
-                    if view.ast != &ast || current_atoms != saved_atoms {
+                    if !self.multicenter_bond_equiv(id, &saved_atoms, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
+                    let view = self.multicenter_bond(id);
+                    let current_atoms: Vec<AtomId> = view.atom_ids().collect();
                     removed.push(RemovedMulticenterBond {
                         id,
                         atoms: current_atoms,
@@ -1038,10 +1039,10 @@ impl MoleculeBuilder {
                         created.atom(atoms[0].clone())?,
                         created.atom(atoms[1].clone())?,
                     ];
-                    let view = self.noncovalent_bond(id);
-                    if view.ast != &ast || view.atoms != saved_atoms {
+                    if !self.noncovalent_bond_equiv(id, saved_atoms, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
+                    let view = self.noncovalent_bond(id);
                     removed.push(RemovedNoncovalentBond {
                         id,
                         atoms: view.atoms,
@@ -1103,10 +1104,10 @@ impl MoleculeBuilder {
                     }
                     let site = created.atom(site)?;
                     let ligands = created.stereo_ligands(ligands)?;
-                    let view = self.stereo_atom(id);
-                    if view.ast != &ast || view.site != site || view.ligands != ligands.as_slice() {
+                    if !self.stereo_atom_equiv(id, site, &ligands, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
+                    let view = self.stereo_atom(id);
                     removed.push(RemovedStereoAtom {
                         id,
                         site: view.site,
@@ -1169,10 +1170,10 @@ impl MoleculeBuilder {
                     }
                     let site = created.bond(site)?;
                     let ligands = created.stereo_ligands(ligands)?;
-                    let view = self.stereo_bond(id);
-                    if view.ast != &ast || view.site != site || view.ligands != ligands.as_slice() {
+                    if !self.stereo_bond_equiv(id, site, &ligands, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
+                    let view = self.stereo_bond(id);
                     removed.push(RemovedStereoBond {
                         id,
                         site: view.site,

@@ -5,7 +5,7 @@
 
 use umol_graph_core::{
     EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, GraphCorrespondence, NodeId,
-    ParticipantPosition, Unordered, VarRelationSet,
+    ParticipantPosition, RelationData, Unordered, VarRelationSet,
 };
 
 use super::super::atom::AtomAst;
@@ -212,7 +212,7 @@ impl MoleculeAst {
 /// glue; `left` already lives in the glue id space). Each `right` datum's electron ordering is
 /// re-indexed to the canonicalized participant order, then coinciding overlays merge by `meet` and
 /// non-coinciding ones are appended (context). `None` if any coincident meet is `⊥`.
-fn glue_var_overlays<D: Lattice + Clone>(
+fn glue_var_overlays<D: Lattice + RelationData>(
     left: &VarRelationSet<NodeId, Unordered, D>,
     right: &VarRelationSet<NodeId, Unordered, D>,
     map_node: impl Fn(NodeId) -> NodeId,

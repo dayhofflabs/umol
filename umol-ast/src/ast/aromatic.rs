@@ -1,7 +1,7 @@
 //! Aromatic system AST.
 
 use umol_ast_macros::{Canonicalize, Lattice};
-use umol_graph_core::ParticipantPosition;
+use umol_graph_core::{ParticipantPosition, RelationData};
 
 use super::constraint::{AromaticSystemConstraint, AromaticSystemConstraints};
 use super::electrons::ElectronCountsAst;
@@ -15,6 +15,17 @@ pub struct AromaticSystemAst {
     pub charge: ValueAst,
     pub spin: SpinStateAst,
     pub constraints: AromaticSystemConstraints,
+}
+
+impl RelationData for AromaticSystemAst {
+    /// The per-member electron counts are positional, so they follow a participant reorder.
+    fn on_permutation(&mut self, order: &[ParticipantPosition]) {
+        self.electrons.permute(order);
+    }
+
+    fn is_permutation_invariant(&self) -> bool {
+        self.electrons.is_undetermined()
+    }
 }
 
 impl AromaticSystemAst {

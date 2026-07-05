@@ -11,6 +11,7 @@ use std::collections::BTreeSet;
 
 use strum::VariantArray;
 use umol_ast_macros::{Canonicalize, Lattice};
+use umol_graph_core::{BiRelationData, ParticipantPosition};
 use umol_perm::{space, ClassKey, Permutation};
 
 use super::constraint::{
@@ -31,6 +32,21 @@ macro_rules! stereo_element {
         pub struct $name {
             pub configuration: StereoConfigurationAst,
             pub constraints: $constraints,
+        }
+
+        impl BiRelationData for $name {
+            /// The ligands are an `Ordered` factor, so `order_2` from `canonicalize_positions` is
+            /// always the identity — the frame-relative configuration needs no reindex here.
+            fn on_permutation(
+                &mut self,
+                _order_1: &[ParticipantPosition],
+                _order_2: &[ParticipantPosition],
+            ) {
+            }
+
+            fn is_permutation_invariant(&self) -> bool {
+                true
+            }
         }
 
         impl $name {

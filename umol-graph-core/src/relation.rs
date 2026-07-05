@@ -141,6 +141,37 @@ impl FactorOrdering for Ordered {
     }
 }
 
+/// A relation payload's coupling to participant order — the payload-side mirror of
+/// [`RelationParticipant`] (which couples a participant to the id space). A relation set
+/// canonicalizes its participants on construction and remap, so any position-indexed payload (e.g.
+/// per-member electron counts) must follow that reorder via `on_permutation`. This is purely the
+/// *structural* (position) coupling; value equivalence is a separate concern (in the consuming
+/// crate, `on_permutation` composes with a canonical value equality to give the full framed compare).
+pub trait RelationData {
+    /// Reindex a position-indexed payload by `order` (the σ from `canonicalize_positions` /
+    /// [`participant_permutation`](FixedRelationSet::participant_permutation)). A payload with no
+    /// positional content is a no-op — but the impl is required, so the decision is explicit at every
+    /// payload type.
+    fn on_permutation(&mut self, order: &[ParticipantPosition]);
+
+    /// `true` when `on_permutation` cannot change `self` (no positional content, or it is already
+    /// wildcard) — a guard that lets consumers skip the reindex work. Conservative default `false`;
+    /// override to `true` (or a value-dependent test) where the payload is provably invariant.
+    fn is_permutation_invariant(&self) -> bool {
+        false
+    }
+}
+
+/// Two-factor analog of [`RelationData`] for birelation sets: `on_permutation` takes a permutation
+/// per factor.
+pub trait BiRelationData {
+    fn on_permutation(&mut self, order_1: &[ParticipantPosition], order_2: &[ParticipantPosition]);
+
+    fn is_permutation_invariant(&self) -> bool {
+        false
+    }
+}
+
 /// The id-space contents of a participant, surfaced for the incidence index.
 /// At most one ref per space today (a node or an edge); a future port type
 /// could fill both.
@@ -347,11 +378,15 @@ fn participants_match<P: RelationParticipant>(stored: &[P], sorted_query: &[P]) 
 }
 
 impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelationSet<P, O, D, N> {
-    pub fn new(entries: Vec<([P; N], D)>) -> Self {
+    pub fn new(entries: Vec<([P; N], D)>) -> Self
+    where
+        D: RelationData + Clone,
+    {
         let mut participants = Vec::with_capacity(entries.len());
         let mut data = Vec::with_capacity(entries.len());
-        for (mut p, d) in entries {
-            O::canonicalize(&mut p);
+        for (mut p, mut d) in entries {
+            let sigma = O::canonicalize_positions(&mut p);
+            d.on_permutation(&sigma);
             participants.push(p);
             data.push(d);
         }
@@ -386,6 +421,20 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
 
     pub fn participants(&self, id: RelationId) -> &[P; N] {
         &self.participants[id.index()]
+    }
+
+    /// The permutation σ reindexing `query` into relation `id`'s stored participant frame, or `None`
+    /// if their participants differ (up to this factor's ordering). The σ-keeping, known-id sibling of
+    /// [`find_by_participants`](Self::find_by_participants): the structural half of a relation compare,
+    /// which the caller completes by reindexing the payload with σ and comparing values.
+    pub fn participant_permutation(
+        &self,
+        id: RelationId,
+        query: &[P],
+    ) -> Option<Vec<ParticipantPosition>> {
+        let mut canonical = query.to_vec();
+        let sigma = O::canonicalize_positions(&mut canonical);
+        (self.participants(id).as_slice() == canonical.as_slice()).then_some(sigma)
     }
 
     /// Id of the relation whose participants equal `query` as a multiset (order-independent),
@@ -433,7 +482,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
 
     pub fn apply_compaction(&self, compaction: &Compaction) -> Self
     where
-        D: Clone,
+        D: RelationData + Clone,
     {
         let entries: Vec<([P; N], D)> = (0..self.relation_count())
             .filter_map(|i| {
@@ -452,7 +501,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
 
     pub fn apply_remapping(&self, remapping: &Remapping) -> (Self, Vec<ParticipantPosition>)
     where
-        D: Clone,
+        D: RelationData + Clone,
     {
         let mut positions = Vec::new();
         let entries: Vec<([P; N], D)> = (0..self.relation_count())
@@ -481,7 +530,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         mut combine: impl FnMut(&D, &D) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
-        D: Clone,
+        D: RelationData + Clone,
     {
         let mut entries: Vec<([P; N], D)> = self
             .relation_ids()
@@ -521,7 +570,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         mut combine: impl FnMut(&D, &D) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
-        D: Clone,
+        D: RelationData + Clone,
     {
         let mut entries: Vec<([P; N], D)> = Vec::new();
         let mut left_images: Vec<RelationId> = Vec::new();
@@ -581,7 +630,10 @@ impl<P: PartialEq, O, D: PartialEq> PartialEq for VarRelationSet<P, O, D> {
 impl<P: Eq, O, D: Eq> Eq for VarRelationSet<P, O, D> {}
 
 impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
-    pub fn new(entries: Vec<(Vec<P>, D)>) -> Self {
+    pub fn new(entries: Vec<(Vec<P>, D)>) -> Self
+    where
+        D: RelationData + Clone,
+    {
         let relation_count = entries.len();
         let mut offsets = Vec::with_capacity(relation_count + 1);
         offsets.push(0);
@@ -590,8 +642,9 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         let mut participants = Vec::with_capacity(total_participants);
         let mut data = Vec::with_capacity(relation_count);
 
-        for (mut p, d) in entries {
-            O::canonicalize(&mut p);
+        for (mut p, mut d) in entries {
+            let sigma = O::canonicalize_positions(&mut p);
+            d.on_permutation(&sigma);
             participants.extend_from_slice(&p);
             offsets.push(participants.len() as u32);
             data.push(d);
@@ -632,6 +685,19 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         let start = self.offsets[id.index()] as usize;
         let end = self.offsets[id.index() + 1] as usize;
         &self.participants[start..end]
+    }
+
+    /// The permutation σ reindexing `query` into relation `id`'s stored participant frame, or `None`
+    /// if their participants differ (up to this factor's ordering). The σ-keeping, known-id sibling of
+    /// [`find_by_participants`](Self::find_by_participants).
+    pub fn participant_permutation(
+        &self,
+        id: RelationId,
+        query: &[P],
+    ) -> Option<Vec<ParticipantPosition>> {
+        let mut canonical = query.to_vec();
+        let sigma = O::canonicalize_positions(&mut canonical);
+        (self.participants(id) == canonical.as_slice()).then_some(sigma)
     }
 
     /// Id of the relation whose participants equal `query` as a multiset (order-independent),
@@ -679,7 +745,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
 
     pub fn apply_compaction(&self, compaction: &Compaction) -> Self
     where
-        D: Clone,
+        D: RelationData + Clone,
     {
         let entries: Vec<(Vec<P>, D)> = (0..self.relation_count())
             .filter_map(|i| {
@@ -697,7 +763,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
 
     pub fn apply_remapping(&self, remapping: &Remapping) -> (Self, Vec<ParticipantPosition>)
     where
-        D: Clone,
+        D: RelationData + Clone,
     {
         let mut positions = Vec::new();
         let entries: Vec<(Vec<P>, D)> = (0..self.relation_count())
@@ -718,7 +784,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         mut combine: impl FnMut(&D, &D) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
-        D: Clone,
+        D: RelationData + Clone,
     {
         let mut entries: Vec<(Vec<P>, D)> = self
             .relation_ids()
@@ -755,7 +821,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         mut combine: impl FnMut(&D, &D) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
-        D: Clone,
+        D: RelationData + Clone,
     {
         let mut entries: Vec<(Vec<P>, D)> = Vec::new();
         let mut left_images: Vec<RelationId> = Vec::new();
@@ -831,14 +897,18 @@ where
     L2: RelationParticipant,
     O2: FactorOrdering,
 {
-    pub fn new(entries: Vec<([L1; N1], [L2; N2], D)>) -> Self {
+    pub fn new(entries: Vec<([L1; N1], [L2; N2], D)>) -> Self
+    where
+        D: BiRelationData + Clone,
+    {
         let relation_count = entries.len();
         let mut participants_1 = Vec::with_capacity(relation_count);
         let mut participants_2 = Vec::with_capacity(relation_count);
         let mut data = Vec::with_capacity(relation_count);
-        for (mut l1, mut l2, d) in entries {
-            O1::canonicalize(&mut l1);
-            O2::canonicalize(&mut l2);
+        for (mut l1, mut l2, mut d) in entries {
+            let s1 = O1::canonicalize_positions(&mut l1);
+            let s2 = O2::canonicalize_positions(&mut l2);
+            d.on_permutation(&s1, &s2);
             participants_1.push(l1);
             participants_2.push(l2);
             data.push(d);
@@ -878,6 +948,25 @@ where
 
     pub fn participants_2(&self, id: RelationId) -> &[L2; N2] {
         &self.participants_2[id.index()]
+    }
+
+    /// The per-factor permutations (σ₁, σ₂) reindexing `query_1` / `query_2` into relation `id`'s
+    /// stored participant frame, or `None` if either factor's participants differ (up to its
+    /// ordering). The σ-keeping, known-id sibling of [`find_by_participants`](Self::find_by_participants).
+    #[allow(clippy::type_complexity)]
+    pub fn participant_permutation(
+        &self,
+        id: RelationId,
+        query_1: &[L1],
+        query_2: &[L2],
+    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
+        let mut canonical_1 = query_1.to_vec();
+        let s1 = O1::canonicalize_positions(&mut canonical_1);
+        let mut canonical_2 = query_2.to_vec();
+        let s2 = O2::canonicalize_positions(&mut canonical_2);
+        (self.participants_1(id).as_slice() == canonical_1.as_slice()
+            && self.participants_2(id).as_slice() == canonical_2.as_slice())
+        .then_some((s1, s2))
     }
 
     /// Id of the relation whose two factors equal `query_1` / `query_2` as multisets
@@ -934,7 +1023,7 @@ where
 
     pub fn apply_compaction(&self, compaction: &Compaction) -> Self
     where
-        D: Clone,
+        D: BiRelationData + Clone,
     {
         let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.relation_count())
             .filter_map(|i| {
@@ -962,7 +1051,7 @@ where
         remapping: &Remapping,
     ) -> (Self, Vec<ParticipantPosition>, Vec<ParticipantPosition>)
     where
-        D: Clone,
+        D: BiRelationData + Clone,
     {
         let mut positions_1 = Vec::new();
         let mut positions_2 = Vec::new();
@@ -993,7 +1082,7 @@ where
         mut combine: impl FnMut(&D, &D) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
-        D: Clone,
+        D: BiRelationData + Clone,
     {
         let mut entries: Vec<([L1; N1], [L2; N2], D)> = self
             .relation_ids()
@@ -1040,7 +1129,7 @@ where
         mut combine: impl FnMut(&D, &D) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
-        D: Clone,
+        D: BiRelationData + Clone,
     {
         let mut entries: Vec<([L1; N1], [L2; N2], D)> = Vec::new();
         let mut left_images: Vec<RelationId> = Vec::new();
@@ -1120,17 +1209,21 @@ where
     L2: RelationParticipant,
     O2: FactorOrdering,
 {
-    pub fn new(entries: Vec<([L1; N1], Vec<L2>, D)>) -> Self {
+    pub fn new(entries: Vec<([L1; N1], Vec<L2>, D)>) -> Self
+    where
+        D: BiRelationData + Clone,
+    {
         let relation_count = entries.len();
         let mut participants_1 = Vec::with_capacity(relation_count);
         let mut f2_offsets = Vec::with_capacity(relation_count + 1);
         f2_offsets.push(0);
         let mut participants_2 = Vec::new();
         let mut data = Vec::with_capacity(relation_count);
-        for (mut l1, mut l2, d) in entries {
-            O1::canonicalize(&mut l1);
+        for (mut l1, mut l2, mut d) in entries {
+            let s1 = O1::canonicalize_positions(&mut l1);
+            let s2 = O2::canonicalize_positions(&mut l2);
+            d.on_permutation(&s1, &s2);
             participants_1.push(l1);
-            O2::canonicalize(&mut l2);
             participants_2.extend_from_slice(&l2);
             f2_offsets.push(participants_2.len() as u32);
             data.push(d);
@@ -1175,6 +1268,25 @@ where
         let start = self.f2_offsets[id.index()] as usize;
         let end = self.f2_offsets[id.index() + 1] as usize;
         &self.participants_2[start..end]
+    }
+
+    /// The per-factor permutations (σ₁, σ₂) reindexing `query_1` / `query_2` into relation `id`'s
+    /// stored participant frame, or `None` if either factor's participants differ (up to its
+    /// ordering). The σ-keeping, known-id sibling of [`find_by_participants`](Self::find_by_participants).
+    #[allow(clippy::type_complexity)]
+    pub fn participant_permutation(
+        &self,
+        id: RelationId,
+        query_1: &[L1],
+        query_2: &[L2],
+    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
+        let mut canonical_1 = query_1.to_vec();
+        let s1 = O1::canonicalize_positions(&mut canonical_1);
+        let mut canonical_2 = query_2.to_vec();
+        let s2 = O2::canonicalize_positions(&mut canonical_2);
+        (self.participants_1(id).as_slice() == canonical_1.as_slice()
+            && self.participants_2(id) == canonical_2.as_slice())
+        .then_some((s1, s2))
     }
 
     /// Id of the relation whose two factors equal `query_1` / `query_2` as multisets
@@ -1231,7 +1343,7 @@ where
 
     pub fn apply_compaction(&self, compaction: &Compaction) -> Self
     where
-        D: Clone,
+        D: BiRelationData + Clone,
     {
         let entries: Vec<([L1; N1], Vec<L2>, D)> = (0..self.relation_count())
             .filter_map(|i| {
@@ -1258,7 +1370,7 @@ where
         remapping: &Remapping,
     ) -> (Self, Vec<ParticipantPosition>, Vec<ParticipantPosition>)
     where
-        D: Clone,
+        D: BiRelationData + Clone,
     {
         let mut positions_1 = Vec::new();
         let mut positions_2 = Vec::new();
@@ -1286,7 +1398,7 @@ where
         mut combine: impl FnMut(&D, &D) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
-        D: Clone,
+        D: BiRelationData + Clone,
     {
         let mut entries: Vec<([L1; N1], Vec<L2>, D)> = self
             .relation_ids()
@@ -1333,7 +1445,7 @@ where
         mut combine: impl FnMut(&D, &D) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
-        D: Clone,
+        D: BiRelationData + Clone,
     {
         let mut entries: Vec<([L1; N1], Vec<L2>, D)> = Vec::new();
         let mut left_images: Vec<RelationId> = Vec::new();
@@ -1417,7 +1529,10 @@ where
     L2: RelationParticipant,
     O2: FactorOrdering,
 {
-    pub fn new(entries: Vec<(Vec<L1>, Vec<L2>, D)>) -> Self {
+    pub fn new(entries: Vec<(Vec<L1>, Vec<L2>, D)>) -> Self
+    where
+        D: BiRelationData + Clone,
+    {
         let relation_count = entries.len();
         let mut f1_offsets = Vec::with_capacity(relation_count + 1);
         f1_offsets.push(0);
@@ -1426,11 +1541,12 @@ where
         f2_offsets.push(0);
         let mut participants_2 = Vec::new();
         let mut data = Vec::with_capacity(relation_count);
-        for (mut l1, mut l2, d) in entries {
-            O1::canonicalize(&mut l1);
+        for (mut l1, mut l2, mut d) in entries {
+            let s1 = O1::canonicalize_positions(&mut l1);
+            let s2 = O2::canonicalize_positions(&mut l2);
+            d.on_permutation(&s1, &s2);
             participants_1.extend_from_slice(&l1);
             f1_offsets.push(participants_1.len() as u32);
-            O2::canonicalize(&mut l2);
             participants_2.extend_from_slice(&l2);
             f2_offsets.push(participants_2.len() as u32);
             data.push(d);
@@ -1480,6 +1596,25 @@ where
         let start = self.f2_offsets[id.index()] as usize;
         let end = self.f2_offsets[id.index() + 1] as usize;
         &self.participants_2[start..end]
+    }
+
+    /// The per-factor permutations (σ₁, σ₂) reindexing `query_1` / `query_2` into relation `id`'s
+    /// stored participant frame, or `None` if either factor's participants differ (up to its
+    /// ordering). The σ-keeping, known-id sibling of [`find_by_participants`](Self::find_by_participants).
+    #[allow(clippy::type_complexity)]
+    pub fn participant_permutation(
+        &self,
+        id: RelationId,
+        query_1: &[L1],
+        query_2: &[L2],
+    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
+        let mut canonical_1 = query_1.to_vec();
+        let s1 = O1::canonicalize_positions(&mut canonical_1);
+        let mut canonical_2 = query_2.to_vec();
+        let s2 = O2::canonicalize_positions(&mut canonical_2);
+        (self.participants_1(id) == canonical_1.as_slice()
+            && self.participants_2(id) == canonical_2.as_slice())
+        .then_some((s1, s2))
     }
 
     /// Id of the relation whose two factors equal `query_1` / `query_2` as multisets
@@ -1536,7 +1671,7 @@ where
 
     pub fn apply_compaction(&self, compaction: &Compaction) -> Self
     where
-        D: Clone,
+        D: BiRelationData + Clone,
     {
         let entries: Vec<(Vec<L1>, Vec<L2>, D)> = (0..self.relation_count())
             .filter_map(|i| {
@@ -1562,7 +1697,7 @@ where
         remapping: &Remapping,
     ) -> (Self, Vec<ParticipantPosition>, Vec<ParticipantPosition>)
     where
-        D: Clone,
+        D: BiRelationData + Clone,
     {
         let mut positions_1 = Vec::new();
         let mut positions_2 = Vec::new();
@@ -1587,7 +1722,7 @@ where
         mut combine: impl FnMut(&D, &D) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
-        D: Clone,
+        D: BiRelationData + Clone,
     {
         let mut entries: Vec<(Vec<L1>, Vec<L2>, D)> = self
             .relation_ids()
@@ -1634,7 +1769,7 @@ where
         mut combine: impl FnMut(&D, &D) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
-        D: Clone,
+        D: BiRelationData + Clone,
     {
         let mut entries: Vec<(Vec<L1>, Vec<L2>, D)> = Vec::new();
         let mut left_images: Vec<RelationId> = Vec::new();
@@ -1683,6 +1818,25 @@ mod tests {
     use rstest::*;
 
     use super::*;
+
+    impl RelationData for &str {
+        fn on_permutation(&mut self, _: &[ParticipantPosition]) {}
+    }
+    impl BiRelationData for &str {
+        fn on_permutation(&mut self, _: &[ParticipantPosition], _: &[ParticipantPosition]) {}
+    }
+    impl RelationData for i32 {
+        fn on_permutation(&mut self, _: &[ParticipantPosition]) {}
+    }
+    impl BiRelationData for i32 {
+        fn on_permutation(&mut self, _: &[ParticipantPosition], _: &[ParticipantPosition]) {}
+    }
+    impl RelationData for () {
+        fn on_permutation(&mut self, _: &[ParticipantPosition]) {}
+    }
+    impl BiRelationData for () {
+        fn on_permutation(&mut self, _: &[ParticipantPosition], _: &[ParticipantPosition]) {}
+    }
 
     fn n(i: u32) -> NodeId {
         NodeId(i)

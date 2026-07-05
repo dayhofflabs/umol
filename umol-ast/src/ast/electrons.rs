@@ -29,14 +29,14 @@ impl ElectronCountsAst {
     }
 
     /// Reorder the positional counts by `order` (`new[i] = old[order[i]]`) to
-    /// track a participant reordering. `Undetermined` is unchanged.
+    /// track a participant reordering. `Undetermined` is unchanged. A length
+    /// mismatch (a malformed count vector, rejected later by structure
+    /// validation) is left untouched rather than reindexed.
     pub fn permute(&mut self, order: &[ParticipantPosition]) {
         if let Self::Lit(counts) = self {
-            debug_assert_eq!(
-                order.len(),
-                counts.len(),
-                "permutation length matches the count vector"
-            );
+            if order.len() != counts.len() {
+                return;
+            }
             let reordered: Vec<i64> = order.iter().map(|p| counts[p.index()]).collect();
             *counts = reordered;
         }

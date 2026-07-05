@@ -10,7 +10,7 @@ use std::iter;
 use std::mem::{discriminant, Discriminant};
 use std::slice::{Iter, IterMut};
 
-use umol_graph_core::{FactorOrdering, Unordered};
+use umol_graph_core::{BiRelationData, FactorOrdering, ParticipantPosition, RelationData, Unordered};
 use umol_perm::Permutation;
 
 use super::aromatic::AromaticSystemAst;
@@ -694,6 +694,46 @@ impl<T> EntitySpan<T> {
             }
             Self::Removed(_) => None,
         }
+    }
+}
+
+/// A span stored as relation data (a `ReactionSpanAst` overlay) reindexes each present side's payload
+/// and compares side-wise, delegating to the underlying payload's [`RelationData`].
+impl<U: RelationData> RelationData for EntitySpan<U> {
+    fn on_permutation(&mut self, order: &[ParticipantPosition]) {
+        match self {
+            Self::Unchanged(value) | Self::Added(value) | Self::Removed(value) => {
+                value.on_permutation(order)
+            }
+            Self::Modified { lhs, rhs } => {
+                lhs.on_permutation(order);
+                rhs.on_permutation(order);
+            }
+        }
+    }
+
+    fn is_permutation_invariant(&self) -> bool {
+        self.lhs().is_none_or(U::is_permutation_invariant)
+            && self.rhs().is_none_or(U::is_permutation_invariant)
+    }
+}
+
+impl<U: BiRelationData> BiRelationData for EntitySpan<U> {
+    fn on_permutation(&mut self, order_1: &[ParticipantPosition], order_2: &[ParticipantPosition]) {
+        match self {
+            Self::Unchanged(value) | Self::Added(value) | Self::Removed(value) => {
+                value.on_permutation(order_1, order_2)
+            }
+            Self::Modified { lhs, rhs } => {
+                lhs.on_permutation(order_1, order_2);
+                rhs.on_permutation(order_1, order_2);
+            }
+        }
+    }
+
+    fn is_permutation_invariant(&self) -> bool {
+        self.lhs().is_none_or(U::is_permutation_invariant)
+            && self.rhs().is_none_or(U::is_permutation_invariant)
     }
 }
 

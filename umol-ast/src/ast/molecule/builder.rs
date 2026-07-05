@@ -11,9 +11,9 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    compact_edge_vec, compact_node_vec, Compaction, EdgeId, FactorOrdering, FixedRelationSet,
-    FixedVarBirelationSet, Graph, NodeId, Ordered, RelationId, RelationParticipant, Unordered,
-    VarRelationSet,
+    compact_edge_vec, compact_node_vec, BiRelationData, Compaction, EdgeId, FactorOrdering,
+    FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered, ParticipantPosition,
+    RelationData, RelationId, RelationParticipant, Unordered, VarRelationSet,
 };
 
 use super::super::aromatic::AromaticSystemAst;
@@ -36,6 +36,7 @@ use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::NoncovalentBondAst;
 use super::super::remap::{IdCompaction, UndoCompaction};
 use super::super::stereo::{StereoAtomAst, StereoBondAst};
+use super::super::traits::{BiEquiv, Equiv};
 use super::super::view::{
     AromaticSystemBuilderView, AromaticSystemBuilderViewMut, AtomBuilderView, AtomBuilderViewMut,
     BondBuilderView, BondBuilderViewMut, DativeBondBuilderView, DativeBondBuilderViewMut,
@@ -55,7 +56,7 @@ impl<P, O, D, const N: usize> FixedSetStorage<P, O, D, N>
 where
     P: RelationParticipant,
     O: FactorOrdering,
-    D: Clone,
+    D: RelationData + Clone,
 {
     fn push(&mut self, participants: [P; N], data: D) -> u32 {
         self.materialize();
@@ -98,6 +99,32 @@ where
             FixedSetStorage::Shared(arc) => *arc.participants(RelationId(i as u32)),
             FixedSetStorage::Mutable(vec) => vec[i].0,
         }
+    }
+
+    fn data(&self, i: usize) -> D {
+        match self {
+            FixedSetStorage::Shared(arc) => arc.data(RelationId(i as u32)).clone(),
+            FixedSetStorage::Mutable(vec) => vec[i].1.clone(),
+        }
+    }
+
+    /// The permutation reindexing `query` into relation `i`'s stored participant order (`σ[k]` = the
+    /// position in `query` of the participant equal to `stored[k]`), or `None` when the sets differ.
+    /// Direct alignment to the stored order — mutable storage is not kept canonical.
+    fn participant_permutation(&self, i: usize, query: &[P]) -> Option<Vec<ParticipantPosition>> {
+        let stored = self.participants(i);
+        if stored.len() != query.len() {
+            return None;
+        }
+        stored
+            .iter()
+            .map(|s| {
+                query
+                    .iter()
+                    .position(|q| q == s)
+                    .map(|p| ParticipantPosition(p as u32))
+            })
+            .collect()
     }
 
     fn apply_compaction(self, compaction: &Compaction) -> Self {
@@ -162,7 +189,7 @@ impl<P, O, D> VarSetStorage<P, O, D>
 where
     P: RelationParticipant,
     O: FactorOrdering,
-    D: Clone,
+    D: RelationData + Clone,
 {
     fn push(&mut self, participants: Vec<P>, data: D) -> u32 {
         self.materialize();
@@ -205,6 +232,32 @@ where
             VarSetStorage::Shared(arc) => arc.participants(RelationId(i as u32)).to_vec(),
             VarSetStorage::Mutable(vec) => vec[i].0.clone(),
         }
+    }
+
+    fn data(&self, i: usize) -> D {
+        match self {
+            VarSetStorage::Shared(arc) => arc.data(RelationId(i as u32)).clone(),
+            VarSetStorage::Mutable(vec) => vec[i].1.clone(),
+        }
+    }
+
+    /// The permutation reindexing `query` into relation `i`'s stored participant order (`σ[k]` = the
+    /// position in `query` of the participant equal to `stored[k]`), or `None` when the sets differ.
+    /// Direct alignment to the stored order — mutable storage is not kept canonical.
+    fn participant_permutation(&self, i: usize, query: &[P]) -> Option<Vec<ParticipantPosition>> {
+        let stored = self.participants(i);
+        if stored.len() != query.len() {
+            return None;
+        }
+        stored
+            .iter()
+            .map(|s| {
+                query
+                    .iter()
+                    .position(|q| q == s)
+                    .map(|p| ParticipantPosition(p as u32))
+            })
+            .collect()
     }
 
     fn apply_compaction(self, compaction: &Compaction) -> Self {
@@ -274,7 +327,7 @@ where
     O1: FactorOrdering,
     L2: RelationParticipant,
     O2: FactorOrdering,
-    D: Clone,
+    D: BiRelationData + Clone,
 {
     fn push(&mut self, participants_1: [L1; N1], participants_2: Vec<L2>, data: D) -> u32 {
         self.materialize();
@@ -318,6 +371,49 @@ where
             FixedVarSetStorage::Shared(arc) => arc.participants_2(RelationId(i as u32)).to_vec(),
             FixedVarSetStorage::Mutable(vec) => vec[i].1.clone(),
         }
+    }
+
+    fn data(&self, i: usize) -> D {
+        match self {
+            FixedVarSetStorage::Shared(arc) => arc.data(RelationId(i as u32)).clone(),
+            FixedVarSetStorage::Mutable(vec) => vec[i].2.clone(),
+        }
+    }
+
+    /// Per-factor permutations reindexing `(query_1, query_2)` into relation `i`'s stored participant
+    /// order (`σ[k]` = the position in the query of the participant equal to `stored[k]`), or `None`
+    /// when either factor's sets differ. Direct alignment — mutable storage is not kept canonical.
+    #[allow(clippy::type_complexity)]
+    fn participant_permutation(
+        &self,
+        i: usize,
+        query_1: &[L1],
+        query_2: &[L2],
+    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
+        let stored_1 = self.participants_1(i);
+        let stored_2 = self.participants_2(i);
+        if stored_1.len() != query_1.len() || stored_2.len() != query_2.len() {
+            return None;
+        }
+        let sigma_1: Vec<ParticipantPosition> = stored_1
+            .iter()
+            .map(|s| {
+                query_1
+                    .iter()
+                    .position(|q| q == s)
+                    .map(|p| ParticipantPosition(p as u32))
+            })
+            .collect::<Option<_>>()?;
+        let sigma_2: Vec<ParticipantPosition> = stored_2
+            .iter()
+            .map(|s| {
+                query_2
+                    .iter()
+                    .position(|q| q == s)
+                    .map(|p| ParticipantPosition(p as u32))
+            })
+            .collect::<Option<_>>()?;
+        Some((sigma_1, sigma_2))
     }
 
     fn apply_compaction(self, compaction: &Compaction) -> Self {
@@ -404,7 +500,7 @@ where
     O1: FactorOrdering,
     L2: RelationParticipant,
     O2: FactorOrdering,
-    D: Clone,
+    D: BiRelationData + Clone,
 {
     let mut removed = Vec::new();
     for i in 0..storage.relation_count() {
@@ -451,7 +547,7 @@ fn fixed_relation_removed<P, O, D, const N: usize>(
 where
     P: RelationParticipant,
     O: FactorOrdering,
-    D: Clone,
+    D: RelationData + Clone,
 {
     let mut removed = Vec::new();
     for i in 0..storage.relation_count() {
@@ -473,7 +569,7 @@ fn var_relation_removed<P, O, D>(
 where
     P: RelationParticipant,
     O: FactorOrdering,
-    D: Clone,
+    D: RelationData + Clone,
 {
     let mut removed = Vec::new();
     for i in 0..storage.relation_count() {
@@ -885,6 +981,92 @@ impl MoleculeBuilder {
                 }
             }
         }
+    }
+
+    /// `true` iff noncovalent bond `id` structurally equals `(atoms, ast)` — participants (unordered)
+    /// and `ast` up to canonical form, `ast` reindexed into the stored participant frame.
+    pub(crate) fn noncovalent_bond_equiv(
+        &self,
+        id: NoncovalentBondId,
+        atoms: [AtomId; 2],
+        ast: &NoncovalentBondAst,
+    ) -> bool {
+        self.noncovalent_bonds
+            .participant_permutation(id.index(), &atoms.map(NodeId::from))
+            .is_some_and(|sigma| ast.equiv_under(&self.noncovalent_bonds.data(id.index()), &sigma))
+    }
+
+    /// `true` iff aromatic system `id` structurally equals `(atoms, ast)`.
+    pub(crate) fn aromatic_system_equiv(
+        &self,
+        id: AromaticSystemId,
+        atoms: &[AtomId],
+        ast: &AromaticSystemAst,
+    ) -> bool {
+        let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
+        self.aromatic_systems
+            .participant_permutation(id.index(), &nodes)
+            .is_some_and(|sigma| ast.equiv_under(&self.aromatic_systems.data(id.index()), &sigma))
+    }
+
+    /// `true` iff multicenter bond `id` structurally equals `(atoms, ast)`.
+    pub(crate) fn multicenter_bond_equiv(
+        &self,
+        id: MulticenterBondId,
+        atoms: &[AtomId],
+        ast: &MulticenterBondAst,
+    ) -> bool {
+        let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
+        self.multicenter_bonds
+            .participant_permutation(id.index(), &nodes)
+            .is_some_and(|sigma| ast.equiv_under(&self.multicenter_bonds.data(id.index()), &sigma))
+    }
+
+    /// `true` iff dative bond `id` structurally equals `(acceptor, donors, ast)` — the acceptor
+    /// (ordered, single) and donors (unordered) factors and `ast` up to canonical form.
+    pub(crate) fn dative_bond_equiv(
+        &self,
+        id: DativeBondId,
+        acceptor: AtomId,
+        donors: &[AtomId],
+        ast: &DativeBondAst,
+    ) -> bool {
+        let donor_nodes: Vec<NodeId> = donors.iter().map(|&a| NodeId::from(a)).collect();
+        self.dative_bonds
+            .participant_permutation(id.index(), &[NodeId::from(acceptor)], &donor_nodes)
+            .is_some_and(|(s1, s2)| {
+                ast.equiv_under(&self.dative_bonds.data(id.index()), &s1, &s2)
+            })
+    }
+
+    /// `true` iff stereo atom `id` structurally equals `(site, ligands, ast)`.
+    pub(crate) fn stereo_atom_equiv(
+        &self,
+        id: StereoAtomId,
+        site: AtomId,
+        ligands: &[StereoLigand],
+        ast: &StereoAtomAst,
+    ) -> bool {
+        self.stereo_atoms
+            .participant_permutation(id.index(), &[NodeId::from(site)], ligands)
+            .is_some_and(|(s1, s2)| {
+                ast.equiv_under(&self.stereo_atoms.data(id.index()), &s1, &s2)
+            })
+    }
+
+    /// `true` iff stereo bond `id` structurally equals `(site, ligands, ast)`.
+    pub(crate) fn stereo_bond_equiv(
+        &self,
+        id: StereoBondId,
+        site: BondId,
+        ligands: &[StereoLigand],
+        ast: &StereoBondAst,
+    ) -> bool {
+        self.stereo_bonds
+            .participant_permutation(id.index(), &[EdgeId::from(site)], ligands)
+            .is_some_and(|(s1, s2)| {
+                ast.equiv_under(&self.stereo_bonds.data(id.index()), &s1, &s2)
+            })
     }
 
     pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomBuilderViewMut<'_> {

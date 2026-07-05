@@ -10,6 +10,8 @@
 use std::borrow::Cow;
 use std::hash::Hash;
 
+use umol_graph_core::{BiRelationData, ParticipantPosition, RelationData};
+
 use super::error::Contradiction;
 
 /// Build `Self` from a borrowed AST of type `A` plus a configuration context.
@@ -173,7 +175,7 @@ pub trait Lattice: Canonicalize {
 /// unsatisfiable value (e.g. an empty set).
 ///
 /// Equality is **lazy**: `==`/`Hash`/`Ord` stay derived-structural ("same
-/// tree"); semantic equality is `equiv`, comparing canonical forms. The hot
+/// tree"); semantic equality is `canonical_eq`, comparing canonical forms. The hot
 /// path is cheap — `canonical` borrows values that are already canonical.
 pub trait Canonicalize: Sized + Clone + PartialEq {
     /// By-value canonical form (the folding lives here). Idempotent.
@@ -189,10 +191,56 @@ pub trait Canonicalize: Sized + Clone + PartialEq {
     /// Semantic equality: equal canonical forms (two unsatisfiable values count
     /// as equal). Structural short-circuit first, then compare canonical forms
     /// with the derived structural `==` (on `Result<Cow<_>, _>`) — no recursion.
-    fn equiv(&self, other: &Self) -> bool {
+    fn canonical_eq(&self, other: &Self) -> bool {
         self == other || self.canonical() == other.canonical()
     }
 }
+
+/// Framed value equivalence for a single-factor relation payload: the value axis (`canonical_eq`)
+/// composed with the position axis (`on_permutation`). `equiv` is the frameless case; `equiv_under`
+/// reindexes `self` into `other`'s frame first, skipping the work when the payload is permutation-invariant.
+pub trait Equiv: RelationData + Canonicalize {
+    fn equiv(&self, other: &Self) -> bool {
+        self.canonical_eq(other)
+    }
+
+    fn equiv_under(&self, other: &Self, order: &[ParticipantPosition]) -> bool {
+        if self.is_permutation_invariant() {
+            self.canonical_eq(other)
+        } else {
+            let mut probe = self.clone();
+            probe.on_permutation(order);
+            probe.canonical_eq(other)
+        }
+    }
+}
+
+impl<T: RelationData + Canonicalize> Equiv for T {}
+
+/// Two-factor analog of [`Equiv`] for a birelation payload: `equiv_under` reindexes `self` per factor
+/// before comparing canonical forms.
+pub trait BiEquiv: BiRelationData + Canonicalize {
+    fn equiv(&self, other: &Self) -> bool {
+        self.canonical_eq(other)
+    }
+
+    fn equiv_under(
+        &self,
+        other: &Self,
+        order_1: &[ParticipantPosition],
+        order_2: &[ParticipantPosition],
+    ) -> bool {
+        if self.is_permutation_invariant() {
+            self.canonical_eq(other)
+        } else {
+            let mut probe = self.clone();
+            probe.on_permutation(order_1, order_2);
+            probe.canonical_eq(other)
+        }
+    }
+}
+
+impl<T: BiRelationData + Canonicalize> BiEquiv for T {}
 
 /// A value carrying the guarantee that it is canonical. Built via `new` (which
 /// canonicalizes once); its derived structural `Eq`/`Hash`/`Ord` are therefore

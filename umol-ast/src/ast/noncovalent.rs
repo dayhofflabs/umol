@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 
 use umol_ast_macros::{Canonicalize, Lattice};
+use umol_graph_core::{ParticipantPosition, RelationData};
 
 use super::constraint::{NoncovalentBondConstraint, NoncovalentBondConstraints};
 use super::error::Contradiction;
@@ -15,6 +16,15 @@ use super::traits::{AsLit, Canonicalize, Lattice};
 pub struct NoncovalentBondAst {
     pub kind: NoncovalentBondKindAst,
     pub constraints: NoncovalentBondConstraints,
+}
+
+impl RelationData for NoncovalentBondAst {
+    /// The kind is not position-indexed — reordering the two participants leaves it unchanged.
+    fn on_permutation(&mut self, _order: &[ParticipantPosition]) {}
+
+    fn is_permutation_invariant(&self) -> bool {
+        true
+    }
 }
 
 impl NoncovalentBondAst {

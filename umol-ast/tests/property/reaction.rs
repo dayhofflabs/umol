@@ -916,22 +916,20 @@ proptest! {
     /// composite's product. Together with `compose_sound_overlay` (composed ⊆ seq) this is set
     /// equality at `host = a.lhs`.
     ///
-    /// IGNORED — completeness needs three coordinated compose fixes, none landed:
-    /// (1) **monomorphism overlaps** — compose enumerates *induced* common subgraphs but `apply` is a
-    ///     monomorphism, so an overlap where R_A carries a bond/overlay L_B lacks (context in A's
-    ///     product) is dropped, missing the sequential product B would produce over that structure;
-    /// (2) **`meet` interface** — `lhs_c`'s overlap entity is A's lhs only, so B's specificity there
-    ///     is lost unless (3) preserves it; it must be `meet(A-lhs, B-lhs)`;
-    /// (3) **delta rebasing** — B's overlap-entity delta carries B's lhs old-state, but in the
-    ///     composite it acts on A's product state, so the `Remove` ast / `ModifyField` `old` must be
-    ///     R_A's value for `canonicalize` to fold A's modify with B's op.
-    /// (3) alone is unsound (it drops B's constraints without (2)); they must land together.
+    /// Non-stereo only: compose bails on stereo overlays (the stereo compose phase is not yet
+    /// implemented), so stereo reactants would leave `composed` empty and spuriously fail; they are
+    /// skipped here until that phase lands.
     #[test]
-    #[ignore = "compose completeness needs monomorphism overlaps + meet interface + delta rebasing together"]
     fn test_reaction_ast_compose_complete_overlay(
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
+        prop_assume!(
+            !a.lhs.has_stereo_atoms()
+                && !a.lhs.has_stereo_bonds()
+                && !b.lhs.has_stereo_atoms()
+                && !b.lhs.has_stereo_bonds()
+        );
         let host = a.lhs.clone();
         let composed: Vec<MoleculeAst> = a
             .compose(&b, CompositionScope::Full)

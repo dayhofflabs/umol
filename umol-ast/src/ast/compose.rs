@@ -4,29 +4,17 @@
 //! conditions) are rejected.
 
 use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
 
 use umol_graph_core::{
-    CommonSubgraphEnumerationAlgorithm, EdgeId, EmbeddingKind, FactorOrdering, NodeId, Unordered,
+    CommonSubgraphEnumerationAlgorithm, EdgeId, EmbeddingKind, GraphCorrespondence, NodeId,
 };
 
-use super::aromatic::AromaticSystemAst;
-use super::atom::AtomAst;
-use super::bond::BondAst;
-use super::constraint::Constraints;
-use super::dative::DativeBondAst;
 use super::delta::{
-    remap_delta, AromaticSystemDelta, AtomDelta, BondDelta, DativeBondDelta, Delta, Deltas,
+    AromaticSystemDelta, AtomDelta, BondDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta,
 };
-use super::id::{
-    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-};
-use super::molecule::MoleculeAst;
-use super::multicenter::MulticenterBondAst;
-use super::noncovalent::NoncovalentBondAst;
+use super::id::{AtomId, BondId};
 use super::reaction::ReactionAst;
-use super::remap::IdRemapping;
 use super::traits::{Canonicalize, Lattice};
 
 /// Which overlaps `compose` keeps.
@@ -45,6 +33,30 @@ impl ReactionAst {
     pub fn compose(&self, other: &ReactionAst, scope: CompositionScope) -> Vec<ReactionAst> {
         compose_all(self, other, scope).unwrap_or_default()
     }
+}
+
+/// The sequential composite for one overlap of A's product with `b`'s reactant: glue `a_inverse.lhs`
+/// (`R_A`) and `b.lhs` (`L_B`) over `overlap`, apply `A⁻¹` and `B` at the glue, and read off the
+/// composite `L_c → R_c` (`from_sides` diffs the two applied glues). `None` when the overlap is
+/// inadmissible (`⊥` meet) or either application dangles.
+fn compose_overlap(
+    a_inverse: &ReactionAst,
+    b: &ReactionAst,
+    overlap: &GraphCorrespondence,
+) -> Option<ReactionAst> {
+    let glue = a_inverse.lhs.meet_pushout(&b.lhs, overlap)?;
+    let derivation_a = a_inverse.apply_at(&glue.object, &glue.left).ok()?;
+    let derivation_b = b.apply_at(&glue.object, &glue.right).ok()?;
+    let correspondence = derivation_a.atom_map().reverse().compose(derivation_b.atom_map());
+    let composite = ReactionAst::from_sides(
+        derivation_a.rhs().clone(),
+        derivation_b.rhs().clone(),
+        correspondence,
+    );
+    Some(ReactionAst::new(
+        composite.lhs,
+        composite.deltas.canonicalize().ok()?,
+    ))
 }
 
 fn created_atom_ids(deltas: &Deltas) -> Vec<AtomId> {
@@ -71,84 +83,12 @@ fn created_bond_ids(deltas: &Deltas) -> Vec<BondId> {
     ids
 }
 
-/// Assign composite overlay ids for one overlay kind over an overlap, in four ordered classes:
-/// (1) lhs_A, (2) L_B context, (3) A-created, (4) B-created. Classes 1 and 2 live in `lhs_c`, in
-/// push order. `a_lhs`/`lb` carry, per overlay, its composite correspondence key and its prebuilt
-/// `lhs_c` entry; `lb` entries are in L_B id space, so `relabel` maps a context one into the
-/// composite frame (re-aligning any positional payload). An L_B overlay whose participants all lie
-/// in the overlap corresponds — by key — to an A-side overlay present in R_A (non-removed lhs_A +
-/// A-created), reusing its id; a required overlap overlay with no match returns `None` (skip the
-/// overlap). Keys are unique per overlay (spec §4.1). The key (`K`) and entry (`E`) are opaque, so a
-/// bond-anchored kind (stereo bond) keys on a bond + atoms and the relabel routes its site through
-/// the bond frame.
-/// One overlay kind's composite placement: A-id→composite and B-id→composite maps, plus the kind's
-/// `lhs_c` entries (classes 1 and 2, in id order).
-type OverlayPlacement<I, E> = (HashMap<I, I>, HashMap<I, I>, Vec<E>);
-
-fn place_overlays<I, K, E>(
-    a_lhs: Vec<(I, K, E)>,
-    a_removed: &HashSet<I>,
-    a_created: &[(I, K)],
-    lb: Vec<(I, K, E, bool)>,
-    b_created: &[I],
-    mut relabel: impl FnMut(E) -> E,
-) -> Option<OverlayPlacement<I, E>>
-where
-    I: Copy + Eq + Hash + From<usize>,
-    K: Eq + Hash + Clone,
-{
-    let mut da: HashMap<I, I> = HashMap::new();
-    let mut db: HashMap<I, I> = HashMap::new();
-    let mut lc: Vec<E> = Vec::new();
-    let mut index: HashMap<K, I> = HashMap::new();
-
-    // Class 1: lhs_A overlays, carried as-is; survivors seed the correspondence index.
-    for (id, key, entry) in a_lhs {
-        let cid = I::from(lc.len());
-        da.insert(id, cid);
-        if !a_removed.contains(&id) {
-            index.insert(key, cid);
-        }
-        lc.push(entry);
-    }
-
-    // Class 2: L_B context overlays, relabeled into the composite frame; overlap-region deferred.
-    let mut overlap_region: Vec<(I, K)> = Vec::new();
-    for (id, key, entry, in_overlap) in lb {
-        if in_overlap {
-            overlap_region.push((id, key));
-        } else {
-            db.insert(id, I::from(lc.len()));
-            lc.push(relabel(entry));
-        }
-    }
-    let class12 = lc.len();
-
-    // Class 3: A-created (also correspondents). Class 4: B-created.
-    for (rank, (id, key)) in a_created.iter().enumerate() {
-        let cid = I::from(class12 + rank);
-        da.insert(*id, cid);
-        index.insert(key.clone(), cid);
-    }
-    let class123 = class12 + a_created.len();
-    for (rank, id) in b_created.iter().enumerate() {
-        db.insert(*id, I::from(class123 + rank));
-    }
-
-    // Each overlap-region L_B overlay reuses its R_A correspondent's id.
-    for (id, key) in overlap_region {
-        db.insert(id, *index.get(&key)?);
-    }
-    Some((da, db, lc))
-}
-
 fn compose_all(
     a: &ReactionAst,
     b: &ReactionAst,
     scope: CompositionScope,
 ) -> Option<Vec<ReactionAst>> {
     let da = a.deltas.clone().canonicalize().ok()?;
-    let db = b.deltas.clone().canonicalize().ok()?;
     // Stereo overlays arrive in I6; bail if either reactant carries one.
     if a.lhs.has_stereo_atoms()
         || a.lhs.has_stereo_bonds()
@@ -162,8 +102,6 @@ fn compose_all(
     let l_b = &b.lhs;
     let n_a = a.lhs.atoms().count();
     let m_a = a.lhs.bonds().count();
-    let n_b = l_b.atoms().count();
-    let m_b = l_b.bonds().count();
 
     // R_A id ⇒ A id: the span's union id space is `lhs_A` in place then A-created appended, and
     // `right()` keeps the survivors in that order, so the k-th survivor's A-id index is the
@@ -185,9 +123,6 @@ fn compose_all(
             ra_bond_a_id.push(a_id);
         }
     }
-    let a_created_atoms = span_a.atoms().len() - n_a;
-    let a_created_bonds = span_a.bonds().len() - m_a;
-
     // A-created delta id ⇒ A-id rank (the span appends them sorted by id).
     let a_atom_rank: HashMap<AtomId, usize> = created_atom_ids(&da)
         .into_iter()
@@ -311,99 +246,28 @@ fn compose_all(
     };
     // Every overlap of R_A with L_B — the *complete* common-subgraph enumeration, not just the
     // maximal ones: each distinct (incl. partial and empty) overlap is a distinct sequential
-    // composite, so completeness (`seq ⊆ composed`) requires all of them. Induced for now: the
-    // R_A bond lookup below assumes overlap bonds coincide in R_A. Widening to monomorphism overlaps
-    // (keeping R_A context bonds) needs the meet-interface + delta-rebasing rewrite to land together.
+    // composite, so completeness (`seq ⊆ composed`) requires all of them. Monomorphism (not induced):
+    // an R_A bond absent in the matched L_B region stays as R_A context (the R1 case), rather than
+    // forcing the overlap edge-for-edge. `compose_overlap` builds the composite by gluing over the
+    // overlap.
     let overlaps = r_a.raw_graph().enumerate_common_subgraphs(
         l_b.raw_graph(),
         &mut node_match,
         &mut edge_match,
-        EmbeddingKind::Induced,
+        EmbeddingKind::Monomorphism,
         CommonSubgraphEnumerationAlgorithm::Backtracking,
     );
-
-    let db_created_atom_rank: HashMap<AtomId, usize> = created_atom_ids(&db)
-        .into_iter()
-        .enumerate()
-        .map(|(rank, id)| (id, rank))
-        .collect();
-    let db_created_bond_rank: HashMap<BondId, usize> = created_bond_ids(&db)
-        .into_iter()
-        .enumerate()
-        .map(|(rank, id)| (id, rank))
-        .collect();
-    let db_removed_atoms: HashSet<AtomId> = db
-        .iter()
-        .filter_map(|d| match d {
-            Delta::Atom(AtomDelta::Remove { id, .. }) => Some(*id),
-            _ => None,
-        })
-        .collect();
-    let db_removed_bonds: HashSet<BondId> = db
-        .iter()
-        .filter_map(|d| match d {
-            Delta::Bond(BondDelta::Remove { id, .. }) => Some(*id),
-            _ => None,
-        })
-        .collect();
-    // Overlays B deletes, keyed by sorted L_B participant set (for the combined-frame overlay
-    // dangling check). A deleted shared atom's R_A overlay must correspond to one of these.
-    let sorted = |mut p: Vec<AtomId>| {
-        p.sort();
-        p
-    };
-    let b_removed_dative: HashSet<Vec<AtomId>> = db
-        .iter()
-        .filter_map(|d| match d {
-            Delta::DativeBond(DativeBondDelta::Remove {
-                donors, acceptor, ..
-            }) => Some(sorted(donors.iter().copied().chain([*acceptor]).collect())),
-            _ => None,
-        })
-        .collect();
-    let b_removed_aromatic: HashSet<Vec<AtomId>> = db
-        .iter()
-        .filter_map(|d| match d {
-            Delta::AromaticSystem(AromaticSystemDelta::Remove { atoms, .. }) => {
-                Some(sorted(atoms.clone()))
-            }
-            _ => None,
-        })
-        .collect();
-    let b_removed_multicenter: HashSet<Vec<AtomId>> = db
-        .iter()
-        .filter_map(|d| match d {
-            Delta::MulticenterBond(MulticenterBondDelta::Remove { atoms, .. }) => {
-                Some(sorted(atoms.clone()))
-            }
-            _ => None,
-        })
-        .collect();
-    let b_removed_noncovalent: HashSet<Vec<AtomId>> = db
-        .iter()
-        .filter_map(|d| match d {
-            Delta::NoncovalentBond(NoncovalentBondDelta::Remove { atoms, .. }) => {
-                Some(sorted(atoms.to_vec()))
-            }
-            _ => None,
-        })
-        .collect();
+    let a_inverse = a.reverse().ok()?;
 
     let mut results = Vec::new();
     for overlap in overlaps {
-        let mapping = overlap.nodes().mates();
-        let lb_to_ra: HashMap<AtomId, AtomId> = mapping
-            .iter()
-            .map(|&(ra, lb)| (AtomId::from(lb), AtomId::from(ra)))
-            .collect();
-        let ra_to_lb: HashMap<AtomId, AtomId> = mapping
-            .iter()
-            .map(|&(ra, lb)| (AtomId::from(ra), AtomId::from(lb)))
-            .collect();
-        let overlap_lb: HashSet<AtomId> = lb_to_ra.keys().copied().collect();
-        let overlap_ra: HashSet<AtomId> = ra_to_lb.keys().copied().collect();
-
         if matches!(scope, CompositionScope::RcAnchored) {
+            let overlap_ra: HashSet<AtomId> = overlap
+                .nodes()
+                .mates()
+                .iter()
+                .map(|&(ra, _)| AtomId::from(ra))
+                .collect();
             let touches_atom = overlap_ra.iter().any(|ra| rc_ra_atoms.contains(ra));
             let touches_bond = rc_ra_bonds.iter().any(|&rb| {
                 let [x, y] = r_a.raw_graph().edge_endpoints(EdgeId(rb.0));
@@ -413,580 +277,9 @@ fn compose_all(
                 continue;
             }
         }
-
-        let is_ra_created = |ra: AtomId| ra_atom_a_id[ra.index()] >= n_a;
-
-        // Extra (non-overlap) L_B atoms → composite class 2 (`n_a..n_a+e`).
-        let lb_extra: Vec<AtomId> = (0..n_b as u32)
-            .map(AtomId)
-            .filter(|x| !overlap_lb.contains(x))
-            .collect();
-        let e = lb_extra.len();
-        let lb_extra_comp: HashMap<AtomId, usize> = lb_extra
-            .iter()
-            .enumerate()
-            .map(|(rank, &x)| (x, n_a + rank))
-            .collect();
-
-        // Classify L_B bonds; context bonds (incident to an extra atom) become composite class 2.
-        // Pushout-complement: a context bond whose overlap endpoint is A-created has no place in
-        // `lhs_C` → the overlap is inadmissible.
-        let mut context_bonds: Vec<BondId> = Vec::new();
-        let mut admissible = true;
-        for j in 0..m_b as u32 {
-            let [u, v] = l_b.raw_graph().edge_endpoints(EdgeId(j));
-            let (u, v) = (AtomId::from(u), AtomId::from(v));
-            let u_overlap = overlap_lb.contains(&u);
-            let v_overlap = overlap_lb.contains(&v);
-            if u_overlap && v_overlap {
-                continue;
-            }
-            if (u_overlap && is_ra_created(lb_to_ra[&u]))
-                || (v_overlap && is_ra_created(lb_to_ra[&v]))
-            {
-                admissible = false;
-                break;
-            }
-            context_bonds.push(BondId(j));
+        if let Some(composite) = compose_overlap(&a_inverse, b, &overlap) {
+            results.push(composite);
         }
-        if !admissible {
-            continue;
-        }
-        let f = context_bonds.len();
-        let context_comp: HashMap<BondId, usize> = context_bonds
-            .iter()
-            .enumerate()
-            .map(|(rank, &x)| (x, m_a + rank))
-            .collect();
-
-        // Overlay pushout-complement: a context overlay (≥1 participant off the overlap) whose
-        // overlap participant is A-created has no place in `lhs_c` (created atoms are not in `lhs_c`)
-        // → the overlap is inadmissible, mirroring the context-bond check above.
-        let overlay_context_inadmissible = |atoms: &[AtomId]| {
-            atoms.iter().any(|a| !overlap_lb.contains(a))
-                && atoms
-                    .iter()
-                    .any(|a| overlap_lb.contains(a) && is_ra_created(lb_to_ra[a]))
-        };
-        let inadmissible_overlay = l_b
-            .dative_bonds()
-            .iter()
-            .any(|x| overlay_context_inadmissible(&x.atom_ids().collect::<Vec<_>>()))
-            || l_b
-                .aromatic_systems()
-                .iter()
-                .any(|x| overlay_context_inadmissible(&x.atom_ids().collect::<Vec<_>>()))
-            || l_b
-                .multicenter_bonds()
-                .iter()
-                .any(|x| overlay_context_inadmissible(&x.atom_ids().collect::<Vec<_>>()))
-            || l_b
-                .noncovalent_bonds()
-                .iter()
-                .any(|x| overlay_context_inadmissible(&x.atom_ids()));
-        if inadmissible_overlay {
-            continue;
-        }
-
-        // Composite-id-space dangling: if B deletes a shared (overlap) atom, every R_A bond or
-        // overlay incident to its image must be one B also deletes; an A-product bond/overlay B
-        // cannot see would dangle.
-        let mut dangling = false;
-        // An R_A overlay on a deleted shared atom dangles unless all its participants are in the
-        // overlap and B removes the corresponding overlay (matched by sorted L_B participant set).
-        let overlay_dangles = |parts: Vec<AtomId>, removed: &HashSet<Vec<AtomId>>| -> bool {
-            let mut lb: Vec<AtomId> = Vec::with_capacity(parts.len());
-            for p in parts {
-                match ra_to_lb.get(&p) {
-                    Some(&id) => lb.push(id),
-                    None => return true,
-                }
-            }
-            lb.sort();
-            !removed.contains(&lb)
-        };
-        for &u in &db_removed_atoms {
-            if !overlap_lb.contains(&u) {
-                continue;
-            }
-            let ru = lb_to_ra[&u];
-            for rb in r_a.atom(ru).bond_ids() {
-                let [x, y] = r_a.raw_graph().edge_endpoints(EdgeId(rb.0));
-                let other = if AtomId::from(x) == ru {
-                    AtomId::from(y)
-                } else {
-                    AtomId::from(x)
-                };
-                if !overlap_ra.contains(&other) {
-                    dangling = true;
-                    break;
-                }
-                let w = ra_to_lb[&other];
-                match l_b.raw_graph().find_edge(NodeId::from(u), NodeId::from(w)) {
-                    Some(le) if db_removed_bonds.contains(&BondId::from(le)) => {}
-                    _ => {
-                        dangling = true;
-                        break;
-                    }
-                }
-            }
-            if !dangling {
-                for od in r_a.atom(ru).dative_bond_ids() {
-                    if overlay_dangles(r_a.dative_bond(od).atom_ids().collect(), &b_removed_dative)
-                    {
-                        dangling = true;
-                        break;
-                    }
-                }
-            }
-            if !dangling {
-                if let Some(oa) = r_a.atom(ru).aromatic_system_id() {
-                    if overlay_dangles(
-                        r_a.aromatic_system(oa).atom_ids().collect(),
-                        &b_removed_aromatic,
-                    ) {
-                        dangling = true;
-                    }
-                }
-            }
-            if !dangling {
-                for om in r_a.atom(ru).multicenter_bond_ids() {
-                    if overlay_dangles(
-                        r_a.multicenter_bond(om).atom_ids().collect(),
-                        &b_removed_multicenter,
-                    ) {
-                        dangling = true;
-                        break;
-                    }
-                }
-            }
-            if !dangling {
-                for on in r_a.atom(ru).noncovalent_bond_ids() {
-                    if overlay_dangles(
-                        r_a.noncovalent_bond(on).atom_ids().to_vec(),
-                        &b_removed_noncovalent,
-                    ) {
-                        dangling = true;
-                        break;
-                    }
-                }
-            }
-            if dangling {
-                break;
-            }
-        }
-        if dangling {
-            continue;
-        }
-
-        // Composite id maps. A id → composite: `lhs_A`/`lhs_A`-bonds keep their id; A-created
-        // shift past the appended extras (atoms by `e`, bonds by `f`).
-        let composite_atom_id = |a_id: usize| {
-            if a_id < n_a {
-                a_id
-            } else {
-                n_a + e + (a_id - n_a)
-            }
-        };
-        let composite_bond_id = |a_id: usize| {
-            if a_id < m_a {
-                a_id
-            } else {
-                m_a + f + (a_id - m_a)
-            }
-        };
-        let ra_atom_comp = |ra: AtomId| AtomId(composite_atom_id(ra_atom_a_id[ra.index()]) as u32);
-        let ra_bond_comp = |rb: BondId| BondId(composite_bond_id(ra_bond_a_id[rb.index()]) as u32);
-
-        let mut da_atom: HashMap<AtomId, AtomId> =
-            (0..n_a as u32).map(|i| (AtomId(i), AtomId(i))).collect();
-        for (&id, &rank) in &a_atom_rank {
-            da_atom.insert(id, AtomId((n_a + e + rank) as u32));
-        }
-        let mut da_bond: HashMap<BondId, BondId> =
-            (0..m_a as u32).map(|j| (BondId(j), BondId(j))).collect();
-        for (&id, &rank) in &a_bond_rank {
-            da_bond.insert(id, BondId((m_a + f + rank) as u32));
-        }
-
-        let b_atom_base = n_a + e + a_created_atoms;
-        let b_bond_base = m_a + f + a_created_bonds;
-        let mut db_atom: HashMap<AtomId, AtomId> = HashMap::new();
-        for j in 0..n_b as u32 {
-            let lb = AtomId(j);
-            let comp = match lb_to_ra.get(&lb) {
-                Some(&ra) => ra_atom_comp(ra),
-                None => AtomId(lb_extra_comp[&lb] as u32),
-            };
-            db_atom.insert(lb, comp);
-        }
-        for (&id, &rank) in &db_created_atom_rank {
-            db_atom.insert(id, AtomId((b_atom_base + rank) as u32));
-        }
-        let mut db_bond: HashMap<BondId, BondId> = HashMap::new();
-        for j in 0..m_b as u32 {
-            let lb = BondId(j);
-            let [u, v] = l_b.raw_graph().edge_endpoints(EdgeId(j));
-            let (u, v) = (AtomId::from(u), AtomId::from(v));
-            let comp = if overlap_lb.contains(&u) && overlap_lb.contains(&v) {
-                let re = r_a
-                    .raw_graph()
-                    .find_edge(NodeId::from(lb_to_ra[&u]), NodeId::from(lb_to_ra[&v]))
-                    .expect("an induced overlap bond exists in R_A");
-                ra_bond_comp(BondId::from(re))
-            } else {
-                BondId(context_comp[&lb] as u32)
-            };
-            db_bond.insert(lb, comp);
-        }
-        for (&id, &rank) in &db_created_bond_rank {
-            db_bond.insert(id, BondId((b_bond_base + rank) as u32));
-        }
-
-        // lhs_C = lhs_A + extra L_B atoms, with lhs_A bonds + the L_B context bonds.
-        let mut lc_atoms: Vec<AtomAst> = Vec::with_capacity(n_a + e);
-        for i in 0..n_a as u32 {
-            lc_atoms.push(a.lhs.atom(AtomId(i)).ast.clone());
-        }
-        for &x in &lb_extra {
-            lc_atoms.push(l_b.atom(x).ast.clone());
-        }
-        let mut lc_bonds: Vec<(AtomId, AtomId, BondAst)> = Vec::new();
-        for j in 0..m_a as u32 {
-            let [x, y] = a.lhs.raw_graph().edge_endpoints(EdgeId(j));
-            lc_bonds.push((
-                AtomId::from(x),
-                AtomId::from(y),
-                a.lhs.bond(BondId(j)).ast.clone(),
-            ));
-        }
-        for &cb in &context_bonds {
-            let [u, v] = l_b.raw_graph().edge_endpoints(EdgeId(cb.0));
-            lc_bonds.push((
-                db_atom[&AtomId::from(u)],
-                db_atom[&AtomId::from(v)],
-                l_b.bond(cb).ast.clone(),
-            ));
-        }
-
-        // Overlay frame, DAMN order (stereo is I6): per kind, place the four-class ids and carry
-        // class 1 (lhs_A, identity) + class 2 (L_B context, relabeled) into `lhs_c`; classes 3/4 are
-        // delta-created. Aromatic/multicenter relabel re-sorts participants and permutes electrons.
-
-        // Dative.
-        let removed_d: HashSet<DativeBondId> = da
-            .iter()
-            .filter_map(|d| match d {
-                Delta::DativeBond(DativeBondDelta::Remove { id, .. }) => Some(*id),
-                _ => None,
-            })
-            .collect();
-        let a_lhs_d = a
-            .lhs
-            .dative_bonds()
-            .iter()
-            .map(|x| {
-                let acceptor = x.acceptor_id();
-                let donors: Vec<AtomId> = x.atom_ids().filter(|a| *a != acceptor).collect();
-                let mut key: Vec<AtomId> = x.atom_ids().collect();
-                key.sort();
-                (x.id, key, (donors, acceptor, x.ast.clone()))
-            })
-            .collect();
-        let mut a_created_d: Vec<(DativeBondId, Vec<AtomId>)> = da
-            .iter()
-            .filter_map(|d| match d {
-                Delta::DativeBond(DativeBondDelta::Add {
-                    id,
-                    donors,
-                    acceptor,
-                    ..
-                }) => {
-                    let mut key: Vec<AtomId> = donors.iter().map(|a| da_atom[a]).collect();
-                    key.push(da_atom[acceptor]);
-                    key.sort();
-                    Some((*id, key))
-                }
-                _ => None,
-            })
-            .collect();
-        a_created_d.sort_by_key(|(id, _)| *id);
-        let lb_d = l_b
-            .dative_bonds()
-            .iter()
-            .map(|x| {
-                let acceptor = x.acceptor_id();
-                let atoms: Vec<AtomId> = x.atom_ids().collect();
-                let in_overlap = atoms.iter().all(|a| overlap_lb.contains(a));
-                let donors: Vec<AtomId> =
-                    atoms.iter().copied().filter(|a| *a != acceptor).collect();
-                let mut key: Vec<AtomId> = atoms.iter().map(|a| db_atom[a]).collect();
-                key.sort();
-                (x.id, key, (donors, acceptor, x.ast.clone()), in_overlap)
-            })
-            .collect();
-        let mut b_created_d: Vec<DativeBondId> = db
-            .iter()
-            .filter_map(|d| match d {
-                Delta::DativeBond(DativeBondDelta::Add { id, .. }) => Some(*id),
-                _ => None,
-            })
-            .collect();
-        b_created_d.sort();
-        let Some((da_dative, db_dative, lc_dative)) = place_overlays(
-            a_lhs_d,
-            &removed_d,
-            &a_created_d,
-            lb_d,
-            &b_created_d,
-            |(donors, acceptor, ast): (Vec<AtomId>, AtomId, DativeBondAst)| {
-                (
-                    donors.iter().map(|a| db_atom[a]).collect(),
-                    db_atom[&acceptor],
-                    ast,
-                )
-            },
-        ) else {
-            continue;
-        };
-
-        // Aromatic.
-        let removed_a: HashSet<AromaticSystemId> = da
-            .iter()
-            .filter_map(|d| match d {
-                Delta::AromaticSystem(AromaticSystemDelta::Remove { id, .. }) => Some(*id),
-                _ => None,
-            })
-            .collect();
-        let a_lhs_a = a
-            .lhs
-            .aromatic_systems()
-            .iter()
-            .map(|x| {
-                let mut key: Vec<AtomId> = x.atom_ids().collect();
-                key.sort();
-                (x.id, key, (x.atom_ids().collect(), x.ast.clone()))
-            })
-            .collect();
-        let mut a_created_a: Vec<(AromaticSystemId, Vec<AtomId>)> = da
-            .iter()
-            .filter_map(|d| match d {
-                Delta::AromaticSystem(AromaticSystemDelta::Add { id, atoms, .. }) => {
-                    let mut key: Vec<AtomId> = atoms.iter().map(|a| da_atom[a]).collect();
-                    key.sort();
-                    Some((*id, key))
-                }
-                _ => None,
-            })
-            .collect();
-        a_created_a.sort_by_key(|(id, _)| *id);
-        let lb_a = l_b
-            .aromatic_systems()
-            .iter()
-            .map(|x| {
-                let atoms: Vec<AtomId> = x.atom_ids().collect();
-                let in_overlap = atoms.iter().all(|a| overlap_lb.contains(a));
-                let mut key: Vec<AtomId> = atoms.iter().map(|a| db_atom[a]).collect();
-                key.sort();
-                (x.id, key, (atoms, x.ast.clone()), in_overlap)
-            })
-            .collect();
-        let mut b_created_a: Vec<AromaticSystemId> = db
-            .iter()
-            .filter_map(|d| match d {
-                Delta::AromaticSystem(AromaticSystemDelta::Add { id, .. }) => Some(*id),
-                _ => None,
-            })
-            .collect();
-        b_created_a.sort();
-        let Some((da_aromatic, db_aromatic, lc_aromatic)) = place_overlays(
-            a_lhs_a,
-            &removed_a,
-            &a_created_a,
-            lb_a,
-            &b_created_a,
-            |(members, ast): (Vec<AtomId>, AromaticSystemAst)| {
-                let mut members: Vec<AtomId> = members.iter().map(|a| db_atom[a]).collect();
-                let order = Unordered::canonicalize_positions(&mut members);
-                let mut ast = ast;
-                ast.permute(&order);
-                (members, ast)
-            },
-        ) else {
-            continue;
-        };
-
-        // Multicenter.
-        let removed_m: HashSet<MulticenterBondId> = da
-            .iter()
-            .filter_map(|d| match d {
-                Delta::MulticenterBond(MulticenterBondDelta::Remove { id, .. }) => Some(*id),
-                _ => None,
-            })
-            .collect();
-        let a_lhs_m = a
-            .lhs
-            .multicenter_bonds()
-            .iter()
-            .map(|x| {
-                let mut key: Vec<AtomId> = x.atom_ids().collect();
-                key.sort();
-                (x.id, key, (x.atom_ids().collect(), x.ast.clone()))
-            })
-            .collect();
-        let mut a_created_m: Vec<(MulticenterBondId, Vec<AtomId>)> = da
-            .iter()
-            .filter_map(|d| match d {
-                Delta::MulticenterBond(MulticenterBondDelta::Add { id, atoms, .. }) => {
-                    let mut key: Vec<AtomId> = atoms.iter().map(|a| da_atom[a]).collect();
-                    key.sort();
-                    Some((*id, key))
-                }
-                _ => None,
-            })
-            .collect();
-        a_created_m.sort_by_key(|(id, _)| *id);
-        let lb_m = l_b
-            .multicenter_bonds()
-            .iter()
-            .map(|x| {
-                let atoms: Vec<AtomId> = x.atom_ids().collect();
-                let in_overlap = atoms.iter().all(|a| overlap_lb.contains(a));
-                let mut key: Vec<AtomId> = atoms.iter().map(|a| db_atom[a]).collect();
-                key.sort();
-                (x.id, key, (atoms, x.ast.clone()), in_overlap)
-            })
-            .collect();
-        let mut b_created_m: Vec<MulticenterBondId> = db
-            .iter()
-            .filter_map(|d| match d {
-                Delta::MulticenterBond(MulticenterBondDelta::Add { id, .. }) => Some(*id),
-                _ => None,
-            })
-            .collect();
-        b_created_m.sort();
-        let Some((da_multicenter, db_multicenter, lc_multicenter)) = place_overlays(
-            a_lhs_m,
-            &removed_m,
-            &a_created_m,
-            lb_m,
-            &b_created_m,
-            |(members, ast): (Vec<AtomId>, MulticenterBondAst)| {
-                let mut members: Vec<AtomId> = members.iter().map(|a| db_atom[a]).collect();
-                let order = Unordered::canonicalize_positions(&mut members);
-                let mut ast = ast;
-                ast.permute(&order);
-                (members, ast)
-            },
-        ) else {
-            continue;
-        };
-
-        // Noncovalent.
-        let removed_n: HashSet<NoncovalentBondId> = da
-            .iter()
-            .filter_map(|d| match d {
-                Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, .. }) => Some(*id),
-                _ => None,
-            })
-            .collect();
-        let a_lhs_n = a
-            .lhs
-            .noncovalent_bonds()
-            .iter()
-            .map(|x| {
-                let [u, v] = x.atom_ids();
-                let mut key = vec![u, v];
-                key.sort();
-                (x.id, key, (u, v, x.ast.clone()))
-            })
-            .collect();
-        let mut a_created_n: Vec<(NoncovalentBondId, Vec<AtomId>)> = da
-            .iter()
-            .filter_map(|d| match d {
-                Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, atoms, .. }) => {
-                    let mut key: Vec<AtomId> = atoms.iter().map(|a| da_atom[a]).collect();
-                    key.sort();
-                    Some((*id, key))
-                }
-                _ => None,
-            })
-            .collect();
-        a_created_n.sort_by_key(|(id, _)| *id);
-        let lb_n = l_b
-            .noncovalent_bonds()
-            .iter()
-            .map(|x| {
-                let [u, v] = x.atom_ids();
-                let in_overlap = overlap_lb.contains(&u) && overlap_lb.contains(&v);
-                let mut key = vec![db_atom[&u], db_atom[&v]];
-                key.sort();
-                (x.id, key, (u, v, x.ast.clone()), in_overlap)
-            })
-            .collect();
-        let mut b_created_n: Vec<NoncovalentBondId> = db
-            .iter()
-            .filter_map(|d| match d {
-                Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, .. }) => Some(*id),
-                _ => None,
-            })
-            .collect();
-        b_created_n.sort();
-        let Some((da_noncovalent, db_noncovalent, lc_noncovalent)) = place_overlays(
-            a_lhs_n,
-            &removed_n,
-            &a_created_n,
-            lb_n,
-            &b_created_n,
-            |(u, v, ast): (AtomId, AtomId, NoncovalentBondAst)| (db_atom[&u], db_atom[&v], ast),
-        ) else {
-            continue;
-        };
-
-        let lhs_c = MoleculeAst::from_parts(
-            lc_atoms,
-            lc_bonds,
-            lc_dative,
-            lc_aromatic,
-            lc_multicenter,
-            lc_noncovalent,
-            Vec::new(),
-            Vec::new(),
-            Constraints::new(),
-        );
-
-        // Stereo overlays have no deltas yet (I6).
-        let da_map = IdRemapping::new(
-            da_atom,
-            da_bond,
-            da_dative,
-            da_aromatic,
-            da_multicenter,
-            da_noncovalent,
-            HashMap::new(),
-            HashMap::new(),
-        );
-        let db_map = IdRemapping::new(
-            db_atom,
-            db_bond,
-            db_dative,
-            db_aromatic,
-            db_multicenter,
-            db_noncovalent,
-            HashMap::new(),
-            HashMap::new(),
-        );
-        let mut deltas: Vec<Delta> = Vec::with_capacity(da.len() + db.len());
-        for delta in da.iter() {
-            deltas.push(remap_delta(delta.clone(), &da_map));
-        }
-        for delta in db.iter() {
-            deltas.push(remap_delta(delta.clone(), &db_map));
-        }
-        let Ok(deltas) = Deltas::from_iter(deltas).canonicalize() else {
-            continue;
-        };
-        results.push(ReactionAst::new(lhs_c, deltas));
     }
     Some(results)
 }
@@ -995,10 +288,15 @@ fn compose_all(
 mod tests {
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::SubgraphIsomorphismAlgorithm;
+    use umol_graph_core::{Correspondence, SubgraphIsomorphismAlgorithm};
 
+    use super::super::aromatic::AromaticSystemAst;
+    use super::super::atom::AtomAst;
+    use super::super::bond::BondAst;
     use super::super::constraint::Constraints;
     use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange};
+    use super::super::id::{AromaticSystemId, NoncovalentBondId};
+    use super::super::molecule::MoleculeAst;
     use super::super::noncovalent::{
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
     };
@@ -1801,5 +1099,57 @@ mod tests {
         );
         assert_eq!(composed, vec![product.clone()]);
         assert_eq!(sequential, vec![product]);
+    }
+
+    // compose_overlap builds the span composite for one overlap: A (C–O order 1→2) then B (2→3), fused
+    // over the shared overlap; applied at the host it reproduces B(A(host)).
+    #[rstest]
+    #[case::order_fuse(1, 2, 3)]
+    fn test_compose_overlap(#[case] start: i64, #[case] mid: i64, #[case] end: i64) {
+        let a = ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::O),
+                ],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(start as u8))],
+            ),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order {
+                    old: ValueAst::Lit(start),
+                    new: ValueAst::Lit(mid),
+                },
+            })]),
+        );
+        let b = ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::O),
+                ],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(mid as u8))],
+            ),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order {
+                    old: ValueAst::Lit(mid),
+                    new: ValueAst::Lit(end),
+                },
+            })]),
+        );
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2),
+            Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1),
+        );
+        let a_inverse = a.reverse().unwrap();
+        let composite = compose_overlap(&a_inverse, &b, &overlap).expect("admissible composite");
+
+        let alg = SubgraphIsomorphismAlgorithm::Vf2;
+        let host = a.lhs.clone();
+        let intermediate = a.apply(&host, alg).next().unwrap().rhs().clone();
+        let sequential = b.apply(&intermediate, alg).next().unwrap().rhs().clone();
+        let composed = composite.apply(&host, alg).next().unwrap().rhs().clone();
+        assert_eq!(composed, sequential);
     }
 }

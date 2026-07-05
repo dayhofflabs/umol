@@ -1,6 +1,7 @@
 //! Dative bond AST.
 
 use umol_ast_macros::{Canonicalize, Lattice};
+use umol_graph_core::{BiRelationData, ParticipantPosition};
 
 use super::constraint::{DativeBondConstraint, DativeBondConstraints};
 use super::traits::Lattice;
@@ -14,6 +15,20 @@ pub struct DativeBondAst {
     /// Bond order — number of electron pairs donated.
     pub order: ValueAst,
     pub constraints: DativeBondConstraints,
+}
+
+impl BiRelationData for DativeBondAst {
+    /// `order` is a scalar; neither the acceptor nor the donor factor is position-indexed.
+    fn on_permutation(
+        &mut self,
+        _order_1: &[ParticipantPosition],
+        _order_2: &[ParticipantPosition],
+    ) {
+    }
+
+    fn is_permutation_invariant(&self) -> bool {
+        true
+    }
 }
 
 impl DativeBondAst {
