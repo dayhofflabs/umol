@@ -5,7 +5,7 @@
 
 use umol_graph_core::{
     EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, GraphCorrespondence, NodeId,
-    ParticipantPosition, RelationData, Unordered, VarRelationSet,
+    Ordered, ParticipantPosition, RelationData, RelationParticipant, Unordered, VarRelationSet,
 };
 
 use super::super::atom::AtomAst;
@@ -14,8 +14,10 @@ use super::super::constraint::Constraints;
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::DativeBondAst;
 use super::super::id::{AtomId, BondId};
+use super::super::ligand::StereoLigand;
 use super::super::noncovalent::NoncovalentBondAst;
 use super::super::remap::IdRemapping;
+use super::super::stereo::{StereoAtomAst, StereoBondAst};
 use super::super::traits::Lattice;
 use super::MoleculeAst;
 
@@ -33,7 +35,8 @@ impl MoleculeAst {
     /// Glue `self` (left) and `other` (right) over `overlap` (a common subgraph — its edges the
     /// coincident bonds), meeting atom / bond / overlay data at coincident entities and combining the
     /// two molecule-constraint sets; `None` when any coincident `meet` is `⊥` (the overlap is
-    /// inadmissible). Stereo overlays are not yet carried.
+    /// inadmissible). Stereo overlays are carried by canonicalizing each side's ligand frame
+    /// (`transform_frame`) before the pushout, so coincident cosets `meet` in a shared frame.
     #[allow(dead_code)]
     pub fn meet_pushout(
         &self,
@@ -159,6 +162,77 @@ impl MoleculeAst {
             })
             .collect();
 
+        // Stereo overlays differ: ligand order is meaningful (the coset is frame-relative), so both
+        // sides are relabeled into the glue space and their ligands sorted into one canonical frame —
+        // `transform_frame` carries each coset into that frame — before the full-participant relation
+        // `pushout` coincides same-site / same-ligands specs and `meet`s their cosets (`⊥ → None`).
+        let map_edge = |e: EdgeId| po.right.edges().right_of(e).expect("right total on other edges");
+        let map_ligand_atom = |a: AtomId| AtomId::from(map_node(NodeId::from(a)));
+
+        let stereo_atom_left: FixedVarBirelationSet<
+            NodeId,
+            Ordered,
+            1,
+            StereoLigand,
+            Ordered,
+            StereoAtomAst,
+        > = FixedVarBirelationSet::new(stereo_glue_entries(
+            &self.stereo_atoms,
+            |s| s,
+            |a| a,
+            |d, before, after| d.transform_frame(before, after),
+        ));
+        let stereo_atom_right = FixedVarBirelationSet::new(stereo_glue_entries(
+            &other.stereo_atoms,
+            map_node,
+            map_ligand_atom,
+            |d, before, after| d.transform_frame(before, after),
+        ));
+        let stereo_atom_merged = stereo_atom_left.pushout(&stereo_atom_right, |a, b| a.meet(b))?;
+        let sa_object = &stereo_atom_merged.object;
+        let stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> = sa_object
+            .relation_ids()
+            .map(|id| {
+                (
+                    AtomId::from(sa_object.participants_1(id)[0]),
+                    sa_object.participants_2(id).to_vec(),
+                    sa_object.data(id).clone(),
+                )
+            })
+            .collect();
+
+        let stereo_bond_left: FixedVarBirelationSet<
+            EdgeId,
+            Ordered,
+            1,
+            StereoLigand,
+            Ordered,
+            StereoBondAst,
+        > = FixedVarBirelationSet::new(stereo_glue_entries(
+            &self.stereo_bonds,
+            |s| s,
+            |a| a,
+            |d, before, after| d.transform_frame(before, after),
+        ));
+        let stereo_bond_right = FixedVarBirelationSet::new(stereo_glue_entries(
+            &other.stereo_bonds,
+            map_edge,
+            map_ligand_atom,
+            |d, before, after| d.transform_frame(before, after),
+        ));
+        let stereo_bond_merged = stereo_bond_left.pushout(&stereo_bond_right, |a, b| a.meet(b))?;
+        let sb_object = &stereo_bond_merged.object;
+        let stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)> = sb_object
+            .relation_ids()
+            .map(|id| {
+                (
+                    BondId::from(sb_object.participants_1(id)[0]),
+                    sb_object.participants_2(id).to_vec(),
+                    sb_object.data(id).clone(),
+                )
+            })
+            .collect();
+
         let mut object = MoleculeAst::from_parts(
             atoms,
             bonds,
@@ -166,8 +240,8 @@ impl MoleculeAst {
             aromatic,
             multicenter,
             noncovalent,
-            Vec::new(),
-            Vec::new(),
+            stereo_atoms,
+            stereo_bonds,
             Constraints::new(),
         );
 
@@ -254,6 +328,37 @@ fn glue_var_overlays<D: Lattice + RelationData>(
     )
 }
 
+/// Relabel one side's stereo overlay family into the glue space (`map_site` for the site, `map_atom`
+/// for each ligand's atom) and sort each spec's ligands into one canonical (ascending atom-id) frame,
+/// carrying the coset there via `transform` (`transform_frame`). Both sides run through this before the
+/// full-participant relation `pushout`, so same-site / same-ligands specs coincide with their cosets in
+/// a shared frame and `meet` correctly.
+fn stereo_glue_entries<S, D>(
+    set: &FixedVarBirelationSet<S, Ordered, 1, StereoLigand, Ordered, D>,
+    map_site: impl Fn(S) -> S,
+    map_atom: impl Fn(AtomId) -> AtomId,
+    transform: impl Fn(&D, &[StereoLigand], &[StereoLigand]) -> D,
+) -> Vec<([S; 1], Vec<StereoLigand>, D)>
+where
+    S: RelationParticipant,
+    D: Clone,
+{
+    set.relation_ids()
+        .map(|id| {
+            let site = map_site(set.participants_1(id)[0]);
+            let stored: Vec<StereoLigand> = set
+                .participants_2(id)
+                .iter()
+                .map(|&l| StereoLigand::new(map_atom(l.atom_id), l.kind))
+                .collect();
+            let mut canonical = stored.clone();
+            canonical.sort_unstable();
+            let data = transform(set.data(id), &stored, &canonical);
+            ([site], canonical, data)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::*;
@@ -262,6 +367,8 @@ mod tests {
 
     use super::super::super::aromatic::AromaticSystemAst;
     use super::super::super::constraint::{AtomConstraint, Constraint};
+    use super::super::super::ligand::StereoLigandKind;
+    use super::super::super::stereo::StereoKind;
     use super::*;
 
     // A single shared atom (node 0 ↔ node 0), no shared bond; each side has one exposed atom.
@@ -478,6 +585,65 @@ mod tests {
             left.meet_pushout(&right, &overlap)
                 .expect("admissible")
                 .object,
+            expected,
+        );
+    }
+
+    // One tetrahedral center on atom 0 (ligands {1,2,3,4}) shared by both molecules, but `other`'s
+    // ligand frame swaps 1 and 2 — a transposition, which flips the coset. `meet_pushout` canonicalizes
+    // both frames (`transform_frame`) before the meet, so `agree` (opposite coset in the swapped frame
+    // = same physical configuration) folds to `self`, while `contradict` (same coset = opposite
+    // configuration) is `⊥`.
+    #[rstest]
+    #[case::agree(1, true)]
+    #[case::contradict(0, false)]
+    fn test_molecule_ast_meet_pushout_stereo(#[case] other_coset: u32, #[case] admissible: bool) {
+        let atoms = vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::F),
+            AtomAst::from_element(Element::Cl),
+            AtomAst::from_element(Element::Br),
+            AtomAst::from_element(Element::I),
+        ];
+        let self_mol = MoleculeAst::from_parts(
+            atoms.clone(),
+            vec![], vec![], vec![], vec![], vec![],
+            vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+            )],
+            vec![],
+            Constraints::new(),
+        );
+        let other_mol = MoleculeAst::from_parts(
+            atoms,
+            vec![], vec![], vec![], vec![], vec![],
+            vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, other_coset),
+            )],
+            vec![],
+            Constraints::new(),
+        );
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new((0..5u32).map(|i| (NodeId(i), NodeId(i))).collect(), 5, 5),
+            Correspondence::new(vec![], 0, 0),
+        );
+        let expected = admissible.then(|| self_mol.clone());
+        assert_eq!(
+            self_mol.meet_pushout(&other_mol, &overlap).map(|po| po.object),
             expected,
         );
     }

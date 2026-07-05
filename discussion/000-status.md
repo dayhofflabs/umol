@@ -53,15 +53,15 @@
 | [049-stereochemistry-encoding-2026-01-29.md](049-stereochemistry-encoding-2026-01-29.md)                         | Outdated      | 2026-02-17   |
 | [050-reaction-design-research-2026-02-08.md](050-reaction-design-research-2026-02-08.md)                         | Informational | 2026-02-17   |
 | [051-reaction-design-research-claude-2026-02-08.md](051-reaction-design-research-claude-2026-02-08.md)           | Informational | 2026-02-17   |
-| [052-graph-ir-2026-02-11.md](052-graph-ir-2026-02-11.md)                                                         | Active        | 2026-04-17   |
-| [053-molecule-validation-scheme-2026-02-17.md](053-molecule-validation-scheme-2026-02-17.md)                     | Active        | 2026-02-17   |
-| [054-molecule-validation-phases-2026-02-17.md](054-molecule-validation-phases-2026-02-17.md)                     | Active        | 2026-02-17   |
+| [052-graph-ir-2026-02-11.md](052-graph-ir-2026-02-11.md)                                                         | Completed     | 2026-07-04   |
+| [053-molecule-validation-scheme-2026-02-17.md](053-molecule-validation-scheme-2026-02-17.md)                     | Outdated      | 2026-07-04   |
+| [054-molecule-validation-phases-2026-02-17.md](054-molecule-validation-phases-2026-02-17.md)                     | Outdated      | 2026-07-04   |
 | [055-opensmiles-spec-validation-2026-03-06.md](055-opensmiles-spec-validation-2026-03-06.md)                     | Active        | 2026-03-06   |
 | [056-default-registry-2026-03-07.md](056-default-registry-2026-03-07.md)                                         | Active        | 2026-03-11   |
 | [057-sssr-needed-2026-03-11.md](057-sssr-needed-2026-03-11.md)                                                   | Informational | 2026-03-11   |
 | [058-aromaticity-perception-2026-03-11.md](058-aromaticity-perception-2026-03-11.md)                             | Completed     | 2026-03-15   |
 | [059-aromaticity-perception-review-2026-03-12.md](059-aromaticity-perception-review-2026-03-12.md)               | Completed     | 2026-03-15   |
-| [060-molecule-builder-dsl-2026-03-21.md](060-molecule-builder-dsl-2026-03-21.md)                                 | Active        | 2026-04-17   |
+| [060-molecule-builder-dsl-2026-03-21.md](060-molecule-builder-dsl-2026-03-21.md)                                 | Completed     | 2026-07-04   |
 | [061-spin-state-builder-2026-03-22.md](061-spin-state-builder-2026-03-22.md)                                     | Completed     | 2026-03-22   |
 | [062-rust-clojure-reader-status-2026-03-31.md](062-rust-clojure-reader-status-2026-03-31.md)                     | Informational | 2026-03-31   |
 | [063-rust-edn-reader-2026-03-31.md](063-rust-edn-reader-2026-03-31.md)                                           | Completed     | 2026-04-01   |
@@ -81,10 +81,10 @@
 | [077-umol-edn-usability-review-2026-04-07.md](077-umol-edn-usability-review-2026-04-07.md)                       | Completed     | 2026-04-08   |
 | [078-edn-subgrammar-design-2026-04-09.md](078-edn-subgrammar-design-2026-04-09.md)                               | Completed     | 2026-04-24   |
 | [079-pattern-language-design-2026-04-10.md](079-pattern-language-design-2026-04-10.md)                           | Informational | 2026-04-10   |
-| [080-unified-constraint-ast-2026-04-10.md](080-unified-constraint-ast-2026-04-10.md)                             | Active        | 2026-04-10   |
+| [080-unified-constraint-ast-2026-04-10.md](080-unified-constraint-ast-2026-04-10.md)                             | Completed     | 2026-07-04   |
 | [081-fix-point-group-impl-2026-04-11.md](081-fix-point-group-impl-2026-04-11.md)                                 | Completed     | 2026-04-12   |
 | [082-graph-representation-2026-04-13.md](082-graph-representation-2026-04-13.md)                                 | Informational | 2026-04-13   |
-| [083-constraint-unification-architecture-2026-04-13.md](083-constraint-unification-architecture-2026-04-13.md)   | Active        | 2026-04-15   |
+| [083-constraint-unification-architecture-2026-04-13.md](083-constraint-unification-architecture-2026-04-13.md)   | Completed     | 2026-07-04   |
 | [084-graph-library-decision-2026-04-14.md](084-graph-library-decision-2026-04-14.md)                             | Completed     | 2026-04-15   |
 | [085-kekulization-algorithms-2026-04-15.md](085-kekulization-algorithms-2026-04-15.md)                           | Active        | 2026-04-15   |
 | [086-molecule-ast-api-2026-04-16.md](086-molecule-ast-api-2026-04-16.md)                                         | Active        | 2026-04-17   |
@@ -128,7 +128,7 @@
 | [124-tier1-structural-wellformedness-2026-06-21.md](124-tier1-structural-wellformedness-2026-06-21.md)           | Active        | 2026-06-21   |
 | [125-constraints-as-projections-2026-06-22.md](125-constraints-as-projections-2026-06-22.md)                     | Active        | 2026-06-22   |
 | [126-fingerprint-facility-2026-06-22.md](126-fingerprint-facility-2026-06-22.md)                                 | Active        | 2026-06-23   |
-| [127-reaction-ast-interim-stereo-2026-06-22.md](127-reaction-ast-interim-stereo-2026-06-22.md)                   | Active        | 2026-06-22   |
+| [127-reaction-ast-interim-stereo-2026-06-22.md](127-reaction-ast-interim-stereo-2026-06-22.md)                   | Outdated      | 2026-07-04   |
 | [128-substructure-derived-predicates-2026-06-23.md](128-substructure-derived-predicates-2026-06-23.md)           | Active        | 2026-06-23   |
 | [129-crate-organization-2026-06-24.md](129-crate-organization-2026-06-24.md)                                     | Completed     | 2026-06-24   |
 | [130-crate-reorganization-plan-2026-06-24.md](130-crate-reorganization-plan-2026-06-24.md)                       | Completed     | 2026-06-24   |
@@ -137,4 +137,4 @@
 | [133-reaction-edn-surface-2026-06-26.md](133-reaction-edn-surface-2026-06-26.md)                                 | Completed     | 2026-06-29   |
 | [134-reaction-application-overlays-2026-06-26.md](134-reaction-application-overlays-2026-06-26.md)               | Completed     | 2026-07-02   |
 | [135-reaction-composition-completeness-2026-07-01.md](135-reaction-composition-completeness-2026-07-01.md)       | Active        | 2026-07-01   |
-| [136-dpo-primitives-2026-07-04.md](136-dpo-primitives-2026-07-04.md)                                             | Active        | 2026-07-04   |
+| [136-dpo-primitives-2026-07-04.md](136-dpo-primitives-2026-07-04.md)                                             | Informational | 2026-07-04   |

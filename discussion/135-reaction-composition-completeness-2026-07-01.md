@@ -326,7 +326,7 @@ new primitive is `meet_pushout`.
 - **D-a4 — stereo overlay gluing in `meet_pushout`. (additive)** Canonicalize each stereo overlay's
   ligand order (`transform_frame`, coset carried) → full-participant relation `pushout` over the two
   `FixedVarBirelationSet` families with `combine = StereoAtomAst` / `StereoBondAst::meet`. Test: two
-  frames of one stereo center (reordered) glue + meet; contradictory cosets `⊥`. `[dep: D-a1]`
+  frames of one stereo center (reordered) glue + meet; contradictory cosets `⊥`. `[dep: D-a1]` **Done**
 
 - **D-b2 — `compose_overlap` stereo. (additive)** Pre-apply `transform_frame` of `A⁻¹` / `B`'s stereo
   overlays into the glue's canonical frame before `apply_at` (rule-AST, per overlap). Test: a stereo
