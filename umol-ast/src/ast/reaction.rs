@@ -8,6 +8,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use umol_graph_core::{Correspondence, NodeId, SubgraphIsomorphismAlgorithm};
+use umol_perm::Permutation;
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
@@ -28,6 +29,7 @@ use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
+use super::ligand::StereoLigand;
 use super::molecule::MoleculeAst;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
@@ -70,7 +72,11 @@ impl ReactionAst {
         host: &'h MoleculeAst,
         correspondence: &MoleculeCorrespondence,
     ) -> Result<ReactionDerivation<'h>, ApplyError> {
-        let deltas = self.deltas.clone().canonicalize()?;
+        let mut deltas = self.deltas.clone().canonicalize()?;
+        // A stereo coset is stated relative to a ligand ordering; the rule writes its cosets in the
+        // rule's frame, the host stores the matched center in its own. Restate the rule's absolute
+        // stereo deltas into the host frame before lowering (identity when the frames agree).
+        reframe_stereo(&mut deltas, &self.lhs, host, correspondence);
         // Host id of a matched pattern entity (total-on-pattern, so always `Some`).
         let host_atom = |id: AtomId| {
             AtomId::from(
@@ -750,6 +756,102 @@ impl ReactionAst {
     }
 }
 
+/// Restate `deltas`' absolute stereo cosets from the rule (`lhs`) frame into the matched `host` frame.
+/// The coset is meaningful only per ligand ordering, so a `ModifyField`/`Remove` delta lowered onto a
+/// host whose matching center is numbered differently must carry its cosets across — the delta-side
+/// mirror of the matcher's `coset_for`. `before` is the rule's ligand order mapped into the host id
+/// space, `after` the host's stored order; identity when they agree. The relative ops
+/// (`Apply`/`Swap`/`Mirror`) resolve against the host coset, `Add` creates a fresh overlay, and stereo
+/// constraints are positionless — none are reframed; a delta with no host correspondent is skipped.
+fn reframe_stereo(
+    deltas: &mut Deltas,
+    lhs: &MoleculeAst,
+    host: &MoleculeAst,
+    correspondence: &MoleculeCorrespondence,
+) {
+    let into_host = |l: &StereoLigand| {
+        StereoLigand::new(
+            AtomId::from(
+                correspondence
+                    .atoms()
+                    .right_of(NodeId::from(l.atom_id))
+                    .expect("a matched rule ligand maps into the host"),
+            ),
+            l.kind,
+        )
+    };
+    let from_host = |l: &StereoLigand| {
+        StereoLigand::new(
+            AtomId::from(
+                correspondence
+                    .atoms()
+                    .left_of(NodeId::from(l.atom_id))
+                    .expect("a matched host ligand maps back to the rule"),
+            ),
+            l.kind,
+        )
+    };
+    for delta in deltas.iter_mut() {
+        match delta {
+            Delta::StereoAtom(s) => {
+                let Some(host_id) = correspondence.stereo_atoms().right_of(s.id()) else {
+                    continue;
+                };
+                let before: Vec<StereoLigand> = lhs
+                    .stereo_atom(s.id())
+                    .ligand_frame()
+                    .iter()
+                    .map(into_host)
+                    .collect();
+                let after = host.stereo_atom(host_id).ligand_frame();
+                match s {
+                    StereoAtomDelta::ModifyField {
+                        change: StereoAtomFieldChange::Configuration { old, new },
+                        ..
+                    } => {
+                        let sigma = Permutation::between(&before, &after);
+                        *old = old.apply(sigma);
+                        *new = new.apply(sigma);
+                    }
+                    StereoAtomDelta::Remove { ligands, ast, .. } => {
+                        *ast = ast.transform_frame(&before, &after);
+                        *ligands = after.iter().map(from_host).collect();
+                    }
+                    _ => {}
+                }
+            }
+            Delta::StereoBond(s) => {
+                let Some(host_id) = correspondence.stereo_bonds().right_of(s.id()) else {
+                    continue;
+                };
+                let before: Vec<StereoLigand> = lhs
+                    .stereo_bond(s.id())
+                    .ligand_frame()
+                    .iter()
+                    .map(into_host)
+                    .collect();
+                let after = host.stereo_bond(host_id).ligand_frame();
+                match s {
+                    StereoBondDelta::ModifyField {
+                        change: StereoBondFieldChange::Configuration { old, new },
+                        ..
+                    } => {
+                        let sigma = Permutation::between(&before, &after);
+                        *old = old.apply(sigma);
+                        *new = new.apply(sigma);
+                    }
+                    StereoBondDelta::Remove { ligands, ast, .. } => {
+                        *ast = ast.transform_frame(&before, &after);
+                        *ligands = after.iter().map(from_host).collect();
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 impl Canonicalize for ReactionAst {
     /// Value-level in a fixed atom id space: `deltas` are canonicalized;
     /// `lhs` is passed through (`MoleculeAst` has no whole-molecule canonical form — its
@@ -770,7 +872,9 @@ mod tests {
 
     use super::super::constraint::{Constraint, Constraints, MoleculeConstraint};
     use super::super::edit::{AtomFieldChange, BondFieldChange};
+    use super::super::ligand::StereoLigandKind;
     use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use super::super::stereo::{StereoAtomAst, StereoCosetAst, StereoKind};
     use super::super::value::ValueAst;
     use super::*;
 
@@ -1030,6 +1134,138 @@ mod tests {
                 vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
             )],
         );
+    }
+
+    #[fixture]
+    fn tetrahedral_inversion() -> ReactionAst {
+        // Invert a tetrahedral C(0) whose ligands F,Cl,Br,I are stated in ascending order: coset 0 → 1.
+        ReactionAst::new(
+            MoleculeAst::from_parts(
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::F),
+                    AtomAst::from_element(Element::Cl),
+                    AtomAst::from_element(Element::Br),
+                    AtomAst::from_element(Element::I),
+                ],
+                vec![
+                    (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                    (AtomId(0), AtomId(2), BondAst::from_order(1)),
+                    (AtomId(0), AtomId(3), BondAst::from_order(1)),
+                    (AtomId(0), AtomId(4), BondAst::from_order(1)),
+                ],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![(
+                    AtomId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    ],
+                    StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+                )],
+                vec![],
+                Constraints::new(),
+            ),
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                id: StereoAtomId(0),
+                change: StereoAtomFieldChange::Configuration {
+                    old: StereoConfigurationAst::Kinded(
+                        StereoKind::Tetrahedral,
+                        StereoCosetAst::Lit(0),
+                    ),
+                    new: StereoConfigurationAst::Kinded(
+                        StereoKind::Tetrahedral,
+                        StereoCosetAst::Lit(1),
+                    ),
+                },
+            })]),
+        )
+    }
+
+    // Applying the ascending-frame inversion rule to a host that states the same center in a different
+    // ligand order: the match succeeds (the matcher reframes), and `apply_at` now reframes the rule's
+    // `ModifyField` coset into the host frame before lowering it, so the derivation inverts the host's
+    // stored coset in the host's own frame. `same_frame` is the control; `swapped_frame` (ligands 1↔2,
+    // its physically-equal coset 1) forces the reframe.
+    #[rstest]
+    #[case::same_frame([1, 2, 3, 4], 0, 1)]
+    #[case::swapped_frame([2, 1, 3, 4], 1, 0)]
+    fn test_reaction_ast_apply_stereo_cross_frame(
+        tetrahedral_inversion: ReactionAst,
+        #[case] host_ligands: [u32; 4],
+        #[case] host_coset: u32,
+        #[case] product_coset: u32,
+    ) {
+        let host = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::F),
+                AtomAst::from_element(Element::Cl),
+                AtomAst::from_element(Element::Br),
+                AtomAst::from_element(Element::I),
+            ],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(0), AtomId(2), BondAst::from_order(1)),
+                (AtomId(0), AtomId(3), BondAst::from_order(1)),
+                (AtomId(0), AtomId(4), BondAst::from_order(1)),
+            ],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![(
+                AtomId(0),
+                host_ligands
+                    .iter()
+                    .map(|&x| StereoLigand::new(AtomId(x), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomAst::new(StereoKind::Tetrahedral, host_coset),
+            )],
+            vec![],
+            Constraints::new(),
+        );
+        let expected = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::F),
+                AtomAst::from_element(Element::Cl),
+                AtomAst::from_element(Element::Br),
+                AtomAst::from_element(Element::I),
+            ],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(0), AtomId(2), BondAst::from_order(1)),
+                (AtomId(0), AtomId(3), BondAst::from_order(1)),
+                (AtomId(0), AtomId(4), BondAst::from_order(1)),
+            ],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![(
+                AtomId(0),
+                host_ligands
+                    .iter()
+                    .map(|&x| StereoLigand::new(AtomId(x), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomAst::new(StereoKind::Tetrahedral, product_coset),
+            )],
+            vec![],
+            Constraints::new(),
+        );
+        let rhs = tetrahedral_inversion
+            .apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
+            .next()
+            .expect("the inversion rule matches the host")
+            .rhs()
+            .clone();
+        assert_eq!(rhs, expected);
     }
 
     #[rstest]

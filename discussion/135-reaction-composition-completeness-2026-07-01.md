@@ -323,22 +323,55 @@ new primitive is `meet_pushout`.
   two stereo `reversed_remapping`s (created↔removed swap) like the other families; deltas invert via I6a.
   Test: reverse of a stereo-carrying span. `[dep: —]` **Done**
 
-- **D-a4 — stereo overlay gluing in `meet_pushout`. (additive)** Canonicalize each stereo overlay's
-  ligand order (`transform_frame`, coset carried) → full-participant relation `pushout` over the two
+- **D-a4 — stereo overlay gluing in `meet_pushout`. (additive)** The glue keeps `self`'s ligand
+  frame (a pure id-remap leaves the coset untouched); `other`'s coincident sites (same site + ligand
+  multiset, `find_by_participants`) are aligned to `self`'s frame by `transform_frame`, `other`-only
+  sites keep their relabeled frame → full-participant relation `pushout` over the two
   `FixedVarBirelationSet` families with `combine = StereoAtomAst` / `StereoBondAst::meet`. Test: two
   frames of one stereo center (reordered) glue + meet; contradictory cosets `⊥`. `[dep: D-a1]` **Done**
+  (keep-self-frame chosen over sort-both-to-canonical: coset is defined per ligand ordering, invariant
+  under atom-id relabel, so A⁻¹ passes through compose untouched and only B reframes — see D-b2.)
 
-- **D-b2 — `compose_overlap` stereo. (additive)** Pre-apply `transform_frame` of `A⁻¹` / `B`'s stereo
-  overlays into the glue's canonical frame before `apply_at` (rule-AST, per overlap). Test: a stereo
-  compose pair (e.g. the cis/trans C=C carbon-swap overlap). `[dep: D-b1, D-a4, D-b0]`
+- **D-b2 — reframe rule stereo deltas into the host frame, in `apply_at`. (was: a compose-local shim)**
+  A stereo coset is frame-relative, so lowering a rule's *absolute* stereo delta onto a host whose
+  matching center is numbered in a different ligand order must restate the coset in the host frame — the
+  delta-side mirror of the matcher's `coset_for`. This is unconditional stereo infrastructure (a delta's
+  frame is never known to match the host's a priori, and the check costs nothing when there is no
+  stereo), so it lives in `apply_at` — the one path every `apply` and `compose` goes through — not in
+  `compose_overlap`. The relative ops (`Apply`/`Swap`/`Mirror`) resolve against the host coset
+  (frame-agnostic); `Add` is a fresh overlay; stereo constraints are positionless — none reframed.
+  `[dep: D-a4, D-b0]`
+
+  - **D-b2a — `reframe_stereo(&mut Deltas, lhs, host, correspondence)` + wire into `apply_at`.**
+    (additive) After `canonicalize`, reframe each `ModifyField`/`Remove` stereo delta: `before` = rule
+    frame (`lhs.stereo_atom(id).ligand_frame()`) mapped to host ids via `correspondence.atoms()`,
+    `after` = host frame (`host.stereo_atom(host_id).ligand_frame()`); `ModifyField` cosets via
+    `apply(Permutation::between(before, after))`, `Remove` via `transform_frame` + ligands rebuilt from
+    the host frame; `right_of` `None` (e.g. `Add`'s new id) skips. Same-frame apply is identity;
+    cross-frame now correct. `[dep: D-a4, D-b0]` **Done**
+  - **D-b2b — retire the compose-local `reframe_stereo`. (refactor)** Delete it from `compose.rs`;
+    revert `compose_overlap` to call `apply_at` directly and drop the imports it needed. `[dep: D-b2a]`
+    **Done**
+  - **D-b2c — direct `apply` cross-frame test. (additive)** `test_reaction_ast_apply_stereo_cross_frame`
+    — an ascending-frame tetrahedral inversion rule applied to a host stating the same center in a
+    swapped ligand order; the derivation inverts the host's coset in the host's own frame. Locks the
+    behavior that was silently broken — the match succeeded (matcher's `coset_for`) but delta lowering
+    did not reframe. `[dep: D-b2a]` **Done**
+
+  D-b2a and D-b2b land **together** (one green milestone): adding the `apply_at` reframe while the shim
+  is still present double-reframes — the shim pre-reframes the deltas, then `apply_at` reframes again.
+  This supersedes the interim compose-local `reframe_stereo` now in the tree, which reframed correctly
+  but in the wrong place (it left plain `apply` frame-broken for stereo).
 
 - **D-c2 — drop the stereo bail + sample stereo. (breaking→green)** Remove the `has_stereo_*` +
   stereo-delta bail in `compose_all`; extend `overlay_reaction_strategy` to sample stereo overlays;
-  `compose_complete_overlay` now covers stereo. Milestone: **stereo completeness** — full suite green.
-  `[dep: D-c1, D-b2]`
+  `compose_complete_overlay` now covers stereo. No generator frame constraint needed — `apply_at`'s
+  reframe (D-b2) makes both the sequential and composed sides frame-correct. Milestone: **stereo
+  completeness** — full suite green. `[dep: D-c1, D-b2]`
 
 **Stages** (green after each) — non-stereo phase: **S0** = {D-a1, D-a2, D-a3}; **S1** = {D-b1}; **S2** =
-{D-c1} → non-stereo completeness. Stereo phase: **S3** = {D-b0, D-a4}; **S4** = {D-b2}; **S5** = {D-c2}
+{D-c1} → non-stereo completeness. Stereo phase: **S3** = {D-b0, D-a4}; **S4** = {D-b2a, D-b2b, D-b2c};
+**S5** = {D-c2}
 → stereo completeness. **Critical path** D-a1 → D-a2 → D-b1 → D-c1, then D-b0/D-a4 → D-b2 → D-c2 (D-a3
 rides S0 in parallel); S3 needs only S0, so it can begin any time after S0 (parallel to S1/S2). Additive
 subitems carry a transient `#[allow(dead_code)]` until wired.

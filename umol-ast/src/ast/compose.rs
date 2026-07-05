@@ -294,12 +294,15 @@ mod tests {
     use super::super::atom::AtomAst;
     use super::super::bond::BondAst;
     use super::super::constraint::Constraints;
-    use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange};
-    use super::super::id::{AromaticSystemId, NoncovalentBondId};
+    use super::super::delta::StereoAtomDelta;
+    use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange};
+    use super::super::id::{AromaticSystemId, NoncovalentBondId, StereoAtomId};
+    use super::super::ligand::{StereoLigand, StereoLigandKind};
     use super::super::molecule::MoleculeAst;
     use super::super::noncovalent::{
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
     };
+    use super::super::stereo::{StereoAtomAst, StereoConfigurationAst, StereoCosetAst, StereoKind};
     use super::super::value::ValueAst;
     use super::*;
 
@@ -1151,5 +1154,122 @@ mod tests {
         let sequential = b.apply(&intermediate, alg).next().unwrap().rhs().clone();
         let composed = composite.apply(&host, alg).next().unwrap().rhs().clone();
         assert_eq!(composed, sequential);
+    }
+
+    // A tetrahedral center inverted by A then inverted back by B. `meet_pushout` keeps A⁻¹'s (self's)
+    // ligand frame, so A⁻¹ applies at the glue untouched; B states the same center in ligand order
+    // `b_ligands`, so its stereo delta must be re-framed into the glue frame before `apply_at`. The net
+    // composite is a stereo no-op, reproducing `B(A(host)) = host`. `same_frame` is the control (B's
+    // frame already matches the glue, no reframe); `swapped_frame` forces the reframe.
+    #[rstest]
+    #[case::same_frame([1, 2, 3, 4], 1, 0)]
+    #[case::swapped_frame([2, 1, 3, 4], 0, 1)]
+    fn test_compose_overlap_stereo(
+        #[case] b_ligands: [u32; 4],
+        #[case] b_old: u32,
+        #[case] b_new: u32,
+    ) {
+        let a = ReactionAst::new(
+            MoleculeAst::from_parts(
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::F),
+                    AtomAst::from_element(Element::Cl),
+                    AtomAst::from_element(Element::Br),
+                    AtomAst::from_element(Element::I),
+                ],
+                vec![
+                    (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                    (AtomId(0), AtomId(2), BondAst::from_order(1)),
+                    (AtomId(0), AtomId(3), BondAst::from_order(1)),
+                    (AtomId(0), AtomId(4), BondAst::from_order(1)),
+                ],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![(
+                    AtomId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    ],
+                    StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+                )],
+                vec![],
+                Constraints::new(),
+            ),
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                id: StereoAtomId(0),
+                change: StereoAtomFieldChange::Configuration {
+                    old: StereoConfigurationAst::Kinded(
+                        StereoKind::Tetrahedral,
+                        StereoCosetAst::Lit(0),
+                    ),
+                    new: StereoConfigurationAst::Kinded(
+                        StereoKind::Tetrahedral,
+                        StereoCosetAst::Lit(1),
+                    ),
+                },
+            })]),
+        );
+        let b = ReactionAst::new(
+            MoleculeAst::from_parts(
+                vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::F),
+                    AtomAst::from_element(Element::Cl),
+                    AtomAst::from_element(Element::Br),
+                    AtomAst::from_element(Element::I),
+                ],
+                vec![
+                    (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                    (AtomId(0), AtomId(2), BondAst::from_order(1)),
+                    (AtomId(0), AtomId(3), BondAst::from_order(1)),
+                    (AtomId(0), AtomId(4), BondAst::from_order(1)),
+                ],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![(
+                    AtomId(0),
+                    b_ligands
+                        .iter()
+                        .map(|&x| StereoLigand::new(AtomId(x), StereoLigandKind::Atom))
+                        .collect(),
+                    StereoAtomAst::new(StereoKind::Tetrahedral, b_old),
+                )],
+                vec![],
+                Constraints::new(),
+            ),
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                id: StereoAtomId(0),
+                change: StereoAtomFieldChange::Configuration {
+                    old: StereoConfigurationAst::Kinded(
+                        StereoKind::Tetrahedral,
+                        StereoCosetAst::Lit(b_old),
+                    ),
+                    new: StereoConfigurationAst::Kinded(
+                        StereoKind::Tetrahedral,
+                        StereoCosetAst::Lit(b_new),
+                    ),
+                },
+            })]),
+        );
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new((0..5u32).map(|i| (NodeId(i), NodeId(i))).collect(), 5, 5),
+            Correspondence::new((0..4u32).map(|i| (EdgeId(i), EdgeId(i))).collect(), 4, 4),
+        );
+        let a_inverse = a.reverse().unwrap();
+        let composite = compose_overlap(&a_inverse, &b, &overlap).expect("admissible composite");
+
+        // Invert-then-invert is a net stereo no-op; whatever ligand frame B states its center in, the
+        // reframe carries B's delta into the glue frame so the composite folds to A's reactant with no
+        // deltas — a frame-invariant result. (Without the reframe, `swapped_frame`'s B delta fails to
+        // lower onto the glue and `compose_overlap` yields `None`.)
+        assert_eq!(composite, ReactionAst::new(a.lhs.clone(), Deltas::new()));
     }
 }
