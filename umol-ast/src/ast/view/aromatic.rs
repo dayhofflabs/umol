@@ -56,6 +56,20 @@ impl<'a> AromaticSystemViews<'a> {
         })
     }
 
+    /// Whether a system repeats a participant or two systems share an atom — the "aromatic systems are
+    /// vertex-disjoint" structural conflict; the aromatic peer of [`StereoAtomViews::has_conflict`].
+    pub fn has_conflict(&self) -> bool {
+        let mut seen: HashSet<AtomId> = HashSet::new();
+        for view in self.iter() {
+            for atom in view.atom_ids() {
+                if !seen.insert(atom) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     pub fn contains(&self, id: AromaticSystemId) -> bool {
         self.aromatic_systems.contains(RelationId::from(id))
     }

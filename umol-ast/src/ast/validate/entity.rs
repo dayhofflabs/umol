@@ -91,6 +91,9 @@ impl EntityStructureValidator {
 /// self-loop is a neighbor equal to the atom and a parallel bond is two adjacent
 /// equal neighbors — a single linear scan over the adjacency, no auxiliary set.
 fn bond_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradiction> {
+    if !ast.bonds().has_conflict() {
+        return None;
+    }
     for atom in ast.atoms().ids() {
         let mut prev: Option<AtomId> = None;
         for neighbor in ast.neighbors(atom) {
@@ -115,6 +118,9 @@ fn bond_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradictio
 /// Dative bonds: donors distinct, acceptor not among donors, and for any shared
 /// acceptor the donor sets are vertex-disjoint.
 fn dative_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradiction> {
+    if !ast.dative_bonds().has_conflict() {
+        return None;
+    }
     let mut donors_by_acceptor: HashMap<AtomId, HashSet<AtomId>> = HashMap::new();
     for d in ast.dative_bonds().iter() {
         let acceptor = d.acceptor_id();
@@ -150,6 +156,9 @@ fn dative_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradict
 /// (parallel bonds of any kind are forbidden — the uniqueness that makes structural refs
 /// unambiguous).
 fn noncovalent_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradiction> {
+    if !ast.noncovalent_bonds().has_conflict() {
+        return None;
+    }
     let mut seen: HashSet<[AtomId; 2]> = HashSet::new();
     for nc in ast.noncovalent_bonds().iter() {
         let [a, b] = nc.atom_ids();
@@ -164,64 +173,76 @@ fn noncovalent_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContr
     None
 }
 
-/// Aromatic systems: electron-count length match, participants distinct within a
-/// system, and systems pairwise vertex-disjoint.
+/// Aromatic systems: electron-count length match (a per-system data-shape check), participants
+/// distinct within a system, and systems pairwise vertex-disjoint. The disjointness conflict is the
+/// per-entity `has_conflict` primitive; the detailed contradiction locates the offending atom.
 fn aromatic_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradiction> {
-    let mut global: HashSet<AtomId> = HashSet::new();
     for view in ast.aromatic_systems().iter() {
-        let atoms: Vec<AtomId> = view.atom_ids().collect();
         if let ElectronCountsAst::Lit(counts) = &view.ast.electrons {
-            if counts.len() != atoms.len() {
+            let atoms_len = view.atom_ids().count();
+            if counts.len() != atoms_len {
                 return Some(
                     EntityStructureContradiction::AromaticSystemElectronsLengthMismatch {
                         electrons_len: counts.len(),
-                        atoms_len: atoms.len(),
+                        atoms_len,
                     },
                 );
             }
         }
-        let mut local: HashSet<AtomId> = HashSet::new();
-        for atom in atoms {
-            if !local.insert(atom) {
-                return Some(
-                    EntityStructureContradiction::AromaticSystemDuplicateParticipant { atom },
-                );
+    }
+    if ast.aromatic_systems().has_conflict() {
+        let mut global: HashSet<AtomId> = HashSet::new();
+        for view in ast.aromatic_systems().iter() {
+            let mut local: HashSet<AtomId> = HashSet::new();
+            for atom in view.atom_ids() {
+                if !local.insert(atom) {
+                    return Some(
+                        EntityStructureContradiction::AromaticSystemDuplicateParticipant { atom },
+                    );
+                }
+                if global.contains(&atom) {
+                    return Some(EntityStructureContradiction::AromaticSystemsOverlap { atom });
+                }
             }
-            if global.contains(&atom) {
-                return Some(EntityStructureContradiction::AromaticSystemsOverlap { atom });
-            }
+            global.extend(local);
         }
-        global.extend(local);
     }
     None
 }
 
-/// Multicenter bonds: electron-count length match, participants distinct within a
-/// bond, and no two bonds with an identical participant set (overlap allowed).
+/// Multicenter bonds: electron-count length match (a per-bond data-shape check), participants distinct
+/// within a bond, and no two bonds with an identical participant set (partial overlap allowed). The
+/// duplicate/identical conflict is the per-entity `has_conflict` primitive; the detailed contradiction
+/// locates the offender.
 fn multicenter_structure_check(ast: &MoleculeAst) -> Option<EntityStructureContradiction> {
-    let mut seen_sets: HashSet<BTreeSet<AtomId>> = HashSet::new();
     for view in ast.multicenter_bonds().iter() {
-        let atoms: Vec<AtomId> = view.atom_ids().collect();
         if let ElectronCountsAst::Lit(counts) = &view.ast.electrons {
-            if counts.len() != atoms.len() {
+            let atoms_len = view.atom_ids().count();
+            if counts.len() != atoms_len {
                 return Some(
                     EntityStructureContradiction::MulticenterElectronsLengthMismatch {
                         electrons_len: counts.len(),
-                        atoms_len: atoms.len(),
+                        atoms_len,
                     },
                 );
             }
         }
-        let mut set: BTreeSet<AtomId> = BTreeSet::new();
-        for &atom in &atoms {
-            if !set.insert(atom) {
-                return Some(
-                    EntityStructureContradiction::MulticenterBondDuplicateParticipant { atom },
-                );
+    }
+    if ast.multicenter_bonds().has_conflict() {
+        let mut seen_sets: HashSet<BTreeSet<AtomId>> = HashSet::new();
+        for view in ast.multicenter_bonds().iter() {
+            let atoms: Vec<AtomId> = view.atom_ids().collect();
+            let mut set: BTreeSet<AtomId> = BTreeSet::new();
+            for &atom in &atoms {
+                if !set.insert(atom) {
+                    return Some(
+                        EntityStructureContradiction::MulticenterBondDuplicateParticipant { atom },
+                    );
+                }
             }
-        }
-        if !seen_sets.insert(set) {
-            return Some(EntityStructureContradiction::MulticenterBondsIdentical { atoms });
+            if !seen_sets.insert(set) {
+                return Some(EntityStructureContradiction::MulticenterBondsIdentical { atoms });
+            }
         }
     }
     None

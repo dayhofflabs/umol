@@ -1,6 +1,6 @@
 //! Multicenter bond views.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::ops::Index;
 
 use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
@@ -52,6 +52,25 @@ impl<'a> MulticenterBondViews<'a> {
             atoms: set.participants(rid),
             molecule,
         })
+    }
+
+    /// Whether a bond repeats a participant, or two bonds have an identical participant set (partial
+    /// overlap between distinct sets is allowed). Emit-compliance peer of
+    /// [`StereoAtomViews::has_conflict`].
+    pub fn has_conflict(&self) -> bool {
+        let mut seen_sets: HashSet<BTreeSet<AtomId>> = HashSet::new();
+        for view in self.iter() {
+            let mut set: BTreeSet<AtomId> = BTreeSet::new();
+            for atom in view.atom_ids() {
+                if !set.insert(atom) {
+                    return true;
+                }
+            }
+            if !seen_sets.insert(set) {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn contains(&self, id: MulticenterBondId) -> bool {

@@ -1,6 +1,7 @@
 //! Bond views: `BondViews` namespace, `BondView` / `BondViewMut` AST bundles,
 //! `BondBuilderView` / `BondBuilderViewMut` builder bundles.
 
+use std::collections::HashSet;
 use std::ops::Index;
 
 use umol_graph_core::{EdgeId, NodeId};
@@ -50,6 +51,16 @@ impl<'a> BondViews<'a> {
                 ast: &bonds[id.index()],
                 molecule,
             }
+        })
+    }
+
+    /// Whether a localized bond is a self-loop or two bonds share an unordered atom pair (parallel).
+    /// Emit-compliance peer of [`StereoAtomViews::has_conflict`].
+    pub fn has_conflict(&self) -> bool {
+        let mut seen: HashSet<[AtomId; 2]> = HashSet::new();
+        self.iter().any(|view| {
+            let [a, b] = view.atom_ids();
+            a == b || !seen.insert(if a <= b { [a, b] } else { [b, a] })
         })
     }
 
