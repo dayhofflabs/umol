@@ -726,13 +726,20 @@ impl ReactionAst {
         builder.transact(edits)?;
         let product = builder.build();
 
-        // Emit-compliance: the product is a generated molecule, so a rule whose adds land a second
-        // stereo center on an occupied site (the Remove⁻¹ path in compose) must fail rather than emit
-        // an over-coordinated molecule. `has_conflict` is the shared per-entity primitive (also
-        // consulted by the validator and `meet_pushout`); enforced per generating op pending a single
-        // central emit gate.
-        if product.stereo_atoms().has_conflict() || product.stereo_bonds().has_conflict() {
-            return Err(ApplyError::OverCoordinated);
+        // Emit-compliance: the product is a generated molecule, so it must satisfy every per-entity
+        // structural invariant (a rule's adds can land a parallel bond, an overlapping system, or a
+        // second stereo center on an occupied site). The per-entity `has_conflict` primitives are the
+        // shared gates (also consulted by the validator and `meet_pushout`); enforced per generating op
+        // pending a single central emit gate.
+        if product.bonds().has_conflict()
+            || product.dative_bonds().has_conflict()
+            || product.aromatic_systems().has_conflict()
+            || product.multicenter_bonds().has_conflict()
+            || product.noncovalent_bonds().has_conflict()
+            || product.stereo_atoms().has_conflict()
+            || product.stereo_bonds().has_conflict()
+        {
+            return Err(ApplyError::StructuralConflict);
         }
 
         // The host↔product comap: preserved host atoms mate to their compacted product id (survivors
@@ -1018,6 +1025,9 @@ mod tests {
         );
     }
 
+    // `dangling_*`: the rule deletes a host atom still carrying an undeleted bond/overlay (DPO gluing
+    // condition). `structural_conflict`: the rule's add lands a second bond on an already-bonded atom
+    // pair, so the product would carry parallel bonds — an emit-compliance invariant (`has_conflict`).
     #[rstest]
     #[case::dangling_bond(
         ReactionAst::new(
@@ -1031,6 +1041,8 @@ mod tests {
             vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
             vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
         ),
+        vec![AtomId(0)],
+        ApplyError::Dangling { host_atom: AtomId(0) },
     )]
     #[case::dangling_noncovalent(
         ReactionAst::new(
@@ -1047,20 +1059,41 @@ mod tests {
             vec![], vec![],
             Constraints::new(),
         ),
+        vec![AtomId(0)],
+        ApplyError::Dangling { host_atom: AtomId(0) },
     )]
-    fn test_reaction_ast_apply_at_error(#[case] reaction: ReactionAst, #[case] host: MoleculeAst) {
-        // The rule deletes a host atom that still carries an undeleted bond/overlay → dangling.
+    #[case::structural_conflict(
+        ReactionAst::new(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ),
+            Deltas::from_iter([Delta::Bond(BondDelta::Add {
+                id: BondId(1),
+                atoms: [AtomId(0), AtomId(1)],
+                ast: BondAst::from_order(1),
+            })]),
+        ),
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ),
+        vec![AtomId(0), AtomId(1)],
+        ApplyError::StructuralConflict,
+    )]
+    fn test_reaction_ast_apply_at_error(
+        #[case] reaction: ReactionAst,
+        #[case] host: MoleculeAst,
+        #[case] atom_map: Vec<AtomId>,
+        #[case] expected: ApplyError,
+    ) {
+        let images: Vec<NodeId> = atom_map.iter().map(|&a| NodeId::from(a)).collect();
         let correspondence = MoleculeCorrespondence::induce(
             &reaction.lhs,
             &host,
-            Correspondence::from_images(&[NodeId(0)], host.atoms().count()),
+            Correspondence::from_images(&images, host.atoms().count()),
         );
-        assert_eq!(
-            reaction.apply_at(&host, &correspondence).unwrap_err(),
-            ApplyError::Dangling {
-                host_atom: AtomId(0),
-            },
-        );
+        assert_eq!(reaction.apply_at(&host, &correspondence).unwrap_err(), expected);
     }
 
     #[rstest]
@@ -1286,7 +1319,8 @@ mod tests {
     // bond's `New` index must clear the created atoms. Regression for the stereo-bond-only compose
     // failure (a created-bond `New` site aliasing a created atom → `RefTypeMismatch`).
     #[rstest]
-    fn test_reaction_ast_apply_stereo_bond_created_site() {
+    #[case::coset_0(0u32)]
+    fn test_reaction_ast_apply_stereo_bond_created_site(#[case] coset: u32) {
         let reaction = ReactionAst::new(
             MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], vec![]),
             Deltas::from_iter([
@@ -1333,7 +1367,7 @@ mod tests {
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, 0u32),
+                StereoBondAst::new(StereoKind::CisTrans, coset),
             )],
             Constraints::new(),
         );
@@ -1344,6 +1378,57 @@ mod tests {
             .rhs()
             .clone();
         assert_eq!(rhs, expected);
+    }
+
+    // A molecule with two stereo centers — where one center's site is the other's ligand — must match
+    // itself: `verify_overlays` selects the host stereo atom whose *site* is the mapped site, not the
+    // first one merely incident to it. Regression for the two-distinct-site self-apply failure that the
+    // stereo compose completeness surfaced.
+    #[rstest]
+    #[case::undetermined(StereoCosetAst::Undetermined)]
+    fn test_reaction_ast_apply_two_stereo_centers(#[case] coset: StereoCosetAst) {
+        let center = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![
+                (
+                    AtomId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                    ],
+                    StereoAtomAst::new(StereoKind::Tetrahedral, coset.clone()),
+                ),
+                (
+                    AtomId(1),
+                    vec![
+                        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                    ],
+                    StereoAtomAst::new(StereoKind::Tetrahedral, coset.clone()),
+                ),
+            ],
+            vec![],
+            Constraints::new(),
+        );
+        let rhs = ReactionAst::new(center.clone(), Deltas::new())
+            .apply(&center, SubgraphIsomorphismAlgorithm::Vf2)
+            .next()
+            .expect("a two-stereo-center molecule matches itself")
+            .rhs()
+            .clone();
+        assert_eq!(rhs, center);
     }
 
     #[rstest]

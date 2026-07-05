@@ -254,11 +254,19 @@ impl MoleculeAst {
         }
         object.constraints = constraints;
 
-        // Emit-compliance: the glue is a generated molecule, so it must not carry two stereo centers on
-        // one site (over-coordination from a same-site/different-ligand collision). The per-entity
-        // `has_conflict` primitive is the shared gate (also consulted by the validator and `apply_at`);
-        // this is enforced per generating op pending a single central emit gate.
-        if object.stereo_atoms().has_conflict() || object.stereo_bonds().has_conflict() {
+        // Emit-compliance: the glue is a generated molecule, so it must satisfy every per-entity
+        // structural invariant — gluing can collide bonds/overlays a well-formed input never would
+        // (parallel bonds, overlapping systems, two stereo centers on one site, …). The per-entity
+        // `has_conflict` primitives are the shared gates (also consulted by the validator and
+        // `apply_at`); enforced per generating op pending a single central emit gate.
+        if object.bonds().has_conflict()
+            || object.dative_bonds().has_conflict()
+            || object.aromatic_systems().has_conflict()
+            || object.multicenter_bonds().has_conflict()
+            || object.noncovalent_bonds().has_conflict()
+            || object.stereo_atoms().has_conflict()
+            || object.stereo_bonds().has_conflict()
+        {
             return None;
         }
 
@@ -415,36 +423,69 @@ mod tests {
         );
     }
 
-    // A conflicting shared atom (meet = ⊥) makes the whole glue inadmissible.
+    // The glue is inadmissible (`None`) when it would be malformed: a coincident-atom meet is `⊥`
+    // (`carbon_nitrogen` / `oxygen_nitrogen`), or an emit-compliance invariant fails — here two aromatic
+    // systems that share glue atom 0 (`[0,1]` from left, `[0,2]` from right's exposed atom), which the
+    // `has_conflict` gate rejects.
     #[rstest]
-    #[case::carbon_nitrogen(Element::C, Element::N)]
-    #[case::oxygen_nitrogen(Element::O, Element::N)]
+    #[case::carbon_nitrogen(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ),
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::N), AtomAst::from_element(Element::O)],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ),
+    )]
+    #[case::oxygen_nitrogen(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::N)],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ),
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::N), AtomAst::from_element(Element::O)],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ),
+    )]
+    #[case::aromatic_overlap(
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::C); 2],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            vec![],
+            vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default())],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::new(),
+        ),
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::C); 2],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            vec![],
+            vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default())],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::new(),
+        ),
+    )]
     fn test_molecule_ast_meet_pushout_inadmissible(
         overlap: GraphCorrespondence,
-        #[case] left_element: Element,
-        #[case] right_element: Element,
+        #[case] left: MoleculeAst,
+        #[case] right: MoleculeAst,
     ) {
-        let left = MoleculeAst::from_atoms_and_bonds(
-            vec![
-                AtomAst::from_element(left_element),
-                AtomAst::from_element(Element::N),
-            ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        );
-        let right = MoleculeAst::from_atoms_and_bonds(
-            vec![
-                AtomAst::from_element(right_element),
-                AtomAst::from_element(Element::O),
-            ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        );
         assert!(left.meet_pushout(&right, &overlap).is_none());
     }
 
     // Overlays glue over the same pushout: `right`'s system on the shared atoms {0,1} coincides (met to
-    // one), its system on `context` atoms is kept (context) — both sides' overlays survive.
+    // one), its system on the disjoint `context` atoms {2,3} is kept (context) — both sides' overlays
+    // survive. The context is vertex-disjoint from {0,1}: two aromatic systems must not share an atom,
+    // so an overlapping context would make the glue inadmissible (see the `inadmissible` error table).
     #[rstest]
-    #[case::aromatic_context_1_2(vec![AtomId(1), AtomId(2)])]
+    #[case::aromatic_context_disjoint(vec![AtomId(2), AtomId(3)])]
     fn test_molecule_ast_meet_pushout_overlays(#[case] context: Vec<AtomId>) {
         let full_overlap = GraphCorrespondence::new(
             Correspondence::new(
@@ -452,17 +493,27 @@ mod tests {
                     (NodeId(0), NodeId(0)),
                     (NodeId(1), NodeId(1)),
                     (NodeId(2), NodeId(2)),
+                    (NodeId(3), NodeId(3)),
+                ],
+                4,
+                4,
+            ),
+            Correspondence::new(
+                vec![
+                    (EdgeId(0), EdgeId(0)),
+                    (EdgeId(1), EdgeId(1)),
+                    (EdgeId(2), EdgeId(2)),
                 ],
                 3,
                 3,
             ),
-            Correspondence::new(vec![(EdgeId(0), EdgeId(0)), (EdgeId(1), EdgeId(1))], 2, 2),
         );
         let left = MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 3],
+            vec![AtomAst::from_element(Element::C); 4],
             vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
             ],
             vec![],
             vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default())],
@@ -473,10 +524,11 @@ mod tests {
             Constraints::new(),
         );
         let right = MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 3],
+            vec![AtomAst::from_element(Element::C); 4],
             vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
             ],
             vec![],
             vec![
@@ -490,10 +542,11 @@ mod tests {
             Constraints::new(),
         );
         let expected = MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 3],
+            vec![AtomAst::from_element(Element::C); 4],
             vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
             ],
             vec![],
             vec![

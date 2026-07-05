@@ -22,11 +22,11 @@ pub enum ApplyError {
     /// The reaction's deltas are inconsistent (canonicalization failed).
     #[error("inconsistent reaction deltas")]
     Inconsistent,
-    /// The applied product would carry two overlays on one center (e.g. two stereo configurations on
-    /// one site) — a structural emit invariant (the per-entity `has_conflict` predicate) is violated,
-    /// so the application is not a well-formed rewrite.
-    #[error("applied product over-coordinates a site")]
-    OverCoordinated,
+    /// The applied product would violate a per-entity structural invariant (the `has_conflict`
+    /// predicate) — a parallel bond, overlapping systems, two stereo centers on one site, etc. — so the
+    /// application does not emit a well-formed molecule.
+    #[error("applied product has a structural conflict")]
+    StructuralConflict,
     /// The lowered edit transaction failed against the host.
     #[error("apply transaction failed: {0}")]
     Transaction(#[from] TransactionError),

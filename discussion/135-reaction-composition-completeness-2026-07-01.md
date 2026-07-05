@@ -369,6 +369,30 @@ new primitive is `meet_pushout`.
   reframe (D-b2) makes both the sequential and composed sides frame-correct. Milestone: **stereo
   completeness** — full suite green. `[dep: D-c1, D-b2]` **Done**
 
+  Dropping the bail exposed three real defects (each root-caused from a shrunk counterexample, fixed,
+  and regression-tested):
+  1. **`New`-handle namespace** (`apply_at`). A created bond's `New(..)` index was type-local (`0..B`),
+     but transact's created-entity list is one shared vector (atoms pushed first). A stereo bond whose
+     site is a rule-created bond therefore resolved its `New` site to a created *atom* →
+     `RefTypeMismatch`. Fix: offset the created-bond index by the created-atom count.
+  2. **Over-coordination emit** (`meet_pushout` + `apply_at`). A partial overlap can superimpose two
+     stereo centers on one site (glue path), and `apply_at`'s unconditional overlay `Add` can re-add a
+     center onto an occupied site (the Remove⁻¹ path in compose). Neither is enforced by the DPO
+     formalism — it is a molecule well-formedness invariant. Fix per the emit-compliance rule below.
+  3. **Matcher site lookup** (`verify_overlays`). It found the host stereo atom via
+     `incident(host_site).next()`, but `incident` includes ligand incidence, so when a site is another
+     center's ligand it picked the wrong one — a two-stereo-center molecule failed to match itself.
+     Fix: select the incident atom whose *site* is `host_site`.
+
+  **Emit-compliance rule (settled here).** The AST *permits* hand-constructing tier-2-noncompliant
+  molecules (`from_parts`/`transact` stay permissive), but every *generated* AST — `apply`, `compose`,
+  Kekulization — must emit only compliant ASTs. So the "one overlay per site / disjoint systems / no
+  parallel bonds" invariants are **not** validator-owned and **not** enforced in the constructors;
+  they are per-entity `has_conflict()` primitives on each `*Views` (`stereo_atoms().has_conflict()`,
+  …), consulted by *both* the entity-structure validator (as its conflict gate) *and* the generating
+  ops (`apply_at` → `ApplyError::StructuralConflict`, `meet_pushout` → `None`). The single central emit
+  gate is deferred; for now each generating op consults the primitives directly.
+
 **Stages** (green after each) — non-stereo phase: **S0** = {D-a1, D-a2, D-a3}; **S1** = {D-b1}; **S2** =
 {D-c1} → non-stereo completeness. Stereo phase: **S3** = {D-b0, D-a4}; **S4** = {D-b2a, D-b2b, D-b2c};
 **S5** = {D-c2}
