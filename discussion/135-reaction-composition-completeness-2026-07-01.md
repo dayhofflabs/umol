@@ -315,7 +315,7 @@ new primitive is `meet_pushout`.
   delete the superseded manual machinery (`created_atom_ids` / `db_atom` / `db_bond` / `lc_atoms` / the
   `ra_*` plumbing). Un-`#[ignore]` `compose_complete_overlay` (non-stereo generator). Milestone:
   **non-stereo completeness** — `sound` / `complete_overlay` / `dangling_free` / `well_formed` /
-  `determinism` green. `[dep: D-b1]`
+  `determinism` green. `[dep: D-b1]` **Done**
 
 *Stereo (see "Part D stereo — design"):*
 

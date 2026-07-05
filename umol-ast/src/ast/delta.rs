@@ -585,7 +585,7 @@ macro_rules! diff_field_ops {
             match change {
                 $(
                     $change::$variant { old, new } => {
-                        if ast.$field != old {
+                        if !ast.$field.canonical_eq(&old) {
                             return Err(Contradiction);
                         }
                         ast.$field = new;
@@ -598,7 +598,7 @@ macro_rules! diff_field_ops {
         fn diff_field(lhs: &$ast, rhs: &$ast) -> Vec<$change> {
             let mut out = Vec::new();
             $(
-                if lhs.$field != rhs.$field {
+                if !lhs.$field.canonical_eq(&rhs.$field) {
                     out.push($change::$variant {
                         old: lhs.$field.clone(),
                         new: rhs.$field.clone(),
@@ -627,13 +627,23 @@ macro_rules! diff_field_ops {
             for key in keys {
                 let l = lhs_by_key.get(&key).cloned();
                 let r = rhs_by_key.get(&key).cloned();
-                if l != r {
+                if !options_canonical_eq(&l, &r) {
                     out.push((l, r));
                 }
             }
             out
         }
     };
+}
+
+/// Canonical equivalence over optional payloads: both absent is equal, both present compares by
+/// `canonical_eq`, presence mismatch is unequal.
+fn options_canonical_eq<T: Canonicalize>(l: &Option<T>, r: &Option<T>) -> bool {
+    match (l, r) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a.canonical_eq(b),
+        _ => false,
+    }
 }
 
 /// Per-variant fold ops for the crate-private `EntityFold` impl: `fuse_field`,
@@ -646,7 +656,7 @@ macro_rules! fold_field_ops {
                     (
                         $change::$variant { old, new: prev_new },
                         $change::$variant { old: next_old, new },
-                    ) if prev_new == next_old => Some($change::$variant { old, new }),
+                    ) if prev_new.canonical_eq(&next_old) => Some($change::$variant { old, new }),
                 )+
                 #[allow(unreachable_patterns)]
                 _ => None,
@@ -655,7 +665,7 @@ macro_rules! fold_field_ops {
 
         fn field_is_identity(change: &$change) -> bool {
             match change {
-                $( $change::$variant { old, new } => old == new, )+
+                $( $change::$variant { old, new } => old.canonical_eq(new), )+
             }
         }
     };
@@ -737,13 +747,13 @@ impl<U: BiRelationData> BiRelationData for EntitySpan<U> {
     }
 }
 
-impl<T: PartialEq> EntitySpan<T> {
+impl<T: Canonicalize> EntitySpan<T> {
     /// Superimpose an entity's optional lhs and rhs values into a span — the per-entity kernel of
     /// `ReactionSpanAst::superimpose`: present-both maps to `Unchanged` (equal) or `Modified`,
     /// lhs-only to `Removed`, rhs-only to `Added`, neither to `None`.
     pub fn superimpose(lhs: Option<T>, rhs: Option<T>) -> Option<Self> {
         match (lhs, rhs) {
-            (Some(lhs), Some(rhs)) if lhs == rhs => Some(Self::Unchanged(lhs)),
+            (Some(lhs), Some(rhs)) if lhs.canonical_eq(&rhs) => Some(Self::Unchanged(lhs)),
             (Some(lhs), Some(rhs)) => Some(Self::Modified { lhs, rhs }),
             (Some(lhs), None) => Some(Self::Removed(lhs)),
             (None, Some(rhs)) => Some(Self::Added(rhs)),
@@ -940,7 +950,7 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
                 };
                 match constraints.remove(&key) {
                     Some((first_old, prev_new)) => {
-                        if prev_new != old {
+                        if !options_canonical_eq(&prev_new, &old) {
                             return Err(Contradiction);
                         }
                         constraints.insert(key, (first_old, new));
@@ -971,7 +981,7 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
         }
     }
     for (_key, (old, new)) in constraints {
-        if old != new {
+        if !options_canonical_eq(&old, &new) {
             out.push(EntityOp::ModifyConstraint { old, new });
         }
     }
@@ -1499,7 +1509,7 @@ impl EntityPatch for NoncovalentBondDelta {
     ) -> Result<(), Contradiction> {
         match change {
             NoncovalentBondFieldChange::Kind { old, new } => {
-                if ast.kind != old {
+                if !ast.kind.canonical_eq(&old) {
                     return Err(Contradiction);
                 }
                 ast.kind = new;
@@ -1512,7 +1522,7 @@ impl EntityPatch for NoncovalentBondDelta {
         lhs: &NoncovalentBondAst,
         rhs: &NoncovalentBondAst,
     ) -> Vec<NoncovalentBondFieldChange> {
-        if lhs.kind != rhs.kind {
+        if !lhs.kind.canonical_eq(&rhs.kind) {
             vec![NoncovalentBondFieldChange::Kind {
                 old: lhs.kind.clone(),
                 new: rhs.kind.clone(),
@@ -1732,10 +1742,10 @@ impl EntityPatch for StereoBondDelta {
 pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<(), Contradiction> {
     match delta {
         AtomDelta::ModifyField { change, .. } => {
-            <AtomDelta as EntityPatch>::apply_field(ast, change.clone())
+            AtomDelta::apply_field(ast, change.clone())
         }
         AtomDelta::ModifyConstraint { old, new, .. } => {
-            <AtomDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
+            AtomDelta::apply_constraint(ast, old.clone(), new.clone())
         }
         AtomDelta::Add { .. } | AtomDelta::Remove { .. } => Ok(()),
     }
@@ -1744,10 +1754,10 @@ pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<
 pub(crate) fn apply_bond_change(ast: &mut BondAst, delta: &BondDelta) -> Result<(), Contradiction> {
     match delta {
         BondDelta::ModifyField { change, .. } => {
-            <BondDelta as EntityPatch>::apply_field(ast, change.clone())
+            BondDelta::apply_field(ast, change.clone())
         }
         BondDelta::ModifyConstraint { old, new, .. } => {
-            <BondDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
+            BondDelta::apply_constraint(ast, old.clone(), new.clone())
         }
         BondDelta::Add { .. } | BondDelta::Remove { .. } => Ok(()),
     }
@@ -1759,10 +1769,10 @@ pub(crate) fn apply_dative_change(
 ) -> Result<(), Contradiction> {
     match delta {
         DativeBondDelta::ModifyField { change, .. } => {
-            <DativeBondDelta as EntityPatch>::apply_field(ast, change.clone())
+            DativeBondDelta::apply_field(ast, change.clone())
         }
         DativeBondDelta::ModifyConstraint { old, new, .. } => {
-            <DativeBondDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
+            DativeBondDelta::apply_constraint(ast, old.clone(), new.clone())
         }
         DativeBondDelta::Add { .. } | DativeBondDelta::Remove { .. } => Ok(()),
     }
@@ -1774,10 +1784,10 @@ pub(crate) fn apply_aromatic_change(
 ) -> Result<(), Contradiction> {
     match delta {
         AromaticSystemDelta::ModifyField { change, .. } => {
-            <AromaticSystemDelta as EntityPatch>::apply_field(ast, change.clone())
+            AromaticSystemDelta::apply_field(ast, change.clone())
         }
         AromaticSystemDelta::ModifyConstraint { old, new, .. } => {
-            <AromaticSystemDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
+            AromaticSystemDelta::apply_constraint(ast, old.clone(), new.clone())
         }
         AromaticSystemDelta::Add { .. } | AromaticSystemDelta::Remove { .. } => Ok(()),
     }
@@ -1789,10 +1799,10 @@ pub(crate) fn apply_multicenter_change(
 ) -> Result<(), Contradiction> {
     match delta {
         MulticenterBondDelta::ModifyField { change, .. } => {
-            <MulticenterBondDelta as EntityPatch>::apply_field(ast, change.clone())
+            MulticenterBondDelta::apply_field(ast, change.clone())
         }
         MulticenterBondDelta::ModifyConstraint { old, new, .. } => {
-            <MulticenterBondDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
+            MulticenterBondDelta::apply_constraint(ast, old.clone(), new.clone())
         }
         MulticenterBondDelta::Add { .. } | MulticenterBondDelta::Remove { .. } => Ok(()),
     }
@@ -1804,10 +1814,10 @@ pub(crate) fn apply_noncovalent_change(
 ) -> Result<(), Contradiction> {
     match delta {
         NoncovalentBondDelta::ModifyField { change, .. } => {
-            <NoncovalentBondDelta as EntityPatch>::apply_field(ast, change.clone())
+            NoncovalentBondDelta::apply_field(ast, change.clone())
         }
         NoncovalentBondDelta::ModifyConstraint { old, new, .. } => {
-            <NoncovalentBondDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
+            NoncovalentBondDelta::apply_constraint(ast, old.clone(), new.clone())
         }
         NoncovalentBondDelta::Add { .. } | NoncovalentBondDelta::Remove { .. } => Ok(()),
     }
@@ -1819,10 +1829,10 @@ pub(crate) fn apply_stereo_atom_change(
 ) -> Result<(), Contradiction> {
     match delta {
         StereoAtomDelta::ModifyField { change, .. } => {
-            <StereoAtomDelta as EntityPatch>::apply_field(ast, change.clone())
+            StereoAtomDelta::apply_field(ast, change.clone())
         }
         StereoAtomDelta::ModifyConstraint { old, new, .. } => {
-            <StereoAtomDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
+            StereoAtomDelta::apply_constraint(ast, old.clone(), new.clone())
         }
         StereoAtomDelta::Apply { permutation, .. } => {
             *ast = ast.apply(*permutation);
@@ -1846,10 +1856,10 @@ pub(crate) fn apply_stereo_bond_change(
 ) -> Result<(), Contradiction> {
     match delta {
         StereoBondDelta::ModifyField { change, .. } => {
-            <StereoBondDelta as EntityPatch>::apply_field(ast, change.clone())
+            StereoBondDelta::apply_field(ast, change.clone())
         }
         StereoBondDelta::ModifyConstraint { old, new, .. } => {
-            <StereoBondDelta as EntityPatch>::apply_constraint(ast, old.clone(), new.clone())
+            StereoBondDelta::apply_constraint(ast, old.clone(), new.clone())
         }
         StereoBondDelta::Apply { permutation, .. } => {
             *ast = ast.apply(*permutation);
@@ -2036,7 +2046,7 @@ fn fold_stereo_atom_group(
                 };
                 match constraints.remove(&key) {
                     Some((first_old, prev_new)) => {
-                        if prev_new != old {
+                        if !options_canonical_eq(&prev_new, &old) {
                             return Err(Contradiction);
                         }
                         constraints.insert(key, (first_old, new));
@@ -2069,7 +2079,7 @@ fn fold_stereo_atom_group(
             }
         }
         for (_key, (old, new)) in constraints {
-            <StereoAtomDelta as EntityPatch>::apply_constraint(&mut ast, new, old)?;
+            StereoAtomDelta::apply_constraint(&mut ast, new, old)?;
         }
         return Ok(vec![StereoAtomDelta::Remove {
             id,
@@ -2100,7 +2110,7 @@ fn fold_stereo_atom_group(
         }),
     }
     for (_key, (old, new)) in constraints {
-        if old != new {
+        if !options_canonical_eq(&old, &new) {
             out.push(StereoAtomDelta::ModifyConstraint { id, kind, old, new });
         }
     }
@@ -2203,7 +2213,7 @@ fn fold_stereo_bond_group(
                 };
                 match constraints.remove(&key) {
                     Some((first_old, prev_new)) => {
-                        if prev_new != old {
+                        if !options_canonical_eq(&prev_new, &old) {
                             return Err(Contradiction);
                         }
                         constraints.insert(key, (first_old, new));
@@ -2236,7 +2246,7 @@ fn fold_stereo_bond_group(
             }
         }
         for (_key, (old, new)) in constraints {
-            <StereoBondDelta as EntityPatch>::apply_constraint(&mut ast, new, old)?;
+            StereoBondDelta::apply_constraint(&mut ast, new, old)?;
         }
         return Ok(vec![StereoBondDelta::Remove {
             id,
@@ -2267,7 +2277,7 @@ fn fold_stereo_bond_group(
         }),
     }
     for (_key, (old, new)) in constraints {
-        if old != new {
+        if !options_canonical_eq(&old, &new) {
             out.push(StereoBondDelta::ModifyConstraint { id, kind, old, new });
         }
     }
@@ -2833,6 +2843,15 @@ mod tests {
     }
 
     #[rstest]
+    #[case::singleton_set(ValueAst::Lit(1), ValueAst::lit_set([1]))]
+    fn test_atom_delta_diff_canonical(#[case] lhs: ValueAst, #[case] rhs: ValueAst) {
+        // Canonically-equal charges that are structurally distinct → `diff` emits nothing.
+        let lhs = AtomAst::from_element(Element::C).with_charge(lhs);
+        let rhs = AtomAst::from_element(Element::C).with_charge(rhs);
+        assert_eq!(AtomDelta::diff(AtomId(0), &lhs, &rhs), Vec::new());
+    }
+
+    #[rstest]
     #[case::add_remove(
         BondDelta::Add {
             id: BondId(0),
@@ -2975,7 +2994,7 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_delta_diff() {
         assert_eq!(
-            <StereoAtomDelta as EntityPatch>::diff(
+            StereoAtomDelta::diff(
                 StereoAtomId(0),
                 &StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
                 &StereoAtomAst::new(StereoKind::Tetrahedral, 1u32),
@@ -2999,7 +3018,7 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_delta_apply_field() {
         let mut ast = StereoAtomAst::new(StereoKind::Tetrahedral, 0u32);
-        <StereoAtomDelta as EntityPatch>::apply_field(
+        StereoAtomDelta::apply_field(
             &mut ast,
             StereoAtomFieldChange::Configuration {
                 old: StereoConfigurationAst::Kinded(
@@ -3020,7 +3039,7 @@ mod tests {
     fn test_stereo_atom_delta_apply_field_error() {
         let mut ast = StereoAtomAst::new(StereoKind::Tetrahedral, 1u32);
         assert_eq!(
-            <StereoAtomDelta as EntityPatch>::apply_field(
+            StereoAtomDelta::apply_field(
                 &mut ast,
                 StereoAtomFieldChange::Configuration {
                     old: StereoConfigurationAst::Kinded(
@@ -3188,6 +3207,19 @@ mod tests {
     #[case::removed(EntitySpan::Removed(7), None)]
     fn test_entity_span_rhs(#[case] state: EntitySpan<i32>, #[case] expected: Option<&i32>) {
         assert_eq!(state.rhs(), expected);
+    }
+
+    #[rstest]
+    #[case::singleton_set(ValueAst::Lit(1), ValueAst::lit_set([1]))]
+    fn test_entity_span_superimpose_canonical(#[case] lhs: ValueAst, #[case] rhs: ValueAst) {
+        // Canonically-equal sides that are structurally distinct superimpose to `Unchanged`,
+        // not `Modified`.
+        let lhs = AtomAst::from_element(Element::C).with_charge(lhs);
+        let rhs = AtomAst::from_element(Element::C).with_charge(rhs);
+        assert_eq!(
+            EntitySpan::superimpose(Some(lhs.clone()), Some(rhs)),
+            Some(EntitySpan::Unchanged(lhs))
+        );
     }
 
     #[fixture]

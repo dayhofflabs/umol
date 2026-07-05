@@ -25,6 +25,7 @@ use super::super::id::{
 };
 use super::super::ligand::StereoLigand;
 use super::super::remap::IdCompaction;
+use super::super::traits::Canonicalize;
 use super::MoleculeBuilder;
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
@@ -1473,37 +1474,37 @@ impl MoleculeBuilder {
         let atom = self.atom_mut(id);
         match change {
             AtomFieldChange::Element { old, new } => {
-                if atom.ast.element != old {
+                if !atom.ast.element.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.ast.element = new;
             }
             AtomFieldChange::IsotopeMass { old, new } => {
-                if atom.ast.isotope_mass != old {
+                if !atom.ast.isotope_mass.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.ast.isotope_mass = new;
             }
             AtomFieldChange::Charge { old, new } => {
-                if atom.ast.charge != old {
+                if !atom.ast.charge.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.ast.charge = new;
             }
             AtomFieldChange::ImplicitHydrogens { old, new } => {
-                if atom.ast.implicit_hydrogens != old {
+                if !atom.ast.implicit_hydrogens.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.ast.implicit_hydrogens = new;
             }
             AtomFieldChange::LonePairs { old, new } => {
-                if atom.ast.lone_pairs != old {
+                if !atom.ast.lone_pairs.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.ast.lone_pairs = new;
             }
             AtomFieldChange::Spin { old, new } => {
-                if atom.ast.spin != old {
+                if !atom.ast.spin.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.ast.spin = new;
@@ -1520,19 +1521,19 @@ impl MoleculeBuilder {
         let bond = self.bond_mut(id);
         match change {
             BondFieldChange::Order { old, new } => {
-                if bond.ast.order != old {
+                if !bond.ast.order.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 bond.ast.order = new;
             }
             BondFieldChange::Charge { old, new } => {
-                if bond.ast.charge != old {
+                if !bond.ast.charge.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 bond.ast.charge = new;
             }
             BondFieldChange::Spin { old, new } => {
-                if bond.ast.spin != old {
+                if !bond.ast.spin.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 bond.ast.spin = new;
@@ -1549,7 +1550,7 @@ impl MoleculeBuilder {
         let dat = self.dative_bond_mut(id);
         match change {
             DativeBondFieldChange::Order { old, new } => {
-                if dat.ast.order != old {
+                if !dat.ast.order.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 dat.ast.order = new;
@@ -1566,19 +1567,19 @@ impl MoleculeBuilder {
         let ar = self.aromatic_system_mut(id);
         match change {
             AromaticSystemFieldChange::Electrons { old, new } => {
-                if ar.ast.electrons != old {
+                if !ar.ast.electrons.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 ar.ast.electrons = new;
             }
             AromaticSystemFieldChange::Charge { old, new } => {
-                if ar.ast.charge != old {
+                if !ar.ast.charge.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 ar.ast.charge = new;
             }
             AromaticSystemFieldChange::Spin { old, new } => {
-                if ar.ast.spin != old {
+                if !ar.ast.spin.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 ar.ast.spin = new;
@@ -1595,19 +1596,19 @@ impl MoleculeBuilder {
         let mc = self.multicenter_bond_mut(id);
         match change {
             MulticenterBondFieldChange::Electrons { old, new } => {
-                if mc.ast.electrons != old {
+                if !mc.ast.electrons.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 mc.ast.electrons = new;
             }
             MulticenterBondFieldChange::Charge { old, new } => {
-                if mc.ast.charge != old {
+                if !mc.ast.charge.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 mc.ast.charge = new;
             }
             MulticenterBondFieldChange::Spin { old, new } => {
-                if mc.ast.spin != old {
+                if !mc.ast.spin.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 mc.ast.spin = new;
@@ -1624,7 +1625,7 @@ impl MoleculeBuilder {
         let nc = self.noncovalent_bond_mut(id);
         match change {
             NoncovalentBondFieldChange::Kind { old, new } => {
-                if nc.ast.kind != old {
+                if !nc.ast.kind.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 nc.ast.kind = new;
@@ -1641,7 +1642,7 @@ impl MoleculeBuilder {
         let sa = self.stereo_atom_mut(id);
         match change {
             StereoAtomFieldChange::Configuration { old, new } => {
-                if sa.ast.configuration != old {
+                if !sa.ast.configuration.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 sa.ast.configuration = new;
@@ -1658,7 +1659,7 @@ impl MoleculeBuilder {
         let sb = self.stereo_bond_mut(id);
         match change {
             StereoBondFieldChange::Configuration { old, new } => {
-                if sb.ast.configuration != old {
+                if !sb.ast.configuration.canonical_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 sb.ast.configuration = new;
@@ -1685,7 +1686,13 @@ impl MoleculeBuilder {
             (None, None) => return Ok(()),
         };
         let cs = &mut self.atom_mut(id).ast.constraints;
-        if cs.get_by_key(key).cloned() != old {
+        let current = cs.get_by_key(key).cloned();
+        let matches = match (&current, &old) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.canonical_eq(b),
+            _ => false,
+        };
+        if !matches {
             return Err(TransactionError::OldStateMismatch);
         }
         match new {
@@ -1717,7 +1724,13 @@ impl MoleculeBuilder {
             (None, None) => return Ok(()),
         };
         let cs = &mut self.bond_mut(id).ast.constraints;
-        if cs.get_by_key(key).cloned() != old {
+        let current = cs.get_by_key(key).cloned();
+        let matches = match (&current, &old) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.canonical_eq(b),
+            _ => false,
+        };
+        if !matches {
             return Err(TransactionError::OldStateMismatch);
         }
         match new {
@@ -1749,7 +1762,13 @@ impl MoleculeBuilder {
             (None, None) => return Ok(()),
         };
         let cs = &mut self.dative_bond_mut(id).ast.constraints;
-        if cs.get_by_key(key).cloned() != old {
+        let current = cs.get_by_key(key).cloned();
+        let matches = match (&current, &old) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.canonical_eq(b),
+            _ => false,
+        };
+        if !matches {
             return Err(TransactionError::OldStateMismatch);
         }
         match new {
@@ -1781,7 +1800,13 @@ impl MoleculeBuilder {
             (None, None) => return Ok(()),
         };
         let cs = &mut self.aromatic_system_mut(id).ast.constraints;
-        if cs.get_by_key(key).cloned() != old {
+        let current = cs.get_by_key(key).cloned();
+        let matches = match (&current, &old) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.canonical_eq(b),
+            _ => false,
+        };
+        if !matches {
             return Err(TransactionError::OldStateMismatch);
         }
         match new {
@@ -1813,7 +1838,13 @@ impl MoleculeBuilder {
             (None, None) => return Ok(()),
         };
         let cs = &mut self.multicenter_bond_mut(id).ast.constraints;
-        if cs.get_by_key(key).cloned() != old {
+        let current = cs.get_by_key(key).cloned();
+        let matches = match (&current, &old) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.canonical_eq(b),
+            _ => false,
+        };
+        if !matches {
             return Err(TransactionError::OldStateMismatch);
         }
         match new {
@@ -1845,7 +1876,13 @@ impl MoleculeBuilder {
             (None, None) => return Ok(()),
         };
         let cs = &mut self.stereo_atom_mut(id).ast.constraints;
-        if cs.get_by_key(key).cloned() != old {
+        let current = cs.get_by_key(key).cloned();
+        let matches = match (&current, &old) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.canonical_eq(b),
+            _ => false,
+        };
+        if !matches {
             return Err(TransactionError::OldStateMismatch);
         }
         match new {
@@ -1877,7 +1914,13 @@ impl MoleculeBuilder {
             (None, None) => return Ok(()),
         };
         let cs = &mut self.stereo_bond_mut(id).ast.constraints;
-        if cs.get_by_key(key).cloned() != old {
+        let current = cs.get_by_key(key).cloned();
+        let matches = match (&current, &old) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.canonical_eq(b),
+            _ => false,
+        };
+        if !matches {
             return Err(TransactionError::OldStateMismatch);
         }
         match new {
@@ -2265,6 +2308,28 @@ mod tests {
                 AtomConstraint::ring_membership(RingScope::Size(6), 1),
             ]
         );
+    }
+
+    #[rstest]
+    #[case::singleton_set(ValueAst::Lit(1), ValueAst::lit_set([1]))]
+    fn test_molecule_builder_transact_modify_atom_field_canonical(
+        mut one_atom: MoleculeBuilder,
+        #[case] current: ValueAst,
+        #[case] old: ValueAst,
+    ) {
+        // The modify's recorded `old` is canonically equal to — but structurally distinct from — the
+        // stored charge, so the old-state check passes (structural `!=` would raise `OldStateMismatch`).
+        one_atom.atom_mut(AtomId(0)).ast.charge = current;
+        one_atom
+            .transact(vec![Edit::ModifyAtomField {
+                id: AtomHandle::Id(AtomId(0)),
+                change: AtomFieldChange::Charge {
+                    old,
+                    new: ValueAst::Lit(2),
+                },
+            }])
+            .unwrap();
+        assert_eq!(one_atom.atom_mut(AtomId(0)).ast.charge, ValueAst::Lit(2));
     }
 
     #[rstest]

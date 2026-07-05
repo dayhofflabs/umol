@@ -271,7 +271,7 @@ pub trait EntityPatch: Sized {
     type Id: Copy + Eq + Hash + From<usize>;
     type Ast: Clone;
     type FieldChange;
-    type Constraint: Clone + PartialEq;
+    type Constraint: Canonicalize;
 
     fn modify_field(id: Self::Id, change: Self::FieldChange) -> Self;
     fn modify_constraint(

@@ -634,7 +634,7 @@ impl ReactionSpanAst {
                     lhs: left,
                     rhs: right,
                 } => deltas.extend(
-                    <StereoAtomDelta as EntityPatch>::diff(id, left, right)
+                    StereoAtomDelta::diff(id, left, right)
                         .into_iter()
                         .map(Delta::StereoAtom),
                 ),
@@ -665,7 +665,7 @@ impl ReactionSpanAst {
                     lhs: left,
                     rhs: right,
                 } => deltas.extend(
-                    <StereoBondDelta as EntityPatch>::diff(id, left, right)
+                    StereoBondDelta::diff(id, left, right)
                         .into_iter()
                         .map(Delta::StereoBond),
                 ),
