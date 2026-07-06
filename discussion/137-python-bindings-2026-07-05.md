@@ -177,6 +177,10 @@ here):
   silently return `NotImplemented`-by-omission.
 - **Mutation:** on the owner facade or a builder (see the facade section), never
   through child view objects.
+- **Rust alias for a wrapped foreign type:** crate-suffix + the exact Rust type name —
+  `umol_ast::ast::MoleculeAst` → `AstMoleculeAst`, `umol_chem::element::Element` →
+  `ChemElement`. Duplication (`AstMoleculeAst`) is accepted; the wrapper keeps the
+  bare Rust name (`MoleculeAst`, `Element`).
 
 ## Documentation strategy
 
@@ -292,24 +296,49 @@ serialization idiom, for external data, not a built-and-matched AST). Lesson sto
 in reverse from polars: **every variant is a consistent instance** — never some
 variants classes and some instances (polars' `isinstance` broke on that).
 
-**Mechanism (spike-decided, not chosen in the abstract).** Two ways to realize the
-per-variant-class surface, both yielding the identical Python API:
+**Mechanism (resolved by the S1a spike, 2026-07-05): native PyO3 complex enums
+throughout.** The open question was whether a native complex enum can hold a
+recursive `Py<Self>` / `Vec<Py<Self>>` field. The `ValueTerm` spike answered **yes**:
+the enum compiles, and from Python it constructs (`ValueTerm.Lit(5)`,
+`ValueTerm.Neg(...)`, `ValueTerm.Sum([...])`), reads fields (`_0`/`_1`), and `match`es
+natively. So the pure-Python-over-opaque fallback is **not needed** — every value
+mirror type is a native complex enum. AST recursion (`Box<Self>`/`Vec<Self>`) maps to
+`Py<Self>`/`Vec<Py<Self>>`; the two are *distinct* types bridged by `pub(crate)`
+`from_ast(py, &AstT) -> PyResult<T>` / `to_ast(&self, py) -> AstT` conversions (the
+parallel-representation cost native enums carry — accepted, since native gives the
+match ergonomics and the conversions are mechanical and roundtrip-tested).
 
-- **Native PyO3 complex enums** where they compile — PyO3 generates exactly the
-  variant-class + `__match_args__` shape for free. The only blocker is the
-  unverified recursion in `ValueTerm`/`ValuePredicate` (`Box`/`Vec` self-reference).
-- **Pure-Python variant classes over an opaque Rust core** (polars-style) for
-  whatever native enums can't take — the `python/umol/` layer defines the class,
-  converting to/from the Rust value at the boundary.
+Notes from the spike: tuple variants expose fields as `_0`/`_1` (positional `match`
+works: `case ValueTerm.Lit(n)`); `from_ast` allocates one Python object per node via
+`Py::new`; GIL-holding Rust tests use `Python::attach` (PyO3 0.29 renamed `with_gil`)
+under the `auto-initialize` dev-dependency (test-only, absent from the wheel build).
 
-The whole choice hinges on one unknown: **can a PyO3 native complex enum hold a
-recursive `Py<Self>` / `Vec<Py<Self>>` field?** That is an early compile spike on
-`ValueTerm` (below). If yes: native enums throughout (cleanest, most single-source).
-If no: native enums for the non-recursive types, pure-Python variant classes over
-the opaque value for the recursive trees only. Sequencing within the slice:
-`Element` → the scalar-field enums (`ElementAst`, `IsotopeMassAst`, `ValueAst` +
-`ValueTerm`/`ValuePredicate`, `SpinStateAst`) → `AtomConstraints` (13 variants +
-sub-ASTs) last.
+Sequencing within the slice: `Element` → the scalar-field enums (`ElementAst`,
+`IsotopeMassAst`, `ValueAst` + `ValueTerm`/`ValuePredicate`, `SpinStateAst`) →
+`AtomConstraints` (13 variants + sub-ASTs) last.
+
+### Wrapping strategies
+
+Whether a wrapper carries AST-conversion methods is set by its wrapping *strategy*,
+chosen per type — **not** by whether the Rust type is a `Lattice`/homoiconic AST, nor
+by `ast`-module membership (`MoleculeAst` is both, and is *held*, not mirrored).
+
+- **Hold-the-value** — `#[pyclass] struct W(RustValue)` stores the Rust value; reads
+  are accessors over it. No parallel representation, so **no AST-conversion methods**;
+  a getter exposing a value-algebra field runs *that field's* conversion on access.
+  Used for owned roots (`MoleculeAst`, `AtomAst`) and leaf vocabulary (`Element` over
+  `ChemElement`).
+- **Structural mirror** — `#[pyclass] enum W { …variants… }`, a distinct native enum
+  reproducing the Rust enum's variants (recursion re-expressed `Box<Self>` → `Py<Self>`).
+  Being a separate type, it **carries conversions to/from the AST** (the `from_ast` /
+  `to_ast` pair on `ValueTerm`). Used for the value/pattern algebra (`ValueAst`,
+  `ValueTerm`, `ValuePredicate`, `ElementAst`, `IsotopeMassAst`, …).
+
+Criterion: **does Python construct / `match` it by variant?** Yes → structural mirror
+(it must be a umol-py-defined `#[pyclass] enum` — you can't `#[pyclass]` a foreign enum,
+and the recursion becomes `Py<Self>`). No → hold the value. The mirrored set coincides
+with the homoiconic `Lattice` algebra, but the *cause* is the destructure question, not
+`Lattice`-ness.
 
 ## Decisions
 
@@ -331,10 +360,10 @@ Settled:
   work) — the stdlib-`ast` / polars-`DataType` shape; not `as_*` accessors, not a
   tag-field discriminator. Every variant a consistent instance. `Element` is a
   pyclass (`.symbol`/`.atomic_number`).
-- **Mirror mechanism** — spike-decided: PyO3 native complex enums where they compile,
-  pure-Python variant classes over the opaque Rust value where they can't. Hinges on
-  one compile spike — whether a native complex enum can hold a recursive
-  `Py<Self>`/`Vec<Py<Self>>` field (`ValueTerm`/`ValuePredicate`).
+- **Mirror mechanism** — **native PyO3 complex enums throughout** (S1a spike, 2026-07-05:
+  a complex enum *does* hold recursive `Py<Self>`/`Vec<Py<Self>>` fields — construct,
+  field-read, and `match` all work). Pure-Python fallback dropped. Each mirror type is
+  a distinct native enum bridged to the AST by `pub(crate)` `from_ast`/`to_ast`.
 - **Borrowed derivations** — `ReactionDerivation<'a>` gets an owned Rust result type
   the binding wraps (Python-pull change to the Rust API).
 - **Generics** — monomorphize at the boundary: per-entity-family `EntitySpan<T>`
@@ -374,7 +403,7 @@ the pytest suite (via `maturin develop`) both pass. **Naming: maximum Rust fidel
 `MoleculeAst`; no bare `Molecule`/`Atom`), and `Id` types are Python newtypes, not
 bare `int`. Revisit on alpha-user feedback.
 
-### S0 — Scaffold + leaves (green)
+### S0 — Scaffold + leaves (green) **Done**
 
 - **S0a** — crate `umol-py`: workspace member; `Cargo.toml` (`pyo3` extension-module
   + `abi3-py39`, `cdylib`+`rlib`, `umol-ast`/`umol-chem` behind a `graph` feature);
@@ -458,3 +487,17 @@ bare `int`. Revisit on alpha-user feedback.
 - **Naming (decided):** maximum Rust fidelity — verbatim `MoleculeAst`/`AtomAst`/
   `AtomView`/`ValueAst` (no bare `Molecule`/`Atom`), `Id` types as newtypes. Revisit
   on alpha-user feedback.
+
+## Findings to fold back into Rust
+
+Rust-side changes surfaced while wrapping (the Python-pull of the co-iteration
+principle). Collected here as a running list; applied as a batch on the Rust side,
+not mid-slice.
+
+1. **`MoleculeAst` has no `Hash` impl** (S0c). `PartialEq`/`Eq` are hand-written
+   (excluding `rings_cache`), but there is no `Hash` — yet the struct doc comment
+   (`umol-ast/src/ast/molecule.rs:54`) claims the cache is "excluded from PartialEq /
+   **Hash**." Consequence: the Python `MoleculeAst` is unhashable (`#[pyclass(eq)]`
+   only). Fold-back: add a `Hash` impl mirroring the `PartialEq` field set (exclude
+   `rings_cache`), then the wrapper takes `#[pyclass(eq, hash, frozen)]`; fix the
+   stale comment.

@@ -2,11 +2,11 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from . import _native
+from ._native import Element, MemOp, MoleculeAst, RelOp, ValueTerm
 
 try:
     __version__ = version("umol")
 except PackageNotFoundError:
     __version__ = "0.0.0"
 
-__all__ = ["_native", "__version__"]
+__all__ = ["Element", "MemOp", "MoleculeAst", "RelOp", "ValueTerm", "__version__"]
