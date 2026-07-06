@@ -6,6 +6,13 @@ materials/
 scratch/
 whitepaper
 
+# Python / maturin (umol-py)
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+umol-py/python/umol/*.so
+
 ### Emacs ###
 # -*- mode: gitignore; -*-
 *~

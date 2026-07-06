@@ -19,11 +19,16 @@ Two coupled deliverables:
 ## Verified current state
 
 - **Two disjoint domain roots.** `umol-graph` and `umol-geometric` share no
-  dependency edge; a consumer of `umol-graph` compiles zero msym / C code. Domain
+  dependency edge; a consumer of `umol-graph` compiles zero *msym* code. Domain
   isolation already exists at the crate level (doc 129).
-- **`umol-msym-sys` is a C build** (`cc` compiling `libmsym/src/*.c` + a git
-  submodule), reachable only through `umol-geometric`. It is the sole heavy
-  packaging cost.
+- **Both domains carry a `-sys` C build** (corrected at S0a, 2026-07-05 — the
+  earlier "graph = no C build" premise from doc 129 was wrong):
+  - *graph* — `umol-graph-core` depends on `nauty-Traces-sys`, which builds via `cc`
+    **and `bindgen` (libclang/LLVM)**. `umol-ast` depends on `umol-graph-core`, so
+    *every* binding over the AST pulls it. Self-contained (vendored; no system lib or
+    submodule), but needs a C + libclang toolchain to build from source.
+  - *geometric* — `umol-msym-sys` (`cc` compiling vendored `libmsym/src/*.c` + a git
+    submodule), reachable only through `umol-geometric`; no bindgen.
 - **No umbrella crate.** Deferred in doc 129; the per-crate split already isolates
   the C build for Rust consumers, so no single entry point existed to hang features
   on.
@@ -51,9 +56,22 @@ Two coupled deliverables:
   a home for stubs/docstrings and eventual conveniences — but see the parallelism
   principle below: the interface tracks Rust 1:1 for now, so the Python layer stays
   thin and divergence is deferred to alpha-user iteration, not front-loaded.
-- **Wheels:** default build is graph-only (no C toolchain, no submodule — a plain
-  `pip install`); the geometric wheel follows once `cibuildwheel` + submodule
-  checkout are set up.
+- **Wheels (decided):** keep `nauty` (no feature gate — automorphisms/symmetry is
+  core and the local drag is nil: ~5s one-time, cached, never run by the slice).
+  Distribute **prebuilt abi3 wheels from CI** so colleagues `pip install` a binary and
+  never need a toolchain. abi3 ⇒ one wheel per platform covering Python 3.9+, so the
+  matrix is tiny: `macos-arm64`, `macos-x86_64`, `manylinux_2_28-x86_64` (+ `aarch64`
+  only if needed). Tool: `PyO3/maturin-action` (`maturin generate-ci github`). The
+  single extra step vs a pure-Rust crate: `bindgen` needs **libclang inside the
+  manylinux container** — one line, `before-script-linux: yum install -y clang`;
+  macOS runners already have clang. The geometric wheel adds the `libmsym` submodule
+  on top later. The `automorphisms`/`nauty` feature gate stays available for the one
+  case not in scope — a source build on a platform no wheel is produced for. A
+  libclang-free fallback is feasible without porting nauty/bliss: pure-Rust
+  individualization-refinement crates exist (`canonical-form`, `graph_symmetry`/CNAP,
+  `graphica`) to evaluate, and worst case a small IR reusing graph-core's existing
+  `refine.rs` — molecular graphs (small, sparse, strongly colored) are the easy case,
+  and nauty serves as a differential-testing oracle. Deferred; not needed now.
 
 ## The facade boundary (lead open question)
 
@@ -103,8 +121,10 @@ multicenter, stereo) until a workflow drives it.
 ## Feature gating lands on `umol-py`
 
 The umbrella that doc 129 deferred effectively arrives here: `umol-py` is the first
-single artifact that would otherwise force the `libmsym` C build on every user. The
-`graph` / `geometric` features from doc 129 §i belong on this crate:
+single artifact with a feature surface. The `geometric` feature still gates the
+`libmsym` submodule build; note the `graph` build is *not* toolchain-free either (it
+pulls `nauty-Traces-sys`, `cc` + `bindgen`; see Verified current state). The `graph`
+/ `geometric` features from doc 129 §i belong on this crate:
 
 ```toml
 [features]
@@ -218,10 +238,14 @@ Terse, at the public boundary, mechanically enforced:
 - **Dev interpreter**: build/test against Python 3.13 (`/opt/homebrew/bin/python3.13`
   via `uv venv --python 3.13`); the default `python3` is 3.9 (EOL). Keep `abi3-py39`
   as the wheel floor if broad support is wanted, but 3.9 is not the dev target.
+- **Graph C build**: `nauty-Traces-sys` needs `cc` + `bindgen`/libclang — present on
+  the dev machine (S0a built clean). Required for *any* umol-py build, not just
+  geometric.
 - **Docs**: `pandoc`, `xelatex`/`lualatex`/`latexmk`, `pdfunite`, `pygmentize`,
   `dot`; LaTeX `mhchem`/`chemfig`/`minted`/`listings`/`pdfpages`/`tikz` all present.
-- **Deferred with the geometric domain**: `libmsym` submodule init + `cibuildwheel`
-  (not installed) for multi-platform C-linked wheels.
+- **Deferred**: `cibuildwheel` (not installed) for prebuilt multi-platform wheels —
+  needed for *graph* wheels too, since source builds require the C+libclang toolchain;
+  plus the `libmsym` submodule for the geometric wheel.
 
 ## First slice (de-risk)
 
@@ -299,6 +323,9 @@ Settled:
   builder, never through child views (runtime-borrow aliasing).
 - **Interface parallelism** — Python API mirrors the Rust API 1:1 (names, structure,
   AST-typed returns, not primitives); divergence deferred to alpha-user co-iteration.
+- **Naming** — maximum Rust fidelity: verbatim type names incl. the `Ast` suffix
+  (`MoleculeAst`/`AtomAst`/`AtomView`/`ValueAst`, no bare `Molecule`/`Atom`); `Id`
+  types as Python newtypes, not bare `int`. Revisit on alpha-user feedback.
 - **Value representation** — full structural mirror. Read surface is **one class per
   variant** (children as attributes, `__match_args__` set; `isinstance`/`match` both
   work) — the stdlib-`ast` / polars-`DataType` shape; not `as_*` accessors, not a
@@ -332,8 +359,102 @@ Open:
   (`AtomViews`/`AtomView` handle + owned `AtomAst`), and the value-type mirror classes
   (`Element`, `ElementAst`, `IsotopeMassAst`, `ValueAst`/`ValueTerm`/`ValuePredicate`,
   `SpinStateAst`), then `AtomConstraints`; step ii adds atom DSL parsing. First plan
-  task is the mechanism spike (recursive native complex enum on `ValueTerm`). Naming
-  of the owned-atom vs atom-view Python types to be proposed.
+  task is the mechanism spike (recursive native complex enum on `ValueTerm`).
 - **Owned reaction-result type** — its Rust name and shape (the `into_owned()`
   target for `ReactionDerivation`), when reactions are reached.
-- **`AtomId` in Python** — bare `int` vs a newtype (defer; smallest of the open items).
+
+## Implementation plan (slice i + ii)
+
+Scope: slice i (`MoleculeAst`, atom read surface, `AtomAst`, its value types) + ii
+(atom DSL parsing). All work is **additive in the new `umol-py` crate** — existing
+workspace crates are consumed read-only, so the workspace stays green throughout.
+"Green" per stage = `cargo test -p umol-py` (wrapper/conversion unit tests) **and**
+the pytest suite (via `maturin develop`) both pass. **Naming: maximum Rust fidelity**
+(decided) — Python type names mirror Rust verbatim (`ValueAst`, `AtomAst`, `AtomView`,
+`MoleculeAst`; no bare `Molecule`/`Atom`), and `Id` types are Python newtypes, not
+bare `int`. Revisit on alpha-user feedback.
+
+### S0 — Scaffold + leaves (green)
+
+- **S0a** — crate `umol-py`: workspace member; `Cargo.toml` (`pyo3` extension-module
+  + `abi3-py39`, `cdylib`+`rlib`, `umol-ast`/`umol-chem` behind a `graph` feature);
+  `pyproject.toml` (maturin, mixed layout `python/umol/`); `#[pymodule] _native`;
+  `python/umol/__init__.py`; `uv venv --python 3.13`; a pytest asserting `import
+  umol`. *Additive.* [dep: —]
+- **S0b** — `Element` pyclass (module `element`): `Element(symbol)` / from atomic
+  number, `.symbol`, `.atomic_number`, `__repr__`/`__eq__`/`__hash__`. Rust
+  conversion test + pytest roundtrip. *Additive.* [dep: S0a]
+- **S0c** — skeletal `MoleculeAst` pyclass (module `molecule`): wrap the Rust value,
+  `empty()`, `.atom_count`, `__eq__`/`__repr__` — proves the owned-root wrapper.
+  *Additive.* [dep: S0a]
+
+### S1 — Mechanism spike + value-expression core (green)
+
+- **S1a** — **spike & `ValueTerm`** (module `value`): prototype `ValueTerm` as a PyO3
+  native complex enum with recursive `Py<Self>` / `Vec<Py<Self>>` fields; confirm
+  construct + `match` from Python. Record the outcome in this doc. If native fails →
+  pure-Python variant classes over an opaque `#[pyclass] ValueTerm` core. Delivers
+  `ValueTerm` + `__match_args__` + roundtrip tests either way. *Additive.* [dep: S0a]
+- **S1b** — `RelOp`, `MemOp` simple pyclass enums (module `value`). *Additive.*
+  [dep: S0a]
+- **S1c** — `ValuePredicate` mirror (recursive; `Rel`/`Mem`/`Not`/`And`/`Or`).
+  *Additive.* [dep: S1a, S1b]
+- **S1d** — `ValueAst` mirror (7 variants incl. `Term`/`Predicate`), with the
+  Rust-parallel constructors (`lit`/`lit_set`/`range_from`/`var`/`undetermined`).
+  *Additive.* [dep: S1a, S1c]
+
+### S2 — Atom-field value types (green)
+
+- **S2a** — `ElementAst` (5 variants; `Lit` uses `Element`, `Var` uses `MemOp`).
+  *Additive.* [dep: S0b, S1b]
+- **S2b** — `IsotopeMassAst` (5 variants incl. `Natural`). *Additive.* [dep: S0a]
+- **S2c** — `SpinStateAst` (`{unpaired, multiplicity}`; fields are `ValueAst`).
+  *Additive.* [dep: S1d]
+
+### S3 — `AtomAst` owned (green)
+
+- **S3a** — `AtomAst` pyclass (module `atom`): mirror-typed fields (element /
+  isotope_mass / charge / implicit_hydrogens / lone_pairs / spin); Rust-parallel
+  constructors (`new`, `from_element`, `with_*`); getters; `__repr__`/`__eq__`.
+  `constraints` deferred to S5c. *Additive.* [dep: S1d, S2a, S2b, S2c]
+
+### S4 — Molecule atom read surface (green)
+
+- **S4a** — `AtomId` newtype pyclass + `AtomViews` / `AtomView` handle pyclasses
+  (module `atom`): views hold `Py<MoleculeAst>` + `AtomId`; `AtomView.id` is an
+  `AtomId`, molecule indexing takes one; getters return the mirror types by reading a
+  transient Rust `AtomView`. Bond / topology-derived methods (`valence`, `neighbors`,
+  …) are out of scope (need the bond slice). *Additive.* [dep: S0c, S3a]
+- **S4b** — enrich the `MoleculeAst` pyclass: `.atoms` → `AtomViews`, indexing /
+  iteration → `AtomView`, and `from_atoms_and_bonds`-style construction taking Python
+  `AtomAst`s. *Additive.* [dep: S4a, S3a]
+
+### S5 — `AtomConstraints` (green)
+
+- **S5a** — constraint sub-ASTs (module `constraint`): `RingScope`,
+  `RingMembershipAst`, `AromaticValenceAst`, `MulticenterValenceAst`,
+  `TetrahedralStereoAst` (the last may pull one or two more small stereo types).
+  *Additive.* [dep: S1d]
+- **S5b** — `AtomConstraint` (13 variants) + `AtomConstraints` container (add / iter /
+  get-by-key, mirroring the Rust API). *Additive.* [dep: S5a, S1d]
+- **S5c** — wire a `constraints` getter onto `AtomAst` and `AtomView`. *Additive.*
+  [dep: S5b, S3a, S4a]
+
+### S6 (step ii) — atom DSL parsing (green)
+
+- **S6a** — `AtomAst.parse(str)` / `str(atom)` via `AtomDsl` (`FromStr`/`Display`);
+  full roundtrip incl. constraints. Parse errors → a minimal binding exception (the
+  full three-tier hierarchy is a later slice). *Additive.* [dep: S3a, S5c]
+
+### Critical path & deferrals
+
+- **Critical path:** S0a → S1a → S1c → S1d → S2c → S3a → S4a → S4b → S5a → S5b → S5c
+  → S6a. The spike (S1a) is the highest-risk item and sits first; everything
+  downstream assumes its mechanism outcome.
+- **Out of scope for this slice** (subsequent slices, building outward): `AtomView`
+  bond & topology methods; molecule-level DSL/EDN parsing; fingerprints; substructure
+  search; reactions; the full error/exception hierarchy. None are needed for the
+  i + ii deliverable.
+- **Naming (decided):** maximum Rust fidelity — verbatim `MoleculeAst`/`AtomAst`/
+  `AtomView`/`ValueAst` (no bare `Molecule`/`Atom`), `Id` types as newtypes. Revisit
+  on alpha-user feedback.
