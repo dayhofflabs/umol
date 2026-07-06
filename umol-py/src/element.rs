@@ -8,9 +8,21 @@ use pyo3::prelude::*;
 use umol_chem::element::Element as ChemElement;
 
 /// A chemical element (periodic-table entry).
-#[pyclass(eq, hash, frozen)]
-#[derive(PartialEq, Eq, Hash)]
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Element(ChemElement);
+
+impl From<ChemElement> for Element {
+    fn from(element: ChemElement) -> Self {
+        Element(element)
+    }
+}
+
+impl From<&Element> for ChemElement {
+    fn from(element: &Element) -> Self {
+        element.0
+    }
+}
 
 #[pymethods]
 impl Element {
@@ -24,10 +36,8 @@ impl Element {
 
     /// Construct from atomic number (1–118).
     #[staticmethod]
-    fn from_atomic_number(number: u32) -> PyResult<Self> {
-        u8::try_from(number)
-            .ok()
-            .and_then(ChemElement::from_atomic_number)
+    fn from_atomic_number(number: u8) -> PyResult<Self> {
+        ChemElement::from_atomic_number(number)
             .map(Self)
             .ok_or_else(|| PyValueError::new_err(format!("invalid atomic number: {number}")))
     }
@@ -40,8 +50,8 @@ impl Element {
 
     /// Atomic number (proton count).
     #[getter]
-    fn atomic_number(&self) -> u32 {
-        self.0.atomic_number().into()
+    fn atomic_number(&self) -> u8 {
+        self.0.atomic_number()
     }
 
     fn __repr__(&self) -> String {
@@ -59,7 +69,7 @@ mod tests {
     #[case("C", 6)]
     #[case("Cl", 17)]
     #[case("Og", 118)]
-    fn test_element_new(#[case] symbol: &str, #[case] atomic_number: u32) {
+    fn test_element_new(#[case] symbol: &str, #[case] atomic_number: u8) {
         let element = Element::new(symbol).unwrap();
         assert_eq!(element.symbol(), symbol);
         assert_eq!(element.atomic_number(), atomic_number);
@@ -77,7 +87,7 @@ mod tests {
     #[case(1, "H")]
     #[case(6, "C")]
     #[case(118, "Og")]
-    fn test_element_from_atomic_number(#[case] number: u32, #[case] symbol: &str) {
+    fn test_element_from_atomic_number(#[case] number: u8, #[case] symbol: &str) {
         let element = Element::from_atomic_number(number).unwrap();
         assert_eq!(element.symbol(), symbol);
         assert_eq!(element.atomic_number(), number);
@@ -86,8 +96,8 @@ mod tests {
     #[rstest]
     #[case(0)]
     #[case(119)]
-    #[case(300)]
-    fn test_element_from_atomic_number_error(#[case] number: u32) {
+    #[case(255)]
+    fn test_element_from_atomic_number_error(#[case] number: u8) {
         assert!(Element::from_atomic_number(number).is_err());
     }
 

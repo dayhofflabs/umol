@@ -5,11 +5,14 @@ use pyo3::prelude::*;
 
 #[cfg(feature = "graph")]
 use crate::{
+    atom::{ElementAst, IsotopeMassAst, SpinStateAst},
     element::Element,
     molecule::MoleculeAst,
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
 };
 
+#[cfg(feature = "graph")]
+mod atom;
 #[cfg(feature = "graph")]
 mod element;
 #[cfg(feature = "graph")]
@@ -31,6 +34,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ValueTerm>()?;
         module.add_class::<ValuePredicate>()?;
         module.add_class::<ValueAst>()?;
+        module.add_class::<ElementAst>()?;
+        module.add_class::<IsotopeMassAst>()?;
+        module.add_class::<SpinStateAst>()?;
     }
     Ok(())
 }

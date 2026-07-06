@@ -4,9 +4,12 @@ from importlib.metadata import PackageNotFoundError, version
 
 from ._native import (
     Element,
+    ElementAst,
+    IsotopeMassAst,
     MemOp,
     MoleculeAst,
     RelOp,
+    SpinStateAst,
     ValueAst,
     ValuePredicate,
     ValueTerm,
@@ -19,9 +22,12 @@ except PackageNotFoundError:
 
 __all__ = [
     "Element",
+    "ElementAst",
+    "IsotopeMassAst",
     "MemOp",
     "MoleculeAst",
     "RelOp",
+    "SpinStateAst",
     "ValueAst",
     "ValuePredicate",
     "ValueTerm",

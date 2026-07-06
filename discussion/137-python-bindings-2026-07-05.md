@@ -172,9 +172,19 @@ here):
   iteration, applied on both sides together, not front-loaded in the Python layer.
 - **Reads:** mirror the Rust accessor shape (`atom.charge()` → `atom.charge`);
   computed/fallible stay methods (`mol.fingerprint()`).
-- **Dunders:** `__repr__` via Rust `Display`, `__eq__`/`__hash__` via Rust
-  `PartialEq`/`Hash` where the type has them; unsupported comparisons raise, not
-  silently return `NotImplemented`-by-omission.
+- **Integer types (S2a):** a mirror's boundary integer type **matches the underlying
+  Rust type** (fidelity), *not* the workspace "default to u32." Python `int` is
+  arbitrary precision, so width is invisible on the Python side — but the Rust type
+  sets the accepted input range (out-of-range → `OverflowError`) and should track its
+  source: `Element.atomic_number` is `u8` (as `ChemElement`), `IsotopeMassAst.Lit` is
+  `u32` (as the AST), `ValueAst.Lit` is `i64`. The "default u32" is for *new* fields;
+  a `usize` *count* still casts to `u32` at the `.len()` boundary (`atom_count`).
+- **Dunders (corrected S2a):** PyO3 has no automatic `Display`/`Debug` → dunder
+  bridge. `__str__` comes from `Display` via `#[pyclass(str)]` (or a `str = "…"`
+  format string); `__repr__` has **no** `Display`/`Debug` auto-option (a PyO3 todo) —
+  hand-write it as the eval-able constructor form (`ValueTerm.Lit(5)`), except simple
+  unit-only enums which auto-get `__repr__ = "Class.Variant"`. `__eq__`/`__hash__` via
+  Rust `PartialEq`/`Hash` (the `eq`/`hash` pyclass options) where the type has them.
 - **Mutation:** on the owner facade or a builder (see the facade section), never
   through child view objects.
 - **Rust alias for a wrapped foreign type:** crate-suffix + the exact Rust type name —
@@ -384,8 +394,10 @@ Settled:
   carried onto exception objects; typed exceptions want tier-2 enums, `Box<dyn>`
   only for the generic base.
 - **Surface policy** — native layer keeps Rust names, Python layer is PEP8; getters
-  for scalar fields, methods for computed/fallible; dunders via Rust
-  `Display`/`PartialEq`/`Hash`. Recorded here, harvested into the ubook later.
+  for scalar fields, methods for computed/fallible; `__eq__`/`__hash__` from Rust
+  `PartialEq`/`Hash`, `__str__` from `Display` via `#[pyclass(str)]`, `__repr__`
+  hand-written (no `Display`/`Debug` auto-bridge). Recorded here, harvested into the
+  ubook later.
 - **Doc separation** — four artifacts, coordinated by hand, no generation between
   them; Guide is not derived from doc comments.
 - **Doc-comment discipline** — `missing_docs` lint, one-line summaries, prose only
@@ -429,7 +441,7 @@ bare `int`. Revisit on alpha-user feedback.
   `empty()`, `.atom_count`, `__eq__`/`__repr__` — proves the owned-root wrapper.
   *Additive.* [dep: S0a]
 
-### S1 — Mechanism spike + value-expression core (green)
+### S1 — Mechanism spike + value-expression core (green) **Done**
 
 - **S1a** — **spike & `ValueTerm`** (module `value`): prototype `ValueTerm` as a PyO3
   native complex enum with recursive `Py<Self>` / `Vec<Py<Self>>` fields; confirm
@@ -444,7 +456,7 @@ bare `int`. Revisit on alpha-user feedback.
   Rust-parallel constructors (`lit`/`lit_set`/`range_from`/`var`/`undetermined`).
   *Additive.* [dep: S1a, S1c]
 
-### S2 — Atom-field value types (green)
+### S2 — Atom-field value types (green) **Done**
 
 - **S2a** — `ElementAst` (5 variants; `Lit` uses `Element`, `Var` uses `MemOp`).
   *Additive.* [dep: S0b, S1b]
@@ -513,3 +525,16 @@ not mid-slice.
    only). Fold-back: add a `Hash` impl mirroring the `PartialEq` field set (exclude
    `rings_cache`), then the wrapper takes `#[pyclass(eq, hash, frozen)]`; fix the
    stale comment.
+
+## Python-side todos
+
+Binding-side work deferred and batched (distinct from the Rust fold-backs above —
+these change only umol-py, not umol-ast).
+
+1. **`__repr__` / `__str__` on the complex-enum mirrors** (S2a). `ValueTerm`,
+   `ValueAst`, `ValuePredicate`, `ElementAst` currently have PyO3's default
+   `<… object at 0x…>` repr (simple enums like `RelOp` auto-get `Class.Variant`;
+   structs like `Element` hand-write it). Add `__repr__` as the eval-able constructor
+   form, and decide whether `__str__` should be the compact **DSL string** (the AST
+   value types impl `Display` as the value-expr, reachable via `to_ast`) — ties into
+   the S6 DSL-string surface.
