@@ -4,6 +4,9 @@ from importlib.metadata import PackageNotFoundError, version
 
 from ._native import (
     AtomAst,
+    AtomId,
+    AtomView,
+    AtomViews,
     Element,
     ElementAst,
     IsotopeMassAst,
@@ -23,6 +26,9 @@ except PackageNotFoundError:
 
 __all__ = [
     "AtomAst",
+    "AtomId",
+    "AtomView",
+    "AtomViews",
     "Element",
     "ElementAst",
     "IsotopeMassAst",

@@ -170,6 +170,23 @@ here):
   AST-typed returns). Rust methods are already `snake_case`, so mirroring gives PEP8
   for free. Divergences (Python-only conveniences) are deferred to alpha-user
   iteration, applied on both sides together, not front-loaded in the Python layer.
+- **Idiomatic Python wins over fidelity when they conflict (S4b).** Fidelity is the
+  default, but a Rust pattern that reads unidiomatically in Python is adapted, not
+  slavishly mirrored — idiomatic style outranks fidelity. E.g. Rust's `atoms[id]` →
+  `&AtomAst` (data) vs `atoms.get(id)`/`iter()` → `AtomView` (view) asymmetry is an
+  `Index`-signature artifact (Index must return a borrow; a view can't be borrowed);
+  Python has no such constraint, so `[]`/`get`/iteration return one consistent atom
+  type rather than reproducing the split. Where Rust exposes overloaded generic
+  `Index<T>` (`mol[AtomId]`, `mol[BondId]`), one Python `__getitem__` dispatches on
+  the key type at runtime, with `@overload` stubs for static typing.
+- **Builders → constructor kwargs + `replace`, not `with_*` chains (S4b, idiomatic
+  rule).** Rust's consuming `with_*` chain moves `self` (zero copies); Python can't
+  move out of a live pyclass, so each `with_*` clones the whole value — an N-step
+  chain does N copies. Python's idiom for immutable-copy-with-changes is a single
+  `replace(*, field=…)` (`datetime.replace`, `dataclasses.replace`,
+  `namedtuple._replace`): keyword args on the constructor to build in one shot, one
+  `replace` (single clone) to derive a modified copy. Applied to `AtomAst` at S4b —
+  the six `with_*` methods dropped for kwargs on `new`/`from_element` + `replace`.
 - **Reads:** mirror the Rust accessor shape (`atom.charge()` → `atom.charge`);
   computed/fallible stay methods (`mol.fingerprint()`).
 - **Integer types (S2a):** a mirror's boundary integer type **matches the underlying
@@ -368,6 +385,33 @@ and the recursion becomes `Py<Self>`). No → hold the value. The mirrored set c
 with the homoiconic `Lattice` algebra, but the *cause* is the destructure question, not
 `Lattice`-ness.
 
+That two-way cut is the coarse criterion; the concrete kinds observed through S4b:
+
+| Kind | Examples | `#[pyclass]` form | field-hold / arg | AST bridge |
+| --- | --- | --- | --- | --- |
+| **Leaf newtype** | `Element` | `(eq, hash, frozen, from_py_object)` struct over a *vocab* type | by value | `From<Chem>` / `From<&Self>` — not an AST |
+| **Id newtype** | `AtomId` | `(eq, hash, frozen, from_py_object)` struct over an id | by value (index arg) | `From<AstId>`; `#[new](u32)`, `.index` |
+| **Simple enum** | `RelOp`, `MemOp` | `(eq, from_py_object)` enum, unit variants | by value | `from_ast`/`to_ast`, **py-free** |
+| **Complex enum** | `ValueTerm`, `ValueAst`, `ValuePredicate`, `ElementAst`, `IsotopeMassAst` | `#[pyclass]` enum, data variants; unit → `()` | `Py<Self>` for recursion, by-value data else | `from_ast`/`to_ast` (**py** iff it holds `Py` children) |
+| **Mirror struct** | `SpinStateAst` | `#[pyclass]` struct, `#[pyo3(get)]` + `#[new]` | `Py<mirror>` fields | `from_ast`/`to_ast` (**py**) |
+| **Hold-the-value struct** | `MoleculeAst`, `AtomAst` | `(eq)` struct `W(AstT)` | holds `AstT`; getters mirror fields on read | **`inner`/`from_inner`** (borrow out / move in — no rebuild) |
+| **Handle view** | `AtomView`, `AtomViews` | `#[pyclass]` struct `{ owner: Py<W>, id }` | — | none — rebuilds a transient Rust view via `owner.inner()` |
+| **Iterator** | `AtomViewIter` | `#[pyclass]` struct, `__iter__`/`__next__` | holds `owner` + id iter | none — internal, unexported, not `add_class`'d |
+
+The wrapping-infra methods that bridge each kind to the AST:
+
+| Method | On | Role |
+| --- | --- | --- |
+| `from_ast(py?, &AstT) -> PyResult<T>` / `to_ast(&self, py?) -> AstT` | simple + complex enums, mirror struct | structural **convert** mirror ↔ AST (rebuilds; `py` when it allocates `Py` children) |
+| `inner(&self) -> &AstT` / `from_inner(ast: AstT) -> Self` | hold-the-value structs | **wrap/unwrap** the held value (borrow out, move in — no rebuild, no `py`) |
+| `into_py_variant(py, value) -> PyResult<Py<T>>` | every `from_ast` with `Py<…>` children | wrap a complex-enum child as its **variant** instance — `Py::new` yields a base instance (S3 bug) |
+| `From<Chem>` / `From<&Self> for Chem` | leaf newtypes | vocab-type conversion (not an AST bridge) |
+
+The two bridge *pairs* track the two strategies: `from_ast`/`to_ast` = structural
+**conversion** (the mirror rebuilds a parallel structure), `inner`/`from_inner` =
+**wrap/unwrap** of a held value (trivial). Which pair a type carries tells you its
+strategy at a glance; a handle view carries neither — it reads through `owner.inner()`.
+
 ## Decisions
 
 Settled:
@@ -404,6 +448,17 @@ Settled:
   `PartialEq`/`Hash`, `__str__` from `Display` via `#[pyclass(str)]`, `__repr__`
   hand-written (no `Display`/`Debug` auto-bridge). Recorded here, harvested into the
   ubook later.
+- **`AtomAst` is an immutable value (S4b).** Construct via kwargs
+  (`AtomAst(element, *, charge=…)`, `element` a concrete `Element` or an `ElementAst`),
+  derive via one-copy `replace(*, field=…)` — **no field setters**, despite the Rust
+  `pub` fields (which are storage, not a field-poke API — umol itself prefers
+  accessors). Reasons: the surface is uniformly value-semantic, and a lone mutable
+  type collides with `from_atoms`' clone-on-insert (`atom.charge = …` would silently
+  not touch an already-inserted molecule); RDKit-style in-place editing is
+  molecule-*owned* (`mol.atoms[i]`), so it belongs on the mutable-molecule facade (the
+  deferred mutation story), not on a detached atom. Element args accept `Element` *or*
+  `ElementAst` via a `#[derive(FromPyObject)]` union enum (`ElementInput`) — the same
+  runtime-dispatch mechanism as the `__getitem__` overloads.
 - **Doc separation** — four artifacts, coordinated by hand, no generation between
   them; Guide is not derived from doc comments.
 - **Doc-comment discipline** — `missing_docs` lint, one-line summaries, prose only
@@ -470,7 +525,7 @@ bare `int`. Revisit on alpha-user feedback.
 - **S2c** — `SpinStateAst` (`{unpaired, multiplicity}`; fields are `ValueAst`).
   *Additive.* [dep: S1d]
 
-### S3 — `AtomAst` owned (green)
+### S3 — `AtomAst` owned (green) **Done**
 
 - **S3a** — `AtomAst` pyclass (module `atom`): mirror-typed fields (element /
   isotope_mass / charge / implicit_hydrogens / lone_pairs / spin); Rust-parallel
@@ -531,19 +586,44 @@ not mid-slice.
    only). Fold-back: add a `Hash` impl mirroring the `PartialEq` field set (exclude
    `rings_cache`), then the wrapper takes `#[pyclass(eq, hash, frozen)]`; fix the
    stale comment.
+2. **Atom-accessor surface: asymmetry + redundancy** (S4b — *to think about, not a
+   settled fold-back*). Two smells in the by-id atom accessors:
+   - *Asymmetry of return type.* `Index<AtomId>` → `&AtomAst` (intrinsic data) but
+     `get(id)`/`iter()` → `AtomView` (contextual view). Partly forced — `Index` must
+     return a borrow and a view can't be borrowed (it's built on demand) — but
+     surprising even in Rust (indexing and `get` returning different types).
+   - *Redundancy (TIMTOWTDI).* Four distinct by-id paths — `mol.atom(id)` → view,
+     `mol[id]` → `&AtomAst`, `mol.atoms()[id]` → `&AtomAst`, `mol.atoms().get(id)` →
+     view — and `mol[id]` fully duplicates `mol.atoms()[id]`. Does the `MoleculeAst`
+     `Index` earn its keep over the `AtomViews` one?
+   Open Rust-side question: consolidate toward one consistent return + fewer paths
+   (e.g. a `view(id)` method, drop/rename the `Index` impls, one owner for indexing).
+   Flagged for consideration; the binding meanwhile exposes a single lean surface —
+   `mol.atoms[id]` / `.get(id)` / iteration, all returning the view — per the
+   idiomatic-Python rule.
 
 ## Python-side todos
 
 Binding-side work deferred and batched (distinct from the Rust fold-backs above —
 these change only umol-py, not umol-ast).
 
-1. **`__repr__` / `__str__` on the complex-enum mirrors** (S2a). `ValueTerm`,
-   `ValueAst`, `ValuePredicate`, `ElementAst` currently have PyO3's default
-   `<… object at 0x…>` repr (simple enums like `RelOp` auto-get `Class.Variant`;
-   structs like `Element` hand-write it). Add `__repr__` as the eval-able constructor
-   form, and decide whether `__str__` should be the compact **DSL string** (the AST
-   value types impl `Display` as the value-expr, reachable via `to_ast`) — ties into
-   the S6 DSL-string surface.
+1. **`__repr__` / `__str__` on the value mirrors + `AtomAst`** (S2a; pulled forward by
+   the S4b `AtomAst.__repr__` request). `ValueTerm`, `ValueAst`, `ValuePredicate`,
+   `ElementAst`, `IsotopeMassAst` (complex enums) and `SpinStateAst`, `AtomAst`
+   (structs) currently have PyO3's default `<… object at 0x…>` repr (simple enums like
+   `RelOp` auto-get `Class.Variant`; `Element`/`AtomId` hand-write it). **These are
+   coupled**: a constructor-style `AtomAst.__repr__` (`AtomAst(ElementAst.Lit(…),
+   charge=ValueAst.Lit(-1))`) embeds `repr()` of each field mirror, so it's only useful
+   once the mirrors have reprs — do the set together. Each `__repr__` is the eval-able
+   constructor form (recursing via Python `repr()` on children); separately decide
+   whether `__str__` should be the compact **DSL string** (the AST value types impl
+   `Display` as the value-expr, reachable via `to_ast`) — ties into the S6 DSL-string
+   surface.
+3. **Pickling** (`__reduce__` / `__getstate__`+`__setstate__`) — not automatic for
+   pyclasses. Not needed now; may matter later for multiprocessing/distribution of the
+   large reaction networks (atoms/molecules crossing process boundaries). The natural
+   state is `to_ast`/`from_inner` (structs) or `to_ast` + variant tag (mirrors); the
+   value types already round-trip, so `__reduce__` over that is mechanical.
 2. **Terse element notation `E.H` / `E.Cl`** (exploring; not needed now). A
    `python/umol/`-layer convenience mirroring the Rust `e!(H)` macro — a namespace
    object whose `__getattr__(symbol)` returns `Element(symbol)`; the only Python form

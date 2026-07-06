@@ -4,6 +4,8 @@
 use pyo3::prelude::*;
 use umol_ast::ast::MoleculeAst as AstMoleculeAst;
 
+use crate::atom::{AtomAst, AtomViews};
+
 /// A molecule: the owned graph-AST root.
 #[pyclass(eq)]
 #[derive(Debug, PartialEq)]
@@ -17,14 +19,44 @@ impl MoleculeAst {
         Self(AstMoleculeAst::new())
     }
 
+    /// A molecule from a sequence of atoms (no bonds).
+    #[staticmethod]
+    fn from_atoms(py: Python<'_>, atoms: Vec<Py<AtomAst>>) -> Self {
+        let ast_atoms = atoms
+            .iter()
+            .map(|atom| atom.bind(py).borrow().inner().clone())
+            .collect();
+        MoleculeAst(AstMoleculeAst::from_atoms_and_bonds(ast_atoms, Vec::new()))
+    }
+
     /// Number of atoms.
     #[getter]
     fn atom_count(&self) -> u32 {
         self.0.atoms().count() as u32
     }
 
+    /// The atoms, indexed by `AtomId`.
+    #[getter]
+    fn atoms(slf: Py<Self>) -> AtomViews {
+        AtomViews::new(slf)
+    }
+
     fn __repr__(&self) -> String {
         format!("MoleculeAst(atom_count={})", self.0.atoms().count())
+    }
+}
+
+impl MoleculeAst {
+    /// The wrapped AST molecule — read access for atom views.
+    pub(crate) fn inner(&self) -> &AstMoleculeAst {
+        &self.0
+    }
+
+    /// Wrap an AST molecule (the hold-the-value `from_inner` bridge, paired with
+    /// `inner`). Test-only — in-crate construction wraps `MoleculeAst(..)` directly.
+    #[cfg(test)]
+    pub(crate) fn from_inner(molecule: AstMoleculeAst) -> Self {
+        MoleculeAst(molecule)
     }
 }
 
