@@ -3,6 +3,7 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from ._native import (
+    AromaticValenceAst,
     AtomAst,
     AtomId,
     AtomView,
@@ -12,8 +13,15 @@ from ._native import (
     IsotopeMassAst,
     MemOp,
     MoleculeAst,
+    MulticenterValenceAst,
+    Permutation,
     RelOp,
+    RingMembershipAst,
+    RingScope,
     SpinStateAst,
+    StereoCosetAst,
+    StereoTerm,
+    TetrahedralStereoAst,
     ValueAst,
     ValuePredicate,
     ValueTerm,
@@ -25,6 +33,7 @@ except PackageNotFoundError:
     __version__ = "0.0.0"
 
 __all__ = [
+    "AromaticValenceAst",
     "AtomAst",
     "AtomId",
     "AtomView",
@@ -34,8 +43,15 @@ __all__ = [
     "IsotopeMassAst",
     "MemOp",
     "MoleculeAst",
+    "MulticenterValenceAst",
+    "Permutation",
     "RelOp",
+    "RingMembershipAst",
+    "RingScope",
     "SpinStateAst",
+    "StereoCosetAst",
+    "StereoTerm",
+    "TetrahedralStereoAst",
     "ValueAst",
     "ValuePredicate",
     "ValueTerm",

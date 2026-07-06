@@ -532,7 +532,7 @@ bare `int`. Revisit on alpha-user feedback.
   constructors (`new`, `from_element`, `with_*`); getters; `__repr__`/`__eq__`.
   `constraints` deferred to S5c. *Additive.* [dep: S1d, S2a, S2b, S2c]
 
-### S4 — Molecule atom read surface (green)
+### S4 — Molecule atom read surface (green) **Done**
 
 - **S4a** — `AtomId` newtype pyclass + `AtomViews` / `AtomView` handle pyclasses
   (module `atom`): views hold `Py<MoleculeAst>` + `AtomId`; `AtomView.id` is an

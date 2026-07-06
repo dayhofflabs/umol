@@ -6,19 +6,25 @@ use pyo3::prelude::*;
 #[cfg(feature = "graph")]
 use crate::{
     atom::{AtomAst, AtomId, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst},
+    constraint::{AromaticValenceAst, MulticenterValenceAst, RingMembershipAst, RingScope},
     element::Element,
     molecule::MoleculeAst,
+    stereo::{Permutation, StereoCosetAst, StereoTerm, TetrahedralStereoAst},
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
 };
 
 #[cfg(feature = "graph")]
 mod atom;
 #[cfg(feature = "graph")]
+mod constraint;
+#[cfg(feature = "graph")]
 mod convert;
 #[cfg(feature = "graph")]
 mod element;
 #[cfg(feature = "graph")]
 mod molecule;
+#[cfg(feature = "graph")]
+mod stereo;
 #[cfg(feature = "graph")]
 mod value;
 
@@ -43,6 +49,14 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AtomId>()?;
         module.add_class::<AtomView>()?;
         module.add_class::<AtomViews>()?;
+        module.add_class::<AromaticValenceAst>()?;
+        module.add_class::<MulticenterValenceAst>()?;
+        module.add_class::<RingScope>()?;
+        module.add_class::<RingMembershipAst>()?;
+        module.add_class::<Permutation>()?;
+        module.add_class::<StereoTerm>()?;
+        module.add_class::<StereoCosetAst>()?;
+        module.add_class::<TetrahedralStereoAst>()?;
     }
     Ok(())
 }
