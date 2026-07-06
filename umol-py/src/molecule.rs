@@ -30,10 +30,11 @@ impl MoleculeAst {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
     use umol_ast::ast::AtomAst;
     use umol_chem::element::Element;
+
+    use super::*;
 
     #[rstest]
     fn test_molecule_ast_new() {

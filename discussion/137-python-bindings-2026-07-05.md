@@ -333,7 +333,13 @@ Notes from the spike + S1b–d (native-enum mechanics that recur across every mi
   Keys on: *is this type extracted from Python as a value?*
 - `from_ast`/`to_ast` stay `#[allow(dead_code)]` until a live `#[pymethods]` caller
   reaches them (the `AtomAst` field getters at S3); the roundtrip tests keep them
-  covered in the test build meanwhile.
+  covered in the test build meanwhile. (Retired at S3.)
+- **`Py::new` builds a *base*-type complex-enum instance** (S3): its Python-visible
+  variant fields (`_0`, …) and `match` are absent. Wrap every nested `Py<…>` child in
+  a `from_ast` with `IntoPyObject` instead — the `into_py_variant(py, value)` helper
+  (`convert.rs`). Insidious because the Rust-side roundtrip tests (`to_ast`) never
+  exercise Python-side variant access, so it stayed hidden until a getter (`atom.spin`)
+  read a nested child; the fix carries a Python-side regression test.
 
 Sequencing within the slice: `Element` → the scalar-field enums (`ElementAst`,
 `IsotopeMassAst`, `ValueAst` + `ValueTerm`/`ValuePredicate`, `SpinStateAst`) →
@@ -538,3 +544,11 @@ these change only umol-py, not umol-ast).
    form, and decide whether `__str__` should be the compact **DSL string** (the AST
    value types impl `Display` as the value-expr, reachable via `to_ast`) — ties into
    the S6 DSL-string surface.
+2. **Terse element notation `E.H` / `E.Cl`** (exploring; not needed now). A
+   `python/umol/`-layer convenience mirroring the Rust `e!(H)` macro — a namespace
+   object whose `__getattr__(symbol)` returns `Element(symbol)`; the only Python form
+   that keeps the bare, unquoted symbol (`e("H")`/`E["H"]` need quotes; `e(H)` is a
+   `NameError`). Works because every IUPAC symbol is a valid identifier. Tradeoff: the
+   dynamic `__getattr__` has no IDE completion/type-checking without a `.pyi` stub
+   (or generate the 118 as real constants for discoverability). No effect on the
+   binding; decide the form with alpha users.

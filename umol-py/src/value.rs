@@ -11,6 +11,8 @@ use umol_ast::ast::{
     ValuePredicate as AstValuePredicate, ValueTerm as AstValueTerm,
 };
 
+use crate::convert::into_py_variant;
+
 /// Relational operator in a value predicate (`<=`, `>=`, `==`, `<`, `>`, `!=`).
 #[pyclass(eq, from_py_object)]
 #[derive(Clone, PartialEq)]
@@ -89,26 +91,26 @@ impl ValueTerm {
         Ok(match ast {
             AstValueTerm::Lit(n) => ValueTerm::Lit(*n),
             AstValueTerm::Var(name) => ValueTerm::Var(name.clone()),
-            AstValueTerm::Neg(t) => ValueTerm::Neg(Py::new(py, Self::from_ast(py, t)?)?),
+            AstValueTerm::Neg(t) => ValueTerm::Neg(into_py_variant(py, Self::from_ast(py, t)?)?),
             AstValueTerm::Sum(terms) => ValueTerm::Sum(
                 terms
                     .iter()
-                    .map(|t| Py::new(py, Self::from_ast(py, t)?))
+                    .map(|t| into_py_variant(py, Self::from_ast(py, t)?))
                     .collect::<PyResult<_>>()?,
             ),
             AstValueTerm::Product(terms) => ValueTerm::Product(
                 terms
                     .iter()
-                    .map(|t| Py::new(py, Self::from_ast(py, t)?))
+                    .map(|t| into_py_variant(py, Self::from_ast(py, t)?))
                     .collect::<PyResult<_>>()?,
             ),
             AstValueTerm::Div(a, b) => ValueTerm::Div(
-                Py::new(py, Self::from_ast(py, a)?)?,
-                Py::new(py, Self::from_ast(py, b)?)?,
+                into_py_variant(py, Self::from_ast(py, a)?)?,
+                into_py_variant(py, Self::from_ast(py, b)?)?,
             ),
             AstValueTerm::Rem(a, b) => ValueTerm::Rem(
-                Py::new(py, Self::from_ast(py, a)?)?,
-                Py::new(py, Self::from_ast(py, b)?)?,
+                into_py_variant(py, Self::from_ast(py, a)?)?,
+                into_py_variant(py, Self::from_ast(py, b)?)?,
             ),
         })
     }
@@ -119,12 +121,18 @@ impl ValueTerm {
             ValueTerm::Lit(n) => AstValueTerm::Lit(*n),
             ValueTerm::Var(name) => AstValueTerm::Var(name.clone()),
             ValueTerm::Neg(t) => AstValueTerm::Neg(Box::new(t.bind(py).borrow().to_ast(py))),
-            ValueTerm::Sum(terms) => {
-                AstValueTerm::Sum(terms.iter().map(|t| t.bind(py).borrow().to_ast(py)).collect())
-            }
-            ValueTerm::Product(terms) => {
-                AstValueTerm::Product(terms.iter().map(|t| t.bind(py).borrow().to_ast(py)).collect())
-            }
+            ValueTerm::Sum(terms) => AstValueTerm::Sum(
+                terms
+                    .iter()
+                    .map(|t| t.bind(py).borrow().to_ast(py))
+                    .collect(),
+            ),
+            ValueTerm::Product(terms) => AstValueTerm::Product(
+                terms
+                    .iter()
+                    .map(|t| t.bind(py).borrow().to_ast(py))
+                    .collect(),
+            ),
             ValueTerm::Div(a, b) => AstValueTerm::Div(
                 Box::new(a.bind(py).borrow().to_ast(py)),
                 Box::new(b.bind(py).borrow().to_ast(py)),
@@ -151,24 +159,26 @@ impl ValuePredicate {
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstValuePredicate) -> PyResult<ValuePredicate> {
         Ok(match ast {
             AstValuePredicate::Rel(a, op, b) => ValuePredicate::Rel(
-                Py::new(py, ValueTerm::from_ast(py, a)?)?,
+                into_py_variant(py, ValueTerm::from_ast(py, a)?)?,
                 RelOp::from_ast(*op),
-                Py::new(py, ValueTerm::from_ast(py, b)?)?,
+                into_py_variant(py, ValueTerm::from_ast(py, b)?)?,
             ),
             AstValuePredicate::Mem(t, op, members) => ValuePredicate::Mem(
-                Py::new(py, ValueTerm::from_ast(py, t)?)?,
+                into_py_variant(py, ValueTerm::from_ast(py, t)?)?,
                 MemOp::from_ast(*op),
                 members.clone(),
             ),
-            AstValuePredicate::Not(p) => ValuePredicate::Not(Py::new(py, Self::from_ast(py, p)?)?),
+            AstValuePredicate::Not(p) => {
+                ValuePredicate::Not(into_py_variant(py, Self::from_ast(py, p)?)?)
+            }
             AstValuePredicate::And(ps) => ValuePredicate::And(
                 ps.iter()
-                    .map(|p| Py::new(py, Self::from_ast(py, p)?))
+                    .map(|p| into_py_variant(py, Self::from_ast(py, p)?))
                     .collect::<PyResult<_>>()?,
             ),
             AstValuePredicate::Or(ps) => ValuePredicate::Or(
                 ps.iter()
-                    .map(|p| Py::new(py, Self::from_ast(py, p)?))
+                    .map(|p| into_py_variant(py, Self::from_ast(py, p)?))
                     .collect::<PyResult<_>>()?,
             ),
         })
@@ -181,11 +191,9 @@ impl ValuePredicate {
                 op.to_ast(),
                 b.bind(py).borrow().to_ast(py),
             ),
-            ValuePredicate::Mem(t, op, members) => AstValuePredicate::Mem(
-                t.bind(py).borrow().to_ast(py),
-                op.to_ast(),
-                members.clone(),
-            ),
+            ValuePredicate::Mem(t, op, members) => {
+                AstValuePredicate::Mem(t.bind(py).borrow().to_ast(py), op.to_ast(), members.clone())
+            }
             ValuePredicate::Not(p) => {
                 AstValuePredicate::Not(Box::new(p.bind(py).borrow().to_ast(py)))
             }
@@ -212,8 +220,6 @@ pub enum ValueAst {
     Predicate(Py<ValuePredicate>),
 }
 
-// The AST bridge; consumed by `AtomAst` at S3 (unused in the lib until then).
-#[allow(dead_code)]
 impl ValueAst {
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstValueAst) -> PyResult<ValueAst> {
         Ok(match ast {
@@ -222,9 +228,11 @@ impl ValueAst {
             AstValueAst::LitSet(members) => ValueAst::LitSet((**members).clone()),
             AstValueAst::RangeFrom(n) => ValueAst::RangeFrom(*n),
             AstValueAst::RangeTo(n) => ValueAst::RangeTo(*n),
-            AstValueAst::Term(t) => ValueAst::Term(Py::new(py, ValueTerm::from_ast(py, t)?)?),
+            AstValueAst::Term(t) => {
+                ValueAst::Term(into_py_variant(py, ValueTerm::from_ast(py, t)?)?)
+            }
             AstValueAst::Predicate(p) => {
-                ValueAst::Predicate(Py::new(py, ValuePredicate::from_ast(py, p)?)?)
+                ValueAst::Predicate(into_py_variant(py, ValuePredicate::from_ast(py, p)?)?)
             }
         })
     }
@@ -246,8 +254,9 @@ impl ValueAst {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case(AstRelOp::Le)]

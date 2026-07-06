@@ -5,11 +5,12 @@ use std::collections::BTreeSet;
 
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    ElementAst as AstElementAst, IsotopeMassAst as AstIsotopeMassAst,
+    AtomAst as AstAtomAst, ElementAst as AstElementAst, IsotopeMassAst as AstIsotopeMassAst,
     SpinStateAst as AstSpinStateAst,
 };
 use umol_chem::element::Element as ChemElement;
 
+use crate::convert::into_py_variant;
 use crate::element::Element;
 use crate::value::{MemOp, ValueAst};
 
@@ -24,8 +25,6 @@ pub enum ElementAst {
     Var(String, Option<(MemOp, BTreeSet<Element>)>),
 }
 
-// The AST bridge; consumed by `AtomAst` at S3 (unused in the lib until then).
-#[allow(dead_code)]
 impl ElementAst {
     pub(crate) fn from_ast(ast: &AstElementAst) -> ElementAst {
         match ast {
@@ -83,8 +82,6 @@ pub enum IsotopeMassAst {
     Var(String, Option<BTreeSet<u32>>),
 }
 
-// The AST bridge; consumed by `AtomAst` at S3 (unused in the lib until then).
-#[allow(dead_code)]
 impl IsotopeMassAst {
     pub(crate) fn from_ast(ast: &AstIsotopeMassAst) -> IsotopeMassAst {
         match ast {
@@ -132,13 +129,11 @@ impl SpinStateAst {
     }
 }
 
-// The AST bridge; consumed by `AtomAst` at S3 (unused in the lib until then).
-#[allow(dead_code)]
 impl SpinStateAst {
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstSpinStateAst) -> PyResult<SpinStateAst> {
         Ok(SpinStateAst {
-            unpaired: Py::new(py, ValueAst::from_ast(py, &ast.unpaired)?)?,
-            multiplicity: Py::new(py, ValueAst::from_ast(py, &ast.multiplicity)?)?,
+            unpaired: into_py_variant(py, ValueAst::from_ast(py, &ast.unpaired)?)?,
+            multiplicity: into_py_variant(py, ValueAst::from_ast(py, &ast.multiplicity)?)?,
         })
     }
 
@@ -150,11 +145,101 @@ impl SpinStateAst {
     }
 }
 
+/// An atom: element, isotope, charge, implicit hydrogens, lone pairs, and spin.
+/// (Constraints are not yet exposed — S5.)
+#[pyclass(eq)]
+#[derive(PartialEq)]
+pub struct AtomAst(AstAtomAst);
+
+#[pymethods]
+impl AtomAst {
+    /// Construct from an element expression.
+    #[new]
+    fn new(element: PyRef<'_, ElementAst>) -> Self {
+        AtomAst(AstAtomAst::new(element.to_ast()))
+    }
+
+    /// Construct from a single element.
+    #[staticmethod]
+    fn from_element(element: Element) -> Self {
+        AtomAst(AstAtomAst::from_element(ChemElement::from(&element)))
+    }
+
+    #[getter]
+    fn element(&self) -> ElementAst {
+        ElementAst::from_ast(&self.0.element)
+    }
+
+    #[getter]
+    fn isotope_mass(&self) -> IsotopeMassAst {
+        IsotopeMassAst::from_ast(&self.0.isotope_mass)
+    }
+
+    #[getter]
+    fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
+        ValueAst::from_ast(py, &self.0.charge)
+    }
+
+    #[getter]
+    fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<ValueAst> {
+        ValueAst::from_ast(py, &self.0.implicit_hydrogens)
+    }
+
+    #[getter]
+    fn lone_pairs(&self, py: Python<'_>) -> PyResult<ValueAst> {
+        ValueAst::from_ast(py, &self.0.lone_pairs)
+    }
+
+    #[getter]
+    fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
+        SpinStateAst::from_ast(py, &self.0.spin)
+    }
+
+    /// A copy with the element replaced.
+    fn with_element(&self, element: PyRef<'_, ElementAst>) -> AtomAst {
+        AtomAst(self.0.clone().with_element(element.to_ast()))
+    }
+
+    /// A copy with the isotope mass replaced.
+    fn with_isotope_mass(&self, isotope_mass: PyRef<'_, IsotopeMassAst>) -> AtomAst {
+        AtomAst(self.0.clone().with_isotope_mass(isotope_mass.to_ast()))
+    }
+
+    /// A copy with the charge replaced.
+    fn with_charge(&self, py: Python<'_>, charge: PyRef<'_, ValueAst>) -> AtomAst {
+        AtomAst(self.0.clone().with_charge(charge.to_ast(py)))
+    }
+
+    /// A copy with the implicit-hydrogen count replaced.
+    fn with_implicit_hydrogens(
+        &self,
+        py: Python<'_>,
+        implicit_hydrogens: PyRef<'_, ValueAst>,
+    ) -> AtomAst {
+        AtomAst(
+            self.0
+                .clone()
+                .with_implicit_hydrogens(implicit_hydrogens.to_ast(py)),
+        )
+    }
+
+    /// A copy with the lone-pair count replaced.
+    fn with_lone_pairs(&self, py: Python<'_>, lone_pairs: PyRef<'_, ValueAst>) -> AtomAst {
+        AtomAst(self.0.clone().with_lone_pairs(lone_pairs.to_ast(py)))
+    }
+
+    /// A copy with the spin state replaced.
+    fn with_spin(&self, py: Python<'_>, spin: PyRef<'_, SpinStateAst>) -> AtomAst {
+        AtomAst(self.0.clone().with_spin(spin.to_ast(py)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
     use umol_ast::ast::{MemOp as AstMemOp, ValueAst as AstValueAst};
+
+    use super::*;
 
     #[rstest]
     #[case(AstElementAst::Undetermined)]
@@ -194,5 +279,11 @@ mod tests {
         Python::attach(|py| {
             assert_eq!(SpinStateAst::from_ast(py, &ast).unwrap().to_ast(py), ast);
         });
+    }
+
+    #[rstest]
+    fn test_atom_ast_from_element() {
+        let atom = AtomAst::from_element(Element::from(ChemElement::C));
+        assert_eq!(atom.0, AstAtomAst::from_element(ChemElement::C));
     }
 }

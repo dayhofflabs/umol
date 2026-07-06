@@ -3,6 +3,7 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from ._native import (
+    AtomAst,
     Element,
     ElementAst,
     IsotopeMassAst,
@@ -21,6 +22,7 @@ except PackageNotFoundError:
     __version__ = "0.0.0"
 
 __all__ = [
+    "AtomAst",
     "Element",
     "ElementAst",
     "IsotopeMassAst",
