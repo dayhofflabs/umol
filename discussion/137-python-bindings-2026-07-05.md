@@ -308,10 +308,22 @@ mirror type is a native complex enum. AST recursion (`Box<Self>`/`Vec<Self>`) ma
 parallel-representation cost native enums carry — accepted, since native gives the
 match ergonomics and the conversions are mechanical and roundtrip-tested).
 
-Notes from the spike: tuple variants expose fields as `_0`/`_1` (positional `match`
-works: `case ValueTerm.Lit(n)`); `from_ast` allocates one Python object per node via
-`Py::new`; GIL-holding Rust tests use `Python::attach` (PyO3 0.29 renamed `with_gil`)
-under the `auto-initialize` dev-dependency (test-only, absent from the wheel build).
+Notes from the spike + S1b–d (native-enum mechanics that recur across every mirror):
+
+- Tuple variants expose fields as `_0`/`_1` (positional `match` works:
+  `case ValueTerm.Lit(n)`); `from_ast` allocates one Python object per node via
+  `Py::new`; GIL-holding Rust tests use `Python::attach` (PyO3 0.29 renamed `with_gil`)
+  under the `auto-initialize` dev-dependency (test-only, absent from the wheel build).
+- **Unit variants are rejected** in a complex enum — use an empty-tuple variant
+  (`Undetermined()`); Python constructs/matches `ValueAst.Undetermined()`. Recurs for
+  `ElementAst` and `IsotopeMassAst` (`Natural`).
+- **A simple enum used as a *field* of a complex enum** (operands like `RelOp`/`MemOp`)
+  needs `#[derive(Clone)]` + `#[pyclass(…, from_py_object)]` — the getter clones it, the
+  constructor extracts it. Opposite of a held leaf like `Element`, which drops `Clone`.
+  Keys on: *is this type extracted from Python as a value?*
+- `from_ast`/`to_ast` stay `#[allow(dead_code)]` until a live `#[pymethods]` caller
+  reaches them (the `AtomAst` field getters at S3); the roundtrip tests keep them
+  covered in the test build meanwhile.
 
 Sequencing within the slice: `Element` → the scalar-field enums (`ElementAst`,
 `IsotopeMassAst`, `ValueAst` + `ValueTerm`/`ValuePredicate`, `SpinStateAst`) →

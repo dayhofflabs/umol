@@ -7,7 +7,7 @@ use pyo3::prelude::*;
 use crate::{
     element::Element,
     molecule::MoleculeAst,
-    value::{MemOp, RelOp, ValueTerm},
+    value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
 };
 
 #[cfg(feature = "graph")]
@@ -29,6 +29,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<RelOp>()?;
         module.add_class::<MemOp>()?;
         module.add_class::<ValueTerm>()?;
+        module.add_class::<ValuePredicate>()?;
+        module.add_class::<ValueAst>()?;
     }
     Ok(())
 }

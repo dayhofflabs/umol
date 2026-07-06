@@ -1,4 +1,7 @@
 //! `Element` — a periodic-table element, wrapping `umol_chem::Element`.
+// Module complete: blanket-allow the `absolute_paths` false positives from pyo3's
+// `hash` derive (hygienic `::std::…` paths). Hand-written code here imports at top.
+#![allow(clippy::absolute_paths)]
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
