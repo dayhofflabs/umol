@@ -12,7 +12,7 @@ use std::hash::Hash;
 
 use umol_graph_core::{BiRelationData, ParticipantPosition, RelationData};
 
-use super::error::Contradiction;
+use super::error::{Contradiction, NoJoin};
 
 /// Build `Self` from a borrowed AST of type `A` plus a configuration context.
 /// AST → DSL direction. Infallible.
@@ -122,9 +122,11 @@ pub trait Lattice: Canonicalize {
     /// incompatible (no value can satisfy both).
     fn meet(&self, other: &Self) -> Option<Self>;
 
-    /// Least upper bound. Total — incompatible pairs widen toward the
-    /// nearest common generalization (typically `Undetermined`).
-    fn join(&self, other: &Self) -> Self;
+    /// Least upper bound. `Err(NoJoin)` when `self` and `other` have no common
+    /// generalization — a top-less (meet-semilattice) type whose operands lie in
+    /// different fibers (e.g. two `AtomConstraint`s of different kind). Bounded
+    /// lattices always return `Ok`.
+    fn join(&self, other: &Self) -> Result<Self, NoJoin>;
 
     /// Partial-order check: `self` (pattern) is true on `target` iff every
     /// value `target` admits is also admitted by `self` — i.e. the meet refines
@@ -157,15 +159,16 @@ pub trait Lattice: Canonicalize {
         }
     }
 
-    /// In-place `join`. Returns `true` iff `self` actually changed.
-    fn widen_with(&mut self, other: &Self) -> bool {
-        let new = self.join(other);
-        if new != *self {
+    /// In-place `join`. Returns `Ok(true)` iff `self` actually changed;
+    /// `Err(NoJoin)` (leaving `self` unchanged) when the join does not exist.
+    fn widen_with(&mut self, other: &Self) -> Result<bool, NoJoin> {
+        let new = self.join(other)?;
+        Ok(if new != *self {
             *self = new;
             true
         } else {
             false
-        }
+        })
     }
 }
 

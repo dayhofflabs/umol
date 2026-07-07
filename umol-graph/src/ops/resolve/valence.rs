@@ -33,8 +33,6 @@ impl<'a> ValenceResolver<'a> {
         }
     }
 
-    /// Reports completion or contradiction; the global ground-status verdict
-    /// is the composite `Resolver`'s job, not this sub-resolver's.
     pub fn resolve(
         &self,
         ast: &mut MoleculeAst,

@@ -2143,11 +2143,11 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                         },
                         AtomDelta::ModifyConstraint { id: j, old, new } if *j == id => match new {
                             Some(c) => {
-                                partial.constraints.add(c.clone());
+                                partial.constraints.set(c.clone());
                             }
                             None => {
                                 if let Some(old) = old {
-                                    partial.constraints.add(old.as_undetermined());
+                                    partial.constraints.set(old.as_undetermined());
                                 }
                             }
                         },
@@ -3301,6 +3301,26 @@ mod tests {
                     old: ValueAst::Lit(0),
                     new: ValueAst::Lit(-1),
                 },
+            })]),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_atom_modify_remove_constraint() {
+        // lhs :me is C#v4; modify to #v* (vacuous valence) drops the constraint → one
+        // ModifyConstraint with new: None. Exercises the parse→delta path through
+        // `update`'s vacuous-removal (a bare `set` would emit a modify-to-Undetermined instead).
+        let input = r##"{:lhs {:atoms [[:me "C#v4"]]} :deltas [{:atom {:modify [:me "#v*"]}}]}"##;
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyConstraint {
+                id: AtomId(0),
+                old: Some(AtomConstraint::valence(4)),
+                new: None,
             })]),
         );
     }

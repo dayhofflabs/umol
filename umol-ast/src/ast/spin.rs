@@ -177,7 +177,7 @@ mod tests {
         #[case] b: SpinStateAst,
         #[case] expected: SpinStateAst,
     ) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]

@@ -6,7 +6,7 @@ use std::vec::IntoIter;
 
 use strum::EnumDiscriminants;
 
-use super::super::error::Contradiction;
+use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
@@ -284,17 +284,17 @@ impl Lattice for AromaticSystemConstraints {
         Some(result)
     }
 
-    fn join(&self, other: &Self) -> Self {
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
         let mut result = Self::new();
         let a_has = self.contains(AromaticSystemConstraintKind::ElectronCount);
         let b_has = other.contains(AromaticSystemConstraintKind::ElectronCount);
         if a_has && b_has {
-            let joined = self.electron_count().join(&other.electron_count());
+            let joined = self.electron_count().join(&other.electron_count())?;
             if !joined.is_undetermined() {
                 result.add(AromaticSystemConstraint::ElectronCount(joined));
             }
         }
-        result
+        Ok(result)
     }
 
     fn matches(&self, target: &Self) -> bool {

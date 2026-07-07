@@ -313,9 +313,7 @@ impl AtomConstraints {
     #[new]
     fn new(py: Python<'_>, entries: Vec<Py<AtomConstraint>>) -> Self {
         let mut constraints = AstAtomConstraints::new();
-        for entry in entries {
-            constraints.add(entry.bind(py).borrow().to_ast(py));
-        }
+        constraints.extend(entries.into_iter().map(|entry| entry.bind(py).borrow().to_ast(py)));
         AtomConstraints(constraints)
     }
 
@@ -341,13 +339,14 @@ impl AtomConstraints {
     /// The constraint of the given kind, or `None` (the first, for `RingMembership`).
     fn get(&self, py: Python<'_>, kind: AtomConstraintKind) -> PyResult<Option<AtomConstraint>> {
         self.0
-            .get(kind.to_ast())
+            .iter()
+            .find(|constraint| constraint.kind() == kind.to_ast())
             .map(|constraint| AtomConstraint::from_ast(py, constraint))
             .transpose()
     }
 
     fn contains(&self, kind: AtomConstraintKind) -> bool {
-        self.0.contains(kind.to_ast())
+        self.0.iter().any(|constraint| constraint.kind() == kind.to_ast())
     }
 }
 

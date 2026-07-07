@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemId, AtomConstraintKind, AtomId, BondConstraintKind, BondId, MoleculeAst, ValueAst,
+    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKind, BondId, MoleculeAst, ValueAst,
 };
 use umol_graph_core::PerfectMatchingAlgorithm;
 
@@ -85,7 +85,7 @@ impl Transformer for Kekulizer {
             }
             for &aidx in &plan.atoms {
                 let atom = ast.atom_mut(aidx).ast;
-                atom.constraints.remove(AtomConstraintKind::AromaticValence);
+                atom.constraints.remove(AtomConstraintKey::AromaticValence);
             }
         }
 
@@ -178,8 +178,8 @@ impl Kekulizer {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst,
-        BondConstraint, BooleanAst, Constraints, MoleculeAst, SpinStateAst, ValueAst,
+        AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomId,
+        BondAst, BondConstraint, BooleanAst, Constraints, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_chem::element::Element;
 
@@ -189,7 +189,7 @@ mod tests {
         let mut atom = AtomAst::from_element(Element::C);
         atom.charge = ValueAst::Lit(0);
         atom.spin = SpinStateAst::closed_shell();
-        atom.constraints.add(AtomConstraint::AromaticValence(
+        atom.constraints.set(AtomConstraint::AromaticValence(
             AromaticValenceAst::Aromatic(ValueAst::Lit(pi)),
         ));
         atom

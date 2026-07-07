@@ -282,7 +282,7 @@ mod tests {
         atom.spin = SpinStateAst::from((0_u8, 1_u8));
         if let Some(v) = valence {
             atom.constraints
-                .add(AtomConstraint::Valence(ValueAst::Lit(v)));
+                .set(AtomConstraint::Valence(ValueAst::Lit(v)));
         }
         let model = ChemistryModel::default();
         assert_eq!(

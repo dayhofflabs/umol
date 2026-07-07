@@ -1293,7 +1293,7 @@ fn test_molecule_builder_atom_constraint_mut(#[from(rich_molecule)] ast: Molecul
     b.atom_mut(AtomId(0))
         .ast
         .constraints
-        .add(AtomConstraint::Degree(ValueAst::Lit(2)));
+        .set(AtomConstraint::Degree(ValueAst::Lit(2)));
     let result = b.build();
     assert_eq!(
         result[AtomId(0)].constraints,
@@ -1869,11 +1869,11 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
     ast.atom_mut(AtomId(0))
         .ast
         .constraints
-        .add(AtomConstraint::Valence(ValueAst::Lit(4)));
+        .set(AtomConstraint::Valence(ValueAst::Lit(4)));
     ast.atom_mut(AtomId(2))
         .ast
         .constraints
-        .add(AtomConstraint::Degree(ValueAst::Lit(3)));
+        .set(AtomConstraint::Degree(ValueAst::Lit(3)));
     ast.bond_mut(BondId(0))
         .ast
         .constraints
@@ -1924,7 +1924,7 @@ fn test_molecule_ast_lift_constraints_appends_to_existing(
     ast.atom_mut(AtomId(0))
         .ast
         .constraints
-        .add(AtomConstraint::Valence(ValueAst::Lit(4)));
+        .set(AtomConstraint::Valence(ValueAst::Lit(4)));
 
     ast.lift_constraints();
 
@@ -2053,11 +2053,11 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
     ast.atom_mut(AtomId(0))
         .ast
         .constraints
-        .add(AtomConstraint::Valence(ValueAst::Lit(4)));
+        .set(AtomConstraint::Valence(ValueAst::Lit(4)));
     ast.atom_mut(AtomId(0))
         .ast
         .constraints
-        .add(AtomConstraint::Degree(ValueAst::Lit(3)));
+        .set(AtomConstraint::Degree(ValueAst::Lit(3)));
     ast.bond_mut(BondId(0))
         .ast
         .constraints

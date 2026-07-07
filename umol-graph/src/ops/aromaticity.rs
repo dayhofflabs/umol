@@ -233,7 +233,7 @@ fn equalize_charges(
         accumulated += c;
         let atom_mut = ast.atom_mut(atom_idx).ast;
         atom_mut.charge = ValueAst::Lit(0);
-        atom_mut.constraints.add(AtomConstraint::AromaticValence(
+        atom_mut.constraints.set(AtomConstraint::AromaticValence(
             AromaticValenceAst::Aromatic(ValueAst::Lit(k)),
         ));
     }
@@ -264,7 +264,7 @@ fn monoelement(ast: &MoleculeAst, atoms: &[AtomId]) -> Option<Element> {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomId,
+        AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKey, AtomId,
         BondAst, BondConstraintKind, ElectronCountsAst, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_ast::mol_ground;
@@ -285,7 +285,7 @@ mod tests {
             .atom(idx)
             .ast
             .constraints
-            .get(AtomConstraintKind::AromaticValence)?
+            .get(AtomConstraintKey::AromaticValence)?
         {
             AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n))) => {
                 Some(*n)
@@ -298,7 +298,7 @@ mod tests {
         let mut atom = AtomAst::from_element(element);
         atom.charge = ValueAst::Lit(0);
         atom.spin = SpinStateAst::closed_shell();
-        atom.constraints.add(AtomConstraint::AromaticValence(
+        atom.constraints.set(AtomConstraint::AromaticValence(
             AromaticValenceAst::Aromatic(ValueAst::Lit(pi)),
         ));
         atom

@@ -473,15 +473,15 @@ impl<'a> AtomView<'a> {
     /// comes from localized bonds and is always emitted.
     pub fn derive_constraints(&self, include_missing: bool) -> AtomConstraints {
         let mut constraints = AtomConstraints::new();
-        constraints.add(AtomConstraint::valence(self.valence()));
+        constraints.set(AtomConstraint::valence(self.valence()));
 
         if self.is_in_dative_bond() || include_missing {
-            constraints.add(AtomConstraint::donated_pairs(self.donated_pairs()));
-            constraints.add(AtomConstraint::accepted_pairs(self.accepted_pairs()));
+            constraints.set(AtomConstraint::donated_pairs(self.donated_pairs()));
+            constraints.set(AtomConstraint::accepted_pairs(self.accepted_pairs()));
         }
 
         if self.is_in_aromatic_system() {
-            constraints.add(AtomConstraint::aromatic_valence(
+            constraints.set(AtomConstraint::aromatic_valence(
                 AromaticValenceAst::aromatic(
                     self.aromatic_valence()
                         .as_lit_expect("aromatic valence should be Lit"),
@@ -491,34 +491,34 @@ impl<'a> AtomView<'a> {
             .neighbors()
             .any(|n| matches!(n.bond().constraints().aromatic(), BooleanAst::Lit(true)))
         {
-            constraints.add(AtomConstraint::aromatic_valence(
+            constraints.set(AtomConstraint::aromatic_valence(
                 AromaticValenceAst::aromatic(ValueAst::Undetermined),
             ));
         } else if include_missing {
-            constraints.add(AtomConstraint::aromatic_valence(
+            constraints.set(AtomConstraint::aromatic_valence(
                 AromaticValenceAst::NotAromatic,
             ));
         }
 
         if self.is_in_multicenter_bond() {
-            constraints.add(AtomConstraint::multicenter_valence(
+            constraints.set(AtomConstraint::multicenter_valence(
                 MulticenterValenceAst::multicenter(
                     self.multicenter_valence()
                         .as_lit_expect("multicenter valence should be Lit"),
                 ),
             ));
         } else if include_missing {
-            constraints.add(AtomConstraint::multicenter_valence(
+            constraints.set(AtomConstraint::multicenter_valence(
                 MulticenterValenceAst::NotMulticenter,
             ));
         }
 
         if let Some(stereo) = self.tetrahedral_stereo() {
-            constraints.add(AtomConstraint::tetrahedral_stereo(
+            constraints.set(AtomConstraint::tetrahedral_stereo(
                 TetrahedralStereoAst::stereo(stereo.coset().clone()),
             ));
         } else if include_missing {
-            constraints.add(AtomConstraint::tetrahedral_stereo(
+            constraints.set(AtomConstraint::tetrahedral_stereo(
                 TetrahedralStereoAst::NotStereo,
             ));
         }
@@ -750,7 +750,7 @@ mod tests {
     ) {
         let mut atom = AtomAst::from_element(Element::C);
         if let Some(c) = constraint {
-            atom.constraints.add(c);
+            atom.constraints.set(c);
         }
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
         assert_eq!(
@@ -783,7 +783,7 @@ mod tests {
     #[rstest]
     fn test_atom_view_donated_pairs_constraint() {
         let mut atom = AtomAst::from_element(Element::N);
-        atom.constraints.add(AtomConstraint::donated_pairs(1));
+        atom.constraints.set(AtomConstraint::donated_pairs(1));
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().donated_pairs(),
@@ -815,7 +815,7 @@ mod tests {
     #[rstest]
     fn test_atom_view_accepted_pairs_constraint() {
         let mut atom = AtomAst::from_element(Element::C);
-        atom.constraints.add(AtomConstraint::accepted_pairs(2));
+        atom.constraints.set(AtomConstraint::accepted_pairs(2));
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().accepted_pairs(),
@@ -1098,7 +1098,7 @@ mod tests {
     #[rstest]
     fn test_atom_view_aromatic_valence_constraint() {
         let mut atom = AtomAst::from_element(Element::C);
-        atom.constraints.add(AtomConstraint::aromatic_valence(
+        atom.constraints.set(AtomConstraint::aromatic_valence(
             AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
         ));
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
@@ -1153,7 +1153,7 @@ mod tests {
     #[rstest]
     fn test_atom_view_multicenter_valence_constraint() {
         let mut atom = AtomAst::from_element(Element::C);
-        atom.constraints.add(AtomConstraint::multicenter_valence(
+        atom.constraints.set(AtomConstraint::multicenter_valence(
             MulticenterValenceAst::Multicenter(ValueAst::Lit(2)),
         ));
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);

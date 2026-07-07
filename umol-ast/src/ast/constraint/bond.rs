@@ -8,7 +8,7 @@ use strum::{EnumDiscriminants, EnumIter};
 
 use super::super::boolean::BooleanAst;
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
-use super::super::error::Contradiction;
+use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::IdCompaction;
 use super::super::stereo::CisTransStereoAst;
 use super::super::traits::{Canonicalize, Lattice};
@@ -363,9 +363,9 @@ impl Lattice for BondConstraints {
         Some(result)
     }
 
-    fn join(&self, other: &Self) -> Self {
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
         let mut result = Self::new();
-        let aromatic = self.aromatic().join(&other.aromatic());
+        let aromatic = self.aromatic().join(&other.aromatic())?;
         if !aromatic.is_undetermined() {
             result.add(BondConstraint::Aromatic(aromatic));
         }
@@ -376,14 +376,14 @@ impl Lattice for BondConstraints {
             let joined = self
                 .cis_trans_stereo()
                 .unwrap()
-                .join(other.cis_trans_stereo().unwrap());
+                .join(other.cis_trans_stereo().unwrap())?;
             if !joined.is_undetermined() {
                 result.add(BondConstraint::CisTransStereo(joined));
             }
         }
         for (scope, v) in self.ring_memberships() {
             if other.ring_memberships().any(|(s, _)| s == scope) {
-                let j = v.join(other.ring_membership_value(scope).unwrap());
+                let j = v.join(other.ring_membership_value(scope).unwrap())?;
                 if !j.is_undetermined() {
                     result.add(BondConstraint::RingMembership(RingMembershipAst::new(
                         scope, j,
@@ -391,7 +391,7 @@ impl Lattice for BondConstraints {
                 }
             }
         }
-        result
+        Ok(result)
     }
 
     /// Pattern-driven: every constraint the pattern carries must match the target,

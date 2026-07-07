@@ -6,7 +6,7 @@ use std::ops::{Add, Div, Mul, Sub};
 
 use umol_chem::spin::SpinMultiplicity;
 
-use super::error::Contradiction;
+use super::error::{Contradiction, NoJoin};
 use super::operators::{MemOp, RelOp};
 use super::traits::{AsLit, Canonicalize, Lattice};
 
@@ -531,7 +531,7 @@ impl Lattice for ValueAst {
     }
 
     /// Least upper bound, canonicalizing both operands and the result.
-    fn join(&self, other: &Self) -> Self {
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
         let a = self
             .canonical()
             .unwrap_or(Cow::Owned(ValueAst::Undetermined));
@@ -539,7 +539,7 @@ impl Lattice for ValueAst {
             .canonical()
             .unwrap_or(Cow::Owned(ValueAst::Undetermined));
         use ValueAst::*;
-        match (a.as_ref(), b.as_ref()) {
+        Ok(match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) | (_, Undetermined) => Undetermined,
             (Lit(x), Lit(y)) => {
                 if x == y {
@@ -563,7 +563,7 @@ impl Lattice for ValueAst {
                     Undetermined
                 }
             }
-        }
+        })
     }
 
     /// Partial-order check `target ⊑ self` (pattern admits every value target
@@ -839,7 +839,7 @@ mod tests {
     #[case::rangeto_rangeto(ValueAst::RangeTo(3), ValueAst::RangeTo(5), ValueAst::RangeTo(5))]
     #[case::rangefrom_lit_overapprox(ValueAst::RangeFrom(1), ValueAst::Lit(5), ValueAst::Undetermined)]
     fn test_value_ast_join(#[case] a: ValueAst, #[case] b: ValueAst, #[case] expected: ValueAst) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
@@ -898,7 +898,7 @@ mod tests {
         #[case] expected_after: ValueAst,
     ) {
         let changed = target.widen_with(&source);
-        assert_eq!(changed, expected_changed);
+        assert_eq!(changed, Ok(expected_changed));
         assert_eq!(target, expected_after);
     }
 

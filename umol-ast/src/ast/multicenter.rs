@@ -361,7 +361,7 @@ mod tests {
         #[case] b: MulticenterBondAst,
         #[case] expected: MulticenterBondAst,
     ) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rstest]

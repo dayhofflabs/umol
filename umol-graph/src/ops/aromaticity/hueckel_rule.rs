@@ -280,7 +280,7 @@ mod tests {
             .into_iter()
             .map(|(mut atom, pi)| {
                 if let Some(n) = pi {
-                    atom.constraints.add(AtomConstraint::AromaticValence(
+                    atom.constraints.set(AtomConstraint::AromaticValence(
                         AromaticValenceAst::Aromatic(ValueAst::Lit(n)),
                     ));
                 }

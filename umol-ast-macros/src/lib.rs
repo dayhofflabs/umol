@@ -72,10 +72,10 @@ pub fn derive_lattice(input: TokenStream) -> TokenStream {
                     #( #fields: #lattice::meet(&self.#fields, &other.#fields)?, )*
                 })
             }
-            fn join(&self, other: &Self) -> Self {
-                Self {
-                    #( #fields: #lattice::join(&self.#fields, &other.#fields), )*
-                }
+            fn join(&self, other: &Self) -> ::core::result::Result<Self, crate::ast::NoJoin> {
+                ::core::result::Result::Ok(Self {
+                    #( #fields: #lattice::join(&self.#fields, &other.#fields)?, )*
+                })
             }
             fn matches(&self, target: &Self) -> bool {
                 true #( && #lattice::matches(&self.#fields, &target.#fields) )*

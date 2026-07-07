@@ -7,7 +7,7 @@ use umol_ast_macros::{Canonicalize, Lattice};
 use umol_chem::element::{Element, MAX_ATOMIC_NUMBER};
 
 use super::constraint::{AtomConstraint, AtomConstraints};
-use super::error::Contradiction;
+use super::error::{Contradiction, NoJoin};
 use super::operators::MemOp;
 use super::spin::SpinStateAst;
 use super::traits::{AsLit, Canonicalize, Lattice};
@@ -72,7 +72,7 @@ impl AtomAst {
     /// Add a single constraint, replacing any existing entry of the same
     /// kind (last-wins per `AtomConstraints::add`). Chainable.
     pub fn with_constraint(mut self, constraint: impl Into<AtomConstraint>) -> Self {
-        self.constraints.add(constraint.into());
+        self.constraints.set(constraint.into());
         self
     }
 
@@ -85,9 +85,7 @@ impl AtomAst {
         I: IntoIterator,
         I::Item: Into<AtomConstraint>,
     {
-        for c in constraints {
-            self.constraints.add(c.into());
-        }
+        self.constraints.extend(constraints.into_iter().map(Into::into));
         self
     }
 
@@ -404,11 +402,11 @@ impl Lattice for ElementAst {
     }
 
     /// Least upper bound (set union), canonicalizing operands and result.
-    fn join(&self, other: &Self) -> Self {
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
         let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
         let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
         use ElementAst::*;
-        match (a.as_ref(), b.as_ref()) {
+        Ok(match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) | (_, Undetermined) => Undetermined,
             (Var(x), Var(y)) if x == y => a.as_ref().clone(),
             (Var(_), _) | (_, Var(_)) => Undetermined,
@@ -428,7 +426,7 @@ impl Lattice for ElementAst {
                 };
                 raw.canonicalize().unwrap_or(Undetermined)
             }
-        }
+        })
     }
 
     /// Partial-order check `target ⊑ self`, allocation-free for the literal
@@ -608,11 +606,11 @@ impl Lattice for IsotopeMassAst {
 
     /// Least upper bound. `Undetermined` absorbs; `Natural` joins only
     /// itself (else `Undetermined`); mass sets join by union.
-    fn join(&self, other: &Self) -> Self {
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
         let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
         let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
         use IsotopeMassAst::*;
-        match (a.as_ref(), b.as_ref()) {
+        Ok(match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) | (_, Undetermined) => Undetermined,
             (Natural, Natural) => Natural,
             (Natural, _) | (_, Natural) => Undetermined,
@@ -626,7 +624,7 @@ impl Lattice for IsotopeMassAst {
                     .canonicalize()
                     .unwrap_or(Undetermined)
             }
-        }
+        })
     }
 
     /// Partial-order check `target ⊑ self`, allocation-free for the literal
@@ -820,7 +818,7 @@ mod tests {
         #[case] b: AtomAst,
         #[case] expected: ElementAst,
     ) {
-        assert_eq!(a.join(&b).element, expected);
+        assert_eq!(a.join(&b).unwrap().element, expected);
     }
 
     #[rstest]
@@ -1017,7 +1015,7 @@ mod tests {
         #[case] b: ElementAst,
         #[case] expected: ElementAst,
     ) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
@@ -1189,7 +1187,7 @@ mod tests {
         #[case] b: IsotopeMassAst,
         #[case] expected: IsotopeMassAst,
     ) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]

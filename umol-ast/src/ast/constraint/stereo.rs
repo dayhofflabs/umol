@@ -11,7 +11,7 @@ use strum::VariantArray;
 use umol_perm::{Orientation, Permutation};
 
 use super::super::boolean::BooleanAst;
-use super::super::error::Contradiction;
+use super::super::error::{Contradiction, NoJoin};
 use super::super::id::StereoLigandPosition;
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::stereo::{Stereogenicity, Topicity};
@@ -463,7 +463,7 @@ macro_rules! stereo_constraint {
                 Some(result)
             }
 
-            fn join(&self, other: &Self) -> Self {
+            fn join(&self, other: &Self) -> Result<Self, NoJoin> {
                 let mut result = Self::new();
                 for p in self.ligand_symmetry() {
                     if other.ligand_symmetry().any(|o| o == p) {
@@ -477,7 +477,7 @@ macro_rules! stereo_constraint {
                 }
                 for t in self.topicities() {
                     if other.topicities().any(|o| o.pair == t.pair) {
-                        let relation = t.relation.join(&other.topicity(t.pair));
+                        let relation = t.relation.join(&other.topicity(t.pair))?;
                         if !relation.is_undetermined() {
                             result.add($constraint::Topicity(TopicityAst {
                                 pair: t.pair,
@@ -487,12 +487,12 @@ macro_rules! stereo_constraint {
                     }
                 }
                 if self.contains($kind::Stereogenicity) && other.contains($kind::Stereogenicity) {
-                    let g = self.stereogenicity().join(&other.stereogenicity());
+                    let g = self.stereogenicity().join(&other.stereogenicity())?;
                     if !g.is_undetermined() {
                         result.add($constraint::Stereogenicity(g));
                     }
                 }
-                result
+                Ok(result)
             }
 
             fn matches(&self, target: &Self) -> bool {
@@ -707,10 +707,10 @@ macro_rules! relation_ast {
                 .ok()
             }
 
-            fn join(&self, other: &Self) -> Self {
-                Self::LitSet(self.to_set().union(&other.to_set()).copied().collect())
+            fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+                Ok(Self::LitSet(self.to_set().union(&other.to_set()).copied().collect())
                     .canonicalize()
-                    .unwrap_or(Self::Undetermined)
+                    .unwrap_or(Self::Undetermined))
             }
 
             fn matches(&self, target: &Self) -> bool {
@@ -932,7 +932,7 @@ mod tests {
         #[case] b: TopicityRelationAst,
         #[case] expected: TopicityRelationAst,
     ) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
@@ -1382,7 +1382,7 @@ mod tests {
             relation: TopicityRelationAst::Lit(Topicity::Enantiotopic),
         }));
 
-        let j = a.join(&b);
+        let j = a.join(&b).unwrap();
         // #p intersection.
         assert_eq!(j.ligand_symmetry().copied().collect::<Vec<_>>(), vec![p1]);
         // #o per-pair value-join: {H} ∪ {E} = {H,E}.

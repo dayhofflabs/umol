@@ -310,7 +310,7 @@ mod tests {
         constraints: BondConstraints::new() },
     )]
     fn test_bond_ast_join(#[case] a: BondAst, #[case] b: BondAst, #[case] expected: BondAst) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rstest]

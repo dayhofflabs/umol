@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use super::error::Contradiction;
+use super::error::{Contradiction, NoJoin};
 use super::traits::{AsLit, Canonicalize, Lattice};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -50,11 +50,11 @@ impl Lattice for BooleanAst {
         }
     }
 
-    fn join(&self, other: &Self) -> Self {
-        match (self, other) {
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+        Ok(match (self, other) {
             (Self::Lit(a), Self::Lit(b)) if a == b => Self::Lit(*a),
             _ => Self::Undetermined,
-        }
+        })
     }
 }
 
@@ -129,7 +129,7 @@ mod tests {
         #[case] b: BooleanAst,
         #[case] expected: BooleanAst,
     ) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rstest]

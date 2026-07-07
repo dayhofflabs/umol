@@ -17,7 +17,7 @@ use umol_perm::{space, ClassKey, Permutation};
 use super::constraint::{
     StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
 };
-use super::error::Contradiction;
+use super::error::{Contradiction, NoJoin};
 use super::ligand::StereoLigand;
 use super::traits::{AsLit, Canonicalize, Lattice};
 
@@ -401,10 +401,10 @@ impl Lattice for StereoConfigurationAst {
         }
     }
 
-    fn join(&self, other: &Self) -> Self {
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
         let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
         let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
-        match (a.as_ref(), b.as_ref()) {
+        Ok(match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::Kinded(k1, ca), Self::Kinded(k2, cb)) => {
                 if k1 != k2 {
@@ -413,7 +413,7 @@ impl Lattice for StereoConfigurationAst {
                     Self::Kinded(*k1, coset_join(ca, cb, *k1))
                 }
             }
-        }
+        })
     }
 }
 
@@ -516,17 +516,17 @@ macro_rules! stereo_site {
                 }
             }
 
-            fn join(&self, other: &Self) -> Self {
+            fn join(&self, other: &Self) -> Result<Self, NoJoin> {
                 let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
                 let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
-                match (a.as_ref(), b.as_ref()) {
+                Ok(match (a.as_ref(), b.as_ref()) {
                     (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
                     (Self::NotStereo, Self::NotStereo) => Self::NotStereo,
                     (Self::NotStereo, Self::Stereo(_)) | (Self::Stereo(_), Self::NotStereo) => {
                         Self::Undetermined
                     }
                     (Self::Stereo(ca), Self::Stereo(cb)) => Self::Stereo(coset_join(ca, cb, $kind)),
-                }
+                })
             }
         }
     };
@@ -990,7 +990,7 @@ mod tests {
     #[case::coset_widens(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 1)), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::lit_set([0, 1])))]
     #[case::kind_conflict(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::CisTrans, 0)), StereoConfigurationAst::Undetermined)]
     fn test_stereo_configuration_ast_join(#[case] a: StereoConfigurationAst, #[case] b: StereoConfigurationAst, #[case] expected: StereoConfigurationAst) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
@@ -1070,7 +1070,7 @@ mod tests {
     #[case::stereo_same(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)))]
     #[case::stereo_widens(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1)), TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([0, 1])))]
     fn test_tetrahedral_stereo_ast_join(#[case] a: TetrahedralStereoAst, #[case] b: TetrahedralStereoAst, #[case] expected: TetrahedralStereoAst) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
@@ -1241,7 +1241,7 @@ mod tests {
     #[case::same_coset(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
     #[case::distinct_cosets_widen(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::Tetrahedral, 2u32), StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::lit_set([1, 2])))]
     fn test_stereo_atom_ast_join(#[case] a: StereoAtomAst, #[case] b: StereoAtomAst, #[case] expected: StereoAtomAst) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]

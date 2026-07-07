@@ -129,7 +129,7 @@ mod tests {
                 let mut atom = AtomAst::from_element(Element::C);
                 atom.charge = ValueAst::Lit(0);
                 atom.spin = SpinStateAst::closed_shell();
-                atom.constraints.add(AtomConstraint::AromaticValence(
+                atom.constraints.set(AtomConstraint::AromaticValence(
                     AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
                 ));
                 atom

@@ -303,7 +303,7 @@ mod tests {
         #[case] b: AromaticSystemAst,
         #[case] expected: AromaticSystemAst,
     ) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rstest]

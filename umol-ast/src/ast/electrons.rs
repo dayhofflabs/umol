@@ -5,7 +5,7 @@ use std::borrow::Cow;
 
 use umol_graph_core::ParticipantPosition;
 
-use super::error::Contradiction;
+use super::error::{Contradiction, NoJoin};
 use super::traits::{AsLit, Canonicalize, Lattice};
 
 /// Per-position electron counts as one atomic lattice value: undetermined, or a
@@ -94,12 +94,12 @@ impl Lattice for ElectronCountsAst {
         }
     }
 
-    fn join(&self, other: &Self) -> Self {
-        match (self, other) {
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+        Ok(match (self, other) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::Lit(a), Self::Lit(b)) if a == b => Self::Lit(a.clone()),
             _ => Self::Undetermined,
-        }
+        })
     }
 }
 
@@ -218,7 +218,7 @@ mod tests {
         #[case] b: ElectronCountsAst,
         #[case] expected: ElectronCountsAst,
     ) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]

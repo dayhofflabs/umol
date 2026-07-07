@@ -76,7 +76,7 @@ pub use edit::{
 };
 pub use electrons::ElectronCountsAst;
 pub use entity::{Entity, EntityKind};
-pub use error::{ApplyError, Contradiction};
+pub use error::{ApplyError, Contradiction, NoJoin};
 pub use id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId, StereoLigandPosition,

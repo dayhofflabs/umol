@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, BondConstraint, BooleanAst,
-    CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, MoleculeAst,
+    CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, Lattice, MoleculeAst,
     MulticenterBondAst, NoncovalentBondAst, SpinStateAst, StereoCosetAst, TetrahedralStereoAst,
     TryIntoAst, ValueAst,
 };
@@ -64,7 +64,7 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
             .map(|(atom_idx, table_atom)| {
                 let mut atom = table_atom.try_into_ast(ctx)?;
                 if let Some(constraint) = raise_tetrahedral_stereo(self, atom_idx)? {
-                    atom.constraints.add(constraint);
+                    atom.constraints.set(constraint);
                 }
                 Ok(atom)
             })
@@ -164,7 +164,7 @@ impl TryIntoAst<AtomAst> for &TableAtom {
         };
         match self.aromatic {
             Some(true) => {
-                atom.constraints.add(AtomConstraint::AromaticValence(
+                atom.constraints.set(AtomConstraint::AromaticValence(
                     AromaticValenceAst::Aromatic(ValueAst::Undetermined),
                 ));
                 // A bare aromatic heteroatom specifies zero H; any H must be bracketed
@@ -176,7 +176,7 @@ impl TryIntoAst<AtomAst> for &TableAtom {
                 }
             }
             Some(false) => {
-                atom.constraints.add(AtomConstraint::AromaticValence(
+                atom.constraints.set(AtomConstraint::AromaticValence(
                     AromaticValenceAst::NotAromatic,
                 ));
             }

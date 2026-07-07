@@ -246,6 +246,6 @@ mod tests {
         #[case] b: DativeBondAst,
         #[case] expected: DativeBondAst,
     ) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 }

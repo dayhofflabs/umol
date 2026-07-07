@@ -2344,7 +2344,7 @@ mod tests {
         #[case] expected: Option<ValueAst>,
     ) {
         if let Some(c) = old.clone() {
-            one_atom.atom_mut(AtomId(0)).ast.constraints.add(c);
+            one_atom.atom_mut(AtomId(0)).ast.constraints.set(c);
         }
         one_atom
             .transact(vec![Edit::ModifyAtomConstraint {

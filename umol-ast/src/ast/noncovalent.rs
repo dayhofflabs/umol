@@ -6,7 +6,7 @@ use umol_ast_macros::{Canonicalize, Lattice};
 use umol_graph_core::{ParticipantPosition, RelationData};
 
 use super::constraint::{NoncovalentBondConstraint, NoncovalentBondConstraints};
-use super::error::Contradiction;
+use super::error::{Contradiction, NoJoin};
 use super::traits::{AsLit, Canonicalize, Lattice};
 
 /// Noncovalent bond: two-atom non-bonded interaction tagged by an
@@ -142,12 +142,12 @@ impl Lattice for NoncovalentBondKindAst {
         }
     }
 
-    fn join(&self, other: &Self) -> Self {
-        match (self, other) {
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+        Ok(match (self, other) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::Lit(a), Self::Lit(b)) if a == b => Self::Lit(*a),
             _ => Self::Undetermined,
-        }
+        })
     }
 }
 
@@ -335,7 +335,7 @@ mod tests {
         #[case] b: NoncovalentBondKindAst,
         #[case] expected: NoncovalentBondKindAst,
     ) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
@@ -388,6 +388,6 @@ mod tests {
         #[case] b: NoncovalentBondAst,
         #[case] expected: NoncovalentBondAst,
     ) {
-        assert_eq!(a.join(&b), expected);
+        assert_eq!(a.join(&b), Ok(expected));
     }
 }

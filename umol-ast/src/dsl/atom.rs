@@ -4,7 +4,6 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use strum::IntoEnumIterator;
 use umol_chem::element::Element;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::{dec_uint, multispace0};
@@ -30,11 +29,12 @@ use super::stereo::{
 use super::value::{fmt_set, fmt_value, id, terminator, value, ValueDsl};
 use crate::ast::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use crate::ast::constraint::{
-    AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
+    AromaticValenceAst, AtomConstraint, AtomConstraintKey, AtomConstraintKind, AtomConstraints,
+    MulticenterValenceAst,
 };
 use crate::ast::operators::MemOp;
 use crate::ast::stereo::TetrahedralStereoAst;
-use crate::ast::traits::{FromAst, IntoAst};
+use crate::ast::traits::{FromAst, IntoAst, Lattice};
 use crate::ast::value::ValueAst;
 
 /// Surface DSL wrapper around `AtomAst`. Parses and renders the atom-string form
@@ -545,12 +545,12 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
                 apply_spin_pair(&mut ast.spin, sp, ParseError::DuplicateAtomPredicate)?;
             }
             AtomPredicate::Constraint(c) => {
-                if c.is_unique() && ast.constraints.contains(c.kind()) {
+                if ast.constraints.contains(c.key()) {
                     return Err(ParseError::DuplicateAtomPredicate(
                         constraint_tag(c.kind()).to_string(),
                     ));
                 }
-                ast.constraints.add(c);
+                ast.constraints.set(c);
             }
         }
     }
@@ -744,76 +744,49 @@ pub(crate) fn raise_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
     raise_atom_constraints(constraints, cfg);
 }
 
-fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults) {
-    constraints.retain(|c| !c.is_undetermined());
+/// A defaulted key wants filling iff it is absent or holds a vacuous (`Undetermined`) value.
+/// A concrete user value is left alone.
+fn is_unset_or_vacuous(constraints: &AtomConstraints, key: AtomConstraintKey) -> bool {
+    constraints.get(key).is_none_or(|c| c.is_undetermined())
+}
 
-    // Exhaustive dispatch over every kind: a new AtomConstraintKind variant
-    // fails to build here until it has an explicit branch.
-    for kind in AtomConstraintKind::iter() {
-        match kind {
-            AtomConstraintKind::Valence => {
-                if matches!(cfg.valence, NumericDefault::Zero) && !constraints.contains(kind) {
-                    constraints.add(AtomConstraint::Valence(ValueAst::Lit(0)));
-                }
-            }
-            AtomConstraintKind::DonatedPairs => {
-                if matches!(cfg.donated_pairs, NumericDefault::Zero) && !constraints.contains(kind)
-                {
-                    constraints.add(AtomConstraint::DonatedPairs(ValueAst::Lit(0)));
-                }
-            }
-            AtomConstraintKind::AcceptedPairs => {
-                if matches!(cfg.accepted_pairs, NumericDefault::Zero) && !constraints.contains(kind)
-                {
-                    constraints.add(AtomConstraint::AcceptedPairs(ValueAst::Lit(0)));
-                }
-            }
-            AtomConstraintKind::AromaticValence => {
-                if !constraints.contains(kind) {
-                    match cfg.aromatic_valence {
-                        AromaticValenceDefault::NotAromatic => {
-                            constraints.add(AtomConstraint::AromaticValence(
-                                AromaticValenceAst::NotAromatic,
-                            ));
-                        }
-                        AromaticValenceDefault::Required => {}
-                    }
-                }
-            }
-            AtomConstraintKind::MulticenterValence => {
-                if !constraints.contains(kind) {
-                    match cfg.multicenter_valence {
-                        MulticenterValenceDefault::NotMulticenter => {
-                            constraints.add(AtomConstraint::MulticenterValence(
-                                MulticenterValenceAst::NotMulticenter,
-                            ));
-                        }
-                        MulticenterValenceDefault::Required => {}
-                    }
-                }
-            }
-            AtomConstraintKind::TetrahedralStereo => {
-                if !constraints.contains(kind) {
-                    match cfg.tetrahedral_stereo {
-                        StereoDefault::NotStereo => {
-                            constraints.add(AtomConstraint::TetrahedralStereo(
-                                TetrahedralStereoAst::NotStereo,
-                            ));
-                        }
-                        StereoDefault::Required => {}
-                    }
-                }
-            }
-            AtomConstraintKind::TotalValence
-            | AtomConstraintKind::Degree
-            | AtomConstraintKind::TotalDegree
-            | AtomConstraintKind::RingDegree
-            | AtomConstraintKind::RingValence
-            | AtomConstraintKind::TotalHydrogens
-            | AtomConstraintKind::RingMembership => {
-                // Pattern-only constraint: no defaulting mode in AtomDefaults.
-            }
-        }
+fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults) {
+    // One explicit clause per defaulted kind, in ascending key-sort order. No global vacuous
+    // strip: a defaulted kind fills its own absent/vacuous slot; vacuous entries of other kinds
+    // are left for lazy canonicalization.
+    if matches!(cfg.valence, NumericDefault::Zero)
+        && is_unset_or_vacuous(constraints, AtomConstraintKey::Valence)
+    {
+        constraints.set(AtomConstraint::Valence(ValueAst::Lit(0)));
+    }
+    if matches!(cfg.aromatic_valence, AromaticValenceDefault::NotAromatic)
+        && is_unset_or_vacuous(constraints, AtomConstraintKey::AromaticValence)
+    {
+        constraints.set(AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic));
+    }
+    if matches!(
+        cfg.multicenter_valence,
+        MulticenterValenceDefault::NotMulticenter
+    ) && is_unset_or_vacuous(constraints, AtomConstraintKey::MulticenterValence)
+    {
+        constraints.set(AtomConstraint::MulticenterValence(
+            MulticenterValenceAst::NotMulticenter,
+        ));
+    }
+    if matches!(cfg.donated_pairs, NumericDefault::Zero)
+        && is_unset_or_vacuous(constraints, AtomConstraintKey::DonatedPairs)
+    {
+        constraints.set(AtomConstraint::DonatedPairs(ValueAst::Lit(0)));
+    }
+    if matches!(cfg.accepted_pairs, NumericDefault::Zero)
+        && is_unset_or_vacuous(constraints, AtomConstraintKey::AcceptedPairs)
+    {
+        constraints.set(AtomConstraint::AcceptedPairs(ValueAst::Lit(0)));
+    }
+    if matches!(cfg.tetrahedral_stereo, StereoDefault::NotStereo)
+        && is_unset_or_vacuous(constraints, AtomConstraintKey::TetrahedralStereo)
+    {
+        constraints.set(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo));
     }
 }
 
@@ -861,90 +834,46 @@ pub(crate) fn lower_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
     lower_atom_constraints(constraints, cfg);
 }
 
+/// Elide a defaulted entry: if its key holds exactly `default`, remove it (raise would refill it
+/// from the same `cfg`). No-op otherwise.
+fn remove_if_default(constraints: &mut AtomConstraints, default: AtomConstraint) {
+    let key = default.key();
+    if constraints.get(key) == Some(&default) {
+        constraints.remove(key);
+    }
+}
+
 fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults) {
-    // Exhaustive dispatch over every kind: a new AtomConstraintKind variant
-    // fails to build here until it has an explicit branch.
-    for kind in AtomConstraintKind::iter() {
-        match kind {
-            AtomConstraintKind::Valence => {
-                if matches!(cfg.valence, NumericDefault::Zero)
-                    && matches!(
-                        constraints.get(kind),
-                        Some(AtomConstraint::Valence(ValueAst::Lit(0)))
-                    )
-                {
-                    constraints.remove(kind);
-                }
-            }
-            AtomConstraintKind::DonatedPairs => {
-                if matches!(cfg.donated_pairs, NumericDefault::Zero)
-                    && matches!(
-                        constraints.get(kind),
-                        Some(AtomConstraint::DonatedPairs(ValueAst::Lit(0)))
-                    )
-                {
-                    constraints.remove(kind);
-                }
-            }
-            AtomConstraintKind::AcceptedPairs => {
-                if matches!(cfg.accepted_pairs, NumericDefault::Zero)
-                    && matches!(
-                        constraints.get(kind),
-                        Some(AtomConstraint::AcceptedPairs(ValueAst::Lit(0)))
-                    )
-                {
-                    constraints.remove(kind);
-                }
-            }
-            AtomConstraintKind::MulticenterValence => match cfg.multicenter_valence {
-                MulticenterValenceDefault::NotMulticenter => {
-                    if matches!(
-                        constraints.get(kind),
-                        Some(AtomConstraint::MulticenterValence(
-                            MulticenterValenceAst::NotMulticenter
-                        ))
-                    ) {
-                        constraints.remove(kind);
-                    }
-                }
-                MulticenterValenceDefault::Required => {}
-            },
-            AtomConstraintKind::AromaticValence => match cfg.aromatic_valence {
-                AromaticValenceDefault::NotAromatic => {
-                    if matches!(
-                        constraints.get(kind),
-                        Some(AtomConstraint::AromaticValence(
-                            AromaticValenceAst::NotAromatic
-                        ))
-                    ) {
-                        constraints.remove(kind);
-                    }
-                }
-                AromaticValenceDefault::Required => {}
-            },
-            AtomConstraintKind::TetrahedralStereo => match cfg.tetrahedral_stereo {
-                StereoDefault::NotStereo => {
-                    if matches!(
-                        constraints.get(kind),
-                        Some(AtomConstraint::TetrahedralStereo(
-                            TetrahedralStereoAst::NotStereo
-                        ))
-                    ) {
-                        constraints.remove(kind);
-                    }
-                }
-                StereoDefault::Required => {}
-            },
-            AtomConstraintKind::TotalValence
-            | AtomConstraintKind::Degree
-            | AtomConstraintKind::TotalDegree
-            | AtomConstraintKind::RingDegree
-            | AtomConstraintKind::RingValence
-            | AtomConstraintKind::TotalHydrogens
-            | AtomConstraintKind::RingMembership => {
-                // Pattern-only constraint: no defaulting mode in AtomDefaults.
-            }
-        }
+    // Elide each defaulted entry equal to its default, in reverse key-sort order (mirror of raise).
+    if matches!(cfg.tetrahedral_stereo, StereoDefault::NotStereo) {
+        remove_if_default(
+            constraints,
+            AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo),
+        );
+    }
+    if matches!(cfg.accepted_pairs, NumericDefault::Zero) {
+        remove_if_default(constraints, AtomConstraint::AcceptedPairs(ValueAst::Lit(0)));
+    }
+    if matches!(cfg.donated_pairs, NumericDefault::Zero) {
+        remove_if_default(constraints, AtomConstraint::DonatedPairs(ValueAst::Lit(0)));
+    }
+    if matches!(
+        cfg.multicenter_valence,
+        MulticenterValenceDefault::NotMulticenter
+    ) {
+        remove_if_default(
+            constraints,
+            AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter),
+        );
+    }
+    if matches!(cfg.aromatic_valence, AromaticValenceDefault::NotAromatic) {
+        remove_if_default(
+            constraints,
+            AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic),
+        );
+    }
+    if matches!(cfg.valence, NumericDefault::Zero) {
+        remove_if_default(constraints, AtomConstraint::Valence(ValueAst::Lit(0)));
     }
 }
 
@@ -1345,6 +1274,7 @@ mod tests {
     #[case::dup_implicit_hydrogens("C#h3#h2", ParseError::DuplicateAtomPredicate("#h".to_string()))]
     #[case::dup_charge("C#c+#c-", ParseError::DuplicateAtomPredicate("#c".to_string()))]
     #[case::dup_valence("C#v3#v4", ParseError::DuplicateAtomPredicate("#v".to_string()))]
+    #[case::dup_ring_same_scope("C#R(6)#R(6)", ParseError::DuplicateAtomPredicate("#R".to_string()))]
     #[case::invalid_special_slash("C#h/", ParseError::TrailingInput("/".to_string()))]
     #[case::invalid_special_minus("C#h-", ParseError::TrailingInput("-".to_string()))]
     #[case::invalid_special_equal("C#h=", ParseError::TrailingInput("=".to_string()))]
@@ -1607,8 +1537,8 @@ mod tests {
         ast.isotope_mass = IsotopeMassAst::Natural;
         ast.spin = SpinStateAst::from((0_u8, 1_u8));
         ast.constraints
-            .add(AtomConstraint::Valence(ValueAst::Lit(0)));
-        ast.constraints.add(AtomConstraint::AromaticValence(
+            .set(AtomConstraint::Valence(ValueAst::Lit(0)));
+        ast.constraints.set(AtomConstraint::AromaticValence(
             AromaticValenceAst::NotAromatic,
         ));
         let cfg = AtomDefaults::zeroed();
@@ -1632,11 +1562,11 @@ mod tests {
         assert_eq!(ast.isotope_mass, IsotopeMassAst::Natural);
         assert_eq!(ast.spin, SpinStateAst::from((0_u8, 1_u8)));
         assert_eq!(
-            ast.constraints.get(AtomConstraintKind::Valence),
+            ast.constraints.get(AtomConstraintKey::Valence),
             Some(&AtomConstraint::Valence(ValueAst::Lit(0)))
         );
         assert_eq!(
-            ast.constraints.get(AtomConstraintKind::AromaticValence),
+            ast.constraints.get(AtomConstraintKey::AromaticValence),
             Some(&AtomConstraint::AromaticValence(
                 AromaticValenceAst::NotAromatic
             ))

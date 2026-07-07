@@ -779,18 +779,13 @@ impl MoleculeAst {
     /// (last-wins per kind), removing it from the molecule list.
     /// Combinator subtrees, `Relational`, and `Molecule` entries are left
     /// in place.
-    ///
-    /// The `Constraint` arm is exhaustively matched: adding a new variant
-    /// or making any uninhabited entity-leaf inner enum (aromatic,
-    /// multicenter, noncovalent, stereo) inhabited is a compile-time forcing
-    /// function on this method.
     pub fn inline_constraints(&mut self) {
         let entries = self.constraints.take();
         let mut leftover: Vec<Constraint> = Vec::new();
         for c in entries {
             match c {
                 Constraint::Atom(id, inner) => {
-                    self.atom_mut(id).ast.constraints.add(inner);
+                    self.atom_mut(id).ast.constraints.set(inner);
                 }
                 Constraint::Bond(id, inner) => {
                     self.bond_mut(id).ast.constraints.add(inner);

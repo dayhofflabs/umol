@@ -9,7 +9,7 @@ use strum::EnumDiscriminants;
 
 use super::super::boolean::BooleanAst;
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
-use super::super::error::Contradiction;
+use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
@@ -352,15 +352,15 @@ impl Lattice for DativeBondConstraints {
         Some(result)
     }
 
-    fn join(&self, other: &Self) -> Self {
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
         let mut result = Self::new();
-        let aromatic = self.aromatic().join(&other.aromatic());
+        let aromatic = self.aromatic().join(&other.aromatic())?;
         if !aromatic.is_undetermined() {
             result.add(DativeBondConstraint::Aromatic(aromatic));
         }
         for (scope, v) in self.ring_memberships() {
             if other.ring_memberships().any(|(s, _)| s == scope) {
-                let j = v.join(&other.ring_membership_value(scope));
+                let j = v.join(&other.ring_membership_value(scope))?;
                 if !j.is_undetermined() {
                     result.add(DativeBondConstraint::RingMembership(
                         RingMembershipAst::new(scope, j),
@@ -368,7 +368,7 @@ impl Lattice for DativeBondConstraints {
                 }
             }
         }
-        result
+        Ok(result)
     }
 
     /// Each value is matched on its own lattice; an empty pattern matches any target.

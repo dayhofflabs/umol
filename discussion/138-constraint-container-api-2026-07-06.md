@@ -1,6 +1,6 @@
-# 138 — Constraint container API: the map model (reversed)
+# 138 — Constraint container API
 
-Status: Reversed — map model implemented, then reverted. Flat model kept.
+Status: Active
 Date: 2026-07-06
 
 ## Outcome and lessons (2026-07-06)
@@ -66,34 +66,49 @@ per-constraint `AtomConstraintDsl` (EDN) and the string `fmt_constraint`/parsers
 
 ### Target container API (`AtomConstraints`; peers get the same surface in replication)
 
-Read — by full key only:
-- `get(key) -> Option<&Constraint>`
+Storage: `SmallVec<[AtomConstraint; 2]>`, **sorted by `key()`, one entry per key** — both
+structural invariants, maintained by every write (`set` overwrites the same key; `extend`/
+`from_iter` are `set`-loops, last-wins; `update` is a `set`/`remove` loop). No same-key duplicate
+ever reaches `canonicalize`.
+
+Read — by full key:
+- `get(key) -> Option<&AtomConstraint>`
 - `contains(key) -> bool`
 - `iter()`
+- `find(key) -> Result<usize, usize>` — **private** binary-search insertion point; the primitive
+  `get`/`set`/`remove`/`compare_and_set` fold into.
 
-Assert — monotone, **fallible**:
-- `add(constraint) -> Result<(), Contradiction>` — meet the value at `constraint.key()` via
-  `Lattice::meet`; `Err` on incompatible meet. Fallible because it must work for every
-  payload and most have no ⊥ (`BooleanAst` is `true`/`false`/`undetermined`, no bottom) — the
-  old empty-`LitSet` sentinel was `ValueAst`-only and is dropped.
-
-Overwrite — non-monotone:
-- `set(constraint)` — overwrite at `constraint.key()`; a vacuous constraint removes.
-  Infallible. (Takes a whole `Constraint`, not `(key, value)`: the payload type varies by
-  kind — `ValueAst` / `AromaticValenceAst` / `MulticenterValenceAst` / `TetrahedralStereoAst`
-  — so `set(key, value)` would need a payload union whose tag duplicates the key and can
-  mismatch it; a `Constraint` is that pair with the tag shared once.)
-- `update(&other)` — bulk overwrite from another container (overlay; vacuous ⇒ remove).
-  Infallible. Replaces the `remove`+`add` loop in `AtomAst::update`.
-- `compare_and_set(old: Option<Constraint>, new: Option<Constraint>) -> Result<(), Contradiction>`
-  — verify the value at the key equals `old` (`canonical_eq`; `None` = expect absent), then
-  set/remove `new`. The single delta apply/undo primitive.
+Write — **verbatim** (no meet, no vacuous trick):
+- `set(c)` — insert-or-replace at `c.key()`, verbatim; a vacuous `c` is *stored*, not removed.
+  Infallible. (Takes a whole `AtomConstraint`, not `(key, value)`: the payload type varies by kind
+  — `ValueAst` / `AromaticValenceAst` / `MulticenterValenceAst` / `TetrahedralStereoAst` — so
+  `set(key, value)` would need a payload union whose tag duplicates the key.)
+- `update(&other)` — overlay: for each entry in `other`, a vacuous (Undetermined) one `remove`s
+  that key, otherwise `set`. Infallible. Replaces the `remove`+`add` loop in `AtomAst::update`; the
+  vacuous-remove is what lets a reaction's `#v*` rhs generate a remove-constraint delta (via
+  `AtomAst::update` → `AtomDelta::diff`).
+- `compare_and_set(old: Option<AtomConstraint>, new: Option<AtomConstraint>) -> Result<(), Contradiction>`
+  — verify the value at the key `canonical_eq` `old` (`None` = expect absent), then `set(new)` /
+  `remove(key)`. The delta apply/undo primitive.
 
 Remove:
-- `remove(key) -> Option<Constraint>` — unconditional delete.
+- `remove(key) -> Option<AtomConstraint>` — unconditional delete.
+- `clear()`
 
-Bulk:
+Bulk / construction:
 - `retain(pred)`
+- `new()`, `FromIterator`/`extend` (`set` in a loop — last-wins, no `debug_assert`), `IntoIterator`
+  (key order).
+
+Lattice — sorted merge delegating the shared-key case to `AtomConstraint`'s value-op:
+- `meet(&self, &other) -> Option<Self>` — shared key → `AtomConstraint::meet` (`None` aborts);
+  A-only / B-only kept.
+- `join(&self, &other) -> Result<Self, NoJoin>` — shared → `AtomConstraint::join` (`Err` ⇒ drop
+  key); A/B-only dropped. Container has ⊤ (empty) ⇒ always `Ok`.
+- `matches` / `is_compatible` — same merge shape.
+
+**No `add`** — meet lives only inside the Lattice merge. **No `is_unique`** — the parse dup-check is
+`contains(c.key())` (same-scope ring is a same-key duplicate; different scopes differ).
 
 ### Removed / renamed / kept
 - **Removed:** `is_unique` (method + tests); by-kind `get`/`get_mut`/`contains`/`remove`
@@ -117,10 +132,11 @@ Bulk:
   projection with zero real callers once by-kind addressing is gone — deleting it removes
   upkeep, not capability.
 
-### Behavior change (pin with tests before it lands)
-Meet-`add` makes duplicate assertions conjunctive: `#V4#V3` → contradiction (was
-last-wins/`DuplicateAtomPredicate`); `#V*#V3` → `#V3` (vacuous meets away). Confirmed
-acceptable — also lets repeated tags join.
+### Behavior change
+None at parse — `DuplicateAtomPredicate` is retained (the reset dropped meet-`add`, so `#V4#V3`
+and `#V*#V3` are both rejected as duplicates as before). The only shift is internal: `set` is now
+verbatim (a vacuous constraint is stored and canonicalized away lazily) rather than eagerly
+removing at the write.
 
 ### Call-site migration — atom slice (audited 2026-07-06, whole workspace)
 
@@ -207,43 +223,153 @@ the old value — `compare_and_set` fixes that.
   `1→2` ring modify contradicted; `set` overwrites the scope. old-mismatch → `OldStateMismatch`,
   key-mismatch → `KindMismatch`. [dep: S1c]
 
-**S3 — meet-`add` + `is_unique` removal (breaking → green):**
-- **S3a** `constraint/atom.rs` — `add(&mut self, c) -> Result<(), Contradiction>`:
-  `find(c.key())` → `Ok(i)` meet `entries[i]`'s payload with `c`'s: `existing.meet(&c).ok_or
-  (Contradiction)?` (`Lattice::meet` returns `Option`; `None` = incompatible → `add` maps it to
-  the AST `Contradiction`); `Err(i)` insert. Delete the `is_unique`/append branch. `Canonicalize`
-  drops the same-scope ring dedup. No caller reads `add`'s old `Option<replaced>` return, so the
-  switch is clean — and because `Result` is `#[must_use]` (unlike `Option`), the compiler flags
-  every unhandled site. Routing rule: **`add` (fallible meet) only where *user* input can
-  conflict; `set` (infallible, last-wins) for all construction of known/computed values.** Caller
-  migration (audited 2026-07-06):
-  - **`add` (fallible) → `ParseError` — the *only* fallible site:** the parse assembly
-    `ast.constraints.add(c)` (`dsl/atom.rs:553`), where user predicates accumulate (`#V4#V3`
-    meets). → `add(c).map_err(|_| ParseError::ContradictoryPredicate(tag))?` (see S3b; replaces
-    `DuplicateAtomPredicate`'s constraint role). Today `Contradiction` never reaches the parse
-    path, so this bridge is new.
-  - **`set` (infallible) — everything else:** `with_constraint`/`with_constraints`
-    (`ast/atom.rs:75/89`, stay fluent); perception umol-graph `aromaticity.rs:236/301`,
-    `clar.rs:152`, `hmo.rs:322`, `hueckel_rule.rs:283`, `kekulizer.rs:192`, `validate.rs:285`,
-    `validate/aromaticity.rs:132`; umol-io `table_ir/raise.rs:167/179`; `from_iter`/`from`;
-    `AtomView` materialization (`view/atom.rs:476–521`); `raise_atom_constraints`
-    (`dsl/atom.rs:756–799`); `Lattice::meet`/`join` build (`atom.rs:815–929`, rewritten in S4a).
-    All infallible — no `Result`, no `.expect()`, no fallible builders. (`ast/atom.rs:102` is the
-    `update` loop S1d deletes.)
-  - **tests of `add` itself → `.unwrap()`**: `molecule/tests.rs`, `dsl/atom.rs:1610–1611`.
-  Tests: `add(V(4))`→`add(V(3))` = `Err`; `add(V(*))`→`add(V(3))` = `V(3)`;
-  `add(R(6,1))`→`add(R(6,2))` = `Err`; disjoint scopes coexist; insert-new. [dep: S1]
-- **S3b** `constraint/atom.rs` + `dsl/atom.rs` + `dsl/error.rs` — delete `AtomConstraint::is_unique`
-  (116) + `test_atom_constraint_is_unique`; delete the atom DSL dup-check (`dsl/atom.rs:548`); add
-  a **new `ParseError::ContradictoryPredicate(String)` variant** (parallels
-  `DuplicateAtomPredicate`, carrying the tag) and map the assembly `add` at
-  `dsl/atom.rs:553` with `.map_err(|_| ParseError::ContradictoryPredicate(tag))?`. This is the sole new `Contradiction →
-  ParseError` bridge and is what `#V4#V3` now produces (replacing `DuplicateAtomPredicate` for the
-  constraint case; the field cases keep `DuplicateAtomPredicate` until its own follow-up). Tests:
-  `C#V4#V3` → the new variant (not `DuplicateAtomPredicate`); `C#V*#V3` → `#V3`; duplicate ring
-  scopes → meet/contradiction. [dep: S3a]
+**S3 — verbatim `set`, drop `add`, Lattice merge, `is_unique` removal (breaking → green):** **Done (2026-07-07)**
+- **S3a-1** `ast/traits.rs` + `ast/error.rs` + `umol-ast-macros` + **every `Lattice` impl** — make
+  `join` fallible and give `AtomConstraint` a `Lattice`. *(Foundation; the one S3 subitem that is
+  **not** atom-only — the `join` signature touches the whole `Lattice` surface. Breaking → green:
+  the trait signature and all impls land together.)*
+  - **`NoJoin`** error (`ast/error.rs`, beside `Contradiction`): the top-less join — no least
+    upper bound. Distinct from `Contradiction` (meet's unrepresented ⊥); a failed join is not a
+    contradiction (both operands are individually valid, they just have no common generalization).
+  - `Lattice::join(&self, other) -> Result<Self, NoJoin>` (was `-> Self`). Bounded lattices return
+    `Ok(..)`; meet-semilattices (`AtomConstraint`) return `Err(NoJoin)` for cross-key operands.
+    `meet` stays `Option` (⊥). `widen_with` → `Result<bool, NoJoin>`. `matches`/`is_compatible`
+    unchanged (meet-derived); **no** join-side predicate — `is_compatible` exists only as a
+    cheap-override hook over `meet`, and join needs none.
+  - `#[derive(Lattice)]` proc-macro (`umol-ast-macros/src/lib.rs:75`): derived `join` becomes
+    `Ok(Self { field: <lattice>::join(&self.field, &other.field)?, .. })` (a field's `Err(NoJoin)`
+    short-circuits) — regenerates for all 9 derive users below.
+  - **New `impl Lattice for AtomConstraint`** (`constraint/atom.rs`) — disjoint-union /
+    meet-semilattice keyed by `AtomConstraintKey`: `is_undetermined`/`is_ground` proxy to the
+    payload; `meet` same-key → payload meet, diff-key → `None`; `join` same-key →
+    `Ok(payload join)`, diff-key → `Err(NoJoin)`. Removes the inherent `AtomConstraint::
+    is_undetermined` and `meet`; the container's Lattice merge (S3a-2) calls `Lattice::meet`.
+  - **`StereoConfigurationAst::Undetermined` stays** — it is the `Default`, the DSL `*`, and the
+    kind-unknown state (default stereo.rs:279; parse dsl/stereo.rs:169/187; render 832/885;
+    `is_undetermined` checks reaction.rs:2576/2716), not merely a Lattice top. Its `join` stays
+    total, wrapped `Ok`; only its top-crutch duty is retired.
+  - **Full `Lattice` implementor list** (each `join` → `Ok`-wrap unless noted):
+    - *Direct impls (15):* `ValueAst`, `BooleanAst`, `ElementAst`, `IsotopeMassAst`,
+      `ElectronCountsAst`, `NoncovalentBondKindAst`, `StereoConfigurationAst`, `AromaticValenceAst`,
+      `MulticenterValenceAst`, `AtomConstraints`, `BondConstraints`, `DativeBondConstraints`,
+      `MulticenterBondConstraints`, `NoncovalentBondConstraints`, `AromaticSystemConstraints`.
+    - *`#[derive(Lattice)]` field-wise (9):* `AtomAst`, `BondAst`, `DativeBondAst`,
+      `MulticenterBondAst`, `NoncovalentBondAst`, `AromaticSystemAst`, `SpinStateAst`; plus
+      `StereoAtomAst`, `StereoBondAst` (derived inside `stereo_element!`).
+    - *`macro_rules!` manual impls (6):* `TetrahedralStereoAst`, `CisTransStereoAst`
+      (`stereo_site!`); `StereoAtomConstraints`, `StereoBondConstraints` (`stereo_constraint!`);
+      `TopicityRelationAst`, `StereogenicityAst` (`relation_ast!`).
+    - *New (1):* `AtomConstraint` — the sole `Err(NoJoin)`-returning impl (cross-key join).
+  - Tests: per-type `join` tests → `Ok(..)`; `AtomConstraint` same-key `join` → `Ok(payload join)`,
+    cross-key → `Err(NoJoin)`; `widen_with` tests thread the `Result`. [dep: —] (foundation)
+- **S3a-2** `constraint/atom.rs` — verbatim `set`, drop `add`, Lattice as sorted merge:
+  - **`set` → verbatim.** Drop S1a's vacuous-remove branch: `set(c)` is insert-or-replace at
+    `find(c.key())`, *storing* a vacuous `c`. S1a's `set-vacuous-removes` test → `set-vacuous-stores`.
+  - **Delete `add`** (the meet-write) entirely — no caller keeps it; meet survives only in the
+    merge below. Only `set` went verbatim; `update`/`AtomAst::update` keep their vacuous-remove (a
+    vacuous entry in `other` `remove`s that key), so S1b's "vacuous-in-other removes" test stays.
+  - **Rewrite `Lattice::meet`/`join`** (≈895–1015) as a **two-pointer sorted merge** over the two
+    key-sorted slices, delegating the shared-key case to `AtomConstraint::meet`/`join` (S3a-1); an
+    A-only/B-only key follows the meet (keep) / join (drop) rule; the result is built by ordered
+    `push`. Deletes the hand-written 13-arm per-kind bodies and the `!is_undetermined()` guards.
+    `matches`/`is_compatible` follow the same merge. `canonicalize` = value-canonicalize each +
+    drop-vacuous (no same-key dedup — the container is always sorted-unique via last-wins `set`).
+  - **`find` → private**; `from_iter`/`extend` are `set`-loops (last-wins, no `debug_assert`).
+  - **Caller migration** of the former `add` sites is the re-walked call-site list below — each is
+    `set` (verbatim), `collect` (fresh construction), or absorbed into the merge. No container write
+    but `compare_and_set` produces a `Result`, so there is nothing to thread. [dep: S3a-1, S1]
+- **S3b** `constraint/atom.rs` + `dsl/atom.rs` — delete `AtomConstraint::is_unique` (116) +
+  `test_atom_constraint_is_unique`. The atom DSL dup-check (`dsl/atom.rs:548`) becomes
+  `if constraints.contains(c.key())` → **`DuplicateAtomPredicate`** (same-scope ring is a same-key
+  duplicate; different scopes are different keys); the assembly then does `set(c)`.
+  **`DuplicateAtomPredicate` stays; no `ContradictoryPredicate`** — the permissive meet-merge that
+  would accept `#V3#V*` is a later addition, if ever. Tests: `C#V4#V3` → `DuplicateAtomPredicate`;
+  `C#R6#R6` → `DuplicateAtomPredicate`; `C#R6#R5` accepted (distinct scopes). [dep: S3a-2]
 
-**S4 — kill kind-addressing on `AtomConstraints` (breaking → green):**
+**Reset (2026-07-07): `add`-as-meet dropped — it was a footgun.** The parallel `add`(silent meet)/
+`set`(silent vacuous-remove) system was a mistake. New model:
+- Container write is a single **verbatim `set`** — insert-or-replace at `c.key()`, no vacuous
+  special-case, no meet. `update`/`compare_and_set`/`find`/`get`/`remove`/`clear` stay; storage is
+  a key-sorted vec; Lattice `meet`/`join`/`matches`/`is_compatible` are a sorted merge delegating
+  the shared-key case to `AtomConstraint`'s value-`meet`; no kind-iteration.
+- **Meet is used only by the container's Lattice `meet`/`join` merge** (shared key →
+  `AtomConstraint` value-`meet`). **Parse does not meet** — it rejects duplicate predicates the old
+  way, **`DuplicateAtomPredicate`** (any same-key duplicate → error), restored; **no
+  `ContradictoryPredicate`**. That's a strict superset: `#V3#V4` is rejected either way, and
+  `#V3#V*` (which a meet would accept as `V3`) is just rejected as a duplicate. A permissive
+  meet-merge at parse is a possible later addition, if ever.
+
+So each former `add` site resolves to `set` (verbatim), `collect` (fresh construction), or the
+sorted merge. Re-walking the list:
+
+1. **`Lattice::meet`/`join` builds** — ~15, `constraint/atom.rs:895–1015` — **merge, no `add`/`set`**:
+   the sorted-merge rewrite builds the result by ordered `push` during the two-pointer walk, so the
+   ~15 `result.add(..)` calls are *removed* (not converted). `meet`/`join`/`matches`/`is_compatible`
+   delegate the shared-key case to `AtomConstraint`'s op; the `!is_undetermined()` guards go.
+2. **`extend` / `from_iter`** — `constraint/atom.rs` — **both `set` in a loop** (last-wins, no
+   `debug_assert`): `for c in iter { self.set(c) }` — `from_iter` into a fresh container, `extend`
+   into an existing one. Last-wins `set` keeps the container sorted-*unique*, so no dup-key ever
+   reaches `canonicalize`. Callers of `extend`: `AtomAst::with_constraints` (`ast/atom.rs:83`),
+   `resolve_molecule_atom` (`atom_typing.rs:70`), `stereo.rs:71`. The singular `with_constraint`
+   (`ast/atom.rs:74`) → one `set`. `into_iter` iterates; `remove` compacts.
+3. **`AtomView` materialization** (`derive_constraints`) — ~10, `view/atom.rs:474–527` —
+   **`from_iter`/collect**: a fresh copy from concrete perceived data — distinct keys, values
+   never vacuous, so `add`/`set`/`collect` all coincide (plain insert). It's a can't-fail
+   construction → `.collect()` (infallible). Minimal treatment — `derive_constraints` is itself
+   slated for removal, so no further investment here.
+4. **DSL `raise`/`lower` defaults** (`raise_atom_constraints`/`lower_atom_constraints`) —
+   `dsl/atom.rs:747–…` — **`set`, restructured** (raise/lower are too complicated). Supersedes the
+   S4b `add(..)?` and the `retain(...)` lowering below.
+   - **Drop the global `retain(|c| !c.is_undetermined())`.** It strips *every* vacuous entry;
+     we must only touch the kinds being defaulted — vacuous values of other kinds stay.
+   - **No `for kind in Kind::iter()`.** One **explicit clause per relevant kind** — valence,
+     donated, accepted, aromatic, multicenter, tetrahedral — written in **ascending key-sort
+     order**. (These clauses will most likely go away later too.)
+   - Each raise clause: if the key is **absent *or* undetermined** (vacuous ≈ absent for
+     defaulting — confirmed ok), `set(default)`. Concrete user values are left untouched (the
+     guard skips them); the default overwrites a vacuous entry of that same kind.
+   - **`lower`:** likewise an explicit clause per kind, iterating in **reverse key-sort order**.
+   - Any shared per-kind helper stays a **free fn in `dsl/atom.rs`** (raise: absent-or-undetermined
+     → `set(default)`; lower: equals-default → `remove`), **not** a method on `AtomConstraints` —
+     defaulting/elision is DSL-boundary logic and would pollute the container's primitive surface.
+     Or just inline the ~6 guarded `set`s, since each is a one-liner over `get`/`set`.
+5. **DSL parse accumulation** — 1, `dsl/atom.rs:548–553` — **`set` + `DuplicateAtomPredicate`**.
+   Keep the dup-check (any same-key duplicate → `DuplicateAtomPredicate`); otherwise `set(c)`
+   verbatim. No meet, no `ContradictoryPredicate`. (`#V3#V*` stays rejected as a duplicate; the
+   permissive meet-merge is a later addition, if ever.)
+6. **perception** — **1 production site + 5 test fixtures** — **`set`**. Only `aromaticity.rs:236`
+   (`equalize_charges`, charge equalization for symmetric monoelement aromatic ions — Cp⁻,
+   tropylium, `[S₄]²⁺`) writes a constraint in production; it pins `AromaticValence(Aromatic(Lit
+   (k)))` alongside the `system.electrons` update on line 240 → a computed write, `set`. The other
+   five `.add` sites are inside `mod tests` (aromaticity:301, clar:152, kekulizer:192, validate:285,
+   validate/aromaticity:132) — fresh fixture builders, `set`/`add` coincide. (My earlier
+   "perception overwrites, is_unique-replace policy" framing was wrong: `e`/`k` there are the
+   system's electron counts, not the atom's constraint.)
+7. **reaction partial rebuild** — 2, `dsl/reaction.rs:2144–2153` (the atom `ModifyConstraint` arm of
+   `render_deltas`) — **`set` in both branches**: `Some(c)` → `set(c)`; `None` →
+   `set(old.as_undetermined())`. Verbatim `set` *stores* the vacuous removal marker (renders `#v*`)
+   rather than dropping it, which is what removes the earlier "set drops the marker" objection. The
+   same block repeats for 6 peer families (bond 2191/2195, dative 2270/2274, aromatic 2344/2348,
+   multicenter 2418/2422, stereo-atom 2560/2564, stereo-bond 2703/2707) — outside the atom slice
+   (replication), keep `add`.
+8. **IO raise** — 3, `umol-io/table_ir/raise.rs:67/167/179` — **`set`**. Fresh `AtomAst`
+   construction from a table atom (distinct keys — tetrahedral stereo at 67, aromatic valence at
+   167/179). Verbatim insert.
+9. **molecule `inline_constraints`** — `molecule.rs:788` (atom arm) — **`set`**. Moves a
+   molecule-level `Constraint::Atom` into the atom's inline store; the doc comment already says
+   "last-wins per kind" — that's `set`. (Bond/dative arms are peers → keep `add`.)
+10. **binding** — `umol-py/constraint.rs:314–319` — **`extend` / set-loop**. `for entry in entries {
+    add }` building a fresh container is the set-loop; use `extend`/`collect` (last-wins per key),
+    matching its docstring.
+11. **tests + `replace` import** — `constraint/atom.rs` — test `add` sites → `set`; remove
+    `use std::mem::replace` (only the old `add` used it).
+
+**S4 — kill kind-addressing on `AtomConstraints` (breaking → green):** **Done (2026-07-07)** —
+pure by-kind→by-key migration + teardown + rename, zero behavior change. **Deferred:** the item-4
+`raise`/`lower` *restructure* (drop the global `retain`, explicit per-kind clauses in key-sort
+order, `absent-or-undetermined → set`, lower in reverse) — a behavior change, separable from
+killing by-kind addressing; S4b did only the minimal `contains(kind)`→`contains(Key::X)` swap and
+kept the loop + global retain.
 - **S4a** `constraint/atom.rs` — internal callers → by-key: typed accessors (531–631) `get(Kind::X)`
   → `get_by_key(Key::X)`; ring accessors → direct `get_by_key` (delete `ring_memberships`/
   `ring_membership_value`/the `get_all` call); rewrite `Lattice::meet`/`join` (≈770–935) to the
@@ -264,8 +390,10 @@ the old value — `compare_and_set` fixes that.
   `get`-assert. [dep: S4a, S4b, S4c]
 
 Critical path within atom: **S1 → {S2, S3} → S4** (S2 and S3 are independent given S1; both
-precede S4). Each subitem carries its tests and ends green (S3a briefly red while `add` callers
-migrate, green by S3a's end).
+precede S4); within S3, **S3a-1 → S3a-2 → S3b**. Each subitem carries its tests and ends green
+(S3a-1 red only while the `join` signature and its impls migrate together; S3a-2 briefly red while
+`add` callers migrate, green by its end). S3a-1 is the only workspace-wide subitem — every other
+S1–S4 item is `AtomConstraints`-scoped.
 
 ### After the atom slice
 - **Replication** — repeat S1–S4 for `BondConstraints`, `DativeBondConstraints`,
@@ -279,13 +407,11 @@ migrate, green by S3a's end).
   `AtomConstraint`→`AtomConstraintAst`, `AtomConstraints`→`AtomConstraintsAst` and peers;
   `*ConstraintKind`/`*ConstraintKey`/`*Dsl` unchanged. Not atom-scoped — renaming atom alone
   would leave the family inconsistent.
-- **Scheduled: remove `ParseError::DuplicateAtomPredicate`.** *Not* constraint-specific — of its
-  ~10 raisers only `dsl/atom.rs:549` is the constraint dup-check (deleted in S3b); the rest guard
-  duplicate atom *fields* (`#i`/`#c`/`#h`/`#n`, spin `#u`/`#s` via `apply_spin_pair`). Full
-  removal requires extending meet-on-duplicate to those fields (`#c+#c-` → contradiction,
-  `#c*#c-` → join, mirroring `#V4#V3`) — a change to the field parsers + `apply_spin_pair`, not
-  the constraint container. Schedule after the constraint work; do not assume S3b removes the
-  variant.
+- **`ParseError::DuplicateAtomPredicate` stays** (the reset dropped `ContradictoryPredicate`).
+  S3b keeps it for the constraint dup-check (`contains(c.key())` → duplicate), and its other ~10
+  raisers guard duplicate atom *fields* (`#i`/`#c`/`#h`/`#n`, spin `#u`/`#s` via `apply_spin_pair`)
+  unchanged. A permissive meet-on-duplicate (`#V3#V*` → `V3`, `#c+#c-` → contradiction) is a
+  possible later addition; not scheduled.
 - **Scheduled: remove `TransactionError::KindMismatch`.** Preserved through the atom slice (S2b)
   for behavior parity; used by all 7 `apply_modify_*_constraint`. Once every family routes
   verify+apply through `compare_and_set` (replication), drop the `KindMismatch` pre-checks and

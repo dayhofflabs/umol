@@ -3,7 +3,7 @@
 use std::mem;
 use std::slice::Iter;
 
-use super::super::error::Contradiction;
+use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
 
@@ -150,8 +150,8 @@ impl Lattice for NoncovalentBondConstraints {
         Some(Self::new())
     }
 
-    fn join(&self, _other: &Self) -> Self {
-        Self::new()
+    fn join(&self, _other: &Self) -> Result<Self, NoJoin> {
+        Ok(Self::new())
     }
 
     fn matches(&self, _target: &Self) -> bool {
