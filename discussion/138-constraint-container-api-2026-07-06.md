@@ -175,7 +175,7 @@ the old value — `compare_and_set` fixes that.
 
 ### Subitems (atom slice; green after each subitem unless marked)
 
-**S1 — additive primitives on `AtomConstraints` (all green, nothing removed):**
+**S1 — additive primitives on `AtomConstraints` (all green, nothing removed):** **Done**
 - **S1a** `constraint/atom.rs` — `set(&mut self, c: AtomConstraint)`. `find_by_key(c.key())`:
   `Ok(i)` replace `entries[i]`, `Err(i)` insert at `i`; if `c.is_undetermined()`, remove at that
   key instead (vacuous ⇒ absent). Infallible. Tests: set-into-empty, set-overwrite-same-key,

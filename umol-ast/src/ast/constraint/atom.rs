@@ -654,6 +654,65 @@ impl AtomConstraints {
         }
     }
 
+    /// Overwrite the entry at `c.key()` with `c` (last-wins), inserting at the sorted position
+    /// if absent; a vacuous (`Undetermined`) `c` removes the entry instead. Unlike `add`, this
+    /// does not meet — it is the write used by construction and delta application.
+    pub fn set(&mut self, c: AtomConstraint) {
+        match self.find_by_key(c.key()) {
+            Ok(i) if c.is_undetermined() => {
+                self.entries.remove(i);
+            }
+            Ok(i) => self.entries[i] = c,
+            Err(_) if c.is_undetermined() => {}
+            Err(i) => self.entries.insert(i, c),
+        }
+    }
+
+    /// Overlay `other` onto self by `set`-ing each of its entries (last-wins; a vacuous entry
+    /// in `other` removes that key). Disjoint keys are kept.
+    pub fn update(&mut self, other: &AtomConstraints) {
+        for c in other.iter() {
+            self.set(c.clone());
+        }
+    }
+
+    /// Transactional write at one key: verify the current value equals `old` (by `canonical_eq`;
+    /// both absent is a match), then apply `new` (`Some` sets, `None` removes). `old` and `new`
+    /// must address the same key. `Err` on a key or old-value mismatch; the store is unchanged
+    /// when it errors. The delta apply/undo primitive.
+    pub fn compare_and_set(
+        &mut self,
+        old: Option<AtomConstraint>,
+        new: Option<AtomConstraint>,
+    ) -> Result<(), Contradiction> {
+        let key = match (&old, &new) {
+            (Some(o), Some(n)) => {
+                if o.key() != n.key() {
+                    return Err(Contradiction);
+                }
+                o.key()
+            }
+            (Some(o), None) => o.key(),
+            (None, Some(n)) => n.key(),
+            (None, None) => return Ok(()),
+        };
+        let matches = match (self.get_by_key(key), old.as_ref()) {
+            (None, None) => true,
+            (Some(current), Some(old)) => current.canonical_eq(old),
+            _ => false,
+        };
+        if !matches {
+            return Err(Contradiction);
+        }
+        match new {
+            Some(c) => self.set(c),
+            None => {
+                self.remove_by_key(key);
+            }
+        }
+        Ok(())
+    }
+
     /// Add multiple constraints at once, using semantics of `add`.
     pub fn extend(&mut self, constraints: impl IntoIterator<Item = AtomConstraint>) {
         for constraint in constraints {
@@ -1658,6 +1717,84 @@ mod tests {
         let mut cs = AtomConstraints::new();
         let returns: Vec<_> = sequence.into_iter().map(|c| cs.add(c)).collect();
         assert_eq!(returns, expected_returns);
+        let collected: Vec<_> = cs.iter().cloned().collect();
+        assert_eq!(collected, expected_state);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fresh(vec![AtomConstraint::valence(4)], vec![AtomConstraint::valence(4)])]
+    #[case::overwrite_same_key(vec![AtomConstraint::valence(3), AtomConstraint::valence(4)], vec![AtomConstraint::valence(4)])]
+    #[case::vacuous_removes(vec![AtomConstraint::valence(4), AtomConstraint::Valence(ValueAst::Undetermined)], vec![])]
+    #[case::vacuous_absent_noop(vec![AtomConstraint::Valence(ValueAst::Undetermined)], vec![])]
+    #[case::new_key_sorts(vec![AtomConstraint::degree(3), AtomConstraint::valence(4)], vec![AtomConstraint::valence(4), AtomConstraint::degree(3)])]
+    #[case::ring_overwrite_scope(vec![AtomConstraint::ring_membership(RingScope::Size(6), 1), AtomConstraint::ring_membership(RingScope::Size(6), 2)], vec![AtomConstraint::ring_membership(RingScope::Size(6), 2)])]
+    #[case::ring_vacuous_removes_scope(vec![AtomConstraint::ring_membership(RingScope::All, 2), AtomConstraint::ring_membership(RingScope::Size(6), 1), AtomConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined)], vec![AtomConstraint::ring_membership(RingScope::All, 2)])]
+    fn test_atom_constraints_set(
+        #[case] sequence: Vec<AtomConstraint>,
+        #[case] expected_state: Vec<AtomConstraint>,
+    ) {
+        let mut cs = AtomConstraints::new();
+        for c in sequence {
+            cs.set(c);
+        }
+        let collected: Vec<_> = cs.iter().cloned().collect();
+        assert_eq!(collected, expected_state);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::overwrite_shared(
+        vec![AtomConstraint::valence(3), AtomConstraint::degree(3)],
+        vec![AtomConstraint::valence(4)],
+        vec![AtomConstraint::valence(4), AtomConstraint::degree(3)])]
+    #[case::keeps_disjoint(
+        vec![AtomConstraint::valence(4)],
+        vec![AtomConstraint::degree(3)],
+        vec![AtomConstraint::valence(4), AtomConstraint::degree(3)])]
+    #[case::vacuous_removes(
+        vec![AtomConstraint::valence(4), AtomConstraint::degree(3)],
+        vec![AtomConstraint::Valence(ValueAst::Undetermined)],
+        vec![AtomConstraint::degree(3)])]
+    #[case::empty_other(
+        vec![AtomConstraint::valence(4)],
+        vec![],
+        vec![AtomConstraint::valence(4)])]
+    #[case::ring_overwrite_scope(
+        vec![AtomConstraint::ring_membership(RingScope::All, 2), AtomConstraint::ring_membership(RingScope::Size(6), 1)],
+        vec![AtomConstraint::ring_membership(RingScope::Size(6), 3)],
+        vec![AtomConstraint::ring_membership(RingScope::All, 2), AtomConstraint::ring_membership(RingScope::Size(6), 3)])]
+    fn test_atom_constraints_update(
+        #[case] initial: Vec<AtomConstraint>,
+        #[case] other: Vec<AtomConstraint>,
+        #[case] expected: Vec<AtomConstraint>,
+    ) {
+        let mut cs = AtomConstraints::from_iter(initial);
+        let overlay = AtomConstraints::from_iter(other);
+        cs.update(&overlay);
+        let collected: Vec<_> = cs.iter().cloned().collect();
+        assert_eq!(collected, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::modify(vec![AtomConstraint::valence(3)], Some(AtomConstraint::valence(3)), Some(AtomConstraint::valence(4)), Ok(()), vec![AtomConstraint::valence(4)])]
+    #[case::remove(vec![AtomConstraint::valence(4)], Some(AtomConstraint::valence(4)), None, Ok(()), vec![])]
+    #[case::add_from_absent(vec![], None, Some(AtomConstraint::valence(4)), Ok(()), vec![AtomConstraint::valence(4)])]
+    #[case::canonical_match(vec![AtomConstraint::Valence(ValueAst::lit_set([4]))], Some(AtomConstraint::valence(4)), Some(AtomConstraint::valence(5)), Ok(()), vec![AtomConstraint::valence(5)])]
+    #[case::old_mismatch(vec![AtomConstraint::valence(3)], Some(AtomConstraint::valence(4)), Some(AtomConstraint::valence(5)), Err(Contradiction), vec![AtomConstraint::valence(3)])]
+    #[case::old_absent_mismatch(vec![AtomConstraint::valence(3)], None, Some(AtomConstraint::valence(4)), Err(Contradiction), vec![AtomConstraint::valence(3)])]
+    #[case::key_mismatch(vec![], Some(AtomConstraint::valence(3)), Some(AtomConstraint::degree(4)), Err(Contradiction), vec![])]
+    #[case::noop(vec![AtomConstraint::valence(4)], None, None, Ok(()), vec![AtomConstraint::valence(4)])]
+    fn test_atom_constraints_compare_and_set(
+        #[case] initial: Vec<AtomConstraint>,
+        #[case] old: Option<AtomConstraint>,
+        #[case] new: Option<AtomConstraint>,
+        #[case] expected_result: Result<(), Contradiction>,
+        #[case] expected_state: Vec<AtomConstraint>,
+    ) {
+        let mut cs = AtomConstraints::from_iter(initial);
+        assert_eq!(cs.compare_and_set(old, new), expected_result);
         let collected: Vec<_> = cs.iter().cloned().collect();
         assert_eq!(collected, expected_state);
     }

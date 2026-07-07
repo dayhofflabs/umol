@@ -94,14 +94,7 @@ impl AtomAst {
     /// Overwrite with `other`, keeping existing values and constraints.
     pub fn update(&self, other: &AtomAst) -> AtomAst {
         let mut constraints = self.constraints.clone();
-        for c in other.constraints.iter() {
-            constraints.remove_by_key(c.key());
-        }
-        for c in other.constraints.iter() {
-            if !c.is_undetermined() {
-                constraints.add(c.clone());
-            }
-        }
+        constraints.update(&other.constraints);
         AtomAst {
             element: if other.element.is_undetermined() {
                 self.element.clone()

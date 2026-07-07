@@ -3,6 +3,14 @@
 Status: Active
 Date: 2026-06-22
 
+## Draft API
+
+- `AtomView::derive(&[AtomConstraintKey]) -> AtomConstraints`: derive for given set of constraints
+- `AtomView::derive_for(&AtomConstraints) -> AtomConstraints`: derive for constraints in container
+- `AtomView::matches(&AtomConstraints) -> bool`: derive and match constraints in container
+- `AtomView::is_compatible(&AtomConstraints) -> bool`: derive and check for compatibility for constraints in container
+- `AtomConstraints::append(&AtomConstraints) -> Option<AtomConstraints>`: meet-add constraints in container (add semantics)
+
 ## Why this doc
 
 Resolving stereo through atom-typing exposed a structural problem that isn't
