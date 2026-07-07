@@ -252,6 +252,33 @@ impl ValueAst {
     }
 }
 
+/// A `ValueAst` or a Python `int` (→ `ValueAst::Lit`), mirroring `impl Into<ValueAst>`
+/// on the Rust builders. The `*Arg` convention for binding coercion inputs (`*Input`
+/// is the DSL side); shared by the atom fields, spin, and ring-membership count.
+#[derive(FromPyObject)]
+pub(crate) enum ValueArg {
+    Ast(Py<ValueAst>),
+    Lit(i64),
+}
+
+impl ValueArg {
+    /// Coerce to the value AST (for `impl Into<ValueAst>` Rust builders).
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstValueAst {
+        match self {
+            ValueArg::Ast(value) => value.bind(py).borrow().to_ast(py),
+            ValueArg::Lit(number) => AstValueAst::Lit(*number),
+        }
+    }
+
+    /// Coerce to a `Py<ValueAst>` (for mirror structs that store the value field).
+    pub(crate) fn to_py(&self, py: Python<'_>) -> PyResult<Py<ValueAst>> {
+        match self {
+            ValueArg::Ast(value) => Ok(value.clone_ref(py)),
+            ValueArg::Lit(number) => into_py_variant(py, ValueAst::Lit(*number)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;

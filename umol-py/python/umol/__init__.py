@@ -5,6 +5,9 @@ from importlib.metadata import PackageNotFoundError, version
 from ._native import (
     AromaticValenceAst,
     AtomAst,
+    AtomConstraint,
+    AtomConstraintKind,
+    AtomConstraints,
     AtomId,
     AtomView,
     AtomViews,
@@ -35,6 +38,9 @@ except PackageNotFoundError:
 __all__ = [
     "AromaticValenceAst",
     "AtomAst",
+    "AtomConstraint",
+    "AtomConstraintKind",
+    "AtomConstraints",
     "AtomId",
     "AtomView",
     "AtomViews",

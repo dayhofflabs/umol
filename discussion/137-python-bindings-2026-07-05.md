@@ -456,9 +456,20 @@ Settled:
   type collides with `from_atoms`' clone-on-insert (`atom.charge = …` would silently
   not touch an already-inserted molecule); RDKit-style in-place editing is
   molecule-*owned* (`mol.atoms[i]`), so it belongs on the mutable-molecule facade (the
-  deferred mutation story), not on a detached atom. Element args accept `Element` *or*
-  `ElementAst` via a `#[derive(FromPyObject)]` union enum (`ElementInput`) — the same
-  runtime-dispatch mechanism as the `__getitem__` overloads.
+  deferred mutation story), not on a detached atom.
+- **Literal coercion via `*Arg` unions (S5+).** Wherever the Rust builders take
+  `impl Into<T>` (accepting a bare literal), the Python argument accepts the literal
+  *or* the mirror, via a `#[derive(FromPyObject)]` union tried in order: `ElementArg`
+  (`Element` | `ElementAst`), `ValueArg` (`int` → `ValueAst::Lit` | `ValueAst`),
+  `IsotopeMassArg` (`int` → mass | `IsotopeMassAst`). So `AtomAst(Element("C"),
+  charge=-1, isotope_mass=13)` works alongside the explicit mirror form. **Naming:**
+  `*Arg` for these binding coercion inputs — `*Input` is reserved for the DSL side.
+  Variants are `Ast` (the wrapper) / `Lit` (the literal). Same runtime-dispatch
+  mechanism as the `__getitem__` overloads; input-only (getters still return mirrors).
+  Applied to the atom value fields, `SpinStateAst(unpaired, multiplicity)`, and
+  `RingMembershipAst.count`. The shared `ValueArg` lives in `value.rs` (with two coercions:
+  `to_ast` → `AstValueAst` for `with_*` builders, `to_py` → `Py<ValueAst>` for mirror
+  structs that store the field); `ElementArg`/`IsotopeMassArg` stay in `atom.rs`.
 - **Doc separation** — four artifacts, coordinated by hand, no generation between
   them; Guide is not derived from doc comments.
 - **Doc-comment discipline** — `missing_docs` lint, one-line summaries, prose only
@@ -543,16 +554,25 @@ bare `int`. Revisit on alpha-user feedback.
   iteration → `AtomView`, and `from_atoms_and_bonds`-style construction taking Python
   `AtomAst`s. *Additive.* [dep: S4a, S3a]
 
-### S5 — `AtomConstraints` (green)
+### S5 — `AtomConstraints` (green) **Done**
 
-- **S5a** — constraint sub-ASTs (module `constraint`): `RingScope`,
-  `RingMembershipAst`, `AromaticValenceAst`, `MulticenterValenceAst`,
-  `TetrahedralStereoAst` (the last may pull one or two more small stereo types).
-  *Additive.* [dep: S1d]
-- **S5b** — `AtomConstraint` (13 variants) + `AtomConstraints` container (add / iter /
-  get-by-key, mirroring the Rust API). *Additive.* [dep: S5a, S1d]
-- **S5c** — wire a `constraints` getter onto `AtomAst` and `AtomView`. *Additive.*
-  [dep: S5b, S3a, S4a]
+- **S5a** *(done)* — constraint sub-ASTs (module `constraint`): `RingScope`,
+  `RingMembershipAst`, `AromaticValenceAst`, `MulticenterValenceAst`. And **the full
+  stereo sub-tree** (module `stereo`, decided over the concrete-only/defer options):
+  `TetrahedralStereoAst` → `StereoCosetAst` → `StereoTerm` (recursive) → `Permutation`
+  (hold-the-value over `umol_perm::Permutation`, a cross-crate dep added on `umol-py`).
+  Finding: PyO3 maps `Vec<u8>` → `bytes`, so the permutation image surfaces as
+  `Vec<u32>` (list of ints), consistent with the `u32` coset indices. *Additive.*
+- **S5b** *(done)* — `AtomConstraint` (13 variants, `.kind`), `AtomConstraintKind`
+  (simple enum, keyed lookup), `AtomConstraints` container (hold-the-value:
+  `len`/iteration/`get(kind)`/`contains(kind)`, built from a list). Consuming the
+  sub-ASTs here made every `from_ast`/`to_ast` live (cleared the S5a `dead_code`).
+  *Additive.*
+- **S5c** *(done)* — `constraints` getter on `AtomAst` and `AtomView`, plus a
+  `constraints=` kwarg on `AtomAst(...)`/`replace` (wipe-and-set via the `pub`
+  `constraints` field — replace-semantics, not `with_constraints`' add). `atom.rs` +
+  `stereo.rs` now complete → module-level `#[allow(clippy::absolute_paths)]` for the
+  `#[pyclass(hash)]` macro false-positives. **Whole atom slice green; clippy clean.**
 
 ### S6 (step ii) — atom DSL parsing (green)
 
@@ -601,6 +621,16 @@ not mid-slice.
    Flagged for consideration; the binding meanwhile exposes a single lean surface —
    `mol.atoms[id]` / `.get(id)` / iteration, all returning the view — per the
    idiomatic-Python rule.
+3. **`umol_perm::Permutation` image `u8` → `u32`** (S5a). `Permutation` stores
+   `image: [u8; MAX_DEGREE]` (`MAX_DEGREE = 6`); the `u8` is a size optimization that's
+   moot at that degree, and it deviates from the codebase's `u32` index convention
+   (`AtomId`, coset `Lit`). Consequence: the binding round-trips `u8`↔`u32` at the
+   boundary (image surfaced as `Vec<u32>`) with a silent `as u8` truncation on invalid
+   input. Verified there's **no `u8`-specific logic** — only `as u8`/`as usize` casts —
+   so the change is mechanical: `[u32; N]`, `from_image(&[u32])`, internal `Vec<u32>`;
+   ripple is `from_image`'s signature + ~2 call sites in `umol-ast/symmetry.rs`, and the
+   binding simplifies (drops both casts). Recommend doing it; batch with the other
+   fold-backs (not mid-slice).
 
 ## Python-side todos
 
@@ -624,6 +654,10 @@ these change only umol-py, not umol-ast).
    large reaction networks (atoms/molecules crossing process boundaries). The natural
    state is `to_ast`/`from_inner` (structs) or `to_ast` + variant tag (mirrors); the
    value types already round-trip, so `__reduce__` over that is mechanical.
+4. **`AtomConstraints` container surface is interim** — the current `get(kind)` /
+   `contains(kind)` / list-construction binding predates the container-API redesign in
+   doc 138 (map model, ring-membership-as-map, key expression, bare-lit `set`). Rework
+   the Python surface once 138 settles.
 2. **Terse element notation `E.H` / `E.Cl`** (exploring; not needed now). A
    `python/umol/`-layer convenience mirroring the Rust `e!(H)` macro — a namespace
    object whose `__getattr__(symbol)` returns `Element(symbol)`; the only Python form

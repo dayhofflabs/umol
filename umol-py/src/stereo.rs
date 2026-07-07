@@ -1,6 +1,7 @@
 //! Stereo sub-ASTs mirroring `umol_ast::ast::stereo` and `umol_perm` (S5a): the
 //! `Permutation` value, the recursive `StereoTerm` transformation algebra, the
 //! `StereoCosetAst` coset, and the `TetrahedralStereoAst` atom-stereo state.
+#![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use std::collections::BTreeSet;
 

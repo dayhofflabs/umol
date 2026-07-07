@@ -2,6 +2,9 @@ import pytest
 
 from umol import (
     AtomAst,
+    AtomConstraint,
+    AtomConstraintKind,
+    AtomConstraints,
     AtomId,
     Element,
     ElementAst,
@@ -94,6 +97,12 @@ def test_spinstateast_fields():
     assert spin.multiplicity._0 == 2
 
 
+def test_spinstateast_int_literals():
+    spin = SpinStateAst(1, 2)
+    assert spin.unpaired._0 == 1
+    assert spin.multiplicity._0 == 2
+
+
 def test_spinstateast_undetermined():
     spin = SpinStateAst(ValueAst.Undetermined(), ValueAst.Undetermined())
     match spin.unpaired:
@@ -171,6 +180,56 @@ def test_atomast_new_kwargs():
             raise AssertionError
 
 
+def test_atomast_charge_int_literal():
+    match AtomAst(Element("C"), charge=-1).charge:
+        case ValueAst.Lit(n):
+            assert n == -1
+        case _:
+            raise AssertionError
+
+
+def test_atomast_isotope_mass_int_literal():
+    match AtomAst(Element("C"), isotope_mass=13).isotope_mass:
+        case IsotopeMassAst.Lit(n):
+            assert n == 13
+        case _:
+            raise AssertionError
+
+
+def test_atomast_replace_charge_int_literal():
+    match AtomAst(Element("C")).replace(charge=1).charge:
+        case ValueAst.Lit(n):
+            assert n == 1
+        case _:
+            raise AssertionError
+
+
+def test_atomast_constraints_empty():
+    assert len(AtomAst(Element("C")).constraints) == 0
+
+
+def test_atomast_constraints_kwarg():
+    atom = AtomAst(
+        Element("C"),
+        constraints=AtomConstraints([AtomConstraint.Valence(ValueAst.Lit(4))]),
+    )
+    assert len(atom.constraints) == 1
+    match atom.constraints.get(AtomConstraintKind.Valence):
+        case AtomConstraint.Valence(ValueAst.Lit(n)):
+            assert n == 4
+        case _:
+            raise AssertionError
+
+
+def test_atomview_constraints():
+    atom = AtomAst(
+        Element("C"),
+        constraints=AtomConstraints([AtomConstraint.Valence(ValueAst.Lit(4))]),
+    )
+    mol = MoleculeAst.from_atoms([atom])
+    assert len(mol.atoms[AtomId(0)].constraints) == 1
+
+
 def test_atomast_asdict():
     d = AtomAst(Element("C"), charge=ValueAst.Lit(-1)).asdict()
     assert set(d.keys()) == {
@@ -180,6 +239,7 @@ def test_atomast_asdict():
         "implicit_hydrogens",
         "lone_pairs",
         "spin",
+        "constraints",
     }
     match d["element"]:
         case ElementAst.Lit(e):

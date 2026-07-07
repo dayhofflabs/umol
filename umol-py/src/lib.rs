@@ -6,7 +6,10 @@ use pyo3::prelude::*;
 #[cfg(feature = "graph")]
 use crate::{
     atom::{AtomAst, AtomId, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst},
-    constraint::{AromaticValenceAst, MulticenterValenceAst, RingMembershipAst, RingScope},
+    constraint::{
+        AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints,
+        MulticenterValenceAst, RingMembershipAst, RingScope,
+    },
     element::Element,
     molecule::MoleculeAst,
     stereo::{Permutation, StereoCosetAst, StereoTerm, TetrahedralStereoAst},
@@ -53,6 +56,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<MulticenterValenceAst>()?;
         module.add_class::<RingScope>()?;
         module.add_class::<RingMembershipAst>()?;
+        module.add_class::<AtomConstraint>()?;
+        module.add_class::<AtomConstraintKind>()?;
+        module.add_class::<AtomConstraints>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;
         module.add_class::<StereoCosetAst>()?;
