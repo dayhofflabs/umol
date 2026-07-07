@@ -194,13 +194,18 @@ the old value — `compare_and_set` fixes that.
   (replaces the `remove_by_key`+`add` loop). Tests: existing `AtomAst::update` tests unchanged.
   [dep: S1b]
 
-**S2 — atom delta/transact onto `compare_and_set` (breaking → green):**
+**S2 — atom delta/transact onto `compare_and_set` (breaking → green):** **Done**
 - **S2a** `ast/delta.rs` `AtomDelta::apply_constraint` (≈1018) → `ast.constraints.compare_and_set
   (old, new)`. `remove_entry` left in place (bond/dative still call it). Tests: reaction property
   tests over atom constraint deltas; apply/undo round-trip. [dep: S1c]
-- **S2b** `ast/molecule/transact.rs` `apply_modify_atom_constraint` (1671) → `compare_and_set`
-  (kind-mismatch + old-verify fold into it; `map_err` to `OldStateMismatch`). Tests: transact
-  add/modify/remove atom constraint; mismatch → `OldStateMismatch`. [dep: S1c]
+- **S2b** *(done)* `ast/molecule/transact.rs` `apply_modify_atom_constraint` (1671): **kept**
+  the `KindMismatch` pre-check (behavior-preserving, and consistent with the 6 peer families
+  that still raise it — the plan's "fold it in" would have made atom alone report
+  `OldStateMismatch` for a key mismatch); routed verify+apply through `compare_and_set`
+  (`map_err` `Contradiction` → `OldStateMismatch`). This also fixed a latent ring bug — the old
+  body `add`-ed the new scope (append), leaving a duplicate that canonicalize meets, so a legit
+  `1→2` ring modify contradicted; `set` overwrites the scope. old-mismatch → `OldStateMismatch`,
+  key-mismatch → `KindMismatch`. [dep: S1c]
 
 **S3 — meet-`add` + `is_unique` removal (breaking → green):**
 - **S3a** `constraint/atom.rs` — `add(&mut self, c) -> Result<(), Contradiction>`:
@@ -281,6 +286,11 @@ migrate, green by S3a's end).
   `#c*#c-` → join, mirroring `#V4#V3`) — a change to the field parsers + `apply_spin_pair`, not
   the constraint container. Schedule after the constraint work; do not assume S3b removes the
   variant.
+- **Scheduled: remove `TransactionError::KindMismatch`.** Preserved through the atom slice (S2b)
+  for behavior parity; used by all 7 `apply_modify_*_constraint`. Once every family routes
+  verify+apply through `compare_and_set` (replication), drop the `KindMismatch` pre-checks and
+  the variant — a key-mismatched modify then reports `OldStateMismatch` (or one merged error).
+  Cross-cutting, so after replication, not in the atom slice.
 
 ## Why this doc
 
