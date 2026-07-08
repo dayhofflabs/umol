@@ -44,12 +44,11 @@ pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring}
 pub use compose::CompositionScope;
 pub use constraint::{
     aromatic_increment, AromaticSystemConstraint, AromaticSystemConstraintKey,
-    AromaticSystemConstraintKind, AromaticSystemConstraints, AromaticValenceAst, AtomConstraint,
-    AtomConstraintKey, AtomConstraintKind, AtomConstraints, BondConstraint, BondConstraintKey,
-    BondConstraintKind, BondConstraints, Constraint, Constraints, DativeBondConstraint,
-    DativeBondConstraintKey, DativeBondConstraintKind, DativeBondConstraints, FluxionalityAst,
+    AromaticSystemConstraints, AromaticValenceAst, AtomConstraint, AtomConstraintKey,
+    AtomConstraints, BondConstraint, BondConstraintKey, BondConstraints, Constraint, Constraints,
+    DativeBondConstraint, DativeBondConstraintKey, DativeBondConstraints, FluxionalityAst,
     LigandPermutation, LigandSymmetryAst, MoleculeConstraint, MulticenterBondConstraint,
-    MulticenterBondConstraintKey, MulticenterBondConstraintKind, MulticenterBondConstraints,
+    MulticenterBondConstraintKey, MulticenterBondConstraints,
     MulticenterValenceAst, NoncovalentBondConstraint, NoncovalentBondConstraintKey,
     NoncovalentBondConstraints, OrientedLigandPermutation, RelationalConstraint, RingMembershipAst,
     RingScope, StereoAtomConstraint, StereoAtomConstraintKey, StereoAtomConstraints,

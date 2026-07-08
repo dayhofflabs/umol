@@ -29,8 +29,7 @@ use super::stereo::{
 use super::value::{fmt_set, fmt_value, id, terminator, value, ValueDsl};
 use crate::ast::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use crate::ast::constraint::{
-    AromaticValenceAst, AtomConstraint, AtomConstraintKey, AtomConstraintKind, AtomConstraints,
-    MulticenterValenceAst,
+    AromaticValenceAst, AtomConstraint, AtomConstraintKey, AtomConstraints, MulticenterValenceAst,
 };
 use crate::ast::operators::MemOp;
 use crate::ast::stereo::TetrahedralStereoAst;
@@ -210,7 +209,7 @@ impl Display for PartialAtomDsl {
         fmt_spin_pair(f, &ast.spin)?;
         for c in ast.constraints.iter() {
             if c.is_undetermined() {
-                write!(f, "{}*", constraint_tag(c.kind()))?;
+                write!(f, "{}*", constraint_tag(c.key()))?;
             } else {
                 fmt_constraint(f, c)?;
             }
@@ -253,21 +252,21 @@ pub(crate) fn partial_atom(i: &mut &str) -> PResult<PartialAtomDsl> {
     Ok(PartialAtomDsl(form.0))
 }
 
-fn constraint_tag(kind: AtomConstraintKind) -> &'static str {
-    match kind {
-        AtomConstraintKind::Valence => "#v",
-        AtomConstraintKind::TotalValence => "#V",
-        AtomConstraintKind::DonatedPairs => "#d",
-        AtomConstraintKind::AcceptedPairs => "#t",
-        AtomConstraintKind::AromaticValence => "#a",
-        AtomConstraintKind::MulticenterValence => "#m",
-        AtomConstraintKind::Degree => "#D",
-        AtomConstraintKind::TotalDegree => "#X",
-        AtomConstraintKind::RingDegree => "#x",
-        AtomConstraintKind::RingValence => "#y",
-        AtomConstraintKind::TotalHydrogens => "#H",
-        AtomConstraintKind::RingMembership => "#R",
-        AtomConstraintKind::TetrahedralStereo => "#T",
+fn constraint_tag(key: AtomConstraintKey) -> &'static str {
+    match key {
+        AtomConstraintKey::Valence => "#v",
+        AtomConstraintKey::DonatedPairs => "#d",
+        AtomConstraintKey::AcceptedPairs => "#t",
+        AtomConstraintKey::AromaticValence => "#a",
+        AtomConstraintKey::MulticenterValence => "#m",
+        AtomConstraintKey::TetrahedralStereo => "#T",
+        AtomConstraintKey::Degree => "#D",
+        AtomConstraintKey::TotalDegree => "#X",
+        AtomConstraintKey::TotalValence => "#V",
+        AtomConstraintKey::RingDegree => "#x",
+        AtomConstraintKey::RingValence => "#y",
+        AtomConstraintKey::TotalHydrogens => "#H",
+        AtomConstraintKey::RingMembership(_) => "#R",
     }
 }
 
@@ -547,7 +546,7 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
             AtomPredicate::Constraint(c) => {
                 if ast.constraints.contains(c.key()) {
                     return Err(ParseError::DuplicateAtomPredicate(
-                        constraint_tag(c.kind()).to_string(),
+                        constraint_tag(c.key()).to_string(),
                     ));
                 }
                 ast.constraints.set(c);
@@ -762,7 +761,9 @@ fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
     if matches!(cfg.aromatic_valence, AromaticValenceDefault::NotAromatic)
         && is_unset_or_vacuous(constraints, AtomConstraintKey::AromaticValence)
     {
-        constraints.set(AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic));
+        constraints.set(AtomConstraint::AromaticValence(
+            AromaticValenceAst::NotAromatic,
+        ));
     }
     if matches!(
         cfg.multicenter_valence,
@@ -786,7 +787,9 @@ fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
     if matches!(cfg.tetrahedral_stereo, StereoDefault::NotStereo)
         && is_unset_or_vacuous(constraints, AtomConstraintKey::TetrahedralStereo)
     {
-        constraints.set(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo));
+        constraints.set(AtomConstraint::TetrahedralStereo(
+            TetrahedralStereoAst::NotStereo,
+        ));
     }
 }
 

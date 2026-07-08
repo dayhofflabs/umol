@@ -10,15 +10,15 @@ pub(crate) use std::ops::RangeInclusive;
 
 use proptest::prelude::*;
 pub(crate) use umol_ast::ast::{
-    AddBond, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKind,
+    AddBond, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKey,
     AromaticSystemConstraints, AromaticSystemHandle, AromaticSystemId, AromaticValenceAst, AtomAst,
-    AtomConstraint, AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomHandle, AtomId,
-    BondAst, BondConstraint, BondConstraintKind, BondConstraints, BondFieldChange, BondHandle,
+    AtomConstraint, AtomConstraintKey, AtomConstraints, AtomFieldChange, AtomHandle, AtomId,
+    BondAst, BondConstraint, BondConstraintKey, BondConstraints, BondFieldChange, BondHandle,
     BondId, BooleanAst, Canonicalize, CisTransStereoAst, Constraint, Constraints, DativeBondAst,
-    DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints, DativeBondHandle,
+    DativeBondConstraint, DativeBondConstraintKey, DativeBondConstraints, DativeBondHandle,
     DativeBondId, Edit, ElectronCountsAst, ElementAst, FluxionalityAst, IsotopeMassAst, Lattice,
     LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint,
-    MulticenterBondAst, MulticenterBondConstraint, MulticenterBondConstraintKind,
+    MulticenterBondAst, MulticenterBondConstraint, MulticenterBondConstraintKey,
     MulticenterBondConstraints, MulticenterBondHandle, MulticenterBondId, MulticenterValenceAst,
     NoncovalentBondAst, NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind,
     NoncovalentBondKindAst, OrientedLigandPermutation, RelOp, RelationalConstraint, RingScope,

@@ -3,7 +3,7 @@ import pytest
 from umol import (
     AtomAst,
     AtomConstraint,
-    AtomConstraintKind,
+    AtomConstraintKey,
     AtomConstraints,
     AtomId,
     Element,
@@ -214,7 +214,7 @@ def test_atomast_constraints_kwarg():
         constraints=AtomConstraints([AtomConstraint.Valence(ValueAst.Lit(4))]),
     )
     assert len(atom.constraints) == 1
-    match atom.constraints.get(AtomConstraintKind.Valence):
+    match atom.constraints.get(AtomConstraintKey.Valence()):
         case AtomConstraint.Valence(ValueAst.Lit(n)):
             assert n == 4
         case _:

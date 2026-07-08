@@ -27,21 +27,17 @@ mod ring;
 mod stereo;
 
 pub use aromatic::{
-    AromaticSystemConstraint, AromaticSystemConstraintKey, AromaticSystemConstraintKind,
-    AromaticSystemConstraints,
+    AromaticSystemConstraint, AromaticSystemConstraintKey, AromaticSystemConstraints,
 };
 pub use atom::{
-    aromatic_increment, AromaticValenceAst, AtomConstraint, AtomConstraintKey, AtomConstraintKind,
-    AtomConstraints, MulticenterValenceAst,
+    aromatic_increment, AromaticValenceAst, AtomConstraint, AtomConstraintKey, AtomConstraints,
+    MulticenterValenceAst,
 };
-pub use bond::{BondConstraint, BondConstraintKey, BondConstraintKind, BondConstraints};
-pub use dative::{
-    DativeBondConstraint, DativeBondConstraintKey, DativeBondConstraintKind, DativeBondConstraints,
-};
+pub use bond::{BondConstraint, BondConstraintKey, BondConstraints};
+pub use dative::{DativeBondConstraint, DativeBondConstraintKey, DativeBondConstraints};
 pub use molecule::{Constraint, Constraints, MoleculeConstraint, SubPatternAnchor};
 pub use multicenter::{
-    MulticenterBondConstraint, MulticenterBondConstraintKey, MulticenterBondConstraintKind,
-    MulticenterBondConstraints,
+    MulticenterBondConstraint, MulticenterBondConstraintKey, MulticenterBondConstraints,
 };
 pub use noncovalent::{
     NoncovalentBondConstraint, NoncovalentBondConstraintKey, NoncovalentBondConstraints,

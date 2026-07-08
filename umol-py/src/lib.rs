@@ -7,7 +7,7 @@ use pyo3::prelude::*;
 use crate::{
     atom::{AtomAst, AtomId, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst},
     constraint::{
-        AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints,
+        AromaticValenceAst, AtomConstraint, AtomConstraintKey, AtomConstraints,
         MulticenterValenceAst, RingMembershipAst, RingScope,
     },
     element::Element,
@@ -57,7 +57,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<RingScope>()?;
         module.add_class::<RingMembershipAst>()?;
         module.add_class::<AtomConstraint>()?;
-        module.add_class::<AtomConstraintKind>()?;
+        module.add_class::<AtomConstraintKey>()?;
         module.add_class::<AtomConstraints>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;

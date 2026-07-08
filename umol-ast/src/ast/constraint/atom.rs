@@ -5,7 +5,6 @@ use std::cmp::Ordering;
 use std::mem;
 
 use smallvec::SmallVec;
-use strum::EnumDiscriminants;
 
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::{Contradiction, NoJoin};
@@ -15,8 +14,7 @@ use super::super::traits::{AsLit, Canonicalize, Lattice};
 use super::super::value::ValueAst;
 
 /// Atom-scope constraint.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
-#[strum_discriminants(name(AtomConstraintKind), derive(Hash))]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AtomConstraint {
     Valence(ValueAst),
     DonatedPairs(ValueAst),
@@ -84,10 +82,6 @@ impl AtomConstraint {
 
     pub fn ring_membership(scope: RingScope, count: impl Into<ValueAst>) -> Self {
         Self::RingMembership(RingMembershipAst::new(scope, count))
-    }
-
-    pub fn kind(&self) -> AtomConstraintKind {
-        self.into()
     }
 
     /// Atom constraint key, unique within an `AtomConstraints` container.
@@ -1063,29 +1057,6 @@ mod tests {
         #[case] expected: AtomConstraint,
     ) {
         assert_eq!(actual, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::valence(AtomConstraint::valence(4), AtomConstraintKind::Valence)]
-    #[case::total_valence(AtomConstraint::total_valence(5), AtomConstraintKind::TotalValence)]
-    #[case::aromatic_valence(AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic), AtomConstraintKind::AromaticValence)]
-    #[case::multicenter_valence(AtomConstraint::multicenter_valence(MulticenterValenceAst::Undetermined), AtomConstraintKind::MulticenterValence)]
-    #[case::donated_pairs(AtomConstraint::donated_pairs(1), AtomConstraintKind::DonatedPairs)]
-    #[case::accepted_pairs(AtomConstraint::accepted_pairs(2), AtomConstraintKind::AcceptedPairs)]
-    #[case::degree(AtomConstraint::degree(3), AtomConstraintKind::Degree)]
-    #[case::total_degree(AtomConstraint::total_degree(4), AtomConstraintKind::TotalDegree)]
-    #[case::ring_degree(AtomConstraint::ring_degree(2), AtomConstraintKind::RingDegree)]
-    #[case::ring_valence(AtomConstraint::ring_valence(3), AtomConstraintKind::RingValence)]
-    #[case::total_hydrogens(AtomConstraint::total_hydrogens(3), AtomConstraintKind::TotalHydrogens)]
-    #[case::ring_membership_all(AtomConstraint::ring_membership(RingScope::All, 1), AtomConstraintKind::RingMembership)]
-    #[case::ring_membership_size(AtomConstraint::ring_membership(RingScope::Size(6), 1), AtomConstraintKind::RingMembership)]
-    #[case::tetrahedral_stereo(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo), AtomConstraintKind::TetrahedralStereo)]
-    fn test_atom_constraint_kind(
-        #[case] constraint: AtomConstraint,
-        #[case] expected: AtomConstraintKind,
-    ) {
-        assert_eq!(constraint.kind(), expected);
     }
 
     #[rustfmt::skip]

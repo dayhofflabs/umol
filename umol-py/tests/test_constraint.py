@@ -1,7 +1,7 @@
 from umol import (
     AromaticValenceAst,
     AtomConstraint,
-    AtomConstraintKind,
+    AtomConstraintKey,
     AtomConstraints,
     MulticenterValenceAst,
     RingMembershipAst,
@@ -73,31 +73,35 @@ def test_ringmembershipast_int_count():
             raise AssertionError
 
 
-def test_atomconstraint_valence():
-    constraint = AtomConstraint.Valence(ValueAst.Lit(4))
-    assert constraint.kind == AtomConstraintKind.Valence
-    match constraint:
-        case AtomConstraint.Valence(v):
-            match v:
-                case ValueAst.Lit(n):
-                    assert n == 4
-                case _:
-                    raise AssertionError
-        case _:
-            raise AssertionError
-
-
-def test_atomconstraint_tetrahedral_stereo():
-    constraint = AtomConstraint.TetrahedralStereo(TetrahedralStereoAst.NotStereo())
-    assert constraint.kind == AtomConstraintKind.TetrahedralStereo
-    match constraint:
-        case AtomConstraint.TetrahedralStereo(TetrahedralStereoAst.NotStereo()):
+def test_atomconstraint_key_valence():
+    match AtomConstraint.Valence(ValueAst.Lit(4)).key:
+        case AtomConstraintKey.Valence():
             pass
         case _:
             raise AssertionError
 
 
-def test_atomconstraints_len_iter():
+def test_atomconstraint_key_tetrahedral_stereo():
+    constraint = AtomConstraint.TetrahedralStereo(TetrahedralStereoAst.NotStereo())
+    match constraint.key:
+        case AtomConstraintKey.TetrahedralStereo():
+            pass
+        case _:
+            raise AssertionError
+
+
+def test_atomconstraint_key_ring_membership():
+    constraint = AtomConstraint.RingMembership(
+        RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1))
+    )
+    match constraint.key:
+        case AtomConstraintKey.RingMembership(RingScope.Size(s)):
+            assert s == 6
+        case _:
+            raise AssertionError
+
+
+def test_atomconstraints_iter():
     constraints = AtomConstraints(
         [
             AtomConstraint.Valence(ValueAst.Lit(4)),
@@ -105,18 +109,42 @@ def test_atomconstraints_len_iter():
         ]
     )
     assert len(constraints) == 2
-    kinds = [constraint.kind for constraint in constraints]
-    assert AtomConstraintKind.Valence in kinds
-    assert AtomConstraintKind.Degree in kinds
+    keys = set()
+    for constraint in constraints:
+        match constraint.key:
+            case AtomConstraintKey.Valence():
+                keys.add("valence")
+            case AtomConstraintKey.Degree():
+                keys.add("degree")
+            case _:
+                raise AssertionError
+    assert keys == {"valence", "degree"}
 
 
 def test_atomconstraints_get():
     constraints = AtomConstraints([AtomConstraint.Valence(ValueAst.Lit(4))])
-    assert constraints.contains(AtomConstraintKind.Valence)
-    assert not constraints.contains(AtomConstraintKind.Degree)
-    assert constraints.get(AtomConstraintKind.Degree) is None
-    match constraints.get(AtomConstraintKind.Valence):
+    assert constraints.contains(AtomConstraintKey.Valence())
+    assert not constraints.contains(AtomConstraintKey.Degree())
+    assert constraints.get(AtomConstraintKey.Degree()) is None
+    match constraints.get(AtomConstraintKey.Valence()):
         case AtomConstraint.Valence(ValueAst.Lit(n)):
             assert n == 4
+        case _:
+            raise AssertionError
+
+
+def test_atomconstraints_get_ring_membership():
+    constraints = AtomConstraints(
+        [AtomConstraint.RingMembership(RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1)))]
+    )
+    assert constraints.contains(AtomConstraintKey.RingMembership(RingScope.Size(6)))
+    assert not constraints.contains(AtomConstraintKey.RingMembership(RingScope.All()))
+    match constraints.get(AtomConstraintKey.RingMembership(RingScope.Size(6))):
+        case AtomConstraint.RingMembership(rm):
+            match rm.count:
+                case ValueAst.Lit(n):
+                    assert n == 1
+                case _:
+                    raise AssertionError
         case _:
             raise AssertionError

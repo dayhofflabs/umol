@@ -1,6 +1,6 @@
 # 138 — Constraint container API
 
-Status: Active
+Status: Completed
 Date: 2026-07-06
 
 ## Outcome and lessons (2026-07-06)

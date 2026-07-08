@@ -108,29 +108,29 @@ proptest! {
     fn test_inline_deposits_leaves_into_entities(
         ast in molecule_ast_with_constraints_strategy(),
     ) {
-        let mut atom_kinds: HashSet<(AtomId, AtomConstraintKind)> = HashSet::new();
-        let mut bond_kinds: HashSet<(BondId, BondConstraintKind)> = HashSet::new();
-        let mut dative_kinds: HashSet<(DativeBondId, DativeBondConstraintKind)> = HashSet::new();
-        let mut aromatic_kinds: HashSet<(AromaticSystemId, AromaticSystemConstraintKind)> =
+        let mut atom_keys: HashSet<(AtomId, AtomConstraintKey)> = HashSet::new();
+        let mut bond_keys: HashSet<(BondId, BondConstraintKey)> = HashSet::new();
+        let mut dative_keys: HashSet<(DativeBondId, DativeBondConstraintKey)> = HashSet::new();
+        let mut aromatic_keys: HashSet<(AromaticSystemId, AromaticSystemConstraintKey)> =
             HashSet::new();
-        let mut multicenter_kinds: HashSet<(MulticenterBondId, MulticenterBondConstraintKind)> =
+        let mut multicenter_keys: HashSet<(MulticenterBondId, MulticenterBondConstraintKey)> =
             HashSet::new();
         for c in ast.constraints().iter() {
             match c {
                 Constraint::Atom(id, inner) => {
-                    atom_kinds.insert((*id, inner.kind()));
+                    atom_keys.insert((*id, inner.key()));
                 }
                 Constraint::Bond(id, inner) => {
-                    bond_kinds.insert((*id, inner.kind()));
+                    bond_keys.insert((*id, inner.key()));
                 }
                 Constraint::DativeBond(id, inner) => {
-                    dative_kinds.insert((*id, inner.kind()));
+                    dative_keys.insert((*id, inner.key()));
                 }
                 Constraint::AromaticSystem(id, inner) => {
-                    aromatic_kinds.insert((*id, inner.kind()));
+                    aromatic_keys.insert((*id, inner.key()));
                 }
                 Constraint::MulticenterBond(id, inner) => {
-                    multicenter_kinds.insert((*id, inner.kind()));
+                    multicenter_keys.insert((*id, inner.key()));
                 }
                 _ => {}
             }
@@ -139,34 +139,34 @@ proptest! {
         let mut a = ast;
         a.inline_constraints();
 
-        for (id, kind) in atom_kinds {
+        for (id, key) in atom_keys {
             prop_assert!(
-                a[id].constraints.iter().any(|c| c.kind() == kind),
-                "atom {id:?} missing kind {kind:?} after inline",
+                a[id].constraints.contains(key),
+                "atom {id:?} missing key {key:?} after inline",
             );
         }
-        for (id, kind) in bond_kinds {
+        for (id, key) in bond_keys {
             prop_assert!(
-                a[id].constraints.iter().any(|c| c.kind() == kind),
-                "bond {id:?} missing kind {kind:?} after inline",
+                a[id].constraints.contains(key),
+                "bond {id:?} missing key {key:?} after inline",
             );
         }
-        for (id, kind) in dative_kinds {
+        for (id, key) in dative_keys {
             prop_assert!(
-                a[id].constraints.iter().any(|c| c.kind() == kind),
-                "dative bond {id:?} missing kind {kind:?} after inline",
+                a[id].constraints.contains(key),
+                "dative bond {id:?} missing key {key:?} after inline",
             );
         }
-        for (id, kind) in aromatic_kinds {
+        for (id, key) in aromatic_keys {
             prop_assert!(
-                a[id].constraints.iter().any(|c| c.kind() == kind),
-                "aromatic system {id:?} missing kind {kind:?} after inline",
+                a[id].constraints.contains(key),
+                "aromatic system {id:?} missing key {key:?} after inline",
             );
         }
-        for (id, kind) in multicenter_kinds {
+        for (id, key) in multicenter_keys {
             prop_assert!(
-                a[id].constraints.iter().any(|c| c.kind() == kind),
-                "multicenter bond {id:?} missing kind {kind:?} after inline",
+                a[id].constraints.contains(key),
+                "multicenter bond {id:?} missing key {key:?} after inline",
             );
         }
     }

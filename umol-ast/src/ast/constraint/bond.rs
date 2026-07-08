@@ -4,8 +4,6 @@ use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-use strum::{EnumCount, EnumDiscriminants, EnumIter};
-
 use super::super::boolean::BooleanAst;
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::{Contradiction, NoJoin};
@@ -15,8 +13,7 @@ use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
 
 /// Localized bond constraint.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
-#[strum_discriminants(name(BondConstraintKind), derive(Hash, EnumCount, EnumIter))]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BondConstraint {
     Aromatic(BooleanAst),
     CisTransStereo(CisTransStereoAst),
@@ -34,10 +31,6 @@ impl BondConstraint {
 
     pub fn ring_membership(scope: RingScope, count: impl Into<ValueAst>) -> Self {
         Self::RingMembership(RingMembershipAst::new(scope, count.into()))
-    }
-
-    pub fn kind(&self) -> BondConstraintKind {
-        self.into()
     }
 
     /// Bond constraint key, unique within a `BondConstraints` container.
@@ -490,16 +483,6 @@ mod tests {
         #[case] expected: BondConstraint,
     ) {
         assert_eq!(actual, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::aromatic(BondConstraint::Aromatic(BooleanAst::Lit(true)), BondConstraintKind::Aromatic)]
-    #[case::ring_membership_all(BondConstraint::ring_membership(RingScope::All, 1), BondConstraintKind::RingMembership)]
-    #[case::ring_membership_size(BondConstraint::ring_membership(RingScope::Size(6), 1), BondConstraintKind::RingMembership)]
-    #[case::cis_trans_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), BondConstraintKind::CisTransStereo)]
-    fn test_bond_constraint_kind(#[case] c: BondConstraint, #[case] expected: BondConstraintKind) {
-        assert_eq!(c.kind(), expected);
     }
 
     #[rustfmt::skip]

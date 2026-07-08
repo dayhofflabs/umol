@@ -20,15 +20,7 @@ use super::super::traits::{AsLit, Canonicalize, Lattice};
 
 /// Stereo atom and bond constraints.
 macro_rules! stereo_constraint {
-    ($constraint:ident, $kind:ident, $key:ident, $constraints:ident) => {
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-        pub enum $kind {
-            LigandSymmetry,
-            Fluxionality,
-            Topicity,
-            Stereogenicity,
-        }
-
+    ($constraint:ident, $key:ident, $constraints:ident) => {
         /// Stereo constraint key: discriminant, unique within constraint container.
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum $key {
@@ -47,15 +39,6 @@ macro_rules! stereo_constraint {
         }
 
         impl $constraint {
-            pub fn kind(&self) -> $kind {
-                match self {
-                    Self::LigandSymmetry(_) => $kind::LigandSymmetry,
-                    Self::Fluxionality(_) => $kind::Fluxionality,
-                    Self::Topicity(_) => $kind::Topicity,
-                    Self::Stereogenicity(_) => $kind::Stereogenicity,
-                }
-            }
-
             /// Stereo constraint key, unique within a `StereoConstraints` container.
             pub fn key(&self) -> $key {
                 match self {
@@ -568,8 +551,8 @@ macro_rules! stereo_constraint {
     };
 }
 
-stereo_constraint! { StereoAtomConstraint, StereoAtomConstraintKind, StereoAtomConstraintKey, StereoAtomConstraints }
-stereo_constraint! { StereoBondConstraint, StereoBondConstraintKind, StereoBondConstraintKey, StereoBondConstraints }
+stereo_constraint! { StereoAtomConstraint, StereoAtomConstraintKey, StereoAtomConstraints }
+stereo_constraint! { StereoBondConstraint, StereoBondConstraintKey, StereoBondConstraints }
 
 /// Ligand permutation literal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -1079,27 +1062,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::ligand_symmetry(
-        StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
-        StereoAtomConstraintKind::LigandSymmetry)]
-    #[case::fluxionality(
-        StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Lit(true) }),
-        StereoAtomConstraintKind::Fluxionality)]
-    #[case::topicity(
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-        StereoAtomConstraintKind::Topicity)]
-    #[case::stereogenicity(
-        StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
-        StereoAtomConstraintKind::Stereogenicity)]
-    fn test_stereo_atom_constraint_kind(
-        #[case] c: StereoAtomConstraint,
-        #[case] expected: StereoAtomConstraintKind,
-    ) {
-        assert_eq!(c.kind(), expected);
     }
 
     #[rustfmt::skip]

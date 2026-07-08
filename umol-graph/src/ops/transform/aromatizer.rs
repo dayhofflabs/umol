@@ -96,7 +96,7 @@ pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticSystemId, AtomAst, AtomId, BondAst, BondConstraintKind, MoleculeAst, SpinStateAst,
+        AromaticSystemId, AtomAst, AtomId, BondAst, BondConstraintKey, MoleculeAst, SpinStateAst,
     };
     use umol_chem::element::Element;
 
@@ -136,8 +136,7 @@ mod tests {
             .filter(|view| {
                 view.ast
                     .constraints
-                    .iter()
-                    .any(|c| c.kind() == BondConstraintKind::Aromatic)
+                    .contains(BondConstraintKey::Aromatic)
             })
             .count();
         assert_eq!(aromatic_bond_count, 6);

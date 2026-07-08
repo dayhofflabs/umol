@@ -139,4 +139,4 @@
 | [135-reaction-composition-completeness-2026-07-01.md](135-reaction-composition-completeness-2026-07-01.md)       | Completed     | 2026-07-01   |
 | [136-dpo-primitives-2026-07-04.md](136-dpo-primitives-2026-07-04.md)                                             | Informational | 2026-07-04   |
 | [137-python-bindings-2026-07-05.md](137-python-bindings-2026-07-05.md)                                           | Active        | 2026-07-05   |
-| [138-constraint-container-api-2026-07-06.md](138-constraint-container-api-2026-07-06.md)                         | Active        | 2026-07-06   |
+| [138-constraint-container-api-2026-07-06.md](138-constraint-container-api-2026-07-06.md)                         | Completed     | 2026-07-08   |

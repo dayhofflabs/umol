@@ -10,12 +10,14 @@
 //! atom processing order — which controls determinism — is fixed at
 //! construction time and is the caller's responsibility (e.g., from a
 //! nauty/Traces canonical labeling).
+//! 
+//! TODO: Expand to charged systems.
 
 use std::collections::{HashMap, HashSet};
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKind, BondId, MoleculeAst, ValueAst,
+    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, MoleculeAst, ValueAst,
 };
 use umol_graph_core::PerfectMatchingAlgorithm;
 
@@ -74,14 +76,12 @@ impl Transformer for Kekulizer {
             for &bid in &plan.matched_bonds {
                 let bond = ast.bond_mut(bid).ast;
                 bond.order = ValueAst::Lit(2);
-                bond.constraints
-                    .retain(|c| c.kind() != BondConstraintKind::Aromatic);
+                bond.constraints.remove(BondConstraintKey::Aromatic);
             }
             for &bid in &plan.unmatched_bonds {
                 let bond = ast.bond_mut(bid).ast;
                 bond.order = ValueAst::Lit(1);
-                bond.constraints
-                    .retain(|c| c.kind() != BondConstraintKind::Aromatic);
+                bond.constraints.remove(BondConstraintKey::Aromatic);
             }
             for &aidx in &plan.atoms {
                 let atom = ast.atom_mut(aidx).ast;
@@ -177,134 +177,40 @@ impl Kekulizer {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{
-        AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomId,
-        BondAst, BondConstraint, BooleanAst, Constraints, MoleculeAst, SpinStateAst, ValueAst,
-    };
-    use umol_chem::element::Element;
+    use umol_ast::ast::{AromaticSystemId, AtomId, MoleculeAst};
+    use umol_ast::mol_ground;
 
     use super::*;
 
-    fn aromatic_carbon(pi: i64) -> AtomAst {
-        let mut atom = AtomAst::from_element(Element::C);
-        atom.charge = ValueAst::Lit(0);
-        atom.spin = SpinStateAst::closed_shell();
-        atom.constraints.set(AtomConstraint::AromaticValence(
-            AromaticValenceAst::Aromatic(ValueAst::Lit(pi)),
-        ));
-        atom
-    }
-
-    fn benzene_aromatic() -> MoleculeAst {
-        let atoms: Vec<AtomAst> = (0..6).map(|_| aromatic_carbon(1)).collect();
-        let mut bonds = Vec::new();
-        for i in 0..6 {
-            let mut bond = BondAst::from_order(1);
-            bond.constraints
-                .set(BondConstraint::Aromatic(BooleanAst::Lit(true)));
-            bonds.push((AtomId(i), AtomId((i + 1) % 6), bond));
-        }
-        let system = AromaticSystemAst::from_electrons(vec![1; 6]);
-        let aromatic_systems = vec![((0..6).map(AtomId).collect(), system)];
-        MoleculeAst::from_parts(
-            atoms,
-            bonds,
-            vec![],
-            aromatic_systems,
-            vec![],
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        )
-    }
-
-    fn ascending(n: u32) -> Vec<AtomId> {
-        (0..n).map(AtomId).collect()
-    }
-
     #[rstest]
-    fn test_kekulize_benzene_assigns_alternating_orders() {
-        let mut ast = benzene_aromatic();
-        Kekulizer::new(KekulizationModel::default(), ascending(6))
+    #[case::benzene(
+        mol_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]}"#),
+        mol_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#)
+    )]
+    fn test_kekulizer_transform_into(#[case] input: MoleculeAst, #[case] expected: MoleculeAst) {
+        let mut ast = input;
+        Kekulizer::new(KekulizationModel::default(), (0..6).map(AtomId).collect())
             .transform_into(&mut ast)
             .unwrap();
-        assert_eq!(ast.aromatic_systems().count(), 0);
-
-        let orders: Vec<i64> = ast
-            .bonds()
-            .iter()
-            .map(|view| match view.ast.order {
-                ValueAst::Lit(n) => n,
-                _ => -1,
-            })
-            .collect();
-        assert_eq!(orders.len(), 6);
-        let doubles = orders.iter().filter(|&&o| o == 2).count();
-        let singles = orders.iter().filter(|&&o| o == 1).count();
-        assert_eq!(doubles, 3, "exactly 3 double bonds in a Kekulé benzene");
-        assert_eq!(singles, 3, "exactly 3 single bonds in a Kekulé benzene");
-
-        for view in ast.bonds().iter() {
-            let has_aromatic = view
-                .ast
-                .constraints
-                .iter()
-                .any(|c| c.kind() == BondConstraintKind::Aromatic);
-            assert!(!has_aromatic, "Aromatic bond constraint must be cleared");
-        }
-
-        for view in ast.atoms().iter() {
-            let has_av = view
-                .ast
-                .constraints
-                .iter()
-                .any(|c| c.kind() == AtomConstraintKind::AromaticValence);
-            assert!(!has_av, "AromaticValence constraint must be cleared");
-        }
+        assert_eq!(ast, expected);
     }
 
     #[rstest]
-    fn test_kekulize_no_aromatic_systems_is_noop() {
-        let mut ast = MoleculeAst::from_atoms_and_bonds(
-            vec![AtomAst::from_element(Element::C); 2],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        );
-        let original = ast.clone();
-        Kekulizer::new(KekulizationModel::default(), ascending(2))
+    #[case::kekule_benzene( mol_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#))]
+    fn test_kekulizer_transform_into_identity(#[case] input: MoleculeAst) {
+        let mut ast = input.clone();
+        Kekulizer::new(KekulizationModel::default(), (0..6).map(AtomId).collect())
             .transform_into(&mut ast)
             .unwrap();
-        assert_eq!(ast, original);
+        assert_eq!(ast, input);
     }
 
     #[rstest]
-    fn test_kekulize_pentagon_returns_no_matching_error() {
-        // Hypothetical aromatic system over an odd ring (5 atoms): no perfect
-        // matching exists, so kekulize must error.
-        let atoms: Vec<AtomAst> = (0..5).map(|_| aromatic_carbon(1)).collect();
-        let mut bonds = Vec::new();
-        for i in 0..5 {
-            let mut bond = BondAst::from_order(1);
-            bond.constraints
-                .set(BondConstraint::Aromatic(BooleanAst::Lit(true)));
-            bonds.push((AtomId(i), AtomId((i + 1) % 5), bond));
-        }
-        let system = AromaticSystemAst::from_electrons(vec![1; 5]);
-        let aromatic_systems = vec![((0..5).map(AtomId).collect(), system)];
-        let mut ast = MoleculeAst::from_parts(
-            atoms,
-            bonds,
-            vec![],
-            aromatic_systems,
-            vec![],
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        );
-
-        let result =
-            Kekulizer::new(KekulizationModel::default(), ascending(5)).transform_into(&mut ast);
-        assert!(matches!(result, Err(KekulizerError::NoMatching(_))));
+    #[case::no_matching( mol_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]"}]}"#))]
+    fn test_kekulizer_transform_into_error(#[case] input: MoleculeAst) {
+        let mut ast = input;
+        let result = Kekulizer::new(KekulizationModel::default(), (0..5).map(AtomId).collect())
+            .transform_into(&mut ast);
+        assert_eq!(result, Err(KekulizerError::NoMatching(AromaticSystemId(0))));
     }
 }

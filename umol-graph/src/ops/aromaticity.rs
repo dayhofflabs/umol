@@ -265,7 +265,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKey, AtomId,
-        BondAst, BondConstraintKind, ElectronCountsAst, MoleculeAst, SpinStateAst, ValueAst,
+        BondAst, BondConstraintKey, ElectronCountsAst, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_ast::mol_ground;
     use umol_chem::element::Element;
@@ -372,8 +372,7 @@ mod tests {
             .filter(|view| {
                 view.ast
                     .constraints
-                    .iter()
-                    .any(|c| c.kind() == BondConstraintKind::Aromatic)
+                    .contains(BondConstraintKey::Aromatic)
             })
             .count();
         assert_eq!(aromatic_bond_count, 6);
@@ -502,8 +501,7 @@ mod tests {
         let any_aromatic = ast.bonds().iter().any(|view| {
             view.ast
                 .constraints
-                .iter()
-                .any(|c| c.kind() == BondConstraintKind::Aromatic)
+                .contains(BondConstraintKey::Aromatic)
         });
         assert!(!any_aromatic);
     }

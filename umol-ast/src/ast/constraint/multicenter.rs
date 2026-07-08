@@ -5,8 +5,6 @@ use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-use strum::EnumDiscriminants;
-
 use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
@@ -14,8 +12,7 @@ use super::super::value::ValueAst;
 
 /// Multicenter-bond-scope constraint. Held inline on `MulticenterBondAst` via
 /// `MulticenterBondConstraints`.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
-#[strum_discriminants(name(MulticenterBondConstraintKind), derive(Hash))]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MulticenterBondConstraint {
     /// Asserted total electron count for the multicenter bond. Cross-checked
     /// by the `ConsistencyValidator` against `sum(MulticenterBondAst::electrons)`.
@@ -25,10 +22,6 @@ pub enum MulticenterBondConstraint {
 impl MulticenterBondConstraint {
     pub fn electron_count(v: impl Into<ValueAst>) -> Self {
         Self::ElectronCount(v.into())
-    }
-
-    pub fn kind(&self) -> MulticenterBondConstraintKind {
-        self.into()
     }
 
     /// Multicenter-bond constraint key, unique within a `MulticenterBondConstraints` container.
@@ -404,18 +397,6 @@ mod tests {
         #[case] expected: MulticenterBondConstraint,
     ) {
         assert_eq!(actual, expected);
-    }
-
-    #[rstest]
-    #[case::electron_count(
-        MulticenterBondConstraint::electron_count(6),
-        MulticenterBondConstraintKind::ElectronCount
-    )]
-    fn test_multicenter_bond_constraint_kind(
-        #[case] c: MulticenterBondConstraint,
-        #[case] expected: MulticenterBondConstraintKind,
-    ) {
-        assert_eq!(c.kind(), expected);
     }
 
     #[rstest]

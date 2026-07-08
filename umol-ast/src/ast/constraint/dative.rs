@@ -5,8 +5,6 @@ use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-use strum::EnumDiscriminants;
-
 use super::super::boolean::BooleanAst;
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::{Contradiction, NoJoin};
@@ -15,8 +13,7 @@ use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
 
 /// Dative-bond constraint.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
-#[strum_discriminants(name(DativeBondConstraintKind), derive(Hash))]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DativeBondConstraint {
     Aromatic(BooleanAst),
     RingMembership(RingMembershipAst),
@@ -29,10 +26,6 @@ impl DativeBondConstraint {
 
     pub fn ring_membership(scope: RingScope, count: impl Into<ValueAst>) -> Self {
         Self::RingMembership(RingMembershipAst::new(scope, count))
-    }
-
-    pub fn kind(&self) -> DativeBondConstraintKind {
-        self.into()
     }
 
     /// Dative bond constraint key, unique within a `DativeBondConstraints` container.
@@ -449,18 +442,6 @@ mod tests {
         #[case] expected: DativeBondConstraint,
     ) {
         assert_eq!(actual, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::aromatic(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintKind::Aromatic)]
-    #[case::ring_membership_all(DativeBondConstraint::ring_membership(RingScope::All, 1), DativeBondConstraintKind::RingMembership)]
-    #[case::ring_membership_size(DativeBondConstraint::ring_membership(RingScope::Size(6), 1), DativeBondConstraintKind::RingMembership)]
-    fn test_dative_bond_constraint_kind(
-        #[case] c: DativeBondConstraint,
-        #[case] expected: DativeBondConstraintKind,
-    ) {
-        assert_eq!(c.kind(), expected);
     }
 
     #[rustfmt::skip]

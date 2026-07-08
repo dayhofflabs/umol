@@ -5,8 +5,6 @@ use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-use strum::EnumDiscriminants;
-
 use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
@@ -14,8 +12,7 @@ use super::super::value::ValueAst;
 
 /// Aromatic-system-scope constraint. Held inline on `AromaticSystemAst` via
 /// `AromaticSystemConstraints`.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
-#[strum_discriminants(name(AromaticSystemConstraintKind), derive(Hash))]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AromaticSystemConstraint {
     /// Asserted total π-electron count for the system. Cross-checked by the
     /// `ConsistencyValidator` against `sum(AromaticSystemAst::electrons)`.
@@ -25,10 +22,6 @@ pub enum AromaticSystemConstraint {
 impl AromaticSystemConstraint {
     pub fn electron_count(v: impl Into<ValueAst>) -> Self {
         Self::ElectronCount(v.into())
-    }
-
-    pub fn kind(&self) -> AromaticSystemConstraintKind {
-        self.into()
     }
 
     /// Aromatic-system constraint key, unique within an `AromaticSystemConstraints` container.
@@ -401,18 +394,6 @@ mod tests {
         #[case] expected: AromaticSystemConstraint,
     ) {
         assert_eq!(actual, expected);
-    }
-
-    #[rstest]
-    #[case::electron_count(
-        AromaticSystemConstraint::electron_count(6),
-        AromaticSystemConstraintKind::ElectronCount
-    )]
-    fn test_aromatic_system_constraint_kind(
-        #[case] c: AromaticSystemConstraint,
-        #[case] expected: AromaticSystemConstraintKind,
-    ) {
-        assert_eq!(c.kind(), expected);
     }
 
     #[rstest]

@@ -7,7 +7,7 @@ use std::vec::IntoIter;
 use pyo3::prelude::*;
 use umol_ast::ast::{
     AromaticValenceAst as AstAromaticValenceAst, AtomConstraint as AstAtomConstraint,
-    AtomConstraintKind as AstAtomConstraintKind, AtomConstraints as AstAtomConstraints,
+    AtomConstraintKey as AstAtomConstraintKey, AtomConstraints as AstAtomConstraints,
     MulticenterValenceAst as AstMulticenterValenceAst, RingMembershipAst as AstRingMembershipAst,
     RingScope as AstRingScope,
 };
@@ -135,59 +135,63 @@ impl RingMembershipAst {
     }
 }
 
-/// The kind (discriminant) of an atom constraint, for keyed lookup.
-#[pyclass(eq, from_py_object)]
-#[derive(Clone, PartialEq)]
-pub enum AtomConstraintKind {
-    Valence,
-    TotalValence,
-    AromaticValence,
-    MulticenterValence,
-    DonatedPairs,
-    AcceptedPairs,
-    Degree,
-    TotalDegree,
-    RingDegree,
-    RingValence,
-    TotalHydrogens,
-    RingMembership,
-    TetrahedralStereo,
+/// The key (identity) of an atom constraint, for keyed lookup. The ring-membership
+/// key carries its ring scope; all other keys are the bare discriminant.
+#[pyclass]
+pub enum AtomConstraintKey {
+    Valence(),
+    DonatedPairs(),
+    AcceptedPairs(),
+    AromaticValence(),
+    MulticenterValence(),
+    TetrahedralStereo(),
+    Degree(),
+    TotalDegree(),
+    TotalValence(),
+    RingDegree(),
+    RingValence(),
+    TotalHydrogens(),
+    RingMembership(Py<RingScope>),
 }
 
-impl AtomConstraintKind {
-    pub(crate) fn from_ast(ast: AstAtomConstraintKind) -> Self {
-        match ast {
-            AstAtomConstraintKind::Valence => Self::Valence,
-            AstAtomConstraintKind::TotalValence => Self::TotalValence,
-            AstAtomConstraintKind::AromaticValence => Self::AromaticValence,
-            AstAtomConstraintKind::MulticenterValence => Self::MulticenterValence,
-            AstAtomConstraintKind::DonatedPairs => Self::DonatedPairs,
-            AstAtomConstraintKind::AcceptedPairs => Self::AcceptedPairs,
-            AstAtomConstraintKind::Degree => Self::Degree,
-            AstAtomConstraintKind::TotalDegree => Self::TotalDegree,
-            AstAtomConstraintKind::RingDegree => Self::RingDegree,
-            AstAtomConstraintKind::RingValence => Self::RingValence,
-            AstAtomConstraintKind::TotalHydrogens => Self::TotalHydrogens,
-            AstAtomConstraintKind::RingMembership => Self::RingMembership,
-            AstAtomConstraintKind::TetrahedralStereo => Self::TetrahedralStereo,
-        }
+impl AtomConstraintKey {
+    pub(crate) fn from_ast(py: Python<'_>, ast: &AstAtomConstraintKey) -> PyResult<Self> {
+        Ok(match ast {
+            AstAtomConstraintKey::Valence => Self::Valence(),
+            AstAtomConstraintKey::DonatedPairs => Self::DonatedPairs(),
+            AstAtomConstraintKey::AcceptedPairs => Self::AcceptedPairs(),
+            AstAtomConstraintKey::AromaticValence => Self::AromaticValence(),
+            AstAtomConstraintKey::MulticenterValence => Self::MulticenterValence(),
+            AstAtomConstraintKey::TetrahedralStereo => Self::TetrahedralStereo(),
+            AstAtomConstraintKey::Degree => Self::Degree(),
+            AstAtomConstraintKey::TotalDegree => Self::TotalDegree(),
+            AstAtomConstraintKey::TotalValence => Self::TotalValence(),
+            AstAtomConstraintKey::RingDegree => Self::RingDegree(),
+            AstAtomConstraintKey::RingValence => Self::RingValence(),
+            AstAtomConstraintKey::TotalHydrogens => Self::TotalHydrogens(),
+            AstAtomConstraintKey::RingMembership(scope) => {
+                Self::RingMembership(into_py_variant(py, RingScope::from_ast(scope))?)
+            }
+        })
     }
 
-    pub(crate) fn to_ast(&self) -> AstAtomConstraintKind {
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstAtomConstraintKey {
         match self {
-            Self::Valence => AstAtomConstraintKind::Valence,
-            Self::TotalValence => AstAtomConstraintKind::TotalValence,
-            Self::AromaticValence => AstAtomConstraintKind::AromaticValence,
-            Self::MulticenterValence => AstAtomConstraintKind::MulticenterValence,
-            Self::DonatedPairs => AstAtomConstraintKind::DonatedPairs,
-            Self::AcceptedPairs => AstAtomConstraintKind::AcceptedPairs,
-            Self::Degree => AstAtomConstraintKind::Degree,
-            Self::TotalDegree => AstAtomConstraintKind::TotalDegree,
-            Self::RingDegree => AstAtomConstraintKind::RingDegree,
-            Self::RingValence => AstAtomConstraintKind::RingValence,
-            Self::TotalHydrogens => AstAtomConstraintKind::TotalHydrogens,
-            Self::RingMembership => AstAtomConstraintKind::RingMembership,
-            Self::TetrahedralStereo => AstAtomConstraintKind::TetrahedralStereo,
+            Self::Valence() => AstAtomConstraintKey::Valence,
+            Self::DonatedPairs() => AstAtomConstraintKey::DonatedPairs,
+            Self::AcceptedPairs() => AstAtomConstraintKey::AcceptedPairs,
+            Self::AromaticValence() => AstAtomConstraintKey::AromaticValence,
+            Self::MulticenterValence() => AstAtomConstraintKey::MulticenterValence,
+            Self::TetrahedralStereo() => AstAtomConstraintKey::TetrahedralStereo,
+            Self::Degree() => AstAtomConstraintKey::Degree,
+            Self::TotalDegree() => AstAtomConstraintKey::TotalDegree,
+            Self::TotalValence() => AstAtomConstraintKey::TotalValence,
+            Self::RingDegree() => AstAtomConstraintKey::RingDegree,
+            Self::RingValence() => AstAtomConstraintKey::RingValence,
+            Self::TotalHydrogens() => AstAtomConstraintKey::TotalHydrogens,
+            Self::RingMembership(scope) => {
+                AstAtomConstraintKey::RingMembership(scope.bind(py).borrow().to_ast())
+            }
         }
     }
 }
@@ -213,10 +217,10 @@ pub enum AtomConstraint {
 
 #[pymethods]
 impl AtomConstraint {
-    /// The constraint's kind (discriminant).
+    /// The constraint's key (identity).
     #[getter]
-    fn kind(&self, py: Python<'_>) -> AtomConstraintKind {
-        AtomConstraintKind::from_ast(self.to_ast(py).kind())
+    fn key(&self, py: Python<'_>) -> PyResult<AtomConstraintKey> {
+        AtomConstraintKey::from_ast(py, &self.to_ast(py).key())
     }
 }
 
@@ -336,17 +340,16 @@ impl AtomConstraints {
         })
     }
 
-    /// The constraint of the given kind, or `None` (the first, for `RingMembership`).
-    fn get(&self, py: Python<'_>, kind: AtomConstraintKind) -> PyResult<Option<AtomConstraint>> {
+    /// The constraint with the given key, or `None`.
+    fn get(&self, py: Python<'_>, key: Py<AtomConstraintKey>) -> PyResult<Option<AtomConstraint>> {
         self.0
-            .iter()
-            .find(|constraint| constraint.kind() == kind.to_ast())
+            .get(key.bind(py).borrow().to_ast(py))
             .map(|constraint| AtomConstraint::from_ast(py, constraint))
             .transpose()
     }
 
-    fn contains(&self, kind: AtomConstraintKind) -> bool {
-        self.0.iter().any(|constraint| constraint.kind() == kind.to_ast())
+    fn contains(&self, py: Python<'_>, key: Py<AtomConstraintKey>) -> bool {
+        self.0.contains(key.bind(py).borrow().to_ast(py))
     }
 }
 
@@ -458,9 +461,18 @@ mod tests {
             .unwrap();
             let constraints = AtomConstraints::new(py, vec![valence, degree]);
             assert_eq!(constraints.__len__(), 2);
-            assert!(constraints.contains(AtomConstraintKind::Valence));
-            assert!(constraints.contains(AtomConstraintKind::Degree));
-            assert!(!constraints.contains(AtomConstraintKind::TotalHydrogens));
+            assert!(constraints.contains(
+                py,
+                into_py_variant(py, AtomConstraintKey::Valence()).unwrap()
+            ));
+            assert!(constraints.contains(
+                py,
+                into_py_variant(py, AtomConstraintKey::Degree()).unwrap()
+            ));
+            assert!(!constraints.contains(
+                py,
+                into_py_variant(py, AtomConstraintKey::TotalHydrogens()).unwrap()
+            ));
         });
     }
 }
