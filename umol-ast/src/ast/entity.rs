@@ -10,7 +10,7 @@ use super::id::{
 /// A typed reference to any entity in a molecule — the variant is the kind, the
 /// payload its id. General-purpose (coloring, symmetry analysis, constraints).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
-#[strum_discriminants(name(EntityKind), repr(u8))]
+#[strum_discriminants(name(EntityKind))]
 #[strum_discriminants(derive(Hash, EnumCount, FromRepr))]
 pub enum Entity {
     Atom(AtomId),
@@ -55,6 +55,24 @@ impl EntityKind {
             EntityKind::NoncovalentBond => Entity::NoncovalentBond(NoncovalentBondId(id)),
             EntityKind::StereoAtom => Entity::StereoAtom(StereoAtomId(id)),
             EntityKind::StereoBond => Entity::StereoBond(StereoBondId(id)),
+        }
+    }
+}
+
+impl TryFrom<u8> for EntityKind {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(EntityKind::Atom),
+            1 => Ok(EntityKind::Bond),
+            2 => Ok(EntityKind::DativeBond),
+            3 => Ok(EntityKind::AromaticSystem),
+            4 => Ok(EntityKind::MulticenterBond),
+            5 => Ok(EntityKind::NoncovalentBond),
+            6 => Ok(EntityKind::StereoAtom),
+            7 => Ok(EntityKind::StereoBond),
+            _ => Err(()),
         }
     }
 }

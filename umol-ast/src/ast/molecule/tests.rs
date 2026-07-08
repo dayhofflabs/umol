@@ -1877,7 +1877,7 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
     ast.bond_mut(BondId(0))
         .ast
         .constraints
-        .add(BondConstraint::Aromatic(BooleanAst::Lit(true)));
+        .set(BondConstraint::Aromatic(BooleanAst::Lit(true)));
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
         .add(DativeBondConstraint::ring_membership(
@@ -2061,7 +2061,7 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
     ast.bond_mut(BondId(0))
         .ast
         .constraints
-        .add(BondConstraint::Aromatic(BooleanAst::Lit(true)));
+        .set(BondConstraint::Aromatic(BooleanAst::Lit(true)));
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
         .add(DativeBondConstraint::ring_membership(

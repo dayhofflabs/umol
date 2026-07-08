@@ -47,14 +47,14 @@ impl BondAst {
     }
 
     /// Add a single constraint, replacing any existing entry of the same
-    /// kind (last-wins per `BondConstraints::add`). Chainable.
+    /// key (last-wins per `BondConstraints::set`). Chainable.
     pub fn with_constraint(mut self, constraint: impl Into<BondConstraint>) -> Self {
-        self.constraints.add(constraint.into());
+        self.constraints.set(constraint.into());
         self
     }
 
     /// Add each constraint from the iterator, replacing any existing entry
-    /// of the same kind (last-wins per `BondConstraints::add`). Does not
+    /// of the same key (last-wins per `BondConstraints::set`). Does not
     /// clear existing constraints; use `bond.constraints.clear()` or direct
     /// field assignment for wipe-and-replace.
     pub fn with_constraints<I>(mut self, constraints: I) -> Self
@@ -62,23 +62,15 @@ impl BondAst {
         I: IntoIterator,
         I::Item: Into<BondConstraint>,
     {
-        for c in constraints {
-            self.constraints.add(c.into());
-        }
+        self.constraints
+            .extend(constraints.into_iter().map(Into::into));
         self
     }
 
     /// Overwrite with `other`, keeping existing values and constraints.
     pub fn update(&self, other: &BondAst) -> BondAst {
         let mut constraints = self.constraints.clone();
-        for c in other.constraints.iter() {
-            constraints.remove_by_key(c.key());
-        }
-        for c in other.constraints.iter() {
-            if !c.is_undetermined() {
-                constraints.add(c.clone());
-            }
-        }
+        constraints.update(&other.constraints);
         BondAst {
             order: if other.order.is_undetermined() {
                 self.order.clone()

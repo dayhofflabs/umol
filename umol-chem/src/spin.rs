@@ -27,7 +27,6 @@ use crate::error::SpinStateError;
     Deserialize,
 )]
 #[strum(serialize_all = "snake_case", ascii_case_insensitive)]
-#[repr(u8)]
 pub enum SpinMultiplicity {
     Singlet = 1,
     Doublet = 2,
@@ -57,7 +56,19 @@ impl TryFrom<u8> for SpinMultiplicity {
     type Error = SpinStateError;
 
     fn try_from(m: u8) -> Result<Self, Self::Error> {
-        Self::from_repr(m).ok_or(SpinStateError::MultiplicityOutOfRange { multiplicity: m })
+        match m {
+            1 => Ok(SpinMultiplicity::Singlet),
+            2 => Ok(SpinMultiplicity::Doublet),
+            3 => Ok(SpinMultiplicity::Triplet),
+            4 => Ok(SpinMultiplicity::Quartet),
+            5 => Ok(SpinMultiplicity::Quintet),
+            6 => Ok(SpinMultiplicity::Sextet),
+            7 => Ok(SpinMultiplicity::Septet),
+            8 => Ok(SpinMultiplicity::Octet),
+            9 => Ok(SpinMultiplicity::Nonet),
+            10 => Ok(SpinMultiplicity::Decet),
+            _ => Err(SpinStateError::MultiplicityOutOfRange { multiplicity: m }),
+        }
     }
 }
 
@@ -116,7 +127,7 @@ impl SpinState {
 
     /// Create a spin state assuming maximum multiplicity (Hund's rule: m = n+1).
     pub fn max_multiplicity(unpaired_electrons: u8) -> Option<Self> {
-        let m = SpinMultiplicity::from_repr(unpaired_electrons + 1)?;
+        let m = SpinMultiplicity::try_from(unpaired_electrons + 1).ok()?;
         Some(Self {
             unpaired: unpaired_electrons,
             multiplicity: m,

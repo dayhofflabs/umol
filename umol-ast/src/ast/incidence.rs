@@ -69,7 +69,7 @@ impl IncidenceGraph {
         for (block, &count) in self.entity_counts.iter().enumerate() {
             let end = offset + count as usize;
             if n < end {
-                let kind = EntityKind::from_repr(block as u8).expect("block is a valid kind index");
+                let kind = EntityKind::try_from(block as u8).expect("block is a valid kind index");
                 return kind.with_id((n - offset) as u32);
             }
             offset = end;

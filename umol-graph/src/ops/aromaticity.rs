@@ -149,7 +149,7 @@ impl AromaticityPerception {
             let bond = ast.bond_mut(bond_id);
             bond.ast
                 .constraints
-                .add(BondConstraint::Aromatic(BooleanAst::Lit(true)));
+                .set(BondConstraint::Aromatic(BooleanAst::Lit(true)));
         }
     }
 

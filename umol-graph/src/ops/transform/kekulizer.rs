@@ -201,7 +201,7 @@ mod tests {
         for i in 0..6 {
             let mut bond = BondAst::from_order(1);
             bond.constraints
-                .add(BondConstraint::Aromatic(BooleanAst::Lit(true)));
+                .set(BondConstraint::Aromatic(BooleanAst::Lit(true)));
             bonds.push((AtomId(i), AtomId((i + 1) % 6), bond));
         }
         let system = AromaticSystemAst::from_electrons(vec![1; 6]);
@@ -286,7 +286,7 @@ mod tests {
         for i in 0..5 {
             let mut bond = BondAst::from_order(1);
             bond.constraints
-                .add(BondConstraint::Aromatic(BooleanAst::Lit(true)));
+                .set(BondConstraint::Aromatic(BooleanAst::Lit(true)));
             bonds.push((AtomId(i), AtomId((i + 1) % 5), bond));
         }
         let system = AromaticSystemAst::from_electrons(vec![1; 5]);

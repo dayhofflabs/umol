@@ -365,11 +365,15 @@ sorted merge. Re-walking the list:
     `use std::mem::replace` (only the old `add` used it).
 
 **S4 — kill kind-addressing on `AtomConstraints` (breaking → green):** **Done (2026-07-07)** —
-pure by-kind→by-key migration + teardown + rename, zero behavior change. **Deferred:** the item-4
-`raise`/`lower` *restructure* (drop the global `retain`, explicit per-kind clauses in key-sort
-order, `absent-or-undetermined → set`, lower in reverse) — a behavior change, separable from
-killing by-kind addressing; S4b did only the minimal `contains(kind)`→`contains(Key::X)` swap and
-kept the loop + global retain.
+pure by-kind→by-key migration + teardown + rename, zero behavior change.
+
+**Item-4 `raise`/`lower` restructure — Done (2026-07-07).** Dropped the global `retain`; explicit
+per-kind clause per defaulted kind in ascending key-sort order (`raise`) / reverse (`lower`);
+`raise` fills when a defaulted key is `absent-or-vacuous` (helper `is_unset_or_vacuous`), `lower`
+elides a defaulted entry equal to its default (helper `remove_if_default`); both helpers are free
+fns in `dsl/atom.rs`. Behavior change pinned: a vacuous entry of a *non-defaulted* kind now
+survives `raise` (the old global strip removed all vacuous) — `test_raise_atom_constraints` /
+`test_lower_atom_constraints`.
 - **S4a** `constraint/atom.rs` — internal callers → by-key: typed accessors (531–631) `get(Kind::X)`
   → `get_by_key(Key::X)`; ring accessors → direct `get_by_key` (delete `ring_memberships`/
   `ring_membership_value`/the `get_all` call); rewrite `Lattice::meet`/`join` (≈770–935) to the
@@ -412,11 +416,90 @@ S1–S4 item is `AtomConstraints`-scoped.
   raisers guard duplicate atom *fields* (`#i`/`#c`/`#h`/`#n`, spin `#u`/`#s` via `apply_spin_pair`)
   unchanged. A permissive meet-on-duplicate (`#V3#V*` → `V3`, `#c+#c-` → contradiction) is a
   possible later addition; not scheduled.
-- **Scheduled: remove `TransactionError::KindMismatch`.** Preserved through the atom slice (S2b)
-  for behavior parity; used by all 7 `apply_modify_*_constraint`. Once every family routes
-  verify+apply through `compare_and_set` (replication), drop the `KindMismatch` pre-checks and
-  the variant — a key-mismatched modify then reports `OldStateMismatch` (or one merged error).
-  Cross-cutting, so after replication, not in the atom slice.
+- **`TransactionError::KindMismatch` — partly retired (2026-07-07).** The **atom and bond**
+  pre-checks are **removed**: their `apply_modify_*_constraint` route straight through
+  `compare_and_set`, so a key-mismatched modify now reports `OldStateMismatch` (same as an old-value
+  mismatch). The variant **stays** — the **5 unconverted peers** (dative / aromatic-system /
+  multicenter / stereo-atom / stereo-bond) still do inline verify+apply where `KindMismatch` is
+  their only key-mismatch error. Drop the variant + those 5 pre-checks once every family routes
+  through `compare_and_set`. Cross-cutting; open decision whether to keep it as a genuine
+  "malformed modify" error instead of folding into `OldStateMismatch`.
+
+## Replication plan — `BondConstraints` (first peer, 2026-07-07)
+
+Mirrors the atom slice. `BondConstraint` has **3 variants**, reordered to `Aromatic(BooleanAst)` /
+`CisTransStereo(CisTransStereoAst)` / `RingMembership(RingMembershipAst)` — ring last, being the
+non-unique multi-entry kind — so each Lattice match is 3 arms. The `Lattice` trait's fallible
+`join`/`NoJoin` and the `#[derive(Lattice)]` `is_compatible`/`matches` are already in place (atom's
+S3a-1), so **no trait or macro work** — only `BondConstraint`'s own `impl Lattice`. Storage stays
+`Vec<BondConstraint>` sorted by key.
+
+**BS0 — reorder + layout (green, mechanical):** **Done (2026-07-07)**
+- **BS0a** `constraint/bond.rs` — reorder `BondConstraint`'s variants to `Aromatic` /
+  `CisTransStereo` / `RingMembership`, consistently across the enum, `BondConstraintKind` (strum
+  discriminants — order follows the enum), `BondConstraintKey`, and every per-variant `match`
+  (`key`/`is_undetermined`/`as_undetermined`/`canonicalize`/the container accessors). Lay out
+  `bond.rs` to mirror `atom.rs`: the `BondConstraint` (value) impls first, then `BondConstraints`
+  (container). No behavior change (Ord over the reordered key shifts where ring entries sort, but the
+  container is order-agnostic). [dep: —]
+
+**BS1 — additive primitives on `BondConstraints` (all green):** **Done (2026-07-07)**
+- **BS1a** `constraint/bond.rs` — `set(&mut self, c)` verbatim (`find_by_key`: `Ok(i)` replace /
+  `Err(i)` insert; a vacuous `c` is stored). Infallible. Tests: into-empty / overwrite-same-key /
+  new-key-sorts / vacuous-stores. [dep: —]
+- **BS1b** `constraint/bond.rs` — `update(&other)`: per `other` entry, vacuous → `remove(key)`,
+  else `set`. Tests: overwrite-shared / keep-disjoint / vacuous-removes. [dep: BS1a]
+- **BS1c** `constraint/bond.rs` — `compare_and_set(old, new) -> Result<(), Contradiction>` (verify
+  `canonical_eq old`, then set/remove). Tests: verified modify/remove/add, old/key mismatch. [dep: BS1a]
+- **BS1d** `ast/bond.rs` — `BondAst::update` (72) body → `constraints.update(&other.constraints)`.
+  Behavior-preserving: the inline `remove(all other keys)` + `add-back(non-vacuous)` loop it replaces
+  already removed on a vacuous rhs, so `update` is an exact refactor. Existing tests pass. [dep: BS1b]
+
+**BS2 — bond delta/transact onto `compare_and_set` (breaking → green):** **Done (2026-07-07)**
+- **BS2a** `ast/delta.rs` `BondDelta::apply_constraint` (~1104, `remove_entry`+`add`) →
+  `compare_and_set(old, new)`. Tests: reaction property tests over bond constraint deltas; apply/undo.
+  [dep: BS1c]
+- **BS2b** `ast/molecule/transact.rs` `apply_modify_bond_constraint` → verify+apply via
+  `compare_and_set`; the redundant `KindMismatch` pre-check **removed** (from atom too) — a
+  key-mismatch now reports `OldStateMismatch`. [dep: BS1c]
+
+**BS3 — verbatim `set`, drop `add`, Lattice merge, `is_unique` removal (breaking → green):** **Done (2026-07-07)**
+- **BS3a-1** `constraint/bond.rs` — **`impl Lattice for BondConstraint`**: `is_undetermined` /
+  `is_ground` (payload proxy); `meet` (same-key → payload meet, `_ => None`); `join` (same-key →
+  `Ok(payload join)`, `_ => Err(NoJoin)`); `is_compatible` (same-key → payload, `_ => false`).
+  Delete the inherent `is_undetermined`; add `Lattice` to any external `BondConstraint::is_undetermined`
+  caller. Tests: value meet/join/is_compatible incl. cross-key. [dep: —]
+- **BS3a-2** `constraint/bond.rs` — **delete `add`**; `extend`/`from_iter` → `set`-loops; rewrite
+  `Lattice::meet`/`join` as a two-pointer merge delegating to `BondConstraint::meet`/`join`; add the
+  `is_compatible` merge override; `canonicalize` drops the same-scope ring dedup (drop-vacuous only,
+  always unique via `set`); migrate former-`add` callers (`BondAst::with_constraint`→`set`,
+  `with_constraints`→`extend`, io/perception → `set`). [dep: BS3a-1, BS1]
+- **BS3b** `constraint/bond.rs` + `dsl/bond.rs` — delete `BondConstraint::is_unique`; parse
+  dup-check (`is_unique() && iter().any(tag)`, ~340) → `contains(c.key())` → `DuplicateBondPredicate`;
+  assembly `add` → `set`. Tests: `#a`-dup, distinct ring scopes ok. [dep: BS3a-2]
+
+**BS4 — kill kind-addressing + rename (breaking → green):** **Done (2026-07-07)**
+- **BS4a** `constraint/bond.rs` — accessors (`aromatic`/`ring_count`/`ring_size_count`/
+  `cis_trans_stereo`) + internal callers → by-key. [dep: BS3]
+- **BS4b** `dsl/bond.rs` — `raise`/`lower` bond constraints: `contains(kind)`→`contains_key(Key)`
+  and the item-4 restructure (explicit clause per defaulted kind in key-sort order, absent-or-vacuous
+  → `set` / equals-default → `remove`, no global retain — check `BondDefaults`/`raise_bond_constraints`
+  for which bond kinds default; may be few/none). [dep: BS3]
+- **BS4c** external — umol-graph / umol-io / umol-py by-kind `BondConstraints` callers → by-key. [dep: BS3]
+- **BS4d** `constraint/bond.rs` — teardown + rename (atomic): delete by-kind `get`/`get_mut`/
+  `contains`/`remove`(Kind), `get_all`, `remove_all`, `get_by_key_mut`, `remove_entry`,
+  `contains_entry`, `BondConstraintKey::kind()`; rename `get_by_key`→`get`, `contains_key`→`contains`,
+  `remove_by_key`→`remove`, `find_by_key`→`find`; update all call sites. [dep: BS4a, BS4b, BS4c]
+- **BS4e** `constraint/bond.rs` tests — container test-order pass (deferred from BS3): once the
+  by-kind tests are deleted, order the `BondConstraints` tests to parallel the final method order
+  (`new` → accessors → `iter` → `set`/`update`/`compare_and_set` → by-key → `extend`/`retain`/
+  `clear`/`take` → `compact` → Canonicalize → Lattice `meet`/`join`/`matches`/`is_compatible` →
+  FromIterator/From). BS1's write-tests and BS3's `meet`/`join` currently sit out of order. [dep: BS4d]
+
+Critical path: **BS0 → BS1 → {BS2, BS3} → BS4**. `BondConstraints::remove_entry` is deleted in BS4d (its
+last caller, `BondDelta::apply_constraint`, moves to `compare_and_set` at BS2a). **Deferrable:**
+storage `Vec` → `SmallVec<[BondConstraint;2]>` (match atom; `Vec` sorted-by-key already works).
+`TransactionError::KindMismatch` removal stays cross-cutting, after all families.
 
 ## Why this doc
 

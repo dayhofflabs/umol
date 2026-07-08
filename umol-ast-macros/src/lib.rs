@@ -50,6 +50,8 @@ fn named_struct_fields(input: &DeriveInput, derive: &str) -> Result<Vec<Ident>, 
 ///   `meet`-derived default (a struct of canonical fields is canonical), but built
 ///   from each field's `matches` directly so the per-candidate path allocates no
 ///   intermediate `meet`/`canonical`.
+/// - `is_compatible`: conjunction of the field-wise `is_compatible`. Equal to the
+///   trait's `meet(other).is_some()` default, but builds no intermediate `meet`.
 #[proc_macro_derive(Lattice)]
 pub fn derive_lattice(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -79,6 +81,9 @@ pub fn derive_lattice(input: TokenStream) -> TokenStream {
             }
             fn matches(&self, target: &Self) -> bool {
                 true #( && #lattice::matches(&self.#fields, &target.#fields) )*
+            }
+            fn is_compatible(&self, other: &Self) -> bool {
+                true #( && #lattice::is_compatible(&self.#fields, &other.#fields) )*
             }
         }
     }

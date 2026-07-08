@@ -373,7 +373,7 @@ fn derive_multiplicity(spin: &SpinStateAst, unpaired: i64) -> Option<i64> {
     let unpaired = unpaired as u8;
     match spin.multiplicity {
         ValueAst::Lit(m) => {
-            let multiplicity = SpinMultiplicity::from_repr(m as u8)?;
+            let multiplicity = SpinMultiplicity::try_from(m as u8).ok()?;
             SpinState::are_compatible(unpaired, multiplicity).then_some(m)
         }
         ValueAst::Undetermined => Some(i64::from(unpaired) + 1),
@@ -432,24 +432,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ethane_carbon(
-        mol!(r#"{:atoms ["C #c0" "C #c0"] :bonds [[0 1 "1"]]}"#),
-        0,
-        "C#i=#c0#h3#n0#u0#s#v#a!"
-    )]
-    #[case::water_oxygen(
-        mol!(r#"{:atoms ["O #c0" "H #c0" "H #c0"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
-        0,
-        "O#i=#c0#h0#n2#u0#s#v2#a!"
-    )]
-    #[case::benzene_ring(
-        mol!(
-            r#"{:atoms ["C #c0" "C #c0" "C #c0" "C #c0" "C #c0" "C #c0"]
-               :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}"#
-        ),
-        0,
-        "C#i=#c0#h#n0#u0#s#v2#a"
-    )]
+    #[case::ethane_carbon(mol!(r#"{:atoms ["C #c0" "C #c0"] :bonds [[0 1 "1"]]}"#), 0, "C#i=#c0#h3#n0#u0#s#v#a!")]
+    #[case::water_oxygen(mol!(r#"{:atoms ["O #c0" "H #c0" "H #c0"] :bonds [[0 1 "1"] [0 2 "1"]]}"#), 0, "O#i=#c0#h0#n2#u0#s#v2#a!")]
+    #[case::benzene_ring(mol!( r#"{:atoms ["C #c0" "C #c0" "C #c0" "C #c0" "C #c0" "C #c0"] :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}"#), 0, "C#i=#c0#h#n0#u0#s#v2#a")]
     fn test_counts_valence_resolve_molecule_atom(
         #[case] mut molecule: MoleculeAst,
         #[case] atom_id: u32,
@@ -464,10 +449,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::undetermined_aromatic_out_of_table(
-        atom!("Fe#c0#h0#a+"),
-        Err(CountsError::UndeterminedAromaticValence)
-    )]
+    #[case::undetermined_aromatic_out_of_table(atom!("Fe#c0#h0#a+"), Err(CountsError::UndeterminedAromaticValence))]
     fn test_counts_valence_resolve_atom_error(
         #[case] mut atom: AtomAst,
         #[case] expected: Result<(), CountsError>,
@@ -481,14 +463,7 @@ mod tests {
 
     #[rstest]
     #[case::methane_conforms("C#i=#c0#h4#n0#u0#s#v0#a!", Solution::Determined(()))]
-    #[case::excess_lone_pairs(
-        "C#i=#c0#h4#n2#u0#s#v0#a!",
-        Solution::Contradictory(CountsMismatch {
-            element: Element::C,
-            charge: 0,
-            valence: 0,
-        })
-    )]
+    #[case::excess_lone_pairs("C#i=#c0#h4#n2#u0#s#v0#a!", Solution::Contradictory(CountsMismatch { element: Element::C, charge: 0, valence: 0, }))]
     #[case::not_ground("C", Solution::Underdetermined(()))]
     fn test_counts_valence_conforms_atom(
         #[case] input: &str,

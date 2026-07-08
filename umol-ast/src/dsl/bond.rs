@@ -4,7 +4,6 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use strum::IntoEnumIterator;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
 use winnow::combinator::{delimited, opt, repeat, terminated};
@@ -25,10 +24,10 @@ use super::stereo::{cis_trans_stereo_config, fmt_cis_trans_stereo_config, CisTra
 use super::value::{fmt_value, value};
 use crate::ast::bond::BondAst;
 use crate::ast::boolean::BooleanAst;
-use crate::ast::constraint::{BondConstraint, BondConstraintKind, BondConstraints};
+use crate::ast::constraint::{BondConstraint, BondConstraintKey, BondConstraints};
 use crate::ast::spin::SpinStateAst;
 use crate::ast::stereo::CisTransStereoAst;
-use crate::ast::traits::{FromAst, IntoAst};
+use crate::ast::traits::{FromAst, IntoAst, Lattice};
 use crate::ast::value::ValueAst;
 
 /// Surface DSL wrapper around `BondAst`.
@@ -336,16 +335,12 @@ fn apply_predicates(form: &mut BondDsl, preds: Vec<BondPredicate>) -> Result<(),
                 apply_spin_pair(&mut ast.spin, sp, ParseError::DuplicateBondPredicate)?;
             }
             BondPredicate::Constraint(c) => {
-                let tag = constraint_tag(&c);
-                if c.is_unique()
-                    && ast
-                        .constraints
-                        .iter()
-                        .any(|existing| constraint_tag(existing) == tag)
-                {
-                    return Err(ParseError::DuplicateBondPredicate(tag.to_string()));
+                if ast.constraints.contains(c.key()) {
+                    return Err(ParseError::DuplicateBondPredicate(
+                        constraint_tag(&c).to_string(),
+                    ));
                 }
-                ast.constraints.add(c);
+                ast.constraints.set(c);
             }
         }
     }
@@ -418,44 +413,23 @@ pub(crate) fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
 }
 
 fn raise_bond_constraints(constraints: &mut BondConstraints, cfg: &BondDefaults) {
-    for kind in BondConstraintKind::iter() {
-        match kind {
-            BondConstraintKind::CisTransStereo => {
-                if !constraints.contains(kind) {
-                    match cfg.cis_trans_stereo {
-                        StereoDefault::NotStereo => {
-                            constraints
-                                .add(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo));
-                        }
-                        StereoDefault::Required => {}
-                    }
-                }
-            }
-            BondConstraintKind::Aromatic | BondConstraintKind::RingMembership => {
-                // Pattern-only constraint: no defaulting mode in BondDefaults.
-            }
-        }
+    // CisTransStereo is the only defaulted bond constraint; Aromatic/RingMembership are pattern-only.
+    if matches!(cfg.cis_trans_stereo, StereoDefault::NotStereo)
+        && constraints
+            .get(BondConstraintKey::CisTransStereo)
+            .is_none_or(|c| c.is_undetermined())
+    {
+        constraints.set(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo));
     }
 }
 
 fn lower_bond_constraints(constraints: &mut BondConstraints, cfg: &BondDefaults) {
-    for kind in BondConstraintKind::iter() {
-        match kind {
-            BondConstraintKind::CisTransStereo => match cfg.cis_trans_stereo {
-                StereoDefault::NotStereo => {
-                    if matches!(
-                        constraints.get(kind),
-                        Some(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo))
-                    ) {
-                        constraints.remove(kind);
-                    }
-                }
-                StereoDefault::Required => {}
-            },
-            BondConstraintKind::Aromatic | BondConstraintKind::RingMembership => {
-                // Pattern-only constraint: no defaulting mode in BondDefaults.
-            }
-        }
+    // Elide the default CisTransStereo (NotStereo); Aromatic/RingMembership are pattern-only.
+    if matches!(cfg.cis_trans_stereo, StereoDefault::NotStereo)
+        && constraints.get(BondConstraintKey::CisTransStereo)
+            == Some(&BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo))
+    {
+        constraints.remove(BondConstraintKey::CisTransStereo);
     }
 }
 

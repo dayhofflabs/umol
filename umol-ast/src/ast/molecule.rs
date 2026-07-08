@@ -788,7 +788,7 @@ impl MoleculeAst {
                     self.atom_mut(id).ast.constraints.set(inner);
                 }
                 Constraint::Bond(id, inner) => {
-                    self.bond_mut(id).ast.constraints.add(inner);
+                    self.bond_mut(id).ast.constraints.set(inner);
                 }
                 Constraint::DativeBond(id, inner) => {
                     self.dative_bond_mut(id).constraints.add(inner);

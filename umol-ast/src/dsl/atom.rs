@@ -1574,6 +1574,45 @@ mod tests {
     }
 
     #[rstest]
+    fn test_raise_atom_constraints() {
+        // A vacuous defaulted kind is overwritten with its default; a vacuous NON-defaulted kind
+        // survives (no global vacuous strip); a concrete value is left alone.
+        let mut constraints = AtomConstraints::from_iter([
+            AtomConstraint::Valence(ValueAst::Undetermined),
+            AtomConstraint::TotalValence(ValueAst::Undetermined),
+            AtomConstraint::degree(3),
+        ]);
+        raise_atom_constraints(&mut constraints, &AtomDefaults::zeroed());
+        assert_eq!(
+            constraints.get(AtomConstraintKey::Valence),
+            Some(&AtomConstraint::Valence(ValueAst::Lit(0)))
+        );
+        assert_eq!(
+            constraints.get(AtomConstraintKey::TotalValence),
+            Some(&AtomConstraint::TotalValence(ValueAst::Undetermined))
+        );
+        assert_eq!(
+            constraints.get(AtomConstraintKey::Degree),
+            Some(&AtomConstraint::degree(3))
+        );
+    }
+
+    #[rstest]
+    fn test_lower_atom_constraints() {
+        // A defaulted entry equal to its default is elided; a non-default value is kept.
+        let mut constraints = AtomConstraints::from_iter([
+            AtomConstraint::Valence(ValueAst::Lit(0)),
+            AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic),
+            AtomConstraint::degree(3),
+        ]);
+        lower_atom_constraints(&mut constraints, &AtomDefaults::zeroed());
+        assert_eq!(
+            constraints.iter().cloned().collect::<Vec<_>>(),
+            vec![AtomConstraint::degree(3)]
+        );
+    }
+
+    #[rstest]
     fn test_atom_dsl_roundtrip_zeroed() {
         let input = AtomDsl(AtomAst::new(ElementAst::Lit(Element::C)));
         let cfg = AtomDefaults::zeroed();

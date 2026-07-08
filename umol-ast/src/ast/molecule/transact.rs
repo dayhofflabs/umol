@@ -1674,14 +1674,8 @@ impl MoleculeBuilder {
         old: Option<super::super::constraint::AtomConstraint>,
         new: Option<super::super::constraint::AtomConstraint>,
     ) -> Result<(), TransactionError> {
-        // Key disagreement is a KindMismatch (distinct from an old-value mismatch); the
-        // verify+apply then go through `compare_and_set` (its `Contradiction` is the old-value
-        // mismatch → `OldStateMismatch`).
-        if let (Some(o), Some(n)) = (&old, &new) {
-            if o.key() != n.key() {
-                return Err(TransactionError::KindMismatch);
-            }
-        }
+        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
+        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
         self.atom_mut(id)
             .ast
             .constraints
@@ -1695,36 +1689,13 @@ impl MoleculeBuilder {
         old: Option<super::super::constraint::BondConstraint>,
         new: Option<super::super::constraint::BondConstraint>,
     ) -> Result<(), TransactionError> {
-        let key = match (&old, &new) {
-            (Some(o), Some(n)) => {
-                if o.key() != n.key() {
-                    return Err(TransactionError::KindMismatch);
-                }
-                o.key()
-            }
-            (Some(o), None) => o.key(),
-            (None, Some(n)) => n.key(),
-            (None, None) => return Ok(()),
-        };
-        let cs = &mut self.bond_mut(id).ast.constraints;
-        let current = cs.get_by_key(key).cloned();
-        let matches = match (&current, &old) {
-            (None, None) => true,
-            (Some(a), Some(b)) => a.canonical_eq(b),
-            _ => false,
-        };
-        if !matches {
-            return Err(TransactionError::OldStateMismatch);
-        }
-        match new {
-            Some(c) => {
-                cs.add(c);
-            }
-            None => {
-                cs.remove_by_key(key);
-            }
-        }
-        Ok(())
+        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
+        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
+        self.bond_mut(id)
+            .ast
+            .constraints
+            .compare_and_set(old, new)
+            .map_err(|_| TransactionError::OldStateMismatch)
     }
 
     fn apply_modify_dative_bond_constraint(

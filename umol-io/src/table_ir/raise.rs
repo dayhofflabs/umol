@@ -93,7 +93,7 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
             } else {
                 let mut bond_ast = b.try_into_ast(ctx)?;
                 if let Some(constraint) = raise_cis_trans_stereo(self, bond_idx)? {
-                    bond_ast.constraints.add(constraint);
+                    bond_ast.constraints.set(constraint);
                 }
                 bonds.push((a_idx, b_idx, bond_ast));
             }
@@ -209,7 +209,7 @@ impl TryIntoAst<BondAst> for &TableBond {
         };
         if matches!(self.order, TableBondOrder::Aromatic) {
             bond.constraints
-                .add(BondConstraint::Aromatic(BooleanAst::Lit(true)));
+                .set(BondConstraint::Aromatic(BooleanAst::Lit(true)));
         }
         Ok(bond)
     }

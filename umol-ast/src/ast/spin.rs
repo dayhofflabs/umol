@@ -69,7 +69,7 @@ impl AsLit for SpinStateAst {
         let (ValueAst::Lit(u), ValueAst::Lit(m)) = (&self.unpaired, &self.multiplicity) else {
             return None;
         };
-        let mult = SpinMultiplicity::from_repr(*m as u8)?;
+        let mult = SpinMultiplicity::try_from(*m as u8).ok()?;
         SpinState::try_new(*u as u8, mult).ok()
     }
 }

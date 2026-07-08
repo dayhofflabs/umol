@@ -1,4 +1,4 @@
-//! Boolean AST value.
+//! Boolean AST.
 
 use std::borrow::Cow;
 
@@ -10,6 +10,22 @@ pub enum BooleanAst {
     #[default]
     Undetermined,
     Lit(bool),
+}
+
+impl BooleanAst {
+    pub fn undetermined() -> Self {
+        Self::Undetermined
+    }
+
+    pub fn lit(b: bool) -> Self {
+        Self::Lit(b)
+    }
+}
+
+impl From<bool> for BooleanAst {
+    fn from(b: bool) -> Self {
+        Self::lit(b)
+    }
 }
 
 impl Canonicalize for BooleanAst {

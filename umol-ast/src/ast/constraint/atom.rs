@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use std::mem;
 
 use smallvec::SmallVec;
-use strum::{EnumCount, EnumDiscriminants, EnumIter};
+use strum::EnumDiscriminants;
 
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::{Contradiction, NoJoin};
@@ -16,8 +16,7 @@ use super::super::value::ValueAst;
 
 /// Atom-scope constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
-#[strum_discriminants(name(AtomConstraintKind), derive(Hash, EnumCount, EnumIter))]
-#[repr(u8)]
+#[strum_discriminants(name(AtomConstraintKind), derive(Hash))]
 pub enum AtomConstraint {
     Valence(ValueAst),
     DonatedPairs(ValueAst),
@@ -47,16 +46,16 @@ impl AtomConstraint {
         Self::AcceptedPairs(v.into())
     }
 
-    pub fn aromatic_valence(v: AromaticValenceAst) -> Self {
-        Self::AromaticValence(v)
+    pub fn aromatic_valence(v: impl Into<AromaticValenceAst>) -> Self {
+        Self::AromaticValence(v.into())
     }
 
-    pub fn multicenter_valence(v: MulticenterValenceAst) -> Self {
-        Self::MulticenterValence(v)
+    pub fn multicenter_valence(v: impl Into<MulticenterValenceAst>) -> Self {
+        Self::MulticenterValence(v.into())
     }
 
-    pub fn tetrahedral_stereo(c: TetrahedralStereoAst) -> Self {
-        Self::TetrahedralStereo(c)
+    pub fn tetrahedral_stereo(c: impl Into<TetrahedralStereoAst>) -> Self {
+        Self::TetrahedralStereo(c.into())
     }
 
     pub fn degree(v: impl Into<ValueAst>) -> Self {
@@ -91,7 +90,7 @@ impl AtomConstraint {
         self.into()
     }
 
-    /// Atom constraint key, AtomConstraints container is unique by key.
+    /// Atom constraint key, unique within an `AtomConstraints` container.
     pub fn key(&self) -> AtomConstraintKey {
         match self {
             Self::Valence(_) => AtomConstraintKey::Valence,
@@ -110,7 +109,7 @@ impl AtomConstraint {
         }
     }
 
-    /// Vacuous form corresponding to the given constraint, used for removal.
+    /// Vacuous form of constraint key, used for removal.
     pub fn as_undetermined(&self) -> Self {
         match self {
             Self::Valence(_) => Self::Valence(ValueAst::Undetermined),
@@ -256,10 +255,31 @@ impl Lattice for AtomConstraint {
             _ => Err(NoJoin),
         }
     }
+
+    /// Compatible iff same key with compatible payloads; different keys are incompatible (one
+    /// constraint can't be two kinds). Overrides the `meet`-derived default to skip building the
+    /// `AtomConstraint`.
+    fn is_compatible(&self, other: &AtomConstraint) -> bool {
+        match (self, other) {
+            (Self::Valence(a), Self::Valence(b)) => a.is_compatible(b),
+            (Self::DonatedPairs(a), Self::DonatedPairs(b)) => a.is_compatible(b),
+            (Self::AcceptedPairs(a), Self::AcceptedPairs(b)) => a.is_compatible(b),
+            (Self::AromaticValence(a), Self::AromaticValence(b)) => a.is_compatible(b),
+            (Self::MulticenterValence(a), Self::MulticenterValence(b)) => a.is_compatible(b),
+            (Self::TetrahedralStereo(a), Self::TetrahedralStereo(b)) => a.is_compatible(b),
+            (Self::Degree(a), Self::Degree(b)) => a.is_compatible(b),
+            (Self::TotalDegree(a), Self::TotalDegree(b)) => a.is_compatible(b),
+            (Self::TotalValence(a), Self::TotalValence(b)) => a.is_compatible(b),
+            (Self::RingDegree(a), Self::RingDegree(b)) => a.is_compatible(b),
+            (Self::RingValence(a), Self::RingValence(b)) => a.is_compatible(b),
+            (Self::TotalHydrogens(a), Self::TotalHydrogens(b)) => a.is_compatible(b),
+            (Self::RingMembership(a), Self::RingMembership(b)) => a.count.is_compatible(&b.count),
+            _ => false,
+        }
+    }
 }
 
-/// Entry identity: discriminant + sub-key. Variant order matches `AtomConstraint`,
-/// so `Ord` agrees with `kind as u8`; the ring run orders by `RingScope`.
+/// Entry identity: discriminant + sub-key, AtomConstraints is ordered, unique by key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AtomConstraintKey {
     Valence,
@@ -379,18 +399,18 @@ impl AtomConstraints {
         })
     }
 
-    fn ring_membership_value(&self, scope: RingScope) -> Option<&ValueAst> {
+    fn ring_membership(&self, scope: RingScope) -> Option<&ValueAst> {
         self.ring_memberships()
             .find(|(s, _)| *s == scope)
             .map(|(_, v)| v)
     }
 
     pub fn ring_count(&self) -> Option<&ValueAst> {
-        self.ring_membership_value(RingScope::All)
+        self.ring_membership(RingScope::All)
     }
 
     pub fn ring_size_count(&self, s: u8) -> Option<&ValueAst> {
-        self.ring_membership_value(RingScope::Size(s))
+        self.ring_membership(RingScope::Size(s))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -485,7 +505,7 @@ impl AtomConstraints {
         self.entries.retain(|c| f(c));
     }
 
-    /// Clear the store, leaving it empty.
+    /// Remove all entries.
     pub fn clear(&mut self) {
         self.entries.clear();
     }
@@ -526,21 +546,7 @@ impl Lattice for AtomConstraints {
     }
 
     fn is_ground(&self) -> bool {
-        self.iter().all(|c| match c {
-            AtomConstraint::Valence(v)
-            | AtomConstraint::TotalValence(v)
-            | AtomConstraint::DonatedPairs(v)
-            | AtomConstraint::AcceptedPairs(v)
-            | AtomConstraint::Degree(v)
-            | AtomConstraint::TotalDegree(v)
-            | AtomConstraint::RingDegree(v)
-            | AtomConstraint::RingValence(v)
-            | AtomConstraint::TotalHydrogens(v) => v.is_ground(),
-            AtomConstraint::RingMembership(m) => m.count.is_ground(),
-            AtomConstraint::AromaticValence(c) => c.is_ground(),
-            AtomConstraint::MulticenterValence(c) => c.is_ground(),
-            AtomConstraint::TetrahedralStereo(c) => c.is_ground(),
-        })
+        self.iter().all(|c| c.is_ground())
     }
 
     /// Greatest lower bound as a two-pointer merge over the key-sorted entries: a shared key
@@ -654,10 +660,33 @@ impl Lattice for AtomConstraints {
             }
             AtomConstraint::RingMembership(rm) => rm.count.matches(
                 target
-                    .ring_membership_value(rm.scope)
+                    .ring_membership(rm.scope)
                     .unwrap_or(&ValueAst::Undetermined),
             ),
         })
+    }
+
+    /// Sorted merge, short-circuit: only shared keys can conflict; non-shared keys are always
+    /// compatible. Cheaper than the `meet`-derived default — builds no result container.
+    fn is_compatible(&self, other: &Self) -> bool {
+        let mut a = self.entries.iter();
+        let mut b = other.entries.iter();
+        let mut ca = a.next();
+        let mut cb = b.next();
+        while let (Some(x), Some(y)) = (ca, cb) {
+            match x.key().cmp(&y.key()) {
+                Ordering::Less => ca = a.next(),
+                Ordering::Greater => cb = b.next(),
+                Ordering::Equal => {
+                    if !x.is_compatible(y) {
+                        return false;
+                    }
+                    ca = a.next();
+                    cb = b.next();
+                }
+            }
+        }
+        true
     }
 }
 
@@ -1522,8 +1551,7 @@ mod tests {
         for c in sequence {
             cs.set(c);
         }
-        let collected: Vec<_> = cs.iter().cloned().collect();
-        assert_eq!(collected, expected_state);
+        assert_eq!(cs, AtomConstraints::from_iter(expected_state));
     }
 
     #[rustfmt::skip]
@@ -1556,8 +1584,7 @@ mod tests {
         let mut cs = AtomConstraints::from_iter(initial);
         let overlay = AtomConstraints::from_iter(other);
         cs.update(&overlay);
-        let collected: Vec<_> = cs.iter().cloned().collect();
-        assert_eq!(collected, expected);
+        assert_eq!(cs, AtomConstraints::from_iter(expected));
     }
 
     #[rustfmt::skip]
@@ -1579,8 +1606,7 @@ mod tests {
     ) {
         let mut cs = AtomConstraints::from_iter(initial);
         assert_eq!(cs.compare_and_set(old, new), expected_result);
-        let collected: Vec<_> = cs.iter().cloned().collect();
-        assert_eq!(collected, expected_state);
+        assert_eq!(cs, AtomConstraints::from_iter(expected_state));
     }
 
     #[rustfmt::skip]
@@ -1597,8 +1623,7 @@ mod tests {
             AtomConstraint::ring_membership(RingScope::All, 2),
         ]);
         cs.retain(predicate);
-        let collected: Vec<_> = cs.iter().cloned().collect();
-        assert_eq!(collected, expected);
+        assert_eq!(cs, AtomConstraints::from_iter(expected));
     }
 
     #[rstest]
@@ -1665,8 +1690,7 @@ mod tests {
         #[case] expected: Vec<AtomConstraint>,
     ) {
         let cs = AtomConstraints::from_iter(input);
-        let collected: Vec<_> = cs.iter().cloned().collect();
-        assert_eq!(collected, expected);
+        assert_eq!(cs, AtomConstraints::from_iter(expected));
     }
 
     #[rstest]
