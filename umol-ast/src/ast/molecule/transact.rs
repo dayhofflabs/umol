@@ -56,10 +56,6 @@ pub enum TransactionError {
     #[error("constraint shape mismatch for kind")]
     KindShapeMismatch,
 
-    /// `Set*Constraint { old: Some(a), new: Some(b) }` with `a.kind() != b.kind()`.
-    #[error("constraint kind mismatch between old and new")]
-    KindMismatch,
-
     /// `Add*Constraint` with a value that's already present in the store.
     #[error("duplicate constraint entry on add")]
     DuplicateEntry,
@@ -1749,36 +1745,13 @@ impl MoleculeBuilder {
         old: Option<super::super::constraint::StereoAtomConstraint>,
         new: Option<super::super::constraint::StereoAtomConstraint>,
     ) -> Result<(), TransactionError> {
-        let key = match (&old, &new) {
-            (Some(o), Some(n)) => {
-                if o.key() != n.key() {
-                    return Err(TransactionError::KindMismatch);
-                }
-                o.key()
-            }
-            (Some(o), None) => o.key(),
-            (None, Some(n)) => n.key(),
-            (None, None) => return Ok(()),
-        };
-        let cs = &mut self.stereo_atom_mut(id).ast.constraints;
-        let current = cs.get_by_key(key).cloned();
-        let matches = match (&current, &old) {
-            (None, None) => true,
-            (Some(a), Some(b)) => a.canonical_eq(b),
-            _ => false,
-        };
-        if !matches {
-            return Err(TransactionError::OldStateMismatch);
-        }
-        match new {
-            Some(c) => {
-                cs.add(c);
-            }
-            None => {
-                cs.remove_by_key(key);
-            }
-        }
-        Ok(())
+        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
+        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
+        self.stereo_atom_mut(id)
+            .ast
+            .constraints
+            .compare_and_set(old, new)
+            .map_err(|_| TransactionError::OldStateMismatch)
     }
 
     fn apply_modify_stereo_bond_constraint(
@@ -1787,36 +1760,13 @@ impl MoleculeBuilder {
         old: Option<super::super::constraint::StereoBondConstraint>,
         new: Option<super::super::constraint::StereoBondConstraint>,
     ) -> Result<(), TransactionError> {
-        let key = match (&old, &new) {
-            (Some(o), Some(n)) => {
-                if o.key() != n.key() {
-                    return Err(TransactionError::KindMismatch);
-                }
-                o.key()
-            }
-            (Some(o), None) => o.key(),
-            (None, Some(n)) => n.key(),
-            (None, None) => return Ok(()),
-        };
-        let cs = &mut self.stereo_bond_mut(id).ast.constraints;
-        let current = cs.get_by_key(key).cloned();
-        let matches = match (&current, &old) {
-            (None, None) => true,
-            (Some(a), Some(b)) => a.canonical_eq(b),
-            _ => false,
-        };
-        if !matches {
-            return Err(TransactionError::OldStateMismatch);
-        }
-        match new {
-            Some(c) => {
-                cs.add(c);
-            }
-            None => {
-                cs.remove_by_key(key);
-            }
-        }
-        Ok(())
+        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
+        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
+        self.stereo_bond_mut(id)
+            .ast
+            .constraints
+            .compare_and_set(old, new)
+            .map_err(|_| TransactionError::OldStateMismatch)
     }
 }
 

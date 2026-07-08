@@ -2557,11 +2557,11 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                             modify_kind = modify_kind.or(*kind);
                             match new {
                                 Some(c) => {
-                                    partial.constraints.add(c.clone());
+                                    partial.constraints.set(c.clone());
                                 }
                                 None => {
                                     if let Some(old) = old {
-                                        partial.constraints.add(old.as_undetermined());
+                                        partial.constraints.set(old.as_undetermined());
                                     }
                                 }
                             }
@@ -2700,11 +2700,11 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                             modify_kind = modify_kind.or(*kind);
                             match new {
                                 Some(c) => {
-                                    partial.constraints.add(c.clone());
+                                    partial.constraints.set(c.clone());
                                 }
                                 None => {
                                     if let Some(old) = old {
-                                        partial.constraints.add(old.as_undetermined());
+                                        partial.constraints.set(old.as_undetermined());
                                     }
                                 }
                             }

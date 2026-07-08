@@ -82,14 +82,7 @@ macro_rules! stereo_element {
             /// undetermined, and merging constraints by key.
             pub fn update(&self, other: &Self) -> Self {
                 let mut constraints = self.constraints.clone();
-                for c in other.constraints.iter() {
-                    constraints.remove_by_key(c.key());
-                }
-                for c in other.constraints.iter() {
-                    if !c.is_undetermined() {
-                        constraints.add(c.clone());
-                    }
-                }
+                constraints.update(&other.constraints);
                 Self {
                     configuration: self.configuration.update(&other.configuration),
                     constraints,

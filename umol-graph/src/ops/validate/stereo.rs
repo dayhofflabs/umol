@@ -100,7 +100,7 @@ impl StereoConformanceValidator {
         let stereogenicity = constraints.stereogenicity();
         let topicities: Vec<TopicityAst> = constraints.topicities().cloned().collect();
         let ligand_symmetries: Vec<LigandSymmetryAst> =
-            constraints.ligand_symmetry().copied().collect();
+            constraints.ligand_symmetries().cloned().collect();
         match self.validate_kind(
             view.kind(),
             view.coset().as_lit(),
@@ -127,7 +127,7 @@ impl StereoConformanceValidator {
         let stereogenicity = constraints.stereogenicity();
         let topicities: Vec<TopicityAst> = constraints.topicities().cloned().collect();
         let ligand_symmetries: Vec<LigandSymmetryAst> =
-            constraints.ligand_symmetry().copied().collect();
+            constraints.ligand_symmetries().cloned().collect();
         match self.validate_kind(
             view.kind(),
             view.coset().as_lit(),
@@ -277,7 +277,7 @@ mod tests {
         (|ast: &mut MoleculeAst| {
             ast.stereo_atom_mut(StereoAtomId(0))
                 .constraints
-                .add(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)));
+                .set(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)));
         }) as fn(&mut MoleculeAst)
     )]
     fn test_stereo_conformance_validator_validate(
@@ -320,7 +320,7 @@ mod tests {
         (|ast: &mut MoleculeAst| {
             ast.stereo_bond_mut(StereoBondId(0))
                 .constraints
-                .add(StereoBondConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Prochiral)));
+                .set(StereoBondConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Prochiral)));
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::ImproperOnAchiral {
             kind: StereoKind::CisTrans,
@@ -331,7 +331,7 @@ mod tests {
         (|ast: &mut MoleculeAst| {
             ast.stereo_atom_mut(StereoAtomId(0))
                 .constraints
-                .add(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Symmetric)));
+                .set(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Symmetric)));
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::StereogenicityMismatch {
             asserted: StereogenicityAst::Lit(Stereogenicity::Symmetric),
@@ -343,7 +343,7 @@ mod tests {
         (|ast: &mut MoleculeAst| {
             ast.stereo_atom_mut(StereoAtomId(0))
                 .constraints
-                .add(StereoAtomConstraint::Topicity(TopicityAst {
+                .set(StereoAtomConstraint::Topicity(TopicityAst {
                     pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
                     relation: TopicityRelationAst::Lit(Topicity::Homotopic),
                 }));
@@ -359,7 +359,7 @@ mod tests {
         (|ast: &mut MoleculeAst| {
             ast.stereo_atom_mut(StereoAtomId(0))
                 .constraints
-                .add(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
+                .set(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
                     permutation: OrientedLigandPermutation {
                         permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                         orientation: Orientation::Proper,

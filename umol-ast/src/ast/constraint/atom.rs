@@ -266,6 +266,29 @@ impl Lattice for AtomConstraint {
         }
     }
 
+    /// Pattern-driven per-variant match: same key with a matching payload; a mismatched sub-key
+    /// (ring scope) or a different kind never matches. Overrides the `meet`-derived default.
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Valence(a), Self::Valence(b)) => a.matches(b),
+            (Self::DonatedPairs(a), Self::DonatedPairs(b)) => a.matches(b),
+            (Self::AcceptedPairs(a), Self::AcceptedPairs(b)) => a.matches(b),
+            (Self::AromaticValence(a), Self::AromaticValence(b)) => a.matches(b),
+            (Self::MulticenterValence(a), Self::MulticenterValence(b)) => a.matches(b),
+            (Self::TetrahedralStereo(a), Self::TetrahedralStereo(b)) => a.matches(b),
+            (Self::Degree(a), Self::Degree(b)) => a.matches(b),
+            (Self::TotalDegree(a), Self::TotalDegree(b)) => a.matches(b),
+            (Self::TotalValence(a), Self::TotalValence(b)) => a.matches(b),
+            (Self::RingDegree(a), Self::RingDegree(b)) => a.matches(b),
+            (Self::RingValence(a), Self::RingValence(b)) => a.matches(b),
+            (Self::TotalHydrogens(a), Self::TotalHydrogens(b)) => a.matches(b),
+            (Self::RingMembership(a), Self::RingMembership(b)) if a.scope == b.scope => {
+                a.count.matches(&b.count)
+            }
+            _ => false,
+        }
+    }
+
     /// Compatible iff same key with compatible payloads; different keys are incompatible (one
     /// constraint can't be two kinds). Overrides the `meet`-derived default to skip building the
     /// `AtomConstraint`.

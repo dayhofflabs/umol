@@ -939,7 +939,7 @@ pub(crate) fn stereo_atom_constraints_strategy(
     prop::collection::vec(stereo_atom_constraint_strategy(kind), 0..=3).prop_map(|list| {
         let mut cs = StereoAtomConstraints::new();
         for c in list {
-            cs.add(c);
+            cs.set(c);
         }
         cs.canonicalize().unwrap_or_default()
     })
@@ -951,7 +951,7 @@ pub(crate) fn stereo_bond_constraints_strategy(
     prop::collection::vec(stereo_bond_constraint_strategy(kind), 0..=3).prop_map(|list| {
         let mut cs = StereoBondConstraints::new();
         for c in list {
-            cs.add(c);
+            cs.set(c);
         }
         cs.canonicalize().unwrap_or_default()
     })

@@ -128,6 +128,17 @@ impl Lattice for BondConstraint {
         }
     }
 
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Aromatic(a), Self::Aromatic(b)) => a.matches(b),
+            (Self::CisTransStereo(a), Self::CisTransStereo(b)) => a.matches(b),
+            (Self::RingMembership(a), Self::RingMembership(b)) if a.scope == b.scope => {
+                a.count.matches(&b.count)
+            }
+            _ => false,
+        }
+    }
+
     fn is_compatible(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Aromatic(a), Self::Aromatic(b)) => a.is_compatible(b),

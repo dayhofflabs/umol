@@ -55,6 +55,10 @@ impl Lattice for NoncovalentBondConstraint {
         match *self {}
     }
 
+    fn matches(&self, _target: &Self) -> bool {
+        match *self {}
+    }
+
     fn is_compatible(&self, _other: &Self) -> bool {
         match *self {}
     }

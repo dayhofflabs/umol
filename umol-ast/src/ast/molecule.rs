@@ -803,10 +803,10 @@ impl MoleculeAst {
                 // The carried kind is dropped here; kind/degree consistency
                 // against the element is the C4 validator's job.
                 Constraint::StereoAtom(id, _kind, inner) => {
-                    self.stereo_atom_mut(id).constraints.add(inner);
+                    self.stereo_atom_mut(id).constraints.set(inner);
                 }
                 Constraint::StereoBond(id, _kind, inner) => {
-                    self.stereo_bond_mut(id).constraints.add(inner);
+                    self.stereo_bond_mut(id).constraints.set(inner);
                 }
                 c @ (Constraint::Relational(_)
                 | Constraint::Molecule(_)

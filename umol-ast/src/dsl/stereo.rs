@@ -31,7 +31,7 @@ use crate::ast::stereo::{
     CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst,
     StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoAst, Topicity,
 };
-use crate::ast::traits::{FromAst, IntoAst};
+use crate::ast::traits::{FromAst, IntoAst, Lattice};
 
 /// Surface DSL wrapper for `StereoAtomAst`
 #[repr(transparent)]
@@ -211,12 +211,12 @@ fn stereo_atom_tail(i: &mut &str, configuration: StereoConfigurationAst) -> PRes
             let before = *i;
             match stereo_atom_predicate(i, kind) {
                 Ok(c) => {
-                    if c.is_unique() && constraints.contains(c.kind()) {
+                    if constraints.contains(c.key()) {
                         return Err(ErrMode::Cut(ParseError::DuplicateStereoPredicate(
                             before[..2].to_string(),
                         )));
                     }
-                    constraints.add(c);
+                    constraints.set(c);
                 }
                 Err(ErrMode::Backtrack(_)) => {
                     *i = before;
@@ -378,12 +378,12 @@ fn stereo_bond_tail(i: &mut &str, configuration: StereoConfigurationAst) -> PRes
             let before = *i;
             match stereo_bond_predicate(i, kind) {
                 Ok(c) => {
-                    if c.is_unique() && constraints.contains(c.kind()) {
+                    if constraints.contains(c.key()) {
                         return Err(ErrMode::Cut(ParseError::DuplicateStereoPredicate(
                             before[..2].to_string(),
                         )));
                     }
-                    constraints.add(c);
+                    constraints.set(c);
                 }
                 Err(ErrMode::Backtrack(_)) => {
                     *i = before;

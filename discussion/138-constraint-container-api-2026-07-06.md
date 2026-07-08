@@ -569,8 +569,9 @@ the remaining families convert.
 
 ## Peer replication status (2026-07-07/08)
 
-- **Done:** `AtomConstraints` (original slice), `BondConstraints`, `DativeBondConstraints`,
-  `AromaticSystemConstraints`, `MulticenterBondConstraints`, `NoncovalentBondConstraints`.
+- **Done (all families):** `AtomConstraints` (original slice), `BondConstraints`,
+  `DativeBondConstraints`, `AromaticSystemConstraints`, `MulticenterBondConstraints`,
+  `NoncovalentBondConstraints`, `StereoAtomConstraints`, `StereoBondConstraints`.
   All follow the canonical method/impl order (`new` → accessors → `is_empty`/`len` →
   `find`/`contains`/`get` → `set`/`compare_and_set`/`remove`/`extend`/`update`/`retain`/`clear`/
   `take`/`iter`/`compact`, then Canonicalize, Lattice, From impls).
@@ -579,8 +580,14 @@ the remaining families convert.
   `match c {}`, `extend`/`update`/`from_iter` are no-op empty bodies, and the container Lattice is
   hand-written `true`/empty (not the delegate/merge form) — the honest shape for a degenerate
   container; the value still gets a `match *self {}` Lattice impl (called by the molecule dispatch).
-- **Remaining:** `StereoAtomConstraints`, `StereoBondConstraints`. Then the cross-cutting
-  `TransactionError::KindMismatch` variant removal once all families are on `compare_and_set`.
+- **Stereo pair** (done) — macro-generated (one `stereo_constraint!` macro), 4 data-carrying
+  variants; three (LigandSymmetry/Fluxionality/Topicity) are non-unique-by-subkey like atom's
+  RingMembership, so the value `Lattice` + two-pointer merge follow the atom shape. The value `meet`
+  absorbs the old `merge_same_key`; the accessor-based `ligand_present`/`fluxional_present` became
+  dead (the merge delegates to the value) and were removed.
+- **`TransactionError::KindMismatch` removed** (done) — every family now routes through
+  `compare_and_set`, so a key-mismatched modify surfaces as `Contradiction` → `OldStateMismatch`; the
+  variant had zero raise sites and is deleted. **The doc-138 reset is complete across all families.**
 
 ## Why this doc
 

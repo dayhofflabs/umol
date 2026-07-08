@@ -90,6 +90,12 @@ impl Lattice for MulticenterBondConstraint {
         }
     }
 
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::ElectronCount(a), Self::ElectronCount(b)) => a.matches(b),
+        }
+    }
+
     fn is_compatible(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::ElectronCount(a), Self::ElectronCount(b)) => a.is_compatible(b),
