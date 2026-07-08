@@ -51,14 +51,14 @@ impl AromaticSystemAst {
     }
 
     /// Add a single constraint, replacing any existing entry of the same
-    /// kind (last-wins per `AromaticSystemConstraints::add`). Chainable.
+    /// kind (last-wins per `AromaticSystemConstraints::set`). Chainable.
     pub fn with_constraint(mut self, constraint: impl Into<AromaticSystemConstraint>) -> Self {
-        self.constraints.add(constraint.into());
+        self.constraints.set(constraint.into());
         self
     }
 
     /// Add each constraint from the iterator, replacing any existing entry
-    /// of the same kind (last-wins per `AromaticSystemConstraints::add`).
+    /// of the same kind (last-wins per `AromaticSystemConstraints::set`).
     /// Does not clear existing constraints; use `system.constraints.clear()`
     /// or direct field assignment for wipe-and-replace.
     pub fn with_constraints<I>(mut self, constraints: I) -> Self
@@ -67,7 +67,7 @@ impl AromaticSystemAst {
         I::Item: Into<AromaticSystemConstraint>,
     {
         for c in constraints {
-            self.constraints.add(c.into());
+            self.constraints.set(c.into());
         }
         self
     }
@@ -90,14 +90,7 @@ impl AromaticSystemAst {
     /// field-wise (unpaired / multiplicity independently).
     pub fn update(&self, other: &AromaticSystemAst) -> AromaticSystemAst {
         let mut constraints = self.constraints.clone();
-        for c in other.constraints.iter() {
-            constraints.remove_by_key(c.key());
-        }
-        for c in other.constraints.iter() {
-            if !c.is_undetermined() {
-                constraints.add(c.clone());
-            }
-        }
+        constraints.update(&other.constraints);
         AromaticSystemAst {
             electrons: if other.electrons.is_undetermined() {
                 self.electrons.clone()

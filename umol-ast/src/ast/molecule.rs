@@ -794,10 +794,10 @@ impl MoleculeAst {
                     self.dative_bond_mut(id).constraints.set(inner);
                 }
                 Constraint::AromaticSystem(id, inner) => {
-                    self.aromatic_system_mut(id).constraints.add(inner);
+                    self.aromatic_system_mut(id).constraints.set(inner);
                 }
                 Constraint::MulticenterBond(id, inner) => {
-                    self.multicenter_bond_mut(id).constraints.add(inner);
+                    self.multicenter_bond_mut(id).constraints.set(inner);
                 }
                 Constraint::NoncovalentBond(_, inner) => match inner {},
                 // The carried kind is dropped here; kind/degree consistency

@@ -17,14 +17,6 @@ impl NoncovalentBondConstraint {
         match *self {}
     }
 
-    pub fn is_unique(&self) -> bool {
-        match *self {}
-    }
-
-    pub fn is_undetermined(&self) -> bool {
-        match *self {}
-    }
-
     pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
         match self {}
     }
@@ -46,6 +38,28 @@ impl Canonicalize for NoncovalentBondConstraint {
     }
 }
 
+impl Lattice for NoncovalentBondConstraint {
+    fn is_undetermined(&self) -> bool {
+        match *self {}
+    }
+
+    fn is_ground(&self) -> bool {
+        match *self {}
+    }
+
+    fn meet(&self, _other: &Self) -> Option<Self> {
+        match *self {}
+    }
+
+    fn join(&self, _other: &Self) -> Result<Self, NoJoin> {
+        match *self {}
+    }
+
+    fn is_compatible(&self, _other: &Self) -> bool {
+        match *self {}
+    }
+}
+
 /// Per-noncovalent-bond constraint container. Empty in practice until new
 /// value-only variants land on `NoncovalentBondConstraint`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -64,53 +78,49 @@ impl NoncovalentBondConstraints {
         self.0.len()
     }
 
-    pub fn as_slice(&self) -> &[NoncovalentBondConstraint] {
-        &self.0
-    }
-
-    pub fn iter(&self) -> Iter<'_, NoncovalentBondConstraint> {
-        self.0.iter()
-    }
-
-    pub fn add(&mut self, c: NoncovalentBondConstraint) -> Option<NoncovalentBondConstraint> {
-        match c {}
-    }
-
-    fn find_by_key(&self, key: NoncovalentBondConstraintKey) -> Result<usize, usize> {
+    fn find(&self, key: NoncovalentBondConstraintKey) -> Result<usize, usize> {
         match key {}
     }
 
-    pub fn contains_key(&self, key: NoncovalentBondConstraintKey) -> bool {
-        self.find_by_key(key).is_ok()
+    pub fn contains(&self, key: NoncovalentBondConstraintKey) -> bool {
+        self.find(key).is_ok()
     }
 
-    pub fn get_by_key(
-        &self,
-        key: NoncovalentBondConstraintKey,
-    ) -> Option<&NoncovalentBondConstraint> {
-        self.find_by_key(key).ok().map(|i| &self.0[i])
+    pub fn get(&self, key: NoncovalentBondConstraintKey) -> Option<&NoncovalentBondConstraint> {
+        self.find(key).ok().map(|i| &self.0[i])
     }
 
-    pub fn get_by_key_mut(
+    /// Uninhabited element: no value exists to set.
+    pub fn set(&mut self, c: NoncovalentBondConstraint) {
+        match c {}
+    }
+
+    pub fn compare_and_set(
         &mut self,
-        key: NoncovalentBondConstraintKey,
-    ) -> Option<&mut NoncovalentBondConstraint> {
-        self.find_by_key(key).ok().map(|i| &mut self.0[i])
+        old: Option<NoncovalentBondConstraint>,
+        new: Option<NoncovalentBondConstraint>,
+    ) -> Result<(), Contradiction> {
+        if let Some(c) = old {
+            match c {}
+        }
+        if let Some(c) = new {
+            match c {}
+        }
+        Ok(())
     }
 
-    pub fn remove_by_key(
+    pub fn remove(
         &mut self,
         key: NoncovalentBondConstraintKey,
     ) -> Option<NoncovalentBondConstraint> {
-        self.find_by_key(key).ok().map(|i| self.0.remove(i))
+        self.find(key).ok().map(|i| self.0.remove(i))
     }
 
-    /// Add multiple constraints at once, using semantics of `add`.
-    pub fn extend(&mut self, constraints: impl IntoIterator<Item = NoncovalentBondConstraint>) {
-        for constraint in constraints {
-            self.add(constraint);
-        }
-    }
+    /// Uninhabited element: the iterator is always empty, so this is a no-op.
+    pub fn extend(&mut self, _constraints: impl IntoIterator<Item = NoncovalentBondConstraint>) {}
+
+    /// Overlay `other`: uninhabited element, so `other` is always empty and this is a no-op.
+    pub fn update(&mut self, _other: &NoncovalentBondConstraints) {}
 
     pub fn retain(&mut self, mut f: impl FnMut(&NoncovalentBondConstraint) -> bool) {
         self.0.retain(|c| f(c));
@@ -123,6 +133,10 @@ impl NoncovalentBondConstraints {
     /// Move the entries out of the store, leaving it empty.
     pub fn take(&mut self) -> impl Iterator<Item = NoncovalentBondConstraint> {
         mem::take(&mut self.0).into_iter()
+    }
+
+    pub fn iter(&self) -> Iter<'_, NoncovalentBondConstraint> {
+        self.0.iter()
     }
 
     pub fn compact(self, _compaction: &IdCompaction) -> Self {
@@ -157,15 +171,15 @@ impl Lattice for NoncovalentBondConstraints {
     fn matches(&self, _target: &Self) -> bool {
         true
     }
+
+    fn is_compatible(&self, _other: &Self) -> bool {
+        true
+    }
 }
 
 impl FromIterator<NoncovalentBondConstraint> for NoncovalentBondConstraints {
-    fn from_iter<I: IntoIterator<Item = NoncovalentBondConstraint>>(iter: I) -> Self {
-        let mut out = Self::new();
-        for c in iter {
-            out.add(c);
-        }
-        out
+    fn from_iter<I: IntoIterator<Item = NoncovalentBondConstraint>>(_iter: I) -> Self {
+        Self::new()
     }
 }
 
@@ -184,7 +198,20 @@ mod tests {
         let cs = NoncovalentBondConstraints::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
-        assert_eq!(cs.as_slice(), &[] as &[NoncovalentBondConstraint]);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_compare_and_set() {
+        let mut cs = NoncovalentBondConstraints::new();
+        assert_eq!(cs.compare_and_set(None, None), Ok(()));
+        assert_eq!(cs, NoncovalentBondConstraints::new());
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_update() {
+        let mut cs = NoncovalentBondConstraints::new();
+        cs.update(&NoncovalentBondConstraints::new());
+        assert_eq!(cs, NoncovalentBondConstraints::new());
     }
 
     #[rstest]

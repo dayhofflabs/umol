@@ -565,7 +565,22 @@ Three dative-specific items:
 
 Critical path: **DS1 → {DS2, DS3} → DS4** (no DS0). `DativeBondConstraints::remove_entry` deleted in
 DS4d (last caller → `compare_and_set` at DS2a). `TransactionError::KindMismatch` variant stays until
-the remaining 4 families (aromatic-system, multicenter, stereo-atom, stereo-bond) convert.
+the remaining families convert.
+
+## Peer replication status (2026-07-07/08)
+
+- **Done:** `AtomConstraints` (original slice), `BondConstraints`, `DativeBondConstraints`,
+  `AromaticSystemConstraints`, `MulticenterBondConstraints`, `NoncovalentBondConstraints`.
+  All follow the canonical method/impl order (`new` → accessors → `is_empty`/`len` →
+  `find`/`contains`/`get` → `set`/`compare_and_set`/`remove`/`extend`/`update`/`retain`/`clear`/
+  `take`/`iter`/`compact`, then Canonicalize, Lattice, From impls).
+- **Aromatic & multicenter** are the single-`ElectronCount(ValueAst)` twins — mechanical copies of
+  each other. **Noncovalent** is uninhabited (`enum {}`): container always empty, so `set` is
+  `match c {}`, `extend`/`update`/`from_iter` are no-op empty bodies, and the container Lattice is
+  hand-written `true`/empty (not the delegate/merge form) — the honest shape for a degenerate
+  container; the value still gets a `match *self {}` Lattice impl (called by the molecule dispatch).
+- **Remaining:** `StereoAtomConstraints`, `StereoBondConstraints`. Then the cross-cutting
+  `TransactionError::KindMismatch` variant removal once all families are on `compare_and_set`.
 
 ## Why this doc
 

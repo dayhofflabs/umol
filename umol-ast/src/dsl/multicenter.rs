@@ -197,23 +197,17 @@ fn apply_predicates(
                 )?;
             }
             MulticenterBondPredicate::Electrons(v) => {
-                if has_electron_count(ast) {
+                let c = MulticenterBondConstraint::ElectronCount(v);
+                if ast.constraints.contains(c.key()) {
                     return Err(ParseError::DuplicateMulticenterBondPredicate(
                         "#e".to_string(),
                     ));
                 }
-                ast.constraints
-                    .add(MulticenterBondConstraint::ElectronCount(v));
+                ast.constraints.set(c);
             }
         }
     }
     Ok(())
-}
-
-fn has_electron_count(ast: &MulticenterBondAst) -> bool {
-    ast.constraints
-        .iter()
-        .any(|c| matches!(c, MulticenterBondConstraint::ElectronCount(_)))
 }
 
 fn electron_count_value(ast: &MulticenterBondAst) -> Option<&ValueAst> {

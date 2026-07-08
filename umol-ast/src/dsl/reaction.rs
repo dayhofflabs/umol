@@ -2341,11 +2341,11 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                         AromaticSystemDelta::ModifyConstraint { id: j, old, new } if *j == id => {
                             match new {
                                 Some(c) => {
-                                    partial.constraints.add(c.clone());
+                                    partial.constraints.set(c.clone());
                                 }
                                 None => {
                                     if let Some(old) = old {
-                                        partial.constraints.add(old.as_undetermined());
+                                        partial.constraints.set(old.as_undetermined());
                                     }
                                 }
                             }
@@ -2415,11 +2415,11 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                         MulticenterBondDelta::ModifyConstraint { id: j, old, new } if *j == id => {
                             match new {
                                 Some(c) => {
-                                    partial.constraints.add(c.clone());
+                                    partial.constraints.set(c.clone());
                                 }
                                 None => {
                                     if let Some(old) = old {
-                                        partial.constraints.add(old.as_undetermined());
+                                        partial.constraints.set(old.as_undetermined());
                                     }
                                 }
                             }

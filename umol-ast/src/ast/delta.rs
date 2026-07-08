@@ -1305,15 +1305,7 @@ impl EntityPatch for AromaticSystemDelta {
         old: Option<AromaticSystemConstraint>,
         new: Option<AromaticSystemConstraint>,
     ) -> Result<(), Contradiction> {
-        if let Some(old) = old {
-            if ast.constraints.remove_by_key(old.key()).is_none() {
-                return Err(Contradiction);
-            }
-        }
-        if let Some(new) = new {
-            ast.constraints.add(new);
-        }
-        Ok(())
+        ast.constraints.compare_and_set(old, new)
     }
 }
 
@@ -1399,15 +1391,7 @@ impl EntityPatch for MulticenterBondDelta {
         old: Option<MulticenterBondConstraint>,
         new: Option<MulticenterBondConstraint>,
     ) -> Result<(), Contradiction> {
-        if let Some(old) = old {
-            if ast.constraints.remove_by_key(old.key()).is_none() {
-                return Err(Contradiction);
-            }
-        }
-        if let Some(new) = new {
-            ast.constraints.add(new);
-        }
-        Ok(())
+        ast.constraints.compare_and_set(old, new)
     }
 }
 

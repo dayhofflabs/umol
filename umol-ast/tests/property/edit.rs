@@ -159,13 +159,13 @@ proptest! {
         }
         for (id, kind) in aromatic_kinds {
             prop_assert!(
-                a[id].constraints.contains(kind),
+                a[id].constraints.iter().any(|c| c.kind() == kind),
                 "aromatic system {id:?} missing kind {kind:?} after inline",
             );
         }
         for (id, kind) in multicenter_kinds {
             prop_assert!(
-                a[id].constraints.contains(kind),
+                a[id].constraints.iter().any(|c| c.kind() == kind),
                 "multicenter bond {id:?} missing kind {kind:?} after inline",
             );
         }

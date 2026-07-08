@@ -195,23 +195,17 @@ fn apply_predicates(
                 )?;
             }
             AromaticSystemPredicate::Electrons(v) => {
-                if has_electron_count(ast) {
+                let c = AromaticSystemConstraint::ElectronCount(v);
+                if ast.constraints.contains(c.key()) {
                     return Err(ParseError::DuplicateAromaticSystemPredicate(
                         "#e".to_string(),
                     ));
                 }
-                ast.constraints
-                    .add(AromaticSystemConstraint::ElectronCount(v));
+                ast.constraints.set(c);
             }
         }
     }
     Ok(())
-}
-
-fn has_electron_count(ast: &AromaticSystemAst) -> bool {
-    ast.constraints
-        .iter()
-        .any(|c| matches!(c, AromaticSystemConstraint::ElectronCount(_)))
 }
 
 fn electron_count_value(ast: &AromaticSystemAst) -> Option<&ValueAst> {

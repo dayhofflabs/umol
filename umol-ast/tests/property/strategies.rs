@@ -553,7 +553,7 @@ pub(crate) fn optional_aromatic_electron_count() -> impl Strategy<Value = Aromat
     prop::option::weighted(0.5, electron_count_value_strategy(0..=12)).prop_map(|opt| {
         let mut cs = AromaticSystemConstraints::new();
         if let Some(v) = opt {
-            cs.add(AromaticSystemConstraint::ElectronCount(v));
+            cs.set(AromaticSystemConstraint::ElectronCount(v));
         }
         cs.canonicalize().unwrap_or_default()
     })
@@ -564,7 +564,7 @@ pub(crate) fn optional_multicenter_electron_count(
     prop::option::weighted(0.5, electron_count_value_strategy(0..=8)).prop_map(|opt| {
         let mut cs = MulticenterBondConstraints::new();
         if let Some(v) = opt {
-            cs.add(MulticenterBondConstraint::ElectronCount(v));
+            cs.set(MulticenterBondConstraint::ElectronCount(v));
         }
         cs.canonicalize().unwrap_or_default()
     })

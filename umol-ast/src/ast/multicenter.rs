@@ -51,14 +51,14 @@ impl MulticenterBondAst {
     }
 
     /// Add a single constraint, replacing any existing entry of the same
-    /// kind (last-wins per `MulticenterBondConstraints::add`). Chainable.
+    /// kind (last-wins per `MulticenterBondConstraints::set`). Chainable.
     pub fn with_constraint(mut self, constraint: impl Into<MulticenterBondConstraint>) -> Self {
-        self.constraints.add(constraint.into());
+        self.constraints.set(constraint.into());
         self
     }
 
     /// Add each constraint from the iterator, replacing any existing entry
-    /// of the same kind (last-wins per `MulticenterBondConstraints::add`).
+    /// of the same kind (last-wins per `MulticenterBondConstraints::set`).
     /// Does not clear existing constraints; use `bond.constraints.clear()`
     /// or direct field assignment for wipe-and-replace.
     pub fn with_constraints<I>(mut self, constraints: I) -> Self
@@ -67,7 +67,7 @@ impl MulticenterBondAst {
         I::Item: Into<MulticenterBondConstraint>,
     {
         for c in constraints {
-            self.constraints.add(c.into());
+            self.constraints.set(c.into());
         }
         self
     }
@@ -90,14 +90,7 @@ impl MulticenterBondAst {
     /// field-wise (unpaired / multiplicity independently).
     pub fn update(&self, other: &MulticenterBondAst) -> MulticenterBondAst {
         let mut constraints = self.constraints.clone();
-        for c in other.constraints.iter() {
-            constraints.remove_by_key(c.key());
-        }
-        for c in other.constraints.iter() {
-            if !c.is_undetermined() {
-                constraints.add(c.clone());
-            }
-        }
+        constraints.update(&other.constraints);
         MulticenterBondAst {
             electrons: if other.electrons.is_undetermined() {
                 self.electrons.clone()
