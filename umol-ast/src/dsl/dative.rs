@@ -21,7 +21,7 @@ use super::value::{fmt_value, value};
 use crate::ast::boolean::BooleanAst;
 use crate::ast::constraint::{DativeBondConstraint, RingMembershipAst};
 use crate::ast::dative::DativeBondAst;
-use crate::ast::traits::{FromAst, IntoAst};
+use crate::ast::traits::{FromAst, IntoAst, Lattice};
 use crate::ast::value::ValueAst;
 
 /// Surface DSL wrapper around `DativeBondAst`. The string form is the order
@@ -280,16 +280,12 @@ fn apply_predicates(
     let ast = &mut form.0;
     for pred in preds {
         let DativeBondPredicate::Constraint(c) = pred;
-        let tag = constraint_tag(&c);
-        if c.is_unique()
-            && ast
-                .constraints
-                .iter()
-                .any(|existing| constraint_tag(existing) == tag)
-        {
-            return Err(ParseError::DuplicateDativeBondPredicate(tag.to_string()));
+        if ast.constraints.contains(c.key()) {
+            return Err(ParseError::DuplicateDativeBondPredicate(
+                constraint_tag(&c).to_string(),
+            ));
         }
-        ast.constraints.add(c);
+        ast.constraints.set(c);
     }
     Ok(())
 }

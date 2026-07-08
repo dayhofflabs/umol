@@ -398,7 +398,7 @@ pub(crate) fn atom_constraints_strategy() -> impl Strategy<Value = AtomConstrain
     prop::collection::vec(atom_constraint_strategy(), 0..=3).prop_map(|list| {
         let mut cs = AtomConstraints::new();
         for c in list {
-            cs.add(c);
+            cs.set(c);
         }
         cs.canonicalize().unwrap_or_default()
     })
@@ -420,7 +420,7 @@ pub(crate) fn bond_constraints_strategy() -> impl Strategy<Value = BondConstrain
     prop::collection::vec(bond_constraint_strategy(), 0..=2).prop_map(|list| {
         let mut cs = BondConstraints::new();
         for c in list {
-            cs.add(c);
+            cs.set(c);
         }
         cs.canonicalize().unwrap_or_default()
     })
@@ -442,7 +442,7 @@ pub(crate) fn dative_bond_constraints_strategy() -> impl Strategy<Value = Dative
     prop::collection::vec(dative_bond_constraint_strategy(), 0..=2).prop_map(|list| {
         let mut cs = DativeBondConstraints::new();
         for c in list {
-            cs.add(c);
+            cs.set(c);
         }
         cs.canonicalize().unwrap_or_default()
     })
@@ -850,13 +850,17 @@ pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
         a.meet(b).and_then(|ab| ab.meet(c)),
         b.meet(c).and_then(|bc| a.meet(&bc))
     );
-    prop_assert_eq!(a.join(b).join(c), a.join(&b.join(c)));
+    prop_assert_eq!(
+        a.join(b).and_then(|ab| ab.join(c)),
+        b.join(c).and_then(|bc| a.join(&bc))
+    );
     prop_assert_eq!(a.matches(b), a.meet(b) == b.clone().canonicalize().ok());
     if let Some(m) = a.meet(b) {
         prop_assert_eq!(m.clone().canonicalize(), Ok(m));
     }
-    let j = a.join(b);
-    prop_assert_eq!(j.clone().canonicalize(), Ok(j));
+    if let Ok(j) = a.join(b) {
+        prop_assert_eq!(j.clone().canonicalize(), Ok(j));
+    }
     // `canonical()` (the borrow fast-path) agrees with `canonicalize()`.
     prop_assert_eq!(
         a.canonical().map(|c| c.into_owned()),
@@ -882,8 +886,10 @@ pub(crate) fn assert_canonical_lattice_laws<L: Lattice + Debug>(
     prop_assert_eq!(b.clone().canonicalize(), Ok(b.clone()));
     prop_assert_eq!(c.clone().canonicalize(), Ok(c.clone()));
     prop_assert_eq!(a.meet(a), Some(a.clone()));
-    prop_assert_eq!(a.join(a), a.clone());
-    prop_assert_eq!(a.meet(&a.join(b)), Some(a.clone()));
+    prop_assert_eq!(a.join(a), Ok(a.clone()));
+    if let Ok(ab) = a.join(b) {
+        prop_assert_eq!(a.meet(&ab), Some(a.clone()));
+    }
     Ok(())
 }
 

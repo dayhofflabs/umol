@@ -232,7 +232,7 @@ fn normalize_removed(removed: &mut Vec<RelationId>) {
 /// id to its image in the target id space; used to move `Delta`s between id spaces
 /// (`reverse`, `compose`). Every id a moved delta references must be present.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct IdRemapping {
+pub struct IdRemapping {
     atom: HashMap<AtomId, AtomId>,
     bond: HashMap<BondId, BondId>,
     dative: HashMap<DativeBondId, DativeBondId>,
@@ -245,7 +245,7 @@ pub(crate) struct IdRemapping {
 
 impl IdRemapping {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    pub fn new(
         atom: HashMap<AtomId, AtomId>,
         bond: HashMap<BondId, BondId>,
         dative: HashMap<DativeBondId, DativeBondId>,
@@ -267,35 +267,35 @@ impl IdRemapping {
         }
     }
 
-    pub(crate) fn map_atom(&self, id: AtomId) -> AtomId {
+    pub fn map_atom(&self, id: AtomId) -> AtomId {
         self.atom[&id]
     }
 
-    pub(crate) fn map_bond(&self, id: BondId) -> BondId {
+    pub fn map_bond(&self, id: BondId) -> BondId {
         self.bond[&id]
     }
 
-    pub(crate) fn map_dative(&self, id: DativeBondId) -> DativeBondId {
+    pub fn map_dative(&self, id: DativeBondId) -> DativeBondId {
         self.dative[&id]
     }
 
-    pub(crate) fn map_aromatic(&self, id: AromaticSystemId) -> AromaticSystemId {
+    pub fn map_aromatic(&self, id: AromaticSystemId) -> AromaticSystemId {
         self.aromatic[&id]
     }
 
-    pub(crate) fn map_multicenter(&self, id: MulticenterBondId) -> MulticenterBondId {
+    pub fn map_multicenter(&self, id: MulticenterBondId) -> MulticenterBondId {
         self.multicenter[&id]
     }
 
-    pub(crate) fn map_noncovalent(&self, id: NoncovalentBondId) -> NoncovalentBondId {
+    pub fn map_noncovalent(&self, id: NoncovalentBondId) -> NoncovalentBondId {
         self.noncovalent[&id]
     }
 
-    pub(crate) fn map_stereo_atom(&self, id: StereoAtomId) -> StereoAtomId {
+    pub fn map_stereo_atom(&self, id: StereoAtomId) -> StereoAtomId {
         self.stereo_atom[&id]
     }
 
-    pub(crate) fn map_stereo_bond(&self, id: StereoBondId) -> StereoBondId {
+    pub fn map_stereo_bond(&self, id: StereoBondId) -> StereoBondId {
         self.stereo_bond[&id]
     }
 }

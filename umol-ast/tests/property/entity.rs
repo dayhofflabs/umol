@@ -183,7 +183,7 @@ proptest! {
 ))]
 fn test_atom_dsl_vacuous_constraint_renders_empty(#[case] vacuous: AtomConstraint) {
     let mut atom = AtomAst::default();
-    atom.constraints.add(vacuous);
+    atom.constraints.set(vacuous);
     let with_vacuous = AtomDsl(atom).to_string();
     let bare = AtomDsl(AtomAst::default()).to_string();
     assert_eq!(with_vacuous, bare);

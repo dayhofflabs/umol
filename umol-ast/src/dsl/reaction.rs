@@ -2267,11 +2267,11 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                         DativeBondDelta::ModifyConstraint { id: j, old, new } if *j == id => {
                             match new {
                                 Some(c) => {
-                                    partial.constraints.add(c.clone());
+                                    partial.constraints.set(c.clone());
                                 }
                                 None => {
                                     if let Some(old) = old {
-                                        partial.constraints.add(old.as_undetermined());
+                                        partial.constraints.set(old.as_undetermined());
                                     }
                                 }
                             }

@@ -61,7 +61,7 @@ impl AromaticSystemConstraint {
     }
 
     /// Value-only: no indices to remap.
-    pub(crate) fn remap(self, _map: &IdRemapping) -> Self {
+    pub fn remap(self, _map: &IdRemapping) -> Self {
         self
     }
 }

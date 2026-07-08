@@ -17,20 +17,6 @@ pub struct DativeBondAst {
     pub constraints: DativeBondConstraints,
 }
 
-impl BiRelationData for DativeBondAst {
-    /// `order` is a scalar; neither the acceptor nor the donor factor is position-indexed.
-    fn on_permutation(
-        &mut self,
-        _order_1: &[ParticipantPosition],
-        _order_2: &[ParticipantPosition],
-    ) {
-    }
-
-    fn is_permutation_invariant(&self) -> bool {
-        true
-    }
-}
-
 impl DativeBondAst {
     pub fn new(order: ValueAst) -> Self {
         Self {
@@ -49,14 +35,14 @@ impl DativeBondAst {
     }
 
     /// Add a single constraint, replacing any existing entry of the same
-    /// kind (last-wins per `DativeBondConstraints::add`). Chainable.
+    /// key (last-wins per `DativeBondConstraints::set`). Chainable.
     pub fn with_constraint(mut self, constraint: impl Into<DativeBondConstraint>) -> Self {
-        self.constraints.add(constraint.into());
+        self.constraints.set(constraint.into());
         self
     }
 
     /// Add each constraint from the iterator, replacing any existing entry
-    /// of the same kind (last-wins per `DativeBondConstraints::add`). Does
+    /// of the same key (last-wins per `DativeBondConstraints::set`). Does
     /// not clear existing constraints; use `bond.constraints.clear()` or
     /// direct field assignment for wipe-and-replace.
     pub fn with_constraints<I>(mut self, constraints: I) -> Self
@@ -64,9 +50,8 @@ impl DativeBondAst {
         I: IntoIterator,
         I::Item: Into<DativeBondConstraint>,
     {
-        for c in constraints {
-            self.constraints.add(c.into());
-        }
+        self.constraints
+            .extend(constraints.into_iter().map(Into::into));
         self
     }
 
@@ -79,14 +64,7 @@ impl DativeBondAst {
     /// Overwrite with `other`, keeping existing values and constraints.
     pub fn update(&self, other: &DativeBondAst) -> DativeBondAst {
         let mut constraints = self.constraints.clone();
-        for c in other.constraints.iter() {
-            constraints.remove_by_key(c.key());
-        }
-        for c in other.constraints.iter() {
-            if !c.is_undetermined() {
-                constraints.add(c.clone());
-            }
-        }
+        constraints.update(&other.constraints);
         DativeBondAst {
             order: if other.order.is_undetermined() {
                 self.order.clone()
@@ -95,6 +73,20 @@ impl DativeBondAst {
             },
             constraints,
         }
+    }
+}
+
+impl BiRelationData for DativeBondAst {
+    /// `order` is a scalar; neither the acceptor nor the donor factor is position-indexed.
+    fn on_permutation(
+        &mut self,
+        _order_1: &[ParticipantPosition],
+        _order_2: &[ParticipantPosition],
+    ) {
+    }
+
+    fn is_permutation_invariant(&self) -> bool {
+        true
     }
 }
 

@@ -9,7 +9,7 @@ use strum::EnumDiscriminants;
 
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::{Contradiction, NoJoin};
-use super::super::remap::IdCompaction;
+use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::stereo::TetrahedralStereoAst;
 use super::super::traits::{AsLit, Canonicalize, Lattice};
 use super::super::value::ValueAst;
@@ -132,6 +132,16 @@ impl AtomConstraint {
                 Self::RingMembership(RingMembershipAst::new(m.scope, ValueAst::Undetermined))
             }
         }
+    }
+
+    /// Value-only payload: no entity ids to compact, so this never drops.
+    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+        Some(self)
+    }
+
+    /// Value-only payload: no entity ids to remap.
+    pub fn remap(self, _map: &IdRemapping) -> Self {
+        self
     }
 }
 

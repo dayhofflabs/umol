@@ -69,7 +69,7 @@ impl Constraint {
             Self::DativeBond(_, c) => c.is_undetermined(),
             Self::AromaticSystem(_, c) => c.is_undetermined(),
             Self::MulticenterBond(_, c) => c.is_undetermined(),
-            Self::NoncovalentBond(_, _) => false,
+            Self::NoncovalentBond(_, c) => c.is_undetermined(),
             Self::StereoAtom(_, _, c) => c.is_undetermined(),
             Self::StereoBond(_, _, c) => c.is_undetermined(),
             Self::Relational(_) => false,
@@ -81,8 +81,14 @@ impl Constraint {
 
     pub fn compact(self, compaction: &IdCompaction) -> Option<Self> {
         match self {
-            Constraint::Atom(id, c) => compaction.compact_atom(id).map(|i| Constraint::Atom(i, c)),
-            Constraint::Bond(id, c) => compaction.compact_bond(id).map(|i| Constraint::Bond(i, c)),
+            Constraint::Atom(id, c) => {
+                let i = compaction.compact_atom(id)?;
+                c.compact(compaction).map(|c| Constraint::Atom(i, c))
+            }
+            Constraint::Bond(id, c) => {
+                let i = compaction.compact_bond(id)?;
+                c.compact(compaction).map(|c| Constraint::Bond(i, c))
+            }
             Constraint::DativeBond(id, c) => {
                 let i = compaction.compact_dative_bond(id)?;
                 c.compact(compaction).map(|c| Constraint::DativeBond(i, c))
@@ -131,10 +137,16 @@ impl Constraint {
     /// Re-anchor every entity ref through a total id remapping (match-based: lhs → host,
     /// created → appended). Total — never drops (the parallel of `compact`, which compacts after
     /// removal). Stays a separate flow from `compact`; the two are not bridged.
-    pub(crate) fn remap(self, map: &IdRemapping) -> Self {
+    pub fn remap(self, map: &IdRemapping) -> Self {
         match self {
-            Constraint::Atom(id, c) => Constraint::Atom(map.map_atom(id), c),
-            Constraint::Bond(id, c) => Constraint::Bond(map.map_bond(id), c),
+            Constraint::Atom(id, c) => {
+                let i = map.map_atom(id);
+                Constraint::Atom(i, c.remap(map))
+            }
+            Constraint::Bond(id, c) => {
+                let i = map.map_bond(id);
+                Constraint::Bond(i, c.remap(map))
+            }
             Constraint::DativeBond(id, c) => {
                 Constraint::DativeBond(map.map_dative(id), c.remap(map))
             }
@@ -396,7 +408,7 @@ impl MoleculeConstraint {
         }
     }
 
-    pub(crate) fn remap(self, map: &IdRemapping) -> Self {
+    pub fn remap(self, map: &IdRemapping) -> Self {
         match self {
             MoleculeConstraint::ChargeSum { atoms, sum } => MoleculeConstraint::ChargeSum {
                 atoms: remap_atom_subset(atoms, map),

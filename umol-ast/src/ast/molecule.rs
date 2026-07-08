@@ -791,7 +791,7 @@ impl MoleculeAst {
                     self.bond_mut(id).ast.constraints.set(inner);
                 }
                 Constraint::DativeBond(id, inner) => {
-                    self.dative_bond_mut(id).constraints.add(inner);
+                    self.dative_bond_mut(id).constraints.set(inner);
                 }
                 Constraint::AromaticSystem(id, inner) => {
                     self.aromatic_system_mut(id).constraints.add(inner);

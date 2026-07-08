@@ -414,7 +414,7 @@ impl RelationalConstraint {
 
     /// Re-anchor every entity ref through a total id remapping. Total — the parallel of
     /// `compact`, never drops.
-    pub(crate) fn remap(self, map: &IdRemapping) -> Self {
+    pub fn remap(self, map: &IdRemapping) -> Self {
         match self {
             Self::DativeBondDonors { bond, atoms } => Self::DativeBondDonors {
                 bond: map.map_dative(bond),

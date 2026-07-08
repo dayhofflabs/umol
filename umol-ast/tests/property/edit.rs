@@ -141,19 +141,19 @@ proptest! {
 
         for (id, kind) in atom_kinds {
             prop_assert!(
-                a[id].constraints.contains(kind),
+                a[id].constraints.iter().any(|c| c.kind() == kind),
                 "atom {id:?} missing kind {kind:?} after inline",
             );
         }
         for (id, kind) in bond_kinds {
             prop_assert!(
-                a[id].constraints.contains(kind),
+                a[id].constraints.iter().any(|c| c.kind() == kind),
                 "bond {id:?} missing kind {kind:?} after inline",
             );
         }
         for (id, kind) in dative_kinds {
             prop_assert!(
-                a[id].constraints.contains(kind),
+                a[id].constraints.iter().any(|c| c.kind() == kind),
                 "dative bond {id:?} missing kind {kind:?} after inline",
             );
         }

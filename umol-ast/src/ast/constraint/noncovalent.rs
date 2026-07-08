@@ -30,7 +30,7 @@ impl NoncovalentBondConstraint {
     }
 
     /// Uninhabited — no `NoncovalentBondConstraint` value exists to remap.
-    pub(crate) fn remap(self, _map: &IdRemapping) -> Self {
+    pub fn remap(self, _map: &IdRemapping) -> Self {
         match self {}
     }
 }

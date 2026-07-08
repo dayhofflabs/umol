@@ -1187,15 +1187,7 @@ impl EntityPatch for DativeBondDelta {
         old: Option<DativeBondConstraint>,
         new: Option<DativeBondConstraint>,
     ) -> Result<(), Contradiction> {
-        if let Some(old) = old {
-            if ast.constraints.remove_entry(&old).is_none() {
-                return Err(Contradiction);
-            }
-        }
-        if let Some(new) = new {
-            ast.constraints.add(new);
-        }
-        Ok(())
+        ast.constraints.compare_and_set(old, new)
     }
 }
 
@@ -2272,7 +2264,7 @@ fn fold_stereo_bond_group(
 /// deltas between id spaces (reverse re-anchoring, composition). The relabeling must cover every id
 /// the delta references. Overlay participants on `Unordered` factors are re-sorted to canonical
 /// order; aromatic/multicenter electrons are permuted to stay aligned with their atoms.
-pub(crate) fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
+pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
     match delta {
         Delta::Atom(a) => Delta::Atom(match a {
             AtomDelta::Add { id, ast } => AtomDelta::Add {

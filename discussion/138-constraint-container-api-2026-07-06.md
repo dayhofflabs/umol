@@ -501,6 +501,72 @@ last caller, `BondDelta::apply_constraint`, moves to `compare_and_set` at BS2a).
 storage `Vec` → `SmallVec<[BondConstraint;2]>` (match atom; `Vec` sorted-by-key already works).
 `TransactionError::KindMismatch` removal stays cross-cutting, after all families.
 
+## Replication plan — `DativeBondConstraints` (peer 2, 2026-07-07) — **Done (2026-07-07)**
+
+Mirrors the bond slice. `DativeBondConstraint` has **2 variants** — `Aromatic(BooleanAst)` /
+`RingMembership(RingMembershipAst)` (no `CisTransStereo`); ring is already last, so **no BS0-style
+reorder is needed**. Same pre-reset state bond had — `add`/`is_unique`/by-kind/`as_slice`, no
+`set`/`update`/`compare_and_set`, hand-written container Lattice, no value `Lattice`. The `Lattice`
+trait's fallible `join`/`NoJoin` and the derived `is_compatible` are already in place.
+
+Three dative-specific items:
+- **`as_slice` leaks the `Vec`** (dative.rs:127) — drop it; tests compare via `PartialEq`
+  (`assert_eq!(cs, DativeBondConstraints::from_iter([…]))`), as the atom/bond tests now do.
+- **`compact`/`remap` resolution (decided):** the value-level `DativeBondConstraint::compact`
+  (`-> Option<Self>`, `Some(self)`) and `remap` (`-> Self`, `self`) are kept as **no-ops** — they're
+  called by the molecule-level `Constraint::DativeBond(id, value)` dispatch (constraint/molecule.rs
+  :88/:139), which was left untouched. The **container** `compact` is a plain `self`; the container
+  had no `remap` (a stray one was dropped). No overlay constraint value carries an index, so both
+  ops are inert — the only real index work is the entity **id** in each `Constraint::X(id, …)` tuple
+  and `RelationalConstraint::DativeBondDonors`, both molecule-scope. (See the audit note below.)
+- **`DativeBondDefaults` is empty** — no defaulted dative constraints, so the `raise`/`lower`
+  constraint helpers are empty; the item-4 step is a deletion, not a rewrite.
+
+**DS1 — additive primitives on `DativeBondConstraints` (green):**
+- **DS1a** `constraint/dative.rs` — `set` verbatim (find→replace/insert). Tests. [dep: —]
+- **DS1b** — `update` (vacuous→`remove`, else `set`). Tests. [dep: DS1a]
+- **DS1c** — `compare_and_set(old, new)`. Tests. [dep: DS1a]
+- **DS1d** `ast/dative.rs` — `DativeBondAst::update` → `constraints.update` (check whether it's an
+  add-loop or already a remove-all-then-add-back loop, as bond's was — behavior-preserving). [dep: DS1b]
+
+**DS2 — delta/transact onto `compare_and_set` (breaking → green):**
+- **DS2a** `ast/delta.rs` `DativeBondDelta::apply_constraint` (`remove_by_key`+`add`, ~1317) →
+  `compare_and_set`. [dep: DS1c]
+- **DS2b** `ast/molecule/transact.rs` `apply_modify_dative_bond_constraint` → `compare_and_set`;
+  drop the redundant `KindMismatch` pre-check (key-mismatch reports `OldStateMismatch`, as atom/bond
+  now do). [dep: DS1c]
+
+**DS3 — verbatim set, drop add, Lattice merge, is_unique removal (breaking → green):**
+- **DS3a-1** `constraint/dative.rs` — `impl Lattice for DativeBondConstraint` (2-arm
+  `meet`/`join`/`is_compatible`/`is_undetermined`/`is_ground`); delete inherent `is_undetermined`;
+  fix external `is_undetermined` callers (add `Lattice`). Tests. [dep: —]
+- **DS3a-2** — delete `add`; `extend`/`from_iter` → `set`-loops; container `Lattice::meet`/`join`
+  → two-pointer merge; `is_compatible` merge override; `canonicalize` drops the ring-dedup; migrate
+  former-`add` callers (`with_constraint`→`set`, `with_constraints`→`extend`, io/perception → `set`).
+  [dep: DS3a-1, DS1]
+- **DS3b** `constraint/dative.rs` + `dsl/dative.rs` — delete `DativeBondConstraint::is_unique`;
+  parse dup-check → `contains(c.key())` → `DuplicateDativeBondPredicate`; assembly `add` → `set`.
+  [dep: DS3a-2]
+
+**DS4 — kill kind-addressing, drop `as_slice`, rename (breaking → green):**
+- **DS4a** `constraint/dative.rs` — accessors (`aromatic`/`ring_count`/`ring_size_count`) → by-key
+  (note `ring_count`/`ring_size_count` return `ValueAst`, not `Option`). [dep: DS3]
+- **DS4b** `dsl/dative.rs` — delete the empty `raise`/`lower` constraint helpers (or their by-kind
+  calls); no defaulting to restructure. [dep: DS3]
+- **DS4c** external — umol-graph / umol-io / umol-py by-kind `DativeBondConstraints` callers → by-key
+  (survey; likely few, via accessors/`set`). [dep: DS3]
+- **DS4d** `constraint/dative.rs` — teardown + rename (atomic): delete by-kind `get`/`get_mut`/
+  `contains`/`remove`(Kind), `get_all`, `remove_all`, `get_by_key_mut`, `remove_entry`,
+  `contains_entry`, **`as_slice`**, `DativeBondConstraintKey::kind()`; rename `get_by_key`→`get`,
+  `contains_key`→`contains`, `remove_by_key`→`remove`, `find_by_key`→`find`; resolve the `compact`
+  decision. [dep: DS4a, DS4b, DS4c]
+- **DS4e** `constraint/dative.rs` tests — reorder to parallel the final method order; all
+  container-state comparisons via `PartialEq` (per test-writing). [dep: DS4d]
+
+Critical path: **DS1 → {DS2, DS3} → DS4** (no DS0). `DativeBondConstraints::remove_entry` deleted in
+DS4d (last caller → `compare_and_set` at DS2a). `TransactionError::KindMismatch` variant stays until
+the remaining 4 families (aromatic-system, multicenter, stereo-atom, stereo-bond) convert.
+
 ## Why this doc
 
 The Python binding (doc 137) forced the question of what a good `AtomConstraints`

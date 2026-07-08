@@ -9,12 +9,12 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter};
 use super::super::boolean::BooleanAst;
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::{Contradiction, NoJoin};
-use super::super::remap::IdCompaction;
+use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::stereo::CisTransStereoAst;
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
 
-/// Bond-level constraint.
+/// Localized bond constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(BondConstraintKind), derive(Hash, EnumCount, EnumIter))]
 pub enum BondConstraint {
@@ -58,6 +58,16 @@ impl BondConstraint {
                 Self::RingMembership(RingMembershipAst::new(m.scope, ValueAst::Undetermined))
             }
         }
+    }
+
+    /// Value-only payload: no entity ids to compact, so this never drops.
+    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+        Some(self)
+    }
+
+    /// Value-only payload: no entity ids to remap.
+    pub(crate) fn remap(self, _map: &IdRemapping) -> Self {
+        self
     }
 }
 
