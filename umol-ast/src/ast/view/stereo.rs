@@ -19,7 +19,7 @@ use super::super::traits::Lattice;
 use super::atom::AtomView;
 use super::bond::BondView;
 use super::ligand::StereoLigandView;
-use crate::ast::{StereoAtomConstraints, StereoBondConstraints, StereoCosetAst};
+use crate::ast::{StereoAtomConstraintsAst, StereoBondConstraintsAst, StereoCosetAst};
 
 type StereoAtomSet =
     FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>;
@@ -243,7 +243,7 @@ impl<'a> StereoAtomView<'a> {
 
     #[inline]
     /// The stereo atom constraints.
-    pub fn constraints(&self) -> &'a StereoAtomConstraints {
+    pub fn constraints(&self) -> &'a StereoAtomConstraintsAst {
         &self.ast.constraints
     }
 
@@ -612,7 +612,7 @@ impl<'a> StereoBondView<'a> {
 
     #[inline]
     /// The stereo bond constraints.
-    pub fn constraints(&self) -> &'a StereoBondConstraints {
+    pub fn constraints(&self) -> &'a StereoBondConstraintsAst {
         &self.ast.constraints
     }
 

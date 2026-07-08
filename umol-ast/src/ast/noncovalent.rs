@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use umol_ast_macros::{Canonicalize, Lattice};
 use umol_graph_core::{ParticipantPosition, RelationData};
 
-use super::constraint::{NoncovalentBondConstraint, NoncovalentBondConstraints};
+use super::constraint::{NoncovalentBondConstraintAst, NoncovalentBondConstraintsAst};
 use super::error::{Contradiction, NoJoin};
 use super::traits::{AsLit, Canonicalize, Lattice};
 
@@ -15,7 +15,7 @@ use super::traits::{AsLit, Canonicalize, Lattice};
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
 pub struct NoncovalentBondAst {
     pub kind: NoncovalentBondKindAst,
-    pub constraints: NoncovalentBondConstraints,
+    pub constraints: NoncovalentBondConstraintsAst,
 }
 
 impl RelationData for NoncovalentBondAst {
@@ -31,7 +31,7 @@ impl NoncovalentBondAst {
     pub fn new(kind: NoncovalentBondKindAst) -> Self {
         Self {
             kind,
-            constraints: NoncovalentBondConstraints::new(),
+            constraints: NoncovalentBondConstraintsAst::new(),
         }
     }
 
@@ -45,13 +45,13 @@ impl NoncovalentBondAst {
     }
 
     /// Add each constraint from the iterator. Vacuous today since
-    /// `NoncovalentBondConstraint` is uninhabited; the signature locks in
+    /// `NoncovalentBondConstraintAst` is uninhabited; the signature locks in
     /// the extend semantic so that callers don't develop replace-style
     /// expectations before inhabited variants land.
     pub fn with_constraints<I>(self, _constraints: I) -> Self
     where
         I: IntoIterator,
-        I::Item: Into<NoncovalentBondConstraint>,
+        I::Item: Into<NoncovalentBondConstraintAst>,
     {
         self
     }
@@ -174,10 +174,10 @@ mod tests {
     #[rstest]
     #[case::new(NoncovalentBondAst::new(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)),
         NoncovalentBondAst { kind: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-            constraints: NoncovalentBondConstraints::new() })]
+            constraints: NoncovalentBondConstraintsAst::new() })]
     #[case::from_kind(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
         NoncovalentBondAst { kind: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-            constraints: NoncovalentBondConstraints::new() })]
+            constraints: NoncovalentBondConstraintsAst::new() })]
     fn test_noncovalent_bond_ast_new(
         #[case] actual: NoncovalentBondAst,
         #[case] expected: NoncovalentBondAst,
@@ -190,14 +190,14 @@ mod tests {
     #[case::with_kind_primitive(
         NoncovalentBondAst::default().with_kind(NoncovalentBondKind::HydrogenBond),
         NoncovalentBondAst { kind: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-            constraints: NoncovalentBondConstraints::new() })]
+            constraints: NoncovalentBondConstraintsAst::new() })]
     #[case::with_kind_ast(
         NoncovalentBondAst::default().with_kind(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)),
         NoncovalentBondAst { kind: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
-            constraints: NoncovalentBondConstraints::new() })]
+            constraints: NoncovalentBondConstraintsAst::new() })]
     #[case::with_constraints_empty(
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)
-            .with_constraints(empty::<NoncovalentBondConstraint>()),
+            .with_constraints(empty::<NoncovalentBondConstraintAst>()),
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
     fn test_noncovalent_bond_ast_with_methods(
         #[case] actual: NoncovalentBondAst,

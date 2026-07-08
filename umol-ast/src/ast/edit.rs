@@ -12,8 +12,9 @@ use super::aromatic::AromaticSystemAst;
 use super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::bond::BondAst;
 use super::constraint::{
-    AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint, Constraints,
-    DativeBondConstraint, MulticenterBondConstraint, StereoAtomConstraint, StereoBondConstraint,
+    AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint, Constraints,
+    DativeBondConstraintAst, MulticenterBondConstraintAst, StereoAtomConstraintAst,
+    StereoBondConstraintAst,
 };
 use super::dative::DativeBondAst;
 use super::electrons::ElectronCountsAst;
@@ -364,38 +365,38 @@ pub enum Edit {
     // (old → new) covers add (old None), remove (new None), and replace.
     ModifyAtomConstraint {
         id: AtomHandle,
-        old: Option<AtomConstraint>,
-        new: Option<AtomConstraint>,
+        old: Option<AtomConstraintAst>,
+        new: Option<AtomConstraintAst>,
     },
     ModifyBondConstraint {
         id: BondHandle,
-        old: Option<BondConstraint>,
-        new: Option<BondConstraint>,
+        old: Option<BondConstraintAst>,
+        new: Option<BondConstraintAst>,
     },
     ModifyDativeBondConstraint {
         id: DativeBondHandle,
-        old: Option<DativeBondConstraint>,
-        new: Option<DativeBondConstraint>,
+        old: Option<DativeBondConstraintAst>,
+        new: Option<DativeBondConstraintAst>,
     },
     ModifyAromaticSystemConstraint {
         id: AromaticSystemHandle,
-        old: Option<AromaticSystemConstraint>,
-        new: Option<AromaticSystemConstraint>,
+        old: Option<AromaticSystemConstraintAst>,
+        new: Option<AromaticSystemConstraintAst>,
     },
     ModifyMulticenterBondConstraint {
         id: MulticenterBondHandle,
-        old: Option<MulticenterBondConstraint>,
-        new: Option<MulticenterBondConstraint>,
+        old: Option<MulticenterBondConstraintAst>,
+        new: Option<MulticenterBondConstraintAst>,
     },
     ModifyStereoAtomConstraint {
         id: StereoAtomHandle,
-        old: Option<StereoAtomConstraint>,
-        new: Option<StereoAtomConstraint>,
+        old: Option<StereoAtomConstraintAst>,
+        new: Option<StereoAtomConstraintAst>,
     },
     ModifyStereoBondConstraint {
         id: StereoBondHandle,
-        old: Option<StereoBondConstraint>,
-        new: Option<StereoBondConstraint>,
+        old: Option<StereoBondConstraintAst>,
+        new: Option<StereoBondConstraintAst>,
     },
 
     // Molecule-list constraints — a true multiset, so add/remove by value

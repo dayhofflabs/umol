@@ -14,12 +14,12 @@ use super::super::value::ValueAst;
 
 /// Dative-bond constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum DativeBondConstraint {
+pub enum DativeBondConstraintAst {
     Aromatic(BooleanAst),
     RingMembership(RingMembershipAst),
 }
 
-impl DativeBondConstraint {
+impl DativeBondConstraintAst {
     pub fn aromatic(value: impl Into<BooleanAst>) -> Self {
         Self::Aromatic(value.into())
     }
@@ -28,7 +28,7 @@ impl DativeBondConstraint {
         Self::RingMembership(RingMembershipAst::new(scope, count))
     }
 
-    /// Dative bond constraint key, unique within a `DativeBondConstraints` container.
+    /// Dative bond constraint key, unique within a `DativeBondConstraintsAst` container.
     pub fn key(&self) -> DativeBondConstraintKey {
         match self {
             Self::Aromatic(_) => DativeBondConstraintKey::Aromatic,
@@ -57,7 +57,7 @@ impl DativeBondConstraint {
     }
 }
 
-impl Canonicalize for DativeBondConstraint {
+impl Canonicalize for DativeBondConstraintAst {
     /// Canonicalize the inner value; kind and sub-key are preserved.
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
@@ -69,7 +69,7 @@ impl Canonicalize for DativeBondConstraint {
     }
 }
 
-impl Lattice for DativeBondConstraint {
+impl Lattice for DativeBondConstraintAst {
     fn is_undetermined(&self) -> bool {
         match self {
             Self::Aromatic(b) => b.is_undetermined(),
@@ -132,9 +132,9 @@ pub enum DativeBondConstraintKey {
 }
 /// Dative bond constraints container, ordered, unique by key, sorted flat vector storage.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DativeBondConstraints(Vec<DativeBondConstraint>);
+pub struct DativeBondConstraintsAst(Vec<DativeBondConstraintAst>);
 
-impl DativeBondConstraints {
+impl DativeBondConstraintsAst {
     pub fn new() -> Self {
         Self(Vec::new())
     }
@@ -142,14 +142,14 @@ impl DativeBondConstraints {
     /// The dative bond's aromatic value, or `Undetermined` when no `Aromatic` constraint is present.
     pub fn aromatic(&self) -> BooleanAst {
         match self.get(DativeBondConstraintKey::Aromatic) {
-            Some(DativeBondConstraint::Aromatic(b)) => *b,
+            Some(DativeBondConstraintAst::Aromatic(b)) => *b,
             _ => BooleanAst::Undetermined,
         }
     }
 
     fn ring_memberships(&self) -> impl Iterator<Item = (RingScope, &ValueAst)> {
         self.iter().filter_map(|c| match c {
-            DativeBondConstraint::RingMembership(m) => Some((m.scope, &m.count)),
+            DativeBondConstraintAst::RingMembership(m) => Some((m.scope, &m.count)),
             _ => None,
         })
     }
@@ -185,12 +185,12 @@ impl DativeBondConstraints {
         self.find(key).is_ok()
     }
 
-    pub fn get(&self, key: DativeBondConstraintKey) -> Option<&DativeBondConstraint> {
+    pub fn get(&self, key: DativeBondConstraintKey) -> Option<&DativeBondConstraintAst> {
         self.find(key).ok().map(|i| &self.0[i])
     }
 
     /// Insert in sorted order by key, overwrite same key (last-wins).
-    pub fn set(&mut self, c: DativeBondConstraint) {
+    pub fn set(&mut self, c: DativeBondConstraintAst) {
         match self.find(c.key()) {
             Ok(i) => self.0[i] = c,
             Err(i) => self.0.insert(i, c),
@@ -203,8 +203,8 @@ impl DativeBondConstraints {
     /// apply/undo primitive.
     pub fn compare_and_set(
         &mut self,
-        old: Option<DativeBondConstraint>,
-        new: Option<DativeBondConstraint>,
+        old: Option<DativeBondConstraintAst>,
+        new: Option<DativeBondConstraintAst>,
     ) -> Result<(), Contradiction> {
         let key = match (&old, &new) {
             (Some(o), Some(n)) => {
@@ -234,12 +234,12 @@ impl DativeBondConstraints {
         Ok(())
     }
 
-    pub fn remove(&mut self, key: DativeBondConstraintKey) -> Option<DativeBondConstraint> {
+    pub fn remove(&mut self, key: DativeBondConstraintKey) -> Option<DativeBondConstraintAst> {
         self.find(key).ok().map(|i| self.0.remove(i))
     }
 
     /// `set` each constraint in turn (last-wins), for bulk construction.
-    pub fn extend(&mut self, constraints: impl IntoIterator<Item = DativeBondConstraint>) {
+    pub fn extend(&mut self, constraints: impl IntoIterator<Item = DativeBondConstraintAst>) {
         for constraint in constraints {
             self.set(constraint);
         }
@@ -247,7 +247,7 @@ impl DativeBondConstraints {
 
     /// Overlay `other`: for each entry, a vacuous (`Undetermined`) one `remove`s its key, else
     /// `set`. Disjoint keys are kept.
-    pub fn update(&mut self, other: &DativeBondConstraints) {
+    pub fn update(&mut self, other: &DativeBondConstraintsAst) {
         for c in other.iter() {
             if c.is_undetermined() {
                 self.remove(c.key());
@@ -257,7 +257,7 @@ impl DativeBondConstraints {
         }
     }
 
-    pub fn retain(&mut self, mut f: impl FnMut(&DativeBondConstraint) -> bool) {
+    pub fn retain(&mut self, mut f: impl FnMut(&DativeBondConstraintAst) -> bool) {
         self.0.retain(|c| f(c));
     }
 
@@ -266,11 +266,11 @@ impl DativeBondConstraints {
     }
 
     /// Move the entries out of the store, leaving it empty.
-    pub fn take(&mut self) -> impl Iterator<Item = DativeBondConstraint> {
+    pub fn take(&mut self) -> impl Iterator<Item = DativeBondConstraintAst> {
         mem::take(&mut self.0).into_iter()
     }
 
-    pub fn iter(&self) -> Iter<'_, DativeBondConstraint> {
+    pub fn iter(&self) -> Iter<'_, DativeBondConstraintAst> {
         self.0.iter()
     }
 
@@ -279,7 +279,7 @@ impl DativeBondConstraints {
     }
 }
 
-impl Canonicalize for DativeBondConstraints {
+impl Canonicalize for DativeBondConstraintsAst {
     /// Canonicalize each value and drop the vacuous ones. Keys are already unique and
     /// key-sorted (every write goes through `set`), so no dedup or re-sort is needed —
     /// canonicalizing a value never changes its `key()`.
@@ -288,13 +288,13 @@ impl Canonicalize for DativeBondConstraints {
             .0
             .into_iter()
             .map(Canonicalize::canonicalize)
-            .collect::<Result<Vec<DativeBondConstraint>, _>>()?;
+            .collect::<Result<Vec<DativeBondConstraintAst>, _>>()?;
         entries.retain(|c| !c.is_undetermined());
         Ok(Self(entries))
     }
 }
 
-impl Lattice for DativeBondConstraints {
+impl Lattice for DativeBondConstraintsAst {
     fn is_undetermined(&self) -> bool {
         self.iter().all(|c| c.is_undetermined())
     }
@@ -304,10 +304,10 @@ impl Lattice for DativeBondConstraints {
     }
 
     /// Greatest lower bound as a two-pointer merge over the key-sorted entries: a shared key
-    /// meets its two values (`DativeBondConstraint::meet`; a `None` aborts the whole meet), an
+    /// meets its two values (`DativeBondConstraintAst::meet`; a `None` aborts the whole meet), an
     /// A-only / B-only key is kept (meet with the absent ⊤ is the value). Vacuous results dropped.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let mut entries: Vec<DativeBondConstraint> = Vec::new();
+        let mut entries: Vec<DativeBondConstraintAst> = Vec::new();
         let mut a = self.0.iter();
         let mut b = other.0.iter();
         let mut ca = a.next();
@@ -337,10 +337,10 @@ impl Lattice for DativeBondConstraints {
     }
 
     /// Least upper bound as a two-pointer merge: only keys present on *both* sides join
-    /// (`DativeBondConstraint::join`); a single-side key widens to the absent ⊤ and is dropped.
+    /// (`DativeBondConstraintAst::join`); a single-side key widens to the absent ⊤ and is dropped.
     /// The container always has a top (the empty set), so this is total (`Ok`).
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
-        let mut entries: Vec<DativeBondConstraint> = Vec::new();
+        let mut entries: Vec<DativeBondConstraintAst> = Vec::new();
         let mut a = self.0.iter();
         let mut b = other.0.iter();
         let mut ca = a.next();
@@ -395,8 +395,8 @@ impl Lattice for DativeBondConstraints {
     }
 }
 
-impl FromIterator<DativeBondConstraint> for DativeBondConstraints {
-    fn from_iter<I: IntoIterator<Item = DativeBondConstraint>>(iter: I) -> Self {
+impl FromIterator<DativeBondConstraintAst> for DativeBondConstraintsAst {
+    fn from_iter<I: IntoIterator<Item = DativeBondConstraintAst>>(iter: I) -> Self {
         let mut out = Self::new();
         for c in iter {
             out.set(c);
@@ -405,23 +405,23 @@ impl FromIterator<DativeBondConstraint> for DativeBondConstraints {
     }
 }
 
-impl IntoIterator for DativeBondConstraints {
-    type Item = DativeBondConstraint;
-    type IntoIter = IntoIter<DativeBondConstraint>;
+impl IntoIterator for DativeBondConstraintsAst {
+    type Item = DativeBondConstraintAst;
+    type IntoIter = IntoIter<DativeBondConstraintAst>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl From<DativeBondConstraint> for DativeBondConstraints {
-    fn from(c: DativeBondConstraint) -> Self {
+impl From<DativeBondConstraintAst> for DativeBondConstraintsAst {
+    fn from(c: DativeBondConstraintAst) -> Self {
         Self::from_iter([c])
     }
 }
 
-impl From<Vec<DativeBondConstraint>> for DativeBondConstraints {
-    fn from(cs: Vec<DativeBondConstraint>) -> Self {
+impl From<Vec<DativeBondConstraintAst>> for DativeBondConstraintsAst {
+    fn from(cs: Vec<DativeBondConstraintAst>) -> Self {
         Self::from_iter(cs)
     }
 }
@@ -435,22 +435,22 @@ mod tests {
     use super::*;
     #[rustfmt::skip]
     #[rstest]
-    #[case::ring_membership_all(DativeBondConstraint::ring_membership(RingScope::All, 1), DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)))]
-    #[case::ring_membership_size(DativeBondConstraint::ring_membership(RingScope::Size(6), 1), DativeBondConstraint::ring_membership(RingScope::Size(6), 1))]
+    #[case::ring_membership_all(DativeBondConstraintAst::ring_membership(RingScope::All, 1), DativeBondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)))]
+    #[case::ring_membership_size(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1))]
     fn test_dative_bond_constraint_constructors(
-        #[case] actual: DativeBondConstraint,
-        #[case] expected: DativeBondConstraint,
+        #[case] actual: DativeBondConstraintAst,
+        #[case] expected: DativeBondConstraintAst,
     ) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintKey::Aromatic)]
-    #[case::ring_membership_all(DativeBondConstraint::ring_membership(RingScope::All, 1), DativeBondConstraintKey::RingMembership(RingScope::All))]
-    #[case::ring_membership_size(DativeBondConstraint::ring_membership(RingScope::Size(6), 1), DativeBondConstraintKey::RingMembership(RingScope::Size(6)))]
+    #[case::aromatic(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintKey::Aromatic)]
+    #[case::ring_membership_all(DativeBondConstraintAst::ring_membership(RingScope::All, 1), DativeBondConstraintKey::RingMembership(RingScope::All))]
+    #[case::ring_membership_size(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1), DativeBondConstraintKey::RingMembership(RingScope::Size(6)))]
     fn test_dative_bond_constraint_key(
-        #[case] c: DativeBondConstraint,
+        #[case] c: DativeBondConstraintAst,
         #[case] expected: DativeBondConstraintKey,
     ) {
         assert_eq!(c.key(), expected);
@@ -458,142 +458,142 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::Aromatic(BooleanAst::Undetermined))]
-    #[case::ring_membership_keeps_scope(DativeBondConstraint::ring_membership(RingScope::Size(6), 1), DativeBondConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined))]
-    fn test_dative_bond_constraint_as_undetermined(#[case] c: DativeBondConstraint, #[case] expected: DativeBondConstraint) {
+    #[case::aromatic(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined))]
+    #[case::ring_membership_keeps_scope(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1), DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined))]
+    fn test_dative_bond_constraint_as_undetermined(#[case] c: DativeBondConstraintAst, #[case] expected: DativeBondConstraintAst) {
         assert_eq!(c.as_undetermined(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), Ok(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))))]
+    #[case::aromatic(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), Ok(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
     #[case::ring_count_litset_singleton(
-        DativeBondConstraint::RingMembership(RingMembershipAst::new(RingScope::All, ValueAst::lit_set([2]))),
-        Ok(DativeBondConstraint::ring_membership(RingScope::All, 2)))]
+        DativeBondConstraintAst::RingMembership(RingMembershipAst::new(RingScope::All, ValueAst::lit_set([2]))),
+        Ok(DativeBondConstraintAst::ring_membership(RingScope::All, 2)))]
     #[case::empty_litset_contradiction(
-        DativeBondConstraint::RingMembership(RingMembershipAst::new(RingScope::All, ValueAst::lit_set(Vec::<i64>::new()))),
+        DativeBondConstraintAst::RingMembership(RingMembershipAst::new(RingScope::All, ValueAst::lit_set(Vec::<i64>::new()))),
         Err(Contradiction))]
     fn test_dative_bond_constraint_canonicalize(
-        #[case] constraint: DativeBondConstraint,
-        #[case] expected: Result<DativeBondConstraint, Contradiction>,
+        #[case] constraint: DativeBondConstraintAst,
+        #[case] expected: Result<DativeBondConstraintAst, Contradiction>,
     ) {
         assert_eq!(constraint.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), false)]
-    #[case::ring_membership_all_lit(DativeBondConstraint::ring_membership(RingScope::All, 1), false)]
-    #[case::ring_membership_all_undetermined(DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined), true)]
-    #[case::ring_membership_size_lit(DativeBondConstraint::ring_membership(RingScope::Size(6), 1), false)]
-    #[case::ring_membership_size_undetermined(DativeBondConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined), true)]
-    fn test_dative_bond_constraint_is_undetermined(#[case] c: DativeBondConstraint, #[case] expected: bool) {
+    #[case::aromatic(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), false)]
+    #[case::ring_membership_all_lit(DativeBondConstraintAst::ring_membership(RingScope::All, 1), false)]
+    #[case::ring_membership_all_undetermined(DativeBondConstraintAst::ring_membership(RingScope::All, ValueAst::Undetermined), true)]
+    #[case::ring_membership_size_lit(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1), false)]
+    #[case::ring_membership_size_undetermined(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined), true)]
+    fn test_dative_bond_constraint_is_undetermined(#[case] c: DativeBondConstraintAst, #[case] expected: bool) {
         assert_eq!(c.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_key_compatible(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::Aromatic(BooleanAst::Undetermined), Some(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))))]
-    #[case::same_key_incompatible(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::Aromatic(BooleanAst::Lit(false)), None)]
-    #[case::different_key(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::ring_membership(RingScope::All, 1), None)]
-    fn test_dative_bond_constraint_meet(#[case] a: DativeBondConstraint, #[case] b: DativeBondConstraint, #[case] expected: Option<DativeBondConstraint>) {
+    #[case::same_key_compatible(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined), Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
+    #[case::same_key_incompatible(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false)), None)]
+    #[case::different_key(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::All, 1), None)]
+    fn test_dative_bond_constraint_meet(#[case] a: DativeBondConstraintAst, #[case] b: DativeBondConstraintAst, #[case] expected: Option<DativeBondConstraintAst>) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_key_widens(DativeBondConstraint::ring_membership(RingScope::All, 1), DativeBondConstraint::ring_membership(RingScope::All, 2), Ok(DativeBondConstraint::ring_membership(RingScope::All, ValueAst::lit_set([1, 2]))))]
-    #[case::different_key(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::ring_membership(RingScope::All, 1), Err(NoJoin))]
-    fn test_dative_bond_constraint_join(#[case] a: DativeBondConstraint, #[case] b: DativeBondConstraint, #[case] expected: Result<DativeBondConstraint, NoJoin>) {
+    #[case::same_key_widens(DativeBondConstraintAst::ring_membership(RingScope::All, 1), DativeBondConstraintAst::ring_membership(RingScope::All, 2), Ok(DativeBondConstraintAst::ring_membership(RingScope::All, ValueAst::lit_set([1, 2]))))]
+    #[case::different_key(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::All, 1), Err(NoJoin))]
+    fn test_dative_bond_constraint_join(#[case] a: DativeBondConstraintAst, #[case] b: DativeBondConstraintAst, #[case] expected: Result<DativeBondConstraintAst, NoJoin>) {
         assert_eq!(a.join(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_key_compatible(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), true)]
-    #[case::same_key_incompatible(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::Aromatic(BooleanAst::Lit(false)), false)]
-    #[case::different_key(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::ring_membership(RingScope::All, 1), false)]
-    fn test_dative_bond_constraint_is_compatible(#[case] a: DativeBondConstraint, #[case] b: DativeBondConstraint, #[case] expected: bool) {
+    #[case::same_key_compatible(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), true)]
+    #[case::same_key_incompatible(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false)), false)]
+    #[case::different_key(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::All, 1), false)]
+    fn test_dative_bond_constraint_is_compatible(#[case] a: DativeBondConstraintAst, #[case] b: DativeBondConstraintAst, #[case] expected: bool) {
         assert_eq!(a.is_compatible(&b), expected);
     }
 
     #[rstest]
     fn test_dative_bond_constraints_new() {
-        let cs = DativeBondConstraints::new();
+        let cs = DativeBondConstraintsAst::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
     }
 
     #[rstest]
     fn test_dative_bond_constraints_iter() {
-        let cs = DativeBondConstraints::from_iter([
-            DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
-            DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-            DativeBondConstraint::ring_membership(RingScope::All, 1),
+        let cs = DativeBondConstraintsAst::from_iter([
+            DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            DativeBondConstraintAst::ring_membership(RingScope::All, 1),
         ]);
         let collected: Vec<_> = cs.iter().cloned().collect();
         assert_eq!(
             collected,
             vec![
-                DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-                DativeBondConstraint::ring_membership(RingScope::All, 1),
-                DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+                DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+                DativeBondConstraintAst::ring_membership(RingScope::All, 1),
+                DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
             ],
         );
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::fresh(vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true))], vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true))])]
-    #[case::overwrite_same_key(vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::Aromatic(BooleanAst::Lit(false))], vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(false))])]
-    #[case::vacuous_stores(vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::Aromatic(BooleanAst::Undetermined)], vec![DativeBondConstraint::Aromatic(BooleanAst::Undetermined)])]
-    #[case::new_key_sorts(vec![DativeBondConstraint::ring_membership(RingScope::Size(6), 1), DativeBondConstraint::Aromatic(BooleanAst::Lit(true))], vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::ring_membership(RingScope::Size(6), 1)])]
-    #[case::ring_overwrite_scope(vec![DativeBondConstraint::ring_membership(RingScope::Size(6), 1), DativeBondConstraint::ring_membership(RingScope::Size(6), 2)], vec![DativeBondConstraint::ring_membership(RingScope::Size(6), 2)])]
-    fn test_dative_bond_constraints_set(#[case] sequence: Vec<DativeBondConstraint>, #[case] expected: Vec<DativeBondConstraint>) {
-        let mut cs = DativeBondConstraints::new();
+    #[case::fresh(vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))], vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))])]
+    #[case::overwrite_same_key(vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false))], vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false))])]
+    #[case::vacuous_stores(vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined)], vec![DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined)])]
+    #[case::new_key_sorts(vec![DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))], vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)])]
+    #[case::ring_overwrite_scope(vec![DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 2)], vec![DativeBondConstraintAst::ring_membership(RingScope::Size(6), 2)])]
+    fn test_dative_bond_constraints_set(#[case] sequence: Vec<DativeBondConstraintAst>, #[case] expected: Vec<DativeBondConstraintAst>) {
+        let mut cs = DativeBondConstraintsAst::new();
         for c in sequence {
             cs.set(c);
         }
-        assert_eq!(cs, DativeBondConstraints::from_iter(expected));
+        assert_eq!(cs, DativeBondConstraintsAst::from_iter(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::overwrite_shared(
-        vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::ring_membership(RingScope::All, 1)],
-        vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(false))],
-        vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(false)), DativeBondConstraint::ring_membership(RingScope::All, 1)])]
+        vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::All, 1)],
+        vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false))],
+        vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false)), DativeBondConstraintAst::ring_membership(RingScope::All, 1)])]
     #[case::keeps_disjoint(
-        vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true))],
-        vec![DativeBondConstraint::ring_membership(RingScope::All, 1)],
-        vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::ring_membership(RingScope::All, 1)])]
+        vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))],
+        vec![DativeBondConstraintAst::ring_membership(RingScope::All, 1)],
+        vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::All, 1)])]
     #[case::vacuous_removes(
-        vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::ring_membership(RingScope::All, 1)],
-        vec![DativeBondConstraint::Aromatic(BooleanAst::Undetermined)],
-        vec![DativeBondConstraint::ring_membership(RingScope::All, 1)])]
-    fn test_dative_bond_constraints_update(#[case] initial: Vec<DativeBondConstraint>, #[case] other: Vec<DativeBondConstraint>, #[case] expected: Vec<DativeBondConstraint>) {
-        let mut cs = DativeBondConstraints::from_iter(initial);
-        cs.update(&DativeBondConstraints::from_iter(other));
-        assert_eq!(cs, DativeBondConstraints::from_iter(expected));
+        vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::All, 1)],
+        vec![DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined)],
+        vec![DativeBondConstraintAst::ring_membership(RingScope::All, 1)])]
+    fn test_dative_bond_constraints_update(#[case] initial: Vec<DativeBondConstraintAst>, #[case] other: Vec<DativeBondConstraintAst>, #[case] expected: Vec<DativeBondConstraintAst>) {
+        let mut cs = DativeBondConstraintsAst::from_iter(initial);
+        cs.update(&DativeBondConstraintsAst::from_iter(other));
+        assert_eq!(cs, DativeBondConstraintsAst::from_iter(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::modify(vec![DativeBondConstraint::ring_membership(RingScope::All, 1)], Some(DativeBondConstraint::ring_membership(RingScope::All, 1)), Some(DativeBondConstraint::ring_membership(RingScope::All, 2)), Ok(()), vec![DativeBondConstraint::ring_membership(RingScope::All, 2)])]
-    #[case::remove(vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true))], Some(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))), None, Ok(()), vec![])]
-    #[case::add_from_absent(vec![], None, Some(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))), Ok(()), vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true))])]
-    #[case::old_mismatch(vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true))], Some(DativeBondConstraint::Aromatic(BooleanAst::Lit(false))), None, Err(Contradiction), vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true))])]
-    #[case::key_mismatch(vec![], Some(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))), Some(DativeBondConstraint::ring_membership(RingScope::All, 1)), Err(Contradiction), vec![])]
+    #[case::modify(vec![DativeBondConstraintAst::ring_membership(RingScope::All, 1)], Some(DativeBondConstraintAst::ring_membership(RingScope::All, 1)), Some(DativeBondConstraintAst::ring_membership(RingScope::All, 2)), Ok(()), vec![DativeBondConstraintAst::ring_membership(RingScope::All, 2)])]
+    #[case::remove(vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))], Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))), None, Ok(()), vec![])]
+    #[case::add_from_absent(vec![], None, Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))), Ok(()), vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))])]
+    #[case::old_mismatch(vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))], Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false))), None, Err(Contradiction), vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))])]
+    #[case::key_mismatch(vec![], Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))), Some(DativeBondConstraintAst::ring_membership(RingScope::All, 1)), Err(Contradiction), vec![])]
     fn test_dative_bond_constraints_compare_and_set(
-        #[case] initial: Vec<DativeBondConstraint>,
-        #[case] old: Option<DativeBondConstraint>,
-        #[case] new: Option<DativeBondConstraint>,
+        #[case] initial: Vec<DativeBondConstraintAst>,
+        #[case] old: Option<DativeBondConstraintAst>,
+        #[case] new: Option<DativeBondConstraintAst>,
         #[case] expected_result: Result<(), Contradiction>,
-        #[case] expected_state: Vec<DativeBondConstraint>,
+        #[case] expected_state: Vec<DativeBondConstraintAst>,
     ) {
-        let mut cs = DativeBondConstraints::from_iter(initial);
+        let mut cs = DativeBondConstraintsAst::from_iter(initial);
         assert_eq!(cs.compare_and_set(old, new), expected_result);
-        assert_eq!(cs, DativeBondConstraints::from_iter(expected_state));
+        assert_eq!(cs, DativeBondConstraintsAst::from_iter(expected_state));
     }
 
     #[rustfmt::skip]
@@ -606,102 +606,105 @@ mod tests {
         #[case] key: DativeBondConstraintKey,
         #[case] expected: bool,
     ) {
-        let cs = DativeBondConstraints::from_iter([
-            DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-            DativeBondConstraint::ring_membership(RingScope::All, 2),
-            DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+        let cs = DativeBondConstraintsAst::from_iter([
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            DativeBondConstraintAst::ring_membership(RingScope::All, 2),
+            DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]);
         assert_eq!(cs.contains(key), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(DativeBondConstraintKey::Aromatic, Some(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))))]
-    #[case::ring_all(DativeBondConstraintKey::RingMembership(RingScope::All), Some(DativeBondConstraint::ring_membership(RingScope::All, 2)))]
-    #[case::ring_size(DativeBondConstraintKey::RingMembership(RingScope::Size(6)), Some(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)))]
+    #[case::aromatic(DativeBondConstraintKey::Aromatic, Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
+    #[case::ring_all(DativeBondConstraintKey::RingMembership(RingScope::All), Some(DativeBondConstraintAst::ring_membership(RingScope::All, 2)))]
+    #[case::ring_size(DativeBondConstraintKey::RingMembership(RingScope::Size(6)), Some(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)))]
     #[case::ring_size_absent(DativeBondConstraintKey::RingMembership(RingScope::Size(5)), None)]
     fn test_dative_bond_constraints_get(
         #[case] key: DativeBondConstraintKey,
-        #[case] expected: Option<DativeBondConstraint>,
+        #[case] expected: Option<DativeBondConstraintAst>,
     ) {
-        let cs = DativeBondConstraints::from_iter([
-            DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-            DativeBondConstraint::ring_membership(RingScope::All, 2),
-            DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+        let cs = DativeBondConstraintsAst::from_iter([
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            DativeBondConstraintAst::ring_membership(RingScope::All, 2),
+            DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]);
         assert_eq!(cs.get(key), expected.as_ref());
     }
 
     #[rstest]
     fn test_dative_bond_constraints_remove() {
-        let mut cs = DativeBondConstraints::from_iter([
-            DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-            DativeBondConstraint::ring_membership(RingScope::All, 2),
-            DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+        let mut cs = DativeBondConstraintsAst::from_iter([
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            DativeBondConstraintAst::ring_membership(RingScope::All, 2),
+            DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]);
         let removed = cs.remove(DativeBondConstraintKey::RingMembership(RingScope::Size(6)));
         assert_eq!(
             removed,
-            Some(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)),
+            Some(DativeBondConstraintAst::ring_membership(
+                RingScope::Size(6),
+                1
+            )),
         );
         assert_eq!(
             cs,
-            DativeBondConstraints::from_iter([
-                DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-                DativeBondConstraint::ring_membership(RingScope::All, 2),
+            DativeBondConstraintsAst::from_iter([
+                DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+                DativeBondConstraintAst::ring_membership(RingScope::All, 2),
             ]),
         );
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::partial(|c: &DativeBondConstraint| matches!(c, DativeBondConstraint::Aromatic(BooleanAst::Lit(true))) || matches!(c, DativeBondConstraint::RingMembership(m) if m.scope == RingScope::Size(6)), vec![
-            DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::ring_membership(RingScope::Size(6), 1)])]
-    #[case::all_dropped(|_: &DativeBondConstraint| false, vec![])]
+    #[case::partial(|c: &DativeBondConstraintAst| matches!(c, DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))) || matches!(c, DativeBondConstraintAst::RingMembership(m) if m.scope == RingScope::Size(6)), vec![
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)])]
+    #[case::all_dropped(|_: &DativeBondConstraintAst| false, vec![])]
     fn test_dative_bond_constraints_retain(
-        #[case] predicate: impl FnMut(&DativeBondConstraint) -> bool,
-        #[case] expected: Vec<DativeBondConstraint>,
+        #[case] predicate: impl FnMut(&DativeBondConstraintAst) -> bool,
+        #[case] expected: Vec<DativeBondConstraintAst>,
     ) {
-        let mut cs = DativeBondConstraints::from_iter([
-            DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-            DativeBondConstraint::ring_membership(RingScope::All, 1),
-            DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+        let mut cs = DativeBondConstraintsAst::from_iter([
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            DativeBondConstraintAst::ring_membership(RingScope::All, 1),
+            DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]);
         cs.retain(predicate);
-        assert_eq!(cs, DativeBondConstraints::from_iter(expected));
+        assert_eq!(cs, DativeBondConstraintsAst::from_iter(expected));
     }
 
     #[rstest]
     fn test_dative_bond_constraints_clear() {
-        let mut cs = DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(
+        let mut cs = DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(
             BooleanAst::Lit(true),
         )]);
         cs.clear();
-        assert_eq!(cs, DativeBondConstraints::new());
+        assert_eq!(cs, DativeBondConstraintsAst::new());
     }
 
     #[rstest]
     fn test_dative_bond_constraints_take() {
-        let mut cs = DativeBondConstraints::from_iter([
-            DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-            DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+        let mut cs = DativeBondConstraintsAst::from_iter([
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]);
         let drained: Vec<_> = cs.take().collect();
         assert_eq!(
             drained,
             vec![
-                DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-                DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+                DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+                DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
             ],
         );
-        assert_eq!(cs, DativeBondConstraints::new());
+        assert_eq!(cs, DativeBondConstraintsAst::new());
     }
 
     #[rstest]
     fn test_dative_bond_constraints_compact() {
-        let cs = DativeBondConstraints::from_iter([
-            DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-            DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+        let cs = DativeBondConstraintsAst::from_iter([
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]);
         let compaction = IdCompaction::new(
             Compaction::new(vec![1], vec![1]),
@@ -718,65 +721,65 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::drop_vacuous(
-        DativeBondConstraints::from_iter([
-            DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-            DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined),
+        DativeBondConstraintsAst::from_iter([
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            DativeBondConstraintAst::ring_membership(RingScope::All, ValueAst::Undetermined),
         ]),
-        Ok(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))])))]
+        Ok(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))])))]
     #[case::canonicalizes_values(
-        DativeBondConstraints::from_iter([
-            DativeBondConstraint::ring_membership(RingScope::All, ValueAst::lit_set([2])),
+        DativeBondConstraintsAst::from_iter([
+            DativeBondConstraintAst::ring_membership(RingScope::All, ValueAst::lit_set([2])),
         ]),
-        Ok(DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, 2)])))]
+        Ok(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::All, 2)])))]
     fn test_dative_bond_constraints_canonicalize(
-        #[case] constraints: DativeBondConstraints,
-        #[case] expected: Result<DativeBondConstraints, Contradiction>,
+        #[case] constraints: DativeBondConstraintsAst,
+        #[case] expected: Result<DativeBondConstraintsAst, Contradiction>,
     ) {
         assert_eq!(constraints.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::disjoint_keys_kept(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, 1)]),
-        Some(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::ring_membership(RingScope::All, 1)])))]
-    #[case::shared_key_meets(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Undetermined)]),
-        Some(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))])))]
-    #[case::shared_key_contradicts(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(false))]), None)]
-    #[case::ring_size_unions(DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(5), 1)]), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(6), 1)]),
-        Some(DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(5), 1), DativeBondConstraint::ring_membership(RingScope::Size(6), 1)])))]
-    #[case::prunes_vacuous(DativeBondConstraints::new(), DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Undetermined)]), Some(DativeBondConstraints::new()))]
-    fn test_dative_bond_constraints_meet(#[case] a: DativeBondConstraints, #[case] b: DativeBondConstraints, #[case] expected: Option<DativeBondConstraints>) {
+    #[case::disjoint_keys_kept(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::All, 1)]),
+        Some(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::All, 1)])))]
+    #[case::shared_key_meets(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined)]),
+        Some(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))])))]
+    #[case::shared_key_contradicts(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false))]), None)]
+    #[case::ring_size_unions(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1)]), DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)]),
+        Some(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)])))]
+    #[case::prunes_vacuous(DativeBondConstraintsAst::new(), DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Undetermined)]), Some(DativeBondConstraintsAst::new()))]
+    fn test_dative_bond_constraints_meet(#[case] a: DativeBondConstraintsAst, #[case] b: DativeBondConstraintsAst, #[case] expected: Option<DativeBondConstraintsAst>) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::keeps_only_shared_keys(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::ring_membership(RingScope::All, 1)]), DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]),
-        DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]))]
-    #[case::widens_value(DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, 1)]), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, 2)]),
-        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, ValueAst::lit_set([1, 2]))]))]
-    #[case::incompatible_drops_to_undetermined(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(false))]), DativeBondConstraints::new())]
-    fn test_dative_bond_constraints_join(#[case] a: DativeBondConstraints, #[case] b: DativeBondConstraints, #[case] expected: DativeBondConstraints) {
+    #[case::keeps_only_shared_keys(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::All, 1)]), DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]),
+        DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]))]
+    #[case::widens_value(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::All, 1)]), DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::All, 2)]),
+        DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::All, ValueAst::lit_set([1, 2]))]))]
+    #[case::incompatible_drops_to_undetermined(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false))]), DativeBondConstraintsAst::new())]
+    fn test_dative_bond_constraints_join(#[case] a: DativeBondConstraintsAst, #[case] b: DativeBondConstraintsAst, #[case] expected: DativeBondConstraintsAst) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty_pattern_matches_anything(DativeBondConstraints::new(), DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]), true)]
-    #[case::aromatic_required_present(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]),
-        DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]), true)]
-    #[case::aromatic_required_absent(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraints::new(), false)]
-    #[case::ring_membership_all_wildcard_matches_lit(DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined)]),
-        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, 1)]), true)]
-    #[case::ring_membership_all_lit_mismatch(DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, 1)]),
-        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, 2)]), false)]
-    #[case::ring_membership_size_subset(DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(5), 1)]),
-        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(5), 1), DativeBondConstraint::ring_membership(RingScope::Size(6), 1)]), true)]
-    #[case::ring_membership_size_not_in_target(DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(7), 1)]),
-        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(5), 1)]), false)]
+    #[case::empty_pattern_matches_anything(DativeBondConstraintsAst::new(), DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]), true)]
+    #[case::aromatic_required_present(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]),
+        DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]), true)]
+    #[case::aromatic_required_absent(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraintsAst::new(), false)]
+    #[case::ring_membership_all_wildcard_matches_lit(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::All, ValueAst::Undetermined)]),
+        DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::All, 1)]), true)]
+    #[case::ring_membership_all_lit_mismatch(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::All, 1)]),
+        DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::All, 2)]), false)]
+    #[case::ring_membership_size_subset(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1)]),
+        DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)]), true)]
+    #[case::ring_membership_size_not_in_target(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::Size(7), 1)]),
+        DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1)]), false)]
     fn test_dative_bond_constraints_matches(
-        #[case] pattern: DativeBondConstraints,
-        #[case] target: DativeBondConstraints,
+        #[case] pattern: DativeBondConstraintsAst,
+        #[case] target: DativeBondConstraintsAst,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
@@ -784,70 +787,70 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::disjoint_keys(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, 1)]), true)]
-    #[case::shared_key_compatible(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]), true)]
-    #[case::shared_key_incompatible(DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(false))]), false)]
-    fn test_dative_bond_constraints_is_compatible(#[case] a: DativeBondConstraints, #[case] b: DativeBondConstraints, #[case] expected: bool) {
+    #[case::disjoint_keys(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(RingScope::All, 1)]), true)]
+    #[case::shared_key_compatible(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]), true)]
+    #[case::shared_key_incompatible(DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))]), DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false))]), false)]
+    fn test_dative_bond_constraints_is_compatible(#[case] a: DativeBondConstraintsAst, #[case] b: DativeBondConstraintsAst, #[case] expected: bool) {
         assert_eq!(a.is_compatible(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::distinct(vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::ring_membership(RingScope::All, 1)],
-        vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::ring_membership(RingScope::All, 1)])]
-    #[case::unique_kind_last_wins(vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(true)), DativeBondConstraint::Aromatic(BooleanAst::Lit(false))],
-        vec![DativeBondConstraint::Aromatic(BooleanAst::Lit(false))])]
-    #[case::ring_appends(vec![DativeBondConstraint::ring_membership(RingScope::All, 1), DativeBondConstraint::ring_membership(RingScope::Size(6), 1)],
-        vec![DativeBondConstraint::ring_membership(RingScope::All, 1), DativeBondConstraint::ring_membership(RingScope::Size(6), 1)])]
+    #[case::distinct(vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::All, 1)],
+        vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::ring_membership(RingScope::All, 1)])]
+    #[case::unique_kind_last_wins(vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)), DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false))],
+        vec![DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false))])]
+    #[case::ring_appends(vec![DativeBondConstraintAst::ring_membership(RingScope::All, 1), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)],
+        vec![DativeBondConstraintAst::ring_membership(RingScope::All, 1), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)])]
     #[case::empty(vec![], vec![])]
     fn test_dative_bond_constraints_from_iter(
-        #[case] input: Vec<DativeBondConstraint>,
-        #[case] expected: Vec<DativeBondConstraint>,
+        #[case] input: Vec<DativeBondConstraintAst>,
+        #[case] expected: Vec<DativeBondConstraintAst>,
     ) {
-        let cs = DativeBondConstraints::from_iter(input);
-        assert_eq!(cs, DativeBondConstraints::from_iter(expected));
+        let cs = DativeBondConstraintsAst::from_iter(input);
+        assert_eq!(cs, DativeBondConstraintsAst::from_iter(expected));
     }
 
     #[rstest]
     fn test_dative_bond_constraints_into_iter() {
-        let cs = DativeBondConstraints::from_iter([
-            DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-            DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+        let cs = DativeBondConstraintsAst::from_iter([
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]);
         let collected: Vec<_> = cs.into_iter().collect();
         assert_eq!(
             collected,
             vec![
-                DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-                DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+                DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+                DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
             ],
         );
     }
 
     #[rstest]
     fn test_dative_bond_constraints_from_dative_bond_constraint() {
-        let cs: DativeBondConstraints =
-            DativeBondConstraint::Aromatic(BooleanAst::Lit(true)).into();
+        let cs: DativeBondConstraintsAst =
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)).into();
         assert_eq!(
             cs,
-            DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic(BooleanAst::Lit(
-                true
-            ))]),
+            DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::Aromatic(
+                BooleanAst::Lit(true)
+            )]),
         );
     }
 
     #[rstest]
     fn test_dative_bond_constraints_from_vec() {
-        let cs: DativeBondConstraints = vec![
-            DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-            DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+        let cs: DativeBondConstraintsAst = vec![
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]
         .into();
         assert_eq!(
             cs,
-            DativeBondConstraints::from_iter([
-                DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-                DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+            DativeBondConstraintsAst::from_iter([
+                DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+                DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
             ]),
         );
     }

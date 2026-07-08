@@ -2,7 +2,7 @@
 
 use umol_ast_macros::{Canonicalize, Lattice};
 
-use super::constraint::{BondConstraint, BondConstraints};
+use super::constraint::{BondConstraintAst, BondConstraintsAst};
 use super::spin::SpinStateAst;
 use super::traits::Lattice;
 use super::value::ValueAst;
@@ -14,7 +14,7 @@ pub struct BondAst {
     pub order: ValueAst,
     pub charge: ValueAst,
     pub spin: SpinStateAst,
-    pub constraints: BondConstraints,
+    pub constraints: BondConstraintsAst,
 }
 
 impl BondAst {
@@ -23,7 +23,7 @@ impl BondAst {
             order,
             charge: ValueAst::default(),
             spin: SpinStateAst::default(),
-            constraints: BondConstraints::new(),
+            constraints: BondConstraintsAst::new(),
         }
     }
 
@@ -47,20 +47,20 @@ impl BondAst {
     }
 
     /// Add a single constraint, replacing any existing entry of the same
-    /// key (last-wins per `BondConstraints::set`). Chainable.
-    pub fn with_constraint(mut self, constraint: impl Into<BondConstraint>) -> Self {
+    /// key (last-wins per `BondConstraintsAst::set`). Chainable.
+    pub fn with_constraint(mut self, constraint: impl Into<BondConstraintAst>) -> Self {
         self.constraints.set(constraint.into());
         self
     }
 
     /// Add each constraint from the iterator, replacing any existing entry
-    /// of the same key (last-wins per `BondConstraints::set`). Does not
+    /// of the same key (last-wins per `BondConstraintsAst::set`). Does not
     /// clear existing constraints; use `bond.constraints.clear()` or direct
     /// field assignment for wipe-and-replace.
     pub fn with_constraints<I>(mut self, constraints: I) -> Self
     where
         I: IntoIterator,
-        I::Item: Into<BondConstraint>,
+        I::Item: Into<BondConstraintAst>,
     {
         self.constraints
             .extend(constraints.into_iter().map(Into::into));
@@ -120,9 +120,9 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::new(BondAst::new(ValueAst::Lit(2)),
-        BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
+        BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() })]
     #[case::from_order(BondAst::from_order(3),
-        BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
+        BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() })]
     fn test_bond_ast_new(#[case] actual: BondAst, #[case] expected: BondAst) {
         assert_eq!(actual, expected);
     }
@@ -130,41 +130,41 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::with_order(BondAst::default().with_order(2_i64),
-        BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
+        BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() })]
     #[case::with_charge(BondAst::from_order(1).with_charge(-1_i64),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() })]
     #[case::with_spin(BondAst::from_order(1).with_spin((0_u8, 1_u8)),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(), constraints: BondConstraints::new() })]
-    #[case::with_constraint(BondAst::from_order(1).with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(), constraints: BondConstraintsAst::new() })]
+    #[case::with_constraint(BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::Aromatic(BooleanAst::Lit(true))) })]
+            constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) })]
     #[case::with_constraints_extends(
         BondAst::from_order(1)
-            .with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true)))
-            .with_constraints([BondConstraint::ring_membership(RingScope::All, 1), BondConstraint::ring_membership(RingScope::Size(6), 1)]),
+            .with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true)))
+            .with_constraints([BondConstraintAst::ring_membership(RingScope::All, 1), BondConstraintAst::ring_membership(RingScope::Size(6), 1)]),
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from_iter([
-                BondConstraint::Aromatic(BooleanAst::Lit(true)),
-                BondConstraint::ring_membership(RingScope::All, 1),
-                BondConstraint::ring_membership(RingScope::Size(6), 1),
+            constraints: BondConstraintsAst::from_iter([
+                BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+                BondConstraintAst::ring_membership(RingScope::All, 1),
+                BondConstraintAst::ring_membership(RingScope::Size(6), 1),
             ]) })]
     #[case::with_constraint_appends_same_scope(
         BondAst::from_order(1)
-            .with_constraint(BondConstraint::ring_membership(RingScope::All, 1))
-            .with_constraint(BondConstraint::ring_membership(RingScope::All, 2)),
+            .with_constraint(BondConstraintAst::ring_membership(RingScope::All, 1))
+            .with_constraint(BondConstraintAst::ring_membership(RingScope::All, 2)),
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from_iter([
-                BondConstraint::ring_membership(RingScope::All, 1),
-                BondConstraint::ring_membership(RingScope::All, 2),
+            constraints: BondConstraintsAst::from_iter([
+                BondConstraintAst::ring_membership(RingScope::All, 1),
+                BondConstraintAst::ring_membership(RingScope::All, 2),
             ]) })]
     #[case::with_constraint_appends_multi_valued_ring_size(
         BondAst::from_order(1)
-            .with_constraint(BondConstraint::ring_membership(RingScope::Size(5), 1))
-            .with_constraint(BondConstraint::ring_membership(RingScope::Size(6), 1)),
+            .with_constraint(BondConstraintAst::ring_membership(RingScope::Size(5), 1))
+            .with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1)),
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from_iter([
-                BondConstraint::ring_membership(RingScope::Size(5), 1),
-                BondConstraint::ring_membership(RingScope::Size(6), 1),
+            constraints: BondConstraintsAst::from_iter([
+                BondConstraintAst::ring_membership(RingScope::Size(5), 1),
+                BondConstraintAst::ring_membership(RingScope::Size(6), 1),
             ]) })]
     fn test_bond_ast_with_methods(#[case] actual: BondAst, #[case] expected: BondAst) {
         assert_eq!(actual, expected);
@@ -173,12 +173,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::overwrite(
-        BondAst::from_order(1).with_charge(0_i64).with_constraint(BondConstraint::ring_membership(RingScope::Size(6), 1_i64)),
-        BondAst::new(ValueAst::Undetermined).with_charge(-1_i64).with_constraint(BondConstraint::ring_membership(RingScope::Size(6), 2_i64)),
-        BondAst::from_order(1).with_charge(-1_i64).with_constraint(BondConstraint::ring_membership(RingScope::Size(6), 2_i64)))]
+        BondAst::from_order(1).with_charge(0_i64).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
+        BondAst::new(ValueAst::Undetermined).with_charge(-1_i64).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)),
+        BondAst::from_order(1).with_charge(-1_i64).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)))]
     #[case::remove_constraint(
-        BondAst::from_order(1).with_constraint(BondConstraint::ring_membership(RingScope::Size(6), 1_i64)),
-        BondAst::new(ValueAst::Undetermined).with_constraint(BondConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined)),
+        BondAst::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
+        BondAst::new(ValueAst::Undetermined).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)),
         BondAst::from_order(1))]
     fn test_bond_ast_update(#[case] lhs: BondAst, #[case] rhs: BondAst, #[case] expected: BondAst) {
         assert_eq!(lhs.update(&rhs), expected);
@@ -192,7 +192,7 @@ mod tests {
             order: ValueAst::Lit(1),
             charge: ValueAst::Lit(0),
             spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: BondConstraints::new(),
+            constraints: BondConstraintsAst::new(),
         },
     )]
     #[case::preserves_set_charge(
@@ -201,16 +201,16 @@ mod tests {
             order: ValueAst::Lit(2),
             charge: ValueAst::Lit(1),
             spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: BondConstraints::new(),
+            constraints: BondConstraintsAst::new(),
         },
     )]
     #[case::preserves_constraints(
-        BondAst::from_order(1).with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))).into_ground(),
+        BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))).into_ground(),
         BondAst {
             order: ValueAst::Lit(1),
             charge: ValueAst::Lit(0),
             spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: BondConstraints::from(BondConstraint::Aromatic(BooleanAst::Lit(true))),
+            constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
         },
     )]
     fn test_bond_ast_into_ground(#[case] actual: BondAst, #[case] expected: BondAst) {
@@ -222,11 +222,11 @@ mod tests {
     #[case::default_(BondAst::default(), false)]
     #[case::order_only(BondAst::from_order(1), false)]
     #[case::all_ground(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::closed_shell(),
-        constraints: BondConstraints::new() }, true)]
+        constraints: BondConstraintsAst::new() }, true)]
     #[case::charge_undetermined(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(),
-        constraints: BondConstraints::new() }, false)]
+        constraints: BondConstraintsAst::new() }, false)]
     #[case::ground_with_constraint(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::closed_shell(),
-        constraints: BondConstraints::from(BondConstraint::Aromatic(BooleanAst::Lit(true))) }, true)]
+        constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) }, true)]
     fn test_bond_ast_is_ground(#[case] ast: BondAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
@@ -234,11 +234,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::folds_order(
-        BondAst { order: ValueAst::lit_set([2]), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() },
-        Ok(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }),
+        BondAst { order: ValueAst::lit_set([2]), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() },
+        Ok(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }),
     )]
     #[case::order_empty_litset_contradiction(
-        BondAst { order: ValueAst::lit_set(Vec::<i64>::new()), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() },
+        BondAst { order: ValueAst::lit_set(Vec::<i64>::new()), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() },
         Err(Contradiction),
     )]
     fn test_bond_ast_canonicalize(
@@ -251,26 +251,26 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::default_matches_ground(BondAst::default(),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::closed_shell(), constraints: BondConstraints::new() }, true)]
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::closed_shell(), constraints: BondConstraintsAst::new() }, true)]
     #[case::same_order(BondAst::from_order(2), BondAst::from_order(2), true)]
     #[case::order_mismatch(BondAst::from_order(2), BondAst::from_order(1), false)]
     #[case::pattern_more_specific_than_target(BondAst::from_order(2), BondAst::default(), false)]
-    #[case::charge_mismatch(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::default(), constraints: BondConstraints::new() },
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }, false)]
+    #[case::charge_mismatch(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() },
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }, false)]
     #[case::charge_wildcard_pattern(BondAst::from_order(1),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }, true)]
-    #[case::spin_mismatch(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(), constraints: BondConstraints::new() },
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: (2_u8, 3_u8).into(), constraints: BondConstraints::new() }, false)]
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }, true)]
+    #[case::spin_mismatch(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(), constraints: BondConstraintsAst::new() },
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: (2_u8, 3_u8).into(), constraints: BondConstraintsAst::new() }, false)]
     #[case::spin_wildcard_pattern(BondAst::from_order(1),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(), constraints: BondConstraints::new() }, true)]
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(), constraints: BondConstraintsAst::new() }, true)]
     #[case::constraint_required_present(
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::Aromatic(BooleanAst::Lit(true))) },
+            constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) },
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::Aromatic(BooleanAst::Lit(true))) }, true)]
+            constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) }, true)]
     #[case::constraint_required_absent(
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::Aromatic(BooleanAst::Lit(true))) },
+            constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) },
         BondAst::from_order(1), false)]
     fn test_bond_ast_matches(
         #[case] pattern: BondAst,
@@ -284,8 +284,8 @@ mod tests {
     #[case::both_default(BondAst::default(), BondAst::default(), Some(BondAst::default()))]
     #[case::narrows_field(
         BondAst::from_order(2),
-        BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() },
-        Some(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }),
+        BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() },
+        Some(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }),
     )]
     #[case::incompatible_order(BondAst::from_order(2), BondAst::from_order(3), None)]
     fn test_bond_ast_meet(
@@ -299,7 +299,7 @@ mod tests {
     #[rstest]
     #[case::widens_to_set(BondAst::from_order(2), BondAst::from_order(3),
         BondAst { order: ValueAst::lit_set([2, 3]), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-        constraints: BondConstraints::new() },
+        constraints: BondConstraintsAst::new() },
     )]
     fn test_bond_ast_join(#[case] a: BondAst, #[case] b: BondAst, #[case] expected: BondAst) {
         assert_eq!(a.join(&b), Ok(expected));

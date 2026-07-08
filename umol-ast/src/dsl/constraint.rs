@@ -37,10 +37,11 @@ use super::stereo::{
 use super::value::{parse_value, ValueDsl};
 use crate::ast::boolean::BooleanAst;
 use crate::ast::constraint::{
-    AromaticValenceAst, AtomConstraint, BondConstraint, Constraint, Constraints, FluxionalityAst,
-    LigandPermutation, LigandSymmetryAst, MoleculeConstraint, MulticenterValenceAst,
-    OrientedLigandPermutation, RingMembershipAst, RingScope, StereoAtomConstraint,
-    StereoBondConstraint, StereoLigandPair, StereogenicityAst, SubPatternAnchor, TopicityAst,
+    AromaticValenceAst, AtomConstraintAst, BondConstraintAst, Constraint, Constraints,
+    FluxionalityAst, LigandPermutation, LigandSymmetryAst, MoleculeConstraint,
+    MulticenterValenceAst, OrientedLigandPermutation, RingMembershipAst, RingScope,
+    StereoAtomConstraintAst, StereoBondConstraintAst, StereoLigandPair, StereogenicityAst,
+    SubPatternAnchor, TopicityAst,
 };
 use crate::ast::id::{AtomId, BondId, StereoLigandPosition};
 use crate::ast::molecule::MoleculeAst;
@@ -362,23 +363,25 @@ pub(super) fn read_atom_constraint_dsl(
 ) -> Result<AtomConstraintDsl, EdnError> {
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
-        "valence" => AtomConstraint::Valence(read_value_dsl(de)?.into_ast(&())),
-        "total-valence" => AtomConstraint::TotalValence(read_value_dsl(de)?.into_ast(&())),
+        "valence" => AtomConstraintAst::Valence(read_value_dsl(de)?.into_ast(&())),
+        "total-valence" => AtomConstraintAst::TotalValence(read_value_dsl(de)?.into_ast(&())),
         "aromatic-valence" => {
-            AtomConstraint::AromaticValence(read_aromatic_valence_dsl(de)?.into_ast(&()))
+            AtomConstraintAst::AromaticValence(read_aromatic_valence_dsl(de)?.into_ast(&()))
         }
         "multicenter-valence" => {
-            AtomConstraint::MulticenterValence(read_multicenter_valence_dsl(de)?.into_ast(&()))
+            AtomConstraintAst::MulticenterValence(read_multicenter_valence_dsl(de)?.into_ast(&()))
         }
-        "donated-pairs" => AtomConstraint::DonatedPairs(read_value_dsl(de)?.into_ast(&())),
-        "accepted-pairs" => AtomConstraint::AcceptedPairs(read_value_dsl(de)?.into_ast(&())),
-        "degree" => AtomConstraint::Degree(read_value_dsl(de)?.into_ast(&())),
-        "total-degree" => AtomConstraint::TotalDegree(read_value_dsl(de)?.into_ast(&())),
-        "ring-degree" => AtomConstraint::RingDegree(read_value_dsl(de)?.into_ast(&())),
-        "ring-valence" => AtomConstraint::RingValence(read_value_dsl(de)?.into_ast(&())),
-        "total-hydrogens" => AtomConstraint::TotalHydrogens(read_value_dsl(de)?.into_ast(&())),
-        "ring-membership" => AtomConstraint::RingMembership(read_ring_membership_dsl(de)?),
-        "tetrahedral-stereo" => AtomConstraint::TetrahedralStereo(read_tetrahedral_stereo_dsl(de)?),
+        "donated-pairs" => AtomConstraintAst::DonatedPairs(read_value_dsl(de)?.into_ast(&())),
+        "accepted-pairs" => AtomConstraintAst::AcceptedPairs(read_value_dsl(de)?.into_ast(&())),
+        "degree" => AtomConstraintAst::Degree(read_value_dsl(de)?.into_ast(&())),
+        "total-degree" => AtomConstraintAst::TotalDegree(read_value_dsl(de)?.into_ast(&())),
+        "ring-degree" => AtomConstraintAst::RingDegree(read_value_dsl(de)?.into_ast(&())),
+        "ring-valence" => AtomConstraintAst::RingValence(read_value_dsl(de)?.into_ast(&())),
+        "total-hydrogens" => AtomConstraintAst::TotalHydrogens(read_value_dsl(de)?.into_ast(&())),
+        "ring-membership" => AtomConstraintAst::RingMembership(read_ring_membership_dsl(de)?),
+        "tetrahedral-stereo" => {
+            AtomConstraintAst::TetrahedralStereo(read_tetrahedral_stereo_dsl(de)?)
+        }
         other => {
             return Err(DeError::UnknownField {
                 key: other.to_string(),
@@ -398,10 +401,12 @@ pub(super) fn read_bond_constraint_dsl(
         b'{' => {
             let key = read_single_key_map_header(de)?;
             let c = match key.as_str() {
-                "aromatic" => BondConstraint::Aromatic(read_boolean_dsl(de)?.0),
-                "ring-membership" => BondConstraint::RingMembership(read_ring_membership_dsl(de)?),
+                "aromatic" => BondConstraintAst::Aromatic(read_boolean_dsl(de)?.0),
+                "ring-membership" => {
+                    BondConstraintAst::RingMembership(read_ring_membership_dsl(de)?)
+                }
                 "cis-trans-stereo" => {
-                    BondConstraint::CisTransStereo(read_cis_trans_stereo_dsl(de)?)
+                    BondConstraintAst::CisTransStereo(read_cis_trans_stereo_dsl(de)?)
                 }
                 other => {
                     return Err(DeError::UnknownField {
@@ -714,11 +719,11 @@ macro_rules! read_stereo_constraint_dsl {
 }
 
 read_stereo_constraint_dsl! {
-    read_stereo_atom_constraint_dsl, StereoAtomConstraint, StereoAtomConstraintDsl,
+    read_stereo_atom_constraint_dsl, StereoAtomConstraintAst, StereoAtomConstraintDsl,
     "stereo-atom-constraint"
 }
 read_stereo_constraint_dsl! {
-    read_stereo_bond_constraint_dsl, StereoBondConstraint, StereoBondConstraintDsl,
+    read_stereo_bond_constraint_dsl, StereoBondConstraintAst, StereoBondConstraintDsl,
     "stereo-bond-constraint"
 }
 
@@ -2144,10 +2149,10 @@ mod tests {
     use super::super::namespace::MoleculeNamespace;
     use super::*;
     use crate::ast::constraint::{
-        AromaticValenceAst, AtomConstraint, BondConstraint, DativeBondConstraint, FluxionalityAst,
-        LigandPermutation, LigandSymmetryAst, MulticenterValenceAst, OrientedLigandPermutation,
-        RelationalConstraint, StereoAtomConstraint, StereoLigandPair, StereogenicityAst,
-        TopicityAst, TopicityRelationAst,
+        AromaticValenceAst, AtomConstraintAst, BondConstraintAst, DativeBondConstraintAst,
+        FluxionalityAst, LigandPermutation, LigandSymmetryAst, MulticenterValenceAst,
+        OrientedLigandPermutation, RelationalConstraint, StereoAtomConstraintAst, StereoLigandPair,
+        StereogenicityAst, TopicityAst, TopicityRelationAst,
     };
     use crate::ast::id::{
         AromaticSystemId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
@@ -2250,33 +2255,33 @@ mod tests {
     #[rstest]
     #[case::fluxionality(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(true) })),
+            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(true) })),
         "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]]}}]]}")]
     #[case::fluxionality_absent(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(false) })),
+            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(false) })),
         "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]] :present false}}]]}")]
     #[case::ligand_symmetry(
         Constraint::StereoAtom(StereoAtomId(1), StereoKind::Tetrahedral,
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
                 permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Improper },
                 present: BooleanAst::Lit(false) })),
         "{:stereo-atom [1 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :present false}}]]}")]
     #[case::ligand_symmetry_defaults(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
                 permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper },
                 present: BooleanAst::Lit(true) })),
         "{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]]}}]]}")]
     #[case::topicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Octahedral,
-            StereoAtomConstraint::Topicity(TopicityAst {
+            StereoAtomConstraintAst::Topicity(TopicityAst {
                 pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
                 relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
         "{:stereo-atom [0 [:octahedral {:topicity {:pair [0 1] :relation :enantiotopic}}]]}")]
     #[case::stereogenicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
         "{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation :stereogenic}}]]}")]
     fn test_constraint_dsl_stereo_atom_roundtrip(
         #[from(full_namespace)] namespace: MoleculeNamespace,
@@ -2398,9 +2403,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::atom_leaf(Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Lit(4))), "{:atom [0 {:valence 4}]}")]
-    #[case::bond_leaf(Constraint::Bond(BondId(1), BondConstraint::Aromatic(BooleanAst::Lit(true))), "{:bond [1 {:aromatic true}]}")]
-    #[case::dative_bond_leaf_ring_count(Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1))),
+    #[case::atom_leaf(Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(ValueAst::Lit(4))), "{:atom [0 {:valence 4}]}")]
+    #[case::bond_leaf(Constraint::Bond(BondId(1), BondConstraintAst::Aromatic(BooleanAst::Lit(true))), "{:bond [1 {:aromatic true}]}")]
+    #[case::dative_bond_leaf_ring_count(Constraint::DativeBond(DativeBondId(0), DativeBondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1))),
         "{:dative-bond [0 {:ring-membership {:count 1}}]}")]
     #[case::dative_bond_leaf_donor(Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(0), atom: AtomId(2) }),
         "{:dative-bond-donor [0 2]}")]
@@ -2409,25 +2414,25 @@ mod tests {
     #[case::dative_bond_leaf_parallels(Constraint::Relational(RelationalConstraint::DativeBondParallels { dative: DativeBondId(0), parallel: BondId(2) }),
         "{:dative-bond-parallels [0 2]}")]
     #[case::dative_bond_leaf_all_donors(Constraint::Relational(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0),
-        predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(3))) }), "{:dative-bond-all-donors [0 {:valence 3}]}")]
+        predicate: Box::new(AtomConstraintAst::Valence(ValueAst::Lit(3))) }), "{:dative-bond-all-donors [0 {:valence 3}]}")]
     #[case::aromatic_system_leaf_atoms(Constraint::Relational(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(0),
         atoms: vec![AtomId(0), AtomId(1)] }), "{:aromatic-system-atoms [0 [0 1]]}")]
     #[case::aromatic_system_leaf_contains(Constraint::Relational(RelationalConstraint::AromaticSystemContains { system: AromaticSystemId(0), atom: AtomId(2) }),
         "{:aromatic-system-contains [0 2]}")]
     #[case::aromatic_system_leaf_all_atoms(Constraint::Relational(RelationalConstraint::AromaticSystemAllAtoms { system: AromaticSystemId(0),
-        predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))) }), "{:aromatic-system-all-atoms [0 {:valence 4}]}")]
+        predicate: Box::new(AtomConstraintAst::Valence(ValueAst::Lit(4))) }), "{:aromatic-system-all-atoms [0 {:valence 4}]}")]
     #[case::multicenter_leaf_atoms(Constraint::Relational(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(0),
         atoms: vec![AtomId(0), AtomId(1), AtomId(2)] }), "{:multicenter-bond-atoms [0 [0 1 2]]}")]
     #[case::multicenter_leaf_contains_all(Constraint::Relational(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondId(0),
         atoms: vec![AtomId(0), AtomId(1)] }), "{:multicenter-bond-contains-all [0 [0 1]]}")]
     #[case::multicenter_leaf_any_atom(Constraint::Relational(RelationalConstraint::MulticenterBondAnyAtom { bond: MulticenterBondId(0),
-        predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(3))) }), "{:multicenter-bond-any-atom [0 {:degree 3}]}")]
+        predicate: Box::new(AtomConstraintAst::Degree(ValueAst::Lit(3))) }), "{:multicenter-bond-any-atom [0 {:degree 3}]}")]
     #[case::noncovalent_leaf_ends(Constraint::Relational(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(3)] }),
         "{:noncovalent-bond-ends [0 [0 3]]}")]
     #[case::noncovalent_leaf_contains(Constraint::Relational(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondId(0), atom: AtomId(2) }),
         "{:noncovalent-bond-contains [0 2]}")]
     #[case::noncovalent_leaf_ends_satisfy(Constraint::Relational(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
-        predicates: [Box::new(AtomConstraint::Valence(ValueAst::Lit(2))), Box::new(AtomConstraint::Valence(ValueAst::Lit(3)))] }),
+        predicates: [Box::new(AtomConstraintAst::Valence(ValueAst::Lit(2))), Box::new(AtomConstraintAst::Valence(ValueAst::Lit(3)))] }),
         "{:noncovalent-bond-ends-satisfy [0 [{:valence 2} {:valence 3}]]}")]
     #[case::molecule_connected(Constraint::Molecule(MoleculeConstraint::Connected { atoms: Some(vec![AtomId(0), AtomId(1)]) }), "{:connected {:atoms [0 1]}}")]
     #[case::molecule_charge_sum(Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(1)]), sum: ValueAst::Lit(0) }),
@@ -2438,10 +2443,10 @@ mod tests {
         "{:bond-order-sum {:bonds [0 1] :sum 4}}")]
     #[case::molecule_sub_pattern(Constraint::Molecule(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) }),
         "{:sub-pattern {:anchor {} :pattern {:atoms [] :bonds []}}}")]
-    #[case::not(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Lit(3))))), "{:not {:atom [0 {:valence 3}]}}")]
-    #[case::and(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Lit(4))), Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true)))]),
+    #[case::not(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(ValueAst::Lit(3))))), "{:not {:atom [0 {:valence 3}]}}")]
+    #[case::and(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(ValueAst::Lit(4))), Constraint::Bond(BondId(0), BondConstraintAst::Aromatic(BooleanAst::Lit(true)))]),
         "{:and [{:atom [0 {:valence 4}]} {:bond [0 {:aromatic true}]}]}")]
-    #[case::or(Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraint::Degree(ValueAst::Lit(3))), Constraint::Atom(AtomId(0), AtomConstraint::Degree(ValueAst::Lit(4)))]),
+    #[case::or(Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraintAst::Degree(ValueAst::Lit(3))), Constraint::Atom(AtomId(0), AtomConstraintAst::Degree(ValueAst::Lit(4)))]),
         "{:or [{:atom [0 {:degree 3}]} {:atom [0 {:degree 4}]}]}")]
     fn test_constraint_dsl_roundtrip(
         #[from(full_namespace)] namespace: MoleculeNamespace,
@@ -2460,28 +2465,28 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valence(AtomConstraint::Valence(ValueAst::Lit(4)), "{:valence 4}")]
-    #[case::aromatic_valence_not_aromatic(AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic), "{:aromatic-valence :not-aromatic}")]
-    #[case::aromatic_valence_aromatic(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(6))), "{:aromatic-valence {:aromatic 6}}")]
-    #[case::aromatic_valence_undetermined(AtomConstraint::AromaticValence(AromaticValenceAst::Undetermined), "{:aromatic-valence :undetermined}")]
-    #[case::multicenter_valence_not_multicenter(AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter), "{:multicenter-valence :not-multicenter}")]
-    #[case::multicenter_valence_multicenter(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))), "{:multicenter-valence {:multicenter 3}}")]
-    #[case::multicenter_valence_undetermined(AtomConstraint::MulticenterValence(MulticenterValenceAst::Undetermined), "{:multicenter-valence :undetermined}")]
-    #[case::donated_pairs(AtomConstraint::DonatedPairs(ValueAst::Lit(1)), "{:donated-pairs 1}")]
-    #[case::accepted_pairs(AtomConstraint::AcceptedPairs(ValueAst::Lit(2)), "{:accepted-pairs 2}")]
-    #[case::degree(AtomConstraint::Degree(ValueAst::Lit(3)), "{:degree 3}")]
-    #[case::total_degree(AtomConstraint::TotalDegree(ValueAst::Lit(4)), "{:total-degree 4}")]
-    #[case::ring_degree(AtomConstraint::RingDegree(ValueAst::Lit(2)), "{:ring-degree 2}")]
-    #[case::ring_valence(AtomConstraint::RingValence(ValueAst::Lit(3)), "{:ring-valence 3}")]
-    #[case::total_valence(AtomConstraint::TotalValence(ValueAst::Lit(5)), "{:total-valence 5}")]
-    #[case::total_hydrogens(AtomConstraint::TotalHydrogens(ValueAst::Lit(3)), "{:total-hydrogens 3}")]
-    #[case::ring_membership_all(AtomConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:ring-membership {:count 1}}")]
-    #[case::ring_membership_size(AtomConstraint::ring_membership(RingScope::Size(6), 1), "{:ring-membership {:size 6 :count 1}}")]
-    #[case::tetrahedral_stereo_not_stereo(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo), "{:tetrahedral-stereo :not-stereo}")]
-    #[case::tetrahedral_stereo_lit(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:tetrahedral-stereo {:stereo 1}}")]
-    #[case::tetrahedral_stereo_set(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([1, 2]))), "{:tetrahedral-stereo {:stereo [1 2]}}")]
+    #[case::valence(AtomConstraintAst::Valence(ValueAst::Lit(4)), "{:valence 4}")]
+    #[case::aromatic_valence_not_aromatic(AtomConstraintAst::AromaticValence(AromaticValenceAst::NotAromatic), "{:aromatic-valence :not-aromatic}")]
+    #[case::aromatic_valence_aromatic(AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(6))), "{:aromatic-valence {:aromatic 6}}")]
+    #[case::aromatic_valence_undetermined(AtomConstraintAst::AromaticValence(AromaticValenceAst::Undetermined), "{:aromatic-valence :undetermined}")]
+    #[case::multicenter_valence_not_multicenter(AtomConstraintAst::MulticenterValence(MulticenterValenceAst::NotMulticenter), "{:multicenter-valence :not-multicenter}")]
+    #[case::multicenter_valence_multicenter(AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))), "{:multicenter-valence {:multicenter 3}}")]
+    #[case::multicenter_valence_undetermined(AtomConstraintAst::MulticenterValence(MulticenterValenceAst::Undetermined), "{:multicenter-valence :undetermined}")]
+    #[case::donated_pairs(AtomConstraintAst::DonatedPairs(ValueAst::Lit(1)), "{:donated-pairs 1}")]
+    #[case::accepted_pairs(AtomConstraintAst::AcceptedPairs(ValueAst::Lit(2)), "{:accepted-pairs 2}")]
+    #[case::degree(AtomConstraintAst::Degree(ValueAst::Lit(3)), "{:degree 3}")]
+    #[case::total_degree(AtomConstraintAst::TotalDegree(ValueAst::Lit(4)), "{:total-degree 4}")]
+    #[case::ring_degree(AtomConstraintAst::RingDegree(ValueAst::Lit(2)), "{:ring-degree 2}")]
+    #[case::ring_valence(AtomConstraintAst::RingValence(ValueAst::Lit(3)), "{:ring-valence 3}")]
+    #[case::total_valence(AtomConstraintAst::TotalValence(ValueAst::Lit(5)), "{:total-valence 5}")]
+    #[case::total_hydrogens(AtomConstraintAst::TotalHydrogens(ValueAst::Lit(3)), "{:total-hydrogens 3}")]
+    #[case::ring_membership_all(AtomConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:ring-membership {:count 1}}")]
+    #[case::ring_membership_size(AtomConstraintAst::ring_membership(RingScope::Size(6), 1), "{:ring-membership {:size 6 :count 1}}")]
+    #[case::tetrahedral_stereo_not_stereo(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo), "{:tetrahedral-stereo :not-stereo}")]
+    #[case::tetrahedral_stereo_lit(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:tetrahedral-stereo {:stereo 1}}")]
+    #[case::tetrahedral_stereo_set(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([1, 2]))), "{:tetrahedral-stereo {:stereo [1 2]}}")]
     fn test_atom_constraint_dsl_roundtrip(
-        #[case] input: AtomConstraint,
+        #[case] input: AtomConstraintAst,
         #[case] edn_source: &str,
     ) {
         let dsl = AtomConstraintDsl::from_ast(&input, &());
@@ -2495,14 +2500,14 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(BondConstraint::Aromatic(BooleanAst::Lit(true)), "{:bond [0 {:aromatic true}]}")]
-    #[case::ring_membership_all(BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:bond [0 {:ring-membership {:count 1}}]}")]
-    #[case::ring_membership_size(BondConstraint::ring_membership(RingScope::Size(6), 1), "{:bond [0 {:ring-membership {:size 6 :count 1}}]}")]
-    #[case::cis_trans_stereo_not_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), "{:bond [0 {:cis-trans-stereo :not-stereo}]}")]
-    #[case::cis_trans_stereo_lit(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:bond [0 {:cis-trans-stereo {:stereo 1}}]}")]
+    #[case::aromatic(BondConstraintAst::Aromatic(BooleanAst::Lit(true)), "{:bond [0 {:aromatic true}]}")]
+    #[case::ring_membership_all(BondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:bond [0 {:ring-membership {:count 1}}]}")]
+    #[case::ring_membership_size(BondConstraintAst::ring_membership(RingScope::Size(6), 1), "{:bond [0 {:ring-membership {:size 6 :count 1}}]}")]
+    #[case::cis_trans_stereo_not_stereo(BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo), "{:bond [0 {:cis-trans-stereo :not-stereo}]}")]
+    #[case::cis_trans_stereo_lit(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:bond [0 {:cis-trans-stereo {:stereo 1}}]}")]
     fn test_bond_constraint_dsl_roundtrip(
         #[from(full_namespace)] namespace: MoleculeNamespace,
-        #[case] input: BondConstraint,
+        #[case] input: BondConstraintAst,
         #[case] edn_source: &str,
     ) {
         let wrapped = Constraint::Bond(BondId(0), input.clone());
@@ -2571,7 +2576,7 @@ mod tests {
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(
             AtomId(0),
-            AtomConstraint::Valence(ValueAst::Lit(4)),
+            AtomConstraintAst::Valence(ValueAst::Lit(4)),
         ));
         cs.push(Constraint::Molecule(MoleculeConstraint::Connected {
             atoms: Some(vec![AtomId(0), AtomId(1)]),

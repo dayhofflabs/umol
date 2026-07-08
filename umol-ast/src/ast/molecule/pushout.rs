@@ -170,7 +170,12 @@ impl MoleculeAst {
         // (`⊥ → None`). `other`-only sites keep their own (relabeled) frame. A same-site/different-ligand
         // collision leaves two overlays on one site — over-coordination, rejected by the `has_conflict`
         // gate below.
-        let map_edge = |e: EdgeId| po.right.edges().right_of(e).expect("right total on other edges");
+        let map_edge = |e: EdgeId| {
+            po.right
+                .edges()
+                .right_of(e)
+                .expect("right total on other edges")
+        };
         let map_ligand_atom = |a: AtomId| AtomId::from(map_node(NodeId::from(a)));
 
         let stereo_atom_right = FixedVarBirelationSet::new(stereo_glue_entries(
@@ -180,7 +185,9 @@ impl MoleculeAst {
             map_ligand_atom,
             |d, before, after| d.transform_frame(before, after),
         ));
-        let stereo_atom_merged = self.stereo_atoms.pushout(&stereo_atom_right, |a, b| a.meet(b))?;
+        let stereo_atom_merged = self
+            .stereo_atoms
+            .pushout(&stereo_atom_right, |a, b| a.meet(b))?;
         let sa_object = &stereo_atom_merged.object;
         let stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> = sa_object
             .relation_ids()
@@ -200,7 +207,9 @@ impl MoleculeAst {
             map_ligand_atom,
             |d, before, after| d.transform_frame(before, after),
         ));
-        let stereo_bond_merged = self.stereo_bonds.pushout(&stereo_bond_right, |a, b| a.meet(b))?;
+        let stereo_bond_merged = self
+            .stereo_bonds
+            .pushout(&stereo_bond_right, |a, b| a.meet(b))?;
         let sb_object = &stereo_bond_merged.object;
         let stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)> = sb_object
             .relation_ids()
@@ -371,7 +380,7 @@ mod tests {
     use umol_graph_core::Correspondence;
 
     use super::super::super::aromatic::AromaticSystemAst;
-    use super::super::super::constraint::{AtomConstraint, Constraint};
+    use super::super::super::constraint::{AtomConstraintAst, Constraint};
     use super::super::super::ligand::StereoLigandKind;
     use super::super::super::stereo::StereoKind;
     use super::*;
@@ -590,7 +599,7 @@ mod tests {
             vec![],
             Constraints::from(vec![Constraint::Atom(
                 AtomId(0),
-                AtomConstraint::valence(left_valence),
+                AtomConstraintAst::valence(left_valence),
             )]),
         );
         let right = MoleculeAst::from_parts(
@@ -607,7 +616,7 @@ mod tests {
             vec![],
             Constraints::from(vec![Constraint::Atom(
                 AtomId(1),
-                AtomConstraint::valence(right_valence),
+                AtomConstraintAst::valence(right_valence),
             )]),
         );
         let expected = MoleculeAst::from_parts(
@@ -627,8 +636,8 @@ mod tests {
             vec![],
             vec![],
             Constraints::from(vec![
-                Constraint::Atom(AtomId(0), AtomConstraint::valence(left_valence)),
-                Constraint::Atom(AtomId(2), AtomConstraint::valence(right_valence)),
+                Constraint::Atom(AtomId(0), AtomConstraintAst::valence(left_valence)),
+                Constraint::Atom(AtomId(2), AtomConstraintAst::valence(right_valence)),
             ]),
         );
         assert_eq!(
@@ -657,7 +666,11 @@ mod tests {
         ];
         let self_mol = MoleculeAst::from_parts(
             atoms.clone(),
-            vec![], vec![], vec![], vec![], vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
             vec![(
                 AtomId(0),
                 vec![
@@ -673,7 +686,11 @@ mod tests {
         );
         let other_mol = MoleculeAst::from_parts(
             atoms,
-            vec![], vec![], vec![], vec![], vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
             vec![(
                 AtomId(0),
                 vec![
@@ -693,7 +710,9 @@ mod tests {
         );
         let expected = admissible.then(|| self_mol.clone());
         assert_eq!(
-            self_mol.meet_pushout(&other_mol, &overlap).map(|po| po.object),
+            self_mol
+                .meet_pushout(&other_mol, &overlap)
+                .map(|po| po.object),
             expected,
         );
     }

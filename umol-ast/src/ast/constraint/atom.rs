@@ -15,7 +15,7 @@ use super::super::value::ValueAst;
 
 /// Atom-scope constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum AtomConstraint {
+pub enum AtomConstraintAst {
     Valence(ValueAst),
     DonatedPairs(ValueAst),
     AcceptedPairs(ValueAst),
@@ -31,7 +31,7 @@ pub enum AtomConstraint {
     RingMembership(RingMembershipAst),
 }
 
-impl AtomConstraint {
+impl AtomConstraintAst {
     pub fn valence(v: impl Into<ValueAst>) -> Self {
         Self::Valence(v.into())
     }
@@ -84,7 +84,7 @@ impl AtomConstraint {
         Self::RingMembership(RingMembershipAst::new(scope, count))
     }
 
-    /// Atom constraint key, unique within an `AtomConstraints` container.
+    /// Atom constraint key, unique within an `AtomConstraintsAst` container.
     pub fn key(&self) -> AtomConstraintKey {
         match self {
             Self::Valence(_) => AtomConstraintKey::Valence,
@@ -139,7 +139,7 @@ impl AtomConstraint {
     }
 }
 
-impl Canonicalize for AtomConstraint {
+impl Canonicalize for AtomConstraintAst {
     /// Canonicalize the inner value; kind and sub-key are preserved.
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
@@ -162,7 +162,7 @@ impl Canonicalize for AtomConstraint {
     }
 }
 
-impl Lattice for AtomConstraint {
+impl Lattice for AtomConstraintAst {
     fn is_undetermined(&self) -> bool {
         match self {
             Self::Valence(v)
@@ -200,7 +200,7 @@ impl Lattice for AtomConstraint {
     }
 
     /// Meet per-key, None on an incompatible meet.
-    fn meet(&self, other: &AtomConstraint) -> Option<AtomConstraint> {
+    fn meet(&self, other: &AtomConstraintAst) -> Option<AtomConstraintAst> {
         match (self, other) {
             (Self::Valence(a), Self::Valence(b)) => a.meet(b).map(Self::Valence),
             (Self::DonatedPairs(a), Self::DonatedPairs(b)) => a.meet(b).map(Self::DonatedPairs),
@@ -231,7 +231,7 @@ impl Lattice for AtomConstraint {
     }
 
     /// Join per-key, Err(NoJoin) when operands are in different fibers (different keys).
-    fn join(&self, other: &AtomConstraint) -> Result<AtomConstraint, NoJoin> {
+    fn join(&self, other: &AtomConstraintAst) -> Result<AtomConstraintAst, NoJoin> {
         match (self, other) {
             (Self::Valence(a), Self::Valence(b)) => Ok(Self::Valence(a.join(b)?)),
             (Self::DonatedPairs(a), Self::DonatedPairs(b)) => Ok(Self::DonatedPairs(a.join(b)?)),
@@ -285,8 +285,8 @@ impl Lattice for AtomConstraint {
 
     /// Compatible iff same key with compatible payloads; different keys are incompatible (one
     /// constraint can't be two kinds). Overrides the `meet`-derived default to skip building the
-    /// `AtomConstraint`.
-    fn is_compatible(&self, other: &AtomConstraint) -> bool {
+    /// `AtomConstraintAst`.
+    fn is_compatible(&self, other: &AtomConstraintAst) -> bool {
         match (self, other) {
             (Self::Valence(a), Self::Valence(b)) => a.is_compatible(b),
             (Self::DonatedPairs(a), Self::DonatedPairs(b)) => a.is_compatible(b),
@@ -306,7 +306,7 @@ impl Lattice for AtomConstraint {
     }
 }
 
-/// Entry identity: discriminant + sub-key, AtomConstraints is ordered, unique by key.
+/// Entry identity: discriminant + sub-key, AtomConstraintsAst is ordered, unique by key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AtomConstraintKey {
     Valence,
@@ -326,102 +326,102 @@ pub enum AtomConstraintKey {
 
 /// Atom constraint container, unique by key, sorted flat vector storage.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AtomConstraints {
-    entries: SmallVec<[AtomConstraint; 2]>,
+pub struct AtomConstraintsAst {
+    entries: SmallVec<[AtomConstraintAst; 2]>,
 }
 
-impl AtomConstraints {
+impl AtomConstraintsAst {
     pub fn new() -> Self {
         Self::default()
     }
 
     pub fn valence(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKey::Valence) {
-            Some(AtomConstraint::Valence(v)) => Some(v),
+            Some(AtomConstraintAst::Valence(v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn aromatic_valence(&self) -> Option<&AromaticValenceAst> {
         match self.get(AtomConstraintKey::AromaticValence) {
-            Some(AtomConstraint::AromaticValence(v)) => Some(v),
+            Some(AtomConstraintAst::AromaticValence(v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn multicenter_valence(&self) -> Option<&MulticenterValenceAst> {
         match self.get(AtomConstraintKey::MulticenterValence) {
-            Some(AtomConstraint::MulticenterValence(v)) => Some(v),
+            Some(AtomConstraintAst::MulticenterValence(v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn tetrahedral_stereo(&self) -> Option<&TetrahedralStereoAst> {
         match self.get(AtomConstraintKey::TetrahedralStereo) {
-            Some(AtomConstraint::TetrahedralStereo(c)) => Some(c),
+            Some(AtomConstraintAst::TetrahedralStereo(c)) => Some(c),
             _ => None,
         }
     }
 
     pub fn degree(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKey::Degree) {
-            Some(AtomConstraint::Degree(v)) => Some(v),
+            Some(AtomConstraintAst::Degree(v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn total_degree(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKey::TotalDegree) {
-            Some(AtomConstraint::TotalDegree(v)) => Some(v),
+            Some(AtomConstraintAst::TotalDegree(v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn total_valence(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKey::TotalValence) {
-            Some(AtomConstraint::TotalValence(v)) => Some(v),
+            Some(AtomConstraintAst::TotalValence(v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn ring_degree(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKey::RingDegree) {
-            Some(AtomConstraint::RingDegree(v)) => Some(v),
+            Some(AtomConstraintAst::RingDegree(v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn ring_valence(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKey::RingValence) {
-            Some(AtomConstraint::RingValence(v)) => Some(v),
+            Some(AtomConstraintAst::RingValence(v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn total_hydrogens(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKey::TotalHydrogens) {
-            Some(AtomConstraint::TotalHydrogens(v)) => Some(v),
+            Some(AtomConstraintAst::TotalHydrogens(v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn donated_pairs(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKey::DonatedPairs) {
-            Some(AtomConstraint::DonatedPairs(v)) => Some(v),
+            Some(AtomConstraintAst::DonatedPairs(v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn accepted_pairs(&self) -> Option<&ValueAst> {
         match self.get(AtomConstraintKey::AcceptedPairs) {
-            Some(AtomConstraint::AcceptedPairs(v)) => Some(v),
+            Some(AtomConstraintAst::AcceptedPairs(v)) => Some(v),
             _ => None,
         }
     }
 
     fn ring_memberships(&self) -> impl Iterator<Item = (RingScope, &ValueAst)> {
         self.iter().filter_map(|c| match c {
-            AtomConstraint::RingMembership(m) => Some((m.scope, &m.count)),
+            AtomConstraintAst::RingMembership(m) => Some((m.scope, &m.count)),
             _ => None,
         })
     }
@@ -456,12 +456,12 @@ impl AtomConstraints {
         self.find(key).is_ok()
     }
 
-    pub fn get(&self, key: AtomConstraintKey) -> Option<&AtomConstraint> {
+    pub fn get(&self, key: AtomConstraintKey) -> Option<&AtomConstraintAst> {
         self.find(key).ok().map(|i| &self.entries[i])
     }
 
     /// Insert in sorted order by key, overwrite same key (last-wins).
-    pub fn set(&mut self, c: AtomConstraint) {
+    pub fn set(&mut self, c: AtomConstraintAst) {
         match self.find(c.key()) {
             Ok(i) => self.entries[i] = c,
             Err(i) => self.entries.insert(i, c),
@@ -473,8 +473,8 @@ impl AtomConstraints {
     /// `Err` on a key or old-value mismatch; the store is unchanged when it errors.
     pub fn compare_and_set(
         &mut self,
-        old: Option<AtomConstraint>,
-        new: Option<AtomConstraint>,
+        old: Option<AtomConstraintAst>,
+        new: Option<AtomConstraintAst>,
     ) -> Result<(), Contradiction> {
         let key = match (&old, &new) {
             (Some(o), Some(n)) => {
@@ -504,12 +504,12 @@ impl AtomConstraints {
         Ok(())
     }
 
-    pub fn remove(&mut self, key: AtomConstraintKey) -> Option<AtomConstraint> {
+    pub fn remove(&mut self, key: AtomConstraintKey) -> Option<AtomConstraintAst> {
         self.find(key).ok().map(|i| self.entries.remove(i))
     }
 
     /// `set` each constraint in turn (last-wins), for bulk construction.
-    pub fn extend(&mut self, constraints: impl IntoIterator<Item = AtomConstraint>) {
+    pub fn extend(&mut self, constraints: impl IntoIterator<Item = AtomConstraintAst>) {
         for constraint in constraints {
             self.set(constraint);
         }
@@ -517,7 +517,7 @@ impl AtomConstraints {
 
     /// Overlay `other` onto self by `set`-ing each of its entries (last-wins).
     /// Undetermined entries in `other` remove.
-    pub fn update(&mut self, other: &AtomConstraints) {
+    pub fn update(&mut self, other: &AtomConstraintsAst) {
         for c in other.iter() {
             if c.is_undetermined() {
                 self.remove(c.key());
@@ -528,7 +528,7 @@ impl AtomConstraints {
     }
 
     /// Bulk-remove entries that don't satisfy the predicate.
-    pub fn retain(&mut self, mut f: impl FnMut(&AtomConstraint) -> bool) {
+    pub fn retain(&mut self, mut f: impl FnMut(&AtomConstraintAst) -> bool) {
         self.entries.retain(|c| f(c));
     }
 
@@ -538,21 +538,21 @@ impl AtomConstraints {
     }
 
     /// Move the entries out of the store, leaving it empty.
-    pub fn take(&mut self) -> impl Iterator<Item = AtomConstraint> {
+    pub fn take(&mut self) -> impl Iterator<Item = AtomConstraintAst> {
         mem::take(&mut self.entries).into_iter()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &AtomConstraint> {
+    pub fn iter(&self) -> impl Iterator<Item = &AtomConstraintAst> {
         self.entries.iter()
     }
 
-    /// No-op: no `AtomConstraint` variant carries an entity index.
+    /// No-op: no `AtomConstraintAst` variant carries an entity index.
     pub fn compact(self, _compaction: &IdCompaction) -> Self {
         self
     }
 }
 
-impl Canonicalize for AtomConstraints {
+impl Canonicalize for AtomConstraintsAst {
     /// Canonicalize each value and drop the vacuous ones. Keys are already unique and
     /// key-sorted (every write goes through `set`), so no dedup or re-sort is needed —
     /// canonicalizing a value never changes its `key()`.
@@ -561,13 +561,13 @@ impl Canonicalize for AtomConstraints {
             .entries
             .into_iter()
             .map(Canonicalize::canonicalize)
-            .collect::<Result<SmallVec<[AtomConstraint; 2]>, _>>()?;
+            .collect::<Result<SmallVec<[AtomConstraintAst; 2]>, _>>()?;
         entries.retain(|c| !c.is_undetermined());
         Ok(Self { entries })
     }
 }
 
-impl Lattice for AtomConstraints {
+impl Lattice for AtomConstraintsAst {
     fn is_undetermined(&self) -> bool {
         self.iter().all(|c| c.is_undetermined())
     }
@@ -577,10 +577,10 @@ impl Lattice for AtomConstraints {
     }
 
     /// Greatest lower bound as a two-pointer merge over the key-sorted entries: a shared key
-    /// meets its two values (`AtomConstraint::meet`; a `None` aborts the whole meet), an A-only /
+    /// meets its two values (`AtomConstraintAst::meet`; a `None` aborts the whole meet), an A-only /
     /// B-only key is kept (meet with the absent ⊤ is the value). Vacuous results are dropped.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let mut entries: SmallVec<[AtomConstraint; 2]> = SmallVec::new();
+        let mut entries: SmallVec<[AtomConstraintAst; 2]> = SmallVec::new();
         let mut a = self.entries.iter();
         let mut b = other.entries.iter();
         let mut ca = a.next();
@@ -610,11 +610,11 @@ impl Lattice for AtomConstraints {
     }
 
     /// Least upper bound as a two-pointer merge: only keys present on *both* sides join
-    /// (`AtomConstraint::join`); a single-side key widens to the absent ⊤ and is dropped. A
+    /// (`AtomConstraintAst::join`); a single-side key widens to the absent ⊤ and is dropped. A
     /// same-key join never returns `Err(NoJoin)`, but if it did the key would simply drop
     /// (widen to ⊤). The container always has a top (the empty set), so this is total (`Ok`).
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
-        let mut entries: SmallVec<[AtomConstraint; 2]> = SmallVec::new();
+        let mut entries: SmallVec<[AtomConstraintAst; 2]> = SmallVec::new();
         let mut a = self.entries.iter();
         let mut b = other.entries.iter();
         let mut ca = a.next();
@@ -643,49 +643,49 @@ impl Lattice for AtomConstraints {
     /// constraints, not the field count; an empty pattern matches any target.
     fn matches(&self, target: &Self) -> bool {
         self.iter().all(|c| match c {
-            AtomConstraint::Valence(v) => {
+            AtomConstraintAst::Valence(v) => {
                 v.matches(target.valence().unwrap_or(&ValueAst::Undetermined))
             }
-            AtomConstraint::DonatedPairs(v) => {
+            AtomConstraintAst::DonatedPairs(v) => {
                 v.matches(target.donated_pairs().unwrap_or(&ValueAst::Undetermined))
             }
-            AtomConstraint::AcceptedPairs(v) => {
+            AtomConstraintAst::AcceptedPairs(v) => {
                 v.matches(target.accepted_pairs().unwrap_or(&ValueAst::Undetermined))
             }
-            AtomConstraint::AromaticValence(av) => av.matches(
+            AtomConstraintAst::AromaticValence(av) => av.matches(
                 target
                     .aromatic_valence()
                     .unwrap_or(&AromaticValenceAst::Undetermined),
             ),
-            AtomConstraint::MulticenterValence(mv) => mv.matches(
+            AtomConstraintAst::MulticenterValence(mv) => mv.matches(
                 target
                     .multicenter_valence()
                     .unwrap_or(&MulticenterValenceAst::Undetermined),
             ),
-            AtomConstraint::TetrahedralStereo(ts) => ts.matches(
+            AtomConstraintAst::TetrahedralStereo(ts) => ts.matches(
                 target
                     .tetrahedral_stereo()
                     .unwrap_or(&TetrahedralStereoAst::Undetermined),
             ),
-            AtomConstraint::Degree(v) => {
+            AtomConstraintAst::Degree(v) => {
                 v.matches(target.degree().unwrap_or(&ValueAst::Undetermined))
             }
-            AtomConstraint::TotalDegree(v) => {
+            AtomConstraintAst::TotalDegree(v) => {
                 v.matches(target.total_degree().unwrap_or(&ValueAst::Undetermined))
             }
-            AtomConstraint::TotalValence(v) => {
+            AtomConstraintAst::TotalValence(v) => {
                 v.matches(target.total_valence().unwrap_or(&ValueAst::Undetermined))
             }
-            AtomConstraint::RingDegree(v) => {
+            AtomConstraintAst::RingDegree(v) => {
                 v.matches(target.ring_degree().unwrap_or(&ValueAst::Undetermined))
             }
-            AtomConstraint::RingValence(v) => {
+            AtomConstraintAst::RingValence(v) => {
                 v.matches(target.ring_valence().unwrap_or(&ValueAst::Undetermined))
             }
-            AtomConstraint::TotalHydrogens(v) => {
+            AtomConstraintAst::TotalHydrogens(v) => {
                 v.matches(target.total_hydrogens().unwrap_or(&ValueAst::Undetermined))
             }
-            AtomConstraint::RingMembership(rm) => rm.count.matches(
+            AtomConstraintAst::RingMembership(rm) => rm.count.matches(
                 target
                     .ring_membership(rm.scope)
                     .unwrap_or(&ValueAst::Undetermined),
@@ -717,8 +717,8 @@ impl Lattice for AtomConstraints {
     }
 }
 
-impl FromIterator<AtomConstraint> for AtomConstraints {
-    fn from_iter<I: IntoIterator<Item = AtomConstraint>>(iter: I) -> Self {
+impl FromIterator<AtomConstraintAst> for AtomConstraintsAst {
+    fn from_iter<I: IntoIterator<Item = AtomConstraintAst>>(iter: I) -> Self {
         let mut out = Self::new();
         for c in iter {
             out.set(c);
@@ -727,23 +727,23 @@ impl FromIterator<AtomConstraint> for AtomConstraints {
     }
 }
 
-impl IntoIterator for AtomConstraints {
-    type Item = AtomConstraint;
-    type IntoIter = smallvec::IntoIter<[AtomConstraint; 2]>;
+impl IntoIterator for AtomConstraintsAst {
+    type Item = AtomConstraintAst;
+    type IntoIter = smallvec::IntoIter<[AtomConstraintAst; 2]>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.entries.into_iter()
     }
 }
 
-impl From<AtomConstraint> for AtomConstraints {
-    fn from(c: AtomConstraint) -> Self {
+impl From<AtomConstraintAst> for AtomConstraintsAst {
+    fn from(c: AtomConstraintAst) -> Self {
         Self::from_iter([c])
     }
 }
 
-impl From<Vec<AtomConstraint>> for AtomConstraints {
-    fn from(cs: Vec<AtomConstraint>) -> Self {
+impl From<Vec<AtomConstraintAst>> for AtomConstraintsAst {
+    fn from(cs: Vec<AtomConstraintAst>) -> Self {
         Self::from_iter(cs)
     }
 }
@@ -1029,54 +1029,54 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valence(AtomConstraint::valence(4), AtomConstraint::Valence(ValueAst::Lit(4)))]
-    #[case::total_valence(AtomConstraint::total_valence(5), AtomConstraint::TotalValence(ValueAst::Lit(5)))]
-    #[case::donated_pairs(AtomConstraint::donated_pairs(1), AtomConstraint::DonatedPairs(ValueAst::Lit(1)))]
-    #[case::accepted_pairs(AtomConstraint::accepted_pairs(2), AtomConstraint::AcceptedPairs(ValueAst::Lit(2)))]
-    #[case::degree(AtomConstraint::degree(3), AtomConstraint::Degree(ValueAst::Lit(3)))]
-    #[case::total_degree(AtomConstraint::total_degree(4), AtomConstraint::TotalDegree(ValueAst::Lit(4)))]
-    #[case::ring_degree(AtomConstraint::ring_degree(2), AtomConstraint::RingDegree(ValueAst::Lit(2)))]
-    #[case::ring_valence(AtomConstraint::ring_valence(3), AtomConstraint::RingValence(ValueAst::Lit(3)))]
-    #[case::total_hydrogens(AtomConstraint::total_hydrogens(3), AtomConstraint::TotalHydrogens(ValueAst::Lit(3)))]
-    #[case::ring_membership_all(AtomConstraint::ring_membership(RingScope::All, 1), AtomConstraint::RingMembership(RingMembershipAst { scope: RingScope::All, count: ValueAst::Lit(1) }))]
-    #[case::ring_membership_size(AtomConstraint::ring_membership(RingScope::Size(6), 1), AtomConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::Lit(1) }))]
+    #[case::valence(AtomConstraintAst::valence(4), AtomConstraintAst::Valence(ValueAst::Lit(4)))]
+    #[case::total_valence(AtomConstraintAst::total_valence(5), AtomConstraintAst::TotalValence(ValueAst::Lit(5)))]
+    #[case::donated_pairs(AtomConstraintAst::donated_pairs(1), AtomConstraintAst::DonatedPairs(ValueAst::Lit(1)))]
+    #[case::accepted_pairs(AtomConstraintAst::accepted_pairs(2), AtomConstraintAst::AcceptedPairs(ValueAst::Lit(2)))]
+    #[case::degree(AtomConstraintAst::degree(3), AtomConstraintAst::Degree(ValueAst::Lit(3)))]
+    #[case::total_degree(AtomConstraintAst::total_degree(4), AtomConstraintAst::TotalDegree(ValueAst::Lit(4)))]
+    #[case::ring_degree(AtomConstraintAst::ring_degree(2), AtomConstraintAst::RingDegree(ValueAst::Lit(2)))]
+    #[case::ring_valence(AtomConstraintAst::ring_valence(3), AtomConstraintAst::RingValence(ValueAst::Lit(3)))]
+    #[case::total_hydrogens(AtomConstraintAst::total_hydrogens(3), AtomConstraintAst::TotalHydrogens(ValueAst::Lit(3)))]
+    #[case::ring_membership_all(AtomConstraintAst::ring_membership(RingScope::All, 1), AtomConstraintAst::RingMembership(RingMembershipAst { scope: RingScope::All, count: ValueAst::Lit(1) }))]
+    #[case::ring_membership_size(AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintAst::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::Lit(1) }))]
     #[case::aromatic_valence(
-        AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic),
-        AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic),
+        AtomConstraintAst::aromatic_valence(AromaticValenceAst::NotAromatic),
+        AtomConstraintAst::AromaticValence(AromaticValenceAst::NotAromatic),
     )]
     #[case::multicenter_valence(
-        AtomConstraint::multicenter_valence(MulticenterValenceAst::NotMulticenter),
-        AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter),
+        AtomConstraintAst::multicenter_valence(MulticenterValenceAst::NotMulticenter),
+        AtomConstraintAst::MulticenterValence(MulticenterValenceAst::NotMulticenter),
     )]
     #[case::tetrahedral_stereo(
-        AtomConstraint::tetrahedral_stereo(TetrahedralStereoAst::NotStereo),
-        AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo),
+        AtomConstraintAst::tetrahedral_stereo(TetrahedralStereoAst::NotStereo),
+        AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo),
     )]
     fn test_atom_constraint_constructors(
-        #[case] actual: AtomConstraint,
-        #[case] expected: AtomConstraint,
+        #[case] actual: AtomConstraintAst,
+        #[case] expected: AtomConstraintAst,
     ) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valence(AtomConstraint::valence(4), AtomConstraintKey::Valence)]
-    #[case::total_valence(AtomConstraint::total_valence(5), AtomConstraintKey::TotalValence)]
-    #[case::aromatic_valence(AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic), AtomConstraintKey::AromaticValence)]
-    #[case::multicenter_valence(AtomConstraint::multicenter_valence(MulticenterValenceAst::Undetermined), AtomConstraintKey::MulticenterValence)]
-    #[case::donated_pairs(AtomConstraint::donated_pairs(1), AtomConstraintKey::DonatedPairs)]
-    #[case::accepted_pairs(AtomConstraint::accepted_pairs(2), AtomConstraintKey::AcceptedPairs)]
-    #[case::degree(AtomConstraint::degree(3), AtomConstraintKey::Degree)]
-    #[case::total_degree(AtomConstraint::total_degree(4), AtomConstraintKey::TotalDegree)]
-    #[case::ring_degree(AtomConstraint::ring_degree(2), AtomConstraintKey::RingDegree)]
-    #[case::ring_valence(AtomConstraint::ring_valence(3), AtomConstraintKey::RingValence)]
-    #[case::total_hydrogens(AtomConstraint::total_hydrogens(3), AtomConstraintKey::TotalHydrogens)]
-    #[case::ring_membership_all(AtomConstraint::ring_membership(RingScope::All, 1), AtomConstraintKey::RingMembership(RingScope::All))]
-    #[case::ring_membership_size(AtomConstraint::ring_membership(RingScope::Size(6), 1), AtomConstraintKey::RingMembership(RingScope::Size(6)))]
-    #[case::tetrahedral_stereo(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo), AtomConstraintKey::TetrahedralStereo)]
+    #[case::valence(AtomConstraintAst::valence(4), AtomConstraintKey::Valence)]
+    #[case::total_valence(AtomConstraintAst::total_valence(5), AtomConstraintKey::TotalValence)]
+    #[case::aromatic_valence(AtomConstraintAst::aromatic_valence(AromaticValenceAst::NotAromatic), AtomConstraintKey::AromaticValence)]
+    #[case::multicenter_valence(AtomConstraintAst::multicenter_valence(MulticenterValenceAst::Undetermined), AtomConstraintKey::MulticenterValence)]
+    #[case::donated_pairs(AtomConstraintAst::donated_pairs(1), AtomConstraintKey::DonatedPairs)]
+    #[case::accepted_pairs(AtomConstraintAst::accepted_pairs(2), AtomConstraintKey::AcceptedPairs)]
+    #[case::degree(AtomConstraintAst::degree(3), AtomConstraintKey::Degree)]
+    #[case::total_degree(AtomConstraintAst::total_degree(4), AtomConstraintKey::TotalDegree)]
+    #[case::ring_degree(AtomConstraintAst::ring_degree(2), AtomConstraintKey::RingDegree)]
+    #[case::ring_valence(AtomConstraintAst::ring_valence(3), AtomConstraintKey::RingValence)]
+    #[case::total_hydrogens(AtomConstraintAst::total_hydrogens(3), AtomConstraintKey::TotalHydrogens)]
+    #[case::ring_membership_all(AtomConstraintAst::ring_membership(RingScope::All, 1), AtomConstraintKey::RingMembership(RingScope::All))]
+    #[case::ring_membership_size(AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintKey::RingMembership(RingScope::Size(6)))]
+    #[case::tetrahedral_stereo(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo), AtomConstraintKey::TetrahedralStereo)]
     fn test_atom_constraint_key(
-        #[case] constraint: AtomConstraint,
+        #[case] constraint: AtomConstraintAst,
         #[case] expected: AtomConstraintKey,
     ) {
         assert_eq!(constraint.key(), expected);
@@ -1084,34 +1084,34 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valence_litset_singleton(AtomConstraint::Valence(ValueAst::lit_set([4])), Ok(AtomConstraint::valence(4)))]
+    #[case::valence_litset_singleton(AtomConstraintAst::Valence(ValueAst::lit_set([4])), Ok(AtomConstraintAst::valence(4)))]
     #[case::ring_count_litset_singleton(
-        AtomConstraint::RingMembership(RingMembershipAst::new(RingScope::Size(6), ValueAst::lit_set([2]))),
-        Ok(AtomConstraint::ring_membership(RingScope::Size(6), 2)))]
-    #[case::empty_litset_contradiction(AtomConstraint::Valence(ValueAst::lit_set(Vec::<i64>::new())), Err(Contradiction))]
+        AtomConstraintAst::RingMembership(RingMembershipAst::new(RingScope::Size(6), ValueAst::lit_set([2]))),
+        Ok(AtomConstraintAst::ring_membership(RingScope::Size(6), 2)))]
+    #[case::empty_litset_contradiction(AtomConstraintAst::Valence(ValueAst::lit_set(Vec::<i64>::new())), Err(Contradiction))]
     fn test_atom_constraint_canonicalize(
-        #[case] constraint: AtomConstraint,
-        #[case] expected: Result<AtomConstraint, Contradiction>,
+        #[case] constraint: AtomConstraintAst,
+        #[case] expected: Result<AtomConstraintAst, Contradiction>,
     ) {
         assert_eq!(constraint.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valence_lit(AtomConstraint::valence(4), false)]
-    #[case::valence_undetermined(AtomConstraint::Valence(ValueAst::Undetermined), true)]
-    #[case::degree_undetermined(AtomConstraint::Degree(ValueAst::Undetermined), true)]
-    #[case::ring_membership_undetermined(AtomConstraint::ring_membership(RingScope::All, ValueAst::Undetermined), true)]
-    #[case::aromatic_undetermined(AtomConstraint::aromatic_valence(AromaticValenceAst::Undetermined), true)]
-    #[case::aromatic_not_aromatic(AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic), false)]
-    #[case::aromatic_with_value(AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1)), false)]
-    #[case::multicenter_undetermined(AtomConstraint::multicenter_valence(MulticenterValenceAst::Undetermined), true)]
-    #[case::multicenter_not(AtomConstraint::multicenter_valence(MulticenterValenceAst::NotMulticenter), false)]
-    #[case::multicenter_with_value(AtomConstraint::multicenter_valence(MulticenterValenceAst::multicenter(1)), false)]
-    #[case::tetrahedral_not_stereo(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo), false)]
-    #[case::tetrahedral_undetermined(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Undetermined), true)]
+    #[case::valence_lit(AtomConstraintAst::valence(4), false)]
+    #[case::valence_undetermined(AtomConstraintAst::Valence(ValueAst::Undetermined), true)]
+    #[case::degree_undetermined(AtomConstraintAst::Degree(ValueAst::Undetermined), true)]
+    #[case::ring_membership_undetermined(AtomConstraintAst::ring_membership(RingScope::All, ValueAst::Undetermined), true)]
+    #[case::aromatic_undetermined(AtomConstraintAst::aromatic_valence(AromaticValenceAst::Undetermined), true)]
+    #[case::aromatic_not_aromatic(AtomConstraintAst::aromatic_valence(AromaticValenceAst::NotAromatic), false)]
+    #[case::aromatic_with_value(AtomConstraintAst::aromatic_valence(AromaticValenceAst::aromatic(1)), false)]
+    #[case::multicenter_undetermined(AtomConstraintAst::multicenter_valence(MulticenterValenceAst::Undetermined), true)]
+    #[case::multicenter_not(AtomConstraintAst::multicenter_valence(MulticenterValenceAst::NotMulticenter), false)]
+    #[case::multicenter_with_value(AtomConstraintAst::multicenter_valence(MulticenterValenceAst::multicenter(1)), false)]
+    #[case::tetrahedral_not_stereo(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo), false)]
+    #[case::tetrahedral_undetermined(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Undetermined), true)]
     fn test_atom_constraint_is_undetermined(
-        #[case] c: AtomConstraint,
+        #[case] c: AtomConstraintAst,
         #[case] expected: bool,
     ) {
         assert_eq!(c.is_undetermined(), expected);
@@ -1119,27 +1119,27 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valence(AtomConstraint::valence(4), AtomConstraint::Valence(ValueAst::Undetermined))]
-    #[case::degree(AtomConstraint::Degree(ValueAst::Lit(2)), AtomConstraint::Degree(ValueAst::Undetermined))]
-    #[case::ring_membership_keeps_scope(AtomConstraint::ring_membership(RingScope::Size(6), 1), AtomConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined))]
-    #[case::aromatic(AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1)), AtomConstraint::aromatic_valence(AromaticValenceAst::Undetermined))]
-    #[case::multicenter(AtomConstraint::multicenter_valence(MulticenterValenceAst::multicenter(1)), AtomConstraint::multicenter_valence(MulticenterValenceAst::Undetermined))]
-    #[case::tetrahedral(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo), AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Undetermined))]
+    #[case::valence(AtomConstraintAst::valence(4), AtomConstraintAst::Valence(ValueAst::Undetermined))]
+    #[case::degree(AtomConstraintAst::Degree(ValueAst::Lit(2)), AtomConstraintAst::Degree(ValueAst::Undetermined))]
+    #[case::ring_membership_keeps_scope(AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined))]
+    #[case::aromatic(AtomConstraintAst::aromatic_valence(AromaticValenceAst::aromatic(1)), AtomConstraintAst::aromatic_valence(AromaticValenceAst::Undetermined))]
+    #[case::multicenter(AtomConstraintAst::multicenter_valence(MulticenterValenceAst::multicenter(1)), AtomConstraintAst::multicenter_valence(MulticenterValenceAst::Undetermined))]
+    #[case::tetrahedral(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo), AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Undetermined))]
     fn test_atom_constraint_as_undetermined(
-        #[case] c: AtomConstraint,
-        #[case] expected: AtomConstraint,
+        #[case] c: AtomConstraintAst,
+        #[case] expected: AtomConstraintAst,
     ) {
         assert_eq!(c.as_undetermined(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_key_widens(AtomConstraint::valence(4), AtomConstraint::valence(3), Ok(AtomConstraint::Valence(ValueAst::lit_set([3, 4]))))]
-    #[case::different_key(AtomConstraint::valence(4), AtomConstraint::degree(3), Err(NoJoin))]
+    #[case::same_key_widens(AtomConstraintAst::valence(4), AtomConstraintAst::valence(3), Ok(AtomConstraintAst::Valence(ValueAst::lit_set([3, 4]))))]
+    #[case::different_key(AtomConstraintAst::valence(4), AtomConstraintAst::degree(3), Err(NoJoin))]
     fn test_atom_constraint_join(
-        #[case] a: AtomConstraint,
-        #[case] b: AtomConstraint,
-        #[case] expected: Result<AtomConstraint, NoJoin>,
+        #[case] a: AtomConstraintAst,
+        #[case] b: AtomConstraintAst,
+        #[case] expected: Result<AtomConstraintAst, NoJoin>,
     ) {
         assert_eq!(a.join(&b), expected);
     }
@@ -1454,7 +1454,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_constraints_new() {
-        let cs = AtomConstraints::new();
+        let cs = AtomConstraintsAst::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
     }
@@ -1470,49 +1470,49 @@ mod tests {
         #[case] key: AtomConstraintKey,
         #[case] expected: bool,
     ) {
-        let cs = AtomConstraints::from_iter([
-            AtomConstraint::valence(4),
-            AtomConstraint::ring_membership(RingScope::All, 2),
-            AtomConstraint::ring_membership(RingScope::Size(6), 1),
+        let cs = AtomConstraintsAst::from_iter([
+            AtomConstraintAst::valence(4),
+            AtomConstraintAst::ring_membership(RingScope::All, 2),
+            AtomConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]);
         assert_eq!(cs.contains(key), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::ring_all(AtomConstraintKey::RingMembership(RingScope::All), Some(AtomConstraint::ring_membership(RingScope::All, 2)))]
-    #[case::ring_size(AtomConstraintKey::RingMembership(RingScope::Size(6)), Some(AtomConstraint::ring_membership(RingScope::Size(6), 1)))]
+    #[case::ring_all(AtomConstraintKey::RingMembership(RingScope::All), Some(AtomConstraintAst::ring_membership(RingScope::All, 2)))]
+    #[case::ring_size(AtomConstraintKey::RingMembership(RingScope::Size(6)), Some(AtomConstraintAst::ring_membership(RingScope::Size(6), 1)))]
     #[case::ring_size_absent(AtomConstraintKey::RingMembership(RingScope::Size(5)), None)]
-    #[case::valence(AtomConstraintKey::Valence, Some(AtomConstraint::valence(4)))]
+    #[case::valence(AtomConstraintKey::Valence, Some(AtomConstraintAst::valence(4)))]
     fn test_atom_constraints_get(
         #[case] key: AtomConstraintKey,
-        #[case] expected: Option<AtomConstraint>,
+        #[case] expected: Option<AtomConstraintAst>,
     ) {
-        let cs = AtomConstraints::from_iter([
-            AtomConstraint::valence(4),
-            AtomConstraint::ring_membership(RingScope::All, 2),
-            AtomConstraint::ring_membership(RingScope::Size(6), 1),
+        let cs = AtomConstraintsAst::from_iter([
+            AtomConstraintAst::valence(4),
+            AtomConstraintAst::ring_membership(RingScope::All, 2),
+            AtomConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]);
         assert_eq!(cs.get(key), expected.as_ref());
     }
 
     #[rstest]
     fn test_atom_constraints_remove() {
-        let mut cs = AtomConstraints::from_iter([
-            AtomConstraint::valence(4),
-            AtomConstraint::ring_membership(RingScope::All, 2),
-            AtomConstraint::ring_membership(RingScope::Size(6), 1),
+        let mut cs = AtomConstraintsAst::from_iter([
+            AtomConstraintAst::valence(4),
+            AtomConstraintAst::ring_membership(RingScope::All, 2),
+            AtomConstraintAst::ring_membership(RingScope::Size(6), 1),
         ]);
         let removed = cs.remove(AtomConstraintKey::RingMembership(RingScope::Size(6)));
         assert_eq!(
             removed,
-            Some(AtomConstraint::ring_membership(RingScope::Size(6), 1)),
+            Some(AtomConstraintAst::ring_membership(RingScope::Size(6), 1)),
         );
         assert_eq!(
             cs.iter().cloned().collect::<Vec<_>>(),
             vec![
-                AtomConstraint::valence(4),
-                AtomConstraint::ring_membership(RingScope::All, 2),
+                AtomConstraintAst::valence(4),
+                AtomConstraintAst::ring_membership(RingScope::All, 2),
             ],
         );
     }
@@ -1520,158 +1520,164 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::drop_vacuous(
-        AtomConstraints::from_iter([
-            AtomConstraint::Valence(ValueAst::Undetermined),
-            AtomConstraint::degree(3),
+        AtomConstraintsAst::from_iter([
+            AtomConstraintAst::Valence(ValueAst::Undetermined),
+            AtomConstraintAst::degree(3),
         ]),
-        Ok(AtomConstraints::from_iter([AtomConstraint::degree(3)])))]
+        Ok(AtomConstraintsAst::from_iter([AtomConstraintAst::degree(3)])))]
     #[case::canonicalizes_values(
-        AtomConstraints::from_iter([
-            AtomConstraint::Degree(ValueAst::lit_set([3])),
-            AtomConstraint::Valence(ValueAst::lit_set([4])),
+        AtomConstraintsAst::from_iter([
+            AtomConstraintAst::Degree(ValueAst::lit_set([3])),
+            AtomConstraintAst::Valence(ValueAst::lit_set([4])),
         ]),
-        Ok(AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)])))]
+        Ok(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)])))]
     fn test_atom_constraints_canonicalize(
-        #[case] constraints: AtomConstraints,
-        #[case] expected: Result<AtomConstraints, Contradiction>,
+        #[case] constraints: AtomConstraintsAst,
+        #[case] expected: Result<AtomConstraintsAst, Contradiction>,
     ) {
         assert_eq!(constraints.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::fresh(vec![AtomConstraint::valence(4)], vec![AtomConstraint::valence(4)])]
-    #[case::overwrite_same_key(vec![AtomConstraint::valence(3), AtomConstraint::valence(4)], vec![AtomConstraint::valence(4)])]
-    #[case::vacuous_overwrites(vec![AtomConstraint::valence(4), AtomConstraint::Valence(ValueAst::Undetermined)], vec![AtomConstraint::Valence(ValueAst::Undetermined)])]
-    #[case::vacuous_absent_inserts(vec![AtomConstraint::Valence(ValueAst::Undetermined)], vec![AtomConstraint::Valence(ValueAst::Undetermined)])]
-    #[case::new_key_sorts(vec![AtomConstraint::degree(3), AtomConstraint::valence(4)], vec![AtomConstraint::valence(4), AtomConstraint::degree(3)])]
-    #[case::ring_overwrite_scope(vec![AtomConstraint::ring_membership(RingScope::Size(6), 1), AtomConstraint::ring_membership(RingScope::Size(6), 2)], vec![AtomConstraint::ring_membership(RingScope::Size(6), 2)])]
-    #[case::ring_vacuous_overwrites_scope(vec![AtomConstraint::ring_membership(RingScope::All, 2), AtomConstraint::ring_membership(RingScope::Size(6), 1), AtomConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined)], vec![AtomConstraint::ring_membership(RingScope::All, 2), AtomConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined)])]
+    #[case::fresh(vec![AtomConstraintAst::valence(4)], vec![AtomConstraintAst::valence(4)])]
+    #[case::overwrite_same_key(vec![AtomConstraintAst::valence(3), AtomConstraintAst::valence(4)], vec![AtomConstraintAst::valence(4)])]
+    #[case::vacuous_overwrites(vec![AtomConstraintAst::valence(4), AtomConstraintAst::Valence(ValueAst::Undetermined)], vec![AtomConstraintAst::Valence(ValueAst::Undetermined)])]
+    #[case::vacuous_absent_inserts(vec![AtomConstraintAst::Valence(ValueAst::Undetermined)], vec![AtomConstraintAst::Valence(ValueAst::Undetermined)])]
+    #[case::new_key_sorts(vec![AtomConstraintAst::degree(3), AtomConstraintAst::valence(4)], vec![AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)])]
+    #[case::ring_overwrite_scope(vec![AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), 2)], vec![AtomConstraintAst::ring_membership(RingScope::Size(6), 2)])]
+    #[case::ring_vacuous_overwrites_scope(vec![AtomConstraintAst::ring_membership(RingScope::All, 2), AtomConstraintAst::ring_membership(RingScope::Size(6), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)], vec![AtomConstraintAst::ring_membership(RingScope::All, 2), AtomConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)])]
     fn test_atom_constraints_set(
-        #[case] sequence: Vec<AtomConstraint>,
-        #[case] expected_state: Vec<AtomConstraint>,
+        #[case] sequence: Vec<AtomConstraintAst>,
+        #[case] expected_state: Vec<AtomConstraintAst>,
     ) {
-        let mut cs = AtomConstraints::new();
+        let mut cs = AtomConstraintsAst::new();
         for c in sequence {
             cs.set(c);
         }
-        assert_eq!(cs, AtomConstraints::from_iter(expected_state));
+        assert_eq!(cs, AtomConstraintsAst::from_iter(expected_state));
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::overwrite_shared(
-        vec![AtomConstraint::valence(3), AtomConstraint::degree(3)],
-        vec![AtomConstraint::valence(4)],
-        vec![AtomConstraint::valence(4), AtomConstraint::degree(3)])]
+        vec![AtomConstraintAst::valence(3), AtomConstraintAst::degree(3)],
+        vec![AtomConstraintAst::valence(4)],
+        vec![AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)])]
     #[case::keeps_disjoint(
-        vec![AtomConstraint::valence(4)],
-        vec![AtomConstraint::degree(3)],
-        vec![AtomConstraint::valence(4), AtomConstraint::degree(3)])]
+        vec![AtomConstraintAst::valence(4)],
+        vec![AtomConstraintAst::degree(3)],
+        vec![AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)])]
     #[case::vacuous_removes(
-        vec![AtomConstraint::valence(4), AtomConstraint::degree(3)],
-        vec![AtomConstraint::Valence(ValueAst::Undetermined)],
-        vec![AtomConstraint::degree(3)])]
+        vec![AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)],
+        vec![AtomConstraintAst::Valence(ValueAst::Undetermined)],
+        vec![AtomConstraintAst::degree(3)])]
     #[case::empty_other(
-        vec![AtomConstraint::valence(4)],
+        vec![AtomConstraintAst::valence(4)],
         vec![],
-        vec![AtomConstraint::valence(4)])]
+        vec![AtomConstraintAst::valence(4)])]
     #[case::ring_overwrite_scope(
-        vec![AtomConstraint::ring_membership(RingScope::All, 2), AtomConstraint::ring_membership(RingScope::Size(6), 1)],
-        vec![AtomConstraint::ring_membership(RingScope::Size(6), 3)],
-        vec![AtomConstraint::ring_membership(RingScope::All, 2), AtomConstraint::ring_membership(RingScope::Size(6), 3)])]
+        vec![AtomConstraintAst::ring_membership(RingScope::All, 2), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)],
+        vec![AtomConstraintAst::ring_membership(RingScope::Size(6), 3)],
+        vec![AtomConstraintAst::ring_membership(RingScope::All, 2), AtomConstraintAst::ring_membership(RingScope::Size(6), 3)])]
     fn test_atom_constraints_update(
-        #[case] initial: Vec<AtomConstraint>,
-        #[case] other: Vec<AtomConstraint>,
-        #[case] expected: Vec<AtomConstraint>,
+        #[case] initial: Vec<AtomConstraintAst>,
+        #[case] other: Vec<AtomConstraintAst>,
+        #[case] expected: Vec<AtomConstraintAst>,
     ) {
-        let mut cs = AtomConstraints::from_iter(initial);
-        let overlay = AtomConstraints::from_iter(other);
+        let mut cs = AtomConstraintsAst::from_iter(initial);
+        let overlay = AtomConstraintsAst::from_iter(other);
         cs.update(&overlay);
-        assert_eq!(cs, AtomConstraints::from_iter(expected));
+        assert_eq!(cs, AtomConstraintsAst::from_iter(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::modify(vec![AtomConstraint::valence(3)], Some(AtomConstraint::valence(3)), Some(AtomConstraint::valence(4)), Ok(()), vec![AtomConstraint::valence(4)])]
-    #[case::remove(vec![AtomConstraint::valence(4)], Some(AtomConstraint::valence(4)), None, Ok(()), vec![])]
-    #[case::add_from_absent(vec![], None, Some(AtomConstraint::valence(4)), Ok(()), vec![AtomConstraint::valence(4)])]
-    #[case::canonical_match(vec![AtomConstraint::Valence(ValueAst::lit_set([4]))], Some(AtomConstraint::valence(4)), Some(AtomConstraint::valence(5)), Ok(()), vec![AtomConstraint::valence(5)])]
-    #[case::old_mismatch(vec![AtomConstraint::valence(3)], Some(AtomConstraint::valence(4)), Some(AtomConstraint::valence(5)), Err(Contradiction), vec![AtomConstraint::valence(3)])]
-    #[case::old_absent_mismatch(vec![AtomConstraint::valence(3)], None, Some(AtomConstraint::valence(4)), Err(Contradiction), vec![AtomConstraint::valence(3)])]
-    #[case::key_mismatch(vec![], Some(AtomConstraint::valence(3)), Some(AtomConstraint::degree(4)), Err(Contradiction), vec![])]
-    #[case::noop(vec![AtomConstraint::valence(4)], None, None, Ok(()), vec![AtomConstraint::valence(4)])]
+    #[case::modify(vec![AtomConstraintAst::valence(3)], Some(AtomConstraintAst::valence(3)), Some(AtomConstraintAst::valence(4)), Ok(()), vec![AtomConstraintAst::valence(4)])]
+    #[case::remove(vec![AtomConstraintAst::valence(4)], Some(AtomConstraintAst::valence(4)), None, Ok(()), vec![])]
+    #[case::add_from_absent(vec![], None, Some(AtomConstraintAst::valence(4)), Ok(()), vec![AtomConstraintAst::valence(4)])]
+    #[case::canonical_match(vec![AtomConstraintAst::Valence(ValueAst::lit_set([4]))], Some(AtomConstraintAst::valence(4)), Some(AtomConstraintAst::valence(5)), Ok(()), vec![AtomConstraintAst::valence(5)])]
+    #[case::old_mismatch(vec![AtomConstraintAst::valence(3)], Some(AtomConstraintAst::valence(4)), Some(AtomConstraintAst::valence(5)), Err(Contradiction), vec![AtomConstraintAst::valence(3)])]
+    #[case::old_absent_mismatch(vec![AtomConstraintAst::valence(3)], None, Some(AtomConstraintAst::valence(4)), Err(Contradiction), vec![AtomConstraintAst::valence(3)])]
+    #[case::key_mismatch(vec![], Some(AtomConstraintAst::valence(3)), Some(AtomConstraintAst::degree(4)), Err(Contradiction), vec![])]
+    #[case::noop(vec![AtomConstraintAst::valence(4)], None, None, Ok(()), vec![AtomConstraintAst::valence(4)])]
     fn test_atom_constraints_compare_and_set(
-        #[case] initial: Vec<AtomConstraint>,
-        #[case] old: Option<AtomConstraint>,
-        #[case] new: Option<AtomConstraint>,
+        #[case] initial: Vec<AtomConstraintAst>,
+        #[case] old: Option<AtomConstraintAst>,
+        #[case] new: Option<AtomConstraintAst>,
         #[case] expected_result: Result<(), Contradiction>,
-        #[case] expected_state: Vec<AtomConstraint>,
+        #[case] expected_state: Vec<AtomConstraintAst>,
     ) {
-        let mut cs = AtomConstraints::from_iter(initial);
+        let mut cs = AtomConstraintsAst::from_iter(initial);
         assert_eq!(cs.compare_and_set(old, new), expected_result);
-        assert_eq!(cs, AtomConstraints::from_iter(expected_state));
+        assert_eq!(cs, AtomConstraintsAst::from_iter(expected_state));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::partial(|c: &AtomConstraint| matches!(c, AtomConstraint::Valence(_) | AtomConstraint::RingMembership(_)), vec![AtomConstraint::valence(4), AtomConstraint::ring_membership(RingScope::All, 2)])]
-    #[case::all_dropped(|_: &AtomConstraint| false, vec![])]
+    #[case::partial(|c: &AtomConstraintAst| matches!(c, AtomConstraintAst::Valence(_) | AtomConstraintAst::RingMembership(_)), vec![AtomConstraintAst::valence(4), AtomConstraintAst::ring_membership(RingScope::All, 2)])]
+    #[case::all_dropped(|_: &AtomConstraintAst| false, vec![])]
     fn test_atom_constraints_retain(
-        #[case] predicate: impl FnMut(&AtomConstraint) -> bool,
-        #[case] expected: Vec<AtomConstraint>,
+        #[case] predicate: impl FnMut(&AtomConstraintAst) -> bool,
+        #[case] expected: Vec<AtomConstraintAst>,
     ) {
-        let mut cs = AtomConstraints::from_iter([
-            AtomConstraint::valence(4),
-            AtomConstraint::degree(3),
-            AtomConstraint::ring_membership(RingScope::All, 2),
+        let mut cs = AtomConstraintsAst::from_iter([
+            AtomConstraintAst::valence(4),
+            AtomConstraintAst::degree(3),
+            AtomConstraintAst::ring_membership(RingScope::All, 2),
         ]);
         cs.retain(predicate);
-        assert_eq!(cs, AtomConstraints::from_iter(expected));
+        assert_eq!(cs, AtomConstraintsAst::from_iter(expected));
     }
 
     #[rstest]
     fn test_atom_constraints_clear() {
-        let mut cs =
-            AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]);
+        let mut cs = AtomConstraintsAst::from_iter([
+            AtomConstraintAst::valence(4),
+            AtomConstraintAst::degree(3),
+        ]);
         cs.clear();
-        assert_eq!(cs, AtomConstraints::new());
+        assert_eq!(cs, AtomConstraintsAst::new());
     }
 
     #[rstest]
     fn test_atom_constraints_take() {
-        let mut cs =
-            AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]);
+        let mut cs = AtomConstraintsAst::from_iter([
+            AtomConstraintAst::valence(4),
+            AtomConstraintAst::degree(3),
+        ]);
         let drained: Vec<_> = cs.take().collect();
         assert_eq!(
             drained,
-            vec![AtomConstraint::valence(4), AtomConstraint::degree(3)],
+            vec![AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)],
         );
-        assert_eq!(cs, AtomConstraints::new());
+        assert_eq!(cs, AtomConstraintsAst::new());
     }
 
     #[rstest]
     fn test_atom_constraints_iter() {
-        let cs = AtomConstraints::from_iter([
-            AtomConstraint::ring_membership(RingScope::Size(6), 1),
-            AtomConstraint::valence(4),
-            AtomConstraint::degree(3),
+        let cs = AtomConstraintsAst::from_iter([
+            AtomConstraintAst::ring_membership(RingScope::Size(6), 1),
+            AtomConstraintAst::valence(4),
+            AtomConstraintAst::degree(3),
         ]);
         let collected: Vec<_> = cs.iter().cloned().collect();
         assert_eq!(
             collected,
             vec![
-                AtomConstraint::valence(4),
-                AtomConstraint::degree(3),
-                AtomConstraint::ring_membership(RingScope::Size(6), 1),
+                AtomConstraintAst::valence(4),
+                AtomConstraintAst::degree(3),
+                AtomConstraintAst::ring_membership(RingScope::Size(6), 1),
             ],
         );
     }
 
     #[rstest]
     fn test_atom_constraints_compact() {
-        let cs =
-            AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]);
+        let cs = AtomConstraintsAst::from_iter([
+            AtomConstraintAst::valence(4),
+            AtomConstraintAst::degree(3),
+        ]);
         let compaction = IdCompaction::new(
             Compaction::new(vec![0, 1, 2], vec![0]),
             Vec::new(),
@@ -1686,92 +1692,100 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::distinct(vec![AtomConstraint::valence(4), AtomConstraint::degree(3)], vec![AtomConstraint::valence(4), AtomConstraint::degree(3)])]
-    #[case::same_kind_last_wins(vec![AtomConstraint::valence(3), AtomConstraint::valence(4)], vec![AtomConstraint::valence(4)])]
+    #[case::distinct(vec![AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)], vec![AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)])]
+    #[case::same_kind_last_wins(vec![AtomConstraintAst::valence(3), AtomConstraintAst::valence(4)], vec![AtomConstraintAst::valence(4)])]
     #[case::empty(vec![], vec![])]
     fn test_atom_constraints_from_iter(
-        #[case] input: Vec<AtomConstraint>,
-        #[case] expected: Vec<AtomConstraint>,
+        #[case] input: Vec<AtomConstraintAst>,
+        #[case] expected: Vec<AtomConstraintAst>,
     ) {
-        let cs = AtomConstraints::from_iter(input);
-        assert_eq!(cs, AtomConstraints::from_iter(expected));
+        let cs = AtomConstraintsAst::from_iter(input);
+        assert_eq!(cs, AtomConstraintsAst::from_iter(expected));
     }
 
     #[rstest]
     fn test_atom_constraints_into_iter() {
-        let cs =
-            AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]);
-        let collected: Vec<AtomConstraint> = cs.into_iter().collect();
+        let cs = AtomConstraintsAst::from_iter([
+            AtomConstraintAst::valence(4),
+            AtomConstraintAst::degree(3),
+        ]);
+        let collected: Vec<AtomConstraintAst> = cs.into_iter().collect();
         assert_eq!(
             collected,
-            vec![AtomConstraint::valence(4), AtomConstraint::degree(3)],
+            vec![AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)],
         );
     }
 
     #[rstest]
     fn test_atom_constraints_from_atom_constraint() {
-        let cs: AtomConstraints = AtomConstraint::valence(4).into();
-        assert_eq!(cs, AtomConstraints::from_iter([AtomConstraint::valence(4)]));
+        let cs: AtomConstraintsAst = AtomConstraintAst::valence(4).into();
+        assert_eq!(
+            cs,
+            AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)])
+        );
     }
 
     #[rstest]
     fn test_atom_constraints_from_vec() {
-        let cs: AtomConstraints =
-            vec![AtomConstraint::valence(4), AtomConstraint::donated_pairs(1)].into();
+        let cs: AtomConstraintsAst = vec![
+            AtomConstraintAst::valence(4),
+            AtomConstraintAst::donated_pairs(1),
+        ]
+        .into();
         assert_eq!(
             cs,
-            AtomConstraints::from_iter([
-                AtomConstraint::valence(4),
-                AtomConstraint::donated_pairs(1),
+            AtomConstraintsAst::from_iter([
+                AtomConstraintAst::valence(4),
+                AtomConstraintAst::donated_pairs(1),
             ]),
         );
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty_empty(AtomConstraints::new(), AtomConstraints::new(), Some(AtomConstraints::new()))]
-    #[case::adds_kind_from_other(AtomConstraints::new(), AtomConstraints::from_iter([AtomConstraint::valence(4)]), Some(AtomConstraints::from_iter([AtomConstraint::valence(4)])))]
-    #[case::narrows_undetermined_to_lit(AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Undetermined)]), AtomConstraints::from_iter([AtomConstraint::valence(4)]),
-        Some(AtomConstraints::from_iter([AtomConstraint::valence(4)])))]
-    #[case::lit_lit_match_preserved(AtomConstraints::from_iter([AtomConstraint::valence(4)]), AtomConstraints::from_iter([AtomConstraint::valence(4)]),
-        Some(AtomConstraints::from_iter([AtomConstraint::valence(4)])))]
-    #[case::lit_lit_mismatch_none(AtomConstraints::from_iter([AtomConstraint::valence(4)]), AtomConstraints::from_iter([AtomConstraint::valence(3)]), None)]
-    #[case::multi_kind_combines(AtomConstraints::from_iter([AtomConstraint::valence(4)]), AtomConstraints::from_iter([AtomConstraint::degree(3)]),
-        Some(AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)])))]
-    #[case::aromatic_valence_narrows(AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::Undetermined)]),
-        AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))]),
-        Some(AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))])))]
-    #[case::aromatic_valence_not_vs_aromatic_none(AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic)]),
-        AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))]), None)]
-    #[case::ring_membership_size_unions(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1)]), AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(6), 1)]),
-        Some(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1), AtomConstraint::ring_membership(RingScope::Size(6), 1)])))]
-    #[case::ring_membership_size_dedup(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1)]), AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1)]),
-        Some(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1)])))]
-    #[case::prunes_vacuous(AtomConstraints::new(), AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Undetermined)]), Some(AtomConstraints::new()))]
-    #[case::tetrahedral_narrows_from_absent(AtomConstraints::new(),
-        AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        Some(AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo)])))]
-    #[case::tetrahedral_not_stereo_vs_stereo_contradicts(AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::stereo(0_u32))]), None)]
+    #[case::empty_empty(AtomConstraintsAst::new(), AtomConstraintsAst::new(), Some(AtomConstraintsAst::new()))]
+    #[case::adds_kind_from_other(AtomConstraintsAst::new(), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), Some(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)])))]
+    #[case::narrows_undetermined_to_lit(AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(ValueAst::Undetermined)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]),
+        Some(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)])))]
+    #[case::lit_lit_match_preserved(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]),
+        Some(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)])))]
+    #[case::lit_lit_mismatch_none(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(3)]), None)]
+    #[case::multi_kind_combines(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), AtomConstraintsAst::from_iter([AtomConstraintAst::degree(3)]),
+        Some(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)])))]
+    #[case::aromatic_valence_narrows(AtomConstraintsAst::from_iter([AtomConstraintAst::aromatic_valence(AromaticValenceAst::Undetermined)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::aromatic_valence(AromaticValenceAst::aromatic(1))]),
+        Some(AtomConstraintsAst::from_iter([AtomConstraintAst::aromatic_valence(AromaticValenceAst::aromatic(1))])))]
+    #[case::aromatic_valence_not_vs_aromatic_none(AtomConstraintsAst::from_iter([AtomConstraintAst::aromatic_valence(AromaticValenceAst::NotAromatic)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::aromatic_valence(AromaticValenceAst::aromatic(1))]), None)]
+    #[case::ring_membership_size_unions(AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1)]), AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]),
+        Some(AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)])))]
+    #[case::ring_membership_size_dedup(AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1)]), AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1)]),
+        Some(AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1)])))]
+    #[case::prunes_vacuous(AtomConstraintsAst::new(), AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(ValueAst::Undetermined)]), Some(AtomConstraintsAst::new()))]
+    #[case::tetrahedral_narrows_from_absent(AtomConstraintsAst::new(),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
+        Some(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)])))]
+    #[case::tetrahedral_not_stereo_vs_stereo_contradicts(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::stereo(0_u32))]), None)]
     fn test_atom_constraints_meet(
-        #[case] a: AtomConstraints,
-        #[case] b: AtomConstraints,
-        #[case] expected: Option<AtomConstraints>,
+        #[case] a: AtomConstraintsAst,
+        #[case] b: AtomConstraintsAst,
+        #[case] expected: Option<AtomConstraintsAst>,
     ) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
-    #[case::extends_self(AtomConstraints::new(), AtomConstraints::from_iter([AtomConstraint::valence(4)]), true, AtomConstraints::from_iter([AtomConstraint::valence(4)]))]
-    #[case::no_change(AtomConstraints::from_iter([AtomConstraint::valence(4)]), AtomConstraints::from_iter([AtomConstraint::valence(4)]), false,
-        AtomConstraints::from_iter([AtomConstraint::valence(4)]))]
-    #[case::contradiction_leaves_self_unchanged(AtomConstraints::from_iter([AtomConstraint::valence(4)]), AtomConstraints::from_iter([AtomConstraint::valence(3)]), false,
-        AtomConstraints::from_iter([AtomConstraint::valence(4)]))]
+    #[case::extends_self(AtomConstraintsAst::new(), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), true, AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]))]
+    #[case::no_change(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), false,
+        AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]))]
+    #[case::contradiction_leaves_self_unchanged(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(3)]), false,
+        AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]))]
     fn test_atom_constraints_narrow_from(
-        #[case] mut target: AtomConstraints,
-        #[case] source: AtomConstraints,
+        #[case] mut target: AtomConstraintsAst,
+        #[case] source: AtomConstraintsAst,
         #[case] expected_changed: bool,
-        #[case] expected_after: AtomConstraints,
+        #[case] expected_after: AtomConstraintsAst,
     ) {
         let changed = target.narrow_from(&source);
         assert_eq!(changed, expected_changed);
@@ -1779,45 +1793,45 @@ mod tests {
     }
 
     #[rstest]
-    #[case::keeps_only_shared_kinds(AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(2)]), AtomConstraints::from_iter([AtomConstraint::valence(4)]),
-        AtomConstraints::from_iter([AtomConstraint::valence(4)]))]
-    #[case::widens_value(AtomConstraints::from_iter([AtomConstraint::valence(4)]), AtomConstraints::from_iter([AtomConstraint::valence(3)]),
-        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::lit_set([4, 3]))]))]
-    #[case::tetrahedral_same(AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]))]
-    #[case::tetrahedral_incompatible_drops_to_undetermined(AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::stereo(0_u32))]), AtomConstraints::new())]
+    #[case::keeps_only_shared_kinds(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::degree(2)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]))]
+    #[case::widens_value(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(3)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(ValueAst::lit_set([4, 3]))]))]
+    #[case::tetrahedral_same(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]))]
+    #[case::tetrahedral_incompatible_drops_to_undetermined(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::stereo(0_u32))]), AtomConstraintsAst::new())]
     fn test_atom_constraints_join(
-        #[case] a: AtomConstraints,
-        #[case] b: AtomConstraints,
-        #[case] expected: AtomConstraints,
+        #[case] a: AtomConstraintsAst,
+        #[case] b: AtomConstraintsAst,
+        #[case] expected: AtomConstraintsAst,
     ) {
         assert_eq!(a.join(&b), Ok(expected));
     }
 
     #[rstest]
-    #[case::empty_pattern_matches_anything(AtomConstraints::new(), AtomConstraints::from_iter([AtomConstraint::valence(4)]), true)]
-    #[case::missing_in_target_when_pattern_specific(AtomConstraints::from_iter([AtomConstraint::valence(4)]), AtomConstraints::new(), false)]
-    #[case::same_lit(AtomConstraints::from_iter([AtomConstraint::valence(4)]), AtomConstraints::from_iter([AtomConstraint::valence(4)]), true)]
-    #[case::lit_lit_mismatch(AtomConstraints::from_iter([AtomConstraint::valence(4)]), AtomConstraints::from_iter([AtomConstraint::valence(3)]), false)]
-    #[case::aromatic_wildcard_matches_aromatic(AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::Undetermined)]),
-        AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))]), true)]
-    #[case::aromatic_not_vs_aromatic_mismatch(AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic)]),
-        AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))]), false)]
-    #[case::ring_membership_size_subset(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1)]),
-        AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1), AtomConstraint::ring_membership(RingScope::Size(6), 1)]), true)]
-    #[case::ring_membership_size_not_present_in_target(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(7), 1)]),
-        AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1), AtomConstraint::ring_membership(RingScope::Size(6), 1)]), false)]
-    #[case::multi_kind_all_must_match(AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]),
-        AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(2)]), false)]
-    #[case::tetrahedral_same(AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]), true)]
-    #[case::tetrahedral_pattern_specific_vs_absent(AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
-        AtomConstraints::new(), false)]
+    #[case::empty_pattern_matches_anything(AtomConstraintsAst::new(), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), true)]
+    #[case::missing_in_target_when_pattern_specific(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), AtomConstraintsAst::new(), false)]
+    #[case::same_lit(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), true)]
+    #[case::lit_lit_mismatch(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4)]), AtomConstraintsAst::from_iter([AtomConstraintAst::valence(3)]), false)]
+    #[case::aromatic_wildcard_matches_aromatic(AtomConstraintsAst::from_iter([AtomConstraintAst::aromatic_valence(AromaticValenceAst::Undetermined)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::aromatic_valence(AromaticValenceAst::aromatic(1))]), true)]
+    #[case::aromatic_not_vs_aromatic_mismatch(AtomConstraintsAst::from_iter([AtomConstraintAst::aromatic_valence(AromaticValenceAst::NotAromatic)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::aromatic_valence(AromaticValenceAst::aromatic(1))]), false)]
+    #[case::ring_membership_size_subset(AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]), true)]
+    #[case::ring_membership_size_not_present_in_target(AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(7), 1)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::ring_membership(RingScope::Size(5), 1), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]), false)]
+    #[case::multi_kind_all_must_match(AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::degree(3)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::degree(2)]), false)]
+    #[case::tetrahedral_same(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
+        AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]), true)]
+    #[case::tetrahedral_pattern_specific_vs_absent(AtomConstraintsAst::from_iter([AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
+        AtomConstraintsAst::new(), false)]
     fn test_atom_constraints_matches(
-        #[case] pattern: AtomConstraints,
-        #[case] target: AtomConstraints,
+        #[case] pattern: AtomConstraintsAst,
+        #[case] target: AtomConstraintsAst,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);

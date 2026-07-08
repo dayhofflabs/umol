@@ -47,7 +47,10 @@ fn compose_overlap(
     let glue = a_inverse.lhs.meet_pushout(&b.lhs, overlap)?;
     let derivation_a = a_inverse.apply_at(&glue.object, &glue.left).ok()?;
     let derivation_b = b.apply_at(&glue.object, &glue.right).ok()?;
-    let correspondence = derivation_a.atom_map().reverse().compose(derivation_b.atom_map());
+    let correspondence = derivation_a
+        .atom_map()
+        .reverse()
+        .compose(derivation_b.atom_map());
     let composite = ReactionAst::from_sides(
         derivation_a.rhs().clone(),
         derivation_b.rhs().clone(),

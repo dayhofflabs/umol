@@ -1651,7 +1651,7 @@ mod tests {
 
     use super::*;
     use crate::ast::boolean::BooleanAst;
-    use crate::ast::constraint::{BondConstraint, Constraint, Constraints, MoleculeConstraint};
+    use crate::ast::constraint::{BondConstraintAst, Constraint, Constraints, MoleculeConstraint};
     use crate::ast::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
     use crate::ast::edit::BondFieldChange;
     use crate::ast::ligand::StereoLigandKind;
@@ -1739,7 +1739,7 @@ mod tests {
     }))]
     #[case::triple("[0 1 :triple]", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(BondAst::from_order(3))))]
     #[case::aromatic("[0 1 :aromatic]", (None, [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(
-        BondAst::from_order(1).with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))),
+        BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
     )))]
     fn test_parse_bond_span_entry(
         #[case] input: &str,
@@ -2095,7 +2095,7 @@ mod tests {
             ast.constraints().to_vec(),
             vec![ConstraintSpan::Unchanged(Constraint::Bond(
                 BondId(0),
-                BondConstraint::Aromatic(BooleanAst::Lit(true)),
+                BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
             ))]
         );
     }
@@ -2245,7 +2245,7 @@ mod tests {
     )]
     #[case::modify(EntitySpan::Modified { lhs:BondAst::from_order(1), rhs:BondAst::from_order(2) }, MoleculeMetadata::new(), "{:modify [0 1 [:single :double]]}")]
     #[case::with_id(EntitySpan::Unchanged(BondAst::from_order(1)), MoleculeMetadata::new().with_bond_keyword(BondId(0), "b1"), "{:id :b1 :atoms [0 1] :type :single}")]
-    #[case::aromatic(EntitySpan::Unchanged(BondAst::from_order(1).with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true)))), MoleculeMetadata::new(), "[0 1 :aromatic]")]
+    #[case::aromatic(EntitySpan::Unchanged(BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true)))), MoleculeMetadata::new(), "[0 1 :aromatic]")]
     fn test_render_bond_span_entry(
         #[case] span: EntitySpan<BondAst>,
         #[case] meta: MoleculeMetadata,

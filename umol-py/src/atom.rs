@@ -16,7 +16,7 @@ use umol_ast::ast::{
 };
 use umol_chem::element::Element as ChemElement;
 
-use crate::constraint::AtomConstraints;
+use crate::constraint::AtomConstraintsAst;
 use crate::convert::into_py_variant;
 use crate::element::Element;
 use crate::molecule::MoleculeAst;
@@ -178,7 +178,7 @@ impl AtomAst {
         implicit_hydrogens: Option<ValueArg>,
         lone_pairs: Option<ValueArg>,
         spin: Option<PyRef<'_, SpinStateAst>>,
-        constraints: Option<Py<AtomConstraints>>,
+        constraints: Option<Py<AtomConstraintsAst>>,
     ) -> Self {
         let atom = AstAtomAst::new(element.to_ast(py));
         AtomAst(apply_fields(
@@ -224,8 +224,8 @@ impl AtomAst {
     }
 
     #[getter]
-    fn constraints(&self) -> AtomConstraints {
-        AtomConstraints::from_inner(self.0.constraints.clone())
+    fn constraints(&self) -> AtomConstraintsAst {
+        AtomConstraintsAst::from_inner(self.0.constraints.clone())
     }
 
     /// A copy with the given fields replaced — the Python-idiomatic single-copy
@@ -242,7 +242,7 @@ impl AtomAst {
         implicit_hydrogens: Option<ValueArg>,
         lone_pairs: Option<ValueArg>,
         spin: Option<PyRef<'_, SpinStateAst>>,
-        constraints: Option<Py<AtomConstraints>>,
+        constraints: Option<Py<AtomConstraintsAst>>,
     ) -> Self {
         let mut atom = self.0.clone();
         if let Some(element) = element {
@@ -269,7 +269,7 @@ impl AtomAst {
         dict.set_item("implicit_hydrogens", self.implicit_hydrogens(py)?)?;
         dict.set_item("lone_pairs", self.lone_pairs(py)?)?;
         dict.set_item("spin", self.spin(py)?)?;
-        dict.set_item("constraints", self.constraints())?;
+        dict.set_item("constraints", self.constraints().asdict(py)?)?;
         Ok(dict)
     }
 }
@@ -320,7 +320,7 @@ fn apply_fields(
     implicit_hydrogens: Option<ValueArg>,
     lone_pairs: Option<ValueArg>,
     spin: Option<PyRef<'_, SpinStateAst>>,
-    constraints: Option<Py<AtomConstraints>>,
+    constraints: Option<Py<AtomConstraintsAst>>,
 ) -> AstAtomAst {
     if let Some(isotope_mass) = isotope_mass {
         atom = atom.with_isotope_mass(isotope_mass.to_ast(py));
@@ -442,9 +442,9 @@ impl AtomView {
     }
 
     #[getter]
-    fn constraints(&self, py: Python<'_>) -> PyResult<AtomConstraints> {
+    fn constraints(&self, py: Python<'_>) -> PyResult<AtomConstraintsAst> {
         let molecule = self.owner.bind(py).borrow();
-        Ok(AtomConstraints::from_inner(
+        Ok(AtomConstraintsAst::from_inner(
             self.atom(molecule.inner())?.constraints.clone(),
         ))
     }
@@ -530,7 +530,7 @@ impl AtomViewIter {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AtomConstraint as AstAtomConstraint, MemOp as AstMemOp, ValueAst as AstValueAst,
+        AtomConstraintAst as AstAtomConstraintAst, MemOp as AstMemOp, ValueAst as AstValueAst,
     };
 
     use super::*;
@@ -619,7 +619,8 @@ mod tests {
     #[rstest]
     fn test_atom_ast_constraints() {
         let atom = AtomAst(
-            AstAtomAst::from_element(ChemElement::C).with_constraint(AstAtomConstraint::valence(4)),
+            AstAtomAst::from_element(ChemElement::C)
+                .with_constraint(AstAtomConstraintAst::valence(4)),
         );
         assert_eq!(atom.constraints().inner().len(), 1);
     }
@@ -628,7 +629,7 @@ mod tests {
     fn test_atom_view_constraints() {
         Python::attach(|py| {
             let atom = AstAtomAst::from_element(ChemElement::C)
-                .with_constraint(AstAtomConstraint::valence(4));
+                .with_constraint(AstAtomConstraintAst::valence(4));
             let molecule = AstMoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
             let view = AtomView {
                 owner: Py::new(py, MoleculeAst::from_inner(molecule)).unwrap(),

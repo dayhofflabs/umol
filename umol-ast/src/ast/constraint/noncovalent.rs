@@ -10,9 +10,9 @@ use super::super::traits::{Canonicalize, Lattice};
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
 /// live at molecule scope via `RelationalConstraint`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum NoncovalentBondConstraint {}
+pub enum NoncovalentBondConstraintAst {}
 
-impl NoncovalentBondConstraint {
+impl NoncovalentBondConstraintAst {
     pub fn key(&self) -> NoncovalentBondConstraintKey {
         match *self {}
     }
@@ -21,24 +21,24 @@ impl NoncovalentBondConstraint {
         match self {}
     }
 
-    /// Uninhabited — no `NoncovalentBondConstraint` value exists to remap.
+    /// Uninhabited — no `NoncovalentBondConstraintAst` value exists to remap.
     pub fn remap(self, _map: &IdRemapping) -> Self {
         match self {}
     }
 }
 
-/// Entry identity for `NoncovalentBondConstraint`. Uninhabited, mirroring the
+/// Entry identity for `NoncovalentBondConstraintAst`. Uninhabited, mirroring the
 /// constraint enum; exists for parity with the other constraint families.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NoncovalentBondConstraintKey {}
 
-impl Canonicalize for NoncovalentBondConstraint {
+impl Canonicalize for NoncovalentBondConstraintAst {
     fn canonicalize(self) -> Result<Self, Contradiction> {
         match self {}
     }
 }
 
-impl Lattice for NoncovalentBondConstraint {
+impl Lattice for NoncovalentBondConstraintAst {
     fn is_undetermined(&self) -> bool {
         match *self {}
     }
@@ -65,11 +65,11 @@ impl Lattice for NoncovalentBondConstraint {
 }
 
 /// Per-noncovalent-bond constraint container. Empty in practice until new
-/// value-only variants land on `NoncovalentBondConstraint`.
+/// value-only variants land on `NoncovalentBondConstraintAst`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NoncovalentBondConstraints(Vec<NoncovalentBondConstraint>);
+pub struct NoncovalentBondConstraintsAst(Vec<NoncovalentBondConstraintAst>);
 
-impl NoncovalentBondConstraints {
+impl NoncovalentBondConstraintsAst {
     pub fn new() -> Self {
         Self(Vec::new())
     }
@@ -90,19 +90,19 @@ impl NoncovalentBondConstraints {
         self.find(key).is_ok()
     }
 
-    pub fn get(&self, key: NoncovalentBondConstraintKey) -> Option<&NoncovalentBondConstraint> {
+    pub fn get(&self, key: NoncovalentBondConstraintKey) -> Option<&NoncovalentBondConstraintAst> {
         self.find(key).ok().map(|i| &self.0[i])
     }
 
     /// Uninhabited element: no value exists to set.
-    pub fn set(&mut self, c: NoncovalentBondConstraint) {
+    pub fn set(&mut self, c: NoncovalentBondConstraintAst) {
         match c {}
     }
 
     pub fn compare_and_set(
         &mut self,
-        old: Option<NoncovalentBondConstraint>,
-        new: Option<NoncovalentBondConstraint>,
+        old: Option<NoncovalentBondConstraintAst>,
+        new: Option<NoncovalentBondConstraintAst>,
     ) -> Result<(), Contradiction> {
         if let Some(c) = old {
             match c {}
@@ -116,17 +116,18 @@ impl NoncovalentBondConstraints {
     pub fn remove(
         &mut self,
         key: NoncovalentBondConstraintKey,
-    ) -> Option<NoncovalentBondConstraint> {
+    ) -> Option<NoncovalentBondConstraintAst> {
         self.find(key).ok().map(|i| self.0.remove(i))
     }
 
     /// Uninhabited element: the iterator is always empty, so this is a no-op.
-    pub fn extend(&mut self, _constraints: impl IntoIterator<Item = NoncovalentBondConstraint>) {}
+    pub fn extend(&mut self, _constraints: impl IntoIterator<Item = NoncovalentBondConstraintAst>) {
+    }
 
     /// Overlay `other`: uninhabited element, so `other` is always empty and this is a no-op.
-    pub fn update(&mut self, _other: &NoncovalentBondConstraints) {}
+    pub fn update(&mut self, _other: &NoncovalentBondConstraintsAst) {}
 
-    pub fn retain(&mut self, mut f: impl FnMut(&NoncovalentBondConstraint) -> bool) {
+    pub fn retain(&mut self, mut f: impl FnMut(&NoncovalentBondConstraintAst) -> bool) {
         self.0.retain(|c| f(c));
     }
 
@@ -135,11 +136,11 @@ impl NoncovalentBondConstraints {
     }
 
     /// Move the entries out of the store, leaving it empty.
-    pub fn take(&mut self) -> impl Iterator<Item = NoncovalentBondConstraint> {
+    pub fn take(&mut self) -> impl Iterator<Item = NoncovalentBondConstraintAst> {
         mem::take(&mut self.0).into_iter()
     }
 
-    pub fn iter(&self) -> Iter<'_, NoncovalentBondConstraint> {
+    pub fn iter(&self) -> Iter<'_, NoncovalentBondConstraintAst> {
         self.0.iter()
     }
 
@@ -148,14 +149,14 @@ impl NoncovalentBondConstraints {
     }
 }
 
-impl Canonicalize for NoncovalentBondConstraints {
+impl Canonicalize for NoncovalentBondConstraintsAst {
     /// Always empty (uninhabited element), so canonicalization is the identity.
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(self)
     }
 }
 
-impl Lattice for NoncovalentBondConstraints {
+impl Lattice for NoncovalentBondConstraintsAst {
     fn is_undetermined(&self) -> bool {
         true
     }
@@ -181,8 +182,8 @@ impl Lattice for NoncovalentBondConstraints {
     }
 }
 
-impl FromIterator<NoncovalentBondConstraint> for NoncovalentBondConstraints {
-    fn from_iter<I: IntoIterator<Item = NoncovalentBondConstraint>>(_iter: I) -> Self {
+impl FromIterator<NoncovalentBondConstraintAst> for NoncovalentBondConstraintsAst {
+    fn from_iter<I: IntoIterator<Item = NoncovalentBondConstraintAst>>(_iter: I) -> Self {
         Self::new()
     }
 }
@@ -199,56 +200,56 @@ mod tests {
 
     #[rstest]
     fn test_noncovalent_bond_constraints_new() {
-        let cs = NoncovalentBondConstraints::new();
+        let cs = NoncovalentBondConstraintsAst::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
     }
 
     #[rstest]
     fn test_noncovalent_bond_constraints_compare_and_set() {
-        let mut cs = NoncovalentBondConstraints::new();
+        let mut cs = NoncovalentBondConstraintsAst::new();
         assert_eq!(cs.compare_and_set(None, None), Ok(()));
-        assert_eq!(cs, NoncovalentBondConstraints::new());
+        assert_eq!(cs, NoncovalentBondConstraintsAst::new());
     }
 
     #[rstest]
     fn test_noncovalent_bond_constraints_update() {
-        let mut cs = NoncovalentBondConstraints::new();
-        cs.update(&NoncovalentBondConstraints::new());
-        assert_eq!(cs, NoncovalentBondConstraints::new());
+        let mut cs = NoncovalentBondConstraintsAst::new();
+        cs.update(&NoncovalentBondConstraintsAst::new());
+        assert_eq!(cs, NoncovalentBondConstraintsAst::new());
     }
 
     #[rstest]
     fn test_noncovalent_bond_constraints_iter() {
-        let cs = NoncovalentBondConstraints::new();
+        let cs = NoncovalentBondConstraintsAst::new();
         assert_eq!(cs.iter().count(), 0);
     }
 
     #[rstest]
     fn test_noncovalent_bond_constraints_retain() {
-        let mut cs = NoncovalentBondConstraints::new();
+        let mut cs = NoncovalentBondConstraintsAst::new();
         cs.retain(|_| true);
-        assert_eq!(cs, NoncovalentBondConstraints::new());
+        assert_eq!(cs, NoncovalentBondConstraintsAst::new());
     }
 
     #[rstest]
     fn test_noncovalent_bond_constraints_clear() {
-        let mut cs = NoncovalentBondConstraints::new();
+        let mut cs = NoncovalentBondConstraintsAst::new();
         cs.clear();
-        assert_eq!(cs, NoncovalentBondConstraints::new());
+        assert_eq!(cs, NoncovalentBondConstraintsAst::new());
     }
 
     #[rstest]
     fn test_noncovalent_bond_constraints_take() {
-        let mut cs = NoncovalentBondConstraints::new();
+        let mut cs = NoncovalentBondConstraintsAst::new();
         let drained: Vec<_> = cs.take().collect();
         assert!(drained.is_empty());
-        assert_eq!(cs, NoncovalentBondConstraints::new());
+        assert_eq!(cs, NoncovalentBondConstraintsAst::new());
     }
 
     #[rstest]
     fn test_noncovalent_bond_constraints_compact() {
-        let cs = NoncovalentBondConstraints::new();
+        let cs = NoncovalentBondConstraintsAst::new();
         let compaction = IdCompaction::new(
             Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
@@ -263,13 +264,13 @@ mod tests {
 
     #[rstest]
     fn test_noncovalent_bond_constraints_from_iter() {
-        let cs: NoncovalentBondConstraints = empty().collect();
-        assert_eq!(cs, NoncovalentBondConstraints::new());
+        let cs: NoncovalentBondConstraintsAst = empty().collect();
+        assert_eq!(cs, NoncovalentBondConstraintsAst::new());
     }
 
     #[rstest]
     fn test_noncovalent_bond_constraints_canonicalize() {
-        let cs = NoncovalentBondConstraints::new();
+        let cs = NoncovalentBondConstraintsAst::new();
         assert_eq!(cs.clone().canonicalize(), Ok(cs));
     }
 }

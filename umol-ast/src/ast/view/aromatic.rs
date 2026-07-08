@@ -6,7 +6,7 @@ use std::ops::Index;
 use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
 use super::super::aromatic::AromaticSystemAst;
-use super::super::constraint::AromaticSystemConstraints;
+use super::super::constraint::AromaticSystemConstraintsAst;
 use super::super::electrons::ElectronCountsAst;
 use super::super::id::{AromaticSystemId, AtomId, BondId};
 use super::super::molecule::MoleculeAst;
@@ -201,7 +201,7 @@ impl<'a> AromaticSystemView<'a> {
     }
 
     #[inline]
-    pub fn constraints(&self) -> &'a AromaticSystemConstraints {
+    pub fn constraints(&self) -> &'a AromaticSystemConstraintsAst {
         &self.ast.constraints
     }
 

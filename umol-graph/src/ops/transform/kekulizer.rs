@@ -10,7 +10,7 @@
 //! atom processing order — which controls determinism — is fixed at
 //! construction time and is the caller's responsibility (e.g., from a
 //! nauty/Traces canonical labeling).
-//! 
+//!
 //! TODO: Expand to charged systems.
 
 use std::collections::{HashMap, HashSet};

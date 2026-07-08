@@ -19,7 +19,7 @@ use super::predicate::{
     SpinPredicate,
 };
 use super::value::{fmt_value, ValueDsl};
-use crate::ast::constraint::MulticenterBondConstraint;
+use crate::ast::constraint::MulticenterBondConstraintAst;
 use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
@@ -197,7 +197,7 @@ fn apply_predicates(
                 )?;
             }
             MulticenterBondPredicate::Electrons(v) => {
-                let c = MulticenterBondConstraint::ElectronCount(v);
+                let c = MulticenterBondConstraintAst::ElectronCount(v);
                 if ast.constraints.contains(c.key()) {
                     return Err(ParseError::DuplicateMulticenterBondPredicate(
                         "#e".to_string(),
@@ -213,7 +213,7 @@ fn apply_predicates(
 fn electron_count_value(ast: &MulticenterBondAst) -> Option<&ValueAst> {
     ast.constraints
         .iter()
-        .map(|MulticenterBondConstraint::ElectronCount(v)| v)
+        .map(|MulticenterBondConstraintAst::ElectronCount(v)| v)
         .next()
 }
 
@@ -326,15 +326,15 @@ pub enum MulticenterBondConstraintDsl {
 }
 
 impl MulticenterBondConstraintDsl {
-    pub(crate) fn from_ast(c: &MulticenterBondConstraint) -> Self {
+    pub(crate) fn from_ast(c: &MulticenterBondConstraintAst) -> Self {
         match c {
-            MulticenterBondConstraint::ElectronCount(v) => Self::ElectronCount(v.clone()),
+            MulticenterBondConstraintAst::ElectronCount(v) => Self::ElectronCount(v.clone()),
         }
     }
 
-    pub(crate) fn into_ast(self) -> MulticenterBondConstraint {
+    pub(crate) fn into_ast(self) -> MulticenterBondConstraintAst {
         match self {
-            Self::ElectronCount(v) => MulticenterBondConstraint::ElectronCount(v),
+            Self::ElectronCount(v) => MulticenterBondConstraintAst::ElectronCount(v),
         }
     }
 }
@@ -406,22 +406,22 @@ mod tests {
     use umol_edn::read_string;
 
     use super::*;
-    use crate::ast::constraint::MulticenterBondConstraints;
+    use crate::ast::constraint::MulticenterBondConstraintsAst;
     use crate::ast::electrons::ElectronCountsAst;
     use crate::ast::spin::SpinStateAst;
 
     #[rustfmt::skip]
     #[rstest]
     #[case::undetermined("*", MulticenterBondDsl(MulticenterBondAst::default()))]
-    #[case::whitespace("  [1,1,1]  #c+1  ", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: MulticenterBondConstraints::new() }))]
-    #[case::charge_pos("[1,1,1]#c+1", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: MulticenterBondConstraints::new() }))]
-    #[case::charge_neg("[1,1,1]#c-2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), constraints: MulticenterBondConstraints::new() }))]
-    #[case::electron_count("[1,1,1]#e6", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(6))]) }))]
-    #[case::electron_count_bare("[1,1,1]#e", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(1))]) }))]
-    #[case::unpaired("[1,1,1]#u1", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, constraints: MulticenterBondConstraints::new() }))]
-    #[case::mult("[1,1,1]#s2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, constraints: MulticenterBondConstraints::new() }))]
-    #[case::charge_electron_count("[1,1,1]#c+#e2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))]) }))]
-    #[case::full("[1,1,1]#c0#u0#s1#e2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))]) }))]
+    #[case::whitespace("  [1,1,1]  #c+1  ", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: MulticenterBondConstraintsAst::new() }))]
+    #[case::charge_pos("[1,1,1]#c+1", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: MulticenterBondConstraintsAst::new() }))]
+    #[case::charge_neg("[1,1,1]#c-2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), constraints: MulticenterBondConstraintsAst::new() }))]
+    #[case::electron_count("[1,1,1]#e6", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: MulticenterBondConstraintsAst::from_iter([MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(6))]) }))]
+    #[case::electron_count_bare("[1,1,1]#e", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: MulticenterBondConstraintsAst::from_iter([MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(1))]) }))]
+    #[case::unpaired("[1,1,1]#u1", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, constraints: MulticenterBondConstraintsAst::new() }))]
+    #[case::mult("[1,1,1]#s2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, constraints: MulticenterBondConstraintsAst::new() }))]
+    #[case::charge_electron_count("[1,1,1]#c+#e2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: MulticenterBondConstraintsAst::from_iter([MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(2))]) }))]
+    #[case::full("[1,1,1]#c0#u0#s1#e2", MulticenterBondDsl(MulticenterBondAst { electrons: ElectronCountsAst::Lit(vec![1, 1, 1]), charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: MulticenterBondConstraintsAst::from_iter([MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(2))]) }))]
     fn test_parse_multicenter(#[case] input: &str, #[case] expected: MulticenterBondDsl) {
         let result = multicenter_bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -475,7 +475,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             spin: SpinStateAst::from((0_u8, 1_u8)),
             electrons: ElectronCountsAst::Undetermined,
-            constraints: MulticenterBondConstraints::new(),
+            constraints: MulticenterBondConstraintsAst::new(),
         };
         let cfg = MulticenterBondDefaults::zeroed();
         let dsl = MulticenterBondDsl::from_ast(&ast, &cfg);

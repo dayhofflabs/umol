@@ -1,15 +1,15 @@
 //! AST constraints: per-scope predicates and their containers.
 //!
-//! Per-scope enums (`AtomConstraint`, `BondConstraint`, `DativeBondConstraint`,
-//! `AromaticSystemConstraint`, `MulticenterBondConstraint`,
-//! `NoncovalentBondConstraint`, `MoleculeConstraint`) each carry the predicates
+//! Per-scope enums (`AtomConstraintAst`, `BondConstraintAst`, `DativeBondConstraintAst`,
+//! `AromaticSystemConstraintAst`, `MulticenterBondConstraintAst`,
+//! `NoncovalentBondConstraintAst`, `MoleculeConstraint`) each carry the predicates
 //! admissible at that scope. `Constraint` is the tree node type admitting
 //! per-entity leaves, a molecule-scope leaf, and `And`/`Or`/`Not` combinators.
 //!
 //! Per-entity constraints live inline on the entity AST via the typed
-//! containers (`AtomConstraints`, `BondConstraints`, `DativeBondConstraints`,
-//! `AromaticSystemConstraints`, `MulticenterBondConstraints`,
-//! `NoncovalentBondConstraints`). Each exposes a uniform `new`/`len`/`iter`/
+//! containers (`AtomConstraintsAst`, `BondConstraintsAst`, `DativeBondConstraintsAst`,
+//! `AromaticSystemConstraintsAst`, `MulticenterBondConstraintsAst`,
+//! `NoncovalentBondConstraintsAst`). Each exposes a uniform `new`/`len`/`iter`/
 //! `add`/`retain`/`clear` surface; `add` enforces per-variant cardinality
 //! (last-wins for unique-kind variants, append for multi-kind variants).
 //! The molecule-level `Constraints` (under `molecule`) is a flat
@@ -27,26 +27,26 @@ mod ring;
 mod stereo;
 
 pub use aromatic::{
-    AromaticSystemConstraint, AromaticSystemConstraintKey, AromaticSystemConstraints,
+    AromaticSystemConstraintAst, AromaticSystemConstraintKey, AromaticSystemConstraintsAst,
 };
 pub use atom::{
-    aromatic_increment, AromaticValenceAst, AtomConstraint, AtomConstraintKey, AtomConstraints,
-    MulticenterValenceAst,
+    aromatic_increment, AromaticValenceAst, AtomConstraintAst, AtomConstraintKey,
+    AtomConstraintsAst, MulticenterValenceAst,
 };
-pub use bond::{BondConstraint, BondConstraintKey, BondConstraints};
-pub use dative::{DativeBondConstraint, DativeBondConstraintKey, DativeBondConstraints};
+pub use bond::{BondConstraintAst, BondConstraintKey, BondConstraintsAst};
+pub use dative::{DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst};
 pub use molecule::{Constraint, Constraints, MoleculeConstraint, SubPatternAnchor};
 pub use multicenter::{
-    MulticenterBondConstraint, MulticenterBondConstraintKey, MulticenterBondConstraints,
+    MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsAst,
 };
 pub use noncovalent::{
-    NoncovalentBondConstraint, NoncovalentBondConstraintKey, NoncovalentBondConstraints,
+    NoncovalentBondConstraintAst, NoncovalentBondConstraintKey, NoncovalentBondConstraintsAst,
 };
 pub use relational::RelationalConstraint;
 pub use ring::{RingMembershipAst, RingScope};
 pub use stereo::{
     FluxionalityAst, LigandPermutation, LigandSymmetryAst, OrientedLigandPermutation,
-    StereoAtomConstraint, StereoAtomConstraintKey, StereoAtomConstraints, StereoBondConstraint,
-    StereoBondConstraintKey, StereoBondConstraints, StereoLigandPair, StereogenicityAst,
-    TopicityAst, TopicityRelationAst,
+    StereoAtomConstraintAst, StereoAtomConstraintKey, StereoAtomConstraintsAst,
+    StereoBondConstraintAst, StereoBondConstraintKey, StereoBondConstraintsAst, StereoLigandPair,
+    StereogenicityAst, TopicityAst, TopicityRelationAst,
 };

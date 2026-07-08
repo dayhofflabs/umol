@@ -14,9 +14,9 @@ use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::super::bond::BondAst;
 use super::super::boolean::BooleanAst;
 use super::super::constraint::{
-    AtomConstraint, AtomConstraints, BondConstraint, BondConstraints, Constraint, Constraints,
-    DativeBondConstraint, DativeBondConstraints, MoleculeConstraint, RelationalConstraint,
-    RingScope,
+    AtomConstraintAst, AtomConstraintsAst, BondConstraintAst, BondConstraintsAst, Constraint,
+    Constraints, DativeBondConstraintAst, DativeBondConstraintsAst, MoleculeConstraint,
+    RelationalConstraint, RingScope,
 };
 use super::super::dative::DativeBondAst;
 use super::super::electrons::ElectronCountsAst;
@@ -1293,11 +1293,11 @@ fn test_molecule_builder_atom_constraint_mut(#[from(rich_molecule)] ast: Molecul
     b.atom_mut(AtomId(0))
         .ast
         .constraints
-        .set(AtomConstraint::Degree(ValueAst::Lit(2)));
+        .set(AtomConstraintAst::Degree(ValueAst::Lit(2)));
     let result = b.build();
     assert_eq!(
         result[AtomId(0)].constraints,
-        AtomConstraints::from_iter([AtomConstraint::Degree(ValueAst::Lit(2))])
+        AtomConstraintsAst::from_iter([AtomConstraintAst::Degree(ValueAst::Lit(2))])
     );
     assert!(ast[AtomId(0)].constraints.is_empty());
 }
@@ -1359,10 +1359,9 @@ fn test_molecule_builder_push_constraint_and_constraints_mut(
 #[rstest]
 fn test_molecule_builder_dative_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
-    b.dative_bond_mut(DativeBondId(0))
-        .ast
-        .constraints
-        .set(DativeBondConstraint::ring_membership(RingScope::Size(5), 1));
+    b.dative_bond_mut(DativeBondId(0)).ast.constraints.set(
+        DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1),
+    );
     let result = b.build();
     assert!(!result[DativeBondId(0)].constraints.is_empty());
     assert!(ast[DativeBondId(0)].constraints.is_empty());
@@ -1575,7 +1574,7 @@ fn test_molecule_ast_eq_canonical_across_bond_order() {
         order: ValueAst::Lit(1),
         charge: ValueAst::Lit(0),
         spin: SpinStateAst::closed_shell(),
-        constraints: BondConstraints::new(),
+        constraints: BondConstraintsAst::new(),
     };
     let forward = MoleculeAst::from_parts(
         atoms_a,
@@ -1778,10 +1777,13 @@ fn test_molecule_ast_bonds_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
 fn test_molecule_ast_dative_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
-        .set(DativeBondConstraint::ring_membership(RingScope::Size(6), 1));
+        .set(DativeBondConstraintAst::ring_membership(
+            RingScope::Size(6),
+            1,
+        ));
     assert_eq!(
         ast[DativeBondId(0)].constraints,
-        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(
+        DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(
             RingScope::Size(6),
             1
         )])
@@ -1869,18 +1871,18 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
     ast.atom_mut(AtomId(0))
         .ast
         .constraints
-        .set(AtomConstraint::Valence(ValueAst::Lit(4)));
+        .set(AtomConstraintAst::Valence(ValueAst::Lit(4)));
     ast.atom_mut(AtomId(2))
         .ast
         .constraints
-        .set(AtomConstraint::Degree(ValueAst::Lit(3)));
+        .set(AtomConstraintAst::Degree(ValueAst::Lit(3)));
     ast.bond_mut(BondId(0))
         .ast
         .constraints
-        .set(BondConstraint::Aromatic(BooleanAst::Lit(true)));
+        .set(BondConstraintAst::Aromatic(BooleanAst::Lit(true)));
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
-        .set(DativeBondConstraint::ring_membership(
+        .set(DativeBondConstraintAst::ring_membership(
             RingScope::All,
             ValueAst::Lit(1),
         ));
@@ -1895,19 +1897,19 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
     let mut expected = Constraints::new();
     expected.push(Constraint::Atom(
         AtomId(0),
-        AtomConstraint::Valence(ValueAst::Lit(4)),
+        AtomConstraintAst::Valence(ValueAst::Lit(4)),
     ));
     expected.push(Constraint::Atom(
         AtomId(2),
-        AtomConstraint::Degree(ValueAst::Lit(3)),
+        AtomConstraintAst::Degree(ValueAst::Lit(3)),
     ));
     expected.push(Constraint::Bond(
         BondId(0),
-        BondConstraint::Aromatic(BooleanAst::Lit(true)),
+        BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
     ));
     expected.push(Constraint::DativeBond(
         DativeBondId(0),
-        DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)),
+        DativeBondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)),
     ));
     assert_same_constraints(ast.constraints(), &expected);
 }
@@ -1924,7 +1926,7 @@ fn test_molecule_ast_lift_constraints_appends_to_existing(
     ast.atom_mut(AtomId(0))
         .ast
         .constraints
-        .set(AtomConstraint::Valence(ValueAst::Lit(4)));
+        .set(AtomConstraintAst::Valence(ValueAst::Lit(4)));
 
     ast.lift_constraints();
 
@@ -1932,7 +1934,7 @@ fn test_molecule_ast_lift_constraints_appends_to_existing(
     expected.push(prior);
     expected.push(Constraint::Atom(
         AtomId(0),
-        AtomConstraint::Valence(ValueAst::Lit(4)),
+        AtomConstraintAst::Valence(ValueAst::Lit(4)),
     ));
     assert_same_constraints(ast.constraints(), &expected);
 }
@@ -1943,15 +1945,15 @@ fn test_molecule_ast_inline_constraints_drains_top_level_leaves(
 ) {
     ast.constraints_mut().push(Constraint::Atom(
         AtomId(0),
-        AtomConstraint::Valence(ValueAst::Lit(4)),
+        AtomConstraintAst::Valence(ValueAst::Lit(4)),
     ));
     ast.constraints_mut().push(Constraint::Bond(
         BondId(0),
-        BondConstraint::Aromatic(BooleanAst::Lit(true)),
+        BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
     ));
     ast.constraints_mut().push(Constraint::DativeBond(
         DativeBondId(0),
-        DativeBondConstraint::ring_membership(RingScope::Size(5), 1),
+        DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1),
     ));
 
     ast.inline_constraints();
@@ -1959,15 +1961,15 @@ fn test_molecule_ast_inline_constraints_drains_top_level_leaves(
     assert!(ast.constraints().is_empty());
     assert_eq!(
         ast[AtomId(0)].constraints,
-        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Lit(4))])
+        AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(ValueAst::Lit(4))])
     );
     assert_eq!(
         ast[BondId(0)].constraints,
-        BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))])
+        BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))])
     );
     assert_eq!(
         ast[DativeBondId(0)].constraints,
-        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(
+        DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(
             RingScope::Size(5),
             1
         )])
@@ -1980,11 +1982,11 @@ fn test_molecule_ast_inline_constraints_last_wins_on_collision(
 ) {
     ast.constraints_mut().push(Constraint::Atom(
         AtomId(0),
-        AtomConstraint::Valence(ValueAst::Lit(3)),
+        AtomConstraintAst::Valence(ValueAst::Lit(3)),
     ));
     ast.constraints_mut().push(Constraint::Atom(
         AtomId(0),
-        AtomConstraint::Valence(ValueAst::Lit(4)),
+        AtomConstraintAst::Valence(ValueAst::Lit(4)),
     ));
 
     ast.inline_constraints();
@@ -1993,17 +1995,20 @@ fn test_molecule_ast_inline_constraints_last_wins_on_collision(
     // exactly one wins (which one is unspecified). Verify count and kind.
     assert_eq!(ast[AtomId(0)].constraints.len(), 1);
     let v = ast[AtomId(0)].constraints.iter().next().unwrap().clone();
-    assert!(matches!(v, AtomConstraint::Valence(_)));
+    assert!(matches!(v, AtomConstraintAst::Valence(_)));
 }
 
 #[rstest]
 fn test_molecule_ast_inline_constraints_skips_combinator_nested(
     #[from(rich_molecule)] mut ast: MoleculeAst,
 ) {
-    let leaf = Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Lit(4)));
+    let leaf = Constraint::Atom(AtomId(0), AtomConstraintAst::Valence(ValueAst::Lit(4)));
     let nested = Constraint::And(vec![
         leaf.clone(),
-        Constraint::Bond(BondId(0), BondConstraint::Aromatic(BooleanAst::Lit(true))),
+        Constraint::Bond(
+            BondId(0),
+            BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+        ),
     ]);
     ast.constraints_mut().push(nested.clone());
 
@@ -2031,7 +2036,7 @@ fn test_molecule_ast_inline_constraints_skips_relational_and_molecule(
     ast.constraints_mut().push(mol.clone());
     ast.constraints_mut().push(Constraint::Atom(
         AtomId(0),
-        AtomConstraint::Valence(ValueAst::Lit(4)),
+        AtomConstraintAst::Valence(ValueAst::Lit(4)),
     ));
 
     ast.inline_constraints();
@@ -2042,7 +2047,7 @@ fn test_molecule_ast_inline_constraints_skips_relational_and_molecule(
     assert_same_constraints(ast.constraints(), &expected);
     assert_eq!(
         ast[AtomId(0)].constraints,
-        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Lit(4))])
+        AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(ValueAst::Lit(4))])
     );
 }
 
@@ -2053,18 +2058,18 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
     ast.atom_mut(AtomId(0))
         .ast
         .constraints
-        .set(AtomConstraint::Valence(ValueAst::Lit(4)));
+        .set(AtomConstraintAst::Valence(ValueAst::Lit(4)));
     ast.atom_mut(AtomId(0))
         .ast
         .constraints
-        .set(AtomConstraint::Degree(ValueAst::Lit(3)));
+        .set(AtomConstraintAst::Degree(ValueAst::Lit(3)));
     ast.bond_mut(BondId(0))
         .ast
         .constraints
-        .set(BondConstraint::Aromatic(BooleanAst::Lit(true)));
+        .set(BondConstraintAst::Aromatic(BooleanAst::Lit(true)));
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
-        .set(DativeBondConstraint::ring_membership(
+        .set(DativeBondConstraintAst::ring_membership(
             RingScope::All,
             ValueAst::Lit(1),
         ));

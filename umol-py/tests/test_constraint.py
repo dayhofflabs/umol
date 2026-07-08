@@ -1,8 +1,8 @@
 from umol import (
     AromaticValenceAst,
-    AtomConstraint,
+    AtomConstraintAst,
     AtomConstraintKey,
-    AtomConstraints,
+    AtomConstraintsAst,
     MulticenterValenceAst,
     RingMembershipAst,
     RingScope,
@@ -74,7 +74,7 @@ def test_ringmembershipast_int_count():
 
 
 def test_atomconstraint_key_valence():
-    match AtomConstraint.Valence(ValueAst.Lit(4)).key:
+    match AtomConstraintAst.Valence(ValueAst.Lit(4)).key:
         case AtomConstraintKey.Valence():
             pass
         case _:
@@ -82,7 +82,7 @@ def test_atomconstraint_key_valence():
 
 
 def test_atomconstraint_key_tetrahedral_stereo():
-    constraint = AtomConstraint.TetrahedralStereo(TetrahedralStereoAst.NotStereo())
+    constraint = AtomConstraintAst.TetrahedralStereo(TetrahedralStereoAst.NotStereo())
     match constraint.key:
         case AtomConstraintKey.TetrahedralStereo():
             pass
@@ -91,7 +91,7 @@ def test_atomconstraint_key_tetrahedral_stereo():
 
 
 def test_atomconstraint_key_ring_membership():
-    constraint = AtomConstraint.RingMembership(
+    constraint = AtomConstraintAst.RingMembership(
         RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1))
     )
     match constraint.key:
@@ -102,10 +102,10 @@ def test_atomconstraint_key_ring_membership():
 
 
 def test_atomconstraints_iter():
-    constraints = AtomConstraints(
+    constraints = AtomConstraintsAst(
         [
-            AtomConstraint.Valence(ValueAst.Lit(4)),
-            AtomConstraint.Degree(ValueAst.Lit(3)),
+            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            AtomConstraintAst.Degree(ValueAst.Lit(3)),
         ]
     )
     assert len(constraints) == 2
@@ -122,25 +122,25 @@ def test_atomconstraints_iter():
 
 
 def test_atomconstraints_get():
-    constraints = AtomConstraints([AtomConstraint.Valence(ValueAst.Lit(4))])
+    constraints = AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))])
     assert constraints.contains(AtomConstraintKey.Valence())
     assert not constraints.contains(AtomConstraintKey.Degree())
     assert constraints.get(AtomConstraintKey.Degree()) is None
     match constraints.get(AtomConstraintKey.Valence()):
-        case AtomConstraint.Valence(ValueAst.Lit(n)):
+        case AtomConstraintAst.Valence(ValueAst.Lit(n)):
             assert n == 4
         case _:
             raise AssertionError
 
 
 def test_atomconstraints_get_ring_membership():
-    constraints = AtomConstraints(
-        [AtomConstraint.RingMembership(RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1)))]
+    constraints = AtomConstraintsAst(
+        [AtomConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1)))]
     )
     assert constraints.contains(AtomConstraintKey.RingMembership(RingScope.Size(6)))
     assert not constraints.contains(AtomConstraintKey.RingMembership(RingScope.All()))
     match constraints.get(AtomConstraintKey.RingMembership(RingScope.Size(6))):
-        case AtomConstraint.RingMembership(rm):
+        case AtomConstraintAst.RingMembership(rm):
             match rm.count:
                 case ValueAst.Lit(n):
                     assert n == 1
@@ -148,3 +148,70 @@ def test_atomconstraints_get_ring_membership():
                     raise AssertionError
         case _:
             raise AssertionError
+
+
+def test_atomconstraints_valence():
+    constraints = AtomConstraintsAst(
+        [
+            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            AtomConstraintAst.Degree(ValueAst.Lit(3)),
+        ]
+    )
+    match constraints.valence():
+        case ValueAst.Lit(n):
+            assert n == 4
+        case _:
+            raise AssertionError
+    match constraints.degree():
+        case ValueAst.Lit(n):
+            assert n == 3
+        case _:
+            raise AssertionError
+    assert constraints.total_valence() is None
+    assert constraints.aromatic_valence() is None
+
+
+def test_atomconstraints_asdict():
+    constraints = AtomConstraintsAst(
+        [
+            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            AtomConstraintAst.Degree(ValueAst.Lit(3)),
+            AtomConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), ValueAst.Lit(2))),
+            AtomConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1))),
+        ]
+    )
+    d = constraints.asdict()
+    assert set(d.keys()) == {"valence", "degree", "ring_count", "ring_size_count_6"}
+    match d["valence"]:
+        case ValueAst.Lit(n):
+            assert n == 4
+        case _:
+            raise AssertionError
+    match d["degree"]:
+        case ValueAst.Lit(n):
+            assert n == 3
+        case _:
+            raise AssertionError
+    match d["ring_count"]:
+        case ValueAst.Lit(n):
+            assert n == 2
+        case _:
+            raise AssertionError
+    match d["ring_size_count_6"]:
+        case ValueAst.Lit(n):
+            assert n == 1
+        case _:
+            raise AssertionError
+
+
+def test_atomconstraints_ring_size_count():
+    constraints = AtomConstraintsAst(
+        [AtomConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1)))]
+    )
+    match constraints.ring_size_count(6):
+        case ValueAst.Lit(n):
+            assert n == 1
+        case _:
+            raise AssertionError
+    assert constraints.ring_size_count(5) is None
+    assert constraints.ring_count() is None

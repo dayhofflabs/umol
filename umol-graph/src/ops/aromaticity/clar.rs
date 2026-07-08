@@ -129,7 +129,7 @@ fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingId]) -> Vec<RingId
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, MoleculeAst,
+        AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
         RingFamily, RingId, ValueAst,
     };
     use umol_chem::element::Element;
@@ -149,7 +149,7 @@ mod tests {
             .into_iter()
             .map(|(mut atom, pi)| {
                 if let Some(n) = pi {
-                    atom.constraints.set(AtomConstraint::AromaticValence(
+                    atom.constraints.set(AtomConstraintAst::AromaticValence(
                         AromaticValenceAst::Aromatic(ValueAst::Lit(n)),
                     ));
                 }

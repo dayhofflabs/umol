@@ -6,7 +6,7 @@ use crate::strategies::*;
 // Lattice-law sweep: every `impl Lattice` type satisfies commutativity,
 // associativity, absorption, idempotence, and `matches`↔`meet` consistency,
 // checked by `assert_lattice_laws` over a generated value triple.
-// `NoncovalentBondConstraints` is omitted: its inner enum is uninhabited, so the
+// `NoncovalentBondConstraintsAst` is omitted: its inner enum is uninhabited, so the
 // collection has the single empty value and the laws would be vacuous.
 
 proptest! {

@@ -7,7 +7,7 @@ use proptest::bool::weighted;
 use proptest::prelude::*;
 use umol_ast::ast::{
     AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, BondDelta, CompositionScope,
-    DativeBondConstraint, DativeBondDelta, DativeBondFieldChange, Delta, Deltas, DpoValidator,
+    DativeBondConstraintAst, DativeBondDelta, DativeBondFieldChange, Delta, Deltas, DpoValidator,
     MulticenterBondDelta, MulticenterBondFieldChange, NoncovalentBondAst, NoncovalentBondDelta,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, ReactionAst, ReactionSpanAst,
     StereoAtomAst, StereoAtomDelta, StereoAtomFieldChange, StereoBondAst, StereoBondDelta,
@@ -604,14 +604,14 @@ fn build_reaction(
             .ast
             .constraints
             .iter()
-            .any(|c| matches!(c, DativeBondConstraint::Aromatic(_)));
+            .any(|c| matches!(c, DativeBondConstraintAst::Aromatic(_)));
         if has_aromatic {
             continue;
         }
         deltas.push(Delta::DativeBond(DativeBondDelta::ModifyConstraint {
             id,
             old: None,
-            new: Some(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
+            new: Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
         }));
     }
     // Part B — stereo edits on survivors. Relative ops resolve `old` from the host at apply;

@@ -21,8 +21,8 @@ pub use hmo::{HmoAromaticity, HmoError, HmoOutput};
 pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AsLit, AtomConstraint, AtomId,
-    AtomView, BondConstraint, BondId, BooleanAst, ElectronCountsAst, ElementAst, MoleculeAst,
+    AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AsLit, AtomConstraintAst, AtomId,
+    AtomView, BondConstraintAst, BondId, BooleanAst, ElectronCountsAst, ElementAst, MoleculeAst,
     RingFamily, ValueAst,
 };
 use umol_chem::element::Element;
@@ -149,7 +149,7 @@ impl AromaticityPerception {
             let bond = ast.bond_mut(bond_id);
             bond.ast
                 .constraints
-                .set(BondConstraint::Aromatic(BooleanAst::Lit(true)));
+                .set(BondConstraintAst::Aromatic(BooleanAst::Lit(true)));
         }
     }
 
@@ -233,7 +233,7 @@ fn equalize_charges(
         accumulated += c;
         let atom_mut = ast.atom_mut(atom_idx).ast;
         atom_mut.charge = ValueAst::Lit(0);
-        atom_mut.constraints.set(AtomConstraint::AromaticValence(
+        atom_mut.constraints.set(AtomConstraintAst::AromaticValence(
             AromaticValenceAst::Aromatic(ValueAst::Lit(k)),
         ));
     }
@@ -264,8 +264,8 @@ fn monoelement(ast: &MoleculeAst, atoms: &[AtomId]) -> Option<Element> {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKey, AtomId,
-        BondAst, BondConstraintKey, ElectronCountsAst, MoleculeAst, SpinStateAst, ValueAst,
+        AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraintAst, AtomConstraintKey,
+        AtomId, BondAst, BondConstraintKey, ElectronCountsAst, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_ast::mol_ground;
     use umol_chem::element::Element;
@@ -287,7 +287,7 @@ mod tests {
             .constraints
             .get(AtomConstraintKey::AromaticValence)?
         {
-            AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n))) => {
+            AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n))) => {
                 Some(*n)
             }
             _ => None,
@@ -298,7 +298,7 @@ mod tests {
         let mut atom = AtomAst::from_element(element);
         atom.charge = ValueAst::Lit(0);
         atom.spin = SpinStateAst::closed_shell();
-        atom.constraints.set(AtomConstraint::AromaticValence(
+        atom.constraints.set(AtomConstraintAst::AromaticValence(
             AromaticValenceAst::Aromatic(ValueAst::Lit(pi)),
         ));
         atom
@@ -369,11 +369,7 @@ mod tests {
         let aromatic_bond_count = ast
             .bonds()
             .iter()
-            .filter(|view| {
-                view.ast
-                    .constraints
-                    .contains(BondConstraintKey::Aromatic)
-            })
+            .filter(|view| view.ast.constraints.contains(BondConstraintKey::Aromatic))
             .count();
         assert_eq!(aromatic_bond_count, 6);
     }
@@ -498,11 +494,10 @@ mod tests {
         let solution = run_full(&perception, &mut ast);
         assert!(matches!(solution, Solution::Determined(())));
         assert_eq!(ast.aromatic_systems().count(), 0);
-        let any_aromatic = ast.bonds().iter().any(|view| {
-            view.ast
-                .constraints
-                .contains(BondConstraintKey::Aromatic)
-        });
+        let any_aromatic = ast
+            .bonds()
+            .iter()
+            .any(|view| view.ast.constraints.contains(BondConstraintKey::Aromatic));
         assert!(!any_aromatic);
     }
 }

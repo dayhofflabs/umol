@@ -395,11 +395,12 @@ impl MoleculeBuilder {
                         .iter()
                         .map(|r| created.atom(r.clone()))
                         .collect::<Result<_, _>>()?;
-                    let (acceptor, donors) = saved_atoms.split_last().ok_or(
-                        TransactionError::MalformedEdit(
-                            "RemoveDativeBond requires at least one participant atom",
-                        ),
-                    )?;
+                    let (acceptor, donors) =
+                        saved_atoms
+                            .split_last()
+                            .ok_or(TransactionError::MalformedEdit(
+                                "RemoveDativeBond requires at least one participant atom",
+                            ))?;
                     if !self.dative_bond_equiv(id, *acceptor, donors, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
@@ -816,11 +817,12 @@ impl MoleculeBuilder {
                         .iter()
                         .map(|r| created.atom(r.clone()))
                         .collect::<Result<_, _>>()?;
-                    let (acceptor, donors) = saved_atoms.split_last().ok_or(
-                        TransactionError::MalformedEdit(
-                            "RemoveDativeBond requires at least one participant atom",
-                        ),
-                    )?;
+                    let (acceptor, donors) =
+                        saved_atoms
+                            .split_last()
+                            .ok_or(TransactionError::MalformedEdit(
+                                "RemoveDativeBond requires at least one participant atom",
+                            ))?;
                     if !self.dative_bond_equiv(id, *acceptor, donors, &ast) {
                         return Err(TransactionError::OldStateMismatch);
                     }
@@ -1667,8 +1669,8 @@ impl MoleculeBuilder {
     fn apply_modify_atom_constraint(
         &mut self,
         id: AtomId,
-        old: Option<super::super::constraint::AtomConstraint>,
-        new: Option<super::super::constraint::AtomConstraint>,
+        old: Option<super::super::constraint::AtomConstraintAst>,
+        new: Option<super::super::constraint::AtomConstraintAst>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1682,8 +1684,8 @@ impl MoleculeBuilder {
     fn apply_modify_bond_constraint(
         &mut self,
         id: BondId,
-        old: Option<super::super::constraint::BondConstraint>,
-        new: Option<super::super::constraint::BondConstraint>,
+        old: Option<super::super::constraint::BondConstraintAst>,
+        new: Option<super::super::constraint::BondConstraintAst>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1697,8 +1699,8 @@ impl MoleculeBuilder {
     fn apply_modify_dative_bond_constraint(
         &mut self,
         id: DativeBondId,
-        old: Option<super::super::constraint::DativeBondConstraint>,
-        new: Option<super::super::constraint::DativeBondConstraint>,
+        old: Option<super::super::constraint::DativeBondConstraintAst>,
+        new: Option<super::super::constraint::DativeBondConstraintAst>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1712,8 +1714,8 @@ impl MoleculeBuilder {
     fn apply_modify_aromatic_system_constraint(
         &mut self,
         id: AromaticSystemId,
-        old: Option<super::super::constraint::AromaticSystemConstraint>,
-        new: Option<super::super::constraint::AromaticSystemConstraint>,
+        old: Option<super::super::constraint::AromaticSystemConstraintAst>,
+        new: Option<super::super::constraint::AromaticSystemConstraintAst>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1727,8 +1729,8 @@ impl MoleculeBuilder {
     fn apply_modify_multicenter_bond_constraint(
         &mut self,
         id: MulticenterBondId,
-        old: Option<super::super::constraint::MulticenterBondConstraint>,
-        new: Option<super::super::constraint::MulticenterBondConstraint>,
+        old: Option<super::super::constraint::MulticenterBondConstraintAst>,
+        new: Option<super::super::constraint::MulticenterBondConstraintAst>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1742,8 +1744,8 @@ impl MoleculeBuilder {
     fn apply_modify_stereo_atom_constraint(
         &mut self,
         id: StereoAtomId,
-        old: Option<super::super::constraint::StereoAtomConstraint>,
-        new: Option<super::super::constraint::StereoAtomConstraint>,
+        old: Option<super::super::constraint::StereoAtomConstraintAst>,
+        new: Option<super::super::constraint::StereoAtomConstraintAst>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1757,8 +1759,8 @@ impl MoleculeBuilder {
     fn apply_modify_stereo_bond_constraint(
         &mut self,
         id: StereoBondId,
-        old: Option<super::super::constraint::StereoBondConstraint>,
-        new: Option<super::super::constraint::StereoBondConstraint>,
+        old: Option<super::super::constraint::StereoBondConstraintAst>,
+        new: Option<super::super::constraint::StereoBondConstraintAst>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1889,8 +1891,8 @@ mod tests {
     use super::super::super::atom::{AtomAst, ElementAst};
     use super::super::super::bond::BondAst;
     use super::super::super::constraint::{
-        AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint, DativeBondConstraint,
-        MoleculeConstraint, MulticenterBondConstraint, RingScope,
+        AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint,
+        DativeBondConstraintAst, MoleculeConstraint, MulticenterBondConstraintAst, RingScope,
     };
     use super::super::super::dative::DativeBondAst;
     use super::super::super::ligand::StereoLigandKind;
@@ -2119,12 +2121,12 @@ mod tests {
                 Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId(0)),
                     old: None,
-                    new: Some(AtomConstraint::ring_membership(RingScope::Size(5), 1)),
+                    new: Some(AtomConstraintAst::ring_membership(RingScope::Size(5), 1)),
                 },
                 Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId(0)),
                     old: None,
-                    new: Some(AtomConstraint::ring_membership(RingScope::Size(6), 1)),
+                    new: Some(AtomConstraintAst::ring_membership(RingScope::Size(6), 1)),
                 },
             ])
             .unwrap();
@@ -2139,8 +2141,8 @@ mod tests {
         assert_eq!(
             cs,
             vec![
-                AtomConstraint::ring_membership(RingScope::Size(5), 1),
-                AtomConstraint::ring_membership(RingScope::Size(6), 1),
+                AtomConstraintAst::ring_membership(RingScope::Size(5), 1),
+                AtomConstraintAst::ring_membership(RingScope::Size(6), 1),
             ]
         );
     }
@@ -2174,7 +2176,7 @@ mod tests {
         let err = one_atom
             .transact(vec![Edit::ModifyAtomConstraint {
                 id: AtomHandle::Id(AtomId(0)),
-                old: Some(AtomConstraint::ring_membership(RingScope::Size(5), 1)),
+                old: Some(AtomConstraintAst::ring_membership(RingScope::Size(5), 1)),
                 new: None,
             }])
             .unwrap_err();
@@ -2182,17 +2184,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case::introduce(None, Some(AtomConstraint::valence(4)), Some(ValueAst::Lit(4)))]
+    #[case::introduce(None, Some(AtomConstraintAst::valence(4)), Some(ValueAst::Lit(4)))]
     #[case::replace(
-        Some(AtomConstraint::valence(3)),
-        Some(AtomConstraint::valence(4)),
+        Some(AtomConstraintAst::valence(3)),
+        Some(AtomConstraintAst::valence(4)),
         Some(ValueAst::Lit(4))
     )]
-    #[case::remove(Some(AtomConstraint::valence(3)), None, None)]
+    #[case::remove(Some(AtomConstraintAst::valence(3)), None, None)]
     fn test_molecule_builder_transact_set_atom_constraint(
         mut one_atom: MoleculeBuilder,
-        #[case] old: Option<AtomConstraint>,
-        #[case] new: Option<AtomConstraint>,
+        #[case] old: Option<AtomConstraintAst>,
+        #[case] new: Option<AtomConstraintAst>,
         #[case] expected: Option<ValueAst>,
     ) {
         if let Some(c) = old.clone() {
@@ -2217,7 +2219,7 @@ mod tests {
             .transact(vec![Edit::ModifyBondConstraint {
                 id: BondHandle::Id(BondId(0)),
                 old: None,
-                new: Some(BondConstraint::Aromatic(BooleanAst::Lit(true))),
+                new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
             }])
             .unwrap();
         assert!(diatomic
@@ -2225,7 +2227,7 @@ mod tests {
             .ast
             .constraints
             .iter()
-            .any(|c| *c == BondConstraint::Aromatic(BooleanAst::Lit(true))));
+            .any(|c| *c == BondConstraintAst::Aromatic(BooleanAst::Lit(true))));
     }
 
     #[rstest]
@@ -2913,7 +2915,7 @@ mod tests {
         b.transact(vec![Edit::AddMoleculeConstraint {
             constraint: Constraint::AromaticSystem(
                 constrained,
-                AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6)),
+                AromaticSystemConstraintAst::ElectronCount(ValueAst::Lit(6)),
             ),
         }])
         .unwrap();
@@ -2995,7 +2997,7 @@ mod tests {
             .transact(vec![Edit::ModifyBondConstraint {
                 id: BondHandle::Id(BondId(0)),
                 old: None,
-                new: Some(BondConstraint::cis_trans_stereo(
+                new: Some(BondConstraintAst::cis_trans_stereo(
                     CisTransStereoAst::NotStereo,
                 )),
             }])
@@ -3008,7 +3010,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<Vec<_>>(),
-            vec![BondConstraint::cis_trans_stereo(
+            vec![BondConstraintAst::cis_trans_stereo(
                 CisTransStereoAst::NotStereo
             )],
         );
@@ -3020,7 +3022,7 @@ mod tests {
             .transact(vec![Edit::ModifyBondConstraint {
                 id: BondHandle::Id(BondId(0)),
                 old: None,
-                new: Some(BondConstraint::ring_membership(RingScope::Size(5), 1)),
+                new: Some(BondConstraintAst::ring_membership(RingScope::Size(5), 1)),
             }])
             .unwrap();
         assert!(diatomic
@@ -3028,7 +3030,7 @@ mod tests {
             .ast
             .constraints
             .iter()
-            .any(|c| *c == BondConstraint::ring_membership(RingScope::Size(5), 1)));
+            .any(|c| *c == BondConstraintAst::ring_membership(RingScope::Size(5), 1)));
     }
 
     #[rstest]
@@ -3038,7 +3040,7 @@ mod tests {
         let err = diatomic
             .transact(vec![Edit::ModifyBondConstraint {
                 id: BondHandle::Id(BondId(0)),
-                old: Some(BondConstraint::ring_membership(RingScope::Size(5), 1)),
+                old: Some(BondConstraintAst::ring_membership(RingScope::Size(5), 1)),
                 new: None,
             }])
             .unwrap_err();
@@ -3053,7 +3055,7 @@ mod tests {
             .transact(vec![Edit::ModifyDativeBondConstraint {
                 id: DativeBondHandle::Id(DativeBondId(0)),
                 old: None,
-                new: Some(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
+                new: Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
             }])
             .unwrap();
         assert!(diatomic_with_overlays
@@ -3061,7 +3063,7 @@ mod tests {
             .ast
             .constraints
             .iter()
-            .any(|c| *c == DativeBondConstraint::Aromatic(BooleanAst::Lit(true))));
+            .any(|c| *c == DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))));
     }
 
     #[rstest]
@@ -3072,7 +3074,7 @@ mod tests {
             .transact(vec![Edit::ModifyAromaticSystemConstraint {
                 id: AromaticSystemHandle::Id(AromaticSystemId(0)),
                 old: None,
-                new: Some(AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))),
+                new: Some(AromaticSystemConstraintAst::ElectronCount(ValueAst::Lit(6))),
             }])
             .unwrap();
         assert_eq!(
@@ -3083,7 +3085,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<Vec<_>>(),
-            vec![AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))],
+            vec![AromaticSystemConstraintAst::ElectronCount(ValueAst::Lit(6))],
         );
     }
 
@@ -3095,7 +3097,9 @@ mod tests {
             .transact(vec![Edit::ModifyMulticenterBondConstraint {
                 id: MulticenterBondHandle::Id(MulticenterBondId(0)),
                 old: None,
-                new: Some(MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))),
+                new: Some(MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(
+                    2,
+                ))),
             }])
             .unwrap();
         assert_eq!(
@@ -3106,7 +3110,9 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<Vec<_>>(),
-            vec![MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))],
+            vec![MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(
+                2
+            ))],
         );
     }
 
@@ -3185,7 +3191,7 @@ mod tests {
                     let mut b = MoleculeAst::default().edit();
                     b.add_atom(AtomAst::from_element(Element::C));
                     b.add_atom(AtomAst::from_element(Element::N));
-                    b.push_constraint(Constraint::Atom(AtomId(1), AtomConstraint::degree(3)));
+                    b.push_constraint(Constraint::Atom(AtomId(1), AtomConstraintAst::degree(3)));
                     b
                 }
                 RollbackCase::RemoveTopology | RollbackCase::RemoveOverlay => {
@@ -3239,7 +3245,7 @@ mod tests {
                 RollbackCase::Constraint => vec![Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId(0)),
                     old: None,
-                    new: Some(AtomConstraint::ring_membership(RingScope::Size(5), 1)),
+                    new: Some(AtomConstraintAst::ring_membership(RingScope::Size(5), 1)),
                 }],
                 RollbackCase::CascadedConstraints => vec![Edit::RemoveTopology {
                     atoms: vec![AtomHandle::Id(AtomId(1))],

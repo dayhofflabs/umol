@@ -6,7 +6,7 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    aromatic_increment, AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraints,
+    aromatic_increment, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintsAst,
     AtomId, BooleanAst, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
 };
 use umol_chem::element::Element;
@@ -357,9 +357,9 @@ fn make_updates(
             unpaired: ValueAst::Lit(unpaired),
             multiplicity: ValueAst::Lit(multiplicity),
         },
-        constraints: AtomConstraints::from_iter([
-            AtomConstraint::Valence(ValueAst::Lit(valence)),
-            AtomConstraint::AromaticValence(if is_aromatic {
+        constraints: AtomConstraintsAst::from_iter([
+            AtomConstraintAst::Valence(ValueAst::Lit(valence)),
+            AtomConstraintAst::AromaticValence(if is_aromatic {
                 AromaticValenceAst::Aromatic(ValueAst::Lit(aromatic_valence))
             } else {
                 AromaticValenceAst::NotAromatic

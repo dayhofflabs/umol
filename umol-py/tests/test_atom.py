@@ -2,9 +2,9 @@ import pytest
 
 from umol import (
     AtomAst,
-    AtomConstraint,
+    AtomConstraintAst,
     AtomConstraintKey,
-    AtomConstraints,
+    AtomConstraintsAst,
     AtomId,
     Element,
     ElementAst,
@@ -211,11 +211,11 @@ def test_atomast_constraints_empty():
 def test_atomast_constraints_kwarg():
     atom = AtomAst(
         Element("C"),
-        constraints=AtomConstraints([AtomConstraint.Valence(ValueAst.Lit(4))]),
+        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
     )
     assert len(atom.constraints) == 1
     match atom.constraints.get(AtomConstraintKey.Valence()):
-        case AtomConstraint.Valence(ValueAst.Lit(n)):
+        case AtomConstraintAst.Valence(ValueAst.Lit(n)):
             assert n == 4
         case _:
             raise AssertionError
@@ -224,7 +224,7 @@ def test_atomast_constraints_kwarg():
 def test_atomview_constraints():
     atom = AtomAst(
         Element("C"),
-        constraints=AtomConstraints([AtomConstraint.Valence(ValueAst.Lit(4))]),
+        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
     )
     mol = MoleculeAst.from_atoms([atom])
     assert len(mol.atoms[AtomId(0)].constraints) == 1
@@ -249,6 +249,21 @@ def test_atomast_asdict():
     match d["charge"]:
         case ValueAst.Lit(n):
             assert n == -1
+        case _:
+            raise AssertionError
+
+
+def test_atomast_asdict_constraints():
+    atom = AtomAst(
+        Element("C"),
+        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
+    )
+    constraints = atom.asdict()["constraints"]
+    assert isinstance(constraints, dict)
+    assert set(constraints.keys()) == {"valence"}
+    match constraints["valence"]:
+        case ValueAst.Lit(n):
+            assert n == 4
         case _:
             raise AssertionError
 

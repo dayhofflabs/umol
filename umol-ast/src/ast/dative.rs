@@ -3,7 +3,7 @@
 use umol_ast_macros::{Canonicalize, Lattice};
 use umol_graph_core::{BiRelationData, ParticipantPosition};
 
-use super::constraint::{DativeBondConstraint, DativeBondConstraints};
+use super::constraint::{DativeBondConstraintAst, DativeBondConstraintsAst};
 use super::traits::Lattice;
 use super::value::ValueAst;
 
@@ -14,14 +14,14 @@ use super::value::ValueAst;
 pub struct DativeBondAst {
     /// Bond order — number of electron pairs donated.
     pub order: ValueAst,
-    pub constraints: DativeBondConstraints,
+    pub constraints: DativeBondConstraintsAst,
 }
 
 impl DativeBondAst {
     pub fn new(order: ValueAst) -> Self {
         Self {
             order,
-            constraints: DativeBondConstraints::new(),
+            constraints: DativeBondConstraintsAst::new(),
         }
     }
 
@@ -35,20 +35,20 @@ impl DativeBondAst {
     }
 
     /// Add a single constraint, replacing any existing entry of the same
-    /// key (last-wins per `DativeBondConstraints::set`). Chainable.
-    pub fn with_constraint(mut self, constraint: impl Into<DativeBondConstraint>) -> Self {
+    /// key (last-wins per `DativeBondConstraintsAst::set`). Chainable.
+    pub fn with_constraint(mut self, constraint: impl Into<DativeBondConstraintAst>) -> Self {
         self.constraints.set(constraint.into());
         self
     }
 
     /// Add each constraint from the iterator, replacing any existing entry
-    /// of the same key (last-wins per `DativeBondConstraints::set`). Does
+    /// of the same key (last-wins per `DativeBondConstraintsAst::set`). Does
     /// not clear existing constraints; use `bond.constraints.clear()` or
     /// direct field assignment for wipe-and-replace.
     pub fn with_constraints<I>(mut self, constraints: I) -> Self
     where
         I: IntoIterator,
-        I::Item: Into<DativeBondConstraint>,
+        I::Item: Into<DativeBondConstraintAst>,
     {
         self.constraints
             .extend(constraints.into_iter().map(Into::into));
@@ -104,9 +104,9 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::new(DativeBondAst::new(ValueAst::Lit(2)),
-        DativeBondAst { order: ValueAst::Lit(2), constraints: DativeBondConstraints::new() })]
+        DativeBondAst { order: ValueAst::Lit(2), constraints: DativeBondConstraintsAst::new() })]
     #[case::from_order(DativeBondAst::from_order(3),
-        DativeBondAst { order: ValueAst::Lit(3), constraints: DativeBondConstraints::new() })]
+        DativeBondAst { order: ValueAst::Lit(3), constraints: DativeBondConstraintsAst::new() })]
     fn test_dative_bond_ast_new(#[case] actual: DativeBondAst, #[case] expected: DativeBondAst) {
         assert_eq!(actual, expected);
     }
@@ -114,28 +114,28 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::with_order(DativeBondAst::default().with_order(2),
-        DativeBondAst { order: ValueAst::Lit(2), constraints: DativeBondConstraints::new() })]
-    #[case::with_constraint(DativeBondAst::from_order(1).with_constraint(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
+        DativeBondAst { order: ValueAst::Lit(2), constraints: DativeBondConstraintsAst::new() })]
+    #[case::with_constraint(DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
         DativeBondAst { order: ValueAst::Lit(1),
-            constraints: DativeBondConstraints::from(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))) })]
+            constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))) })]
     #[case::with_constraints_extends(
         DativeBondAst::from_order(1)
-            .with_constraint(DativeBondConstraint::Aromatic(BooleanAst::Lit(true)))
-            .with_constraints([DativeBondConstraint::ring_membership(RingScope::All, 1), DativeBondConstraint::ring_membership(RingScope::Size(6), 1)]),
+            .with_constraint(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)))
+            .with_constraints([DativeBondConstraintAst::ring_membership(RingScope::All, 1), DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)]),
         DativeBondAst { order: ValueAst::Lit(1),
-            constraints: DativeBondConstraints::from_iter([
-                DativeBondConstraint::Aromatic(BooleanAst::Lit(true)),
-                DativeBondConstraint::ring_membership(RingScope::All, 1),
-                DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+            constraints: DativeBondConstraintsAst::from_iter([
+                DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+                DativeBondConstraintAst::ring_membership(RingScope::All, 1),
+                DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
             ]) })]
     #[case::with_constraint_appends_different_scopes(
         DativeBondAst::from_order(1)
-            .with_constraint(DativeBondConstraint::ring_membership(RingScope::Size(5), 1))
-            .with_constraint(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)),
+            .with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1))
+            .with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)),
         DativeBondAst { order: ValueAst::Lit(1),
-            constraints: DativeBondConstraints::from_iter([
-                DativeBondConstraint::ring_membership(RingScope::Size(5), 1),
-                DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+            constraints: DativeBondConstraintsAst::from_iter([
+                DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1),
+                DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
             ]) })]
     fn test_dative_bond_ast_with_methods(#[case] actual: DativeBondAst, #[case] expected: DativeBondAst) {
         assert_eq!(actual, expected);
@@ -143,7 +143,7 @@ mod tests {
 
     #[rstest]
     #[case::from_order(DativeBondAst::from_order(1))]
-    #[case::with_constraint(DativeBondAst::from_order(1).with_constraint(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))))]
+    #[case::with_constraint(DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
     fn test_dative_bond_ast_into_ground(#[case] bond: DativeBondAst) {
         assert_eq!(bond.clone().into_ground(), bond);
     }
@@ -154,7 +154,7 @@ mod tests {
     #[case::order_lit(DativeBondAst::from_order(1), true)]
     #[case::order_undetermined(DativeBondAst::new(ValueAst::Undetermined), false)]
     #[case::ground_with_constraint(DativeBondAst { order: ValueAst::Lit(1),
-        constraints: DativeBondConstraints::from(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)) }, true)]
+        constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)) }, true)]
     fn test_dative_bond_ast_is_ground(#[case] ast: DativeBondAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
@@ -190,12 +190,12 @@ mod tests {
         false
     )]
     #[case::constraint_required_present(
-        DativeBondAst::from_order(1).with_constraint(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
-        DativeBondAst::from_order(1).with_constraint(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
+        DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+        DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
         true
     )]
     #[case::constraint_required_absent(
-        DativeBondAst::from_order(1).with_constraint(DativeBondConstraint::Aromatic(BooleanAst::Lit(true))),
+        DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
         DativeBondAst::from_order(1),
         false
     )]
@@ -215,9 +215,9 @@ mod tests {
     )]
     #[case::order_mismatch(DativeBondAst::from_order(1), DativeBondAst::from_order(2), None)]
     #[case::narrows_order(
-        DativeBondAst { order: ValueAst::Undetermined, constraints: DativeBondConstraints::new() },
-        DativeBondAst { order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
-        Some(DativeBondAst { order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() }),
+        DativeBondAst { order: ValueAst::Undetermined, constraints: DativeBondConstraintsAst::new() },
+        DativeBondAst { order: ValueAst::Lit(1), constraints: DativeBondConstraintsAst::new() },
+        Some(DativeBondAst { order: ValueAst::Lit(1), constraints: DativeBondConstraintsAst::new() }),
     )]
     fn test_dative_bond_ast_meet(
         #[case] a: DativeBondAst,
@@ -231,7 +231,7 @@ mod tests {
     #[case::order_widens_to_lit_set(
         DativeBondAst::from_order(1),
         DativeBondAst::from_order(2),
-        DativeBondAst { order: ValueAst::lit_set([1, 2]), constraints: DativeBondConstraints::new() },
+        DativeBondAst { order: ValueAst::lit_set([1, 2]), constraints: DativeBondConstraintsAst::new() },
     )]
     fn test_dative_bond_ast_join(
         #[case] a: DativeBondAst,

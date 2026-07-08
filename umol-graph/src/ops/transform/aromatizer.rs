@@ -133,11 +133,7 @@ mod tests {
         let aromatic_bond_count = ast
             .bonds()
             .iter()
-            .filter(|view| {
-                view.ast
-                    .constraints
-                    .contains(BondConstraintKey::Aromatic)
-            })
+            .filter(|view| view.ast.constraints.contains(BondConstraintKey::Aromatic))
             .count();
         assert_eq!(aromatic_bond_count, 6);
     }

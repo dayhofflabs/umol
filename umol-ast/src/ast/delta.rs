@@ -10,18 +10,20 @@ use std::iter;
 use std::mem::{discriminant, Discriminant};
 use std::slice::{Iter, IterMut};
 
-use umol_graph_core::{BiRelationData, FactorOrdering, ParticipantPosition, RelationData, Unordered};
+use umol_graph_core::{
+    BiRelationData, FactorOrdering, ParticipantPosition, RelationData, Unordered,
+};
 use umol_perm::Permutation;
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::constraint::{
-    AromaticSystemConstraint, AromaticSystemConstraintKey, AtomConstraint, AtomConstraintKey,
-    BondConstraint, BondConstraintKey, Constraint, DativeBondConstraint, DativeBondConstraintKey,
-    MulticenterBondConstraint, MulticenterBondConstraintKey, NoncovalentBondConstraint,
-    NoncovalentBondConstraintKey, StereoAtomConstraint, StereoAtomConstraintKey,
-    StereoBondConstraint, StereoBondConstraintKey,
+    AromaticSystemConstraintAst, AromaticSystemConstraintKey, AtomConstraintAst, AtomConstraintKey,
+    BondConstraintAst, BondConstraintKey, Constraint, DativeBondConstraintAst,
+    DativeBondConstraintKey, MulticenterBondConstraintAst, MulticenterBondConstraintKey,
+    NoncovalentBondConstraintAst, NoncovalentBondConstraintKey, StereoAtomConstraintAst,
+    StereoAtomConstraintKey, StereoBondConstraintAst, StereoBondConstraintKey,
 };
 use super::dative::DativeBondAst;
 use super::edit::{
@@ -58,8 +60,8 @@ pub enum AtomDelta {
     },
     ModifyConstraint {
         id: AtomId,
-        old: Option<AtomConstraint>,
-        new: Option<AtomConstraint>,
+        old: Option<AtomConstraintAst>,
+        new: Option<AtomConstraintAst>,
     },
 }
 
@@ -101,8 +103,8 @@ pub enum BondDelta {
     },
     ModifyConstraint {
         id: BondId,
-        old: Option<BondConstraint>,
-        new: Option<BondConstraint>,
+        old: Option<BondConstraintAst>,
+        new: Option<BondConstraintAst>,
     },
 }
 
@@ -146,8 +148,8 @@ pub enum DativeBondDelta {
     },
     ModifyConstraint {
         id: DativeBondId,
-        old: Option<DativeBondConstraint>,
-        new: Option<DativeBondConstraint>,
+        old: Option<DativeBondConstraintAst>,
+        new: Option<DativeBondConstraintAst>,
     },
 }
 
@@ -209,8 +211,8 @@ pub enum AromaticSystemDelta {
     },
     ModifyConstraint {
         id: AromaticSystemId,
-        old: Option<AromaticSystemConstraint>,
-        new: Option<AromaticSystemConstraint>,
+        old: Option<AromaticSystemConstraintAst>,
+        new: Option<AromaticSystemConstraintAst>,
     },
 }
 
@@ -252,8 +254,8 @@ pub enum MulticenterBondDelta {
     },
     ModifyConstraint {
         id: MulticenterBondId,
-        old: Option<MulticenterBondConstraint>,
-        new: Option<MulticenterBondConstraint>,
+        old: Option<MulticenterBondConstraintAst>,
+        new: Option<MulticenterBondConstraintAst>,
     },
 }
 
@@ -295,8 +297,8 @@ pub enum NoncovalentBondDelta {
     },
     ModifyConstraint {
         id: NoncovalentBondId,
-        old: Option<NoncovalentBondConstraint>,
-        new: Option<NoncovalentBondConstraint>,
+        old: Option<NoncovalentBondConstraintAst>,
+        new: Option<NoncovalentBondConstraintAst>,
     },
 }
 
@@ -346,8 +348,8 @@ pub enum StereoAtomDelta {
         /// permutation degree, `~` shortcut). `None` for a kind-free constraint on an
         /// `Undetermined`-geometry center. Not read by apply/canonicalize/diff.
         kind: Option<StereoKind>,
-        old: Option<StereoAtomConstraint>,
-        new: Option<StereoAtomConstraint>,
+        old: Option<StereoAtomConstraintAst>,
+        new: Option<StereoAtomConstraintAst>,
     },
     Apply {
         id: StereoAtomId,
@@ -450,8 +452,8 @@ pub enum StereoBondDelta {
         id: StereoBondId,
         /// Serialization context — see `StereoAtomDelta::ModifyConstraint`.
         kind: Option<StereoKind>,
-        old: Option<StereoBondConstraint>,
-        new: Option<StereoBondConstraint>,
+        old: Option<StereoBondConstraintAst>,
+        new: Option<StereoBondConstraintAst>,
     },
     Apply {
         id: StereoBondId,
@@ -992,7 +994,7 @@ impl EntityPatch for AtomDelta {
     type Id = AtomId;
     type Ast = AtomAst;
     type FieldChange = AtomFieldChange;
-    type Constraint = AtomConstraint;
+    type Constraint = AtomConstraintAst;
 
     fn modify_field(id: AtomId, change: AtomFieldChange) -> Self {
         AtomDelta::ModifyField { id, change }
@@ -1000,13 +1002,13 @@ impl EntityPatch for AtomDelta {
 
     fn modify_constraint(
         id: AtomId,
-        old: Option<AtomConstraint>,
-        new: Option<AtomConstraint>,
+        old: Option<AtomConstraintAst>,
+        new: Option<AtomConstraintAst>,
     ) -> Self {
         AtomDelta::ModifyConstraint { id, old, new }
     }
 
-    diff_field_ops!(AtomFieldChange, AtomAst, AtomConstraint, {
+    diff_field_ops!(AtomFieldChange, AtomAst, AtomConstraintAst, {
         Element => element,
         IsotopeMass => isotope_mass,
         Charge => charge,
@@ -1017,8 +1019,8 @@ impl EntityPatch for AtomDelta {
 
     fn apply_constraint(
         ast: &mut AtomAst,
-        old: Option<AtomConstraint>,
-        new: Option<AtomConstraint>,
+        old: Option<AtomConstraintAst>,
+        new: Option<AtomConstraintAst>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1063,7 +1065,7 @@ impl EntityFold for AtomDelta {
         change.inverse()
     }
 
-    fn constraint_key(constraint: &AtomConstraint) -> AtomConstraintKey {
+    fn constraint_key(constraint: &AtomConstraintAst) -> AtomConstraintKey {
         constraint.key()
     }
 
@@ -1081,7 +1083,7 @@ impl EntityPatch for BondDelta {
     type Id = BondId;
     type Ast = BondAst;
     type FieldChange = BondFieldChange;
-    type Constraint = BondConstraint;
+    type Constraint = BondConstraintAst;
 
     fn modify_field(id: BondId, change: BondFieldChange) -> Self {
         BondDelta::ModifyField { id, change }
@@ -1089,13 +1091,13 @@ impl EntityPatch for BondDelta {
 
     fn modify_constraint(
         id: BondId,
-        old: Option<BondConstraint>,
-        new: Option<BondConstraint>,
+        old: Option<BondConstraintAst>,
+        new: Option<BondConstraintAst>,
     ) -> Self {
         BondDelta::ModifyConstraint { id, old, new }
     }
 
-    diff_field_ops!(BondFieldChange, BondAst, BondConstraint, {
+    diff_field_ops!(BondFieldChange, BondAst, BondConstraintAst, {
         Order => order,
         Charge => charge,
         Spin => spin,
@@ -1103,8 +1105,8 @@ impl EntityPatch for BondDelta {
 
     fn apply_constraint(
         ast: &mut BondAst,
-        old: Option<BondConstraint>,
-        new: Option<BondConstraint>,
+        old: Option<BondConstraintAst>,
+        new: Option<BondConstraintAst>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1149,7 +1151,7 @@ impl EntityFold for BondDelta {
         change.inverse()
     }
 
-    fn constraint_key(constraint: &BondConstraint) -> BondConstraintKey {
+    fn constraint_key(constraint: &BondConstraintAst) -> BondConstraintKey {
         constraint.key()
     }
 
@@ -1164,7 +1166,7 @@ impl EntityPatch for DativeBondDelta {
     type Id = DativeBondId;
     type Ast = DativeBondAst;
     type FieldChange = DativeBondFieldChange;
-    type Constraint = DativeBondConstraint;
+    type Constraint = DativeBondConstraintAst;
 
     fn modify_field(id: DativeBondId, change: DativeBondFieldChange) -> Self {
         DativeBondDelta::ModifyField { id, change }
@@ -1172,20 +1174,20 @@ impl EntityPatch for DativeBondDelta {
 
     fn modify_constraint(
         id: DativeBondId,
-        old: Option<DativeBondConstraint>,
-        new: Option<DativeBondConstraint>,
+        old: Option<DativeBondConstraintAst>,
+        new: Option<DativeBondConstraintAst>,
     ) -> Self {
         DativeBondDelta::ModifyConstraint { id, old, new }
     }
 
-    diff_field_ops!(DativeBondFieldChange, DativeBondAst, DativeBondConstraint, {
+    diff_field_ops!(DativeBondFieldChange, DativeBondAst, DativeBondConstraintAst, {
         Order => order,
     });
 
     fn apply_constraint(
         ast: &mut DativeBondAst,
-        old: Option<DativeBondConstraint>,
-        new: Option<DativeBondConstraint>,
+        old: Option<DativeBondConstraintAst>,
+        new: Option<DativeBondConstraintAst>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1264,7 +1266,7 @@ impl EntityFold for DativeBondDelta {
         change.inverse()
     }
 
-    fn constraint_key(constraint: &DativeBondConstraint) -> DativeBondConstraintKey {
+    fn constraint_key(constraint: &DativeBondConstraintAst) -> DativeBondConstraintKey {
         constraint.key()
     }
 
@@ -1275,7 +1277,7 @@ impl EntityPatch for AromaticSystemDelta {
     type Id = AromaticSystemId;
     type Ast = AromaticSystemAst;
     type FieldChange = AromaticSystemFieldChange;
-    type Constraint = AromaticSystemConstraint;
+    type Constraint = AromaticSystemConstraintAst;
 
     fn modify_field(id: AromaticSystemId, change: AromaticSystemFieldChange) -> Self {
         AromaticSystemDelta::ModifyField { id, change }
@@ -1283,8 +1285,8 @@ impl EntityPatch for AromaticSystemDelta {
 
     fn modify_constraint(
         id: AromaticSystemId,
-        old: Option<AromaticSystemConstraint>,
-        new: Option<AromaticSystemConstraint>,
+        old: Option<AromaticSystemConstraintAst>,
+        new: Option<AromaticSystemConstraintAst>,
     ) -> Self {
         AromaticSystemDelta::ModifyConstraint { id, old, new }
     }
@@ -1292,7 +1294,7 @@ impl EntityPatch for AromaticSystemDelta {
     diff_field_ops!(
         AromaticSystemFieldChange,
         AromaticSystemAst,
-        AromaticSystemConstraint,
+        AromaticSystemConstraintAst,
         {
             Electrons => electrons,
             Charge => charge,
@@ -1302,8 +1304,8 @@ impl EntityPatch for AromaticSystemDelta {
 
     fn apply_constraint(
         ast: &mut AromaticSystemAst,
-        old: Option<AromaticSystemConstraint>,
-        new: Option<AromaticSystemConstraint>,
+        old: Option<AromaticSystemConstraintAst>,
+        new: Option<AromaticSystemConstraintAst>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1350,7 +1352,7 @@ impl EntityFold for AromaticSystemDelta {
         change.inverse()
     }
 
-    fn constraint_key(constraint: &AromaticSystemConstraint) -> AromaticSystemConstraintKey {
+    fn constraint_key(constraint: &AromaticSystemConstraintAst) -> AromaticSystemConstraintKey {
         constraint.key()
     }
 
@@ -1361,7 +1363,7 @@ impl EntityPatch for MulticenterBondDelta {
     type Id = MulticenterBondId;
     type Ast = MulticenterBondAst;
     type FieldChange = MulticenterBondFieldChange;
-    type Constraint = MulticenterBondConstraint;
+    type Constraint = MulticenterBondConstraintAst;
 
     fn modify_field(id: MulticenterBondId, change: MulticenterBondFieldChange) -> Self {
         MulticenterBondDelta::ModifyField { id, change }
@@ -1369,8 +1371,8 @@ impl EntityPatch for MulticenterBondDelta {
 
     fn modify_constraint(
         id: MulticenterBondId,
-        old: Option<MulticenterBondConstraint>,
-        new: Option<MulticenterBondConstraint>,
+        old: Option<MulticenterBondConstraintAst>,
+        new: Option<MulticenterBondConstraintAst>,
     ) -> Self {
         MulticenterBondDelta::ModifyConstraint { id, old, new }
     }
@@ -1378,7 +1380,7 @@ impl EntityPatch for MulticenterBondDelta {
     diff_field_ops!(
         MulticenterBondFieldChange,
         MulticenterBondAst,
-        MulticenterBondConstraint,
+        MulticenterBondConstraintAst,
         {
             Electrons => electrons,
             Charge => charge,
@@ -1388,8 +1390,8 @@ impl EntityPatch for MulticenterBondDelta {
 
     fn apply_constraint(
         ast: &mut MulticenterBondAst,
-        old: Option<MulticenterBondConstraint>,
-        new: Option<MulticenterBondConstraint>,
+        old: Option<MulticenterBondConstraintAst>,
+        new: Option<MulticenterBondConstraintAst>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1436,7 +1438,7 @@ impl EntityFold for MulticenterBondDelta {
         change.inverse()
     }
 
-    fn constraint_key(constraint: &MulticenterBondConstraint) -> MulticenterBondConstraintKey {
+    fn constraint_key(constraint: &MulticenterBondConstraintAst) -> MulticenterBondConstraintKey {
         constraint.key()
     }
 
@@ -1447,7 +1449,7 @@ impl EntityPatch for NoncovalentBondDelta {
     type Id = NoncovalentBondId;
     type Ast = NoncovalentBondAst;
     type FieldChange = NoncovalentBondFieldChange;
-    type Constraint = NoncovalentBondConstraint;
+    type Constraint = NoncovalentBondConstraintAst;
 
     fn modify_field(id: NoncovalentBondId, change: NoncovalentBondFieldChange) -> Self {
         NoncovalentBondDelta::ModifyField { id, change }
@@ -1455,13 +1457,13 @@ impl EntityPatch for NoncovalentBondDelta {
 
     fn modify_constraint(
         id: NoncovalentBondId,
-        old: Option<NoncovalentBondConstraint>,
-        new: Option<NoncovalentBondConstraint>,
+        old: Option<NoncovalentBondConstraintAst>,
+        new: Option<NoncovalentBondConstraintAst>,
     ) -> Self {
         NoncovalentBondDelta::ModifyConstraint { id, old, new }
     }
 
-    // Hand-written (not `diff_field_ops!`): `NoncovalentBondConstraint` is uninhabited,
+    // Hand-written (not `diff_field_ops!`): `NoncovalentBondConstraintAst` is uninhabited,
     // so the macro's constraint loop would be unreachable code.
     fn apply_field(
         ast: &mut NoncovalentBondAst,
@@ -1496,17 +1498,17 @@ impl EntityPatch for NoncovalentBondDelta {
         _lhs: &NoncovalentBondAst,
         _rhs: &NoncovalentBondAst,
     ) -> Vec<(
-        Option<NoncovalentBondConstraint>,
-        Option<NoncovalentBondConstraint>,
+        Option<NoncovalentBondConstraintAst>,
+        Option<NoncovalentBondConstraintAst>,
     )> {
         Vec::new()
     }
 
-    /// `NoncovalentBondConstraint` is uninhabited, so `old`/`new` are always `None`.
+    /// `NoncovalentBondConstraintAst` is uninhabited, so `old`/`new` are always `None`.
     fn apply_constraint(
         _ast: &mut NoncovalentBondAst,
-        old: Option<NoncovalentBondConstraint>,
-        new: Option<NoncovalentBondConstraint>,
+        old: Option<NoncovalentBondConstraintAst>,
+        new: Option<NoncovalentBondConstraintAst>,
     ) -> Result<(), Contradiction> {
         debug_assert!(
             old.is_none() && new.is_none(),
@@ -1557,7 +1559,7 @@ impl EntityFold for NoncovalentBondDelta {
         change.inverse()
     }
 
-    fn constraint_key(constraint: &NoncovalentBondConstraint) -> NoncovalentBondConstraintKey {
+    fn constraint_key(constraint: &NoncovalentBondConstraintAst) -> NoncovalentBondConstraintKey {
         constraint.key()
     }
 
@@ -1571,7 +1573,7 @@ impl EntityPatch for StereoAtomDelta {
     type Id = StereoAtomId;
     type Ast = StereoAtomAst;
     type FieldChange = StereoAtomFieldChange;
-    type Constraint = StereoAtomConstraint;
+    type Constraint = StereoAtomConstraintAst;
 
     fn modify_field(id: StereoAtomId, change: StereoAtomFieldChange) -> Self {
         StereoAtomDelta::ModifyField { id, change }
@@ -1581,8 +1583,8 @@ impl EntityPatch for StereoAtomDelta {
     /// `diff`, which stamps `kind` from the entity's config. Stereo's flow never uses this arm.
     fn modify_constraint(
         id: StereoAtomId,
-        old: Option<StereoAtomConstraint>,
-        new: Option<StereoAtomConstraint>,
+        old: Option<StereoAtomConstraintAst>,
+        new: Option<StereoAtomConstraintAst>,
     ) -> Self {
         StereoAtomDelta::ModifyConstraint {
             id,
@@ -1592,7 +1594,7 @@ impl EntityPatch for StereoAtomDelta {
         }
     }
 
-    diff_field_ops!(StereoAtomFieldChange, StereoAtomAst, StereoAtomConstraint, {
+    diff_field_ops!(StereoAtomFieldChange, StereoAtomAst, StereoAtomConstraintAst, {
         Configuration => configuration,
     });
 
@@ -1617,8 +1619,8 @@ impl EntityPatch for StereoAtomDelta {
 
     fn apply_constraint(
         ast: &mut StereoAtomAst,
-        old: Option<StereoAtomConstraint>,
-        new: Option<StereoAtomConstraint>,
+        old: Option<StereoAtomConstraintAst>,
+        new: Option<StereoAtomConstraintAst>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1628,7 +1630,7 @@ impl EntityPatch for StereoBondDelta {
     type Id = StereoBondId;
     type Ast = StereoBondAst;
     type FieldChange = StereoBondFieldChange;
-    type Constraint = StereoBondConstraint;
+    type Constraint = StereoBondConstraintAst;
 
     fn modify_field(id: StereoBondId, change: StereoBondFieldChange) -> Self {
         StereoBondDelta::ModifyField { id, change }
@@ -1637,8 +1639,8 @@ impl EntityPatch for StereoBondDelta {
     /// Kind-less fallback — see `StereoAtomDelta::modify_constraint`.
     fn modify_constraint(
         id: StereoBondId,
-        old: Option<StereoBondConstraint>,
-        new: Option<StereoBondConstraint>,
+        old: Option<StereoBondConstraintAst>,
+        new: Option<StereoBondConstraintAst>,
     ) -> Self {
         StereoBondDelta::ModifyConstraint {
             id,
@@ -1648,7 +1650,7 @@ impl EntityPatch for StereoBondDelta {
         }
     }
 
-    diff_field_ops!(StereoBondFieldChange, StereoBondAst, StereoBondConstraint, {
+    diff_field_ops!(StereoBondFieldChange, StereoBondAst, StereoBondConstraintAst, {
         Configuration => configuration,
     });
 
@@ -1672,8 +1674,8 @@ impl EntityPatch for StereoBondDelta {
 
     fn apply_constraint(
         ast: &mut StereoBondAst,
-        old: Option<StereoBondConstraint>,
-        new: Option<StereoBondConstraint>,
+        old: Option<StereoBondConstraintAst>,
+        new: Option<StereoBondConstraintAst>,
     ) -> Result<(), Contradiction> {
         ast.constraints.compare_and_set(old, new)
     }
@@ -1685,9 +1687,7 @@ impl EntityPatch for StereoBondDelta {
 /// preserved entity for a `ReactionSpanAst`.
 pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<(), Contradiction> {
     match delta {
-        AtomDelta::ModifyField { change, .. } => {
-            AtomDelta::apply_field(ast, change.clone())
-        }
+        AtomDelta::ModifyField { change, .. } => AtomDelta::apply_field(ast, change.clone()),
         AtomDelta::ModifyConstraint { old, new, .. } => {
             AtomDelta::apply_constraint(ast, old.clone(), new.clone())
         }
@@ -1697,9 +1697,7 @@ pub(crate) fn apply_atom_change(ast: &mut AtomAst, delta: &AtomDelta) -> Result<
 
 pub(crate) fn apply_bond_change(ast: &mut BondAst, delta: &BondDelta) -> Result<(), Contradiction> {
     match delta {
-        BondDelta::ModifyField { change, .. } => {
-            BondDelta::apply_field(ast, change.clone())
-        }
+        BondDelta::ModifyField { change, .. } => BondDelta::apply_field(ast, change.clone()),
         BondDelta::ModifyConstraint { old, new, .. } => {
             BondDelta::apply_constraint(ast, old.clone(), new.clone())
         }
@@ -1945,7 +1943,10 @@ fn fold_stereo_atom_group(
     let mut config_ops: Vec<StereoConfigOp> = Vec::new();
     let mut constraints: HashMap<
         StereoAtomConstraintKey,
-        (Option<StereoAtomConstraint>, Option<StereoAtomConstraint>),
+        (
+            Option<StereoAtomConstraintAst>,
+            Option<StereoAtomConstraintAst>,
+        ),
     > = HashMap::new();
     let mut removed: Option<(AtomId, Vec<StereoLigand>, StereoAtomAst)> = None;
     for delta in group {
@@ -2112,7 +2113,10 @@ fn fold_stereo_bond_group(
     let mut config_ops: Vec<StereoConfigOp> = Vec::new();
     let mut constraints: HashMap<
         StereoBondConstraintKey,
-        (Option<StereoBondConstraint>, Option<StereoBondConstraint>),
+        (
+            Option<StereoBondConstraintAst>,
+            Option<StereoBondConstraintAst>,
+        ),
     > = HashMap::new();
     let mut removed: Option<(BondId, Vec<StereoLigand>, StereoBondAst)> = None;
     for delta in group {
@@ -2772,13 +2776,13 @@ mod tests {
     #[case::set_constraint(
         AtomDelta::ModifyConstraint {
             id: AtomId(2),
-            old: Some(AtomConstraint::Valence(ValueAst::Lit(4))),
-            new: Some(AtomConstraint::Valence(ValueAst::Lit(3))),
+            old: Some(AtomConstraintAst::Valence(ValueAst::Lit(4))),
+            new: Some(AtomConstraintAst::Valence(ValueAst::Lit(3))),
         },
         AtomDelta::ModifyConstraint {
             id: AtomId(2),
-            old: Some(AtomConstraint::Valence(ValueAst::Lit(3))),
-            new: Some(AtomConstraint::Valence(ValueAst::Lit(4))),
+            old: Some(AtomConstraintAst::Valence(ValueAst::Lit(3))),
+            new: Some(AtomConstraintAst::Valence(ValueAst::Lit(4))),
         }
     )]
     fn test_atom_delta_inverse(#[case] input: AtomDelta, #[case] expected: AtomDelta) {
@@ -2822,11 +2826,11 @@ mod tests {
         BondDelta::ModifyConstraint {
             id: BondId(3),
             old: None,
-            new: Some(BondConstraint::Aromatic(BooleanAst::Lit(true))),
+            new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
         },
         BondDelta::ModifyConstraint {
             id: BondId(3),
-            old: Some(BondConstraint::Aromatic(BooleanAst::Lit(true))),
+            old: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
             new: None,
         }
     )]
@@ -2871,12 +2875,12 @@ mod tests {
             id: StereoAtomId(2),
             kind: Some(StereoKind::Tetrahedral),
             old: None,
-            new: Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Undetermined)),
+            new: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
         },
         StereoAtomDelta::ModifyConstraint {
             id: StereoAtomId(2),
             kind: Some(StereoKind::Tetrahedral),
-            old: Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Undetermined)),
+            old: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
             new: None,
         }
     )]
@@ -3374,12 +3378,12 @@ mod tests {
             Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
                 old: None,
-                new: Some(AtomConstraint::Valence(ValueAst::Lit(4))),
+                new: Some(AtomConstraintAst::Valence(ValueAst::Lit(4))),
             }),
             Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
-                old: Some(AtomConstraint::Valence(ValueAst::Lit(4))),
-                new: Some(AtomConstraint::Valence(ValueAst::Lit(3))),
+                old: Some(AtomConstraintAst::Valence(ValueAst::Lit(4))),
+                new: Some(AtomConstraintAst::Valence(ValueAst::Lit(3))),
             }),
         ]);
         assert_eq!(
@@ -3387,7 +3391,7 @@ mod tests {
             Deltas::from_iter([Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
                 old: None,
-                new: Some(AtomConstraint::Valence(ValueAst::Lit(3))),
+                new: Some(AtomConstraintAst::Valence(ValueAst::Lit(3))),
             })]),
         );
     }

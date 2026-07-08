@@ -10,24 +10,24 @@ pub(crate) use std::ops::RangeInclusive;
 
 use proptest::prelude::*;
 pub(crate) use umol_ast::ast::{
-    AddBond, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKey,
-    AromaticSystemConstraints, AromaticSystemHandle, AromaticSystemId, AromaticValenceAst, AtomAst,
-    AtomConstraint, AtomConstraintKey, AtomConstraints, AtomFieldChange, AtomHandle, AtomId,
-    BondAst, BondConstraint, BondConstraintKey, BondConstraints, BondFieldChange, BondHandle,
-    BondId, BooleanAst, Canonicalize, CisTransStereoAst, Constraint, Constraints, DativeBondAst,
-    DativeBondConstraint, DativeBondConstraintKey, DativeBondConstraints, DativeBondHandle,
-    DativeBondId, Edit, ElectronCountsAst, ElementAst, FluxionalityAst, IsotopeMassAst, Lattice,
-    LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint,
-    MulticenterBondAst, MulticenterBondConstraint, MulticenterBondConstraintKey,
-    MulticenterBondConstraints, MulticenterBondHandle, MulticenterBondId, MulticenterValenceAst,
-    NoncovalentBondAst, NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind,
-    NoncovalentBondKindAst, OrientedLigandPermutation, RelOp, RelationalConstraint, RingScope,
-    SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomConstraints, StereoAtomId,
-    StereoBondAst, StereoBondConstraint, StereoBondConstraints, StereoBondId,
-    StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind,
-    StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
-    TetrahedralStereoAst, Topicity, TopicityAst, TopicityRelationAst, ValueAst, ValuePredicate,
-    ValueTerm,
+    AddBond, AromaticSystemAst, AromaticSystemConstraintAst, AromaticSystemConstraintKey,
+    AromaticSystemConstraintsAst, AromaticSystemHandle, AromaticSystemId, AromaticValenceAst,
+    AtomAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst, AtomFieldChange, AtomHandle,
+    AtomId, BondAst, BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondFieldChange,
+    BondHandle, BondId, BooleanAst, Canonicalize, CisTransStereoAst, Constraint, Constraints,
+    DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst,
+    DativeBondHandle, DativeBondId, Edit, ElectronCountsAst, ElementAst, FluxionalityAst,
+    IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst,
+    MoleculeConstraint, MulticenterBondAst, MulticenterBondConstraintAst,
+    MulticenterBondConstraintKey, MulticenterBondConstraintsAst, MulticenterBondHandle,
+    MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondHandle,
+    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, OrientedLigandPermutation,
+    RelOp, RelationalConstraint, RingScope, SpinStateAst, StereoAtomAst, StereoAtomConstraintAst,
+    StereoAtomConstraintsAst, StereoAtomId, StereoBondAst, StereoBondConstraintAst,
+    StereoBondConstraintsAst, StereoBondId, StereoConfigurationAst, StereoCosetAst, StereoKind,
+    StereoLigand, StereoLigandKind, StereoLigandPair, StereoLigandPosition, Stereogenicity,
+    StereogenicityAst, SubPatternAnchor, TetrahedralStereoAst, Topicity, TopicityAst,
+    TopicityRelationAst, ValueAst, ValuePredicate, ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, DativeBondParticipants,
@@ -372,31 +372,31 @@ pub(crate) fn multicenter_valence_ast_strategy() -> impl Strategy<Value = Multic
 /// `fmt_ring_count` for `#R`), which elide vacuous (Undetermined) payloads
 /// per the canonical-rendering rule. Generators excluding `Undetermined`
 /// keep the render → reparse identity intact.
-pub(crate) fn atom_constraint_strategy() -> BoxedStrategy<AtomConstraint> {
+pub(crate) fn atom_constraint_strategy() -> BoxedStrategy<AtomConstraintAst> {
     prop_oneof![
-        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::Valence),
-        constraint_inner_value_strategy(0..=8).prop_map(AtomConstraint::TotalValence),
-        constraint_inner_value_strategy(0..=4).prop_map(AtomConstraint::DonatedPairs),
-        constraint_inner_value_strategy(0..=4).prop_map(AtomConstraint::AcceptedPairs),
-        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::Degree),
-        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::TotalDegree),
-        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingDegree),
-        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingValence),
-        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::TotalHydrogens),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraintAst::Valence),
+        constraint_inner_value_strategy(0..=8).prop_map(AtomConstraintAst::TotalValence),
+        constraint_inner_value_strategy(0..=4).prop_map(AtomConstraintAst::DonatedPairs),
+        constraint_inner_value_strategy(0..=4).prop_map(AtomConstraintAst::AcceptedPairs),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraintAst::Degree),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraintAst::TotalDegree),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraintAst::RingDegree),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraintAst::RingValence),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraintAst::TotalHydrogens),
         constraint_inner_value_strategy(0..=6)
-            .prop_map(|v| AtomConstraint::ring_membership(RingScope::All, v)),
+            .prop_map(|v| AtomConstraintAst::ring_membership(RingScope::All, v)),
         (3u8..=10, constraint_inner_value_strategy(0..=6))
-            .prop_map(|(s, count)| AtomConstraint::ring_membership(RingScope::Size(s), count)),
-        aromatic_valence_ast_strategy().prop_map(AtomConstraint::AromaticValence),
-        multicenter_valence_ast_strategy().prop_map(AtomConstraint::MulticenterValence),
-        tetrahedral_stereo_strategy().prop_map(AtomConstraint::TetrahedralStereo),
+            .prop_map(|(s, count)| AtomConstraintAst::ring_membership(RingScope::Size(s), count)),
+        aromatic_valence_ast_strategy().prop_map(AtomConstraintAst::AromaticValence),
+        multicenter_valence_ast_strategy().prop_map(AtomConstraintAst::MulticenterValence),
+        tetrahedral_stereo_strategy().prop_map(AtomConstraintAst::TetrahedralStereo),
     ]
     .boxed()
 }
 
-pub(crate) fn atom_constraints_strategy() -> impl Strategy<Value = AtomConstraints> {
+pub(crate) fn atom_constraints_strategy() -> impl Strategy<Value = AtomConstraintsAst> {
     prop::collection::vec(atom_constraint_strategy(), 0..=3).prop_map(|list| {
-        let mut cs = AtomConstraints::new();
+        let mut cs = AtomConstraintsAst::new();
         for c in list {
             cs.set(c);
         }
@@ -404,21 +404,21 @@ pub(crate) fn atom_constraints_strategy() -> impl Strategy<Value = AtomConstrain
     })
 }
 
-pub(crate) fn bond_constraint_strategy() -> BoxedStrategy<BondConstraint> {
+pub(crate) fn bond_constraint_strategy() -> BoxedStrategy<BondConstraintAst> {
     prop_oneof![
-        any::<bool>().prop_map(|b| BondConstraint::Aromatic(BooleanAst::Lit(b))),
+        any::<bool>().prop_map(|b| BondConstraintAst::Aromatic(BooleanAst::Lit(b))),
         constraint_inner_value_strategy(0..=6)
-            .prop_map(|v| BondConstraint::ring_membership(RingScope::All, v)),
+            .prop_map(|v| BondConstraintAst::ring_membership(RingScope::All, v)),
         (3u8..=10, constraint_inner_value_strategy(0..=6))
-            .prop_map(|(s, count)| BondConstraint::ring_membership(RingScope::Size(s), count)),
-        cis_trans_stereo_strategy().prop_map(BondConstraint::CisTransStereo),
+            .prop_map(|(s, count)| BondConstraintAst::ring_membership(RingScope::Size(s), count)),
+        cis_trans_stereo_strategy().prop_map(BondConstraintAst::CisTransStereo),
     ]
     .boxed()
 }
 
-pub(crate) fn bond_constraints_strategy() -> impl Strategy<Value = BondConstraints> {
+pub(crate) fn bond_constraints_strategy() -> impl Strategy<Value = BondConstraintsAst> {
     prop::collection::vec(bond_constraint_strategy(), 0..=2).prop_map(|list| {
-        let mut cs = BondConstraints::new();
+        let mut cs = BondConstraintsAst::new();
         for c in list {
             cs.set(c);
         }
@@ -426,21 +426,22 @@ pub(crate) fn bond_constraints_strategy() -> impl Strategy<Value = BondConstrain
     })
 }
 
-pub(crate) fn dative_bond_constraint_strategy() -> BoxedStrategy<DativeBondConstraint> {
+pub(crate) fn dative_bond_constraint_strategy() -> BoxedStrategy<DativeBondConstraintAst> {
     prop_oneof![
-        any::<bool>().prop_map(|b| DativeBondConstraint::Aromatic(BooleanAst::Lit(b))),
+        any::<bool>().prop_map(|b| DativeBondConstraintAst::Aromatic(BooleanAst::Lit(b))),
         constraint_inner_value_strategy(0..=6)
-            .prop_map(|v| DativeBondConstraint::ring_membership(RingScope::All, v)),
+            .prop_map(|v| DativeBondConstraintAst::ring_membership(RingScope::All, v)),
         (3u8..=10, constraint_inner_value_strategy(0..=6)).prop_map(|(s, count)| {
-            DativeBondConstraint::ring_membership(RingScope::Size(s), count)
+            DativeBondConstraintAst::ring_membership(RingScope::Size(s), count)
         }),
     ]
     .boxed()
 }
 
-pub(crate) fn dative_bond_constraints_strategy() -> impl Strategy<Value = DativeBondConstraints> {
+pub(crate) fn dative_bond_constraints_strategy() -> impl Strategy<Value = DativeBondConstraintsAst>
+{
     prop::collection::vec(dative_bond_constraint_strategy(), 0..=2).prop_map(|list| {
-        let mut cs = DativeBondConstraints::new();
+        let mut cs = DativeBondConstraintsAst::new();
         for c in list {
             cs.set(c);
         }
@@ -498,7 +499,7 @@ pub(crate) fn canonical_keyword_bond_strategy() -> impl Strategy<Value = BondAst
         Just(BondAst::new(ValueAst::Lit(4))),
         Just(
             BondAst::new(ValueAst::Lit(1))
-                .with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))),
+                .with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
         ),
     ]
 }
@@ -548,23 +549,23 @@ pub(crate) fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
 /// surface form in the entity-string `#e<n>` slot — `#e*` is admitted on
 /// parse but the renderer omits the predicate entirely, breaking
 /// roundtrip.
-pub(crate) fn optional_aromatic_electron_count() -> impl Strategy<Value = AromaticSystemConstraints>
-{
+pub(crate) fn optional_aromatic_electron_count(
+) -> impl Strategy<Value = AromaticSystemConstraintsAst> {
     prop::option::weighted(0.5, electron_count_value_strategy(0..=12)).prop_map(|opt| {
-        let mut cs = AromaticSystemConstraints::new();
+        let mut cs = AromaticSystemConstraintsAst::new();
         if let Some(v) = opt {
-            cs.set(AromaticSystemConstraint::ElectronCount(v));
+            cs.set(AromaticSystemConstraintAst::ElectronCount(v));
         }
         cs.canonicalize().unwrap_or_default()
     })
 }
 
 pub(crate) fn optional_multicenter_electron_count(
-) -> impl Strategy<Value = MulticenterBondConstraints> {
+) -> impl Strategy<Value = MulticenterBondConstraintsAst> {
     prop::option::weighted(0.5, electron_count_value_strategy(0..=8)).prop_map(|opt| {
-        let mut cs = MulticenterBondConstraints::new();
+        let mut cs = MulticenterBondConstraintsAst::new();
         if let Some(v) = opt {
-            cs.set(MulticenterBondConstraint::ElectronCount(v));
+            cs.set(MulticenterBondConstraintAst::ElectronCount(v));
         }
         cs.canonicalize().unwrap_or_default()
     })
@@ -930,14 +931,14 @@ macro_rules! stereo_constraint_strategy {
     };
 }
 
-stereo_constraint_strategy! { stereo_atom_constraint_strategy, StereoAtomConstraint }
-stereo_constraint_strategy! { stereo_bond_constraint_strategy, StereoBondConstraint }
+stereo_constraint_strategy! { stereo_atom_constraint_strategy, StereoAtomConstraintAst }
+stereo_constraint_strategy! { stereo_bond_constraint_strategy, StereoBondConstraintAst }
 
 pub(crate) fn stereo_atom_constraints_strategy(
     kind: StereoKind,
-) -> impl Strategy<Value = StereoAtomConstraints> {
+) -> impl Strategy<Value = StereoAtomConstraintsAst> {
     prop::collection::vec(stereo_atom_constraint_strategy(kind), 0..=3).prop_map(|list| {
-        let mut cs = StereoAtomConstraints::new();
+        let mut cs = StereoAtomConstraintsAst::new();
         for c in list {
             cs.set(c);
         }
@@ -947,9 +948,9 @@ pub(crate) fn stereo_atom_constraints_strategy(
 
 pub(crate) fn stereo_bond_constraints_strategy(
     kind: StereoKind,
-) -> impl Strategy<Value = StereoBondConstraints> {
+) -> impl Strategy<Value = StereoBondConstraintsAst> {
     prop::collection::vec(stereo_bond_constraint_strategy(kind), 0..=3).prop_map(|list| {
-        let mut cs = StereoBondConstraints::new();
+        let mut cs = StereoBondConstraintsAst::new();
         for c in list {
             cs.set(c);
         }
@@ -1265,7 +1266,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
     if counts.atom > 0 {
         let atom_id = atom_id_strategy(counts.atom);
 
-        // Constraint::Atom carrying any AtomConstraint variant.
+        // Constraint::Atom carrying any AtomConstraintAst variant.
         let atom_leaf = (atom_id.clone(), atom_constraint_strategy())
             .prop_map(|(id, c)| Constraint::Atom(id, c));
         choices.push(atom_leaf.boxed());
@@ -1401,7 +1402,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
 
         let aromatic_leaf = (system_id.clone(), electron_count_value_strategy(0..=12))
             .prop_map(|(system, v)| {
-                Constraint::AromaticSystem(system, AromaticSystemConstraint::ElectronCount(v))
+                Constraint::AromaticSystem(system, AromaticSystemConstraintAst::ElectronCount(v))
             })
             .boxed();
         choices.push(aromatic_leaf);
@@ -1464,7 +1465,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
 
         let multicenter_leaf = (bond_id.clone(), electron_count_value_strategy(0..=8))
             .prop_map(|(bond, v)| {
-                Constraint::MulticenterBond(bond, MulticenterBondConstraint::ElectronCount(v))
+                Constraint::MulticenterBond(bond, MulticenterBondConstraintAst::ElectronCount(v))
             })
             .boxed();
         choices.push(multicenter_leaf);
@@ -2007,7 +2008,7 @@ impl TransactionCase {
                 vec![Edit::ModifyAtomConstraint {
                     id: AtomHandle::Id(AtomId((id % count) as u32)),
                     old: None,
-                    new: Some(AtomConstraint::ring_membership(
+                    new: Some(AtomConstraintAst::ring_membership(
                         RingScope::Size(*size as u8),
                         1,
                     )),
@@ -2169,7 +2170,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                     edits.push(Edit::AddMoleculeConstraint {
                         constraint: Constraint::AromaticSystem(
                             AromaticSystemId(i as u32),
-                            AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6)),
+                            AromaticSystemConstraintAst::ElectronCount(ValueAst::Lit(6)),
                         ),
                     });
                 }
@@ -2177,7 +2178,7 @@ pub(crate) fn overlay_transaction_strategy() -> impl Strategy<Value = (MoleculeA
                     edits.push(Edit::AddMoleculeConstraint {
                         constraint: Constraint::MulticenterBond(
                             MulticenterBondId(i as u32),
-                            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(4)),
+                            MulticenterBondConstraintAst::ElectronCount(ValueAst::Lit(4)),
                         ),
                     });
                 }

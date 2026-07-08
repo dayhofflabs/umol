@@ -24,7 +24,7 @@ use super::stereo::{cis_trans_stereo_config, fmt_cis_trans_stereo_config, CisTra
 use super::value::{fmt_value, value};
 use crate::ast::bond::BondAst;
 use crate::ast::boolean::BooleanAst;
-use crate::ast::constraint::{BondConstraint, BondConstraintKey, BondConstraints};
+use crate::ast::constraint::{BondConstraintAst, BondConstraintKey, BondConstraintsAst};
 use crate::ast::spin::SpinStateAst;
 use crate::ast::stereo::CisTransStereoAst;
 use crate::ast::traits::{FromAst, IntoAst, Lattice};
@@ -132,13 +132,15 @@ fn bond_keyword_for(ast: &BondAst) -> Option<&'static str> {
     if !matches!(ast.charge, ValueAst::Undetermined) || ast.spin != SpinStateAst::default() {
         return None;
     }
-    let constraints: Vec<&BondConstraint> = ast.constraints.iter().collect();
+    let constraints: Vec<&BondConstraintAst> = ast.constraints.iter().collect();
     match (&ast.order, constraints.as_slice()) {
         (ValueAst::Lit(1), []) => Some("single"),
         (ValueAst::Lit(2), []) => Some("double"),
         (ValueAst::Lit(3), []) => Some("triple"),
         (ValueAst::Lit(4), []) => Some("quadruple"),
-        (ValueAst::Lit(1), [BondConstraint::Aromatic(BooleanAst::Lit(true))]) => Some("aromatic"),
+        (ValueAst::Lit(1), [BondConstraintAst::Aromatic(BooleanAst::Lit(true))]) => {
+            Some("aromatic")
+        }
         _ => None,
     }
 }
@@ -277,11 +279,11 @@ fn partial_bond(i: &mut &str) -> PResult<PartialBondDsl> {
     Ok(PartialBondDsl(form.0))
 }
 
-fn constraint_tag(c: &BondConstraint) -> &'static str {
+fn constraint_tag(c: &BondConstraintAst) -> &'static str {
     match c {
-        BondConstraint::Aromatic(_) => "#a",
-        BondConstraint::RingMembership(..) => "#R",
-        BondConstraint::CisTransStereo(_) => "#C",
+        BondConstraintAst::Aromatic(_) => "#a",
+        BondConstraintAst::RingMembership(..) => "#R",
+        BondConstraintAst::CisTransStereo(_) => "#C",
     }
 }
 
@@ -291,7 +293,7 @@ fn constraint_tag(c: &BondConstraint) -> &'static str {
 pub enum BondPredicate {
     Charge(ValueAst),
     Spin(SpinPredicate),
-    Constraint(BondConstraint),
+    Constraint(BondConstraintAst),
 }
 
 fn bond_predicate(i: &mut &str) -> PResult<BondPredicate> {
@@ -306,13 +308,13 @@ fn bond_predicate(i: &mut &str) -> PResult<BondPredicate> {
             .map(|v| BondPredicate::Spin(SpinPredicate::Multiplicity(v)))
             .parse_next(i),
         "#a" => boolean
-            .map(|b| BondPredicate::Constraint(BondConstraint::Aromatic(b.0)))
+            .map(|b| BondPredicate::Constraint(BondConstraintAst::Aromatic(b.0)))
             .parse_next(i),
         "#R" => ring_membership
-            .map(|m| BondPredicate::Constraint(BondConstraint::RingMembership(m)))
+            .map(|m| BondPredicate::Constraint(BondConstraintAst::RingMembership(m)))
             .parse_next(i),
         "#C" => (|i: &mut &str| cis_trans_stereo_config(i))
-            .map(|c| BondPredicate::Constraint(BondConstraint::CisTransStereo(c)))
+            .map(|c| BondPredicate::Constraint(BondConstraintAst::CisTransStereo(c)))
             .parse_next(i),
         p if p.starts_with('#') => Err(ErrMode::Cut(ParseError::UnknownBondPredicate(
             p.to_string(),
@@ -358,14 +360,14 @@ fn fmt_bond_ast(f: &mut fmt::Formatter<'_>, ast: &BondAst) -> fmt::Result {
     fmt_spin_pair(f, &ast.spin)
 }
 
-fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraint) -> fmt::Result {
+fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraintAst) -> fmt::Result {
     match c {
-        BondConstraint::Aromatic(BooleanAst::Lit(true)) => write!(f, "#a"),
-        BondConstraint::Aromatic(BooleanAst::Lit(false)) => write!(f, "#a!"),
-        BondConstraint::Aromatic(BooleanAst::Undetermined) => Ok(()),
-        BondConstraint::RingMembership(m) => fmt_ring_membership(f, m),
-        BondConstraint::CisTransStereo(CisTransStereoAst::Undetermined) => Ok(()),
-        BondConstraint::CisTransStereo(c) => {
+        BondConstraintAst::Aromatic(BooleanAst::Lit(true)) => write!(f, "#a"),
+        BondConstraintAst::Aromatic(BooleanAst::Lit(false)) => write!(f, "#a!"),
+        BondConstraintAst::Aromatic(BooleanAst::Undetermined) => Ok(()),
+        BondConstraintAst::RingMembership(m) => fmt_ring_membership(f, m),
+        BondConstraintAst::CisTransStereo(CisTransStereoAst::Undetermined) => Ok(()),
+        BondConstraintAst::CisTransStereo(c) => {
             write!(f, "#C")?;
             fmt_cis_trans_stereo_config(f, c)
         }
@@ -412,45 +414,49 @@ pub(crate) fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     raise_bond_constraints(constraints, cfg);
 }
 
-fn raise_bond_constraints(constraints: &mut BondConstraints, cfg: &BondDefaults) {
+fn raise_bond_constraints(constraints: &mut BondConstraintsAst, cfg: &BondDefaults) {
     // CisTransStereo is the only defaulted bond constraint; Aromatic/RingMembership are pattern-only.
     if matches!(cfg.cis_trans_stereo, StereoDefault::NotStereo)
         && constraints
             .get(BondConstraintKey::CisTransStereo)
             .is_none_or(|c| c.is_undetermined())
     {
-        constraints.set(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo));
+        constraints.set(BondConstraintAst::CisTransStereo(
+            CisTransStereoAst::NotStereo,
+        ));
     }
 }
 
-fn lower_bond_constraints(constraints: &mut BondConstraints, cfg: &BondDefaults) {
+fn lower_bond_constraints(constraints: &mut BondConstraintsAst, cfg: &BondDefaults) {
     // Elide the default CisTransStereo (NotStereo); Aromatic/RingMembership are pattern-only.
     if matches!(cfg.cis_trans_stereo, StereoDefault::NotStereo)
         && constraints.get(BondConstraintKey::CisTransStereo)
-            == Some(&BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo))
+            == Some(&BondConstraintAst::CisTransStereo(
+                CisTransStereoAst::NotStereo,
+            ))
     {
         constraints.remove(BondConstraintKey::CisTransStereo);
     }
 }
 
-/// Surface DSL wrapper around `BondConstraint`. EDN form: the keyword
+/// Surface DSL wrapper around `BondConstraintAst`. EDN form: the keyword
 /// `:aromatic` (flag variant, no value) or a single-key map
 /// `{:ring-membership {:size? <int> :count <value>}}` / `{:cis-trans-stereo …}`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct BondConstraintDsl(pub BondConstraint);
+pub struct BondConstraintDsl(pub BondConstraintAst);
 
-impl FromAst<BondConstraint> for BondConstraintDsl {
+impl FromAst<BondConstraintAst> for BondConstraintDsl {
     type Ctx = ();
 
-    fn from_ast(ast: &BondConstraint, _ctx: &Self::Ctx) -> Self {
+    fn from_ast(ast: &BondConstraintAst, _ctx: &Self::Ctx) -> Self {
         Self(ast.clone())
     }
 }
 
-impl IntoAst<BondConstraint> for BondConstraintDsl {
+impl IntoAst<BondConstraintAst> for BondConstraintDsl {
     type Ctx = ();
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> BondConstraint {
+    fn into_ast(self, _ctx: &Self::Ctx) -> BondConstraintAst {
         self.0
     }
 }
@@ -468,11 +474,11 @@ impl<'de> FromEdn<'de> for BondConstraintDsl {
                     });
                 };
                 let c = match key.name() {
-                    "aromatic" => BondConstraint::Aromatic(BooleanDsl::from_edn(v)?.0),
+                    "aromatic" => BondConstraintAst::Aromatic(BooleanDsl::from_edn(v)?.0),
                     "ring-membership" => {
-                        BondConstraint::RingMembership(RingMembershipDsl::from_edn(v)?.0)
+                        BondConstraintAst::RingMembership(RingMembershipDsl::from_edn(v)?.0)
                     }
-                    "cis-trans-stereo" => BondConstraint::CisTransStereo(
+                    "cis-trans-stereo" => BondConstraintAst::CisTransStereo(
                         CisTransStereoDsl::from_edn(v)?.into_ast(&()),
                     ),
                     other => {
@@ -496,11 +502,11 @@ impl<'de> FromEdn<'de> for BondConstraintDsl {
 impl ToEdn for BondConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         match &self.0 {
-            BondConstraint::Aromatic(b) => single_key_map("aromatic", BooleanDsl(*b).to_edn()),
-            BondConstraint::RingMembership(m) => {
+            BondConstraintAst::Aromatic(b) => single_key_map("aromatic", BooleanDsl(*b).to_edn()),
+            BondConstraintAst::RingMembership(m) => {
                 single_key_map("ring-membership", RingMembershipDsl(m.clone()).to_edn())
             }
-            BondConstraint::CisTransStereo(c) => single_key_map(
+            BondConstraintAst::CisTransStereo(c) => single_key_map(
                 "cis-trans-stereo",
                 CisTransStereoDsl::from_ast(c, &()).to_edn(),
             ),
@@ -516,45 +522,45 @@ mod tests {
     use umol_edn::read_string;
 
     use super::*;
-    use crate::ast::constraint::{BondConstraints, RingScope};
+    use crate::ast::constraint::{BondConstraintsAst, RingScope};
     use crate::ast::spin::SpinStateAst;
     use crate::ast::stereo::StereoCosetAst;
     use crate::bond;
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single("1", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::double("2", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::triple("3", BondDsl(BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::quadruple("4", BondDsl(BondAst { order: ValueAst::Lit(4), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::single_whitespace("  1  ", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::single_pos_charge("1#c+2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(2), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::single_neg_charge("1#c-2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::single_zero_charge("1#c0", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::single_plus_only("1#c+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::single_minus_only("1#c-", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::double_unpaired("2#u3", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(3), multiplicity: ValueAst::Undetermined }, constraints: BondConstraints::new() }))]
-    #[case::single_u_only("1#u", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, constraints: BondConstraints::new() }))]
-    #[case::single_mult("1#s2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, constraints: BondConstraints::new() }))]
-    #[case::single_s_only("1#s", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) }, constraints: BondConstraints::new() }))]
-    #[case::double_charge_unpaired("2#c+#u2", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, constraints: BondConstraints::new() }))]
-    #[case::double_charge_mult("2#c-1#s3", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(-1), spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, constraints: BondConstraints::new() }))]
-    #[case::aromatic("1#a", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]) }))]
-    #[case::aromatic_plus("1#a+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]) }))]
-    #[case::aromatic_undetermined("1#a*", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Undetermined)]) }))]
-    #[case::not_aromatic("1#a!", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(false))]) }))]
-    #[case::charged_aromatic("1#c+#a", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]) }))]
-    #[case::ring_membership_all("1#R2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(2))]) }))]
-    #[case::ring_membership_all_bare("1#R", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1))]) }))]
-    #[case::ring_membership_all_plus("1#R+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::RangeFrom(1))]) }))]
-    #[case::ring_bang("1#R!", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(0))]) }))]
-    #[case::ring_zero("1#R0", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(0))]) }))]
-    #[case::ring_membership_all_star("1#R*", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined)]) }))]
-    #[case::ring_membership_size("1#R(6)", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::Size(6), 1)]) }))]
-    #[case::ring_membership_size_conj("1#R(5)#R(6)", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::Size(5), 1), BondConstraint::ring_membership(RingScope::Size(6), 1)]) }))]
-    #[case::whitespace_before_predicate("2 #c+", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::whitespace_between_predicates("2#c+ #a", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]) }))]
-    #[case::whitespace_surrounding_predicates("  2  #c+  #a  ", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]) }))]
+    #[case::single("1", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::double("2", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::triple("3", BondDsl(BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::quadruple("4", BondDsl(BondAst { order: ValueAst::Lit(4), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::single_whitespace("  1  ", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::single_pos_charge("1#c+2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(2), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::single_neg_charge("1#c-2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::single_zero_charge("1#c0", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::single_plus_only("1#c+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::single_minus_only("1#c-", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::double_unpaired("2#u3", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(3), multiplicity: ValueAst::Undetermined }, constraints: BondConstraintsAst::new() }))]
+    #[case::single_u_only("1#u", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, constraints: BondConstraintsAst::new() }))]
+    #[case::single_mult("1#s2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, constraints: BondConstraintsAst::new() }))]
+    #[case::single_s_only("1#s", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) }, constraints: BondConstraintsAst::new() }))]
+    #[case::double_charge_unpaired("2#c+#u2", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, constraints: BondConstraintsAst::new() }))]
+    #[case::double_charge_mult("2#c-1#s3", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(-1), spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, constraints: BondConstraintsAst::new() }))]
+    #[case::aromatic("1#a", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]) }))]
+    #[case::aromatic_plus("1#a+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]) }))]
+    #[case::aromatic_undetermined("1#a*", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Undetermined)]) }))]
+    #[case::not_aromatic("1#a!", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(false))]) }))]
+    #[case::charged_aromatic("1#c+#a", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]) }))]
+    #[case::ring_membership_all("1#R2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(2))]) }))]
+    #[case::ring_membership_all_bare("1#R", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1))]) }))]
+    #[case::ring_membership_all_plus("1#R+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, ValueAst::RangeFrom(1))]) }))]
+    #[case::ring_bang("1#R!", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(0))]) }))]
+    #[case::ring_zero("1#R0", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(0))]) }))]
+    #[case::ring_membership_all_star("1#R*", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::All, ValueAst::Undetermined)]) }))]
+    #[case::ring_membership_size("1#R(6)", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::Size(6), 1)]) }))]
+    #[case::ring_membership_size_conj("1#R(5)#R(6)", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::ring_membership(RingScope::Size(5), 1), BondConstraintAst::ring_membership(RingScope::Size(6), 1)]) }))]
+    #[case::whitespace_before_predicate("2 #c+", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::whitespace_between_predicates("2#c+ #a", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]) }))]
+    #[case::whitespace_surrounding_predicates("  2  #c+  #a  ", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]) }))]
     fn test_parse_bond(#[case] input: &str, #[case] expected: BondDsl) {
         let result = bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -588,11 +594,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty("", PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::order_only("2", PartialBondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::charge_only("#c-1", PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
-    #[case::order_and_pred("1#a", PartialBondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]) }))]
-    #[case::order_aromatic_undetermined("1#a*", PartialBondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Undetermined)]) }))]
+    #[case::empty("", PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::order_only("2", PartialBondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::charge_only("#c-1", PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
+    #[case::order_and_pred("1#a", PartialBondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]) }))]
+    #[case::order_aromatic_undetermined("1#a*", PartialBondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Undetermined)]) }))]
     fn test_parse_partial_bond(#[case] input: &str, #[case] expected: PartialBondDsl) {
         assert_eq!(parse_partial_bond(input).unwrap(), expected);
     }
@@ -606,7 +612,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::charge_only(r##""#c-1""##, PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::charge_only(r##""#c-1""##, PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
     fn test_partial_bond_dsl_from_edn(#[case] input: &str, #[case] expected: PartialBondDsl) {
         assert_eq!(
             PartialBondDsl::from_edn(&read_string(input).unwrap()).unwrap(),
@@ -628,10 +634,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::order(PartialBondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }), r##""1""##)]
-    #[case::charge_only(PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }), r##""#c-""##)]
-    #[case::aromatic(PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]) }), r##""#a""##)]
-    #[case::aromatic_undetermined(PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Undetermined)]) }), r##""#a*""##)]
+    #[case::order(PartialBondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }), r##""1""##)]
+    #[case::charge_only(PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }), r##""#c-""##)]
+    #[case::aromatic(PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]) }), r##""#a""##)]
+    #[case::aromatic_undetermined(PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Undetermined)]) }), r##""#a*""##)]
     fn test_partial_bond_dsl_to_edn(#[case] input: PartialBondDsl, #[case] expected: &str) {
         assert_eq!(input.to_edn(), read_string(expected).unwrap());
     }
@@ -650,20 +656,20 @@ mod tests {
     #[case::multiplicity("#s3", BondPredicate::Spin(SpinPredicate::Multiplicity(ValueAst::Lit(3))))]
     #[case::multiplicity_omit("#s", BondPredicate::Spin(SpinPredicate::Multiplicity(ValueAst::Lit(1))))]
     #[case::multiplicity_undetermined("#s*", BondPredicate::Spin(SpinPredicate::Multiplicity(ValueAst::Undetermined)))]
-    #[case::aromatic("#a", BondPredicate::Constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))))]
-    #[case::aromatic_plus("#a+", BondPredicate::Constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))))]
-    #[case::aromatic_false("#a!", BondPredicate::Constraint(BondConstraint::Aromatic(BooleanAst::Lit(false))))]
-    #[case::aromatic_undetermined("#a*", BondPredicate::Constraint(BondConstraint::Aromatic(BooleanAst::Undetermined)))]
-    #[case::ring_membership_all("#R2", BondPredicate::Constraint(BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(2))))]
-    #[case::ring_membership_all_plus("#R+", BondPredicate::Constraint(BondConstraint::ring_membership(RingScope::All, ValueAst::RangeFrom(1))))]
-    #[case::ring_membership_zero("#R0", BondPredicate::Constraint(BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(0))))]
-    #[case::ring_membership_all_undetermined("#R*", BondPredicate::Constraint(BondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined)))]
-    #[case::ring_membership_size("#R(6)", BondPredicate::Constraint(BondConstraint::ring_membership(RingScope::Size(6), 1)))]
-    #[case::ring_membership_size_undetermined("#R(6)*", BondPredicate::Constraint(BondConstraint::ring_membership(RingScope::Size(6), ValueAst::Undetermined)))]
-    #[case::cis_trans_stereo_undetermined("#C*", BondPredicate::Constraint(BondConstraint::CisTransStereo(CisTransStereoAst::Undetermined)))]
-    #[case::cis_trans_stereo_plus("#C+", BondPredicate::Constraint(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Undetermined))))]
-    #[case::cis_trans_stereo_not_stereo("#C!", BondPredicate::Constraint(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo)))]
-    #[case::cis_trans_stereo("#C1", BondPredicate::Constraint(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Lit(1)))))]
+    #[case::aromatic("#a", BondPredicate::Constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
+    #[case::aromatic_plus("#a+", BondPredicate::Constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
+    #[case::aromatic_false("#a!", BondPredicate::Constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(false))))]
+    #[case::aromatic_undetermined("#a*", BondPredicate::Constraint(BondConstraintAst::Aromatic(BooleanAst::Undetermined)))]
+    #[case::ring_membership_all("#R2", BondPredicate::Constraint(BondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(2))))]
+    #[case::ring_membership_all_plus("#R+", BondPredicate::Constraint(BondConstraintAst::ring_membership(RingScope::All, ValueAst::RangeFrom(1))))]
+    #[case::ring_membership_zero("#R0", BondPredicate::Constraint(BondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(0))))]
+    #[case::ring_membership_all_undetermined("#R*", BondPredicate::Constraint(BondConstraintAst::ring_membership(RingScope::All, ValueAst::Undetermined)))]
+    #[case::ring_membership_size("#R(6)", BondPredicate::Constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1)))]
+    #[case::ring_membership_size_undetermined("#R(6)*", BondPredicate::Constraint(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)))]
+    #[case::cis_trans_stereo_undetermined("#C*", BondPredicate::Constraint(BondConstraintAst::CisTransStereo(CisTransStereoAst::Undetermined)))]
+    #[case::cis_trans_stereo_plus("#C+", BondPredicate::Constraint(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Undetermined))))]
+    #[case::cis_trans_stereo_not_stereo("#C!", BondPredicate::Constraint(BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo)))]
+    #[case::cis_trans_stereo("#C1", BondPredicate::Constraint(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Lit(1)))))]
     fn test_bond_predicate(#[case] input: &str, #[case] expected: BondPredicate) {
         let result = bond_predicate.parse(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
@@ -729,11 +735,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single(":single", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
-    #[case::double(":double", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
-    #[case::triple(":triple", BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
-    #[case::quadruple(":quadruple", BondAst { order: ValueAst::Lit(4), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
-    #[case::aromatic(":aromatic", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic(BooleanAst::Lit(true))]) })]
+    #[case::single(":single", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() })]
+    #[case::double(":double", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() })]
+    #[case::triple(":triple", BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() })]
+    #[case::quadruple(":quadruple", BondAst { order: ValueAst::Lit(4), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() })]
+    #[case::aromatic(":aromatic", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]) })]
     fn test_bond_dsl_keyword_shorthand(#[case] input: &str, #[case] expected: BondAst) {
         let edn = read_string(input).unwrap();
         let dsl = BondDsl::from_edn(&edn).unwrap();
@@ -749,19 +755,19 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(BondConstraint::Aromatic(BooleanAst::Lit(true)), "{:aromatic true}")]
-    #[case::aromatic_false(BondConstraint::Aromatic(BooleanAst::Lit(false)), "{:aromatic false}")]
-    #[case::ring_membership_all(BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:ring-membership {:count 1}}")]
-    #[case::ring_membership_all_undetermined(BondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined), "{:ring-membership {:count :undetermined}}")]
-    #[case::ring_membership_size(BondConstraint::ring_membership(RingScope::Size(6), 1), "{:ring-membership {:size 6 :count 1}}")]
-    #[case::ring_membership_size_count_set(BondConstraint::ring_membership(RingScope::Size(6), ValueAst::lit_set([5, 6])), "{:ring-membership {:size 6 :count [5 6]}}")]
-    #[case::cis_trans_stereo_undetermined(BondConstraint::CisTransStereo(CisTransStereoAst::Undetermined), "{:cis-trans-stereo :undetermined}")]
-    #[case::cis_trans_stereo_not_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), "{:cis-trans-stereo :not-stereo}")]
-    #[case::cis_trans_stereo_lit(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:cis-trans-stereo {:stereo 1}}")]
-    #[case::cis_trans_stereo_coset_undetermined(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Undetermined)), "{:cis-trans-stereo {:stereo :undetermined}}")]
-    #[case::cis_trans_stereo_set(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::lit_set([1, 2]))), "{:cis-trans-stereo {:stereo [1 2]}}")]
+    #[case::aromatic(BondConstraintAst::Aromatic(BooleanAst::Lit(true)), "{:aromatic true}")]
+    #[case::aromatic_false(BondConstraintAst::Aromatic(BooleanAst::Lit(false)), "{:aromatic false}")]
+    #[case::ring_membership_all(BondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:ring-membership {:count 1}}")]
+    #[case::ring_membership_all_undetermined(BondConstraintAst::ring_membership(RingScope::All, ValueAst::Undetermined), "{:ring-membership {:count :undetermined}}")]
+    #[case::ring_membership_size(BondConstraintAst::ring_membership(RingScope::Size(6), 1), "{:ring-membership {:size 6 :count 1}}")]
+    #[case::ring_membership_size_count_set(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::lit_set([5, 6])), "{:ring-membership {:size 6 :count [5 6]}}")]
+    #[case::cis_trans_stereo_undetermined(BondConstraintAst::CisTransStereo(CisTransStereoAst::Undetermined), "{:cis-trans-stereo :undetermined}")]
+    #[case::cis_trans_stereo_not_stereo(BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo), "{:cis-trans-stereo :not-stereo}")]
+    #[case::cis_trans_stereo_lit(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:cis-trans-stereo {:stereo 1}}")]
+    #[case::cis_trans_stereo_coset_undetermined(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Undetermined)), "{:cis-trans-stereo {:stereo :undetermined}}")]
+    #[case::cis_trans_stereo_set(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::lit_set([1, 2]))), "{:cis-trans-stereo {:stereo [1 2]}}")]
     fn test_bond_constraint_dsl_roundtrip(
-        #[case] input: BondConstraint,
+        #[case] input: BondConstraintAst,
         #[case] edn_source: &str,
     ) {
         let dsl = BondConstraintDsl::from_ast(&input, &());

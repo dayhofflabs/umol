@@ -1034,9 +1034,7 @@ impl MoleculeBuilder {
         let donor_nodes: Vec<NodeId> = donors.iter().map(|&a| NodeId::from(a)).collect();
         self.dative_bonds
             .participant_permutation(id.index(), &[NodeId::from(acceptor)], &donor_nodes)
-            .is_some_and(|(s1, s2)| {
-                ast.equiv_under(&self.dative_bonds.data(id.index()), &s1, &s2)
-            })
+            .is_some_and(|(s1, s2)| ast.equiv_under(&self.dative_bonds.data(id.index()), &s1, &s2))
     }
 
     /// `true` iff stereo atom `id` structurally equals `(site, ligands, ast)`.
@@ -1049,9 +1047,7 @@ impl MoleculeBuilder {
     ) -> bool {
         self.stereo_atoms
             .participant_permutation(id.index(), &[NodeId::from(site)], ligands)
-            .is_some_and(|(s1, s2)| {
-                ast.equiv_under(&self.stereo_atoms.data(id.index()), &s1, &s2)
-            })
+            .is_some_and(|(s1, s2)| ast.equiv_under(&self.stereo_atoms.data(id.index()), &s1, &s2))
     }
 
     /// `true` iff stereo bond `id` structurally equals `(site, ligands, ast)`.
@@ -1064,9 +1060,7 @@ impl MoleculeBuilder {
     ) -> bool {
         self.stereo_bonds
             .participant_permutation(id.index(), &[EdgeId::from(site)], ligands)
-            .is_some_and(|(s1, s2)| {
-                ast.equiv_under(&self.stereo_bonds.data(id.index()), &s1, &s2)
-            })
+            .is_some_and(|(s1, s2)| ast.equiv_under(&self.stereo_bonds.data(id.index()), &s1, &s2))
     }
 
     pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomBuilderViewMut<'_> {
@@ -1587,7 +1581,7 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::AtomConstraint;
+    use crate::ast::constraint::AtomConstraintAst;
     use crate::ast::dative::DativeBondAst;
     use crate::ast::RemovedConstraint;
     use crate::mol;
@@ -1605,7 +1599,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_builder_restore_topology(mut triatomic: MoleculeBuilder) {
-        let dropped_constraint = Constraint::Atom(AtomId(1), AtomConstraint::degree(3));
+        let dropped_constraint = Constraint::Atom(AtomId(1), AtomConstraintAst::degree(3));
         triatomic.push_constraint(dropped_constraint.clone());
         let expected = triatomic.clone().build();
         let removed_atoms = vec![RemovedAtom {

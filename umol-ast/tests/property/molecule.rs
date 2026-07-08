@@ -80,7 +80,7 @@ fn test_constraint_ref_uses_keyword_when_metadata_id_present() {
     let mut cs = Constraints::new();
     cs.push(Constraint::Atom(
         AtomId(0),
-        AtomConstraint::Valence(ValueAst::Lit(4)),
+        AtomConstraintAst::Valence(ValueAst::Lit(4)),
     ));
     let ast = MoleculeAst::from_parts(
         atoms,

@@ -223,7 +223,7 @@ impl ToEdn for PartialNoncovalentBondDsl {
     }
 }
 
-/// Surface DSL wrapper around the narrow `NoncovalentBondConstraint`.
+/// Surface DSL wrapper around the narrow `NoncovalentBondConstraintAst`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum NoncovalentBondConstraintDsl {}
 

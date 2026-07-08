@@ -152,36 +152,36 @@ proptest! {
 
 }
 
-/// Vacuous-payload `AtomConstraint` variants render to nothing in the
+/// Vacuous-payload `AtomConstraintAst` variants render to nothing in the
 /// canonical entity-string form. The proptest generator excludes these from
 /// roundtrip strategies; this asserts the elision invariant directly so a
 /// regression in `fmt_value_field_required` / `fmt_ring_count` / the
 /// AromaticValence / MulticenterValence formatters can't slip through.
 #[rstest]
-#[case::valence(AtomConstraint::Valence(ValueAst::Undetermined))]
-#[case::total_valence(AtomConstraint::TotalValence(ValueAst::Undetermined))]
-#[case::donated_pairs(AtomConstraint::DonatedPairs(ValueAst::Undetermined))]
-#[case::accepted_pairs(AtomConstraint::AcceptedPairs(ValueAst::Undetermined))]
-#[case::degree(AtomConstraint::Degree(ValueAst::Undetermined))]
-#[case::total_degree(AtomConstraint::TotalDegree(ValueAst::Undetermined))]
-#[case::ring_degree(AtomConstraint::RingDegree(ValueAst::Undetermined))]
-#[case::ring_valence(AtomConstraint::RingValence(ValueAst::Undetermined))]
-#[case::total_hydrogens(AtomConstraint::TotalHydrogens(ValueAst::Undetermined))]
-#[case::ring_membership_all(AtomConstraint::ring_membership(
+#[case::valence(AtomConstraintAst::Valence(ValueAst::Undetermined))]
+#[case::total_valence(AtomConstraintAst::TotalValence(ValueAst::Undetermined))]
+#[case::donated_pairs(AtomConstraintAst::DonatedPairs(ValueAst::Undetermined))]
+#[case::accepted_pairs(AtomConstraintAst::AcceptedPairs(ValueAst::Undetermined))]
+#[case::degree(AtomConstraintAst::Degree(ValueAst::Undetermined))]
+#[case::total_degree(AtomConstraintAst::TotalDegree(ValueAst::Undetermined))]
+#[case::ring_degree(AtomConstraintAst::RingDegree(ValueAst::Undetermined))]
+#[case::ring_valence(AtomConstraintAst::RingValence(ValueAst::Undetermined))]
+#[case::total_hydrogens(AtomConstraintAst::TotalHydrogens(ValueAst::Undetermined))]
+#[case::ring_membership_all(AtomConstraintAst::ring_membership(
     RingScope::All,
     ValueAst::Undetermined
 ))]
-#[case::ring_membership_size(AtomConstraint::ring_membership(
+#[case::ring_membership_size(AtomConstraintAst::ring_membership(
     RingScope::All,
     ValueAst::Undetermined
 ))]
-#[case::aromatic_valence_undetermined(AtomConstraint::AromaticValence(
+#[case::aromatic_valence_undetermined(AtomConstraintAst::AromaticValence(
     AromaticValenceAst::Undetermined
 ))]
-#[case::multicenter_valence_undetermined(AtomConstraint::MulticenterValence(
+#[case::multicenter_valence_undetermined(AtomConstraintAst::MulticenterValence(
     MulticenterValenceAst::Undetermined
 ))]
-fn test_atom_dsl_vacuous_constraint_renders_empty(#[case] vacuous: AtomConstraint) {
+fn test_atom_dsl_vacuous_constraint_renders_empty(#[case] vacuous: AtomConstraintAst) {
     let mut atom = AtomAst::default();
     atom.constraints.set(vacuous);
     let with_vacuous = AtomDsl(atom).to_string();

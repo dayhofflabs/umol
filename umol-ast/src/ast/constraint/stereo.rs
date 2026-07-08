@@ -551,8 +551,8 @@ macro_rules! stereo_constraint {
     };
 }
 
-stereo_constraint! { StereoAtomConstraint, StereoAtomConstraintKey, StereoAtomConstraints }
-stereo_constraint! { StereoBondConstraint, StereoBondConstraintKey, StereoBondConstraints }
+stereo_constraint! { StereoAtomConstraintAst, StereoAtomConstraintKey, StereoAtomConstraintsAst }
+stereo_constraint! { StereoBondConstraintAst, StereoBondConstraintKey, StereoBondConstraintsAst }
 
 /// Ligand permutation literal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -1067,19 +1067,19 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::ligand_symmetry(
-        StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+        StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
         StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }))]
     #[case::fluxionality(
-        StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(true) }),
+        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(true) }),
         StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3]))))]
     #[case::topicity(
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
         StereoAtomConstraintKey::Topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))))]
     #[case::stereogenicity(
-        StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+        StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         StereoAtomConstraintKey::Stereogenicity)]
     fn test_stereo_atom_constraint_key(
-        #[case] c: StereoAtomConstraint,
+        #[case] c: StereoAtomConstraintAst,
         #[case] expected: StereoAtomConstraintKey,
     ) {
         assert_eq!(c.key(), expected);
@@ -1088,20 +1088,20 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::ligand_symmetry(
-        StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
-        StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Undetermined }))]
+        StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+        StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Undetermined }))]
     #[case::fluxionality(
-        StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Lit(true) }),
-        StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Undetermined }))]
+        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Lit(true) }),
+        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Undetermined }))]
     #[case::topicity(
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined }))]
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined }))]
     #[case::stereogenicity(
-        StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
-        StereoAtomConstraint::Stereogenicity(StereogenicityAst::Undetermined))]
+        StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+        StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined))]
     fn test_stereo_atom_constraint_as_undetermined(
-        #[case] c: StereoAtomConstraint,
-        #[case] expected: StereoAtomConstraint,
+        #[case] c: StereoAtomConstraintAst,
+        #[case] expected: StereoAtomConstraintAst,
     ) {
         assert_eq!(c.as_undetermined(), expected);
     }
@@ -1109,87 +1109,87 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::topicity_litset_singleton(
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic])) }),
-        Ok(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })))]
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic])) }),
+        Ok(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })))]
     #[case::fluxionality_identity(
-        StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Lit(true) }),
-        Ok(StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Lit(true) })))]
+        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Lit(true) }),
+        Ok(StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Lit(true) })))]
     fn test_stereo_atom_constraint_canonicalize(
-        #[case] c: StereoAtomConstraint,
-        #[case] expected: Result<StereoAtomConstraint, Contradiction>,
+        #[case] c: StereoAtomConstraintAst,
+        #[case] expected: Result<StereoAtomConstraintAst, Contradiction>,
     ) {
         assert_eq!(c.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::ligand_symmetry_present(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }), false)]
-    #[case::ligand_symmetry_undetermined(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Undetermined }), true)]
-    #[case::topicity_lit(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }), false)]
-    #[case::topicity_undetermined(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined }), true)]
-    #[case::stereogenicity_lit(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)), false)]
-    #[case::stereogenicity_undetermined(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Undetermined), true)]
-    fn test_stereo_atom_constraint_is_undetermined(#[case] c: StereoAtomConstraint, #[case] expected: bool) {
+    #[case::ligand_symmetry_present(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }), false)]
+    #[case::ligand_symmetry_undetermined(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Undetermined }), true)]
+    #[case::topicity_lit(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }), false)]
+    #[case::topicity_undetermined(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined }), true)]
+    #[case::stereogenicity_lit(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)), false)]
+    #[case::stereogenicity_undetermined(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined), true)]
+    fn test_stereo_atom_constraint_is_undetermined(#[case] c: StereoAtomConstraintAst, #[case] expected: bool) {
         assert_eq!(c.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::ligand_symmetry_narrows(
-        StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Undetermined }),
-        StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
-        Some(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })))]
+        StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Undetermined }),
+        StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+        Some(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })))]
     #[case::ligand_symmetry_conflict(
-        StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
-        StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(false) }),
+        StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+        StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(false) }),
         None)]
     #[case::topicity_disjoint(
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
         None)]
     #[case::different_key(
-        StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+        StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
         None)]
-    fn test_stereo_atom_constraint_meet(#[case] a: StereoAtomConstraint, #[case] b: StereoAtomConstraint, #[case] expected: Option<StereoAtomConstraint>) {
+    fn test_stereo_atom_constraint_meet(#[case] a: StereoAtomConstraintAst, #[case] b: StereoAtomConstraintAst, #[case] expected: Option<StereoAtomConstraintAst>) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::topicity_widens(
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
-        Ok(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })))]
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
+        Ok(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })))]
     #[case::different_key(
-        StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+        StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
         Err(NoJoin))]
-    fn test_stereo_atom_constraint_join(#[case] a: StereoAtomConstraint, #[case] b: StereoAtomConstraint, #[case] expected: Result<StereoAtomConstraint, NoJoin>) {
+    fn test_stereo_atom_constraint_join(#[case] a: StereoAtomConstraintAst, #[case] b: StereoAtomConstraintAst, #[case] expected: Result<StereoAtomConstraintAst, NoJoin>) {
         assert_eq!(a.join(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::same_key_compatible(
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined }),
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined }),
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
         true)]
     #[case::same_key_incompatible(
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
         false)]
     #[case::different_key(
-        StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
-        StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+        StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+        StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
         false)]
-    fn test_stereo_atom_constraint_is_compatible(#[case] a: StereoAtomConstraint, #[case] b: StereoAtomConstraint, #[case] expected: bool) {
+    fn test_stereo_atom_constraint_is_compatible(#[case] a: StereoAtomConstraintAst, #[case] b: StereoAtomConstraintAst, #[case] expected: bool) {
         assert_eq!(a.is_compatible(&b), expected);
     }
 
     #[rstest]
     fn test_stereo_atom_constraints_new() {
-        let cs = StereoAtomConstraints::new();
+        let cs = StereoAtomConstraintsAst::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
         assert_eq!(cs.iter().count(), 0);
@@ -1197,14 +1197,14 @@ mod tests {
 
     #[rstest]
     #[case::present(
-        StereoAtomConstraints::from(StereoAtomConstraint::Stereogenicity(
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(
             StereogenicityAst::Lit(Stereogenicity::Stereogenic)
         )),
         StereogenicityAst::Lit(Stereogenicity::Stereogenic)
     )]
-    #[case::absent(StereoAtomConstraints::new(), StereogenicityAst::Undetermined)]
+    #[case::absent(StereoAtomConstraintsAst::new(), StereogenicityAst::Undetermined)]
     fn test_stereo_atom_constraints_stereogenicity(
-        #[case] cs: StereoAtomConstraints,
+        #[case] cs: StereoAtomConstraintsAst,
         #[case] expected: StereogenicityAst,
     ) {
         assert_eq!(cs.stereogenicity(), expected);
@@ -1217,9 +1217,9 @@ mod tests {
     #[case::stereogenicity_present(StereoAtomConstraintKey::Stereogenicity, true)]
     #[case::fluxionality_absent(StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::identity(4))), false)]
     fn test_stereo_atom_constraints_contains(#[case] key: StereoAtomConstraintKey, #[case] expected: bool) {
-        let cs = StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+        let cs = StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ]);
         assert_eq!(cs.contains(key), expected);
     }
@@ -1228,121 +1228,121 @@ mod tests {
     #[rstest]
     #[case::topicity(
         StereoAtomConstraintKey::Topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))),
-        Some(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })))]
+        Some(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })))]
     #[case::stereogenicity(
         StereoAtomConstraintKey::Stereogenicity,
-        Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))))]
+        Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))))]
     #[case::absent(
         StereoAtomConstraintKey::Topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2))),
         None)]
-    fn test_stereo_atom_constraints_get(#[case] key: StereoAtomConstraintKey, #[case] expected: Option<StereoAtomConstraint>) {
-        let cs = StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+    fn test_stereo_atom_constraints_get(#[case] key: StereoAtomConstraintKey, #[case] expected: Option<StereoAtomConstraintAst>) {
+        let cs = StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ]);
         assert_eq!(cs.get(key), expected.as_ref());
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::fresh(vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))], vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])]
+    #[case::fresh(vec![StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))], vec![StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])]
     #[case::overwrite_unique(
-        vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst::Undetermined), StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))],
-        vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])]
+        vec![StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined), StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))],
+        vec![StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])]
     #[case::overwrite_same_ligand_permutation(
         vec![
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(false) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(false) }),
         ],
-        vec![StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(false) })])]
+        vec![StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(false) })])]
     #[case::kind_sorted(
         vec![
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
         ],
         vec![
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ])]
     fn test_stereo_atom_constraints_set(
-        #[case] sequence: Vec<StereoAtomConstraint>,
-        #[case] expected: Vec<StereoAtomConstraint>,
+        #[case] sequence: Vec<StereoAtomConstraintAst>,
+        #[case] expected: Vec<StereoAtomConstraintAst>,
     ) {
-        let mut cs = StereoAtomConstraints::new();
+        let mut cs = StereoAtomConstraintsAst::new();
         for c in sequence {
             cs.set(c);
         }
-        assert_eq!(cs, StereoAtomConstraints::from_iter(expected));
+        assert_eq!(cs, StereoAtomConstraintsAst::from_iter(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::modify(
-        vec![StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })],
-        Some(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
-        Some(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
+        vec![StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })],
+        Some(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        Some(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
         Ok(()),
-        vec![StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })])]
+        vec![StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })])]
     #[case::remove(
-        vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))],
-        Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        vec![StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))],
+        Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
         None,
         Ok(()),
         vec![])]
     #[case::add_from_absent(
         vec![],
         None,
-        Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
         Ok(()),
-        vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])]
+        vec![StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])]
     #[case::old_mismatch(
-        vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))],
-        Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Symmetric))),
+        vec![StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))],
+        Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Symmetric))),
         None,
         Err(Contradiction),
-        vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])]
+        vec![StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])]
     #[case::key_mismatch(
         vec![],
-        Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
-        Some(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        Some(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
         Err(Contradiction),
         vec![])]
     fn test_stereo_atom_constraints_compare_and_set(
-        #[case] initial: Vec<StereoAtomConstraint>,
-        #[case] old: Option<StereoAtomConstraint>,
-        #[case] new: Option<StereoAtomConstraint>,
+        #[case] initial: Vec<StereoAtomConstraintAst>,
+        #[case] old: Option<StereoAtomConstraintAst>,
+        #[case] new: Option<StereoAtomConstraintAst>,
         #[case] expected_result: Result<(), Contradiction>,
-        #[case] expected_state: Vec<StereoAtomConstraint>,
+        #[case] expected_state: Vec<StereoAtomConstraintAst>,
     ) {
-        let mut cs = StereoAtomConstraints::from_iter(initial);
+        let mut cs = StereoAtomConstraintsAst::from_iter(initial);
         assert_eq!(cs.compare_and_set(old, new), expected_result);
-        assert_eq!(cs, StereoAtomConstraints::from_iter(expected_state));
+        assert_eq!(cs, StereoAtomConstraintsAst::from_iter(expected_state));
     }
 
     #[rstest]
     fn test_stereo_atom_constraints_remove() {
         let pair = StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1));
-        let mut cs = StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::Topicity(TopicityAst {
+        let mut cs = StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::Topicity(TopicityAst {
                 pair,
                 relation: TopicityRelationAst::Lit(Topicity::Homotopic),
             }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(
                 Stereogenicity::Stereogenic,
             )),
         ]);
         assert_eq!(
             cs.remove(StereoAtomConstraintKey::Topicity(pair)),
-            Some(StereoAtomConstraint::Topicity(TopicityAst {
+            Some(StereoAtomConstraintAst::Topicity(TopicityAst {
                 pair,
                 relation: TopicityRelationAst::Lit(Topicity::Homotopic),
             })),
         );
         assert_eq!(
             cs,
-            StereoAtomConstraints::from_iter([StereoAtomConstraint::Stereogenicity(
+            StereoAtomConstraintsAst::from_iter([StereoAtomConstraintAst::Stereogenicity(
                 StereogenicityAst::Lit(Stereogenicity::Stereogenic)
             )]),
         );
@@ -1351,67 +1351,67 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::overwrite_shared(
-        vec![StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })],
-        vec![StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })],
-        vec![StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })])]
+        vec![StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })],
+        vec![StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })],
+        vec![StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })])]
     #[case::keeps_disjoint(
-        vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))],
-        vec![StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })],
+        vec![StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))],
+        vec![StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })],
         vec![
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ])]
     #[case::vacuous_removes(
         vec![
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ],
-        vec![StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined })],
-        vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])]
+        vec![StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined })],
+        vec![StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])]
     fn test_stereo_atom_constraints_update(
-        #[case] initial: Vec<StereoAtomConstraint>,
-        #[case] other: Vec<StereoAtomConstraint>,
-        #[case] expected: Vec<StereoAtomConstraint>,
+        #[case] initial: Vec<StereoAtomConstraintAst>,
+        #[case] other: Vec<StereoAtomConstraintAst>,
+        #[case] expected: Vec<StereoAtomConstraintAst>,
     ) {
-        let mut cs = StereoAtomConstraints::from_iter(initial);
-        cs.update(&StereoAtomConstraints::from_iter(other));
-        assert_eq!(cs, StereoAtomConstraints::from_iter(expected));
+        let mut cs = StereoAtomConstraintsAst::from_iter(initial);
+        cs.update(&StereoAtomConstraintsAst::from_iter(other));
+        assert_eq!(cs, StereoAtomConstraintsAst::from_iter(expected));
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::drop_vacuous(
-        StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+        StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined }),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ]),
-        Ok(StereoAtomConstraints::from_iter([StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])))]
+        Ok(StereoAtomConstraintsAst::from_iter([StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])))]
     #[case::canonicalizes_values(
-        StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic])) }),
+        StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic])) }),
         ]),
-        Ok(StereoAtomConstraints::from_iter([StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })])))]
+        Ok(StereoAtomConstraintsAst::from_iter([StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })])))]
     fn test_stereo_atom_constraints_canonicalize(
-        #[case] constraints: StereoAtomConstraints,
-        #[case] expected: Result<StereoAtomConstraints, Contradiction>,
+        #[case] constraints: StereoAtomConstraintsAst,
+        #[case] expected: Result<StereoAtomConstraintsAst, Contradiction>,
     ) {
         assert_eq!(constraints.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(StereoAtomConstraints::new(), true)]
+    #[case::empty(StereoAtomConstraintsAst::new(), true)]
     #[case::ligand_symmetry_present(
-        StereoAtomConstraints::from(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
         false)]
     #[case::topicity_open(
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined })),
         true)]
     #[case::stereogenicity_lit(
-        StereoAtomConstraints::from(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
         false)]
     fn test_stereo_atom_constraints_is_undetermined(
-        #[case] cs: StereoAtomConstraints,
+        #[case] cs: StereoAtomConstraintsAst,
         #[case] expected: bool,
     ) {
         assert_eq!(cs.is_undetermined(), expected);
@@ -1419,18 +1419,18 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(StereoAtomConstraints::new(), true)]
+    #[case::empty(StereoAtomConstraintsAst::new(), true)]
     #[case::ligand_symmetry_present(
-        StereoAtomConstraints::from(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
         true)]
     #[case::topicity_open(
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined })),
         false)]
     #[case::stereogenicity_lit(
-        StereoAtomConstraints::from(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
         true)]
     fn test_stereo_atom_constraints_is_ground(
-        #[case] cs: StereoAtomConstraints,
+        #[case] cs: StereoAtomConstraintsAst,
         #[case] expected: bool,
     ) {
         assert_eq!(cs.is_ground(), expected);
@@ -1439,44 +1439,44 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::disjoint_keys_kept(
-        StereoAtomConstraints::from(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
-        Some(StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        Some(StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ])))]
     #[case::shared_topicity_value_meet(
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })),
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic])) })),
-        Some(StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }))))]
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic])) })),
+        Some(StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }))))]
     #[case::ligand_symmetry_union(
-        StereoAtomConstraints::from(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
-        StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
+        StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
         ]),
-        Some(StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+        Some(StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
         ])))]
     #[case::stereogenicity_carried_through(
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
-        StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ]),
-        Some(StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+        Some(StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ])))]
     #[case::incompatible_same_key_none(
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
         None)]
     fn test_stereo_atom_constraints_meet(
-        #[case] a: StereoAtomConstraints,
-        #[case] b: StereoAtomConstraints,
-        #[case] expected: Option<StereoAtomConstraints>,
+        #[case] a: StereoAtomConstraintsAst,
+        #[case] b: StereoAtomConstraintsAst,
+        #[case] expected: Option<StereoAtomConstraintsAst>,
     ) {
         assert_eq!(a.meet(&b), expected);
     }
@@ -1484,24 +1484,24 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::shared_topicity_widens(
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
-        Ok(StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }))))]
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
+        Ok(StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }))))]
     #[case::ligand_symmetry_intersection(
-        StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+        StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
         ]),
-        StereoAtomConstraints::from(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
-        Ok(StereoAtomConstraints::from(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }))))]
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
+        Ok(StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }))))]
     #[case::disjoint_keys_drop_to_empty(
-        StereoAtomConstraints::from(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
-        Ok(StereoAtomConstraints::new()))]
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        Ok(StereoAtomConstraintsAst::new()))]
     fn test_stereo_atom_constraints_join(
-        #[case] a: StereoAtomConstraints,
-        #[case] b: StereoAtomConstraints,
-        #[case] expected: Result<StereoAtomConstraints, NoJoin>,
+        #[case] a: StereoAtomConstraintsAst,
+        #[case] b: StereoAtomConstraintsAst,
+        #[case] expected: Result<StereoAtomConstraintsAst, NoJoin>,
     ) {
         assert_eq!(a.join(&b), expected);
     }
@@ -1509,38 +1509,38 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty_pattern_matches_any(
-        StereoAtomConstraints::new(),
-        StereoAtomConstraints::from(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
+        StereoAtomConstraintsAst::new(),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
         true)]
     #[case::specific_pattern_absent_in_target(
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
-        StereoAtomConstraints::new(),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
+        StereoAtomConstraintsAst::new(),
         false)]
     #[case::same_ligand_symmetry_and_topicity(
-        StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
+        StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
         ]),
-        StereoAtomConstraints::from_iter([
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
+        StereoAtomConstraintsAst::from_iter([
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
         ]),
         true)]
     #[case::ligand_symmetry_missing_in_target(
-        StereoAtomConstraints::from(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
-        StereoAtomConstraints::from(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) })),
         false)]
     #[case::topicity_subset(
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })),
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
         true)]
     #[case::stereogenicity_mismatch(
-        StereoAtomConstraints::from(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
-        StereoAtomConstraints::from(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Symmetric))),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Symmetric))),
         false)]
     fn test_stereo_atom_constraints_matches(
-        #[case] pattern: StereoAtomConstraints,
-        #[case] target: StereoAtomConstraints,
+        #[case] pattern: StereoAtomConstraintsAst,
+        #[case] target: StereoAtomConstraintsAst,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
@@ -1549,20 +1549,20 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::disjoint_keys(
-        StereoAtomConstraints::from(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
         true)]
     #[case::shared_key_compatible(
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined })),
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
         true)]
     #[case::shared_key_incompatible(
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
-        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
         false)]
     fn test_stereo_atom_constraints_is_compatible(
-        #[case] a: StereoAtomConstraints,
-        #[case] b: StereoAtomConstraints,
+        #[case] a: StereoAtomConstraintsAst,
+        #[case] b: StereoAtomConstraintsAst,
         #[case] expected: bool,
     ) {
         assert_eq!(a.is_compatible(&b), expected);
@@ -1572,33 +1572,33 @@ mod tests {
     #[rstest]
     #[case::distinct(
         vec![
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ],
         vec![
-            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+            StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ])]
     #[case::overwrite_same_key(
         vec![
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Undetermined),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined),
+            StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ],
-        vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])]
+        vec![StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))])]
     #[case::empty(vec![], vec![])]
     fn test_stereo_atom_constraints_from_iter(
-        #[case] input: Vec<StereoAtomConstraint>,
-        #[case] expected: Vec<StereoAtomConstraint>,
+        #[case] input: Vec<StereoAtomConstraintAst>,
+        #[case] expected: Vec<StereoAtomConstraintAst>,
     ) {
         assert_eq!(
-            StereoAtomConstraints::from_iter(input),
-            StereoAtomConstraints::from_iter(expected),
+            StereoAtomConstraintsAst::from_iter(input),
+            StereoAtomConstraintsAst::from_iter(expected),
         );
     }
 
     #[rstest]
     fn test_stereo_bond_constraints_new() {
-        let cs = StereoBondConstraints::new();
+        let cs = StereoBondConstraintsAst::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
         assert_eq!(cs.iter().count(), 0);
@@ -1606,71 +1606,71 @@ mod tests {
 
     #[rstest]
     fn test_stereo_bond_constraints_set() {
-        let mut cs = StereoBondConstraints::new();
+        let mut cs = StereoBondConstraintsAst::new();
         let f = FluxionalityAst {
             permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
             present: BooleanAst::Lit(true),
         };
-        cs.set(StereoBondConstraint::Fluxionality(f));
+        cs.set(StereoBondConstraintAst::Fluxionality(f));
         assert_eq!(cs.fluxionalities().copied().collect::<Vec<_>>(), vec![f]);
     }
 
-    // `StereoBondConstraints` is the second `stereo_constraint!` instantiation; the shared macro
-    // logic is exercised by the `StereoAtomConstraints` tests above. These confirm the bond
+    // `StereoBondConstraintsAst` is the second `stereo_constraint!` instantiation; the shared macro
+    // logic is exercised by the `StereoAtomConstraintsAst` tests above. These confirm the bond
     // instantiation's transactional write and lattice operations independently.
     #[rustfmt::skip]
     #[rstest]
     #[case::modify(
-        vec![StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })],
-        Some(StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
-        Some(StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
+        vec![StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })],
+        Some(StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        Some(StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
         Ok(()),
-        vec![StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })])]
+        vec![StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })])]
     #[case::remove(
-        vec![StereoBondConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))],
-        Some(StereoBondConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        vec![StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))],
+        Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
         None,
         Ok(()),
         vec![])]
     #[case::key_mismatch(
         vec![],
-        Some(StereoBondConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
-        Some(StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        Some(StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
         Err(Contradiction),
         vec![])]
     fn test_stereo_bond_constraints_compare_and_set(
-        #[case] initial: Vec<StereoBondConstraint>,
-        #[case] old: Option<StereoBondConstraint>,
-        #[case] new: Option<StereoBondConstraint>,
+        #[case] initial: Vec<StereoBondConstraintAst>,
+        #[case] old: Option<StereoBondConstraintAst>,
+        #[case] new: Option<StereoBondConstraintAst>,
         #[case] expected_result: Result<(), Contradiction>,
-        #[case] expected_state: Vec<StereoBondConstraint>,
+        #[case] expected_state: Vec<StereoBondConstraintAst>,
     ) {
-        let mut cs = StereoBondConstraints::from_iter(initial);
+        let mut cs = StereoBondConstraintsAst::from_iter(initial);
         assert_eq!(cs.compare_and_set(old, new), expected_result);
-        assert_eq!(cs, StereoBondConstraints::from_iter(expected_state));
+        assert_eq!(cs, StereoBondConstraintsAst::from_iter(expected_state));
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::disjoint_keys_kept(
-        StereoBondConstraints::from(StereoBondConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
-        StereoBondConstraints::from(StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
-        Some(StereoBondConstraints::from_iter([
-            StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-            StereoBondConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+        StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        StereoBondConstraintsAst::from(StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        Some(StereoBondConstraintsAst::from_iter([
+            StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ])))]
     #[case::shared_topicity_value_meet(
-        StereoBondConstraints::from(StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })),
-        StereoBondConstraints::from(StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic])) })),
-        Some(StereoBondConstraints::from(StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }))))]
+        StereoBondConstraintsAst::from(StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })),
+        StereoBondConstraintsAst::from(StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic])) })),
+        Some(StereoBondConstraintsAst::from(StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }))))]
     #[case::incompatible_same_key_none(
-        StereoBondConstraints::from(StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
-        StereoBondConstraints::from(StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
+        StereoBondConstraintsAst::from(StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        StereoBondConstraintsAst::from(StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
         None)]
     fn test_stereo_bond_constraints_meet(
-        #[case] a: StereoBondConstraints,
-        #[case] b: StereoBondConstraints,
-        #[case] expected: Option<StereoBondConstraints>,
+        #[case] a: StereoBondConstraintsAst,
+        #[case] b: StereoBondConstraintsAst,
+        #[case] expected: Option<StereoBondConstraintsAst>,
     ) {
         assert_eq!(a.meet(&b), expected);
     }
@@ -1678,20 +1678,20 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty_pattern_matches_any(
-        StereoBondConstraints::new(),
-        StereoBondConstraints::from(StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        StereoBondConstraintsAst::new(),
+        StereoBondConstraintsAst::from(StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
         true)]
     #[case::topicity_subset(
-        StereoBondConstraints::from(StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })),
-        StereoBondConstraints::from(StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
+        StereoBondConstraintsAst::from(StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })),
+        StereoBondConstraintsAst::from(StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
         true)]
     #[case::stereogenicity_mismatch(
-        StereoBondConstraints::from(StereoBondConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
-        StereoBondConstraints::from(StereoBondConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Symmetric))),
+        StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+        StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Symmetric))),
         false)]
     fn test_stereo_bond_constraints_matches(
-        #[case] pattern: StereoBondConstraints,
-        #[case] target: StereoBondConstraints,
+        #[case] pattern: StereoBondConstraintsAst,
+        #[case] target: StereoBondConstraintsAst,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
@@ -1701,21 +1701,21 @@ mod tests {
     #[rstest]
     #[case::distinct(
         vec![
-            StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-            StereoBondConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+            StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ],
         vec![
-            StereoBondConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
-            StereoBondConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+            StereoBondConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ])]
     #[case::empty(vec![], vec![])]
     fn test_stereo_bond_constraints_from_iter(
-        #[case] input: Vec<StereoBondConstraint>,
-        #[case] expected: Vec<StereoBondConstraint>,
+        #[case] input: Vec<StereoBondConstraintAst>,
+        #[case] expected: Vec<StereoBondConstraintAst>,
     ) {
         assert_eq!(
-            StereoBondConstraints::from_iter(input),
-            StereoBondConstraints::from_iter(expected),
+            StereoBondConstraintsAst::from_iter(input),
+            StereoBondConstraintsAst::from_iter(expected),
         );
     }
 }

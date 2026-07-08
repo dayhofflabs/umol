@@ -15,7 +15,7 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::{
-    AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, IntoAst, IsotopeMassAst, MemOp,
+    AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, IntoAst, IsotopeMassAst, MemOp,
     MoleculeAst, RelOp, SpinStateAst, ValueAst, ValuePredicate, ValueTerm,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
@@ -98,11 +98,11 @@ fn arith_expr_heavy() -> MoleculeAst {
     MoleculeAst::from_atoms_and_bonds(atoms, bonds)
 }
 
-// Silence `unused` warnings on pre-switch build: `AtomConstraint` is kept
+// Silence `unused` warnings on pre-switch build: `AtomConstraintAst` is kept
 // here for future bench cases involving atom-constraint patterns.
 // TODO: Add constraints or remove this piece
 #[allow(dead_code)]
-fn _keep_import(c: AtomConstraint) -> AtomConstraint {
+fn _keep_import(c: AtomConstraintAst) -> AtomConstraintAst {
     c
 }
 

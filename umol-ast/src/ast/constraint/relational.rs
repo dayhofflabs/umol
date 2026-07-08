@@ -16,7 +16,7 @@
 //!   `Acceptor`, `Parallels`, `Ends`, `Atoms`, `Contains`, `ContainsAll` —
 //!   constrain an atom/bond identity to a role or set membership.
 //! - **Role predicate**: `AllDonors`, `AnyDonor`, `AcceptorSatisfies`,
-//!   `AllAtoms`, `AnyAtom`, `EndsSatisfy` — delegate an `AtomConstraint` to a
+//!   `AllAtoms`, `AnyAtom`, `EndsSatisfy` — delegate an `AtomConstraintAst` to a
 //!   role slot, quantified over the matching participants.
 
 use super::super::error::Contradiction;
@@ -26,7 +26,7 @@ use super::super::id::{
 };
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::Canonicalize;
-use super::atom::AtomConstraint;
+use super::atom::AtomConstraintAst;
 
 /// Cross-entity constraint relating one overlay entity (dative bond, aromatic
 /// system, multicenter bond, noncovalent bond, stereo atom, stereo bond) to
@@ -52,19 +52,19 @@ pub enum RelationalConstraint {
     /// Every donor of dative bond `bond` satisfies `predicate`.
     DativeBondAllDonors {
         bond: DativeBondId,
-        predicate: Box<AtomConstraint>,
+        predicate: Box<AtomConstraintAst>,
     },
     /// At least one donor of dative bond `bond` satisfies `predicate`.
     DativeBondAnyDonor {
         bond: DativeBondId,
-        predicate: Box<AtomConstraint>,
+        predicate: Box<AtomConstraintAst>,
     },
     /// The acceptor of dative bond `bond` is `atom`.
     DativeBondAcceptor { bond: DativeBondId, atom: AtomId },
     /// The acceptor of dative bond `bond` satisfies `predicate`.
     DativeBondAcceptorSatisfies {
         bond: DativeBondId,
-        predicate: Box<AtomConstraint>,
+        predicate: Box<AtomConstraintAst>,
     },
     /// Dative bond `dative` is parallel to a localized bond `parallel`
     /// (same atom pair).
@@ -92,12 +92,12 @@ pub enum RelationalConstraint {
     /// Every atom of aromatic system `system` satisfies `predicate`.
     AromaticSystemAllAtoms {
         system: AromaticSystemId,
-        predicate: Box<AtomConstraint>,
+        predicate: Box<AtomConstraintAst>,
     },
     /// At least one atom of aromatic system `system` satisfies `predicate`.
     AromaticSystemAnyAtom {
         system: AromaticSystemId,
-        predicate: Box<AtomConstraint>,
+        predicate: Box<AtomConstraintAst>,
     },
 
     /// Multicenter bond `bond` consists of exactly `atoms` (as a set).
@@ -119,13 +119,13 @@ pub enum RelationalConstraint {
     /// `predicate`.
     MulticenterBondAllAtoms {
         bond: MulticenterBondId,
-        predicate: Box<AtomConstraint>,
+        predicate: Box<AtomConstraintAst>,
     },
     /// At least one participating atom of multicenter bond `bond` satisfies
     /// `predicate`.
     MulticenterBondAnyAtom {
         bond: MulticenterBondId,
-        predicate: Box<AtomConstraint>,
+        predicate: Box<AtomConstraintAst>,
     },
 
     /// Noncovalent bond `bond` connects exactly the pair `atoms` (unordered).
@@ -144,7 +144,7 @@ pub enum RelationalConstraint {
     /// associated with one specific slot.
     NoncovalentBondEndsSatisfy {
         bond: NoncovalentBondId,
-        predicates: [Box<AtomConstraint>; 2],
+        predicates: [Box<AtomConstraintAst>; 2],
     },
 
     /// The site of stereo atom `stereo_atom` is `atom`.
@@ -166,13 +166,13 @@ pub enum RelationalConstraint {
     /// Every atom-kind ligand of stereo atom `stereo_atom` satisfies `predicate`.
     StereoAtomAllLigands {
         stereo_atom: StereoAtomId,
-        predicate: Box<AtomConstraint>,
+        predicate: Box<AtomConstraintAst>,
     },
     /// At least one atom-kind ligand of stereo atom `stereo_atom` satisfies
     /// `predicate`.
     StereoAtomAnyLigand {
         stereo_atom: StereoAtomId,
-        predicate: Box<AtomConstraint>,
+        predicate: Box<AtomConstraintAst>,
     },
 
     /// The site of stereo bond `stereo_bond` is `bond`.
@@ -194,13 +194,13 @@ pub enum RelationalConstraint {
     /// Every atom-kind ligand of stereo bond `stereo_bond` satisfies `predicate`.
     StereoBondAllLigands {
         stereo_bond: StereoBondId,
-        predicate: Box<AtomConstraint>,
+        predicate: Box<AtomConstraintAst>,
     },
     /// At least one atom-kind ligand of stereo bond `stereo_bond` satisfies
     /// `predicate`.
     StereoBondAnyLigand {
         stereo_bond: StereoBondId,
-        predicate: Box<AtomConstraint>,
+        predicate: Box<AtomConstraintAst>,
     },
 }
 
@@ -566,7 +566,7 @@ impl RelationalConstraint {
 }
 
 impl Canonicalize for RelationalConstraint {
-    /// Canonicalize any inner `AtomConstraint` predicate. Refs (`bond`, `atom`,
+    /// Canonicalize any inner `AtomConstraintAst` predicate. Refs (`bond`, `atom`,
     /// `system`, `parallel`, atom sets) are unchanged.
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
@@ -693,8 +693,8 @@ mod tests {
         )
     }
 
-    fn val_pred() -> Box<AtomConstraint> {
-        Box::new(AtomConstraint::Valence(ValueAst::Lit(4)))
+    fn val_pred() -> Box<AtomConstraintAst> {
+        Box::new(AtomConstraintAst::Valence(ValueAst::Lit(4)))
     }
 
     /// Drop atom 1; drop dative 0; preserve other entities. Indices above
@@ -889,15 +889,15 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::predicate_litset_singleton(
-        RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::lit_set([4]))) },
-        Ok(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))) }))]
+        RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraintAst::Valence(ValueAst::lit_set([4]))) },
+        Ok(RelationalConstraint::DativeBondAllDonors { bond: DativeBondId(0), predicate: Box::new(AtomConstraintAst::Valence(ValueAst::Lit(4))) }))]
     #[case::both_ends_canonicalize(
         RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
-            predicates: [Box::new(AtomConstraint::Valence(ValueAst::lit_set([4]))), Box::new(AtomConstraint::Degree(ValueAst::lit_set([2])))] },
+            predicates: [Box::new(AtomConstraintAst::Valence(ValueAst::lit_set([4]))), Box::new(AtomConstraintAst::Degree(ValueAst::lit_set([2])))] },
         Ok(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
-            predicates: [Box::new(AtomConstraint::Valence(ValueAst::Lit(4))), Box::new(AtomConstraint::Degree(ValueAst::Lit(2)))] }))]
+            predicates: [Box::new(AtomConstraintAst::Valence(ValueAst::Lit(4))), Box::new(AtomConstraintAst::Degree(ValueAst::Lit(2)))] }))]
     #[case::predicate_empty_litset_contradiction(
-        RelationalConstraint::StereoAtomAllLigands { stereo_atom: StereoAtomId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::lit_set(Vec::<i64>::new()))) },
+        RelationalConstraint::StereoAtomAllLigands { stereo_atom: StereoAtomId(0), predicate: Box::new(AtomConstraintAst::Valence(ValueAst::lit_set(Vec::<i64>::new()))) },
         Err(Contradiction))]
     fn test_relational_constraint_canonicalize(
         #[case] input: RelationalConstraint,

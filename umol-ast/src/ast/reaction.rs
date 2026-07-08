@@ -252,7 +252,7 @@ impl ReactionAst {
                             change: change.clone(),
                         })
                     }
-                    // `NoncovalentBondConstraint` is uninhabited — no `Edit` variant, no-op.
+                    // `NoncovalentBondConstraintAst` is uninhabited — no `Edit` variant, no-op.
                     NoncovalentBondDelta::ModifyConstraint { .. } => {}
                     NoncovalentBondDelta::Add { .. } => {}
                     NoncovalentBondDelta::Remove { id, .. } => {
@@ -1093,7 +1093,10 @@ mod tests {
             &host,
             Correspondence::from_images(&images, host.atoms().count()),
         );
-        assert_eq!(reaction.apply_at(&host, &correspondence).unwrap_err(), expected);
+        assert_eq!(
+            reaction.apply_at(&host, &correspondence).unwrap_err(),
+            expected
+        );
     }
 
     #[rstest]

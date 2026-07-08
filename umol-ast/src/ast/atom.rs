@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use umol_ast_macros::{Canonicalize, Lattice};
 use umol_chem::element::{Element, MAX_ATOMIC_NUMBER};
 
-use super::constraint::{AtomConstraint, AtomConstraints};
+use super::constraint::{AtomConstraintAst, AtomConstraintsAst};
 use super::error::{Contradiction, NoJoin};
 use super::operators::MemOp;
 use super::spin::SpinStateAst;
@@ -24,7 +24,7 @@ pub struct AtomAst {
     pub implicit_hydrogens: ValueAst,
     pub lone_pairs: ValueAst,
     pub spin: SpinStateAst,
-    pub constraints: AtomConstraints,
+    pub constraints: AtomConstraintsAst,
 }
 
 impl AtomAst {
@@ -70,22 +70,23 @@ impl AtomAst {
     }
 
     /// Add a single constraint, replacing any existing entry of the same
-    /// kind (last-wins per `AtomConstraints::add`). Chainable.
-    pub fn with_constraint(mut self, constraint: impl Into<AtomConstraint>) -> Self {
+    /// kind (last-wins per `AtomConstraintsAst::add`). Chainable.
+    pub fn with_constraint(mut self, constraint: impl Into<AtomConstraintAst>) -> Self {
         self.constraints.set(constraint.into());
         self
     }
 
     /// Add each constraint from the iterator, replacing any existing entry
-    /// of the same kind (last-wins per `AtomConstraints::add`). Does not
+    /// of the same kind (last-wins per `AtomConstraintsAst::add`). Does not
     /// clear existing constraints; use `atom.constraints.clear()` or direct
     /// field assignment for wipe-and-replace.
     pub fn with_constraints<I>(mut self, constraints: I) -> Self
     where
         I: IntoIterator,
-        I::Item: Into<AtomConstraint>,
+        I::Item: Into<AtomConstraintAst>,
     {
-        self.constraints.extend(constraints.into_iter().map(Into::into));
+        self.constraints
+            .extend(constraints.into_iter().map(Into::into));
         self
     }
 
@@ -658,7 +659,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::constraint::{AtomConstraint, RingScope};
+    use crate::ast::constraint::{AtomConstraintAst, RingScope};
 
     #[rstest]
     fn test_atom_ast_from_element() {
@@ -680,22 +681,22 @@ mod tests {
     #[case::with_implicit_hydrogens(AtomAst::default().with_implicit_hydrogens(3_i64), AtomAst { implicit_hydrogens: ValueAst::Lit(3), ..Default::default() })]
     #[case::with_lone_pairs(AtomAst::default().with_lone_pairs(2_i64), AtomAst { lone_pairs: ValueAst::Lit(2), ..Default::default() })]
     #[case::with_spin_tuple(AtomAst::default().with_spin((0_u8, 1_u8)), AtomAst { spin: SpinStateAst::from((0_u8, 1_u8)), ..Default::default() })]
-    #[case::with_constraint(AtomAst::default().with_constraint(AtomConstraint::valence(4_i64)),
-        AtomAst { constraints: AtomConstraints::from(AtomConstraint::valence(4)),..Default::default() })]
-    #[case::with_constraints_extends(AtomAst::default().with_constraint(AtomConstraint::valence(4_i64)).with_constraints([AtomConstraint::donated_pairs(1_i64), AtomConstraint::ring_membership(RingScope::Size(6), 1)]),
-        AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::donated_pairs(1), AtomConstraint::ring_membership(RingScope::Size(6), 1)]), ..Default::default() })]
-    #[case::with_constraint_replaces_same_kind(AtomAst::default().with_constraint(AtomConstraint::valence(3_i64)).with_constraint(AtomConstraint::valence(4_i64)),
-        AtomAst { constraints: AtomConstraints::from(AtomConstraint::valence(4)), ..Default::default() })]
+    #[case::with_constraint(AtomAst::default().with_constraint(AtomConstraintAst::valence(4_i64)),
+        AtomAst { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)),..Default::default() })]
+    #[case::with_constraints_extends(AtomAst::default().with_constraint(AtomConstraintAst::valence(4_i64)).with_constraints([AtomConstraintAst::donated_pairs(1_i64), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]),
+        AtomAst { constraints: AtomConstraintsAst::from_iter([AtomConstraintAst::valence(4), AtomConstraintAst::donated_pairs(1), AtomConstraintAst::ring_membership(RingScope::Size(6), 1)]), ..Default::default() })]
+    #[case::with_constraint_replaces_same_kind(AtomAst::default().with_constraint(AtomConstraintAst::valence(3_i64)).with_constraint(AtomConstraintAst::valence(4_i64)),
+        AtomAst { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)), ..Default::default() })]
     fn test_atom_ast_with_methods(#[case] actual: AtomAst, #[case] expected: AtomAst) {
         assert_eq!(actual, expected);
     }
 
     #[rstest]
-    #[case::overwrite(AtomAst::from_element(Element::C).with_charge(0_i64) .with_constraint(AtomConstraint::valence(4_i64)),
-        AtomAst::new(ElementAst::Undetermined).with_charge(-1_i64).with_constraint(AtomConstraint::valence(6_i64)),
-        AtomAst::from_element(Element::C).with_charge(-1_i64).with_constraint(AtomConstraint::valence(6_i64)))]
-    #[case::remove_constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4_i64)),
-        AtomAst::new(ElementAst::Undetermined).with_constraint(AtomConstraint::valence(ValueAst::Undetermined)),
+    #[case::overwrite(AtomAst::from_element(Element::C).with_charge(0_i64) .with_constraint(AtomConstraintAst::valence(4_i64)),
+        AtomAst::new(ElementAst::Undetermined).with_charge(-1_i64).with_constraint(AtomConstraintAst::valence(6_i64)),
+        AtomAst::from_element(Element::C).with_charge(-1_i64).with_constraint(AtomConstraintAst::valence(6_i64)))]
+    #[case::remove_constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)),
+        AtomAst::new(ElementAst::Undetermined).with_constraint(AtomConstraintAst::valence(ValueAst::Undetermined)),
         AtomAst::from_element(Element::C))]
     fn test_atom_ast_update(#[case] lhs: AtomAst, #[case] rhs: AtomAst, #[case] expected: AtomAst) {
         assert_eq!(lhs.update(&rhs), expected);
@@ -705,13 +706,13 @@ mod tests {
     #[rstest]
     #[case::from_element(AtomAst::from_element(Element::C).into_ground(),
         AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ValueAst::Lit(0),
-        lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::new() })]
+        lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
     #[case::with_charge(AtomAst::from_element(Element::C).with_charge(1_i64).into_ground(),
         AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: ValueAst::Lit(1), implicit_hydrogens: ValueAst::Lit(0),
-        lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::new() })]
-    #[case::constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4_i64)).into_ground(),
+        lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::new() })]
+    #[case::constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)).into_ground(),
         AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ValueAst::Lit(0),
-        lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::from(AtomConstraint::valence(4)) })]
+        lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4)) })]
     fn test_atom_ast_into_ground(#[case] actual: AtomAst, #[case] expected: AtomAst) {
         assert_eq!(actual, expected);
     }
@@ -721,25 +722,25 @@ mod tests {
     #[case::default_(AtomAst::default(), false)]
     #[case::all_ground(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
         implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
-        constraints: AtomConstraints::new() }, true)]
+        constraints: AtomConstraintsAst::new() }, true)]
     #[case::element_undetermined(AtomAst { element: ElementAst::Undetermined, isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
         implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
-        constraints: AtomConstraints::new() }, false)]
+        constraints: AtomConstraintsAst::new() }, false)]
     #[case::isotope_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Undetermined, charge: ValueAst::Lit(0),
         implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
-        constraints: AtomConstraints::new() }, false)]
+        constraints: AtomConstraintsAst::new() }, false)]
     #[case::charge_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Undetermined,
         implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
-        constraints: AtomConstraints::new() }, false)]
+        constraints: AtomConstraintsAst::new() }, false)]
     #[case::hydrogens_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
         implicit_hydrogens: ValueAst::Undetermined, lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
-        constraints: AtomConstraints::new() }, false)]
+        constraints: AtomConstraintsAst::new() }, false)]
     #[case::lone_pairs_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
         implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Undetermined, spin: SpinStateAst::from((0_u8, 1_u8)),
-        constraints: AtomConstraints::new() }, false)]
+        constraints: AtomConstraintsAst::new() }, false)]
     #[case::spin_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
         implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::default(),
-        constraints: AtomConstraints::new() }, false)]
+        constraints: AtomConstraintsAst::new() }, false)]
     fn test_atom_ast_is_ground(#[case] ast: AtomAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
@@ -774,16 +775,16 @@ mod tests {
     #[case::lone_pairs_mismatch(AtomAst::from_element(Element::C).with_lone_pairs(1_i64), AtomAst::from_element(Element::C).with_lone_pairs(2_i64), false)]
     #[case::spin_mismatch(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomAst::from_element(Element::C).with_spin((0_u8, 1_u8)), false)]
     #[case::constraint_required_present(
-        AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4)),
-        AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4)),
+        AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
+        AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
         true)]
     #[case::constraint_required_absent(
-        AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4)),
+        AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
         AtomAst::from_element(Element::C),
         false)]
     #[case::constraint_value_mismatch(
-        AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4)),
-        AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(3)),
+        AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4)),
+        AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(3)),
         false)]
     fn test_atom_ast_matches(
         #[case] pattern: AtomAst,

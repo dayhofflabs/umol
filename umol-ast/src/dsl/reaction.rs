@@ -2480,7 +2480,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                                 }
                             }
                         }
-                        // NoncovalentBondConstraint is uninhabited: no constraint payload.
+                        // NoncovalentBondConstraintAst is uninhabited: no constraint payload.
                         NoncovalentBondDelta::ModifyConstraint { id: j, .. } if *j == id => {}
                         _ => break,
                     }
@@ -2875,7 +2875,9 @@ mod tests {
     use super::*;
     use crate::ast::atom::ElementAst;
     use crate::ast::boolean::BooleanAst;
-    use crate::ast::constraint::{AtomConstraint, BondConstraint, Constraint, MoleculeConstraint};
+    use crate::ast::constraint::{
+        AtomConstraintAst, BondConstraintAst, Constraint, MoleculeConstraint,
+    };
     use crate::ast::delta::{ConstraintDelta, Deltas};
     use crate::ast::edit::{AtomFieldChange, BondFieldChange};
     use crate::ast::molecule::MoleculeAst;
@@ -3319,7 +3321,7 @@ mod tests {
             ast.deltas,
             Deltas::from_iter([Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
-                old: Some(AtomConstraint::valence(4)),
+                old: Some(AtomConstraintAst::valence(4)),
                 new: None,
             })]),
         );
@@ -3453,7 +3455,7 @@ mod tests {
                 }),
                 Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(
                     AtomId(1),
-                    AtomConstraint::Valence(ValueAst::Lit(2)),
+                    AtomConstraintAst::Valence(ValueAst::Lit(2)),
                 ))),
             ]),
         );
@@ -3472,7 +3474,7 @@ mod tests {
             ast.deltas,
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(Constraint::Bond(
                 BondId(0),
-                BondConstraint::Aromatic(BooleanAst::Lit(true)),
+                BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
             )))]),
         );
     }
@@ -3553,9 +3555,9 @@ mod tests {
     #[case::add(vec![Delta::Atom(AtomDelta::Add { id: AtomId(2), ast: AtomAst::from_element(Element::N) })], r##"{:atom {:add [:n "N"]}}"##)]
     #[case::remove(vec![Delta::Atom(AtomDelta::Remove { id: AtomId(1), ast: AtomAst::from_element(Element::C) })], "{:atom {:remove :c}}")]
     #[case::modify_field(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Lit(-1) } })], r##"{:atom {:modify [:br "#c-"]}}"##)]
-    #[case::modify_set_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: None, new: Some(AtomConstraint::valence(4_i64)) })], r##"{:atom {:modify [:br "#v4"]}}"##)]
-    #[case::modify_remove_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraint::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#v*"]}}"##)]
-    #[case::modify_coalesced(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Lit(-1) } }), Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraint::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#c-#v*"]}}"##)]
+    #[case::modify_set_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: None, new: Some(AtomConstraintAst::valence(4_i64)) })], r##"{:atom {:modify [:br "#v4"]}}"##)]
+    #[case::modify_remove_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraintAst::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#v*"]}}"##)]
+    #[case::modify_coalesced(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Lit(-1) } }), Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraintAst::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#c-#v*"]}}"##)]
     fn test_render_deltas_atom(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
         assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);
     }
@@ -3565,7 +3567,7 @@ mod tests {
     #[case::add(vec![Delta::Bond(BondDelta::Add { id: BondId(2), atoms: [AtomId(1), AtomId(2)], ast: BondAst::from_order(1) })], "{:bond {:add {:id :b2 :atoms [:c :n] :type :single}}}")]
     #[case::remove(vec![Delta::Bond(BondDelta::Remove { id: BondId(1), atoms: [AtomId(0), AtomId(1)], ast: BondAst::from_order(1) })], "{:bond {:remove :bx}}")]
     #[case::modify_field(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) } })], r##"{:bond {:modify [:b1 "2"]}}"##)]
-    #[case::modify_constraint(vec![Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: None, new: Some(BondConstraint::Aromatic(BooleanAst::Lit(true))) })], r##"{:bond {:modify [:b1 "#a"]}}"##)]
+    #[case::modify_constraint(vec![Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: None, new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) })], r##"{:bond {:modify [:b1 "#a"]}}"##)]
     fn test_render_deltas_bond(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
         assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);
     }
@@ -3573,7 +3575,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::add_molecule(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:add {:connected {}}}}")]
-    #[case::add_entity_leaf(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(AtomId(2), AtomConstraint::Valence(ValueAst::Lit(2)))))], "{:constraint {:add {:atom [:n {:valence 2}]}}}")]
+    #[case::add_entity_leaf(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(AtomId(2), AtomConstraintAst::Valence(ValueAst::Lit(2)))))], "{:constraint {:add {:atom [:n {:valence 2}]}}}")]
     #[case::remove(vec![Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:remove {:connected {}}}}")]
     fn test_render_deltas_constraint(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
         assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);

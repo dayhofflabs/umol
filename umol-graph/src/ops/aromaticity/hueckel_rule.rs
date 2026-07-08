@@ -249,7 +249,7 @@ fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomId>]) -> Vec<HashSe
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElectronCountsAst,
+        AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElectronCountsAst,
         ElementAst, MoleculeAst, RingFamily, ValueAst,
     };
     use umol_chem::element::Element;
@@ -280,7 +280,7 @@ mod tests {
             .into_iter()
             .map(|(mut atom, pi)| {
                 if let Some(n) = pi {
-                    atom.constraints.set(AtomConstraint::AromaticValence(
+                    atom.constraints.set(AtomConstraintAst::AromaticValence(
                         AromaticValenceAst::Aromatic(ValueAst::Lit(n)),
                     ));
                 }

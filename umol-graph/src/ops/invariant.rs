@@ -8,7 +8,7 @@ use std::ops::RangeInclusive;
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraints, AtomId, ElementAst,
+    AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintsAst, AtomId, ElementAst,
     Lattice, MoleculeAst, MulticenterValenceAst, SpinStateAst, ValueAst,
 };
 use umol_chem::element::Element;
@@ -374,7 +374,7 @@ impl ValenceInvariants {
                                 unpaired: ValueAst::Lit(unpaired),
                                 multiplicity: ValueAst::Lit(multiplicity),
                             },
-                            constraints: AtomConstraints::from(AtomConstraint::Valence(
+                            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(
                                 ValueAst::Lit(valence),
                             )),
                             ..Default::default()
@@ -465,8 +465,8 @@ fn enumeration_values(field: &ValueAst, bound: RangeInclusive<i64>) -> Vec<i64> 
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AtomAst, AtomConstraint, AtomConstraints, AtomId, ElementAst, IsotopeMassAst, MoleculeAst,
-        SpinStateAst, ValueAst,
+        AtomAst, AtomConstraintAst, AtomConstraintsAst, AtomId, ElementAst, IsotopeMassAst,
+        MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_chem::element::Element;
 
@@ -591,7 +591,7 @@ mod tests {
             implicit_hydrogens: ValueAst::Lit(4),
             lone_pairs: ValueAst::Lit(0),
             spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
     #[case::infeasible_h(
@@ -625,7 +625,7 @@ mod tests {
             implicit_hydrogens: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(2),
             spin: SpinStateAst::from((2_u8, 3_u8)),
-            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
     // Spin fully ground to a non-maximal but valid coupling (3 unpaired as a
@@ -646,7 +646,7 @@ mod tests {
             implicit_hydrogens: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(1),
             spin: SpinStateAst::from((3_u8, 2_u8)),
-            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
     // Multiplicity is ground (singlet), unpaired open: conservation fixes
@@ -671,7 +671,7 @@ mod tests {
             implicit_hydrogens: ValueAst::Lit(2),
             lone_pairs: ValueAst::Lit(0),
             spin: SpinStateAst::from((2_u8, 1_u8)),
-            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
     // Spin pinned to a physically impossible pair (2 unpaired, multiplicity 2):
@@ -706,7 +706,7 @@ mod tests {
             implicit_hydrogens: ValueAst::Lit(2),
             lone_pairs: ValueAst::Lit(0),
             spin: SpinStateAst::from((2_u8, 3_u8)),
-            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
     // Nonzero (given) charge: oxide anion, 7 electrons, resolves to a doublet.
@@ -726,7 +726,7 @@ mod tests {
             implicit_hydrogens: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(3),
             spin: SpinStateAst::from((1_u8, 2_u8)),
-            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
     // Specified isotope survives the meet (Natural can't, Lit(13) does) and is
@@ -748,7 +748,7 @@ mod tests {
             implicit_hydrogens: ValueAst::Lit(4),
             lone_pairs: ValueAst::Lit(0),
             spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+            constraints: AtomConstraintsAst::from(AtomConstraintAst::Valence(ValueAst::Lit(0))),
         }],
     )]
     fn test_valence_invariants_enumerate_atom(

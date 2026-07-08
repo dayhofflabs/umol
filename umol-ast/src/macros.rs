@@ -248,10 +248,10 @@ mod tests {
 
     use crate::ast::constraint::RingScope;
     use crate::ast::{
-        AromaticSystemAst, AromaticSystemConstraint, AtomAst, AtomConstraint, AtomId, BondAst,
-        BondConstraint, BooleanAst, Constraints, DativeBondAst, DativeBondConstraint, ElementAst,
-        MoleculeAst, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst,
-        StereoBondAst, StereoCosetAst, StereoKind, ValueAst,
+        AromaticSystemAst, AromaticSystemConstraintAst, AtomAst, AtomConstraintAst, AtomId,
+        BondAst, BondConstraintAst, BooleanAst, Constraints, DativeBondAst,
+        DativeBondConstraintAst, ElementAst, MoleculeAst, MulticenterBondAst, NoncovalentBondAst,
+        NoncovalentBondKind, StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind, ValueAst,
     };
     use crate::dsl::molecule::MoleculeMetadata;
     use crate::dsl::{AtomDsl, MoleculeDsl};
@@ -299,7 +299,7 @@ mod tests {
         MoleculeAst::from_parts(vec![AtomAst::from_element(Element::C); 3],
             vec![(AtomId(0), AtomId(1), BondAst::from_order(1)), (AtomId(1), AtomId(2), BondAst::from_order(1)), (AtomId(2), AtomId(0), BondAst::from_order(1))],
             vec![], vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemAst::from_electrons(vec![1; 3]).with_constraint(AromaticSystemConstraint::electron_count(3)))],
+            AromaticSystemAst::from_electrons(vec![1; 3]).with_constraint(AromaticSystemConstraintAst::electron_count(3)))],
             vec![], vec![],
             Vec::new(), Vec::new(), Constraints::default()))]
     fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
@@ -339,7 +339,7 @@ mod tests {
     #[rstest]
     #[case::carbon_h4("C #h4", AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground())]
     #[case::carbon("C", AtomAst::from_element(Element::C).into_ground())]
-    #[case::carbon_v4("C #v4", AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4_i64)).into_ground())]
+    #[case::carbon_v4("C #v4", AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)).into_ground())]
     fn test_atom_ground_macro(#[case] input: &str, #[case] expected: AtomAst) {
         assert_eq!(atom_ground!(input), expected);
     }
@@ -349,7 +349,7 @@ mod tests {
     #[case::empty("", AtomAst::new(ElementAst::Undetermined))]
     #[case::element("C#h4", AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64))]
     #[case::field_only("#h4", AtomAst::new(ElementAst::Undetermined).with_implicit_hydrogens(4_i64))]
-    #[case::constraint_only("#v4", AtomAst::new(ElementAst::Undetermined).with_constraint(AtomConstraint::valence(4_i64)))]
+    #[case::constraint_only("#v4", AtomAst::new(ElementAst::Undetermined).with_constraint(AtomConstraintAst::valence(4_i64)))]
     fn test_partial_atom_macro(#[case] input: &str, #[case] expected: AtomAst) {
         assert_eq!(partial_atom!(input), expected);
     }
@@ -357,7 +357,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::double("2", BondAst::from_order(2))]
-    #[case::aromatic("1#a", BondAst::from_order(1).with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))))]
+    #[case::aromatic("1#a", BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
     fn test_bond_macro(#[case] input: &str, #[case] expected: BondAst) {
         assert_eq!(bond!(input), expected);
     }
@@ -380,7 +380,7 @@ mod tests {
     #[case::empty("", BondAst::new(ValueAst::Undetermined))]
     #[case::order("1", BondAst::from_order(1))]
     #[case::field_only("#c+", BondAst::new(ValueAst::Undetermined).with_charge(1_i64))]
-    #[case::constraint_only("#a", BondAst::new(ValueAst::Undetermined).with_constraint(BondConstraint::Aromatic(BooleanAst::Lit(true))))]
+    #[case::constraint_only("#a", BondAst::new(ValueAst::Undetermined).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
     fn test_partial_bond_macro(#[case] input: &str, #[case] expected: BondAst) {
         assert_eq!(partial_bond!(input), expected);
     }
@@ -388,7 +388,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::single("1", DativeBondAst::from_order(1))]
-    #[case::with_ring_size( "2 #R(6)", DativeBondAst::from_order(2).with_constraint(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)),)]
+    #[case::with_ring_size( "2 #R(6)", DativeBondAst::from_order(2).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)),)]
     fn test_dative_macro(#[case] input: &str, #[case] expected: DativeBondAst) {
         assert_eq!(dative!(input), expected);
     }
@@ -409,7 +409,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::charge("[1,1,1]#c+", AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64))]
-    #[case::electron_count("*#e6", AromaticSystemAst::default().with_constraint(AromaticSystemConstraint::electron_count(6)))]
+    #[case::electron_count("*#e6", AromaticSystemAst::default().with_constraint(AromaticSystemConstraintAst::electron_count(6)))]
     fn test_aromatic_macro(#[case] input: &str, #[case] expected: AromaticSystemAst) {
         assert_eq!(aromatic!(input), expected);
     }
@@ -422,7 +422,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::electron_count("[1,1,1,1,1,1]#e6", AromaticSystemAst::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraint::electron_count(6)).into_ground())]
+    #[case::electron_count("[1,1,1,1,1,1]#e6", AromaticSystemAst::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraintAst::electron_count(6)).into_ground())]
     fn test_aromatic_ground_macro(#[case] input: &str, #[case] expected: AromaticSystemAst) {
         assert_eq!(aromatic_ground!(input), expected);
     }

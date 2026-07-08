@@ -106,7 +106,8 @@ impl AromaticityConformanceValidator {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, BondAst, MoleculeAst, SpinStateAst, ValueAst,
+        AromaticValenceAst, AtomAst, AtomConstraintAst, BondAst, MoleculeAst, SpinStateAst,
+        ValueAst,
     };
     use umol_chem::element::Element;
 
@@ -129,7 +130,7 @@ mod tests {
                 let mut atom = AtomAst::from_element(Element::C);
                 atom.charge = ValueAst::Lit(0);
                 atom.spin = SpinStateAst::closed_shell();
-                atom.constraints.set(AtomConstraint::AromaticValence(
+                atom.constraints.set(AtomConstraintAst::AromaticValence(
                     AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
                 ));
                 atom

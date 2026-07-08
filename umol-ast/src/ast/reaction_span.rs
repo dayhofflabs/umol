@@ -1442,15 +1442,11 @@ impl ReactionAst {
                 Delta::StereoAtom(StereoAtomDelta::Remove { id, .. }) => {
                     removed_stereo_atom.push(*id)
                 }
-                Delta::StereoAtom(StereoAtomDelta::Add { id, .. }) => {
-                    created_stereo_atom.push(*id)
-                }
+                Delta::StereoAtom(StereoAtomDelta::Add { id, .. }) => created_stereo_atom.push(*id),
                 Delta::StereoBond(StereoBondDelta::Remove { id, .. }) => {
                     removed_stereo_bond.push(*id)
                 }
-                Delta::StereoBond(StereoBondDelta::Add { id, .. }) => {
-                    created_stereo_bond.push(*id)
-                }
+                Delta::StereoBond(StereoBondDelta::Add { id, .. }) => created_stereo_bond.push(*id),
                 _ => {}
             }
         }

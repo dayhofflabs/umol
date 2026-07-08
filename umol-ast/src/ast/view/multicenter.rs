@@ -5,7 +5,7 @@ use std::ops::Index;
 
 use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
-use super::super::constraint::MulticenterBondConstraints;
+use super::super::constraint::MulticenterBondConstraintsAst;
 use super::super::electrons::ElectronCountsAst;
 use super::super::id::{AtomId, MulticenterBondId};
 use super::super::molecule::MoleculeAst;
@@ -203,7 +203,7 @@ impl<'a> MulticenterBondView<'a> {
     }
 
     #[inline]
-    pub fn constraints(&self) -> &'a MulticenterBondConstraints {
+    pub fn constraints(&self) -> &'a MulticenterBondConstraintsAst {
         &self.ast.constraints
     }
 

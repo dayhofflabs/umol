@@ -15,7 +15,8 @@ use umol_graph_core::{BiRelationData, ParticipantPosition};
 use umol_perm::{space, ClassKey, Permutation};
 
 use super::constraint::{
-    StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
+    StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoBondConstraintAst,
+    StereoBondConstraintsAst,
 };
 use super::error::{Contradiction, NoJoin};
 use super::ligand::StereoLigand;
@@ -128,12 +129,12 @@ macro_rules! stereo_element {
 
 stereo_element! {
     /// StereoAtomAst with geometry class, configuration, and per-site constraints.
-    StereoAtomAst, StereoAtomConstraints, StereoAtomConstraint
+    StereoAtomAst, StereoAtomConstraintsAst, StereoAtomConstraintAst
 }
 
 stereo_element! {
     /// StereoBondAst with cis/trans configuration and per-site constraints.
-    StereoBondAst, StereoBondConstraints, StereoBondConstraint
+    StereoBondAst, StereoBondConstraintsAst, StereoBondConstraintAst
 }
 
 /// Stereo kind: the atom-centered coordination geometries and the bond-centered cis/trans kind.
@@ -1195,7 +1196,7 @@ mod tests {
             stereo_atom.configuration,
             StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined)
         );
-        assert_eq!(stereo_atom.constraints, StereoAtomConstraints::new());
+        assert_eq!(stereo_atom.constraints, StereoAtomConstraintsAst::new());
     }
 
     #[rustfmt::skip]
@@ -1273,7 +1274,7 @@ mod tests {
             stereo_bond.configuration,
             StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCosetAst::Undetermined)
         );
-        assert_eq!(stereo_bond.constraints, StereoBondConstraints::new())
+        assert_eq!(stereo_bond.constraints, StereoBondConstraintsAst::new())
     }
 
     #[rustfmt::skip]

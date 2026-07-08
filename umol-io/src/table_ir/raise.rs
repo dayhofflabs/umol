@@ -9,10 +9,10 @@ use std::collections::HashSet;
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, BondConstraint, BooleanAst,
-    CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, Lattice, MoleculeAst,
-    MulticenterBondAst, NoncovalentBondAst, SpinStateAst, StereoCosetAst, TetrahedralStereoAst,
-    TryIntoAst, ValueAst,
+    AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst, BooleanAst,
+    CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, Lattice,
+    MoleculeAst, MulticenterBondAst, NoncovalentBondAst, SpinStateAst, StereoCosetAst,
+    TetrahedralStereoAst, TryIntoAst, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_perm::{space, ClassKey, Permutation};
@@ -164,7 +164,7 @@ impl TryIntoAst<AtomAst> for &TableAtom {
         };
         match self.aromatic {
             Some(true) => {
-                atom.constraints.set(AtomConstraint::AromaticValence(
+                atom.constraints.set(AtomConstraintAst::AromaticValence(
                     AromaticValenceAst::Aromatic(ValueAst::Undetermined),
                 ));
                 // A bare aromatic heteroatom specifies zero H; any H must be bracketed
@@ -176,7 +176,7 @@ impl TryIntoAst<AtomAst> for &TableAtom {
                 }
             }
             Some(false) => {
-                atom.constraints.set(AtomConstraint::AromaticValence(
+                atom.constraints.set(AtomConstraintAst::AromaticValence(
                     AromaticValenceAst::NotAromatic,
                 ));
             }
@@ -209,7 +209,7 @@ impl TryIntoAst<BondAst> for &TableBond {
         };
         if matches!(self.order, TableBondOrder::Aromatic) {
             bond.constraints
-                .set(BondConstraint::Aromatic(BooleanAst::Lit(true)));
+                .set(BondConstraintAst::Aromatic(BooleanAst::Lit(true)));
         }
         Ok(bond)
     }
@@ -225,7 +225,7 @@ fn raise_bond_order(order: TableBondOrder) -> ValueAst {
         TableBondOrder::Quintuple => ValueAst::Lit(5),
         TableBondOrder::Sextuple => ValueAst::Lit(6),
         // Definite-aromatic: localized bond order is 1 by Kekulé convention;
-        // the aromatic flag is added separately as `BondConstraint::Aromatic`.
+        // the aromatic flag is added separately as `BondConstraintAst::Aromatic`.
         // Renders as `1#a`.
         TableBondOrder::Aromatic => ValueAst::Lit(1),
         // Fuzzy orders: no concrete bond order can be assigned; raise to
@@ -243,12 +243,12 @@ fn raise_bond_order(order: TableBondOrder) -> ValueAst {
 fn raise_tetrahedral_stereo(
     mol: &TableMolecule,
     atom_idx: usize,
-) -> Result<Option<AtomConstraint>, RaiseError> {
+) -> Result<Option<AtomConstraintAst>, RaiseError> {
     let chirality = mol.atoms[atom_idx].chirality;
     let (relabeling, source_coset): (Permutation, usize) = match chirality {
         Some(Chirality::Unspecified) => {
             validate_tetrahedral_geometry(mol, atom_idx)?;
-            return Ok(Some(AtomConstraint::TetrahedralStereo(
+            return Ok(Some(AtomConstraintAst::TetrahedralStereo(
                 TetrahedralStereoAst::stereo(StereoCosetAst::Undetermined),
             )));
         }
@@ -327,7 +327,7 @@ fn raise_tetrahedral_stereo(
     let coset = space(ClassKey::Tetrahedral)
         .reindex(source_coset as u32, relabeling)
         .expect("tetrahedral coset reindex");
-    Ok(Some(AtomConstraint::TetrahedralStereo(
+    Ok(Some(AtomConstraintAst::TetrahedralStereo(
         TetrahedralStereoAst::stereo(StereoCosetAst::Lit(coset)),
     )))
 }
@@ -336,13 +336,13 @@ fn raise_tetrahedral_stereo(
 fn raise_cis_trans_stereo(
     mol: &TableMolecule,
     bond_idx: usize,
-) -> Result<Option<BondConstraint>, RaiseError> {
+) -> Result<Option<BondConstraintAst>, RaiseError> {
     let bond = &mol.bonds[bond_idx];
     if bond.order != TableBondOrder::Double {
         return Ok(None);
     }
     if bond.stereo == Some(BondStereo::Either) {
-        return Ok(Some(BondConstraint::CisTransStereo(
+        return Ok(Some(BondConstraintAst::CisTransStereo(
             CisTransStereoAst::stereo(StereoCosetAst::Undetermined),
         )));
     }
@@ -373,7 +373,7 @@ fn raise_cis_trans_stereo(
     let coset = space(ClassKey::CisTrans)
         .index(Permutation::between(&source, &target))
         .expect("cis/trans coset index");
-    Ok(Some(BondConstraint::CisTransStereo(
+    Ok(Some(BondConstraintAst::CisTransStereo(
         CisTransStereoAst::stereo(StereoCosetAst::Lit(coset)),
     )))
 }
@@ -526,7 +526,7 @@ mod tests {
         assert!(bond
             .constraints
             .iter()
-            .any(|c| matches!(c, BondConstraint::Aromatic(BooleanAst::Lit(true)))));
+            .any(|c| matches!(c, BondConstraintAst::Aromatic(BooleanAst::Lit(true)))));
         for i in 0..2 {
             assert!(ast
                 .atom(AtomId(i))
@@ -591,7 +591,7 @@ mod tests {
         #[case] expected: Option<StereoCosetAst>,
     ) {
         let expected = expected
-            .map(|coset| AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::stereo(coset)));
+            .map(|coset| AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::stereo(coset)));
         assert_eq!(raise_tetrahedral_stereo(&mol, atom_idx), Ok(expected));
     }
 
@@ -646,8 +646,8 @@ mod tests {
         #[case] bond_idx: usize,
         #[case] expected: Option<StereoCosetAst>,
     ) {
-        let expected =
-            expected.map(|coset| BondConstraint::CisTransStereo(CisTransStereoAst::stereo(coset)));
+        let expected = expected
+            .map(|coset| BondConstraintAst::CisTransStereo(CisTransStereoAst::stereo(coset)));
         assert_eq!(raise_cis_trans_stereo(&mol, bond_idx), Ok(expected));
     }
 
