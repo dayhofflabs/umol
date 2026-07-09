@@ -11,6 +11,7 @@ from umol import (
     IsotopeMassAst,
     MemOp,
     MoleculeAst,
+    ParseError,
     SpinStateAst,
     ValueAst,
     ValueTerm,
@@ -339,3 +340,15 @@ def test_atomast_charge_nested_variant_readable():
                     raise AssertionError
         case _:
             raise AssertionError
+
+
+@pytest.mark.parametrize("dsl", ["C", "N#c+", "C#v4", "O#n2", "C#R(6)"])
+def test_atomast_parse(dsl):
+    atom = AtomAst.parse(dsl)
+    assert str(atom) == dsl
+    assert repr(atom) == f"AtomAst.parse('{dsl}')"
+
+
+def test_atomast_parse_error():
+    with pytest.raises(ParseError):
+        AtomAst.parse("Zz##")

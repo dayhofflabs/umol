@@ -11,6 +11,7 @@ use crate::{
         MulticenterValenceAst, RingMembershipAst, RingScope,
     },
     element::Element,
+    error::ParseError,
     molecule::MoleculeAst,
     stereo::{Permutation, StereoCosetAst, StereoTerm, TetrahedralStereoAst},
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
@@ -24,6 +25,8 @@ mod constraint;
 mod convert;
 #[cfg(feature = "graph")]
 mod element;
+#[cfg(feature = "graph")]
+mod error;
 #[cfg(feature = "graph")]
 mod molecule;
 #[cfg(feature = "graph")]
@@ -39,6 +42,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "graph")]
     {
         module.add_class::<Element>()?;
+        module.add("ParseError", module.py().get_type::<ParseError>())?;
         module.add_class::<MoleculeAst>()?;
         module.add_class::<RelOp>()?;
         module.add_class::<MemOp>()?;

@@ -574,11 +574,16 @@ bare `int`. Revisit on alpha-user feedback.
   `stereo.rs` now complete → module-level `#[allow(clippy::absolute_paths)]` for the
   `#[pyclass(hash)]` macro false-positives. **Whole atom slice green; clippy clean.**
 
-### S6 (step ii) — atom DSL parsing (green)
+### S6 (step ii) — atom DSL parsing (green) **Done**
 
-- **S6a** — `AtomAst.parse(str)` / `str(atom)` via `AtomDsl` (`FromStr`/`Display`);
-  full roundtrip incl. constraints. Parse errors → a minimal binding exception (the
-  full three-tier hierarchy is a later slice). *Additive.* [dep: S3a, S5c]
+- **S6a** *(done)* — `AtomAst.parse(str)` (staticmethod), `str(atom)`, and
+  `repr(atom)` = `AtomAst.parse('<dsl>')`, wrapping `AtomAst`'s own `FromStr`/`Display`
+  (the convenience shortcuts over the `FromAst`/`IntoAst` raise/lower system; the full
+  raise/lower binding is deferred — Python todo 5). Roundtrip **canonicalizes** (`#c+1`→
+  `#c+`, constraints reorder to key order), so it is `str`∘`parse` stable, not
+  byte-verbatim. Parse errors → the dedicated, catchable `umol.ParseError`
+  (`create_exception!`, `PyException` base); the three-tier hierarchy is a later slice.
+  *Additive.* [dep: S3a, S5c]
 
 ### Critical path & deferrals
 
@@ -649,15 +654,23 @@ these change only umol-py, not umol-ast).
    whether `__str__` should be the compact **DSL string** (the AST value types impl
    `Display` as the value-expr, reachable via `to_ast`) — ties into the S6 DSL-string
    surface.
+5. **`FromAst`/`IntoAst` (raise/lower) binding** — the primary, complete AST↔DSL
+   conversion (perception boundary + structural raise/lower, parameterized by the
+   `*Defaults` config); `Display`/`FromStr` — which S6a wraps for `str`/`repr`/`parse` —
+   are convenience shortcuts layered on top, *not* a separate "raw" path. Exposing the
+   full raise/lower surface to Python (ground a parsed pattern, lower with
+   default-eliding, thread the defaults config) is a distinct, larger binding piece.
+   Deferred; S6a delivers only the string shortcuts.
 3. **Pickling** (`__reduce__` / `__getstate__`+`__setstate__`) — not automatic for
    pyclasses. Not needed now; may matter later for multiprocessing/distribution of the
    large reaction networks (atoms/molecules crossing process boundaries). The natural
    state is `to_ast`/`from_inner` (structs) or `to_ast` + variant tag (mirrors); the
    value types already round-trip, so `__reduce__` over that is mechanical.
-4. **`AtomConstraints` container surface is interim** — the current `get(kind)` /
-   `contains(kind)` / list-construction binding predates the container-API redesign in
-   doc 138 (map model, ring-membership-as-map, key expression, bare-lit `set`). Rework
-   the Python surface once 138 settles.
+4. **`AtomConstraints` container surface** *(done, 2026-07-08)* — reworked after doc 138
+   settled: by-key `AtomConstraintKey` addressing (`get`/`contains`), Rust-mirroring named
+   accessors (`valence()`… + `ring_count()`/`ring_size_count(n)`), and `asdict()` (canonical
+   order; ring keyed `ring_count`/`ring_size_count_<n>`), with `AtomAst.asdict()` emitting
+   the constraint dict. The type is now `AtomConstraintsAst` (the `*Ast` rename).
 2. **Terse element notation `E.H` / `E.Cl`** (exploring; not needed now). A
    `python/umol/`-layer convenience mirroring the Rust `e!(H)` macro — a namespace
    object whose `__getattr__(symbol)` returns `Element(symbol)`; the only Python form

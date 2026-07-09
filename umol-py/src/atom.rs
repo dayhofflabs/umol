@@ -4,6 +4,7 @@
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use std::collections::BTreeSet;
+use std::str::FromStr;
 use std::vec::IntoIter;
 
 use pyo3::exceptions::PyIndexError;
@@ -191,6 +192,20 @@ impl AtomAst {
             spin,
             constraints,
         ))
+    }
+
+    /// Parse an atom-DSL string (e.g. `"C#c-1#v4"`) into an `AtomAst`.
+    #[staticmethod]
+    fn parse(s: &str) -> PyResult<Self> {
+        AstAtomAst::from_str(s).map(Self).map_err(crate::error::parse_error)
+    }
+
+    fn __str__(&self) -> String {
+        self.0.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("AtomAst.parse('{}')", self.0)
     }
 
     #[getter]
@@ -623,6 +638,23 @@ mod tests {
                 .with_constraint(AstAtomConstraintAst::valence(4)),
         );
         assert_eq!(atom.constraints().inner().len(), 1);
+    }
+
+    #[rstest]
+    #[case::bare("C")]
+    #[case::charge("N#c+")]
+    #[case::valence("C#v4")]
+    #[case::lone_pairs("O#n2")]
+    #[case::ring_size("C#R(6)")]
+    fn test_atom_ast_parse(#[case] dsl: &str) {
+        let atom = AtomAst::parse(dsl).unwrap();
+        assert_eq!(atom.__str__(), dsl);
+        assert_eq!(atom.__repr__(), format!("AtomAst.parse('{dsl}')"));
+    }
+
+    #[rstest]
+    fn test_atom_ast_parse_error() {
+        assert!(AtomAst::parse("Zz##").is_err());
     }
 
     #[rstest]
