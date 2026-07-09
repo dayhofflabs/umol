@@ -1,8 +1,12 @@
 from umol import (
     AromaticValenceAst,
+    AtomAst,
     AtomConstraintAst,
     AtomConstraintKey,
     AtomConstraintsAst,
+    AtomId,
+    Element,
+    MoleculeAst,
     MulticenterValenceAst,
     RingMembershipAst,
     RingScope,
@@ -215,3 +219,165 @@ def test_atomconstraints_ring_size_count():
             raise AssertionError
     assert constraints.ring_size_count(5) is None
     assert constraints.ring_count() is None
+
+
+def test_atomconstraintsast_set():
+    constraints = AtomConstraintsAst([])
+    constraints.set(AtomConstraintAst.Valence(ValueAst.Lit(4)))
+    assert len(constraints) == 1
+    match constraints.get(AtomConstraintKey.Valence()):
+        case AtomConstraintAst.Valence(ValueAst.Lit(n)):
+            assert n == 4
+        case _:
+            raise AssertionError
+
+
+def test_atomconstraintsast_remove():
+    constraints = AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))])
+    match constraints.remove(AtomConstraintKey.Valence()):
+        case AtomConstraintAst.Valence(ValueAst.Lit(n)):
+            assert n == 4
+        case _:
+            raise AssertionError
+    assert len(constraints) == 0
+    assert constraints.remove(AtomConstraintKey.Valence()) is None
+
+
+def test_atomconstraintsast_update():
+    constraints = AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))])
+    constraints.update(
+        AtomConstraintsAst(
+            [
+                AtomConstraintAst.Valence(ValueAst.Lit(3)),
+                AtomConstraintAst.Degree(ValueAst.Lit(2)),
+            ]
+        )
+    )
+    assert len(constraints) == 2
+    match constraints.valence():
+        case ValueAst.Lit(n):
+            assert n == 3
+        case _:
+            raise AssertionError
+    match constraints.degree():
+        case ValueAst.Lit(n):
+            assert n == 2
+        case _:
+            raise AssertionError
+
+
+def test_atomconstraintsview_set():
+    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol.atoms[AtomId(0)].constraints.set(
+        AtomConstraintAst.AromaticValence(AromaticValenceAst.Aromatic(ValueAst.Lit(1)))
+    )
+    # a fresh view proves the write hit the molecule, not a transient copy
+    constraints = mol.atoms[AtomId(0)].constraints
+    assert len(constraints) == 1
+    match constraints.get(AtomConstraintKey.AromaticValence()):
+        case AtomConstraintAst.AromaticValence(AromaticValenceAst.Aromatic(ValueAst.Lit(n))):
+            assert n == 1
+        case _:
+            raise AssertionError
+
+
+def test_atomconstraintsview_remove():
+    atom = AtomAst(
+        Element("C"),
+        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
+    )
+    mol = MoleculeAst.from_atoms([atom])
+    match mol.atoms[AtomId(0)].constraints.remove(AtomConstraintKey.Valence()):
+        case AtomConstraintAst.Valence(ValueAst.Lit(n)):
+            assert n == 4
+        case _:
+            raise AssertionError
+    assert len(mol.atoms[AtomId(0)].constraints) == 0
+
+
+def test_atomconstraintsview_update():
+    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol.atoms[AtomId(0)].constraints.update(
+        AtomConstraintsAst(
+            [
+                AtomConstraintAst.Valence(ValueAst.Lit(4)),
+                AtomConstraintAst.Degree(ValueAst.Lit(3)),
+            ]
+        )
+    )
+    constraints = mol.atoms[AtomId(0)].constraints
+    assert len(constraints) == 2
+    match constraints.valence():
+        case ValueAst.Lit(n):
+            assert n == 4
+        case _:
+            raise AssertionError
+
+
+def test_atomconstraintsview_atom_backed_set():
+    atom = AtomAst(Element("C"))
+    atom.constraints.set(AtomConstraintAst.Valence(ValueAst.Lit(4)))
+    # a fresh view proves the write mutated the standalone atom in place
+    assert len(atom.constraints) == 1
+    match atom.constraints.get(AtomConstraintKey.Valence()):
+        case AtomConstraintAst.Valence(ValueAst.Lit(n)):
+            assert n == 4
+        case _:
+            raise AssertionError
+
+
+def test_atomconstraintsview_atom_backed_remove():
+    atom = AtomAst(
+        Element("C"),
+        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
+    )
+    match atom.constraints.remove(AtomConstraintKey.Valence()):
+        case AtomConstraintAst.Valence(ValueAst.Lit(n)):
+            assert n == 4
+        case _:
+            raise AssertionError
+    assert len(atom.constraints) == 0
+
+
+def test_atomconstraintsview_atom_backed_update():
+    atom = AtomAst(Element("C"))
+    atom.constraints.update(
+        AtomConstraintsAst(
+            [
+                AtomConstraintAst.Valence(ValueAst.Lit(4)),
+                AtomConstraintAst.Degree(ValueAst.Lit(3)),
+            ]
+        )
+    )
+    assert len(atom.constraints) == 2
+    match atom.constraints.valence():
+        case ValueAst.Lit(n):
+            assert n == 4
+        case _:
+            raise AssertionError
+
+
+def test_atomconstraintsview_reads():
+    atom = AtomAst(
+        Element("C"),
+        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
+    )
+    mol = MoleculeAst.from_atoms([atom])
+    constraints = mol.atoms[AtomId(0)].constraints
+    assert not constraints.is_empty()
+    assert constraints.contains(AtomConstraintKey.Valence())
+    assert constraints.get(AtomConstraintKey.Degree()) is None
+    match constraints.valence():
+        case ValueAst.Lit(n):
+            assert n == 4
+        case _:
+            raise AssertionError
+    assert set(constraints.asdict().keys()) == {"valence"}
+    keys = set()
+    for constraint in constraints:
+        match constraint.key:
+            case AtomConstraintKey.Valence():
+                keys.add("valence")
+            case _:
+                raise AssertionError
+    assert keys == {"valence"}

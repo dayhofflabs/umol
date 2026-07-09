@@ -8,7 +8,7 @@ use crate::{
     atom::{AtomAst, AtomId, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst},
     constraint::{
         AromaticValenceAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst,
-        MulticenterValenceAst, RingMembershipAst, RingScope,
+        AtomConstraintsView, MulticenterValenceAst, RingMembershipAst, RingScope,
     },
     element::Element,
     error::ParseError,
@@ -63,6 +63,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AtomConstraintAst>()?;
         module.add_class::<AtomConstraintKey>()?;
         module.add_class::<AtomConstraintsAst>()?;
+        module.add_class::<AtomConstraintsView>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;
         module.add_class::<StereoCosetAst>()?;

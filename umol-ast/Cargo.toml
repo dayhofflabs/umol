@@ -20,10 +20,6 @@ autotests = false
 [lib]
 bench = false
 
-[[test]]
-name = "property"
-required-features = ["proptest"]
-
 [features]
 proptest = []
 
@@ -50,6 +46,10 @@ criterion = { version = "0.8", features = ["html_reports"] }
 pretty_assertions = "1.4.1"
 proptest = "1.6"
 rstest = "0.26.1"
+
+[[test]]
+name = "property"
+required-features = ["proptest"]
 
 [[bench]]
 name = "parsing"

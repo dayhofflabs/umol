@@ -1,6 +1,4 @@
-//! Binding exceptions. Minimal for now: a single catchable `ParseError` for DSL
-//! parse failures. The full three-tier hierarchy mirroring umol-ast's error tiers
-//! (doc 137 "Error mapping") lands with the Rust-side error sweep.
+//! Binding exceptions.
 
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;

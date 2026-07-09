@@ -8,6 +8,7 @@ from ._native import (
     AtomConstraintAst,
     AtomConstraintKey,
     AtomConstraintsAst,
+    AtomConstraintsView,
     AtomId,
     AtomView,
     AtomViews,
@@ -30,6 +31,7 @@ from ._native import (
     ValuePredicate,
     ValueTerm,
 )
+from .elements import E
 
 try:
     __version__ = version("umol")
@@ -42,9 +44,11 @@ __all__ = [
     "AtomConstraintAst",
     "AtomConstraintKey",
     "AtomConstraintsAst",
+    "AtomConstraintsView",
     "AtomId",
     "AtomView",
     "AtomViews",
+    "E",
     "Element",
     "ElementAst",
     "IsotopeMassAst",

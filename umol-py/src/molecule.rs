@@ -52,6 +52,12 @@ impl MoleculeAst {
         &self.0
     }
 
+    /// Mutable access to the wrapped AST molecule — write access for the live
+    /// atom and constraint views (copy-on-write through `atom_mut`).
+    pub(crate) fn inner_mut(&mut self) -> &mut AstMoleculeAst {
+        &mut self.0
+    }
+
     /// Wrap an AST molecule (the hold-the-value `from_inner` bridge, paired with
     /// `inner`). Test-only — in-crate construction wraps `MoleculeAst(..)` directly.
     #[cfg(test)]

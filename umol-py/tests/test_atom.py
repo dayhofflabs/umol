@@ -137,8 +137,9 @@ def test_atomast_default_charge_undetermined():
             raise AssertionError
 
 
-def test_atomast_replace_charge():
-    atom = AtomAst(Element("C")).replace(charge=ValueAst.Lit(1))
+def test_atomast_set_charge():
+    atom = AtomAst(Element("C"))
+    atom.charge = ValueAst.Lit(1)
     match atom.charge:
         case ValueAst.Lit(n):
             assert n == 1
@@ -146,9 +147,10 @@ def test_atomast_replace_charge():
             raise AssertionError
 
 
-def test_atomast_replace_spin():
+def test_atomast_set_spin():
     spin = SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2))
-    atom = AtomAst(Element("C")).replace(spin=spin)
+    atom = AtomAst(Element("C"))
+    atom.spin = spin
     assert atom.spin.unpaired._0 == 1
     assert atom.spin.multiplicity._0 == 2
 
@@ -197,8 +199,10 @@ def test_atomast_isotope_mass_int_literal():
             raise AssertionError
 
 
-def test_atomast_replace_charge_int_literal():
-    match AtomAst(Element("C")).replace(charge=1).charge:
+def test_atomast_set_charge_int_literal():
+    atom = AtomAst(Element("C"))
+    atom.charge = 1
+    match atom.charge:
         case ValueAst.Lit(n):
             assert n == 1
         case _:
@@ -305,7 +309,8 @@ def test_molecule_atoms_iter():
 
 
 def test_atomview_charge_through_handle():
-    atom = AtomAst(Element("C")).replace(charge=ValueAst.Lit(-1))
+    atom = AtomAst(Element("C"))
+    atom.charge = ValueAst.Lit(-1)
     mol = MoleculeAst.from_atoms([atom])
     match mol.atoms[AtomId(0)].charge:
         case ValueAst.Lit(n):
@@ -330,7 +335,8 @@ def test_atomast_charge_nested_variant_readable():
     # A from_ast-built nested child (ValueTerm inside ValueAst.Term) must read back
     # as a proper variant from Python, not a base instance — regression for the
     # Py::new-vs-IntoPyObject bug.
-    atom = AtomAst(Element("C")).replace(charge=ValueAst.Term(ValueTerm.Var("h")))
+    atom = AtomAst(Element("C"))
+    atom.charge = ValueAst.Term(ValueTerm.Var("h"))
     match atom.charge:
         case ValueAst.Term(term):
             match term:
@@ -352,3 +358,72 @@ def test_atomast_parse(dsl):
 def test_atomast_parse_error():
     with pytest.raises(ParseError):
         AtomAst.parse("Zz##")
+
+
+def test_atomview_set_charge():
+    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol.atoms[AtomId(0)].charge = ValueAst.Lit(-1)
+    # a fresh view re-reads the molecule, proving the write landed on it
+    match mol.atoms[AtomId(0)].charge:
+        case ValueAst.Lit(n):
+            assert n == -1
+        case _:
+            raise AssertionError
+
+
+def test_atomview_set_charge_int_literal():
+    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol.atoms[AtomId(0)].charge = -1
+    match mol.atoms[AtomId(0)].charge:
+        case ValueAst.Lit(n):
+            assert n == -1
+        case _:
+            raise AssertionError
+
+
+def test_atomview_set_element():
+    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol.atoms[AtomId(0)].element = Element("N")
+    match mol.atoms[AtomId(0)].element:
+        case ElementAst.Lit(e):
+            assert e.symbol == "N"
+        case _:
+            raise AssertionError
+
+
+def test_atomview_set_isotope_mass():
+    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol.atoms[AtomId(0)].isotope_mass = 13
+    match mol.atoms[AtomId(0)].isotope_mass:
+        case IsotopeMassAst.Lit(mass):
+            assert mass == 13
+        case _:
+            raise AssertionError
+
+
+def test_atomview_set_implicit_hydrogens():
+    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol.atoms[AtomId(0)].implicit_hydrogens = ValueAst.Lit(3)
+    match mol.atoms[AtomId(0)].implicit_hydrogens:
+        case ValueAst.Lit(n):
+            assert n == 3
+        case _:
+            raise AssertionError
+
+
+def test_atomview_set_lone_pairs():
+    mol = MoleculeAst.from_atoms([AtomAst(Element("O"))])
+    mol.atoms[AtomId(0)].lone_pairs = ValueAst.Lit(2)
+    match mol.atoms[AtomId(0)].lone_pairs:
+        case ValueAst.Lit(n):
+            assert n == 2
+        case _:
+            raise AssertionError
+
+
+def test_atomview_set_spin():
+    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol.atoms[AtomId(0)].spin = SpinStateAst(1, 2)
+    spin = mol.atoms[AtomId(0)].spin
+    assert spin.unpaired._0 == 1
+    assert spin.multiplicity._0 == 2

@@ -11,10 +11,6 @@ description = "Graph data structures and algorithms for umol."
 [lib]
 bench = false
 
-[[test]]
-name = "property"
-required-features = ["proptest"]
-
 [features]
 proptest = []
 
@@ -27,6 +23,10 @@ criterion = "0.8.1"
 pretty_assertions = "1.4.1"
 proptest = "1.7.0"
 rstest = "0.26.1"
+
+[[test]]
+name = "property"
+required-features = ["proptest"]
 
 [[bench]]
 name = "algorithms"

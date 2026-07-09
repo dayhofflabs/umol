@@ -17,15 +17,14 @@ use umol_ast::ast::{
 };
 use umol_chem::element::Element as ChemElement;
 
-use crate::constraint::AtomConstraintsAst;
+use crate::constraint::{
+    atom_constraints_asdict, AtomConstraintsAst, AtomConstraintsView, ConstraintsBacking,
+};
 use crate::convert::into_py_variant;
 use crate::element::Element;
+use crate::error::parse_error;
 use crate::molecule::MoleculeAst;
 use crate::value::{MemOp, ValueArg, ValueAst};
-
-fn atom_id_error() -> PyErr {
-    PyIndexError::new_err("atom id out of range")
-}
 
 /// Element expression: undetermined, a single element, a finite element set, a
 /// complement set (`!{…}`), or a variable with an optional membership restriction.
@@ -197,7 +196,7 @@ impl AtomAst {
     /// Parse an atom-DSL string (e.g. `"C#c-1#v4"`) into an `AtomAst`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
-        AstAtomAst::from_str(s).map(Self).map_err(crate::error::parse_error)
+        AstAtomAst::from_str(s).map(Self).map_err(parse_error)
     }
 
     fn __str__(&self) -> String {
@@ -213,9 +212,19 @@ impl AtomAst {
         ElementAst::from_ast(&self.0.element)
     }
 
+    #[setter]
+    fn set_element(&mut self, py: Python<'_>, value: ElementArg) {
+        self.0.element = value.to_ast(py);
+    }
+
     #[getter]
     fn isotope_mass(&self) -> IsotopeMassAst {
         IsotopeMassAst::from_ast(&self.0.isotope_mass)
+    }
+
+    #[setter]
+    fn set_isotope_mass(&mut self, py: Python<'_>, value: IsotopeMassArg) {
+        self.0.isotope_mass = value.to_ast(py);
     }
 
     #[getter]
@@ -223,14 +232,31 @@ impl AtomAst {
         ValueAst::from_ast(py, &self.0.charge)
     }
 
+    #[setter]
+    fn set_charge(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0.charge = value.to_ast(py);
+    }
+
+
     #[getter]
     fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<ValueAst> {
         ValueAst::from_ast(py, &self.0.implicit_hydrogens)
     }
 
+    #[setter]
+    fn set_implicit_hydrogens(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0.implicit_hydrogens = value.to_ast(py);
+    }
+
+
     #[getter]
     fn lone_pairs(&self, py: Python<'_>) -> PyResult<ValueAst> {
         ValueAst::from_ast(py, &self.0.lone_pairs)
+    }
+
+    #[setter]
+    fn set_lone_pairs(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0.lone_pairs = value.to_ast(py);
     }
 
     #[getter]
@@ -238,41 +264,18 @@ impl AtomAst {
         SpinStateAst::from_ast(py, &self.0.spin)
     }
 
-    #[getter]
-    fn constraints(&self) -> AtomConstraintsAst {
-        AtomConstraintsAst::from_inner(self.0.constraints.clone())
+    #[setter]
+    fn set_spin(&mut self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
+        self.0.spin = value.to_ast(py);
     }
 
-    /// A copy with the given fields replaced — the Python-idiomatic single-copy
-    /// builder (one clone per call, vs a `with_*` chain that copies at every step).
-    /// `constraints` replaces the whole set (wipe-and-set), not add.
-    #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (*, element=None, isotope_mass=None, charge=None, implicit_hydrogens=None, lone_pairs=None, spin=None, constraints=None))]
-    fn replace(
-        &self,
-        py: Python<'_>,
-        element: Option<ElementArg>,
-        isotope_mass: Option<IsotopeMassArg>,
-        charge: Option<ValueArg>,
-        implicit_hydrogens: Option<ValueArg>,
-        lone_pairs: Option<ValueArg>,
-        spin: Option<PyRef<'_, SpinStateAst>>,
-        constraints: Option<Py<AtomConstraintsAst>>,
-    ) -> Self {
-        let mut atom = self.0.clone();
-        if let Some(element) = element {
-            atom = atom.with_element(element.to_ast(py));
+    /// The atom's constraints as a live handle onto this atom: reads borrow the
+    /// current state, mutators write through to the atom in place.
+    #[getter]
+    fn constraints(slf: Py<Self>) -> AtomConstraintsView {
+        AtomConstraintsView {
+            backing: ConstraintsBacking::Atom(slf),
         }
-        AtomAst(apply_fields(
-            atom,
-            py,
-            isotope_mass,
-            charge,
-            implicit_hydrogens,
-            lone_pairs,
-            spin,
-            constraints,
-        ))
     }
 
     /// The fields as a dict keyed by field name; values are the field mirrors.
@@ -284,7 +287,10 @@ impl AtomAst {
         dict.set_item("implicit_hydrogens", self.implicit_hydrogens(py)?)?;
         dict.set_item("lone_pairs", self.lone_pairs(py)?)?;
         dict.set_item("spin", self.spin(py)?)?;
-        dict.set_item("constraints", self.constraints().asdict(py)?)?;
+        dict.set_item(
+            "constraints",
+            atom_constraints_asdict(py, &self.0.constraints)?,
+        )?;
         Ok(dict)
     }
 }
@@ -391,6 +397,19 @@ impl AtomAst {
     pub(crate) fn inner(&self) -> &AstAtomAst {
         &self.0
     }
+
+    /// Mutable access to the wrapped AST atom — write access for the atom-backed
+    /// constraints view.
+    pub(crate) fn inner_mut(&mut self) -> &mut AstAtomAst {
+        &mut self.0
+    }
+
+    /// Wrap an AST atom (the hold-the-value `from_inner` bridge, paired with
+    /// `inner`). Test-only — in-crate construction wraps `AtomAst(..)` directly.
+    #[cfg(test)]
+    pub(crate) fn from_inner(atom: AstAtomAst) -> Self {
+        AtomAst(atom)
+    }
 }
 
 /// A view of one atom within a molecule: a handle to the molecule plus the atom's
@@ -407,7 +426,7 @@ impl AtomView {
             .atoms()
             .get(self.id)
             .map(|view| view.ast)
-            .ok_or_else(atom_id_error)
+            .ok_or_else(|| PyIndexError::new_err("atom id out of range"))
     }
 }
 
@@ -424,6 +443,16 @@ impl AtomView {
         Ok(ElementAst::from_ast(&self.atom(molecule.inner())?.element))
     }
 
+    #[setter]
+    fn set_element(&self, py: Python<'_>, value: ElementArg) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .atom_mut(self.id)
+            .ast
+            .element = value.to_ast(py);
+    }
+
     #[getter]
     fn isotope_mass(&self, py: Python<'_>) -> PyResult<IsotopeMassAst> {
         let molecule = self.owner.bind(py).borrow();
@@ -432,10 +461,30 @@ impl AtomView {
         ))
     }
 
+    #[setter]
+    fn set_isotope_mass(&self, py: Python<'_>, value: IsotopeMassArg) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .atom_mut(self.id)
+            .ast
+            .isotope_mass = value.to_ast(py);
+    }
+
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
         let molecule = self.owner.bind(py).borrow();
         ValueAst::from_ast(py, &self.atom(molecule.inner())?.charge)
+    }
+
+    #[setter]
+    fn set_charge(&self, py: Python<'_>, value: ValueArg) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .atom_mut(self.id)
+            .ast
+            .charge = value.to_ast(py);
     }
 
     #[getter]
@@ -444,10 +493,30 @@ impl AtomView {
         ValueAst::from_ast(py, &self.atom(molecule.inner())?.implicit_hydrogens)
     }
 
+    #[setter]
+    fn set_implicit_hydrogens(&self, py: Python<'_>, value: ValueArg) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .atom_mut(self.id)
+            .ast
+            .implicit_hydrogens = value.to_ast(py);
+    }
+
     #[getter]
     fn lone_pairs(&self, py: Python<'_>) -> PyResult<ValueAst> {
         let molecule = self.owner.bind(py).borrow();
         ValueAst::from_ast(py, &self.atom(molecule.inner())?.lone_pairs)
+    }
+
+    #[setter]
+    fn set_lone_pairs(&self, py: Python<'_>, value: ValueArg) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .atom_mut(self.id)
+            .ast
+            .lone_pairs = value.to_ast(py);
     }
 
     #[getter]
@@ -456,12 +525,26 @@ impl AtomView {
         SpinStateAst::from_ast(py, &self.atom(molecule.inner())?.spin)
     }
 
+    #[setter]
+    fn set_spin(&self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .atom_mut(self.id)
+            .ast
+            .spin = value.to_ast(py);
+    }
+
+    /// The atom's constraints as a live handle onto the molecule: reads borrow the
+    /// current state, mutators write through to the atom in place.
     #[getter]
-    fn constraints(&self, py: Python<'_>) -> PyResult<AtomConstraintsAst> {
-        let molecule = self.owner.bind(py).borrow();
-        Ok(AtomConstraintsAst::from_inner(
-            self.atom(molecule.inner())?.constraints.clone(),
-        ))
+    fn constraints(&self, py: Python<'_>) -> AtomConstraintsView {
+        AtomConstraintsView {
+            backing: ConstraintsBacking::Molecule {
+                owner: self.owner.clone_ref(py),
+                id: self.id,
+            },
+        }
     }
 }
 
@@ -485,7 +568,7 @@ impl AtomViews {
                 id: id.0,
             })
         } else {
-            Err(atom_id_error())
+            Err(PyIndexError::new_err("atom id out of range"))
         }
     }
 
@@ -617,6 +700,101 @@ mod tests {
     }
 
     #[rstest]
+    fn test_atom_view_set_charge() {
+        Python::attach(|py| {
+            let owner = carbon_oxygen(py);
+            let view = AtomView {
+                owner: owner.clone_ref(py),
+                id: AstAtomId(0),
+            };
+            view.set_charge(py, ValueArg::Lit(-1));
+            let fresh = AtomView {
+                owner,
+                id: AstAtomId(0),
+            };
+            match fresh.charge(py).unwrap() {
+                ValueAst::Lit(n) => assert_eq!(n, -1),
+                _ => panic!("expected Lit"),
+            }
+        });
+    }
+
+    #[rstest]
+    fn test_atom_view_set_element() {
+        Python::attach(|py| {
+            let owner = carbon_oxygen(py);
+            let view = AtomView {
+                owner: owner.clone_ref(py),
+                id: AstAtomId(0),
+            };
+            view.set_element(py, ElementArg::Lit(Element::from(ChemElement::N)));
+            let fresh = AtomView {
+                owner,
+                id: AstAtomId(0),
+            };
+            match fresh.element(py).unwrap() {
+                ElementAst::Lit(e) => assert_eq!(ChemElement::from(&e), ChemElement::N),
+                _ => panic!("expected Lit"),
+            }
+        });
+    }
+
+    #[rstest]
+    fn test_atom_view_set_isotope_mass() {
+        Python::attach(|py| {
+            let owner = carbon_oxygen(py);
+            let view = AtomView {
+                owner: owner.clone_ref(py),
+                id: AstAtomId(0),
+            };
+            view.set_isotope_mass(py, IsotopeMassArg::Lit(13));
+            let fresh = AtomView {
+                owner,
+                id: AstAtomId(0),
+            };
+            match fresh.isotope_mass(py).unwrap() {
+                IsotopeMassAst::Lit(mass) => assert_eq!(mass, 13),
+                _ => panic!("expected Lit"),
+            }
+        });
+    }
+
+    #[rstest]
+    fn test_atom_view_set_spin() {
+        Python::attach(|py| {
+            let owner = carbon_oxygen(py);
+            let view = AtomView {
+                owner: owner.clone_ref(py),
+                id: AstAtomId(0),
+            };
+            let spin = Py::new(
+                py,
+                SpinStateAst::from_ast(
+                    py,
+                    &AstSpinStateAst {
+                        unpaired: AstValueAst::Lit(1),
+                        multiplicity: AstValueAst::Lit(2),
+                    },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            view.set_spin(py, spin.bind(py).borrow());
+            let fresh = AtomView {
+                owner,
+                id: AstAtomId(0),
+            };
+            assert_eq!(
+                fresh.spin(py).unwrap().to_ast(py),
+                AstSpinStateAst {
+                    unpaired: AstValueAst::Lit(1),
+                    multiplicity: AstValueAst::Lit(2),
+                }
+            );
+        });
+    }
+
+    #[rstest]
     fn test_atom_views_len_and_getitem() {
         Python::attach(|py| {
             let views = AtomViews {
@@ -637,7 +815,7 @@ mod tests {
             AstAtomAst::from_element(ChemElement::C)
                 .with_constraint(AstAtomConstraintAst::valence(4)),
         );
-        assert_eq!(atom.constraints().inner().len(), 1);
+        assert_eq!(atom.inner().constraints.len(), 1);
     }
 
     #[rstest]
@@ -660,14 +838,14 @@ mod tests {
     #[rstest]
     fn test_atom_view_constraints() {
         Python::attach(|py| {
-            let atom = AstAtomAst::from_element(ChemElement::C)
-                .with_constraint(AstAtomConstraintAst::valence(4));
-            let molecule = AstMoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
             let view = AtomView {
-                owner: Py::new(py, MoleculeAst::from_inner(molecule)).unwrap(),
-                id: AstAtomId(0),
+                owner: carbon_oxygen(py),
+                id: AstAtomId(1),
             };
-            assert_eq!(view.constraints(py).unwrap().inner().len(), 1);
+            match view.constraints(py).backing {
+                ConstraintsBacking::Molecule { id, .. } => assert_eq!(id, AstAtomId(1)),
+                _ => panic!("expected molecule-backed view"),
+            }
         });
     }
 }

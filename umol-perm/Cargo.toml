@@ -17,10 +17,6 @@ description = "Pure permutation and coset algebra for umol stereochemistry."
 [lib]
 bench = false
 
-[[test]]
-name = "property"
-required-features = ["proptest"]
-
 [features]
 proptest = []
 
@@ -30,6 +26,10 @@ proptest = []
 pretty_assertions = "1.4.1"
 proptest = "1.6"
 rstest = "0.26.1"
+
+[[test]]
+name = "property"
+required-features = ["proptest"]
 
 [lints.clippy]
 absolute_paths = "warn"

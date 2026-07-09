@@ -6,39 +6,12 @@ edition = "2021"
 rust-version.workspace = true
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rappoport/umol"
-keywords = [
-    "chemistry",
-    "cheminformatics",
-    "file formats",
-    "smiles",
-    "molfile",
-]
+keywords = ["chemistry", "cheminformatics", "file formats", "smiles", "molfile"]
 description = "Molecular file-format parsers (SMILES, CTFile) and the TableIR boundary type for umol."
 autotests = false
 
 [lib]
 bench = false
-
-[[test]]
-name = "mol_parsing"
-
-[[test]]
-name = "sdf_parsing"
-
-[[test]]
-name = "smiles_parsing"
-
-[[test]]
-name = "smiles_property"
-required-features = ["proptest"]
-
-[[bench]]
-name = "mol_parsing"
-harness = false
-
-[[bench]]
-name = "smiles_parsing"
-harness = false
 
 [features]
 conformance = []
@@ -70,3 +43,28 @@ pretty_assertions = "1.4.1"
 proptest = "1.7.0"
 rstest = "0.26.1"
 serde = { version = "1.0.221", features = ["derive"] }
+
+[[test]]
+name = "mol_parsing"
+
+[[test]]
+name = "sdf_parsing"
+
+[[test]]
+name = "smiles_parsing"
+
+[[test]]
+name = "smiles_property"
+required-features = ["proptest"]
+
+[[bench]]
+name = "mol_parsing"
+harness = false
+
+[[bench]]
+name = "smiles_parsing"
+harness = false
+
+[lints.clippy]
+absolute_paths = "warn"
+mod_module_files = "warn"

@@ -1,6 +1,6 @@
 import pytest
 
-from umol import Element
+from umol import E, Element
 
 
 def test_element_from_symbol():
@@ -34,3 +34,12 @@ def test_element_eq_hash():
 
 def test_element_repr():
     assert repr(Element("C")) == "Element('C')"
+
+
+def test_e_shorthand():
+    assert E.H == Element("H")
+    assert E.As == Element("As")
+    assert E.Cl.symbol == "Cl"
+    assert E["Fe"] == Element("Fe")
+    with pytest.raises(AttributeError):
+        E.Xx
