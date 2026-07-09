@@ -181,6 +181,26 @@ impl TetrahedralStereoAst {
     }
 }
 
+/// Tetrahedral stereo configuration shorthand: counterclockwise (`Ccw`, coset
+/// `Th0`) or clockwise (`Cw`, coset `Th1`).
+#[pyclass(eq, from_py_object)]
+#[derive(Clone, Copy, PartialEq)]
+pub enum TetrahedralStereo {
+    Ccw,
+    Cw,
+}
+
+impl TetrahedralStereo {
+    /// The tetrahedral-stereo AST for this configuration (a literal coset).
+    pub(crate) fn to_ast(self) -> AstTetrahedralStereoAst {
+        let coset = match self {
+            TetrahedralStereo::Ccw => AstStereoCosetAst::Lit(0),
+            TetrahedralStereo::Cw => AstStereoCosetAst::Lit(1),
+        };
+        AstTetrahedralStereoAst::Stereo(coset)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -241,5 +261,15 @@ mod tests {
                 ast
             );
         });
+    }
+
+    #[rstest]
+    #[case(TetrahedralStereo::Ccw, AstStereoCosetAst::Lit(0))]
+    #[case(TetrahedralStereo::Cw, AstStereoCosetAst::Lit(1))]
+    fn test_tetrahedral_stereo_to_ast(
+        #[case] config: TetrahedralStereo,
+        #[case] coset: AstStereoCosetAst,
+    ) {
+        assert_eq!(config.to_ast(), AstTetrahedralStereoAst::Stereo(coset));
     }
 }

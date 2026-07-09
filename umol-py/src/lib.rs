@@ -5,15 +5,15 @@ use pyo3::prelude::*;
 
 #[cfg(feature = "graph")]
 use crate::{
-    atom::{AtomAst, AtomId, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst},
+    atom::{AtomAst, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst},
     constraint::{
         AromaticValenceAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst,
-        AtomConstraintsView, MulticenterValenceAst, RingMembershipAst, RingScope,
+        AtomConstraintsView, MulticenterValenceAst, RingMembershipAst, RingScope, RingSizeCounts,
     },
     element::Element,
     error::ParseError,
     molecule::MoleculeAst,
-    stereo::{Permutation, StereoCosetAst, StereoTerm, TetrahedralStereoAst},
+    stereo::{Permutation, StereoCosetAst, StereoTerm, TetrahedralStereo, TetrahedralStereoAst},
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
 };
 
@@ -53,7 +53,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<IsotopeMassAst>()?;
         module.add_class::<SpinStateAst>()?;
         module.add_class::<AtomAst>()?;
-        module.add_class::<AtomId>()?;
         module.add_class::<AtomView>()?;
         module.add_class::<AtomViews>()?;
         module.add_class::<AromaticValenceAst>()?;
@@ -64,10 +63,12 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AtomConstraintKey>()?;
         module.add_class::<AtomConstraintsAst>()?;
         module.add_class::<AtomConstraintsView>()?;
+        module.add_class::<RingSizeCounts>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;
         module.add_class::<StereoCosetAst>()?;
         module.add_class::<TetrahedralStereoAst>()?;
+        module.add_class::<TetrahedralStereo>()?;
     }
     Ok(())
 }

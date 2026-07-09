@@ -1,5 +1,5 @@
 //! Atom-field value types and the atom read surface mirroring `umol_ast::ast`:
-//! `ElementAst`, `IsotopeMassAst`, `SpinStateAst`, `AtomAst`, `AtomId`, and the
+//! `ElementAst`, `IsotopeMassAst`, `SpinStateAst`, `AtomAst`, and the
 //! `AtomView`/`AtomViews` handle views.
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
@@ -11,7 +11,7 @@ use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_ast::ast::{
-    AtomAst as AstAtomAst, AtomId as AstAtomId, ElementAst as AstElementAst,
+    AsLit, AtomAst as AstAtomAst, AtomId as AstAtomId, ElementAst as AstElementAst,
     IsotopeMassAst as AstIsotopeMassAst, MoleculeAst as AstMoleculeAst,
     SpinStateAst as AstSpinStateAst,
 };
@@ -35,6 +35,15 @@ pub enum ElementAst {
     LitSet(BTreeSet<Element>),
     NotSet(BTreeSet<Element>),
     Var(String, Option<(MemOp, BTreeSet<Element>)>),
+}
+
+#[pymethods]
+impl ElementAst {
+    /// The single element this resolves to, or `None` when it is not a bare
+    /// literal (undetermined, a set, a complement, or a variable).
+    fn as_lit(&self) -> Option<Element> {
+        self.to_ast().as_lit().map(Element::from)
+    }
 }
 
 impl ElementAst {
@@ -92,6 +101,15 @@ pub enum IsotopeMassAst {
     Lit(u32),
     LitSet(BTreeSet<u32>),
     Var(String, Option<BTreeSet<u32>>),
+}
+
+#[pymethods]
+impl IsotopeMassAst {
+    /// The single mass number this resolves to, or `None` when it is not a bare
+    /// literal (undetermined, the natural mixture, a set, or a variable).
+    fn as_lit(&self) -> Option<u32> {
+        self.to_ast().as_lit()
+    }
 }
 
 impl IsotopeMassAst {
@@ -364,34 +382,6 @@ fn apply_fields(
     atom
 }
 
-/// An atom index into a molecule.
-#[pyclass(eq, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct AtomId(AstAtomId);
-
-impl From<AstAtomId> for AtomId {
-    fn from(id: AstAtomId) -> Self {
-        AtomId(id)
-    }
-}
-
-#[pymethods]
-impl AtomId {
-    #[new]
-    fn new(index: u32) -> Self {
-        AtomId(AstAtomId(index))
-    }
-
-    #[getter]
-    fn index(&self) -> u32 {
-        self.0 .0
-    }
-
-    fn __repr__(&self) -> String {
-        format!("AtomId({})", self.0 .0)
-    }
-}
-
 impl AtomAst {
     /// The wrapped AST atom — read access for molecule construction.
     pub(crate) fn inner(&self) -> &AstAtomAst {
@@ -433,8 +423,8 @@ impl AtomView {
 #[pymethods]
 impl AtomView {
     #[getter]
-    fn id(&self) -> AtomId {
-        AtomId(self.id)
+    fn id(&self) -> u32 {
+        self.id.0
     }
 
     #[getter]
@@ -548,7 +538,7 @@ impl AtomView {
     }
 }
 
-/// The atoms of a molecule, indexed by `AtomId`.
+/// The atoms of a molecule, indexed by integer position.
 #[pyclass]
 pub struct AtomViews {
     owner: Py<MoleculeAst>,
@@ -560,24 +550,36 @@ impl AtomViews {
         self.owner.bind(py).borrow().inner().atoms().count()
     }
 
-    fn __getitem__(&self, py: Python<'_>, id: AtomId) -> PyResult<AtomView> {
+    fn __getitem__(&self, py: Python<'_>, index: usize) -> PyResult<AtomView> {
         let molecule = self.owner.bind(py).borrow();
-        if molecule.inner().atoms().contains(id.0) {
+        let id = AstAtomId(index as u32);
+        if molecule.inner().atoms().contains(id) {
             Ok(AtomView {
                 owner: self.owner.clone_ref(py),
-                id: id.0,
+                id,
             })
         } else {
             Err(PyIndexError::new_err("atom id out of range"))
         }
     }
 
-    /// The atom at `id`, or `None` if out of range.
-    fn get(&self, py: Python<'_>, id: AtomId) -> Option<AtomView> {
+    /// Replace the whole atom at `index` in place.
+    fn __setitem__(&self, py: Python<'_>, index: usize, atom: PyRef<'_, AtomAst>) -> PyResult<()> {
+        let mut molecule = self.owner.borrow_mut(py);
+        if index >= molecule.inner().atoms().count() {
+            return Err(PyIndexError::new_err("atom id out of range"));
+        }
+        *molecule.inner_mut().atom_mut(AstAtomId(index as u32)).ast = atom.inner().clone();
+        Ok(())
+    }
+
+    /// The atom at `index`, or `None` if out of range.
+    fn get(&self, py: Python<'_>, index: usize) -> Option<AtomView> {
         let molecule = self.owner.bind(py).borrow();
-        molecule.inner().atoms().contains(id.0).then(|| AtomView {
+        let id = AstAtomId(index as u32);
+        molecule.inner().atoms().contains(id).then(|| AtomView {
             owner: self.owner.clone_ref(py),
-            id: id.0,
+            id,
         })
     }
 
@@ -648,6 +650,17 @@ mod tests {
     }
 
     #[rstest]
+    #[case(AstElementAst::Lit(ChemElement::C), Some(ChemElement::C))]
+    #[case(AstElementAst::Undetermined, None)]
+    #[case(AstElementAst::LitSet(Box::new(BTreeSet::from([ChemElement::C, ChemElement::N]))), None)]
+    fn test_element_ast_as_lit(#[case] ast: AstElementAst, #[case] expected: Option<ChemElement>) {
+        let got = ElementAst::from_ast(&ast)
+            .as_lit()
+            .map(|e| ChemElement::from(&e));
+        assert_eq!(got, expected);
+    }
+
+    #[rstest]
     #[case(AstIsotopeMassAst::Undetermined)]
     #[case(AstIsotopeMassAst::Natural)]
     #[case(AstIsotopeMassAst::Lit(13))]
@@ -659,6 +672,14 @@ mod tests {
     ))))]
     fn test_isotope_mass_ast_roundtrip(#[case] ast: AstIsotopeMassAst) {
         assert_eq!(IsotopeMassAst::from_ast(&ast).to_ast(), ast);
+    }
+
+    #[rstest]
+    #[case(AstIsotopeMassAst::Lit(13), Some(13))]
+    #[case(AstIsotopeMassAst::Natural, None)]
+    #[case(AstIsotopeMassAst::Undetermined, None)]
+    fn test_isotope_mass_ast_as_lit(#[case] ast: AstIsotopeMassAst, #[case] expected: Option<u32>) {
+        assert_eq!(IsotopeMassAst::from_ast(&ast).as_lit(), expected);
     }
 
     #[rstest]
@@ -691,7 +712,7 @@ mod tests {
                 owner: carbon_oxygen(py),
                 id: AstAtomId(1),
             };
-            assert_eq!(view.id().index(), 1);
+            assert_eq!(view.id(), 1);
             match view.element(py).unwrap() {
                 ElementAst::Lit(e) => assert_eq!(ChemElement::from(&e), ChemElement::O),
                 _ => panic!("expected Lit"),
@@ -801,11 +822,38 @@ mod tests {
                 owner: carbon_oxygen(py),
             };
             assert_eq!(views.__len__(py), 2);
-            assert_eq!(
-                views.__getitem__(py, AtomId::new(0)).unwrap().id().index(),
-                0
-            );
-            assert!(views.__getitem__(py, AtomId::new(5)).is_err());
+            assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
+            assert!(views.__getitem__(py, 5).is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_atom_views_setitem() {
+        Python::attach(|py| {
+            let views = AtomViews {
+                owner: carbon_oxygen(py),
+            };
+            let nitrogen =
+                Py::new(py, AtomAst::from_inner(AstAtomAst::from_element(ChemElement::N))).unwrap();
+            views.__setitem__(py, 0, nitrogen.bind(py).borrow()).unwrap();
+            match views.__getitem__(py, 0).unwrap().element(py).unwrap() {
+                ElementAst::Lit(e) => assert_eq!(ChemElement::from(&e), ChemElement::N),
+                _ => panic!("expected Lit"),
+            }
+        });
+    }
+
+    #[rstest]
+    fn test_atom_views_setitem_error() {
+        Python::attach(|py| {
+            let views = AtomViews {
+                owner: carbon_oxygen(py),
+            };
+            let nitrogen =
+                Py::new(py, AtomAst::from_inner(AstAtomAst::from_element(ChemElement::N))).unwrap();
+            assert!(views
+                .__setitem__(py, 5, nitrogen.bind(py).borrow())
+                .is_err());
         });
     }
 

@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    MemOp as AstMemOp, RelOp as AstRelOp, ValueAst as AstValueAst,
+    AsLit, MemOp as AstMemOp, RelOp as AstRelOp, ValueAst as AstValueAst,
     ValuePredicate as AstValuePredicate, ValueTerm as AstValueTerm,
 };
 
@@ -220,6 +220,15 @@ pub enum ValueAst {
     Predicate(Py<ValuePredicate>),
 }
 
+#[pymethods]
+impl ValueAst {
+    /// The concrete integer this resolves to, or `None` when it is not a bare
+    /// literal (undetermined, a set, a range, or an expression).
+    fn as_lit(&self, py: Python<'_>) -> Option<i64> {
+        self.to_ast(py).as_lit()
+    }
+}
+
 impl ValueAst {
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstValueAst) -> PyResult<ValueAst> {
         Ok(match ast {
@@ -256,7 +265,7 @@ impl ValueAst {
 /// on the Rust builders. The `*Arg` convention for binding coercion inputs (`*Input`
 /// is the DSL side); shared by the atom fields, spin, and ring-membership count.
 #[derive(FromPyObject)]
-pub(crate) enum ValueArg {
+pub enum ValueArg {
     Ast(Py<ValueAst>),
     Lit(i64),
 }
@@ -276,6 +285,19 @@ impl ValueArg {
             ValueArg::Ast(value) => Ok(value.clone_ref(py)),
             ValueArg::Lit(number) => into_py_variant(py, ValueAst::Lit(*number)),
         }
+    }
+}
+
+/// `IntoPyObject` for `&ValueArg` so it can be a complex-enum field: constructors
+/// (`AromaticValenceAst.Aromatic(1)`) coerce `int | ValueAst` in, and the field
+/// reads back as a `ValueAst`.
+impl<'py> IntoPyObject<'py> for &ValueArg {
+    type Target = ValueAst;
+    type Output = Bound<'py, ValueAst>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Bound<'py, ValueAst>> {
+        Ok(self.to_py(py)?.into_bound(py))
     }
 }
 
@@ -351,6 +373,18 @@ mod tests {
         Python::attach(|py| {
             let mirror = ValueAst::from_ast(py, &ast).unwrap();
             assert_eq!(mirror.to_ast(py), ast);
+        });
+    }
+
+    #[rstest]
+    #[case(AstValueAst::Lit(4), Some(4))]
+    #[case(AstValueAst::Lit(-1), Some(-1))]
+    #[case(AstValueAst::Undetermined, None)]
+    #[case(AstValueAst::RangeFrom(1), None)]
+    #[case(AstValueAst::LitSet(Box::new(BTreeSet::from([1, 2]))), None)]
+    fn test_value_ast_as_lit(#[case] ast: AstValueAst, #[case] expected: Option<i64>) {
+        Python::attach(|py| {
+            assert_eq!(ValueAst::from_ast(py, &ast).unwrap().as_lit(py), expected);
         });
     }
 }

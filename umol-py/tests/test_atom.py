@@ -5,7 +5,6 @@ from umol import (
     AtomConstraintAst,
     AtomConstraintKey,
     AtomConstraintsAst,
-    AtomId,
     Element,
     ElementAst,
     IsotopeMassAst,
@@ -232,7 +231,7 @@ def test_atomview_constraints():
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
     )
     mol = MoleculeAst.from_atoms([atom])
-    assert len(mol.atoms[AtomId(0)].constraints) == 1
+    assert len(mol.atoms[0].constraints) == 1
 
 
 def test_atomast_asdict():
@@ -285,8 +284,8 @@ def test_molecule_atoms_len():
 
 
 def test_molecule_atoms_getitem():
-    view = carbon_oxygen().atoms[AtomId(1)]
-    assert view.id == AtomId(1)
+    view = carbon_oxygen().atoms[1]
+    assert view.id == 1
     match view.element:
         case ElementAst.Lit(e):
             assert e.symbol == "O"
@@ -296,7 +295,22 @@ def test_molecule_atoms_getitem():
 
 def test_molecule_atoms_getitem_out_of_range():
     with pytest.raises(IndexError):
-        carbon_oxygen().atoms[AtomId(5)]
+        carbon_oxygen().atoms[5]
+
+
+def test_molecule_atoms_setitem():
+    mol = carbon_oxygen()
+    mol.atoms[0] = AtomAst(Element("N"))
+    match mol.atoms[0].element:
+        case ElementAst.Lit(e):
+            assert e.symbol == "N"
+        case _:
+            raise AssertionError
+
+
+def test_molecule_atoms_setitem_out_of_range():
+    with pytest.raises(IndexError):
+        carbon_oxygen().atoms[5] = AtomAst(Element("N"))
 
 
 def test_molecule_atoms_iter():
@@ -312,23 +326,13 @@ def test_atomview_charge_through_handle():
     atom = AtomAst(Element("C"))
     atom.charge = ValueAst.Lit(-1)
     mol = MoleculeAst.from_atoms([atom])
-    match mol.atoms[AtomId(0)].charge:
+    match mol.atoms[0].charge:
         case ValueAst.Lit(n):
             assert n == -1
         case _:
             raise AssertionError
 
 
-def test_atomid_index_and_repr():
-    aid = AtomId(3)
-    assert aid.index == 3
-    assert repr(aid) == "AtomId(3)"
-
-
-def test_atomid_eq_hash():
-    assert AtomId(3) == AtomId(3)
-    assert AtomId(3) != AtomId(4)
-    assert len({AtomId(3), AtomId(3)}) == 1
 
 
 def test_atomast_charge_nested_variant_readable():
@@ -362,9 +366,9 @@ def test_atomast_parse_error():
 
 def test_atomview_set_charge():
     mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
-    mol.atoms[AtomId(0)].charge = ValueAst.Lit(-1)
+    mol.atoms[0].charge = ValueAst.Lit(-1)
     # a fresh view re-reads the molecule, proving the write landed on it
-    match mol.atoms[AtomId(0)].charge:
+    match mol.atoms[0].charge:
         case ValueAst.Lit(n):
             assert n == -1
         case _:
@@ -373,8 +377,8 @@ def test_atomview_set_charge():
 
 def test_atomview_set_charge_int_literal():
     mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
-    mol.atoms[AtomId(0)].charge = -1
-    match mol.atoms[AtomId(0)].charge:
+    mol.atoms[0].charge = -1
+    match mol.atoms[0].charge:
         case ValueAst.Lit(n):
             assert n == -1
         case _:
@@ -383,8 +387,8 @@ def test_atomview_set_charge_int_literal():
 
 def test_atomview_set_element():
     mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
-    mol.atoms[AtomId(0)].element = Element("N")
-    match mol.atoms[AtomId(0)].element:
+    mol.atoms[0].element = Element("N")
+    match mol.atoms[0].element:
         case ElementAst.Lit(e):
             assert e.symbol == "N"
         case _:
@@ -393,8 +397,8 @@ def test_atomview_set_element():
 
 def test_atomview_set_isotope_mass():
     mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
-    mol.atoms[AtomId(0)].isotope_mass = 13
-    match mol.atoms[AtomId(0)].isotope_mass:
+    mol.atoms[0].isotope_mass = 13
+    match mol.atoms[0].isotope_mass:
         case IsotopeMassAst.Lit(mass):
             assert mass == 13
         case _:
@@ -403,8 +407,8 @@ def test_atomview_set_isotope_mass():
 
 def test_atomview_set_implicit_hydrogens():
     mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
-    mol.atoms[AtomId(0)].implicit_hydrogens = ValueAst.Lit(3)
-    match mol.atoms[AtomId(0)].implicit_hydrogens:
+    mol.atoms[0].implicit_hydrogens = ValueAst.Lit(3)
+    match mol.atoms[0].implicit_hydrogens:
         case ValueAst.Lit(n):
             assert n == 3
         case _:
@@ -413,8 +417,8 @@ def test_atomview_set_implicit_hydrogens():
 
 def test_atomview_set_lone_pairs():
     mol = MoleculeAst.from_atoms([AtomAst(Element("O"))])
-    mol.atoms[AtomId(0)].lone_pairs = ValueAst.Lit(2)
-    match mol.atoms[AtomId(0)].lone_pairs:
+    mol.atoms[0].lone_pairs = ValueAst.Lit(2)
+    match mol.atoms[0].lone_pairs:
         case ValueAst.Lit(n):
             assert n == 2
         case _:
@@ -423,7 +427,22 @@ def test_atomview_set_lone_pairs():
 
 def test_atomview_set_spin():
     mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
-    mol.atoms[AtomId(0)].spin = SpinStateAst(1, 2)
-    spin = mol.atoms[AtomId(0)].spin
+    mol.atoms[0].spin = SpinStateAst(1, 2)
+    spin = mol.atoms[0].spin
     assert spin.unpaired._0 == 1
     assert spin.multiplicity._0 == 2
+
+
+def test_elementast_as_lit():
+    assert ElementAst.Lit(Element("C")).as_lit().symbol == "C"
+    assert ElementAst.Undetermined().as_lit() is None
+
+
+def test_isotopemassast_as_lit():
+    assert IsotopeMassAst.Lit(13).as_lit() == 13
+    assert IsotopeMassAst.Natural().as_lit() is None
+
+
+def test_valueast_as_lit():
+    assert ValueAst.Lit(4).as_lit() == 4
+    assert ValueAst.Undetermined().as_lit() is None

@@ -35,7 +35,7 @@ impl MoleculeAst {
         self.0.atoms().count() as u32
     }
 
-    /// The atoms, indexed by `AtomId`.
+    /// The atoms, indexed by integer position.
     #[getter]
     fn atoms(slf: Py<Self>) -> AtomViews {
         AtomViews::new(slf)

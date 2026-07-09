@@ -678,4 +678,15 @@ these change only umol-py, not umol-ast).
    `NameError`). Works because every IUPAC symbol is a valid identifier. Tradeoff: the
    dynamic `__getattr__` has no IDE completion/type-checking without a `.pyi` stub
    (or generate the 118 as real constants for discoverability). No effect on the
-   binding; decide the form with alpha users.
+   binding; decide the form with alpha users. *(done 2026-07-08, dynamic
+   `__getattr__` form as `umol.E`; the `.pyi`-stub / 118-constants completion option
+   remains open.)*
+6. **Structural atom ops on `AtomViews` — `append` / `extend`** (possible; not settled).
+   `mol.atoms.append(atom)` / `mol.atoms.extend(iterable_of_AtomAst)` add graph nodes,
+   so they are *structural* — routed through `MoleculeBuilder` / `edit()` (one builder
+   cycle; `extend` batches to a single cycle rather than one-per-atom), not the in-place
+   `atom_mut` path. Appended atoms are isolated (bonding is a separate op). `extend`
+   takes any iterable (Python idiom). `__delitem__` / remove is deferred — deleting an
+   atom dangles its bonds (RDKit `RemoveAtom` semantics), needs the bond slice first.
+   Together with `__setitem__` (whole-atom replace) this makes `AtomViews` a
+   mutable-sequence facade.
