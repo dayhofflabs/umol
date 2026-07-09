@@ -140,3 +140,4 @@
 | [136-dpo-primitives-2026-07-04.md](136-dpo-primitives-2026-07-04.md)                                             | Informational | 2026-07-04   |
 | [137-python-bindings-2026-07-05.md](137-python-bindings-2026-07-05.md)                                           | Active        | 2026-07-05   |
 | [138-constraint-container-api-2026-07-06.md](138-constraint-container-api-2026-07-06.md)                         | Completed     | 2026-07-08   |
+| [139-mutability-hashability-equality-2026-07-09.md](139-mutability-hashability-equality-2026-07-09.md)           | Informational | 2026-07-09   |

@@ -218,6 +218,16 @@ def test_molecule_atoms_getitem_out_of_range():
         carbon_oxygen().atoms[5]
 
 
+def test_molecule_atoms_negative_index():
+    mol = carbon_oxygen()
+    assert mol.atoms[-1].id == 1
+    assert mol.atoms[-2].id == 0
+    mol.atoms[-1] = AtomAst(Element("N"))
+    assert mol.atoms[1].element == ElementAst.Lit(Element("N"))
+    with pytest.raises(IndexError):
+        mol.atoms[-3]
+
+
 def test_molecule_atoms_setitem():
     mol = carbon_oxygen()
     mol.atoms[0] = AtomAst(Element("N"))

@@ -36,7 +36,7 @@ impl MoleculeAst {
     }
 
     fn __repr__(&self) -> String {
-        format!("MoleculeAst(atom_count={})", self.0.atoms().count())
+        format!("MoleculeAst(atoms={})", self.0.atoms().count())
     }
 }
 
@@ -95,6 +95,6 @@ mod tests {
 
     #[rstest]
     fn test_molecule_ast_repr() {
-        assert_eq!(MoleculeAst::new().__repr__(), "MoleculeAst(atom_count=0)");
+        assert_eq!(MoleculeAst::new().__repr__(), "MoleculeAst(atoms=0)");
     }
 }

@@ -6,7 +6,7 @@ use std::vec::IntoIter;
 
 use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyAny, PyDict};
 use umol_ast::ast::{
     AromaticValenceAst as AstAromaticValenceAst, AtomConstraintAst as AstAtomConstraintAst,
     AtomConstraintKey as AstAtomConstraintKey, AtomConstraintsAst as AstAtomConstraintsAst,
@@ -547,8 +547,27 @@ impl ConstraintsUpdate {
     }
 }
 
-/// The atom-scope constraints on an atom, in kind-sorted order.
-#[pyclass]
+/// A whole-container argument that snapshots either a value container or a live
+/// view — for the atom `constraints` setter, which accepts either.
+#[derive(FromPyObject)]
+pub(crate) enum ConstraintsArg {
+    Container(Py<AtomConstraintsAst>),
+    View(Py<AtomConstraintsView>),
+}
+
+impl ConstraintsArg {
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstAtomConstraintsAst> {
+        match self {
+            ConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            ConstraintsArg::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
+        }
+    }
+}
+
+/// The atom-scope constraints on an atom, in kind-sorted order. Mutable, hence
+/// value-equal but unhashable (matching `AtomAst`).
+#[pyclass(eq)]
+#[derive(PartialEq)]
 pub struct AtomConstraintsAst(AstAtomConstraintsAst);
 
 #[pymethods]
@@ -566,14 +585,6 @@ impl AtomConstraintsAst {
         AtomConstraintsAst(constraints)
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-
-    fn __hash__(&self) -> u64 {
-        hash_ast(&self.0)
-    }
-
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {
@@ -588,8 +599,8 @@ impl AtomConstraintsAst {
         self.0.set(c.bind(py).borrow().to_ast(py));
     }
 
-    /// Remove the entry with the given key, returning it if present.
-    fn remove(
+    /// Remove the entry with the given key, returning it if present (dict `pop`).
+    fn pop(
         &mut self,
         py: Python<'_>,
         key: Py<AtomConstraintKey>,
@@ -610,20 +621,40 @@ impl AtomConstraintsAst {
         self.0.len()
     }
 
-    fn __iter__(&self, py: Python<'_>) -> PyResult<AtomConstraintIter> {
+    /// Iterate the constraint keys (mapping-style, canonical order).
+    fn __iter__(&self, py: Python<'_>) -> PyResult<AtomConstraintKeyIter> {
+        atom_constraint_keys(py, &self.0)
+    }
+
+    /// The constraint keys, in canonical order.
+    fn keys(&self, py: Python<'_>) -> PyResult<AtomConstraintKeyIter> {
+        atom_constraint_keys(py, &self.0)
+    }
+
+    /// The constraints, in canonical order.
+    fn values(&self, py: Python<'_>) -> PyResult<AtomConstraintIter> {
         atom_constraints_iter(py, &self.0)
     }
 
-    /// The constraint with the given key, or `None`.
+    /// The `(key, constraint)` pairs, in canonical order.
+    fn items(&self, py: Python<'_>) -> PyResult<AtomConstraintItemsIter> {
+        atom_constraint_items(py, &self.0)
+    }
+
+    /// The constraint with the given key, or `default` (`None`) if absent.
+    #[pyo3(signature = (key, default=None))]
     fn get(
         &self,
         py: Python<'_>,
         key: Py<AtomConstraintKey>,
-    ) -> PyResult<Option<AtomConstraintAst>> {
-        self.0
-            .get(key.bind(py).borrow().to_ast(py))
-            .map(|constraint| AtomConstraintAst::from_ast(py, constraint))
-            .transpose()
+        default: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        match self.0.get(key.bind(py).borrow().to_ast(py)) {
+            Some(constraint) => {
+                Ok(into_py_variant(py, AtomConstraintAst::from_ast(py, constraint)?)?.into_any())
+            }
+            None => Ok(default.unwrap_or_else(|| py.None())),
+        }
     }
 
     /// The constraint with the given key; raises `KeyError` if absent.
@@ -907,6 +938,39 @@ fn atom_constraints_iter(
     })
 }
 
+/// Build the key iterator handle from a borrowed container (mapping-style keys).
+fn atom_constraint_keys(
+    py: Python<'_>,
+    constraints: &AstAtomConstraintsAst,
+) -> PyResult<AtomConstraintKeyIter> {
+    let keys = constraints
+        .iter()
+        .map(|constraint| into_py_variant(py, AtomConstraintKey::from_ast(py, &constraint.key())?))
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(AtomConstraintKeyIter {
+        keys: keys.into_iter(),
+    })
+}
+
+/// Build the item iterator handle (`(key, constraint)` pairs) from a borrowed container.
+fn atom_constraint_items(
+    py: Python<'_>,
+    constraints: &AstAtomConstraintsAst,
+) -> PyResult<AtomConstraintItemsIter> {
+    let items = constraints
+        .iter()
+        .map(|constraint| {
+            Ok((
+                into_py_variant(py, AtomConstraintKey::from_ast(py, &constraint.key())?)?,
+                into_py_variant(py, AtomConstraintAst::from_ast(py, constraint)?)?,
+            ))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(AtomConstraintItemsIter {
+        items: items.into_iter(),
+    })
+}
+
 /// The present constraints as a dict keyed by snake_case name; values are the
 /// inner-value mirrors. Ring memberships key by scope: `ring_count` for the
 /// all-rings scope, `ring_size_count_<n>` for a specific ring size.
@@ -1042,8 +1106,8 @@ impl AtomConstraintsView {
     }
 
     /// Remove the entry with the given key from the atom in place, returning it if
-    /// present.
-    fn remove(
+    /// present (dict `pop`).
+    fn pop(
         &self,
         py: Python<'_>,
         key: Py<AtomConstraintKey>,
@@ -1077,22 +1141,44 @@ impl AtomConstraintsView {
         self.read(py, |cs| Ok(cs.len()))
     }
 
-    fn __iter__(&self, py: Python<'_>) -> PyResult<AtomConstraintIter> {
+    /// Iterate the constraint keys (mapping-style, canonical order).
+    fn __iter__(&self, py: Python<'_>) -> PyResult<AtomConstraintKeyIter> {
+        self.read(py, |cs| atom_constraint_keys(py, cs))
+    }
+
+    /// The constraint keys, in canonical order.
+    fn keys(&self, py: Python<'_>) -> PyResult<AtomConstraintKeyIter> {
+        self.read(py, |cs| atom_constraint_keys(py, cs))
+    }
+
+    /// The constraints, in canonical order.
+    fn values(&self, py: Python<'_>) -> PyResult<AtomConstraintIter> {
         self.read(py, |cs| atom_constraints_iter(py, cs))
     }
 
-    /// The constraint with the given key, or `None`.
+    /// The `(key, constraint)` pairs, in canonical order.
+    fn items(&self, py: Python<'_>) -> PyResult<AtomConstraintItemsIter> {
+        self.read(py, |cs| atom_constraint_items(py, cs))
+    }
+
+    /// The constraint with the given key, or `default` (`None`) if absent.
+    #[pyo3(signature = (key, default=None))]
     fn get(
         &self,
         py: Python<'_>,
         key: Py<AtomConstraintKey>,
-    ) -> PyResult<Option<AtomConstraintAst>> {
+        default: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
         let key = key.bind(py).borrow().to_ast(py);
-        self.read(py, |cs| {
+        let found = self.read(py, |cs| {
             cs.get(key)
                 .map(|constraint| AtomConstraintAst::from_ast(py, constraint))
                 .transpose()
-        })
+        })?;
+        match found {
+            Some(constraint) => Ok(into_py_variant(py, constraint)?.into_any()),
+            None => Ok(default.unwrap_or_else(|| py.None())),
+        }
     }
 
     /// The constraint with the given key; raises `KeyError` if absent.
@@ -1492,6 +1578,38 @@ impl AtomConstraintIter {
     }
 }
 
+#[pyclass]
+struct AtomConstraintKeyIter {
+    keys: IntoIter<Py<AtomConstraintKey>>,
+}
+
+#[pymethods]
+impl AtomConstraintKeyIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> Option<Py<AtomConstraintKey>> {
+        self.keys.next()
+    }
+}
+
+#[pyclass]
+struct AtomConstraintItemsIter {
+    items: IntoIter<(Py<AtomConstraintKey>, Py<AtomConstraintAst>)>,
+}
+
+#[pymethods]
+impl AtomConstraintItemsIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> Option<(Py<AtomConstraintKey>, Py<AtomConstraintAst>)> {
+        self.items.next()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -1595,6 +1713,93 @@ mod tests {
     }
 
     #[rstest]
+    fn test_atom_constraints_keys_values_items() {
+        Python::attach(|py| {
+            let valence = into_py_variant(
+                py,
+                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+            )
+            .unwrap();
+            let degree = into_py_variant(
+                py,
+                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::degree(3)).unwrap(),
+            )
+            .unwrap();
+            let constraints = AtomConstraintsAst::new(py, vec![valence, degree]);
+
+            let mut keys = constraints.__iter__(py).unwrap();
+            assert_eq!(
+                keys.__next__().unwrap().bind(py).borrow().to_ast(py),
+                AstAtomConstraintKey::Valence
+            );
+            assert_eq!(
+                keys.__next__().unwrap().bind(py).borrow().to_ast(py),
+                AstAtomConstraintKey::Degree
+            );
+            assert!(keys.__next__().is_none());
+
+            let mut values = constraints.values(py).unwrap();
+            assert_eq!(
+                values.__next__().unwrap().bind(py).borrow().to_ast(py),
+                AstAtomConstraintAst::valence(4)
+            );
+
+            let mut items = constraints.items(py).unwrap();
+            let (key, value) = items.__next__().unwrap();
+            assert_eq!(key.bind(py).borrow().to_ast(py), AstAtomConstraintKey::Valence);
+            assert_eq!(
+                value.bind(py).borrow().to_ast(py),
+                AstAtomConstraintAst::valence(4)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_atom_constraints_ast_get() {
+        Python::attach(|py| {
+            let valence = into_py_variant(
+                py,
+                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+            )
+            .unwrap();
+            let constraints = AtomConstraintsAst::new(py, vec![valence]);
+            let present = constraints
+                .get(
+                    py,
+                    into_py_variant(py, AtomConstraintKey::Valence()).unwrap(),
+                    None,
+                )
+                .unwrap();
+            let expected = into_py_variant(
+                py,
+                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+            )
+            .unwrap()
+            .into_any();
+            assert!(present.bind(py).eq(expected.bind(py)).unwrap());
+            let absent = constraints
+                .get(
+                    py,
+                    into_py_variant(py, AtomConstraintKey::Degree()).unwrap(),
+                    None,
+                )
+                .unwrap();
+            assert!(absent.bind(py).is_none());
+            let sentinel = into_py_variant(py, AtomConstraintKey::Degree())
+                .unwrap()
+                .into_any();
+            let defaulted = constraints
+                .get(
+                    py,
+                    into_py_variant(py, AtomConstraintKey::Degree()).unwrap(),
+                    Some(sentinel.clone_ref(py)),
+                )
+                .unwrap();
+            assert_eq!(defaulted.as_ptr(), sentinel.as_ptr());
+        });
+    }
+
+    #[rstest]
     fn test_atom_constraints_valence() {
         Python::attach(|py| {
             let valence = into_py_variant(
@@ -1668,7 +1873,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_remove() {
+    fn test_atom_constraints_ast_pop() {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
@@ -1677,7 +1882,7 @@ mod tests {
             .unwrap();
             let mut constraints = AtomConstraintsAst::new(py, vec![valence]);
             let removed = constraints
-                .remove(py, into_py_variant(py, AtomConstraintKey::Valence()).unwrap())
+                .pop(py, into_py_variant(py, AtomConstraintKey::Valence()).unwrap())
                 .unwrap();
             match removed {
                 Some(AtomConstraintAst::Valence(v)) => {
@@ -1747,10 +1952,10 @@ mod tests {
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             match fresh
-                .get(py, into_py_variant(py, AtomConstraintKey::Valence()).unwrap())
+                .__getitem__(py, into_py_variant(py, AtomConstraintKey::Valence()).unwrap())
                 .unwrap()
             {
-                Some(AtomConstraintAst::Valence(v)) => {
+                AtomConstraintAst::Valence(v) => {
                     assert_eq!(v.bind(py).borrow().to_ast(py), AstValueAst::Lit(4))
                 }
                 _ => panic!("expected Valence(Lit(4))"),
@@ -1759,7 +1964,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_view_remove() {
+    fn test_atom_constraints_view_pop() {
         Python::attach(|py| {
             let atom = AstAtomAst::from_element(ChemElement::C)
                 .with_constraint(AstAtomConstraintAst::valence(4));
@@ -1775,7 +1980,7 @@ mod tests {
                 },
             };
             let removed = view
-                .remove(py, into_py_variant(py, AtomConstraintKey::Valence()).unwrap())
+                .pop(py, into_py_variant(py, AtomConstraintKey::Valence()).unwrap())
                 .unwrap();
             match removed {
                 Some(AtomConstraintAst::Valence(v)) => {
@@ -1851,10 +2056,10 @@ mod tests {
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             match fresh
-                .get(py, into_py_variant(py, AtomConstraintKey::Valence()).unwrap())
+                .__getitem__(py, into_py_variant(py, AtomConstraintKey::Valence()).unwrap())
                 .unwrap()
             {
-                Some(AtomConstraintAst::Valence(v)) => {
+                AtomConstraintAst::Valence(v) => {
                     assert_eq!(v.bind(py).borrow().to_ast(py), AstValueAst::Lit(4))
                 }
                 _ => panic!("expected Valence(Lit(4))"),
@@ -1863,7 +2068,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_view_remove_atom_backed() {
+    fn test_atom_constraints_view_pop_atom_backed() {
         Python::attach(|py| {
             let atom = Py::new(
                 py,
@@ -1877,7 +2082,7 @@ mod tests {
                 backing: ConstraintsBacking::Atom(atom.clone_ref(py)),
             };
             let removed = view
-                .remove(py, into_py_variant(py, AtomConstraintKey::Valence()).unwrap())
+                .pop(py, into_py_variant(py, AtomConstraintKey::Valence()).unwrap())
                 .unwrap();
             match removed {
                 Some(AtomConstraintAst::Valence(v)) => {

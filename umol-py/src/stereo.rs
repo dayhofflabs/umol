@@ -247,8 +247,8 @@ impl TetrahedralStereoAst {
 
 /// Tetrahedral stereo configuration shorthand: counterclockwise (`Ccw`, coset
 /// `Th0`) or clockwise (`Cw`, coset `Th1`).
-#[pyclass(eq, from_py_object)]
-#[derive(Clone, Copy, PartialEq)]
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TetrahedralStereo {
     Ccw,
     Cw,

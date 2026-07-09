@@ -18,7 +18,8 @@ use umol_ast::ast::{
 use umol_chem::element::Element as ChemElement;
 
 use crate::constraint::{
-    atom_constraints_asdict, AtomConstraintsAst, AtomConstraintsView, ConstraintsBacking,
+    atom_constraints_asdict, AtomConstraintsAst, AtomConstraintsView, ConstraintsArg,
+    ConstraintsBacking,
 };
 use crate::convert::{hash_ast, into_py_variant, variant_repr};
 use crate::element::Element;
@@ -354,10 +355,12 @@ impl AtomAst {
         }
     }
 
-    /// Replace the whole constraint set (wipe-and-set).
+    /// Replace the whole constraint set (wipe-and-set) from a value container or
+    /// a live view.
     #[setter]
-    fn set_constraints(&mut self, py: Python<'_>, value: Py<AtomConstraintsAst>) {
-        self.0.constraints = value.bind(py).borrow().inner().clone();
+    fn set_constraints(&mut self, py: Python<'_>, value: ConstraintsArg) -> PyResult<()> {
+        self.0.constraints = value.to_ast(py)?;
+        Ok(())
     }
 
     /// The fields as a dict keyed by field name; values are the field mirrors.
@@ -605,15 +608,17 @@ impl AtomView {
         }
     }
 
-    /// Replace the whole constraint set of the backing atom in place (wipe-and-set).
+    /// Replace the whole constraint set of the backing atom in place (wipe-and-set)
+    /// from a value container or a live view.
     #[setter]
-    fn set_constraints(&self, py: Python<'_>, value: Py<AtomConstraintsAst>) {
+    fn set_constraints(&self, py: Python<'_>, value: ConstraintsArg) -> PyResult<()> {
         self.owner
             .borrow_mut(py)
             .inner_mut()
             .atom_mut(self.id)
             .ast
-            .constraints = value.bind(py).borrow().inner().clone();
+            .constraints = value.to_ast(py)?;
+        Ok(())
     }
 
     /// The fields as a dict keyed by field name; values are the field mirrors —
@@ -639,6 +644,22 @@ impl AtomView {
     }
 }
 
+/// Resolve a possibly-negative Python index (negative counts from the end) into an
+/// existing atom id, or `IndexError`.
+fn resolve_atom_index(molecule: &AstMoleculeAst, index: isize) -> PyResult<AstAtomId> {
+    let count = molecule.atoms().count();
+    let resolved = if index < 0 { index + count as isize } else { index };
+    if resolved < 0 {
+        return Err(PyIndexError::new_err("atom id out of range"));
+    }
+    let id = AstAtomId(resolved as u32);
+    if molecule.atoms().contains(id) {
+        Ok(id)
+    } else {
+        Err(PyIndexError::new_err("atom id out of range"))
+    }
+}
+
 /// The atoms of a molecule, indexed by integer position.
 #[pyclass]
 pub struct AtomViews {
@@ -658,26 +679,20 @@ impl AtomViews {
         )
     }
 
-    fn __getitem__(&self, py: Python<'_>, index: usize) -> PyResult<AtomView> {
+    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<AtomView> {
         let molecule = self.owner.bind(py).borrow();
-        let id = AstAtomId(index as u32);
-        if molecule.inner().atoms().contains(id) {
-            Ok(AtomView {
-                owner: self.owner.clone_ref(py),
-                id,
-            })
-        } else {
-            Err(PyIndexError::new_err("atom id out of range"))
-        }
+        let id = resolve_atom_index(molecule.inner(), index)?;
+        Ok(AtomView {
+            owner: self.owner.clone_ref(py),
+            id,
+        })
     }
 
     /// Replace the whole atom at `index` in place.
-    fn __setitem__(&self, py: Python<'_>, index: usize, atom: PyRef<'_, AtomAst>) -> PyResult<()> {
+    fn __setitem__(&self, py: Python<'_>, index: isize, atom: PyRef<'_, AtomAst>) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
-        if index >= molecule.inner().atoms().count() {
-            return Err(PyIndexError::new_err("atom id out of range"));
-        }
-        *molecule.inner_mut().atom_mut(AstAtomId(index as u32)).ast = atom.inner().clone();
+        let id = resolve_atom_index(molecule.inner(), index)?;
+        *molecule.inner_mut().atom_mut(id).ast = atom.inner().clone();
         Ok(())
     }
 
@@ -921,7 +936,10 @@ mod tests {
             };
             assert_eq!(views.__len__(py), 2);
             assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
+            assert_eq!(views.__getitem__(py, -1).unwrap().id(), 1);
+            assert_eq!(views.__getitem__(py, -2).unwrap().id(), 0);
             assert!(views.__getitem__(py, 5).is_err());
+            assert!(views.__getitem__(py, -3).is_err());
         });
     }
 
@@ -979,6 +997,33 @@ mod tests {
     #[rstest]
     fn test_atom_ast_parse_error() {
         assert!(AtomAst::parse("Zz##").is_err());
+    }
+
+    #[rstest]
+    fn test_atom_ast_set_constraints_from_view() {
+        Python::attach(|py| {
+            let src = Py::new(
+                py,
+                AtomAst::from_inner(
+                    AstAtomAst::from_element(ChemElement::C)
+                        .with_constraint(AstAtomConstraintAst::valence(4)),
+                ),
+            )
+            .unwrap();
+            let view = Py::new(
+                py,
+                AtomConstraintsView {
+                    backing: ConstraintsBacking::Atom(src),
+                },
+            )
+            .unwrap();
+            let mut dst = AtomAst::from_inner(AstAtomAst::from_element(ChemElement::N));
+            dst.set_constraints(py, ConstraintsArg::View(view)).unwrap();
+            assert_eq!(
+                dst.inner().constraints.valence().unwrap().clone(),
+                AstValueAst::Lit(4)
+            );
+        });
     }
 
     #[rstest]

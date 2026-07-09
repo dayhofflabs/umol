@@ -6,6 +6,10 @@ def test_relop_eq():
     assert RelOp.Lt != RelOp.Ge
 
 
+def test_relop_hashable():
+    assert len({RelOp.Lt, RelOp.Lt, RelOp.Ge}) == 2
+
+
 def test_relop_match():
     match RelOp.Ne:
         case RelOp.Ne:
@@ -17,6 +21,10 @@ def test_relop_match():
 def test_memop_eq():
     assert MemOp.In == MemOp.In
     assert MemOp.In != MemOp.NotIn
+
+
+def test_memop_hashable():
+    assert len({MemOp.In, MemOp.In, MemOp.NotIn}) == 2
 
 
 def test_valueterm_lit():

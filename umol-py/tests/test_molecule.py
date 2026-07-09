@@ -10,4 +10,4 @@ def test_molecule_ast_eq():
 
 
 def test_molecule_ast_repr():
-    assert repr(MoleculeAst()) == "MoleculeAst(atom_count=0)"
+    assert repr(MoleculeAst()) == "MoleculeAst(atoms=0)"

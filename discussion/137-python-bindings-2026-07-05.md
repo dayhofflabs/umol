@@ -630,6 +630,54 @@ immutable-`AtomAst` premise was **not** treated as settled (Python leans mutable
   Still open: `append`/`extend` (todo 6), `__repr__` on a molecule DSL, `MoleculeAst`
   `Hash` (Rust fold-back below).
 
+### Second API-review pass (2026-07-09)
+
+A deeper sweep over the now-richer container surface; findings 1–4 implemented (umol-py
+green: 147 Rust / 162 pytest / clippy clean), 5 and 6 deferred to the interning design.
+
+- **1 — `AtomConstraintsAst` unhashable (bug).** The value container had a hand-written
+  `__eq__` + `__hash__` but is mutable (`set`/`pop`/`update`) — an identity-inconsistent
+  hash footgun. Fixed by converting to `#[pyclass(eq)]` + `derive(PartialEq)` (matches
+  `AtomAst`/`MoleculeAst`), which makes it value-equal but **unhashable**. Note: merely
+  deleting `__hash__` would *not* have worked — a hand-written `__eq__` leaves the default
+  identity `__hash__` in place; only the `eq` macro nulls it (verified against PyO3 0.29).
+- **2 — constraint containers are proper mappings.** `__iter__` now yields *keys*
+  (`AtomConstraintKey`), matching `RingSizeCounts` and dict convention (it yielded values
+  before, while `[]`/`in`/`del`/`get` were all keyed — a half-mapping). Added
+  `keys()`/`values()`/`items()` on both `AtomConstraintsAst` and `AtomConstraintsView`.
+- **3 — `atom.constraints` setter accepts a view.** Was value-only, so
+  `dst.constraints = src.constraints` (RHS a live view) failed. New `ConstraintsArg`
+  coercion snapshots either a value container or a view; both `AtomAst`/`AtomView` setters
+  take it.
+- **4 — `remove` → `pop`.** Remove-by-key-returning is `dict.pop`, not `list.remove`;
+  renamed on both containers. `get(key, default=None)` gained the dict second arg (returns
+  the object, else the default) — return type widened to `PyObject`.
+- **5 — handle `__eq__` (pending, interning-entangled).** Giving `AtomView` /
+  `AtomConstraintsView` an `__eq__` forces a value-vs-reference equality choice — the same
+  identity axis as finding 6. Deferred to the interning discussion rather than guessed.
+- **6 — `AtomViews.__contains__` (deferred).** `atom in mol.atoms` is a handle-membership
+  question tied to interning; left for that design.
+
+### Third API-review pass (2026-07-09)
+
+A final sweep — the surface is largely clean by now. 1–3 implemented (umol-py green:
+147 Rust / 165 pytest / clippy clean); 4 deferred.
+
+- **1 — `AtomViews` negative indexing.** `mol.atoms[-1]` raised `OverflowError` (`usize`
+  index). Both `__getitem__`/`__setitem__` now take `isize` and normalize `index < 0 →
+  len + index` via a shared `resolve_atom_index` (bounds-check → `IndexError`). Slicing
+  (`mol.atoms[1:3]`) is still unsupported — separate, heavier, left open.
+- **2 — `RelOp` / `MemOp` / `TetrahedralStereo` made hashable.** They were
+  `#[pyclass(eq, from_py_object)]` (macro `eq` nulls hash) while every other immutable
+  value type hashes; now `#[pyclass(eq, hash, frozen, from_py_object)]` + `derive(Eq,
+  Hash)`, matching `Element`. Their auto `__repr__` was already fine.
+- **3 — `MoleculeAst.__repr__`** said `atom_count=N`, resurrecting the retired `atom_count`
+  term; now `atoms=N` (consistent with `len(mol.atoms)`).
+- **4 — `Permutation.image` is a method while `degree` is a property (deferred).** Both are
+  no-arg pure reads; a list-returning property is borderline (cf. numpy `.tolist()`).
+  Deferred to be taken up with the top-level stereo work (stereo atoms / stereo bonds),
+  where the `Permutation` surface is revisited as a whole.
+
 ## Findings to fold back into Rust
 
 Rust-side changes surfaced while wrapping (the Python-pull of the co-iteration

@@ -72,16 +72,17 @@ def test_atomconstraints_iter():
         ]
     )
     assert len(constraints) == 2
-    keys = set()
-    for constraint in constraints:
-        match constraint.key:
-            case AtomConstraintKey.Valence():
-                keys.add("valence")
-            case AtomConstraintKey.Degree():
-                keys.add("degree")
-            case _:
-                raise AssertionError
-    assert keys == {"valence", "degree"}
+    # mapping-style: iteration and keys() yield keys in canonical order
+    assert list(constraints) == list(constraints.keys())
+    assert list(constraints) == [AtomConstraintKey.Valence(), AtomConstraintKey.Degree()]
+    assert list(constraints.values()) == [
+        AtomConstraintAst.Valence(ValueAst.Lit(4)),
+        AtomConstraintAst.Degree(ValueAst.Lit(3)),
+    ]
+    assert list(constraints.items()) == [
+        (AtomConstraintKey.Valence(), AtomConstraintAst.Valence(ValueAst.Lit(4))),
+        (AtomConstraintKey.Degree(), AtomConstraintAst.Degree(ValueAst.Lit(3))),
+    ]
 
 
 def test_atomconstraints_get():
@@ -89,6 +90,7 @@ def test_atomconstraints_get():
     assert AtomConstraintKey.Valence() in constraints
     assert AtomConstraintKey.Degree() not in constraints
     assert constraints.get(AtomConstraintKey.Degree()) is None
+    assert constraints.get(AtomConstraintKey.Degree(), 0) == 0
     assert constraints.get(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
         ValueAst.Lit(4)
     )
@@ -153,13 +155,13 @@ def test_atomconstraintsast_set():
     )
 
 
-def test_atomconstraintsast_remove():
+def test_atomconstraintsast_pop():
     constraints = AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))])
-    assert constraints.remove(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+    assert constraints.pop(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
         ValueAst.Lit(4)
     )
     assert len(constraints) == 0
-    assert constraints.remove(AtomConstraintKey.Valence()) is None
+    assert constraints.pop(AtomConstraintKey.Valence()) is None
 
 
 def test_atomconstraintsast_update():
@@ -190,13 +192,13 @@ def test_atomconstraintsview_set():
     ) == AtomConstraintAst.AromaticValence(AromaticValenceAst.Aromatic(ValueAst.Lit(1)))
 
 
-def test_atomconstraintsview_remove():
+def test_atomconstraintsview_pop():
     atom = AtomAst(
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
     )
     mol = MoleculeAst.from_atoms([atom])
-    assert mol.atoms[0].constraints.remove(
+    assert mol.atoms[0].constraints.pop(
         AtomConstraintKey.Valence()
     ) == AtomConstraintAst.Valence(ValueAst.Lit(4))
     assert len(mol.atoms[0].constraints) == 0
@@ -227,12 +229,12 @@ def test_atomconstraintsview_atom_backed_set():
     )
 
 
-def test_atomconstraintsview_atom_backed_remove():
+def test_atomconstraintsview_atom_backed_pop():
     atom = AtomAst(
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
     )
-    assert atom.constraints.remove(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+    assert atom.constraints.pop(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
         ValueAst.Lit(4)
     )
     assert len(atom.constraints) == 0
@@ -264,14 +266,8 @@ def test_atomconstraintsview_reads():
     assert constraints.get(AtomConstraintKey.Degree()) is None
     assert constraints.valence == ValueAst.Lit(4)
     assert set(constraints.asdict().keys()) == {"valence"}
-    keys = set()
-    for constraint in constraints:
-        match constraint.key:
-            case AtomConstraintKey.Valence():
-                keys.add("valence")
-            case _:
-                raise AssertionError
-    assert keys == {"valence"}
+    assert list(constraints) == [AtomConstraintKey.Valence()]
+    assert list(constraints.values()) == [AtomConstraintAst.Valence(ValueAst.Lit(4))]
 
 
 def test_atomconstraints_valence_property():
@@ -356,6 +352,7 @@ def test_multicentervalenceast_multicenter_int():
 def test_tetrahedralstereo_enum():
     assert TetrahedralStereo.Ccw == TetrahedralStereo.Ccw
     assert TetrahedralStereo.Ccw != TetrahedralStereo.Cw
+    assert len({TetrahedralStereo.Cw, TetrahedralStereo.Cw, TetrahedralStereo.Ccw}) == 2
 
 
 def test_atomconstraint_eq_hash():
@@ -408,7 +405,12 @@ def test_atomconstraintsast_eq_repr():
     assert a == b
     assert a != AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(5))])
     assert repr(a) == "AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))])"
-    assert len({a, b}) == 1
+
+
+def test_atomconstraintsast_unhashable():
+    # mutable container: value-equal but unhashable, like AtomAst
+    with pytest.raises(TypeError):
+        hash(AtomConstraintsAst([]))
 
 
 def test_aromaticvalenceast_eq():
@@ -486,6 +488,26 @@ def test_atomconstraintsview_update_from_view():
     mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
     mol.atoms[0].constraints.update(src.constraints)
     assert AtomConstraintKey.Valence() in mol.atoms[0].constraints
+
+
+def test_atomast_set_constraints_from_value():
+    dst = AtomAst(Element("N"))
+    dst.constraints = AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))])
+    assert dst.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+        ValueAst.Lit(4)
+    )
+
+
+def test_atomast_set_constraints_from_view():
+    src = AtomAst(
+        Element("C"),
+        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
+    )
+    dst = AtomAst(Element("N"))
+    dst.constraints = src.constraints  # RHS is a live view, not a value container
+    assert dst.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+        ValueAst.Lit(4)
+    )
 
 
 def test_ringsizecounts_len_iter_contains():

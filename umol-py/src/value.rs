@@ -2,6 +2,9 @@
 //! as a native PyO3 complex enum. AST recursion (`Box<Self>` / `Vec<Self>`) becomes
 //! `Py<Self>` / `Vec<Py<Self>>`; per-variant construction and `match` work natively
 //! on the Python side.
+// Blanket-allow the `absolute_paths` false positives from pyo3's `hash` derive
+// (hygienic `::std::…` paths). Hand-written code here imports at top.
+#![allow(clippy::absolute_paths)]
 
 use std::collections::BTreeSet;
 
@@ -14,8 +17,8 @@ use umol_ast::ast::{
 use crate::convert::{hash_ast, into_py_variant, variant_repr};
 
 /// Relational operator in a value predicate (`<=`, `>=`, `==`, `<`, `>`, `!=`).
-#[pyclass(eq, from_py_object)]
-#[derive(Clone, PartialEq)]
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum RelOp {
     Le,
     Ge,
@@ -50,8 +53,8 @@ impl RelOp {
 }
 
 /// Membership operator in a value predicate (`in`, `not in`).
-#[pyclass(eq, from_py_object)]
-#[derive(Clone, PartialEq)]
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum MemOp {
     In,
     NotIn,
