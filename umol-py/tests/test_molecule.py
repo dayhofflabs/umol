@@ -2,7 +2,7 @@ from umol import MoleculeAst
 
 
 def test_molecule_ast_empty():
-    assert MoleculeAst().atom_count == 0
+    assert len(MoleculeAst().atoms) == 0
 
 
 def test_molecule_ast_eq():

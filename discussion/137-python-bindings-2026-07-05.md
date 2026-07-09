@@ -596,7 +596,39 @@ bare `int`. Revisit on alpha-user feedback.
   i + ii deliverable.
 - **Naming (decided):** maximum Rust fidelity — verbatim `MoleculeAst`/`AtomAst`/
   `AtomView`/`ValueAst` (no bare `Molecule`/`Atom`), `Id` types as newtypes. Revisit
-  on alpha-user feedback.
+  on alpha-user feedback. *(Revised for `Id` types — see the mutation-facade note below:
+  the Python-facing `AtomId` was retired in favor of bare ints.)*
+
+### Post-slice mutation + ergonomics + API polish (2026-07-08)
+
+Built out after i + ii; all umol-py, workspace green throughout. All exploratory — the
+immutable-`AtomAst` premise was **not** treated as settled (Python leans mutable).
+
+- **Mutable atom facade.** `AtomView` (what `mol.atoms[i]` returns) is a live mutable
+  handle: settable field properties (`mol.atoms[i].charge = …`) route through `atom_mut`
+  in place, and `.constraints` returns a live `AtomConstraintsView` whose mutators
+  (`set`/`remove`/`update`, settable accessors) write straight through — reads borrow the
+  item directly, no whole-container clone. The view backs onto **either** a molecule-atom
+  or a standalone `AtomAst` (`ConstraintsBacking` enum; backref lives in the view, not the
+  atom — deliberately unlike RDKit). `AtomAst` fields became settable and `replace` was
+  retired; `mol.atoms[i] = atom` (`__setitem__`) is whole-atom replace. Model: the
+  molecule is a mutable container of atom-*values* — you don't mutate an atom in place,
+  you replace the value at a slot (or edit through the owner).
+- **`AtomId` retired on the Python side** — bare ints (`mol.atoms[0]`, `atom.id → int`);
+  the Rust `AstAtomId` newtype stays.
+- **Literal ergonomics.** Settable per-kind accessors so `mol.atoms[i].constraints.
+  aromatic_valence = 1` *is* `#a1`: `False → No*`, `int → positive` (aromatic/multicenter
+  valence); `TetrahedralStereo.Cw|Ccw` enum (coset `Lit(1)`/`Lit(0)`); `ring_count` (All)
+  property + `ring_size_count[size]` subscript proxy (`RingSizeCounts`); `as_lit()` on
+  `ValueAst`/`ElementAst`/`IsotopeMassAst`; deeper `*Arg` int coercion. `E.H`/`E.As`
+  element shorthand (`python/umol/` `__getattr__`) — Python todo 2, dynamic form.
+- **API-review polish.** Value `__eq__`/`__hash__` (via `to_ast`) + eval-able `__repr__`
+  across all mirrors — so `ValueAst.Lit(1) == ValueAst.Lit(1)` (was identity-false); dict
+  protocol on the constraint containers (`in`/`[]`/`del`, alongside `get`/`remove`);
+  dropped `is_empty`, `atom_count` (→ `len(mol.atoms)`), `AtomViews.get`; `AtomView.asdict`
+  parity; `RingSizeCounts` len/iter/contains. Tests migrated `match`-as-equality → `==`.
+  Still open: `append`/`extend` (todo 6), `__repr__` on a molecule DSL, `MoleculeAst`
+  `Hash` (Rust fold-back below).
 
 ## Findings to fold back into Rust
 

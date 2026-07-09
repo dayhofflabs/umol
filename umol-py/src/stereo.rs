@@ -12,7 +12,7 @@ use umol_ast::ast::{
 };
 use umol_perm::Permutation as PermPermutation;
 
-use crate::convert::into_py_variant;
+use crate::convert::{hash_ast, into_py_variant, variant_repr};
 
 /// A permutation of `0..degree` in one-line (image) notation.
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -73,6 +73,29 @@ pub enum StereoTerm {
     Apply(Py<StereoTerm>, Permutation),
 }
 
+#[pymethods]
+impl StereoTerm {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            StereoTerm::Var(_, _) => ("Var", 2),
+            StereoTerm::Lit(_) => ("Lit", 1),
+            StereoTerm::LitSet(_) => ("LitSet", 1),
+            StereoTerm::Swap(_) => ("Swap", 1),
+            StereoTerm::Mirror(_) => ("Mirror", 1),
+            StereoTerm::Apply(_, _) => ("Apply", 2),
+        };
+        variant_repr(slf.bind(py).as_any(), "StereoTerm", variant, arity)
+    }
+}
+
 impl StereoTerm {
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstStereoTerm) -> PyResult<Self> {
         Ok(match ast {
@@ -126,6 +149,27 @@ pub enum StereoCosetAst {
     Term(Py<StereoTerm>),
 }
 
+#[pymethods]
+impl StereoCosetAst {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            StereoCosetAst::Undetermined() => ("Undetermined", 0),
+            StereoCosetAst::Lit(_) => ("Lit", 1),
+            StereoCosetAst::LitSet(_) => ("LitSet", 1),
+            StereoCosetAst::Term(_) => ("Term", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "StereoCosetAst", variant, arity)
+    }
+}
+
 impl StereoCosetAst {
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstStereoCosetAst) -> PyResult<Self> {
         Ok(match ast {
@@ -157,6 +201,26 @@ pub enum TetrahedralStereoAst {
     Undetermined(),
     NotStereo(),
     Stereo(Py<StereoCosetAst>),
+}
+
+#[pymethods]
+impl TetrahedralStereoAst {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            TetrahedralStereoAst::Undetermined() => ("Undetermined", 0),
+            TetrahedralStereoAst::NotStereo() => ("NotStereo", 0),
+            TetrahedralStereoAst::Stereo(_) => ("Stereo", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "TetrahedralStereoAst", variant, arity)
+    }
 }
 
 impl TetrahedralStereoAst {

@@ -23,54 +23,44 @@ def test_permutation_eq_hash():
 
 
 def test_stereoterm_lit():
-    match StereoTerm.Lit(1):
-        case StereoTerm.Lit(n):
-            assert n == 1
-        case _:
-            raise AssertionError
+    assert StereoTerm.Lit(1) == StereoTerm.Lit(1)
 
 
 def test_stereoterm_apply():
     term = StereoTerm.Apply(StereoTerm.Lit(0), Permutation([1, 0, 2, 3]))
-    match term:
-        case StereoTerm.Apply(inner, perm):
-            match inner:
-                case StereoTerm.Lit(n):
-                    assert n == 0
-                case _:
-                    raise AssertionError
-            assert perm.image() == [1, 0, 2, 3]
-        case _:
-            raise AssertionError
+    assert term == StereoTerm.Apply(StereoTerm.Lit(0), Permutation([1, 0, 2, 3]))
 
 
 def test_stereocosetast_term():
-    match StereoCosetAst.Term(StereoTerm.Lit(2)):
-        case StereoCosetAst.Term(inner):
-            match inner:
-                case StereoTerm.Lit(n):
-                    assert n == 2
-                case _:
-                    raise AssertionError
-        case _:
-            raise AssertionError
+    assert StereoCosetAst.Term(StereoTerm.Lit(2)) == StereoCosetAst.Term(StereoTerm.Lit(2))
 
 
 def test_tetrahedralstereoast_stereo():
-    match TetrahedralStereoAst.Stereo(StereoCosetAst.Lit(1)):
-        case TetrahedralStereoAst.Stereo(coset):
-            match coset:
-                case StereoCosetAst.Lit(n):
-                    assert n == 1
-                case _:
-                    raise AssertionError
-        case _:
-            raise AssertionError
+    assert TetrahedralStereoAst.Stereo(StereoCosetAst.Lit(1)) == TetrahedralStereoAst.Stereo(
+        StereoCosetAst.Lit(1)
+    )
 
 
 def test_tetrahedralstereoast_not_stereo():
-    match TetrahedralStereoAst.NotStereo():
-        case TetrahedralStereoAst.NotStereo():
-            pass
-        case _:
-            raise AssertionError
+    assert TetrahedralStereoAst.NotStereo() == TetrahedralStereoAst.NotStereo()
+
+
+def test_stereocosetast_eq_hash_repr():
+    assert StereoCosetAst.Lit(1) == StereoCosetAst.Lit(1)
+    assert StereoCosetAst.Lit(1) != StereoCosetAst.Lit(0)
+    assert len({StereoCosetAst.Lit(1), StereoCosetAst.Lit(1)}) == 1
+    assert repr(StereoCosetAst.Lit(1)) == "StereoCosetAst.Lit(1)"
+
+
+def test_stereoterm_eq_repr():
+    assert StereoTerm.Lit(0) == StereoTerm.Lit(0)
+    assert StereoTerm.Lit(0) != StereoTerm.Swap(StereoTerm.Lit(0))
+    assert repr(StereoTerm.Apply(StereoTerm.Lit(0), Permutation([1, 0, 2, 3]))) == (
+        "StereoTerm.Apply(StereoTerm.Lit(0), Permutation([1, 0, 2, 3]))"
+    )
+
+
+def test_tetrahedralstereoast_stereo_repr():
+    assert repr(TetrahedralStereoAst.Stereo(StereoCosetAst.Lit(1))) == (
+        "TetrahedralStereoAst.Stereo(StereoCosetAst.Lit(1))"
+    )

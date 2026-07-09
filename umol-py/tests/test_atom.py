@@ -24,19 +24,11 @@ def carbon_oxygen():
 
 
 def test_elementast_lit():
-    match ElementAst.Lit(Element("C")):
-        case ElementAst.Lit(e):
-            assert e.symbol == "C"
-        case _:
-            raise AssertionError
+    assert ElementAst.Lit(Element("C")) == ElementAst.Lit(Element("C"))
 
 
 def test_elementast_undetermined_match():
-    match ElementAst.Undetermined():
-        case ElementAst.Undetermined():
-            pass
-        case _:
-            raise AssertionError
+    assert ElementAst.Undetermined() == ElementAst.Undetermined()
 
 
 def test_elementast_litset():
@@ -45,11 +37,7 @@ def test_elementast_litset():
 
 
 def test_elementast_notset():
-    match ElementAst.NotSet({Element("O")}):
-        case ElementAst.NotSet(members):
-            assert members == {Element("O")}
-        case _:
-            raise AssertionError
+    assert ElementAst.NotSet({Element("O")}) == ElementAst.NotSet({Element("O")})
 
 
 def test_elementast_var_free():
@@ -66,11 +54,7 @@ def test_elementast_var_restricted():
 
 
 def test_isotopemassast_natural_match():
-    match IsotopeMassAst.Natural():
-        case IsotopeMassAst.Natural():
-            pass
-        case _:
-            raise AssertionError
+    assert IsotopeMassAst.Natural() == IsotopeMassAst.Natural()
 
 
 def test_isotopemassast_lit():
@@ -105,45 +89,25 @@ def test_spinstateast_int_literals():
 
 def test_spinstateast_undetermined():
     spin = SpinStateAst(ValueAst.Undetermined(), ValueAst.Undetermined())
-    match spin.unpaired:
-        case ValueAst.Undetermined():
-            pass
-        case _:
-            raise AssertionError
+    assert spin.unpaired == ValueAst.Undetermined()
 
 
 def test_atomast_new_from_element():
-    match AtomAst(Element("C")).element:
-        case ElementAst.Lit(e):
-            assert e.symbol == "C"
-        case _:
-            raise AssertionError
+    assert AtomAst(Element("C")).element == ElementAst.Lit(Element("C"))
 
 
 def test_atomast_new_from_elementast():
-    match AtomAst(ElementAst.Lit(Element("N"))).element:
-        case ElementAst.Lit(e):
-            assert e.symbol == "N"
-        case _:
-            raise AssertionError
+    assert AtomAst(ElementAst.Lit(Element("N"))).element == ElementAst.Lit(Element("N"))
 
 
 def test_atomast_default_charge_undetermined():
-    match AtomAst(Element("C")).charge:
-        case ValueAst.Undetermined():
-            pass
-        case _:
-            raise AssertionError
+    assert AtomAst(Element("C")).charge == ValueAst.Undetermined()
 
 
 def test_atomast_set_charge():
     atom = AtomAst(Element("C"))
     atom.charge = ValueAst.Lit(1)
-    match atom.charge:
-        case ValueAst.Lit(n):
-            assert n == 1
-        case _:
-            raise AssertionError
+    assert atom.charge == ValueAst.Lit(1)
 
 
 def test_atomast_set_spin():
@@ -156,11 +120,7 @@ def test_atomast_set_spin():
 
 def test_atomast_new_from_element_kwargs():
     atom = AtomAst(Element("C"), charge=ValueAst.Lit(-1))
-    match atom.charge:
-        case ValueAst.Lit(n):
-            assert n == -1
-        case _:
-            raise AssertionError
+    assert atom.charge == ValueAst.Lit(-1)
 
 
 def test_atomast_new_bad_element_type():
@@ -170,42 +130,22 @@ def test_atomast_new_bad_element_type():
 
 def test_atomast_new_kwargs():
     atom = AtomAst(ElementAst.Lit(Element("N")), charge=ValueAst.Lit(1))
-    match atom.element:
-        case ElementAst.Lit(e):
-            assert e.symbol == "N"
-        case _:
-            raise AssertionError
-    match atom.charge:
-        case ValueAst.Lit(n):
-            assert n == 1
-        case _:
-            raise AssertionError
+    assert atom.element == ElementAst.Lit(Element("N"))
+    assert atom.charge == ValueAst.Lit(1)
 
 
 def test_atomast_charge_int_literal():
-    match AtomAst(Element("C"), charge=-1).charge:
-        case ValueAst.Lit(n):
-            assert n == -1
-        case _:
-            raise AssertionError
+    assert AtomAst(Element("C"), charge=-1).charge == ValueAst.Lit(-1)
 
 
 def test_atomast_isotope_mass_int_literal():
-    match AtomAst(Element("C"), isotope_mass=13).isotope_mass:
-        case IsotopeMassAst.Lit(n):
-            assert n == 13
-        case _:
-            raise AssertionError
+    assert AtomAst(Element("C"), isotope_mass=13).isotope_mass == IsotopeMassAst.Lit(13)
 
 
 def test_atomast_set_charge_int_literal():
     atom = AtomAst(Element("C"))
     atom.charge = 1
-    match atom.charge:
-        case ValueAst.Lit(n):
-            assert n == 1
-        case _:
-            raise AssertionError
+    assert atom.charge == ValueAst.Lit(1)
 
 
 def test_atomast_constraints_empty():
@@ -218,11 +158,9 @@ def test_atomast_constraints_kwarg():
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
     )
     assert len(atom.constraints) == 1
-    match atom.constraints.get(AtomConstraintKey.Valence()):
-        case AtomConstraintAst.Valence(ValueAst.Lit(n)):
-            assert n == 4
-        case _:
-            raise AssertionError
+    assert atom.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+        ValueAst.Lit(4)
+    )
 
 
 def test_atomview_constraints():
@@ -245,16 +183,8 @@ def test_atomast_asdict():
         "spin",
         "constraints",
     }
-    match d["element"]:
-        case ElementAst.Lit(e):
-            assert e.symbol == "C"
-        case _:
-            raise AssertionError
-    match d["charge"]:
-        case ValueAst.Lit(n):
-            assert n == -1
-        case _:
-            raise AssertionError
+    assert d["element"] == ElementAst.Lit(Element("C"))
+    assert d["charge"] == ValueAst.Lit(-1)
 
 
 def test_atomast_asdict_constraints():
@@ -265,11 +195,7 @@ def test_atomast_asdict_constraints():
     constraints = atom.asdict()["constraints"]
     assert isinstance(constraints, dict)
     assert set(constraints.keys()) == {"valence"}
-    match constraints["valence"]:
-        case ValueAst.Lit(n):
-            assert n == 4
-        case _:
-            raise AssertionError
+    assert constraints["valence"] == ValueAst.Lit(4)
 
 
 def test_atomast_eq():
@@ -278,19 +204,13 @@ def test_atomast_eq():
 
 
 def test_molecule_atoms_len():
-    mol = carbon_oxygen()
-    assert len(mol.atoms) == 2
-    assert mol.atom_count == 2
+    assert len(carbon_oxygen().atoms) == 2
 
 
 def test_molecule_atoms_getitem():
     view = carbon_oxygen().atoms[1]
     assert view.id == 1
-    match view.element:
-        case ElementAst.Lit(e):
-            assert e.symbol == "O"
-        case _:
-            raise AssertionError
+    assert view.element == ElementAst.Lit(Element("O"))
 
 
 def test_molecule_atoms_getitem_out_of_range():
@@ -301,11 +221,7 @@ def test_molecule_atoms_getitem_out_of_range():
 def test_molecule_atoms_setitem():
     mol = carbon_oxygen()
     mol.atoms[0] = AtomAst(Element("N"))
-    match mol.atoms[0].element:
-        case ElementAst.Lit(e):
-            assert e.symbol == "N"
-        case _:
-            raise AssertionError
+    assert mol.atoms[0].element == ElementAst.Lit(Element("N"))
 
 
 def test_molecule_atoms_setitem_out_of_range():
@@ -326,13 +242,7 @@ def test_atomview_charge_through_handle():
     atom = AtomAst(Element("C"))
     atom.charge = ValueAst.Lit(-1)
     mol = MoleculeAst.from_atoms([atom])
-    match mol.atoms[0].charge:
-        case ValueAst.Lit(n):
-            assert n == -1
-        case _:
-            raise AssertionError
-
-
+    assert mol.atoms[0].charge == ValueAst.Lit(-1)
 
 
 def test_atomast_charge_nested_variant_readable():
@@ -368,61 +278,37 @@ def test_atomview_set_charge():
     mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
     mol.atoms[0].charge = ValueAst.Lit(-1)
     # a fresh view re-reads the molecule, proving the write landed on it
-    match mol.atoms[0].charge:
-        case ValueAst.Lit(n):
-            assert n == -1
-        case _:
-            raise AssertionError
+    assert mol.atoms[0].charge == ValueAst.Lit(-1)
 
 
 def test_atomview_set_charge_int_literal():
     mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
     mol.atoms[0].charge = -1
-    match mol.atoms[0].charge:
-        case ValueAst.Lit(n):
-            assert n == -1
-        case _:
-            raise AssertionError
+    assert mol.atoms[0].charge == ValueAst.Lit(-1)
 
 
 def test_atomview_set_element():
     mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
     mol.atoms[0].element = Element("N")
-    match mol.atoms[0].element:
-        case ElementAst.Lit(e):
-            assert e.symbol == "N"
-        case _:
-            raise AssertionError
+    assert mol.atoms[0].element == ElementAst.Lit(Element("N"))
 
 
 def test_atomview_set_isotope_mass():
     mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
     mol.atoms[0].isotope_mass = 13
-    match mol.atoms[0].isotope_mass:
-        case IsotopeMassAst.Lit(mass):
-            assert mass == 13
-        case _:
-            raise AssertionError
+    assert mol.atoms[0].isotope_mass == IsotopeMassAst.Lit(13)
 
 
 def test_atomview_set_implicit_hydrogens():
     mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
     mol.atoms[0].implicit_hydrogens = ValueAst.Lit(3)
-    match mol.atoms[0].implicit_hydrogens:
-        case ValueAst.Lit(n):
-            assert n == 3
-        case _:
-            raise AssertionError
+    assert mol.atoms[0].implicit_hydrogens == ValueAst.Lit(3)
 
 
 def test_atomview_set_lone_pairs():
     mol = MoleculeAst.from_atoms([AtomAst(Element("O"))])
     mol.atoms[0].lone_pairs = ValueAst.Lit(2)
-    match mol.atoms[0].lone_pairs:
-        case ValueAst.Lit(n):
-            assert n == 2
-        case _:
-            raise AssertionError
+    assert mol.atoms[0].lone_pairs == ValueAst.Lit(2)
 
 
 def test_atomview_set_spin():
@@ -446,3 +332,62 @@ def test_isotopemassast_as_lit():
 def test_valueast_as_lit():
     assert ValueAst.Lit(4).as_lit() == 4
     assert ValueAst.Undetermined().as_lit() is None
+
+
+def test_elementast_eq_hash_repr():
+    assert ElementAst.Lit(Element("C")) == ElementAst.Lit(Element("C"))
+    assert ElementAst.Lit(Element("C")) != ElementAst.Lit(Element("N"))
+    assert len({ElementAst.Lit(Element("C")), ElementAst.Lit(Element("C"))}) == 1
+    assert repr(ElementAst.Lit(Element("C"))) == "ElementAst.Lit(Element('C'))"
+
+
+def test_isotopemassast_eq_repr():
+    assert IsotopeMassAst.Lit(13) == IsotopeMassAst.Lit(13)
+    assert IsotopeMassAst.Lit(13) != IsotopeMassAst.Natural()
+    assert repr(IsotopeMassAst.Lit(13)) == "IsotopeMassAst.Lit(13)"
+
+
+def test_spinstateast_eq_repr():
+    assert SpinStateAst(1, 2) == SpinStateAst(1, 2)
+    assert SpinStateAst(1, 2) != SpinStateAst(1, 3)
+    assert repr(SpinStateAst(1, 2)) == "SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2))"
+
+
+def test_atomview_repr():
+    mol = MoleculeAst.from_atoms([AtomAst(Element("C")), AtomAst(Element("O"))])
+    assert repr(mol.atoms[0]) == "AtomView(id=0)"
+    assert repr(mol.atoms) == "AtomViews(len=2)"
+
+
+def test_atomview_asdict():
+    mol = MoleculeAst.from_atoms([AtomAst(Element("C"), charge=ValueAst.Lit(-1))])
+    d = mol.atoms[0].asdict()
+    assert set(d.keys()) == {
+        "element",
+        "isotope_mass",
+        "charge",
+        "implicit_hydrogens",
+        "lone_pairs",
+        "spin",
+        "constraints",
+    }
+    assert d["element"] == ElementAst.Lit(Element("C"))
+    assert d["charge"] == ValueAst.Lit(-1)
+    assert isinstance(d["constraints"], dict)
+
+
+def test_atomview_set_constraints():
+    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol.atoms[0].constraints = AtomConstraintsAst([AtomConstraintAst.Degree(ValueAst.Lit(2))])
+    assert len(mol.atoms[0].constraints) == 1
+    assert mol.atoms[0].constraints.get(AtomConstraintKey.Degree()) == AtomConstraintAst.Degree(
+        ValueAst.Lit(2)
+    )
+
+
+def test_atomast_set_constraints():
+    atom = AtomAst(Element("C"))
+    atom.constraints = AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))])
+    assert len(atom.constraints) == 1
+    atom.constraints = AtomConstraintsAst([])
+    assert not atom.constraints

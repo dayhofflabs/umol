@@ -20,7 +20,7 @@ use umol_chem::element::Element as ChemElement;
 use crate::constraint::{
     atom_constraints_asdict, AtomConstraintsAst, AtomConstraintsView, ConstraintsBacking,
 };
-use crate::convert::into_py_variant;
+use crate::convert::{hash_ast, into_py_variant, variant_repr};
 use crate::element::Element;
 use crate::error::parse_error;
 use crate::molecule::MoleculeAst;
@@ -43,6 +43,25 @@ impl ElementAst {
     /// literal (undetermined, a set, a complement, or a variable).
     fn as_lit(&self) -> Option<Element> {
         self.to_ast().as_lit().map(Element::from)
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_ast() == other.to_ast()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_ast(&self.to_ast())
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            ElementAst::Undetermined() => ("Undetermined", 0),
+            ElementAst::Lit(_) => ("Lit", 1),
+            ElementAst::LitSet(_) => ("LitSet", 1),
+            ElementAst::NotSet(_) => ("NotSet", 1),
+            ElementAst::Var(_, _) => ("Var", 2),
+        };
+        variant_repr(slf.bind(py).as_any(), "ElementAst", variant, arity)
     }
 }
 
@@ -110,6 +129,25 @@ impl IsotopeMassAst {
     fn as_lit(&self) -> Option<u32> {
         self.to_ast().as_lit()
     }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_ast() == other.to_ast()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_ast(&self.to_ast())
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            IsotopeMassAst::Undetermined() => ("Undetermined", 0),
+            IsotopeMassAst::Natural() => ("Natural", 0),
+            IsotopeMassAst::Lit(_) => ("Lit", 1),
+            IsotopeMassAst::LitSet(_) => ("LitSet", 1),
+            IsotopeMassAst::Var(_, _) => ("Var", 2),
+        };
+        variant_repr(slf.bind(py).as_any(), "IsotopeMassAst", variant, arity)
+    }
 }
 
 impl IsotopeMassAst {
@@ -156,6 +194,26 @@ impl SpinStateAst {
             unpaired: unpaired.to_py(py)?,
             multiplicity: multiplicity.to_py(py)?,
         })
+    }
+
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(format!(
+            "SpinStateAst({}, {})",
+            self.unpaired.bind(py).as_any().repr()?.extract::<String>()?,
+            self.multiplicity
+                .bind(py)
+                .as_any()
+                .repr()?
+                .extract::<String>()?,
+        ))
     }
 }
 
@@ -296,6 +354,12 @@ impl AtomAst {
         }
     }
 
+    /// Replace the whole constraint set (wipe-and-set).
+    #[setter]
+    fn set_constraints(&mut self, py: Python<'_>, value: Py<AtomConstraintsAst>) {
+        self.0.constraints = value.bind(py).borrow().inner().clone();
+    }
+
     /// The fields as a dict keyed by field name; values are the field mirrors.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
@@ -427,6 +491,10 @@ impl AtomView {
         self.id.0
     }
 
+    fn __repr__(&self) -> String {
+        format!("AtomView(id={})", self.id.0)
+    }
+
     #[getter]
     fn element(&self, py: Python<'_>) -> PyResult<ElementAst> {
         let molecule = self.owner.bind(py).borrow();
@@ -536,6 +604,39 @@ impl AtomView {
             },
         }
     }
+
+    /// Replace the whole constraint set of the backing atom in place (wipe-and-set).
+    #[setter]
+    fn set_constraints(&self, py: Python<'_>, value: Py<AtomConstraintsAst>) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .atom_mut(self.id)
+            .ast
+            .constraints = value.bind(py).borrow().inner().clone();
+    }
+
+    /// The fields as a dict keyed by field name; values are the field mirrors —
+    /// symmetric with `AtomAst.asdict`, read through the view.
+    fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let molecule = self.owner.bind(py).borrow();
+        let atom = self.atom(molecule.inner())?;
+        let dict = PyDict::new(py);
+        dict.set_item("element", ElementAst::from_ast(&atom.element))?;
+        dict.set_item("isotope_mass", IsotopeMassAst::from_ast(&atom.isotope_mass))?;
+        dict.set_item("charge", ValueAst::from_ast(py, &atom.charge)?)?;
+        dict.set_item(
+            "implicit_hydrogens",
+            ValueAst::from_ast(py, &atom.implicit_hydrogens)?,
+        )?;
+        dict.set_item("lone_pairs", ValueAst::from_ast(py, &atom.lone_pairs)?)?;
+        dict.set_item("spin", SpinStateAst::from_ast(py, &atom.spin)?)?;
+        dict.set_item(
+            "constraints",
+            atom_constraints_asdict(py, &atom.constraints)?,
+        )?;
+        Ok(dict)
+    }
 }
 
 /// The atoms of a molecule, indexed by integer position.
@@ -548,6 +649,13 @@ pub struct AtomViews {
 impl AtomViews {
     fn __len__(&self, py: Python<'_>) -> usize {
         self.owner.bind(py).borrow().inner().atoms().count()
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> String {
+        format!(
+            "AtomViews(len={})",
+            self.owner.bind(py).borrow().inner().atoms().count()
+        )
     }
 
     fn __getitem__(&self, py: Python<'_>, index: usize) -> PyResult<AtomView> {
@@ -571,16 +679,6 @@ impl AtomViews {
         }
         *molecule.inner_mut().atom_mut(AstAtomId(index as u32)).ast = atom.inner().clone();
         Ok(())
-    }
-
-    /// The atom at `index`, or `None` if out of range.
-    fn get(&self, py: Python<'_>, index: usize) -> Option<AtomView> {
-        let molecule = self.owner.bind(py).borrow();
-        let id = AstAtomId(index as u32);
-        molecule.inner().atoms().contains(id).then(|| AtomView {
-            owner: self.owner.clone_ref(py),
-            id,
-        })
     }
 
     fn __iter__(&self, py: Python<'_>) -> AtomViewIter {

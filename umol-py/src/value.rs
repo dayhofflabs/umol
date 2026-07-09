@@ -11,7 +11,7 @@ use umol_ast::ast::{
     ValuePredicate as AstValuePredicate, ValueTerm as AstValueTerm,
 };
 
-use crate::convert::into_py_variant;
+use crate::convert::{hash_ast, into_py_variant, variant_repr};
 
 /// Relational operator in a value predicate (`<=`, `>=`, `==`, `<`, `>`, `!=`).
 #[pyclass(eq, from_py_object)]
@@ -85,6 +85,30 @@ pub enum ValueTerm {
     Rem(Py<ValueTerm>, Py<ValueTerm>),
 }
 
+#[pymethods]
+impl ValueTerm {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            ValueTerm::Lit(_) => ("Lit", 1),
+            ValueTerm::Var(_) => ("Var", 1),
+            ValueTerm::Neg(_) => ("Neg", 1),
+            ValueTerm::Sum(_) => ("Sum", 1),
+            ValueTerm::Product(_) => ("Product", 1),
+            ValueTerm::Div(_, _) => ("Div", 2),
+            ValueTerm::Rem(_, _) => ("Rem", 2),
+        };
+        variant_repr(slf.bind(py).as_any(), "ValueTerm", variant, arity)
+    }
+}
+
 impl ValueTerm {
     /// Build the Python mirror from the AST term (one Python object per node).
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstValueTerm) -> PyResult<ValueTerm> {
@@ -153,6 +177,28 @@ pub enum ValuePredicate {
     Not(Py<ValuePredicate>),
     And(Vec<Py<ValuePredicate>>),
     Or(Vec<Py<ValuePredicate>>),
+}
+
+#[pymethods]
+impl ValuePredicate {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            ValuePredicate::Rel(_, _, _) => ("Rel", 3),
+            ValuePredicate::Mem(_, _, _) => ("Mem", 3),
+            ValuePredicate::Not(_) => ("Not", 1),
+            ValuePredicate::And(_) => ("And", 1),
+            ValuePredicate::Or(_) => ("Or", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "ValuePredicate", variant, arity)
+    }
 }
 
 impl ValuePredicate {
@@ -226,6 +272,27 @@ impl ValueAst {
     /// literal (undetermined, a set, a range, or an expression).
     fn as_lit(&self, py: Python<'_>) -> Option<i64> {
         self.to_ast(py).as_lit()
+    }
+
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            ValueAst::Undetermined() => ("Undetermined", 0),
+            ValueAst::Lit(_) => ("Lit", 1),
+            ValueAst::LitSet(_) => ("LitSet", 1),
+            ValueAst::RangeFrom(_) => ("RangeFrom", 1),
+            ValueAst::RangeTo(_) => ("RangeTo", 1),
+            ValueAst::Term(_) => ("Term", 1),
+            ValueAst::Predicate(_) => ("Predicate", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "ValueAst", variant, arity)
     }
 }
 

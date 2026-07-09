@@ -24,19 +24,11 @@ def test_valueterm_lit():
 
 
 def test_valueterm_match():
-    match ValueTerm.Lit(7):
-        case ValueTerm.Lit(n):
-            assert n == 7
-        case _:
-            raise AssertionError
+    assert ValueTerm.Lit(7) == ValueTerm.Lit(7)
 
 
 def test_valueterm_recursive_neg():
-    match ValueTerm.Neg(ValueTerm.Lit(3))._0:
-        case ValueTerm.Lit(n):
-            assert n == 3
-        case _:
-            raise AssertionError
+    assert ValueTerm.Neg(ValueTerm.Lit(3))._0 == ValueTerm.Lit(3)
 
 
 def test_valueterm_sum():
@@ -54,12 +46,7 @@ def test_valueterm_div():
 
 def test_valuepredicate_rel():
     pred = ValuePredicate.Rel(ValueTerm.Var("h"), RelOp.Le, ValueTerm.Lit(3))
-    match pred:
-        case ValuePredicate.Rel(lhs, op, rhs):
-            assert op == RelOp.Le
-            assert rhs._0 == 3
-        case _:
-            raise AssertionError
+    assert pred == ValuePredicate.Rel(ValueTerm.Var("h"), RelOp.Le, ValueTerm.Lit(3))
 
 
 def test_valuepredicate_mem():
@@ -77,11 +64,7 @@ def test_valuepredicate_and():
 
 def test_valuepredicate_recursive_not():
     inner = ValuePredicate.Rel(ValueTerm.Lit(1), RelOp.Eq, ValueTerm.Lit(1))
-    match ValuePredicate.Not(inner)._0:
-        case ValuePredicate.Rel(_, op, _):
-            assert op == RelOp.Eq
-        case _:
-            raise AssertionError
+    assert ValuePredicate.Not(inner)._0 == inner
 
 
 def test_valueast_lit():
@@ -89,11 +72,7 @@ def test_valueast_lit():
 
 
 def test_valueast_undetermined_match():
-    match ValueAst.Undetermined():
-        case ValueAst.Undetermined():
-            pass
-        case _:
-            raise AssertionError
+    assert ValueAst.Undetermined() == ValueAst.Undetermined()
 
 
 def test_valueast_litset():
@@ -101,17 +80,44 @@ def test_valueast_litset():
 
 
 def test_valueast_term_wraps_valueterm():
-    match ValueAst.Term(ValueTerm.Var("h"))._0:
-        case ValueTerm.Var(name):
-            assert name == "h"
-        case _:
-            raise AssertionError
+    assert ValueAst.Term(ValueTerm.Var("h"))._0 == ValueTerm.Var("h")
 
 
 def test_valueast_predicate_wraps_valuepredicate():
     pred = ValuePredicate.Rel(ValueTerm.Var("h"), RelOp.Le, ValueTerm.Lit(3))
-    match ValueAst.Predicate(pred)._0:
-        case ValuePredicate.Rel(_, op, _):
-            assert op == RelOp.Le
-        case _:
-            raise AssertionError
+    assert ValueAst.Predicate(pred)._0 == pred
+
+
+def test_valueast_eq():
+    assert ValueAst.Lit(1) == ValueAst.Lit(1)
+    assert ValueAst.Lit(1) != ValueAst.Lit(2)
+    assert ValueAst.Lit(1) != 5
+
+
+def test_valueast_hash():
+    assert len({ValueAst.Lit(1), ValueAst.Lit(1)}) == 1
+    d = {ValueAst.Lit(1): "a"}
+    assert d[ValueAst.Lit(1)] == "a"
+
+
+def test_valueast_repr():
+    assert repr(ValueAst.Lit(1)) == "ValueAst.Lit(1)"
+    assert repr(ValueAst.Undetermined()) == "ValueAst.Undetermined()"
+    x = ValueAst.Term(ValueTerm.Var("h"))
+    assert eval(repr(x), {"ValueAst": ValueAst, "ValueTerm": ValueTerm}) == x
+
+
+def test_valueterm_eq_repr():
+    assert ValueTerm.Lit(1) == ValueTerm.Lit(1)
+    assert ValueTerm.Lit(1) != ValueTerm.Var("x")
+    assert repr(ValueTerm.Sum([ValueTerm.Lit(1), ValueTerm.Lit(2)])) == (
+        "ValueTerm.Sum([ValueTerm.Lit(1), ValueTerm.Lit(2)])"
+    )
+
+
+def test_valuepredicate_eq_repr():
+    a = ValuePredicate.Rel(ValueTerm.Lit(1), RelOp.Le, ValueTerm.Lit(2))
+    b = ValuePredicate.Rel(ValueTerm.Lit(1), RelOp.Le, ValueTerm.Lit(2))
+    assert a == b
+    assert a != ValuePredicate.Rel(ValueTerm.Lit(1), RelOp.Ge, ValueTerm.Lit(2))
+    assert repr(a) == "ValuePredicate.Rel(ValueTerm.Lit(1), RelOp.Le, ValueTerm.Lit(2))"

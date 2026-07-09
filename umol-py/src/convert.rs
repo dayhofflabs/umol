@@ -1,6 +1,35 @@
 //! Conversion helpers shared by the mirror types.
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use pyo3::prelude::*;
+
+/// Hash an AST value with the default hasher, for the mirrors' `__hash__`.
+pub(crate) fn hash_ast<T: Hash>(value: &T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// The eval-able `__repr__` of a complex-enum variant instance: `Type.Variant(a, b)`,
+/// recursing through Python `repr()` on each tuple field (`_0`, `_1`, …).
+pub(crate) fn variant_repr(
+    obj: &Bound<'_, PyAny>,
+    type_name: &str,
+    variant: &str,
+    arity: usize,
+) -> PyResult<String> {
+    let mut parts = Vec::with_capacity(arity);
+    for i in 0..arity {
+        parts.push(
+            obj.getattr(format!("_{i}").as_str())?
+                .repr()?
+                .extract::<String>()?,
+        );
+    }
+    Ok(format!("{type_name}.{variant}({})", parts.join(", ")))
+}
 
 /// Wrap a complex-enum value into a `Py<T>` pointing at the **variant** instance.
 ///

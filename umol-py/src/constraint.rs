@@ -4,7 +4,7 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_ast::ast::{
@@ -16,7 +16,7 @@ use umol_ast::ast::{
 };
 
 use crate::atom::AtomAst;
-use crate::convert::into_py_variant;
+use crate::convert::{hash_ast, into_py_variant, variant_repr};
 use crate::molecule::MoleculeAst;
 use crate::stereo::{TetrahedralStereo, TetrahedralStereoAst};
 use crate::value::{ValueArg, ValueAst};
@@ -28,6 +28,26 @@ pub enum AromaticValenceAst {
     Undetermined(),
     NotAromatic(),
     Aromatic(ValueArg),
+}
+
+#[pymethods]
+impl AromaticValenceAst {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            AromaticValenceAst::Undetermined() => ("Undetermined", 0),
+            AromaticValenceAst::NotAromatic() => ("NotAromatic", 0),
+            AromaticValenceAst::Aromatic(_) => ("Aromatic", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "AromaticValenceAst", variant, arity)
+    }
 }
 
 impl AromaticValenceAst {
@@ -82,6 +102,26 @@ pub enum MulticenterValenceAst {
     Undetermined(),
     NotMulticenter(),
     Multicenter(ValueArg),
+}
+
+#[pymethods]
+impl MulticenterValenceAst {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            MulticenterValenceAst::Undetermined() => ("Undetermined", 0),
+            MulticenterValenceAst::NotMulticenter() => ("NotMulticenter", 0),
+            MulticenterValenceAst::Multicenter(_) => ("Multicenter", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "MulticenterValenceAst", variant, arity)
+    }
 }
 
 impl MulticenterValenceAst {
@@ -161,6 +201,25 @@ pub enum RingScope {
     Size(u8),
 }
 
+#[pymethods]
+impl RingScope {
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_ast() == other.to_ast()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_ast(&self.to_ast())
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            RingScope::All() => ("All", 0),
+            RingScope::Size(_) => ("Size", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "RingScope", variant, arity)
+    }
+}
+
 impl RingScope {
     pub(crate) fn from_ast(ast: &AstRingScope) -> Self {
         match ast {
@@ -194,6 +253,22 @@ impl RingMembershipAst {
             scope,
             count: count.to_py(py)?,
         })
+    }
+
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(format!(
+            "RingMembershipAst({}, {})",
+            self.scope.bind(py).as_any().repr()?.extract::<String>()?,
+            self.count.bind(py).as_any().repr()?.extract::<String>()?,
+        ))
     }
 }
 
@@ -230,6 +305,36 @@ pub enum AtomConstraintKey {
     RingValence(),
     TotalHydrogens(),
     RingMembership(Py<RingScope>),
+}
+
+#[pymethods]
+impl AtomConstraintKey {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            AtomConstraintKey::Valence() => ("Valence", 0),
+            AtomConstraintKey::DonatedPairs() => ("DonatedPairs", 0),
+            AtomConstraintKey::AcceptedPairs() => ("AcceptedPairs", 0),
+            AtomConstraintKey::AromaticValence() => ("AromaticValence", 0),
+            AtomConstraintKey::MulticenterValence() => ("MulticenterValence", 0),
+            AtomConstraintKey::TetrahedralStereo() => ("TetrahedralStereo", 0),
+            AtomConstraintKey::Degree() => ("Degree", 0),
+            AtomConstraintKey::TotalDegree() => ("TotalDegree", 0),
+            AtomConstraintKey::TotalValence() => ("TotalValence", 0),
+            AtomConstraintKey::RingDegree() => ("RingDegree", 0),
+            AtomConstraintKey::RingValence() => ("RingValence", 0),
+            AtomConstraintKey::TotalHydrogens() => ("TotalHydrogens", 0),
+            AtomConstraintKey::RingMembership(_) => ("RingMembership", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "AtomConstraintKey", variant, arity)
+    }
 }
 
 impl AtomConstraintKey {
@@ -299,6 +404,33 @@ impl AtomConstraintAst {
     #[getter]
     fn key(&self, py: Python<'_>) -> PyResult<AtomConstraintKey> {
         AtomConstraintKey::from_ast(py, &self.to_ast(py).key())
+    }
+
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let variant = match &*slf.bind(py).borrow() {
+            AtomConstraintAst::Valence(_) => "Valence",
+            AtomConstraintAst::TotalValence(_) => "TotalValence",
+            AtomConstraintAst::AromaticValence(_) => "AromaticValence",
+            AtomConstraintAst::MulticenterValence(_) => "MulticenterValence",
+            AtomConstraintAst::DonatedPairs(_) => "DonatedPairs",
+            AtomConstraintAst::AcceptedPairs(_) => "AcceptedPairs",
+            AtomConstraintAst::Degree(_) => "Degree",
+            AtomConstraintAst::TotalDegree(_) => "TotalDegree",
+            AtomConstraintAst::RingDegree(_) => "RingDegree",
+            AtomConstraintAst::RingValence(_) => "RingValence",
+            AtomConstraintAst::TotalHydrogens(_) => "TotalHydrogens",
+            AtomConstraintAst::RingMembership(_) => "RingMembership",
+            AtomConstraintAst::TetrahedralStereo(_) => "TetrahedralStereo",
+        };
+        variant_repr(slf.bind(py).as_any(), "AtomConstraintAst", variant, 1)
     }
 }
 
@@ -387,6 +519,34 @@ impl AtomConstraintAst {
     }
 }
 
+/// The argument to `update`: another constraint container (value or live view) or
+/// an iterable of `AtomConstraintAst` (each `set`, last-wins).
+#[derive(FromPyObject)]
+enum ConstraintsUpdate {
+    Container(Py<AtomConstraintsAst>),
+    View(Py<AtomConstraintsView>),
+    Entries(Vec<Py<AtomConstraintAst>>),
+}
+
+impl ConstraintsUpdate {
+    /// Overlay this update onto `target` in place.
+    fn apply(&self, py: Python<'_>, target: &mut AstAtomConstraintsAst) -> PyResult<()> {
+        match self {
+            ConstraintsUpdate::Container(c) => target.update(c.bind(py).borrow().inner()),
+            ConstraintsUpdate::View(v) => {
+                let snapshot = v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?;
+                target.update(&snapshot);
+            }
+            ConstraintsUpdate::Entries(entries) => {
+                for entry in entries {
+                    target.set(entry.bind(py).borrow().to_ast(py));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 /// The atom-scope constraints on an atom, in kind-sorted order.
 #[pyclass]
 pub struct AtomConstraintsAst(AstAtomConstraintsAst);
@@ -406,6 +566,23 @@ impl AtomConstraintsAst {
         AtomConstraintsAst(constraints)
     }
 
+    fn __eq__(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_ast(&self.0)
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let mut parts = Vec::with_capacity(self.0.len());
+        for entry in self.0.iter() {
+            let mirror = into_py_variant(py, AtomConstraintAst::from_ast(py, entry)?)?;
+            parts.push(mirror.bind(py).as_any().repr()?.extract::<String>()?);
+        }
+        Ok(format!("AtomConstraintsAst([{}])", parts.join(", ")))
+    }
+
     /// Insert `c`, replacing any existing entry of the same key (last-wins).
     fn set(&mut self, py: Python<'_>, c: Py<AtomConstraintAst>) {
         self.0.set(c.bind(py).borrow().to_ast(py));
@@ -423,17 +600,14 @@ impl AtomConstraintsAst {
             .transpose()
     }
 
-    /// Overlay `other` onto self (last-wins per key; undetermined entries remove).
-    fn update(&mut self, other: &AtomConstraintsAst) {
-        self.0.update(other.inner());
+    /// Overlay `other` onto self in place — another container or an iterable of
+    /// `AtomConstraintAst` (last-wins per key; undetermined entries remove).
+    fn update(&mut self, py: Python<'_>, other: ConstraintsUpdate) -> PyResult<()> {
+        other.apply(py, &mut self.0)
     }
 
     fn __len__(&self) -> usize {
         self.0.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.0.is_empty()
     }
 
     fn __iter__(&self, py: Python<'_>) -> PyResult<AtomConstraintIter> {
@@ -452,7 +626,28 @@ impl AtomConstraintsAst {
             .transpose()
     }
 
-    fn contains(&self, py: Python<'_>, key: Py<AtomConstraintKey>) -> bool {
+    /// The constraint with the given key; raises `KeyError` if absent.
+    fn __getitem__(&self, py: Python<'_>, key: Py<AtomConstraintKey>) -> PyResult<AtomConstraintAst> {
+        match self.0.get(key.bind(py).borrow().to_ast(py)) {
+            Some(constraint) => AtomConstraintAst::from_ast(py, constraint),
+            None => Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            )),
+        }
+    }
+
+    /// Remove the entry with the given key; raises `KeyError` if absent.
+    fn __delitem__(&mut self, py: Python<'_>, key: Py<AtomConstraintKey>) -> PyResult<()> {
+        if self.0.remove(key.bind(py).borrow().to_ast(py)).is_some() {
+            Ok(())
+        } else {
+            Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            ))
+        }
+    }
+
+    fn __contains__(&self, py: Python<'_>, key: Py<AtomConstraintKey>) -> bool {
         self.0.contains(key.bind(py).borrow().to_ast(py))
     }
 
@@ -808,25 +1003,38 @@ impl AtomConstraintsView {
         }
     }
 
+    /// Mutate the backing atom's constraints in place through `f`.
+    fn with_mut<R>(&self, py: Python<'_>, f: impl FnOnce(&mut AstAtomConstraintsAst) -> R) -> R {
+        match &self.backing {
+            ConstraintsBacking::Molecule { owner, id } => {
+                f(&mut owner.borrow_mut(py).inner_mut().atom_mut(*id).ast.constraints)
+            }
+            ConstraintsBacking::Atom(atom) => f(&mut atom.borrow_mut(py).inner_mut().constraints),
+        }
+    }
+
     /// Set one constraint on the backing atom in place (last-wins per key).
     fn set_ast(&self, py: Python<'_>, constraint: AstAtomConstraintAst) {
-        match &self.backing {
-            ConstraintsBacking::Molecule { owner, id } => owner
-                .borrow_mut(py)
-                .inner_mut()
-                .atom_mut(*id)
-                .ast
-                .constraints
-                .set(constraint),
-            ConstraintsBacking::Atom(atom) => {
-                atom.borrow_mut(py).inner_mut().constraints.set(constraint)
-            }
-        }
+        self.with_mut(py, |cs| cs.set(constraint));
+    }
+
+    /// Remove one key from the backing atom in place, returning the removed entry.
+    fn remove_ast(
+        &self,
+        py: Python<'_>,
+        key: AstAtomConstraintKey,
+    ) -> Option<AstAtomConstraintAst> {
+        self.with_mut(py, |cs| cs.remove(key))
     }
 }
 
 #[pymethods]
 impl AtomConstraintsView {
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let count = self.read(py, |cs| Ok(cs.len()))?;
+        Ok(format!("AtomConstraintsView({count} entries)"))
+    }
+
     /// Insert `c` on the atom in place, replacing any existing entry of the same
     /// key (last-wins).
     fn set(&self, py: Python<'_>, c: Py<AtomConstraintAst>) {
@@ -840,47 +1048,33 @@ impl AtomConstraintsView {
         py: Python<'_>,
         key: Py<AtomConstraintKey>,
     ) -> PyResult<Option<AtomConstraintAst>> {
-        let ast_key = key.bind(py).borrow().to_ast(py);
-        let removed = match &self.backing {
-            ConstraintsBacking::Molecule { owner, id } => owner
-                .borrow_mut(py)
-                .inner_mut()
-                .atom_mut(*id)
-                .ast
-                .constraints
-                .remove(ast_key),
-            ConstraintsBacking::Atom(atom) => {
-                atom.borrow_mut(py).inner_mut().constraints.remove(ast_key)
-            }
-        };
-        removed
+        self.remove_ast(py, key.bind(py).borrow().to_ast(py))
             .map(|c| AtomConstraintAst::from_ast(py, &c))
             .transpose()
     }
 
-    /// Overlay `other` onto the atom's constraints in place (last-wins per key;
-    /// undetermined entries remove).
-    fn update(&self, py: Python<'_>, other: &AtomConstraintsAst) {
-        match &self.backing {
-            ConstraintsBacking::Molecule { owner, id } => owner
-                .borrow_mut(py)
-                .inner_mut()
-                .atom_mut(*id)
-                .ast
-                .constraints
-                .update(other.inner()),
-            ConstraintsBacking::Atom(atom) => {
-                atom.borrow_mut(py).inner_mut().constraints.update(other.inner())
-            }
+    /// Remove the entry with the given key; raises `KeyError` if absent.
+    fn __delitem__(&self, py: Python<'_>, key: Py<AtomConstraintKey>) -> PyResult<()> {
+        if self
+            .remove_ast(py, key.bind(py).borrow().to_ast(py))
+            .is_some()
+        {
+            Ok(())
+        } else {
+            Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            ))
         }
+    }
+
+    /// Overlay `other` onto the atom's constraints in place — another container or an
+    /// iterable of `AtomConstraintAst` (last-wins per key; undetermined entries remove).
+    fn update(&self, py: Python<'_>, other: ConstraintsUpdate) -> PyResult<()> {
+        self.with_mut(py, |cs| other.apply(py, cs))
     }
 
     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
         self.read(py, |cs| Ok(cs.len()))
-    }
-
-    fn is_empty(&self, py: Python<'_>) -> PyResult<bool> {
-        self.read(py, |cs| Ok(cs.is_empty()))
     }
 
     fn __iter__(&self, py: Python<'_>) -> PyResult<AtomConstraintIter> {
@@ -901,7 +1095,23 @@ impl AtomConstraintsView {
         })
     }
 
-    fn contains(&self, py: Python<'_>, key: Py<AtomConstraintKey>) -> PyResult<bool> {
+    /// The constraint with the given key; raises `KeyError` if absent.
+    fn __getitem__(&self, py: Python<'_>, key: Py<AtomConstraintKey>) -> PyResult<AtomConstraintAst> {
+        let ast_key = key.bind(py).borrow().to_ast(py);
+        let found = self.read(py, |cs| {
+            cs.get(ast_key)
+                .map(|constraint| AtomConstraintAst::from_ast(py, constraint))
+                .transpose()
+        })?;
+        match found {
+            Some(constraint) => Ok(constraint),
+            None => Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            )),
+        }
+    }
+
+    fn __contains__(&self, py: Python<'_>, key: Py<AtomConstraintKey>) -> PyResult<bool> {
         let key = key.bind(py).borrow().to_ast(py);
         self.read(py, |cs| Ok(cs.contains(key)))
     }
@@ -1189,6 +1399,23 @@ impl RingSizeCounts {
         })
     }
 
+    /// The number of distinct ring sizes with a membership constraint.
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        self.read(py, |cs| Ok(ring_sizes(cs).count()))
+    }
+
+    fn __contains__(&self, py: Python<'_>, size: u8) -> PyResult<bool> {
+        self.read(py, |cs| Ok(cs.ring_size_count(size).is_some()))
+    }
+
+    /// Iterate the present ring sizes (as ints).
+    fn __iter__(&self, py: Python<'_>) -> PyResult<RingSizeIter> {
+        let sizes = self.read(py, |cs| Ok(ring_sizes(cs).collect::<Vec<u8>>()))?;
+        Ok(RingSizeIter {
+            sizes: sizes.into_iter(),
+        })
+    }
+
     /// Set the membership count for rings of `size` in place.
     fn __setitem__(&self, py: Python<'_>, size: u8, count: ValueArg) {
         let constraint =
@@ -1201,6 +1428,51 @@ impl RingSizeCounts {
         self.write(py, |cs| {
             cs.remove(AstAtomConstraintKey::RingMembership(AstRingScope::Size(size)));
         });
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        self.read(py, |cs| {
+            let mut parts = Vec::new();
+            for entry in cs.iter() {
+                if let AstAtomConstraintAst::RingMembership(m) = entry {
+                    if let AstRingScope::Size(size) = m.scope {
+                        let count = into_py_variant(py, ValueAst::from_ast(py, &m.count)?)?;
+                        parts.push(format!(
+                            "{size}: {}",
+                            count.bind(py).as_any().repr()?.extract::<String>()?
+                        ));
+                    }
+                }
+            }
+            Ok(format!("RingSizeCounts({{{}}})", parts.join(", ")))
+        })
+    }
+}
+
+/// The ring sizes with a membership constraint, in kind-sorted order.
+fn ring_sizes(constraints: &AstAtomConstraintsAst) -> impl Iterator<Item = u8> + '_ {
+    constraints.iter().filter_map(|entry| match entry {
+        AstAtomConstraintAst::RingMembership(m) => match m.scope {
+            AstRingScope::Size(size) => Some(size),
+            AstRingScope::All => None,
+        },
+        _ => None,
+    })
+}
+
+#[pyclass]
+struct RingSizeIter {
+    sizes: IntoIter<u8>,
+}
+
+#[pymethods]
+impl RingSizeIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> Option<u8> {
+        self.sizes.next()
     }
 }
 
@@ -1307,15 +1579,15 @@ mod tests {
             .unwrap();
             let constraints = AtomConstraintsAst::new(py, vec![valence, degree]);
             assert_eq!(constraints.__len__(), 2);
-            assert!(constraints.contains(
+            assert!(constraints.__contains__(
                 py,
                 into_py_variant(py, AtomConstraintKey::Valence()).unwrap()
             ));
-            assert!(constraints.contains(
+            assert!(constraints.__contains__(
                 py,
                 into_py_variant(py, AtomConstraintKey::Degree()).unwrap()
             ));
-            assert!(!constraints.contains(
+            assert!(!constraints.__contains__(
                 py,
                 into_py_variant(py, AtomConstraintKey::TotalHydrogens()).unwrap()
             ));
@@ -1413,7 +1685,7 @@ mod tests {
                 }
                 _ => panic!("expected removed Valence(Lit(4))"),
             }
-            assert!(constraints.is_empty());
+            assert_eq!(constraints.__len__(), 0);
         });
     }
 
@@ -1424,7 +1696,14 @@ mod tests {
             let mut other = AstAtomConstraintsAst::new();
             other.set(AstAtomConstraintAst::valence(4));
             other.set(AstAtomConstraintAst::degree(3));
-            constraints.update(&AtomConstraintsAst::from_inner(other));
+            constraints
+                .update(
+                    py,
+                    ConstraintsUpdate::Container(
+                        Py::new(py, AtomConstraintsAst::from_inner(other)).unwrap(),
+                    ),
+                )
+                .unwrap();
             assert_eq!(constraints.__len__(), 2);
             assert_eq!(
                 constraints.valence(py).unwrap().unwrap().to_ast(py),
@@ -1534,7 +1813,14 @@ mod tests {
             let mut other = AstAtomConstraintsAst::new();
             other.set(AstAtomConstraintAst::valence(4));
             other.set(AstAtomConstraintAst::degree(3));
-            view.update(py, &AtomConstraintsAst::from_inner(other));
+            view
+                .update(
+                    py,
+                    ConstraintsUpdate::Container(
+                        Py::new(py, AtomConstraintsAst::from_inner(other)).unwrap(),
+                    ),
+                )
+                .unwrap();
             let fresh = AtomConstraintsView {
                 backing: ConstraintsBacking::Molecule {
                     owner,
@@ -1617,7 +1903,14 @@ mod tests {
             let mut other = AstAtomConstraintsAst::new();
             other.set(AstAtomConstraintAst::valence(4));
             other.set(AstAtomConstraintAst::degree(3));
-            view.update(py, &AtomConstraintsAst::from_inner(other));
+            view
+                .update(
+                    py,
+                    ConstraintsUpdate::Container(
+                        Py::new(py, AtomConstraintsAst::from_inner(other)).unwrap(),
+                    ),
+                )
+                .unwrap();
             let fresh = AtomConstraintsView {
                 backing: ConstraintsBacking::Atom(atom),
             };
@@ -1776,6 +2069,65 @@ mod tests {
                     .to_ast(py),
                 AstValueAst::Lit(1)
             );
+        });
+    }
+
+    #[rstest]
+    fn test_atom_constraints_ast_update_entries() {
+        Python::attach(|py| {
+            let mut constraints = AtomConstraintsAst::new(py, vec![]);
+            let valence = into_py_variant(
+                py,
+                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+            )
+            .unwrap();
+            let degree = into_py_variant(
+                py,
+                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::degree(3)).unwrap(),
+            )
+            .unwrap();
+            constraints
+                .update(py, ConstraintsUpdate::Entries(vec![valence, degree]))
+                .unwrap();
+            assert_eq!(constraints.__len__(), 2);
+        });
+    }
+
+    #[rstest]
+    fn test_atom_constraints_ast_getitem_error() {
+        Python::attach(|py| {
+            let constraints = AtomConstraintsAst::new(py, vec![]);
+            let key = into_py_variant(py, AtomConstraintKey::Valence()).unwrap();
+            assert!(constraints.__getitem__(py, key).is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_atom_constraints_ast_delitem_error() {
+        Python::attach(|py| {
+            let mut constraints = AtomConstraintsAst::new(py, vec![]);
+            let key = into_py_variant(py, AtomConstraintKey::Valence()).unwrap();
+            assert!(constraints.__delitem__(py, key).is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_ring_size_counts_len_iter_contains() {
+        Python::attach(|py| {
+            let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![])).unwrap();
+            let proxy = AtomConstraintsAst::ring_size_count(constraints.clone_ref(py));
+            proxy.__setitem__(py, 6, ValueArg::Lit(3));
+            proxy.__setitem__(py, 5, ValueArg::Lit(1));
+            assert_eq!(proxy.__len__(py).unwrap(), 2);
+            assert!(proxy.__contains__(py, 6).unwrap());
+            assert!(!proxy.__contains__(py, 4).unwrap());
+            let mut iter = proxy.__iter__(py).unwrap();
+            let mut sizes = Vec::new();
+            while let Some(size) = iter.__next__() {
+                sizes.push(size);
+            }
+            sizes.sort_unstable();
+            assert_eq!(sizes, vec![5, 6]);
         });
     }
 }

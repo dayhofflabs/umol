@@ -29,12 +29,6 @@ impl MoleculeAst {
         MoleculeAst(AstMoleculeAst::from_atoms_and_bonds(ast_atoms, Vec::new()))
     }
 
-    /// Number of atoms.
-    #[getter]
-    fn atom_count(&self) -> u32 {
-        self.0.atoms().count() as u32
-    }
-
     /// The atoms, indexed by integer position.
     #[getter]
     fn atoms(slf: Py<Self>) -> AtomViews {
@@ -76,17 +70,17 @@ mod tests {
 
     #[rstest]
     fn test_molecule_ast_new() {
-        assert_eq!(MoleculeAst::new().atom_count(), 0);
+        assert_eq!(MoleculeAst::new().inner().atoms().count(), 0);
     }
 
     #[rstest]
     #[case(vec![], 0)]
     #[case(vec![Element::C], 1)]
     #[case(vec![Element::C, Element::O], 2)]
-    fn test_molecule_ast_atom_count(#[case] elements: Vec<Element>, #[case] expected: u32) {
+    fn test_molecule_ast_atoms(#[case] elements: Vec<Element>, #[case] expected: usize) {
         let atoms = elements.into_iter().map(AtomAst::from_element).collect();
         let molecule = MoleculeAst(AstMoleculeAst::from_atoms_and_bonds(atoms, vec![]));
-        assert_eq!(molecule.atom_count(), expected);
+        assert_eq!(molecule.inner().atoms().count(), expected);
     }
 
     #[rstest]
