@@ -1,152 +1,13 @@
-//! The `mol!` function-like macro: a compile-checked visual literal that desugars to an L2
-//! `MoleculeSpec` and builds a `MoleculeAst`. Grammar: comma-separated *paths* of atoms joined by
-//! bond ops. An atom is `(name: elem)` (a named declaration), `(name)` (a reference to a declaration),
-//! or a bare `elem` (an anonymous, unreferenceable atom) — where `elem` is an element ident (`C`) or a
-//! DSL-spec string (`"C#h3"`). Bond ops: `-` single, `=` double, `#` triple, `-[ "spec" ]-` a full DSL
-//! bond spec. Undeclared references and duplicate declarations are `compile_error!`s; element and spec
-//! strings are runtime-parsed at `build()`. Names are compile-time labels only — every atom is resolved
-//! to a creation position and lowered to a nameless L2 `atoms([…])` term wired by position.
-
-use std::collections::HashMap;
-use std::iter;
+//! The `mol!` function-like macro: a compile-checked visual literal over the shared path grammar
+//! (see [`crate::parse`]) that desugars to an L2 `MoleculeSpec` and builds a `MoleculeAst`. Every atom
+//! resolves to a creation position; the molecule is emitted as one nameless `atoms([spec, …])` term
+//! wired by position. Port markers (`^name`) belong to `frag!` and are rejected here.
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::parse::{Parse, ParseStream};
-use syn::token::{Bracket, Paren};
-use syn::{bracketed, parenthesized, parse2, Error, Ident, LitStr, Result, Token};
+use syn::{parse2, Error, Result};
 
-/// The whole `mol!` body: comma-separated paths.
-struct MolInput {
-    paths: Vec<Path>,
-}
-
-impl Parse for MolInput {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let mut paths = Vec::new();
-        while !input.is_empty() {
-            paths.push(input.parse::<Path>()?);
-            if input.is_empty() {
-                break;
-            }
-            input.parse::<Token![,]>()?;
-        }
-        Ok(MolInput { paths })
-    }
-}
-
-/// A bonded chain of atoms: `first (op atom)*`.
-struct Path {
-    first: Atom,
-    rest: Vec<(Bond, Atom)>,
-}
-
-impl Path {
-    fn atoms(&self) -> impl Iterator<Item = &Atom> {
-        iter::once(&self.first).chain(self.rest.iter().map(|(_, atom)| atom))
-    }
-}
-
-impl Parse for Path {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let first = input.parse::<Atom>()?;
-        let mut rest = Vec::new();
-        while input.peek(Token![-]) || input.peek(Token![=]) || input.peek(Token![#]) {
-            let op = input.parse::<Bond>()?;
-            let atom = input.parse::<Atom>()?;
-            rest.push((op, atom));
-        }
-        Ok(Path { first, rest })
-    }
-}
-
-/// One atom in a path: a named declaration `(name: elem)`, a `(name)` reference to a declaration, or
-/// a bare anonymous atom `elem` (an element ident or spec string) that nothing can reference.
-enum Atom {
-    Declaration { name: Ident, spec: ElementSpec },
-    Reference { name: Ident },
-    Anonymous { spec: ElementSpec },
-}
-
-impl Parse for Atom {
-    fn parse(input: ParseStream) -> Result<Self> {
-        if input.peek(Paren) {
-            let content;
-            parenthesized!(content in input);
-            let name = content.parse::<Ident>()?;
-            if content.peek(Token![:]) {
-                content.parse::<Token![:]>()?;
-                Ok(Atom::Declaration {
-                    name,
-                    spec: content.parse::<ElementSpec>()?,
-                })
-            } else {
-                Ok(Atom::Reference { name })
-            }
-        } else {
-            Ok(Atom::Anonymous {
-                spec: input.parse::<ElementSpec>()?,
-            })
-        }
-    }
-}
-
-/// A bare element ident (`C` → `"C"`) or a DSL-spec string (`"C#h3"`).
-enum ElementSpec {
-    Bare(Ident),
-    Spec(LitStr),
-}
-
-impl ElementSpec {
-    /// The spec as a string literal for the L2 `Into<AtomAst>` path.
-    fn as_lit(&self) -> LitStr {
-        match self {
-            ElementSpec::Bare(ident) => LitStr::new(&ident.to_string(), ident.span()),
-            ElementSpec::Spec(lit) => lit.clone(),
-        }
-    }
-}
-
-impl Parse for ElementSpec {
-    fn parse(input: ParseStream) -> Result<Self> {
-        if input.peek(LitStr) {
-            Ok(ElementSpec::Spec(input.parse()?))
-        } else {
-            Ok(ElementSpec::Bare(input.parse()?))
-        }
-    }
-}
-
-enum Bond {
-    Single,
-    Double,
-    Triple,
-    /// `-[ "spec" ]-` — a full DSL bond spec (order, `#a`, charge, spin, ring).
-    Spec(LitStr),
-}
-
-impl Parse for Bond {
-    fn parse(input: ParseStream) -> Result<Self> {
-        if input.peek(Token![=]) {
-            input.parse::<Token![=]>()?;
-            Ok(Bond::Double)
-        } else if input.peek(Token![#]) {
-            input.parse::<Token![#]>()?;
-            Ok(Bond::Triple)
-        } else {
-            input.parse::<Token![-]>()?;
-            if input.peek(Bracket) {
-                let content;
-                bracketed!(content in input);
-                let spec = content.parse::<LitStr>()?;
-                input.parse::<Token![-]>()?;
-                Ok(Bond::Spec(spec))
-            } else {
-                Ok(Bond::Single)
-            }
-        }
-    }
-}
+use crate::parse::{bond_term, resolve_positions, Atom, MolInput};
 
 pub fn expand(input: TokenStream) -> TokenStream {
     match parse2::<MolInput>(input).and_then(codegen) {
@@ -156,54 +17,18 @@ pub fn expand(input: TokenStream) -> TokenStream {
 }
 
 fn codegen(input: MolInput) -> Result<TokenStream> {
-    // Pass 1: assign a creation position to every declaration and anonymous atom in appearance order,
-    // collecting their specs. Record declared names for cross-path references; reject duplicates.
-    // References create nothing; anonymous atoms never enter `names`, so nothing can reference them.
-    let mut names: HashMap<String, u32> = HashMap::new();
-    let mut specs: Vec<LitStr> = Vec::new();
     for path in &input.paths {
         for atom in path.atoms() {
-            match atom {
-                Atom::Declaration { name, spec } => {
-                    let position = specs.len() as u32;
-                    if names.insert(name.to_string(), position).is_some() {
-                        return Err(Error::new(
-                            name.span(),
-                            format!("atom `{name}` is declared more than once"),
-                        ));
-                    }
-                    specs.push(spec.as_lit());
-                }
-                Atom::Anonymous { spec } => specs.push(spec.as_lit()),
-                Atom::Reference { .. } => {}
+            if let Atom::Port { name } = atom {
+                return Err(Error::new(
+                    name.span(),
+                    "ports (`^name`) are only allowed in `frag!`",
+                ));
             }
         }
     }
 
-    // Pass 2: resolve each atom occurrence to its position — declarations and anonymous atoms advance
-    // the position counter in the same order as pass 1; references resolve to their declaration.
-    let mut next_position = 0u32;
-    let mut path_positions: Vec<Vec<u32>> = Vec::new();
-    for path in &input.paths {
-        let mut row = Vec::new();
-        for atom in path.atoms() {
-            let position = match atom {
-                Atom::Declaration { .. } | Atom::Anonymous { .. } => {
-                    let position = next_position;
-                    next_position += 1;
-                    position
-                }
-                Atom::Reference { name } => *names.get(&name.to_string()).ok_or_else(|| {
-                    Error::new(
-                        name.span(),
-                        format!("atom `{name}` is referenced but never declared"),
-                    )
-                })?,
-            };
-            row.push(position);
-        }
-        path_positions.push(row);
-    }
+    let (specs, positions) = resolve_positions(&input.paths)?;
 
     let atoms = if specs.is_empty() {
         quote! {}
@@ -212,16 +37,11 @@ fn codegen(input: MolInput) -> Result<TokenStream> {
     };
 
     let mut bonds = Vec::new();
-    for (path, row) in input.paths.iter().zip(&path_positions) {
+    for (path, row) in input.paths.iter().zip(&positions) {
         for (index, (op, _)) in path.rest.iter().enumerate() {
-            let a = row[index];
-            let b = row[index + 1];
-            bonds.push(match op {
-                Bond::Single => quote! { single(#a, #b) },
-                Bond::Double => quote! { double(#a, #b) },
-                Bond::Triple => quote! { triple(#a, #b) },
-                Bond::Spec(spec) => quote! { bond(#a, #b, #spec) },
-            });
+            let first = row[index].expect("mol! rejects ports before resolving");
+            let second = row[index + 1].expect("mol! rejects ports before resolving");
+            bonds.push(bond_term(op, first, second));
         }
     }
 

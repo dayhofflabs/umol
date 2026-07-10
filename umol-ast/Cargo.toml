@@ -58,6 +58,9 @@ name = "mol_macro"
 [[test]]
 name = "mol_macro_ui"
 
+[[test]]
+name = "frag_macro"
+
 [[bench]]
 name = "parsing"
 harness = false

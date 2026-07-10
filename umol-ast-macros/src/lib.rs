@@ -6,13 +6,22 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident};
 
+mod frag;
 mod mol;
+mod parse;
 
 /// The `mol!` visual-literal macro: a compile-checked molecular graph literal that desugars to an L2
 /// `MoleculeSpec` and builds a `MoleculeAst`.
 #[proc_macro]
 pub fn mol(input: TokenStream) -> TokenStream {
     mol::expand(input.into()).into()
+}
+
+/// The `frag!` visual-literal macro: a compile-checked fragment literal, the `mol!` grammar plus
+/// `^name` port markers, that desugars to an L3 `Fragment`.
+#[proc_macro]
+pub fn frag(input: TokenStream) -> TokenStream {
+    frag::expand(input.into()).into()
 }
 
 /// Named fields of a struct, or a compile-error `TokenStream` for tuple/unit

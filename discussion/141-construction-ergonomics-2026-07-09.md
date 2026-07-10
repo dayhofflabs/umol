@@ -419,8 +419,11 @@ constraints ⇒ pattern), since both are just `MoleculeAst`.
 - **Bonds** — order shortcuts `-` / `=` / `#`; general **Cypher-style** `-[ "spec" ]-` (optionally
   `-[name: "spec"]-`), spec = a DSL bond spec (order, `#a` aromatic, charge, spin, ring); the optional
   name enables bond references. Atoms `(…)` and bonds `-[…]-` are symmetric (shortcut or quoted spec).
-- **Ports** (`frag!` only) — `*name` in an atom slot: a bond to `*name` declares a port on the other
-  endpoint, colour read off the bond op (SMILES `*` / R-group / operad boundary). No separate syntax.
+- **Ports** (`frag!` only) — `^name` in an atom slot: a bond to `^name` declares a port on the other
+  endpoint, colour read off the bond op (R-group / operad boundary). No separate syntax. Port names are
+  the fragment's *interface* labels, a namespace separate from the internal atom/bond labels. `^`
+  (anchor) is used rather than SMILES `*` so `*` stays free for a future Kleene-star / variable-topology
+  operator (Cypher `-[*1..3]-`).
 - **Overlays** — keyword statements in the same block (**not** nested macros), referencing named atoms:
   `aromatic [a, b, …] : "electrons"`, `dative [donors…] -> acceptor`, `multicenter [ … ] : …`,
   `noncovalent (a) ~ (b) : "kind"`, `stereo (site) [ligands…] : "kind"`. Each desugars to its L2 term.
@@ -432,14 +435,15 @@ Atom decl → `atoms`/`atom` term (`(name, spec)` create); ref → `name(…)`; 
 `triple`/`bond`; overlay → its term. `mol!` emits `(MoleculeSpec::new() + … ).build()`; `frag!` wraps in
 `Fragment::new(…).with_port(…)`.
 
-### Port finishing (refines L3 `close`)
+### Port finishing (refines L3 `close` → `finish`)
 
-The ground-vs-pattern duality of a fragment's free ports:
-- **`close()`** — *ground*: every port must be paired; a free port is an error.
-- **pattern close** (name TBD) — each free port becomes an undetermined `*` `AtomAst` bonded via the
-  port's colour ("something attaches here").
-(Supersedes decision 5's vaguer "open valence"; a lenient-ground "leave the valence open for resolution"
-could be a third mode if wanted.)
+The ground-vs-pattern duality of a fragment's free ports (both implemented):
+- **`finish()`** — *ground*: every port must be paired; a free port **panics** (a construction bug,
+  like a bad port ref — consistent with `attach`). Renamed from the placeholder `close()`.
+- **`finish_open()`** — *pattern*: each free port becomes an undetermined wildcard `AtomAst` bonded via
+  the port's colour ("something attaches here").
+(Supersedes decision 5's vaguer "open valence"; a lenient "leave the valence open for resolution" could
+be a third mode if wanted.)
 
 ### Compile-time checking — **decided: A** (2026-07-10)
 
@@ -477,10 +481,33 @@ relocating it doesn't help. The lever is `mol!`'s crate, not the parser's.
   multicenter/noncovalent/stereo-atom/stereo-bond, mirroring `AtomAst`; stereo via the `stereo_element!`
   macro) so a quoted DSL spec becomes the entity via `Into` — the uniform string-spec surface the macro
   emits onto.
-- **S2** — `frag!` + `*name` ports → `Fragment`; the two `close` modes (ground-error / pattern-`*`).
-  `[dep: S1]`
+- **S2 — done.** Shared parser extracted to `umol-ast-macros/src/parse.rs` (`MolInput`/`Path`/`Atom`/
+  `ElementSpec`/`Bond` + `resolve_positions` + `bond_term`); `mol.rs` and `frag.rs` are thin codegen over
+  it. `frag!` adds the `^name` port marker (`Atom::Port`): a bond incident to a marker emits
+  `.with_port(name, AtomId(pos), colour)` on the real endpoint; a marker-to-marker bond is a
+  `compile_error!`. `mol!` rejects ports with a `compile_error!`. L3 `close()` → `finish()` (strict,
+  panics on a free port) + `finish_open()` (pattern-caps each free port with a wildcard atom). `frag` is
+  re-exported at `umol_ast::frag`. Tests: `umol-ast/tests/frag_macro.rs` (port, multi-port, spec-colour
+  port, `finish_open`), fragment.rs unit tests (`with_port` / `finish` / `finish_error` / `finish_open`),
+  a `trybuild` compile-fail for a port in `mol!`.
 - **S3** — overlay keyword statements (aromatic / dative / multicenter / noncovalent / stereo). `[dep: S1]`
 - Deferrable: bond-spec compile-validation (the shared-parser-crate split).
+
+#### Bond references — future (decided: shared namespace)
+
+Bonds are anonymous today (`-`, `=`, `#`, and the nameless `-[ "spec" ]-`); no bond-naming or
+bond-reference syntax exists. The consumer that needs it is **stereo-bond anchoring**: a stereo overlay
+must name the bond it decorates. The planned syntax binds a label in the bracket form —
+`-[b: "spec"]-` binds `b` to the bond — mirroring the atom `(name: elem)` shape. The bracket stays on
+`-` only (order lives in the spec string; `=[…]=` is not a thing).
+
+**Decision: atom and bond labels share one namespace**, disambiguated positionally at the binding site
+(`(a)` atom vs `[b]` bond) — the Cypher variable model. A label names exactly one entity, atom or bond,
+never both; any collision (atom/atom, bond/bond, atom/bond) is a `compile_error!`. This matches the DSL,
+where ids are already unique across all entity types, and avoids the ambiguity Neo4j deprecated with its
+per-type `id()` spaces (superseded by a single `elementId()`). Codegen resolves bond labels the same way
+atom labels resolve to creation positions — to bond positions — which the stereo overlay term then
+references. `[dep: S3 stereo overlays]`
 
 `mol!` and `frag!` are split (revisit if they converge). Quoteless elements accepted; anything richer is
 a quoted DSL spec.

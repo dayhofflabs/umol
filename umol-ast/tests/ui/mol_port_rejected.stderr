@@ -1,0 +1,5 @@
+error: ports (`^name`) are only allowed in `frag!`
+ --> tests/ui/mol_port_rejected.rs:5:28
+  |
+5 |     let _ = mol!((c: C) - ^x);
+  |                            ^

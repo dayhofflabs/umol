@@ -1,11 +1,13 @@
 //! Fragment algebra — a `MoleculeAst` body with a positional, colour-typed **port interface**.
 //! `attach` (operadic composition) wires two fragments through a pair of ports; `+` (monoidal
-//! product) juxtaposes them without wiring; `close` finalizes to the body.
+//! product) juxtaposes them without wiring; `finish` finalizes to the body (`finish_open` closes to a
+//! pattern, capping each free port with a wildcard atom).
 
 use std::ops::Add;
 
 use umol_graph_core::NodeId;
 
+use super::super::atom::{AtomAst, ElementAst};
 use super::super::bond::BondAst;
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::id::AtomId;
@@ -59,7 +61,7 @@ impl From<String> for PortArg {
 }
 
 /// A subgraph with a port interface: a `MoleculeAst` body plus the ordered ports it may attach
-/// through. Compose with `attach` / `+`, finalize with `close`.
+/// through. Compose with `attach` / `+`, finalize with `finish` (or `finish_open` for a pattern).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fragment {
     body: MoleculeAst,
@@ -110,9 +112,27 @@ impl Fragment {
         &self.ports
     }
 
-    /// Finalize into the body; free ports become open valence (resolved separately).
-    pub fn close(self) -> MoleculeAst {
+    /// Finalize into the body. Every port must have been paired by `attach`; a remaining free port
+    /// panics — a construction bug, like a bad port ref. For a pattern that leaves ports open, use
+    /// [`finish_open`](Self::finish_open).
+    pub fn finish(self) -> MoleculeAst {
+        assert!(
+            self.ports.is_empty(),
+            "fragment has {} unpaired port(s); attach them or use `finish_open`",
+            self.ports.len()
+        );
         self.body
+    }
+
+    /// Finalize into a pattern: each free port becomes an undetermined wildcard atom bonded to the
+    /// port's atom through the port's colour — "something attaches here".
+    pub fn finish_open(self) -> MoleculeAst {
+        let mut editor = self.body.edit();
+        for port in self.ports {
+            let wildcard = editor.add_atom(AtomAst::new(ElementAst::undetermined()));
+            editor.add_bond(port.atom, wildcard, port.bond);
+        }
+        editor.build()
     }
 
     /// Attach `self`'s `self_port` to `other`'s `other_port` — the operadic composition (the only
@@ -236,14 +256,14 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ast::atom::AtomAst;
+    use crate::ast::atom::{AtomAst, ElementAst};
     use crate::ast::id::BondId;
 
     #[rstest]
-    fn test_fragment_close() {
+    fn test_fragment_with_port() {
         let body =
             MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], Vec::new());
-        let fragment = Fragment::new(body.clone())
+        let fragment = Fragment::new(body)
             .with_port("open", AtomId(0), BondAst::from_order(1))
             .with_unnamed_port(AtomId(0), BondAst::from_order(2));
 
@@ -262,7 +282,42 @@ mod tests {
                 },
             ]
         );
-        assert_eq!(fragment.close(), body);
+    }
+
+    #[rstest]
+    fn test_fragment_finish() {
+        let body =
+            MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], Vec::new());
+
+        assert_eq!(Fragment::new(body.clone()).finish(), body);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "unpaired port")]
+    fn test_fragment_finish_error() {
+        let body =
+            MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], Vec::new());
+        Fragment::new(body)
+            .with_port("open", AtomId(0), BondAst::from_order(1))
+            .finish();
+    }
+
+    #[rstest]
+    fn test_fragment_finish_open() {
+        let body =
+            MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], Vec::new());
+        let pattern = Fragment::new(body)
+            .with_port("r", AtomId(0), BondAst::from_order(2))
+            .finish_open();
+
+        // the free port became a wildcard atom double-bonded to the carbon
+        assert_eq!(pattern.atoms().count(), 2);
+        assert_eq!(
+            pattern.atom(AtomId(1)).ast,
+            &AtomAst::new(ElementAst::undetermined())
+        );
+        assert_eq!(pattern.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
+        assert_eq!(pattern.bond(BondId(0)).ast, &BondAst::from_order(2));
     }
 
     #[rstest]
@@ -349,7 +404,7 @@ mod tests {
         ))
         .with_port("b", AtomId(0), BondAst::from_order(2));
 
-        let body = left.attach("a", right, "b").close();
+        let body = left.attach("a", right, "b").finish();
 
         assert_eq!(body.bond(BondId(0)).ast, &BondAst::from_order(2));
     }
