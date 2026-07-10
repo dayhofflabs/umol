@@ -1,6 +1,7 @@
 //! Connectivity (tier-3) validator — checks molecule connectivity with respect to [`ConnectivityModel`].
 
 use std::collections::HashSet;
+use std::iter;
 
 use thiserror::Error;
 use umol_graph_core::UnionFind;
@@ -16,6 +17,7 @@ use super::super::molecule::MoleculeAst;
 /// - `allow_disconnected`: allow disconnected atom / bond graph
 /// - `allow_disconnected_<family>`: allow straddling relations of that family
 ///   (`false` = its atoms must share one bond component).
+///
 /// The defaults permit a disconnected molecule and straddling dative / multicenter / noncovalent bonds
 /// and molecule constraints.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,7 +137,7 @@ impl<'a> ConnectivityValidator<'a> {
         if !self.model.allow_disconnected_stereo_atom {
             for (index, stereo) in ast.stereo_atoms().iter().enumerate() {
                 let atoms =
-                    std::iter::once(stereo.site_id()).chain(stereo.ligands().map(|l| l.atom_id()));
+                    iter::once(stereo.site_id()).chain(stereo.ligands().map(|l| l.atom_id()));
                 if spans(&roots, atoms) {
                     return contradiction(ConnectivityContradiction::DisconnectedStereoAtom {
                         stereo_atom: StereoAtomId(index as u32),

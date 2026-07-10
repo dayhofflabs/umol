@@ -2,12 +2,13 @@
 
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
+use std::iter;
 use std::ops::Index;
 use std::sync::{Arc, OnceLock};
 
 pub use build::MoleculeBuilder;
-pub use fragment::{Fragment, Port, PortArg};
 pub use editor::MoleculeEditor;
+pub use fragment::{Fragment, Port, PortArg};
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{
     Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
@@ -1042,7 +1043,10 @@ impl MoleculeAst {
                 }
                 for system in self.aromatic_systems().iter() {
                     let members: Vec<AtomId> = system.atom_ids().collect();
-                    if members.first().map_or(false, |a| component_of(*a) == component) {
+                    if members
+                        .first()
+                        .is_some_and(|a| component_of(*a) == component)
+                    {
                         editor.add_aromatic_system(
                             members.iter().map(|a| compact(*a)).collect(),
                             system.ast.clone(),
@@ -1051,7 +1055,10 @@ impl MoleculeAst {
                 }
                 for bond in self.multicenter_bonds().iter() {
                     let members: Vec<AtomId> = bond.atom_ids().collect();
-                    if members.first().map_or(false, |a| component_of(*a) == component) {
+                    if members
+                        .first()
+                        .is_some_and(|a| component_of(*a) == component)
+                    {
                         editor.add_multicenter_bond(
                             members.iter().map(|a| compact(*a)).collect(),
                             bond.ast.clone(),
@@ -1128,7 +1135,11 @@ impl MoleculeAst {
     /// and the connectivity validator checks (mirrors the ids each `Constraint` arm carries, resolved
     /// to atoms; a `None`-scoped molecule constraint binds the whole molecule).
     pub fn constraint_atoms(&self, constraint: &Constraint) -> Vec<AtomId> {
-        let all_atoms = || (0..self.atoms().count() as u32).map(AtomId).collect::<Vec<_>>();
+        let all_atoms = || {
+            (0..self.atoms().count() as u32)
+                .map(AtomId)
+                .collect::<Vec<_>>()
+        };
         match constraint {
             Constraint::Atom(id, _) => vec![*id],
             Constraint::Bond(id, _) => self.bond(*id).atom_ids().to_vec(),
@@ -1138,7 +1149,7 @@ impl MoleculeAst {
             Constraint::NoncovalentBond(id, _) => self.noncovalent_bond(*id).atom_ids().to_vec(),
             Constraint::StereoAtom(id, _, _) => {
                 let view = self.stereo_atom(*id);
-                std::iter::once(view.site_id())
+                iter::once(view.site_id())
                     .chain(view.ligands().map(|ligand| ligand.atom_id()))
                     .collect()
             }
@@ -1154,9 +1165,14 @@ impl MoleculeAst {
             Constraint::Molecule(molecule) => match molecule {
                 MoleculeConstraint::ChargeSum { atoms, .. }
                 | MoleculeConstraint::SpinSum { atoms, .. }
-                | MoleculeConstraint::Connected { atoms } => atoms.clone().unwrap_or_else(all_atoms),
+                | MoleculeConstraint::Connected { atoms } => {
+                    atoms.clone().unwrap_or_else(all_atoms)
+                }
                 MoleculeConstraint::BondOrderSum { bonds, .. } => match bonds {
-                    Some(bonds) => bonds.iter().flat_map(|b| self.bond(*b).atom_ids()).collect(),
+                    Some(bonds) => bonds
+                        .iter()
+                        .flat_map(|b| self.bond(*b).atom_ids())
+                        .collect(),
                     None => all_atoms(),
                 },
                 MoleculeConstraint::SubPattern { anchor, .. } => {
@@ -1200,7 +1216,7 @@ impl MoleculeAst {
         };
         let stereo_atom = |id, extra: &[AtomId]| {
             let view = self.stereo_atom(id);
-            std::iter::once(view.site_id())
+            iter::once(view.site_id())
                 .chain(view.ligands().map(|ligand| ligand.atom_id()))
                 .chain(extra.iter().copied())
                 .collect::<Vec<_>>()
@@ -1217,14 +1233,17 @@ impl MoleculeAst {
         match constraint {
             RelationalConstraint::DativeBondDonors { bond, atoms } => dative(*bond, atoms),
             RelationalConstraint::DativeBondDonor { bond, atom } => dative(*bond, &[*atom]),
-            RelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => dative(*bond, atoms),
+            RelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => {
+                dative(*bond, atoms)
+            }
             RelationalConstraint::DativeBondAllDonors { bond, .. } => dative(*bond, &[]),
             RelationalConstraint::DativeBondAnyDonor { bond, .. } => dative(*bond, &[]),
             RelationalConstraint::DativeBondAcceptor { bond, atom } => dative(*bond, &[*atom]),
             RelationalConstraint::DativeBondAcceptorSatisfies { bond, .. } => dative(*bond, &[]),
-            RelationalConstraint::DativeBondParallels { dative: id, parallel } => {
-                dative(*id, &self.bond(*parallel).atom_ids())
-            }
+            RelationalConstraint::DativeBondParallels {
+                dative: id,
+                parallel,
+            } => dative(*id, &self.bond(*parallel).atom_ids()),
             RelationalConstraint::AromaticSystemAtoms { system, atoms } => aromatic(*system, atoms),
             RelationalConstraint::AromaticSystemContains { system, atom } => {
                 aromatic(*system, &[*atom])
@@ -1247,37 +1266,45 @@ impl MoleculeAst {
             RelationalConstraint::NoncovalentBondContains { bond, atom } => {
                 noncovalent(*bond, &[*atom])
             }
-            RelationalConstraint::NoncovalentBondEndsSatisfy { bond, .. } => noncovalent(*bond, &[]),
-            RelationalConstraint::StereoAtomSite { stereo_atom: id, atom } => {
-                stereo_atom(*id, &[*atom])
+            RelationalConstraint::NoncovalentBondEndsSatisfy { bond, .. } => {
+                noncovalent(*bond, &[])
             }
-            RelationalConstraint::StereoAtomContains { stereo_atom: id, atom } => {
-                stereo_atom(*id, &[*atom])
-            }
-            RelationalConstraint::StereoAtomLigands { stereo_atom: id, atoms } => {
-                stereo_atom(*id, atoms)
-            }
-            RelationalConstraint::StereoAtomAllLigands { stereo_atom: id, .. } => {
-                stereo_atom(*id, &[])
-            }
-            RelationalConstraint::StereoAtomAnyLigand { stereo_atom: id, .. } => {
-                stereo_atom(*id, &[])
-            }
-            RelationalConstraint::StereoBondSite { stereo_bond: id, bond } => {
-                stereo_bond(*id, &self.bond(*bond).atom_ids())
-            }
-            RelationalConstraint::StereoBondContains { stereo_bond: id, atom } => {
-                stereo_bond(*id, &[*atom])
-            }
-            RelationalConstraint::StereoBondLigands { stereo_bond: id, atoms } => {
-                stereo_bond(*id, atoms)
-            }
-            RelationalConstraint::StereoBondAllLigands { stereo_bond: id, .. } => {
-                stereo_bond(*id, &[])
-            }
-            RelationalConstraint::StereoBondAnyLigand { stereo_bond: id, .. } => {
-                stereo_bond(*id, &[])
-            }
+            RelationalConstraint::StereoAtomSite {
+                stereo_atom: id,
+                atom,
+            } => stereo_atom(*id, &[*atom]),
+            RelationalConstraint::StereoAtomContains {
+                stereo_atom: id,
+                atom,
+            } => stereo_atom(*id, &[*atom]),
+            RelationalConstraint::StereoAtomLigands {
+                stereo_atom: id,
+                atoms,
+            } => stereo_atom(*id, atoms),
+            RelationalConstraint::StereoAtomAllLigands {
+                stereo_atom: id, ..
+            } => stereo_atom(*id, &[]),
+            RelationalConstraint::StereoAtomAnyLigand {
+                stereo_atom: id, ..
+            } => stereo_atom(*id, &[]),
+            RelationalConstraint::StereoBondSite {
+                stereo_bond: id,
+                bond,
+            } => stereo_bond(*id, &self.bond(*bond).atom_ids()),
+            RelationalConstraint::StereoBondContains {
+                stereo_bond: id,
+                atom,
+            } => stereo_bond(*id, &[*atom]),
+            RelationalConstraint::StereoBondLigands {
+                stereo_bond: id,
+                atoms,
+            } => stereo_bond(*id, atoms),
+            RelationalConstraint::StereoBondAllLigands {
+                stereo_bond: id, ..
+            } => stereo_bond(*id, &[]),
+            RelationalConstraint::StereoBondAnyLigand {
+                stereo_bond: id, ..
+            } => stereo_bond(*id, &[]),
         }
     }
 }

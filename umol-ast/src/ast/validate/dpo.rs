@@ -4,7 +4,7 @@
 
 use std::collections::HashSet;
 use std::hash::Hash;
-use std::iter::once;
+use std::iter;
 
 use thiserror::Error;
 use umol_graph_core::{EdgeId, RelationId};
@@ -154,7 +154,7 @@ impl DpoValidator {
             }
             let acceptor = span.dative_bonds().participants_1(rid)[0];
             let donors = span.dative_bonds().participants_2(rid).iter().copied();
-            for node in once(acceptor).chain(donors) {
+            for node in iter::once(acceptor).chain(donors) {
                 if removed.contains(&node.index()) {
                     return contradiction(DpoContradiction::DanglingDativeBond {
                         atom: AtomId::from(node),
