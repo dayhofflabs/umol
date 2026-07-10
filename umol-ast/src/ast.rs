@@ -109,6 +109,7 @@ pub use traits::{
     TryFromAst, TryIntoAst,
 };
 pub use validate::{
+    ConnectivityContradiction, ConnectivityError, ConnectivityModel, ConnectivityValidator,
     ConstraintContradiction, ConstraintError, ConstraintValidator, DpoContradiction, DpoError,
     DpoValidator, EntityStructureContradiction, EntityStructureError, EntityStructureValidator,
 };

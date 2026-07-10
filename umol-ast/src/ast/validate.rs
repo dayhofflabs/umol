@@ -4,10 +4,14 @@
 //! - [`constraint`] (data-integrity): cross-entity / molecule-scope constraint evaluation.
 //! - [`dpo`] (invariant): DPO reaction invariant (dangling-freedom).
 
+pub mod connectivity;
 pub mod constraint;
 pub mod dpo;
 pub mod entity;
 
+pub use connectivity::{
+    ConnectivityContradiction, ConnectivityError, ConnectivityModel, ConnectivityValidator,
+};
 pub use constraint::{ConstraintContradiction, ConstraintError, ConstraintValidator};
 pub use dpo::{DpoContradiction, DpoError, DpoValidator};
 pub use entity::{EntityStructureContradiction, EntityStructureError, EntityStructureValidator};

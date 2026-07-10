@@ -16,7 +16,7 @@ use umol_graph_core::{
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
-use super::constraint::{Constraint, Constraints};
+use super::constraint::{Constraint, Constraints, MoleculeConstraint, RelationalConstraint};
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::DativeBondAst;
 use super::edit::{AtomHandle, BondHandle, Edit};
@@ -953,13 +953,6 @@ impl MoleculeAst {
     /// `MoleculeCorrespondence` mapping its ids back to `self`. Components are ordered by their lowest
     /// original atom.
     pub fn split(&self) -> Vec<(MoleculeAst, MoleculeCorrespondence)> {
-        assert!(
-            self.stereo_atoms().count() == 0
-                && self.stereo_bonds().count() == 0
-                && self.constraints.is_empty(),
-            "split does not yet support stereo entities or molecule-level constraints"
-        );
-
         let atom_count = self.atoms().count();
         let mut uf = UnionFind::new(atom_count);
         for bond in self.bonds().iter() {
@@ -979,6 +972,24 @@ impl MoleculeAst {
             let [a, b] = bond.atom_ids();
             uf.union(a.index(), b.index());
         }
+        for rid in self.stereo_atoms.relation_ids() {
+            let site = AtomId::from(self.stereo_atoms.participants_1(rid)[0]);
+            for ligand in self.stereo_atoms.participants_2(rid) {
+                uf.union(site.index(), ligand.atom_id.index());
+            }
+        }
+        for rid in self.stereo_bonds.relation_ids() {
+            let [a, b] = self
+                .bond(BondId(self.stereo_bonds.participants_1(rid)[0].0))
+                .atom_ids();
+            uf.union(a.index(), b.index());
+            for ligand in self.stereo_bonds.participants_2(rid) {
+                uf.union(a.index(), ligand.atom_id.index());
+            }
+        }
+        for constraint in self.constraints.iter() {
+            union_participants(&mut uf, self.constraint_atoms(constraint));
+        }
 
         let mut atom_component = vec![0usize; atom_count];
         let mut atom_compact = vec![0u32; atom_count];
@@ -996,6 +1007,10 @@ impl MoleculeAst {
         }
         let compact = |a: AtomId| AtomId(atom_compact[a.index()]);
         let component_of = |a: AtomId| atom_component[a.index()];
+        let compaction = Remapping::new(
+            (0..atom_count).map(|i| NodeId(atom_compact[i])).collect(),
+            Vec::new(),
+        );
 
         component_atoms
             .iter()
@@ -1005,10 +1020,12 @@ impl MoleculeAst {
                 for atom in atoms {
                     editor.add_atom(self[*atom].clone());
                 }
-                for bond in self.bonds().iter() {
+                let mut bond_compact: HashMap<BondId, BondId> = HashMap::new();
+                for (original, bond) in self.bonds().iter().enumerate() {
                     let [a, b] = bond.atom_ids();
                     if component_of(a) == component {
-                        editor.add_bond(compact(a), compact(b), bond.ast.clone());
+                        let new_bond = editor.add_bond(compact(a), compact(b), bond.ast.clone());
+                        bond_compact.insert(BondId(original as u32), new_bond);
                     }
                 }
                 for dative in self.dative_bonds().iter() {
@@ -1045,15 +1062,221 @@ impl MoleculeAst {
                         editor.add_noncovalent_bond([compact(a), compact(b)], bond.ast.clone());
                     }
                 }
-                let component_mol = editor.build();
+                for rid in self.stereo_atoms.relation_ids() {
+                    let site = AtomId::from(self.stereo_atoms.participants_1(rid)[0]);
+                    if component_of(site) == component {
+                        let ligands: Vec<StereoLigand> = self
+                            .stereo_atoms
+                            .participants_2(rid)
+                            .iter()
+                            .map(|ligand| ligand.remap(&compaction))
+                            .collect();
+                        editor.add_stereo_atom(
+                            compact(site),
+                            ligands,
+                            self.stereo_atoms.data(rid).clone(),
+                        );
+                    }
+                }
+                for rid in self.stereo_bonds.relation_ids() {
+                    let bond = BondId(self.stereo_bonds.participants_1(rid)[0].0);
+                    let [a, _] = self.bond(bond).atom_ids();
+                    if component_of(a) == component {
+                        let ligands: Vec<StereoLigand> = self
+                            .stereo_bonds
+                            .participants_2(rid)
+                            .iter()
+                            .map(|ligand| ligand.remap(&compaction))
+                            .collect();
+                        editor.add_stereo_bond(
+                            bond_compact[&bond],
+                            ligands,
+                            self.stereo_bonds.data(rid).clone(),
+                        );
+                    }
+                }
+                let entities = editor.build();
 
                 let atom_images: Vec<NodeId> = atoms.iter().map(|a| NodeId(a.0)).collect();
                 let atom_correspondence = Correspondence::from_images(&atom_images, atom_count);
                 let correspondence =
-                    MoleculeCorrespondence::induce(&component_mol, self, atom_correspondence);
-                (component_mol, correspondence)
+                    MoleculeCorrespondence::induce(&entities, self, atom_correspondence);
+
+                // route each constraint to the component holding its atoms (conservative union
+                // guarantees they share one), remapped to compact ids
+                let remapping = idremapping_from_correspondence(&correspondence);
+                let mut editor = entities.edit();
+                for constraint in self.constraints.iter() {
+                    if self
+                        .constraint_atoms(constraint)
+                        .first()
+                        .is_some_and(|a| component_of(*a) == component)
+                    {
+                        editor
+                            .constraints_mut()
+                            .push(constraint.clone().remap(&remapping));
+                    }
+                }
+                (editor.build(), correspondence)
             })
             .collect()
+    }
+
+    /// Every atom a constraint transitively references — the conservative binding set `split` unions
+    /// and the connectivity validator checks (mirrors the ids each `Constraint` arm carries, resolved
+    /// to atoms; a `None`-scoped molecule constraint binds the whole molecule).
+    pub fn constraint_atoms(&self, constraint: &Constraint) -> Vec<AtomId> {
+        let all_atoms = || (0..self.atoms().count() as u32).map(AtomId).collect::<Vec<_>>();
+        match constraint {
+            Constraint::Atom(id, _) => vec![*id],
+            Constraint::Bond(id, _) => self.bond(*id).atom_ids().to_vec(),
+            Constraint::DativeBond(id, _) => self.dative_bond(*id).atom_ids().collect(),
+            Constraint::AromaticSystem(id, _) => self.aromatic_system(*id).atom_ids().collect(),
+            Constraint::MulticenterBond(id, _) => self.multicenter_bond(*id).atom_ids().collect(),
+            Constraint::NoncovalentBond(id, _) => self.noncovalent_bond(*id).atom_ids().to_vec(),
+            Constraint::StereoAtom(id, _, _) => {
+                let view = self.stereo_atom(*id);
+                std::iter::once(view.site_id())
+                    .chain(view.ligands().map(|ligand| ligand.atom_id()))
+                    .collect()
+            }
+            Constraint::StereoBond(id, _, _) => {
+                let view = self.stereo_bond(*id);
+                let [a, b] = self.bond(view.site_id()).atom_ids();
+                [a, b]
+                    .into_iter()
+                    .chain(view.ligands().map(|ligand| ligand.atom_id()))
+                    .collect()
+            }
+            Constraint::Relational(relational) => self.relational_constraint_atoms(relational),
+            Constraint::Molecule(molecule) => match molecule {
+                MoleculeConstraint::ChargeSum { atoms, .. }
+                | MoleculeConstraint::SpinSum { atoms, .. }
+                | MoleculeConstraint::Connected { atoms } => atoms.clone().unwrap_or_else(all_atoms),
+                MoleculeConstraint::BondOrderSum { bonds, .. } => match bonds {
+                    Some(bonds) => bonds.iter().flat_map(|b| self.bond(*b).atom_ids()).collect(),
+                    None => all_atoms(),
+                },
+                MoleculeConstraint::SubPattern { anchor, .. } => {
+                    anchor.atoms().iter().flat_map(|&(a, b)| [a, b]).collect()
+                }
+            },
+            Constraint::And(constraints) | Constraint::Or(constraints) => constraints
+                .iter()
+                .flat_map(|c| self.constraint_atoms(c))
+                .collect(),
+            Constraint::Not(constraint) => self.constraint_atoms(constraint),
+        }
+    }
+
+    /// A relational constraint's atoms: its primary entity's atoms plus any explicit atom operands.
+    fn relational_constraint_atoms(&self, constraint: &RelationalConstraint) -> Vec<AtomId> {
+        let dative = |id, extra: &[AtomId]| {
+            self.dative_bond(id)
+                .atom_ids()
+                .chain(extra.iter().copied())
+                .collect::<Vec<_>>()
+        };
+        let aromatic = |id, extra: &[AtomId]| {
+            self.aromatic_system(id)
+                .atom_ids()
+                .chain(extra.iter().copied())
+                .collect::<Vec<_>>()
+        };
+        let multicenter = |id, extra: &[AtomId]| {
+            self.multicenter_bond(id)
+                .atom_ids()
+                .chain(extra.iter().copied())
+                .collect::<Vec<_>>()
+        };
+        let noncovalent = |id, extra: &[AtomId]| {
+            self.noncovalent_bond(id)
+                .atom_ids()
+                .into_iter()
+                .chain(extra.iter().copied())
+                .collect::<Vec<_>>()
+        };
+        let stereo_atom = |id, extra: &[AtomId]| {
+            let view = self.stereo_atom(id);
+            std::iter::once(view.site_id())
+                .chain(view.ligands().map(|ligand| ligand.atom_id()))
+                .chain(extra.iter().copied())
+                .collect::<Vec<_>>()
+        };
+        let stereo_bond = |id, extra: &[AtomId]| {
+            let view = self.stereo_bond(id);
+            let [a, b] = self.bond(view.site_id()).atom_ids();
+            [a, b]
+                .into_iter()
+                .chain(view.ligands().map(|ligand| ligand.atom_id()))
+                .chain(extra.iter().copied())
+                .collect::<Vec<_>>()
+        };
+        match constraint {
+            RelationalConstraint::DativeBondDonors { bond, atoms } => dative(*bond, atoms),
+            RelationalConstraint::DativeBondDonor { bond, atom } => dative(*bond, &[*atom]),
+            RelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => dative(*bond, atoms),
+            RelationalConstraint::DativeBondAllDonors { bond, .. } => dative(*bond, &[]),
+            RelationalConstraint::DativeBondAnyDonor { bond, .. } => dative(*bond, &[]),
+            RelationalConstraint::DativeBondAcceptor { bond, atom } => dative(*bond, &[*atom]),
+            RelationalConstraint::DativeBondAcceptorSatisfies { bond, .. } => dative(*bond, &[]),
+            RelationalConstraint::DativeBondParallels { dative: id, parallel } => {
+                dative(*id, &self.bond(*parallel).atom_ids())
+            }
+            RelationalConstraint::AromaticSystemAtoms { system, atoms } => aromatic(*system, atoms),
+            RelationalConstraint::AromaticSystemContains { system, atom } => {
+                aromatic(*system, &[*atom])
+            }
+            RelationalConstraint::AromaticSystemContainsAll { system, atoms } => {
+                aromatic(*system, atoms)
+            }
+            RelationalConstraint::AromaticSystemAllAtoms { system, .. } => aromatic(*system, &[]),
+            RelationalConstraint::AromaticSystemAnyAtom { system, .. } => aromatic(*system, &[]),
+            RelationalConstraint::MulticenterBondAtoms { bond, atoms } => multicenter(*bond, atoms),
+            RelationalConstraint::MulticenterBondContains { bond, atom } => {
+                multicenter(*bond, &[*atom])
+            }
+            RelationalConstraint::MulticenterBondContainsAll { bond, atoms } => {
+                multicenter(*bond, atoms)
+            }
+            RelationalConstraint::MulticenterBondAllAtoms { bond, .. } => multicenter(*bond, &[]),
+            RelationalConstraint::MulticenterBondAnyAtom { bond, .. } => multicenter(*bond, &[]),
+            RelationalConstraint::NoncovalentBondEnds { bond, atoms } => noncovalent(*bond, atoms),
+            RelationalConstraint::NoncovalentBondContains { bond, atom } => {
+                noncovalent(*bond, &[*atom])
+            }
+            RelationalConstraint::NoncovalentBondEndsSatisfy { bond, .. } => noncovalent(*bond, &[]),
+            RelationalConstraint::StereoAtomSite { stereo_atom: id, atom } => {
+                stereo_atom(*id, &[*atom])
+            }
+            RelationalConstraint::StereoAtomContains { stereo_atom: id, atom } => {
+                stereo_atom(*id, &[*atom])
+            }
+            RelationalConstraint::StereoAtomLigands { stereo_atom: id, atoms } => {
+                stereo_atom(*id, atoms)
+            }
+            RelationalConstraint::StereoAtomAllLigands { stereo_atom: id, .. } => {
+                stereo_atom(*id, &[])
+            }
+            RelationalConstraint::StereoAtomAnyLigand { stereo_atom: id, .. } => {
+                stereo_atom(*id, &[])
+            }
+            RelationalConstraint::StereoBondSite { stereo_bond: id, bond } => {
+                stereo_bond(*id, &self.bond(*bond).atom_ids())
+            }
+            RelationalConstraint::StereoBondContains { stereo_bond: id, atom } => {
+                stereo_bond(*id, &[*atom])
+            }
+            RelationalConstraint::StereoBondLigands { stereo_bond: id, atoms } => {
+                stereo_bond(*id, atoms)
+            }
+            RelationalConstraint::StereoBondAllLigands { stereo_bond: id, .. } => {
+                stereo_bond(*id, &[])
+            }
+            RelationalConstraint::StereoBondAnyLigand { stereo_bond: id, .. } => {
+                stereo_bond(*id, &[])
+            }
+        }
     }
 }
 
@@ -1083,6 +1306,61 @@ fn union_participants(uf: &mut UnionFind, atoms: impl IntoIterator<Item = AtomId
             uf.union(first.index(), atom.index());
         }
     }
+}
+
+/// The per-family `original → compact` remapping a `split` component induces, read off its
+/// `component → original` correspondence.
+fn idremapping_from_correspondence(correspondence: &MoleculeCorrespondence) -> IdRemapping {
+    IdRemapping::new(
+        correspondence
+            .atoms()
+            .mates()
+            .iter()
+            .map(|&(compact, original)| (AtomId::from(original), AtomId::from(compact)))
+            .collect(),
+        correspondence
+            .bonds()
+            .mates()
+            .iter()
+            .map(|&(compact, original)| (original, compact))
+            .collect(),
+        correspondence
+            .dative_bonds()
+            .mates()
+            .iter()
+            .map(|&(compact, original)| (original, compact))
+            .collect(),
+        correspondence
+            .aromatic_systems()
+            .mates()
+            .iter()
+            .map(|&(compact, original)| (original, compact))
+            .collect(),
+        correspondence
+            .multicenter_bonds()
+            .mates()
+            .iter()
+            .map(|&(compact, original)| (original, compact))
+            .collect(),
+        correspondence
+            .noncovalent_bonds()
+            .mates()
+            .iter()
+            .map(|&(compact, original)| (original, compact))
+            .collect(),
+        correspondence
+            .stereo_atoms()
+            .mates()
+            .iter()
+            .map(|&(compact, original)| (original, compact))
+            .collect(),
+        correspondence
+            .stereo_bonds()
+            .mates()
+            .iter()
+            .map(|&(compact, original)| (original, compact))
+            .collect(),
+    )
 }
 
 impl Index<AtomId> for MoleculeAst {

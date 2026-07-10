@@ -2324,3 +2324,114 @@ fn test_molecule_ast_join_split_roundtrip() {
     assert_eq!(components[0].0, left);
     assert_eq!(components[1].0, right);
 }
+
+#[rstest]
+fn test_molecule_ast_split_stereo() {
+    // a stereo atom binds its site + ligands into one component, separate from a lone bond
+    let mol = MoleculeAst::from_parts(
+        (0..7).map(|_| AtomAst::from_element(Element::C)).collect(),
+        vec![(AtomId(5), AtomId(6), BondAst::from_order(1))],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            StereoAtomAst::new(StereoKind::Tetrahedral, 1u32),
+        )],
+        Vec::new(),
+        Constraints::new(),
+    );
+    let components = mol.split();
+
+    assert_eq!(components.len(), 2);
+    let (bound, _) = &components[0];
+    assert_eq!(bound.atoms().count(), 5);
+    assert_eq!(bound.stereo_atoms().count(), 1);
+    let stereo = bound.stereo_atoms().iter().next().unwrap();
+    assert_eq!(stereo.site_id(), AtomId(0));
+    assert_eq!(
+        stereo.ligands().map(|l| l.atom_id()).collect::<Vec<_>>(),
+        vec![AtomId(1), AtomId(2), AtomId(3), AtomId(4)]
+    );
+    let (lone, _) = &components[1];
+    assert_eq!(lone.atoms().count(), 2);
+    assert_eq!(lone.stereo_atoms().count(), 0);
+    assert_eq!(lone.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
+}
+
+#[rstest]
+fn test_molecule_ast_split_constraint_binds() {
+    // two disconnected bonds, but a ChargeSum over {1, 2} binds all four atoms into one component
+    let mol = MoleculeAst::from_parts(
+        (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
+        vec![
+            (AtomId(0), AtomId(1), BondAst::from_order(1)),
+            (AtomId(2), AtomId(3), BondAst::from_order(1)),
+        ],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        constraints_with_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(1), AtomId(2)]),
+            sum: ValueAst::Lit(0),
+        })),
+    );
+    let components = mol.split();
+
+    assert_eq!(components.len(), 1);
+    assert_eq!(
+        components[0].0.constraints.iter().collect::<Vec<_>>(),
+        vec![&Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(1), AtomId(2)]),
+            sum: ValueAst::Lit(0),
+        })]
+    );
+}
+
+#[rstest]
+fn test_molecule_ast_split_constraint_routed() {
+    // a constraint over the second component's atoms routes there, remapped to compact ids
+    let mol = MoleculeAst::from_parts(
+        vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::O),
+            AtomAst::from_element(Element::N),
+            AtomAst::from_element(Element::N),
+        ],
+        vec![
+            (AtomId(0), AtomId(1), BondAst::from_order(1)),
+            (AtomId(2), AtomId(3), BondAst::from_order(2)),
+        ],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        constraints_with_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(2), AtomId(3)]),
+            sum: ValueAst::Lit(0),
+        })),
+    );
+    let components = mol.split();
+
+    assert_eq!(components.len(), 2);
+    assert!(components[0].0.constraints.is_empty());
+    assert_eq!(
+        components[1].0.constraints.iter().collect::<Vec<_>>(),
+        vec![&Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(0), AtomId(1)]),
+            sum: ValueAst::Lit(0),
+        })]
+    );
+}
