@@ -1,6 +1,7 @@
 //! Molecule structural AST.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::ops::Index;
 use std::sync::{Arc, OnceLock};
 
@@ -9,7 +10,7 @@ pub use editor::MoleculeEditor;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{
     Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
-    RelationId, Unordered, VarRelationSet,
+    RelationId, RelationParticipant, Remapping, UnionFind, Unordered, VarRelationSet,
 };
 
 use super::aromatic::AromaticSystemAst;
@@ -26,6 +27,7 @@ use super::id::{
 use super::ligand::StereoLigand;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
+use super::remap::IdRemapping;
 use super::ring::{RingFamily, RingSet};
 use super::stereo::{StereoAtomAst, StereoBondAst};
 use super::traits::Lattice;
@@ -837,6 +839,249 @@ impl MoleculeAst {
             Arc::clone(&self.stereo_bonds),
             self.constraints.clone(),
         )
+    }
+
+    /// Append `other` disjointly, in place: `self` keeps its ids (the prefix) and `other`'s
+    /// entities follow, each id offset by `self`'s per-family count. Returns the
+    /// `MoleculeCorrespondence` mapping `other`'s ids to their new ids in the union. Pure
+    /// renumbering — no gluing, no chemistry.
+    pub fn join_from(&mut self, other: &MoleculeAst) -> MoleculeCorrespondence {
+        let atom_offset = self.atoms().count();
+        let bond_offset = self.bonds().count();
+        let dative_offset = self.dative_bonds().count();
+        let aromatic_offset = self.aromatic_systems().count();
+        let multicenter_offset = self.multicenter_bonds().count();
+        let noncovalent_offset = self.noncovalent_bonds().count();
+        let stereo_atom_count = self.stereo_atoms().count();
+        let stereo_bond_count = self.stereo_bonds().count();
+        let shift = |id: AtomId| AtomId(id.0 + atom_offset as u32);
+
+        let mut editor = self.edit();
+        for atom in other.atoms().iter() {
+            editor.add_atom(atom.ast.clone());
+        }
+        for bond in other.bonds().iter() {
+            let [a, b] = bond.atom_ids();
+            editor.add_bond(shift(a), shift(b), bond.ast.clone());
+        }
+        for dative in other.dative_bonds().iter() {
+            let donors: Vec<AtomId> = dative.donors().map(|d| shift(d.id)).collect();
+            editor.add_dative_bond(donors, shift(dative.acceptor_id()), dative.ast.clone());
+        }
+        for system in other.aromatic_systems().iter() {
+            let atoms: Vec<AtomId> = system.atom_ids().map(shift).collect();
+            editor.add_aromatic_system(atoms, system.ast.clone());
+        }
+        for bond in other.multicenter_bonds().iter() {
+            let atoms: Vec<AtomId> = bond.atom_ids().map(shift).collect();
+            editor.add_multicenter_bond(atoms, bond.ast.clone());
+        }
+        for bond in other.noncovalent_bonds().iter() {
+            let [a, b] = bond.atom_ids();
+            editor.add_noncovalent_bond([shift(a), shift(b)], bond.ast.clone());
+        }
+        let ligand_remapping = Remapping::new(
+            (0..other.atoms().count())
+                .map(|k| NodeId((k + atom_offset) as u32))
+                .collect(),
+            (0..other.bonds().count())
+                .map(|k| EdgeId((k + bond_offset) as u32))
+                .collect(),
+        );
+        for rid in other.stereo_atoms.relation_ids() {
+            let site = shift(AtomId::from(other.stereo_atoms.participants_1(rid)[0]));
+            let ligands: Vec<StereoLigand> = other
+                .stereo_atoms
+                .participants_2(rid)
+                .iter()
+                .map(|ligand| ligand.remap(&ligand_remapping))
+                .collect();
+            editor.add_stereo_atom(site, ligands, other.stereo_atoms.data(rid).clone());
+        }
+        for rid in other.stereo_bonds.relation_ids() {
+            let site = BondId(other.stereo_bonds.participants_1(rid)[0].0 + bond_offset as u32);
+            let ligands: Vec<StereoLigand> = other
+                .stereo_bonds
+                .participants_2(rid)
+                .iter()
+                .map(|ligand| ligand.remap(&ligand_remapping))
+                .collect();
+            editor.add_stereo_bond(site, ligands, other.stereo_bonds.data(rid).clone());
+        }
+        if !other.constraints.is_empty() {
+            let remapping = IdRemapping::new(
+                offset_map(atom_offset, other.atoms().count()),
+                offset_map(bond_offset, other.bonds().count()),
+                offset_map(dative_offset, other.dative_bonds().count()),
+                offset_map(aromatic_offset, other.aromatic_systems().count()),
+                offset_map(multicenter_offset, other.multicenter_bonds().count()),
+                offset_map(noncovalent_offset, other.noncovalent_bonds().count()),
+                offset_map(stereo_atom_count, other.stereo_atoms().count()),
+                offset_map(stereo_bond_count, other.stereo_bonds().count()),
+            );
+            for constraint in other.constraints.iter() {
+                editor
+                    .constraints_mut()
+                    .push(constraint.clone().remap(&remapping));
+            }
+        }
+        *self = editor.build();
+
+        MoleculeCorrespondence::new(
+            offset_correspondence(atom_offset, other.atoms().count()),
+            offset_correspondence(bond_offset, other.bonds().count()),
+            offset_correspondence(dative_offset, other.dative_bonds().count()),
+            offset_correspondence(aromatic_offset, other.aromatic_systems().count()),
+            offset_correspondence(multicenter_offset, other.multicenter_bonds().count()),
+            offset_correspondence(noncovalent_offset, other.noncovalent_bonds().count()),
+            offset_correspondence(stereo_atom_count, other.stereo_atoms().count()),
+            offset_correspondence(stereo_bond_count, other.stereo_bonds().count()),
+        )
+    }
+
+    /// Disjoint union of `self` and `other` as a fresh molecule, with the correspondence mapping
+    /// `other`'s ids into it. `self.clone()` then [`join_from`](Self::join_from).
+    pub fn join(&self, other: &MoleculeAst) -> (MoleculeAst, MoleculeCorrespondence) {
+        let mut union = self.clone();
+        let correspondence = union.join_from(other);
+        (union, correspondence)
+    }
+
+    /// Decompose into connected components — a conservative partition where every relation keeps its
+    /// atoms in one component (a spanning overlay prevents the split rather than being dropped). Each
+    /// component is a fresh, compactly-renumbered `MoleculeAst` paired with the
+    /// `MoleculeCorrespondence` mapping its ids back to `self`. Components are ordered by their lowest
+    /// original atom.
+    pub fn split(&self) -> Vec<(MoleculeAst, MoleculeCorrespondence)> {
+        assert!(
+            self.stereo_atoms().count() == 0
+                && self.stereo_bonds().count() == 0
+                && self.constraints.is_empty(),
+            "split does not yet support stereo entities or molecule-level constraints"
+        );
+
+        let atom_count = self.atoms().count();
+        let mut uf = UnionFind::new(atom_count);
+        for bond in self.bonds().iter() {
+            let [a, b] = bond.atom_ids();
+            uf.union(a.index(), b.index());
+        }
+        for dative in self.dative_bonds().iter() {
+            union_participants(&mut uf, dative.atom_ids());
+        }
+        for system in self.aromatic_systems().iter() {
+            union_participants(&mut uf, system.atom_ids());
+        }
+        for bond in self.multicenter_bonds().iter() {
+            union_participants(&mut uf, bond.atom_ids());
+        }
+        for bond in self.noncovalent_bonds().iter() {
+            let [a, b] = bond.atom_ids();
+            uf.union(a.index(), b.index());
+        }
+
+        let mut atom_component = vec![0usize; atom_count];
+        let mut atom_compact = vec![0u32; atom_count];
+        let mut component_atoms: Vec<Vec<AtomId>> = Vec::new();
+        let mut index_of_root: HashMap<usize, usize> = HashMap::new();
+        for i in 0..atom_count {
+            let root = uf.find(i);
+            let component = *index_of_root.entry(root).or_insert_with(|| {
+                component_atoms.push(Vec::new());
+                component_atoms.len() - 1
+            });
+            atom_component[i] = component;
+            atom_compact[i] = component_atoms[component].len() as u32;
+            component_atoms[component].push(AtomId(i as u32));
+        }
+        let compact = |a: AtomId| AtomId(atom_compact[a.index()]);
+        let component_of = |a: AtomId| atom_component[a.index()];
+
+        component_atoms
+            .iter()
+            .enumerate()
+            .map(|(component, atoms)| {
+                let mut editor = MoleculeAst::new().edit();
+                for atom in atoms {
+                    editor.add_atom(self[*atom].clone());
+                }
+                for bond in self.bonds().iter() {
+                    let [a, b] = bond.atom_ids();
+                    if component_of(a) == component {
+                        editor.add_bond(compact(a), compact(b), bond.ast.clone());
+                    }
+                }
+                for dative in self.dative_bonds().iter() {
+                    if component_of(dative.acceptor_id()) == component {
+                        let donors = dative.donors().map(|d| compact(d.id)).collect();
+                        editor.add_dative_bond(
+                            donors,
+                            compact(dative.acceptor_id()),
+                            dative.ast.clone(),
+                        );
+                    }
+                }
+                for system in self.aromatic_systems().iter() {
+                    let members: Vec<AtomId> = system.atom_ids().collect();
+                    if members.first().map_or(false, |a| component_of(*a) == component) {
+                        editor.add_aromatic_system(
+                            members.iter().map(|a| compact(*a)).collect(),
+                            system.ast.clone(),
+                        );
+                    }
+                }
+                for bond in self.multicenter_bonds().iter() {
+                    let members: Vec<AtomId> = bond.atom_ids().collect();
+                    if members.first().map_or(false, |a| component_of(*a) == component) {
+                        editor.add_multicenter_bond(
+                            members.iter().map(|a| compact(*a)).collect(),
+                            bond.ast.clone(),
+                        );
+                    }
+                }
+                for bond in self.noncovalent_bonds().iter() {
+                    let [a, b] = bond.atom_ids();
+                    if component_of(a) == component {
+                        editor.add_noncovalent_bond([compact(a), compact(b)], bond.ast.clone());
+                    }
+                }
+                let component_mol = editor.build();
+
+                let atom_images: Vec<NodeId> = atoms.iter().map(|a| NodeId(a.0)).collect();
+                let atom_correspondence = Correspondence::from_images(&atom_images, atom_count);
+                let correspondence =
+                    MoleculeCorrespondence::induce(&component_mol, self, atom_correspondence);
+                (component_mol, correspondence)
+            })
+            .collect()
+    }
+}
+
+/// The correspondence mapping a family's `other` ids (`0..other_count`) to their union ids
+/// (`offset..offset+other_count`) — the per-family offset a disjoint `join` induces.
+fn offset_correspondence<Id: Copy + Ord + From<usize>>(
+    offset: usize,
+    other_count: usize,
+) -> Correspondence<Id> {
+    let images: Vec<Id> = (0..other_count).map(|k| Id::from(offset + k)).collect();
+    Correspondence::from_images(&images, offset + other_count)
+}
+
+/// The per-family offset map (`other` ids → their union ids) that `join_from` feeds to
+/// `Constraints::remap`.
+fn offset_map<Id: Copy + Eq + Hash + From<usize>>(offset: usize, count: usize) -> HashMap<Id, Id> {
+    (0..count)
+        .map(|k| (Id::from(k), Id::from(offset + k)))
+        .collect()
+}
+
+/// Union every atom of a relation into one component (all participants share the first's set).
+fn union_participants(uf: &mut UnionFind, atoms: impl IntoIterator<Item = AtomId>) {
+    let mut atoms = atoms.into_iter();
+    if let Some(first) = atoms.next() {
+        for atom in atoms {
+            uf.union(first.index(), atom.index());
+        }
     }
 }
 

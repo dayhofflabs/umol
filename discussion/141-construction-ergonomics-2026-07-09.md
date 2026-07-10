@@ -355,11 +355,27 @@ Deferred (as at L1): `stereo_atom`/`stereo_bond` (stereo slice); molecule-level 
   positions are creation-order (the `+`-order of introduce terms).
 - **`+` dual-use** with L3 disjoint union stays disambiguated by operand type (decision 3).
 
+## L3 `Fragment` design (2026-07-10) — held pending join/split (142)
+
+`Fragment { body: MoleculeAst, ports: Vec<Port> }`; `Port { name: String, atom: AtomId, bond: BondAst }`
+— the attachment point (which body atom, an interface name, the bond formed on attach). Operations:
+
+- **`attach(self_port, other, other_port) -> Fragment`** = `MoleculeAst::join` of the two bodies + a
+  bond between the two port atoms with `BondAst = meet(self_port.bond, other_port.bond)` (⊥ → error);
+  the two consumed ports drop, the rest carry forward remapped through the join correspondence.
+- **`Fragment + Fragment -> Fragment`** = `join` alone, ports concatenated (remapped). `+` dual-use vs
+  L2 disambiguated by operand type (decision 3).
+- **`close() -> MoleculeAst`** = the body; free ports left as open valence (resolution fills later).
+
+**Held**: `attach`/`+` need `MoleculeAst::join` (disjoint union) — designed in 086, unimplemented — and
+`split` is its logical inverse. Detouring to build join/split properly first (design in **142**), then
+resuming L3.
+
 ## Next
 
-- **Item 2 — L2 `MoleculeSpec`** (design above, settled) — build `AtomArg` + `MoleculeSpecTerm` +
-  `MoleculeSpec`/`+`/`build`, terms lowering onto L1.
-- **Item 3 — L3 fragment/operad**: `Fragment { body, ports }`, `attach` = `BondAst::meet`, `close`.
+- **L1 + L2 — done** (`build.rs`, `spec.rs`). See the *Implemented — L1* and *L2 `MoleculeSpec`*
+  sections above.
+- **Detour — join/split** (doc 142) before L3.
+- **L3 `Fragment`** — design above; resume after join/split lands.
 - Then the **`mol!` proc-macro** in `umol-ast-macros` (decision 4; the macro rename is done).
-- Overlays-in-*fragments* (L3) remains gated on the port/operad spike (103). L1–L4 do not depend on it
-  landing.
+- Overlays-in-*fragments* (L3) remains gated on the port/operad spike (103).
