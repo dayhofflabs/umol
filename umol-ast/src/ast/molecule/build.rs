@@ -9,9 +9,12 @@ use super::super::constraint::BondConstraintAst;
 use super::super::dative::DativeBondAst;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
+use super::super::ligand::StereoLigand;
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+use super::super::stereo::{StereoAtomAst, StereoBondAst};
 use super::{MoleculeAst, MoleculeEditor};
 
 /// Build a molecule from scratch. `atom` adds an atom and hands back its handle; the
@@ -155,6 +158,30 @@ impl MoleculeBuilder {
             .add_noncovalent_bond([first, second], NoncovalentBondAst::from_kind(kind))
     }
 
+    /// Add a stereo-atom overlay: an atom `site` with its ordered `ligands` and a configuration
+    /// `ast`. Delegates to the editor's `add_stereo_atom`.
+    pub fn stereo_atom(
+        &mut self,
+        site: AtomId,
+        ligands: impl IntoIterator<Item = StereoLigand>,
+        ast: impl Into<StereoAtomAst>,
+    ) -> StereoAtomId {
+        self.editor
+            .add_stereo_atom(site, ligands.into_iter().collect(), ast.into())
+    }
+
+    /// Add a stereo-bond overlay: a bond `site` with its ordered `ligands` and a configuration
+    /// `ast`. Delegates to the editor's `add_stereo_bond`.
+    pub fn stereo_bond(
+        &mut self,
+        site: BondId,
+        ligands: impl IntoIterator<Item = StereoLigand>,
+        ast: impl Into<StereoBondAst>,
+    ) -> StereoBondId {
+        self.editor
+            .add_stereo_bond(site, ligands.into_iter().collect(), ast.into())
+    }
+
     /// Finalize into a `MoleculeAst`. Unspecified atom fields stay open for resolution.
     pub fn build(self) -> MoleculeAst {
         self.editor.build()
@@ -173,6 +200,8 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
+    use crate::ast::ligand::StereoLigandKind;
+    use crate::ast::stereo::{StereoCosetAst, StereoKind};
     use crate::ast::value::ValueAst;
 
     #[rstest]
@@ -323,6 +352,66 @@ mod tests {
         assert_eq!(
             mol.noncovalent_bond(bond).ast,
             &NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_builder_stereo_atom() {
+        let mut builder = MoleculeBuilder::new();
+        let c = builder.atom(Element::C);
+        let f = builder.atom(Element::F);
+        let cl = builder.atom(Element::Cl);
+        let br = builder.atom(Element::Br);
+        let i = builder.atom(Element::I);
+        let stereo = builder.stereo_atom(
+            c,
+            [
+                StereoLigand::new(f, StereoLigandKind::Atom),
+                StereoLigand::new(cl, StereoLigandKind::Atom),
+                StereoLigand::new(br, StereoLigandKind::Atom),
+                StereoLigand::new(i, StereoLigandKind::Atom),
+            ],
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+        );
+        let mol = builder.build();
+
+        assert_eq!(stereo, StereoAtomId(0));
+        assert_eq!(mol.stereo_atoms().count(), 1);
+        assert_eq!(mol.stereo_atom(stereo).site_id(), c);
+        assert_eq!(
+            mol.stereo_atom(stereo).atom_ids().collect::<Vec<_>>(),
+            vec![c, f, cl, br, i]
+        );
+        assert_eq!(
+            mol.stereo_atom(stereo).ast,
+            &StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0))
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_builder_stereo_bond() {
+        let mut builder = MoleculeBuilder::new();
+        let c1 = builder.atom(Element::C);
+        let c2 = builder.atom(Element::C);
+        let f = builder.atom(Element::F);
+        let h = builder.atom(Element::H);
+        let bond = builder.double(c1, c2);
+        let stereo = builder.stereo_bond(
+            bond,
+            [
+                StereoLigand::new(f, StereoLigandKind::Atom),
+                StereoLigand::new(h, StereoLigandKind::Atom),
+            ],
+            StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+        );
+        let mol = builder.build();
+
+        assert_eq!(stereo, StereoBondId(0));
+        assert_eq!(mol.stereo_bonds().count(), 1);
+        assert_eq!(mol.stereo_bond(stereo).site_id(), bond);
+        assert_eq!(
+            mol.stereo_bond(stereo).ast,
+            &StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1))
         );
     }
 }

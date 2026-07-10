@@ -490,7 +490,8 @@ relocating it doesn't help. The lever is `mol!`'s crate, not the parser's.
   re-exported at `umol_ast::frag`. Tests: `umol-ast/tests/frag_macro.rs` (port, multi-port, spec-colour
   port, `finish_open`), fragment.rs unit tests (`with_port` / `finish` / `finish_error` / `finish_open`),
   a `trybuild` compile-fail for a port in `mol!`.
-- **S3** — overlay keyword statements (aromatic / dative / multicenter / noncovalent / stereo). `[dep: S1]`
+- **S3** — overlay keyword statements + stereo, built the full way (L1 → L2 → macro). Design + staged
+  plan in *§S3 — overlay keyword statements + stereo* below. `[dep: S1, bond refs]`
 - Deferrable: bond-spec compile-validation (the shared-parser-crate split).
 
 #### Bond references — binding + namespace done (resolution → S3)
@@ -511,6 +512,79 @@ its per-type `id()` spaces (superseded by a single `elementId()`).
 `mol!` named-bond build, a `trybuild` atom/bond clash. **Deferred to S3:** a bond label is inert until a
 stereo overlay references it; resolving a bond label to its `BondId` (and rejecting a named *port* bond,
 which has none) rides with that consumer — untestable without a reference to exercise it.
+
+### S3 — overlay keyword statements + stereo (design + plan, 2026-07-10)
+
+Overlay statements interleave with paths in a `mol!`/`frag!` block (comma-separated at the statement
+level; whitespace within `[…]` lists, EDN-style). Each is statement-initial-keyword-led and desugars to
+an L2 term. **Stereo is built the full way** — L1 builder → L2 term → macro — never skipped.
+
+#### Syntax
+
+| overlay | syntax | refs (ordering per structural-reference semantics) |
+|---|---|---|
+| dative | `dative [d1 d2] -> a` | donors (unordered) → acceptor |
+| aromatic | `aromatic [a b c d e f]` | atoms (unordered) |
+| multicenter | `multicenter [a b c]` | atoms (unordered) |
+| noncovalent | `noncovalent a ~ b` | 2 atoms (unordered) |
+| stereo atom | `stereo atom s @ [l1 l2 l3 #h]` | site (atom), ligands (ordered) |
+| stereo bond | `stereo bond e @ [l1 #h l3 l4]` | site (**bond-ref**), ligands (ordered) |
+
+- `->` dative; `~` noncovalent (a raw `Punct` — `~` is not a syn `Token!`); `@` separates site from
+  ligands; `stereo atom` / `stereo bond` are two idents (`stereo-atom` can't lex, `-` is an operator).
+- Ligand placeholders `#h` (implicit hydrogen), `#n` (lone pair) — `#`-prefixed to echo the DSL and stay
+  disjoint from atom-label idents; only inside a `@ […]` list, so no clash with `#` triple-bond.
+- Optional payload `: "dsl-spec"` (electrons / kind / stereo config) → the entity Ast via `From<&str>`;
+  omitted → default Ast.
+- Ordering is a property of the relation-set type; the macro passes participants in written order and the
+  types enforce it (dative donors / atom-lists unordered, stereo ligands ordered).
+
+#### References — named, no positional in the public surface
+
+Every human-facing ref is **by name**: overlay participants and stereo ligands emit `name("a")`
+(`AtomArg::Name`); the stereo-bond site emits a **named bond ref** (`BondArg::Name`). The `-[e: …]-`
+label carries through to L2 as an actual **bond name**, not a macro-resolved position. The internal
+path-wiring keeps compile-time positions (`AtomArg::Index`) — an invisible codegen detail for anonymous
+atoms, never a public reference type. A ref of the wrong kind (atom where bond expected, or vice-versa)
+is a `compile_error!` via the shared namespace.
+
+#### L2 additions
+
+- `BondArg::Name(String)` (`From<&str>` / `String`) — reference an existing bond by name (bonds are never
+  created by a stereo term, so no `New` / `Index`).
+- `StereoLigandArg { Atom(AtomArg), ImplicitHydrogen, LonePair }` — `#h` / `#n` map to the unit variants;
+  their `StereoLigand.atom_id` is filled at build (from the site), so no dead atom field.
+- Named bonds: `MoleculeSpecTerm::Bond` gains `name: Option<String>`; a `named_bond(name, first, second,
+  ast)` free fn (unnamed `bond` / `single` / … unchanged); `BuildContext` tracks `bond_names:
+  HashMap<String, BondId>` so a later `stereo_bond` resolves its `BondArg::Name` site. Term order = atoms,
+  bonds, overlays — overlays see every atom/bond regardless of source order.
+- Stereo terms: `MoleculeSpecTerm::StereoAtom { site: AtomArg, ligands, ast }` / `StereoBond { site:
+  BondArg, ligands, ast }` + `stereo_atom` / `stereo_bond` free fns lowering onto the L1 builder.
+- **Breaking:** the four existing overlay free fns move from structured payloads to `ast: impl Into<Ast>`
+  (`aromatic_system(atoms, ast)`, `dative_bond(donors, acceptor, ast)`, `multicenter_bond(atoms, ast)`,
+  `noncovalent_bond(first, second, ast)`) so the macro can pass a quoted DSL string; spec.rs tests update.
+
+#### L1 addition
+
+- `MoleculeBuilder::stereo_atom(site: AtomId, ligands: Vec<StereoLigand>, ast) -> StereoAtomId` /
+  `stereo_bond(site: BondId, ligands, ast) -> StereoBondId`, delegating to the editor's `add_stereo_*`.
+
+#### Staged plan
+
+- **S3.1 — L1 stereo builder — done** (`build.rs`). `stereo_atom(site, ligands, ast: impl
+  Into<StereoAtomAst>)` / `stereo_bond(site, ligands, ast: impl Into<StereoBondAst>)` delegating to
+  `add_stereo_*`; two builder tests (green).
+- **S3.2 — L2 stereo + named bonds + ref types** (`spec.rs`). Additive first — `BondArg` (+`From`);
+  `StereoLigandArg` (+`From`); named-bond term + `named_bond` + `bond_names`; `StereoAtom` / `StereoBond`
+  terms + free fns + build lowering (resolve refs / ligands / site). Then breaking — the four overlay free
+  fns → `ast: impl Into<Ast>`, migrate spec.rs tests. Ends green. `[dep: S3.1]`
+- **S3.3 — macro overlays** (`parse.rs`, `mol.rs`, `frag.rs`). Additive: statement grammar (`Statement =
+  Path | Overlay`; `~` / `@` / `#h` / `#n` / whitespace-lists); codegen emitting overlay terms, named refs,
+  and `named_bond` for `-[e: …]-` (consuming the deferred bond-label resolution), shared across both
+  macros. Tests: `mol_macro` / `frag_macro` overlay builds, `trybuild` wrong-kind-ref. A named *port* bond
+  in `frag!` (a bond ref with no `BondId`) is rejected here. `[dep: S3.2]`
+
+Critical path S3.1 → S3.2 → S3.3.
 
 `mol!` and `frag!` are split (revisit if they converge). Quoteless elements accepted; anything richer is
 a quoted DSL spec.
