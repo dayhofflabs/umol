@@ -215,15 +215,15 @@ fn verdict(any_undetermined: bool) -> Solution<(), ValidatorContradiction> {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{AtomAst, AtomConstraintAst, MoleculeAst, SpinStateAst, ValueAst};
-    use umol_ast::{mol, mol_ground};
+    use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_chem::element::Element;
 
     use super::*;
     use crate::ops::model::ChemistryModel;
 
     #[rstest]
-    #[case::ground(mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#), Solution::Determined(()))]
-    #[case::non_ground(mol!(r#"{:atoms ["C"] :bonds []}"#), Solution::Underdetermined(()))]
+    #[case::ground(mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#), Solution::Determined(()))]
+    #[case::non_ground(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#), Solution::Underdetermined(()))]
     fn test_validator_validate(
         #[case] molecule: MoleculeAst,
         #[case] expected: Solution<(), ValidatorContradiction>,
@@ -237,7 +237,7 @@ mod tests {
 
     #[rstest]
     fn test_validator_validate_integrity() {
-        let molecule = mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
+        let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         let model = ChemistryModel::default();
         assert_eq!(
             Validator::new(&model)
@@ -249,7 +249,7 @@ mod tests {
 
     #[rstest]
     fn test_validator_validate_invariants() {
-        let molecule = mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
+        let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         let model = ChemistryModel::default();
         assert_eq!(
             Validator::new(&model)
@@ -261,7 +261,7 @@ mod tests {
 
     #[rstest]
     fn test_validator_validate_conformance() {
-        let molecule = mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
+        let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         let model = ChemistryModel::default();
         assert_eq!(
             Validator::new(&model)

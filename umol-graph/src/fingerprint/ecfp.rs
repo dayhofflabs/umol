@@ -77,7 +77,7 @@ fn bond_label(mol: &MoleculeAst, id: BondId) -> u32 {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::mol_ground;
+    use umol_ast::mol_dsl_ground;
 
     use super::*;
 
@@ -93,7 +93,7 @@ mod tests {
     #[case::diameter_4(2, 14)]
     #[case::diameter_6(3, 14)]
     fn test_ecfp_featurizer_featurize_butyramide(#[case] radius: u32, #[case] expected: usize) {
-        let fingerprint = EcfpFeaturizer::new(radius).featurize(&mol_ground!(BUTYRAMIDE));
+        let fingerprint = EcfpFeaturizer::new(radius).featurize(&mol_dsl_ground!(BUTYRAMIDE));
         assert_eq!(fingerprint.len(), expected);
     }
 
@@ -105,8 +105,8 @@ mod tests {
     fn test_ecfp_featurizer_featurize_order_independent(#[case] a: &str, #[case] b: &str) {
         let featurizer = EcfpFeaturizer::new(2);
         assert_eq!(
-            featurizer.featurize(&mol_ground!(a)),
-            featurizer.featurize(&mol_ground!(b))
+            featurizer.featurize(&mol_dsl_ground!(a)),
+            featurizer.featurize(&mol_dsl_ground!(b))
         );
     }
 }

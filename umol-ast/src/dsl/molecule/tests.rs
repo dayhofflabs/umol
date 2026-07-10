@@ -12,7 +12,7 @@ use crate::ast::constraint::{BondConstraintAst, Constraint, MoleculeConstraint};
 use crate::ast::electrons::ElectronCountsAst;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::value::ValueAst;
-use crate::{mol, mol_dsl};
+use crate::mol_dsl;
 
 /// Every `fuzz_molecule` seed must parse (tree and streaming) — guards the seed corpus against
 /// rot as the molecule DSL evolves.
@@ -233,19 +233,21 @@ fn test_metadata_mixed_chain() {
 #[case::bond_with_id(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"#, MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C); 2], vec![(AtomId(0), AtomId(1), BondAst::from_order(1))]))]
 #[case::atom_alias(r#"{:atoms [:x :x] :bonds [[0 1 "1"]] :atom-aliases [:x "C"]}"#, MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C); 2], vec![(AtomId(0), AtomId(1), BondAst::from_order(1))]))]
 fn test_mol_dsl_to_edn(#[case] input: &str, #[case] expected: MoleculeAst) {
-    let dsl = mol_dsl!(input);
+    let dsl = input.parse::<MoleculeDsl>().unwrap();
     assert_eq!(dsl.into_ast(&MoleculeDefaults::default()), expected);
 }
 
 #[rstest]
 fn test_molecule_dsl_display_to_edn_parity() {
-    let dsl = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
+    let dsl = r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#
+        .parse::<MoleculeDsl>()
+        .unwrap();
     assert_eq!(dsl.to_string(), dsl.to_edn().to_string());
 }
 
 #[rstest]
 fn test_molecule_dsl_to_edn_omits_empty_optional_sections() {
-    let dsl = mol_dsl!(r#"{:atoms ["C"] :bonds []}"#);
+    let dsl = r#"{:atoms ["C"] :bonds []}"#.parse::<MoleculeDsl>().unwrap();
     let edn = dsl.to_edn();
     let Edn::Map(m) = &edn else {
         panic!("expected map");
@@ -480,7 +482,7 @@ fn test_molecule_dsl_from_str_error() {
 #[case::stereo_atom(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"##)]
 #[case::stereo_bond(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"##)]
 fn test_molecule_dsl_dsl_to_ast_to_dsl_roundtrip_zeroed(#[case] source: &str) {
-    let ast = mol!(source);
+    let ast = mol_dsl!(source);
     let dsl = MoleculeDsl::from_parts(ast, MoleculeMetadata::default());
     let cfg = MoleculeDefaults::zeroed();
     let raised = dsl.clone().into_ast(&cfg);
@@ -490,7 +492,7 @@ fn test_molecule_dsl_dsl_to_ast_to_dsl_roundtrip_zeroed(#[case] source: &str) {
 
 #[rstest]
 fn test_molecule_dsl_from_ast_has_empty_metadata() {
-    let ast = mol!(r#"{:atoms ["C"] :bonds []}"#);
+    let ast = mol_dsl!(r#"{:atoms ["C"] :bonds []}"#);
     let cfg = MoleculeDefaults::zeroed();
     let dsl = MoleculeDsl::from_ast(&ast, &cfg);
     assert_eq!(dsl.metadata(), &MoleculeMetadata::default());
@@ -565,7 +567,7 @@ fn test_molecule_dsl_to_edn_vacuous_constraints(
     #[case] pushed: Vec<MoleculeConstraint>,
     #[case] expected: Vec<MoleculeConstraint>,
 ) {
-    let mut ast = mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
+    let mut ast = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
     for c in pushed {
         ast.constraints_mut().push(Constraint::Molecule(c));
     }

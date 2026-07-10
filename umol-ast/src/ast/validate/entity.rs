@@ -282,14 +282,14 @@ mod tests {
     use super::super::super::id::{AtomId, BondId};
     use super::super::super::molecule::MoleculeAst;
     use super::*;
-    use crate::mol;
+    use crate::mol_dsl;
 
     #[rstest]
-    #[case::aromatic_system(mol!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "*"}]}"#))]
-    #[case::cross_type_parallel(mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#))]
-    #[case::dative_shared_acceptor_disjoint_donors(mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donors [1] :acceptor 0 :type "1"} {:donors [2] :acceptor 0 :type "1"}]}"#))]
-    #[case::dative_shared_donors_distinct_acceptors(mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donors [2] :acceptor 0 :type "1"} {:donors [2] :acceptor 1 :type "1"}]}"#))]
-    #[case::multicenter_partial_overlap(mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "*"} {:atoms [1 2 3] :type "*"}]}"#))]
+    #[case::aromatic_system(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "*"}]}"#))]
+    #[case::cross_type_parallel(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#))]
+    #[case::dative_shared_acceptor_disjoint_donors(mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donors [1] :acceptor 0 :type "1"} {:donors [2] :acceptor 0 :type "1"}]}"#))]
+    #[case::dative_shared_donors_distinct_acceptors(mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donors [2] :acceptor 0 :type "1"} {:donors [2] :acceptor 1 :type "1"}]}"#))]
+    #[case::multicenter_partial_overlap(mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "*"} {:atoms [1 2 3] :type "*"}]}"#))]
     fn test_entity_structure_validator_validate(#[case] ast: MoleculeAst) {
         assert_eq!(
             EntityStructureValidator.validate(ast).unwrap(),
@@ -299,67 +299,67 @@ mod tests {
 
     #[rstest]
     #[case::aromatic_electrons_length(
-        mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :type "[1,1]"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :type "[1,1]"}]}"#),
         EntityStructureContradiction::AromaticSystemElectronsLengthMismatch { electrons_len: 2, atoms_len: 3 }
     )]
     #[case::multicenter_electrons_length(
-        mol!(r#"{:atoms ["B" "B" "H"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "[1]"}]}"#),
+        mol_dsl!(r#"{:atoms ["B" "B" "H"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "[1]"}]}"#),
         EntityStructureContradiction::MulticenterElectronsLengthMismatch { electrons_len: 1, atoms_len: 3 }
     )]
     #[case::bond_self_loop(
-        mol!(r#"{:atoms ["C"] :bonds [[0 0 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C"] :bonds [[0 0 "1"]]}"#),
         EntityStructureContradiction::BondSelfLoop { atom: AtomId(0) }
     )]
     #[case::bonds_parallel(
-        mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"] [0 1 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"] [0 1 "1"]]}"#),
         EntityStructureContradiction::BondsParallel { atoms: [AtomId(0), AtomId(1)] }
     )]
     #[case::dative_acceptor_is_donor(
-        mol!(r#"{:atoms ["C"] :bonds [] :dative-bonds [{:donors [0] :acceptor 0 :type "1"}]}"#),
+        mol_dsl!(r#"{:atoms ["C"] :bonds [] :dative-bonds [{:donors [0] :acceptor 0 :type "1"}]}"#),
         EntityStructureContradiction::DativeBondAcceptorIsDonor { atom: AtomId(0) }
     )]
     #[case::dative_parallel(
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :dative-bonds [{:donors [1] :acceptor 0 :type "1"} {:donors [1] :acceptor 0 :type "1"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :dative-bonds [{:donors [1] :acceptor 0 :type "1"} {:donors [1] :acceptor 0 :type "1"}]}"#),
         EntityStructureContradiction::DativeBondsParallel { acceptor: AtomId(0), shared_donor: AtomId(1) }
     )]
     #[case::noncovalent_self_loop(
-        mol!(r#"{:atoms ["C"] :bonds [] :noncovalent-bonds [{:atoms [0 0] :type "Hbd"}]}"#),
+        mol_dsl!(r#"{:atoms ["C"] :bonds [] :noncovalent-bonds [{:atoms [0 0] :type "Hbd"}]}"#),
         EntityStructureContradiction::NoncovalentBondSelfLoop { atom: AtomId(0) }
     )]
     #[case::noncovalent_parallel(
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"} {:atoms [0 1] :type "Hbd"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"} {:atoms [0 1] :type "Hbd"}]}"#),
         EntityStructureContradiction::NoncovalentBondsParallel { atoms: [AtomId(0), AtomId(1)] }
     )]
     #[case::noncovalent_parallel_distinct_kinds(
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"} {:atoms [0 1] :type "Vdw"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"} {:atoms [0 1] :type "Vdw"}]}"#),
         EntityStructureContradiction::NoncovalentBondsParallel { atoms: [AtomId(0), AtomId(1)] }
     )]
     #[case::aromatic_duplicate_participant(
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 1] :type "*"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 1] :type "*"}]}"#),
         EntityStructureContradiction::AromaticSystemDuplicateParticipant { atom: AtomId(1) }
     )]
     #[case::aromatic_overlap(
-        mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "*"} {:atoms [1 2] :type "*"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "*"} {:atoms [1 2] :type "*"}]}"#),
         EntityStructureContradiction::AromaticSystemsOverlap { atom: AtomId(1) }
     )]
     #[case::multicenter_duplicate_participant(
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 1] :type "*"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 1] :type "*"}]}"#),
         EntityStructureContradiction::MulticenterBondDuplicateParticipant { atom: AtomId(1) }
     )]
     #[case::multicenter_identical(
-        mol!(r#"{:atoms ["C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "*"} {:atoms [0 1 2] :type "*"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "*"} {:atoms [0 1 2] :type "*"}]}"#),
         EntityStructureContradiction::MulticenterBondsIdentical { atoms: vec![AtomId(0), AtomId(1), AtomId(2)] }
     )]
     #[case::stereo_atom_sites_duplicate(
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :stereo-atoms [{:site 0 :ligands [1] :type "Th*"} {:site 0 :ligands [1] :type "Th*"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :stereo-atoms [{:site 0 :ligands [1] :type "Th*"} {:site 0 :ligands [1] :type "Th*"}]}"#),
         EntityStructureContradiction::StereoAtomSitesDuplicate { atom: AtomId(0) }
     )]
     #[case::stereo_bond_sites_duplicate(
-        mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]] :stereo-bonds [{:site 0 :ligands [0] :type "Ct1"} {:site 0 :ligands [0] :type "Ct1"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]] :stereo-bonds [{:site 0 :ligands [0] :type "Ct1"} {:site 0 :ligands [0] :type "Ct1"}]}"#),
         EntityStructureContradiction::StereoBondSitesDuplicate { bond: BondId(0) }
     )]
     #[case::dative_donor_duplicate(
-        mol!(r#"{:atoms ["C" "C"] :bonds [] :dative-bonds [{:donors [1 1] :acceptor 0 :type "1"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :dative-bonds [{:donors [1 1] :acceptor 0 :type "1"}]}"#),
         EntityStructureContradiction::DativeBondDonorDuplicate { acceptor: AtomId(0), donor: AtomId(1) }
     )]
     fn test_entity_structure_validator_validate_error(

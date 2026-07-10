@@ -525,7 +525,7 @@ mod tests {
     use crate::ast::constraint::{BondConstraintsAst, RingScope};
     use crate::ast::spin::SpinStateAst;
     use crate::ast::stereo::StereoCosetAst;
-    use crate::bond;
+    use crate::bond_dsl;
 
     #[rustfmt::skip]
     #[rstest]
@@ -815,14 +815,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::double(bond!("2"))]
-    #[case::aromatic(bond!("1#a"))]
-    #[case::ring_membership_all(bond!("1#R+"))]
-    #[case::ring_membership_size(bond!("1#R(6)+"))]
-    #[case::cis_trans_stereo(bond!("1#C1"))]
-    #[case::cis_trans_stereo_coset_undetermined(bond!("1#C+"))]
-    #[case::cis_trans_stereo_not_stereo(bond!("1#C!"))]
-    #[case::cis_trans_stereo_set(bond!("1#C{1,2}"))]
+    #[case::double(bond_dsl!("2"))]
+    #[case::aromatic(bond_dsl!("1#a"))]
+    #[case::ring_membership_all(bond_dsl!("1#R+"))]
+    #[case::ring_membership_size(bond_dsl!("1#R(6)+"))]
+    #[case::cis_trans_stereo(bond_dsl!("1#C1"))]
+    #[case::cis_trans_stereo_coset_undetermined(bond_dsl!("1#C+"))]
+    #[case::cis_trans_stereo_not_stereo(bond_dsl!("1#C!"))]
+    #[case::cis_trans_stereo_set(bond_dsl!("1#C{1,2}"))]
     fn test_bond_ast_to_edn_from_edn_roundtrip(#[case] input: BondAst) {
         let edn = input.to_edn();
         let parsed = BondAst::from_edn(&edn).unwrap();

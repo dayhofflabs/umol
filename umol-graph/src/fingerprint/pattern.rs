@@ -17,7 +17,7 @@
 use std::sync::LazyLock;
 
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst, SubstructureMatchAlgorithm};
-use umol_ast::mol;
+use umol_ast::mol_dsl;
 use umol_graph_core::{NodeId, SubgraphIsomorphismAlgorithm};
 
 use super::bit_fp::BitFp;
@@ -118,15 +118,15 @@ struct PatternTemplate {
 /// template mirrors RDKit's SMARTS parse so the keying is bit-identical.
 static TEMPLATES: LazyLock<Vec<PatternTemplate>> = LazyLock::new(|| {
     [
-        (1, mol!(r#"{:atoms ["*" "*"] :bonds [[0 1 "*"]]}"#)),
-        (2, mol!(r#"{:atoms ["*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"]]}"#)),
-        (3, mol!(r#"{:atoms ["*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"] [2 0 "*"]]}"#)),
-        (4, mol!(r#"{:atoms ["*" "*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"] [1 3 "*"]]}"#)),
-        (5, mol!(r#"{:atoms ["*" "*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"] [2 3 "*"] [3 0 "*"]]}"#)),
-        (6, mol!(r#"{:atoms ["*" "*" "*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"] [2 3 "*"] [2 4 "*"]]}"#)),
-        (7, mol!(r#"{:atoms ["*" "*" "*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"] [2 3 "*"] [3 4 "*"] [4 0 "*"]]}"#)),
-        (8, mol!(r#"{:atoms ["*" "*" "*" "*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"] [2 3 "*"] [3 4 "*"] [4 5 "*"] [5 0 "*"]]}"#)),
-        (13, mol!(r#"{:atoms ["*"] :bonds []}"#)),
+        (1, mol_dsl!(r#"{:atoms ["*" "*"] :bonds [[0 1 "*"]]}"#)),
+        (2, mol_dsl!(r#"{:atoms ["*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"]]}"#)),
+        (3, mol_dsl!(r#"{:atoms ["*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"] [2 0 "*"]]}"#)),
+        (4, mol_dsl!(r#"{:atoms ["*" "*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"] [1 3 "*"]]}"#)),
+        (5, mol_dsl!(r#"{:atoms ["*" "*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"] [2 3 "*"] [3 0 "*"]]}"#)),
+        (6, mol_dsl!(r#"{:atoms ["*" "*" "*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"] [2 3 "*"] [2 4 "*"]]}"#)),
+        (7, mol_dsl!(r#"{:atoms ["*" "*" "*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"] [2 3 "*"] [3 4 "*"] [4 0 "*"]]}"#)),
+        (8, mol_dsl!(r#"{:atoms ["*" "*" "*" "*" "*" "*"] :bonds [[0 1 "*"] [1 2 "*"] [2 3 "*"] [3 4 "*"] [4 5 "*"] [5 0 "*"]]}"#)),
+        (13, mol_dsl!(r#"{:atoms ["*"] :bonds []}"#)),
     ]
     .into_iter()
     .map(|(index, pattern)| {

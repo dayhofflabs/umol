@@ -1,26 +1,13 @@
 //! Construction macros for the AST and DSL objects.
 
-/// Parse a molecule-EDN string into a `MoleculeDsl`, preserving metadata
-/// (atom IDs, aliases, etc.). Use [`mol!`] when you only need the AST.
+/// Parse a molecule-EDN string into a `MoleculeAst`. MoleculeMetadata (atom IDs,
+/// aliases, etc.) in the input is dropped. Use `MoleculeDsl::from_str` to keep metadata.
 ///
 /// ```ignore
-/// let d = mol_dsl!(r#"{:atom-aliases [:c "C"] :atoms [:c :c] :bonds [[0 1 "1"]]}"#);
+/// let m = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
 /// ```
 #[macro_export]
 macro_rules! mol_dsl {
-    ($s:expr $(,)?) => {{
-        <$crate::dsl::MoleculeDsl as ::core::str::FromStr>::from_str($s).unwrap()
-    }};
-}
-
-/// Parse a molecule-EDN string into a `MoleculeAst`. MoleculeMetadata (atom IDs,
-/// aliases, etc.) in the input is dropped. Use [`mol_dsl!`] to keep metadata.
-///
-/// ```ignore
-/// let m = mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
-/// ```
-#[macro_export]
-macro_rules! mol {
     ($s:expr $(,)?) => {{
         <$crate::ast::MoleculeAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
@@ -29,7 +16,7 @@ macro_rules! mol {
 /// Parse molecule-EDN string into a `MoleculeAst` with `MoleculeDefaults::ground()` applied.
 /// Mirrors `AtomAst::into_ground()` at the molecule scope.
 #[macro_export]
-macro_rules! mol_ground {
+macro_rules! mol_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::MoleculeDsl =
             <$crate::dsl::MoleculeDsl as ::core::str::FromStr>::from_str($s).unwrap();
@@ -44,10 +31,10 @@ macro_rules! mol_ground {
 /// Parse a compact atom-string into an `AtomAst`.
 ///
 /// ```ignore
-/// let a = atom!("C#h*#a+");
+/// let a = atom_dsl!("C#h*#a+");
 /// ```
 #[macro_export]
-macro_rules! atom {
+macro_rules! atom_dsl {
     ($s:expr $(,)?) => {{
         <$crate::ast::AtomAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
@@ -55,7 +42,7 @@ macro_rules! atom {
 
 /// Parse atom DSL into an `AtomAst` with `AtomDefaults::ground()` applied.
 #[macro_export]
-macro_rules! atom_ground {
+macro_rules! atom_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::AtomDsl =
             <$crate::dsl::AtomDsl as ::core::str::FromStr>::from_str($s).unwrap();
@@ -68,7 +55,7 @@ macro_rules! atom_ground {
 
 /// Parse partial atom DSL into `AtomAst`.
 #[macro_export]
-macro_rules! partial_atom {
+macro_rules! partial_atom_dsl {
     ($s:expr $(,)?) => {{
         <$crate::dsl::PartialAtomDsl as ::core::str::FromStr>::from_str($s)
             .unwrap()
@@ -79,10 +66,10 @@ macro_rules! partial_atom {
 /// Parse a compact bond-string into a `BondAst`.
 ///
 /// ```ignore
-/// let b = bond!("1#a");
+/// let b = bond_dsl!("1#a");
 /// ```
 #[macro_export]
-macro_rules! bond {
+macro_rules! bond_dsl {
     ($s:expr $(,)?) => {{
         <$crate::ast::BondAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
@@ -90,7 +77,7 @@ macro_rules! bond {
 
 /// Parse a bond DSL into a `BondAst` with `BondDefaults::ground()` applied.
 #[macro_export]
-macro_rules! bond_ground {
+macro_rules! bond_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::BondDsl =
             <$crate::dsl::BondDsl as ::core::str::FromStr>::from_str($s).unwrap();
@@ -103,7 +90,7 @@ macro_rules! bond_ground {
 
 /// Parse partial bond DSL into `BondAst`.
 #[macro_export]
-macro_rules! partial_bond {
+macro_rules! partial_bond_dsl {
     ($s:expr $(,)?) => {{
         <$crate::dsl::PartialBondDsl as ::core::str::FromStr>::from_str($s)
             .unwrap()
@@ -113,7 +100,7 @@ macro_rules! partial_bond {
 
 /// Parse a compact dative-bond-string into a `DativeBondAst`.
 #[macro_export]
-macro_rules! dative {
+macro_rules! dative_dsl {
     ($s:expr $(,)?) => {{
         <$crate::ast::DativeBondAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
@@ -121,7 +108,7 @@ macro_rules! dative {
 
 /// Parse a dative-bond DSL string into a `DativeBondAst` with `DativeBondDefaults::ground()` applied.
 #[macro_export]
-macro_rules! dative_ground {
+macro_rules! dative_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::DativeBondDsl =
             <$crate::dsl::DativeBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
@@ -134,7 +121,7 @@ macro_rules! dative_ground {
 
 /// Parse a compact aromatic-system-string into an `AromaticSystemAst`.
 #[macro_export]
-macro_rules! aromatic {
+macro_rules! aromatic_dsl {
     ($s:expr $(,)?) => {{
         <$crate::ast::AromaticSystemAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
@@ -143,7 +130,7 @@ macro_rules! aromatic {
 /// Parse an aromatic-system DSL string into an `AromaticSystemAst` with
 /// `AromaticSystemDefaults::ground()` applied.
 #[macro_export]
-macro_rules! aromatic_ground {
+macro_rules! aromatic_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::AromaticSystemDsl =
             <$crate::dsl::AromaticSystemDsl as ::core::str::FromStr>::from_str($s).unwrap();
@@ -156,7 +143,7 @@ macro_rules! aromatic_ground {
 
 /// Parse a compact multicenter-bond-string into a `MulticenterBondAst`.
 #[macro_export]
-macro_rules! multicenter {
+macro_rules! multicenter_dsl {
     ($s:expr $(,)?) => {{
         <$crate::ast::MulticenterBondAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
@@ -165,7 +152,7 @@ macro_rules! multicenter {
 /// Parse a multicenter-bond DSL string into a `MulticenterBondAst` with
 /// `MulticenterBondDefaults::ground()` applied.
 #[macro_export]
-macro_rules! multicenter_ground {
+macro_rules! multicenter_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::MulticenterBondDsl =
             <$crate::dsl::MulticenterBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
@@ -178,7 +165,7 @@ macro_rules! multicenter_ground {
 
 /// Parse a compact noncovalent-bond-string into a `NoncovalentBondAst`.
 #[macro_export]
-macro_rules! noncovalent {
+macro_rules! noncovalent_dsl {
     ($s:expr $(,)?) => {{
         <$crate::ast::NoncovalentBondAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
@@ -187,7 +174,7 @@ macro_rules! noncovalent {
 /// Parse a noncovalent-bond DSL string into a `NoncovalentBondAst` with
 /// `NoncovalentBondDefaults::ground()` applied.
 #[macro_export]
-macro_rules! noncovalent_ground {
+macro_rules! noncovalent_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::NoncovalentBondDsl =
             <$crate::dsl::NoncovalentBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
@@ -200,7 +187,7 @@ macro_rules! noncovalent_ground {
 
 /// Parse a compact stereo-atom-string into a `StereoAtomAst`.
 #[macro_export]
-macro_rules! stereo_atom {
+macro_rules! stereo_atom_dsl {
     ($s:expr $(,)?) => {{
         <$crate::ast::StereoAtomAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
@@ -208,7 +195,7 @@ macro_rules! stereo_atom {
 
 /// Parse a stereo-atom DSL string into a `StereoAtomAst` with `StereoAtomDefaults::ground()` applied.
 #[macro_export]
-macro_rules! stereo_atom_ground {
+macro_rules! stereo_atom_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::StereoAtomDsl =
             <$crate::dsl::StereoAtomDsl as ::core::str::FromStr>::from_str($s).unwrap();
@@ -221,7 +208,7 @@ macro_rules! stereo_atom_ground {
 
 /// Parse a compact stereo-bond-string into a `StereoBondAst`.
 #[macro_export]
-macro_rules! stereo_bond {
+macro_rules! stereo_bond_dsl {
     ($s:expr $(,)?) => {{
         <$crate::ast::StereoBondAst as ::core::str::FromStr>::from_str($s).unwrap()
     }};
@@ -229,7 +216,7 @@ macro_rules! stereo_bond {
 
 /// Parse a stereo-bond DSL string into a `StereoBondAst` with `StereoBondDefaults::ground()` applied.
 #[macro_export]
-macro_rules! stereo_bond_ground {
+macro_rules! stereo_bond_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::StereoBondDsl =
             <$crate::dsl::StereoBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
@@ -280,13 +267,13 @@ mod tests {
         ),
     )]
     fn test_dsl_macro(#[case] input: &str, #[case] expected: MoleculeDsl) {
-        assert_eq!(mol_dsl!(input), expected);
+        assert_eq!(input.parse::<MoleculeDsl>().unwrap(), expected);
     }
 
     #[rstest]
     #[should_panic]
     fn test_dsl_macro_error() {
-        let _ = mol_dsl!("invalid");
+        let _ = "invalid".parse::<MoleculeDsl>().unwrap();
     }
 
     #[rustfmt::skip]
@@ -303,13 +290,13 @@ mod tests {
             vec![], vec![],
             Vec::new(), Vec::new(), Constraints::default()))]
     fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
-        assert_eq!(mol!(input), expected);
+        assert_eq!(mol_dsl!(input), expected);
     }
 
     #[rstest]
     #[should_panic]
     fn test_mol_macro_error() {
-        let _: MoleculeAst = mol!("invalid");
+        let _: MoleculeAst = mol_dsl!("invalid");
     }
 
     #[rustfmt::skip]
@@ -319,20 +306,20 @@ mod tests {
     #[case::carbon_charged(r#"{:atoms ["C #c+"] :bonds []}"#,
         MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_charge(1_i64).into_ground()], vec![]))]
     fn test_mol_ground_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
-        assert_eq!(mol_ground!(input), expected);
+        assert_eq!(mol_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::carbon_charge("C#c+", AtomAst::from_element(Element::C).with_charge(1_i64))]
     fn test_atom_macro(#[case] input: &str, #[case] expected: AtomAst) {
-        assert_eq!(atom!(input), expected);
+        assert_eq!(atom_dsl!(input), expected);
     }
 
     #[rstest]
     #[should_panic]
     fn test_atom_macro_error() {
-        let _ = atom!("invalid");
+        let _ = atom_dsl!("invalid");
     }
 
     #[rustfmt::skip]
@@ -341,7 +328,7 @@ mod tests {
     #[case::carbon("C", AtomAst::from_element(Element::C).into_ground())]
     #[case::carbon_v4("C #v4", AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)).into_ground())]
     fn test_atom_ground_macro(#[case] input: &str, #[case] expected: AtomAst) {
-        assert_eq!(atom_ground!(input), expected);
+        assert_eq!(atom_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -351,7 +338,7 @@ mod tests {
     #[case::field_only("#h4", AtomAst::new(ElementAst::Undetermined).with_implicit_hydrogens(4_i64))]
     #[case::constraint_only("#v4", AtomAst::new(ElementAst::Undetermined).with_constraint(AtomConstraintAst::valence(4_i64)))]
     fn test_partial_atom_macro(#[case] input: &str, #[case] expected: AtomAst) {
-        assert_eq!(partial_atom!(input), expected);
+        assert_eq!(partial_atom_dsl!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -359,20 +346,20 @@ mod tests {
     #[case::double("2", BondAst::from_order(2))]
     #[case::aromatic("1#a", BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
     fn test_bond_macro(#[case] input: &str, #[case] expected: BondAst) {
-        assert_eq!(bond!(input), expected);
+        assert_eq!(bond_dsl!(input), expected);
     }
 
     #[rstest]
     #[should_panic]
     fn test_bond_macro_error() {
-        let _ = bond!("invalid");
+        let _ = bond_dsl!("invalid");
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::double("2", BondAst::from_order(2).into_ground())]
     fn test_bond_ground_macro(#[case] input: &str, #[case] expected: BondAst) {
-        assert_eq!(bond_ground!(input), expected);
+        assert_eq!(bond_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -382,7 +369,7 @@ mod tests {
     #[case::field_only("#c+", BondAst::new(ValueAst::Undetermined).with_charge(1_i64))]
     #[case::constraint_only("#a", BondAst::new(ValueAst::Undetermined).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
     fn test_partial_bond_macro(#[case] input: &str, #[case] expected: BondAst) {
-        assert_eq!(partial_bond!(input), expected);
+        assert_eq!(partial_bond_dsl!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -390,20 +377,20 @@ mod tests {
     #[case::single("1", DativeBondAst::from_order(1))]
     #[case::with_ring_size( "2 #R(6)", DativeBondAst::from_order(2).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1)),)]
     fn test_dative_macro(#[case] input: &str, #[case] expected: DativeBondAst) {
-        assert_eq!(dative!(input), expected);
+        assert_eq!(dative_dsl!(input), expected);
     }
 
     #[rstest]
     #[should_panic]
     fn test_dative_macro_error() {
-        let _ = dative!("invalid");
+        let _ = dative_dsl!("invalid");
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::double("2", DativeBondAst::from_order(2).into_ground())]
     fn test_dative_ground_macro(#[case] input: &str, #[case] expected: DativeBondAst) {
-        assert_eq!(dative_ground!(input), expected);
+        assert_eq!(dative_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -411,40 +398,40 @@ mod tests {
     #[case::charge("[1,1,1]#c+", AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64))]
     #[case::electron_count("*#e6", AromaticSystemAst::default().with_constraint(AromaticSystemConstraintAst::electron_count(6)))]
     fn test_aromatic_macro(#[case] input: &str, #[case] expected: AromaticSystemAst) {
-        assert_eq!(aromatic!(input), expected);
+        assert_eq!(aromatic_dsl!(input), expected);
     }
 
     #[rstest]
     #[should_panic]
     fn test_aromatic_macro_error() {
-        let _ = aromatic!("not_a_predicate");
+        let _ = aromatic_dsl!("not_a_predicate");
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::electron_count("[1,1,1,1,1,1]#e6", AromaticSystemAst::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraintAst::electron_count(6)).into_ground())]
     fn test_aromatic_ground_macro(#[case] input: &str, #[case] expected: AromaticSystemAst) {
-        assert_eq!(aromatic_ground!(input), expected);
+        assert_eq!(aromatic_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::charge("[1,1,1,1,1]#c-", MulticenterBondAst::from_electrons(vec![1; 5]).with_charge(-1_i64))]
     fn test_multicenter_macro(#[case] input: &str, #[case] expected: MulticenterBondAst) {
-        assert_eq!(multicenter!(input), expected);
+        assert_eq!(multicenter_dsl!(input), expected);
     }
 
     #[rstest]
     #[should_panic]
     fn test_multicenter_macro_error() {
-        let _ = multicenter!("not_a_predicate");
+        let _ = multicenter_dsl!("not_a_predicate");
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::charged("[1,1,1,1,1]#c-", MulticenterBondAst::from_electrons(vec![1; 5]).with_charge(-1_i64).into_ground())]
     fn test_multicenter_ground_macro(#[case] input: &str, #[case] expected: MulticenterBondAst) {
-        assert_eq!(multicenter_ground!(input), expected);
+        assert_eq!(multicenter_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -452,20 +439,20 @@ mod tests {
     #[case::hbond("Hbd", NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
     #[case::ionic("Ion", NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic))]
     fn test_noncovalent_macro(#[case] input: &str, #[case] expected: NoncovalentBondAst) {
-        assert_eq!(noncovalent!(input), expected);
+        assert_eq!(noncovalent_dsl!(input), expected);
     }
 
     #[rstest]
     #[should_panic]
     fn test_noncovalent_macro_error() {
-        let _ = noncovalent!("invalid");
+        let _ = noncovalent_dsl!("invalid");
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::hbond("Hbd", NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).into_ground())]
     fn test_noncovalent_ground_macro(#[case] input: &str, #[case] expected: NoncovalentBondAst) {
-        assert_eq!(noncovalent_ground!(input), expected);
+        assert_eq!(noncovalent_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -474,20 +461,20 @@ mod tests {
     #[case::undetermined("Th*", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))]
     #[case::square_planar("Sp2", StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(2)))]
     fn test_stereo_atom_macro(#[case] input: &str, #[case] expected: StereoAtomAst) {
-        assert_eq!(stereo_atom!(input), expected);
+        assert_eq!(stereo_atom_dsl!(input), expected);
     }
 
     #[rstest]
     #[should_panic]
     fn test_stereo_atom_macro_error() {
-        let _ = stereo_atom!("Th!");
+        let _ = stereo_atom_dsl!("Th!");
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::ccw("Th0", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)))]
     fn test_stereo_atom_ground_macro(#[case] input: &str, #[case] expected: StereoAtomAst) {
-        assert_eq!(stereo_atom_ground!(input), expected);
+        assert_eq!(stereo_atom_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -495,19 +482,19 @@ mod tests {
     #[case::z("Ct1", StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)))]
     #[case::undetermined("Ct*", StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined))]
     fn test_stereo_bond_macro(#[case] input: &str, #[case] expected: StereoBondAst) {
-        assert_eq!(stereo_bond!(input), expected);
+        assert_eq!(stereo_bond_dsl!(input), expected);
     }
 
     #[rstest]
     #[should_panic]
     fn test_stereo_bond_macro_error() {
-        let _ = stereo_bond!("Ct!");
+        let _ = stereo_bond_dsl!("Ct!");
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::z("Ct1", StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)))]
     fn test_stereo_bond_ground_macro(#[case] input: &str, #[case] expected: StereoBondAst) {
-        assert_eq!(stereo_bond_ground!(input), expected);
+        assert_eq!(stereo_bond_dsl_ground!(input), expected);
     }
 }

@@ -387,7 +387,7 @@ mod tests {
 
     use rstest::rstest;
     use umol_ast::ast::Constraints;
-    use umol_ast::{atom, mol};
+    use umol_ast::{atom_dsl, mol_dsl};
 
     use super::*;
     use crate::ops::valence::ValenceTable;
@@ -426,15 +426,15 @@ mod tests {
             table: Cow::Borrowed(ValenceTable::default_table()),
         };
         let resolver = CountsValence::new(&model);
-        let mut atom = atom!(input);
+        let mut atom = atom_dsl!(input);
         resolver.resolve_atom(&mut atom).unwrap();
         assert_eq!(atom.to_string(), expected);
     }
 
     #[rstest]
-    #[case::ethane_carbon(mol!(r#"{:atoms ["C #c0" "C #c0"] :bonds [[0 1 "1"]]}"#), 0, "C#i=#c0#h3#n0#u0#s#v#a!")]
-    #[case::water_oxygen(mol!(r#"{:atoms ["O #c0" "H #c0" "H #c0"] :bonds [[0 1 "1"] [0 2 "1"]]}"#), 0, "O#i=#c0#h0#n2#u0#s#v2#a!")]
-    #[case::benzene_ring(mol!( r#"{:atoms ["C #c0" "C #c0" "C #c0" "C #c0" "C #c0" "C #c0"] :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}"#), 0, "C#i=#c0#h#n0#u0#s#v2#a")]
+    #[case::ethane_carbon(mol_dsl!(r#"{:atoms ["C #c0" "C #c0"] :bonds [[0 1 "1"]]}"#), 0, "C#i=#c0#h3#n0#u0#s#v#a!")]
+    #[case::water_oxygen(mol_dsl!(r#"{:atoms ["O #c0" "H #c0" "H #c0"] :bonds [[0 1 "1"] [0 2 "1"]]}"#), 0, "O#i=#c0#h0#n2#u0#s#v2#a!")]
+    #[case::benzene_ring(mol_dsl!( r#"{:atoms ["C #c0" "C #c0" "C #c0" "C #c0" "C #c0" "C #c0"] :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}"#), 0, "C#i=#c0#h#n0#u0#s#v2#a")]
     fn test_counts_valence_resolve_molecule_atom(
         #[case] mut molecule: MoleculeAst,
         #[case] atom_id: u32,
@@ -449,7 +449,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::undetermined_aromatic_out_of_table(atom!("Fe#c0#h0#a+"), Err(CountsError::UndeterminedAromaticValence))]
+    #[case::undetermined_aromatic_out_of_table(atom_dsl!("Fe#c0#h0#a+"), Err(CountsError::UndeterminedAromaticValence))]
     fn test_counts_valence_resolve_atom_error(
         #[case] mut atom: AtomAst,
         #[case] expected: Result<(), CountsError>,
@@ -474,7 +474,7 @@ mod tests {
         };
         let resolver = CountsValence::new(&model);
         let molecule = MoleculeAst::from_parts(
-            vec![atom!(input)],
+            vec![atom_dsl!(input)],
             vec![],
             vec![],
             vec![],

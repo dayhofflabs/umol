@@ -716,6 +716,36 @@ not mid-slice.
    ripple is `from_image`'s signature + ~2 call sites in `umol-ast/symmetry.rs`, and the
    binding simplifies (drops both casts). Recommend doing it; batch with the other
    fold-backs (not mid-slice).
+4. **Rename the exact-participant-set lookup `connecting` → `of`** (surfaced planning the
+   relation bindings, doc 140; resolved 2026-07-09). `connecting` read well for a bond but
+   not for the whole-set lookups (an aromatic system does not *connect* its members). The
+   lookup is really "the entity keyed by this exact participant set" — a terse,
+   converter-like selector, and the common case (vs the rarer `incident`/`induced`), so it
+   earns the shortest name. Rust: `connecting` → `of`, `connecting_id` → `of_id`
+   (`mol.bonds().of(first, second)`). Python mirrors it. Call convention: positional for a
+   fixed symmetric pair (`bonds.of(0, 1)`), one iterable for a variable set
+   (`aromatic_systems.of({…})`), keyword roles for a birelation (`dative_bonds.of(acceptor=…,
+   donors=…)`, `stereo_atoms.of(site=…, ligands=[…])`). Note the lookup is multiset-matched,
+   so `ligands` (which can repeat virtual ligands) must be an ordered sequence, not a set.
+5. **`(a, b)` → `(first, second)` on participant-pair methods.** Ongoing normalization —
+   the ast view `connecting` methods (bond, noncovalent) already use `first`/`second`;
+   `umol-graph-core` `Graph::find_edge` / `add_edge` done (2026-07-09). Remaining:
+   `find_bond_by_participants(a, b)` in the DSL layer (`dsl/namespace.rs` trait + impls,
+   `dsl/reaction.rs`) + its call sites. Decided to leave as-is: the symmetric orbit
+   predicates (`same_orbit` / `same_proper_orbit` / `same_star_orbit`) keep `a, b` (no
+   first/second role in a symmetric relation); single-atom `a` params may become `atom`
+   (non-urgent).
+6. **Uniform `*ViewMut` across all eight families + retire the bulk `&mut` iterators**
+   (surfaced planning the relation bindings, doc 140; interning-relevant, doc 114). Today
+   the mutable accessors are asymmetric: `atom_mut`/`bond_mut` return a `*ViewMut` struct
+   (`BondViewMut` usefully carries endpoints; `AtomViewMut` is `{ id, &mut ast }`), but the
+   six relation `*_mut(id)` return a **bare `&mut XAst`**. Give the six relations a `*ViewMut`
+   too (`id` + participants + `&mut ast`, mirroring their read `*View`). This is not only
+   symmetry: 114's interning plan re-interns on the **view guard's `Drop`**, so a bare
+   `&mut XAst` (no guard) is a latent interning blocker — uniform `*ViewMut` is the
+   prerequisite. Same pass: retire the eight raw `&mut`-iterator `*s_mut()` (closure- or
+   replace-based instead), per 114's discipline. The binding is unaffected (it edits only
+   through per-id `atom_mut(id)`), so this is Rust-internal.
 
 ## Python-side todos
 

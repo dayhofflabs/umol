@@ -255,7 +255,7 @@ mod tests {
         StereoBondConstraintAst, StereoConfigurationAst, StereoKind, StereoLigandPosition,
         StereogenicityAst,
     };
-    use umol_ast::mol_ground;
+    use umol_ast::mol_dsl_ground;
     use umol_perm::{Orientation, Permutation};
 
     use super::*;
@@ -285,7 +285,7 @@ mod tests {
         #[case] dsl: &str,
         #[case] mutate: fn(&mut MoleculeAst),
     ) {
-        let mut ast = mol_ground!(dsl);
+        let mut ast = mol_dsl_ground!(dsl);
         mutate(&mut ast);
         let solution = StereoConformanceValidator::new(&StereoModel::default())
             .validate(&ast)
@@ -383,7 +383,7 @@ mod tests {
         #[case] mutate: fn(&mut MoleculeAst),
         #[case] expected: StereoValidatorContradiction,
     ) {
-        let mut ast = mol_ground!(dsl);
+        let mut ast = mol_dsl_ground!(dsl);
         mutate(&mut ast);
         let solution = StereoConformanceValidator::new(&StereoModel::default())
             .validate(&ast)

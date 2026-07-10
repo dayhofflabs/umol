@@ -707,6 +707,16 @@ the subsumption stays open.
 Settled: **we do not need relations-between-relations.** Whether the future does is a
 spike outcome, not a present decision.
 
+**Categorical framing (2026-07-09, from doc 141).** The port/relation model is a **typed
+hypergraph** — Spivak's **operad of wiring diagrams** (the cycle-allowing kind; algebras are
+**hypergraph categories**), not the tree operad. Ports are the objects/colors; bonds and overlays
+are typed hyperedges (n-ary generators, arity + port-typing per family); composition is port-wiring
+with per-family lattice-`meet`; disjoint union is the monoidal product; ring closure is the cyclic
+wiring that goes past a tree operad. This is one algebra with three faces: in-code construction
+(`attach`), reaction gluing (`meet_pushout`), and relation storage. It is the structure underlying
+*all* the relations here, and it is why overlays slot into fragment construction as n-ary
+port-generators (141) rather than as a separate mechanism.
+
 ## Contract steps to do now
 
 - **Add the `:stereo` top-level key** (class in the config head; grammar above) and the

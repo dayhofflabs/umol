@@ -73,7 +73,7 @@ fn bond_seed(mol: &MoleculeAst, id: BondId) -> u64 {
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
-    use umol_ast::mol_ground;
+    use umol_ast::mol_dsl_ground;
     use umol_graph_core::RefinementRounds;
 
     use super::*;
@@ -102,7 +102,7 @@ mod tests {
         #[case] expected: Vec<u64>,
     ) {
         assert_eq!(
-            featurizer.featurize(&mol_ground!(edn)).ids(),
+            featurizer.featurize(&mol_dsl_ground!(edn)).ids(),
             expected.as_slice()
         );
     }
@@ -129,7 +129,7 @@ mod tests {
         #[case] b: &str,
         #[case] equal: bool,
     ) {
-        let same = featurizer.featurize(&mol_ground!(a)) == featurizer.featurize(&mol_ground!(b));
+        let same = featurizer.featurize(&mol_dsl_ground!(a)) == featurizer.featurize(&mol_dsl_ground!(b));
         assert_eq!(same, equal);
     }
 }

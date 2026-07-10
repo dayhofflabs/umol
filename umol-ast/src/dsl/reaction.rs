@@ -2886,11 +2886,11 @@ mod tests {
     use crate::dsl::constraint::MoleculeConstraintDsl;
     use crate::dsl::molecule::AtomSpecInput;
     use crate::dsl::refs::{AtomRef, BondRef};
-    use crate::mol;
+    use crate::mol_dsl;
 
     #[rstest]
     #[case::sn2(ReactionAst::new(
-        mol!(r##"{:atoms ["C" "Br"] :bonds [[0 1 "1"]]}"##),
+        mol_dsl!(r##"{:atoms ["C" "Br"] :bonds [[0 1 "1"]]}"##),
         Deltas::from_iter([
             Delta::Atom(AtomDelta::Add { id: AtomId(2), ast: AtomAst::from_element(Element::O) }),
             Delta::Bond(BondDelta::Add {

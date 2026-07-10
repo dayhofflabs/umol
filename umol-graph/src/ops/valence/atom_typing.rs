@@ -134,7 +134,7 @@ mod tests {
 
     use rstest::*;
     use umol_ast::ast::Constraints;
-    use umol_ast::{atom, mol, mol_ground};
+    use umol_ast::{atom_dsl, mol_dsl, mol_dsl_ground};
 
     use super::*;
     use crate::ops::valence::AtomTypeRegistry;
@@ -144,7 +144,7 @@ mod tests {
     #[case::default_registry(Cow::Borrowed(AtomTypeRegistry::default_registry()))]
     #[case::empty_registry(Cow::Owned(AtomTypeRegistry::new()))]
     fn test_atom_typing_valence_resolve_identity(#[case] registry: Cow<'static, AtomTypeRegistry>) {
-        let molecule = mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
+        let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         let model = AtomTypingModel { registry };
         let mut resolved = molecule.clone();
         AtomTypingValence::new(&model)
@@ -158,7 +158,7 @@ mod tests {
         let model = AtomTypingModel {
             registry: Cow::Owned(registry!["C#c0#h4#n0#u0"]),
         };
-        let mut molecule = mol!(r#"{:atoms ["C #h3" "Cl"] :bonds [[0 1 "1"]]}"#);
+        let mut molecule = mol_dsl!(r#"{:atoms ["C #h3" "Cl"] :bonds [[0 1 "1"]]}"#);
         let err = AtomTypingValence::new(&model)
             .resolve(&mut molecule)
             .unwrap_err();
@@ -191,7 +191,7 @@ mod tests {
         };
         let resolver = AtomTypingValence::new(&model);
         let molecule = MoleculeAst::from_parts(
-            vec![atom!(input)],
+            vec![atom_dsl!(input)],
             vec![],
             vec![],
             vec![],

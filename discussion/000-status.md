@@ -87,7 +87,7 @@
 | [083-constraint-unification-architecture-2026-04-13.md](083-constraint-unification-architecture-2026-04-13.md)   | Completed     | 2026-07-04   |
 | [084-graph-library-decision-2026-04-14.md](084-graph-library-decision-2026-04-14.md)                             | Completed     | 2026-04-15   |
 | [085-kekulization-algorithms-2026-04-15.md](085-kekulization-algorithms-2026-04-15.md)                           | Active        | 2026-04-15   |
-| [086-molecule-ast-api-2026-04-16.md](086-molecule-ast-api-2026-04-16.md)                                         | Active        | 2026-04-17   |
+| [086-molecule-ast-api-2026-04-16.md](086-molecule-ast-api-2026-04-16.md)                                         | Active        | 2026-07-09   |
 | [087-constraint-taxonomy-2026-04-17.md](087-constraint-taxonomy-2026-04-17.md)                                   | Completed     | 2026-04-19   |
 | [088-fix-dsl-parsing-2026-04-19.md](088-fix-dsl-parsing-2026-04-19.md)                                           | Completed     | 2026-04-24   |
 | [089-substructure-matching-variables-2026-04-21.md](089-substructure-matching-variables-2026-04-21.md)           | Completed     | 2026-04-24   |
@@ -141,3 +141,5 @@
 | [137-python-bindings-2026-07-05.md](137-python-bindings-2026-07-05.md)                                           | Active        | 2026-07-05   |
 | [138-constraint-container-api-2026-07-06.md](138-constraint-container-api-2026-07-06.md)                         | Completed     | 2026-07-08   |
 | [139-mutability-hashability-equality-2026-07-09.md](139-mutability-hashability-equality-2026-07-09.md)           | Informational | 2026-07-09   |
+| [140-python-entity-bindings-plan-2026-07-09.md](140-python-entity-bindings-plan-2026-07-09.md)                   | Active        | 2026-07-09   |
+| [141-construction-ergonomics-2026-07-09.md](141-construction-ergonomics-2026-07-09.md)                           | Active        | 2026-07-09   |

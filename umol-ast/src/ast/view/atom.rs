@@ -582,7 +582,7 @@ mod tests {
     use crate::ast::ring::RingFamily;
     use crate::ast::stereo::{StereoAtomAst, StereoCosetAst, StereoKind, TetrahedralStereoAst};
     use crate::ast::value::ValueAst;
-    use crate::mol;
+    use crate::mol_dsl;
 
     #[fixture]
     fn molecule() -> MoleculeAst {
@@ -709,27 +709,27 @@ mod tests {
 
     #[rstest]
     #[case::no_incident(
-        mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
         AtomId(3),
         ValueAst::Lit(0),
     )]
     #[case::single(
-        mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
         AtomId(0),
         ValueAst::Lit(1),
     )]
     #[case::three_around_center(
-        mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
         AtomId(1),
         ValueAst::Lit(3),
     )]
     #[case::double(
-        mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
         AtomId(2),
         ValueAst::Lit(2),
     )]
     #[case::undetermined_bond(
-        mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*"]]}"#),
         AtomId(0),
         ValueAst::Undetermined,
     )]
@@ -825,7 +825,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_view_aromatic_valence_not_in_system() {
-        let molecule = mol!(r#"{:atoms ["C"] :bonds []}"#);
+        let molecule = mol_dsl!(r#"{:atoms ["C"] :bonds []}"#);
         assert_eq!(
             molecule.atom(AtomId(0)).aromatic_valence(),
             ValueAst::Lit(0)
@@ -1164,9 +1164,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ethane_carbon(mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#), AtomId(0), ValueAst::Lit(1))]
-    #[case::ethene_carbon(mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#), AtomId(0), ValueAst::Lit(1))]
-    #[case::three_bonds(mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#), AtomId(0), ValueAst::Lit(3))]
+    #[case::ethane_carbon(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#), AtomId(0), ValueAst::Lit(1))]
+    #[case::ethene_carbon(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#), AtomId(0), ValueAst::Lit(1))]
+    #[case::three_bonds(mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#), AtomId(0), ValueAst::Lit(3))]
     fn test_atom_view_degree(
         #[case] mol: MoleculeAst,
         #[case] atom: AtomId,
@@ -1176,20 +1176,20 @@ mod tests {
     }
 
     #[rstest]
-    #[case::lit(mol!(r#"{:atoms ["C#h4"] :bonds []}"#), ValueAst::Lit(4))]
-    #[case::undetermined(mol!(r#"{:atoms ["C#h*"] :bonds []}"#), ValueAst::Undetermined)]
+    #[case::lit(mol_dsl!(r#"{:atoms ["C#h4"] :bonds []}"#), ValueAst::Lit(4))]
+    #[case::undetermined(mol_dsl!(r#"{:atoms ["C#h*"] :bonds []}"#), ValueAst::Undetermined)]
     fn test_atom_view_total_degree(#[case] molecule: MoleculeAst, #[case] expected: ValueAst) {
         assert_eq!(molecule.atom(AtomId(0)).total_degree(), expected);
     }
 
     #[rstest]
     #[case::all_heavy(
-        mol!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
         AtomId(0),
         ValueAst::Lit(2),
     )]
     #[case::one_h_neighbor(
-        mol!(r#"{:atoms ["C" "C" "H"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "H"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
         AtomId(0),
         ValueAst::Lit(1),
     )]
@@ -1203,12 +1203,12 @@ mod tests {
 
     #[rstest]
     #[case::all_heavy(
-        mol!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [0 2 "2"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [0 2 "2"]]}"#),
         AtomId(0),
         ValueAst::Lit(3),
     )]
     #[case::skips_h(
-        mol!(r#"{:atoms ["C" "C" "H"] :bonds [[0 1 "2"] [0 2 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "H"] :bonds [[0 1 "2"] [0 2 "1"]]}"#),
         AtomId(0),
         ValueAst::Lit(2),
     )]
@@ -1222,17 +1222,17 @@ mod tests {
 
     #[rstest]
     #[case::implicit_only(
-        mol!(r#"{:atoms ["C#h4"] :bonds []}"#),
+        mol_dsl!(r#"{:atoms ["C#h4"] :bonds []}"#),
         AtomId(0),
         ValueAst::Lit(4),
     )]
     #[case::implicit_and_explicit(
-        mol!(r#"{:atoms ["C#h2" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#h2" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
         AtomId(0),
         ValueAst::Lit(4),
     )]
     #[case::implicit_undetermined(
-        mol!(r#"{:atoms ["C#h*"] :bonds []}"#),
+        mol_dsl!(r#"{:atoms ["C#h*"] :bonds []}"#),
         AtomId(0),
         ValueAst::Undetermined,
     )]
@@ -1245,8 +1245,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::lit(mol!(r#"{:atoms ["C#h4"] :bonds []}"#), ValueAst::Lit(4))]
-    #[case::undetemined(mol!(r#"{:atoms ["C#h*"] :bonds []}"#), ValueAst::Undetermined)]
+    #[case::lit(mol_dsl!(r#"{:atoms ["C#h4"] :bonds []}"#), ValueAst::Lit(4))]
+    #[case::undetemined(mol_dsl!(r#"{:atoms ["C#h*"] :bonds []}"#), ValueAst::Undetermined)]
     fn test_atom_view_total_valence_sum_of_terms(
         #[case] molecule: MoleculeAst,
         #[case] expected: ValueAst,
@@ -1255,8 +1255,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ch4(mol!(r#"{:atoms ["C#h4"] :bonds []}"#), ValueAst::Lit(4))]
-    #[case::undetermined_h(mol!(r#"{:atoms ["C#h*"] :bonds []}"#), ValueAst::Undetermined)]
+    #[case::ch4(mol_dsl!(r#"{:atoms ["C#h4"] :bonds []}"#), ValueAst::Lit(4))]
+    #[case::undetermined_h(mol_dsl!(r#"{:atoms ["C#h*"] :bonds []}"#), ValueAst::Undetermined)]
     fn test_atom_view_covalence_non_aromatic(
         #[case] molecule: MoleculeAst,
         #[case] expected: ValueAst,

@@ -114,9 +114,9 @@ impl Graph {
         self.csr.endpoints[id.index()]
     }
 
-    pub fn find_edge(&self, a: NodeId, b: NodeId) -> Option<EdgeId> {
-        let nbrs = self.neighbors(a);
-        nbrs.binary_search_by_key(&b, |n| n.node)
+    pub fn find_edge(&self, first: NodeId, second: NodeId) -> Option<EdgeId> {
+        let nbrs = self.neighbors(first);
+        nbrs.binary_search_by_key(&second, |n| n.node)
             .ok()
             .map(|i| nbrs[i].edge)
     }
@@ -199,11 +199,11 @@ impl Graph {
         new_id
     }
 
-    pub fn add_edge(&mut self, a: NodeId, b: NodeId) -> EdgeId {
+    pub fn add_edge(&mut self, first: NodeId, second: NodeId) -> EdgeId {
         let old = &*self.csr;
         let new_id = EdgeId(old.edge_count as u32);
         let mut edges: Vec<[u32; 2]> = old.endpoints.iter().map(|&[s, t]| [s.0, t.0]).collect();
-        edges.push([a.0, b.0]);
+        edges.push([first.0, second.0]);
         self.csr = Arc::new(Self::build_csr(old.node_count, &edges));
         new_id
     }

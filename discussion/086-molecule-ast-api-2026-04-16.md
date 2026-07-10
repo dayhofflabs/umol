@@ -2192,3 +2192,86 @@ to land:
   on the new `ChemistryModel` + `Resolver` API or delete and grow new
   conformance coverage. Same call applies to the gated benches:
   `morgan.rs`, `molecule_dsl_parsing.rs`, `substructure.rs`.
+
+## Edit-API evolution: join / split / uniform construction (2026-07-09)
+
+Decided while planning the Python entity bindings (doc 140), which mirror all of this.
+`Remapping` (total relabel) and `Compaction` (removal; the renamed `RemovalRemapping`)
+already exist — no work there.
+
+- **`MoleculeAst::join(other) -> MoleculeCorrespondence`** — put two molecules into one
+  `MoleculeAst`. Pure disjoint concatenation: append `other`, offset its ids per family
+  (participants relabel through the graph-level `Remapping`); `self`'s ids stay stable (an
+  addition, no `Compaction`). Returns the `other → combined` `MoleculeCorrespondence` (all
+  families, symmetric with `split`; `Remapping` is graph-level only, so not it) so external
+  refs into `other` update. The result may be disconnected — a valid container (052: connectedness is a policy/validator,
+  not a container invariant). **Not** a pushout/gluing. Bimolecular reactions: `join` the
+  reactants → DPO on the single `MoleculeAst` (single-`MoleculeAst` by design) → `split` the
+  products; join/split bracket the reaction and carry no chemistry.
+- **`MoleculeAst::split(&self) -> Vec<(MoleculeAst, MoleculeCorrespondence)>`** — partition
+  into maximal groups connected by any relation; each group comes out as a `MoleculeAst`
+  paired with its `MoleculeCorrespondence` into the original. `MoleculeCorrespondence` is the
+  right type (all families — the same one `induced_subgraph`/`extract` already use);
+  `Remapping` is graph-level (atoms+bonds) only, so *not* it. Algorithm:
+  1. `graph.connected_components(Bfs) -> Vec<Vec<AtomId>>` — already in graph-core
+     (`algorithms/connected.rs`, O(V+E)) with the `GraphView` wrapper (covalent connectivity;
+     bonds are graph edges).
+  2. If `> 1` component: **union-find over the component indices**, unioning the indices of
+     every overlay's participant atoms (dative / aromatic / multicenter / noncovalent /
+     stereo-atom / stereo-bond) — bonds already lie within graph components, so only overlays
+     merge. (Single component → the whole molecule, one entry.)
+  3. Each merged group → an induced `MoleculeCorrespondence`, `extract`ed to its `MoleculeAst`.
+
+  Conservative *by construction*: after the overlay-merge no relation crosses a group
+  boundary, so each group is self-contained — nothing dropped, no error. Components joined by
+  *any* overlay (an H-bond included) stay one molecule; to split finer, remove the linking
+  bond first. Uniform over all families (no atom/bond privilege).
+- **`MoleculeParts` — single uniform flat constructor.** A `#[derive(Default)]` struct with
+  a field per family (`atoms`, `bonds`, `dative`, `aromatic`, `multicenter`, `noncovalent`,
+  `stereo_atoms`, `stereo_bonds`, `constraints`); `MoleculeAst::from_parts(MoleculeParts {
+  atoms, bonds, ..Default::default() })`. Retires both `from_atoms_and_bonds` and the 9-arg
+  positional `from_parts`. De-privileges atoms/bonds — every family is an equal field, the
+  topology-only case is just the two filled fields, and `Default` avoids the `∅,∅,…` soup.
+  Field *order* still encodes the referent DAG (atoms → bonds → stereo-bond, since
+  `stereo_bonds` carries a `BondId`) — that is referent dependency, not privilege. The
+  incremental `MoleculeBuilder` (per-family `add_*`) is already uniform and stays.
+- **Remove `MoleculeAst::has_overlays` + `AtomView`/`BondView::is_in_overlays`.** They name
+  the internal graph(atoms+bonds)-vs-relation-set(overlay) storage split as an API concept;
+  all three are test-only (no production callers). Any genuine internal fast-path stays
+  `pub(crate)`.
+
+Python (140) mirrors: `MoleculeParts`-style construction, `mol.join(other)`,
+`mol.split()`, and none of the overlay-privileging surface.
+
+### Remapping / correspondence consolidation (2026-07-09)
+
+`MoleculeCorrespondence` becomes load-bearing (join/split return it), which surfaced a
+redundant twin. Resolution:
+
+- **Retire `IdRemapping`; use `MoleculeCorrespondence` everywhere.** Both are the same shape
+  — 8 per-family maps — but `IdRemapping`'s per-family primitive is `HashMap<XId,XId>` (total,
+  forward-only, heavy) while `MoleculeCorrespondence`'s is `Correspondence<XId>` (`Vec<(Id,Id)>`
+  sorted by left — lighter, and it does the partial case too). Every `IdRemapping` use is a
+  *left-total forward relabel* (e.g. the reaction `match_map`, LHS → host, is a left-total
+  injective correspondence — the same shape as split's `component → original`). `Correspondence::
+  from_images` is exactly the dense relabel; `right_of` is `map_*`. Migration (~15–20 mostly-
+  mechanical sites — `remap_delta`, the per-family `remap` (several already `_map` no-ops), and
+  the producers `reaction_span`/`reaction`/`pushout`/`constraint/molecule`): build
+  correspondences instead of hashmap-triples, take `&MoleculeCorrespondence`. Add two things so
+  nothing regresses: forward `map_*(id) -> XId` conveniences (relabel ergonomics under the
+  left-total contract) and an **O(1) dense `image` accessor** (`mates[id.index()].1` for the
+  dense-left case, so `remap_delta`'s hot path keeps O(1)). Bonus: `MoleculeCorrespondence` can
+  *derive* all eight families from just the atom correspondence, simplifying several producers.
+
+- **Keep `Remapping` (graph-core).** *Not* the same call. `Remapping` is a **dense** `{ Vec<NodeId>,
+  Vec<EdgeId> }` (index = old id → new id), O(1) `map_node`/`map_edge` — the primitive the
+  relation sets reindex through (`RelationParticipant::remap` / `RelationSet::apply_remapping`,
+  the ~5 reindex sites + `StereoLigand::remap`). Against `Correspondence` it is *lighter* (half
+  the memory: `Vec<Id>` vs `Vec<(Id,Id)>`) and *faster* (O(1) vs O(log n)) — the opposite of
+  `IdRemapping` vs `Correspondence`. So the same "use the lighter representation" principle keeps
+  it. It is the dense **lowering target** for reindexing; `Correspondence::to_remapping()` is the
+  bridge. Do **not** collapse it into `{ Correspondence<NodeId>, Correspondence<EdgeId> }` — that
+  is `GraphCorrespondence` (already exists), the heavier form, and would de-optimize the reindex
+  path. Graph-core keeps three genuine roles: `Correspondence<Id>` (per-family partial bijection),
+  `GraphCorrespondence` (correspondence carrier, base of `MoleculeCorrespondence`), `Remapping`
+  (dense reindex primitive).

@@ -68,7 +68,7 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::rstest;
-    use umol_ast::mol_ground;
+    use umol_ast::mol_dsl_ground;
 
     use super::*;
     use crate::ops::model::{AtomTypingModel, CountsModel};
@@ -82,7 +82,7 @@ mod tests {
         registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
     }))]
     fn test_valence_conformance_validator_validate(#[case] model: ValenceModel) {
-        let molecule = mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
+        let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         let result = ValenceConformanceValidator::new(&model)
             .validate(&molecule)
             .unwrap();

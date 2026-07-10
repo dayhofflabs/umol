@@ -152,7 +152,7 @@ mod tests {
 
     use rstest::*;
     use umol_ast::ast::MoleculeAst;
-    use umol_ast::mol_ground;
+    use umol_ast::mol_dsl_ground;
     use umol_chem::element::Element;
 
     use super::*;
@@ -163,11 +163,11 @@ mod tests {
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
     fn methane() -> MoleculeAst {
-        mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#)
+        mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#)
     }
 
     fn benzene() -> MoleculeAst {
-        mol_ground!(
+        mol_dsl_ground!(
             r#"{
             :atoms ["C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]

@@ -178,14 +178,14 @@ impl Kekulizer {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{AromaticSystemId, AtomId, MoleculeAst};
-    use umol_ast::mol_ground;
+    use umol_ast::mol_dsl_ground;
 
     use super::*;
 
     #[rstest]
     #[case::benzene(
-        mol_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]}"#),
-        mol_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#)
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#)
     )]
     fn test_kekulizer_transform_into(#[case] input: MoleculeAst, #[case] expected: MoleculeAst) {
         let mut ast = input;
@@ -196,7 +196,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::kekule_benzene( mol_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#))]
+    #[case::kekule_benzene( mol_dsl_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#))]
     fn test_kekulizer_transform_into_identity(#[case] input: MoleculeAst) {
         let mut ast = input.clone();
         Kekulizer::new(KekulizationModel::default(), (0..6).map(AtomId).collect())
@@ -206,7 +206,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_matching( mol_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]"}]}"#))]
+    #[case::no_matching( mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]"}]}"#))]
     fn test_kekulizer_transform_into_error(#[case] input: MoleculeAst) {
         let mut ast = input;
         let result = Kekulizer::new(KekulizationModel::default(), (0..5).map(AtomId).collect())

@@ -30,7 +30,7 @@ use super::super::spin::SpinStateAst;
 use super::super::stereo::{StereoAtomAst, StereoCosetAst, StereoKind};
 use super::super::value::ValueAst;
 use super::MoleculeAst;
-use crate::{mol, mol_ground};
+use crate::{mol_dsl, mol_dsl_ground};
 
 fn ground_atom() -> AtomAst {
     let mut a = AtomAst::from_element(Element::C);
@@ -92,15 +92,15 @@ fn test_molecule_ast_builder() {
 #[rstest]
 #[case::empty(MoleculeAst::default(), true)]
 #[case::ground_atom(
-    mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
+    mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
     true,
 )]
 #[case::wildcard_element(
-    mol!(r#"{:atoms ["*"] :bonds []}"#),
+    mol_dsl!(r#"{:atoms ["*"] :bonds []}"#),
     false,
 )]
 #[case::wildcard_bond(
-    mol!(r#"{:atoms ["C" "O"] :bonds [[0 1 "*"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "*"]]}"#),
     false,
 )]
 #[case::ground_atom_with_undetermined_constraint(
@@ -810,7 +810,7 @@ fn test_molecule_ast_has_overlays_empty() {
 
 #[rstest]
 fn test_molecule_ast_has_stereo_atoms() {
-    let ast = mol!(
+    let ast = mol_dsl!(
         r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#
     );
     assert!(ast.has_stereo_atoms());
@@ -820,7 +820,7 @@ fn test_molecule_ast_has_stereo_atoms() {
 
 #[rstest]
 fn test_molecule_ast_has_stereo_bonds() {
-    let ast = mol!(
+    let ast = mol_dsl!(
         r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#
     );
     assert!(ast.has_stereo_bonds());
@@ -1463,7 +1463,7 @@ fn test_molecule_ast_rings_cache_reset_after_build() {
 
 #[test]
 fn test_molecule_ast_rings_induced() {
-    let ast = mol!(
+    let ast = mol_dsl!(
         r#"{
         :atoms ["C" "C" "C" "C"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]
@@ -1477,7 +1477,7 @@ fn test_molecule_ast_rings_induced() {
 
 #[test]
 fn test_molecule_ast_rings_induced_naphthalene() {
-    let ast = mol!(
+    let ast = mol_dsl!(
         r#"{
         :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
         :bonds [

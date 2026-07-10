@@ -1584,7 +1584,7 @@ mod tests {
     use crate::ast::constraint::AtomConstraintAst;
     use crate::ast::dative::DativeBondAst;
     use crate::ast::RemovedConstraint;
-    use crate::mol;
+    use crate::mol_dsl;
 
     #[fixture]
     fn triatomic() -> MoleculeBuilder {
@@ -1688,7 +1688,7 @@ mod tests {
     // `edit()` → `build()` reproduces the AST including both stereo overlays.
     #[rstest]
     fn test_molecule_builder_build() {
-        let ast = mol!(
+        let ast = mol_dsl!(
             r#"{:atoms ["C" "C" "C" "F" "Cl"]
                 :bonds [[0 1 "1"] [1 2 "2"] [0 3 "1"] [0 4 "1"]]
                 :stereo-atoms [{:site 0 :ligands [1 3 4] :type "Th1"}]
@@ -1706,7 +1706,7 @@ mod tests {
         #[case] remove_atoms: Vec<AtomId>,
         #[case] expected: Vec<Vec<AtomId>>,
     ) {
-        let ast = mol!(
+        let ast = mol_dsl!(
             r#"{:atoms ["C" "C" "F" "Cl" "Br"]
                 :bonds [[1 2 "1"] [1 3 "1"] [1 4 "1"]]
                 :stereo-atoms [{:site 1 :ligands [2 3 4] :type "Th1"}]}"#
@@ -1731,7 +1731,7 @@ mod tests {
         #[case] remove_bonds: Vec<BondId>,
         #[case] expected: Vec<BondId>,
     ) {
-        let ast = mol!(
+        let ast = mol_dsl!(
             r#"{:atoms ["C" "C" "C" "C"]
                 :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
                 :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#

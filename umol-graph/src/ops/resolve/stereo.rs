@@ -192,7 +192,7 @@ mod tests {
     use umol_ast::ast::{
         AtomId, BondId, StereoAtomId, StereoCosetAst, StereoKind, StereoLigandKind,
     };
-    use umol_ast::mol_ground;
+    use umol_ast::mol_dsl_ground;
     use umol_chem::element::Element;
     use umol_utils::solution::Solution;
 
@@ -234,7 +234,7 @@ mod tests {
         #[case] expected_atoms: Vec<StereoAtomData>,
         #[case] expected_bonds: Vec<StereoBondData>,
     ) {
-        let mut ast = mol_ground!(input);
+        let mut ast = mol_dsl_ground!(input);
         let solution = StereoResolver::new(&StereoModel::default())
             .resolve(&mut ast)
             .unwrap();
@@ -275,7 +275,7 @@ mod tests {
             scope: ElementScope::AllowList(vec![Element::N]),
             fluxionality: false,
         });
-        let mut ast = mol_ground!(
+        let mut ast = mol_dsl_ground!(
             r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"] :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
         );
         StereoResolver::new(&model).resolve(&mut ast).unwrap();
@@ -285,7 +285,7 @@ mod tests {
     #[rstest]
     fn test_stereo_resolver_resolve_idempotent() {
         let resolver = StereoResolver::new(&StereoModel::default());
-        let mut ast = mol_ground!(
+        let mut ast = mol_dsl_ground!(
             r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"] :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
         );
         resolver.resolve(&mut ast).unwrap();
