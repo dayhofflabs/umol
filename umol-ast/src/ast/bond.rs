@@ -106,6 +106,12 @@ impl BondAst {
     }
 }
 
+impl From<&str> for BondAst {
+    fn from(s: &str) -> Self {
+        s.parse().expect("invalid bond string")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;

@@ -50,6 +50,13 @@ macro_rules! stereo_element {
             }
         }
 
+        impl From<&str> for $name {
+            fn from(s: &str) -> Self {
+                s.parse()
+                    .expect(concat!("invalid ", stringify!($name), " string"))
+            }
+        }
+
         impl $name {
             pub fn new(kind: StereoKind, coset: impl Into<StereoCosetAst>) -> Self {
                 Self {

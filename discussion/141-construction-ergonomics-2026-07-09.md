@@ -465,8 +465,11 @@ relocating it doesn't help. The lever is `mol!`'s crate, not the parser's.
   (undeclared ref / duplicate decl, precise span); codegen emits `(MoleculeSpec::new() + atoms([…]) +
   … ).build()` via `::umol_ast::ast::spec::*` (atoms as strings, so bare `C` and `"C#h3"` both flow —
   runtime-parsed per decision A); `mol!` → `MoleculeAst`, re-exported at `umol_ast::mol`. Tests
-  (`umol-ast/tests/`): two runtime builds (orders + quoted spec) + a `trybuild` compile-fail for an
-  undeclared ref. **Pending in S1**: the `-[ "spec" ]-` rich-bond form (only `-`/`=`/`#` so far).
+  (`umol-ast/tests/`): three runtime builds (orders, quoted spec, `-[ "1#a" ]-` rich bond) + a `trybuild`
+  compile-fail for an undeclared ref. Grammar complete for S1 (incl. `-[ "spec" ]-` → L2 `bond(…)`).
+  Alongside: **`From<&str>` added to every entity AST** (bond/dative/aromatic/multicenter/noncovalent/
+  stereo-atom/stereo-bond, mirroring `AtomAst`; stereo via the `stereo_element!` macro) so a quoted DSL
+  spec becomes the entity via `Into` — the uniform string-spec surface the macro emits onto.
 - **S2** — `frag!` + `*name` ports → `Fragment`; the two `close` modes (ground-error / pattern-`*`).
   `[dep: S1]`
 - **S3** — overlay keyword statements (aromatic / dative / multicenter / noncovalent / stereo). `[dep: S1]`

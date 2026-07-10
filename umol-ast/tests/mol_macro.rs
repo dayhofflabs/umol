@@ -27,3 +27,17 @@ fn test_mol_quoted_spec() {
     assert_eq!(molecule.atoms().count(), 2);
     assert_eq!(molecule.bonds().count(), 1);
 }
+
+#[test]
+fn test_mol_bond_spec() {
+    // a rich bond via the DSL spec: order 1 + aromatic flag
+    let molecule: MoleculeAst = mol! {
+        (c1: C) -[ "1#a" ]- (c2: C),
+    };
+
+    assert_eq!(molecule.bonds().count(), 1);
+    assert_eq!(
+        molecule.bond(BondId(0)).ast,
+        &"1#a".parse::<BondAst>().unwrap()
+    );
+}

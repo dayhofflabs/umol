@@ -18,6 +18,12 @@ pub struct NoncovalentBondAst {
     pub constraints: NoncovalentBondConstraintsAst,
 }
 
+impl From<&str> for NoncovalentBondAst {
+    fn from(s: &str) -> Self {
+        s.parse().expect("invalid noncovalent bond string")
+    }
+}
+
 impl RelationData for NoncovalentBondAst {
     /// The kind is not position-indexed — reordering the two participants leaves it unchanged.
     fn on_permutation(&mut self, _order: &[ParticipantPosition]) {}

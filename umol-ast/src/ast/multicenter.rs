@@ -17,6 +17,12 @@ pub struct MulticenterBondAst {
     pub constraints: MulticenterBondConstraintsAst,
 }
 
+impl From<&str> for MulticenterBondAst {
+    fn from(s: &str) -> Self {
+        s.parse().expect("invalid multicenter bond string")
+    }
+}
+
 impl RelationData for MulticenterBondAst {
     /// The per-member electron counts are positional, so they follow a participant reorder.
     fn on_permutation(&mut self, order: &[ParticipantPosition]) {

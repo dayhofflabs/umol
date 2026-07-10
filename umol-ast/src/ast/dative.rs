@@ -76,6 +76,12 @@ impl DativeBondAst {
     }
 }
 
+impl From<&str> for DativeBondAst {
+    fn from(s: &str) -> Self {
+        s.parse().expect("invalid dative bond string")
+    }
+}
+
 impl BiRelationData for DativeBondAst {
     /// `order` is a scalar; neither the acceptor nor the donor factor is position-indexed.
     fn on_permutation(

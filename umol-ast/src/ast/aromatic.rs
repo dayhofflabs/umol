@@ -17,6 +17,12 @@ pub struct AromaticSystemAst {
     pub constraints: AromaticSystemConstraintsAst,
 }
 
+impl From<&str> for AromaticSystemAst {
+    fn from(s: &str) -> Self {
+        s.parse().expect("invalid aromatic system string")
+    }
+}
+
 impl RelationData for AromaticSystemAst {
     /// The per-member electron counts are positional, so they follow a participant reorder.
     fn on_permutation(&mut self, order: &[ParticipantPosition]) {
