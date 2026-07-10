@@ -449,9 +449,11 @@ relocating it doesn't help. The lever is `mol!`'s crate, not the parser's.
 
 - **Structure / refs** — always validated at expansion → `compile_error!` (undeclared ref, duplicate
   name, malformed path). The primary "checked code" win, present in every option.
-- **Bare elements** — `umol-chem` does not depend on `umol-ast-macros`, so bare `(c: C)` is
-  compile-checked regardless (an invalid element makes the emitted `Element::…` path fail to compile; a
-  friendlier macro-span error via a `umol-chem` dep is an easy refinement).
+- **Bare elements** — runtime-parsed, like quoted specs. Codegen lowers a bare `(c: C)` to the same
+  string path (`"C"` → `AtomAst::from(&str)`), not an `Element::…` path, so an invalid element (`(c: Zq)`)
+  compiles and panics at first `build()`. Compile-checking bare elements against a `umol-chem`
+  `Element::…` path is a later refinement (same syntax, same codegen shape) — deferred with the
+  bond-spec validation below.
 - **Rich quoted specs** (`"C#h3"`) — **A (chosen)**: `mol!`/`frag!` live in `umol-ast-macros`, emit
   `AtomAst::from(&str)`, so a bad spec panics at first runtime build. **B** (a separate `umol-mol-macro`
   crate depending on `umol-ast`) or **C** (an AST-free grammar crate shared with the real parser) add
@@ -460,16 +462,21 @@ relocating it doesn't help. The lever is `mol!`'s crate, not the parser's.
 
 ### Impl plan (`umol-ast-macros`, `#[proc_macro]`)
 
-- **S1 — done** (`umol-ast-macros/src/mol.rs`). `syn` parser for the path grammar (atoms
-  `(name: elem | "spec")`, bare `(name)` refs, bonds `-`/`=`/`#`); structure validation → `compile_error!`
-  (undeclared ref / duplicate decl, precise span); codegen emits `(MoleculeSpec::new() + atoms([…]) +
-  … ).build()` via `::umol_ast::ast::spec::*` (atoms as strings, so bare `C` and `"C#h3"` both flow —
-  runtime-parsed per decision A); `mol!` → `MoleculeAst`, re-exported at `umol_ast::mol`. Tests
-  (`umol-ast/tests/`): three runtime builds (orders, quoted spec, `-[ "1#a" ]-` rich bond) + a `trybuild`
-  compile-fail for an undeclared ref. Grammar complete for S1 (incl. `-[ "spec" ]-` → L2 `bond(…)`).
-  Alongside: **`From<&str>` added to every entity AST** (bond/dative/aromatic/multicenter/noncovalent/
-  stereo-atom/stereo-bond, mirroring `AtomAst`; stereo via the `stereo_element!` macro) so a quoted DSL
-  spec becomes the entity via `Into` — the uniform string-spec surface the macro emits onto.
+- **S1 — done** (`umol-ast-macros/src/mol.rs`). `syn` parser for the path grammar. An atom is a named
+  declaration `(name: elem | "spec")`, a `(name)` reference, or a **bare anonymous atom** `elem`/`"spec"`
+  (unparenthesized element ident or spec string) that nothing can reference — the SMILES-style
+  `"C#h3" - "O#h"` case. Bonds `-`/`=`/`#`/`-[ "spec" ]-`. Structure validation → `compile_error!`
+  (undeclared ref / duplicate decl, precise span). Codegen resolves every atom to a **creation position**
+  at expansion (names are compile-time labels only, dropped before L2 — they never persist into
+  `MoleculeAst`), emits one nameless `atoms([spec, …])` term and wires bonds by integer position:
+  `(MoleculeSpec::new() + atoms([…]) + single(0, 1) + … ).build()` via `::umol_ast::ast::spec::*`. All
+  specs (bare `C`, `"C#h3"`) are strings, runtime-parsed per decision A. `mol!` → `MoleculeAst`,
+  re-exported at `umol_ast::mol`. Tests (`umol-ast/tests/`): named builds (orders, quoted spec,
+  `-[ "1#a" ]-` rich bond), anonymous atoms (bare, spec, named/anonymous mix) + a `trybuild` compile-fail
+  for an undeclared ref. Alongside: **`From<&str>` added to every entity AST** (bond/dative/aromatic/
+  multicenter/noncovalent/stereo-atom/stereo-bond, mirroring `AtomAst`; stereo via the `stereo_element!`
+  macro) so a quoted DSL spec becomes the entity via `Into` — the uniform string-spec surface the macro
+  emits onto.
 - **S2** — `frag!` + `*name` ports → `Fragment`; the two `close` modes (ground-error / pattern-`*`).
   `[dep: S1]`
 - **S3** — overlay keyword statements (aromatic / dative / multicenter / noncovalent / stereo). `[dep: S1]`

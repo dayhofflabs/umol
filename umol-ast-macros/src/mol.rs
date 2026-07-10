@@ -1,16 +1,19 @@
 //! The `mol!` function-like macro: a compile-checked visual literal that desugars to an L2
-//! `MoleculeSpec` and builds a `MoleculeAst`. Grammar (this first slice): comma-separated *paths* of
-//! parenthesized atoms joined by bond ops — `(name: elem) - (name: elem) = (other)`, where `elem` is
-//! a bare element ident (`C`) or a DSL-spec string (`"C#h3"`); a first mention `(name: elem)` declares,
-//! a bare `(name)` references. Undeclared references and duplicate declarations are `compile_error!`s.
+//! `MoleculeSpec` and builds a `MoleculeAst`. Grammar: comma-separated *paths* of atoms joined by
+//! bond ops. An atom is `(name: elem)` (a named declaration), `(name)` (a reference to a declaration),
+//! or a bare `elem` (an anonymous, unreferenceable atom) — where `elem` is an element ident (`C`) or a
+//! DSL-spec string (`"C#h3"`). Bond ops: `-` single, `=` double, `#` triple, `-[ "spec" ]-` a full DSL
+//! bond spec. Undeclared references and duplicate declarations are `compile_error!`s; element and spec
+//! strings are runtime-parsed at `build()`. Names are compile-time labels only — every atom is resolved
+//! to a creation position and lowered to a nameless L2 `atoms([…])` term wired by position.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::iter;
 
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
-use syn::token::Bracket;
+use syn::token::{Bracket, Paren};
 use syn::{bracketed, parenthesized, parse2, Error, Ident, LitStr, Result, Token};
 
 /// The whole `mol!` body: comma-separated paths.
@@ -32,7 +35,7 @@ impl Parse for MolInput {
     }
 }
 
-/// A bonded chain of atom slots: `first (op atom)*`.
+/// A bonded chain of atoms: `first (op atom)*`.
 struct Path {
     first: Atom,
     rest: Vec<(Bond, Atom)>,
@@ -57,24 +60,34 @@ impl Parse for Path {
     }
 }
 
-/// `(name)` (reference) or `(name: element)` (declaration).
-struct Atom {
-    name: Ident,
-    element: Option<ElementSpec>,
+/// One atom in a path: a named declaration `(name: elem)`, a `(name)` reference to a declaration, or
+/// a bare anonymous atom `elem` (an element ident or spec string) that nothing can reference.
+enum Atom {
+    Declaration { name: Ident, spec: ElementSpec },
+    Reference { name: Ident },
+    Anonymous { spec: ElementSpec },
 }
 
 impl Parse for Atom {
     fn parse(input: ParseStream) -> Result<Self> {
-        let content;
-        parenthesized!(content in input);
-        let name = content.parse::<Ident>()?;
-        let element = if content.peek(Token![:]) {
-            content.parse::<Token![:]>()?;
-            Some(content.parse::<ElementSpec>()?)
+        if input.peek(Paren) {
+            let content;
+            parenthesized!(content in input);
+            let name = content.parse::<Ident>()?;
+            if content.peek(Token![:]) {
+                content.parse::<Token![:]>()?;
+                Ok(Atom::Declaration {
+                    name,
+                    spec: content.parse::<ElementSpec>()?,
+                })
+            } else {
+                Ok(Atom::Reference { name })
+            }
         } else {
-            None
-        };
-        Ok(Atom { name, element })
+            Ok(Atom::Anonymous {
+                spec: input.parse::<ElementSpec>()?,
+            })
+        }
     }
 }
 
@@ -143,64 +156,79 @@ pub fn expand(input: TokenStream) -> TokenStream {
 }
 
 fn codegen(input: MolInput) -> Result<TokenStream> {
-    // Pass 1: collect declarations (first mention with `: elem`), reject duplicates.
-    let mut declared: Vec<(LitStr, LitStr)> = Vec::new();
-    let mut names: HashSet<String> = HashSet::new();
+    // Pass 1: assign a creation position to every declaration and anonymous atom in appearance order,
+    // collecting their specs. Record declared names for cross-path references; reject duplicates.
+    // References create nothing; anonymous atoms never enter `names`, so nothing can reference them.
+    let mut names: HashMap<String, u32> = HashMap::new();
+    let mut specs: Vec<LitStr> = Vec::new();
     for path in &input.paths {
-        for slot in path.atoms() {
-            if let Some(element) = &slot.element {
-                if !names.insert(slot.name.to_string()) {
-                    return Err(Error::new(
-                        slot.name.span(),
-                        format!("atom `{}` is declared more than once", slot.name),
-                    ));
+        for atom in path.atoms() {
+            match atom {
+                Atom::Declaration { name, spec } => {
+                    let position = specs.len() as u32;
+                    if names.insert(name.to_string(), position).is_some() {
+                        return Err(Error::new(
+                            name.span(),
+                            format!("atom `{name}` is declared more than once"),
+                        ));
+                    }
+                    specs.push(spec.as_lit());
                 }
-                let name = LitStr::new(&slot.name.to_string(), slot.name.span());
-                declared.push((name, element.as_lit()));
-            }
-        }
-    }
-    // Pass 2: every bare reference must resolve to a declaration.
-    for path in &input.paths {
-        for slot in path.atoms() {
-            if slot.element.is_none() && !names.contains(&slot.name.to_string()) {
-                return Err(syn::Error::new(
-                    slot.name.span(),
-                    format!("atom `{}` is referenced but never declared", slot.name),
-                ));
+                Atom::Anonymous { spec } => specs.push(spec.as_lit()),
+                Atom::Reference { .. } => {}
             }
         }
     }
 
-    let atoms = if declared.is_empty() {
+    // Pass 2: resolve each atom occurrence to its position — declarations and anonymous atoms advance
+    // the position counter in the same order as pass 1; references resolve to their declaration.
+    let mut next_position = 0u32;
+    let mut path_positions: Vec<Vec<u32>> = Vec::new();
+    for path in &input.paths {
+        let mut row = Vec::new();
+        for atom in path.atoms() {
+            let position = match atom {
+                Atom::Declaration { .. } | Atom::Anonymous { .. } => {
+                    let position = next_position;
+                    next_position += 1;
+                    position
+                }
+                Atom::Reference { name } => *names.get(&name.to_string()).ok_or_else(|| {
+                    Error::new(
+                        name.span(),
+                        format!("atom `{name}` is referenced but never declared"),
+                    )
+                })?,
+            };
+            row.push(position);
+        }
+        path_positions.push(row);
+    }
+
+    let atoms = if specs.is_empty() {
         quote! {}
     } else {
-        let entries = declared
-            .iter()
-            .map(|(name, element)| quote! { (#name, #element) });
-        quote! { + atoms([ #(#entries),* ]) }
+        quote! { + atoms([ #(#specs),* ]) }
     };
 
     let mut bonds = Vec::new();
-    for path in &input.paths {
-        let mut previous = &path.first;
-        for (op, atom) in &path.rest {
-            let a = LitStr::new(&previous.name.to_string(), previous.name.span());
-            let b = LitStr::new(&atom.name.to_string(), atom.name.span());
+    for (path, row) in input.paths.iter().zip(&path_positions) {
+        for (index, (op, _)) in path.rest.iter().enumerate() {
+            let a = row[index];
+            let b = row[index + 1];
             bonds.push(match op {
-                Bond::Single => quote! { single(name(#a), name(#b)) },
-                Bond::Double => quote! { double(name(#a), name(#b)) },
-                Bond::Triple => quote! { triple(name(#a), name(#b)) },
-                Bond::Spec(spec) => quote! { bond(name(#a), name(#b), #spec) },
+                Bond::Single => quote! { single(#a, #b) },
+                Bond::Double => quote! { double(#a, #b) },
+                Bond::Triple => quote! { triple(#a, #b) },
+                Bond::Spec(spec) => quote! { bond(#a, #b, #spec) },
             });
-            previous = atom;
         }
     }
 
     Ok(quote! {
         {
             #[allow(unused_imports)]
-            use ::umol_ast::ast::spec::{atoms, bond, double, name, single, triple, MoleculeSpec};
+            use ::umol_ast::ast::spec::{atoms, bond, double, single, triple, MoleculeSpec};
             (MoleculeSpec::new() #atoms #(+ #bonds)*).build()
         }
     })
