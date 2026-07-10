@@ -847,28 +847,28 @@ fn permutation_for_ligands(
 // builder storage so old-state checks compare without cloning; callers clone
 // only what they keep (the `ast`).
 
-pub struct StereoAtomBuilderView<'a> {
+pub struct StereoAtomEditorView<'a> {
     pub id: StereoAtomId,
     pub ast: &'a StereoAtomAst,
     pub site: AtomId,
     pub ligands: &'a [StereoLigand],
 }
 
-pub struct StereoBondBuilderView<'a> {
+pub struct StereoBondEditorView<'a> {
     pub id: StereoBondId,
     pub ast: &'a StereoBondAst,
     pub site: BondId,
     pub ligands: &'a [StereoLigand],
 }
 
-pub struct StereoAtomBuilderViewMut<'a> {
+pub struct StereoAtomEditorViewMut<'a> {
     pub id: StereoAtomId,
     pub ast: &'a mut StereoAtomAst,
     pub site: AtomId,
     pub ligands: &'a [StereoLigand],
 }
 
-pub struct StereoBondBuilderViewMut<'a> {
+pub struct StereoBondEditorViewMut<'a> {
     pub id: StereoBondId,
     pub ast: &'a mut StereoBondAst,
     pub site: BondId,

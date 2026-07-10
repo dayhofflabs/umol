@@ -12,7 +12,7 @@ mod utils;
 use umol_ast::ast::{MoleculeAst, TryIntoAst};
 use umol_utils::error::UmolError;
 
-use self::builder::{AtomData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder};
+use self::builder::{AtomData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeEditor};
 use self::cx::{
     parse_cx_annotations, parse_extended_cx_annotations, remap_cx_bond_indices,
     split_reaction_cx_entries, update_extended_molecule, update_extended_reaction, update_molecule,
@@ -239,7 +239,7 @@ fn parse_smiles_inner(
     let mut i = 0usize;
     let n = input.len();
     let mut builder =
-        MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1), store_rings);
+        MoleculeEditor::with_capacity(n.max(1), n.max(1).saturating_sub(1), store_rings);
     let mut branch_stack: Vec<Frame> = Vec::new();
     let mut last_atom_idx: Option<usize> = None;
     let mut pending_bond: Option<(

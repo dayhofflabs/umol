@@ -1,6 +1,6 @@
 //! Structural editing for `MoleculeAst`. The AST itself only allows attribute
 //! mutation; structural change (add atoms/bonds/relations, remove anything)
-//! goes through `MoleculeBuilder`.
+//! goes through `MoleculeEditor`.
 //!
 //! Storage is lazy: each Arc-shared field stays shared until first write,
 //! at which point only that field decomposes to a mutable form. `build`
@@ -38,11 +38,11 @@ use super::super::remap::{IdCompaction, UndoCompaction};
 use super::super::stereo::{StereoAtomAst, StereoBondAst};
 use super::super::traits::{BiEquiv, Equiv};
 use super::super::view::{
-    AromaticSystemBuilderView, AromaticSystemBuilderViewMut, AtomBuilderView, AtomBuilderViewMut,
-    BondBuilderView, BondBuilderViewMut, DativeBondBuilderView, DativeBondBuilderViewMut,
-    MulticenterBondBuilderView, MulticenterBondBuilderViewMut, NoncovalentBondBuilderView,
-    NoncovalentBondBuilderViewMut, StereoAtomBuilderView, StereoAtomBuilderViewMut,
-    StereoBondBuilderView, StereoBondBuilderViewMut,
+    AromaticSystemEditorView, AromaticSystemEditorViewMut, AtomEditorView, AtomEditorViewMut,
+    BondEditorView, BondEditorViewMut, DativeBondEditorView, DativeBondEditorViewMut,
+    MulticenterBondEditorView, MulticenterBondEditorViewMut, NoncovalentBondEditorView,
+    NoncovalentBondEditorViewMut, StereoAtomEditorView, StereoAtomEditorViewMut,
+    StereoBondEditorView, StereoBondEditorViewMut,
 };
 use super::MoleculeAst;
 
@@ -600,12 +600,12 @@ fn restore_fixed_participants<P: RelationParticipant, const N: usize>(
     parts.map(|p| p.uncompact(remapping))
 }
 
-/// Mutable builder for a `MoleculeAst`. Accumulates atoms, bonds, and
+/// Mutable editor for a `MoleculeAst`. Accumulates atoms, bonds, and
 /// relations (dative, aromatic, multicenter, noncovalent), then finalizes
 /// into an immutable `MoleculeAst`. Supports incremental removal with
 /// index remapping via `remove`.
 #[derive(Clone)]
-pub struct MoleculeBuilder {
+pub struct MoleculeEditor {
     graph: Graph,
     atoms: Arc<Vec<AtomAst>>,
     bonds: Arc<Vec<BondAst>>,
@@ -618,7 +618,7 @@ pub struct MoleculeBuilder {
     constraints: Constraints,
 }
 
-impl MoleculeBuilder {
+impl MoleculeEditor {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn from_parts(
         graph: Graph,
@@ -652,7 +652,7 @@ impl MoleculeBuilder {
         }
     }
 
-    /// Append an atom directly to the builder.
+    /// Append an atom directly to the editor.
     ///
     /// This is a low-level, non-transactional construction primitive. Use
     /// `transact` for checked atomic edits or `transact_unchecked` for trusted
@@ -663,7 +663,7 @@ impl MoleculeBuilder {
         AtomId::from(id)
     }
 
-    /// Append a localized bond directly to the builder.
+    /// Append a localized bond directly to the editor.
     ///
     /// This is a low-level, non-transactional construction primitive. It
     /// assumes `first` and `second` are valid atom ids in the current dense layout.
@@ -675,7 +675,7 @@ impl MoleculeBuilder {
         BondId::from(id)
     }
 
-    /// Append a dative-bond overlay directly to the builder. The acceptor is
+    /// Append a dative-bond overlay directly to the editor. The acceptor is
     /// factor 1; the donors are factor 2 (sorted by the `Unordered`
     /// canonicalization).
     pub fn add_dative_bond(
@@ -691,7 +691,7 @@ impl MoleculeBuilder {
         )
     }
 
-    /// Append an aromatic-system overlay directly to the builder.
+    /// Append an aromatic-system overlay directly to the editor.
     pub fn add_aromatic_system(
         &mut self,
         atoms: Vec<AtomId>,
@@ -702,7 +702,7 @@ impl MoleculeBuilder {
         AromaticSystemId(i)
     }
 
-    /// Append a multicenter-bond overlay directly to the builder.
+    /// Append a multicenter-bond overlay directly to the editor.
     pub fn add_multicenter_bond(
         &mut self,
         atoms: Vec<AtomId>,
@@ -713,7 +713,7 @@ impl MoleculeBuilder {
         MulticenterBondId(i)
     }
 
-    /// Append a noncovalent-bond overlay directly to the builder.
+    /// Append a noncovalent-bond overlay directly to the editor.
     pub fn add_noncovalent_bond(
         &mut self,
         ends: [AtomId; 2],
@@ -725,7 +725,7 @@ impl MoleculeBuilder {
         NoncovalentBondId(i)
     }
 
-    /// Append a stereo-atom overlay directly to the builder.
+    /// Append a stereo-atom overlay directly to the editor.
     pub fn add_stereo_atom(
         &mut self,
         site: AtomId,
@@ -735,7 +735,7 @@ impl MoleculeBuilder {
         StereoAtomId(self.stereo_atoms.push([NodeId::from(site)], ligands, ast))
     }
 
-    /// Append a stereo-bond overlay directly to the builder.
+    /// Append a stereo-bond overlay directly to the editor.
     pub fn add_stereo_bond(
         &mut self,
         site: BondId,
@@ -755,42 +755,42 @@ impl MoleculeBuilder {
     // -- Attribute access -----------------------------------------------------
     //
     // Mutable views edit entity data in place. Structural add/remove stays on
-    // the builder itself because dense removal can compact many unrelated ids.
+    // the editor itself because dense removal can compact many unrelated ids.
 
-    pub fn atom(&self, id: AtomId) -> AtomBuilderView<'_> {
-        AtomBuilderView {
+    pub fn atom(&self, id: AtomId) -> AtomEditorView<'_> {
+        AtomEditorView {
             id,
             ast: &self.atoms[id.index()],
         }
     }
 
-    pub fn atom_mut(&mut self, id: AtomId) -> AtomBuilderViewMut<'_> {
+    pub fn atom_mut(&mut self, id: AtomId) -> AtomEditorViewMut<'_> {
         let ast = &mut Arc::make_mut(&mut self.atoms)[id.index()];
-        AtomBuilderViewMut { id, ast }
+        AtomEditorViewMut { id, ast }
     }
 
-    pub fn bond(&self, id: BondId) -> BondBuilderView<'_> {
+    pub fn bond(&self, id: BondId) -> BondEditorView<'_> {
         let endpoints = self.graph.edge_endpoints(EdgeId::from(id));
         let atoms = [AtomId::from(endpoints[0]), AtomId::from(endpoints[1])];
-        BondBuilderView {
+        BondEditorView {
             id,
             ast: &self.bonds[id.index()],
             atoms,
         }
     }
 
-    pub fn bond_mut(&mut self, id: BondId) -> BondBuilderViewMut<'_> {
+    pub fn bond_mut(&mut self, id: BondId) -> BondEditorViewMut<'_> {
         let endpoints = self.graph.edge_endpoints(EdgeId::from(id));
         let atoms = [AtomId::from(endpoints[0]), AtomId::from(endpoints[1])];
         let ast = &mut Arc::make_mut(&mut self.bonds)[id.index()];
-        BondBuilderViewMut { id, ast, atoms }
+        BondEditorViewMut { id, ast, atoms }
     }
 
-    pub fn dative_bond(&self, id: DativeBondId) -> DativeBondBuilderView<'_> {
+    pub fn dative_bond(&self, id: DativeBondId) -> DativeBondEditorView<'_> {
         match &self.dative_bonds {
             FixedVarSetStorage::Shared(arc) => {
                 let rid = RelationId(id.0);
-                DativeBondBuilderView {
+                DativeBondEditorView {
                     id,
                     ast: arc.data(rid),
                     acceptor_id: AtomId::from(arc.participants_1(rid)[0]),
@@ -799,7 +799,7 @@ impl MoleculeBuilder {
             }
             FixedVarSetStorage::Mutable(vec) => {
                 let entry = &vec[id.index()];
-                DativeBondBuilderView {
+                DativeBondEditorView {
                     id,
                     ast: &entry.2,
                     acceptor_id: AtomId::from(entry.0[0]),
@@ -809,14 +809,14 @@ impl MoleculeBuilder {
         }
     }
 
-    pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondBuilderViewMut<'_> {
+    pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondEditorViewMut<'_> {
         self.dative_bonds.materialize();
         let FixedVarSetStorage::Mutable(vec) = &mut self.dative_bonds else {
             unreachable!()
         };
         let entry = &mut vec[id.index()];
         let acceptor_id = AtomId::from(entry.0[0]);
-        DativeBondBuilderViewMut {
+        DativeBondEditorViewMut {
             id,
             acceptor_id,
             donors: &entry.1,
@@ -824,11 +824,11 @@ impl MoleculeBuilder {
         }
     }
 
-    pub fn aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemBuilderView<'_> {
+    pub fn aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemEditorView<'_> {
         match &self.aromatic_systems {
             VarSetStorage::Shared(arc) => {
                 let rid = RelationId(id.0);
-                AromaticSystemBuilderView {
+                AromaticSystemEditorView {
                     id,
                     ast: arc.data(rid),
                     atoms: arc.participants(rid),
@@ -836,7 +836,7 @@ impl MoleculeBuilder {
             }
             VarSetStorage::Mutable(vec) => {
                 let entry = &vec[id.index()];
-                AromaticSystemBuilderView {
+                AromaticSystemEditorView {
                     id,
                     ast: &entry.1,
                     atoms: &entry.0,
@@ -848,24 +848,24 @@ impl MoleculeBuilder {
     pub fn aromatic_system_mut(
         &mut self,
         id: AromaticSystemId,
-    ) -> AromaticSystemBuilderViewMut<'_> {
+    ) -> AromaticSystemEditorViewMut<'_> {
         self.aromatic_systems.materialize();
         let VarSetStorage::Mutable(vec) = &mut self.aromatic_systems else {
             unreachable!()
         };
         let entry = &mut vec[id.index()];
-        AromaticSystemBuilderViewMut {
+        AromaticSystemEditorViewMut {
             id,
             atoms: &entry.0,
             ast: &mut entry.1,
         }
     }
 
-    pub fn multicenter_bond(&self, id: MulticenterBondId) -> MulticenterBondBuilderView<'_> {
+    pub fn multicenter_bond(&self, id: MulticenterBondId) -> MulticenterBondEditorView<'_> {
         match &self.multicenter_bonds {
             VarSetStorage::Shared(arc) => {
                 let rid = RelationId(id.0);
-                MulticenterBondBuilderView {
+                MulticenterBondEditorView {
                     id,
                     ast: arc.data(rid),
                     atoms: arc.participants(rid),
@@ -873,7 +873,7 @@ impl MoleculeBuilder {
             }
             VarSetStorage::Mutable(vec) => {
                 let entry = &vec[id.index()];
-                MulticenterBondBuilderView {
+                MulticenterBondEditorView {
                     id,
                     ast: &entry.1,
                     atoms: &entry.0,
@@ -885,25 +885,25 @@ impl MoleculeBuilder {
     pub fn multicenter_bond_mut(
         &mut self,
         id: MulticenterBondId,
-    ) -> MulticenterBondBuilderViewMut<'_> {
+    ) -> MulticenterBondEditorViewMut<'_> {
         self.multicenter_bonds.materialize();
         let VarSetStorage::Mutable(vec) = &mut self.multicenter_bonds else {
             unreachable!()
         };
         let entry = &mut vec[id.index()];
-        MulticenterBondBuilderViewMut {
+        MulticenterBondEditorViewMut {
             id,
             atoms: &entry.0,
             ast: &mut entry.1,
         }
     }
 
-    pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondBuilderView<'_> {
+    pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondEditorView<'_> {
         match &self.noncovalent_bonds {
             FixedSetStorage::Shared(arc) => {
                 let rid = RelationId(id.0);
                 let parts = arc.participants(rid);
-                NoncovalentBondBuilderView {
+                NoncovalentBondEditorView {
                     id,
                     ast: arc.data(rid),
                     atoms: [AtomId::from(parts[0]), AtomId::from(parts[1])],
@@ -911,7 +911,7 @@ impl MoleculeBuilder {
             }
             FixedSetStorage::Mutable(vec) => {
                 let entry = &vec[id.index()];
-                NoncovalentBondBuilderView {
+                NoncovalentBondEditorView {
                     id,
                     ast: &entry.1,
                     atoms: [AtomId::from(entry.0[0]), AtomId::from(entry.0[1])],
@@ -923,25 +923,25 @@ impl MoleculeBuilder {
     pub fn noncovalent_bond_mut(
         &mut self,
         id: NoncovalentBondId,
-    ) -> NoncovalentBondBuilderViewMut<'_> {
+    ) -> NoncovalentBondEditorViewMut<'_> {
         self.noncovalent_bonds.materialize();
         let FixedSetStorage::Mutable(vec) = &mut self.noncovalent_bonds else {
             unreachable!()
         };
         let entry = &mut vec[id.index()];
         let atoms = [AtomId::from(entry.0[0]), AtomId::from(entry.0[1])];
-        NoncovalentBondBuilderViewMut {
+        NoncovalentBondEditorViewMut {
             id,
             ast: &mut entry.1,
             atoms,
         }
     }
 
-    pub fn stereo_atom(&self, id: StereoAtomId) -> StereoAtomBuilderView<'_> {
+    pub fn stereo_atom(&self, id: StereoAtomId) -> StereoAtomEditorView<'_> {
         match &self.stereo_atoms {
             FixedVarSetStorage::Shared(arc) => {
                 let rid = RelationId(id.0);
-                StereoAtomBuilderView {
+                StereoAtomEditorView {
                     id,
                     ast: arc.data(rid),
                     site: AtomId::from(arc.participants_1(rid)[0]),
@@ -950,7 +950,7 @@ impl MoleculeBuilder {
             }
             FixedVarSetStorage::Mutable(vec) => {
                 let entry = &vec[id.index()];
-                StereoAtomBuilderView {
+                StereoAtomEditorView {
                     id,
                     ast: &entry.2,
                     site: AtomId::from(entry.0[0]),
@@ -960,11 +960,11 @@ impl MoleculeBuilder {
         }
     }
 
-    pub fn stereo_bond(&self, id: StereoBondId) -> StereoBondBuilderView<'_> {
+    pub fn stereo_bond(&self, id: StereoBondId) -> StereoBondEditorView<'_> {
         match &self.stereo_bonds {
             FixedVarSetStorage::Shared(arc) => {
                 let rid = RelationId(id.0);
-                StereoBondBuilderView {
+                StereoBondEditorView {
                     id,
                     ast: arc.data(rid),
                     site: BondId::from(arc.participants_1(rid)[0]),
@@ -973,7 +973,7 @@ impl MoleculeBuilder {
             }
             FixedVarSetStorage::Mutable(vec) => {
                 let entry = &vec[id.index()];
-                StereoBondBuilderView {
+                StereoBondEditorView {
                     id,
                     ast: &entry.2,
                     site: BondId::from(entry.0[0]),
@@ -1063,14 +1063,14 @@ impl MoleculeBuilder {
             .is_some_and(|(s1, s2)| ast.equiv_under(&self.stereo_bonds.data(id.index()), &s1, &s2))
     }
 
-    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomBuilderViewMut<'_> {
+    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {
         self.stereo_atoms.materialize();
         let FixedVarSetStorage::Mutable(vec) = &mut self.stereo_atoms else {
             unreachable!()
         };
         let entry = &mut vec[id.index()];
         let site = AtomId::from(entry.0[0]);
-        StereoAtomBuilderViewMut {
+        StereoAtomEditorViewMut {
             id,
             ast: &mut entry.2,
             site,
@@ -1078,14 +1078,14 @@ impl MoleculeBuilder {
         }
     }
 
-    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondBuilderViewMut<'_> {
+    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondEditorViewMut<'_> {
         self.stereo_bonds.materialize();
         let FixedVarSetStorage::Mutable(vec) = &mut self.stereo_bonds else {
             unreachable!()
         };
         let entry = &mut vec[id.index()];
         let site = BondId::from(entry.0[0]);
-        StereoBondBuilderViewMut {
+        StereoBondEditorViewMut {
             id,
             ast: &mut entry.2,
             site,
@@ -1135,7 +1135,7 @@ impl MoleculeBuilder {
 
     // -- Relation removal -----------------------------------------------------
 
-    /// Remove dative-bond overlays directly from the builder.
+    /// Remove dative-bond overlays directly from the editor.
     ///
     /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
@@ -1154,7 +1154,7 @@ impl MoleculeBuilder {
         self.constraints.compact(&id_compaction);
     }
 
-    /// Remove aromatic-system overlays directly from the builder.
+    /// Remove aromatic-system overlays directly from the editor.
     ///
     /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
@@ -1173,7 +1173,7 @@ impl MoleculeBuilder {
         self.constraints.compact(&id_compaction);
     }
 
-    /// Remove multicenter-bond overlays directly from the builder.
+    /// Remove multicenter-bond overlays directly from the editor.
     ///
     /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
@@ -1192,7 +1192,7 @@ impl MoleculeBuilder {
         self.constraints.compact(&id_compaction);
     }
 
-    /// Remove noncovalent-bond overlays directly from the builder.
+    /// Remove noncovalent-bond overlays directly from the editor.
     ///
     /// This is a low-level dense removal primitive. It compacts molecule-level
     /// constraints but does not build rollback data.
@@ -1211,7 +1211,7 @@ impl MoleculeBuilder {
         self.constraints.compact(&id_compaction);
     }
 
-    /// Remove stereo-atom overlays directly from the builder.
+    /// Remove stereo-atom overlays directly from the editor.
     ///
     /// Low-level dense removal primitive; compacts molecule-level constraints but
     /// does not build rollback data.
@@ -1230,7 +1230,7 @@ impl MoleculeBuilder {
         self.constraints.compact(&id_compaction);
     }
 
-    /// Remove stereo-bond overlays directly from the builder.
+    /// Remove stereo-bond overlays directly from the editor.
     ///
     /// Low-level dense removal primitive; compacts molecule-level constraints but
     /// does not build rollback data.
@@ -1251,7 +1251,7 @@ impl MoleculeBuilder {
 
     // -- Topological removal --------------------------------------------------
 
-    /// Remove topology directly from the builder and return the forward compaction.
+    /// Remove topology directly from the editor and return the forward compaction.
     ///
     /// This is the low-level dense topology-removal primitive. It removes the
     /// requested atoms and bonds, cascades relations whose participants were
@@ -1587,7 +1587,7 @@ mod tests {
     use crate::mol_dsl;
 
     #[fixture]
-    fn triatomic() -> MoleculeBuilder {
+    fn triatomic() -> MoleculeEditor {
         let mut b = MoleculeAst::default().edit();
         b.add_atom(AtomAst::from_element(Element::C));
         b.add_atom(AtomAst::from_element(Element::N));
@@ -1598,7 +1598,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_builder_restore_topology(mut triatomic: MoleculeBuilder) {
+    fn test_molecule_editor_restore_topology(mut triatomic: MoleculeEditor) {
         let dropped_constraint = Constraint::Atom(AtomId(1), AtomConstraintAst::degree(3));
         triatomic.push_constraint(dropped_constraint.clone());
         let expected = triatomic.clone().build();
@@ -1638,7 +1638,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_builder_remove_added_topology(mut triatomic: MoleculeBuilder) {
+    fn test_molecule_editor_remove_added_topology(mut triatomic: MoleculeEditor) {
         let expected = triatomic.clone().build();
         let added_atom = AddedAtom {
             id: triatomic.add_atom(AtomAst::from_element(Element::F)),
@@ -1656,7 +1656,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_builder_restore_dative_bond() {
+    fn test_molecule_editor_restore_dative_bond() {
         let mut b = MoleculeAst::default().edit();
         b.add_atom(AtomAst::from_element(Element::C));
         b.add_atom(AtomAst::from_element(Element::N));
@@ -1687,7 +1687,7 @@ mod tests {
 
     // `edit()` → `build()` reproduces the AST including both stereo overlays.
     #[rstest]
-    fn test_molecule_builder_build() {
+    fn test_molecule_editor_build() {
         let ast = mol_dsl!(
             r#"{:atoms ["C" "C" "C" "F" "Cl"]
                 :bonds [[0 1 "1"] [1 2 "2"] [0 3 "1"] [0 4 "1"]]
@@ -1702,7 +1702,7 @@ mod tests {
     #[rstest]
     #[case::remaps_surviving(vec![AtomId(0)], vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]])]
     #[case::drops_on_site_removal(vec![AtomId(1)], vec![])]
-    fn test_molecule_builder_remove_stereo_atom(
+    fn test_molecule_editor_remove_stereo_atom(
         #[case] remove_atoms: Vec<AtomId>,
         #[case] expected: Vec<Vec<AtomId>>,
     ) {
@@ -1711,9 +1711,9 @@ mod tests {
                 :bonds [[1 2 "1"] [1 3 "1"] [1 4 "1"]]
                 :stereo-atoms [{:site 1 :ligands [2 3 4] :type "Th1"}]}"#
         );
-        let mut builder = ast.edit();
-        builder.remove(&remove_atoms, &[]);
-        let surviving: Vec<Vec<AtomId>> = builder
+        let mut editor = ast.edit();
+        editor.remove(&remove_atoms, &[]);
+        let surviving: Vec<Vec<AtomId>> = editor
             .build()
             .stereo_atoms()
             .iter()
@@ -1727,7 +1727,7 @@ mod tests {
     #[rstest]
     #[case::remaps_surviving(vec![BondId(0)], vec![BondId(0)])]
     #[case::drops_on_site_removal(vec![BondId(1)], vec![])]
-    fn test_molecule_builder_remove_stereo_bond(
+    fn test_molecule_editor_remove_stereo_bond(
         #[case] remove_bonds: Vec<BondId>,
         #[case] expected: Vec<BondId>,
     ) {
@@ -1736,9 +1736,9 @@ mod tests {
                 :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
                 :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#
         );
-        let mut builder = ast.edit();
-        builder.remove(&[], &remove_bonds);
-        let surviving: Vec<BondId> = builder
+        let mut editor = ast.edit();
+        editor.remove(&[], &remove_bonds);
+        let surviving: Vec<BondId> = editor
             .build()
             .stereo_bonds()
             .iter()

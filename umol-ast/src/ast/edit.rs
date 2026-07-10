@@ -1,6 +1,6 @@
 //! Edit vocabulary for transactional molecule mutation.
 //!
-//! The `Edit` enum is the data-form vocabulary for `MoleculeBuilder::transact`
+//! The `Edit` enum is the data-form vocabulary for `MoleculeEditor::transact`
 //! `Edit` is caller-facing mutation data; realized rollback data belongs to
 //! the `Undo` journal.
 //!

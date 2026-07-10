@@ -260,25 +260,25 @@ impl<'a> MulticenterBondView<'a> {
 
 // Builder-scope view bundles for multicenter bonds.
 
-pub struct MulticenterBondBuilderView<'a> {
+pub struct MulticenterBondEditorView<'a> {
     pub id: MulticenterBondId,
     pub ast: &'a MulticenterBondAst,
     pub(crate) atoms: &'a [NodeId],
 }
 
-impl<'a> MulticenterBondBuilderView<'a> {
+impl<'a> MulticenterBondEditorView<'a> {
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 }
 
-pub struct MulticenterBondBuilderViewMut<'a> {
+pub struct MulticenterBondEditorViewMut<'a> {
     pub id: MulticenterBondId,
     pub ast: &'a mut MulticenterBondAst,
     pub(crate) atoms: &'a [NodeId],
 }
 
-impl<'a> MulticenterBondBuilderViewMut<'a> {
+impl<'a> MulticenterBondEditorViewMut<'a> {
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }

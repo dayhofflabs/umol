@@ -1,5 +1,5 @@
 //! Bond views: `BondViews` namespace, `BondView` / `BondViewMut` AST bundles,
-//! `BondBuilderView` / `BondBuilderViewMut` builder bundles.
+//! `BondEditorView` / `BondEditorViewMut` builder bundles.
 
 use std::collections::HashSet;
 use std::ops::Index;
@@ -302,13 +302,13 @@ impl<'a> BondViewMut<'a> {
 
 // Builder-scope view bundles for bonds.
 
-pub struct BondBuilderView<'a> {
+pub struct BondEditorView<'a> {
     pub id: BondId,
     pub ast: &'a BondAst,
     pub atoms: [AtomId; 2],
 }
 
-pub struct BondBuilderViewMut<'a> {
+pub struct BondEditorViewMut<'a> {
     pub id: BondId,
     pub ast: &'a mut BondAst,
     pub atoms: [AtomId; 2],

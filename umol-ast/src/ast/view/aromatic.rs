@@ -304,25 +304,25 @@ impl<'a> AromaticSystemView<'a> {
 
 // Builder-scope view bundles for aromatic systems.
 
-pub struct AromaticSystemBuilderView<'a> {
+pub struct AromaticSystemEditorView<'a> {
     pub id: AromaticSystemId,
     pub ast: &'a AromaticSystemAst,
     pub(crate) atoms: &'a [NodeId],
 }
 
-impl<'a> AromaticSystemBuilderView<'a> {
+impl<'a> AromaticSystemEditorView<'a> {
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 }
 
-pub struct AromaticSystemBuilderViewMut<'a> {
+pub struct AromaticSystemEditorViewMut<'a> {
     pub id: AromaticSystemId,
     pub ast: &'a mut AromaticSystemAst,
     pub(crate) atoms: &'a [NodeId],
 }
 
-impl<'a> AromaticSystemBuilderViewMut<'a> {
+impl<'a> AromaticSystemEditorViewMut<'a> {
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }

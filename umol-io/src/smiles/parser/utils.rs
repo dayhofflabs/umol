@@ -7,7 +7,7 @@ use umol_chem::element::Element;
 
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
-use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeBuilder};
+use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeEditor};
 use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
     AtomSymbol, Bond, BondDirection, BondDonation, BondOrder, ExtendedBond, Span, WildcardAtom,
@@ -350,7 +350,7 @@ pub(super) fn make_extended_bond(start: usize, end: usize, b: BondData) -> Exten
 #[inline]
 #[allow(clippy::too_many_arguments)]
 pub(super) fn attach_atom(
-    builder: &mut MoleculeBuilder,
+    builder: &mut MoleculeEditor,
     last_atom_idx: Option<usize>,
     curr_atom_idx: usize,
     pending_bond: &mut Option<(

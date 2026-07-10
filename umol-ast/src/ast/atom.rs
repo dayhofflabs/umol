@@ -160,6 +160,20 @@ impl AtomAst {
     }
 }
 
+impl From<Element> for AtomAst {
+    fn from(element: Element) -> Self {
+        Self::from_element(element)
+    }
+}
+
+/// Construction sugar for `b.atom("C#h3")`: parse a compact atom-string, panicking on
+/// invalid input — a bad literal is a programmer error, like the `atom_dsl!` macro.
+impl From<&str> for AtomAst {
+    fn from(s: &str) -> Self {
+        s.parse().expect("invalid atom string")
+    }
+}
+
 /// Element expression: undetermined, a single element, a finite element set, a
 /// complement set (`!{…}`), or a variable (free `?x`, or membership-restricted
 /// `?x :: {…}` / `?x :: !{…}`). Sets are cardinality-canonical and
@@ -670,6 +684,16 @@ mod tests {
                 ..Default::default()
             },
         );
+    }
+
+    #[rstest]
+    fn test_atom_ast_from() {
+        let expected = AtomAst {
+            element: ElementAst::Lit(Element::C),
+            ..Default::default()
+        };
+        assert_eq!(AtomAst::from(Element::C), expected);
+        assert_eq!(AtomAst::from("C"), expected);
     }
 
     #[rustfmt::skip]

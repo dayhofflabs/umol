@@ -171,7 +171,7 @@ fn test_molecule_ast_neighbors(#[case] atom: AtomId, #[case] expected: Vec<(Atom
 }
 
 #[rstest]
-fn test_molecule_builder_add_aromatic_system() {
+fn test_molecule_editor_add_aromatic_system() {
     let ast = MoleculeAst::from_parts(
         vec![
             AtomAst::from_element(Element::C),
@@ -1218,7 +1218,7 @@ fn test_molecule_ast_extract(#[from(rich_molecule)] ast: MoleculeAst) {
 }
 
 #[rstest]
-fn test_molecule_builder_remove_aromatic_systems(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_remove_aromatic_systems(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.remove_aromatic_systems(&[AromaticSystemId(0)]);
     let result = b.build();
@@ -1237,7 +1237,7 @@ fn test_molecule_builder_remove_aromatic_systems(#[from(rich_molecule)] ast: Mol
 }
 
 #[rstest]
-fn test_molecule_builder_remove_dative_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_remove_dative_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.remove_dative_bonds(&[DativeBondId(0)]);
     let result = b.build();
@@ -1248,7 +1248,7 @@ fn test_molecule_builder_remove_dative_bonds(#[from(rich_molecule)] ast: Molecul
 }
 
 #[rstest]
-fn test_molecule_builder_remove_multicenter_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_remove_multicenter_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.remove_multicenter_bonds(&[MulticenterBondId(0)]);
     let result = b.build();
@@ -1259,7 +1259,7 @@ fn test_molecule_builder_remove_multicenter_bonds(#[from(rich_molecule)] ast: Mo
 }
 
 #[rstest]
-fn test_molecule_builder_remove_noncovalent_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_remove_noncovalent_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.remove_noncovalent_bonds(&[NoncovalentBondId(0)]);
     let result = b.build();
@@ -1270,7 +1270,7 @@ fn test_molecule_builder_remove_noncovalent_bonds(#[from(rich_molecule)] ast: Mo
 }
 
 #[rstest]
-fn test_molecule_builder_atom_mut(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_atom_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.atom_mut(AtomId(0)).ast.element = ElementAst::Lit(Element::N);
     let result = b.build();
@@ -1279,7 +1279,7 @@ fn test_molecule_builder_atom_mut(#[from(rich_molecule)] ast: MoleculeAst) {
 }
 
 #[rstest]
-fn test_molecule_builder_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.bond_mut(BondId(0)).ast.order = ValueAst::Lit(3);
     let result = b.build();
@@ -1288,7 +1288,7 @@ fn test_molecule_builder_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
 }
 
 #[rstest]
-fn test_molecule_builder_atom_constraint_mut(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_atom_constraint_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.atom_mut(AtomId(0))
         .ast
@@ -1303,7 +1303,7 @@ fn test_molecule_builder_atom_constraint_mut(#[from(rich_molecule)] ast: Molecul
 }
 
 #[rstest]
-fn test_molecule_builder_add_dative_bond(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_add_dative_bond(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     let id = b.add_dative_bond(vec![AtomId(1)], AtomId(0), DativeBondAst::from_order(1));
     let result = b.build();
@@ -1314,7 +1314,7 @@ fn test_molecule_builder_add_dative_bond(#[from(rich_molecule)] ast: MoleculeAst
 }
 
 #[rstest]
-fn test_molecule_builder_add_multicenter_bond(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_add_multicenter_bond(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     let id = b.add_multicenter_bond(
         vec![AtomId(1), AtomId(2), AtomId(3)],
@@ -1327,7 +1327,7 @@ fn test_molecule_builder_add_multicenter_bond(#[from(rich_molecule)] ast: Molecu
 }
 
 #[rstest]
-fn test_molecule_builder_add_noncovalent_bond(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_add_noncovalent_bond(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     let id = b.add_noncovalent_bond(
         [AtomId(1), AtomId(2)],
@@ -1340,7 +1340,7 @@ fn test_molecule_builder_add_noncovalent_bond(#[from(rich_molecule)] ast: Molecu
 }
 
 #[rstest]
-fn test_molecule_builder_push_constraint_and_constraints_mut(
+fn test_molecule_editor_push_constraint_and_constraints_mut(
     #[from(rich_molecule)] ast: MoleculeAst,
 ) {
     let mut b = ast.edit();
@@ -1357,7 +1357,7 @@ fn test_molecule_builder_push_constraint_and_constraints_mut(
 }
 
 #[rstest]
-fn test_molecule_builder_dative_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_dative_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.dative_bond_mut(DativeBondId(0)).ast.constraints.set(
         DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1),
@@ -1368,7 +1368,7 @@ fn test_molecule_builder_dative_bond_mut(#[from(rich_molecule)] ast: MoleculeAst
 }
 
 #[rstest]
-fn test_molecule_builder_aromatic_system_mut(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_aromatic_system_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.aromatic_system_mut(AromaticSystemId(0)).ast.charge = ValueAst::Lit(0);
     let result = b.build();
@@ -1376,7 +1376,7 @@ fn test_molecule_builder_aromatic_system_mut(#[from(rich_molecule)] ast: Molecul
 }
 
 #[rstest]
-fn test_molecule_builder_multicenter_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_multicenter_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.multicenter_bond_mut(MulticenterBondId(0)).ast.electrons =
         ElectronCountsAst::Lit(vec![1, 1, 0]);
@@ -1388,7 +1388,7 @@ fn test_molecule_builder_multicenter_bond_mut(#[from(rich_molecule)] ast: Molecu
 }
 
 #[rstest]
-fn test_molecule_builder_noncovalent_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_noncovalent_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.noncovalent_bond_mut(NoncovalentBondId(0)).ast.kind =
         NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic);
@@ -1400,7 +1400,7 @@ fn test_molecule_builder_noncovalent_bond_mut(#[from(rich_molecule)] ast: Molecu
 }
 
 #[rstest]
-fn test_molecule_builder_remove_empty_is_noop(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_remove_empty_is_noop(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.remove_dative_bonds(&[]);
     b.remove_aromatic_systems(&[]);
@@ -1502,7 +1502,7 @@ fn test_rings_membership() {
 }
 
 #[rstest]
-fn test_molecule_builder_add_and_remove(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_editor_add_and_remove(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     let new_a = b.add_atom(AtomAst::from_element(Element::Br));
     b.add_bond(AtomId(0), new_a, BondAst::from_order(1));
@@ -1514,7 +1514,7 @@ fn test_molecule_builder_add_and_remove(#[from(rich_molecule)] ast: MoleculeAst)
         .iter()
         .map(|v| match v.ast.element {
             ElementAst::Lit(e) => e,
-            _ => panic!("non-ground element in builder result"),
+            _ => panic!("non-ground element in editor result"),
         })
         .collect();
     assert_eq!(atoms, vec![Element::C, Element::C, Element::N, Element::Br]);

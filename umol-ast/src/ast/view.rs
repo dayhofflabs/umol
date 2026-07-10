@@ -17,26 +17,26 @@ mod noncovalent;
 mod stereo;
 
 pub use aromatic::{
-    AromaticSystemBuilderView, AromaticSystemBuilderViewMut, AromaticSystemView,
+    AromaticSystemEditorView, AromaticSystemEditorViewMut, AromaticSystemView,
     AromaticSystemViews,
 };
-pub use atom::{AtomBuilderView, AtomBuilderViewMut, AtomView, AtomViewMut, AtomViews};
-pub use bond::{BondBuilderView, BondBuilderViewMut, BondView, BondViewMut, BondViews};
+pub use atom::{AtomEditorView, AtomEditorViewMut, AtomView, AtomViewMut, AtomViews};
+pub use bond::{BondEditorView, BondEditorViewMut, BondView, BondViewMut, BondViews};
 pub use dative::{
-    DativeBondBuilderView, DativeBondBuilderViewMut, DativeBondView, DativeBondViews,
+    DativeBondEditorView, DativeBondEditorViewMut, DativeBondView, DativeBondViews,
 };
 pub use graph::{AtomAutomorphism, GraphView};
 pub use ligand::StereoLigandView;
 pub use multicenter::{
-    MulticenterBondBuilderView, MulticenterBondBuilderViewMut, MulticenterBondView,
+    MulticenterBondEditorView, MulticenterBondEditorViewMut, MulticenterBondView,
     MulticenterBondViews,
 };
 pub use neighbor::NeighborView;
 pub use noncovalent::{
-    NoncovalentBondBuilderView, NoncovalentBondBuilderViewMut, NoncovalentBondView,
+    NoncovalentBondEditorView, NoncovalentBondEditorViewMut, NoncovalentBondView,
     NoncovalentBondViews,
 };
 pub use stereo::{
-    StereoAtomBuilderView, StereoAtomBuilderViewMut, StereoAtomView, StereoAtomViews,
-    StereoBondBuilderView, StereoBondBuilderViewMut, StereoBondView, StereoBondViews,
+    StereoAtomEditorView, StereoAtomEditorViewMut, StereoAtomView, StereoAtomViews,
+    StereoBondEditorView, StereoBondEditorViewMut, StereoBondView, StereoBondViews,
 };

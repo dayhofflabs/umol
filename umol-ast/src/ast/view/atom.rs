@@ -1,5 +1,5 @@
 //! Atom views: `AtomViews` namespace, `AtomView` / `AtomViewMut` AST bundles,
-//! `AtomBuilderView` / `AtomBuilderViewMut` builder bundles.
+//! `AtomEditorView` / `AtomEditorViewMut` builder bundles.
 
 use std::ops::Index;
 
@@ -546,12 +546,12 @@ pub struct AtomViewMut<'a> {
 
 // Builder-scope view bundles for atoms.
 
-pub struct AtomBuilderView<'a> {
+pub struct AtomEditorView<'a> {
     pub id: AtomId,
     pub ast: &'a AtomAst,
 }
 
-pub struct AtomBuilderViewMut<'a> {
+pub struct AtomEditorViewMut<'a> {
     pub id: AtomId,
     pub ast: &'a mut AtomAst,
 }

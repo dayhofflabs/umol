@@ -46,7 +46,7 @@ pub(super) struct BondData {
 }
 
 /// Molecule builder
-pub(super) struct MoleculeBuilder {
+pub(super) struct MoleculeEditor {
     atoms: Vec<Atom>,
     bond_table: Vec<Option<Bond>>,
     ring_table: Vec<Option<OpenRing>>,
@@ -59,7 +59,7 @@ pub(super) struct MoleculeBuilder {
     molecules: Vec<Molecule>,
 }
 
-impl MoleculeBuilder {
+impl MoleculeEditor {
     pub(crate) fn with_capacity(
         approx_atoms: usize,
         approx_bonds: usize,

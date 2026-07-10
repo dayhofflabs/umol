@@ -48,7 +48,7 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_builder_transact_rollback(
+    fn test_molecule_editor_transact_rollback(
         (base, edits) in transaction_edits_strategy(),
     ) {
         let mut builder = base.edit();
@@ -64,7 +64,7 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_builder_transact_unchecked((base, edits) in transaction_edits_strategy()) {
+    fn test_molecule_editor_transact_unchecked((base, edits) in transaction_edits_strategy()) {
         let mut checked = base.edit();
         checked
             .transact(edits.clone())

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::ops::Index;
 use std::sync::{Arc, OnceLock};
 
-pub use builder::MoleculeBuilder;
+pub use editor::MoleculeEditor;
 use umol_graph_core::{
     Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
     RelationId, Unordered, VarRelationSet,
@@ -34,7 +34,7 @@ use super::view::{
     StereoAtomViews, StereoBondView, StereoBondViews,
 };
 
-mod builder;
+mod editor;
 mod pushout;
 pub(super) mod transact;
 
@@ -42,7 +42,7 @@ pub(super) mod transact;
 ///
 /// Topology and per-atom/bond data are `Arc`-shared (copy-on-write). The AST
 /// itself only allows attribute mutation (`atom_mut`, `bond_mut`); structural
-/// edits go through `MoleculeBuilder` via [`MoleculeAst::edit`].
+/// edits go through `MoleculeEditor` via [`MoleculeAst::edit`].
 ///
 /// Carries a single-slot canonical-rings cache (`OnceLock<RingSet>`) populated
 /// lazily on the first call to [`MoleculeAst::rings`]. The cache stores
@@ -136,10 +136,10 @@ impl MoleculeAst {
         )
     }
 
-    /// Start an empty `MoleculeBuilder` for fluent / programmatic
+    /// Start an empty `MoleculeEditor` for fluent / programmatic
     /// construction. Use [`MoleculeAst::edit`] to start from an existing
     /// molecule.
-    pub fn builder() -> MoleculeBuilder {
+    pub fn builder() -> MoleculeEditor {
         Self::new().edit()
     }
 
@@ -820,8 +820,8 @@ impl MoleculeAst {
         }
     }
 
-    pub fn edit(&self) -> MoleculeBuilder {
-        MoleculeBuilder::from_parts(
+    pub fn edit(&self) -> MoleculeEditor {
+        MoleculeEditor::from_parts(
             self.graph.clone(),
             Arc::clone(&self.atoms),
             Arc::clone(&self.bonds),

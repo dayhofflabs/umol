@@ -1,7 +1,7 @@
 //! AST-level id mappings between `MoleculeAst` id spaces.
 //!
 //! [`IdCompaction`] is the removal compaction produced by
-//! `MoleculeBuilder::remove` (wraps `umol_graph_core::Compaction` for atom/bond
+//! `MoleculeEditor::remove` (wraps `umol_graph_core::Compaction` for atom/bond
 //! and carries sorted removed-id lists for the six relation kinds; lookups are
 //! binary search + partition-point shift). [`IdRemapping`] is the general total
 //! relabeling used to move `Delta`s between id spaces (`reverse`, `compose`).
@@ -15,7 +15,7 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 
-/// Id compaction produced by `MoleculeBuilder::remove`. Translates
+/// Id compaction produced by `MoleculeEditor::remove`. Translates
 /// pre-removal `AtomId` / `BondId` / relation ids to post-removal
 /// ids, or signals that an entity was removed. Used to rewrite stale
 /// id references against the new `MoleculeAst` layout.

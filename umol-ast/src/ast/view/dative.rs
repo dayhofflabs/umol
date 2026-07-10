@@ -262,14 +262,14 @@ impl<'a> DativeBondView<'a> {
 
 // Builder-scope view bundles for dative bonds.
 
-pub struct DativeBondBuilderView<'a> {
+pub struct DativeBondEditorView<'a> {
     pub id: DativeBondId,
     pub ast: &'a DativeBondAst,
     pub(crate) donors: &'a [NodeId],
     pub acceptor_id: AtomId,
 }
 
-impl<'a> DativeBondBuilderView<'a> {
+impl<'a> DativeBondEditorView<'a> {
     /// All atoms: donors followed by the acceptor.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         let acceptor = self.acceptor_id;
@@ -280,14 +280,14 @@ impl<'a> DativeBondBuilderView<'a> {
     }
 }
 
-pub struct DativeBondBuilderViewMut<'a> {
+pub struct DativeBondEditorViewMut<'a> {
     pub id: DativeBondId,
     pub ast: &'a mut DativeBondAst,
     pub(crate) donors: &'a [NodeId],
     pub acceptor_id: AtomId,
 }
 
-impl<'a> DativeBondBuilderViewMut<'a> {
+impl<'a> DativeBondEditorViewMut<'a> {
     /// All atoms: donors followed by the acceptor.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
         let acceptor = self.acceptor_id;

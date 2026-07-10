@@ -206,13 +206,13 @@ impl<'a> NoncovalentBondView<'a> {
 
 // Builder-scope view bundles for noncovalent bonds.
 
-pub struct NoncovalentBondBuilderView<'a> {
+pub struct NoncovalentBondEditorView<'a> {
     pub id: NoncovalentBondId,
     pub ast: &'a NoncovalentBondAst,
     pub atoms: [AtomId; 2],
 }
 
-pub struct NoncovalentBondBuilderViewMut<'a> {
+pub struct NoncovalentBondEditorViewMut<'a> {
     pub id: NoncovalentBondId,
     pub ast: &'a mut NoncovalentBondAst,
     pub atoms: [AtomId; 2],
