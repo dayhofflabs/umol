@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::ops::Index;
 use std::sync::{Arc, OnceLock};
 
+pub use build::MoleculeBuilder;
 pub use editor::MoleculeEditor;
 use umol_graph_core::{
     Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
@@ -34,6 +35,7 @@ use super::view::{
     StereoAtomViews, StereoBondView, StereoBondViews,
 };
 
+mod build;
 mod editor;
 mod pushout;
 pub(super) mod transact;
@@ -139,8 +141,8 @@ impl MoleculeAst {
     /// Start an empty `MoleculeEditor` for fluent / programmatic
     /// construction. Use [`MoleculeAst::edit`] to start from an existing
     /// molecule.
-    pub fn builder() -> MoleculeEditor {
-        Self::new().edit()
+    pub fn builder() -> MoleculeBuilder {
+        MoleculeBuilder::new()
     }
 
     /// Full structural constructor: every entity-type vector is supplied
