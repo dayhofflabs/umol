@@ -151,8 +151,9 @@ visual macro draws it directly.
 ## Sketch — the four layers
 
 The stack (details in the 2026-07-09 conversation): **L1 handle builder + per-family verbs**
-(`b.atom(C) -> AtomId`, `b.single/double/triple/aromatic_ring/dative`); **L2 `+`-spec** (layer
-relation-*terms* — `atoms`/`chain`/`ring`/`aromatic`/`dative` — onto one molecule, refs by name,
+(`b.atom(C) -> AtomId`; `single`/`double`/`triple`/`dative`; `chain`/`ring`; the overlay verbs
+`aromatic_system`/`multicenter`/`noncovalent` — see *Implemented — L1*); **L2 `+`-spec** (layer
+relation-*terms* — `atoms`/`chain`/`ring`/`dative`/overlay terms — onto one molecule, refs by name,
 `+` = relation union); **L3 fragment/operad** (`Fragment { body, ports }`, `attach(port, other,
 port)` = operadic γ, `+` = disjoint union, `close() -> MoleculeAst`, a fragment library); **L4
 `mol!` visual macro** (Cypher/DOT/SMILES-flavored, desugars to L1/L2). Each lowers to the one below.
@@ -179,10 +180,12 @@ port)` = operadic γ, `+` = disjoint union, `close() -> MoleculeAst`, a fragment
 5. **`close()` leaves free ports as open valence**; resolution is a separate step. **Open:** an
    ergonomic way to assert **charges / unpaired electrons** at construction (not punted to
    resolution).
-6. **Per-family bond verbs** (`single`/`double`/`triple`/`aromatic_ring`/`dative`), not a generic
-   `bond(kind)`. **`dative` is not a bond subtype** — a separate family. **Open:** how overlays
-   participate in construction — **fragments are atoms/bonds only for now**; overlays in
-   fragments/ports needs a creative approach (open).
+6. **Per-family bond verbs** (`single`/`double`/`triple`/`dative`), not a generic `bond(kind)`.
+   **`dative` is not a bond subtype** — a separate family. Overlays: at **L1** they get primitive
+   construction verbs (`aromatic_system`/`multicenter`/`noncovalent` — see *Implemented — L1*), since
+   electron counts are usually known at build. **Still open** is how overlays participate in
+   **fragments/ports** (L3) — fragments are atoms/bonds only for now; overlays-in-fragments needs the
+   operad/port approach. (Superseded: `aromatic_ring` — dropped, see *Implemented — L1*.)
 
 Note: the DSL already carries `:atom-aliases` (reusable atom specs) — the in-code analog of the
 "template" answer to question (a).
@@ -254,11 +257,49 @@ Construction (`attach`), reaction gluing (`meet_pushout`, 086), and the relation
 relational core, 103 ports/fragments) are three faces of this one algebra. `ring_close` in the
 sketch is the tell that we're in the wiring-diagram operad, not the tree one.
 
+## Implemented — L1 `MoleculeBuilder` (2026-07-09)
+
+`umol-ast/src/ast/molecule/build.rs`. Bare-verb-adds convention (every method adds/declares; lookup
+is `MoleculeEditor`), reached via `MoleculeAst::builder()`, wrapping a `MoleculeEditor`. Surface:
+
+| group | verbs |
+|---|---|
+| defaults context | `new()` · `ground()` |
+| atoms | `atom(impl Into<AtomAst>) -> AtomId` — element, `AtomAst`, or `"C#h3"` string |
+| bonds (single-entity) | `single` · `double` · `triple` · `dative(donors, acceptor)` |
+| bond composites | `chain(atoms) -> Vec<BondId>` (path of singles) · `ring(atoms)` (+ closing single) |
+| overlays (primitive) | `aromatic_system(atoms, electrons)` · `multicenter(atoms, electrons)` · `noncovalent(first, second, kind)` |
+| finalize | `build() -> MoleculeAst` |
+
+Three shifts vs. the original L1 sketch:
+
+1. **Overlays are constructible at build.** Decision 6's "overlays open" was about overlays *in
+   fragments/ports* (L3, still open); at L1 the overlay families get primitive verbs directly, since
+   electron counts are usually known when building the molecule (benzene `[1;6]`, cyclopentadienyl
+   `[1;5]`). They lower onto the editor's `add_aromatic_system` / `add_multicenter_bond` /
+   `add_noncovalent_bond` via `from_electrons` / `from_kind`.
+2. **`aromatic_ring` dropped.** It conflated three things (ring σ-bonds + per-atom aromatic flags +
+   the overlay). Aromaticity is now expressed by the *atoms* passed (`atom("C#a")` →
+   `AromaticValence(Aromatic)`) or by resolution; the ring is `ring(atoms)`; the overlay, when known,
+   is `aromatic_system(atoms, electrons)`.
+3. **`chain`/`ring` at L1** as the handle-wiring primitive (fold over `single`). The L2 `+`-spec
+   `chain`/`ring` terms will be **create-atoms-then-delegate** wrappers over these — one wiring
+   implementation, layered, so "chain" is not two parallel copies. The operations differ only by
+   input: L1 wires *existing handles*; L2 *creates* atoms then wires.
+
+Defaults: `ground()` applies `AtomAst::into_ground` per atom, preserving preset fields (a `+2` charge
+survives; an unspecified field grounds to its default). Apply-at-add is order-independent here because
+the mode is fixed at construction; the L2 `+ ground()`/`+ charge(0)` terms are the apply-at-build
+case (order-independent across a spec).
+
+Endpoints: the graph stores bond endpoints **normalized (min, max)** (undirected), so `ring`'s
+closing bond `single(last, first)` reads back as `atom_ids() == [first, last]`.
+
 ## Next
 
-- The **macro rename** (decision 4) is the first mechanical step of the construction slice.
-- Prototype L1–L3 signatures in a scratch `.rs` (`todo!()` bodies) to typecheck the shapes; then the
-  `mol!` proc-macro in `umol-ast-macros`.
-- The two opens (charge/spin defaults; overlays-in-fragments) are **resolved** above.
-- Treat the **typed-operad / port** substrate as the research target gated with 103's spike; L1–L4
-  do not depend on it landing.
+- **Item 2 — L2 `+`-spec**: `MolSpec`/`Term`, `+`, terms `atoms`/`chain`/`ring`/`bond`; `chain`/`ring`
+  wrap the L1 primitives; `+ ground()`/`+ charge(0)` desugar to the L1 default (apply-at-build).
+- **Item 3 — L3 fragment/operad**: `Fragment { body, ports }`, `attach` = `BondAst::meet`, `close`.
+- Then the **`mol!` proc-macro** in `umol-ast-macros` (decision 4; the macro rename is done).
+- The two opens (charge/spin defaults; overlays-in-fragments) are **resolved** above; overlays-in-
+  *fragments* (L3) remains gated on the port/operad spike (103). L1–L4 do not depend on it landing.

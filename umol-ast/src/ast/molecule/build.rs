@@ -2,12 +2,15 @@
 //! every method *adds/declares* (there is no lookup — that is `MoleculeEditor`). Wraps a
 //! `MoleculeEditor` and lowers each call onto it.
 
+use super::super::aromatic::AromaticSystemAst;
 use super::super::atom::AtomAst;
 use super::super::bond::BondAst;
-use super::super::constraint::{AromaticValenceAst, AtomConstraintAst};
 use super::super::dative::DativeBondAst;
-use super::super::id::{AtomId, BondId, DativeBondId};
-use super::super::value::ValueAst;
+use super::super::id::{
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+};
+use super::super::multicenter::MulticenterBondAst;
+use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
 use super::{MoleculeAst, MoleculeEditor};
 
 /// Build a molecule from scratch. `atom` adds an atom and hands back its handle; the
@@ -64,27 +67,6 @@ impl MoleculeBuilder {
         self.editor.add_bond(first, second, BondAst::from_order(3))
     }
 
-    /// Close a single-bonded ring through `atoms` (each consecutive pair plus the
-    /// wrap-around) and flag every ring atom aromatic —
-    /// `AromaticValence(Aromatic(Undetermined))`, the "aromatic, count open" marker.
-    /// The `AromaticSystemAst` overlay is a resolution-time product (ring-electron
-    /// counts are not known at construction), so it is not laid down here. Returns the
-    /// ring-bond handles in ring order.
-    pub fn aromatic_ring(&mut self, atoms: impl IntoIterator<Item = AtomId>) -> Vec<BondId> {
-        let atoms: Vec<AtomId> = atoms.into_iter().collect();
-        let mut bonds = Vec::with_capacity(atoms.len());
-        for (position, &atom) in atoms.iter().enumerate() {
-            self.editor.atom_mut(atom).ast.constraints.set(
-                AtomConstraintAst::AromaticValence(AromaticValenceAst::Aromatic(
-                    ValueAst::Undetermined,
-                )),
-            );
-            let next = atoms[(position + 1) % atoms.len()];
-            bonds.push(self.editor.add_bond(atom, next, BondAst::from_order(1)));
-        }
-        bonds
-    }
-
     /// Add a dative bond from `donors` to `acceptor` — its own family, not a bond order.
     pub fn dative(
         &mut self,
@@ -96,6 +78,64 @@ impl MoleculeBuilder {
             acceptor,
             DativeBondAst::default(),
         )
+    }
+
+    /// Wire `atoms` into a path of single bonds (each consecutive pair). Returns the
+    /// bond handles in order — empty for fewer than two atoms.
+    pub fn chain(&mut self, atoms: impl IntoIterator<Item = AtomId>) -> Vec<BondId> {
+        let atoms: Vec<AtomId> = atoms.into_iter().collect();
+        atoms
+            .windows(2)
+            .map(|pair| self.single(pair[0], pair[1]))
+            .collect()
+    }
+
+    /// Wire `atoms` into a ring of single bonds — a `chain` plus the closing bond from
+    /// the last atom back to the first. Returns the bond handles in order.
+    pub fn ring(&mut self, atoms: impl IntoIterator<Item = AtomId>) -> Vec<BondId> {
+        let atoms: Vec<AtomId> = atoms.into_iter().collect();
+        let mut bonds = self.chain(atoms.iter().copied());
+        if atoms.len() > 2 {
+            bonds.push(self.single(atoms[atoms.len() - 1], atoms[0]));
+        }
+        bonds
+    }
+
+    /// Add an aromatic-system overlay over `atoms`, one π-`electrons` count per atom
+    /// (`[1, 1, 1, 1, 1, 1]` for benzene). The σ-framework is separate — add those
+    /// bonds with the bond verbs.
+    pub fn aromatic_system(
+        &mut self,
+        atoms: impl IntoIterator<Item = AtomId>,
+        electrons: impl IntoIterator<Item = i64>,
+    ) -> AromaticSystemId {
+        self.editor.add_aromatic_system(
+            atoms.into_iter().collect(),
+            AromaticSystemAst::from_electrons(electrons.into_iter().collect()),
+        )
+    }
+
+    /// Add a multicenter-bond overlay over `atoms`, one `electrons` count per atom.
+    pub fn multicenter(
+        &mut self,
+        atoms: impl IntoIterator<Item = AtomId>,
+        electrons: impl IntoIterator<Item = i64>,
+    ) -> MulticenterBondId {
+        self.editor.add_multicenter_bond(
+            atoms.into_iter().collect(),
+            MulticenterBondAst::from_electrons(electrons.into_iter().collect()),
+        )
+    }
+
+    /// Add a noncovalent-bond overlay of `kind` between `first` and `second`.
+    pub fn noncovalent(
+        &mut self,
+        first: AtomId,
+        second: AtomId,
+        kind: NoncovalentBondKind,
+    ) -> NoncovalentBondId {
+        self.editor
+            .add_noncovalent_bond([first, second], NoncovalentBondAst::from_kind(kind))
     }
 
     /// Finalize into a `MoleculeAst`. Unspecified atom fields stay open for resolution.
@@ -116,7 +156,7 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ast::constraint::AtomConstraintsAst;
+    use crate::ast::value::ValueAst;
 
     #[rstest]
     fn test_molecule_builder() {
@@ -151,34 +191,93 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_builder_aromatic_ring() {
+    #[case::empty(0, vec![])]
+    #[case::single_atom(1, vec![])]
+    #[case::path(4, vec![(0, 1), (1, 2), (2, 3)])]
+    fn test_molecule_builder_chain(
+        #[case] atom_count: usize,
+        #[case] expected_edges: Vec<(usize, usize)>,
+    ) {
         let mut builder = MoleculeBuilder::new();
-        let ring: Vec<AtomId> = (0..6).map(|_| builder.atom(Element::C)).collect();
-        let bonds = builder.aromatic_ring(ring.iter().copied());
+        let atoms: Vec<AtomId> = (0..atom_count).map(|_| builder.atom(Element::C)).collect();
+        let bonds = builder.chain(atoms.iter().copied());
         let mol = builder.build();
 
+        let endpoints: Vec<[AtomId; 2]> = bonds.iter().map(|&b| mol.bond(b).atom_ids()).collect();
+        let expected: Vec<[AtomId; 2]> =
+            expected_edges.iter().map(|&(i, j)| [atoms[i], atoms[j]]).collect();
+        assert_eq!(endpoints, expected);
+    }
+
+    #[rstest]
+    #[case::two_atoms_no_closure(2, vec![(0, 1)])]
+    #[case::triangle(3, vec![(0, 1), (1, 2), (0, 2)])]
+    fn test_molecule_builder_ring(
+        #[case] atom_count: usize,
+        #[case] expected_edges: Vec<(usize, usize)>,
+    ) {
+        let mut builder = MoleculeBuilder::new();
+        let atoms: Vec<AtomId> = (0..atom_count).map(|_| builder.atom(Element::C)).collect();
+        let bonds = builder.ring(atoms.iter().copied());
+        let mol = builder.build();
+
+        let endpoints: Vec<[AtomId; 2]> = bonds.iter().map(|&b| mol.bond(b).atom_ids()).collect();
+        let expected: Vec<[AtomId; 2]> =
+            expected_edges.iter().map(|&(i, j)| [atoms[i], atoms[j]]).collect();
+        assert_eq!(endpoints, expected);
+    }
+
+    #[rstest]
+    fn test_molecule_builder_aromatic_system() {
+        let mut builder = MoleculeBuilder::new();
+        let a0 = builder.atom(Element::C);
+        let a1 = builder.atom(Element::C);
+        let system = builder.aromatic_system([a0, a1], [1, 1]);
+        let mol = builder.build();
+
+        assert_eq!(system, AromaticSystemId(0));
+        assert_eq!(mol.aromatic_systems().count(), 1);
         assert_eq!(
-            bonds,
-            vec![
-                BondId(0),
-                BondId(1),
-                BondId(2),
-                BondId(3),
-                BondId(4),
-                BondId(5),
-            ]
+            mol.aromatic_system(system).ast,
+            &AromaticSystemAst::from_electrons(vec![1, 1])
         );
-        assert_eq!(mol.bonds().count(), 6);
-        for &bond in &bonds {
-            assert_eq!(mol.bond(bond).ast, &BondAst::from_order(1));
-        }
-        for &atom in &ring {
-            assert_eq!(
-                mol.atom(atom).ast.constraints,
-                AtomConstraintsAst::from(AtomConstraintAst::AromaticValence(
-                    AromaticValenceAst::Aromatic(ValueAst::Undetermined)
-                ))
-            );
-        }
+        assert_eq!(
+            mol.aromatic_system(system)
+                .atoms()
+                .map(|view| view.id)
+                .collect::<Vec<_>>(),
+            vec![a0, a1]
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_builder_multicenter() {
+        let mut builder = MoleculeBuilder::new();
+        let a0 = builder.atom(Element::B);
+        let a1 = builder.atom(Element::B);
+        let a2 = builder.atom(Element::H);
+        let bond = builder.multicenter([a0, a1, a2], [1, 1, 1]);
+        let mol = builder.build();
+
+        assert_eq!(bond, MulticenterBondId(0));
+        assert_eq!(
+            mol.multicenter_bond(bond).ast,
+            &MulticenterBondAst::from_electrons(vec![1, 1, 1])
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_builder_noncovalent() {
+        let mut builder = MoleculeBuilder::new();
+        let a0 = builder.atom(Element::O);
+        let a1 = builder.atom(Element::H);
+        let bond = builder.noncovalent(a0, a1, NoncovalentBondKind::HydrogenBond);
+        let mol = builder.build();
+
+        assert_eq!(bond, NoncovalentBondId(0));
+        assert_eq!(
+            mol.noncovalent_bond(bond).ast,
+            &NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)
+        );
     }
 }
