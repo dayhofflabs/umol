@@ -22,8 +22,8 @@ use super::{MoleculeAst, MoleculeBuilder};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AtomArg {
     New { spec: AtomAst, name: Option<String> },
-    ByPosition(u32),
-    ByName(String),
+    Index(u32),
+    Name(String),
 }
 
 impl From<Element> for AtomArg {
@@ -52,13 +52,13 @@ impl From<AtomAst> for AtomArg {
 
 impl From<u32> for AtomArg {
     fn from(position: u32) -> Self {
-        Self::ByPosition(position)
+        Self::Index(position)
     }
 }
 
 impl From<i32> for AtomArg {
     fn from(position: i32) -> Self {
-        Self::ByPosition(
+        Self::Index(
             u32::try_from(position)
                 .unwrap_or_else(|_| panic!("atom position must be non-negative, got {position}")),
         )
@@ -76,7 +76,7 @@ impl<S: Into<String>, T: Into<AtomAst>> From<(S, T)> for AtomArg {
 
 /// Reference an already-introduced atom by name.
 pub fn name(name: impl Into<String>) -> AtomArg {
-    AtomArg::ByName(name.into())
+    AtomArg::Name(name.into())
 }
 
 /// A single term of a [`MoleculeSpec`]: an introduction, a relation, or a default.
@@ -353,10 +353,10 @@ impl BuildContext {
                 }
                 id
             }
-            AtomArg::ByPosition(position) => *self.positions.get(position as usize).unwrap_or_else(
+            AtomArg::Index(position) => *self.positions.get(position as usize).unwrap_or_else(
                 || panic!("spec references atom position {position} before it is introduced"),
             ),
-            AtomArg::ByName(name) => *self
+            AtomArg::Name(name) => *self
                 .names
                 .get(&name)
                 .unwrap_or_else(|| panic!("spec references unknown atom name {name:?}")),
@@ -387,13 +387,13 @@ mod tests {
         AtomArg::from(Element::C),
         AtomArg::New { spec: AtomAst::from_element(Element::C), name: None }
     )]
-    #[case::position(AtomArg::from(5_u32), AtomArg::ByPosition(5))]
-    #[case::position_signed(AtomArg::from(3_i32), AtomArg::ByPosition(3))]
+    #[case::position(AtomArg::from(5_u32), AtomArg::Index(5))]
+    #[case::position_signed(AtomArg::from(3_i32), AtomArg::Index(3))]
     #[case::named_tuple(
         AtomArg::from(("carbonyl", Element::O)),
         AtomArg::New { spec: AtomAst::from_element(Element::O), name: Some("carbonyl".to_string()) }
     )]
-    #[case::name_fn(name("amide"), AtomArg::ByName("amide".to_string()))]
+    #[case::name_fn(name("amide"), AtomArg::Name("amide".to_string()))]
     fn test_atom_arg_from(#[case] arg: AtomArg, #[case] expected: AtomArg) {
         assert_eq!(arg, expected);
     }

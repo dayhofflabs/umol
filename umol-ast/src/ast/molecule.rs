@@ -6,6 +6,7 @@ use std::ops::Index;
 use std::sync::{Arc, OnceLock};
 
 pub use build::MoleculeBuilder;
+pub use fragment::{Fragment, Port, PortArg};
 pub use editor::MoleculeEditor;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{
@@ -40,6 +41,7 @@ use super::view::{
 
 mod build;
 mod editor;
+mod fragment;
 mod pushout;
 pub mod spec;
 pub(super) mod transact;

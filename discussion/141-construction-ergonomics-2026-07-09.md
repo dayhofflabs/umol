@@ -355,27 +355,56 @@ Deferred (as at L1): `stereo_atom`/`stereo_bond` (stereo slice); molecule-level 
   positions are creation-order (the `+`-order of introduce terms).
 - **`+` dual-use** with L3 disjoint union stays disambiguated by operand type (decision 3).
 
-## L3 `Fragment` design (2026-07-10) — held pending join/split (142)
+## L3 `Fragment` design + plan (2026-07-10) — unblocked (join/split done, 142)
 
-`Fragment { body: MoleculeAst, ports: Vec<Port> }`; `Port { name: String, atom: AtomId, bond: BondAst }`
-— the attachment point (which body atom, an interface name, the bond formed on attach). Operations:
+`Fragment { body: MoleculeAst, ports: Vec<Port> }`; `Port { atom: AtomId, bond: BondAst, name:
+Option<String> }`.
 
-- **`attach(self_port, other, other_port) -> Fragment`** = `MoleculeAst::join` of the two bodies + a
-  bond between the two port atoms with `BondAst = meet(self_port.bond, other_port.bond)` (⊥ → error);
-  the two consumed ports drop, the rest carry forward remapped through the join correspondence.
-- **`Fragment + Fragment -> Fragment`** = `join` alone, ports concatenated (remapped). `+` dual-use vs
-  L2 disambiguated by operand type (decision 3).
-- **`close() -> MoleculeAst`** = the body; free ports left as open valence (resolution fills later).
+**Ports are a positional, colour-typed interface** — the operad arity: an ordered `Vec<Port>`, each
+typed by its `bond: BondAst` (the colour). **Names are convenience, not typing** — an optional label to
+address a port, exactly like the DSL's atom-aliases; compatibility is `meet` of the two bonds, never the
+name. A port is addressed by `PortArg = Index(u32) | Name(String)` (`From<u32>`/`From<i32>` → index,
+`From<&str>` → name — the `AtomArg` shape). Name lookup panics if not found or ambiguous (use the index).
 
-**Held**: `attach`/`+` need `MoleculeAst::join` (disjoint union) — designed in 086, unimplemented — and
-`split` is its logical inverse. Detouring to build join/split properly first (design in **142**), then
-resuming L3.
+Operations:
+- **`attach(self, self_port, other, other_port) -> Fragment`** (operadic γ — the *only* thing that
+  wires) = `join` the two bodies, add a bond between the two addressed port atoms with `BondAst =
+  meet(p.bond, q.bond)`, drop the two consumed ports; remaining ports carry forward, `other`'s remapped
+  through the join correspondence. Panics on a bad port ref or a ⊥-`meet` (both construction bugs, per
+  the runtime-builder-panics convention).
+- **`Fragment + Fragment -> Fragment`** (monoidal ⊗ — juxtaposition, forms **no** bond) = `join` alone,
+  ports concatenated (`other`'s remapped). No port correlation is guessed. For genuinely multi-component
+  structures — salts, mixtures, the two reactants of a bimolecular reaction (its main use). `+`
+  disambiguated from L2 by operand type.
+- **`close(self) -> MoleculeAst`** = the body; free ports become open valence (resolution fills later).
+
+Construction: `Fragment::new(body)` + fluent infallible `with_port(name, atom, bond)` and an unnamed
+variant. Overlay-as-port and a fragment library are deferred (the latter needs the 103 port spike).
+
+### Impl plan — done (2026-07-10), `ast/molecule/fragment.rs`
+
+- **S1** — `Port`, `PortArg` (+`From` impls), `Fragment` struct, `new`, `with_port` / unnamed variant,
+  `close`. Tests: build a fragment with ports; `close` returns the body. Additive.
+- **S2** — port-remap helper (map a port's atom through a join `MoleculeCorrespondence` —
+  `corr.atoms().right_of`) + `impl Add<Fragment> for Fragment` (disjoint union; ports concatenated,
+  `other`'s remapped). Tests: `a + b` body = `join`, all ports carried, `other`'s atoms remapped.
+  `[dep: S1]` Additive.
+- **S3** — `attach(self, impl Into<PortArg>, other, impl Into<PortArg>) -> Fragment` (join + `meet`-bond
+  + drop the two ports, reusing the S2 remap helper). Tests: attach forms the `meet` bond, consumes the
+  two ports, carries the rest; `#[should_panic]` for a missing port ref and for a ⊥-`meet`. `[dep: S2]`
+  Additive.
+- Register `mod fragment` + re-export `Fragment` / `Port` / `PortArg` at `molecule` and `ast`.
+
+S1 (`Port`/`PortArg`/`Fragment`/`new`/`with_port`/`close`), S2 (`+` disjoint union + port remap), S3
+(`attach` = join + `meet`-bond + drop ports) all landed; 10 tests. Nomenclature aligned with L2:
+`AtomArg` variants `New`/`Index`/`Name`, `PortArg` variants `Index`/`Name`. Deferred (last): fragment
+library, overlay-as-port (gated on the 103 spike).
 
 ## Next
 
 - **L1 + L2 — done** (`build.rs`, `spec.rs`). See the *Implemented — L1* and *L2 `MoleculeSpec`*
   sections above.
-- **Detour — join/split** (doc 142) before L3.
-- **L3 `Fragment`** — design above; resume after join/split lands.
-- Then the **`mol!` proc-macro** in `umol-ast-macros` (decision 4; the macro rename is done).
+- **Detour — join/split + connectivity validator — done** (doc 142). Unblocked L3.
+- **L3 `Fragment` — done** (`fragment.rs`; S1→S2→S3, 10 tests).
+- Then the **`mol!` proc-macro** in `umol-ast-macros` (decision 4; the macro rename is done) — the last layer.
 - Overlays-in-*fragments* (L3) remains gated on the port/operad spike (103).
