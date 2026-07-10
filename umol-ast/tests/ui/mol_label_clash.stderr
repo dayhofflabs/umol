@@ -1,0 +1,5 @@
+error: label `x` is already declared as an atom; atom and bond labels share one namespace
+ --> tests/ui/mol_label_clash.rs:5:28
+  |
+5 |     let _ = mol!((x: C) -[ x: "1" ]- (o: O));
+  |                            ^

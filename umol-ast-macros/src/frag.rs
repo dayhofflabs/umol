@@ -75,7 +75,7 @@ fn port_call(name: &Ident, atom: u32, op: &Bond) -> TokenStream {
         Bond::Single => quote! { BondAst::from_order(1) },
         Bond::Double => quote! { BondAst::from_order(2) },
         Bond::Triple => quote! { BondAst::from_order(3) },
-        Bond::Spec(spec) => quote! { #spec },
+        Bond::Spec { spec, .. } => quote! { #spec },
     };
     quote! { .with_port(#name, AtomId(#atom), #colour) }
 }

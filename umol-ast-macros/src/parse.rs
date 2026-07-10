@@ -124,8 +124,9 @@ pub(crate) enum Bond {
     Single,
     Double,
     Triple,
-    /// `-[ "spec" ]-` — a full DSL bond spec (order, `#a`, charge, spin, ring).
-    Spec(LitStr),
+    /// `-[name: "spec"]-` — a full DSL bond spec (order, `#a`, charge, spin, ring), with an optional
+    /// label binding the bond in the shared atom/bond namespace.
+    Spec { name: Option<Ident>, spec: LitStr },
 }
 
 impl Parse for Bond {
@@ -141,9 +142,16 @@ impl Parse for Bond {
             if input.peek(Bracket) {
                 let content;
                 bracketed!(content in input);
+                let name = if content.peek(Ident) && content.peek2(Token![:]) {
+                    let name = content.parse::<Ident>()?;
+                    content.parse::<Token![:]>()?;
+                    Some(name)
+                } else {
+                    None
+                };
                 let spec = content.parse::<LitStr>()?;
                 input.parse::<Token![-]>()?;
-                Ok(Bond::Spec(spec))
+                Ok(Bond::Spec { name, spec })
             } else {
                 Ok(Bond::Single)
             }
@@ -155,28 +163,70 @@ impl Parse for Bond {
 /// occurrence's creation position (`None` marks a `^name` port, which creates no atom).
 pub(crate) type Positions = (Vec<LitStr>, Vec<Vec<Option<u32>>>);
 
+/// A label in the shared atom/bond namespace: an atom (with its creation position, for reference
+/// resolution) or a bond. Bond labels are inert here — resolving one to its `BondId` for a
+/// stereo-overlay reference rides with the overlay work that consumes it.
+enum Label {
+    Atom(u32),
+    Bond,
+}
+
+/// Register `name` in the shared namespace; a duplicate — atom or bond — is an error, since atom and
+/// bond labels share one namespace.
+fn insert_label(labels: &mut HashMap<String, Label>, name: &Ident, label: Label) -> Result<()> {
+    if let Some(existing) = labels.insert(name.to_string(), label) {
+        let existing_kind = match existing {
+            Label::Atom(_) => "an atom",
+            Label::Bond => "a bond",
+        };
+        return Err(Error::new(
+            name.span(),
+            format!("label `{name}` is already declared as {existing_kind}; atom and bond labels share one namespace"),
+        ));
+    }
+    Ok(())
+}
+
+/// Resolve an atom reference `(name)` to its creation position. A name bound to a bond, or unknown, is
+/// an error.
+fn resolve_atom_ref(labels: &HashMap<String, Label>, name: &Ident) -> Result<u32> {
+    match labels.get(&name.to_string()) {
+        Some(Label::Atom(position)) => Ok(*position),
+        Some(Label::Bond) => Err(Error::new(
+            name.span(),
+            format!("`{name}` is a bond label, not an atom"),
+        )),
+        None => Err(Error::new(
+            name.span(),
+            format!("atom `{name}` is referenced but never declared"),
+        )),
+    }
+}
+
 /// Assign a creation position to every declaration and anonymous atom in appearance order, collecting
-/// their specs; reject duplicate declarations. Then resolve each atom occurrence to its position —
-/// declarations and anonymous atoms advance the counter in that same order, references resolve to
-/// their declaration, and `^name` port markers resolve to `None` (they create no atom).
+/// their specs and registering declaration and `-[name: …]-` bond labels in the shared namespace
+/// (duplicates rejected). Then resolve each atom occurrence to its position — declarations and
+/// anonymous atoms advance the counter in that same order, references resolve to their declaration,
+/// and `^name` port markers resolve to `None` (they create no atom).
 pub(crate) fn resolve_positions(paths: &[Path]) -> Result<Positions> {
-    let mut names: HashMap<String, u32> = HashMap::new();
+    let mut labels: HashMap<String, Label> = HashMap::new();
     let mut specs: Vec<LitStr> = Vec::new();
     for path in paths {
         for atom in path.atoms() {
             match atom {
                 Atom::Declaration { name, spec } => {
-                    let position = specs.len() as u32;
-                    if names.insert(name.to_string(), position).is_some() {
-                        return Err(Error::new(
-                            name.span(),
-                            format!("atom `{name}` is declared more than once"),
-                        ));
-                    }
+                    insert_label(&mut labels, name, Label::Atom(specs.len() as u32))?;
                     specs.push(spec.as_lit());
                 }
                 Atom::Anonymous { spec } => specs.push(spec.as_lit()),
                 Atom::Reference { .. } | Atom::Port { .. } => {}
+            }
+        }
+    }
+    for path in paths {
+        for (op, _) in &path.rest {
+            if let Bond::Spec { name: Some(name), .. } = op {
+                insert_label(&mut labels, name, Label::Bond)?;
             }
         }
     }
@@ -192,12 +242,7 @@ pub(crate) fn resolve_positions(paths: &[Path]) -> Result<Positions> {
                     next_position += 1;
                     Some(position)
                 }
-                Atom::Reference { name } => Some(*names.get(&name.to_string()).ok_or_else(|| {
-                    Error::new(
-                        name.span(),
-                        format!("atom `{name}` is referenced but never declared"),
-                    )
-                })?),
+                Atom::Reference { name } => Some(resolve_atom_ref(&labels, name)?),
                 Atom::Port { .. } => None,
             };
             row.push(position);
@@ -213,6 +258,6 @@ pub(crate) fn bond_term(op: &Bond, first: u32, second: u32) -> TokenStream {
         Bond::Single => quote! { single(#first, #second) },
         Bond::Double => quote! { double(#first, #second) },
         Bond::Triple => quote! { triple(#first, #second) },
-        Bond::Spec(spec) => quote! { bond(#first, #second, #spec) },
+        Bond::Spec { spec, .. } => quote! { bond(#first, #second, #spec) },
     }
 }

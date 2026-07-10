@@ -493,21 +493,24 @@ relocating it doesn't help. The lever is `mol!`'s crate, not the parser's.
 - **S3** — overlay keyword statements (aromatic / dative / multicenter / noncovalent / stereo). `[dep: S1]`
 - Deferrable: bond-spec compile-validation (the shared-parser-crate split).
 
-#### Bond references — future (decided: shared namespace)
+#### Bond references — binding + namespace done (resolution → S3)
 
-Bonds are anonymous today (`-`, `=`, `#`, and the nameless `-[ "spec" ]-`); no bond-naming or
-bond-reference syntax exists. The consumer that needs it is **stereo-bond anchoring**: a stereo overlay
-must name the bond it decorates. The planned syntax binds a label in the bracket form —
-`-[b: "spec"]-` binds `b` to the bond — mirroring the atom `(name: elem)` shape. The bracket stays on
-`-` only (order lives in the spec string; `=[…]=` is not a thing).
+The consumer that needs bond references is **stereo-bond anchoring**: a stereo overlay must name the
+bond it decorates. The `-[name: "spec"]-` bracket binds `name` to the bond — mirroring the atom
+`(name: elem)` shape. The bracket stays on `-` only (order lives in the spec string; `=[…]=` is not a
+thing).
 
-**Decision: atom and bond labels share one namespace**, disambiguated positionally at the binding site
-(`(a)` atom vs `[b]` bond) — the Cypher variable model. A label names exactly one entity, atom or bond,
-never both; any collision (atom/atom, bond/bond, atom/bond) is a `compile_error!`. This matches the DSL,
-where ids are already unique across all entity types, and avoids the ambiguity Neo4j deprecated with its
-per-type `id()` spaces (superseded by a single `elementId()`). Codegen resolves bond labels the same way
-atom labels resolve to creation positions — to bond positions — which the stereo overlay term then
-references. `[dep: S3 stereo overlays]`
+**Decision (implemented): atom and bond labels share one namespace**, disambiguated positionally at the
+binding site (`(a)` atom vs `-[b: …]-` bond) — the Cypher variable model. A label names exactly one
+entity, atom or bond, never both; any collision (atom/atom, bond/bond, atom/bond) is a `compile_error!`.
+This matches the DSL (ids unique across all entity types) and avoids the ambiguity Neo4j deprecated with
+its per-type `id()` spaces (superseded by a single `elementId()`).
+
+**Done:** `parse.rs` — `Bond::Spec { name, spec }`; a unified `Label { Atom(pos), Bond }` namespace
+(`insert_label` rejects any duplicate, `resolve_atom_ref` rejects an atom ref bound to a bond). Tests: a
+`mol!` named-bond build, a `trybuild` atom/bond clash. **Deferred to S3:** a bond label is inert until a
+stereo overlay references it; resolving a bond label to its `BondId` (and rejecting a named *port* bond,
+which has none) rides with that consumer — untestable without a reference to exercise it.
 
 `mol!` and `frag!` are split (revisit if they converge). Quoteless elements accepted; anything richer is
 a quoted DSL spec.

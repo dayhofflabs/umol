@@ -45,6 +45,18 @@ fn test_mol_bond_spec() {
 }
 
 #[rstest]
+fn test_mol_named_bond() {
+    // a `-[name: "spec"]-` bond binds a label (inert until referenced) and carries the spec
+    let molecule: MoleculeAst = mol!((c: C) -[ b: "2" ]- (o: O));
+
+    assert_eq!(molecule.bonds().count(), 1);
+    assert_eq!(
+        molecule.bond(BondId(0)).ast,
+        &"2".parse::<BondAst>().unwrap()
+    );
+}
+
+#[rstest]
 fn test_mol_anonymous_atoms() {
     // bare element idents introduce anonymous, unreferenceable atoms
     let molecule: MoleculeAst = mol!(C - O);
