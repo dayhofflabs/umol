@@ -42,6 +42,7 @@ umol-utils = { path = "../umol-utils", version = "0.1.0" }
 winnow = "1.0"
 
 [dev-dependencies]
+trybuild = "1"
 criterion = { version = "0.8", features = ["html_reports"] }
 pretty_assertions = "1.4.1"
 proptest = "1.6"
@@ -50,6 +51,12 @@ rstest = "0.26.1"
 [[test]]
 name = "property"
 required-features = ["proptest"]
+
+[[test]]
+name = "mol_macro"
+
+[[test]]
+name = "mol_macro_ui"
 
 [[bench]]
 name = "parsing"

@@ -1,0 +1,5 @@
+error: atom `x` is referenced but never declared
+ --> tests/ui/mol_undeclared_ref.rs:4:19
+  |
+4 |         (c: C) - (x),
+  |                   ^

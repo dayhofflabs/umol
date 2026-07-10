@@ -6,6 +6,15 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident};
 
+mod mol;
+
+/// The `mol!` visual-literal macro: a compile-checked molecular graph literal that desugars to an L2
+/// `MoleculeSpec` and builds a `MoleculeAst`.
+#[proc_macro]
+pub fn mol(input: TokenStream) -> TokenStream {
+    mol::expand(input.into()).into()
+}
+
 /// Named fields of a struct, or a compile-error `TokenStream` for tuple/unit
 /// structs, enums, unions, and generic types. `derive` names the trait for the
 /// error message.

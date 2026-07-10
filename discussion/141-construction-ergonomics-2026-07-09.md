@@ -400,11 +400,86 @@ S1 (`Port`/`PortArg`/`Fragment`/`new`/`with_port`/`close`), S2 (`+` disjoint uni
 `AtomArg` variants `New`/`Index`/`Name`, `PortArg` variants `Index`/`Name`. Deferred (last): fragment
 library, overlay-as-port (gated on the 103 spike).
 
+## L4 `mol!` / `frag!` — visual-literal macros (design + plan, 2026-07-10)
+
+Compile-checked **visual surface over L2**: parse a path-pattern literal, validate its structure at
+expansion (undeclared reference → `compile_error!`), emit `MoleculeSpec` code. `mol!` → `MoleculeAst`;
+`frag!` → `Fragment`. **Not a serialization/traversal** — a set of *local path-patterns joined by shared
+names* (Cypher/Datalog), so there is no frontier or backedge machinery: names are the only long-range
+reference (the traversal-notation analysis' "sparse long-range reference", done ergonomically — see
+`materials/graph_traversal/`). Write procedurally, desugar declaratively. **Homoiconic for free**: the
+same notation yields a ground molecule or a pattern — whichever the specs are (`*` / `Undetermined` /
+constraints ⇒ pattern), since both are just `MoleculeAst`.
+
+### Grammar (must lex as Rust tokens)
+
+- **Atoms** `(name: elem)` — `elem` is a **quoteless element** (`C`, `Na`) for the common case, or a
+  **quoted DSL spec** `"C#h3"` / `"*"` for anything with `#`, whitespace, constraints, or the
+  undetermined-atom wildcard. First mention declares; bare `(name)` references (the non-tree edges).
+- **Bonds** — order shortcuts `-` / `=` / `#`; general **Cypher-style** `-[ "spec" ]-` (optionally
+  `-[name: "spec"]-`), spec = a DSL bond spec (order, `#a` aromatic, charge, spin, ring); the optional
+  name enables bond references. Atoms `(…)` and bonds `-[…]-` are symmetric (shortcut or quoted spec).
+- **Ports** (`frag!` only) — `*name` in an atom slot: a bond to `*name` declares a port on the other
+  endpoint, colour read off the bond op (SMILES `*` / R-group / operad boundary). No separate syntax.
+- **Overlays** — keyword statements in the same block (**not** nested macros), referencing named atoms:
+  `aromatic [a, b, …] : "electrons"`, `dative [donors…] -> acceptor`, `multicenter [ … ] : …`,
+  `noncovalent (a) ~ (b) : "kind"`, `stereo (site) [ligands…] : "kind"`. Each desugars to its L2 term.
+- Statements comma/newline separated.
+
+### Desugaring → L2
+
+Atom decl → `atoms`/`atom` term (`(name, spec)` create); ref → `name(…)`; bond → `single`/`double`/
+`triple`/`bond`; overlay → its term. `mol!` emits `(MoleculeSpec::new() + … ).build()`; `frag!` wraps in
+`Fragment::new(…).with_port(…)`.
+
+### Port finishing (refines L3 `close`)
+
+The ground-vs-pattern duality of a fragment's free ports:
+- **`close()`** — *ground*: every port must be paired; a free port is an error.
+- **pattern close** (name TBD) — each free port becomes an undetermined `*` `AtomAst` bonded via the
+  port's colour ("something attaches here").
+(Supersedes decision 5's vaguer "open valence"; a lenient-ground "leave the valence open for resolution"
+could be a third mode if wanted.)
+
+### Compile-time checking — **decided: A** (2026-07-10)
+
+The DSL parser is bound to `AtomAst` → `umol-ast` → `umol-ast-macros` (and `AtomAst` itself derives
+`Lattice`/`Canonicalize` from `umol-ast-macros`), so the parser can never sit below `umol-ast-macros`;
+relocating it doesn't help. The lever is `mol!`'s crate, not the parser's.
+
+- **Structure / refs** — always validated at expansion → `compile_error!` (undeclared ref, duplicate
+  name, malformed path). The primary "checked code" win, present in every option.
+- **Bare elements** — `umol-chem` does not depend on `umol-ast-macros`, so bare `(c: C)` is
+  compile-checked regardless (an invalid element makes the emitted `Element::…` path fail to compile; a
+  friendlier macro-span error via a `umol-chem` dep is an easy refinement).
+- **Rich quoted specs** (`"C#h3"`) — **A (chosen)**: `mol!`/`frag!` live in `umol-ast-macros`, emit
+  `AtomAst::from(&str)`, so a bad spec panics at first runtime build. **B** (a separate `umol-mol-macro`
+  crate depending on `umol-ast`) or **C** (an AST-free grammar crate shared with the real parser) add
+  compile-time spec checking later; both are additive — same syntax, same codegen, only the validation
+  step changes — so no rework.
+
+### Impl plan (`umol-ast-macros`, `#[proc_macro]`)
+
+- **S1 — done** (`umol-ast-macros/src/mol.rs`). `syn` parser for the path grammar (atoms
+  `(name: elem | "spec")`, bare `(name)` refs, bonds `-`/`=`/`#`); structure validation → `compile_error!`
+  (undeclared ref / duplicate decl, precise span); codegen emits `(MoleculeSpec::new() + atoms([…]) +
+  … ).build()` via `::umol_ast::ast::spec::*` (atoms as strings, so bare `C` and `"C#h3"` both flow —
+  runtime-parsed per decision A); `mol!` → `MoleculeAst`, re-exported at `umol_ast::mol`. Tests
+  (`umol-ast/tests/`): two runtime builds (orders + quoted spec) + a `trybuild` compile-fail for an
+  undeclared ref. **Pending in S1**: the `-[ "spec" ]-` rich-bond form (only `-`/`=`/`#` so far).
+- **S2** — `frag!` + `*name` ports → `Fragment`; the two `close` modes (ground-error / pattern-`*`).
+  `[dep: S1]`
+- **S3** — overlay keyword statements (aromatic / dative / multicenter / noncovalent / stereo). `[dep: S1]`
+- Deferrable: bond-spec compile-validation (the shared-parser-crate split).
+
+`mol!` and `frag!` are split (revisit if they converge). Quoteless elements accepted; anything richer is
+a quoted DSL spec.
+
 ## Next
 
 - **L1 + L2 — done** (`build.rs`, `spec.rs`). See the *Implemented — L1* and *L2 `MoleculeSpec`*
   sections above.
 - **Detour — join/split + connectivity validator — done** (doc 142). Unblocked L3.
 - **L3 `Fragment` — done** (`fragment.rs`; S1→S2→S3, 10 tests).
-- Then the **`mol!` proc-macro** in `umol-ast-macros` (decision 4; the macro rename is done) — the last layer.
+- **L4 `mol!` / `frag!`** — design + staged plan above (S1→S2→S3); the last layer, ready to build.
 - Overlays-in-*fragments* (L3) remains gated on the port/operad spike (103).
