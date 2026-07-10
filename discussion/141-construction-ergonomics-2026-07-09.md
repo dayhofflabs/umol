@@ -295,11 +295,71 @@ case (order-independent across a spec).
 Endpoints: the graph stores bond endpoints **normalized (min, max)** (undirected), so `ring`'s
 closing bond `single(last, first)` reads back as `atom_ids() == [first, last]`.
 
+## L2 `MoleculeSpec` design (settled 2026-07-09)
+
+A `MoleculeSpec` is a value; free-fn **terms** return a `MoleculeSpecTerm` (name scoped for the coming
+`ReactionSpec`); `spec + term -> spec`; `build() -> MoleculeAst`. Module `ast/molecule/spec.rs`
+(sibling to `build.rs`); terms lower onto the L1 `MoleculeBuilder`.
+
+### `AtomArg` — create-or-reference, unified
+
+Every atom slot in every term is an `AtomArg`. What you write picks create vs reference by type — no
+`&str` collision, so D1/D2/D3 are one mechanism and *every* term create-or-wires:
+
+| write | means |
+|---|---|
+| `C` · `"C#h3"` · `AtomAst` | create a fresh **anonymous** atom |
+| `("carbonyl", C)` tuple | create a fresh atom, **named** |
+| `0` (bare integer) | reference existing atom by **position** (creation order; `From<i32>`+`From<u32>`, negative panics) |
+| `name("carbonyl")` | reference existing atom by **name** |
+
+Bare `&str` is a spec (matches L1 `atom("C")`); a by-name reference is the `name(…)` wrapper. So
+`single(C, O)` mints a diatomic, `single(0, 1)` wires two existing, and
+`ring([name("a"), name("b"), C, C])` closes a fused ring over two existing + two new atoms.
+
+### Terms
+
+| term | signature | lowers to |
+|---|---|---|
+| `atom` | `atom(impl Into<AtomArg>)` | introduce |
+| `atoms` | `atoms(impl IntoIterator<Item = impl Into<AtomArg>>)` | introduce ×N |
+| `single`/`double`/`triple` | `(AtomArg, AtomArg)` | L1 `single`/… |
+| `bond` | `(AtomArg, AtomArg, impl Into<BondAst>)` | L1 `bond` (charge/spin/constraints) |
+| `aromatic_bond` | `(AtomArg, AtomArg)` | L1 `aromatic_bond` (order 1 + `#a`) |
+| `chain` | `(impl IntoIterator<Item = AtomArg>)` | L1 `chain` |
+| `ring` | `(impl IntoIterator<Item = AtomArg>)` | L1 `ring` |
+| `dative_bond` | `(donors, acceptor)` | L1 `dative_bond` |
+| `aromatic_system` | `(atoms, electrons)` | L1 `aromatic_system` |
+| `multicenter_bond` | `(atoms, electrons)` | L1 `multicenter_bond` |
+| `noncovalent_bond` | `(AtomArg, AtomArg, NoncovalentBondKind)` | L1 `noncovalent_bond` |
+| `ground` | `()` | build-time field fill |
+
+Deferred (as at L1): `stereo_atom`/`stereo_bond` (stereo slice); molecule-level constraint terms.
+
+### Decisions
+
+- **Relations spelled out in full** — `dative_bond`, `multicenter_bond`, `noncovalent_bond`,
+  `stereo_atom`, `stereo_bond`, `aromatic_system`, `aromatic_bond`; `single`/`double`/`triple` are
+  bond *orders* (noun implied), `bond`/`chain`/`ring`/`atom(s)` generic/topology. Applied to L1 too —
+  the earlier `dative`/`multicenter`/`noncovalent` were renamed.
+- **`aromatic_bond` = order 1 + aromatic flag** (`1#a`), not undetermined order; resolution perceives
+  the system. Not exclusive with `aromatic_system`.
+- **`bond` exists at L1 and L2** — the only way to set a bond's `charge`/`spin`/constraints (which
+  `BondAst` carries and the order verbs don't).
+- **Named-create is a `(name, spec)` tuple**, not a `named(…)` verb.
+- **Defaults = `ground()` only.** `zeroed` dropped (going away); no arbitrary-value field terms
+  (`charge(-2)` is meaningless) — a field default is its canonical `0`/`1` or nothing. Per-field
+  nullary terms omitted for now; revisit if granularity is needed.
+- **Build order** fixed regardless of `+`-order: introduce (create + build the name/position map) →
+  wire (resolve `AtomArg`s) → defaults (`ground` fill). So `+ ground()` anywhere is order-independent;
+  positions are creation-order (the `+`-order of introduce terms).
+- **`+` dual-use** with L3 disjoint union stays disambiguated by operand type (decision 3).
+
 ## Next
 
-- **Item 2 — L2 `+`-spec**: `MolSpec`/`Term`, `+`, terms `atoms`/`chain`/`ring`/`bond`; `chain`/`ring`
-  wrap the L1 primitives; `+ ground()`/`+ charge(0)` desugar to the L1 default (apply-at-build).
+- **Item 2 — L2 `MoleculeSpec`** (design above, settled) — build `AtomArg` + `MoleculeSpecTerm` +
+  `MoleculeSpec`/`+`/`build`, terms lowering onto L1.
 - **Item 3 — L3 fragment/operad**: `Fragment { body, ports }`, `attach` = `BondAst::meet`, `close`.
 - Then the **`mol!` proc-macro** in `umol-ast-macros` (decision 4; the macro rename is done).
-- The two opens (charge/spin defaults; overlays-in-fragments) are **resolved** above; overlays-in-
-  *fragments* (L3) remains gated on the port/operad spike (103). L1–L4 do not depend on it landing.
+- Overlays-in-*fragments* (L3) remains gated on the port/operad spike (103). L1–L4 do not depend on it
+  landing.

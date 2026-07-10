@@ -84,8 +84,11 @@ pub use id::{
 pub use incidence::{IncidenceGraph, IncidenceNodeSelection};
 pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
+pub use molecule::spec;
 pub use molecule::transact::{Transaction, TransactionError};
-pub use molecule::{MoleculeAst, MoleculeBuilder, MoleculeEditor};
+pub use molecule::{
+    AtomArg, MoleculeAst, MoleculeBuilder, MoleculeEditor, MoleculeSpec, MoleculeSpecTerm,
+};
 pub use multicenter::MulticenterBondAst;
 pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 pub use operators::{MemOp, RelOp};

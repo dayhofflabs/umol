@@ -5,6 +5,7 @@
 use super::super::aromatic::AromaticSystemAst;
 use super::super::atom::AtomAst;
 use super::super::bond::BondAst;
+use super::super::constraint::BondConstraintAst;
 use super::super::dative::DativeBondAst;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -67,8 +68,24 @@ impl MoleculeBuilder {
         self.editor.add_bond(first, second, BondAst::from_order(3))
     }
 
+    /// Add a bond carrying an explicit `BondAst` — the escape hatch for a bond with a
+    /// charge, spin, order-set, or constraint that `single`/`double`/`triple` can't set.
+    pub fn bond(&mut self, first: AtomId, second: AtomId, bond: impl Into<BondAst>) -> BondId {
+        self.editor.add_bond(first, second, bond.into())
+    }
+
+    /// Add an aromatic bond — order 1 with the aromatic flag set (`1#a`); resolution
+    /// perceives the aromatic system. Distinct from, and not exclusive with, `aromatic_system`.
+    pub fn aromatic_bond(&mut self, first: AtomId, second: AtomId) -> BondId {
+        self.editor.add_bond(
+            first,
+            second,
+            BondAst::from_order(1).with_constraint(BondConstraintAst::aromatic(true)),
+        )
+    }
+
     /// Add a dative bond from `donors` to `acceptor` — its own family, not a bond order.
-    pub fn dative(
+    pub fn dative_bond(
         &mut self,
         donors: impl IntoIterator<Item = AtomId>,
         acceptor: AtomId,
@@ -116,7 +133,7 @@ impl MoleculeBuilder {
     }
 
     /// Add a multicenter-bond overlay over `atoms`, one `electrons` count per atom.
-    pub fn multicenter(
+    pub fn multicenter_bond(
         &mut self,
         atoms: impl IntoIterator<Item = AtomId>,
         electrons: impl IntoIterator<Item = i64>,
@@ -128,7 +145,7 @@ impl MoleculeBuilder {
     }
 
     /// Add a noncovalent-bond overlay of `kind` between `first` and `second`.
-    pub fn noncovalent(
+    pub fn noncovalent_bond(
         &mut self,
         first: AtomId,
         second: AtomId,
@@ -188,6 +205,34 @@ mod tests {
         assert_eq!(mol.atom(atom).ast.charge, expected_charge);
         // an unspecified field is grounded regardless of the preset charge
         assert_eq!(mol.atom(atom).ast.implicit_hydrogens, ValueAst::Lit(0));
+    }
+
+    #[rstest]
+    fn test_molecule_builder_bond() {
+        let mut builder = MoleculeBuilder::new();
+        let a = builder.atom(Element::C);
+        let b = builder.atom(Element::O);
+        // charge is reachable only through the explicit-BondAst escape hatch
+        let bond = builder.bond(a, b, BondAst::from_order(2).with_charge(-1_i64));
+        let mol = builder.build();
+
+        assert_eq!(bond, BondId(0));
+        assert_eq!(mol.bond(bond).ast, &BondAst::from_order(2).with_charge(-1_i64));
+    }
+
+    #[rstest]
+    fn test_molecule_builder_aromatic_bond() {
+        let mut builder = MoleculeBuilder::new();
+        let a = builder.atom(Element::C);
+        let b = builder.atom(Element::C);
+        let bond = builder.aromatic_bond(a, b);
+        let mol = builder.build();
+
+        assert_eq!(bond, BondId(0));
+        assert_eq!(
+            mol.bond(bond).ast,
+            &BondAst::from_order(1).with_constraint(BondConstraintAst::aromatic(true))
+        );
     }
 
     #[rstest]
@@ -251,12 +296,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_builder_multicenter() {
+    fn test_molecule_builder_multicenter_bond() {
         let mut builder = MoleculeBuilder::new();
         let a0 = builder.atom(Element::B);
         let a1 = builder.atom(Element::B);
         let a2 = builder.atom(Element::H);
-        let bond = builder.multicenter([a0, a1, a2], [1, 1, 1]);
+        let bond = builder.multicenter_bond([a0, a1, a2], [1, 1, 1]);
         let mol = builder.build();
 
         assert_eq!(bond, MulticenterBondId(0));
@@ -267,11 +312,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_builder_noncovalent() {
+    fn test_molecule_builder_noncovalent_bond() {
         let mut builder = MoleculeBuilder::new();
         let a0 = builder.atom(Element::O);
         let a1 = builder.atom(Element::H);
-        let bond = builder.noncovalent(a0, a1, NoncovalentBondKind::HydrogenBond);
+        let bond = builder.noncovalent_bond(a0, a1, NoncovalentBondKind::HydrogenBond);
         let mol = builder.build();
 
         assert_eq!(bond, NoncovalentBondId(0));

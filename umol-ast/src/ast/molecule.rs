@@ -6,6 +6,7 @@ use std::sync::{Arc, OnceLock};
 
 pub use build::MoleculeBuilder;
 pub use editor::MoleculeEditor;
+pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{
     Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
     RelationId, Unordered, VarRelationSet,
@@ -38,6 +39,7 @@ use super::view::{
 mod build;
 mod editor;
 mod pushout;
+pub mod spec;
 pub(super) mod transact;
 
 /// Molecule AST: structural representation of a molecule (ground or pattern).
