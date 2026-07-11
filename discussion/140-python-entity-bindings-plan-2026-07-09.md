@@ -1,6 +1,8 @@
 # 140 · Python bindings for the remaining entity ASTs (plan)
 
-Status: Active (plan; design calls open)
+Status: Active — **B1 · Bond slice DONE** (value + WET constraint surface + Python tests, all green;
+`BondView`/`BondViews` deferred on topology construction). Next: **B2 · dative**. See *Bond slice —
+build state + detailed plan* at the end for the landed shape and the WET template for the peers.
 Date: 2026-07-09
 Relates: 137 (atom slice — the template being mirrored), 139 (mutability/hashing/equality
 balance), 114 (interning — where stereo/handle-identity deferrals live)
@@ -270,3 +272,103 @@ convention). The shape it will take, following the given order and the staged-im
 - The two stereo overlays are a separate slice/doc after the covalent entities, carrying the
   bulk of the design calls (frame-relative cosets, ligand frames, the constraint sub-surface),
   and align with the deferred "top-level stereo" work.
+
+## Bond slice — build state + detailed plan (2026-07-11)
+
+Pick-up point after a manual compaction. Building **B1 · Bond** as the additive value-type slice
+(value + new leaves + constraint surface; the `BondView`/`BondViews` molecule-handle half is deferred
+on the topology-construction prerequisite).
+
+### Factoring decision (resolved)
+
+The constraint sub-surface is the one real call. Chosen: **generalize nothing structural now — WET
+per-entity mirror**, exactly as umol-ast eschews DRY. Reason: cleanly generalizing the *backing* +
+`ring_size_count` proxy needs a `ConstraintFamily` trait, a `dyn`-backed proxy, **and** retrofitting the
+working atom binding — the "quite large / future pass" case the user named. Iterators are the trivial
+first target when that future generalization pass happens. (User: "if in doubt, follow umol-ast WET.")
+
+### Done (compiling green; `cargo build -p umol-py --features graph`)
+
+- `umol-py/src/boolean.rs` — `BooleanAst { Undetermined() | Lit(bool) }` + `BooleanArg` (`bool → Lit`,
+  mirror passthrough). Leaf of the bond/dative `Aromatic` constraint.
+- `umol-py/src/stereo.rs` — `CisTransStereoAst { Undetermined() | NotStereo() | Stereo(Py<StereoCosetAst>) }`
+  (line-for-line copy of `TetrahedralStereoAst`, `stereo.rs:199`) + `CisTransStereo { Z, E }` (`Z → Ct0`,
+  `E → Ct1`; copy of `TetrahedralStereo`, `stereo.rs:250`).
+- `lib.rs` — `mod boolean`; `use` + `add_class` for `BooleanAst` / `CisTransStereoAst` / `CisTransStereo`.
+- Transient dead-code warnings on the leaves' `from_ast`/`to_ast`/`BooleanArg` — they feed the surface;
+  clear when it lands. Not a defect (the slice is atomic: leaves + value + constraints interdepend).
+
+### Rust API being bound (names verified 2026-07-11)
+
+- `BondAst` (`umol-ast/src/ast/bond.rs`): `{ order: ValueAst, charge: ValueAst, spin: SpinStateAst,
+  constraints: BondConstraintsAst }`; `new(order: ValueAst)`, `from_order(u8)`,
+  `with_order/with_charge/with_spin(impl Into<…>)`, `From<&str>`/`FromStr` (DSL) + `Display`. → mirror the
+  `AtomAst` value type (3 value fields, `parse`/`__str__`/`__repr__`).
+- `BondConstraintAst` (`umol-ast/src/ast/constraint/bond.rs`): `{ Aromatic(BooleanAst),
+  CisTransStereo(CisTransStereoAst), RingMembership(RingMembershipAst) }`; ctors `aromatic(impl Into<
+  BooleanAst>)` (l.24), `cis_trans_stereo(impl Into<CisTransStereoAst>)` (l.28), `ring_membership(RingScope,
+  impl Into<ValueAst>)` (l.32).
+- `BondConstraintKey`: `{ Aromatic, CisTransStereo, RingMembership(RingScope) }`.
+- `BondConstraintsAst` — container: `new`, `set(c)` (l.219), `remove(key)` (l.263), `get(key)` (l.214),
+  `contains(key)` (l.210), `len` (l.202), `iter` (l.301), `extend`/`update` (mirror atom). Per-key reads:
+  **`aromatic() -> BooleanAst` (by value, NON-optional — l.163; differs from the atom `Option<&…>` pattern,
+  so the Python `aromatic` getter is non-optional, returning `Undetermined` when unset)**;
+  `cis_trans_stereo() -> Option<&CisTransStereoAst>` (l.170); `ring_count() -> Option<&ValueAst>` (l.190);
+  `ring_size_count(u8) -> Option<&ValueAst>` (l.194).
+
+### Reuse (do NOT re-bind)
+
+`ValueAst`/`ValueArg` (value.rs), `SpinStateAst` (atom.rs), `RingScope`/`RingMembershipAst`
+(constraint.rs), `BooleanAst`/`BooleanArg` (boolean.rs), `CisTransStereoAst`/`CisTransStereo` (stereo.rs).
+
+### Templates to copy (rename Atom→Bond, keep only the 3 keys)
+
+- Value: `atom.rs` `AtomAst` block (`#[pyclass(eq)]` wrapper; `#[new]` kw-only fields; `parse`/`__str__`/
+  `__repr__`; getters/setters for order/charge/spin; `constraints` getter→view / setter→`BondConstraintsArg`;
+  `asdict`; `apply_fields`; `inner`/`inner_mut`/`#[cfg(test)] from_inner`). `order`/`charge` take `ValueArg`.
+- Constraint surface: `constraint.rs` — `AtomConstraintAst`→`BondConstraintAst` (3 variants),
+  `AtomConstraintKey`→`BondConstraintKey` (3), `AtomConstraintsAst`→`BondConstraintsAst` (whole mapping API:
+  `new`/`__repr__`/`set`/`pop`/`update`/`__len__`/`__iter__`/`keys`/`values`/`items`/`get`/`__getitem__`/
+  `__delitem__`/`__contains__` + per-key `aromatic`/`cis_trans_stereo`/`ring_count` getters+setters +
+  `ring_size_count` proxy getter + `asdict`), `AtomConstraintsView`→`BondConstraintsView`,
+  the 3 iterators, `RingSizeCounts`/`RingSizeBacking`→bond copies, `atom_constraints_asdict`→bond,
+  `ConstraintsArg`/`ConstraintsUpdate`→`BondConstraintsArg`/`BondConstraintsUpdate`.
+
+### Steps
+
+1. `CisTransStereoArg` in `stereo.rs` — copy `TetrahedralStereoArg` (constraint.rs:176): `False →
+   NotStereo`, `CisTransStereo → coset`, `CisTransStereoAst` passthrough. (For the `cis_trans_stereo` setter.)
+2. `umol-py/src/bond.rs` (new) — `BondAst` value + the whole bond constraint surface (keep WET-separate from
+   the atom surface). **`BondConstraintsBacking` = `Bond(Py<BondAst>)` only for now** — add the
+   `Molecule{owner, id: BondId}` arm with the deferred `BondView` half (else dead-code). Same for the bond
+   `RingSizeBacking`: `Bond(...)` + `Value(Py<BondConstraintsAst>)` now, `Molecule{id: BondId}` later.
+3. Register every bond pyclass in `lib.rs`.
+4. Tests (in `bond.rs`, mirror the constraint.rs tests): `BondConstraintAst` roundtrip; `BondConstraintsAst`
+   len/contains/keys/values/items/get; the `ring_size_count` proxy; `BondAst` field round-trip + `parse`.
+   Confirm the leaf dead-code warnings are gone.
+5. **umol-py tests SIGABRT on libpython** — use the venv: `source umol-py/.venv/bin/activate` (see memory).
+
+### Deferred (not this slice)
+
+- `BondView`/`BondViews` (molecule-handle half) — gated on topology construction (cross-cutting call #1);
+  adds the `Molecule{id: BondId}` backing arm + `connecting(a,b)` + whole-value `__setitem__`.
+- Structural generalization of backing/iterators/proxy — the future DRY pass.
+
+### Landed (2026-07-11) — bond slice complete
+
+- `umol-py/src/bond.rs` (new): `BondAst` value type (`order`/`charge`/`spin`/`constraints`, `parse`/
+  `__str__`/`__repr__`/`asdict`) + full WET constraint surface — `BondConstraintAst`/`BondConstraintKey`
+  (3 keys), `BondConstraintsAst` (whole mapping API), `BondConstraintsView`, 3 iterators,
+  `BondRingSizeCounts`/`BondRingSizeBacking`, `bond_constraints_asdict`, `BondConstraintsArg`/`Update`.
+  `aromatic` getter is **non-optional** (returns `Undetermined` when unset), matching the Rust accessor.
+  Backing = `Bond(Py<BondAst>)` only; molecule arm deferred with `BondView`.
+- `stereo.rs`: added `CisTransStereoArg` (`False → NotStereo`, `CisTransStereo → coset`, passthrough).
+- Naming call (user): symmetric rename `RingSizeCounts`→`AtomRingSizeCounts` (+`Backing`/`Iter`); bond
+  copy is `BondRingSizeCounts`.
+- `lib.rs` + `python/umol/__init__.py`: registered/exported all bond pyclasses **and** the previously
+  unexported leaves `BooleanAst`/`CisTransStereo`/`CisTransStereoAst`.
+- Tests: 34 Rust unit tests in `bond.rs`; Python `tests/test_bond.py` (mirrors test_atom + test_constraint,
+  standalone-backed only) + `CisTransStereo*` cases in `tests/test_stereo.py`. Rust suite 190 green;
+  Python suite 219 green; clippy clean.
+- Note for the peers: the bond `RingScope` proxy is per-entity (WET). When the future DRY pass lands, the
+  iterators are the trivial first target; the backing enum + `ring_size_count` proxy are the hard part.

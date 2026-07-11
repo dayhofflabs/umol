@@ -6,19 +6,32 @@ use pyo3::prelude::*;
 #[cfg(feature = "graph")]
 use crate::{
     atom::{AtomAst, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst},
+    bond::{
+        BondAst, BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondConstraintsView,
+        BondRingSizeCounts,
+    },
+    boolean::BooleanAst,
     constraint::{
         AromaticValenceAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst,
-        AtomConstraintsView, MulticenterValenceAst, RingMembershipAst, RingScope, RingSizeCounts,
+        AtomConstraintsView, AtomRingSizeCounts, MulticenterValenceAst, RingMembershipAst,
+        RingScope,
     },
     element::Element,
     error::ParseError,
     molecule::MoleculeAst,
-    stereo::{Permutation, StereoCosetAst, StereoTerm, TetrahedralStereo, TetrahedralStereoAst},
+    stereo::{
+        CisTransStereo, CisTransStereoAst, Permutation, StereoCosetAst, StereoTerm,
+        TetrahedralStereo, TetrahedralStereoAst,
+    },
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
 };
 
 #[cfg(feature = "graph")]
 mod atom;
+#[cfg(feature = "graph")]
+mod bond;
+#[cfg(feature = "graph")]
+mod boolean;
 #[cfg(feature = "graph")]
 mod constraint;
 #[cfg(feature = "graph")]
@@ -63,12 +76,21 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AtomConstraintKey>()?;
         module.add_class::<AtomConstraintsAst>()?;
         module.add_class::<AtomConstraintsView>()?;
-        module.add_class::<RingSizeCounts>()?;
+        module.add_class::<AtomRingSizeCounts>()?;
+        module.add_class::<BondAst>()?;
+        module.add_class::<BondConstraintAst>()?;
+        module.add_class::<BondConstraintKey>()?;
+        module.add_class::<BondConstraintsAst>()?;
+        module.add_class::<BondConstraintsView>()?;
+        module.add_class::<BondRingSizeCounts>()?;
+        module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;
         module.add_class::<StereoCosetAst>()?;
         module.add_class::<TetrahedralStereoAst>()?;
         module.add_class::<TetrahedralStereo>()?;
+        module.add_class::<CisTransStereoAst>()?;
+        module.add_class::<CisTransStereo>()?;
     }
     Ok(())
 }

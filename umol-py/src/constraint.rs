@@ -891,9 +891,9 @@ impl AtomConstraintsAst {
     /// The sized-ring membership counts, as a subscriptable proxy keyed by ring
     /// size: `constraints.ring_size_count[6]`, `[6] = 3`, `del [6]`.
     #[getter]
-    fn ring_size_count(slf: Py<Self>) -> RingSizeCounts {
-        RingSizeCounts {
-            backing: RingSizeBacking::Value(slf),
+    fn ring_size_count(slf: Py<Self>) -> AtomRingSizeCounts {
+        AtomRingSizeCounts {
+            backing: AtomRingSizeBacking::Value(slf),
         }
     }
 
@@ -1406,15 +1406,15 @@ impl AtomConstraintsView {
     /// The sized-ring membership counts, as a subscriptable proxy keyed by ring
     /// size: `constraints.ring_size_count[6]`, `[6] = 3`, `del [6]`.
     #[getter]
-    fn ring_size_count(&self, py: Python<'_>) -> RingSizeCounts {
+    fn ring_size_count(&self, py: Python<'_>) -> AtomRingSizeCounts {
         let backing = match &self.backing {
-            ConstraintsBacking::Molecule { owner, id } => RingSizeBacking::Molecule {
+            ConstraintsBacking::Molecule { owner, id } => AtomRingSizeBacking::Molecule {
                 owner: owner.clone_ref(py),
                 id: *id,
             },
-            ConstraintsBacking::Atom(atom) => RingSizeBacking::Atom(atom.clone_ref(py)),
+            ConstraintsBacking::Atom(atom) => AtomRingSizeBacking::Atom(atom.clone_ref(py)),
         };
-        RingSizeCounts { backing }
+        AtomRingSizeCounts { backing }
     }
 
     /// The present constraints as a dict keyed by snake_case name.
@@ -1423,9 +1423,9 @@ impl AtomConstraintsView {
     }
 }
 
-/// What a `RingSizeCounts` proxy reads/writes through to: an atom within a molecule,
+/// What a `AtomRingSizeCounts` proxy reads/writes through to: an atom within a molecule,
 /// a standalone `AtomAst`, or a standalone `AtomConstraintsAst` value.
-pub(crate) enum RingSizeBacking {
+pub(crate) enum AtomRingSizeBacking {
     Molecule { owner: Py<MoleculeAst>, id: AstAtomId },
     Atom(Py<AtomAst>),
     Value(Py<AtomConstraintsAst>),
@@ -1436,11 +1436,11 @@ pub(crate) enum RingSizeBacking {
 /// removes. Backs onto whichever container produced it (dual-backing, like
 /// `AtomConstraintsView`).
 #[pyclass]
-pub struct RingSizeCounts {
-    backing: RingSizeBacking,
+pub struct AtomRingSizeCounts {
+    backing: AtomRingSizeBacking,
 }
 
-impl RingSizeCounts {
+impl AtomRingSizeCounts {
     /// Borrow the backing constraints and read through `f` — no clone.
     fn read<R>(
         &self,
@@ -1448,7 +1448,7 @@ impl RingSizeCounts {
         f: impl FnOnce(&AstAtomConstraintsAst) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.backing {
-            RingSizeBacking::Molecule { owner, id } => {
+            AtomRingSizeBacking::Molecule { owner, id } => {
                 let molecule = owner.bind(py).borrow();
                 let view = molecule
                     .inner()
@@ -1457,25 +1457,25 @@ impl RingSizeCounts {
                     .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
                 f(&view.ast.constraints)
             }
-            RingSizeBacking::Atom(atom) => f(&atom.bind(py).borrow().inner().constraints),
-            RingSizeBacking::Value(value) => f(value.bind(py).borrow().inner()),
+            AtomRingSizeBacking::Atom(atom) => f(&atom.bind(py).borrow().inner().constraints),
+            AtomRingSizeBacking::Value(value) => f(value.bind(py).borrow().inner()),
         }
     }
 
     /// Mutate the backing constraints in place through `f`.
     fn write(&self, py: Python<'_>, f: impl FnOnce(&mut AstAtomConstraintsAst)) {
         match &self.backing {
-            RingSizeBacking::Molecule { owner, id } => {
+            AtomRingSizeBacking::Molecule { owner, id } => {
                 f(&mut owner.borrow_mut(py).inner_mut().atom_mut(*id).ast.constraints)
             }
-            RingSizeBacking::Atom(atom) => f(&mut atom.borrow_mut(py).inner_mut().constraints),
-            RingSizeBacking::Value(value) => f(value.borrow_mut(py).inner_mut()),
+            AtomRingSizeBacking::Atom(atom) => f(&mut atom.borrow_mut(py).inner_mut().constraints),
+            AtomRingSizeBacking::Value(value) => f(value.borrow_mut(py).inner_mut()),
         }
     }
 }
 
 #[pymethods]
-impl RingSizeCounts {
+impl AtomRingSizeCounts {
     /// The membership count for rings of `size`, or `None`.
     fn __getitem__(&self, py: Python<'_>, size: u8) -> PyResult<Option<ValueAst>> {
         self.read(py, |cs| {
@@ -1495,9 +1495,9 @@ impl RingSizeCounts {
     }
 
     /// Iterate the present ring sizes (as ints).
-    fn __iter__(&self, py: Python<'_>) -> PyResult<RingSizeIter> {
+    fn __iter__(&self, py: Python<'_>) -> PyResult<AtomRingSizeIter> {
         let sizes = self.read(py, |cs| Ok(ring_sizes(cs).collect::<Vec<u8>>()))?;
-        Ok(RingSizeIter {
+        Ok(AtomRingSizeIter {
             sizes: sizes.into_iter(),
         })
     }
@@ -1530,7 +1530,7 @@ impl RingSizeCounts {
                     }
                 }
             }
-            Ok(format!("RingSizeCounts({{{}}})", parts.join(", ")))
+            Ok(format!("AtomRingSizeCounts({{{}}})", parts.join(", ")))
         })
     }
 }
@@ -1547,12 +1547,12 @@ fn ring_sizes(constraints: &AstAtomConstraintsAst) -> impl Iterator<Item = u8> +
 }
 
 #[pyclass]
-struct RingSizeIter {
+struct AtomRingSizeIter {
     sizes: IntoIter<u8>,
 }
 
 #[pymethods]
-impl RingSizeIter {
+impl AtomRingSizeIter {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }

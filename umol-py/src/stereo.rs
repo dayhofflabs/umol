@@ -5,10 +5,11 @@
 
 use std::collections::BTreeSet;
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    StereoCosetAst as AstStereoCosetAst, StereoTerm as AstStereoTerm,
-    TetrahedralStereoAst as AstTetrahedralStereoAst,
+    CisTransStereoAst as AstCisTransStereoAst, StereoCosetAst as AstStereoCosetAst,
+    StereoTerm as AstStereoTerm, TetrahedralStereoAst as AstTetrahedralStereoAst,
 };
 use umol_perm::Permutation as PermPermutation;
 
@@ -265,6 +266,98 @@ impl TetrahedralStereo {
     }
 }
 
+/// Cis/trans bond stereo: undetermined, explicitly not stereogenic, or a stereo coset.
+#[pyclass]
+pub enum CisTransStereoAst {
+    Undetermined(),
+    NotStereo(),
+    Stereo(Py<StereoCosetAst>),
+}
+
+#[pymethods]
+impl CisTransStereoAst {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            CisTransStereoAst::Undetermined() => ("Undetermined", 0),
+            CisTransStereoAst::NotStereo() => ("NotStereo", 0),
+            CisTransStereoAst::Stereo(_) => ("Stereo", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "CisTransStereoAst", variant, arity)
+    }
+}
+
+impl CisTransStereoAst {
+    pub(crate) fn from_ast(py: Python<'_>, ast: &AstCisTransStereoAst) -> PyResult<Self> {
+        Ok(match ast {
+            AstCisTransStereoAst::Undetermined => Self::Undetermined(),
+            AstCisTransStereoAst::NotStereo => Self::NotStereo(),
+            AstCisTransStereoAst::Stereo(coset) => {
+                Self::Stereo(into_py_variant(py, StereoCosetAst::from_ast(py, coset)?)?)
+            }
+        })
+    }
+
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstCisTransStereoAst {
+        match self {
+            Self::Undetermined() => AstCisTransStereoAst::Undetermined,
+            Self::NotStereo() => AstCisTransStereoAst::NotStereo,
+            Self::Stereo(coset) => AstCisTransStereoAst::Stereo(coset.bind(py).borrow().to_ast(py)),
+        }
+    }
+}
+
+/// Cis/trans stereo configuration shorthand: `Z` (coset `Ct0`) or `E` (coset `Ct1`),
+/// named for the chemistry keywords.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CisTransStereo {
+    Z,
+    E,
+}
+
+impl CisTransStereo {
+    /// The cis/trans-stereo AST for this configuration (a literal coset).
+    pub(crate) fn to_ast(self) -> AstCisTransStereoAst {
+        let coset = match self {
+            CisTransStereo::Z => AstStereoCosetAst::Lit(0),
+            CisTransStereo::E => AstStereoCosetAst::Lit(1),
+        };
+        AstCisTransStereoAst::Stereo(coset)
+    }
+}
+
+/// Setter coercion for `cis_trans_stereo`: `False` → not stereogenic, a
+/// `CisTransStereo` (`Z`/`E`) → that coset, or a `CisTransStereoAst` passthrough.
+#[derive(FromPyObject)]
+pub(crate) enum CisTransStereoArg {
+    Flag(bool),
+    Config(CisTransStereo),
+    Ast(Py<CisTransStereoAst>),
+}
+
+impl CisTransStereoArg {
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstCisTransStereoAst> {
+        Ok(match self {
+            CisTransStereoArg::Flag(false) => AstCisTransStereoAst::NotStereo,
+            CisTransStereoArg::Flag(true) => {
+                return Err(PyValueError::new_err(
+                    "cis_trans_stereo = True is not meaningful; use CisTransStereo.Z/E or False",
+                ))
+            }
+            CisTransStereoArg::Config(cts) => cts.to_ast(),
+            CisTransStereoArg::Ast(a) => a.bind(py).borrow().to_ast(py),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -335,5 +428,31 @@ mod tests {
         #[case] coset: AstStereoCosetAst,
     ) {
         assert_eq!(config.to_ast(), AstTetrahedralStereoAst::Stereo(coset));
+    }
+
+    #[rstest]
+    #[case(AstCisTransStereoAst::Undetermined)]
+    #[case(AstCisTransStereoAst::NotStereo)]
+    #[case(AstCisTransStereoAst::Stereo(AstStereoCosetAst::Lit(1)))]
+    #[case(AstCisTransStereoAst::Stereo(AstStereoCosetAst::Term(Box::new(
+        AstStereoTerm::Lit(0)
+    ))))]
+    fn test_cis_trans_stereo_ast_roundtrip(#[case] ast: AstCisTransStereoAst) {
+        Python::attach(|py| {
+            assert_eq!(
+                CisTransStereoAst::from_ast(py, &ast).unwrap().to_ast(py),
+                ast
+            );
+        });
+    }
+
+    #[rstest]
+    #[case(CisTransStereo::Z, AstStereoCosetAst::Lit(0))]
+    #[case(CisTransStereo::E, AstStereoCosetAst::Lit(1))]
+    fn test_cis_trans_stereo_to_ast(
+        #[case] config: CisTransStereo,
+        #[case] coset: AstStereoCosetAst,
+    ) {
+        assert_eq!(config.to_ast(), AstCisTransStereoAst::Stereo(coset));
     }
 }

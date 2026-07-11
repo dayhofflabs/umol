@@ -1,4 +1,6 @@
 from umol import (
+    CisTransStereo,
+    CisTransStereoAst,
     Permutation,
     StereoCosetAst,
     StereoTerm,
@@ -64,3 +66,25 @@ def test_tetrahedralstereoast_stereo_repr():
     assert repr(TetrahedralStereoAst.Stereo(StereoCosetAst.Lit(1))) == (
         "TetrahedralStereoAst.Stereo(StereoCosetAst.Lit(1))"
     )
+
+
+def test_cistransstereoast_stereo():
+    assert CisTransStereoAst.Stereo(StereoCosetAst.Lit(1)) == CisTransStereoAst.Stereo(
+        StereoCosetAst.Lit(1)
+    )
+
+
+def test_cistransstereoast_not_stereo():
+    assert CisTransStereoAst.NotStereo() == CisTransStereoAst.NotStereo()
+
+
+def test_cistransstereoast_stereo_repr():
+    assert repr(CisTransStereoAst.Stereo(StereoCosetAst.Lit(1))) == (
+        "CisTransStereoAst.Stereo(StereoCosetAst.Lit(1))"
+    )
+
+
+def test_cistransstereo_enum():
+    assert CisTransStereo.Z == CisTransStereo.Z
+    assert CisTransStereo.Z != CisTransStereo.E
+    assert len({CisTransStereo.E, CisTransStereo.E, CisTransStereo.Z}) == 2

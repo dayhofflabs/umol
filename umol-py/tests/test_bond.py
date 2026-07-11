@@ -1,0 +1,463 @@
+import pytest
+
+from umol import (
+    BondAst,
+    BondConstraintAst,
+    BondConstraintKey,
+    BondConstraintsAst,
+    BooleanAst,
+    CisTransStereo,
+    CisTransStereoAst,
+    ParseError,
+    RingMembershipAst,
+    RingScope,
+    SpinStateAst,
+    StereoCosetAst,
+    ValueAst,
+)
+
+
+def test_bondast_new():
+    bond = BondAst(2)
+    assert bond.order == ValueAst.Lit(2)
+    assert bond.charge == ValueAst.Undetermined()
+
+
+def test_bondast_new_kwargs():
+    bond = BondAst(1, charge=ValueAst.Lit(-1))
+    assert bond.order == ValueAst.Lit(1)
+    assert bond.charge == ValueAst.Lit(-1)
+
+
+def test_bondast_constraints_kwarg():
+    bond = BondAst(
+        1,
+        constraints=BondConstraintsAst(
+            [BondConstraintAst.Aromatic(BooleanAst.Lit(True))]
+        ),
+    )
+    assert len(bond.constraints) == 1
+    assert bond.constraints.aromatic == BooleanAst.Lit(True)
+
+
+def test_bondast_order_setter():
+    bond = BondAst(1)
+    bond.order = 2
+    assert bond.order == ValueAst.Lit(2)
+
+
+def test_bondast_charge_setter():
+    bond = BondAst(1)
+    bond.charge = -1
+    assert bond.charge == ValueAst.Lit(-1)
+
+
+def test_bondast_spin_setter():
+    bond = BondAst(1)
+    bond.spin = SpinStateAst(0, 1)
+    assert bond.spin == SpinStateAst(0, 1)
+
+
+def test_bondast_asdict():
+    d = BondAst(2, charge=ValueAst.Lit(-1)).asdict()
+    assert set(d.keys()) == {"order", "charge", "spin", "constraints"}
+    assert d["order"] == ValueAst.Lit(2)
+    assert d["charge"] == ValueAst.Lit(-1)
+
+
+def test_bondast_asdict_constraints():
+    bond = BondAst(
+        1,
+        constraints=BondConstraintsAst(
+            [BondConstraintAst.Aromatic(BooleanAst.Lit(True))]
+        ),
+    )
+    constraints = bond.asdict()["constraints"]
+    assert isinstance(constraints, dict)
+    assert set(constraints.keys()) == {"aromatic"}
+    assert constraints["aromatic"] == BooleanAst.Lit(True)
+
+
+def test_bondast_eq():
+    assert BondAst(1) == BondAst(1)
+    assert BondAst(1) != BondAst(2)
+
+
+@pytest.mark.parametrize("dsl", ["1", "2#c-", "1#a", "1#R(6)"])
+def test_bondast_parse(dsl):
+    bond = BondAst.parse(dsl)
+    assert str(bond) == dsl
+    assert repr(bond) == f"BondAst.parse('{dsl}')"
+
+
+def test_bondast_parse_error():
+    with pytest.raises(ParseError):
+        BondAst.parse("x#")
+
+
+def test_bondconstraint_key_aromatic():
+    assert BondConstraintAst.Aromatic(BooleanAst.Lit(True)).key == BondConstraintKey.Aromatic()
+
+
+def test_bondconstraint_key_cis_trans_stereo():
+    constraint = BondConstraintAst.CisTransStereo(CisTransStereoAst.NotStereo())
+    assert constraint.key == BondConstraintKey.CisTransStereo()
+
+
+def test_bondconstraint_key_ring_membership():
+    constraint = BondConstraintAst.RingMembership(
+        RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1))
+    )
+    assert constraint.key == BondConstraintKey.RingMembership(RingScope.Size(6))
+
+
+def test_bondconstraints_iter():
+    constraints = BondConstraintsAst(
+        [
+            BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), ValueAst.Lit(2))),
+        ]
+    )
+    assert len(constraints) == 2
+    assert list(constraints) == list(constraints.keys())
+    assert list(constraints) == [
+        BondConstraintKey.Aromatic(),
+        BondConstraintKey.RingMembership(RingScope.All()),
+    ]
+    assert list(constraints.values()) == [
+        BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+        BondConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), ValueAst.Lit(2))),
+    ]
+    assert list(constraints.items()) == [
+        (BondConstraintKey.Aromatic(), BondConstraintAst.Aromatic(BooleanAst.Lit(True))),
+        (
+            BondConstraintKey.RingMembership(RingScope.All()),
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), ValueAst.Lit(2))),
+        ),
+    ]
+
+
+def test_bondconstraints_get():
+    constraints = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))])
+    assert BondConstraintKey.Aromatic() in constraints
+    assert BondConstraintKey.CisTransStereo() not in constraints
+    assert constraints.get(BondConstraintKey.CisTransStereo()) is None
+    assert constraints.get(BondConstraintKey.CisTransStereo(), 0) == 0
+    assert constraints.get(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+        BooleanAst.Lit(True)
+    )
+
+
+def test_bondconstraints_aromatic():
+    empty = BondConstraintsAst([])
+    # aromatic is non-optional: unset reads back as Undetermined
+    assert empty.aromatic == BooleanAst.Undetermined()
+    assert empty.cis_trans_stereo is None
+    assert empty.ring_count is None
+    constraints = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))])
+    assert constraints.aromatic == BooleanAst.Lit(True)
+
+
+def test_bondconstraints_asdict():
+    constraints = BondConstraintsAst(
+        [
+            BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), ValueAst.Lit(2))),
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1))),
+        ]
+    )
+    d = constraints.asdict()
+    assert set(d.keys()) == {"aromatic", "ring_count", "ring_size_count_6"}
+    assert d["aromatic"] == BooleanAst.Lit(True)
+    assert d["ring_count"] == ValueAst.Lit(2)
+    assert d["ring_size_count_6"] == ValueAst.Lit(1)
+
+
+def test_bondconstraints_ring_size_count():
+    constraints = BondConstraintsAst(
+        [BondConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1)))]
+    )
+    assert constraints.ring_size_count[6] == ValueAst.Lit(1)
+    assert constraints.ring_size_count[5] is None
+    assert constraints.ring_count is None
+
+
+def test_bondconstraintsast_set():
+    constraints = BondConstraintsAst([])
+    constraints.set(BondConstraintAst.Aromatic(BooleanAst.Lit(True)))
+    assert len(constraints) == 1
+    assert constraints.get(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+        BooleanAst.Lit(True)
+    )
+
+
+def test_bondconstraintsast_pop():
+    constraints = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))])
+    assert constraints.pop(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+        BooleanAst.Lit(True)
+    )
+    assert len(constraints) == 0
+    assert constraints.pop(BondConstraintKey.Aromatic()) is None
+
+
+def test_bondconstraintsast_update():
+    constraints = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))])
+    constraints.update(
+        BondConstraintsAst(
+            [
+                BondConstraintAst.Aromatic(BooleanAst.Lit(False)),
+                BondConstraintAst.RingMembership(
+                    RingMembershipAst(RingScope.All(), ValueAst.Lit(2))
+                ),
+            ]
+        )
+    )
+    assert len(constraints) == 2
+    assert constraints.aromatic == BooleanAst.Lit(False)
+    assert constraints.ring_count == ValueAst.Lit(2)
+
+
+def test_bondconstraints_update_iterable():
+    cs = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))])
+    cs.update(
+        [
+            BondConstraintAst.Aromatic(BooleanAst.Lit(False)),
+            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), ValueAst.Lit(1))),
+        ]
+    )
+    assert len(cs) == 2
+    assert cs.aromatic == BooleanAst.Lit(False)
+
+
+def test_bondconstraints_aromatic_property():
+    cs = BondConstraintsAst([])
+    cs.aromatic = True
+    assert cs.aromatic == BooleanAst.Lit(True)
+
+
+def test_bondconstraints_cis_trans_stereo_config():
+    cs = BondConstraintsAst([])
+    cs.cis_trans_stereo = CisTransStereo.E
+    assert cs.cis_trans_stereo == CisTransStereoAst.Stereo(StereoCosetAst.Lit(1))
+
+
+def test_bondconstraints_cis_trans_stereo_false():
+    cs = BondConstraintsAst([])
+    cs.cis_trans_stereo = False
+    assert cs.cis_trans_stereo == CisTransStereoAst.NotStereo()
+
+
+def test_bondconstraints_cis_trans_stereo_true_error():
+    cs = BondConstraintsAst([])
+    with pytest.raises(ValueError):
+        cs.cis_trans_stereo = True
+
+
+def test_bondconstraints_ring_count_property():
+    cs = BondConstraintsAst([])
+    cs.ring_count = 2
+    assert cs.ring_count.as_lit() == 2
+
+
+def test_bondconstraints_ring_size_count_subscript():
+    cs = BondConstraintsAst([])
+    cs.ring_size_count[6] = 3
+    assert cs.ring_size_count[6].as_lit() == 3
+    del cs.ring_size_count[6]
+    assert cs.ring_size_count[6] is None
+
+
+def test_bondringsizecounts_len_iter_contains():
+    cs = BondConstraintsAst([])
+    cs.ring_size_count[6] = 3
+    cs.ring_size_count[5] = 1
+    rsc = cs.ring_size_count
+    assert len(rsc) == 2
+    assert sorted(rsc) == [5, 6]
+    assert 6 in rsc
+    assert 4 not in rsc
+
+
+def test_bondconstraints_getitem_delitem():
+    cs = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))])
+    assert BondConstraintKey.Aromatic() in cs
+    assert cs[BondConstraintKey.Aromatic()] == BondConstraintAst.Aromatic(BooleanAst.Lit(True))
+    with pytest.raises(KeyError):
+        cs[BondConstraintKey.CisTransStereo()]
+    del cs[BondConstraintKey.Aromatic()]
+    assert not cs
+    with pytest.raises(KeyError):
+        del cs[BondConstraintKey.Aromatic()]
+
+
+def test_bondconstraintsview_set():
+    bond = BondAst(1)
+    bond.constraints.set(BondConstraintAst.Aromatic(BooleanAst.Lit(True)))
+    # a fresh view proves the write mutated the standalone bond in place
+    assert len(bond.constraints) == 1
+    assert bond.constraints.get(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+        BooleanAst.Lit(True)
+    )
+
+
+def test_bondconstraintsview_pop():
+    bond = BondAst(
+        1,
+        constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))]),
+    )
+    assert bond.constraints.pop(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+        BooleanAst.Lit(True)
+    )
+    assert len(bond.constraints) == 0
+
+
+def test_bondconstraintsview_update():
+    bond = BondAst(1)
+    bond.constraints.update(
+        BondConstraintsAst(
+            [
+                BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+                BondConstraintAst.RingMembership(
+                    RingMembershipAst(RingScope.All(), ValueAst.Lit(2))
+                ),
+            ]
+        )
+    )
+    assert len(bond.constraints) == 2
+    assert bond.constraints.aromatic == BooleanAst.Lit(True)
+
+
+def test_bondconstraintsview_aromatic_property():
+    bond = BondAst(1)
+    bond.constraints.aromatic = True
+    # a fresh view proves the write hit the bond
+    assert bond.constraints.aromatic == BooleanAst.Lit(True)
+
+
+def test_bondconstraintsview_ring_size_count():
+    bond = BondAst(1)
+    bond.constraints.ring_size_count[6] = 3
+    assert bond.constraints.ring_size_count[6].as_lit() == 3
+    del bond.constraints.ring_size_count[6]
+    assert bond.constraints.ring_size_count[6] is None
+
+
+def test_bondconstraintsview_reads():
+    bond = BondAst(
+        1,
+        constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))]),
+    )
+    constraints = bond.constraints
+    assert constraints
+    assert BondConstraintKey.Aromatic() in constraints
+    assert constraints.get(BondConstraintKey.CisTransStereo()) is None
+    assert constraints.aromatic == BooleanAst.Lit(True)
+    assert set(constraints.asdict().keys()) == {"aromatic"}
+    assert list(constraints) == [BondConstraintKey.Aromatic()]
+    assert list(constraints.values()) == [BondConstraintAst.Aromatic(BooleanAst.Lit(True))]
+
+
+def test_bondconstraintsview_getitem_delitem():
+    bond = BondAst(
+        1,
+        constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))]),
+    )
+    cs = bond.constraints
+    assert BondConstraintKey.Aromatic() in cs
+    assert cs[BondConstraintKey.Aromatic()] == BondConstraintAst.Aromatic(BooleanAst.Lit(True))
+    with pytest.raises(KeyError):
+        cs[BondConstraintKey.CisTransStereo()]
+    del bond.constraints[BondConstraintKey.Aromatic()]
+    assert not bond.constraints
+    with pytest.raises(KeyError):
+        del bond.constraints[BondConstraintKey.Aromatic()]
+
+
+def test_bondconstraintsview_update_from_view():
+    src = BondAst(
+        1,
+        constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))]),
+    )
+    dst = BondAst(2)
+    dst.constraints.update(src.constraints)
+    assert BondConstraintKey.Aromatic() in dst.constraints
+
+
+def test_bondast_set_constraints_from_value():
+    dst = BondAst(2)
+    dst.constraints = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))])
+    assert dst.constraints.get(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+        BooleanAst.Lit(True)
+    )
+
+
+def test_bondast_set_constraints_from_view():
+    src = BondAst(
+        1,
+        constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))]),
+    )
+    dst = BondAst(2)
+    dst.constraints = src.constraints  # RHS is a live view, not a value container
+    assert dst.constraints.get(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+        BooleanAst.Lit(True)
+    )
+
+
+def test_bondconstraint_eq_hash():
+    assert BondConstraintAst.Aromatic(BooleanAst.Lit(True)) == BondConstraintAst.Aromatic(
+        BooleanAst.Lit(True)
+    )
+    assert BondConstraintAst.Aromatic(BooleanAst.Lit(True)) != BondConstraintAst.Aromatic(
+        BooleanAst.Lit(False)
+    )
+    assert (
+        len(
+            {
+                BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+                BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            }
+        )
+        == 1
+    )
+
+
+def test_bondconstraint_repr():
+    x = BondConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), ValueAst.Lit(1)))
+    env = {
+        "BondConstraintAst": BondConstraintAst,
+        "RingMembershipAst": RingMembershipAst,
+        "RingScope": RingScope,
+        "ValueAst": ValueAst,
+    }
+    assert eval(repr(x), env) == x
+
+
+def test_bondconstraintkey_eq_hash():
+    assert BondConstraintKey.Aromatic() == BondConstraintKey.Aromatic()
+    assert BondConstraintKey.Aromatic() != BondConstraintKey.CisTransStereo()
+    assert BondConstraintKey.RingMembership(RingScope.Size(6)) == BondConstraintKey.RingMembership(
+        RingScope.Size(6)
+    )
+    assert BondConstraintKey.RingMembership(RingScope.Size(6)) != BondConstraintKey.RingMembership(
+        RingScope.Size(5)
+    )
+    assert len({BondConstraintKey.Aromatic(), BondConstraintKey.Aromatic()}) == 1
+
+
+def test_bondconstraintsast_eq_repr():
+    a = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))])
+    b = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))])
+    assert a == b
+    assert a != BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(False))])
+    assert repr(a) == "BondConstraintsAst([BondConstraintAst.Aromatic(BooleanAst.Lit(True))])"
+
+
+def test_bondconstraintsast_unhashable():
+    # mutable container: value-equal but unhashable, like BondAst
+    with pytest.raises(TypeError):
+        hash(BondConstraintsAst([]))
+
+
+def test_bondconstraintsview_repr():
+    bond = BondAst(1)
+    assert repr(bond.constraints) == "BondConstraintsView(0 entries)"
