@@ -18,7 +18,7 @@ from umol import (
 
 
 def carbon_oxygen():
-    return MoleculeAst.from_atoms(
+    return MoleculeAst.from_atoms_and_bonds(
         [AtomAst(Element("C")), AtomAst(Element("O"))]
     )
 
@@ -168,7 +168,7 @@ def test_atomview_constraints():
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
     )
-    mol = MoleculeAst.from_atoms([atom])
+    mol = MoleculeAst.from_atoms_and_bonds([atom])
     assert len(mol.atoms[0].constraints) == 1
 
 
@@ -251,7 +251,7 @@ def test_molecule_atoms_iter():
 def test_atomview_charge_through_handle():
     atom = AtomAst(Element("C"))
     atom.charge = ValueAst.Lit(-1)
-    mol = MoleculeAst.from_atoms([atom])
+    mol = MoleculeAst.from_atoms_and_bonds([atom])
     assert mol.atoms[0].charge == ValueAst.Lit(-1)
 
 
@@ -285,44 +285,44 @@ def test_atomast_parse_error():
 
 
 def test_atomview_set_charge():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     mol.atoms[0].charge = ValueAst.Lit(-1)
     # a fresh view re-reads the molecule, proving the write landed on it
     assert mol.atoms[0].charge == ValueAst.Lit(-1)
 
 
 def test_atomview_set_charge_int_literal():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     mol.atoms[0].charge = -1
     assert mol.atoms[0].charge == ValueAst.Lit(-1)
 
 
 def test_atomview_set_element():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     mol.atoms[0].element = Element("N")
     assert mol.atoms[0].element == ElementAst.Lit(Element("N"))
 
 
 def test_atomview_set_isotope_mass():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     mol.atoms[0].isotope_mass = 13
     assert mol.atoms[0].isotope_mass == IsotopeMassAst.Lit(13)
 
 
 def test_atomview_set_implicit_hydrogens():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     mol.atoms[0].implicit_hydrogens = ValueAst.Lit(3)
     assert mol.atoms[0].implicit_hydrogens == ValueAst.Lit(3)
 
 
 def test_atomview_set_lone_pairs():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("O"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("O"))])
     mol.atoms[0].lone_pairs = ValueAst.Lit(2)
     assert mol.atoms[0].lone_pairs == ValueAst.Lit(2)
 
 
 def test_atomview_set_spin():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     mol.atoms[0].spin = SpinStateAst(1, 2)
     spin = mol.atoms[0].spin
     assert spin.unpaired._0 == 1
@@ -364,13 +364,13 @@ def test_spinstateast_eq_repr():
 
 
 def test_atomview_repr():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C")), AtomAst(Element("O"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C")), AtomAst(Element("O"))])
     assert repr(mol.atoms[0]) == "AtomView(id=0)"
     assert repr(mol.atoms) == "AtomViews(len=2)"
 
 
 def test_atomview_asdict():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"), charge=ValueAst.Lit(-1))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"), charge=ValueAst.Lit(-1))])
     d = mol.atoms[0].asdict()
     assert set(d.keys()) == {
         "element",
@@ -387,7 +387,7 @@ def test_atomview_asdict():
 
 
 def test_atomview_set_constraints():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     mol.atoms[0].constraints = AtomConstraintsAst([AtomConstraintAst.Degree(ValueAst.Lit(2))])
     assert len(mol.atoms[0].constraints) == 1
     assert mol.atoms[0].constraints.get(AtomConstraintKey.Degree()) == AtomConstraintAst.Degree(

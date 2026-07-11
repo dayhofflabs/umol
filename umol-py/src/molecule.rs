@@ -2,9 +2,10 @@
 //! `umol_ast::ast::MoleculeAst`.
 
 use pyo3::prelude::*;
-use umol_ast::ast::MoleculeAst as AstMoleculeAst;
+use umol_ast::ast::{AtomId as AstAtomId, MoleculeAst as AstMoleculeAst};
 
 use crate::atom::{AtomAst, AtomViews};
+use crate::bond::{BondAst, BondViews};
 
 /// A molecule: the owned graph-AST root.
 #[pyclass(eq)]
@@ -19,14 +20,31 @@ impl MoleculeAst {
         Self(AstMoleculeAst::new())
     }
 
-    /// A molecule from a sequence of atoms (no bonds).
+    /// A molecule from a sequence of atoms and bonds. Each bond is a
+    /// `(first, second, bond)` triple: two atom indices into `atoms` and a
+    /// `BondAst` value carrying the bond's order/charge/spin/constraints.
     #[staticmethod]
-    fn from_atoms(py: Python<'_>, atoms: Vec<Py<AtomAst>>) -> Self {
+    #[pyo3(signature = (atoms, bonds=Vec::new()))]
+    fn from_atoms_and_bonds(
+        py: Python<'_>,
+        atoms: Vec<Py<AtomAst>>,
+        bonds: Vec<(u32, u32, Py<BondAst>)>,
+    ) -> Self {
         let ast_atoms = atoms
             .iter()
             .map(|atom| atom.bind(py).borrow().inner().clone())
             .collect();
-        MoleculeAst(AstMoleculeAst::from_atoms_and_bonds(ast_atoms, Vec::new()))
+        let ast_bonds = bonds
+            .iter()
+            .map(|(first, second, bond)| {
+                (
+                    AstAtomId(*first),
+                    AstAtomId(*second),
+                    bond.bind(py).borrow().inner().clone(),
+                )
+            })
+            .collect();
+        MoleculeAst(AstMoleculeAst::from_atoms_and_bonds(ast_atoms, ast_bonds))
     }
 
     /// The atoms, indexed by integer position.
@@ -35,8 +53,18 @@ impl MoleculeAst {
         AtomViews::new(slf)
     }
 
+    /// The bonds, indexed by integer position.
+    #[getter]
+    fn bonds(slf: Py<Self>) -> BondViews {
+        BondViews::new(slf)
+    }
+
     fn __repr__(&self) -> String {
-        format!("MoleculeAst(atoms={})", self.0.atoms().count())
+        format!(
+            "MoleculeAst(atoms={}, bonds={})",
+            self.0.atoms().count(),
+            self.0.bonds().count()
+        )
     }
 }
 
@@ -95,6 +123,6 @@ mod tests {
 
     #[rstest]
     fn test_molecule_ast_repr() {
-        assert_eq!(MoleculeAst::new().__repr__(), "MoleculeAst(atoms=0)");
+        assert_eq!(MoleculeAst::new().__repr__(), "MoleculeAst(atoms=0, bonds=0)");
     }
 }

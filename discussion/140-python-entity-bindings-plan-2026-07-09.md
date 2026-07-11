@@ -1,8 +1,9 @@
 # 140 · Python bindings for the remaining entity ASTs (plan)
 
-Status: Active — **B1 · Bond slice DONE** (value + WET constraint surface + Python tests, all green;
-`BondView`/`BondViews` deferred on topology construction). Next: **B2 · dative**. See *Bond slice —
-build state + detailed plan* at the end for the landed shape and the WET template for the peers.
+Status: Active — **B1 · Bond slice DONE incl. the view half** (value + WET constraint surface +
+`BondView`/`BondViews` + molecule-backed constraint views; Python `from_atoms` replaced by
+`from_atoms_and_bonds`; Rust 201 / Python 237 green, clippy clean). Next: **B2 · dative**. See *Bond
+slice — build state + detailed plan* at the end for the landed shape and the WET template for the peers.
 Date: 2026-07-09
 Relates: 137 (atom slice — the template being mirrored), 139 (mutability/hashing/equality
 balance), 114 (interning — where stereo/handle-identity deferrals live)
@@ -348,11 +349,31 @@ first target when that future generalization pass happens. (User: "if in doubt, 
    Confirm the leaf dead-code warnings are gone.
 5. **umol-py tests SIGABRT on libpython** — use the venv: `source umol-py/.venv/bin/activate` (see memory).
 
-### Deferred (not this slice)
+### View half — LANDED (2026-07-11), not deferred after all
 
-- `BondView`/`BondViews` (molecule-handle half) — gated on topology construction (cross-cutting call #1);
-  adds the `Molecule{id: BondId}` backing arm + `connecting(a,b)` + whole-value `__setitem__`.
-- Structural generalization of backing/iterators/proxy — the future DRY pass.
+The AST fully supports bonds by stable `BondId` today (`molecule.bonds()`, `bond_mut(id) -> BondViewMut
+{ ast: &mut BondAst }`, `BondView { ast, atom_ids() }`), so nothing was actually blocked. The only real
+gate was that Python could not construct a molecule *with* bonds — resolved by replacing the `from_atoms`
+backstop with **`MoleculeAst.from_atoms_and_bonds(atoms, bonds=[(i, j, BondAst), …])`** (the exact Rust
+counterpart). Landed:
+
+- `molecule.rs`: `from_atoms_and_bonds` (replaces `from_atoms`; all 23 Python call sites migrated),
+  `bonds` getter → `BondViews`, `__repr__` now `atoms=N, bonds=M`.
+- `bond.rs`: `BondView` (id, read-only `atom_ids -> (int,int)`, order/charge/spin get+set, constraints
+  get+set, asdict, repr) + `BondViews` (`mol.bonds`: len/getitem/setitem-value-replace/iter +
+  `connecting(a,b)`) + `resolve_bond_index` + `BondViewIter`. `Molecule{owner, id: BondId}` arm added to
+  both `BondConstraintsBacking` and `BondRingSizeBacking`.
+- Registered `BondView`/`BondViews` in `lib.rs` + `__init__.py`.
+- Tests: +11 Rust view tests in `bond.rs`, +18 Python tests in `test_bond.py`, `test_molecule.py`
+  updated (repr + `from_atoms_and_bonds` construction).
+
+Full parity with the atom slice reached. `MoleculeParts`/`join`/`split` (cross-cutting call #1's broader
+resolution) remain future work but are **not** a prerequisite for the per-entity view halves — the peers
+(dative/aromatic/…) follow this same `from_atoms_and_bonds`-backed pattern.
+
+### Still deferred
+
+- Structural generalization of backing/iterators/proxy — the future DRY pass (WET per-entity for now).
 
 ### Landed (2026-07-11) — bond slice complete
 

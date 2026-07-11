@@ -2139,27 +2139,15 @@ actually live now:
 
 ## Outstanding
 
-The chemist-facing tier-1 wrappers and several tier-2 invariants still need
-to land:
+Discuss first, not all required.
 
 - [ ] **`Molecule` chemist-facing wrapper.** Holds an `Arc<MoleculeInner>`
   with the AST plus chemistry-side cache slots. Doc 92's open question on
   metadata-on-`Molecule` (round-trip preservation vs. purely semantic
   object) is unsettled; revisit when the type is reintroduced.
-- [ ] **Cache slots on `Molecule`.** `DistanceMatrix`,
-  `BiconnectedComponents`, `MatchTarget`, `MorganTarget`. Add as their first
-  consumer arrives, not speculatively. The `RingSet` cache already lives on
-  `MoleculeAst` itself (doc 92 settled this); other Molecule-side caches are
-  for ground-only views that don't make sense on patterns.
 - [ ] **Coordinate annotations on `Molecule`.** Optional per-atom
   `Coordinate` payload propagated through MOL / CXSMILES roundtrip; stored
   but never recomputed.
-- [ ] **`Pattern` chemist-facing wrapper** with matcher-side scaffolding
-  (per-atom constraint index, sub-pattern dependency graph, recursion
-  order, packed pattern adjacency) and well-formedness checks at
-  construction. Lands alongside doc 80 step 9 (matcher port).
-- [ ] **`ReactionRule` / `ReactionRuleAst` split.** Mirror of the
-  `Molecule` / `MoleculeAst` split for reactions. Doc 80 step 10.
 - [ ] **Tier-1 parser entry-points returning chemist-facing types.**
   `parse_smiles → Molecule`, `parse_smarts → Pattern`, `parse_smirks →
   ReactionRule`. Today the parsers return `MoleculeAst`; chemist-facing
@@ -2174,24 +2162,6 @@ to land:
   (atom, aromatic system, multicenter bond). Parity rule lives in
   `umol_shared::spin::SpinState`; lift into the validator alongside
   `ElectronInvariant`.
-- [ ] **`ConstraintValidator` cross-checks.** Constraint-vs-topology
-  agreement across entity types, plus molecule-scope constraints
-  (`:connected`, etc.). Currently a stub returning `Determined`.
-- [ ] **Matcher port** + the `evaluate.rs` it carried — both deleted at the
-  end of doc 92. Doc 80 step 9.
-- [ ] **Transformation ops** — `kekulize`, `aromatize`, `tautomers`,
-  `to_canonical_smiles`, `apply_reaction` — with the signatures and result
-  types from §"Transformation ops" and §"Result types".
-- [ ] **Tier-3 model-dependent validators** (octet, normal-valence tables,
-  drug-like charge bounds, connectedness). Opt-in `validator` modules;
-  never gate construction.
-- [ ] **Builder API** producing `MoleculeAst` then resolving to `Molecule`.
-- [ ] **Resolution conformance suite port.** `tests/resolution/*` is gated
-  behind `cargo` feature `legacy` and currently broken (uses deleted
-  `umol_graph::ast`/`dsl`/old `Chemistry`/`ValenceTheory`). Either rewrite
-  on the new `ChemistryModel` + `Resolver` API or delete and grow new
-  conformance coverage. Same call applies to the gated benches:
-  `morgan.rs`, `molecule_dsl_parsing.rs`, `substructure.rs`.
 
 ## Edit-API evolution: join / split / uniform construction (2026-07-09)
 
@@ -2243,7 +2213,7 @@ already exist — no work there.
 Python (140) mirrors: `MoleculeParts`-style construction, `mol.join(other)`,
 `mol.split()`, and none of the overlay-privileging surface.
 
-### Remapping / correspondence consolidation (2026-07-09)
+### Remapping / correspondence consolidation (2026-07-09) **Won't do**
 
 `MoleculeCorrespondence` becomes load-bearing (join/split return it), which surfaced a
 redundant twin. Resolution:

@@ -180,7 +180,7 @@ def test_atomconstraintsast_update():
 
 
 def test_atomconstraintsview_set():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     mol.atoms[0].constraints.set(
         AtomConstraintAst.AromaticValence(AromaticValenceAst.Aromatic(ValueAst.Lit(1)))
     )
@@ -197,7 +197,7 @@ def test_atomconstraintsview_pop():
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
     )
-    mol = MoleculeAst.from_atoms([atom])
+    mol = MoleculeAst.from_atoms_and_bonds([atom])
     assert mol.atoms[0].constraints.pop(
         AtomConstraintKey.Valence()
     ) == AtomConstraintAst.Valence(ValueAst.Lit(4))
@@ -205,7 +205,7 @@ def test_atomconstraintsview_pop():
 
 
 def test_atomconstraintsview_update():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     mol.atoms[0].constraints.update(
         AtomConstraintsAst(
             [
@@ -259,7 +259,7 @@ def test_atomconstraintsview_reads():
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
     )
-    mol = MoleculeAst.from_atoms([atom])
+    mol = MoleculeAst.from_atoms_and_bonds([atom])
     constraints = mol.atoms[0].constraints
     assert constraints
     assert AtomConstraintKey.Valence() in constraints
@@ -327,14 +327,14 @@ def test_atomconstraints_ring_size_count_subscript():
 
 
 def test_atomconstraintsview_property_on_molecule():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     mol.atoms[0].constraints.aromatic_valence = 1
     # a fresh view proves the write hit the molecule
     assert mol.atoms[0].constraints.aromatic_valence == AromaticValenceAst.Aromatic(ValueAst.Lit(1))
 
 
 def test_atomconstraintsview_ring_size_count_on_molecule():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     mol.atoms[0].constraints.ring_size_count[6] = 3
     assert mol.atoms[0].constraints.ring_size_count[6].as_lit() == 3
     del mol.atoms[0].constraints.ring_size_count[6]
@@ -426,7 +426,7 @@ def test_ringmembershipast_eq_repr():
 
 
 def test_atomconstraintsview_repr():
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     assert repr(mol.atoms[0].constraints) == "AtomConstraintsView(0 entries)"
 
 
@@ -461,7 +461,7 @@ def test_atomconstraints_update_container():
 
 
 def test_atomconstraintsview_getitem_delitem():
-    mol = MoleculeAst.from_atoms(
+    mol = MoleculeAst.from_atoms_and_bonds(
         [
             AtomAst(
                 Element("C"),
@@ -485,7 +485,7 @@ def test_atomconstraintsview_update_from_view():
         Element("C"),
         constraints=AtomConstraintsAst([AtomConstraintAst.Valence(ValueAst.Lit(4))]),
     )
-    mol = MoleculeAst.from_atoms([AtomAst(Element("C"))])
+    mol = MoleculeAst.from_atoms_and_bonds([AtomAst(Element("C"))])
     mol.atoms[0].constraints.update(src.constraints)
     assert AtomConstraintKey.Valence() in mol.atoms[0].constraints
 

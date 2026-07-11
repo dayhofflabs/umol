@@ -5,13 +5,13 @@
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::PyKeyError;
+use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_ast::ast::{
-    BondAst as AstBondAst, BondConstraintAst as AstBondConstraintAst,
+    AtomId as AstAtomId, BondAst as AstBondAst, BondConstraintAst as AstBondConstraintAst,
     BondConstraintKey as AstBondConstraintKey, BondConstraintsAst as AstBondConstraintsAst,
-    RingScope as AstRingScope,
+    BondId as AstBondId, MoleculeAst as AstMoleculeAst, RingScope as AstRingScope,
 };
 
 use crate::atom::SpinStateAst;
@@ -19,6 +19,7 @@ use crate::boolean::{BooleanArg, BooleanAst};
 use crate::constraint::{RingMembershipAst, RingScope};
 use crate::convert::{hash_ast, into_py_variant, variant_repr};
 use crate::error::parse_error;
+use crate::molecule::MoleculeAst;
 use crate::stereo::{CisTransStereoArg, CisTransStereoAst};
 use crate::value::{ValueArg, ValueAst};
 
@@ -145,6 +146,244 @@ impl BondAst {
     #[cfg(test)]
     pub(crate) fn from_inner(bond: AstBondAst) -> Self {
         BondAst(bond)
+    }
+}
+
+/// A view of one bond within a molecule: a handle to the molecule plus the bond's
+/// index. Field reads rebuild the transient Rust view; the molecule is never copied.
+#[pyclass]
+pub struct BondView {
+    owner: Py<MoleculeAst>,
+    id: AstBondId,
+}
+
+impl BondView {
+    fn bond<'a>(&self, molecule: &'a AstMoleculeAst) -> PyResult<&'a AstBondAst> {
+        molecule
+            .bonds()
+            .get(self.id)
+            .map(|view| view.ast)
+            .ok_or_else(|| PyIndexError::new_err("bond id out of range"))
+    }
+}
+
+#[pymethods]
+impl BondView {
+    #[getter]
+    fn id(&self) -> u32 {
+        self.id.0
+    }
+
+    /// The two atom indices incident to this bond (read-only — endpoints are
+    /// topology, not part of the bond value).
+    #[getter]
+    fn atom_ids(&self, py: Python<'_>) -> PyResult<(u32, u32)> {
+        let molecule = self.owner.bind(py).borrow();
+        let view = molecule
+            .inner()
+            .bonds()
+            .get(self.id)
+            .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
+        let [first, second] = view.atom_ids();
+        Ok((first.0, second.0))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("BondView(id={})", self.id.0)
+    }
+
+    #[getter]
+    fn order(&self, py: Python<'_>) -> PyResult<ValueAst> {
+        let molecule = self.owner.bind(py).borrow();
+        ValueAst::from_ast(py, &self.bond(molecule.inner())?.order)
+    }
+
+    #[setter]
+    fn set_order(&self, py: Python<'_>, value: ValueArg) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .bond_mut(self.id)
+            .ast
+            .order = value.to_ast(py);
+    }
+
+    #[getter]
+    fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
+        let molecule = self.owner.bind(py).borrow();
+        ValueAst::from_ast(py, &self.bond(molecule.inner())?.charge)
+    }
+
+    #[setter]
+    fn set_charge(&self, py: Python<'_>, value: ValueArg) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .bond_mut(self.id)
+            .ast
+            .charge = value.to_ast(py);
+    }
+
+    #[getter]
+    fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
+        let molecule = self.owner.bind(py).borrow();
+        SpinStateAst::from_ast(py, &self.bond(molecule.inner())?.spin)
+    }
+
+    #[setter]
+    fn set_spin(&self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .bond_mut(self.id)
+            .ast
+            .spin = value.to_ast(py);
+    }
+
+    /// The bond's constraints as a live handle onto the molecule: reads borrow the
+    /// current state, mutators write through to the bond in place.
+    #[getter]
+    fn constraints(&self, py: Python<'_>) -> BondConstraintsView {
+        BondConstraintsView {
+            backing: BondConstraintsBacking::Molecule {
+                owner: self.owner.clone_ref(py),
+                id: self.id,
+            },
+        }
+    }
+
+    /// Replace the whole constraint set of the backing bond in place (wipe-and-set)
+    /// from a value container or a live view.
+    #[setter]
+    fn set_constraints(&self, py: Python<'_>, value: BondConstraintsArg) -> PyResult<()> {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .bond_mut(self.id)
+            .ast
+            .constraints = value.to_ast(py)?;
+        Ok(())
+    }
+
+    /// The fields as a dict keyed by field name; values are the field mirrors —
+    /// symmetric with `BondAst.asdict`, read through the view.
+    fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let molecule = self.owner.bind(py).borrow();
+        let bond = self.bond(molecule.inner())?;
+        let dict = PyDict::new(py);
+        dict.set_item("order", ValueAst::from_ast(py, &bond.order)?)?;
+        dict.set_item("charge", ValueAst::from_ast(py, &bond.charge)?)?;
+        dict.set_item("spin", SpinStateAst::from_ast(py, &bond.spin)?)?;
+        dict.set_item("constraints", bond_constraints_asdict(py, &bond.constraints)?)?;
+        Ok(dict)
+    }
+}
+
+/// Resolve a possibly-negative Python index (negative counts from the end) into an
+/// existing bond id, or `IndexError`.
+fn resolve_bond_index(molecule: &AstMoleculeAst, index: isize) -> PyResult<AstBondId> {
+    let count = molecule.bonds().count();
+    let resolved = if index < 0 { index + count as isize } else { index };
+    if resolved < 0 {
+        return Err(PyIndexError::new_err("bond id out of range"));
+    }
+    let id = AstBondId(resolved as u32);
+    if molecule.bonds().contains(id) {
+        Ok(id)
+    } else {
+        Err(PyIndexError::new_err("bond id out of range"))
+    }
+}
+
+/// The bonds of a molecule, indexed by integer position.
+#[pyclass]
+pub struct BondViews {
+    owner: Py<MoleculeAst>,
+}
+
+#[pymethods]
+impl BondViews {
+    fn __len__(&self, py: Python<'_>) -> usize {
+        self.owner.bind(py).borrow().inner().bonds().count()
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> String {
+        format!(
+            "BondViews(len={})",
+            self.owner.bind(py).borrow().inner().bonds().count()
+        )
+    }
+
+    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<BondView> {
+        let molecule = self.owner.bind(py).borrow();
+        let id = resolve_bond_index(molecule.inner(), index)?;
+        Ok(BondView {
+            owner: self.owner.clone_ref(py),
+            id,
+        })
+    }
+
+    /// Replace the whole bond value at `index` in place (endpoints unchanged).
+    fn __setitem__(&self, py: Python<'_>, index: isize, bond: PyRef<'_, BondAst>) -> PyResult<()> {
+        let mut molecule = self.owner.borrow_mut(py);
+        let id = resolve_bond_index(molecule.inner(), index)?;
+        *molecule.inner_mut().bond_mut(id).ast = bond.inner().clone();
+        Ok(())
+    }
+
+    /// The bond connecting atoms `first` and `second`, or `None`.
+    fn connecting(&self, py: Python<'_>, first: u32, second: u32) -> Option<BondView> {
+        let molecule = self.owner.bind(py).borrow();
+        molecule
+            .inner()
+            .bonds()
+            .connecting_id(AstAtomId(first), AstAtomId(second))
+            .map(|id| BondView {
+                owner: self.owner.clone_ref(py),
+                id,
+            })
+    }
+
+    fn __iter__(&self, py: Python<'_>) -> BondViewIter {
+        let ids = self
+            .owner
+            .bind(py)
+            .borrow()
+            .inner()
+            .bonds()
+            .ids()
+            .collect::<Vec<_>>();
+        BondViewIter {
+            owner: self.owner.clone_ref(py),
+            ids: ids.into_iter(),
+        }
+    }
+}
+
+impl BondViews {
+    /// Build the bond-views handle for `owner` (the `.bonds` accessor on the molecule).
+    pub(crate) fn new(owner: Py<MoleculeAst>) -> BondViews {
+        BondViews { owner }
+    }
+}
+
+#[pyclass]
+struct BondViewIter {
+    owner: Py<MoleculeAst>,
+    ids: IntoIter<AstBondId>,
+}
+
+#[pymethods]
+impl BondViewIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self, py: Python<'_>) -> Option<BondView> {
+        self.ids.next().map(|id| BondView {
+            owner: self.owner.clone_ref(py),
+            id,
+        })
     }
 }
 
@@ -582,16 +821,17 @@ fn bond_constraints_asdict<'py>(
     Ok(dict)
 }
 
-/// What a `BondConstraintsView` writes through to: a standalone `BondAst`. (The
-/// molecule-bond arm arrives with the `BondView` half.)
+/// What a `BondConstraintsView` writes through to: a bond within a molecule (by
+/// index) or a standalone `BondAst`.
 enum BondConstraintsBacking {
+    Molecule { owner: Py<MoleculeAst>, id: AstBondId },
     Bond(Py<BondAst>),
 }
 
-/// A live handle onto one bond's constraints, backed by a standalone `BondAst`.
-/// Reads borrow the bond's constraints and read only the item they need (no
-/// whole-container clone); mutators write through to the bond in place, without a
-/// clone-and-writeback.
+/// A live handle onto one bond's constraints, backed by either a molecule-bond or a
+/// standalone `BondAst`. Reads borrow the bond's constraints and read only the item
+/// they need (no whole-container clone); mutators write through to the bond in place,
+/// without a clone-and-writeback.
 #[pyclass]
 pub struct BondConstraintsView {
     backing: BondConstraintsBacking,
@@ -605,6 +845,15 @@ impl BondConstraintsView {
         f: impl FnOnce(&AstBondConstraintsAst) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.backing {
+            BondConstraintsBacking::Molecule { owner, id } => {
+                let molecule = owner.bind(py).borrow();
+                let view = molecule
+                    .inner()
+                    .bonds()
+                    .get(*id)
+                    .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
+                f(&view.ast.constraints)
+            }
             BondConstraintsBacking::Bond(bond) => {
                 let bond = bond.bind(py).borrow();
                 f(&bond.inner().constraints)
@@ -615,6 +864,9 @@ impl BondConstraintsView {
     /// Mutate the backing bond's constraints in place through `f`.
     fn with_mut<R>(&self, py: Python<'_>, f: impl FnOnce(&mut AstBondConstraintsAst) -> R) -> R {
         match &self.backing {
+            BondConstraintsBacking::Molecule { owner, id } => {
+                f(&mut owner.borrow_mut(py).inner_mut().bond_mut(*id).ast.constraints)
+            }
             BondConstraintsBacking::Bond(bond) => {
                 f(&mut bond.borrow_mut(py).inner_mut().constraints)
             }
@@ -797,6 +1049,10 @@ impl BondConstraintsView {
     #[getter]
     fn ring_size_count(&self, py: Python<'_>) -> BondRingSizeCounts {
         let backing = match &self.backing {
+            BondConstraintsBacking::Molecule { owner, id } => BondRingSizeBacking::Molecule {
+                owner: owner.clone_ref(py),
+                id: *id,
+            },
             BondConstraintsBacking::Bond(bond) => BondRingSizeBacking::Bond(bond.clone_ref(py)),
         };
         BondRingSizeCounts { backing }
@@ -808,9 +1064,10 @@ impl BondConstraintsView {
     }
 }
 
-/// What a `BondRingSizeCounts` proxy reads/writes through to: a standalone
-/// `BondAst` or a standalone `BondConstraintsAst` value.
+/// What a `BondRingSizeCounts` proxy reads/writes through to: a bond within a
+/// molecule, a standalone `BondAst`, or a standalone `BondConstraintsAst` value.
 enum BondRingSizeBacking {
+    Molecule { owner: Py<MoleculeAst>, id: AstBondId },
     Bond(Py<BondAst>),
     Value(Py<BondConstraintsAst>),
 }
@@ -832,6 +1089,15 @@ impl BondRingSizeCounts {
         f: impl FnOnce(&AstBondConstraintsAst) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.backing {
+            BondRingSizeBacking::Molecule { owner, id } => {
+                let molecule = owner.bind(py).borrow();
+                let view = molecule
+                    .inner()
+                    .bonds()
+                    .get(*id)
+                    .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
+                f(&view.ast.constraints)
+            }
             BondRingSizeBacking::Bond(bond) => f(&bond.bind(py).borrow().inner().constraints),
             BondRingSizeBacking::Value(value) => f(value.bind(py).borrow().inner()),
         }
@@ -840,6 +1106,9 @@ impl BondRingSizeCounts {
     /// Mutate the backing constraints in place through `f`.
     fn write(&self, py: Python<'_>, f: impl FnOnce(&mut AstBondConstraintsAst)) {
         match &self.backing {
+            BondRingSizeBacking::Molecule { owner, id } => {
+                f(&mut owner.borrow_mut(py).inner_mut().bond_mut(*id).ast.constraints)
+            }
             BondRingSizeBacking::Bond(bond) => f(&mut bond.borrow_mut(py).inner_mut().constraints),
             BondRingSizeBacking::Value(value) => f(value.borrow_mut(py).inner_mut()),
         }
@@ -986,12 +1255,26 @@ impl BondConstraintItemsIter {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        BooleanAst as AstBooleanAst, CisTransStereoAst as AstCisTransStereoAst,
-        StereoCosetAst as AstStereoCosetAst, ValueAst as AstValueAst,
+        AtomAst as AstAtomAst, BooleanAst as AstBooleanAst,
+        CisTransStereoAst as AstCisTransStereoAst, StereoCosetAst as AstStereoCosetAst,
+        ValueAst as AstValueAst,
     };
+    use umol_chem::element::Element as ChemElement;
 
     use super::*;
     use crate::stereo::CisTransStereo;
+
+    /// A two-carbon molecule joined by one double bond (bond id 0, atoms 0–1).
+    fn ethene(py: Python<'_>) -> Py<MoleculeAst> {
+        let molecule = AstMoleculeAst::from_atoms_and_bonds(
+            vec![
+                AstAtomAst::from_element(ChemElement::C),
+                AstAtomAst::from_element(ChemElement::C),
+            ],
+            vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(2))],
+        );
+        Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()
+    }
 
     #[rstest]
     #[case::single("1")]
@@ -1590,6 +1873,194 @@ mod tests {
             }
             sizes.sort_unstable();
             assert_eq!(sizes, vec![5, 6]);
+        });
+    }
+
+    #[rstest]
+    fn test_bond_view_order() {
+        Python::attach(|py| {
+            let view = BondView {
+                owner: ethene(py),
+                id: AstBondId(0),
+            };
+            assert_eq!(view.id(), 0);
+            assert_eq!(view.order(py).unwrap().to_ast(py), AstValueAst::Lit(2));
+        });
+    }
+
+    #[rstest]
+    fn test_bond_view_atom_ids() {
+        Python::attach(|py| {
+            let view = BondView {
+                owner: ethene(py),
+                id: AstBondId(0),
+            };
+            assert_eq!(view.atom_ids(py).unwrap(), (0, 1));
+        });
+    }
+
+    #[rstest]
+    fn test_bond_view_set_order() {
+        Python::attach(|py| {
+            let owner = ethene(py);
+            let view = BondView {
+                owner: owner.clone_ref(py),
+                id: AstBondId(0),
+            };
+            view.set_order(py, ValueArg::Lit(1));
+            let fresh = BondView {
+                owner,
+                id: AstBondId(0),
+            };
+            assert_eq!(fresh.order(py).unwrap().to_ast(py), AstValueAst::Lit(1));
+        });
+    }
+
+    #[rstest]
+    fn test_bond_view_set_charge() {
+        Python::attach(|py| {
+            let owner = ethene(py);
+            let view = BondView {
+                owner: owner.clone_ref(py),
+                id: AstBondId(0),
+            };
+            view.set_charge(py, ValueArg::Lit(-1));
+            let fresh = BondView {
+                owner,
+                id: AstBondId(0),
+            };
+            assert_eq!(fresh.charge(py).unwrap().to_ast(py), AstValueAst::Lit(-1));
+        });
+    }
+
+    #[rstest]
+    fn test_bond_view_constraints() {
+        Python::attach(|py| {
+            let view = BondView {
+                owner: ethene(py),
+                id: AstBondId(0),
+            };
+            match view.constraints(py).backing {
+                BondConstraintsBacking::Molecule { id, .. } => assert_eq!(id, AstBondId(0)),
+                _ => panic!("expected molecule-backed view"),
+            }
+        });
+    }
+
+    #[rstest]
+    fn test_bond_constraints_view_set_molecule_backed() {
+        Python::attach(|py| {
+            let owner = ethene(py);
+            let view = BondConstraintsView {
+                backing: BondConstraintsBacking::Molecule {
+                    owner: owner.clone_ref(py),
+                    id: AstBondId(0),
+                },
+            };
+            let aromatic = into_py_variant(
+                py,
+                BondConstraintAst::from_ast(
+                    py,
+                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            view.set(py, aromatic);
+            let fresh = BondConstraintsView {
+                backing: BondConstraintsBacking::Molecule {
+                    owner,
+                    id: AstBondId(0),
+                },
+            };
+            assert_eq!(fresh.__len__(py).unwrap(), 1);
+            assert_eq!(fresh.aromatic(py).unwrap().to_ast(), AstBooleanAst::Lit(true));
+        });
+    }
+
+    #[rstest]
+    fn test_bond_ring_size_counts_molecule_backed() {
+        Python::attach(|py| {
+            let owner = ethene(py);
+            let view = BondConstraintsView {
+                backing: BondConstraintsBacking::Molecule {
+                    owner: owner.clone_ref(py),
+                    id: AstBondId(0),
+                },
+            };
+            view.ring_size_count(py).__setitem__(py, 6, ValueArg::Lit(1));
+            let fresh = BondConstraintsView {
+                backing: BondConstraintsBacking::Molecule {
+                    owner,
+                    id: AstBondId(0),
+                },
+            };
+            assert_eq!(
+                fresh
+                    .ring_size_count(py)
+                    .__getitem__(py, 6)
+                    .unwrap()
+                    .unwrap()
+                    .to_ast(py),
+                AstValueAst::Lit(1)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_bond_views_len_and_getitem() {
+        Python::attach(|py| {
+            let views = BondViews { owner: ethene(py) };
+            assert_eq!(views.__len__(py), 1);
+            assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
+            assert_eq!(views.__getitem__(py, -1).unwrap().id(), 0);
+            assert!(views.__getitem__(py, 5).is_err());
+            assert!(views.__getitem__(py, -2).is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_bond_views_setitem() {
+        Python::attach(|py| {
+            let owner = ethene(py);
+            let views = BondViews {
+                owner: owner.clone_ref(py),
+            };
+            let single = Py::new(py, BondAst::from_inner(AstBondAst::from_order(1))).unwrap();
+            views.__setitem__(py, 0, single.bind(py).borrow()).unwrap();
+            let view = views.__getitem__(py, 0).unwrap();
+            // value replaced, endpoints preserved
+            assert_eq!(view.order(py).unwrap().to_ast(py), AstValueAst::Lit(1));
+            assert_eq!(view.atom_ids(py).unwrap(), (0, 1));
+        });
+    }
+
+    #[rstest]
+    fn test_bond_views_setitem_error() {
+        Python::attach(|py| {
+            let views = BondViews { owner: ethene(py) };
+            let single = Py::new(py, BondAst::from_inner(AstBondAst::from_order(1))).unwrap();
+            assert!(views.__setitem__(py, 5, single.bind(py).borrow()).is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_bond_views_connecting() {
+        Python::attach(|py| {
+            // three carbons, one bond 0–1; atom 2 is isolated
+            let molecule = AstMoleculeAst::from_atoms_and_bonds(
+                vec![
+                    AstAtomAst::from_element(ChemElement::C),
+                    AstAtomAst::from_element(ChemElement::C),
+                    AstAtomAst::from_element(ChemElement::C),
+                ],
+                vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
+            );
+            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let views = BondViews { owner };
+            assert_eq!(views.connecting(py, 0, 1).unwrap().id(), 0);
+            assert_eq!(views.connecting(py, 1, 0).unwrap().id(), 0);
+            assert!(views.connecting(py, 1, 2).is_none());
         });
     }
 }

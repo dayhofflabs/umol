@@ -8,7 +8,7 @@ use crate::{
     atom::{AtomAst, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst},
     bond::{
         BondAst, BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondConstraintsView,
-        BondRingSizeCounts,
+        BondRingSizeCounts, BondView, BondViews,
     },
     boolean::BooleanAst,
     constraint::{
@@ -83,6 +83,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<BondConstraintsAst>()?;
         module.add_class::<BondConstraintsView>()?;
         module.add_class::<BondRingSizeCounts>()?;
+        module.add_class::<BondView>()?;
+        module.add_class::<BondViews>()?;
         module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;

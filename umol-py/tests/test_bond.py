@@ -1,6 +1,7 @@
 import pytest
 
 from umol import (
+    AtomAst,
     BondAst,
     BondConstraintAst,
     BondConstraintKey,
@@ -8,6 +9,8 @@ from umol import (
     BooleanAst,
     CisTransStereo,
     CisTransStereoAst,
+    Element,
+    MoleculeAst,
     ParseError,
     RingMembershipAst,
     RingScope,
@@ -15,6 +18,14 @@ from umol import (
     StereoCosetAst,
     ValueAst,
 )
+
+
+def ethene():
+    # two carbons joined by one double bond (bond id 0, atoms 0-1)
+    return MoleculeAst.from_atoms_and_bonds(
+        [AtomAst(Element("C")), AtomAst(Element("C"))],
+        [(0, 1, BondAst(2))],
+    )
 
 
 def test_bondast_new():
@@ -461,3 +472,112 @@ def test_bondconstraintsast_unhashable():
 def test_bondconstraintsview_repr():
     bond = BondAst(1)
     assert repr(bond.constraints) == "BondConstraintsView(0 entries)"
+
+
+def test_bondview_fields():
+    view = ethene().bonds[0]
+    assert view.id == 0
+    assert view.order == ValueAst.Lit(2)
+    assert view.atom_ids == (0, 1)
+    assert repr(view) == "BondView(id=0)"
+
+
+def test_bondview_set_order():
+    mol = ethene()
+    mol.bonds[0].order = 1
+    # a fresh view re-reads the molecule, proving the write landed on it
+    assert mol.bonds[0].order == ValueAst.Lit(1)
+
+
+def test_bondview_set_charge():
+    mol = ethene()
+    mol.bonds[0].charge = -1
+    assert mol.bonds[0].charge == ValueAst.Lit(-1)
+
+
+def test_bondview_set_spin():
+    mol = ethene()
+    mol.bonds[0].spin = SpinStateAst(0, 1)
+    assert mol.bonds[0].spin == SpinStateAst(0, 1)
+
+
+def test_bondview_asdict():
+    view = ethene().bonds[0]
+    d = view.asdict()
+    assert set(d.keys()) == {"order", "charge", "spin", "constraints"}
+    assert d["order"] == ValueAst.Lit(2)
+
+
+def test_bondview_constraints_write_through():
+    mol = ethene()
+    mol.bonds[0].constraints.set(BondConstraintAst.Aromatic(BooleanAst.Lit(True)))
+    # a fresh view proves the write hit the molecule, not a transient copy
+    constraints = mol.bonds[0].constraints
+    assert len(constraints) == 1
+    assert constraints.aromatic == BooleanAst.Lit(True)
+
+
+def test_bondview_constraints_aromatic_property():
+    mol = ethene()
+    mol.bonds[0].constraints.aromatic = True
+    assert mol.bonds[0].constraints.aromatic == BooleanAst.Lit(True)
+
+
+def test_bondview_constraints_ring_size_count():
+    mol = ethene()
+    mol.bonds[0].constraints.ring_size_count[6] = 3
+    assert mol.bonds[0].constraints.ring_size_count[6].as_lit() == 3
+    del mol.bonds[0].constraints.ring_size_count[6]
+    assert mol.bonds[0].constraints.ring_size_count[6] is None
+
+
+def test_bondview_set_constraints():
+    mol = ethene()
+    mol.bonds[0].constraints = BondConstraintsAst(
+        [BondConstraintAst.Aromatic(BooleanAst.Lit(True))]
+    )
+    assert mol.bonds[0].constraints.aromatic == BooleanAst.Lit(True)
+
+
+def test_bondviews_len_getitem():
+    bonds = ethene().bonds
+    assert len(bonds) == 1
+    assert bonds[0].id == 0
+    assert bonds[-1].id == 0
+    with pytest.raises(IndexError):
+        bonds[5]
+    with pytest.raises(IndexError):
+        bonds[-2]
+
+
+def test_bondviews_setitem():
+    mol = ethene()
+    mol.bonds[0] = BondAst(1)
+    view = mol.bonds[0]
+    # value replaced, endpoints preserved
+    assert view.order == ValueAst.Lit(1)
+    assert view.atom_ids == (0, 1)
+
+
+def test_bondviews_setitem_out_of_range():
+    with pytest.raises(IndexError):
+        ethene().bonds[5] = BondAst(1)
+
+
+def test_bondviews_iter():
+    orders = [view.order for view in ethene().bonds]
+    assert orders == [ValueAst.Lit(2)]
+
+
+def test_bondviews_connecting():
+    mol = MoleculeAst.from_atoms_and_bonds(
+        [AtomAst(Element("C")), AtomAst(Element("C")), AtomAst(Element("C"))],
+        [(0, 1, BondAst(1))],
+    )
+    assert mol.bonds.connecting(0, 1).id == 0
+    assert mol.bonds.connecting(1, 0).id == 0
+    assert mol.bonds.connecting(1, 2) is None
+
+
+def test_bondviews_repr():
+    assert repr(ethene().bonds) == "BondViews(len=1)"
