@@ -8,11 +8,16 @@ use std::ops::Add;
 
 use umol_chem::element::Element;
 
+use super::super::aromatic::AromaticSystemAst;
 use super::super::atom::AtomAst;
 use super::super::bond::BondAst;
 use super::super::constraint::BondConstraintAst;
-use super::super::id::AtomId;
-use super::super::noncovalent::NoncovalentBondKind;
+use super::super::dative::DativeBondAst;
+use super::super::id::{AtomId, BondId};
+use super::super::ligand::{StereoLigand, StereoLigandKind};
+use super::super::multicenter::MulticenterBondAst;
+use super::super::noncovalent::NoncovalentBondAst;
+use super::super::stereo::{StereoAtomAst, StereoBondAst};
 use super::{MoleculeAst, MoleculeBuilder};
 
 /// An atom argument to a spec term: create a fresh atom (optionally named) or reference
@@ -79,11 +84,50 @@ pub fn name(name: impl Into<String>) -> AtomArg {
     AtomArg::Name(name.into())
 }
 
+/// A reference to an existing bond, by name. Bonds pre-exist as path edges — a spec term never creates
+/// one — so this only references (no `New` / positional `Index`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BondArg {
+    Name(String),
+}
+
+impl From<&str> for BondArg {
+    fn from(name: &str) -> Self {
+        Self::Name(name.to_string())
+    }
+}
+
+impl From<String> for BondArg {
+    fn from(name: String) -> Self {
+        Self::Name(name)
+    }
+}
+
+/// A ligand argument to a stereo term: an atom (referenced like any [`AtomArg`]) or a virtual ligand
+/// (implicit hydrogen / lone pair). A virtual ligand's bearing atom is filled at build — the site atom
+/// for a stereo atom, or the bond atom its position selects for a stereo bond.
+// The `Atom(AtomArg)` variant dwarfs the unit ones, but this is a transient construction-time enum;
+// boxing it would only clutter every ligand literal.
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StereoLigandArg {
+    Atom(AtomArg),
+    ImplicitHydrogen,
+    LonePair,
+}
+
+impl From<AtomArg> for StereoLigandArg {
+    fn from(atom: AtomArg) -> Self {
+        Self::Atom(atom)
+    }
+}
+
 /// A single term of a [`MoleculeSpec`]: an introduction, a relation, or a default.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MoleculeSpecTerm {
     Atoms(Vec<AtomArg>),
     Bond {
+        name: Option<String>,
         first: AtomArg,
         second: AtomArg,
         ast: BondAst,
@@ -93,19 +137,30 @@ pub enum MoleculeSpecTerm {
     DativeBond {
         donors: Vec<AtomArg>,
         acceptor: AtomArg,
+        ast: DativeBondAst,
     },
     AromaticSystem {
         atoms: Vec<AtomArg>,
-        electrons: Vec<i64>,
+        ast: AromaticSystemAst,
     },
     MulticenterBond {
         atoms: Vec<AtomArg>,
-        electrons: Vec<i64>,
+        ast: MulticenterBondAst,
     },
     NoncovalentBond {
         first: AtomArg,
         second: AtomArg,
-        kind: NoncovalentBondKind,
+        ast: NoncovalentBondAst,
+    },
+    StereoAtom {
+        site: AtomArg,
+        ligands: Vec<StereoLigandArg>,
+        ast: StereoAtomAst,
+    },
+    StereoBond {
+        site: BondArg,
+        ligands: Vec<StereoLigandArg>,
+        ast: StereoBondAst,
     },
     Ground,
 }
@@ -123,6 +178,7 @@ pub fn atoms(specs: impl IntoIterator<Item = impl Into<AtomArg>>) -> MoleculeSpe
 /// A single (order-1) bond.
 pub fn single(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> MoleculeSpecTerm {
     MoleculeSpecTerm::Bond {
+        name: None,
         first: first.into(),
         second: second.into(),
         ast: BondAst::from_order(1),
@@ -132,6 +188,7 @@ pub fn single(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> Molecule
 /// A double (order-2) bond.
 pub fn double(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> MoleculeSpecTerm {
     MoleculeSpecTerm::Bond {
+        name: None,
         first: first.into(),
         second: second.into(),
         ast: BondAst::from_order(2),
@@ -141,6 +198,7 @@ pub fn double(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> Molecule
 /// A triple (order-3) bond.
 pub fn triple(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> MoleculeSpecTerm {
     MoleculeSpecTerm::Bond {
+        name: None,
         first: first.into(),
         second: second.into(),
         ast: BondAst::from_order(3),
@@ -155,6 +213,23 @@ pub fn bond(
     ast: impl Into<BondAst>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::Bond {
+        name: None,
+        first: first.into(),
+        second: second.into(),
+        ast: ast.into(),
+    }
+}
+
+/// A bond that binds a `name` in the molecule's shared atom/bond namespace, so an overlay (a stereo
+/// bond) can reference it as its site. Otherwise identical to [`bond`].
+pub fn named_bond(
+    name: impl Into<String>,
+    first: impl Into<AtomArg>,
+    second: impl Into<AtomArg>,
+    ast: impl Into<BondAst>,
+) -> MoleculeSpecTerm {
+    MoleculeSpecTerm::Bond {
+        name: Some(name.into()),
         first: first.into(),
         second: second.into(),
         ast: ast.into(),
@@ -165,6 +240,7 @@ pub fn bond(
 /// aromatic system. Not exclusive with [`aromatic_system`].
 pub fn aromatic_bond(first: impl Into<AtomArg>, second: impl Into<AtomArg>) -> MoleculeSpecTerm {
     MoleculeSpecTerm::Bond {
+        name: None,
         first: first.into(),
         second: second.into(),
         ast: BondAst::from_order(1).with_constraint(BondConstraintAst::aromatic(true)),
@@ -181,49 +257,80 @@ pub fn ring(specs: impl IntoIterator<Item = impl Into<AtomArg>>) -> MoleculeSpec
     MoleculeSpecTerm::Ring(specs.into_iter().map(Into::into).collect())
 }
 
-/// A dative bond from `donors` to `acceptor`.
+/// A dative bond from `donors` to `acceptor`, carrying `ast` (a `DativeBondAst` or a DSL spec string).
 pub fn dative_bond(
     donors: impl IntoIterator<Item = impl Into<AtomArg>>,
     acceptor: impl Into<AtomArg>,
+    ast: impl Into<DativeBondAst>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::DativeBond {
         donors: donors.into_iter().map(Into::into).collect(),
         acceptor: acceptor.into(),
+        ast: ast.into(),
     }
 }
 
-/// An aromatic-system overlay over `atoms`, one π-`electrons` count per atom.
+/// An aromatic-system overlay over `atoms`, carrying `ast` (an `AromaticSystemAst` — e.g. from
+/// `from_electrons` — or a DSL spec string).
 pub fn aromatic_system(
     atoms: impl IntoIterator<Item = impl Into<AtomArg>>,
-    electrons: impl IntoIterator<Item = i64>,
+    ast: impl Into<AromaticSystemAst>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::AromaticSystem {
         atoms: atoms.into_iter().map(Into::into).collect(),
-        electrons: electrons.into_iter().collect(),
+        ast: ast.into(),
     }
 }
 
-/// A multicenter-bond overlay over `atoms`, one `electrons` count per atom.
+/// A multicenter-bond overlay over `atoms`, carrying `ast` (a `MulticenterBondAst` or a DSL spec
+/// string).
 pub fn multicenter_bond(
     atoms: impl IntoIterator<Item = impl Into<AtomArg>>,
-    electrons: impl IntoIterator<Item = i64>,
+    ast: impl Into<MulticenterBondAst>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::MulticenterBond {
         atoms: atoms.into_iter().map(Into::into).collect(),
-        electrons: electrons.into_iter().collect(),
+        ast: ast.into(),
     }
 }
 
-/// A noncovalent-bond overlay of `kind` between `first` and `second`.
+/// A noncovalent-bond overlay between `first` and `second`, carrying `ast` (a `NoncovalentBondAst` —
+/// e.g. from `from_kind` — or a DSL spec string).
 pub fn noncovalent_bond(
     first: impl Into<AtomArg>,
     second: impl Into<AtomArg>,
-    kind: NoncovalentBondKind,
+    ast: impl Into<NoncovalentBondAst>,
 ) -> MoleculeSpecTerm {
     MoleculeSpecTerm::NoncovalentBond {
         first: first.into(),
         second: second.into(),
-        kind,
+        ast: ast.into(),
+    }
+}
+
+/// A stereo-atom overlay on `site`, with its ordered `ligands` and configuration `ast`.
+pub fn stereo_atom(
+    site: impl Into<AtomArg>,
+    ligands: impl IntoIterator<Item = impl Into<StereoLigandArg>>,
+    ast: impl Into<StereoAtomAst>,
+) -> MoleculeSpecTerm {
+    MoleculeSpecTerm::StereoAtom {
+        site: site.into(),
+        ligands: ligands.into_iter().map(Into::into).collect(),
+        ast: ast.into(),
+    }
+}
+
+/// A stereo-bond overlay on the named bond `site`, with its ordered `ligands` and configuration `ast`.
+pub fn stereo_bond(
+    site: impl Into<BondArg>,
+    ligands: impl IntoIterator<Item = impl Into<StereoLigandArg>>,
+    ast: impl Into<StereoBondAst>,
+) -> MoleculeSpecTerm {
+    MoleculeSpecTerm::StereoBond {
+        site: site.into(),
+        ligands: ligands.into_iter().map(Into::into).collect(),
+        ast: ast.into(),
     }
 }
 
@@ -262,10 +369,18 @@ impl MoleculeSpec {
                         cx.resolve(spec);
                     }
                 }
-                MoleculeSpecTerm::Bond { first, second, ast } => {
+                MoleculeSpecTerm::Bond {
+                    name,
+                    first,
+                    second,
+                    ast,
+                } => {
                     let first = cx.resolve(first);
                     let second = cx.resolve(second);
-                    cx.builder.bond(first, second, ast);
+                    let id = cx.builder.bond(first, second, ast);
+                    if let Some(name) = name {
+                        cx.bond_names.insert(name, (id, first, second));
+                    }
                 }
                 MoleculeSpecTerm::Chain(specs) => {
                     let ids = cx.resolve_all(specs);
@@ -275,27 +390,37 @@ impl MoleculeSpec {
                     let ids = cx.resolve_all(specs);
                     cx.builder.ring(ids);
                 }
-                MoleculeSpecTerm::DativeBond { donors, acceptor } => {
+                MoleculeSpecTerm::DativeBond {
+                    donors,
+                    acceptor,
+                    ast,
+                } => {
                     let donors = cx.resolve_all(donors);
                     let acceptor = cx.resolve(acceptor);
-                    cx.builder.dative_bond(donors, acceptor);
+                    cx.builder.dative_bond(donors, acceptor, ast);
                 }
-                MoleculeSpecTerm::AromaticSystem { atoms, electrons } => {
+                MoleculeSpecTerm::AromaticSystem { atoms, ast } => {
                     let ids = cx.resolve_all(atoms);
-                    cx.builder.aromatic_system(ids, electrons);
+                    cx.builder.aromatic_system(ids, ast);
                 }
-                MoleculeSpecTerm::MulticenterBond { atoms, electrons } => {
+                MoleculeSpecTerm::MulticenterBond { atoms, ast } => {
                     let ids = cx.resolve_all(atoms);
-                    cx.builder.multicenter_bond(ids, electrons);
+                    cx.builder.multicenter_bond(ids, ast);
                 }
-                MoleculeSpecTerm::NoncovalentBond {
-                    first,
-                    second,
-                    kind,
-                } => {
+                MoleculeSpecTerm::NoncovalentBond { first, second, ast } => {
                     let first = cx.resolve(first);
                     let second = cx.resolve(second);
-                    cx.builder.noncovalent_bond(first, second, kind);
+                    cx.builder.noncovalent_bond(first, second, ast);
+                }
+                MoleculeSpecTerm::StereoAtom { site, ligands, ast } => {
+                    let site = cx.resolve(site);
+                    let ligands = cx.resolve_stereo_ligands(ligands, site, site);
+                    cx.builder.stereo_atom(site, ligands, ast);
+                }
+                MoleculeSpecTerm::StereoBond { site, ligands, ast } => {
+                    let (bond, first, second) = cx.resolve_bond(site);
+                    let ligands = cx.resolve_stereo_ligands(ligands, first, second);
+                    cx.builder.stereo_bond(bond, ligands, ast);
                 }
             }
         }
@@ -320,11 +445,13 @@ impl Add<MoleculeSpecTerm> for MoleculeSpecTerm {
     }
 }
 
-/// Materialization state: the target builder plus the position/name resolution maps.
+/// Materialization state: the target builder plus the position/name resolution maps. `bond_names`
+/// records each named bond's id and (written-order) endpoints for a later stereo-bond site.
 struct BuildContext {
     builder: MoleculeBuilder,
     positions: Vec<AtomId>,
     names: HashMap<String, AtomId>,
+    bond_names: HashMap<String, (BondId, AtomId, AtomId)>,
 }
 
 impl BuildContext {
@@ -337,6 +464,7 @@ impl BuildContext {
             },
             positions: Vec::new(),
             names: HashMap::new(),
+            bond_names: HashMap::new(),
         }
     }
 
@@ -366,6 +494,46 @@ impl BuildContext {
     fn resolve_all(&mut self, args: Vec<AtomArg>) -> Vec<AtomId> {
         args.into_iter().map(|arg| self.resolve(arg)).collect()
     }
+
+    /// Resolve a bond reference to its id and (written-order) endpoints. Referencing an unknown bond
+    /// name panics — a construction bug, like a bad atom ref.
+    fn resolve_bond(&self, arg: BondArg) -> (BondId, AtomId, AtomId) {
+        match arg {
+            BondArg::Name(name) => *self
+                .bond_names
+                .get(&name)
+                .unwrap_or_else(|| panic!("spec references unknown bond name {name:?}")),
+        }
+    }
+
+    /// Lower stereo ligand args to `StereoLigand`s. An atom ligand carries its substituent; a virtual
+    /// ligand bears on `first_atom` for positions 0–1 and `second_atom` for 2+ (both are the site for a
+    /// stereo atom; the bond's two atoms for a stereo bond).
+    fn resolve_stereo_ligands(
+        &mut self,
+        ligands: Vec<StereoLigandArg>,
+        first_atom: AtomId,
+        second_atom: AtomId,
+    ) -> Vec<StereoLigand> {
+        ligands
+            .into_iter()
+            .enumerate()
+            .map(|(index, ligand)| {
+                let bearing = if index < 2 { first_atom } else { second_atom };
+                match ligand {
+                    StereoLigandArg::Atom(arg) => {
+                        StereoLigand::new(self.resolve(arg), StereoLigandKind::Atom)
+                    }
+                    StereoLigandArg::ImplicitHydrogen => {
+                        StereoLigand::new(bearing, StereoLigandKind::ImplicitHydrogen)
+                    }
+                    StereoLigandArg::LonePair => {
+                        StereoLigand::new(bearing, StereoLigandKind::LonePair)
+                    }
+                }
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -373,13 +541,12 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::aromatic::AromaticSystemAst;
-    use crate::ast::dative::DativeBondAst;
     use crate::ast::id::{
-        AromaticSystemId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+        AromaticSystemId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
+        StereoBondId,
     };
-    use crate::ast::multicenter::MulticenterBondAst;
-    use crate::ast::noncovalent::NoncovalentBondAst;
+    use crate::ast::noncovalent::NoncovalentBondKind;
+    use crate::ast::stereo::{StereoCosetAst, StereoKind};
     use crate::ast::value::ValueAst;
 
     #[rstest]
@@ -402,6 +569,21 @@ mod tests {
     #[should_panic(expected = "atom position must be non-negative")]
     fn test_atom_arg_from_error() {
         let _ = AtomArg::from(-1_i32);
+    }
+
+    #[rstest]
+    #[case::str(BondArg::from("ring"), BondArg::Name("ring".to_string()))]
+    #[case::string(BondArg::from("ring".to_string()), BondArg::Name("ring".to_string()))]
+    fn test_bond_arg_from(#[case] arg: BondArg, #[case] expected: BondArg) {
+        assert_eq!(arg, expected);
+    }
+
+    #[rstest]
+    fn test_stereo_ligand_arg_from() {
+        assert_eq!(
+            StereoLigandArg::from(AtomArg::from(2_u32)),
+            StereoLigandArg::Atom(AtomArg::Index(2))
+        );
     }
 
     #[rstest]
@@ -477,7 +659,8 @@ mod tests {
 
     #[rstest]
     fn test_molecule_spec_dative_bond() {
-        let spec = atoms([Element::N, Element::B]) + dative_bond([0_u32], 1_u32);
+        let spec =
+            atoms([Element::N, Element::B]) + dative_bond([0_u32], 1_u32, DativeBondAst::default());
         let mol = spec.build();
 
         assert_eq!(mol.dative_bonds().count(), 1);
@@ -486,7 +669,8 @@ mod tests {
 
     #[rstest]
     fn test_molecule_spec_aromatic_system() {
-        let spec = atoms([Element::C, Element::C]) + aromatic_system([0_u32, 1_u32], [1_i64, 1_i64]);
+        let spec = atoms([Element::C, Element::C])
+            + aromatic_system([0_u32, 1_u32], AromaticSystemAst::from_electrons(vec![1, 1]));
         let mol = spec.build();
 
         assert_eq!(
@@ -498,7 +682,10 @@ mod tests {
     #[rstest]
     fn test_molecule_spec_multicenter_bond() {
         let spec = atoms([Element::B, Element::B, Element::H])
-            + multicenter_bond([0_u32, 1_u32, 2_u32], [1_i64, 1_i64, 1_i64]);
+            + multicenter_bond(
+                [0_u32, 1_u32, 2_u32],
+                MulticenterBondAst::from_electrons(vec![1, 1, 1]),
+            );
         let mol = spec.build();
 
         assert_eq!(
@@ -510,12 +697,88 @@ mod tests {
     #[rstest]
     fn test_molecule_spec_noncovalent_bond() {
         let spec =
-            atoms([Element::O, Element::H]) + noncovalent_bond(0_u32, 1_u32, NoncovalentBondKind::HydrogenBond);
+            atoms([Element::O, Element::H])
+                + noncovalent_bond(
+                    0_u32,
+                    1_u32,
+                    NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                );
         let mol = spec.build();
 
         assert_eq!(
             mol.noncovalent_bond(NoncovalentBondId(0)).ast,
             &NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_spec_named_bond() {
+        // a named bond carries its spec and binds a label (inert without a reference)
+        let spec = atoms([Element::C, Element::C])
+            + named_bond("db", 0_u32, 1_u32, BondAst::from_order(2));
+        let mol = spec.build();
+
+        assert_eq!(mol.bond(BondId(0)).ast, &BondAst::from_order(2));
+    }
+
+    #[rstest]
+    fn test_molecule_spec_stereo_atom() {
+        // a tetrahedral center: three atom ligands plus an implicit hydrogen borne by the site
+        let spec = atoms([Element::C, Element::F, Element::Cl, Element::Br])
+            + stereo_atom(
+                0_u32,
+                [
+                    StereoLigandArg::Atom(1_u32.into()),
+                    StereoLigandArg::Atom(2_u32.into()),
+                    StereoLigandArg::Atom(3_u32.into()),
+                    StereoLigandArg::ImplicitHydrogen,
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+            );
+        let mol = spec.build();
+
+        assert_eq!(mol.stereo_atom(StereoAtomId(0)).site_id(), AtomId(0));
+        // the implicit-H bears on the site (atom 0), so atom incidence is site + 3 substituents
+        assert_eq!(
+            mol.stereo_atom(StereoAtomId(0))
+                .atom_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]
+        );
+        assert_eq!(
+            mol.stereo_atom(StereoAtomId(0)).ast,
+            &StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0))
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_spec_stereo_bond() {
+        // stereo bond referencing the named double bond by name; virtual Hs bear on the two bond
+        // atoms by ligand position (0–1 → first atom, 2–3 → second)
+        let spec = atoms([Element::C, Element::C, Element::F, Element::Cl])
+            + named_bond("db", 0_u32, 1_u32, BondAst::from_order(2))
+            + stereo_bond(
+                "db",
+                [
+                    StereoLigandArg::Atom(2_u32.into()),
+                    StereoLigandArg::ImplicitHydrogen,
+                    StereoLigandArg::Atom(3_u32.into()),
+                    StereoLigandArg::ImplicitHydrogen,
+                ],
+                StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            );
+        let mol = spec.build();
+
+        assert_eq!(mol.stereo_bond(StereoBondId(0)).site_id(), BondId(0));
+        assert_eq!(
+            mol.stereo_bond(StereoBondId(0))
+                .implicit_hydrogen_atom_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(0), AtomId(1)]
+        );
+        assert_eq!(
+            mol.stereo_bond(StereoBondId(0)).ast,
+            &StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1))
         );
     }
 

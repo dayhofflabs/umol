@@ -574,10 +574,15 @@ is a `compile_error!` via the shared namespace.
 - **S3.1 — L1 stereo builder — done** (`build.rs`). `stereo_atom(site, ligands, ast: impl
   Into<StereoAtomAst>)` / `stereo_bond(site, ligands, ast: impl Into<StereoBondAst>)` delegating to
   `add_stereo_*`; two builder tests (green).
-- **S3.2 — L2 stereo + named bonds + ref types** (`spec.rs`). Additive first — `BondArg` (+`From`);
-  `StereoLigandArg` (+`From`); named-bond term + `named_bond` + `bond_names`; `StereoAtom` / `StereoBond`
-  terms + free fns + build lowering (resolve refs / ligands / site). Then breaking — the four overlay free
-  fns → `ast: impl Into<Ast>`, migrate spec.rs tests. Ends green. `[dep: S3.1]`
+- **S3.2 — L2 stereo + named bonds + ref types — done** (`spec.rs`, `build.rs`). `BondArg::Name`
+  (`From<&str>`/`String`); `StereoLigandArg { Atom(AtomArg), ImplicitHydrogen, LonePair }` (+`From`);
+  named-bond term (`Bond.name`) + `named_bond` free fn + `BuildContext.bond_names` (id + written
+  endpoints); `StereoAtom` / `StereoBond` terms + free fns; `resolve_bond` + `resolve_stereo_ligands`
+  lowering (virtual ligand bears on the site for a stereo atom, or the bond atom its position selects —
+  0–1 → first, 2–3 → second). Breaking: the four overlay free fns **and the L1 builder methods they
+  lower onto** → `ast: impl Into<Ast>`; spec.rs + build.rs tests migrated. New tests: `BondArg`/
+  `StereoLigandArg` `From`, named bond, stereo atom (with implicit-H), stereo bond (named-bond ref +
+  positional virtual bearing). Green.
 - **S3.3 — macro overlays** (`parse.rs`, `mol.rs`, `frag.rs`). Additive: statement grammar (`Statement =
   Path | Overlay`; `~` / `@` / `#h` / `#n` / whitespace-lists); codegen emitting overlay terms, named refs,
   and `named_bond` for `-[e: …]-` (consuming the deferred bond-label resolution), shared across both
