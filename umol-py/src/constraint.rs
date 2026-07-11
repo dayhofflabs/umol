@@ -1614,8 +1614,9 @@ impl AtomConstraintItemsIter {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AtomAst as AstAtomAst, MoleculeAst as AstMoleculeAst, StereoCosetAst as AstStereoCosetAst,
-        TetrahedralStereoAst as AstTetrahedralStereoAst, ValueAst as AstValueAst,
+        AtomAst as AstAtomAst, MoleculeAst as AstMoleculeAst, MoleculeParts as AstMoleculeParts,
+        StereoCosetAst as AstStereoCosetAst, TetrahedralStereoAst as AstTetrahedralStereoAst,
+        ValueAst as AstValueAst,
     };
     use umol_chem::element::Element as ChemElement;
 
@@ -1926,10 +1927,10 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_atoms_and_bonds(
-                    vec![AstAtomAst::from_element(ChemElement::C)],
-                    vec![],
-                )),
+                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+                    ..Default::default()
+                })),
             )
             .unwrap();
             let view = AtomConstraintsView {
@@ -1970,7 +1971,10 @@ mod tests {
                 .with_constraint(AstAtomConstraintAst::valence(4));
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_atoms_and_bonds(vec![atom], vec![])),
+                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![atom],
+                    ..Default::default()
+                })),
             )
             .unwrap();
             let view = AtomConstraintsView {
@@ -2003,10 +2007,10 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_atoms_and_bonds(
-                    vec![AstAtomAst::from_element(ChemElement::C)],
-                    vec![],
-                )),
+                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+                    ..Default::default()
+                })),
             )
             .unwrap();
             let view = AtomConstraintsView {
@@ -2199,10 +2203,10 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_atoms_and_bonds(
-                    vec![AstAtomAst::from_element(ChemElement::C)],
-                    vec![],
-                )),
+                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+                    ..Default::default()
+                })),
             )
             .unwrap();
             let view = AtomConstraintsView {
@@ -2246,10 +2250,10 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_inner(AstMoleculeAst::from_atoms_and_bonds(
-                    vec![AstAtomAst::from_element(ChemElement::C)],
-                    vec![],
-                )),
+                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+                    ..Default::default()
+                })),
             )
             .unwrap();
             let view = AtomConstraintsView {

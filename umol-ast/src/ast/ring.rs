@@ -489,7 +489,7 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
 
     #[fixture]
     fn triangle_set() -> RingSet {
@@ -733,7 +733,11 @@ mod tests {
             .iter()
             .map(|[a, b]| (AtomId(*a), AtomId(*b), BondAst::default()))
             .collect();
-        let mol = MoleculeAst::from_atoms_and_bonds(atoms, bonds);
+        let mol = MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            ..Default::default()
+        });
         let set = mol.rings_with(family, max_ring_size, atom_filter);
         assert_eq!(set.count(), expected_count);
     }
@@ -748,7 +752,11 @@ mod tests {
             .iter()
             .map(|[a, b]| (AtomId(*a), AtomId(*b), BondAst::default()))
             .collect();
-        let mol = MoleculeAst::from_atoms_and_bonds(atoms, bonds);
+        let mol = MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            ..Default::default()
+        });
         let simple = mol.rings_with(RingFamily::Simple, 4, |_| true);
         let relevant = mol.rings_with(RingFamily::Relevant, 4, |_| true);
         assert!(simple.count() >= relevant.count());

@@ -236,9 +236,10 @@ mod tests {
     use crate::ast::constraint::RingScope;
     use crate::ast::{
         AromaticSystemAst, AromaticSystemConstraintAst, AtomAst, AtomConstraintAst, AtomId,
-        BondAst, BondConstraintAst, BooleanAst, Constraints, DativeBondAst,
-        DativeBondConstraintAst, ElementAst, MoleculeAst, MulticenterBondAst, NoncovalentBondAst,
-        NoncovalentBondKind, StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind, ValueAst,
+        BondAst, BondConstraintAst, BooleanAst, DativeBondAst,
+        DativeBondConstraintAst, ElementAst, MoleculeAst, MoleculeParts, MulticenterBondAst,
+        NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst, StereoBondAst, StereoCosetAst,
+        StereoKind, ValueAst,
     };
     use crate::dsl::molecule::MoleculeMetadata;
     use crate::dsl::{AtomDsl, MoleculeDsl};
@@ -249,20 +250,22 @@ mod tests {
     #[case::with_alias(
         r#"{:atom-aliases [:c "C"] :atoms [:c :c] :bonds [[0 1 "1"]]}"#,
         MoleculeDsl::from_parts(
-            MoleculeAst::from_atoms_and_bonds(
-                vec![AtomAst::from_element(Element::C); 2],
-                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            ),
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::C); 2],
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                ..Default::default()
+            }),
             MoleculeMetadata::new().with_atom_alias("c", "C".parse::<AtomDsl>().unwrap()),
         ),
     )]
     #[case::with_atom_ids(
         r#"{:atoms [[:a "C"] [:b "C"]] :bonds []}"#,
         MoleculeDsl::from_parts(
-            MoleculeAst::from_atoms_and_bonds(
-                vec![AtomAst::from_element(Element::C); 2],
-                vec![],
-            ),
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::C); 2],
+                bonds: vec![],
+                ..Default::default()
+            }),
             MoleculeMetadata::new().with_atom_keyword(AtomId(0), "a").with_atom_keyword(AtomId(1), "b"),
         ),
     )]
@@ -280,15 +283,16 @@ mod tests {
     #[rstest]
     #[case::empty("{}", MoleculeAst::default())]
     #[case::carbon_oxygen(r#"{:atoms ["C #h2" "O"] :bonds [[0 1 "2"]]}"#,
-        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(2_i64), AtomAst::from_element(Element::O)],
-        vec![(AtomId(0), AtomId(1), BondAst::from_order(2))]))]
+        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(2_i64), AtomAst::from_element(Element::O)],
+        bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))], ..Default::default() }))]
     #[case::aromatic_system(r##"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]#e3"}]}"##,
-        MoleculeAst::from_parts(vec![AtomAst::from_element(Element::C); 3],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1)), (AtomId(1), AtomId(2), BondAst::from_order(1)), (AtomId(2), AtomId(0), BondAst::from_order(1))],
-            vec![], vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 3],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1)), (AtomId(1), AtomId(2), BondAst::from_order(1)), (AtomId(2), AtomId(0), BondAst::from_order(1))],
+            aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
             AromaticSystemAst::from_electrons(vec![1; 3]).with_constraint(AromaticSystemConstraintAst::electron_count(3)))],
-            vec![], vec![],
-            Vec::new(), Vec::new(), Constraints::default()))]
+            ..Default::default()
+        }))]
     fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
         assert_eq!(mol_dsl!(input), expected);
     }
@@ -302,9 +306,9 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::methane(r#"{:atoms ["C #h4"] :bonds []}"#,
-        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground()], vec![]))]
+        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground()], bonds: vec![], ..Default::default() }))]
     #[case::carbon_charged(r#"{:atoms ["C #c+"] :bonds []}"#,
-        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_charge(1_i64).into_ground()], vec![]))]
+        MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C).with_charge(1_i64).into_ground()], bonds: vec![], ..Default::default() }))]
     fn test_mol_ground_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
         assert_eq!(mol_dsl_ground!(input), expected);
     }

@@ -2196,19 +2196,22 @@ already exist — no work there.
   boundary, so each group is self-contained — nothing dropped, no error. Components joined by
   *any* overlay (an H-bond included) stay one molecule; to split finer, remove the linking
   bond first. Uniform over all families (no atom/bond privilege).
-- **`MoleculeParts` — single uniform flat constructor.** A `#[derive(Default)]` struct with
-  a field per family (`atoms`, `bonds`, `dative`, `aromatic`, `multicenter`, `noncovalent`,
-  `stereo_atoms`, `stereo_bonds`, `constraints`); `MoleculeAst::from_parts(MoleculeParts {
+- **`MoleculeParts` — single uniform flat constructor. DONE (2026-07-11).** A `#[derive(Default)]`
+  struct with a field per family (`atoms`, `bonds`, `dative`, `aromatic`, `multicenter`,
+  `noncovalent`, `stereo_atoms`, `stereo_bonds`, `constraints`); `MoleculeAst::from_parts(MoleculeParts {
   atoms, bonds, ..Default::default() })`. Retires both `from_atoms_and_bonds` and the 9-arg
   positional `from_parts`. De-privileges atoms/bonds — every family is an equal field, the
   topology-only case is just the two filled fields, and `Default` avoids the `∅,∅,…` soup.
   Field *order* still encodes the referent DAG (atoms → bonds → stereo-bond, since
   `stereo_bonds` carries a `BondId`) — that is referent dependency, not privilege. The
-  incremental `MoleculeBuilder` (per-family `add_*`) is already uniform and stays.
-- **Remove `MoleculeAst::has_overlays` + `AtomView`/`BondView::is_in_overlays`.** They name
-  the internal graph(atoms+bonds)-vs-relation-set(overlay) storage split as an API concept;
-  all three are test-only (no production callers). Any genuine internal fast-path stays
-  `pub(crate)`.
+  incremental `MoleculeBuilder` (per-family `add_*`) is already uniform and stays. Migration:
+  176 `from_atoms_and_bonds` + 122 positional `from_parts` call sites rewritten across
+  umol-ast/umol-graph/umol-geometric-graph/umol-io/umol-py; test-only `MoleculeParts` imports are
+  `#[cfg(test)]`-gated. Workspace 10,851 tests green, clippy clean.
+- **Remove `MoleculeAst::has_overlays` + `AtomView`/`BondView::is_in_overlays`. DONE (2026-07-11).**
+  They named the internal graph(atoms+bonds)-vs-relation-set(overlay) storage split as an API concept;
+  all three were test-only (no production callers), removed with their tests. The per-family
+  `has_*` predicates and per-atom/bond `is_in_*` predicates stay.
 
 Python (140) mirrors: `MoleculeParts`-style construction, `mol.join(other)`,
 `mol.split()`, and none of the overlay-privileging surface.

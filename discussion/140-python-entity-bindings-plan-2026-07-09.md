@@ -255,7 +255,17 @@ connected-via-any-relation; conservative — remove a bond first to split finer)
 `from_atoms_and_bonds`, positional `from_parts`, `has_overlays`, and `is_in_overlays` are
 retired. Python mirrors: `MoleculeParts`-style construction, `mol.join(other)`,
 `mol.split()`, and none of the overlay-privileging surface. The incremental `MoleculeBuilder`
-(uniform per-family `add_*`) stays. This depends on the Rust slice landing first.
+(uniform per-family `add_*`) stays.
+
+**`MoleculeParts` + the overlay-surface removal landed in Rust 2026-07-11** (086 L2199-2211 — the
+two pieces that unblock every remaining view half). Consequence for this plan: each entity's view
+half is now buildable — construct a molecule carrying that entity via `MoleculeAst::from_parts` and
+read/write it through the view. The Python molecule constructor currently exposes only atoms+bonds
+(`MoleculeAst.from_atoms_and_bonds`, routed through the Rust `from_parts`); it grows one keyword-arg
+per family (and is renamed to the `from_parts`/`MoleculeParts` mirror, de-privileging atoms/bonds)
+as each entity's Python binding lands — do that rename at the **dative** slice (B2), the first
+overlay entity, not speculatively now. `join`/`split` Python mirrors remain future work and are not
+prerequisites for the per-entity view halves.
 
 ## Build shape (once the calls are settled)
 

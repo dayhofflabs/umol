@@ -15,6 +15,8 @@ use umol_ast::ast::{
     IsotopeMassAst as AstIsotopeMassAst, MoleculeAst as AstMoleculeAst,
     SpinStateAst as AstSpinStateAst,
 };
+#[cfg(test)]
+use umol_ast::ast::MoleculeParts as AstMoleculeParts;
 use umol_chem::element::Element as ChemElement;
 
 use crate::constraint::{
@@ -808,13 +810,13 @@ mod tests {
     }
 
     fn carbon_oxygen(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_atoms_and_bonds(
-            vec![
+        let molecule = AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![
                 AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::O),
             ],
-            vec![],
-        );
+            ..Default::default()
+        });
         Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()
     }
 

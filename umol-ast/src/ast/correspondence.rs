@@ -13,6 +13,8 @@ use super::id::{
 };
 use super::ligand::StereoLigand;
 use super::molecule::MoleculeAst;
+#[cfg(test)]
+use super::molecule::MoleculeParts;
 
 /// A per-entity partial bijection between two molecules: atoms + bonds + the six overlay families.
 /// The mated/exposed reads of each family are those of its `Correspondence`.
@@ -330,7 +332,6 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
 
     #[fixture]
@@ -381,35 +382,25 @@ mod tests {
     #[rstest]
     fn test_molecule_correspondence_induce() {
         // lhs C-C-C with a dative (donor 2 → acceptor 1); rhs adds a fourth atom + bond.
-        let lhs = MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 3],
-            vec![
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 3],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
             ],
-            vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::from_order(1))],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
-        let rhs = MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 4],
-            vec![
+            dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::from_order(1))],
+            ..Default::default()
+        });
+        let rhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 4],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
                 (AtomId(2), AtomId(3), BondAst::from_order(1)),
             ],
-            vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::from_order(1))],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
+            dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::from_order(1))],
+            ..Default::default()
+        });
         let atoms = Correspondence::new(
             vec![
                 (NodeId(0), NodeId(0)),

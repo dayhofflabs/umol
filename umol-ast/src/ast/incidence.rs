@@ -6,6 +6,8 @@ use umol_graph_core::{Graph, NodeId};
 
 use super::entity::{Entity, EntityKind};
 use super::molecule::MoleculeAst;
+#[cfg(test)]
+use super::molecule::MoleculeParts;
 
 bitflags! {
     /// Which relation kinds become pseudonodes in [`MoleculeAst::incidence_graph`].
@@ -202,7 +204,6 @@ mod tests {
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
     use crate::ast::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -218,28 +219,28 @@ mod tests {
     // site 1; a stereo bond on site BondId(1).
     #[fixture]
     fn molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 6],
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 6],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
                 (AtomId(2), AtomId(3), BondAst::from_order(1)),
             ],
-            vec![(vec![AtomId(0)], AtomId(3), DativeBondAst::from_order(1))],
-            vec![(
+            dative: vec![(vec![AtomId(0)], AtomId(3), DativeBondAst::from_order(1))],
+            aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
                 AromaticSystemAst::default(),
             )],
-            vec![(
+            multicenter: vec![(
                 vec![AtomId(3), AtomId(4), AtomId(5)],
                 MulticenterBondAst::default(),
             )],
-            vec![(
+            noncovalent: vec![(
                 AtomId(0),
                 AtomId(5),
                 NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
-            vec![(
+            stereo_atoms: vec![(
                 AtomId(1),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
@@ -247,7 +248,7 @@ mod tests {
                 ],
                 StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
             )],
-            vec![(
+            stereo_bonds: vec![(
                 BondId(1),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
@@ -255,8 +256,8 @@ mod tests {
                 ],
                 StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
             )],
-            Constraints::default(),
-        )
+            ..Default::default()
+        })
     }
 
     #[rstest]

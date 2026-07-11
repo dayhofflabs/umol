@@ -1655,19 +1655,19 @@ mod tests {
     use crate::ast::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
     use crate::ast::edit::BondFieldChange;
     use crate::ast::ligand::StereoLigandKind;
-    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::reaction::ReactionAst;
     use crate::ast::value::ValueAst;
 
     // Modified bond + Unchanged atoms + Unchanged molecule-constraint.
     #[rstest]
     #[case::modify(ReactionAst::new(
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            vec![], vec![], vec![], vec![], vec![], vec![],
-            Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
-        ),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            constraints: Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
             id: BondId(0),
             change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
@@ -1675,10 +1675,11 @@ mod tests {
     ))]
     // Unchanged / Removed / Added atoms and bonds + an Added constraint.
     #[case::add_remove(ReactionAst::new(
-        MoleculeAst::from_atoms_and_bonds(
-            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        ),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        }),
         Deltas::from_iter([
             Delta::Atom(AtomDelta::Remove { id: AtomId(1), ast: AtomAst::from_element(Element::O) }),
             Delta::Bond(BondDelta::Remove {

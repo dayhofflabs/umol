@@ -18,7 +18,7 @@ pub(crate) use umol_ast::ast::{
     DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst,
     DativeBondHandle, DativeBondId, Edit, ElectronCountsAst, ElementAst, FluxionalityAst,
     IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst,
-    MoleculeConstraint, MulticenterBondAst, MulticenterBondConstraintAst,
+    MoleculeConstraint, MoleculeParts, MulticenterBondAst, MulticenterBondConstraintAst,
     MulticenterBondConstraintKey, MulticenterBondConstraintsAst, MulticenterBondHandle,
     MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondHandle,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, OrientedLigandPermutation,
@@ -1181,17 +1181,17 @@ pub(crate) fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                         _ => None,
                     })
                     .collect();
-                MoleculeAst::from_parts(
+                MoleculeAst::from_parts(MoleculeParts {
                     atoms,
                     bonds,
-                    dative_triples,
-                    aromatic_entries,
-                    multicenter_entries,
-                    noncovalent_triples,
+                    dative: dative_triples,
+                    aromatic: aromatic_entries,
+                    multicenter: multicenter_entries,
+                    noncovalent: noncovalent_triples,
                     stereo_atoms,
                     stereo_bonds,
-                    Constraints::new(),
-                )
+                    constraints: Constraints::new(),
+                })
             },
         )
 }
@@ -1912,7 +1912,11 @@ pub(crate) fn transaction_path_molecule(count: usize) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms,
+        bonds,
+        ..Default::default()
+    })
 }
 
 pub(crate) fn transaction_add_path_edits(count: usize) -> Vec<Edit> {
@@ -2114,17 +2118,16 @@ pub(crate) fn overlay_transaction_base() -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::from_parts(
+    MoleculeAst::from_parts(MoleculeParts {
         atoms,
         bonds,
         dative,
         aromatic,
         multicenter,
         noncovalent,
-        vec![],
-        vec![],
-        Constraints::new(),
-    )
+        constraints: Constraints::new(),
+        ..Default::default()
+    })
 }
 
 /// A valid transaction over `overlay_transaction_base`: optional atom appends, then one batched

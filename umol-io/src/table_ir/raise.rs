@@ -11,7 +11,7 @@ use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst, BooleanAst,
     CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, Lattice,
-    MoleculeAst, MulticenterBondAst, NoncovalentBondAst, SpinStateAst, StereoCosetAst,
+    MoleculeAst, MoleculeParts, MulticenterBondAst, NoncovalentBondAst, SpinStateAst, StereoCosetAst,
     TetrahedralStereoAst, TryIntoAst, ValueAst,
 };
 use umol_chem::element::Element;
@@ -116,17 +116,15 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
 
         let constraints = Constraints::new();
 
-        Ok(MoleculeAst::from_parts(
+        Ok(MoleculeAst::from_parts(MoleculeParts {
             atoms,
             bonds,
-            dative_bonds,
-            vec![],
-            multicenter_bond,
-            noncovalent_bonds,
-            Vec::new(),
-            Vec::new(),
+            dative: dative_bonds,
+            multicenter: multicenter_bond,
+            noncovalent: noncovalent_bonds,
             constraints,
-        ))
+            ..Default::default()
+        }))
     }
 }
 

@@ -9,6 +9,8 @@ use umol_ast::ast::{
     aromatic_increment, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintsAst,
     AtomId, BooleanAst, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
 };
+#[cfg(test)]
+use umol_ast::ast::MoleculeParts;
 use umol_chem::element::Element;
 use umol_chem::spin::{SpinMultiplicity, SpinState};
 use umol_utils::solution::Solution;
@@ -386,7 +388,6 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::rstest;
-    use umol_ast::ast::Constraints;
     use umol_ast::{atom_dsl, mol_dsl};
 
     use super::*;
@@ -473,17 +474,10 @@ mod tests {
             table: Cow::Borrowed(ValenceTable::default_table()),
         };
         let resolver = CountsValence::new(&model);
-        let molecule = MoleculeAst::from_parts(
-            vec![atom_dsl!(input)],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        );
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![atom_dsl!(input)],
+            ..Default::default()
+        });
         assert_eq!(
             resolver.conforms_molecule_atom(&molecule, AtomId(0)),
             expected

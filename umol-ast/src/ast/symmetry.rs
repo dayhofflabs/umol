@@ -12,6 +12,8 @@ use super::id::{AtomId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use super::incidence::{IncidenceGraph, IncidenceNodeSelection};
 use super::ligand::{StereoLigand, StereoLigandKind};
 use super::molecule::MoleculeAst;
+#[cfg(test)]
+use super::molecule::MoleculeParts;
 use super::stereo::{
     coset_apply_permutation, StereoCosetAst, StereoKind, Stereogenicity, Topicity,
 };
@@ -591,7 +593,6 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::coloring::ConstitutionColoring;
-    use crate::ast::constraint::Constraints;
     use crate::ast::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
     use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind};
 
@@ -609,7 +610,11 @@ mod tests {
         let bonds = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            ..Default::default()
+        })
     }
 
     // A tetrahedral center on atom 0 with the four given peripheral elements.
@@ -619,14 +624,10 @@ mod tests {
         let bonds = (1..=4)
             .map(|i| (AtomId(0), AtomId(i), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_parts(
+        MoleculeAst::from_parts(MoleculeParts {
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![(
+            stereo_atoms: vec![(
                 AtomId(0),
                 vec![
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
@@ -636,9 +637,8 @@ mod tests {
                 ],
                 StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
             )],
-            vec![],
-            Constraints::default(),
-        )
+            ..Default::default()
+        })
     }
 
     #[rstest]
@@ -736,8 +736,8 @@ mod tests {
     #[rstest]
     fn test_molecule_ast_stereo_bond_symmetry() {
         // C0=C1 with four distinct substituents (F,Cl on C0; Br,I on C1): E/Z stereogenic.
-        let mol = MoleculeAst::from_parts(
-            vec![
+        let mol = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::F),
@@ -745,19 +745,14 @@ mod tests {
                 AtomAst::from_element(Element::Br),
                 AtomAst::from_element(Element::I),
             ],
-            vec![
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(2)),
                 (AtomId(0), AtomId(2), BondAst::from_order(1)),
                 (AtomId(0), AtomId(3), BondAst::from_order(1)),
                 (AtomId(1), AtomId(4), BondAst::from_order(1)),
                 (AtomId(1), AtomId(5), BondAst::from_order(1)),
             ],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![(
+            stereo_bonds: vec![(
                 BondId(0),
                 vec![
                     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
@@ -767,8 +762,8 @@ mod tests {
                 ],
                 StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(0)),
             )],
-            Constraints::default(),
-        );
+            ..Default::default()
+        });
         let gs = mol.graph_symmetry(&config());
         let stereo = mol.stereo_bond_symmetry(&gs, StereoBondId(0));
         assert!(stereo.is_stereogenic());

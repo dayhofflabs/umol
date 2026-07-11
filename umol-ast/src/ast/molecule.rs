@@ -120,29 +120,25 @@ impl AsRef<MoleculeAst> for MoleculeAst {
     }
 }
 
+/// Constructor input for [`MoleculeAst::from_parts`].
+#[derive(Debug, Default, Clone)]
+pub struct MoleculeParts {
+    pub atoms: Vec<AtomAst>,
+    pub bonds: Vec<(AtomId, AtomId, BondAst)>,
+    pub dative: Vec<(Vec<AtomId>, AtomId, DativeBondAst)>,
+    pub aromatic: Vec<(Vec<AtomId>, AromaticSystemAst)>,
+    pub multicenter: Vec<(Vec<AtomId>, MulticenterBondAst)>,
+    pub noncovalent: Vec<(AtomId, AtomId, NoncovalentBondAst)>,
+    pub stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)>,
+    pub stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)>,
+    pub constraints: Constraints,
+}
+
 impl MoleculeAst {
     /// Empty molecule: zero atoms, zero bonds, zero relations, zero
     /// constraints. Mirrors `Vec::new()` / `HashMap::new()`.
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Common shape: atoms plus pairwise bonds, no relations or constraints.
-    pub fn from_atoms_and_bonds(
-        atoms: Vec<AtomAst>,
-        bonds: Vec<(AtomId, AtomId, BondAst)>,
-    ) -> Self {
-        Self::from_parts(
-            atoms,
-            bonds,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        )
     }
 
     /// Start an empty `MoleculeEditor` for fluent / programmatic
@@ -152,24 +148,27 @@ impl MoleculeAst {
         MoleculeBuilder::new()
     }
 
-    /// Full structural constructor: every entity-type vector is supplied
-    /// directly. The escape hatch when the molecule has relations or
-    /// molecule-level constraints; tests covering all entity types route
-    /// through here.
-    #[allow(clippy::too_many_arguments)]
-    pub fn from_parts(
-        atoms: Vec<AtomAst>,
-        bonds: Vec<(AtomId, AtomId, BondAst)>,
-        dative: Vec<(Vec<AtomId>, AtomId, DativeBondAst)>,
-        aromatic: Vec<(Vec<AtomId>, AromaticSystemAst)>,
-        multicenter: Vec<(Vec<AtomId>, MulticenterBondAst)>,
-        noncovalent: Vec<(AtomId, AtomId, NoncovalentBondAst)>,
-        stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)>,
-        stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)>,
-        constraints: Constraints,
-    ) -> Self {
+    /// Full structural constructor from a flat [`MoleculeParts`]: every
+    /// entity-type field is supplied directly. The topology-only case fills
+    /// just `atoms` and `bonds`; relations and molecule-level constraints go
+    /// in the remaining fields.
+    pub fn from_parts(parts: MoleculeParts) -> Self {
+        let MoleculeParts {
+            atoms,
+            bonds,
+            dative,
+            aromatic,
+            multicenter,
+            noncovalent,
+            stereo_atoms,
+            stereo_bonds,
+            constraints,
+        } = parts;
         let node_count = atoms.len();
-        let edges: Vec<[u32; 2]> = bonds.iter().map(|(s, t, _)| [s.0, t.0]).collect();
+        let edges: Vec<[u32; 2]> = bonds
+            .iter()
+            .map(|(first, second, _)| [first.0, second.0])
+            .collect();
         let bond_data: Vec<BondAst> = bonds.into_iter().map(|(_, _, d)| d).collect();
         let graph = Graph::new(node_count, &edges);
 
@@ -691,17 +690,6 @@ impl MoleculeAst {
 
     pub fn has_stereo_bonds(&self) -> bool {
         self.stereo_bonds.relation_count() > 0
-    }
-
-    /// True if any overlay (dative bond, aromatic system, multicenter bond,
-    /// noncovalent bond, stereo atom, stereo bond) is non-empty.
-    pub fn has_overlays(&self) -> bool {
-        self.has_dative_bonds()
-            || self.has_aromatic_systems()
-            || self.has_multicenter_bonds()
-            || self.has_noncovalent_bonds()
-            || self.has_stereo_atoms()
-            || self.has_stereo_bonds()
     }
 
     /// Drain every entity's inline `constraints` store into `self.constraints`

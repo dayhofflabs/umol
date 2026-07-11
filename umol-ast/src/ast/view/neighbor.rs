@@ -50,45 +50,42 @@ mod tests {
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
     use crate::ast::id::{AtomId, BondId};
-    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
 
     #[fixture]
     fn molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::N),
                 AtomAst::from_element(Element::O),
             ],
-            vec![
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(2)),
                 (AtomId(2), AtomId(3), BondAst::from_order(1)),
             ],
-            vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
-            vec![(
+            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
                 AromaticSystemAst::default(),
             )],
-            vec![(
+            multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
                 MulticenterBondAst::default(),
             )],
-            vec![(
+            noncovalent: vec![(
                 AtomId(0),
                 AtomId(3),
                 NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        )
+            ..Default::default()
+        })
     }
 
     #[rstest]

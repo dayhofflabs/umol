@@ -82,17 +82,11 @@ fn test_constraint_ref_uses_keyword_when_metadata_id_present() {
         AtomId(0),
         AtomConstraintAst::Valence(ValueAst::Lit(4)),
     ));
-    let ast = MoleculeAst::from_parts(
+    let ast = MoleculeAst::from_parts(MoleculeParts {
         atoms,
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        cs,
-    );
+        constraints: cs,
+        ..Default::default()
+    });
 
     let mut metadata = MoleculeMetadata::new();
     metadata.set_atom_keyword(AtomId(0), "carbon".to_string());

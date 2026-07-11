@@ -130,7 +130,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
-        RingFamily, RingId, ValueAst,
+        MoleculeParts, RingFamily, RingId, ValueAst,
     };
     use umol_chem::element::Element;
 
@@ -170,7 +170,11 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            ..Default::default()
+        })
     }
 
     fn make_fused(specs: Vec<(AtomAst, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
@@ -179,7 +183,11 @@ mod tests {
             .iter()
             .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            ..Default::default()
+        })
     }
 
     fn enumerate_induced(ast: &MoleculeAst) -> RingSet {

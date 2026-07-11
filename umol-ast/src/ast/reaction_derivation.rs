@@ -14,6 +14,8 @@ use umol_graph_core::{Correspondence, NodeId};
 
 use super::correspondence::MoleculeCorrespondence;
 use super::molecule::MoleculeAst;
+#[cfg(test)]
+use super::molecule::MoleculeParts;
 use super::reaction::ReactionAst;
 
 /// A reaction fired once at a match: its two concrete molecule sides (`lhs` ⇒ `rhs`) plus the
@@ -101,13 +103,14 @@ mod tests {
     use super::*;
 
     fn bond_order_molecule(order: u8) -> MoleculeAst {
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
             ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(order))],
-        )
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(order))],
+            ..Default::default()
+        })
     }
 
     fn total_atoms() -> Correspondence<NodeId> {

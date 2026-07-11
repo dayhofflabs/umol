@@ -238,7 +238,7 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::id::AtomId;
-    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
 
     fn ring(n: usize) -> MoleculeAst {
         let atoms = vec![AtomAst::from_element(Element::C); n];
@@ -251,7 +251,11 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            ..Default::default()
+        })
     }
 
     fn chain(n: usize) -> MoleculeAst {
@@ -265,7 +269,11 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            ..Default::default()
+        })
     }
 
     #[fixture]

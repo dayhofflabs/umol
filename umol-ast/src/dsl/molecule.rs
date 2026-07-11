@@ -51,7 +51,7 @@ use crate::ast::id::{
     StereoAtomId, StereoBondId,
 };
 use crate::ast::ligand::{StereoLigand, StereoLigandKind};
-use crate::ast::molecule::MoleculeAst;
+use crate::ast::molecule::{MoleculeAst, MoleculeParts};
 use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::noncovalent::NoncovalentBondAst;
 use crate::ast::stereo::{StereoAtomAst, StereoBondAst};
@@ -1543,17 +1543,17 @@ impl MoleculeInput {
         // projected only at the DSL boundary, not here.
         let constraints = ConstraintsDsl(constraint_dsls).into_ast(&namespace)?;
 
-        let ast = MoleculeAst::from_parts(
+        let ast = MoleculeAst::from_parts(MoleculeParts {
             atoms,
             bonds,
-            dative_list,
-            aromatic_list,
-            multicenter_list,
-            noncovalent_list,
-            stereo_atom_list,
-            stereo_bond_list,
+            dative: dative_list,
+            aromatic: aromatic_list,
+            multicenter: multicenter_list,
+            noncovalent: noncovalent_list,
+            stereo_atoms: stereo_atom_list,
+            stereo_bonds: stereo_bond_list,
             constraints,
-        );
+        });
         Ok((ast, namespace))
     }
 }

@@ -6,7 +6,7 @@
 
 use umol_ast::ast::{
     AtomAst, AtomId, BondAst, Constraint, Constraints, ElementAst, IntoAst, MoleculeAst,
-    MoleculeConstraint, SpinStateAst, ValueAst,
+    MoleculeConstraint, MoleculeParts, SpinStateAst, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_chem::spin::SpinMultiplicity;
@@ -84,17 +84,12 @@ impl IntoAst<MoleculeAst> for PerceivedMolecule {
                 spin: SpinStateAst::from((multiplicity - 1, multiplicity)),
             }),
         ]);
-        MoleculeAst::from_parts(
+        MoleculeAst::from_parts(MoleculeParts {
             atoms,
             bonds,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
             constraints,
-        )
+            ..Default::default()
+        })
     }
 }
 
@@ -137,15 +132,15 @@ mod tests {
             feasible: true,
             valence_residuals: vec![0, 0],
         },
-        MoleculeAst::from_parts(
-            vec![AtomAst::new(ElementAst::Lit(C)), AtomAst::new(ElementAst::Lit(C))],
-            vec![(AtomId(0), AtomId(1), BondAst::new(ValueAst::Lit(2)))],
-            Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(),
-            Constraints::from_iter([
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::new(ElementAst::Lit(C)), AtomAst::new(ElementAst::Lit(C))],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::new(ValueAst::Lit(2)))],
+            constraints: Constraints::from_iter([
                 Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }),
                 Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: None, spin: SpinStateAst::from((0u8, 1u8)) }),
             ]),
-        )
+            ..Default::default()
+        })
     )]
     #[case::anion_doublet(
         PerceivedMolecule {
@@ -156,15 +151,14 @@ mod tests {
             feasible: true,
             valence_residuals: vec![0],
         },
-        MoleculeAst::from_parts(
-            vec![AtomAst::new(ElementAst::Lit(O))],
-            Vec::new(),
-            Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(),
-            Constraints::from_iter([
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::new(ElementAst::Lit(O))],
+            constraints: Constraints::from_iter([
                 Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(-1) }),
                 Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: None, spin: SpinStateAst::from((1u8, 2u8)) }),
             ]),
-        )
+            ..Default::default()
+        })
     )]
     fn test_perceived_molecule_into_ast(
         #[case] perceived: PerceivedMolecule,

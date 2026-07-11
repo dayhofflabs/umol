@@ -13,6 +13,8 @@ use umol_ast::ast::{
     BondConstraintKey as AstBondConstraintKey, BondConstraintsAst as AstBondConstraintsAst,
     BondId as AstBondId, MoleculeAst as AstMoleculeAst, RingScope as AstRingScope,
 };
+#[cfg(test)]
+use umol_ast::ast::MoleculeParts as AstMoleculeParts;
 
 use crate::atom::SpinStateAst;
 use crate::boolean::{BooleanArg, BooleanAst};
@@ -1266,13 +1268,14 @@ mod tests {
 
     /// A two-carbon molecule joined by one double bond (bond id 0, atoms 0–1).
     fn ethene(py: Python<'_>) -> Py<MoleculeAst> {
-        let molecule = AstMoleculeAst::from_atoms_and_bonds(
-            vec![
+        let molecule = AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![
                 AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::C),
             ],
-            vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(2))],
-        );
+            bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(2))],
+            ..Default::default()
+        });
         Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()
     }
 
@@ -2048,14 +2051,15 @@ mod tests {
     fn test_bond_views_connecting() {
         Python::attach(|py| {
             // three carbons, one bond 0–1; atom 2 is isolated
-            let molecule = AstMoleculeAst::from_atoms_and_bonds(
-                vec![
+            let molecule = AstMoleculeAst::from_parts(AstMoleculeParts {
+                atoms: vec![
                     AstAtomAst::from_element(ChemElement::C),
                     AstAtomAst::from_element(ChemElement::C),
                     AstAtomAst::from_element(ChemElement::C),
                 ],
-                vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
-            );
+                bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
+                ..Default::default()
+            });
             let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
             let views = BondViews { owner };
             assert_eq!(views.connecting(py, 0, 1).unwrap().id(), 0);

@@ -885,10 +885,9 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::coloring::ConstitutionColoring;
-    use crate::ast::constraint::Constraints;
     use crate::ast::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::stereo::{
         StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind, Stereogenicity, Topicity,
     };
@@ -896,19 +895,15 @@ mod tests {
 
     #[fixture]
     fn molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(
+        MoleculeAst::from_parts(MoleculeParts {
             // Atom 6 is an unbonded spare: a node that is neither stereo-bond site nor ligand.
-            vec![AtomAst::from_element(Element::C); 7],
-            vec![
+            atoms: vec![AtomAst::from_element(Element::C); 7],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(2), AtomId(3), BondAst::from_order(2)),
                 (AtomId(4), AtomId(5), BondAst::from_order(1)),
             ],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![(
+            stereo_atoms: vec![(
                 AtomId(0),
                 vec![
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
@@ -918,7 +913,7 @@ mod tests {
                 ],
                 StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
             )],
-            vec![(
+            stereo_bonds: vec![(
                 BondId(1),
                 vec![
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
@@ -928,24 +923,20 @@ mod tests {
                 ],
                 StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
             )],
-            Constraints::default(),
-        )
+            ..Default::default()
+        })
     }
 
     #[fixture]
     fn virtual_ligand_molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 6],
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 6],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(2), AtomId(3), BondAst::from_order(2)),
                 (AtomId(4), AtomId(5), BondAst::from_order(1)),
             ],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![(
+            stereo_atoms: vec![(
                 AtomId(0),
                 vec![
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
@@ -955,7 +946,7 @@ mod tests {
                 ],
                 StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
             )],
-            vec![(
+            stereo_bonds: vec![(
                 BondId(1),
                 vec![
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
@@ -965,17 +956,17 @@ mod tests {
                 ],
                 StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
             )],
-            Constraints::default(),
-        )
+            ..Default::default()
+        })
     }
 
     // A 4-membered ring (atoms 0-1-2-3) with two pendant atoms (4 on 0, 5 on 1);
     // a stereo atom on ring atom 0 and a stereo bond on ring bond 0-1.
     #[fixture]
     fn ring_molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 6],
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 6],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
                 (AtomId(2), AtomId(3), BondAst::from_order(1)),
@@ -983,11 +974,7 @@ mod tests {
                 (AtomId(0), AtomId(4), BondAst::from_order(1)),
                 (AtomId(1), AtomId(5), BondAst::from_order(1)),
             ],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![(
+            stereo_atoms: vec![(
                 AtomId(0),
                 vec![
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
@@ -997,7 +984,7 @@ mod tests {
                 ],
                 StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
             )],
-            vec![(
+            stereo_bonds: vec![(
                 BondId(0),
                 vec![
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
@@ -1007,8 +994,8 @@ mod tests {
                 ],
                 StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
             )],
-            Constraints::default(),
-        )
+            ..Default::default()
+        })
     }
 
     #[rstest]
@@ -1173,22 +1160,18 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_view_stereo_queries() {
         // A clean stereocenter: C bonded to four distinct halogens.
-        let mol = MoleculeAst::from_parts(
-            vec![
+        let mol = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::F),
                 AtomAst::from_element(Element::Cl),
                 AtomAst::from_element(Element::Br),
                 AtomAst::from_element(Element::I),
             ],
-            (1..=4)
+            bonds: (1..=4)
                 .map(|i| (AtomId(0), AtomId(i), BondAst::from_order(1)))
                 .collect(),
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![(
+            stereo_atoms: vec![(
                 AtomId(0),
                 vec![
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
@@ -1198,9 +1181,8 @@ mod tests {
                 ],
                 StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
             )],
-            vec![],
-            Constraints::default(),
-        );
+            ..Default::default()
+        });
         let gs = mol.graph_symmetry(&GraphSymmetryConfig {
             coloring: ConstitutionColoring::full(),
             iterate_to_fixpoint: true,

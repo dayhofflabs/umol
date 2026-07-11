@@ -33,7 +33,7 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
-use super::molecule::MoleculeAst;
+use super::molecule::{MoleculeAst, MoleculeParts};
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 use super::reaction::ReactionAst;
@@ -852,7 +852,7 @@ impl ReactionSpanAst {
         }
         constraints.compact(&compaction);
 
-        MoleculeAst::from_parts(
+        MoleculeAst::from_parts(MoleculeParts {
             atoms,
             bonds,
             dative,
@@ -862,7 +862,7 @@ impl ReactionSpanAst {
             stereo_atoms,
             stereo_bonds,
             constraints,
-        )
+        })
     }
 }
 
@@ -1534,13 +1534,14 @@ mod tests {
     #[rstest]
     fn test_reaction_ast_to_reaction_span() {
         let reaction = ReactionAst::new(
-            MoleculeAst::from_atoms_and_bonds(
-                vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::C),
                 ],
-                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            ),
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                ..Default::default()
+            }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
@@ -1586,13 +1587,14 @@ mod tests {
         );
         assert_eq!(
             span.rhs(),
-            MoleculeAst::from_atoms_and_bonds(
-                vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::N),
                 ],
-                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            ),
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                ..Default::default()
+            }),
         );
     }
 
@@ -1601,26 +1603,28 @@ mod tests {
         let span = substitution_reaction.to_reaction_span().unwrap();
         assert_eq!(
             span.lhs(),
-            MoleculeAst::from_atoms_and_bonds(
-                vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::O),
                 ],
-                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            ),
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                ..Default::default()
+            }),
         );
     }
 
     #[rstest]
     #[case::order_change(
         ReactionAst::new(
-            MoleculeAst::from_atoms_and_bonds(
-                vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::C),
                 ],
-                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            ),
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                ..Default::default()
+            }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
@@ -1629,30 +1633,33 @@ mod tests {
                 },
             })]),
         ),
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
             ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
-        ),
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+            ..Default::default()
+        }),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
             ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        ),
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        }),
     )]
     #[case::substitution(
         ReactionAst::new(
-            MoleculeAst::from_atoms_and_bonds(
-                vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::O),
                 ],
-                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            ),
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                ..Default::default()
+            }),
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Remove {
                     id: AtomId(1),
@@ -1674,33 +1681,34 @@ mod tests {
                 }),
             ]),
         ),
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::N),
             ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        ),
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        }),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::O),
             ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        ),
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        }),
     )]
     #[case::stereo_atom(
         ReactionAst::new(
-            MoleculeAst::from_parts(
-                vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::F),
                     AtomAst::from_element(Element::Cl),
                     AtomAst::from_element(Element::Br),
                     AtomAst::from_element(Element::I),
                 ],
-                vec![], vec![], vec![], vec![], vec![],
-                vec![(
+                stereo_atoms: vec![(
                     AtomId(0),
                     vec![
                         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
@@ -1710,9 +1718,9 @@ mod tests {
                     ],
                     StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
                 )],
-                vec![],
-                Constraints::new(),
-            ),
+                constraints: Constraints::new(),
+                ..Default::default()
+            }),
             Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
                 id: StereoAtomId(0),
                 site: AtomId(0),
@@ -1725,26 +1733,26 @@ mod tests {
                 ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
             })]),
         ),
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::F),
                 AtomAst::from_element(Element::Cl),
                 AtomAst::from_element(Element::Br),
                 AtomAst::from_element(Element::I),
             ],
-            vec![],
-        ),
-        MoleculeAst::from_parts(
-            vec![
+            bonds: vec![],
+            ..Default::default()
+        }),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::F),
                 AtomAst::from_element(Element::Cl),
                 AtomAst::from_element(Element::Br),
                 AtomAst::from_element(Element::I),
             ],
-            vec![], vec![], vec![], vec![], vec![],
-            vec![(
+            stereo_atoms: vec![(
                 AtomId(0),
                 vec![
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
@@ -1754,9 +1762,9 @@ mod tests {
                 ],
                 StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
             )],
-            vec![],
-            Constraints::new(),
-        ),
+            constraints: Constraints::new(),
+            ..Default::default()
+        }),
     )]
     fn test_reaction_ast_reverse(
         #[case] forward: ReactionAst,
@@ -1822,22 +1830,23 @@ mod tests {
     #[rstest]
     #[case::unchanged(
         ReactionAst::new(
-            MoleculeAst::from_parts(
-                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
-                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-                vec![], vec![], vec![], vec![], vec![], vec![],
-                Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
-            ),
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                constraints: Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+                ..Default::default()
+            }),
             Deltas::new(),
         ),
         vec![ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }))],
     )]
     #[case::added(
         ReactionAst::new(
-            MoleculeAst::from_atoms_and_bonds(
-                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
-                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            ),
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                ..Default::default()
+            }),
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
                 Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
             ))]),
@@ -1846,12 +1855,12 @@ mod tests {
     )]
     #[case::removed(
         ReactionAst::new(
-            MoleculeAst::from_parts(
-                vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
-                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-                vec![], vec![], vec![], vec![], vec![], vec![],
-                Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
-            ),
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                constraints: Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+                ..Default::default()
+            }),
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(
                 Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
             ))]),
@@ -1870,34 +1879,36 @@ mod tests {
 
     #[rstest]
     #[case::add(ReactionAst::new(
-        MoleculeAst::from_atoms_and_bonds(
-            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        ),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
             Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
         ))]),
     ))]
     #[case::remove(ReactionAst::new(
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            vec![], vec![], vec![], vec![], vec![], vec![],
-            Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
-        ),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            constraints: Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(
             Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
         ))]),
     ))]
     #[case::dative_add(ReactionAst::new(
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::N),
                 AtomAst::from_element(Element::B),
                 AtomAst::from_element(Element::N),
             ],
-            vec![],
-        ),
+            bonds: vec![],
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::DativeBond(DativeBondDelta::Add {
             id: DativeBondId(0),
             donors: vec![AtomId(0), AtomId(2)],
@@ -1906,10 +1917,11 @@ mod tests {
         })]),
     ))]
     #[case::aromatic_add(ReactionAst::new(
-        MoleculeAst::from_atoms_and_bonds(
-            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
-            vec![],
-        ),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+            bonds: vec![],
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::AromaticSystem(AromaticSystemDelta::Add {
             id: AromaticSystemId(0),
             atoms: vec![AtomId(0), AtomId(1)],
@@ -1917,14 +1929,15 @@ mod tests {
         })]),
     ))]
     #[case::multicenter_add(ReactionAst::new(
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::B),
                 AtomAst::from_element(Element::H),
                 AtomAst::from_element(Element::B),
             ],
-            vec![],
-        ),
+            bonds: vec![],
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::MulticenterBond(MulticenterBondDelta::Add {
             id: MulticenterBondId(0),
             atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
@@ -1932,10 +1945,11 @@ mod tests {
         })]),
     ))]
     #[case::noncovalent_add(ReactionAst::new(
-        MoleculeAst::from_atoms_and_bonds(
-            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
-            vec![],
-        ),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            bonds: vec![],
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Add {
             id: NoncovalentBondId(0),
             atoms: [AtomId(0), AtomId(1)],
@@ -1943,13 +1957,12 @@ mod tests {
         })]),
     ))]
     #[case::noncovalent_remove(ReactionAst::new(
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
-            vec![], vec![], vec![], vec![],
-            vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
-            vec![], vec![],
-            Constraints::new(),
-        ),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            constraints: Constraints::new(),
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
             id: NoncovalentBondId(0),
             atoms: [AtomId(0), AtomId(1)],
@@ -1957,13 +1970,12 @@ mod tests {
         })]),
     ))]
     #[case::noncovalent_modify(ReactionAst::new(
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
-            vec![], vec![], vec![], vec![],
-            vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
-            vec![], vec![],
-            Constraints::new(),
-        ),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            constraints: Constraints::new(),
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
             id: NoncovalentBondId(0),
             change: NoncovalentBondFieldChange::Kind {
@@ -1973,16 +1985,17 @@ mod tests {
         })]),
     ))]
     #[case::stereo_atom_add(ReactionAst::new(
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::F),
                 AtomAst::from_element(Element::Cl),
                 AtomAst::from_element(Element::Br),
                 AtomAst::from_element(Element::I),
             ],
-            vec![],
-        ),
+            bonds: vec![],
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Add {
             id: StereoAtomId(0),
             site: AtomId(0),
@@ -1996,16 +2009,15 @@ mod tests {
         })]),
     ))]
     #[case::stereo_atom_remove(ReactionAst::new(
-        MoleculeAst::from_parts(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::F),
                 AtomAst::from_element(Element::Cl),
                 AtomAst::from_element(Element::Br),
                 AtomAst::from_element(Element::I),
             ],
-            vec![], vec![], vec![], vec![], vec![],
-            vec![(
+            stereo_atoms: vec![(
                 AtomId(0),
                 vec![
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
@@ -2015,9 +2027,9 @@ mod tests {
                 ],
                 StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
             )],
-            vec![],
-            Constraints::new(),
-        ),
+            constraints: Constraints::new(),
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
             id: StereoAtomId(0),
             site: AtomId(0),
@@ -2031,16 +2043,15 @@ mod tests {
         })]),
     ))]
     #[case::stereo_atom_modify(ReactionAst::new(
-        MoleculeAst::from_parts(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::F),
                 AtomAst::from_element(Element::Cl),
                 AtomAst::from_element(Element::Br),
                 AtomAst::from_element(Element::I),
             ],
-            vec![], vec![], vec![], vec![], vec![],
-            vec![(
+            stereo_atoms: vec![(
                 AtomId(0),
                 vec![
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
@@ -2050,9 +2061,9 @@ mod tests {
                 ],
                 StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
             )],
-            vec![],
-            Constraints::new(),
-        ),
+            constraints: Constraints::new(),
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
             id: StereoAtomId(0),
             change: StereoAtomFieldChange::Configuration {
@@ -2062,19 +2073,20 @@ mod tests {
         })]),
     ))]
     #[case::stereo_bond_add(ReactionAst::new(
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
             ],
-            vec![
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(2)),
                 (AtomId(2), AtomId(3), BondAst::from_order(1)),
             ],
-        ),
+            ..Default::default()
+        }),
         Deltas::from_iter([Delta::StereoBond(StereoBondDelta::Add {
             id: StereoBondId(0),
             site: BondId(1),
@@ -2097,22 +2109,17 @@ mod tests {
     #[rstest]
     fn test_reaction_span_ast_project() {
         let span = ReactionAst::new(
-            MoleculeAst::from_parts(
-                vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::O),
                 ],
-                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-                vec![],
-                vec![],
-                vec![],
-                vec![],
-                vec![],
-                vec![],
-                Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected {
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                constraints: Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected {
                     atoms: Some(vec![AtomId(0), AtomId(1)]),
                 })),
-            ),
+                ..Default::default()
+            }),
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Remove {
                     id: AtomId(1),
@@ -2139,53 +2146,51 @@ mod tests {
     #[rstest]
     #[case::unchanged(
         ReactionAst::new(
-            MoleculeAst::from_parts(
-                vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
-                vec![], vec![], vec![], vec![],
-                vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
-                vec![], vec![],
-                Constraints::new(),
-            ),
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+                noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+                constraints: Constraints::new(),
+                ..Default::default()
+            }),
             Deltas::new(),
         ),
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
-            vec![], vec![], vec![], vec![],
-            vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
-            vec![], vec![],
-            Constraints::new(),
-        ),
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
-            vec![], vec![], vec![], vec![],
-            vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
-            vec![], vec![],
-            Constraints::new(),
-        ),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            constraints: Constraints::new(),
+            ..Default::default()
+        }),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            constraints: Constraints::new(),
+            ..Default::default()
+        }),
     )]
     #[case::added(
         ReactionAst::new(
-            MoleculeAst::from_atoms_and_bonds(
-                vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
-                vec![],
-            ),
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+                bonds: vec![],
+                ..Default::default()
+            }),
             Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                 id: NoncovalentBondId(0),
                 atoms: [AtomId(0), AtomId(1)],
                 ast: NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
             })]),
         ),
-        MoleculeAst::from_atoms_and_bonds(
-            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
-            vec![],
-        ),
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
-            vec![], vec![], vec![], vec![],
-            vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
-            vec![], vec![],
-            Constraints::new(),
-        ),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            bonds: vec![],
+            ..Default::default()
+        }),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::O), AtomAst::from_element(Element::O)],
+            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))],
+            constraints: Constraints::new(),
+            ..Default::default()
+        }),
     )]
     fn test_reaction_span_ast_project_overlay(
         #[case] reaction: ReactionAst,
@@ -2203,13 +2208,14 @@ mod tests {
     #[fixture]
     fn substitution_reaction() -> ReactionAst {
         ReactionAst::new(
-            MoleculeAst::from_atoms_and_bonds(
-                vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::O),
                 ],
-                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            ),
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                ..Default::default()
+            }),
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Remove {
                     id: AtomId(1),
@@ -2236,38 +2242,26 @@ mod tests {
     #[rstest]
     fn test_reaction_span_ast_superimpose() {
         // atom 0 C stays C (Unchanged); atom 1 C→N (Modified); atom 2 O and its bond are Added.
-        let left = MoleculeAst::from_parts(
-            vec![
+        let left = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
             ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
-        let right = MoleculeAst::from_parts(
-            vec![
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        });
+        let right = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::N),
                 AtomAst::from_element(Element::O),
             ],
-            vec![
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
             ],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
+            ..Default::default()
+        });
         let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 3);
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
 
@@ -2281,32 +2275,20 @@ mod tests {
     fn test_reaction_span_ast_correspondence() {
         // atom 0 unchanged, 1 modified (C→N), 2 removed (left) with 2 added (right O): all four
         // EntitySpan variants in the atom column.
-        let left = MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 3],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
-        let right = MoleculeAst::from_parts(
-            vec![
+        let left = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 3],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        });
+        let right = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::N),
                 AtomAst::from_element(Element::O),
             ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        });
         let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 3, 3);
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
         let span = ReactionSpanAst::superimpose(&left, &right, &correspondence);
@@ -2322,20 +2304,22 @@ mod tests {
     #[rstest]
     fn test_molecule_ast_difference_to() {
         // C-C (order 1) → C-C (order 2), total correspondence: a single bond-order modify.
-        let left = MoleculeAst::from_atoms_and_bonds(
-            vec![
+        let left = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
             ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        );
-        let right = MoleculeAst::from_atoms_and_bonds(
-            vec![
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        });
+        let right = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
             ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
-        );
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+            ..Default::default()
+        });
         let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2);
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
         assert_eq!(
@@ -2353,31 +2337,20 @@ mod tests {
     #[rstest]
     fn test_reaction_span_ast_superimpose_removed() {
         // left has a third atom, a bond to it, and a dative onto it — all left-exposed (Removed).
-        let left = MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 3],
-            vec![
+        let left = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 3],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
             ],
-            vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::from_order(1))],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
-        let right = MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 2],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
+            dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondAst::from_order(1))],
+            ..Default::default()
+        });
+        let right = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        });
         let atoms = Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 3, 2);
         let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms);
 

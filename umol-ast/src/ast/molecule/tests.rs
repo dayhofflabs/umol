@@ -30,7 +30,7 @@ use super::super::ring::{RingFamily, RingSet};
 use super::super::spin::SpinStateAst;
 use super::super::stereo::{StereoAtomAst, StereoCosetAst, StereoKind};
 use super::super::value::ValueAst;
-use super::MoleculeAst;
+use super::{MoleculeAst, MoleculeParts};
 use crate::{mol_dsl, mol_dsl_ground};
 
 fn ground_atom() -> AtomAst {
@@ -67,13 +67,17 @@ fn test_molecule_ast_default_equals_new() {
 }
 
 #[rstest]
-fn test_molecule_ast_from_atoms_and_bonds() {
+fn test_molecule_ast_from_parts() {
     let atoms = vec![
         AtomAst::from_element(Element::C),
         AtomAst::from_element(Element::O),
     ];
     let bonds = vec![(AtomId(0), AtomId(1), BondAst::from_order(1))];
-    let m = MoleculeAst::from_atoms_and_bonds(atoms, bonds);
+    let m = MoleculeAst::from_parts(MoleculeParts {
+        atoms,
+        bonds,
+        ..Default::default()
+    });
     assert_eq!(m.atoms().count(), 2);
     assert_eq!(m.bonds().count(), 1);
     assert_eq!(m.dative_bonds().count(), 0);
@@ -105,36 +109,32 @@ fn test_molecule_ast_builder() {
     false,
 )]
 #[case::ground_atom_with_undetermined_constraint(
-    MoleculeAst::from_parts(
-        vec![ground_atom()],
-        vec![], vec![], vec![], vec![], vec![],
-        Vec::new(),
-        Vec::new(),
-        constraints_with_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![ground_atom()],
+        constraints: constraints_with_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
             atoms: Some(vec![]),
             sum: ValueAst::Undetermined,
         })),
-    ),
+        ..Default::default()
+    }),
     true,
 )]
 #[case::stereo_atom_ground_coset(
-    MoleculeAst::from_parts(
-        vec![ground_atom()],
-        vec![], vec![], vec![], vec![], vec![],
-        vec![(AtomId(0), vec![], StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))],
-        Vec::new(),
-        Constraints::new(),
-    ),
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![ground_atom()],
+        stereo_atoms: vec![(AtomId(0), vec![], StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))],
+        constraints: Constraints::new(),
+        ..Default::default()
+    }),
     true,
 )]
 #[case::stereo_atom_undetermined_coset(
-    MoleculeAst::from_parts(
-        vec![ground_atom()],
-        vec![], vec![], vec![], vec![], vec![],
-        vec![(AtomId(0), vec![], StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))],
-        Vec::new(),
-        Constraints::new(),
-    ),
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![ground_atom()],
+        stereo_atoms: vec![(AtomId(0), vec![], StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))],
+        constraints: Constraints::new(),
+        ..Default::default()
+    }),
     false,
 )]
 fn test_molecule_ast_is_ground(#[case] ast: MoleculeAst, #[case] expected: bool) {
@@ -146,24 +146,18 @@ fn test_molecule_ast_is_ground(#[case] ast: MoleculeAst, #[case] expected: bool)
 #[case::leaf_o(AtomId(1), vec![(AtomId(0), BondId(0))])]
 #[case::leaf_n(AtomId(2), vec![(AtomId(0), BondId(1))])]
 fn test_molecule_ast_neighbors(#[case] atom: AtomId, #[case] expected: Vec<(AtomId, BondId)>) {
-    let ast = MoleculeAst::from_parts(
-        vec![
+    let ast = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::O),
             AtomAst::from_element(Element::N),
         ],
-        vec![
+        bonds: vec![
             (AtomId(0), AtomId(1), BondAst::from_order(1)),
             (AtomId(0), AtomId(2), BondAst::from_order(2)),
         ],
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        Vec::new(),
-        Vec::new(),
-        Constraints::default(),
-    );
+        ..Default::default()
+    });
     let nbrs: Vec<(AtomId, BondId)> = ast
         .neighbors(atom)
         .map(|n| (n.atom_id(), n.bond_id()))
@@ -173,20 +167,14 @@ fn test_molecule_ast_neighbors(#[case] atom: AtomId, #[case] expected: Vec<(Atom
 
 #[rstest]
 fn test_molecule_editor_add_aromatic_system() {
-    let ast = MoleculeAst::from_parts(
-        vec![
+    let ast = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
         ],
-        vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        Vec::new(),
-        Vec::new(),
-        Constraints::default(),
-    );
+        bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ..Default::default()
+    });
     let mut b = ast.edit();
     let id = b.add_aromatic_system(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default());
     let new_ast = b.build();
@@ -208,36 +196,34 @@ fn test_molecule_editor_add_aromatic_system() {
 
 #[fixture]
 fn rich_molecule() -> MoleculeAst {
-    MoleculeAst::from_parts(
-        vec![
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::N),
             AtomAst::from_element(Element::O),
         ],
-        vec![
+        bonds: vec![
             (AtomId(0), AtomId(1), BondAst::from_order(1)),
             (AtomId(1), AtomId(2), BondAst::from_order(2)),
             (AtomId(2), AtomId(3), BondAst::from_order(1)),
         ],
-        vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
-        vec![(
+        dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+        aromatic: vec![(
             vec![AtomId(0), AtomId(1), AtomId(2)],
             AromaticSystemAst::default(),
         )],
-        vec![(
+        multicenter: vec![(
             vec![AtomId(0), AtomId(1), AtomId(2)],
             MulticenterBondAst::default(),
         )],
-        vec![(
+        noncovalent: vec![(
             AtomId(0),
             AtomId(3),
             NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
-        Vec::new(),
-        Vec::new(),
-        Constraints::default(),
-    )
+        ..Default::default()
+    })
 }
 
 #[rstest]
@@ -800,23 +786,12 @@ fn test_molecule_ast_has_noncovalent_bonds(#[from(rich_molecule)] ast: MoleculeA
 }
 
 #[rstest]
-fn test_molecule_ast_has_overlays(#[from(rich_molecule)] ast: MoleculeAst) {
-    assert!(ast.has_overlays());
-}
-
-#[rstest]
-fn test_molecule_ast_has_overlays_empty() {
-    assert!(!MoleculeAst::default().has_overlays());
-}
-
-#[rstest]
 fn test_molecule_ast_has_stereo_atoms() {
     let ast = mol_dsl!(
         r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#
     );
     assert!(ast.has_stereo_atoms());
     assert!(!ast.has_stereo_bonds());
-    assert!(ast.has_overlays());
 }
 
 #[rstest]
@@ -826,7 +801,6 @@ fn test_molecule_ast_has_stereo_bonds() {
     );
     assert!(ast.has_stereo_bonds());
     assert!(!ast.has_stereo_atoms());
-    assert!(ast.has_overlays());
 }
 
 #[rstest]
@@ -849,25 +823,19 @@ fn test_molecule_ast_atoms(#[from(rich_molecule)] ast: MoleculeAst) {
 
 #[test]
 fn test_bond_views_induced_ids() {
-    let ast = MoleculeAst::from_parts(
-        vec![
+    let ast = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
         ],
-        vec![
+        bonds: vec![
             (AtomId(0), AtomId(1), BondAst::from_order(1)),
             (AtomId(1), AtomId(2), BondAst::from_order(1)),
             (AtomId(0), AtomId(2), BondAst::from_order(1)),
         ],
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        Vec::new(),
-        Vec::new(),
-        Constraints::default(),
-    );
+        ..Default::default()
+    });
     let bonds = ast.bonds().induced_ids(&[AtomId(0), AtomId(1)]);
     assert_eq!(bonds, vec![BondId(0)]);
 
@@ -887,7 +855,11 @@ fn chain(n: usize) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms,
+        bonds,
+        ..Default::default()
+    })
 }
 
 fn ring(n: usize) -> MoleculeAst {
@@ -901,7 +873,11 @@ fn ring(n: usize) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms,
+        bonds,
+        ..Default::default()
+    })
 }
 
 fn two_components() -> MoleculeAst {
@@ -910,17 +886,11 @@ fn two_components() -> MoleculeAst {
         (AtomId(0), AtomId(1), BondAst::from_order(1)),
         (AtomId(2), AtomId(3), BondAst::from_order(1)),
     ];
-    MoleculeAst::from_parts(
+    MoleculeAst::from_parts(MoleculeParts {
         atoms,
         bonds,
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        Vec::new(),
-        Vec::new(),
-        Constraints::default(),
-    )
+        ..Default::default()
+    })
 }
 
 #[rstest]
@@ -1551,17 +1521,12 @@ fn test_molecule_editor_add_and_remove(#[from(rich_molecule)] ast: MoleculeAst) 
 #[case::donor_above_acceptor(AtomId(1), AtomId(0))]
 fn test_molecule_ast_dative_acceptor_donor(#[case] donor: AtomId, #[case] acceptor: AtomId) {
     let atoms = vec![ground_atom(), ground_atom()];
-    let ast = MoleculeAst::from_parts(
+    let ast = MoleculeAst::from_parts(MoleculeParts {
         atoms,
-        Vec::new(),
-        vec![(vec![donor], acceptor, DativeBondAst::from_order(1))],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Constraints::new(),
-    );
+        dative: vec![(vec![donor], acceptor, DativeBondAst::from_order(1))],
+        constraints: Constraints::new(),
+        ..Default::default()
+    });
     let view = ast.dative_bond(DativeBondId(0));
     assert_eq!(view.acceptor_id(), acceptor);
     assert_eq!(view.donor_ids().collect::<Vec<_>>(), vec![donor]);
@@ -1577,28 +1542,18 @@ fn test_molecule_ast_eq_canonical_across_bond_order() {
         spin: SpinStateAst::closed_shell(),
         constraints: BondConstraintsAst::new(),
     };
-    let forward = MoleculeAst::from_parts(
-        atoms_a,
-        vec![(AtomId(0), AtomId(1), bond.clone())],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Constraints::new(),
-    );
-    let reverse = MoleculeAst::from_parts(
-        atoms_b,
-        vec![(AtomId(1), AtomId(0), bond)],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Constraints::new(),
-    );
+    let forward = MoleculeAst::from_parts(MoleculeParts {
+        atoms: atoms_a,
+        bonds: vec![(AtomId(0), AtomId(1), bond.clone())],
+        constraints: Constraints::new(),
+        ..Default::default()
+    });
+    let reverse = MoleculeAst::from_parts(MoleculeParts {
+        atoms: atoms_b,
+        bonds: vec![(AtomId(1), AtomId(0), bond)],
+        constraints: Constraints::new(),
+        ..Default::default()
+    });
     assert_eq!(forward, reverse);
 }
 
@@ -1606,28 +1561,18 @@ fn test_molecule_ast_eq_canonical_across_bond_order() {
 fn test_molecule_ast_eq_canonical_across_dative_order() {
     let atoms_a = vec![ground_atom(), ground_atom()];
     let atoms_b = vec![ground_atom(), ground_atom()];
-    let forward = MoleculeAst::from_parts(
-        atoms_a,
-        Vec::new(),
-        vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Constraints::new(),
-    );
-    let reverse = MoleculeAst::from_parts(
-        atoms_b,
-        Vec::new(),
-        vec![(vec![AtomId(1)], AtomId(0), DativeBondAst::from_order(1))],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Constraints::new(),
-    );
+    let forward = MoleculeAst::from_parts(MoleculeParts {
+        atoms: atoms_a,
+        dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+        constraints: Constraints::new(),
+        ..Default::default()
+    });
+    let reverse = MoleculeAst::from_parts(MoleculeParts {
+        atoms: atoms_b,
+        dative: vec![(vec![AtomId(1)], AtomId(0), DativeBondAst::from_order(1))],
+        constraints: Constraints::new(),
+        ..Default::default()
+    });
     assert_ne!(
         forward, reverse,
         "acceptor identity is part of dative bond; swapping donor/acceptor should differ"
@@ -2086,20 +2031,22 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
 
 #[rstest]
 fn test_molecule_ast_join() {
-    let left = MoleculeAst::from_atoms_and_bonds(
-        vec![
+    let left = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::O),
         ],
-        vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-    );
-    let right = MoleculeAst::from_atoms_and_bonds(
-        vec![
+        bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ..Default::default()
+    });
+    let right = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::N),
             AtomAst::from_element(Element::N),
         ],
-        vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
-    );
+        bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+        ..Default::default()
+    });
     let (union, correspondence) = left.join(&right);
 
     assert_eq!(union.atoms().count(), 4);
@@ -2115,15 +2062,18 @@ fn test_molecule_ast_join() {
 
 #[rstest]
 fn test_molecule_ast_join_from() {
-    let mut left =
-        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], Vec::new());
-    let right = MoleculeAst::from_atoms_and_bonds(
-        vec![
+    let mut left = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![AtomAst::from_element(Element::C)],
+        ..Default::default()
+    });
+    let right = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::O),
             AtomAst::from_element(Element::N),
         ],
-        vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-    );
+        bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ..Default::default()
+    });
     let correspondence = left.join_from(&right);
 
     assert_eq!(left.atoms().count(), 3);
@@ -2134,25 +2084,22 @@ fn test_molecule_ast_join_from() {
 
 #[rstest]
 fn test_molecule_ast_join_overlay() {
-    let left =
-        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], Vec::new());
-    let right = MoleculeAst::from_parts(
-        vec![
+    let left = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![AtomAst::from_element(Element::C)],
+        ..Default::default()
+    });
+    let right = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
         ],
-        vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        Vec::new(),
-        vec![(
+        bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        aromatic: vec![(
             vec![AtomId(0), AtomId(1)],
             AromaticSystemAst::from_electrons(vec![1, 1]),
         )],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Constraints::default(),
-    );
+        ..Default::default()
+    });
     let (union, correspondence) = left.join(&right);
 
     assert_eq!(union.aromatic_systems().count(), 1);
@@ -2174,20 +2121,17 @@ fn test_molecule_ast_join_overlay() {
 
 #[rstest]
 fn test_molecule_ast_join_stereo() {
-    let left =
-        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], Vec::new());
-    let right = MoleculeAst::from_parts(
-        vec![
+    let left = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![AtomAst::from_element(Element::C)],
+        ..Default::default()
+    });
+    let right = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
         ],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        vec![(
+        stereo_atoms: vec![(
             AtomId(0),
             vec![
                 StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
@@ -2195,9 +2139,9 @@ fn test_molecule_ast_join_stereo() {
             ],
             StereoAtomAst::new(StereoKind::Tetrahedral, 1u32),
         )],
-        Vec::new(),
-        Constraints::new(),
-    );
+        constraints: Constraints::new(),
+        ..Default::default()
+    });
     let (union, _) = left.join(&right);
 
     assert_eq!(union.stereo_atoms().count(), 1);
@@ -2212,25 +2156,23 @@ fn test_molecule_ast_join_stereo() {
 
 #[rstest]
 fn test_molecule_ast_join_constraint() {
-    let left =
-        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C)], Vec::new());
-    let right = MoleculeAst::from_parts(
-        vec![
+    let left = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![AtomAst::from_element(Element::C)],
+        ..Default::default()
+    });
+    let right = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
         ],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        constraints_with_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: Some(vec![AtomId(0), AtomId(1)]),
-            sum: ValueAst::Lit(0),
-        })),
-    );
+        constraints: constraints_with_molecule(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum {
+                atoms: Some(vec![AtomId(0), AtomId(1)]),
+                sum: ValueAst::Lit(0),
+            },
+        )),
+        ..Default::default()
+    });
     let (union, _) = left.join(&right);
 
     // right's constraint over atoms [0, 1] is remapped to [1, 2] in the union
@@ -2244,18 +2186,19 @@ fn test_molecule_ast_join_constraint() {
 #[rstest]
 fn test_molecule_ast_split() {
     // two disconnected bonds → two components
-    let mol = MoleculeAst::from_atoms_and_bonds(
-        vec![
+    let mol = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::O),
             AtomAst::from_element(Element::N),
             AtomAst::from_element(Element::N),
         ],
-        vec![
+        bonds: vec![
             (AtomId(0), AtomId(1), BondAst::from_order(1)),
             (AtomId(2), AtomId(3), BondAst::from_order(2)),
         ],
-    );
+        ..Default::default()
+    });
     let components = mol.split();
 
     assert_eq!(components.len(), 2);
@@ -2273,28 +2216,23 @@ fn test_molecule_ast_split() {
 #[rstest]
 fn test_molecule_ast_split_overlay_binds() {
     // two disconnected bonds, but an aromatic system over {1, 2} keeps all four atoms in one component
-    let mol = MoleculeAst::from_parts(
-        vec![
+    let mol = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
         ],
-        vec![
+        bonds: vec![
             (AtomId(0), AtomId(1), BondAst::from_order(1)),
             (AtomId(2), AtomId(3), BondAst::from_order(1)),
         ],
-        Vec::new(),
-        vec![(
+        aromatic: vec![(
             vec![AtomId(1), AtomId(2)],
             AromaticSystemAst::from_electrons(vec![1, 1]),
         )],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Constraints::default(),
-    );
+        ..Default::default()
+    });
     let components = mol.split();
 
     assert_eq!(components.len(), 1);
@@ -2303,20 +2241,22 @@ fn test_molecule_ast_split_overlay_binds() {
 
 #[rstest]
 fn test_molecule_ast_join_split_roundtrip() {
-    let left = MoleculeAst::from_atoms_and_bonds(
-        vec![
+    let left = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::O),
         ],
-        vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-    );
-    let right = MoleculeAst::from_atoms_and_bonds(
-        vec![
+        bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ..Default::default()
+    });
+    let right = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::N),
             AtomAst::from_element(Element::N),
         ],
-        vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
-    );
+        bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+        ..Default::default()
+    });
     let (union, _) = left.join(&right);
     let components = union.split();
 
@@ -2328,14 +2268,10 @@ fn test_molecule_ast_join_split_roundtrip() {
 #[rstest]
 fn test_molecule_ast_split_stereo() {
     // a stereo atom binds its site + ligands into one component, separate from a lone bond
-    let mol = MoleculeAst::from_parts(
-        (0..7).map(|_| AtomAst::from_element(Element::C)).collect(),
-        vec![(AtomId(5), AtomId(6), BondAst::from_order(1))],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        vec![(
+    let mol = MoleculeAst::from_parts(MoleculeParts {
+        atoms: (0..7).map(|_| AtomAst::from_element(Element::C)).collect(),
+        bonds: vec![(AtomId(5), AtomId(6), BondAst::from_order(1))],
+        stereo_atoms: vec![(
             AtomId(0),
             vec![
                 StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
@@ -2345,9 +2281,9 @@ fn test_molecule_ast_split_stereo() {
             ],
             StereoAtomAst::new(StereoKind::Tetrahedral, 1u32),
         )],
-        Vec::new(),
-        Constraints::new(),
-    );
+        constraints: Constraints::new(),
+        ..Default::default()
+    });
     let components = mol.split();
 
     assert_eq!(components.len(), 2);
@@ -2369,23 +2305,20 @@ fn test_molecule_ast_split_stereo() {
 #[rstest]
 fn test_molecule_ast_split_constraint_binds() {
     // two disconnected bonds, but a ChargeSum over {1, 2} binds all four atoms into one component
-    let mol = MoleculeAst::from_parts(
-        (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
-        vec![
+    let mol = MoleculeAst::from_parts(MoleculeParts {
+        atoms: (0..4).map(|_| AtomAst::from_element(Element::C)).collect(),
+        bonds: vec![
             (AtomId(0), AtomId(1), BondAst::from_order(1)),
             (AtomId(2), AtomId(3), BondAst::from_order(1)),
         ],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        constraints_with_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: Some(vec![AtomId(1), AtomId(2)]),
-            sum: ValueAst::Lit(0),
-        })),
-    );
+        constraints: constraints_with_molecule(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum {
+                atoms: Some(vec![AtomId(1), AtomId(2)]),
+                sum: ValueAst::Lit(0),
+            },
+        )),
+        ..Default::default()
+    });
     let components = mol.split();
 
     assert_eq!(components.len(), 1);
@@ -2401,28 +2334,25 @@ fn test_molecule_ast_split_constraint_binds() {
 #[rstest]
 fn test_molecule_ast_split_constraint_routed() {
     // a constraint over the second component's atoms routes there, remapped to compact ids
-    let mol = MoleculeAst::from_parts(
-        vec![
+    let mol = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::O),
             AtomAst::from_element(Element::N),
             AtomAst::from_element(Element::N),
         ],
-        vec![
+        bonds: vec![
             (AtomId(0), AtomId(1), BondAst::from_order(1)),
             (AtomId(2), AtomId(3), BondAst::from_order(2)),
         ],
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        constraints_with_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: Some(vec![AtomId(2), AtomId(3)]),
-            sum: ValueAst::Lit(0),
-        })),
-    );
+        constraints: constraints_with_molecule(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum {
+                atoms: Some(vec![AtomId(2), AtomId(3)]),
+                sum: ValueAst::Lit(0),
+            },
+        )),
+        ..Default::default()
+    });
     let components = mol.split();
 
     assert_eq!(components.len(), 2);

@@ -208,10 +208,9 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::Constraints;
     use crate::ast::id::{AtomId, BondId, StereoAtomId, StereoBondId};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::spin::SpinStateAst;
     use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
     use crate::ast::value::ValueAst;
@@ -219,17 +218,18 @@ mod tests {
     #[fixture]
     fn ethanol_fragment() -> MoleculeAst {
         // C-C-O: the two carbons share an element; oxygen differs.
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::O),
             ],
-            vec![
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
             ],
-        )
+            ..Default::default()
+        })
     }
 
     #[rustfmt::skip]
@@ -255,19 +255,15 @@ mod tests {
     fn stereo_molecule() -> MoleculeAst {
         // Two stereo atoms of different kinds (Tetrahedral, SquarePlanar) and a
         // stereo bond, on a C₆ chain — enough to exercise kind + tag distinction.
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 6],
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 6],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
                 (AtomId(2), AtomId(3), BondAst::from_order(1)),
                 (AtomId(3), AtomId(4), BondAst::from_order(1)),
             ],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![
+            stereo_atoms: vec![
                 (
                     AtomId(1),
                     vec![
@@ -285,7 +281,7 @@ mod tests {
                     StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(1)),
                 ),
             ],
-            vec![(
+            stereo_bonds: vec![(
                 BondId(1),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
@@ -293,8 +289,8 @@ mod tests {
                 ],
                 StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
             )],
-            Constraints::default(),
-        )
+            ..Default::default()
+        })
     }
 
     #[rustfmt::skip]
@@ -335,13 +331,14 @@ mod tests {
     ) {
         // Two same-element atoms differing only in spin; the color matches iff
         // the spins are indistinguishable under `features`.
-        let mol = MoleculeAst::from_atoms_and_bonds(
-            vec![
+        let mol = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C).with_spin(spin_a),
                 AtomAst::from_element(Element::C).with_spin(spin_b),
             ],
-            vec![],
-        );
+            bonds: vec![],
+            ..Default::default()
+        });
         let coloring = ConstitutionColoring::new(features);
         let equal = coloring.color(&mol, Entity::Atom(AtomId(0)))
             == coloring.color(&mol, Entity::Atom(AtomId(1)));

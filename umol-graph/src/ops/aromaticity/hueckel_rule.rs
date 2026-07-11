@@ -250,7 +250,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElectronCountsAst,
-        ElementAst, MoleculeAst, RingFamily, ValueAst,
+        ElementAst, MoleculeAst, MoleculeParts, RingFamily, ValueAst,
     };
     use umol_chem::element::Element;
 
@@ -301,7 +301,11 @@ mod tests {
             })
             .collect();
         let atoms = apply_pi(specs);
-        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            ..Default::default()
+        })
     }
 
     fn make_fused(specs: Vec<(AtomAst, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
@@ -310,7 +314,11 @@ mod tests {
             .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondAst::from_order(1)))
             .collect();
         let atoms = apply_pi(specs);
-        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            ..Default::default()
+        })
     }
 
     fn enumerate_simple(ast: &MoleculeAst, max_ring_size: usize) -> RingSet {

@@ -12,7 +12,9 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
-use umol_ast::ast::{AtomAst, AtomId, BondAst, MoleculeAst, SubstructureMatchAlgorithm, ValueAst};
+use umol_ast::ast::{
+    AtomAst, AtomId, BondAst, MoleculeAst, MoleculeParts, SubstructureMatchAlgorithm, ValueAst,
+};
 use umol_chem::element::Element;
 use umol_graph::parse::parse_smiles;
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
@@ -89,7 +91,11 @@ fn pattern(atoms: Vec<AtomAst>, bonds: Vec<(u32, u32, BondAst)>) -> MoleculeAst 
         .into_iter()
         .map(|(s, t, b)| (AtomId(s), AtomId(t), b))
         .collect();
-    MoleculeAst::from_atoms_and_bonds(atoms, bond_list)
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms,
+        bonds: bond_list,
+        ..Default::default()
+    })
 }
 
 /// `C(C)C(C)N` — 5 atoms, all any-bonds.

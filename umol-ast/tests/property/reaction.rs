@@ -8,7 +8,8 @@ use proptest::prelude::*;
 use umol_ast::ast::{
     AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, BondDelta, CompositionScope,
     DativeBondConstraintAst, DativeBondDelta, DativeBondFieldChange, Delta, Deltas, DpoValidator,
-    MulticenterBondDelta, MulticenterBondFieldChange, NoncovalentBondAst, NoncovalentBondDelta,
+    MoleculeParts, MulticenterBondDelta, MulticenterBondFieldChange, NoncovalentBondAst,
+    NoncovalentBondDelta,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, ReactionAst, ReactionSpanAst,
     StereoAtomAst, StereoAtomDelta, StereoAtomFieldChange, StereoBondAst, StereoBondDelta,
     StereoBondFieldChange, StereoConfigurationAst, StereoKind, StereoLigand,
@@ -43,7 +44,11 @@ fn simple_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                 .zip(orders)
                 .map(|(&[a, b], order)| (AtomId(a), AtomId(b), BondAst::from_order(order)))
                 .collect();
-            MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms,
+                bonds,
+                ..Default::default()
+            })
         })
 }
 
@@ -163,7 +168,7 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                         _ => None,
                     })
                     .collect();
-                MoleculeAst::from_parts(
+                MoleculeAst::from_parts(MoleculeParts {
                     atoms,
                     bonds,
                     dative,
@@ -172,8 +177,8 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
                     noncovalent,
                     stereo_atoms,
                     stereo_bonds,
-                    Constraints::new(),
-                )
+                    constraints: Constraints::new(),
+                })
             },
         )
 }

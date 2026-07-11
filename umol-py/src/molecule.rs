@@ -2,7 +2,9 @@
 //! `umol_ast::ast::MoleculeAst`.
 
 use pyo3::prelude::*;
-use umol_ast::ast::{AtomId as AstAtomId, MoleculeAst as AstMoleculeAst};
+use umol_ast::ast::{
+    AtomId as AstAtomId, MoleculeAst as AstMoleculeAst, MoleculeParts as AstMoleculeParts,
+};
 
 use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
@@ -44,7 +46,11 @@ impl MoleculeAst {
                 )
             })
             .collect();
-        MoleculeAst(AstMoleculeAst::from_atoms_and_bonds(ast_atoms, ast_bonds))
+        MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: ast_atoms,
+            bonds: ast_bonds,
+            ..Default::default()
+        }))
     }
 
     /// The atoms, indexed by integer position.
@@ -107,17 +113,20 @@ mod tests {
     #[case(vec![Element::C, Element::O], 2)]
     fn test_molecule_ast_atoms(#[case] elements: Vec<Element>, #[case] expected: usize) {
         let atoms = elements.into_iter().map(AtomAst::from_element).collect();
-        let molecule = MoleculeAst(AstMoleculeAst::from_atoms_and_bonds(atoms, vec![]));
+        let molecule = MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms,
+            ..Default::default()
+        }));
         assert_eq!(molecule.inner().atoms().count(), expected);
     }
 
     #[rstest]
     fn test_molecule_ast_eq() {
         assert_eq!(MoleculeAst::new(), MoleculeAst::new());
-        let carbon = MoleculeAst(AstMoleculeAst::from_atoms_and_bonds(
-            vec![AtomAst::from_element(Element::C)],
-            vec![],
-        ));
+        let carbon = MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        }));
         assert_ne!(MoleculeAst::new(), carbon);
     }
 

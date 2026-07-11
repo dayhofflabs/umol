@@ -133,7 +133,7 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::*;
-    use umol_ast::ast::Constraints;
+    use umol_ast::ast::MoleculeParts;
     use umol_ast::{atom_dsl, mol_dsl, mol_dsl_ground};
 
     use super::*;
@@ -190,17 +190,10 @@ mod tests {
             registry: Cow::Owned(registry!["C#c0#h4#n0#u0#s#v0#a!"]),
         };
         let resolver = AtomTypingValence::new(&model);
-        let molecule = MoleculeAst::from_parts(
-            vec![atom_dsl!(input)],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        );
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![atom_dsl!(input)],
+            ..Default::default()
+        });
         assert_eq!(
             resolver.conforms_molecule_atom(&molecule, AtomId(0)),
             expected

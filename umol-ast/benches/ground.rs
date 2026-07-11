@@ -16,7 +16,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::{
     AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, IntoAst, IsotopeMassAst, MemOp,
-    MoleculeAst, RelOp, SpinStateAst, ValueAst, ValuePredicate, ValueTerm,
+    MoleculeAst, MoleculeParts, RelOp, SpinStateAst, ValueAst, ValuePredicate, ValueTerm,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_chem::element::Element;
@@ -95,7 +95,11 @@ fn arith_expr_heavy() -> MoleculeAst {
             (AtomId(i as u32), AtomId(i as u32 + 1), bond)
         })
         .collect();
-    MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+    MoleculeAst::from_parts(MoleculeParts {
+        atoms,
+        bonds,
+        ..Default::default()
+    })
 }
 
 // Silence `unused` warnings on pre-switch build: `AtomConstraintAst` is kept

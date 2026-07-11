@@ -202,13 +202,6 @@ impl<'a> BondView<'a> {
             .filter(|s| s.kind() == StereoKind::CisTrans)
     }
 
-    /// True if this bond participates in any overlay relation (aromatic
-    /// system, cis/trans stereo). Bond counterpart of `AtomView::is_in_overlays`;
-    /// useful as a pre-mutation predicate before structural removal.
-    pub fn is_in_overlays(&self) -> bool {
-        self.is_in_aromatic_system() || self.is_in_cis_trans_stereo()
-    }
-
     /// True if this bond belongs to any ring in the molecule's canonical
     /// ring set (Vismara relevant cycles, max ring size 22). Uses the
     /// molecule's cached canonical `RingSet`.
@@ -323,11 +316,11 @@ mod tests {
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::{BondConstraintAst, BondConstraintsAst, Constraints, RingScope};
+    use crate::ast::constraint::{BondConstraintAst, BondConstraintsAst, RingScope};
     use crate::ast::dative::DativeBondAst;
     use crate::ast::id::{AromaticSystemId, AtomId, BondId, StereoBondId};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use crate::ast::ring::RingFamily;
@@ -336,43 +329,41 @@ mod tests {
 
     #[fixture]
     fn molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::N),
                 AtomAst::from_element(Element::O),
             ],
-            vec![
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(2)),
                 (AtomId(2), AtomId(3), BondAst::from_order(1)),
             ],
-            vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
-            vec![(
+            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
                 AromaticSystemAst::default(),
             )],
-            vec![(
+            multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
                 MulticenterBondAst::default(),
             )],
-            vec![(
+            noncovalent: vec![(
                 AtomId(0),
                 AtomId(3),
                 NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        )
+            ..Default::default()
+        })
     }
 
     #[fixture]
     fn ring_with_chain() -> MoleculeAst {
-        MoleculeAst::from_atoms_and_bonds(
-            vec![AtomAst::from_element(Element::C); 7],
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 7],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
                 (AtomId(2), AtomId(3), BondAst::from_order(1)),
@@ -381,7 +372,8 @@ mod tests {
                 (AtomId(5), AtomId(0), BondAst::from_order(1)),
                 (AtomId(0), AtomId(6), BondAst::from_order(1)),
             ],
-        )
+            ..Default::default()
+        })
     }
 
     #[rstest]
@@ -481,19 +473,14 @@ mod tests {
 
     #[fixture]
     fn stereo_molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 4],
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 4],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(2)),
                 (AtomId(2), AtomId(3), BondAst::from_order(1)),
             ],
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            vec![(
+            stereo_bonds: vec![(
                 BondId(1),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
@@ -501,8 +488,8 @@ mod tests {
                 ],
                 StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
             )],
-            Constraints::default(),
-        )
+            ..Default::default()
+        })
     }
 
     #[rstest]
@@ -536,18 +523,6 @@ mod tests {
         assert_eq!(view.id, StereoBondId(0));
         assert_eq!(view.kind(), StereoKind::CisTrans);
         assert!(stereo_molecule.bond(BondId(0)).cis_trans_stereo().is_none());
-    }
-
-    #[rstest]
-    #[case::aromatic(molecule(), BondId(0), true)]
-    #[case::cis_trans_stereo(stereo_molecule(), BondId(1), true)]
-    #[case::plain(stereo_molecule(), BondId(0), false)]
-    fn test_bond_view_is_in_overlays(
-        #[case] mol: MoleculeAst,
-        #[case] bond: BondId,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(mol.bond(bond).is_in_overlays(), expected);
     }
 
     #[rustfmt::skip]

@@ -379,17 +379,6 @@ impl<'a> AtomView<'a> {
             .filter(|s| s.kind() == StereoKind::Tetrahedral)
     }
 
-    /// True if this atom participates in any overlay relation (aromatic
-    /// system, dative bond, multicenter bond, noncovalent bond, tetrahedral
-    /// stereo). Mirror of `MoleculeAst::has_overlays` scoped to a single atom;
-    /// useful as a pre-mutation predicate before structural removal.
-    pub fn is_in_overlays(&self) -> bool {
-        self.is_in_aromatic_system()
-            || self.is_in_dative_bond()
-            || self.is_in_multicenter_bond()
-            || self.is_in_noncovalent_bond()
-            || self.is_in_tetrahedral_stereo()
-    }
 
     /// True if this atom belongs to any ring in the molecule's canonical
     /// ring set (Vismara relevant cycles, max ring size 22). Uses the
@@ -566,8 +555,8 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::{
-        AromaticValenceAst, AtomConstraintAst, AtomConstraintsAst, Constraints,
-        MulticenterValenceAst, RingScope,
+        AromaticValenceAst, AtomConstraintAst, AtomConstraintsAst, MulticenterValenceAst,
+        RingScope,
     };
     use crate::ast::dative::DativeBondAst;
     use crate::ast::electrons::ElectronCountsAst;
@@ -576,7 +565,7 @@ mod tests {
         StereoAtomId,
     };
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use crate::ast::ring::RingFamily;
@@ -586,43 +575,41 @@ mod tests {
 
     #[fixture]
     fn molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::N),
                 AtomAst::from_element(Element::O),
             ],
-            vec![
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(2)),
                 (AtomId(2), AtomId(3), BondAst::from_order(1)),
             ],
-            vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
-            vec![(
+            dative: vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
                 AromaticSystemAst::default(),
             )],
-            vec![(
+            multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
                 MulticenterBondAst::default(),
             )],
-            vec![(
+            noncovalent: vec![(
                 AtomId(0),
                 AtomId(3),
                 NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        )
+            ..Default::default()
+        })
     }
 
     #[fixture]
     fn ring_with_chain() -> MoleculeAst {
-        MoleculeAst::from_atoms_and_bonds(
-            vec![AtomAst::from_element(Element::C); 7],
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 7],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
                 (AtomId(2), AtomId(3), BondAst::from_order(1)),
@@ -631,7 +618,8 @@ mod tests {
                 (AtomId(5), AtomId(0), BondAst::from_order(1)),
                 (AtomId(0), AtomId(6), BondAst::from_order(1)),
             ],
-        )
+            ..Default::default()
+        })
     }
 
     #[rstest]
@@ -752,7 +740,10 @@ mod tests {
         if let Some(c) = constraint {
             atom.constraints.set(c);
         }
-        let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![atom],
+            ..Default::default()
+        });
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().valence(),
             expected.as_ref()
@@ -763,20 +754,14 @@ mod tests {
     #[case::donor(AtomId(0), ValueAst::Lit(1))]
     #[case::acceptor(AtomId(1), ValueAst::Lit(0))]
     fn test_atom_view_donated_pairs(#[case] atom: AtomId, #[case] expected: ValueAst) {
-        let molecule = MoleculeAst::from_parts(
-            vec![
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::N),
                 AtomAst::from_element(Element::C),
             ],
-            vec![],
-            vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
-            vec![],
-            vec![],
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        );
+            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+            ..Default::default()
+        });
         assert_eq!(molecule.atom(atom).donated_pairs(), expected);
     }
 
@@ -784,7 +769,10 @@ mod tests {
     fn test_atom_view_donated_pairs_constraint() {
         let mut atom = AtomAst::from_element(Element::N);
         atom.constraints.set(AtomConstraintAst::donated_pairs(1));
-        let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![atom],
+            ..Default::default()
+        });
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().donated_pairs(),
             Some(&ValueAst::Lit(1)),
@@ -795,20 +783,14 @@ mod tests {
     #[case::donor(AtomId(0), ValueAst::Lit(0))]
     #[case::acceptor(AtomId(1), ValueAst::Lit(1))]
     fn test_atom_view_accepted_pairs(#[case] atom: AtomId, #[case] expected: ValueAst) {
-        let molecule = MoleculeAst::from_parts(
-            vec![
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::N),
                 AtomAst::from_element(Element::C),
             ],
-            vec![],
-            vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
-            vec![],
-            vec![],
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        );
+            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+            ..Default::default()
+        });
         assert_eq!(molecule.atom(atom).accepted_pairs(), expected);
     }
 
@@ -816,7 +798,10 @@ mod tests {
     fn test_atom_view_accepted_pairs_constraint() {
         let mut atom = AtomAst::from_element(Element::C);
         atom.constraints.set(AtomConstraintAst::accepted_pairs(2));
-        let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![atom],
+            ..Default::default()
+        });
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().accepted_pairs(),
             Some(&ValueAst::Lit(2)),
@@ -903,9 +888,9 @@ mod tests {
 
     #[fixture]
     fn stereo_molecule() -> MoleculeAst {
-        MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 10],
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 10],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(0), AtomId(2), BondAst::from_order(1)),
                 (AtomId(0), AtomId(3), BondAst::from_order(1)),
@@ -915,11 +900,7 @@ mod tests {
                 (AtomId(5), AtomId(8), BondAst::from_order(1)),
                 (AtomId(5), AtomId(9), BondAst::from_order(1)),
             ],
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            vec![
+            stereo_atoms: vec![
                 (
                     AtomId(0),
                     vec![
@@ -941,9 +922,8 @@ mod tests {
                     StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(1)),
                 ),
             ],
-            Vec::new(),
-            Constraints::default(),
-        )
+            ..Default::default()
+        })
     }
 
     #[rstest]
@@ -1025,42 +1005,6 @@ mod tests {
         assert_eq!(count, expected_count);
     }
 
-    #[rstest]
-    #[case::aromatic_and_multicenter(molecule(), AtomId(0), true)]
-    #[case::aromatic_only_in_rich(molecule(), AtomId(1), true)]
-    #[case::dative_donor(molecule(), AtomId(2), true)]
-    #[case::dative_acceptor(molecule(), AtomId(3), true)]
-    #[case::bare_atom_0(
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
-            ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        ),
-        AtomId(0),
-        false,
-    )]
-    #[case::bare_atom_1(
-        MoleculeAst::from_atoms_and_bonds(
-            vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
-            ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-        ),
-        AtomId(1),
-        false,
-    )]
-    #[case::tetrahedral_stereo_site(stereo_molecule(), AtomId(0), true)]
-    fn test_atom_view_is_in_overlays(
-        #[case] mol: MoleculeAst,
-        #[case] atom: AtomId,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(mol.atom(atom).is_in_overlays(), expected);
-    }
-
     #[rustfmt::skip]
     #[rstest]
     #[case::tetrahedral_site(AtomId(0), AtomConstraintsAst::from_iter([
@@ -1101,7 +1045,10 @@ mod tests {
         atom.constraints.set(AtomConstraintAst::aromatic_valence(
             AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
         ));
-        let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![atom],
+            ..Default::default()
+        });
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().aromatic_valence(),
             Some(&AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
@@ -1132,21 +1079,15 @@ mod tests {
             .into_iter()
             .map(|(parts, electrons)| (parts, MulticenterBondAst::new(electrons)))
             .collect();
-        let molecule = MoleculeAst::from_parts(
-            vec![
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
             ],
-            vec![],
-            vec![],
-            vec![],
             multicenter,
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        );
+            ..Default::default()
+        });
         assert_eq!(molecule.atom(AtomId(0)).multicenter_valence(), expected);
     }
 
@@ -1156,7 +1097,10 @@ mod tests {
         atom.constraints.set(AtomConstraintAst::multicenter_valence(
             MulticenterValenceAst::Multicenter(ValueAst::Lit(2)),
         ));
-        let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![atom],
+            ..Default::default()
+        });
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().multicenter_valence(),
             Some(&MulticenterValenceAst::Multicenter(ValueAst::Lit(2))),
@@ -1269,24 +1213,19 @@ mod tests {
         // 3-membered C ring, each with 0 implicit H (valence 2 from two ring
         // bonds), aromatic system electrons [1, 2, 0].
         let carbon = AtomAst::from_element(Element::C).with_implicit_hydrogens(0_i64);
-        MoleculeAst::from_parts(
-            vec![carbon.clone(), carbon.clone(), carbon],
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![carbon.clone(), carbon.clone(), carbon],
+            bonds: vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(1), AtomId(2), BondAst::from_order(1)),
                 (AtomId(2), AtomId(0), BondAst::from_order(1)),
             ],
-            vec![],
-            vec![(
+            aromatic: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
                 AromaticSystemAst::from_electrons(vec![1, 2, 0]),
             )],
-            vec![],
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        )
+            ..Default::default()
+        })
     }
 
     #[rstest]
@@ -1305,20 +1244,14 @@ mod tests {
     fn dative_pair() -> MoleculeAst {
         // H₃N→BH₃: N (3 H) donates a pair to B (3 H). Covalence = v+h+ai for
         // both = 3; the dative bond (donated on N, accepted on B) is excluded.
-        MoleculeAst::from_parts(
-            vec![
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::N).with_implicit_hydrogens(3_i64),
                 AtomAst::from_element(Element::B).with_implicit_hydrogens(3_i64),
             ],
-            vec![],
-            vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
-            vec![],
-            vec![],
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        )
+            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+            ..Default::default()
+        })
     }
 
     #[rstest]
@@ -1334,24 +1267,18 @@ mod tests {
 
     #[rstest]
     fn test_atom_view_multicenter_degree() {
-        let molecule = MoleculeAst::from_parts(
-            vec![
+        let molecule = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
             ],
-            vec![],
-            vec![],
-            vec![],
-            vec![(
+            multicenter: vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
                 MulticenterBondAst::from_electrons(vec![2, 2, 2]),
             )],
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        );
+            ..Default::default()
+        });
         assert_eq!(
             molecule.atom(AtomId(0)).multicenter_degree(),
             ValueAst::Lit(2),

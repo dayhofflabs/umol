@@ -265,7 +265,8 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraintAst, AtomConstraintKey,
-        AtomId, BondAst, BondConstraintKey, ElectronCountsAst, MoleculeAst, SpinStateAst, ValueAst,
+        AtomId, BondAst, BondConstraintKey, ElectronCountsAst, MoleculeAst, MoleculeParts,
+        SpinStateAst, ValueAst,
     };
     use umol_ast::mol_dsl_ground;
     use umol_chem::element::Element;
@@ -309,7 +310,11 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+        MoleculeAst::from_parts(MoleculeParts {
+        atoms,
+        bonds,
+        ..Default::default()
+    })
     }
 
     fn pyrrole() -> MoleculeAst {
@@ -323,7 +328,11 @@ mod tests {
         let bonds: Vec<_> = (0..5)
             .map(|i| (AtomId(i), AtomId((i + 1) % 5), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+        MoleculeAst::from_parts(MoleculeParts {
+        atoms,
+        bonds,
+        ..Default::default()
+    })
     }
 
     fn run_full(
@@ -490,7 +499,11 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        let mut ast = MoleculeAst::from_atoms_and_bonds(atoms, bonds);
+        let mut ast = MoleculeAst::from_parts(MoleculeParts {
+        atoms,
+        bonds,
+        ..Default::default()
+    });
         let solution = run_full(&perception, &mut ast);
         assert!(matches!(solution, Solution::Determined(())));
         assert_eq!(ast.aromatic_systems().count(), 0);

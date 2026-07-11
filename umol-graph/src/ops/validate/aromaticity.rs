@@ -106,8 +106,8 @@ impl AromaticityConformanceValidator {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraintAst, BondAst, MoleculeAst, SpinStateAst,
-        ValueAst,
+        AromaticValenceAst, AtomAst, AtomConstraintAst, BondAst, MoleculeAst, MoleculeParts,
+        SpinStateAst, ValueAst,
     };
     use umol_chem::element::Element;
 
@@ -139,7 +139,11 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            ..Default::default()
+        })
     }
 
     #[rstest]
