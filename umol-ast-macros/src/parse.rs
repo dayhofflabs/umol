@@ -7,28 +7,76 @@
 use std::collections::HashMap;
 use std::iter;
 
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::token::{Bracket, Paren};
 use syn::{bracketed, parenthesized, Error, Ident, LitStr, Result, Token};
 
-/// The whole macro body: comma-separated paths.
+/// Overlay-statement leading keywords.
+mod kw {
+    syn::custom_keyword!(aromatic);
+    syn::custom_keyword!(dative);
+    syn::custom_keyword!(multicenter);
+    syn::custom_keyword!(noncovalent);
+    syn::custom_keyword!(stereo);
+    syn::custom_keyword!(atom);
+    syn::custom_keyword!(bond);
+}
+
+/// The whole macro body: comma-separated statements — a bonded path or an overlay.
 pub(crate) struct MolInput {
-    pub(crate) paths: Vec<Path>,
+    pub(crate) statements: Vec<Statement>,
 }
 
 impl Parse for MolInput {
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut paths = Vec::new();
+        let mut statements = Vec::new();
         while !input.is_empty() {
-            paths.push(input.parse::<Path>()?);
+            statements.push(input.parse::<Statement>()?);
             if input.is_empty() {
                 break;
             }
             input.parse::<Token![,]>()?;
         }
-        Ok(MolInput { paths })
+        Ok(MolInput { statements })
+    }
+}
+
+impl MolInput {
+    pub(crate) fn paths(&self) -> impl Iterator<Item = &Path> {
+        self.statements.iter().filter_map(|statement| match statement {
+            Statement::Path(path) => Some(path),
+            Statement::Overlay(_) => None,
+        })
+    }
+
+    pub(crate) fn overlays(&self) -> impl Iterator<Item = &Overlay> {
+        self.statements.iter().filter_map(|statement| match statement {
+            Statement::Overlay(overlay) => Some(overlay),
+            Statement::Path(_) => None,
+        })
+    }
+}
+
+/// A statement: a bonded path, or an overlay (a keyword-led relation over already-declared atoms/bonds).
+pub(crate) enum Statement {
+    Path(Path),
+    Overlay(Overlay),
+}
+
+impl Parse for Statement {
+    fn parse(input: ParseStream) -> Result<Self> {
+        if input.peek(kw::aromatic)
+            || input.peek(kw::dative)
+            || input.peek(kw::multicenter)
+            || input.peek(kw::noncovalent)
+            || input.peek(kw::stereo)
+        {
+            Ok(Statement::Overlay(input.parse()?))
+        } else {
+            Ok(Statement::Path(input.parse()?))
+        }
     }
 }
 
@@ -108,6 +156,13 @@ impl ElementSpec {
             ElementSpec::Spec(lit) => lit.clone(),
         }
     }
+
+    pub(crate) fn span(&self) -> Span {
+        match self {
+            ElementSpec::Bare(ident) => ident.span(),
+            ElementSpec::Spec(lit) => lit.span(),
+        }
+    }
 }
 
 impl Parse for ElementSpec {
@@ -159,14 +214,110 @@ impl Parse for Bond {
     }
 }
 
-/// The output of [`resolve_positions`]: the ordered creation specs, and per path each atom
-/// occurrence's creation position (`None` marks a `^name` port, which creates no atom).
-pub(crate) type Positions = (Vec<LitStr>, Vec<Vec<Option<u32>>>);
+/// A ligand in a stereo overlay: an atom reference, or a virtual `"#h"` / `"#n"` placeholder.
+pub(crate) enum Ligand {
+    Atom(Atom),
+    ImplicitHydrogen,
+    LonePair,
+}
+
+impl Parse for Ligand {
+    fn parse(input: ParseStream) -> Result<Self> {
+        if input.peek(LitStr) {
+            let placeholder: LitStr = input.parse()?;
+            match placeholder.value().as_str() {
+                "#h" => Ok(Ligand::ImplicitHydrogen),
+                "#n" => Ok(Ligand::LonePair),
+                other => Err(Error::new(
+                    placeholder.span(),
+                    format!("unknown ligand placeholder {other:?}; use \"#h\" or \"#n\""),
+                )),
+            }
+        } else {
+            Ok(Ligand::Atom(input.parse()?))
+        }
+    }
+}
+
+/// An overlay statement: a keyword-led relation over already-declared atoms/bonds (references only).
+/// Each desugars to its L2 term; the optional payload is a quoted DSL spec for the entity's own Ast.
+pub(crate) enum Overlay {
+    Aromatic { atoms: Vec<Atom>, payload: Option<LitStr> },
+    Dative { donors: Vec<Atom>, acceptor: Atom, payload: Option<LitStr> },
+    Multicenter { atoms: Vec<Atom>, payload: Option<LitStr> },
+    Noncovalent { atoms: Vec<Atom>, payload: Option<LitStr> },
+    StereoAtom { site: Atom, ligands: Vec<Ligand>, payload: Option<LitStr> },
+    StereoBond { site: Atom, ligands: Vec<Ligand>, payload: Option<LitStr> },
+}
+
+impl Parse for Overlay {
+    fn parse(input: ParseStream) -> Result<Self> {
+        if input.peek(kw::aromatic) {
+            input.parse::<kw::aromatic>()?;
+            let atoms = bracketed_list(input)?;
+            Ok(Overlay::Aromatic { atoms, payload: payload(input)? })
+        } else if input.peek(kw::dative) {
+            input.parse::<kw::dative>()?;
+            let donors = bracketed_list(input)?;
+            let acceptor = input.parse::<Atom>()?;
+            Ok(Overlay::Dative { donors, acceptor, payload: payload(input)? })
+        } else if input.peek(kw::multicenter) {
+            input.parse::<kw::multicenter>()?;
+            let atoms = bracketed_list(input)?;
+            Ok(Overlay::Multicenter { atoms, payload: payload(input)? })
+        } else if input.peek(kw::noncovalent) {
+            input.parse::<kw::noncovalent>()?;
+            let atoms = bracketed_list(input)?;
+            Ok(Overlay::Noncovalent { atoms, payload: payload(input)? })
+        } else {
+            input.parse::<kw::stereo>()?;
+            if input.peek(kw::atom) {
+                input.parse::<kw::atom>()?;
+                let site = input.parse::<Atom>()?;
+                let ligands = bracketed_list(input)?;
+                Ok(Overlay::StereoAtom { site, ligands, payload: payload(input)? })
+            } else {
+                input.parse::<kw::bond>()?;
+                let site = input.parse::<Atom>()?;
+                let ligands = bracketed_list(input)?;
+                Ok(Overlay::StereoBond { site, ligands, payload: payload(input)? })
+            }
+        }
+    }
+}
+
+/// Parse a whitespace-separated `[ … ]` list.
+fn bracketed_list<T: Parse>(input: ParseStream) -> Result<Vec<T>> {
+    let content;
+    bracketed!(content in input);
+    let mut items = Vec::new();
+    while !content.is_empty() {
+        items.push(content.parse()?);
+    }
+    Ok(items)
+}
+
+/// Parse an optional `: "payload"` trailer.
+fn payload(input: ParseStream) -> Result<Option<LitStr>> {
+    if input.peek(Token![:]) {
+        input.parse::<Token![:]>()?;
+        Ok(Some(input.parse()?))
+    } else {
+        Ok(None)
+    }
+}
+
+/// The output of [`resolve_positions`]: the ordered creation specs, per-path atom positions (`None`
+/// marks a `^name` port, which creates no atom), and the shared label namespace (for overlay refs).
+pub(crate) struct Resolved {
+    pub(crate) specs: Vec<LitStr>,
+    pub(crate) path_positions: Vec<Vec<Option<u32>>>,
+    pub(crate) labels: HashMap<String, Label>,
+}
 
 /// A label in the shared atom/bond namespace: an atom (with its creation position, for reference
-/// resolution) or a bond. Bond labels are inert here — resolving one to its `BondId` for a
-/// stereo-overlay reference rides with the overlay work that consumes it.
-enum Label {
+/// resolution) or a bond (referenced by name — the stereo-overlay site).
+pub(crate) enum Label {
     Atom(u32),
     Bond,
 }
@@ -208,7 +359,7 @@ fn resolve_atom_ref(labels: &HashMap<String, Label>, name: &Ident) -> Result<u32
 /// (duplicates rejected). Then resolve each atom occurrence to its position — declarations and
 /// anonymous atoms advance the counter in that same order, references resolve to their declaration,
 /// and `^name` port markers resolve to `None` (they create no atom).
-pub(crate) fn resolve_positions(paths: &[Path]) -> Result<Positions> {
+pub(crate) fn resolve_positions(paths: &[&Path]) -> Result<Resolved> {
     let mut labels: HashMap<String, Label> = HashMap::new();
     let mut specs: Vec<LitStr> = Vec::new();
     for path in paths {
@@ -249,15 +400,158 @@ pub(crate) fn resolve_positions(paths: &[Path]) -> Result<Positions> {
         }
         path_positions.push(row);
     }
-    Ok((specs, path_positions))
+    Ok(Resolved {
+        specs,
+        path_positions,
+        labels,
+    })
 }
 
-/// The L2 bond term for a real-atom-to-real-atom bond, wired by creation position.
+/// Resolve a bond reference `(name)` (a stereo-overlay site). A name bound to an atom, or unknown, is
+/// an error.
+fn resolve_bond_ref(labels: &HashMap<String, Label>, name: &Ident) -> Result<()> {
+    match labels.get(&name.to_string()) {
+        Some(Label::Bond) => Ok(()),
+        Some(Label::Atom(_)) => Err(Error::new(
+            name.span(),
+            format!("`{name}` is an atom, not a bond"),
+        )),
+        None => Err(Error::new(
+            name.span(),
+            format!("bond `{name}` is referenced but never declared"),
+        )),
+    }
+}
+
+/// The L2 bond term for a real-atom-to-real-atom bond, wired by creation position. A `-[name: …]-`
+/// bond emits `named_bond` so a later stereo-bond site can reference it by name.
 pub(crate) fn bond_term(op: &Bond, first: u32, second: u32) -> TokenStream {
     match op {
         Bond::Single => quote! { single(#first, #second) },
         Bond::Double => quote! { double(#first, #second) },
         Bond::Triple => quote! { triple(#first, #second) },
-        Bond::Spec { spec, .. } => quote! { bond(#first, #second, #spec) },
+        Bond::Spec {
+            name: Some(name),
+            spec,
+        } => {
+            let name = name.to_string();
+            quote! { named_bond(#name, #first, #second, #spec) }
+        }
+        Bond::Spec { name: None, spec } => quote! { bond(#first, #second, #spec) },
     }
+}
+
+/// An overlay atom reference → an `AtomArg::Index` position. Overlays reference declared atoms only;
+/// an inline declaration or anonymous atom in an overlay is an error (declare it in a path).
+fn overlay_atom(atom: &Atom, labels: &HashMap<String, Label>) -> Result<TokenStream> {
+    match atom {
+        Atom::Reference { name } => {
+            let position = resolve_atom_ref(labels, name)?;
+            Ok(quote! { AtomArg::Index(#position) })
+        }
+        Atom::Declaration { name, .. } => Err(Error::new(
+            name.span(),
+            "overlay participants reference declared atoms — declare atoms in a path",
+        )),
+        Atom::Anonymous { spec } => Err(Error::new(
+            spec.span(),
+            "overlay participants reference declared atoms — declare atoms in a path",
+        )),
+        Atom::Port { name } => Err(Error::new(
+            name.span(),
+            "a port cannot appear in an overlay",
+        )),
+    }
+}
+
+/// The `ast: impl Into<…>` payload argument of an overlay term — the quoted DSL spec, or the entity's
+/// `default()` when none was given.
+fn overlay_payload(payload: &Option<LitStr>, ast_ty: TokenStream) -> TokenStream {
+    match payload {
+        Some(spec) => quote! { #spec },
+        None => quote! { <#ast_ty>::default() },
+    }
+}
+
+/// The L2 term for one overlay, resolving its references against the shared label namespace.
+pub(crate) fn overlay_term(overlay: &Overlay, labels: &HashMap<String, Label>) -> Result<TokenStream> {
+    match overlay {
+        Overlay::Aromatic { atoms, payload } => {
+            let atoms = overlay_atoms(atoms, labels)?;
+            let ast = overlay_payload(payload, quote! { ::umol_ast::ast::AromaticSystemAst });
+            Ok(quote! { aromatic_system([ #(#atoms),* ], #ast) })
+        }
+        Overlay::Dative {
+            donors,
+            acceptor,
+            payload,
+        } => {
+            let donors = overlay_atoms(donors, labels)?;
+            let acceptor = overlay_atom(acceptor, labels)?;
+            let ast = overlay_payload(payload, quote! { ::umol_ast::ast::DativeBondAst });
+            Ok(quote! { dative_bond([ #(#donors),* ], #acceptor, #ast) })
+        }
+        Overlay::Multicenter { atoms, payload } => {
+            let atoms = overlay_atoms(atoms, labels)?;
+            let ast = overlay_payload(payload, quote! { ::umol_ast::ast::MulticenterBondAst });
+            Ok(quote! { multicenter_bond([ #(#atoms),* ], #ast) })
+        }
+        Overlay::Noncovalent { atoms, payload } => {
+            if atoms.len() != 2 {
+                return Err(Error::new(
+                    Span::call_site(),
+                    "noncovalent takes exactly two atoms",
+                ));
+            }
+            let first = overlay_atom(&atoms[0], labels)?;
+            let second = overlay_atom(&atoms[1], labels)?;
+            let ast = overlay_payload(payload, quote! { ::umol_ast::ast::NoncovalentBondAst });
+            Ok(quote! { noncovalent_bond(#first, #second, #ast) })
+        }
+        Overlay::StereoAtom {
+            site,
+            ligands,
+            payload,
+        } => {
+            let site = overlay_atom(site, labels)?;
+            let ligands = overlay_ligands(ligands, labels)?;
+            let ast = overlay_payload(payload, quote! { ::umol_ast::ast::StereoAtomAst });
+            Ok(quote! { stereo_atom(#site, [ #(#ligands),* ], #ast) })
+        }
+        Overlay::StereoBond {
+            site,
+            ligands,
+            payload,
+        } => {
+            let Atom::Reference { name } = site else {
+                return Err(Error::new(
+                    Span::call_site(),
+                    "a stereo-bond site must reference a named bond",
+                ));
+            };
+            resolve_bond_ref(labels, name)?;
+            let site = name.to_string();
+            let ligands = overlay_ligands(ligands, labels)?;
+            let ast = overlay_payload(payload, quote! { ::umol_ast::ast::StereoBondAst });
+            Ok(quote! { stereo_bond(#site, [ #(#ligands),* ], #ast) })
+        }
+    }
+}
+
+fn overlay_atoms(atoms: &[Atom], labels: &HashMap<String, Label>) -> Result<Vec<TokenStream>> {
+    atoms.iter().map(|atom| overlay_atom(atom, labels)).collect()
+}
+
+fn overlay_ligands(ligands: &[Ligand], labels: &HashMap<String, Label>) -> Result<Vec<TokenStream>> {
+    ligands
+        .iter()
+        .map(|ligand| match ligand {
+            Ligand::Atom(atom) => {
+                let atom = overlay_atom(atom, labels)?;
+                Ok(quote! { StereoLigandArg::Atom(#atom) })
+            }
+            Ligand::ImplicitHydrogen => Ok(quote! { StereoLigandArg::ImplicitHydrogen }),
+            Ligand::LonePair => Ok(quote! { StereoLigandArg::LonePair }),
+        })
+        .collect()
 }

@@ -7,7 +7,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{parse2, Error, Result};
 
-use crate::parse::{bond_term, resolve_positions, Atom, MolInput};
+use crate::parse::{bond_term, overlay_term, resolve_positions, Atom, MolInput, Path};
 
 pub fn expand(input: TokenStream) -> TokenStream {
     match parse2::<MolInput>(input).and_then(codegen) {
@@ -17,7 +17,8 @@ pub fn expand(input: TokenStream) -> TokenStream {
 }
 
 fn codegen(input: MolInput) -> Result<TokenStream> {
-    for path in &input.paths {
+    let paths: Vec<&Path> = input.paths().collect();
+    for path in &paths {
         for atom in path.atoms() {
             if let Atom::Port { name } = atom {
                 return Err(Error::new(
@@ -28,16 +29,17 @@ fn codegen(input: MolInput) -> Result<TokenStream> {
         }
     }
 
-    let (specs, positions) = resolve_positions(&input.paths)?;
+    let resolved = resolve_positions(&paths)?;
 
-    let atoms = if specs.is_empty() {
+    let atoms = if resolved.specs.is_empty() {
         quote! {}
     } else {
+        let specs = &resolved.specs;
         quote! { + atoms([ #(#specs),* ]) }
     };
 
     let mut bonds = Vec::new();
-    for (path, row) in input.paths.iter().zip(&positions) {
+    for (path, row) in paths.iter().zip(&resolved.path_positions) {
         for (index, (op, _)) in path.rest.iter().enumerate() {
             let first = row[index].expect("mol! rejects ports before resolving");
             let second = row[index + 1].expect("mol! rejects ports before resolving");
@@ -45,11 +47,16 @@ fn codegen(input: MolInput) -> Result<TokenStream> {
         }
     }
 
+    let mut overlays = Vec::new();
+    for overlay in input.overlays() {
+        overlays.push(overlay_term(overlay, &resolved.labels)?);
+    }
+
     Ok(quote! {
         {
             #[allow(unused_imports)]
-            use ::umol_ast::ast::spec::{atoms, bond, double, single, triple, MoleculeSpec};
-            (MoleculeSpec::new() #atoms #(+ #bonds)*).build()
+            use ::umol_ast::ast::spec::*;
+            (MoleculeSpec::new() #atoms #(+ #bonds)* #(+ #overlays)*).build()
         }
     })
 }

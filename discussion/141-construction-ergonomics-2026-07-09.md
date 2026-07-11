@@ -519,34 +519,65 @@ Overlay statements interleave with paths in a `mol!`/`frag!` block (comma-separa
 level; whitespace within `[…]` lists, EDN-style). Each is statement-initial-keyword-led and desugars to
 an L2 term. **Stereo is built the full way** — L1 builder → L2 term → macro — never skipped.
 
-#### Syntax
+#### Syntax — **implemented: flat keyword scheme**
 
-| overlay | syntax | refs (ordering per structural-reference semantics) |
+The simplest-to-parse variant: each overlay is a leading **keyword** + bracketed reference lists +
+optional `: "payload"`. One-token statement dispatch, no infix operators, no lookahead. Atoms follow the
+path grammar (`(a)` ref, `(a: elem)` decl, bare `elem` anon); overlays are **reference-only** (a
+participant is a `(a)` reference to a path-declared atom — an inline decl / anonymous atom in an overlay
+is a `compile_error!`).
+
+| relation | form |
+|---|---|
+| aromatic | `aromatic [(a) (b) (c) (d) (e) (f)]` |
+| dative | `dative [(d1) (d2)] (acc)` |
+| multicenter | `multicenter [(a) (b) (c)]` |
+| noncovalent | `noncovalent [(a) (b)]` |
+| stereo atom | `stereo atom (s) [(l1) (l2) (l3) "#h"]` |
+| stereo bond | `stereo bond (b) [(l1) "#h" (l3) (l4)]` |
+
+- Whitespace-separated inside `[…]`; `stereo atom` / `stereo bond` are two idents. Dispatch: leading
+  keyword (`aromatic` / `dative` / `multicenter` / `noncovalent` / `stereo`) → overlay, else path.
+- **Payload** `: "dsl-spec"` optional → the entity Ast via `From<&str>`; omitted → `default()`.
+- **Ligand placeholders** `"#h"` (implicit hydrogen), `"#n"` (lone pair) — quoted; `LitStr` in a ligand
+  list is a placeholder, else an atom ref.
+- **Bond refs consumed here**: a `-[db: "2"]-` bond emits `named_bond("db", …)`; `stereo bond (db) …`
+  resolves the `BondArg::Name` site via `bond_names`. A wrong-kind ref (atom-as-bond) is a `compile_error!`.
+- Ordering is a property of the relation-set type; participants pass in written order (stereo ligands
+  ordered; dative donors / atom-lists unordered). Stereo virtual-ligand bearing atom: site for a stereo
+  atom; bond atom 0–1 → first, 2–3 → second for a stereo bond.
+
+#### Syntax — sigil variant (developed, **not** implemented; preserved)
+
+A structure-mirroring alternative explored at length: binary relations as infix operators (beside the
+covalent bond ops), stereo as SMILES site-markers, the n-ary sets as short names — plus in-band
+declaration (overlay participants may declare/anon, not only reference).
+
+| relation | form | rationale |
 |---|---|---|
-| dative | `dative [d1 d2] -> a` | donors (unordered) → acceptor |
-| aromatic | `aromatic [a b c d e f]` | atoms (unordered) |
-| multicenter | `multicenter [a b c]` | atoms (unordered) |
-| noncovalent | `noncovalent a ~ b` | 2 atoms (unordered) |
-| stereo atom | `stereo atom s @ [l1 l2 l3 #h]` | site (atom), ligands (ordered) |
-| stereo bond | `stereo bond e @ [l1 #h l3 l4]` | site (**bond-ref**), ligands (ordered) |
+| noncovalent | `(a) ~ (b)` | binary bond → infix `~` (weak bond) |
+| dative | `[(d1) (d2)] -> (acc)` | directional `->` |
+| stereo atom | `(s) @ […]` | SMILES `@` |
+| stereo bond | `(b) / […]` or `(c)=(c) / […]` | SMILES `/`; site may be an inline bond |
+| aromatic | `A[…]` | `&`/`A` = electrons shared/equalized |
+| multicenter | `M[…]` | `>`/`M` = 3-center shape |
 
-- `->` dative; `~` noncovalent (a raw `Punct` — `~` is not a syn `Token!`); `@` separates site from
-  ligands; `stereo atom` / `stereo bond` are two idents (`stereo-atom` can't lex, `-` is an operator).
-- Ligand placeholders `#h` (implicit hydrogen), `#n` (lone pair) — `#`-prefixed to echo the DSL and stay
-  disjoint from atom-label idents; only inside a `@ […]` list, so no clash with `#` triple-bond.
-- Optional payload `: "dsl-spec"` (electrons / kind / stereo config) → the entity Ast via `From<&str>`;
-  omitted → default Ast.
-- Ordering is a property of the relation-set type; the macro passes participants in written order and the
-  types enforce it (dative donors / atom-lists unordered, stereo ligands ordered).
+Trade-off that kept it on the shelf: infix dispatch needs lookahead (a leading `(a)` may be a path or an
+overlay, decided by the following operator; `(c)=(c)` is a full path until a trailing `/`), and `&`/`>`
+were the two invented (non-SMILES) symbols. **In-band declaration** rule (also preserved): an overlay
+participant may be declared/anon inline (`(a: "C")` / `("C#h3")`); it creates the atom, the overlay adds
+**no σ-bonds** beyond its own relation — so it completes the structure where the overlay *is* the bond
+(multicenter, noncovalent, dative, inline stereo-bond site) and leaves a bare atom (connectivity
+validator flags it) where the participant still needs its own bonds (aromatic members, stereo ligands).
 
-#### References — named, no positional in the public surface
+#### References — named surface, positional internals
 
-Every human-facing ref is **by name**: overlay participants and stereo ligands emit `name("a")`
-(`AtomArg::Name`); the stereo-bond site emits a **named bond ref** (`BondArg::Name`). The `-[e: …]-`
-label carries through to L2 as an actual **bond name**, not a macro-resolved position. The internal
-path-wiring keeps compile-time positions (`AtomArg::Index`) — an invisible codegen detail for anonymous
-atoms, never a public reference type. A ref of the wrong kind (atom where bond expected, or vice-versa)
-is a `compile_error!` via the shared namespace.
+The user writes named refs (`(a)`, `(db)`); the macro resolves them against the shared label namespace.
+**As implemented**, overlay atom refs and stereo ligands lower to `AtomArg::Index(pos)` (the atom's
+creation position), same as the path wiring — positions stay an internal codegen detail, never written by
+hand. The **stereo-bond site** is the exception: it lowers to a `BondArg::Name`, since a `-[db: …]-` bond
+carries its label into L2 as a real bond name (`named_bond` + `bond_names`). A wrong-kind ref (atom where
+a bond is expected, or vice-versa) is a `compile_error!` via the shared namespace.
 
 #### L2 additions
 
@@ -583,22 +614,36 @@ is a `compile_error!` via the shared namespace.
   lower onto** → `ast: impl Into<Ast>`; spec.rs + build.rs tests migrated. New tests: `BondArg`/
   `StereoLigandArg` `From`, named bond, stereo atom (with implicit-H), stereo bond (named-bond ref +
   positional virtual bearing). Green.
-- **S3.3 — macro overlays** (`parse.rs`, `mol.rs`, `frag.rs`). Additive: statement grammar (`Statement =
-  Path | Overlay`; `~` / `@` / `#h` / `#n` / whitespace-lists); codegen emitting overlay terms, named refs,
-  and `named_bond` for `-[e: …]-` (consuming the deferred bond-label resolution), shared across both
-  macros. Tests: `mol_macro` / `frag_macro` overlay builds, `trybuild` wrong-kind-ref. A named *port* bond
-  in `frag!` (a bond ref with no `BondId`) is rejected here. `[dep: S3.2]`
+- **S3.3 — macro overlays — done** (`parse.rs`, `mol.rs`, `frag.rs`). Implemented the **flat keyword
+  scheme** (simplest to parse; the sigil variant is preserved above but not built). `Statement = Path |
+  Overlay`; keyword dispatch via `syn::custom_keyword!`; `Overlay` + `Ligand` parse the six relations
+  with bracketed reference lists + optional payload. Codegen (`overlay_term`, shared across `mol!`/`frag!`)
+  lowers to the L2 overlay terms — atom refs → `AtomArg::Index`, stereo-bond site → `BondArg::Name`, and
+  `bond_term` now emits `named_bond` for a `-[db: …]-` bond (consuming the deferred bond-label resolution).
+  Overlays are **reference-only** (inline decl / anon → `compile_error!`; in-band declaration deferred).
+  Tests: `mol_macro.rs` builds one per relation (aromatic / dative / multicenter / noncovalent / stereo
+  atom / stereo bond). `[dep: S3.2]`
+- **Deferred (future):** in-band declaration in overlays; the sigil surface (preserved above); inline
+  stereo-bond site.
 
 Critical path S3.1 → S3.2 → S3.3.
 
 `mol!` and `frag!` are split (revisit if they converge). Quoteless elements accepted; anything richer is
 a quoted DSL spec.
 
-## Next
+## Status — closed (2026-07-11)
 
-- **L1 + L2 — done** (`build.rs`, `spec.rs`). See the *Implemented — L1* and *L2 `MoleculeSpec`*
-  sections above.
-- **Detour — join/split + connectivity validator — done** (doc 142). Unblocked L3.
-- **L3 `Fragment` — done** (`fragment.rs`; S1→S2→S3, 10 tests).
-- **L4 `mol!` / `frag!`** — design + staged plan above (S1→S2→S3); the last layer, ready to build.
-- Overlays-in-*fragments* (L3) remains gated on the port/operad spike (103).
+The construction stack L1→L4 is built and green (356 `ast::molecule` tests + macro tests + trybuild).
+
+- **L1 `MoleculeBuilder`** — done (`build.rs`), incl. `stereo_atom`/`stereo_bond`.
+- **L2 `MoleculeSpec`** — done (`spec.rs`), incl. `BondArg`/`StereoLigandArg`/named bonds/stereo terms;
+  the four non-stereo overlay free fns + L1 methods take `ast: impl Into<Ast>`.
+- **L3 `Fragment`** — done (`fragment.rs`; `finish`/`finish_open`).
+- **L4 `mol!` / `frag!`** — done (`umol-ast-macros`). S1 grammar, S2 `^name` ports + close modes, S3
+  overlays (flat keyword scheme) + stereo. Bond refs (`-[db: …]-` → `named_bond`) consumed by the
+  stereo-bond site.
+- **Detour — join/split + connectivity validator — done** (doc 142).
+
+**Deferred (future, not part of the closed scope):** in-band declaration in overlays; the sigil surface
+(preserved in §Syntax); inline stereo-bond site; bond-spec compile-validation; `IdRemapping` →
+`MoleculeCorrespondence` retirement; overlays-in-*fragments* (gated on the 103 port/operad spike).

@@ -7,7 +7,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{parse2, Error, Ident, LitStr, Result};
 
-use crate::parse::{bond_term, resolve_positions, Atom, Bond, MolInput};
+use crate::parse::{bond_term, overlay_term, resolve_positions, Atom, Bond, MolInput, Path};
 
 pub fn expand(input: TokenStream) -> TokenStream {
     match parse2::<MolInput>(input).and_then(codegen) {
@@ -17,17 +17,19 @@ pub fn expand(input: TokenStream) -> TokenStream {
 }
 
 fn codegen(input: MolInput) -> Result<TokenStream> {
-    let (specs, positions) = resolve_positions(&input.paths)?;
+    let paths: Vec<&Path> = input.paths().collect();
+    let resolved = resolve_positions(&paths)?;
 
-    let atoms = if specs.is_empty() {
+    let atoms = if resolved.specs.is_empty() {
         quote! {}
     } else {
+        let specs = &resolved.specs;
         quote! { + atoms([ #(#specs),* ]) }
     };
 
     let mut bonds = Vec::new();
     let mut port_calls = Vec::new();
-    for (path, row) in input.paths.iter().zip(&positions) {
+    for (path, row) in paths.iter().zip(&resolved.path_positions) {
         let occurrences: Vec<&Atom> = path.atoms().collect();
         for (index, (op, _)) in path.rest.iter().enumerate() {
             match (row[index], row[index + 1]) {
@@ -48,13 +50,18 @@ fn codegen(input: MolInput) -> Result<TokenStream> {
         }
     }
 
+    let mut overlays = Vec::new();
+    for overlay in input.overlays() {
+        overlays.push(overlay_term(overlay, &resolved.labels)?);
+    }
+
     Ok(quote! {
         {
             #[allow(unused_imports)]
-            use ::umol_ast::ast::spec::{atoms, bond, double, single, triple, MoleculeSpec};
+            use ::umol_ast::ast::spec::*;
             #[allow(unused_imports)]
             use ::umol_ast::ast::{AtomId, BondAst, Fragment};
-            Fragment::new((MoleculeSpec::new() #atoms #(+ #bonds)*).build())
+            Fragment::new((MoleculeSpec::new() #atoms #(+ #bonds)* #(+ #overlays)*).build())
                 #(#port_calls)*
         }
     })

@@ -142,5 +142,5 @@
 | [138-constraint-container-api-2026-07-06.md](138-constraint-container-api-2026-07-06.md)                         | Completed     | 2026-07-08   |
 | [139-mutability-hashability-equality-2026-07-09.md](139-mutability-hashability-equality-2026-07-09.md)           | Informational | 2026-07-09   |
 | [140-python-entity-bindings-plan-2026-07-09.md](140-python-entity-bindings-plan-2026-07-09.md)                   | Active        | 2026-07-09   |
-| [141-construction-ergonomics-2026-07-09.md](141-construction-ergonomics-2026-07-09.md)                           | Active        | 2026-07-09   |
+| [141-construction-ergonomics-2026-07-09.md](141-construction-ergonomics-2026-07-09.md)                           | Completed     | 2026-07-09   |
 | [142-join-split-2026-07-10.md](142-join-split-2026-07-10.md)                                                     | Completed     | 2026-07-10   |
