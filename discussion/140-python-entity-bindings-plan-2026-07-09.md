@@ -2,8 +2,11 @@
 
 Status: Active — **B1 · Bond slice DONE incl. the view half** (value + WET constraint surface +
 `BondView`/`BondViews` + molecule-backed constraint views; Python `from_atoms` replaced by
-`from_atoms_and_bonds`; Rust 201 / Python 237 green, clippy clean). Next: **B2 · dative**. See *Bond
-slice — build state + detailed plan* at the end for the landed shape and the WET template for the peers.
+`from_atoms_and_bonds`; Rust 201 / Python 237 green, clippy clean). **B2 · dative FULLY PLANNED**
+(staged, settled 2026-07-11 — see *B2 · Dative — staged impl plan* below): Part A = the Rust
+`*ViewMut` prerequisite (doc 137 pt6, in full) unblocking every overlay view half; Part B = the dative
+Python slice; constructor becomes atoms-positional `from_parts`. Ready to implement Part A (S0). See
+*Bond slice — build state + detailed plan* at the end for the WET template.
 Date: 2026-07-09
 Relates: 137 (atom slice — the template being mirrored), 139 (mutability/hashing/equality
 balance), 114 (interning — where stereo/handle-identity deferrals live)
@@ -163,6 +166,75 @@ fixed pairs read as a sorted tuple, not a frozenset, for ergonomics.)
   Collection `mol.dative_bonds`: id-indexed + `connecting(donors, acceptor)` / `incident`.
 - Design calls: the acceptor/donor split surface (a scalar `acceptor` + a `donors` list),
   and that donors are an unordered multiset.
+
+#### B2 · Dative — staged impl plan (settled 2026-07-11)
+
+Two design calls resolved: constructor is **atoms-positional** `from_parts(atoms, *, bonds=[],
+dative=[])`; dative constraint surface is now a clean mirror of bond's (the ring-accessor optionality
+discrepancy was fixed on the Rust side — `aromatic() -> BooleanAst` non-optional, `ring_count()`/
+`ring_size_count() -> Option<&ValueAst>`). Dative-entry tuple is `(donors: list[int], acceptor: int,
+DativeBondAst)` (donors-first).
+
+**Blocker found + folded in:** the overlay `*_mut(id)` accessors return a bare `&mut XAst` (no view
+guard) — non-uniform with `atom_mut`/`bond_mut` and the 114 interning-guard hole (doc 137 pt6). The
+overlay Python view halves would edit through that bare ref. So **Part A (Rust) implements 137 pt6 in
+full** as the prerequisite, then **Part B** binds dative. Feasibility of `*ViewMut`: confirmed — the
+relation sets keep `participants*(&self)` and `data_mut(&mut self)` reachable in sequence, so the
+accessor reads participants → copies to owned → the `&self` borrow ends → `data_mut` (as `BondViewMut`
+already owns its `[AtomId;2]`).
+
+**Part A — uniform `*ViewMut` + retire bulk `*s_mut()` (Rust-internal; implements doc 137 pt6). No umol-py.**
+
+- **S0a** *(additive/green)* — six `*ViewMut` structs, one per relation, each in its `view/*.rs`:
+  `pub struct XViewMut<'a> { pub id: XId, <owned participants, private>, pub ast: &'a mut XAst }` +
+  the id-returning participant accessors from the read `*View` (drop the `&molecule`-returning ones;
+  a ViewMut holds no `&molecule`). Shapes: Dative `{ acceptor: AtomId, donors: Vec<AtomId> }` ·
+  Aromatic/Multicenter `{ atoms: Vec<AtomId> }` · Noncovalent `{ atoms: [AtomId; 2] }` · StereoAtom
+  `{ site: AtomId, ligands: Vec<StereoLigand> }` · StereoBond `{ site: BondId, ligands: Vec<StereoLigand> }`.
+  Export from `view.rs` + `ast.rs`, mirroring `AtomViewMut`/`BondViewMut`. Owned participants (not
+  borrowed) — matches `BondViewMut`; sidesteps the participants-vs-data split-borrow. `[dep: none]`
+- **S0b** *(breaking→green)* — change the six `MoleculeAst::X_mut(id)` to build+return the `XViewMut`
+  (`Arc::make_mut` → read participants to owned → `data_mut`); migrate the **29 `.ast` sites**:
+  molecule.rs 13 (lift/inline_constraints), umol-graph/ops/aromaticity.rs 2, umol-graph/ops/validate/
+  stereo.rs 7, umol-ast/symmetry.rs 1, molecule/tests.rs 6. The 15 `MoleculeEditor`/`transact.rs` +
+  editor-test hits already use `.ast` — untouched. `[dep: S0a]`
+- **S0c** *(breaking→green)* — add eight `MoleculeAst::map_*(&mut self, f: impl FnMut(XAst) -> XAst)`
+  (atoms/bonds + 6 relations; body `for slot in <iter>_mut() { *slot = f(mem::take(slot)); }` — no
+  `&mut XAst` escapes the API, and the container owns re-interning post-`f`, the 114-cleanest form).
+  Rewrite the **22 bulk sites** (dsl/molecule.rs 16 raise/lower loops → `map_*(|x| …)`; resolve 2 +
+  tests 4 field-mutations → `map_*(|mut x| { …; x })`); delete the eight `Xs_mut()`. `[dep: none;
+  parallel with S0b]`
+- **S0d** — workspace build + full test suite + clippy green. `[dep: S0b, S0c]`
+- Interning (114): the `*ViewMut` is the future `Drop` re-intern-guard slot — **no `Drop` added now**;
+  `map_*` is the container's post-`f` re-intern hook. Both are prerequisite shape only.
+
+**Part B — Python dative slice (`umol-py/src/dative.rs`), mirrors `bond.rs` minus CisTransStereo + charge/spin. After S0.**
+
+- **S1a** *(additive/green)* — `DativeBondAst` value pyclass (`#[new] new(order: ValueArg, *,
+  constraints=None)`; `parse`/`__str__`/`__repr__`; order+constraints getters/setters; `asdict`;
+  `inner`/`inner_mut`/`from_inner`) + the WET constraint surface (verbatim bond mirror, 2 keys):
+  `DativeBondConstraintKey`/`DativeBondConstraintAst` (`Aromatic`, `RingMembership`),
+  `DativeBondConstraintsAst` (whole mapping API), `DativeBondConstraintsView`,
+  `DativeBondConstraintsBacking { Molecule{owner, id: DativeBondId}, DativeBond(Py<DativeBondAst>) }`,
+  `DativeBondRingSizeCounts`/`DativeBondRingSizeBacking`, the 3 iterators,
+  `DativeBondConstraintsArg`/`Update`, `dative_bond_constraints_asdict`. Reuse `BooleanAst`/
+  `RingMembershipAst`/`RingScope`/`ValueAst` leaves. The Molecule-backed view's write-through is
+  `mol.inner_mut().dative_bond_mut(id).ast.constraints` — the `.ast` is S0's ViewMut. Register value +
+  constraint pyclasses in `lib.rs` + `__init__.py`; Rust unit tests. `[dep: S0a]`
+- **S1b** *(breaking→green)* — rename Python `MoleculeAst.from_atoms_and_bonds` → `from_parts(atoms,
+  *, bonds=[], dative=[])`; wire `dative` → `MoleculeParts.dative` (entries `(donors, acceptor,
+  Py<DativeBondAst>)`). Migrate **27 Python test sites** (test_atom/test_constraint/test_molecule/
+  test_bond) + the umol-py Rust test call sites. `[dep: S1a — dative entries carry Py<DativeBondAst>]`
+- **S1c** *(additive/green)* — `DativeBondView` (`id`, `acceptor -> int`, `donors -> list[int]`
+  read-only, `atom_ids -> tuple` donors-then-acceptor, settable `order`/`constraints`, `asdict`) +
+  `DativeBondViews` (`mol.dative_bonds`: `__len__`/`__getitem__`/`__setitem__` value-replace/`__iter__`
+  + `connecting(donors, acceptor)` + `incident(atom)`) + `DativeBondViewIter` +
+  `resolve_dative_bond_index` (DativeBondId is RelationId-backed but contiguous for fresh molecules →
+  mirror `resolve_bond_index`). Register view pyclasses; Rust unit + `tests/test_dative.py`; maturin
+  rebuild + pytest. `[dep: S1a, S1b]`
+
+Critical path: S0a → S0b → S1a → S1b → S1c (S0c parallel to S0b; S0d gates Part B). Part A unblocks
+**every** remaining overlay view half (B3–B6 + stereo), not just dative.
 
 ### B3 · Aromatic system
 

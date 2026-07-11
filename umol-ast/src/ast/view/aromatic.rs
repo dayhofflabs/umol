@@ -302,6 +302,22 @@ impl<'a> AromaticSystemView<'a> {
     }
 }
 
+/// Mutable borrowed view of an aromatic system: its id, member atoms (owned)
+/// and mutable data. Molecule-scope peer of `AromaticSystemView`.
+#[derive(Debug)]
+pub struct AromaticSystemViewMut<'a> {
+    pub id: AromaticSystemId,
+    atoms: Vec<AtomId>,
+    pub ast: &'a mut AromaticSystemAst,
+}
+
+impl<'a> AromaticSystemViewMut<'a> {
+    /// The member atom ids.
+    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
+        self.atoms.iter().copied()
+    }
+}
+
 // Builder-scope view bundles for aromatic systems.
 
 pub struct AromaticSystemEditorView<'a> {

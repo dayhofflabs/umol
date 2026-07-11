@@ -116,8 +116,10 @@ pub use validate::{
 };
 pub use value::{ValueAst, ValuePredicate, ValueTerm};
 pub use view::{
-    AromaticSystemView, AromaticSystemViews, AtomAutomorphism, AtomView, AtomViewMut, AtomViews,
-    BondView, BondViewMut, BondViews, DativeBondView, DativeBondViews, MulticenterBondView,
-    MulticenterBondViews, NeighborView, NoncovalentBondView, NoncovalentBondViews, StereoAtomView,
-    StereoAtomViews, StereoBondView, StereoBondViews, StereoLigandView,
+    AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphism, AtomView,
+    AtomViewMut, AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
+    DativeBondViews, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
+    NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, StereoAtomView,
+    StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut, StereoBondViews,
+    StereoLigandView,
 };

@@ -260,6 +260,33 @@ impl<'a> DativeBondView<'a> {
     }
 }
 
+/// Mutable borrowed view of a dative bond: its id, participants (donors +
+/// acceptor, owned) and mutable data. Molecule-scope peer of `DativeBondView`.
+#[derive(Debug)]
+pub struct DativeBondViewMut<'a> {
+    pub id: DativeBondId,
+    acceptor: AtomId,
+    donors: Vec<AtomId>,
+    pub ast: &'a mut DativeBondAst,
+}
+
+impl<'a> DativeBondViewMut<'a> {
+    /// The acceptor atom id.
+    pub fn acceptor_id(&self) -> AtomId {
+        self.acceptor
+    }
+
+    /// The donor atom ids.
+    pub fn donor_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
+        self.donors.iter().copied()
+    }
+
+    /// All atoms: the donors followed by the acceptor.
+    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
+        self.donors.iter().copied().chain(iter::once(self.acceptor))
+    }
+}
+
 // Builder-scope view bundles for dative bonds.
 
 pub struct DativeBondEditorView<'a> {

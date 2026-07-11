@@ -204,6 +204,22 @@ impl<'a> NoncovalentBondView<'a> {
     }
 }
 
+/// Mutable borrowed view of a noncovalent bond: its id, the two incident atoms
+/// (owned) and mutable data. Molecule-scope peer of `NoncovalentBondView`.
+#[derive(Debug)]
+pub struct NoncovalentBondViewMut<'a> {
+    pub id: NoncovalentBondId,
+    atoms: [AtomId; 2],
+    pub ast: &'a mut NoncovalentBondAst,
+}
+
+impl<'a> NoncovalentBondViewMut<'a> {
+    /// The two atoms incident to this noncovalent bond.
+    pub fn atom_ids(&self) -> [AtomId; 2] {
+        self.atoms
+    }
+}
+
 // Builder-scope view bundles for noncovalent bonds.
 
 pub struct NoncovalentBondEditorView<'a> {

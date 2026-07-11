@@ -258,6 +258,22 @@ impl<'a> MulticenterBondView<'a> {
     }
 }
 
+/// Mutable borrowed view of a multicenter bond: its id, member atoms (owned)
+/// and mutable data. Molecule-scope peer of `MulticenterBondView`.
+#[derive(Debug)]
+pub struct MulticenterBondViewMut<'a> {
+    pub id: MulticenterBondId,
+    atoms: Vec<AtomId>,
+    pub ast: &'a mut MulticenterBondAst,
+}
+
+impl<'a> MulticenterBondViewMut<'a> {
+    /// The member atom ids.
+    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
+        self.atoms.iter().copied()
+    }
+}
+
 // Builder-scope view bundles for multicenter bonds.
 
 pub struct MulticenterBondEditorView<'a> {

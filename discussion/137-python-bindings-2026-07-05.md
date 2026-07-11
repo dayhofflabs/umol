@@ -744,8 +744,15 @@ not mid-slice.
    symmetry: 114's interning plan re-interns on the **view guard's `Drop`**, so a bare
    `&mut XAst` (no guard) is a latent interning blocker — uniform `*ViewMut` is the
    prerequisite. Same pass: retire the eight raw `&mut`-iterator `*s_mut()` (closure- or
-   replace-based instead), per 114's discipline. The binding is unaffected (it edits only
-   through per-id `atom_mut(id)`), so this is Rust-internal.
+   replace-based instead), per 114's discipline. The "binding is unaffected" note held only
+   for the atom slice (edits via `atom_mut`, already a `ViewMut`); the overlay Python view
+   halves (doc 140 B2+) edit through the bare `&mut XAst`, so this is now their
+   **prerequisite**. **Scheduled + fully planned as Part A ("S0") of the dative slice —
+   doc 140 §"B2 · Dative — staged impl plan (2026-07-11)".** Resolved there: `*ViewMut`
+   carries **owned** participants (clone-then-`data_mut`, borrow-legal, mirrors `BondViewMut`);
+   the eight `*s_mut()` retire to `map_*(FnMut(XAst) -> XAst)` (replace-based — no `&mut`
+   escapes, container owns re-interning); 29 `.ast` migrations + 22 loop→`map_*` rewrites;
+   no `Drop` guard yet (shape only).
 
 ## Python-side todos
 

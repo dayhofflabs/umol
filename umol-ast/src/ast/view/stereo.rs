@@ -843,6 +843,50 @@ fn permutation_for_ligands(
     (current_set == requested_set).then(|| Permutation::between(&current, &requested))
 }
 
+/// Mutable borrowed view of a stereo atom: its id, site atom + ligand frame
+/// (owned) and mutable data. Molecule-scope peer of `StereoAtomView`.
+#[derive(Debug)]
+pub struct StereoAtomViewMut<'a> {
+    pub id: StereoAtomId,
+    site: AtomId,
+    ligands: Vec<StereoLigand>,
+    pub ast: &'a mut StereoAtomAst,
+}
+
+impl<'a> StereoAtomViewMut<'a> {
+    /// The site atom id.
+    pub fn site_id(&self) -> AtomId {
+        self.site
+    }
+
+    /// The ordered ligand frame.
+    pub fn ligands(&self) -> &[StereoLigand] {
+        &self.ligands
+    }
+}
+
+/// Mutable borrowed view of a stereo bond: its id, site bond + ligand frame
+/// (owned) and mutable data. Molecule-scope peer of `StereoBondView`.
+#[derive(Debug)]
+pub struct StereoBondViewMut<'a> {
+    pub id: StereoBondId,
+    site: BondId,
+    ligands: Vec<StereoLigand>,
+    pub ast: &'a mut StereoBondAst,
+}
+
+impl<'a> StereoBondViewMut<'a> {
+    /// The site bond id.
+    pub fn site_id(&self) -> BondId {
+        self.site
+    }
+
+    /// The ordered ligand frame.
+    pub fn ligands(&self) -> &[StereoLigand] {
+        &self.ligands
+    }
+}
+
 // Builder-scope view bundles for stereo elements. `ligands` is a borrow into
 // builder storage so old-state checks compare without cloning; callers clone
 // only what they keep (the `ast`).
