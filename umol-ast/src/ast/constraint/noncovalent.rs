@@ -199,48 +199,48 @@ mod tests {
     use super::*;
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_new() {
+    fn test_noncovalent_bond_constraints_ast_new() {
         let cs = NoncovalentBondConstraintsAst::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_compare_and_set() {
+    fn test_noncovalent_bond_constraints_ast_compare_and_set() {
         let mut cs = NoncovalentBondConstraintsAst::new();
         assert_eq!(cs.compare_and_set(None, None), Ok(()));
         assert_eq!(cs, NoncovalentBondConstraintsAst::new());
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_update() {
+    fn test_noncovalent_bond_constraints_ast_update() {
         let mut cs = NoncovalentBondConstraintsAst::new();
         cs.update(&NoncovalentBondConstraintsAst::new());
         assert_eq!(cs, NoncovalentBondConstraintsAst::new());
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_iter() {
+    fn test_noncovalent_bond_constraints_ast_iter() {
         let cs = NoncovalentBondConstraintsAst::new();
         assert_eq!(cs.iter().count(), 0);
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_retain() {
+    fn test_noncovalent_bond_constraints_ast_retain() {
         let mut cs = NoncovalentBondConstraintsAst::new();
         cs.retain(|_| true);
         assert_eq!(cs, NoncovalentBondConstraintsAst::new());
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_clear() {
+    fn test_noncovalent_bond_constraints_ast_clear() {
         let mut cs = NoncovalentBondConstraintsAst::new();
         cs.clear();
         assert_eq!(cs, NoncovalentBondConstraintsAst::new());
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_take() {
+    fn test_noncovalent_bond_constraints_ast_take() {
         let mut cs = NoncovalentBondConstraintsAst::new();
         let drained: Vec<_> = cs.take().collect();
         assert!(drained.is_empty());
@@ -248,7 +248,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_compact() {
+    fn test_noncovalent_bond_constraints_ast_compact() {
         let cs = NoncovalentBondConstraintsAst::new();
         let compaction = IdCompaction::new(
             Compaction::new(Vec::new(), Vec::new()),
@@ -263,13 +263,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_from_iter() {
+    fn test_noncovalent_bond_constraints_ast_from_iter() {
         let cs: NoncovalentBondConstraintsAst = empty().collect();
         assert_eq!(cs, NoncovalentBondConstraintsAst::new());
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_canonicalize() {
+    fn test_noncovalent_bond_constraints_ast_canonicalize() {
         let cs = NoncovalentBondConstraintsAst::new();
         assert_eq!(cs.clone().canonicalize(), Ok(cs));
     }
