@@ -40,7 +40,7 @@
 | [036-opensmiles-linting-2025-09-14.md](036-opensmiles-linting-2025-09-14.md)                                     | Outdated      | 2026-02-17   |
 | [037-opensmiles-parser-opt-2025-09-21.md](037-opensmiles-parser-opt-2025-09-21.md)                               | Completed     | 2026-02-17   |
 | [038-opensmiles-conformance-strategy-2025-09-30.md](038-opensmiles-conformance-strategy-2025-09-30.md)           | Completed     | 2026-02-17   |
-| [039-opensmiles-semantic-issues-2025-09-30.md](039-opensmiles-semantic-issues-2025-09-30.md)                     | Active        | 2026-02-17   |
+| [039-opensmiles-semantic-issues-2025-09-30.md](039-opensmiles-semantic-issues-2025-09-30.md)                     | Informational | 2026-03-15   |
 | [040-opensmiles-ir-modeling-2025-09-30.md](040-opensmiles-ir-modeling-2025-09-30.md)                             | Outdated      | 2026-02-17   |
 | [041-opensmiles-aromaticity-2025-10-01.md](041-opensmiles-aromaticity-2025-10-01.md)                             | Informational | 2026-02-17   |
 | [042-relational-representation-2025-11-23.md](042-relational-representation-2025-11-23.md)                       | Informational | 2026-03-11   |
@@ -144,3 +144,5 @@
 | [140-python-entity-bindings-plan-2026-07-09.md](140-python-entity-bindings-plan-2026-07-09.md)                   | Active        | 2026-07-09   |
 | [141-construction-ergonomics-2026-07-09.md](141-construction-ergonomics-2026-07-09.md)                           | Completed     | 2026-07-09   |
 | [142-join-split-2026-07-10.md](142-join-split-2026-07-10.md)                                                     | Completed     | 2026-07-10   |
+| [143-vendored-nauty-integration-2026-07-11.md](143-vendored-nauty-integration-2026-07-11.md)                     | Completed     | 2026-07-10   |
+| [144-vendored-nauty-implementation-plan-2026-07-11.md](144-vendored-nauty-implementation-plan-2026-07-11.md)     | Completed     | 2026-07-10   |

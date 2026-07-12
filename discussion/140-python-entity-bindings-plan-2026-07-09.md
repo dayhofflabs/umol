@@ -430,21 +430,27 @@ constraint `electron_count` (total `ValueAst`) — both exist, no clash.
   review then returned `null` on structured-output emission); substituted a manual rename-slip scan (zero
   `Aromatic` leaks) + method-inventory/test-parity diff vs aromatic (identical modulo the 5 deferred view
   tests). `[dep: existing ValueAst]`
-- **S1b** *(additive)* — `MulticenterBondAst` value pyclass (`new(electrons: ElectronCountsArg, *,
+- **S1b — DONE** *(additive)* — `MulticenterBondAst` value pyclass (`new(electrons: ElectronCountsArg, *,
   charge=None, spin=None, constraints=None)`, `parse`/`__str__`/`__repr__`, getters/setters
   `electrons`(→`ElectronCountsArg`)/`charge`(→`ValueArg`)/`spin`(→`SpinStateAst`)/`constraints`, `asdict`
   `{electrons, charge, spin, constraints}`, `inner`/`inner_mut`/`from_inner`) + `MulticenterBondConstraintsView`
   (live handle, full mapping API + `electron_count` getter/setter, no ring proxy) +
   `MulticenterBondConstraintsBacking { MulticenterBond(Py<MulticenterBondAst>) }` — **Molecule arm deferred
   to S3a** — + `MulticenterBondConstraintsArg { Container, View }` + the `MulticenterBondConstraintsUpdate::View`
-  variant/`apply` arm. Reuses the existing `ElectronCountsAst`/`ElectronCountsArg` (no gating). Register value
-  + view (`lib.rs` + `__init__.py`); Rust unit tests. `[dep: S1a]`
+  variant/`apply` arm. Reuses the existing `ElectronCountsAst`/`ElectronCountsArg` (no gating). Verbatim
+  rename of aromatic's S1c. Registered value + view (`lib.rs` + `__init__.py`); 9 value + 4 view tests;
+  36 Rust unit + 299 pytest green, clippy/fmt clean. Verification: the review workflow's structured-output
+  emission reliably dies on the rename-diff prompt shape (failed on S1a twice), so substituted the manual
+  rename-slip scan (zero leaks) + value/view method-inventory + test-parity diff vs aromatic (identical
+  modulo the deferred S3 view/collection + the one molecule-backed view test → S3a). `[dep: S1a]`
 
 **S2 — `from_parts` wiring (`umol-py/src/molecule.rs`).**
-- **S2a** *(additive)* — add `multicenter=Vec::new()` kwarg to `from_parts` (`(atoms, *, bonds=[],
-  dative=[], aromatic=[], multicenter=[])`), wire to `MoleculeParts.multicenter` (Python entry `(list[int],
-  MulticenterBondAst)` → `(Vec<AtomId>, MulticenterBondAst)`). Additive — **no** test-site migration. Extend
-  `test_molecule_ast_from_parts` (assert via `inner().multicenter_bonds()`). `[dep: S1b]`
+- **S2a — DONE** *(additive)* — added `multicenter=Vec::new()` kwarg to `from_parts` (`(atoms, *, bonds=[],
+  dative=[], aromatic=[], multicenter=[])`), wired to `MoleculeParts.multicenter` (Python entry `(list[int],
+  MulticenterBondAst)` → `(Vec<AtomId>, MulticenterBondAst)`). Additive — **no** test-site migration.
+  Extended `test_molecule_ast_from_parts` (asserts via `inner().multicenter_bonds()` count + `atom_ids`);
+  Python smoke confirms the kwarg is accepted (no `mol.multicenter_bonds` accessor until S3c). 13 molecule
+  Rust tests + 299 pytest green, clippy/fmt clean. Trivial mechanical mirror — no workflow. `[dep: S1b]`
 
 **S3 — views (`umol-py/src/multicenter.rs` + `molecule.rs`).**
 - **S3a** *(additive)* — `MulticenterBondView` (`id`, read-only `atom_ids -> tuple`, settable

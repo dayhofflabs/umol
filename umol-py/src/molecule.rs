@@ -10,6 +10,7 @@ use crate::aromatic::{AromaticSystemAst, AromaticSystemViews};
 use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
 use crate::dative::{DativeBondAst, DativeBondViews};
+use crate::multicenter::MulticenterBondAst;
 
 /// A molecule: the owned graph-AST root.
 #[pyclass(eq)]
@@ -29,14 +30,17 @@ impl MoleculeAst {
     /// `(donors, acceptor, bond)` triple: a list of donor atom indices, one
     /// acceptor atom index, and a `DativeBondAst`. Each aromatic system is an
     /// `(atoms, system)` pair: a list of member atom indices and an `AromaticSystemAst`.
+    /// Each multicenter bond is an `(atoms, bond)` pair: a list of member atom indices
+    /// and a `MulticenterBondAst`.
     #[staticmethod]
-    #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative=Vec::new(), aromatic=Vec::new()))]
+    #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative=Vec::new(), aromatic=Vec::new(), multicenter=Vec::new()))]
     fn from_parts(
         py: Python<'_>,
         atoms: Vec<Py<AtomAst>>,
         bonds: Vec<(u32, u32, Py<BondAst>)>,
         dative: Vec<(Vec<u32>, u32, Py<DativeBondAst>)>,
         aromatic: Vec<(Vec<u32>, Py<AromaticSystemAst>)>,
+        multicenter: Vec<(Vec<u32>, Py<MulticenterBondAst>)>,
     ) -> Self {
         let ast_atoms = atoms
             .iter()
@@ -71,11 +75,21 @@ impl MoleculeAst {
                 )
             })
             .collect();
+        let ast_multicenter = multicenter
+            .iter()
+            .map(|(atoms, bond)| {
+                (
+                    atoms.iter().map(|&atom| AstAtomId(atom)).collect(),
+                    bond.bind(py).borrow().inner().clone(),
+                )
+            })
+            .collect();
         MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
             atoms: ast_atoms,
             bonds: ast_bonds,
             dative: ast_dative,
             aromatic: ast_aromatic,
+            multicenter: ast_multicenter,
             ..Default::default()
         }))
     }
@@ -139,7 +153,8 @@ mod tests {
     use umol_ast::ast::{
         AromaticSystemAst as AstAromaticSystemAst, AromaticSystemId as AstAromaticSystemId,
         AtomAst, BondAst as AstBondAst, DativeBondAst as AstDativeBondAst,
-        DativeBondId as AstDativeBondId,
+        DativeBondId as AstDativeBondId, MulticenterBondAst as AstMulticenterBondAst,
+        MulticenterBondId as AstMulticenterBondId,
     };
     use umol_chem::element::Element;
 
@@ -183,7 +198,17 @@ mod tests {
                 )
                 .unwrap(),
             )];
-            let molecule = MoleculeAst::from_parts(py, atoms, bonds, dative, aromatic);
+            let multicenter = vec![(
+                vec![0, 1, 2],
+                Py::new(
+                    py,
+                    MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                        1, 1, 1,
+                    ])),
+                )
+                .unwrap(),
+            )];
+            let molecule = MoleculeAst::from_parts(py, atoms, bonds, dative, aromatic, multicenter);
             assert_eq!(molecule.inner().atoms().count(), 3);
             assert_eq!(molecule.inner().bonds().count(), 1);
             let dative_bonds = molecule.inner().dative_bonds();
@@ -199,6 +224,13 @@ mod tests {
             let aromatic_view = aromatic_systems.get(AstAromaticSystemId(0)).unwrap();
             assert_eq!(
                 aromatic_view.atom_ids().collect::<Vec<_>>(),
+                vec![AstAtomId(0), AstAtomId(1), AstAtomId(2)]
+            );
+            let multicenter_bonds = molecule.inner().multicenter_bonds();
+            assert_eq!(multicenter_bonds.count(), 1);
+            let multicenter_view = multicenter_bonds.get(AstMulticenterBondId(0)).unwrap();
+            assert_eq!(
+                multicenter_view.atom_ids().collect::<Vec<_>>(),
                 vec![AstAtomId(0), AstAtomId(1), AstAtomId(2)]
             );
         });
