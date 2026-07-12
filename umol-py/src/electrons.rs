@@ -59,6 +59,26 @@ impl ElectronCountsAst {
     }
 }
 
+/// Setter coercion for an electron-counts field: a Python `list[int]` → `Lit`, or an
+/// `ElectronCountsAst` passthrough (mirroring `impl From<Vec<i64>>`). Test-only until
+/// the aromatic value pyclass (S1c) consumes it.
+#[cfg(test)]
+#[derive(FromPyObject)]
+pub(crate) enum ElectronCountsArg {
+    Lit(Vec<i64>),
+    Ast(Py<ElectronCountsAst>),
+}
+
+#[cfg(test)]
+impl ElectronCountsArg {
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstElectronCountsAst {
+        match self {
+            ElectronCountsArg::Lit(counts) => AstElectronCountsAst::Lit(counts.clone()),
+            ElectronCountsArg::Ast(a) => a.bind(py).borrow().to_ast(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -81,5 +101,22 @@ mod tests {
         #[case] expected: Option<Vec<i64>>,
     ) {
         assert_eq!(ElectronCountsAst::from_ast(&ast).as_lit(), expected);
+    }
+
+    #[rstest]
+    fn test_electron_counts_arg_to_ast() {
+        Python::attach(|py| {
+            // a bare list coerces to Lit
+            assert_eq!(
+                ElectronCountsArg::Lit(vec![1, 0, 1]).to_ast(py),
+                AstElectronCountsAst::Lit(vec![1, 0, 1])
+            );
+            // an ElectronCountsAst passes through
+            let ast = Py::new(py, ElectronCountsAst::Lit(vec![2, 2])).unwrap();
+            assert_eq!(
+                ElectronCountsArg::Ast(ast).to_ast(py),
+                AstElectronCountsAst::Lit(vec![2, 2])
+            );
+        });
     }
 }

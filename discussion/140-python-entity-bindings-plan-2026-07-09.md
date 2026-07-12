@@ -286,12 +286,16 @@ constraint `electron_count` (total-π `ValueAst`) — both exist, no clash.
 
 **S0 — new leaf `ElectronCountsAst` (`umol-py/src/electrons.rs`).** Foundation; own module because B4
 reuses it (no lopsided dep).
-- **S0a** *(additive)* — `ElectronCountsAst` pyclass enum `{ Undetermined(), Lit(Vec<i64>) }`:
-  `from_ast`/`to_ast`, `__eq__`/`__hash__`/`__repr__`, `as_lit() -> Option<list[int]>`. New module;
-  register in `lib.rs` + `__init__.py`; Rust unit tests. `[dep: none]`
-- **S0b** *(additive)* — `ElectronCountsArg` (`FromPyObject` enum `{ Ast(Py<ElectronCountsAst>),
-  Lit(Vec<i64>) }`) + `to_ast(py)`, mirroring `ValueArg`; a bare `list[int]` coerces to `Lit`.
-  `[dep: S0a]`
+- **S0a — DONE** *(additive)* — `ElectronCountsAst` pyclass enum `{ Undetermined(), Lit(Vec<i64>) }`
+  (`boolean.rs` leaf pattern): `to_ast`, `__eq__`/`__hash__`/`__repr__`, `as_lit() -> Option<list[int]>`.
+  New module `umol-py/src/electrons.rs`; registered in `lib.rs` + `__init__.py`; 5 Rust unit tests
+  (roundtrip + as_lit); `import umol` + 266 pytest green. `from_ast` gated `#[cfg(test)]` (test-only
+  consumer at S0a, `from_inner` precedent — avoids a dead-code warning); **S1c un-gates it** when the
+  value pyclass calls it. `[dep: none]`
+- **S0b — DONE** *(additive)* — `ElectronCountsArg` (`FromPyObject` enum `{ Lit(Vec<i64>),
+  Ast(Py<ElectronCountsAst>) }`) + `to_ast(py)`, mirroring `ValueArg`; a bare `list[int]` coerces to
+  `Lit`. Gated `#[cfg(test)]` (first consumer is the S1c value setter — avoids a dead-code warning)
+  with a `to_ast` mapping test (both variants); **S1c un-gates it** with `from_ast`. `[dep: S0a]`
 
 **S1 — value + WET constraint surface (`umol-py/src/aromatic.rs`).**
 - **S1a** *(additive)* — `AromaticSystemConstraintKey { ElectronCount() }` +
