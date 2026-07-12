@@ -9,20 +9,23 @@
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::PyKeyError;
+use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyDict};
+use pyo3::types::{PyAny, PyDict, PyTuple};
 use umol_ast::ast::{
     AromaticSystemAst as AstAromaticSystemAst,
     AromaticSystemConstraintAst as AstAromaticSystemConstraintAst,
     AromaticSystemConstraintKey as AstAromaticSystemConstraintKey,
     AromaticSystemConstraintsAst as AstAromaticSystemConstraintsAst,
+    AromaticSystemId as AstAromaticSystemId, AromaticSystemView as AstAromaticSystemView,
+    MoleculeAst as AstMoleculeAst,
 };
 
 use crate::atom::SpinStateAst;
 use crate::convert::{hash_ast, into_py_variant, variant_repr};
 use crate::electrons::{ElectronCountsArg, ElectronCountsAst};
 use crate::error::parse_error;
+use crate::molecule::MoleculeAst;
 use crate::value::{ValueArg, ValueAst};
 
 /// An aromatic system: a positional per-member-atom `electrons` vector, charge,
@@ -158,6 +161,145 @@ impl AromaticSystemAst {
     #[cfg(test)]
     pub(crate) fn from_inner(system: AstAromaticSystemAst) -> Self {
         AromaticSystemAst(system)
+    }
+}
+
+/// A view of one aromatic system within a molecule: a handle to the molecule plus
+/// the system's index. Field reads rebuild the transient Rust view; the molecule is
+/// never copied. The member atom indices are read-only topology; the electrons,
+/// charge, spin, and constraints are the mutable system value.
+#[pyclass]
+pub struct AromaticSystemView {
+    owner: Py<MoleculeAst>,
+    id: AstAromaticSystemId,
+}
+
+impl AromaticSystemView {
+    fn aromatic_system<'a>(
+        &self,
+        molecule: &'a AstMoleculeAst,
+    ) -> PyResult<AstAromaticSystemView<'a>> {
+        molecule
+            .aromatic_systems()
+            .get(self.id)
+            .ok_or_else(|| PyIndexError::new_err("aromatic system id out of range"))
+    }
+}
+
+#[pymethods]
+impl AromaticSystemView {
+    #[getter]
+    fn id(&self) -> u32 {
+        self.id.0
+    }
+
+    /// The member atom indices (read-only — participants are topology, not part of
+    /// the system value).
+    #[getter]
+    fn atom_ids<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        let molecule = self.owner.bind(py).borrow();
+        let atom_ids: Vec<u32> = self
+            .aromatic_system(molecule.inner())?
+            .atom_ids()
+            .map(|atom| atom.0)
+            .collect();
+        PyTuple::new(py, atom_ids)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("AromaticSystemView(id={})", self.id.0)
+    }
+
+    /// The per-member-atom electron counts (positional, aligned to `atom_ids`).
+    #[getter]
+    fn electrons(&self, py: Python<'_>) -> PyResult<ElectronCountsAst> {
+        let molecule = self.owner.bind(py).borrow();
+        Ok(ElectronCountsAst::from_ast(
+            &self.aromatic_system(molecule.inner())?.ast.electrons,
+        ))
+    }
+
+    #[setter]
+    fn set_electrons(&self, py: Python<'_>, value: ElectronCountsArg) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .aromatic_system_mut(self.id)
+            .ast
+            .electrons = value.to_ast(py);
+    }
+
+    #[getter]
+    fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
+        let molecule = self.owner.bind(py).borrow();
+        ValueAst::from_ast(py, &self.aromatic_system(molecule.inner())?.ast.charge)
+    }
+
+    #[setter]
+    fn set_charge(&self, py: Python<'_>, value: ValueArg) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .aromatic_system_mut(self.id)
+            .ast
+            .charge = value.to_ast(py);
+    }
+
+    #[getter]
+    fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
+        let molecule = self.owner.bind(py).borrow();
+        SpinStateAst::from_ast(py, &self.aromatic_system(molecule.inner())?.ast.spin)
+    }
+
+    #[setter]
+    fn set_spin(&self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .aromatic_system_mut(self.id)
+            .ast
+            .spin = value.to_ast(py);
+    }
+
+    /// The system's constraints as a live handle onto the molecule: reads borrow the
+    /// current state, mutators write through to the system in place.
+    #[getter]
+    fn constraints(&self, py: Python<'_>) -> AromaticSystemConstraintsView {
+        AromaticSystemConstraintsView {
+            backing: AromaticSystemConstraintsBacking::Molecule {
+                owner: self.owner.clone_ref(py),
+                id: self.id,
+            },
+        }
+    }
+
+    /// Replace the whole constraint set of the backing system in place (wipe-and-set)
+    /// from a value container or a live view.
+    #[setter]
+    fn set_constraints(&self, py: Python<'_>, value: AromaticSystemConstraintsArg) -> PyResult<()> {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .aromatic_system_mut(self.id)
+            .ast
+            .constraints = value.to_ast(py)?;
+        Ok(())
+    }
+
+    /// The value fields as a dict keyed by field name; values are the field mirrors —
+    /// symmetric with `AromaticSystemAst.asdict`, read through the view.
+    fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let molecule = self.owner.bind(py).borrow();
+        let system = self.aromatic_system(molecule.inner())?.ast;
+        let dict = PyDict::new(py);
+        dict.set_item("electrons", ElectronCountsAst::from_ast(&system.electrons))?;
+        dict.set_item("charge", ValueAst::from_ast(py, &system.charge)?)?;
+        dict.set_item("spin", SpinStateAst::from_ast(py, &system.spin)?)?;
+        dict.set_item(
+            "constraints",
+            aromatic_system_constraints_asdict(py, &system.constraints)?,
+        )?;
+        Ok(dict)
     }
 }
 
@@ -542,17 +684,20 @@ fn aromatic_system_constraints_asdict<'py>(
     Ok(dict)
 }
 
-/// What an `AromaticSystemConstraintsView` writes through to. Only the standalone
-/// `AromaticSystemAst` backing exists at this stage; the molecule backing lands with
-/// `AromaticSystemView` (S3), which constructs it.
+/// What an `AromaticSystemConstraintsView` writes through to: an aromatic system
+/// within a molecule (by index) or a standalone `AromaticSystemAst`.
 enum AromaticSystemConstraintsBacking {
+    Molecule {
+        owner: Py<MoleculeAst>,
+        id: AstAromaticSystemId,
+    },
     AromaticSystem(Py<AromaticSystemAst>),
 }
 
-/// A live handle onto one aromatic system's constraints, backed by a standalone
-/// `AromaticSystemAst`. Reads borrow the constraints and read only the item they need
-/// (no whole-container clone); mutators write through to the system in place, without a
-/// clone-and-writeback.
+/// A live handle onto one aromatic system's constraints, backed by either a
+/// molecule-system or a standalone `AromaticSystemAst`. Reads borrow the constraints
+/// and read only the item they need (no whole-container clone); mutators write through
+/// to the system in place, without a clone-and-writeback.
 #[pyclass]
 pub struct AromaticSystemConstraintsView {
     backing: AromaticSystemConstraintsBacking,
@@ -566,6 +711,15 @@ impl AromaticSystemConstraintsView {
         f: impl FnOnce(&AstAromaticSystemConstraintsAst) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.backing {
+            AromaticSystemConstraintsBacking::Molecule { owner, id } => {
+                let molecule = owner.bind(py).borrow();
+                let view = molecule
+                    .inner()
+                    .aromatic_systems()
+                    .get(*id)
+                    .ok_or_else(|| PyIndexError::new_err("aromatic system id out of range"))?;
+                f(&view.ast.constraints)
+            }
             AromaticSystemConstraintsBacking::AromaticSystem(system) => {
                 let system = system.bind(py).borrow();
                 f(&system.inner().constraints)
@@ -580,6 +734,12 @@ impl AromaticSystemConstraintsView {
         f: impl FnOnce(&mut AstAromaticSystemConstraintsAst) -> R,
     ) -> R {
         match &self.backing {
+            AromaticSystemConstraintsBacking::Molecule { owner, id } => f(&mut owner
+                .borrow_mut(py)
+                .inner_mut()
+                .aromatic_system_mut(*id)
+                .ast
+                .constraints),
             AromaticSystemConstraintsBacking::AromaticSystem(system) => {
                 f(&mut system.borrow_mut(py).inner_mut().constraints)
             }
@@ -796,11 +956,26 @@ impl AromaticSystemConstraintItemsIter {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        ElectronCountsAst as AstElectronCountsAst, SpinStateAst as AstSpinStateAst,
-        ValueAst as AstValueAst,
+        AtomAst as AstAtomAst, AtomId as AstAtomId, ElectronCountsAst as AstElectronCountsAst,
+        MoleculeParts, SpinStateAst as AstSpinStateAst, ValueAst as AstValueAst,
     };
+    use umol_chem::element::Element as ChemElement;
 
     use super::*;
+
+    /// Benzene: six aromatic carbons (atom ids 0–5), one aromatic system over all six
+    /// (electrons `[1,1,1,1,1,1]`), aromatic system id 0.
+    fn benzene(py: Python<'_>) -> Py<MoleculeAst> {
+        let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AstAtomAst::from_element(ChemElement::C); 6],
+            aromatic: vec![(
+                (0u32..6).map(AstAtomId).collect(),
+                AstAromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1]),
+            )],
+            ..Default::default()
+        });
+        Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()
+    }
 
     #[rstest]
     fn test_aromatic_system_ast_new() {
@@ -947,6 +1122,152 @@ mod tests {
             assert_eq!(dict.len(), 4);
             let electrons = dict.get_item("electrons").unwrap().unwrap();
             let expected = into_py_variant(py, ElectronCountsAst::Lit(vec![1, 1, 1])).unwrap();
+            assert!(electrons.eq(expected.bind(py)).unwrap());
+            assert!(dict.contains("charge").unwrap());
+            assert!(dict.contains("spin").unwrap());
+            assert!(dict.contains("constraints").unwrap());
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_atom_ids() {
+        Python::attach(|py| {
+            let view = AromaticSystemView {
+                owner: benzene(py),
+                id: AstAromaticSystemId(0),
+            };
+            assert_eq!(view.id(), 0);
+            let atom_ids: Vec<u32> = view.atom_ids(py).unwrap().extract().unwrap();
+            assert_eq!(atom_ids, vec![0, 1, 2, 3, 4, 5]);
+            assert_eq!(view.__repr__(), "AromaticSystemView(id=0)");
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_electrons() {
+        Python::attach(|py| {
+            let owner = benzene(py);
+            let view = AromaticSystemView {
+                owner: owner.clone_ref(py),
+                id: AstAromaticSystemId(0),
+            };
+            assert_eq!(
+                view.electrons(py).unwrap().to_ast(),
+                AstElectronCountsAst::Lit(vec![1, 1, 1, 1, 1, 1])
+            );
+            view.set_electrons(py, ElectronCountsArg::Lit(vec![2, 2, 2, 2, 2, 2]));
+            let fresh = AromaticSystemView {
+                owner,
+                id: AstAromaticSystemId(0),
+            };
+            assert_eq!(
+                fresh.electrons(py).unwrap().to_ast(),
+                AstElectronCountsAst::Lit(vec![2, 2, 2, 2, 2, 2])
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_charge() {
+        Python::attach(|py| {
+            let owner = benzene(py);
+            let view = AromaticSystemView {
+                owner: owner.clone_ref(py),
+                id: AstAromaticSystemId(0),
+            };
+            view.set_charge(py, ValueArg::Lit(-1));
+            let fresh = AromaticSystemView {
+                owner,
+                id: AstAromaticSystemId(0),
+            };
+            assert_eq!(fresh.charge(py).unwrap().to_ast(py), AstValueAst::Lit(-1));
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_spin() {
+        Python::attach(|py| {
+            let spin_ast = AstSpinStateAst::from((0_u8, 1_u8));
+            let spin = Py::new(py, SpinStateAst::from_ast(py, &spin_ast).unwrap()).unwrap();
+            let owner = benzene(py);
+            let view = AromaticSystemView {
+                owner: owner.clone_ref(py),
+                id: AstAromaticSystemId(0),
+            };
+            view.set_spin(py, spin.bind(py).borrow());
+            let fresh = AromaticSystemView {
+                owner,
+                id: AstAromaticSystemId(0),
+            };
+            assert_eq!(fresh.spin(py).unwrap().to_ast(py), spin_ast);
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_constraints() {
+        Python::attach(|py| {
+            let view = AromaticSystemView {
+                owner: benzene(py),
+                id: AstAromaticSystemId(0),
+            };
+            match view.constraints(py).backing {
+                AromaticSystemConstraintsBacking::Molecule { id, .. } => {
+                    assert_eq!(id, AstAromaticSystemId(0))
+                }
+                _ => panic!("expected molecule-backed view"),
+            }
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_set_constraints() {
+        Python::attach(|py| {
+            let owner = benzene(py);
+            let view = AromaticSystemView {
+                owner: owner.clone_ref(py),
+                id: AstAromaticSystemId(0),
+            };
+            let constraints = Py::new(
+                py,
+                AromaticSystemConstraintsAst::new(
+                    py,
+                    vec![into_py_variant(
+                        py,
+                        AromaticSystemConstraintAst::from_ast(
+                            py,
+                            &AstAromaticSystemConstraintAst::electron_count(6),
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap()],
+                ),
+            )
+            .unwrap();
+            view.set_constraints(py, AromaticSystemConstraintsArg::Container(constraints))
+                .unwrap();
+            let fresh = AromaticSystemView {
+                owner,
+                id: AstAromaticSystemId(0),
+            };
+            assert_eq!(
+                fresh.constraints(py).electron_count(py).unwrap().to_ast(py),
+                AstValueAst::Lit(6)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_asdict() {
+        Python::attach(|py| {
+            let view = AromaticSystemView {
+                owner: benzene(py),
+                id: AstAromaticSystemId(0),
+            };
+            let dict = view.asdict(py).unwrap();
+            assert_eq!(dict.len(), 4);
+            let electrons = dict.get_item("electrons").unwrap().unwrap();
+            let expected =
+                into_py_variant(py, ElectronCountsAst::Lit(vec![1, 1, 1, 1, 1, 1])).unwrap();
             assert!(electrons.eq(expected.bind(py)).unwrap());
             assert!(dict.contains("charge").unwrap());
             assert!(dict.contains("spin").unwrap());
@@ -1436,6 +1757,31 @@ mod tests {
             let fresh = AromaticSystemConstraintsView {
                 backing: AromaticSystemConstraintsBacking::AromaticSystem(system),
             };
+            assert_eq!(
+                fresh.electron_count(py).unwrap().to_ast(py),
+                AstValueAst::Lit(6)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_constraints_view_set_molecule_backed() {
+        Python::attach(|py| {
+            let owner = benzene(py);
+            let view = AromaticSystemConstraintsView {
+                backing: AromaticSystemConstraintsBacking::Molecule {
+                    owner: owner.clone_ref(py),
+                    id: AstAromaticSystemId(0),
+                },
+            };
+            view.set_electron_count(py, ValueArg::Lit(6));
+            let fresh = AromaticSystemConstraintsView {
+                backing: AromaticSystemConstraintsBacking::Molecule {
+                    owner,
+                    id: AstAromaticSystemId(0),
+                },
+            };
+            assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
                 fresh.electron_count(py).unwrap().to_ast(py),
                 AstValueAst::Lit(6)
