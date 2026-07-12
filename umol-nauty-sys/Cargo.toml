@@ -11,6 +11,9 @@ links = "umol_nauty"
 [build-dependencies]
 cc = "1"
 
+[dev-dependencies]
+rstest = "0.26.1"
+
 [lints.clippy]
 absolute_paths = "warn"
 mod_module_files = "warn"
