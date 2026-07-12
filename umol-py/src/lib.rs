@@ -30,7 +30,8 @@ use crate::{
     error::ParseError,
     molecule::MoleculeAst,
     multicenter::{
-        MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsAst,
+        MulticenterBondAst, MulticenterBondConstraintAst, MulticenterBondConstraintKey,
+        MulticenterBondConstraintsAst, MulticenterBondConstraintsView,
     },
     stereo::{
         CisTransStereo, CisTransStereoAst, Permutation, StereoCosetAst, StereoTerm,
@@ -122,9 +123,11 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AromaticSystemConstraintsView>()?;
         module.add_class::<AromaticSystemView>()?;
         module.add_class::<AromaticSystemViews>()?;
+        module.add_class::<MulticenterBondAst>()?;
         module.add_class::<MulticenterBondConstraintAst>()?;
         module.add_class::<MulticenterBondConstraintKey>()?;
         module.add_class::<MulticenterBondConstraintsAst>()?;
+        module.add_class::<MulticenterBondConstraintsView>()?;
         module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;

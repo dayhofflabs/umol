@@ -6,19 +6,160 @@
 //! constraints. The member atoms are the participants of the owning molecule's
 //! multicenter relation, so they are topology (the view half) rather than value.
 
+use std::str::FromStr;
 use std::vec::IntoIter;
 
 use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_ast::ast::{
+    MulticenterBondAst as AstMulticenterBondAst,
     MulticenterBondConstraintAst as AstMulticenterBondConstraintAst,
     MulticenterBondConstraintKey as AstMulticenterBondConstraintKey,
     MulticenterBondConstraintsAst as AstMulticenterBondConstraintsAst,
 };
 
+use crate::atom::SpinStateAst;
 use crate::convert::{hash_ast, into_py_variant, variant_repr};
+use crate::electrons::{ElectronCountsArg, ElectronCountsAst};
+use crate::error::parse_error;
 use crate::value::{ValueArg, ValueAst};
+
+/// A multicenter bond: a positional per-member-atom `electrons` vector, charge,
+/// spin, and multicenter-bond-scope constraints. The member atoms are the
+/// participants of the owning molecule's multicenter relation (the view half); the
+/// `electrons` vector is positional, aligned to that atom order.
+#[pyclass(eq)]
+#[derive(PartialEq)]
+pub struct MulticenterBondAst(AstMulticenterBondAst);
+
+#[pymethods]
+impl MulticenterBondAst {
+    /// Construct from an electron-count vector — a `list[int]` or an
+    /// `ElectronCountsAst` — optionally setting fields.
+    #[new]
+    #[pyo3(signature = (electrons, *, charge=None, spin=None, constraints=None))]
+    fn new(
+        py: Python<'_>,
+        electrons: ElectronCountsArg,
+        charge: Option<ValueArg>,
+        spin: Option<PyRef<'_, SpinStateAst>>,
+        constraints: Option<Py<MulticenterBondConstraintsAst>>,
+    ) -> Self {
+        let mut bond = AstMulticenterBondAst::new(electrons.to_ast(py));
+        if let Some(charge) = charge {
+            bond = bond.with_charge(charge.to_ast(py));
+        }
+        if let Some(spin) = spin {
+            bond = bond.with_spin(spin.to_ast(py));
+        }
+        if let Some(constraints) = constraints {
+            bond.constraints = constraints.bind(py).borrow().inner().clone();
+        }
+        MulticenterBondAst(bond)
+    }
+
+    /// Parse a multicenter-bond-DSL string (e.g. `"[1,1,1]#e6"`) into a `MulticenterBondAst`.
+    #[staticmethod]
+    fn parse(s: &str) -> PyResult<Self> {
+        AstMulticenterBondAst::from_str(s)
+            .map(Self)
+            .map_err(parse_error)
+    }
+
+    fn __str__(&self) -> String {
+        self.0.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("MulticenterBondAst.parse('{}')", self.0)
+    }
+
+    /// The per-member-atom electron counts (positional, aligned to `atom_ids`).
+    #[getter]
+    fn electrons(&self) -> ElectronCountsAst {
+        ElectronCountsAst::from_ast(&self.0.electrons)
+    }
+
+    #[setter]
+    fn set_electrons(&mut self, py: Python<'_>, value: ElectronCountsArg) {
+        self.0.electrons = value.to_ast(py);
+    }
+
+    #[getter]
+    fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
+        ValueAst::from_ast(py, &self.0.charge)
+    }
+
+    #[setter]
+    fn set_charge(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0.charge = value.to_ast(py);
+    }
+
+    #[getter]
+    fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
+        SpinStateAst::from_ast(py, &self.0.spin)
+    }
+
+    #[setter]
+    fn set_spin(&mut self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
+        self.0.spin = value.to_ast(py);
+    }
+
+    /// The bond's constraints as a live handle onto this bond: reads borrow the
+    /// current state, mutators write through to the bond in place.
+    #[getter]
+    fn constraints(slf: Py<Self>) -> MulticenterBondConstraintsView {
+        MulticenterBondConstraintsView {
+            backing: MulticenterBondConstraintsBacking::MulticenterBond(slf),
+        }
+    }
+
+    /// Replace the whole constraint set (wipe-and-set) from a value container or a
+    /// live view.
+    #[setter]
+    fn set_constraints(
+        &mut self,
+        py: Python<'_>,
+        value: MulticenterBondConstraintsArg,
+    ) -> PyResult<()> {
+        self.0.constraints = value.to_ast(py)?;
+        Ok(())
+    }
+
+    /// The fields as a dict keyed by field name; values are the field mirrors.
+    fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let dict = PyDict::new(py);
+        dict.set_item("electrons", self.electrons())?;
+        dict.set_item("charge", self.charge(py)?)?;
+        dict.set_item("spin", self.spin(py)?)?;
+        dict.set_item(
+            "constraints",
+            multicenter_bond_constraints_asdict(py, &self.0.constraints)?,
+        )?;
+        Ok(dict)
+    }
+}
+
+impl MulticenterBondAst {
+    /// The wrapped AST bond — read access for the bond-backed constraints view.
+    pub(crate) fn inner(&self) -> &AstMulticenterBondAst {
+        &self.0
+    }
+
+    /// Mutable access to the wrapped AST bond — write access for the bond-backed
+    /// constraints view.
+    pub(crate) fn inner_mut(&mut self) -> &mut AstMulticenterBondAst {
+        &mut self.0
+    }
+
+    /// Wrap an AST bond (the hold-the-value `from_inner` bridge, paired with
+    /// `inner`). Test-only — in-crate construction wraps `MulticenterBondAst(..)` directly.
+    #[cfg(test)]
+    pub(crate) fn from_inner(bond: AstMulticenterBondAst) -> Self {
+        MulticenterBondAst(bond)
+    }
+}
 
 /// The key (identity) of a multicenter-bond constraint, for keyed lookup. The
 /// single key `ElectronCount` is the bare discriminant (no sub-key).
@@ -121,12 +262,12 @@ impl MulticenterBondConstraintAst {
     }
 }
 
-/// The argument to `update`: another constraint container or an iterable of
-/// `MulticenterBondConstraintAst` (each `set`, last-wins). The live-view variant
-/// lands with `MulticenterBondConstraintsView` (S1b).
+/// The argument to `update`: another constraint container (value or live view) or an
+/// iterable of `MulticenterBondConstraintAst` (each `set`, last-wins).
 #[derive(FromPyObject)]
 enum MulticenterBondConstraintsUpdate {
     Container(Py<MulticenterBondConstraintsAst>),
+    View(Py<MulticenterBondConstraintsView>),
     Entries(Vec<Py<MulticenterBondConstraintAst>>),
 }
 
@@ -137,6 +278,10 @@ impl MulticenterBondConstraintsUpdate {
             MulticenterBondConstraintsUpdate::Container(c) => {
                 target.update(c.bind(py).borrow().inner())
             }
+            MulticenterBondConstraintsUpdate::View(v) => {
+                let snapshot = v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?;
+                target.update(&snapshot);
+            }
             MulticenterBondConstraintsUpdate::Entries(entries) => {
                 for entry in entries {
                     target.set(entry.bind(py).borrow().to_ast(py));
@@ -144,6 +289,25 @@ impl MulticenterBondConstraintsUpdate {
             }
         }
         Ok(())
+    }
+}
+
+/// A whole-container argument that snapshots either a value container or a live view
+/// — for the multicenter bond `constraints` setter, which accepts either.
+#[derive(FromPyObject)]
+enum MulticenterBondConstraintsArg {
+    Container(Py<MulticenterBondConstraintsAst>),
+    View(Py<MulticenterBondConstraintsView>),
+}
+
+impl MulticenterBondConstraintsArg {
+    fn to_ast(&self, py: Python<'_>) -> PyResult<AstMulticenterBondConstraintsAst> {
+        match self {
+            MulticenterBondConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            MulticenterBondConstraintsArg::View(v) => {
+                v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))
+            }
+        }
     }
 }
 
@@ -387,6 +551,204 @@ fn multicenter_bond_constraints_asdict<'py>(
     Ok(dict)
 }
 
+/// What a `MulticenterBondConstraintsView` writes through to. Only the standalone
+/// `MulticenterBondAst` backing exists at this stage; the molecule backing lands with
+/// `MulticenterBondView` (S3), which constructs it.
+enum MulticenterBondConstraintsBacking {
+    MulticenterBond(Py<MulticenterBondAst>),
+}
+
+/// A live handle onto one multicenter bond's constraints, backed by a standalone
+/// `MulticenterBondAst`. Reads borrow the constraints and read only the item they need
+/// (no whole-container clone); mutators write through to the bond in place, without a
+/// clone-and-writeback.
+#[pyclass]
+pub struct MulticenterBondConstraintsView {
+    backing: MulticenterBondConstraintsBacking,
+}
+
+impl MulticenterBondConstraintsView {
+    /// Borrow the backing bond's constraints and read one item through `f` — no clone.
+    fn read<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&AstMulticenterBondConstraintsAst) -> PyResult<R>,
+    ) -> PyResult<R> {
+        match &self.backing {
+            MulticenterBondConstraintsBacking::MulticenterBond(bond) => {
+                let bond = bond.bind(py).borrow();
+                f(&bond.inner().constraints)
+            }
+        }
+    }
+
+    /// Mutate the backing bond's constraints in place through `f`.
+    fn with_mut<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut AstMulticenterBondConstraintsAst) -> R,
+    ) -> R {
+        match &self.backing {
+            MulticenterBondConstraintsBacking::MulticenterBond(bond) => {
+                f(&mut bond.borrow_mut(py).inner_mut().constraints)
+            }
+        }
+    }
+
+    /// Set one constraint on the backing bond in place (last-wins per key).
+    fn set_ast(&self, py: Python<'_>, constraint: AstMulticenterBondConstraintAst) {
+        self.with_mut(py, |cs| cs.set(constraint));
+    }
+
+    /// Remove one key from the backing bond in place, returning the removed entry.
+    fn remove_ast(
+        &self,
+        py: Python<'_>,
+        key: AstMulticenterBondConstraintKey,
+    ) -> Option<AstMulticenterBondConstraintAst> {
+        self.with_mut(py, |cs| cs.remove(key))
+    }
+}
+
+#[pymethods]
+impl MulticenterBondConstraintsView {
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let count = self.read(py, |cs| Ok(cs.len()))?;
+        Ok(format!("MulticenterBondConstraintsView({count} entries)"))
+    }
+
+    /// Insert `c` on the bond in place, replacing any existing entry of the same key
+    /// (last-wins).
+    fn set(&self, py: Python<'_>, c: Py<MulticenterBondConstraintAst>) {
+        self.set_ast(py, c.bind(py).borrow().to_ast(py));
+    }
+
+    /// Remove the entry with the given key from the bond in place, returning it if
+    /// present (dict `pop`).
+    fn pop(
+        &self,
+        py: Python<'_>,
+        key: Py<MulticenterBondConstraintKey>,
+    ) -> PyResult<Option<MulticenterBondConstraintAst>> {
+        self.remove_ast(py, key.bind(py).borrow().to_ast())
+            .map(|c| MulticenterBondConstraintAst::from_ast(py, &c))
+            .transpose()
+    }
+
+    /// Remove the entry with the given key; raises `KeyError` if absent.
+    fn __delitem__(&self, py: Python<'_>, key: Py<MulticenterBondConstraintKey>) -> PyResult<()> {
+        if self
+            .remove_ast(py, key.bind(py).borrow().to_ast())
+            .is_some()
+        {
+            Ok(())
+        } else {
+            Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            ))
+        }
+    }
+
+    /// Overlay `other` onto the bond's constraints in place — another container or an
+    /// iterable of `MulticenterBondConstraintAst` (last-wins per key; undetermined entries remove).
+    fn update(&self, py: Python<'_>, other: MulticenterBondConstraintsUpdate) -> PyResult<()> {
+        self.with_mut(py, |cs| other.apply(py, cs))
+    }
+
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        self.read(py, |cs| Ok(cs.len()))
+    }
+
+    /// Iterate the constraint keys (mapping-style, canonical order).
+    fn __iter__(&self, py: Python<'_>) -> PyResult<MulticenterBondConstraintKeyIter> {
+        self.read(py, |cs| multicenter_bond_constraint_keys(py, cs))
+    }
+
+    /// The constraint keys, in canonical order.
+    fn keys(&self, py: Python<'_>) -> PyResult<MulticenterBondConstraintKeyIter> {
+        self.read(py, |cs| multicenter_bond_constraint_keys(py, cs))
+    }
+
+    /// The constraints, in canonical order.
+    fn values(&self, py: Python<'_>) -> PyResult<MulticenterBondConstraintIter> {
+        self.read(py, |cs| multicenter_bond_constraints_iter(py, cs))
+    }
+
+    /// The `(key, constraint)` pairs, in canonical order.
+    fn items(&self, py: Python<'_>) -> PyResult<MulticenterBondConstraintItemsIter> {
+        self.read(py, |cs| multicenter_bond_constraint_items(py, cs))
+    }
+
+    /// The constraint with the given key, or `default` (`None`) if absent.
+    #[pyo3(signature = (key, default=None))]
+    fn get(
+        &self,
+        py: Python<'_>,
+        key: Py<MulticenterBondConstraintKey>,
+        default: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        let key = key.bind(py).borrow().to_ast();
+        let found = self.read(py, |cs| {
+            cs.get(key)
+                .map(|constraint| MulticenterBondConstraintAst::from_ast(py, constraint))
+                .transpose()
+        })?;
+        match found {
+            Some(constraint) => Ok(into_py_variant(py, constraint)?.into_any()),
+            None => Ok(default.unwrap_or_else(|| py.None())),
+        }
+    }
+
+    /// The constraint with the given key; raises `KeyError` if absent.
+    fn __getitem__(
+        &self,
+        py: Python<'_>,
+        key: Py<MulticenterBondConstraintKey>,
+    ) -> PyResult<MulticenterBondConstraintAst> {
+        let ast_key = key.bind(py).borrow().to_ast();
+        let found = self.read(py, |cs| {
+            cs.get(ast_key)
+                .map(|constraint| MulticenterBondConstraintAst::from_ast(py, constraint))
+                .transpose()
+        })?;
+        match found {
+            Some(constraint) => Ok(constraint),
+            None => Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            )),
+        }
+    }
+
+    fn __contains__(
+        &self,
+        py: Python<'_>,
+        key: Py<MulticenterBondConstraintKey>,
+    ) -> PyResult<bool> {
+        let key = key.bind(py).borrow().to_ast();
+        self.read(py, |cs| Ok(cs.contains(key)))
+    }
+
+    /// The asserted total electron count; `Undetermined` when no `ElectronCount`
+    /// constraint is present (mirroring the non-optional Rust accessor).
+    #[getter]
+    fn electron_count(&self, py: Python<'_>) -> PyResult<ValueAst> {
+        self.read(py, |cs| ValueAst::from_ast(py, &cs.electron_count()))
+    }
+
+    #[setter]
+    fn set_electron_count(&self, py: Python<'_>, value: ValueArg) {
+        self.set_ast(
+            py,
+            AstMulticenterBondConstraintAst::electron_count(value.to_ast(py)),
+        );
+    }
+
+    /// The present constraints as a dict keyed by snake_case name.
+    fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.read(py, |cs| multicenter_bond_constraints_asdict(py, cs))
+    }
+}
+
 #[pyclass]
 struct MulticenterBondConstraintIter {
     entries: IntoIter<Py<MulticenterBondConstraintAst>>,
@@ -446,9 +808,173 @@ impl MulticenterBondConstraintItemsIter {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::ValueAst as AstValueAst;
+    use umol_ast::ast::{
+        ElectronCountsAst as AstElectronCountsAst, SpinStateAst as AstSpinStateAst,
+        ValueAst as AstValueAst,
+    };
 
     use super::*;
+
+    #[rstest]
+    fn test_multicenter_bond_ast_new() {
+        Python::attach(|py| {
+            let spin_ast = AstSpinStateAst::from((0_u8, 1_u8));
+            let spin = Py::new(py, SpinStateAst::from_ast(py, &spin_ast).unwrap()).unwrap();
+            let bond = MulticenterBondAst::new(
+                py,
+                ElectronCountsArg::Lit(vec![1, 1, 1]),
+                Some(ValueArg::Lit(-2)),
+                Some(spin.bind(py).borrow()),
+                None,
+            );
+            assert_eq!(
+                bond.inner().electrons,
+                AstElectronCountsAst::Lit(vec![1, 1, 1])
+            );
+            assert_eq!(bond.inner().charge, AstValueAst::Lit(-2));
+            assert_eq!(bond.inner().spin, spin_ast);
+        });
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_ast_new_constraints() {
+        Python::attach(|py| {
+            let ec = into_py_variant(
+                py,
+                MulticenterBondConstraintAst::from_ast(
+                    py,
+                    &AstMulticenterBondConstraintAst::electron_count(6),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let constraints =
+                Py::new(py, MulticenterBondConstraintsAst::new(py, vec![ec])).unwrap();
+            let bond = MulticenterBondAst::new(
+                py,
+                ElectronCountsArg::Lit(vec![1, 1, 1]),
+                None,
+                None,
+                Some(constraints),
+            );
+            assert_eq!(
+                bond.inner().constraints.electron_count(),
+                AstValueAst::Lit(6)
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::undetermined("*")]
+    #[case::electron_count("[1,1,1]#e6")]
+    #[case::charge("[1,1,1]#c-2")]
+    fn test_multicenter_bond_ast_parse(#[case] dsl: &str) {
+        let bond = MulticenterBondAst::parse(dsl).unwrap();
+        assert_eq!(bond.__str__(), dsl);
+        assert_eq!(
+            bond.__repr__(),
+            format!("MulticenterBondAst.parse('{dsl}')")
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_ast_parse_error() {
+        assert!(MulticenterBondAst::parse("z").is_err());
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_ast_electrons() {
+        Python::attach(|py| {
+            let mut bond =
+                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                    1, 1, 1,
+                ]));
+            assert_eq!(
+                bond.electrons().to_ast(),
+                AstElectronCountsAst::Lit(vec![1, 1, 1])
+            );
+            bond.set_electrons(py, ElectronCountsArg::Lit(vec![2, 2]));
+            assert_eq!(
+                bond.electrons().to_ast(),
+                AstElectronCountsAst::Lit(vec![2, 2])
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_ast_charge() {
+        Python::attach(|py| {
+            let mut bond =
+                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                    1, 1, 1,
+                ]));
+            bond.set_charge(py, ValueArg::Lit(-1));
+            assert_eq!(bond.charge(py).unwrap().to_ast(py), AstValueAst::Lit(-1));
+        });
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_ast_spin() {
+        Python::attach(|py| {
+            let spin_ast = AstSpinStateAst::from((0_u8, 1_u8));
+            let spin = Py::new(py, SpinStateAst::from_ast(py, &spin_ast).unwrap()).unwrap();
+            let mut bond =
+                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                    1, 1, 1,
+                ]));
+            bond.set_spin(py, spin.bind(py).borrow());
+            assert_eq!(bond.spin(py).unwrap().to_ast(py), spin_ast);
+        });
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_ast_set_constraints_from_view() {
+        Python::attach(|py| {
+            let src = Py::new(
+                py,
+                MulticenterBondAst::from_inner(
+                    AstMulticenterBondAst::from_electrons(vec![1, 1, 1])
+                        .with_constraint(AstMulticenterBondConstraintAst::electron_count(6)),
+                ),
+            )
+            .unwrap();
+            let view = Py::new(
+                py,
+                MulticenterBondConstraintsView {
+                    backing: MulticenterBondConstraintsBacking::MulticenterBond(src),
+                },
+            )
+            .unwrap();
+            let mut dst =
+                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                    1, 1, 1,
+                ]));
+            dst.set_constraints(py, MulticenterBondConstraintsArg::View(view))
+                .unwrap();
+            assert_eq!(
+                dst.inner().constraints.electron_count(),
+                AstValueAst::Lit(6)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_ast_asdict() {
+        Python::attach(|py| {
+            let bond = MulticenterBondAst::from_inner(
+                AstMulticenterBondAst::from_electrons(vec![1, 1, 1])
+                    .with_constraint(AstMulticenterBondConstraintAst::electron_count(6)),
+            );
+            let dict = bond.asdict(py).unwrap();
+            assert_eq!(dict.len(), 4);
+            let electrons = dict.get_item("electrons").unwrap().unwrap();
+            let expected = into_py_variant(py, ElectronCountsAst::Lit(vec![1, 1, 1])).unwrap();
+            assert!(electrons.eq(expected.bind(py)).unwrap());
+            assert!(dict.contains("charge").unwrap());
+            assert!(dict.contains("spin").unwrap());
+            assert!(dict.contains("constraints").unwrap());
+        });
+    }
 
     #[rstest]
     fn test_multicenter_bond_constraint_key_roundtrip() {
@@ -815,6 +1341,135 @@ mod tests {
             let expected =
                 into_py_variant(py, ValueAst::from_ast(py, &AstValueAst::Lit(6)).unwrap()).unwrap();
             assert!(value.eq(expected.bind(py)).unwrap());
+        });
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_view_set() {
+        Python::attach(|py| {
+            let bond = Py::new(
+                py,
+                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                    1, 1, 1,
+                ])),
+            )
+            .unwrap();
+            let view = MulticenterBondConstraintsView {
+                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+            };
+            let ec = into_py_variant(
+                py,
+                MulticenterBondConstraintAst::from_ast(
+                    py,
+                    &AstMulticenterBondConstraintAst::electron_count(6),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            view.set(py, ec);
+            // a fresh view proves the write hit the standalone bond, not a copy
+            let fresh = MulticenterBondConstraintsView {
+                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond),
+            };
+            assert_eq!(fresh.__len__(py).unwrap(), 1);
+            assert_eq!(
+                fresh.electron_count(py).unwrap().to_ast(py),
+                AstValueAst::Lit(6)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_view_pop() {
+        Python::attach(|py| {
+            let bond = Py::new(
+                py,
+                MulticenterBondAst::from_inner(
+                    AstMulticenterBondAst::from_electrons(vec![1, 1, 1])
+                        .with_constraint(AstMulticenterBondConstraintAst::electron_count(6)),
+                ),
+            )
+            .unwrap();
+            let view = MulticenterBondConstraintsView {
+                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+            };
+            let removed = view
+                .pop(
+                    py,
+                    into_py_variant(py, MulticenterBondConstraintKey::ElectronCount()).unwrap(),
+                )
+                .unwrap();
+            match removed {
+                Some(MulticenterBondConstraintAst::ElectronCount(v)) => {
+                    assert_eq!(v.bind(py).borrow().to_ast(py), AstValueAst::Lit(6))
+                }
+                _ => panic!("expected removed ElectronCount(Lit(6))"),
+            }
+            let fresh = MulticenterBondConstraintsView {
+                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond),
+            };
+            assert_eq!(fresh.__len__(py).unwrap(), 0);
+        });
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_view_update() {
+        Python::attach(|py| {
+            let bond = Py::new(
+                py,
+                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                    1, 1, 1,
+                ])),
+            )
+            .unwrap();
+            let view = MulticenterBondConstraintsView {
+                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+            };
+            let mut other = AstMulticenterBondConstraintsAst::new();
+            other.set(AstMulticenterBondConstraintAst::electron_count(6));
+            view.update(
+                py,
+                MulticenterBondConstraintsUpdate::Container(
+                    Py::new(py, MulticenterBondConstraintsAst::from_inner(other)).unwrap(),
+                ),
+            )
+            .unwrap();
+            let fresh = MulticenterBondConstraintsView {
+                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond),
+            };
+            assert_eq!(fresh.__len__(py).unwrap(), 1);
+            assert_eq!(
+                fresh.electron_count(py).unwrap().to_ast(py),
+                AstValueAst::Lit(6)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_view_set_electron_count() {
+        Python::attach(|py| {
+            let bond = Py::new(
+                py,
+                MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
+                    1, 1, 1,
+                ])),
+            )
+            .unwrap();
+            let view = MulticenterBondConstraintsView {
+                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+            };
+            assert_eq!(
+                view.electron_count(py).unwrap().to_ast(py),
+                AstValueAst::Undetermined
+            );
+            view.set_electron_count(py, ValueArg::Lit(6));
+            let fresh = MulticenterBondConstraintsView {
+                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond),
+            };
+            assert_eq!(
+                fresh.electron_count(py).unwrap().to_ast(py),
+                AstValueAst::Lit(6)
+            );
         });
     }
 }
