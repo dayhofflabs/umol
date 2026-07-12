@@ -5,13 +5,15 @@
 //! over the `Element` value enum.
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
+use std::str::FromStr;
 use std::vec::IntoIter;
 
 use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_ast::ast::{
-    AsLit, NoncovalentBondConstraintAst as AstNoncovalentBondConstraintAst,
+    AsLit, NoncovalentBondAst as AstNoncovalentBondAst,
+    NoncovalentBondConstraintAst as AstNoncovalentBondConstraintAst,
     NoncovalentBondConstraintKey as AstNoncovalentBondConstraintKey,
     NoncovalentBondConstraintsAst as AstNoncovalentBondConstraintsAst,
     NoncovalentBondKind as AstNoncovalentBondKind,
@@ -20,6 +22,7 @@ use umol_ast::ast::{
 
 use crate::boolean::{BooleanArg, BooleanAst};
 use crate::convert::{hash_ast, into_py_variant, variant_repr};
+use crate::error::parse_error;
 
 /// A noncovalent interaction kind. A fieldless, hashable value enum whose members
 /// mirror the Rust `NoncovalentBondKind` exactly.
@@ -93,7 +96,6 @@ impl NoncovalentBondKindAst {
 }
 
 impl NoncovalentBondKindAst {
-    #[cfg(test)]
     pub(crate) fn from_ast(ast: &AstNoncovalentBondKindAst) -> Self {
         match ast {
             AstNoncovalentBondKindAst::Undetermined => Self::Undetermined(),
@@ -112,14 +114,12 @@ impl NoncovalentBondKindAst {
 /// Setter coercion for a noncovalent `kind` field: a bare `NoncovalentBondKind` →
 /// `Lit`, or a `NoncovalentBondKindAst` passthrough (mirroring the `Undetermined |
 /// Lit` structure).
-#[cfg(test)]
 #[derive(FromPyObject)]
 pub(crate) enum NoncovalentBondKindArg {
     Kind(NoncovalentBondKind),
     Ast(Py<NoncovalentBondKindAst>),
 }
 
-#[cfg(test)]
 impl NoncovalentBondKindArg {
     pub(crate) fn to_ast(&self, py: Python<'_>) -> AstNoncovalentBondKindAst {
         match self {
@@ -230,29 +230,66 @@ impl NoncovalentBondConstraintAst {
     }
 }
 
-/// The argument to `update`: another constraint container or an iterable of
-/// `NoncovalentBondConstraintAst` (each `set`, last-wins). The live-view variant is
-/// added with the view.
+/// The argument to `update`: another constraint container, a live view, or an
+/// iterable of `NoncovalentBondConstraintAst` (each `set`, last-wins).
 #[derive(FromPyObject)]
 enum NoncovalentBondConstraintsUpdate {
     Container(Py<NoncovalentBondConstraintsAst>),
+    View(Py<NoncovalentBondConstraintsView>),
     Entries(Vec<Py<NoncovalentBondConstraintAst>>),
 }
 
 impl NoncovalentBondConstraintsUpdate {
-    /// Overlay this update onto `target` in place.
-    fn apply(&self, py: Python<'_>, target: &mut AstNoncovalentBondConstraintsAst) -> PyResult<()> {
-        match self {
+    /// Read every Python object into owned data — no write target is touched. Callers
+    /// resolve *before* taking the write borrow so the re-entrant read of a view (or
+    /// container) that aliases the same bond happens while nothing is borrowed
+    /// (otherwise `bond.constraints.update(bond.constraints)` self-aliases into a
+    /// RefCell double-borrow panic).
+    fn resolve(&self, py: Python<'_>) -> PyResult<ResolvedNoncovalentBondConstraintsUpdate> {
+        Ok(match self {
             NoncovalentBondConstraintsUpdate::Container(c) => {
-                target.update(c.bind(py).borrow().inner())
+                ResolvedNoncovalentBondConstraintsUpdate::Overlay(
+                    c.bind(py).borrow().inner().clone(),
+                )
+            }
+            NoncovalentBondConstraintsUpdate::View(v) => {
+                ResolvedNoncovalentBondConstraintsUpdate::Overlay(
+                    v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?,
+                )
             }
             NoncovalentBondConstraintsUpdate::Entries(entries) => {
+                ResolvedNoncovalentBondConstraintsUpdate::Entries(
+                    entries
+                        .iter()
+                        .map(|entry| entry.bind(py).borrow().to_ast(py))
+                        .collect(),
+                )
+            }
+        })
+    }
+}
+
+/// A `NoncovalentBondConstraintsUpdate` with all Python-object reads already done, so
+/// it can be applied under a write borrow without re-entering Python.
+enum ResolvedNoncovalentBondConstraintsUpdate {
+    /// A whole container (from another container or a live view): overlaid via
+    /// `update` (last-wins per key; undetermined entries remove).
+    Overlay(AstNoncovalentBondConstraintsAst),
+    /// Loose entries: `set` each (last-wins; undetermined entries stored, not removed).
+    Entries(Vec<AstNoncovalentBondConstraintAst>),
+}
+
+impl ResolvedNoncovalentBondConstraintsUpdate {
+    /// Overlay onto `target` in place. No Python reads.
+    fn apply(self, target: &mut AstNoncovalentBondConstraintsAst) {
+        match self {
+            ResolvedNoncovalentBondConstraintsUpdate::Overlay(overlay) => target.update(&overlay),
+            ResolvedNoncovalentBondConstraintsUpdate::Entries(entries) => {
                 for entry in entries {
-                    target.set(entry.bind(py).borrow().to_ast(py));
+                    target.set(entry);
                 }
             }
         }
-        Ok(())
     }
 }
 
@@ -306,10 +343,19 @@ impl NoncovalentBondConstraintsAst {
             .transpose()
     }
 
-    /// Overlay `other` onto self in place — another container or an iterable of
-    /// `NoncovalentBondConstraintAst` (last-wins per key; undetermined entries remove).
-    fn update(&mut self, py: Python<'_>, other: NoncovalentBondConstraintsUpdate) -> PyResult<()> {
-        other.apply(py, &mut self.0)
+    /// Overlay `other` onto self in place — another container, a live view, or an
+    /// iterable of `NoncovalentBondConstraintAst` (last-wins per key; undetermined
+    /// entries remove). Takes `slf` by handle so `other` is fully read *before* the
+    /// write borrow — `cs.update(cs)` on the same container is then a no-op, not a
+    /// double-borrow panic.
+    fn update(
+        slf: Py<Self>,
+        py: Python<'_>,
+        other: NoncovalentBondConstraintsUpdate,
+    ) -> PyResult<()> {
+        let resolved = other.resolve(py)?;
+        resolved.apply(&mut slf.borrow_mut(py).0);
+        Ok(())
     }
 
     fn __len__(&self) -> usize {
@@ -552,6 +598,337 @@ impl NoncovalentBondConstraintItemsIter {
     }
 }
 
+/// A noncovalent bond: an interaction `kind` plus noncovalent-bond-scope constraints.
+/// No bond order, charge, or spin — these do not apply to noncovalent interactions.
+/// The endpoint atom pair is the owning molecule's relation topology (the view half),
+/// not part of the value.
+#[pyclass(eq)]
+#[derive(PartialEq)]
+pub struct NoncovalentBondAst(AstNoncovalentBondAst);
+
+#[pymethods]
+impl NoncovalentBondAst {
+    /// Construct from an interaction kind — a `NoncovalentBondKind` or a
+    /// `NoncovalentBondKindAst` — optionally setting constraints.
+    #[new]
+    #[pyo3(signature = (kind, *, constraints=None))]
+    fn new(
+        py: Python<'_>,
+        kind: NoncovalentBondKindArg,
+        constraints: Option<Py<NoncovalentBondConstraintsAst>>,
+    ) -> Self {
+        let mut bond = AstNoncovalentBondAst::new(kind.to_ast(py));
+        if let Some(constraints) = constraints {
+            bond.constraints = constraints.bind(py).borrow().inner().clone();
+        }
+        NoncovalentBondAst(bond)
+    }
+
+    /// Parse a noncovalent-bond-DSL string (e.g. `"Hbd#I"`) into a `NoncovalentBondAst`.
+    #[staticmethod]
+    fn parse(s: &str) -> PyResult<Self> {
+        AstNoncovalentBondAst::from_str(s)
+            .map(Self)
+            .map_err(parse_error)
+    }
+
+    fn __str__(&self) -> String {
+        self.0.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("NoncovalentBondAst.parse('{}')", self.0)
+    }
+
+    /// The interaction kind.
+    #[getter]
+    fn kind(&self) -> NoncovalentBondKindAst {
+        NoncovalentBondKindAst::from_ast(&self.0.kind)
+    }
+
+    #[setter]
+    fn set_kind(&mut self, py: Python<'_>, value: NoncovalentBondKindArg) {
+        self.0.kind = value.to_ast(py);
+    }
+
+    /// The bond's constraints as a live handle onto this bond: reads borrow the
+    /// current state, mutators write through to the bond in place.
+    #[getter]
+    fn constraints(slf: Py<Self>) -> NoncovalentBondConstraintsView {
+        NoncovalentBondConstraintsView {
+            backing: NoncovalentBondConstraintsBacking::Noncovalent(slf),
+        }
+    }
+
+    /// Replace the whole constraint set (wipe-and-set) from a value container or a
+    /// live view. Takes `slf` by handle and snapshots `value` *before* the write borrow,
+    /// so `bond.constraints = bond.constraints` (a view over the same bond) reads while
+    /// the bond is unborrowed instead of self-aliasing into a double-borrow panic.
+    #[setter]
+    fn set_constraints(
+        slf: Py<Self>,
+        py: Python<'_>,
+        value: NoncovalentBondConstraintsArg,
+    ) -> PyResult<()> {
+        let snapshot = value.to_ast(py)?;
+        slf.borrow_mut(py).0.constraints = snapshot;
+        Ok(())
+    }
+
+    /// The fields as a dict keyed by field name; values are the field mirrors.
+    fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let dict = PyDict::new(py);
+        dict.set_item("kind", self.kind())?;
+        dict.set_item(
+            "constraints",
+            noncovalent_bond_constraints_asdict(py, &self.0.constraints)?,
+        )?;
+        Ok(dict)
+    }
+}
+
+impl NoncovalentBondAst {
+    /// The wrapped AST bond — read access for the bond-backed constraints view.
+    pub(crate) fn inner(&self) -> &AstNoncovalentBondAst {
+        &self.0
+    }
+
+    /// Mutable access to the wrapped AST bond — write access for the bond-backed
+    /// constraints view.
+    pub(crate) fn inner_mut(&mut self) -> &mut AstNoncovalentBondAst {
+        &mut self.0
+    }
+
+    /// Wrap an AST bond (the hold-the-value `from_inner` bridge, paired with `inner`).
+    /// Test-only — in-crate construction wraps `NoncovalentBondAst(..)` directly.
+    #[cfg(test)]
+    pub(crate) fn from_inner(bond: AstNoncovalentBondAst) -> Self {
+        NoncovalentBondAst(bond)
+    }
+}
+
+/// A whole-container argument that snapshots either a value container or a live view
+/// — for the noncovalent bond `constraints` setter, which accepts either.
+#[derive(FromPyObject)]
+enum NoncovalentBondConstraintsArg {
+    Container(Py<NoncovalentBondConstraintsAst>),
+    View(Py<NoncovalentBondConstraintsView>),
+}
+
+impl NoncovalentBondConstraintsArg {
+    fn to_ast(&self, py: Python<'_>) -> PyResult<AstNoncovalentBondConstraintsAst> {
+        match self {
+            NoncovalentBondConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            NoncovalentBondConstraintsArg::View(v) => {
+                v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))
+            }
+        }
+    }
+}
+
+/// What a `NoncovalentBondConstraintsView` writes through to: a standalone
+/// `NoncovalentBondAst`. The molecule-backed arm is added with the molecule view.
+enum NoncovalentBondConstraintsBacking {
+    Noncovalent(Py<NoncovalentBondAst>),
+}
+
+/// A live handle onto one noncovalent bond's constraints, backed by a standalone
+/// `NoncovalentBondAst`. Reads borrow the constraints and read only the item they need
+/// (no whole-container clone); mutators write through to the bond in place, without a
+/// clone-and-writeback.
+#[pyclass]
+pub struct NoncovalentBondConstraintsView {
+    backing: NoncovalentBondConstraintsBacking,
+}
+
+impl NoncovalentBondConstraintsView {
+    /// Borrow the backing bond's constraints and read one item through `f` — no clone.
+    fn read<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&AstNoncovalentBondConstraintsAst) -> PyResult<R>,
+    ) -> PyResult<R> {
+        match &self.backing {
+            NoncovalentBondConstraintsBacking::Noncovalent(bond) => {
+                let bond = bond.bind(py).borrow();
+                f(&bond.inner().constraints)
+            }
+        }
+    }
+
+    /// Mutate the backing bond's constraints in place through `f`.
+    fn with_mut<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut AstNoncovalentBondConstraintsAst) -> R,
+    ) -> R {
+        match &self.backing {
+            NoncovalentBondConstraintsBacking::Noncovalent(bond) => {
+                f(&mut bond.borrow_mut(py).inner_mut().constraints)
+            }
+        }
+    }
+
+    /// Set one constraint on the backing bond in place (last-wins per key).
+    fn set_ast(&self, py: Python<'_>, constraint: AstNoncovalentBondConstraintAst) {
+        self.with_mut(py, |cs| cs.set(constraint));
+    }
+
+    /// Remove one key from the backing bond in place, returning the removed entry.
+    fn remove_ast(
+        &self,
+        py: Python<'_>,
+        key: AstNoncovalentBondConstraintKey,
+    ) -> Option<AstNoncovalentBondConstraintAst> {
+        self.with_mut(py, |cs| cs.remove(key))
+    }
+}
+
+#[pymethods]
+impl NoncovalentBondConstraintsView {
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let count = self.read(py, |cs| Ok(cs.len()))?;
+        Ok(format!("NoncovalentBondConstraintsView({count} entries)"))
+    }
+
+    /// Insert `c` on the bond in place, replacing any existing entry of the same key
+    /// (last-wins).
+    fn set(&self, py: Python<'_>, c: Py<NoncovalentBondConstraintAst>) {
+        self.set_ast(py, c.bind(py).borrow().to_ast(py));
+    }
+
+    /// Remove the entry with the given key from the bond in place, returning it if
+    /// present (dict `pop`).
+    fn pop(
+        &self,
+        py: Python<'_>,
+        key: Py<NoncovalentBondConstraintKey>,
+    ) -> PyResult<Option<NoncovalentBondConstraintAst>> {
+        self.remove_ast(py, key.bind(py).borrow().to_ast())
+            .map(|c| NoncovalentBondConstraintAst::from_ast(py, &c))
+            .transpose()
+    }
+
+    /// Remove the entry with the given key; raises `KeyError` if absent.
+    fn __delitem__(&self, py: Python<'_>, key: Py<NoncovalentBondConstraintKey>) -> PyResult<()> {
+        if self
+            .remove_ast(py, key.bind(py).borrow().to_ast())
+            .is_some()
+        {
+            Ok(())
+        } else {
+            Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            ))
+        }
+    }
+
+    /// Overlay `other` onto the bond's constraints in place — another container, a live
+    /// view, or an iterable of `NoncovalentBondConstraintAst` (last-wins per key;
+    /// undetermined entries remove).
+    fn update(&self, py: Python<'_>, other: NoncovalentBondConstraintsUpdate) -> PyResult<()> {
+        // Resolve `other` to owned data *before* the write borrow, so a view aliasing
+        // the same bond (`bond.constraints.update(bond.constraints)`) reads while the
+        // bond is unborrowed instead of self-aliasing into a double-borrow panic.
+        let resolved = other.resolve(py)?;
+        self.with_mut(py, |cs| resolved.apply(cs));
+        Ok(())
+    }
+
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        self.read(py, |cs| Ok(cs.len()))
+    }
+
+    /// Iterate the constraint keys (mapping-style, canonical order).
+    fn __iter__(&self, py: Python<'_>) -> PyResult<NoncovalentBondConstraintKeyIter> {
+        self.read(py, |cs| noncovalent_bond_constraint_keys(py, cs))
+    }
+
+    /// The constraint keys, in canonical order.
+    fn keys(&self, py: Python<'_>) -> PyResult<NoncovalentBondConstraintKeyIter> {
+        self.read(py, |cs| noncovalent_bond_constraint_keys(py, cs))
+    }
+
+    /// The constraints, in canonical order.
+    fn values(&self, py: Python<'_>) -> PyResult<NoncovalentBondConstraintIter> {
+        self.read(py, |cs| noncovalent_bond_constraints_iter(py, cs))
+    }
+
+    /// The `(key, constraint)` pairs, in canonical order.
+    fn items(&self, py: Python<'_>) -> PyResult<NoncovalentBondConstraintItemsIter> {
+        self.read(py, |cs| noncovalent_bond_constraint_items(py, cs))
+    }
+
+    /// The constraint with the given key, or `default` (`None`) if absent.
+    #[pyo3(signature = (key, default=None))]
+    fn get(
+        &self,
+        py: Python<'_>,
+        key: Py<NoncovalentBondConstraintKey>,
+        default: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        let key = key.bind(py).borrow().to_ast();
+        let found = self.read(py, |cs| {
+            cs.get(key)
+                .map(|constraint| NoncovalentBondConstraintAst::from_ast(py, constraint))
+                .transpose()
+        })?;
+        match found {
+            Some(constraint) => Ok(into_py_variant(py, constraint)?.into_any()),
+            None => Ok(default.unwrap_or_else(|| py.None())),
+        }
+    }
+
+    /// The constraint with the given key; raises `KeyError` if absent.
+    fn __getitem__(
+        &self,
+        py: Python<'_>,
+        key: Py<NoncovalentBondConstraintKey>,
+    ) -> PyResult<NoncovalentBondConstraintAst> {
+        let ast_key = key.bind(py).borrow().to_ast();
+        let found = self.read(py, |cs| {
+            cs.get(ast_key)
+                .map(|constraint| NoncovalentBondConstraintAst::from_ast(py, constraint))
+                .transpose()
+        })?;
+        match found {
+            Some(constraint) => Ok(constraint),
+            None => Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            )),
+        }
+    }
+
+    fn __contains__(
+        &self,
+        py: Python<'_>,
+        key: Py<NoncovalentBondConstraintKey>,
+    ) -> PyResult<bool> {
+        let key = key.bind(py).borrow().to_ast();
+        self.read(py, |cs| Ok(cs.contains(key)))
+    }
+
+    /// Whether the bond is intramolecular; `Undetermined` when no `Intramolecular`
+    /// constraint is present (mirroring the non-optional Rust accessor).
+    #[getter]
+    fn intramolecular(&self, py: Python<'_>) -> PyResult<BooleanAst> {
+        self.read(py, |cs| Ok(BooleanAst::from_ast(&cs.intramolecular())))
+    }
+
+    #[setter]
+    fn set_intramolecular(&self, py: Python<'_>, value: BooleanArg) {
+        self.set_ast(
+            py,
+            AstNoncovalentBondConstraintAst::intramolecular(value.to_ast(py)),
+        );
+    }
+
+    /// The present constraints as a dict keyed by snake_case name.
+    fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.read(py, |cs| noncovalent_bond_constraints_asdict(py, cs))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -720,19 +1097,19 @@ mod tests {
     #[rstest]
     fn test_noncovalent_bond_constraints_ast_update_container() {
         Python::attach(|py| {
-            let mut constraints = NoncovalentBondConstraintsAst::new(py, vec![]);
+            let constraints = Py::new(py, NoncovalentBondConstraintsAst::new(py, vec![])).unwrap();
             let mut other = AstNoncovalentBondConstraintsAst::new();
             other.set(AstNoncovalentBondConstraintAst::intramolecular(true));
-            constraints
-                .update(
-                    py,
-                    NoncovalentBondConstraintsUpdate::Container(
-                        Py::new(py, NoncovalentBondConstraintsAst::from_inner(other)).unwrap(),
-                    ),
-                )
-                .unwrap();
+            NoncovalentBondConstraintsAst::update(
+                constraints.clone_ref(py),
+                py,
+                NoncovalentBondConstraintsUpdate::Container(
+                    Py::new(py, NoncovalentBondConstraintsAst::from_inner(other)).unwrap(),
+                ),
+            )
+            .unwrap();
             assert_eq!(
-                constraints.intramolecular().to_ast(),
+                constraints.bind(py).borrow().intramolecular().to_ast(),
                 AstBooleanAst::Lit(true)
             );
         });
@@ -741,16 +1118,39 @@ mod tests {
     #[rstest]
     fn test_noncovalent_bond_constraints_ast_update_entries() {
         Python::attach(|py| {
-            let mut constraints = NoncovalentBondConstraintsAst::new(py, vec![]);
-            constraints
-                .update(
-                    py,
-                    NoncovalentBondConstraintsUpdate::Entries(vec![intramolecular(py, false)]),
-                )
-                .unwrap();
+            let constraints = Py::new(py, NoncovalentBondConstraintsAst::new(py, vec![])).unwrap();
+            NoncovalentBondConstraintsAst::update(
+                constraints.clone_ref(py),
+                py,
+                NoncovalentBondConstraintsUpdate::Entries(vec![intramolecular(py, false)]),
+            )
+            .unwrap();
             assert_eq!(
-                constraints.intramolecular().to_ast(),
+                constraints.bind(py).borrow().intramolecular().to_ast(),
                 AstBooleanAst::Lit(false)
+            );
+        });
+    }
+
+    /// Regression: a container updating itself resolves `other` before the write borrow,
+    /// so it is an idempotent no-op, not a RefCell double-borrow panic.
+    #[rstest]
+    fn test_noncovalent_bond_constraints_ast_update_self() {
+        Python::attach(|py| {
+            let constraints = Py::new(
+                py,
+                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]),
+            )
+            .unwrap();
+            NoncovalentBondConstraintsAst::update(
+                constraints.clone_ref(py),
+                py,
+                NoncovalentBondConstraintsUpdate::Container(constraints.clone_ref(py)),
+            )
+            .unwrap();
+            assert_eq!(
+                constraints.bind(py).borrow().intramolecular().to_ast(),
+                AstBooleanAst::Lit(true)
             );
         });
     }
@@ -859,6 +1259,315 @@ mod tests {
             let value = dict.get_item("intramolecular").unwrap().unwrap();
             let expected = into_py_variant(py, BooleanAst::Lit(true)).unwrap();
             assert!(value.eq(expected.bind(py)).unwrap());
+        });
+    }
+
+    /// A standalone `NoncovalentBondAst` value pyclass (hydrogen bond, no constraints).
+    fn hbond(py: Python<'_>) -> Py<NoncovalentBondAst> {
+        Py::new(
+            py,
+            NoncovalentBondAst::from_inner(AstNoncovalentBondAst::from_kind(
+                AstNoncovalentBondKind::HydrogenBond,
+            )),
+        )
+        .unwrap()
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_new() {
+        Python::attach(|py| {
+            let bond = NoncovalentBondAst::new(
+                py,
+                NoncovalentBondKindArg::Kind(NoncovalentBondKind::HydrogenBond),
+                None,
+            );
+            assert_eq!(
+                bond.inner().kind,
+                AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond)
+            );
+            assert_eq!(bond.inner().constraints.len(), 0);
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_new_constraints() {
+        Python::attach(|py| {
+            let constraints = Py::new(
+                py,
+                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]),
+            )
+            .unwrap();
+            let bond = NoncovalentBondAst::new(
+                py,
+                NoncovalentBondKindArg::Kind(NoncovalentBondKind::HalogenBond),
+                Some(constraints),
+            );
+            assert_eq!(
+                bond.inner().constraints.intramolecular(),
+                AstBooleanAst::Lit(true)
+            );
+        });
+    }
+
+    #[rstest]
+    #[case("Hbd")]
+    #[case("Hbd#I")]
+    #[case("Hbd#I!")]
+    #[case("*")]
+    fn test_noncovalent_bond_ast_parse(#[case] dsl: &str) {
+        let bond = NoncovalentBondAst::parse(dsl).unwrap();
+        assert_eq!(bond.__str__(), dsl);
+        assert_eq!(
+            bond.__repr__(),
+            format!("NoncovalentBondAst.parse('{dsl}')")
+        );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_parse_error() {
+        assert!(NoncovalentBondAst::parse("z").is_err());
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_kind() {
+        Python::attach(|py| {
+            let mut bond = NoncovalentBondAst::from_inner(AstNoncovalentBondAst::from_kind(
+                AstNoncovalentBondKind::HydrogenBond,
+            ));
+            assert_eq!(
+                bond.kind().to_ast(),
+                AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond)
+            );
+            bond.set_kind(py, NoncovalentBondKindArg::Kind(NoncovalentBondKind::Ionic));
+            assert_eq!(
+                bond.kind().to_ast(),
+                AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::Ionic)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_set_constraints() {
+        Python::attach(|py| {
+            let bond = hbond(py);
+            let constraints = Py::new(
+                py,
+                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]),
+            )
+            .unwrap();
+            NoncovalentBondAst::set_constraints(
+                bond.clone_ref(py),
+                py,
+                NoncovalentBondConstraintsArg::Container(constraints),
+            )
+            .unwrap();
+            assert_eq!(
+                bond.bind(py).borrow().inner().constraints.intramolecular(),
+                AstBooleanAst::Lit(true)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_set_constraints_from_view() {
+        Python::attach(|py| {
+            // source bond carrying a constraint, exposed as a live view
+            let source = Py::new(
+                py,
+                NoncovalentBondAst::from_inner(
+                    AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond)
+                        .with_constraint(AstNoncovalentBondConstraintAst::intramolecular(true)),
+                ),
+            )
+            .unwrap();
+            let view = NoncovalentBondAst::constraints(source);
+            let dest = hbond(py);
+            NoncovalentBondAst::set_constraints(
+                dest.clone_ref(py),
+                py,
+                NoncovalentBondConstraintsArg::View(Py::new(py, view).unwrap()),
+            )
+            .unwrap();
+            assert_eq!(
+                dest.bind(py).borrow().inner().constraints.intramolecular(),
+                AstBooleanAst::Lit(true)
+            );
+        });
+    }
+
+    /// Regression: assigning a bond's own constraints view back to it snapshots before
+    /// the write borrow, so it is a no-op, not a RefCell double-borrow panic
+    /// (`bond.constraints = bond.constraints`).
+    #[rstest]
+    fn test_noncovalent_bond_ast_set_constraints_self() {
+        Python::attach(|py| {
+            let bond = Py::new(
+                py,
+                NoncovalentBondAst::from_inner(
+                    AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond)
+                        .with_constraint(AstNoncovalentBondConstraintAst::intramolecular(true)),
+                ),
+            )
+            .unwrap();
+            let own_view = NoncovalentBondAst::constraints(bond.clone_ref(py));
+            NoncovalentBondAst::set_constraints(
+                bond.clone_ref(py),
+                py,
+                NoncovalentBondConstraintsArg::View(Py::new(py, own_view).unwrap()),
+            )
+            .unwrap();
+            assert_eq!(
+                bond.bind(py).borrow().inner().constraints.intramolecular(),
+                AstBooleanAst::Lit(true)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_constraints_write_through() {
+        Python::attach(|py| {
+            let bond = hbond(py);
+            let view = NoncovalentBondAst::constraints(bond.clone_ref(py));
+            view.set(py, intramolecular(py, true));
+            // the write hit the standalone bond, not a copy
+            assert_eq!(
+                bond.bind(py).borrow().inner().constraints.intramolecular(),
+                AstBooleanAst::Lit(true)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_asdict() {
+        Python::attach(|py| {
+            let bond = NoncovalentBondAst::from_inner(
+                AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond)
+                    .with_constraint(AstNoncovalentBondConstraintAst::intramolecular(true)),
+            );
+            let dict = bond.asdict(py).unwrap();
+            let kind = dict.get_item("kind").unwrap().unwrap();
+            let expected_kind = into_py_variant(
+                py,
+                NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
+            )
+            .unwrap();
+            assert!(kind.eq(expected_kind.bind(py)).unwrap());
+            let constraints = dict.get_item("constraints").unwrap().unwrap();
+            assert_eq!(constraints.len().unwrap(), 1);
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_view_set() {
+        Python::attach(|py| {
+            let bond = hbond(py);
+            let view = NoncovalentBondConstraintsView {
+                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
+            };
+            view.set(py, intramolecular(py, true));
+            // a fresh view proves the write hit the standalone bond, not a copy
+            let fresh = NoncovalentBondConstraintsView {
+                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond),
+            };
+            assert_eq!(fresh.__len__(py).unwrap(), 1);
+            assert_eq!(
+                fresh.intramolecular(py).unwrap().to_ast(),
+                AstBooleanAst::Lit(true)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_view_pop() {
+        Python::attach(|py| {
+            let bond = Py::new(
+                py,
+                NoncovalentBondAst::from_inner(
+                    AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond)
+                        .with_constraint(AstNoncovalentBondConstraintAst::intramolecular(true)),
+                ),
+            )
+            .unwrap();
+            let view = NoncovalentBondConstraintsView {
+                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
+            };
+            let removed = view.pop(py, intramolecular_key(py)).unwrap();
+            match removed {
+                Some(NoncovalentBondConstraintAst::Intramolecular(b)) => {
+                    assert_eq!(b.bind(py).borrow().to_ast(), AstBooleanAst::Lit(true))
+                }
+                _ => panic!("expected removed Intramolecular(Lit(true))"),
+            }
+            let fresh = NoncovalentBondConstraintsView {
+                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond),
+            };
+            assert_eq!(fresh.__len__(py).unwrap(), 0);
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_view_update() {
+        Python::attach(|py| {
+            let bond = hbond(py);
+            let view = NoncovalentBondConstraintsView {
+                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
+            };
+            view.update(
+                py,
+                NoncovalentBondConstraintsUpdate::Entries(vec![intramolecular(py, false)]),
+            )
+            .unwrap();
+            assert_eq!(
+                bond.bind(py).borrow().inner().constraints.intramolecular(),
+                AstBooleanAst::Lit(false)
+            );
+        });
+    }
+
+    /// Regression: a view updating from a view over the same bond resolves `other`
+    /// before the write borrow, so it is an idempotent no-op, not a double-borrow panic
+    /// (`bond.constraints.update(bond.constraints)`).
+    #[rstest]
+    fn test_noncovalent_bond_constraints_view_update_self() {
+        Python::attach(|py| {
+            let bond = Py::new(
+                py,
+                NoncovalentBondAst::from_inner(
+                    AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond)
+                        .with_constraint(AstNoncovalentBondConstraintAst::intramolecular(true)),
+                ),
+            )
+            .unwrap();
+            let view = NoncovalentBondConstraintsView {
+                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
+            };
+            let other = NoncovalentBondConstraintsView {
+                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
+            };
+            view.update(
+                py,
+                NoncovalentBondConstraintsUpdate::View(Py::new(py, other).unwrap()),
+            )
+            .unwrap();
+            assert_eq!(
+                bond.bind(py).borrow().inner().constraints.intramolecular(),
+                AstBooleanAst::Lit(true)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_view_set_intramolecular() {
+        Python::attach(|py| {
+            let bond = hbond(py);
+            let view = NoncovalentBondConstraintsView {
+                backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
+            };
+            view.set_intramolecular(py, BooleanArg::Lit(true));
+            assert_eq!(
+                bond.bind(py).borrow().inner().constraints.intramolecular(),
+                AstBooleanAst::Lit(true)
+            );
         });
     }
 }
