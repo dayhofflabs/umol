@@ -144,5 +144,6 @@
 | [140-python-entity-bindings-plan-2026-07-09.md](140-python-entity-bindings-plan-2026-07-09.md)                   | Active        | 2026-07-09   |
 | [141-construction-ergonomics-2026-07-09.md](141-construction-ergonomics-2026-07-09.md)                           | Completed     | 2026-07-09   |
 | [142-join-split-2026-07-10.md](142-join-split-2026-07-10.md)                                                     | Completed     | 2026-07-10   |
-| [143-vendored-nauty-integration-2026-07-11.md](143-vendored-nauty-integration-2026-07-11.md)                     | Completed     | 2026-07-10   |
-| [144-vendored-nauty-implementation-plan-2026-07-11.md](144-vendored-nauty-implementation-plan-2026-07-11.md)     | Completed     | 2026-07-10   |
+| [143-vendored-nauty-integration-2026-07-11.md](143-vendored-nauty-integration-2026-07-11.md)                     | Completed     | 2026-07-11   |
+| [144-vendored-nauty-implementation-plan-2026-07-11.md](144-vendored-nauty-implementation-plan-2026-07-11.md)     | Completed     | 2026-07-11   |
+| [145-kekulization-matching-design-spike-2026-07-12.md](145-kekulization-matching-design-spike-2026-07-12.md)     | Informational | 2026-07-12   |

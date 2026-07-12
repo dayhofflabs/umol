@@ -532,8 +532,6 @@ fn build_mate(graph: &Graph, included: &[bool]) -> Vec<i32> {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Range;
-
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -541,24 +539,26 @@ mod tests {
     use super::MatchingEnumerationAlgorithm::BranchAndBound;
     use super::MaxMatchingAlgorithm::{Edmonds, HopcroftKarp};
     use super::PerfectMatchingAlgorithm::BacktrackingDfs;
-    use crate::graph::{Graph, NodeId};
-
-    #[test]
-    fn test_matching_empty() {
-        let g = Graph::default();
-        let m = g.maximum_matching(Edmonds);
-        assert_eq!(m.size(), 0);
-        assert!(m.is_perfect(0));
-        assert!(m.edges().is_empty());
-    }
+    use crate::graph::{EdgeId, Graph, NodeId};
 
     #[rstest]
+    #[case::empty(0, vec![], 0, true)]
     #[case::single_edge(2, vec![[0, 1]], 1, true)]
     #[case::triangle(3, vec![[0, 1], [1, 2], [0, 2]], 1, false)]
     #[case::square(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]], 2, true)]
     #[case::path_4(4, vec![[0, 1], [1, 2], [2, 3]], 2, true)]
     #[case::path_5(5, vec![[0, 1], [1, 2], [2, 3], [3, 4]], 2, false)]
     #[case::k4(4, vec![[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]], 2, true)]
+    #[case::petersen(
+        10,
+        vec![
+            [0, 1], [1, 2], [2, 3], [3, 4], [4, 0],
+            [5, 7], [7, 9], [9, 6], [6, 8], [8, 5],
+            [0, 5], [1, 6], [2, 7], [3, 8], [4, 9],
+        ],
+        5,
+        true,
+    )]
     fn test_graph_maximum_matching(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,
@@ -572,21 +572,114 @@ mod tests {
         assert_matching_valid(&g, &m);
     }
 
-    #[rustfmt::skip]
-    #[test]
-    fn test_graph_maximum_matching_petersen() {
-        let g = Graph::new(
-            10,
-            &[
-                [0, 1], [1, 2], [2, 3], [3, 4], [4, 0],
-                [5, 7], [7, 9], [9, 6], [6, 8], [8, 5],
-                [0, 5], [1, 6], [2, 7], [3, 8], [4, 9],
-            ],
-        );
-        let m = g.maximum_matching(Edmonds);
-        assert_eq!(m.size(), 5);
-        assert!(m.is_perfect(10));
+    #[rstest]
+    #[case::single_edge(2, vec![[0, 1]], 1, true)]
+    #[case::square(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]], 2, true)]
+    #[case::path_4(4, vec![[0, 1], [1, 2], [2, 3]], 2, true)]
+    #[case::path_5(5, vec![[0, 1], [1, 2], [2, 3], [3, 4]], 2, false)]
+    #[case::hexagon(6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], 3, true)]
+    #[case::k_2_3(
+        5,
+        vec![[0, 2], [0, 3], [0, 4], [1, 2], [1, 3], [1, 4]],
+        2,
+        false,
+    )]
+    fn test_graph_maximum_matching_hopcroft_karp(
+        #[case] node_count: usize,
+        #[case] edges: Vec<[u32; 2]>,
+        #[case] expected_size: usize,
+        #[case] expected_perfect: bool,
+    ) {
+        let g = Graph::new(node_count, &edges);
+        let m = g.maximum_matching(HopcroftKarp);
+        assert_eq!(m.size(), expected_size, "matching size");
+        assert_eq!(m.is_perfect(node_count), expected_perfect, "is_perfect");
         assert_matching_valid(&g, &m);
+    }
+
+    #[rstest]
+    fn test_graph_maximum_matching_cross_algorithm() {
+        let cases: &[(usize, Vec<[u32; 2]>)] = &[
+            (4, vec![[0, 1], [1, 2], [2, 3], [3, 0]]),
+            (6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
+            (
+                8,
+                vec![
+                    [0, 4],
+                    [0, 5],
+                    [1, 4],
+                    [1, 6],
+                    [2, 5],
+                    [2, 7],
+                    [3, 6],
+                    [3, 7],
+                ],
+            ),
+        ];
+        for (n, edges) in cases {
+            let g = Graph::new(*n, edges);
+            let hk = g.maximum_matching(HopcroftKarp);
+            let ed = g.maximum_matching(Edmonds);
+            assert_eq!(hk.size(), ed.size(), "n={}, edges={:?}", n, edges);
+        }
+    }
+
+    #[rstest]
+    #[case::single_edge(2, vec![[0, 1]], vec![NodeId(0), NodeId(1)], true, 1)]
+    #[case::square(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]], vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)], true, 2)]
+    #[case::hexagon(
+        6,
+        vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]],
+        vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4), NodeId(5)],
+        true,
+        3,
+    )]
+    #[case::k4(
+        4,
+        vec![[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]],
+        vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
+        true,
+        2,
+    )]
+    #[case::triangle_no_perfect(
+        3,
+        vec![[0, 1], [1, 2], [0, 2]],
+        vec![NodeId(0), NodeId(1), NodeId(2)],
+        false,
+        0,
+    )]
+    #[case::path_5_no_perfect(
+        5,
+        vec![[0, 1], [1, 2], [2, 3], [3, 4]],
+        vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4)],
+        false,
+        0,
+    )]
+    #[case::two_disconnected_edges(4, vec![[0, 1], [2, 3]], vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)], true, 2)]
+    fn test_graph_perfect_matching(
+        #[case] node_count: usize,
+        #[case] edges: Vec<[u32; 2]>,
+        #[case] node_order: Vec<NodeId>,
+        #[case] expected_some: bool,
+        #[case] expected_size: usize,
+    ) {
+        let g = Graph::new(node_count, &edges);
+        let m = g.perfect_matching(&node_order, BacktrackingDfs);
+        assert_eq!(m.is_some(), expected_some, "Some-ness");
+        if let Some(m) = m {
+            assert_eq!(m.size(), expected_size);
+            assert!(m.is_perfect(node_count));
+            assert_matching_valid(&g, &m);
+        }
+    }
+
+    #[rstest]
+    fn test_graph_perfect_matching_determinism() {
+        let g = Graph::new(4, &[[0, 1], [0, 2], [1, 3], [2, 3]]);
+        let order = vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)];
+        let m1 = g.perfect_matching(&order, BacktrackingDfs).unwrap();
+        let m2 = g.perfect_matching(&order, BacktrackingDfs).unwrap();
+        assert_eq!(m1.edges(), m2.edges());
     }
 
     #[rstest]
@@ -639,107 +732,167 @@ mod tests {
         assert_all_distinct(&matchings);
     }
 
-    #[rstest]
-    #[case::single_edge(2, vec![[0, 1]], 1, true)]
-    #[case::square(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]], 2, true)]
-    #[case::path_4(4, vec![[0, 1], [1, 2], [2, 3]], 2, true)]
-    #[case::path_5(5, vec![[0, 1], [1, 2], [2, 3], [3, 4]], 2, false)]
-    #[case::hexagon(6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], 3, true)]
-    #[case::k_2_3(
-        5,
-        vec![[0, 2], [0, 3], [0, 4], [1, 2], [1, 3], [1, 4]],
-        2,
-        false,
-    )]
-    fn test_graph_maximum_matching_hopcroft_karp(
-        #[case] node_count: usize,
-        #[case] edges: Vec<[u32; 2]>,
-        #[case] expected_size: usize,
-        #[case] expected_perfect: bool,
-    ) {
-        let g = Graph::new(node_count, &edges);
-        let m = g.maximum_matching(HopcroftKarp);
-        assert_eq!(m.size(), expected_size, "matching size");
-        assert_eq!(m.is_perfect(node_count), expected_perfect, "is_perfect");
-        assert_matching_valid(&g, &m);
-    }
+    fn exhaustive_matchings(graph: &Graph) -> Vec<Vec<EdgeId>> {
+        let edge_count = graph.edge_count();
+        let subset_count = 1_usize
+            .checked_shl(edge_count as u32)
+            .expect("test oracle graph fits a usize edge mask");
+        let mut matchings = Vec::new();
 
-    #[rustfmt::skip]
-    #[rstest]
-    fn test_graph_maximum_matching_hopcroft_karp_matches_edmonds_on_bipartite() {
-        let cases: &[(usize, Vec<[u32; 2]>)] = &[
-            (4, vec![[0, 1], [1, 2], [2, 3], [3, 0]]),
-            (6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
-            (8, vec![[0, 4], [0, 5], [1, 4], [1, 6], [2, 5], [2, 7], [3, 6], [3, 7]]),
-        ];
-        for (n, edges) in cases {
-            let g = Graph::new(*n, edges);
-            let hk = g.maximum_matching(HopcroftKarp);
-            let ed = g.maximum_matching(Edmonds);
-            assert_eq!(hk.size(), ed.size(), "n={}, edges={:?}", n, edges);
+        for mask in 0..subset_count {
+            let mut matched = vec![false; graph.node_bound()];
+            let mut edges = Vec::new();
+            let mut valid = true;
+            for edge in graph.edge_ids() {
+                if mask & (1 << edge.index()) == 0 {
+                    continue;
+                }
+                let [first, second] = graph.edge_endpoints(edge);
+                if matched[first.index()] || matched[second.index()] {
+                    valid = false;
+                    break;
+                }
+                matched[first.index()] = true;
+                matched[second.index()] = true;
+                edges.push(edge);
+            }
+            if valid {
+                matchings.push(edges);
+            }
         }
+
+        matchings.sort_unstable();
+        matchings
     }
 
-    fn ids(range: Range<u32>) -> Vec<NodeId> {
-        range.map(NodeId).collect()
+    fn exhaustive_exact_matchings(graph: &Graph, size: usize) -> Vec<Vec<EdgeId>> {
+        exhaustive_matchings(graph)
+            .into_iter()
+            .filter(|matching| matching.len() == size)
+            .collect()
     }
 
-    #[rstest]
-    #[case::single_edge(2, vec![[0, 1]], ids(0..2), true, 1)]
-    #[case::square(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]], ids(0..4), true, 2)]
-    #[case::hexagon(
-        6,
-        vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]],
-        ids(0..6),
-        true,
-        3,
-    )]
-    #[case::k4(
-        4,
-        vec![[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]],
-        ids(0..4),
-        true,
-        2,
-    )]
-    #[case::triangle_no_perfect(
-        3,
-        vec![[0, 1], [1, 2], [0, 2]],
-        ids(0..3),
-        false,
-        0,
-    )]
-    #[case::path_5_no_perfect(
-        5,
-        vec![[0, 1], [1, 2], [2, 3], [3, 4]],
-        ids(0..5),
-        false,
-        0,
-    )]
-    #[case::two_disconnected_edges(4, vec![[0, 1], [2, 3]], ids(0..4), true, 2)]
-    fn test_graph_perfect_matching_backtracking_dfs(
-        #[case] node_count: usize,
-        #[case] edges: Vec<[u32; 2]>,
-        #[case] node_order: Vec<NodeId>,
-        #[case] expected_some: bool,
-        #[case] expected_size: usize,
-    ) {
-        let g = Graph::new(node_count, &edges);
-        let m = g.perfect_matching(&node_order, BacktrackingDfs);
-        assert_eq!(m.is_some(), expected_some, "Some-ness");
-        if let Some(m) = m {
-            assert_eq!(m.size(), expected_size);
-            assert!(m.is_perfect(node_count));
-            assert_matching_valid(&g, &m);
+    fn exhaustive_perfect_matchings(graph: &Graph) -> Vec<Vec<EdgeId>> {
+        exhaustive_exact_matchings(graph, graph.node_count() / 2)
+            .into_iter()
+            .filter(|matching| matching.len() * 2 == graph.node_count())
+            .collect()
+    }
+
+    fn exhaustive_maximum_matchings(graph: &Graph) -> Vec<Vec<EdgeId>> {
+        let matchings = exhaustive_matchings(graph);
+        let maximum_size = matchings.iter().map(Vec::len).max().unwrap_or(0);
+        matchings
+            .into_iter()
+            .filter(|matching| matching.len() == maximum_size)
+            .collect()
+    }
+
+    fn greedy_matching_size(graph: &Graph) -> usize {
+        let mut matched = vec![false; graph.node_bound()];
+        let mut size = 0;
+        for edge in graph.edge_ids() {
+            let [first, second] = graph.edge_endpoints(edge);
+            if !matched[first.index()] && !matched[second.index()] {
+                matched[first.index()] = true;
+                matched[second.index()] = true;
+                size += 1;
+            }
         }
+        size
     }
 
     #[rstest]
-    fn test_graph_perfect_matching_deterministic_under_node_order() {
-        let g = Graph::new(4, &[[0, 1], [0, 2], [1, 3], [2, 3]]);
-        let order = ids(0..4);
-        let m1 = g.perfect_matching(&order, BacktrackingDfs).unwrap();
-        let m2 = g.perfect_matching(&order, BacktrackingDfs).unwrap();
-        assert_eq!(m1.edges(), m2.edges());
+    #[case::empty(
+        Graph::default(),
+        0,
+        vec![vec![]],
+        vec![vec![]],
+        vec![vec![]],
+        vec![vec![]],
+    )]
+    #[case::isolated(
+        Graph::new(2, &[]),
+        0,
+        vec![vec![]],
+        vec![vec![]],
+        vec![],
+        vec![vec![]],
+    )]
+    #[case::path_3(
+        Graph::new(3, &[[0, 1], [1, 2]]),
+        1,
+        vec![vec![], vec![EdgeId(0)], vec![EdgeId(1)]],
+        vec![vec![EdgeId(0)], vec![EdgeId(1)]],
+        vec![],
+        vec![vec![EdgeId(0)], vec![EdgeId(1)]],
+    )]
+    #[case::triangle(
+        Graph::new(3, &[[0, 1], [1, 2], [0, 2]]),
+        1,
+        vec![vec![], vec![EdgeId(0)], vec![EdgeId(1)], vec![EdgeId(2)]],
+        vec![vec![EdgeId(0)], vec![EdgeId(1)], vec![EdgeId(2)]],
+        vec![],
+        vec![vec![EdgeId(0)], vec![EdgeId(1)], vec![EdgeId(2)]],
+    )]
+    #[case::square(
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]),
+        2,
+        vec![
+            vec![],
+            vec![EdgeId(0)],
+            vec![EdgeId(0), EdgeId(2)],
+            vec![EdgeId(1)],
+            vec![EdgeId(1), EdgeId(3)],
+            vec![EdgeId(2)],
+            vec![EdgeId(3)],
+        ],
+        vec![vec![EdgeId(0), EdgeId(2)], vec![EdgeId(1), EdgeId(3)]],
+        vec![vec![EdgeId(0), EdgeId(2)], vec![EdgeId(1), EdgeId(3)]],
+        vec![vec![EdgeId(0), EdgeId(2)], vec![EdgeId(1), EdgeId(3)]],
+    )]
+    #[case::disconnected_edges(
+        Graph::new(4, &[[0, 1], [2, 3]]),
+        1,
+        vec![
+            vec![],
+            vec![EdgeId(0)],
+            vec![EdgeId(0), EdgeId(1)],
+            vec![EdgeId(1)],
+        ],
+        vec![vec![EdgeId(0)], vec![EdgeId(1)]],
+        vec![vec![EdgeId(0), EdgeId(1)]],
+        vec![vec![EdgeId(0), EdgeId(1)]],
+    )]
+    fn test_exhaustive_matching_sets(
+        #[case] graph: Graph,
+        #[case] exact_size: usize,
+        #[case] expected_all: Vec<Vec<EdgeId>>,
+        #[case] expected_exact: Vec<Vec<EdgeId>>,
+        #[case] expected_perfect: Vec<Vec<EdgeId>>,
+        #[case] expected_maximum: Vec<Vec<EdgeId>>,
+    ) {
+        assert_eq!(exhaustive_matchings(&graph), expected_all);
+        assert_eq!(
+            exhaustive_exact_matchings(&graph, exact_size),
+            expected_exact
+        );
+        assert_eq!(exhaustive_perfect_matchings(&graph), expected_perfect);
+        assert_eq!(exhaustive_maximum_matchings(&graph), expected_maximum);
+    }
+
+    #[rstest]
+    #[case::middle_edge_first(Graph::new(4, &[[1, 2], [0, 1], [2, 3]]), 1, 2)]
+    fn test_greedy_matching_cardinality_bound(
+        #[case] graph: Graph,
+        #[case] expected_greedy: usize,
+        #[case] expected_maximum: usize,
+    ) {
+        assert_eq!(greedy_matching_size(&graph), expected_greedy);
+        assert_eq!(
+            exhaustive_maximum_matchings(&graph)[0].len(),
+            expected_maximum
+        );
     }
 
     fn assert_matching_valid(graph: &Graph, matching: &Matching) {
