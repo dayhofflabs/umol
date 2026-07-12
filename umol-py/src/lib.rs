@@ -5,7 +5,9 @@ use pyo3::prelude::*;
 
 #[cfg(feature = "graph")]
 use crate::{
-    aromatic::{AromaticSystemConstraintAst, AromaticSystemConstraintKey},
+    aromatic::{
+        AromaticSystemConstraintAst, AromaticSystemConstraintKey, AromaticSystemConstraintsAst,
+    },
     atom::{AtomAst, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst},
     bond::{
         BondAst, BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondConstraintsView,
@@ -108,6 +110,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ElectronCountsAst>()?;
         module.add_class::<AromaticSystemConstraintAst>()?;
         module.add_class::<AromaticSystemConstraintKey>()?;
+        module.add_class::<AromaticSystemConstraintsAst>()?;
         module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;

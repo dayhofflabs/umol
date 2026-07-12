@@ -5,6 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 from ._native import (
     AromaticSystemConstraintAst,
     AromaticSystemConstraintKey,
+    AromaticSystemConstraintsAst,
     AromaticValenceAst,
     AtomAst,
     AtomConstraintAst,
@@ -64,6 +65,7 @@ except PackageNotFoundError:
 __all__ = [
     "AromaticSystemConstraintAst",
     "AromaticSystemConstraintKey",
+    "AromaticSystemConstraintsAst",
     "AromaticValenceAst",
     "AtomAst",
     "AtomConstraintAst",
