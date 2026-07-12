@@ -34,10 +34,14 @@ pub struct Matching {
 impl Matching {
     fn from_mates(graph: &Graph, mates: &[i32]) -> Self {
         let mut edges = Vec::new();
+        let mut represented = vec![false; graph.node_bound()];
         for eid in graph.edge_ids() {
             let [a, b] = graph.edge_endpoints(eid);
-            if mates[a.index()] == b.0 as i32 {
+            if mates[a.index()] == b.0 as i32 && !represented[a.index()] && !represented[b.index()]
+            {
                 edges.push(eid);
+                represented[a.index()] = true;
+                represented[b.index()] = true;
             }
         }
         edges.sort_unstable();
@@ -201,17 +205,8 @@ impl Graph {
             return vec![initial];
         }
         let mut result = Vec::new();
-        let edges: Vec<EdgeId> = self.edge_ids().collect();
-        let mut included = vec![false; self.edge_bound()];
-        let mut excluded = vec![false; self.edge_bound()];
-        enumerate_rec(
-            self,
-            &edges,
-            &mut included,
-            &mut excluded,
-            self.node_count() / 2,
-            &mut result,
-        );
+        let mut state = MatchingSearchState::new(self);
+        enumerate_rec(&mut state, self.node_count() / 2, &mut result);
         result
     }
 
@@ -223,17 +218,8 @@ impl Graph {
             return vec![initial];
         }
         let mut result = Vec::new();
-        let edges: Vec<EdgeId> = self.edge_ids().collect();
-        let mut included = vec![false; self.edge_bound()];
-        let mut excluded = vec![false; self.edge_bound()];
-        enumerate_rec(
-            self,
-            &edges,
-            &mut included,
-            &mut excluded,
-            target_size,
-            &mut result,
-        );
+        let mut state = MatchingSearchState::new(self);
+        enumerate_rec(&mut state, target_size, &mut result);
         result
     }
 }
@@ -410,128 +396,39 @@ fn mark_blossom_path(
 // ── Branch-and-bound enumeration ────────────────────────────────────
 
 fn enumerate_rec(
-    graph: &Graph,
-    edges: &[EdgeId],
-    included: &mut [bool],
-    excluded: &mut [bool],
+    state: &mut MatchingSearchState<'_>,
     target_size: usize,
     result: &mut Vec<Matching>,
 ) {
-    let mut node_matched = vec![false; graph.node_bound()];
-    let mut current_size = 0usize;
-    for (i, &inc) in included.iter().enumerate() {
-        if inc {
-            let [a, b] = graph.edge_endpoints(EdgeId(i as u32));
-            node_matched[a.index()] = true;
-            node_matched[b.index()] = true;
-            current_size += 1;
-        }
-    }
-
-    if current_size == target_size {
-        let mate = build_mate(graph, included);
-        result.push(Matching::from_mates(graph, &mate));
+    if state.included_size == target_size {
+        result.push(state.matching());
         return;
     }
 
-    let branch_edge = edges.iter().find(|&&eid| {
-        !included[eid.index()] && !excluded[eid.index()] && {
-            let [a, b] = graph.edge_endpoints(eid);
-            !node_matched[a.index()] && !node_matched[b.index()]
+    let branch_edge = state.graph.edge_ids().find(|&edge| {
+        !state.included[edge.index()] && !state.excluded[edge.index()] && {
+            let [first, second] = state.graph.edge_endpoints(edge);
+            !state.covered[first.index()] && !state.covered[second.index()]
         }
     });
 
-    let Some(&eid) = branch_edge else {
+    let Some(edge) = branch_edge else {
         return;
     };
 
-    let [a, b] = graph.edge_endpoints(eid);
+    let include_undo = state.include(edge);
+    if state.can_extend_to(target_size) {
+        enumerate_rec(state, target_size, result);
+    }
+    state.undo_include(include_undo);
 
-    // Include branch
-    included[eid.index()] = true;
-    let mut newly_excluded = Vec::new();
-    for nbr in graph.neighbors(a).iter().chain(graph.neighbors(b)) {
-        if nbr.edge != eid && !excluded[nbr.edge.index()] && !included[nbr.edge.index()] {
-            excluded[nbr.edge.index()] = true;
-            newly_excluded.push(nbr.edge);
-        }
+    let exclude_undo = state.exclude(edge);
+    if state.can_extend_to(target_size) {
+        enumerate_rec(state, target_size, result);
     }
-    if can_reach(graph, included, excluded, current_size + 1, target_size) {
-        enumerate_rec(graph, edges, included, excluded, target_size, result);
-    }
-    included[eid.index()] = false;
-    for &e in &newly_excluded {
-        excluded[e.index()] = false;
-    }
-
-    // Exclude branch
-    excluded[eid.index()] = true;
-    if can_reach(graph, included, excluded, current_size, target_size) {
-        enumerate_rec(graph, edges, included, excluded, target_size, result);
-    }
-    excluded[eid.index()] = false;
+    state.undo_exclude(exclude_undo);
 }
 
-fn can_reach(
-    graph: &Graph,
-    included: &[bool],
-    excluded: &[bool],
-    current_size: usize,
-    target_size: usize,
-) -> bool {
-    if current_size > target_size {
-        return false;
-    }
-    let remaining = target_size - current_size;
-    if remaining == 0 {
-        return true;
-    }
-
-    let mut node_matched = vec![false; graph.node_bound()];
-    for (i, &inc) in included.iter().enumerate() {
-        if inc {
-            let [a, b] = graph.edge_endpoints(EdgeId(i as u32));
-            node_matched[a.index()] = true;
-            node_matched[b.index()] = true;
-        }
-    }
-
-    let unmatched: usize = node_matched.iter().filter(|&&m| !m).count();
-    if unmatched < remaining * 2 {
-        return false;
-    }
-
-    // Greedy matching on residual graph as tighter bound
-    let mut residual_matched = node_matched;
-    let mut greedy_count = 0usize;
-    for eid in graph.edge_ids() {
-        if included[eid.index()] || excluded[eid.index()] {
-            continue;
-        }
-        let [a, b] = graph.edge_endpoints(eid);
-        if !residual_matched[a.index()] && !residual_matched[b.index()] {
-            residual_matched[a.index()] = true;
-            residual_matched[b.index()] = true;
-            greedy_count += 1;
-        }
-    }
-
-    greedy_count >= remaining
-}
-
-fn build_mate(graph: &Graph, included: &[bool]) -> Vec<i32> {
-    let mut mate = vec![-1i32; graph.node_bound()];
-    for (i, &inc) in included.iter().enumerate() {
-        if inc {
-            let [a, b] = graph.edge_endpoints(EdgeId(i as u32));
-            mate[a.index()] = b.0 as i32;
-            mate[b.index()] = a.0 as i32;
-        }
-    }
-    mate
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct MatchingSearchState<'a> {
     graph: &'a Graph,
@@ -541,20 +438,17 @@ struct MatchingSearchState<'a> {
     included_size: usize,
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug)]
 struct IncludeUndo {
     edge: EdgeId,
     newly_excluded: Vec<EdgeId>,
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug)]
 struct ExcludeUndo {
     edge: EdgeId,
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 impl<'a> MatchingSearchState<'a> {
     fn new(graph: &'a Graph) -> Self {
         Self {
@@ -666,11 +560,48 @@ impl<'a> MatchingSearchState<'a> {
         );
         (residual, correspondence)
     }
+
+    fn can_extend_to(&self, target_size: usize) -> bool {
+        if self.included_size > target_size {
+            return false;
+        }
+        let remaining = target_size - self.included_size;
+        if remaining == 0 {
+            return true;
+        }
+        let uncovered = self.covered.iter().filter(|&&covered| !covered).count();
+        if remaining > uncovered / 2 {
+            return false;
+        }
+
+        let (residual, _) = self.residual_graph();
+        self.included_size + residual.maximum_matching_edmonds().size() >= target_size
+    }
+
+    fn matching(&self) -> Matching {
+        let edges: Vec<_> = self
+            .included
+            .iter()
+            .enumerate()
+            .filter_map(|(index, &included)| included.then_some(EdgeId(index as u32)))
+            .collect();
+        let mut mate = vec![None; self.graph.node_bound()];
+        for &edge in &edges {
+            let [first, second] = self.graph.edge_endpoints(edge);
+            mate[first.index()] = Some(second);
+            mate[second.index()] = Some(first);
+        }
+        Matching { edges, mate }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, Instant};
+
     use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
+    use proptest::test_runner::{Config, TestRunner};
     use rstest::*;
 
     use super::MatchingEnumerationAlgorithm::BranchAndBound;
@@ -687,6 +618,7 @@ mod tests {
     #[case::path_4(4, vec![[0, 1], [1, 2], [2, 3]], 2, true)]
     #[case::path_5(5, vec![[0, 1], [1, 2], [2, 3], [3, 4]], 2, false)]
     #[case::k4(4, vec![[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]], 2, true)]
+    #[case::parallel_edges(2, vec![[0, 1], [0, 1]], 1, true)]
     #[case::petersen(
         10,
         vec![
@@ -826,6 +758,8 @@ mod tests {
     #[case::square(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]], 2)]
     #[case::c6(6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], 2)]
     #[case::k4(4, vec![[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]], 3)]
+    #[case::greedy_counterexample(4, vec![[1, 2], [0, 1], [2, 3]], 1)]
+    #[case::parallel_edges(2, vec![[0, 1], [0, 1]], 2)]
     fn test_graph_enumerate_perfect_matchings(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,
@@ -849,6 +783,7 @@ mod tests {
     #[case::triangle(3, vec![[0, 1], [1, 2], [0, 2]], 3)]
     #[case::path_3(3, vec![[0, 1], [1, 2]], 2)]
     #[case::single_edge(2, vec![[0, 1]], 1)]
+    #[case::parallel_edges(2, vec![[0, 1], [0, 1]], 2)]
     fn test_graph_enumerate_maximum_matchings(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,
@@ -868,6 +803,196 @@ mod tests {
             assert_matching_valid(&g, m);
         }
         assert_all_distinct(&matchings);
+    }
+
+    #[rstest]
+    fn test_graph_enumerate_matchings_exhaustive() {
+        const EXHAUSTIVE_NODE_BOUND: usize = 5;
+        const EXHAUSTIVE_TIME_BUDGET: Duration = Duration::from_secs(30);
+
+        let started = Instant::now();
+        for node_count in 0..=EXHAUSTIVE_NODE_BOUND {
+            let potential_edges: Vec<_> = (0..node_count as u32)
+                .flat_map(|first| (first + 1..node_count as u32).map(move |second| [first, second]))
+                .collect();
+            for graph_mask in 0_usize..(1 << potential_edges.len()) {
+                let edges: Vec<_> = potential_edges
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, &edge)| (graph_mask & (1 << index) != 0).then_some(edge))
+                    .collect();
+                let graph = Graph::new(node_count, &edges);
+
+                let perfect = graph.enumerate_perfect_matchings(BranchAndBound);
+                let mut perfect_edges: Vec<_> = perfect
+                    .iter()
+                    .map(|matching| matching.edges().to_vec())
+                    .collect();
+                perfect_edges.sort_unstable();
+                assert_eq!(perfect_edges, exhaustive_perfect_matchings(&graph));
+                for matching in &perfect {
+                    assert!(matching.is_perfect(node_count));
+                    assert_matching_valid(&graph, matching);
+                }
+                assert_all_distinct(&perfect);
+
+                let maximum = graph.enumerate_maximum_matchings(BranchAndBound);
+                let mut maximum_edges: Vec<_> = maximum
+                    .iter()
+                    .map(|matching| matching.edges().to_vec())
+                    .collect();
+                maximum_edges.sort_unstable();
+                let expected_maximum = exhaustive_maximum_matchings(&graph);
+                assert_eq!(maximum_edges, expected_maximum);
+                let maximum_size = expected_maximum.first().map_or(0, Vec::len);
+                for matching in &maximum {
+                    assert_eq!(matching.size(), maximum_size);
+                    assert_matching_valid(&graph, matching);
+                }
+                assert_all_distinct(&maximum);
+            }
+        }
+        assert!(
+            started.elapsed() <= EXHAUSTIVE_TIME_BUDGET,
+            "exhaustive enumeration check exceeded {EXHAUSTIVE_TIME_BUDGET:?}",
+        );
+    }
+
+    #[rstest]
+    #[case::mixed(
+        6,
+        vec![
+            [0, 3], [0, 4], [1, 3], [1, 5], [2, 4], [2, 5],
+            [0, 1], [4, 5],
+        ],
+    )]
+    #[case::non_bipartite(
+        7,
+        vec![
+            [0, 1], [1, 2], [2, 0], [2, 3], [3, 4], [4, 5], [5, 6],
+            [6, 3], [0, 6], [1, 4],
+        ],
+    )]
+    fn test_graph_enumerate_matchings_edge_order(
+        #[case] node_count: usize,
+        #[case] edges: Vec<[u32; 2]>,
+    ) {
+        let forward = Graph::new(node_count, &edges);
+        let reverse = Graph::new(node_count, &edges.iter().rev().copied().collect::<Vec<_>>());
+        let canonicalize = |graph: &Graph, matchings: Vec<Matching>| {
+            let mut canonical: Vec<_> = matchings
+                .into_iter()
+                .map(|matching| {
+                    let mut selected: Vec<_> = matching
+                        .edges()
+                        .iter()
+                        .map(|&edge| {
+                            let [first, second] = graph.edge_endpoints(edge);
+                            [first.0.min(second.0), first.0.max(second.0)]
+                        })
+                        .collect();
+                    selected.sort_unstable();
+                    selected
+                })
+                .collect();
+            canonical.sort_unstable();
+            canonical
+        };
+
+        assert_eq!(
+            canonicalize(
+                &forward,
+                forward.enumerate_perfect_matchings(BranchAndBound)
+            ),
+            canonicalize(
+                &reverse,
+                reverse.enumerate_perfect_matchings(BranchAndBound)
+            )
+        );
+        assert_eq!(
+            canonicalize(
+                &forward,
+                forward.enumerate_maximum_matchings(BranchAndBound)
+            ),
+            canonicalize(
+                &reverse,
+                reverse.enumerate_maximum_matchings(BranchAndBound)
+            )
+        );
+    }
+
+    #[rstest]
+    fn test_graph_enumerate_matchings_property() {
+        const PROPERTY_CASES: u32 = 32;
+
+        let strategy = (6_usize..=7).prop_flat_map(|node_count| {
+            let pairs: Vec<_> = (0..node_count as u32)
+                .flat_map(|first| (first + 1..node_count as u32).map(move |second| [first, second]))
+                .collect();
+            (
+                Just(node_count),
+                Just(pairs.clone()),
+                prop::collection::vec(prop_oneof![3 => Just(false), 1 => Just(true)], pairs.len()),
+            )
+        });
+        let mut runner = TestRunner::new(Config {
+            cases: PROPERTY_CASES,
+            ..Config::default()
+        });
+
+        runner
+            .run(&strategy, |(node_count, pairs, present)| {
+                let edges: Vec<_> = pairs
+                    .into_iter()
+                    .zip(present)
+                    .filter_map(|(edge, present)| present.then_some(edge))
+                    .collect();
+                let forward = Graph::new(node_count, &edges);
+                let reverse =
+                    Graph::new(node_count, &edges.iter().rev().copied().collect::<Vec<_>>());
+                let canonicalize = |graph: &Graph, matchings: Vec<Matching>| {
+                    let mut canonical: Vec<_> = matchings
+                        .into_iter()
+                        .map(|matching| {
+                            let mut selected: Vec<_> = matching
+                                .edges()
+                                .iter()
+                                .map(|&edge| {
+                                    let [first, second] = graph.edge_endpoints(edge);
+                                    [first.0.min(second.0), first.0.max(second.0)]
+                                })
+                                .collect();
+                            selected.sort_unstable();
+                            selected
+                        })
+                        .collect();
+                    canonical.sort_unstable();
+                    canonical
+                };
+
+                prop_assert_eq!(
+                    canonicalize(
+                        &forward,
+                        forward.enumerate_perfect_matchings(BranchAndBound)
+                    ),
+                    canonicalize(
+                        &reverse,
+                        reverse.enumerate_perfect_matchings(BranchAndBound)
+                    )
+                );
+                prop_assert_eq!(
+                    canonicalize(
+                        &forward,
+                        forward.enumerate_maximum_matchings(BranchAndBound)
+                    ),
+                    canonicalize(
+                        &reverse,
+                        reverse.enumerate_maximum_matchings(BranchAndBound)
+                    )
+                );
+                Ok(())
+            })
+            .unwrap();
     }
 
     fn exhaustive_matchings(graph: &Graph) -> Vec<Vec<EdgeId>> {
@@ -1207,6 +1332,141 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[rstest]
+    #[case::greedy_counterexample(Graph::new(4, &[[1, 2], [0, 1], [2, 3]]), 2, true)]
+    #[case::odd_capacity(Graph::new(3, &[[0, 1], [1, 2], [0, 2]]), 2, false)]
+    #[case::zero_target(Graph::new(2, &[[0, 1]]), 0, true)]
+    fn test_matching_search_state_can_extend_to(
+        #[case] graph: Graph,
+        #[case] target_size: usize,
+        #[case] expected: bool,
+    ) {
+        let state = MatchingSearchState::new(&graph);
+        assert_eq!(state.can_extend_to(target_size), expected);
+    }
+
+    #[rstest]
+    fn test_matching_search_state_can_extend_to_greedy_counterexample() {
+        let graph = Graph::new(4, &[[1, 2], [0, 1], [2, 3]]);
+        let state = MatchingSearchState::new(&graph);
+        let (residual, _) = state.residual_graph();
+
+        assert_eq!(greedy_matching_size(&residual), 1);
+        assert_eq!(exhaustive_maximum_matchings(&residual)[0].len(), 2);
+        assert!(state.can_extend_to(2));
+    }
+
+    #[rstest]
+    fn test_matching_search_state_can_extend_to_exhaustive() {
+        const EXHAUSTIVE_NODE_BOUND: usize = 5;
+        const EXHAUSTIVE_TIME_BUDGET: Duration = Duration::from_secs(60);
+
+        let started = Instant::now();
+        for node_count in 0..=EXHAUSTIVE_NODE_BOUND {
+            let potential_edges: Vec<_> = (0..node_count as u32)
+                .flat_map(|first| (first + 1..node_count as u32).map(move |second| [first, second]))
+                .collect();
+            let state_count = 4_usize.pow(potential_edges.len() as u32);
+
+            for encoded_state in 0..state_count {
+                let mut encoding = encoded_state;
+                let mut edges = Vec::new();
+                let mut statuses = Vec::new();
+                for &edge in &potential_edges {
+                    let status = encoding % 4;
+                    if status != 0 {
+                        edges.push(edge);
+                        statuses.push(status);
+                    }
+                    encoding /= 4;
+                }
+
+                let graph = Graph::new(node_count, &edges);
+                let mut state = MatchingSearchState::new(&graph);
+                let mut valid_state = true;
+                for (index, &status) in statuses.iter().enumerate() {
+                    let edge = EdgeId(index as u32);
+                    match status {
+                        2 => {
+                            let [first, second] = graph.edge_endpoints(edge);
+                            if state.covered[first.index()] || state.covered[second.index()] {
+                                valid_state = false;
+                                break;
+                            }
+                            state.included[edge.index()] = true;
+                            state.covered[first.index()] = true;
+                            state.covered[second.index()] = true;
+                            state.included_size += 1;
+                        }
+                        3 => state.excluded[edge.index()] = true,
+                        _ => {}
+                    }
+                }
+                if !valid_state {
+                    continue;
+                }
+                for edge in graph.edge_ids() {
+                    if state.included[edge.index()] {
+                        continue;
+                    }
+                    let [first, second] = graph.edge_endpoints(edge);
+                    if (state.covered[first.index()] || state.covered[second.index()])
+                        && !state.excluded[edge.index()]
+                    {
+                        valid_state = false;
+                        break;
+                    }
+                }
+                if !valid_state {
+                    continue;
+                }
+
+                let mut reachable_sizes = vec![false; node_count / 2 + 1];
+                for subset in 0_usize..(1 << graph.edge_count()) {
+                    let mut matched = vec![false; node_count];
+                    let mut size = 0;
+                    let mut valid_matching = true;
+                    for edge in graph.edge_ids() {
+                        let selected = subset & (1 << edge.index()) != 0;
+                        if state.included[edge.index()] && !selected
+                            || state.excluded[edge.index()] && selected
+                        {
+                            valid_matching = false;
+                            break;
+                        }
+                        if !selected {
+                            continue;
+                        }
+                        let [first, second] = graph.edge_endpoints(edge);
+                        if matched[first.index()] || matched[second.index()] {
+                            valid_matching = false;
+                            break;
+                        }
+                        matched[first.index()] = true;
+                        matched[second.index()] = true;
+                        size += 1;
+                    }
+                    if valid_matching {
+                        reachable_sizes[size] = true;
+                    }
+                }
+
+                for target_size in 0..=node_count / 2 + 1 {
+                    let expected = reachable_sizes.get(target_size).copied().unwrap_or(false);
+                    assert_eq!(
+                        state.can_extend_to(target_size),
+                        expected,
+                        "node_count={node_count}, encoded_state={encoded_state}, target={target_size}",
+                    );
+                }
+            }
+        }
+        assert!(
+            started.elapsed() <= EXHAUSTIVE_TIME_BUDGET,
+            "exhaustive extension check exceeded {EXHAUSTIVE_TIME_BUDGET:?}",
+        );
     }
 
     fn assert_matching_valid(graph: &Graph, matching: &Matching) {
