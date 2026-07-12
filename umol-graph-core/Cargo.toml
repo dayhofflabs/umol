@@ -17,6 +17,7 @@ proptest = []
 [dependencies]
 bitvec = "1.0.1"
 nauty-Traces-sys = { version = "0.11", features = ["bundled", "tls"] }
+umol-nauty-sys = { path = "../umol-nauty-sys" }
 
 [dev-dependencies]
 criterion = "0.8.1"

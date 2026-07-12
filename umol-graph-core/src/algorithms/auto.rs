@@ -7,6 +7,7 @@ use std::mem;
 use std::os::raw::c_int;
 
 use nauty_Traces_sys::*;
+use umol_nauty_sys::{run as run_vendored_nauty, NautyInput};
 
 use crate::graph::{EdgeId, Graph, NodeId};
 
@@ -261,6 +262,58 @@ impl Graph {
         }
     }
 
+    #[allow(dead_code)] // Becomes the production dispatch in S4b.
+    fn automorphisms_vendored_nauty<C: Ord + Copy>(
+        &self,
+        node_color: impl Fn(NodeId) -> C,
+    ) -> AutomorphismOutput {
+        let node_count = self.node_count();
+        let mut indexed: Vec<(usize, C)> = self
+            .node_ids()
+            .map(|node| (node.index(), node_color(node)))
+            .collect();
+        indexed.sort_by_key(|&(_, color)| color);
+
+        let mut colors = vec![0; node_count];
+        let mut rank = 0_u32;
+        for (position, &(vertex, color)) in indexed.iter().enumerate() {
+            if position > 0 && color != indexed[position - 1].1 {
+                rank = rank.checked_add(1).expect("color rank fits u32");
+            }
+            colors[vertex] = rank;
+        }
+
+        let mut offsets = Vec::with_capacity(node_count + 1);
+        let mut neighbors = Vec::with_capacity(2 * self.edge_count());
+        offsets.push(0);
+        for node in self.node_ids() {
+            neighbors.extend(self.neighbors(node).iter().map(|neighbor| neighbor.node.0));
+            offsets.push(neighbors.len());
+        }
+
+        let input = NautyInput::try_new(node_count, offsets, neighbors, colors)
+            .expect("Graph produces valid nauty input");
+        let output = run_vendored_nauty(&input).expect("vendored nauty succeeds");
+        let orbits: Vec<NodeId> = output.orbits.into_iter().map(NodeId).collect();
+        let orbit_count = orbits.iter().copied().collect::<HashSet<_>>().len();
+
+        AutomorphismOutput {
+            orbits,
+            canonical_labels: output.canonical_labels.into_iter().map(NodeId).collect(),
+            node_count,
+            orbit_count,
+            group_order: AutomorphismGroupOrder::from_scientific(
+                output.group_order.mantissa,
+                output.group_order.exponent,
+            ),
+            generators: output
+                .generators
+                .into_iter()
+                .map(|generator| generator.into_iter().map(NodeId).collect())
+                .collect(),
+        }
+    }
+
     /// Numbering-invariant canonical key of `self` as an edge-colored graph: two
     /// graphs yield equal keys iff isomorphic under `node_color` and `edge_color`.
     /// Each edge is subdivided into a class-disjoint colored vertex so nauty (vertex
@@ -426,6 +479,8 @@ mod tests {
     use super::*;
     use crate::union_find::UnionFind;
 
+    const GROUP_ORDER_RELATIVE_TOLERANCE: f64 = 1.0e-12;
+
     #[rstest]
     #[case::integer(8.0, 0, AutomorphismGroupOrder::Exact(8))]
     #[case::positive_exponent(130.7674368, 10, AutomorphismGroupOrder::Exact(1_307_674_368_000))]
@@ -530,6 +585,66 @@ mod tests {
         }
     }
 
+    fn canonical_form(
+        graph: &Graph,
+        colors: &[u8],
+        canonical_labels: &[NodeId],
+    ) -> (Vec<u8>, Vec<(usize, usize)>) {
+        let mut positions = vec![0; graph.node_count()];
+        for (position, &vertex) in canonical_labels.iter().enumerate() {
+            positions[vertex.index()] = position;
+        }
+        let canonical_colors = canonical_labels
+            .iter()
+            .map(|vertex| colors[vertex.index()])
+            .collect();
+        let mut canonical_edges: Vec<_> = graph
+            .edge_ids()
+            .map(|edge| {
+                let [first, second] = graph.edge_endpoints(edge);
+                let first = positions[first.index()];
+                let second = positions[second.index()];
+                (first.min(second), first.max(second))
+            })
+            .collect();
+        canonical_edges.sort_unstable();
+        (canonical_colors, canonical_edges)
+    }
+
+    fn generated_group(node_count: usize, generators: &[Vec<NodeId>]) -> HashSet<Vec<NodeId>> {
+        let identity: Vec<NodeId> = (0..node_count as u32).map(NodeId).collect();
+        let mut group = HashSet::from([identity.clone()]);
+        let mut frontier = vec![identity];
+        while let Some(element) = frontier.pop() {
+            for generator in generators {
+                let product: Vec<NodeId> = element
+                    .iter()
+                    .map(|&image| generator[image.index()])
+                    .collect();
+                if group.insert(product.clone()) {
+                    frontier.push(product);
+                }
+            }
+        }
+        group
+    }
+
+    fn old_group_order(order: AutoGroupOrder) -> f64 {
+        match order {
+            AutoGroupOrder::Exact(value) => value as f64,
+            AutoGroupOrder::Approx(value) => value,
+        }
+    }
+
+    fn vendored_group_order(order: AutomorphismGroupOrder) -> f64 {
+        match order {
+            AutomorphismGroupOrder::Exact(value) => value as f64,
+            AutomorphismGroupOrder::Scientific { mantissa, exponent } => {
+                mantissa * 10.0_f64.powi(exponent)
+            }
+        }
+    }
+
     #[rstest]
     #[case::empty(Graph::default(), vec![], 0, AutoGroupOrder::Exact(1), vec![], vec![])]
     #[case::singleton(
@@ -599,6 +714,55 @@ mod tests {
             assert!(!aut.same_orbit(NodeId(a), NodeId(b)));
         }
         assert_automorphism_semantics(&graph, &colors, &aut);
+    }
+
+    #[rstest]
+    #[case::empty(Graph::default(), vec![])]
+    #[case::colored_path(Graph::new(3, &[[0, 1], [1, 2]]), vec![0, 1, 0])]
+    #[case::uniform_square(
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]),
+        vec![0, 0, 0, 0]
+    )]
+    #[case::disconnected_edges(
+        Graph::new(4, &[[0, 1], [2, 3]]),
+        vec![0, 0, 0, 0]
+    )]
+    #[case::complete_5(
+        Graph::new(
+            5,
+            &[
+                [0, 1], [0, 2], [0, 3], [0, 4], [1, 2],
+                [1, 3], [1, 4], [2, 3], [2, 4], [3, 4]
+            ]
+        ),
+        vec![0, 0, 0, 0, 0]
+    )]
+    fn test_graph_automorphisms_vendored_nauty(#[case] graph: Graph, #[case] colors: Vec<u8>) {
+        let old = graph.automorphisms_nauty(|node| colors[node.index()]);
+        let vendored = graph.automorphisms_vendored_nauty(|node| colors[node.index()]);
+
+        assert_eq!(vendored.node_count(), old.node_count());
+        assert_eq!(vendored.orbit_count(), old.orbit_count());
+        for first in graph.node_ids() {
+            for second in graph.node_ids() {
+                assert_eq!(
+                    vendored.same_orbit(first, second),
+                    old.same_orbit(first, second)
+                );
+            }
+        }
+        assert_eq!(
+            canonical_form(&graph, &colors, vendored.canonical_labels()),
+            canonical_form(&graph, &colors, old.canonical_labeling())
+        );
+        let old_order = old_group_order(old.auto_group_order());
+        let vendored_order = vendored_group_order(vendored.group_order());
+        let tolerance = old_order.abs().max(1.0) * GROUP_ORDER_RELATIVE_TOLERANCE;
+        assert!((old_order - vendored_order).abs() <= tolerance);
+        assert_eq!(
+            generated_group(graph.node_count(), vendored.generators()),
+            generated_group(graph.node_count(), old.generators())
+        );
     }
 
     #[rstest]
