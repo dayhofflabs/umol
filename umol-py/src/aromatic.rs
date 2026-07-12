@@ -18,7 +18,7 @@ use umol_ast::ast::{
     AromaticSystemConstraintKey as AstAromaticSystemConstraintKey,
     AromaticSystemConstraintsAst as AstAromaticSystemConstraintsAst,
     AromaticSystemId as AstAromaticSystemId, AromaticSystemView as AstAromaticSystemView,
-    MoleculeAst as AstMoleculeAst,
+    AtomId as AstAtomId, MoleculeAst as AstMoleculeAst,
 };
 
 use crate::atom::SpinStateAst;
@@ -300,6 +300,144 @@ impl AromaticSystemView {
             aromatic_system_constraints_asdict(py, &system.constraints)?,
         )?;
         Ok(dict)
+    }
+}
+
+/// Resolve a possibly-negative Python index (negative counts from the end) into an
+/// existing aromatic system id, or `IndexError`. `AromaticSystemId` is `RelationId`-
+/// backed but contiguous for fresh molecules, so integer positions address it directly.
+fn resolve_aromatic_system_index(
+    molecule: &AstMoleculeAst,
+    index: isize,
+) -> PyResult<AstAromaticSystemId> {
+    let count = molecule.aromatic_systems().count();
+    let resolved = if index < 0 {
+        index + count as isize
+    } else {
+        index
+    };
+    if resolved < 0 {
+        return Err(PyIndexError::new_err("aromatic system id out of range"));
+    }
+    let id = AstAromaticSystemId(resolved as u32);
+    if molecule.aromatic_systems().contains(id) {
+        Ok(id)
+    } else {
+        Err(PyIndexError::new_err("aromatic system id out of range"))
+    }
+}
+
+/// The aromatic systems of a molecule, indexed by integer position.
+#[pyclass]
+pub struct AromaticSystemViews {
+    owner: Py<MoleculeAst>,
+}
+
+#[pymethods]
+impl AromaticSystemViews {
+    fn __len__(&self, py: Python<'_>) -> usize {
+        self.owner
+            .bind(py)
+            .borrow()
+            .inner()
+            .aromatic_systems()
+            .count()
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> String {
+        format!(
+            "AromaticSystemViews(len={})",
+            self.owner
+                .bind(py)
+                .borrow()
+                .inner()
+                .aromatic_systems()
+                .count()
+        )
+    }
+
+    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<AromaticSystemView> {
+        let molecule = self.owner.bind(py).borrow();
+        let id = resolve_aromatic_system_index(molecule.inner(), index)?;
+        Ok(AromaticSystemView {
+            owner: self.owner.clone_ref(py),
+            id,
+        })
+    }
+
+    /// Replace the whole aromatic system value at `index` in place (members unchanged).
+    fn __setitem__(
+        &self,
+        py: Python<'_>,
+        index: isize,
+        system: PyRef<'_, AromaticSystemAst>,
+    ) -> PyResult<()> {
+        let mut molecule = self.owner.borrow_mut(py);
+        let id = resolve_aromatic_system_index(molecule.inner(), index)?;
+        *molecule.inner_mut().aromatic_system_mut(id).ast = system.inner().clone();
+        Ok(())
+    }
+
+    /// The aromatic system whose member atom set equals `atoms`, or `None`.
+    fn connecting(&self, py: Python<'_>, atoms: Vec<u32>) -> Option<AromaticSystemView> {
+        let molecule = self.owner.bind(py).borrow();
+        molecule
+            .inner()
+            .aromatic_systems()
+            .connecting_id(atoms.into_iter().map(AstAtomId))
+            .map(|id| AromaticSystemView {
+                owner: self.owner.clone_ref(py),
+                id,
+            })
+    }
+
+    /// The aromatic systems `atom` is a member of.
+    fn incident(&self, py: Python<'_>, atom: u32) -> Vec<AromaticSystemView> {
+        let molecule = self.owner.bind(py).borrow();
+        molecule
+            .inner()
+            .aromatic_systems()
+            .incident_ids(AstAtomId(atom))
+            .map(|id| AromaticSystemView {
+                owner: self.owner.clone_ref(py),
+                id,
+            })
+            .collect()
+    }
+
+    fn __iter__(&self, py: Python<'_>) -> AromaticSystemViewIter {
+        let ids = self
+            .owner
+            .bind(py)
+            .borrow()
+            .inner()
+            .aromatic_systems()
+            .ids()
+            .collect::<Vec<_>>();
+        AromaticSystemViewIter {
+            owner: self.owner.clone_ref(py),
+            ids: ids.into_iter(),
+        }
+    }
+}
+
+#[pyclass]
+struct AromaticSystemViewIter {
+    owner: Py<MoleculeAst>,
+    ids: IntoIter<AstAromaticSystemId>,
+}
+
+#[pymethods]
+impl AromaticSystemViewIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self, py: Python<'_>) -> Option<AromaticSystemView> {
+        self.ids.next().map(|id| AromaticSystemView {
+            owner: self.owner.clone_ref(py),
+            id,
+        })
     }
 }
 
@@ -1276,6 +1414,119 @@ mod tests {
     }
 
     #[rstest]
+    fn test_aromatic_system_views_len_and_getitem() {
+        Python::attach(|py| {
+            let views = AromaticSystemViews { owner: benzene(py) };
+            assert_eq!(views.__len__(py), 1);
+            assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
+            assert_eq!(views.__getitem__(py, -1).unwrap().id(), 0);
+            assert!(views.__getitem__(py, 5).is_err());
+            assert!(views.__getitem__(py, -2).is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_repr() {
+        Python::attach(|py| {
+            let views = AromaticSystemViews { owner: benzene(py) };
+            assert_eq!(views.__repr__(py), "AromaticSystemViews(len=1)");
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_setitem() {
+        Python::attach(|py| {
+            let owner = benzene(py);
+            let views = AromaticSystemViews {
+                owner: owner.clone_ref(py),
+            };
+            let replacement = Py::new(
+                py,
+                AromaticSystemAst::from_inner(AstAromaticSystemAst::from_electrons(vec![
+                    2, 2, 2, 2, 2, 2,
+                ])),
+            )
+            .unwrap();
+            views
+                .__setitem__(py, 0, replacement.bind(py).borrow())
+                .unwrap();
+            let view = views.__getitem__(py, 0).unwrap();
+            // value replaced, members preserved
+            assert_eq!(
+                view.electrons(py).unwrap().to_ast(),
+                AstElectronCountsAst::Lit(vec![2, 2, 2, 2, 2, 2])
+            );
+            let atom_ids: Vec<u32> = view.atom_ids(py).unwrap().extract().unwrap();
+            assert_eq!(atom_ids, vec![0, 1, 2, 3, 4, 5]);
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_setitem_error() {
+        Python::attach(|py| {
+            let views = AromaticSystemViews { owner: benzene(py) };
+            let replacement = Py::new(
+                py,
+                AromaticSystemAst::from_inner(AstAromaticSystemAst::from_electrons(vec![1, 1, 1])),
+            )
+            .unwrap();
+            assert!(views
+                .__setitem__(py, 5, replacement.bind(py).borrow())
+                .is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_connecting() {
+        Python::attach(|py| {
+            let views = AromaticSystemViews { owner: benzene(py) };
+            assert_eq!(
+                views.connecting(py, vec![0, 1, 2, 3, 4, 5]).unwrap().id(),
+                0
+            );
+            // a subset is not the system's exact atom set
+            assert!(views.connecting(py, vec![0, 1, 2]).is_none());
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_incident() {
+        Python::attach(|py| {
+            // benzene's six carbons plus one isolated carbon (atom id 6)
+            let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AstAtomAst::from_element(ChemElement::C); 7],
+                aromatic: vec![(
+                    (0u32..6).map(AstAtomId).collect(),
+                    AstAromaticSystemAst::from_electrons(vec![1, 1, 1, 1, 1, 1]),
+                )],
+                ..Default::default()
+            });
+            let views = AromaticSystemViews {
+                owner: Py::new(py, MoleculeAst::from_inner(molecule)).unwrap(),
+            };
+            assert_eq!(
+                views
+                    .incident(py, 0)
+                    .iter()
+                    .map(|v| v.id())
+                    .collect::<Vec<_>>(),
+                vec![0]
+            );
+            assert!(views.incident(py, 6).is_empty());
+        });
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_iter() {
+        Python::attach(|py| {
+            let views = AromaticSystemViews { owner: benzene(py) };
+            let mut iter = views.__iter__(py);
+            assert_eq!(iter.__next__(py).unwrap().id(), 0);
+            assert!(iter.__next__(py).is_none());
+        });
+    }
+
+    #[rstest]
     fn test_aromatic_system_constraint_key_roundtrip() {
         let key =
             AromaticSystemConstraintKey::from_ast(&AstAromaticSystemConstraintKey::ElectronCount);
@@ -1774,7 +2025,16 @@ mod tests {
                     id: AstAromaticSystemId(0),
                 },
             };
-            view.set_electron_count(py, ValueArg::Lit(6));
+            let ec = into_py_variant(
+                py,
+                AromaticSystemConstraintAst::from_ast(
+                    py,
+                    &AstAromaticSystemConstraintAst::electron_count(6),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            view.set(py, ec);
             let fresh = AromaticSystemConstraintsView {
                 backing: AromaticSystemConstraintsBacking::Molecule {
                     owner,

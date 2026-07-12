@@ -348,18 +348,28 @@ reuses it (no lopsided dep).
   Trivial mechanical mirror of dative's S1b wiring — no verification workflow. `[dep: S1c]`
 
 **S3 — views (`umol-py/src/aromatic.rs` + `molecule.rs`).**
-- **S3a** *(additive)* — `AromaticSystemView`: `id`, read-only `atom_ids -> tuple` (member set),
-  settable `electrons`/`charge`/`spin`/`constraints`, `asdict` (`{electrons, charge, spin,
-  constraints}`). `[dep: S1c]`
-- **S3b** *(additive)* — `resolve_aromatic_system_index` (mirrors `resolve_bond_index`) +
-  `AromaticSystemViews` (`mol.aromatic_systems`: `__len__`/`__getitem__`/`__setitem__` value-replace/
-  `__iter__` + `connecting(atoms)` + `incident(atom)`) + `AromaticSystemViewIter`. `[dep: S3a]`
-- **S3c** *(additive)* — re-add the `Molecule` backing arm to `AromaticSystemConstraintsBacking`
-  (read/with_mut Molecule arms) — `AromaticSystemView::constraints` constructs it — + the
-  molecule-backed constraint-view unit test. `[dep: S1c, S3a]`
-- **S3d** *(additive)* — `mol.aromatic_systems` accessor (`molecule.rs`) + register
-  `AromaticSystemView`/`AromaticSystemViews` (`lib.rs` + `__init__.py`) + `tests/test_aromatic.py`;
-  maturin rebuild + pytest. `[dep: S3a, S3b, S3c]`
+- **S3a — DONE** *(additive)* — `AromaticSystemView`: `id`, read-only `atom_ids -> tuple` (member set,
+  no acceptor/donor split), settable `electrons`/`charge`/`spin`/`constraints`, `asdict`
+  (`{electrons, charge, spin, constraints}`); write-through via `aromatic_system_mut(id)`. **Absorbed
+  S3c:** the `Molecule` backing arm's only constructor is `AromaticSystemView::constraints`, so re-adding
+  it (+ `read`/`with_mut` Molecule arms) and the molecule-backed constraint-view test landed here, not
+  in a separate stage. Not yet registered (S3d); `benzene` test helper + 8 view tests + molecule-backed
+  test; 55 aromatic Rust tests green, clippy/fmt clean. Verification workflow confirmed 1 low finding
+  (molecule-backed test drove `set_electron_count` but was named `..._set_...`; changed it to drive
+  `set`, matching the dative template + its name) — fixed. `[dep: S1c]` **(S3c absorbed here.)**
+- **S3b — DONE** *(additive)* — `resolve_aromatic_system_index` (mirrors `resolve_bond_index`) +
+  `AromaticSystemViews` (`mol.aromatic_systems`: `__len__`/`__repr__`/`__getitem__`/`__setitem__`
+  value-replace/`__iter__` + `connecting(atoms)` single-set-lookup + `incident(atom)`) +
+  `AromaticSystemViewIter`. `AromaticSystemViews::new` + the accessor + registration deferred to S3d, so
+  the 7 collection tests construct the collection via struct-literal (no dead code). 62 aromatic Rust
+  tests green, clippy/fmt clean. Verification workflow confirmed 1 low finding (the `_repr` test was
+  ordered last but `__repr__` is the 2nd-declared method — moved it after `_len_and_getitem`) — fixed;
+  1 refuted. `[dep: S3a]`
+- **~~S3c~~ — absorbed into S3a** (the Molecule backing arm must land with its constructor,
+  `AromaticSystemView`). `[dep: S1c, S3a]`
+- **S3d** *(additive)* — `AromaticSystemViews::new` + `mol.aromatic_systems` accessor (`molecule.rs`) +
+  register `AromaticSystemView`/`AromaticSystemViews` (`lib.rs` + `__init__.py`) + `tests/test_aromatic.py`;
+  maturin rebuild + pytest. `[dep: S3a, S3b]`
 
 Critical path: **S0 → S1 → S2 → S3** (linear). No deferrable stages; no red stages (fully additive).
 B4 (multicenter) reuses S0's `electrons.rs` verbatim and is otherwise byte-for-byte this plan.
