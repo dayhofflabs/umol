@@ -14,6 +14,7 @@ members = [
     "umol-io",
     "umol-msym",
     "umol-msym-sys",
+    "umol-nauty-sys",
     "umol-params",
     "umol-perm",
     "umol-py",
