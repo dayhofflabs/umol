@@ -388,6 +388,82 @@ B4 (multicenter) reuses S0's `electrons.rs` verbatim and is otherwise byte-for-b
   `constraints`; `ElectronCount(ValueAst)` constraint). One template serves both; only the
   type names differ. Same `electrons`-pairing design call as B3.
 
+#### B4 · Multicenter — staged impl plan (settled 2026-07-12)
+
+**Design verified byte-for-byte identical to the completed aromatic slice (B3)** against the AST:
+`MulticenterBondAst { electrons: ElectronCountsAst, charge: ValueAst, spin: SpinStateAst, constraints }`
+(ctors `new(electrons)`/`from_electrons`/`with_charge`/`with_spin`/`with_constraint`, `FromStr`+`Display`);
+one constraint key `MulticenterBondConstraintAst::ElectronCount(ValueAst)` / `MulticenterBondConstraintKey::
+ElectronCount` with an `electron_count()` container accessor; `MulticenterBondView` is a **single unordered
+atom set** (`atom_ids`/`electrons`/`charge`/`spin`/`constraints`, no acceptor/donor); collection
+`MulticenterBondViews` has `count`/`ids`/`get`/`contains`/`connecting(atoms)`/`incident(atom)`;
+`MoleculeParts.multicenter = Vec<(Vec<AtomId>, MulticenterBondAst)>`; accessors `multicenter_bonds()` /
+`multicenter_bond_mut()` / `MulticenterBondId`. So B4 is the **aromatic slice with a rename**:
+`Aromatic`→`Multicenter`, `AromaticSystem`→`MulticenterBond`, `mol.aromatic_systems`→`mol.multicenter_bonds`,
+`aromatic=[]`→`multicenter=[]`, module `aromatic.rs`→`multicenter.rs`. Concrete per-entity module (WET —
+no dedup with aromatic, mirroring the separate AST types). Fully additive; no red stages.
+
+**Three improvements over B3's staging** (learned while building B3):
+1. **No S0.** The `ElectronCountsAst`/`ElectronCountsArg` leaf already exists (`electrons.rs`, built +
+   un-gated in B3) — B4 reuses it directly, no gating.
+2. **Merge constraint key+enum+container into one stage (S1a)** so `MulticenterBondConstraintAst::from_ast`
+   has its container-iterator consumer immediately — **no `#[cfg(test)]` gating** (B3 split these across
+   S1a/S1b and had to gate).
+3. **The `Molecule` backing arm lands in S3a with the view** (its only constructor is
+   `MulticenterBondView::constraints`) — not a separate stage (B3's S3c was absorbed into S3a anyway).
+
+Naming note (as in B3): the value `electrons` (per-atom `ElectronCountsAst` vector) is distinct from the
+constraint `electron_count` (total `ValueAst`) — both exist, no clash.
+
+**S1 — value + WET constraint surface (`umol-py/src/multicenter.rs`).**
+- **S1a — DONE** *(additive)* — `MulticenterBondConstraintKey { ElectronCount() }` +
+  `MulticenterBondConstraintAst { ElectronCount(Py<ValueAst>) }` (unit key ⇒ infallible `Key::from_ast`,
+  `key()` getter returns the key directly) + `MulticenterBondConstraintsAst` container (uniform mapping API:
+  `new`/`__repr__`/`set`/`pop`/`update`/`__len__`/`__iter__`/`keys`/`values`/`items`/`get`/`__getitem__`/
+  `__delitem__`/`__contains__` + `electron_count` getter/setter + `asdict` `{"electron_count"}`) +
+  `MulticenterBondConstraintsUpdate { Container, Entries }` + the 3 iterators +
+  `multicenter_bond_constraints_asdict`. **No** ring proxy; **no** container `inner_mut` (only `inner()` +
+  cfg-test `from_inner`). `from_ast` **not** gated (container consumes it — the B4 improvement). Verbatim
+  rename of aromatic's constraint surface (its test-quality fixes carried over). Registered the 3 constraint
+  pyclasses (`lib.rs` + `__init__.py`); 17 constraint tests (key/enum/container); 21 Rust unit + 299 pytest
+  green, clippy/fmt clean. Verification: the review workflow failed as **infra** (both runs — agents did the
+  review then returned `null` on structured-output emission); substituted a manual rename-slip scan (zero
+  `Aromatic` leaks) + method-inventory/test-parity diff vs aromatic (identical modulo the 5 deferred view
+  tests). `[dep: existing ValueAst]`
+- **S1b** *(additive)* — `MulticenterBondAst` value pyclass (`new(electrons: ElectronCountsArg, *,
+  charge=None, spin=None, constraints=None)`, `parse`/`__str__`/`__repr__`, getters/setters
+  `electrons`(→`ElectronCountsArg`)/`charge`(→`ValueArg`)/`spin`(→`SpinStateAst`)/`constraints`, `asdict`
+  `{electrons, charge, spin, constraints}`, `inner`/`inner_mut`/`from_inner`) + `MulticenterBondConstraintsView`
+  (live handle, full mapping API + `electron_count` getter/setter, no ring proxy) +
+  `MulticenterBondConstraintsBacking { MulticenterBond(Py<MulticenterBondAst>) }` — **Molecule arm deferred
+  to S3a** — + `MulticenterBondConstraintsArg { Container, View }` + the `MulticenterBondConstraintsUpdate::View`
+  variant/`apply` arm. Reuses the existing `ElectronCountsAst`/`ElectronCountsArg` (no gating). Register value
+  + view (`lib.rs` + `__init__.py`); Rust unit tests. `[dep: S1a]`
+
+**S2 — `from_parts` wiring (`umol-py/src/molecule.rs`).**
+- **S2a** *(additive)* — add `multicenter=Vec::new()` kwarg to `from_parts` (`(atoms, *, bonds=[],
+  dative=[], aromatic=[], multicenter=[])`), wire to `MoleculeParts.multicenter` (Python entry `(list[int],
+  MulticenterBondAst)` → `(Vec<AtomId>, MulticenterBondAst)`). Additive — **no** test-site migration. Extend
+  `test_molecule_ast_from_parts` (assert via `inner().multicenter_bonds()`). `[dep: S1b]`
+
+**S3 — views (`umol-py/src/multicenter.rs` + `molecule.rs`).**
+- **S3a** *(additive)* — `MulticenterBondView` (`id`, read-only `atom_ids -> tuple`, settable
+  `electrons`/`charge`/`spin`/`constraints`, `asdict`; write-through via `multicenter_bond_mut(id)`) +
+  **re-add the `Molecule` backing arm** to `MulticenterBondConstraintsBacking` (+ `read`/`with_mut` Molecule
+  arms) — `MulticenterBondView::constraints` constructs it — + the molecule-backed constraint-view unit test.
+  `[dep: S1b]`
+- **S3b** *(additive)* — `resolve_multicenter_bond_index` (mirrors `resolve_bond_index`) +
+  `MulticenterBondViews` (`mol.multicenter_bonds`: `__len__`/`__repr__`/`__getitem__`/`__setitem__`
+  value-replace/`__iter__` + `connecting(atoms)` + `incident(atom)`) + `MulticenterBondViewIter`. `new` +
+  accessor + registration deferred to S3c → the collection tests construct via struct-literal (no dead
+  code). `[dep: S3a]`
+- **S3c** *(additive)* — `MulticenterBondViews::new` + `mol.multicenter_bonds` accessor (`molecule.rs`) +
+  register `MulticenterBondView`/`MulticenterBondViews` (`lib.rs` + `__init__.py`) +
+  `tests/test_multicenter.py`; maturin rebuild + pytest. `[dep: S3a, S3b]`
+
+Critical path: **S1 → S2 → S3** (linear). No S0, no gating, no deferrable/red stages. After B4, B5–B7
+(noncovalent, stereo) remain; the `electrons.rs` leaf is now shared by aromatic + multicenter.
+
 ### B5 · Noncovalent bond
 
 - Value `NoncovalentBondAst { kind: NoncovalentBondKindAst, constraints }`.

@@ -29,6 +29,9 @@ use crate::{
     element::Element,
     error::ParseError,
     molecule::MoleculeAst,
+    multicenter::{
+        MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsAst,
+    },
     stereo::{
         CisTransStereo, CisTransStereoAst, Permutation, StereoCosetAst, StereoTerm,
         TetrahedralStereo, TetrahedralStereoAst,
@@ -58,6 +61,8 @@ mod element;
 mod error;
 #[cfg(feature = "graph")]
 mod molecule;
+#[cfg(feature = "graph")]
+mod multicenter;
 #[cfg(feature = "graph")]
 mod stereo;
 #[cfg(feature = "graph")]
@@ -117,6 +122,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AromaticSystemConstraintsView>()?;
         module.add_class::<AromaticSystemView>()?;
         module.add_class::<AromaticSystemViews>()?;
+        module.add_class::<MulticenterBondConstraintAst>()?;
+        module.add_class::<MulticenterBondConstraintKey>()?;
+        module.add_class::<MulticenterBondConstraintsAst>()?;
         module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;
