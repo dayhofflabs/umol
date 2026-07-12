@@ -2,13 +2,13 @@
 
 Status: Active — **B1 · Bond slice DONE incl. the view half** (value + WET constraint surface +
 `BondView`/`BondViews` + molecule-backed constraint views; Rust/Python green, clippy clean).
-**B2 · dative slice COMPLETE** (`umol-py/src/dative.rs`: value + WET constraint surface +
-`DativeBondView`/`DativeBondViews` + molecule-backed constraint views; `mol.dative_bonds` accessor;
-`from_atoms_and_bonds` → `from_parts(atoms, *, bonds=[], dative=[])`; 8 dative pyclasses registered;
-242 Rust unit + 266 pytest green, clippy/fmt clean). Next entity per the order **bonds → dative →
-aromatic → …**: **B3 · aromatic-system slice** (`umol-py/src/aromatic.rs`), following the same WET
-template. See *B2 · Dative — staged impl plan* below and *Bond slice — build state + detailed plan* at
-the end for the WET template.
+**B2 · dative slice COMPLETE**; **B3 · aromatic slice in progress** — S0 (new `ElectronCountsAst`
+leaf, `electrons.rs`), S1a (constraint key+enum), S1b (constraints container), **S1c (value pyclass +
+live constraints view) DONE** (`umol-py/src/aromatic.rs`; 7 aromatic pyclasses registered; 281 Rust
+unit + 266 pytest green), **S2 (`from_parts` `aromatic=[]` kwarg) DONE**. Next: **S3** —
+`AromaticSystemView`/`AromaticSystemViews` + `mol.aromatic_systems` + re-add the Molecule constraint
+backing + `tests/test_aromatic.py`. See *B3 · Aromatic — staged impl plan* below and *Bond slice —
+build state + detailed plan* at the end for the WET template.
 Date: 2026-07-09
 Relates: 137 (atom slice — the template being mirrored), 139 (mutability/hashing/equality
 balance), 114 (interning — where stereo/handle-identity deferrals live)
@@ -309,26 +309,43 @@ reuses it (no lopsided dep).
   Adversarial verification workflow (3 review dims → verify) confirmed 1 finding (test-ordering: key
   test before constraint-AST tests, per the skill's group-by-definition-order rule) — fixed; 3 other
   findings refuted as intended. `[dep: ValueAst leaf]`
-- **S1b** *(additive)* — `AromaticSystemConstraintsAst` container: the uniform mapping API
-  (`new`/`set`/`pop`/`update`/`__len__`/`__iter__`/`keys`/`values`/`items`/`get`/`__getitem__`/
-  `__delitem__`/`__contains__`) + `electron_count` getter/setter + `asdict` (`{"electron_count"}`) +
-  `AromaticSystemConstraintsUpdate`/`Arg` + the 3 iterators + `aromatic_system_constraints_asdict`.
-  **No** ring proxy / `RingSizeCounts` / `RingSizeBacking`. `[dep: S1a]`
-- **S1c** *(additive)* — `AromaticSystemAst` value pyclass: `new(electrons: ElectronCountsArg, *,
-  charge=None, spin=None, constraints=None)`, `parse`/`__str__`/`__repr__`, getters/setters
+- **S1b — DONE** *(additive)* — `AromaticSystemConstraintsAst` container: the uniform mapping API
+  (`new`/`__repr__`/`set`/`pop`/`update`/`__len__`/`__iter__`/`keys`/`values`/`items`/`get`/
+  `__getitem__`/`__delitem__`/`__contains__`) + `electron_count` getter/setter + `asdict`
+  (`{"electron_count"}`) + `AromaticSystemConstraintsUpdate { Container, Entries }` + the 3 iterators +
+  `aromatic_system_constraints_asdict`. **No** ring proxy / `RingSizeCounts` / `RingSizeBacking`.
+  Adjustments vs the plan: `AromaticSystemConstraintsUpdate::View` and `AromaticSystemConstraintsArg`
+  **deferred to S1c** (both reference the S1c view type); the container's `inner_mut` **omitted** (its
+  only dative user was the value-backed ring proxy, absent here) — only `inner()` + cfg-test
+  `from_inner`; un-gated `AromaticSystemConstraintAst::from_ast` + `into_py_variant` (iterators consume
+  them). Registered the container; 14 helper-free container test cases; 32 Rust unit + 266 pytest
+  green, clippy/fmt clean. Adversarial verification workflow confirmed 3 test-quality findings
+  (summary-stat-only assertions in `new`/`update_entries`; missing `get` non-None-default branch) —
+  all fixed; 2 findings refuted (a delegating-`keys()` coverage nit, and getitem/delitem ordering that
+  faithfully mirrors dative). `[dep: S1a]`
+- **S1c — DONE** *(additive)* — `AromaticSystemAst` value pyclass: `new(electrons: ElectronCountsArg,
+  *, charge=None, spin=None, constraints=None)`, `parse`/`__str__`/`__repr__`, getters/setters
   `electrons`(→`ElectronCountsArg`)/`charge`(→`ValueArg`)/`spin`(→`SpinStateAst`)/`constraints`,
   `asdict` (`{electrons, charge, spin, constraints}`), `inner`/`inner_mut`/`from_inner`; plus
-  `AromaticSystemConstraintsView` (live handle) + `AromaticSystemConstraintsBacking {
-  AromaticSystem(Py<AromaticSystemAst>) }` — **Molecule arm deferred to S3** (dative lesson: its only
-  constructor is `AromaticSystemView`, so at S1 it would be an unconstructed variant). Register value +
-  constraint pyclasses (`lib.rs` + `__init__.py`); Rust unit tests. `[dep: S0, S1a, S1b]`
+  `AromaticSystemConstraintsView` (live handle, full mapping API + `electron_count` getter/setter, no
+  ring proxy) + `AromaticSystemConstraintsBacking { AromaticSystem(Py<AromaticSystemAst>) }` —
+  **Molecule arm deferred to S3** (its only constructor is `AromaticSystemView`). Added (deferred from
+  S1b): `AromaticSystemConstraintsArg { Container, View }` + the `AromaticSystemConstraintsUpdate::View`
+  variant/`apply` arm. **Un-gated `ElectronCountsAst::from_ast` + `ElectronCountsArg` (S0)** — the value
+  consumes them. Registered value + view (`lib.rs` + `__init__.py`); 13 value/view test cases; 281 Rust
+  unit + 266 pytest green, clippy/fmt clean. Adversarial verification workflow confirmed 3 low
+  test-quality findings (misnamed `new_constraints` test; `spin` asserted via `inner()` not the getter
+  + uncovered `new` spin kwarg; value-test ordering `new`-before-`parse`) — all fixed; 1 refuted.
+  `[dep: S0, S1a, S1b]`
 
 **S2 — `from_parts` wiring (`umol-py/src/molecule.rs`).**
-- **S2a** *(additive)* — add `aromatic=Vec::new()` kwarg to `from_parts` (`(atoms, *, bonds=[],
-  dative=[], aromatic=[])`), wire to `MoleculeParts.aromatic` (Python entry `(list[int],
+- **S2a — DONE** *(additive)* — added `aromatic=Vec::new()` kwarg to `from_parts` (`(atoms, *,
+  bonds=[], dative=[], aromatic=[])`), wired to `MoleculeParts.aromatic` (Python entry `(list[int],
   AromaticSystemAst)` → `(Vec<AtomId>, AromaticSystemAst)`). Additive kwarg — **no** Python test-site
-  migration (unlike dative's rename). Rust unit test asserting via `inner().aromatic_systems()`
-  (no `mol.aromatic_systems` Python accessor until S3, so no Python observable yet). `[dep: S1c]`
+  migration. Extended `test_molecule_ast_from_parts` to cover the aromatic wiring (asserts via
+  `inner().aromatic_systems()` count + `atom_ids`); Python smoke confirms the kwarg is accepted (no
+  `mol.aromatic_systems` accessor until S3). 281 Rust unit + 266 pytest green, clippy/fmt clean.
+  Trivial mechanical mirror of dative's S1b wiring — no verification workflow. `[dep: S1c]`
 
 **S3 — views (`umol-py/src/aromatic.rs` + `molecule.rs`).**
 - **S3a** *(additive)* — `AromaticSystemView`: `id`, read-only `atom_ids -> tuple` (member set),

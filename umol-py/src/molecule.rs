@@ -6,6 +6,7 @@ use umol_ast::ast::{
     AtomId as AstAtomId, MoleculeAst as AstMoleculeAst, MoleculeParts as AstMoleculeParts,
 };
 
+use crate::aromatic::AromaticSystemAst;
 use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
 use crate::dative::{DativeBondAst, DativeBondViews};
@@ -26,14 +27,16 @@ impl MoleculeAst {
     /// A molecule from its parts. Each bond is a `(first, second, bond)` triple:
     /// two atom indices into `atoms` and a `BondAst`. Each dative bond is a
     /// `(donors, acceptor, bond)` triple: a list of donor atom indices, one
-    /// acceptor atom index, and a `DativeBondAst`.
+    /// acceptor atom index, and a `DativeBondAst`. Each aromatic system is an
+    /// `(atoms, system)` pair: a list of member atom indices and an `AromaticSystemAst`.
     #[staticmethod]
-    #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative=Vec::new()))]
+    #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative=Vec::new(), aromatic=Vec::new()))]
     fn from_parts(
         py: Python<'_>,
         atoms: Vec<Py<AtomAst>>,
         bonds: Vec<(u32, u32, Py<BondAst>)>,
         dative: Vec<(Vec<u32>, u32, Py<DativeBondAst>)>,
+        aromatic: Vec<(Vec<u32>, Py<AromaticSystemAst>)>,
     ) -> Self {
         let ast_atoms = atoms
             .iter()
@@ -59,10 +62,20 @@ impl MoleculeAst {
                 )
             })
             .collect();
+        let ast_aromatic = aromatic
+            .iter()
+            .map(|(atoms, system)| {
+                (
+                    atoms.iter().map(|&atom| AstAtomId(atom)).collect(),
+                    system.bind(py).borrow().inner().clone(),
+                )
+            })
+            .collect();
         MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
             atoms: ast_atoms,
             bonds: ast_bonds,
             dative: ast_dative,
+            aromatic: ast_aromatic,
             ..Default::default()
         }))
     }
@@ -118,6 +131,7 @@ impl MoleculeAst {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
+        AromaticSystemAst as AstAromaticSystemAst, AromaticSystemId as AstAromaticSystemId,
         AtomAst, BondAst as AstBondAst, DativeBondAst as AstDativeBondAst,
         DativeBondId as AstDativeBondId,
     };
@@ -153,14 +167,34 @@ mod tests {
                 )
                 .unwrap(),
             )];
-            let molecule = MoleculeAst::from_parts(py, atoms, bonds, dative);
+            let aromatic = vec![(
+                vec![0, 1, 2],
+                Py::new(
+                    py,
+                    AromaticSystemAst::from_inner(AstAromaticSystemAst::from_electrons(vec![
+                        1, 1, 1,
+                    ])),
+                )
+                .unwrap(),
+            )];
+            let molecule = MoleculeAst::from_parts(py, atoms, bonds, dative, aromatic);
             assert_eq!(molecule.inner().atoms().count(), 3);
             assert_eq!(molecule.inner().bonds().count(), 1);
             let dative_bonds = molecule.inner().dative_bonds();
             assert_eq!(dative_bonds.count(), 1);
-            let view = dative_bonds.get(AstDativeBondId(0)).unwrap();
-            assert_eq!(view.acceptor_id(), AstAtomId(1));
-            assert_eq!(view.donor_ids().collect::<Vec<_>>(), vec![AstAtomId(2)]);
+            let dative_view = dative_bonds.get(AstDativeBondId(0)).unwrap();
+            assert_eq!(dative_view.acceptor_id(), AstAtomId(1));
+            assert_eq!(
+                dative_view.donor_ids().collect::<Vec<_>>(),
+                vec![AstAtomId(2)]
+            );
+            let aromatic_systems = molecule.inner().aromatic_systems();
+            assert_eq!(aromatic_systems.count(), 1);
+            let aromatic_view = aromatic_systems.get(AstAromaticSystemId(0)).unwrap();
+            assert_eq!(
+                aromatic_view.atom_ids().collect::<Vec<_>>(),
+                vec![AstAtomId(0), AstAtomId(1), AstAtomId(2)]
+            );
         });
     }
 
