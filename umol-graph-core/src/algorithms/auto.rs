@@ -2,50 +2,14 @@
 
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
-#[cfg(test)]
-use std::{cell::RefCell, mem, os::raw::c_int};
 
-#[cfg(test)]
-use nauty_Traces_sys::*;
 use umol_nauty_sys::{run as run_vendored_nauty, NautyInput};
 
 use crate::graph::{EdgeId, Graph, NodeId};
 
-#[cfg(test)]
-thread_local! {
-    /// Accumulates the generators nauty emits via `userautomproc` during one
-    /// `sparsenauty` call; cleared before the call and drained right after. The
-    /// crate enables nauty's `tls` feature, so each thread runs independently.
-    static GENERATORS: RefCell<Vec<Vec<NodeId>>> = const { RefCell::new(Vec::new()) };
-}
-
-/// nauty `userautomproc`: invoked once per generator with its permutation image
-/// `perm` over the `n` vertices (`perm[i]` is the image of vertex `i`).
-#[cfg(test)]
-unsafe extern "C" fn capture_generator(
-    _count: c_int,
-    perm: *mut c_int,
-    _orbits: *mut c_int,
-    _numorbits: c_int,
-    _stabvertex: c_int,
-    n: c_int,
-) {
-    let image: Vec<NodeId> = (0..n as usize)
-        .map(|i| NodeId(unsafe { *perm.add(i) } as u32))
-        .collect();
-    GENERATORS.with(|g| g.borrow_mut().push(image));
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AutomorphismAlgorithm {
     Nauty,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[cfg(test)]
-enum AutoGroupOrder {
-    Exact(u32),
-    Approx(f64),
 }
 
 /// Size of an automorphism group, exact when representable without loss and
@@ -106,17 +70,6 @@ fn exact_scientific_value(mantissa: f64, exponent: i32) -> Option<u128> {
     (exact as f64 == rounded).then_some(exact)
 }
 
-#[derive(Debug, Clone)]
-#[cfg(test)]
-struct LegacyAutomorphism {
-    orbits: Vec<NodeId>,
-    canonical_lab: Vec<NodeId>,
-    node_count: usize,
-    orbit_count: usize,
-    group_order: AutoGroupOrder,
-    generators: Vec<Vec<NodeId>>,
-}
-
 /// Canonical-labeling and automorphism-group output independent of the solver
 /// backend that produced it.
 #[derive(Debug, Clone, PartialEq)]
@@ -137,136 +90,6 @@ impl Graph {
     ) -> AutomorphismOutput {
         match alg {
             AutomorphismAlgorithm::Nauty => self.automorphisms_vendored_nauty(node_color),
-        }
-    }
-
-    // McKay & Piperno 2014 "Practical graph isomorphism, II". Impl: nauty-Traces-sys FFI.
-    #[cfg(test)]
-    fn automorphisms_nauty<C: Ord + Copy>(
-        &self,
-        node_color: impl Fn(NodeId) -> C,
-    ) -> LegacyAutomorphism {
-        let n = self.node_count();
-
-        if n == 0 {
-            return LegacyAutomorphism {
-                orbits: vec![],
-                canonical_lab: vec![],
-                node_count: 0,
-                orbit_count: 0,
-                group_order: AutoGroupOrder::Exact(1),
-                generators: vec![],
-            };
-        }
-
-        let mut indexed: Vec<(usize, C)> = self
-            .node_ids()
-            .map(|id| (id.index(), node_color(id)))
-            .collect();
-        indexed.sort_by_key(|&(_, c)| c);
-
-        let mut lab = vec![0 as c_int; n];
-        let mut ptn = vec![0 as c_int; n];
-        for (pos, &(v, _)) in indexed.iter().enumerate() {
-            lab[pos] = v as c_int;
-        }
-        for pos in 0..n.saturating_sub(1) {
-            ptn[pos] = if indexed[pos].1 == indexed[pos + 1].1 {
-                1
-            } else {
-                0
-            };
-        }
-
-        let edge_count = self.edge_ids().count();
-        let n_dir_edges = 2 * edge_count;
-        let mut degree = vec![0usize; n];
-        for eid in self.edge_ids() {
-            let [a, b] = self.edge_endpoints(eid);
-            degree[a.index()] += 1;
-            degree[b.index()] += 1;
-        }
-
-        let mut sg = SparseGraph::new(n, n_dir_edges);
-        let mut pos = 0usize;
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..n {
-            sg.v[i] = pos;
-            sg.d[i] = degree[i] as c_int;
-            pos += degree[i];
-        }
-
-        let mut offset = vec![0usize; n];
-        for eid in self.edge_ids() {
-            let [a, b] = self.edge_endpoints(eid);
-            let ai = a.index();
-            let bi = b.index();
-            sg.e[sg.v[ai] + offset[ai]] = bi as c_int;
-            offset[ai] += 1;
-            sg.e[sg.v[bi] + offset[bi]] = ai as c_int;
-            offset[bi] += 1;
-        }
-
-        let mut orbits = vec![0 as c_int; n];
-        let mut options = optionblk::default_sparse();
-        options.getcanon = TRUE;
-        options.defaultptn = FALSE;
-        options.userautomproc = Some(capture_generator);
-        let mut stats = statsblk::default();
-        let mut cg = sparsegraph::default();
-
-        GENERATORS.with(|g| g.borrow_mut().clear());
-        let m = SETWORDSNEEDED(n);
-        unsafe {
-            nauty_check(
-                WORDSIZE as c_int,
-                m as c_int,
-                n as c_int,
-                NAUTYVERSIONID as c_int,
-            );
-            sparsenauty(
-                &mut (&mut sg).into(),
-                lab.as_mut_ptr(),
-                ptn.as_mut_ptr(),
-                orbits.as_mut_ptr(),
-                &mut options,
-                &mut stats,
-                &mut cg,
-            );
-            SG_FREE(&mut cg);
-        }
-
-        let generators = GENERATORS.with(|g| mem::take(&mut *g.borrow_mut()));
-        let orbits: Vec<NodeId> = orbits.iter().map(|&o| NodeId(o as u32)).collect();
-        let canonical_lab: Vec<NodeId> = lab.iter().map(|&v| NodeId(v as u32)).collect();
-
-        let orbit_count = {
-            let mut reps = HashSet::new();
-            for &o in &orbits {
-                reps.insert(o);
-            }
-            reps.len()
-        };
-
-        let group_order = {
-            let g1 = stats.grpsize1;
-            let g2 = stats.grpsize2;
-            if g2 == 0 && g1 >= 0.0 && g1 <= u32::MAX as f64 && g1.fract() == 0.0 {
-                AutoGroupOrder::Exact(g1 as u32)
-            } else if g2 == 0 {
-                AutoGroupOrder::Approx(g1)
-            } else {
-                AutoGroupOrder::Approx(g1 * 10.0_f64.powi(g2))
-            }
-        };
-
-        LegacyAutomorphism {
-            orbits,
-            canonical_lab,
-            node_count: n,
-            orbit_count,
-            group_order,
-            generators,
         }
     }
 
@@ -409,36 +232,6 @@ impl Graph {
     }
 }
 
-#[cfg(test)]
-impl LegacyAutomorphism {
-    pub fn node_count(&self) -> usize {
-        self.node_count
-    }
-
-    pub fn orbit_count(&self) -> usize {
-        self.orbit_count
-    }
-
-    pub fn same_orbit(&self, a: NodeId, b: NodeId) -> bool {
-        self.orbits[a.index()] == self.orbits[b.index()]
-    }
-
-    pub fn canonical_labeling(&self) -> &[NodeId] {
-        &self.canonical_lab
-    }
-
-    pub fn auto_group_order(&self) -> AutoGroupOrder {
-        self.group_order
-    }
-
-    /// A generating set of the automorphism group, each generator a permutation
-    /// image over `0..node_count` (`generators()[k][i]` is the image of node `i`).
-    /// Empty iff the group is trivial.
-    pub fn generators(&self) -> &[Vec<NodeId>] {
-        &self.generators
-    }
-}
-
 impl AutomorphismOutput {
     pub fn node_count(&self) -> usize {
         self.node_count
@@ -482,8 +275,6 @@ mod tests {
     use super::AutomorphismAlgorithm::Nauty;
     use super::*;
     use crate::union_find::UnionFind;
-
-    const GROUP_ORDER_RELATIVE_TOLERANCE: f64 = 1.0e-12;
 
     #[rstest]
     #[case::integer(8.0, 0, AutomorphismGroupOrder::Exact(8))]
@@ -589,66 +380,6 @@ mod tests {
         }
     }
 
-    fn canonical_form(
-        graph: &Graph,
-        colors: &[u8],
-        canonical_labels: &[NodeId],
-    ) -> (Vec<u8>, Vec<(usize, usize)>) {
-        let mut positions = vec![0; graph.node_count()];
-        for (position, &vertex) in canonical_labels.iter().enumerate() {
-            positions[vertex.index()] = position;
-        }
-        let canonical_colors = canonical_labels
-            .iter()
-            .map(|vertex| colors[vertex.index()])
-            .collect();
-        let mut canonical_edges: Vec<_> = graph
-            .edge_ids()
-            .map(|edge| {
-                let [first, second] = graph.edge_endpoints(edge);
-                let first = positions[first.index()];
-                let second = positions[second.index()];
-                (first.min(second), first.max(second))
-            })
-            .collect();
-        canonical_edges.sort_unstable();
-        (canonical_colors, canonical_edges)
-    }
-
-    fn generated_group(node_count: usize, generators: &[Vec<NodeId>]) -> HashSet<Vec<NodeId>> {
-        let identity: Vec<NodeId> = (0..node_count as u32).map(NodeId).collect();
-        let mut group = HashSet::from([identity.clone()]);
-        let mut frontier = vec![identity];
-        while let Some(element) = frontier.pop() {
-            for generator in generators {
-                let product: Vec<NodeId> = element
-                    .iter()
-                    .map(|&image| generator[image.index()])
-                    .collect();
-                if group.insert(product.clone()) {
-                    frontier.push(product);
-                }
-            }
-        }
-        group
-    }
-
-    fn old_group_order(order: AutoGroupOrder) -> f64 {
-        match order {
-            AutoGroupOrder::Exact(value) => value as f64,
-            AutoGroupOrder::Approx(value) => value,
-        }
-    }
-
-    fn vendored_group_order(order: AutomorphismGroupOrder) -> f64 {
-        match order {
-            AutomorphismGroupOrder::Exact(value) => value as f64,
-            AutomorphismGroupOrder::Scientific { mantissa, exponent } => {
-                mantissa * 10.0_f64.powi(exponent)
-            }
-        }
-    }
-
     #[rstest]
     #[case::empty(Graph::default(), vec![], 0, AutomorphismGroupOrder::Exact(1), vec![], vec![])]
     #[case::singleton(
@@ -718,55 +449,6 @@ mod tests {
             assert!(!aut.same_orbit(NodeId(a), NodeId(b)));
         }
         assert_automorphism_semantics(&graph, &colors, &aut);
-    }
-
-    #[rstest]
-    #[case::empty(Graph::default(), vec![])]
-    #[case::colored_path(Graph::new(3, &[[0, 1], [1, 2]]), vec![0, 1, 0])]
-    #[case::uniform_square(
-        Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]),
-        vec![0, 0, 0, 0]
-    )]
-    #[case::disconnected_edges(
-        Graph::new(4, &[[0, 1], [2, 3]]),
-        vec![0, 0, 0, 0]
-    )]
-    #[case::complete_5(
-        Graph::new(
-            5,
-            &[
-                [0, 1], [0, 2], [0, 3], [0, 4], [1, 2],
-                [1, 3], [1, 4], [2, 3], [2, 4], [3, 4]
-            ]
-        ),
-        vec![0, 0, 0, 0, 0]
-    )]
-    fn test_graph_automorphisms_vendored_nauty(#[case] graph: Graph, #[case] colors: Vec<u8>) {
-        let old = graph.automorphisms_nauty(|node| colors[node.index()]);
-        let vendored = graph.automorphisms_vendored_nauty(|node| colors[node.index()]);
-
-        assert_eq!(vendored.node_count(), old.node_count());
-        assert_eq!(vendored.orbit_count(), old.orbit_count());
-        for first in graph.node_ids() {
-            for second in graph.node_ids() {
-                assert_eq!(
-                    vendored.same_orbit(first, second),
-                    old.same_orbit(first, second)
-                );
-            }
-        }
-        assert_eq!(
-            canonical_form(&graph, &colors, vendored.canonical_labels()),
-            canonical_form(&graph, &colors, old.canonical_labeling())
-        );
-        let old_order = old_group_order(old.auto_group_order());
-        let vendored_order = vendored_group_order(vendored.group_order());
-        let tolerance = old_order.abs().max(1.0) * GROUP_ORDER_RELATIVE_TOLERANCE;
-        assert!((old_order - vendored_order).abs() <= tolerance);
-        assert_eq!(
-            generated_group(graph.node_count(), vendored.generators()),
-            generated_group(graph.node_count(), old.generators())
-        );
     }
 
     #[rstest]
