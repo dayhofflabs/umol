@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::fmt::{self, Display, Formatter};
 use std::mem;
 use std::os::raw::c_int;
 
@@ -43,6 +44,64 @@ pub enum AutoGroupOrder {
     Approx(f64),
 }
 
+/// Size of an automorphism group, exact when representable without loss and
+/// otherwise retained in the solver's scientific representation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AutomorphismGroupOrder {
+    Exact(u128),
+    Scientific { mantissa: f64, exponent: i32 },
+}
+
+impl AutomorphismGroupOrder {
+    /// Construct from `mantissa × 10^exponent`, promoting to [`Self::Exact`]
+    /// only when the floating-point representation proves the integer exactly.
+    pub fn from_scientific(mantissa: f64, exponent: i32) -> Self {
+        match exact_scientific_value(mantissa, exponent) {
+            Some(value) => Self::Exact(value),
+            None => Self::Scientific { mantissa, exponent },
+        }
+    }
+
+    /// The exact group order when it can be recovered without loss.
+    pub fn exact_value(self) -> Option<u128> {
+        match self {
+            Self::Exact(value) => Some(value),
+            Self::Scientific { mantissa, exponent } => exact_scientific_value(mantissa, exponent),
+        }
+    }
+}
+
+impl Display for AutomorphismGroupOrder {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Exact(value) => Display::fmt(value, formatter),
+            Self::Scientific { mantissa, exponent } => {
+                write!(formatter, "{mantissa}e{exponent}")
+            }
+        }
+    }
+}
+
+fn exact_scientific_value(mantissa: f64, exponent: i32) -> Option<u128> {
+    const MAX_EXACT_F64_INTEGER: f64 = 9_007_199_254_740_992.0;
+    const EXACT_INTEGER_ROUNDING_ULPS: f64 = 2.0;
+
+    let exponent = u32::try_from(exponent).ok()?;
+    let factor = 10_u128.checked_pow(exponent)?;
+    let value = mantissa * factor as f64;
+    let rounded = value.round();
+    let rounding_tolerance = value.abs().max(1.0) * f64::EPSILON * EXACT_INTEGER_ROUNDING_ULPS;
+    if !value.is_finite()
+        || value < 0.0
+        || value > MAX_EXACT_F64_INTEGER
+        || (value - rounded).abs() > rounding_tolerance
+    {
+        return None;
+    }
+    let exact = rounded as u128;
+    (exact as f64 == rounded).then_some(exact)
+}
+
 #[derive(Debug, Clone)]
 pub struct Automorphism {
     orbits: Vec<NodeId>,
@@ -50,6 +109,18 @@ pub struct Automorphism {
     node_count: usize,
     orbit_count: usize,
     group_order: AutoGroupOrder,
+    generators: Vec<Vec<NodeId>>,
+}
+
+/// Canonical-labeling and automorphism-group output independent of the solver
+/// backend that produced it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AutomorphismOutput {
+    orbits: Vec<NodeId>,
+    canonical_labels: Vec<NodeId>,
+    node_count: usize,
+    orbit_count: usize,
+    group_order: AutomorphismGroupOrder,
     generators: Vec<Vec<NodeId>>,
 }
 
@@ -311,6 +382,38 @@ impl Automorphism {
     }
 }
 
+impl AutomorphismOutput {
+    pub fn node_count(&self) -> usize {
+        self.node_count
+    }
+
+    pub fn orbit_count(&self) -> usize {
+        self.orbit_count
+    }
+
+    pub fn orbit_of(&self, vertex: NodeId) -> NodeId {
+        self.orbits[vertex.index()]
+    }
+
+    pub fn same_orbit(&self, first: NodeId, second: NodeId) -> bool {
+        self.orbits[first.index()] == self.orbits[second.index()]
+    }
+
+    pub fn canonical_labels(&self) -> &[NodeId] {
+        &self.canonical_labels
+    }
+
+    pub fn group_order(&self) -> AutomorphismGroupOrder {
+        self.group_order
+    }
+
+    /// A generating set of the automorphism group, each generator a
+    /// permutation image over `0..node_count`.
+    pub fn generators(&self) -> &[Vec<NodeId>] {
+        &self.generators
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
@@ -322,6 +425,70 @@ mod tests {
     use super::AutomorphismAlgorithm::Nauty;
     use super::*;
     use crate::union_find::UnionFind;
+
+    #[rstest]
+    #[case::integer(8.0, 0, AutomorphismGroupOrder::Exact(8))]
+    #[case::positive_exponent(130.7674368, 10, AutomorphismGroupOrder::Exact(1_307_674_368_000))]
+    #[case::negative_exponent(
+        1.5,
+        -1,
+        AutomorphismGroupOrder::Scientific { mantissa: 1.5, exponent: -1 }
+    )]
+    #[case::fractional(
+        1.5,
+        0,
+        AutomorphismGroupOrder::Scientific { mantissa: 1.5, exponent: 0 }
+    )]
+    #[case::overflow(
+        1.0,
+        39,
+        AutomorphismGroupOrder::Scientific { mantissa: 1.0, exponent: 39 }
+    )]
+    #[case::non_finite(
+        f64::INFINITY,
+        0,
+        AutomorphismGroupOrder::Scientific { mantissa: f64::INFINITY, exponent: 0 }
+    )]
+    fn test_automorphism_group_order_from_scientific(
+        #[case] mantissa: f64,
+        #[case] exponent: i32,
+        #[case] expected: AutomorphismGroupOrder,
+    ) {
+        assert_eq!(
+            AutomorphismGroupOrder::from_scientific(mantissa, exponent),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::exact(AutomorphismGroupOrder::Exact(12), Some(12))]
+    #[case::recoverable(
+        AutomorphismGroupOrder::Scientific { mantissa: 2.5, exponent: 2 },
+        Some(250)
+    )]
+    #[case::fractional(
+        AutomorphismGroupOrder::Scientific { mantissa: 2.5, exponent: 0 },
+        None
+    )]
+    fn test_automorphism_group_order_exact_value(
+        #[case] order: AutomorphismGroupOrder,
+        #[case] expected: Option<u128>,
+    ) {
+        assert_eq!(order.exact_value(), expected);
+    }
+
+    #[rstest]
+    #[case::exact(AutomorphismGroupOrder::Exact(12), "12")]
+    #[case::scientific(
+        AutomorphismGroupOrder::Scientific { mantissa: 1.25, exponent: 20 },
+        "1.25e20"
+    )]
+    fn test_automorphism_group_order_display(
+        #[case] order: AutomorphismGroupOrder,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(order.to_string(), expected);
+    }
 
     fn assert_automorphism_semantics<C: Copy + Debug + Eq>(
         graph: &Graph,
@@ -593,5 +760,31 @@ mod tests {
             Nauty,
         );
         assert_ne!(key_a, key_b);
+    }
+
+    #[rstest]
+    #[case::two_orbits(AutomorphismOutput {
+        orbits: vec![NodeId(0), NodeId(0), NodeId(2)],
+        canonical_labels: vec![NodeId(2), NodeId(0), NodeId(1)],
+        node_count: 3,
+        orbit_count: 2,
+        group_order: AutomorphismGroupOrder::Exact(2),
+        generators: vec![vec![NodeId(1), NodeId(0), NodeId(2)]],
+    })]
+    fn test_automorphism_output_queries(#[case] output: AutomorphismOutput) {
+        assert_eq!(output.node_count(), 3);
+        assert_eq!(output.orbit_count(), 2);
+        assert_eq!(output.orbit_of(NodeId(1)), NodeId(0));
+        assert!(output.same_orbit(NodeId(0), NodeId(1)));
+        assert!(!output.same_orbit(NodeId(0), NodeId(2)));
+        assert_eq!(
+            output.canonical_labels(),
+            &[NodeId(2), NodeId(0), NodeId(1)]
+        );
+        assert_eq!(output.group_order(), AutomorphismGroupOrder::Exact(2));
+        assert_eq!(
+            output.generators(),
+            &[vec![NodeId(1), NodeId(0), NodeId(2)]]
+        );
     }
 }
