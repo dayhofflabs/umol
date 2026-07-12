@@ -504,9 +504,7 @@ pub(super) fn read_noncovalent_bond_constraint_dsl(
 ) -> Result<NoncovalentBondConstraintDsl, EdnError> {
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
-        "intramolecular" => {
-            NoncovalentBondConstraintDsl::Intramolecular(read_boolean_dsl(de)?.0)
-        }
+        "intramolecular" => NoncovalentBondConstraintDsl::Intramolecular(read_boolean_dsl(de)?.0),
         other => {
             return Err(DeError::UnknownField {
                 key: other.to_string(),

@@ -248,6 +248,16 @@ proptest! {
     }
 
     #[test]
+    fn test_noncovalent_bond_ast_lattice_laws(
+        a in noncovalent_bond_ast_strategy(),
+        b in noncovalent_bond_ast_strategy(),
+        c in noncovalent_bond_ast_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
     fn test_atom_constraints_lattice_laws(
         a in atom_constraints_strategy(),
         b in atom_constraints_strategy(),
@@ -292,6 +302,16 @@ proptest! {
         a in optional_multicenter_electron_count(),
         b in optional_multicenter_electron_count(),
         c in optional_multicenter_electron_count(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_noncovalent_bond_constraints_lattice_laws(
+        a in noncovalent_bond_constraints_strategy(),
+        b in noncovalent_bond_constraints_strategy(),
+        c in noncovalent_bond_constraints_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;

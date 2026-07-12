@@ -20,7 +20,8 @@ pub(crate) use umol_ast::ast::{
     IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst,
     MoleculeConstraint, MoleculeParts, MulticenterBondAst, MulticenterBondConstraintAst,
     MulticenterBondConstraintKey, MulticenterBondConstraintsAst, MulticenterBondHandle,
-    MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondHandle,
+    MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
+    NoncovalentBondConstraintKey, NoncovalentBondConstraintsAst, NoncovalentBondHandle,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, OrientedLigandPermutation,
     RelOp, RelationalConstraint, RingScope, SpinStateAst, StereoAtomAst, StereoAtomConstraintAst,
     StereoAtomConstraintsAst, StereoAtomId, StereoBondAst, StereoBondConstraintAst,
@@ -661,11 +662,33 @@ pub(crate) fn noncovalent_bond_kind_ast_strategy() -> impl Strategy<Value = Nonc
     ]
 }
 
-pub(crate) fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = NoncovalentBondAst> {
-    prop::sample::select(NONCOVALENT_KINDS).prop_map(|kind| NoncovalentBondAst {
-        kind: NoncovalentBondKindAst::Lit(kind),
-        constraints: Default::default(),
+pub(crate) fn noncovalent_bond_constraint_strategy() -> BoxedStrategy<NoncovalentBondConstraintAst>
+{
+    any::<bool>()
+        .prop_map(|b| NoncovalentBondConstraintAst::Intramolecular(BooleanAst::Lit(b)))
+        .boxed()
+}
+
+pub(crate) fn noncovalent_bond_constraints_strategy(
+) -> impl Strategy<Value = NoncovalentBondConstraintsAst> {
+    prop::collection::vec(noncovalent_bond_constraint_strategy(), 0..=1).prop_map(|list| {
+        let mut cs = NoncovalentBondConstraintsAst::new();
+        for c in list {
+            cs.set(c);
+        }
+        cs.canonicalize().unwrap_or_default()
     })
+}
+
+pub(crate) fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = NoncovalentBondAst> {
+    (
+        prop::sample::select(NONCOVALENT_KINDS),
+        noncovalent_bond_constraints_strategy(),
+    )
+        .prop_map(|(kind, constraints)| NoncovalentBondAst {
+            kind: NoncovalentBondKindAst::Lit(kind),
+            constraints,
+        })
 }
 
 /// Coset forms that round-trip through both the entity `:type` string and the

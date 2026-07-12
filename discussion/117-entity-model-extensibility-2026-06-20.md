@@ -244,8 +244,15 @@ not any design.
   undetermined explicitly (`#I*`) so a constraint→undetermined change round-trips. Purely additive —
   4551 umol-ast tests pass, workspace green. Mirrored the dative `#a` predicate machinery exactly; the
   only asymmetry is noncovalent's single predicate vs dative's two.
-- **C / D pending.** C = property strategies + lattice proptests, D = resume B5. `[dep: A]` each;
-  (B ∥ C) → D.
+- **C done (2026-07-12).** `noncovalent_bond_constraint(s)_strategy` + wired into
+  `noncovalent_bond_ast_strategy`; `test_noncovalent_bond_ast_lattice_laws` +
+  `test_noncovalent_bond_constraints_lattice_laws`. The high-value side effect: the *existing*
+  molecule/reaction/edit/substructure round-trip proptests now generate noncovalent `#I` constraints and
+  drive them through the whole Stage A pipeline (delta ↔ edit, transact + undo, reaction lowering, EDN
+  render, string parse) — 111 property tests pass, so the Stage A threading is round-trip- and
+  lattice-law-clean under fuzzing, not just at the hand-written cases. Also filled a pre-existing gap:
+  there was no entity-level `NoncovalentBondAst` lattice test at all (the bond was kind-only until now).
+- **D pending.** Resume B5 (Python noncovalent slice). `[dep: A (+B for a Python parse test)]`.
 
 ## Open decisions
 

@@ -2480,9 +2480,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                                 }
                             }
                         }
-                        NoncovalentBondDelta::ModifyConstraint { id: j, old, new }
-                            if *j == id =>
-                        {
+                        NoncovalentBondDelta::ModifyConstraint { id: j, old, new } if *j == id => {
                             match new {
                                 Some(c) => {
                                     partial.constraints.set(c.clone());

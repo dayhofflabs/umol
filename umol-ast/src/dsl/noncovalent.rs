@@ -154,9 +154,9 @@ fn noncovalent_bond_predicate(i: &mut &str) -> PResult<NoncovalentBondPredicate>
                 ))
             })
             .parse_next(i),
-        p if p.starts_with('#') => Err(ErrMode::Cut(
-            ParseError::UnknownNoncovalentBondPredicate(p.to_string()),
-        )),
+        p if p.starts_with('#') => Err(ErrMode::Cut(ParseError::UnknownNoncovalentBondPredicate(
+            p.to_string(),
+        ))),
         _ => Err(ErrMode::Cut(ParseError::TrailingInput(start.to_string()))),
     }
 }

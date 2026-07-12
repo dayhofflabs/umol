@@ -499,9 +499,8 @@ mod tests {
 
     #[rstest]
     fn test_noncovalent_bond_constraints_ast_iter() {
-        let cs = NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(
-            true,
-        ));
+        let cs =
+            NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true));
         let collected: Vec<_> = cs.iter().cloned().collect();
         assert_eq!(
             collected,
@@ -623,18 +622,16 @@ mod tests {
 
     #[rstest]
     fn test_noncovalent_bond_constraints_ast_clear() {
-        let mut cs = NoncovalentBondConstraintsAst::from(
-            NoncovalentBondConstraintAst::intramolecular(true),
-        );
+        let mut cs =
+            NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true));
         cs.clear();
         assert_eq!(cs, NoncovalentBondConstraintsAst::new());
     }
 
     #[rstest]
     fn test_noncovalent_bond_constraints_ast_take() {
-        let mut cs = NoncovalentBondConstraintsAst::from(
-            NoncovalentBondConstraintAst::intramolecular(true),
-        );
+        let mut cs =
+            NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true));
         let drained: Vec<_> = cs.take().collect();
         assert_eq!(
             drained,
@@ -645,9 +642,8 @@ mod tests {
 
     #[rstest]
     fn test_noncovalent_bond_constraints_ast_compact() {
-        let cs = NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(
-            true,
-        ));
+        let cs =
+            NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true));
         let compaction = IdCompaction::new(
             Compaction::new(Vec::new(), Vec::new()),
             Vec::new(),
@@ -739,9 +735,8 @@ mod tests {
 
     #[rstest]
     fn test_noncovalent_bond_constraints_ast_into_iter() {
-        let cs = NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(
-            true,
-        ));
+        let cs =
+            NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true));
         let collected: Vec<_> = cs.into_iter().collect();
         assert_eq!(
             collected,
