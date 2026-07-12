@@ -16,6 +16,10 @@ use crate::{
         AtomConstraintsView, AtomRingSizeCounts, MulticenterValenceAst, RingMembershipAst,
         RingScope,
     },
+    dative::{
+        DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst,
+        DativeBondConstraintsView, DativeBondRingSizeCounts,
+    },
     element::Element,
     error::ParseError,
     molecule::MoleculeAst,
@@ -36,6 +40,8 @@ mod boolean;
 mod constraint;
 #[cfg(feature = "graph")]
 mod convert;
+#[cfg(feature = "graph")]
+mod dative;
 #[cfg(feature = "graph")]
 mod element;
 #[cfg(feature = "graph")]
@@ -85,6 +91,12 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<BondRingSizeCounts>()?;
         module.add_class::<BondView>()?;
         module.add_class::<BondViews>()?;
+        module.add_class::<DativeBondAst>()?;
+        module.add_class::<DativeBondConstraintAst>()?;
+        module.add_class::<DativeBondConstraintKey>()?;
+        module.add_class::<DativeBondConstraintsAst>()?;
+        module.add_class::<DativeBondConstraintsView>()?;
+        module.add_class::<DativeBondRingSizeCounts>()?;
         module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;

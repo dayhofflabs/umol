@@ -2216,12 +2216,12 @@ already exist — no work there.
 Python (140) mirrors: `MoleculeParts`-style construction, `mol.join(other)`,
 `mol.split()`, and none of the overlay-privileging surface.
 
-### Remapping / correspondence consolidation (2026-07-09) **Won't do**
+### Remapping / correspondence consolidation (2026-07-09) **SKIPPED**
 
 `MoleculeCorrespondence` becomes load-bearing (join/split return it), which surfaced a
 redundant twin. Resolution:
 
-- **Retire `IdRemapping`; use `MoleculeCorrespondence` everywhere.** Both are the same shape
+- **SKIPPED** **Retire `IdRemapping`; use `MoleculeCorrespondence` everywhere.** Both are the same shape
   — 8 per-family maps — but `IdRemapping`'s per-family primitive is `HashMap<XId,XId>` (total,
   forward-only, heavy) while `MoleculeCorrespondence`'s is `Correspondence<XId>` (`Vec<(Id,Id)>`
   sorted by left — lighter, and it does the partial case too). Every `IdRemapping` use is a
@@ -2236,7 +2236,7 @@ redundant twin. Resolution:
   dense-left case, so `remap_delta`'s hot path keeps O(1)). Bonus: `MoleculeCorrespondence` can
   *derive* all eight families from just the atom correspondence, simplifying several producers.
 
-- **Keep `Remapping` (graph-core).** *Not* the same call. `Remapping` is a **dense** `{ Vec<NodeId>,
+- **SKIPPED** **Keep `Remapping` (graph-core).** *Not* the same call. `Remapping` is a **dense** `{ Vec<NodeId>,
   Vec<EdgeId> }` (index = old id → new id), O(1) `map_node`/`map_edge` — the primitive the
   relation sets reindex through (`RelationParticipant::remap` / `RelationSet::apply_remapping`,
   the ~5 reindex sites + `StereoLigand::remap`). Against `Correspondence` it is *lighter* (half
