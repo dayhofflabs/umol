@@ -22,9 +22,9 @@ from umol import (
 
 def ethene():
     # two carbons joined by one double bond (bond id 0, atoms 0-1)
-    return MoleculeAst.from_atoms_and_bonds(
+    return MoleculeAst.from_parts(
         [AtomAst(Element("C")), AtomAst(Element("C"))],
-        [(0, 1, BondAst(2))],
+        bonds=[(0, 1, BondAst(2))],
     )
 
 
@@ -570,9 +570,9 @@ def test_bondviews_iter():
 
 
 def test_bondviews_connecting():
-    mol = MoleculeAst.from_atoms_and_bonds(
+    mol = MoleculeAst.from_parts(
         [AtomAst(Element("C")), AtomAst(Element("C")), AtomAst(Element("C"))],
-        [(0, 1, BondAst(1))],
+        bonds=[(0, 1, BondAst(1))],
     )
     assert mol.bonds.connecting(0, 1).id == 0
     assert mol.bonds.connecting(1, 0).id == 0

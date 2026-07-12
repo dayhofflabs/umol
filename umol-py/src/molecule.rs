@@ -8,6 +8,7 @@ use umol_ast::ast::{
 
 use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
+use crate::dative::DativeBondAst;
 
 /// A molecule: the owned graph-AST root.
 #[pyclass(eq)]
@@ -22,15 +23,17 @@ impl MoleculeAst {
         Self(AstMoleculeAst::new())
     }
 
-    /// A molecule from a sequence of atoms and bonds. Each bond is a
-    /// `(first, second, bond)` triple: two atom indices into `atoms` and a
-    /// `BondAst` value carrying the bond's order/charge/spin/constraints.
+    /// A molecule from its parts. Each bond is a `(first, second, bond)` triple:
+    /// two atom indices into `atoms` and a `BondAst`. Each dative bond is a
+    /// `(donors, acceptor, bond)` triple: a list of donor atom indices, one
+    /// acceptor atom index, and a `DativeBondAst`.
     #[staticmethod]
-    #[pyo3(signature = (atoms, bonds=Vec::new()))]
-    fn from_atoms_and_bonds(
+    #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative=Vec::new()))]
+    fn from_parts(
         py: Python<'_>,
         atoms: Vec<Py<AtomAst>>,
         bonds: Vec<(u32, u32, Py<BondAst>)>,
+        dative: Vec<(Vec<u32>, u32, Py<DativeBondAst>)>,
     ) -> Self {
         let ast_atoms = atoms
             .iter()
@@ -46,9 +49,20 @@ impl MoleculeAst {
                 )
             })
             .collect();
+        let ast_dative = dative
+            .iter()
+            .map(|(donors, acceptor, bond)| {
+                (
+                    donors.iter().map(|&donor| AstAtomId(donor)).collect(),
+                    AstAtomId(*acceptor),
+                    bond.bind(py).borrow().inner().clone(),
+                )
+            })
+            .collect();
         MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
             atoms: ast_atoms,
             bonds: ast_bonds,
+            dative: ast_dative,
             ..Default::default()
         }))
     }
@@ -97,14 +111,51 @@ impl MoleculeAst {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::AtomAst;
+    use umol_ast::ast::{
+        AtomAst, BondAst as AstBondAst, DativeBondAst as AstDativeBondAst,
+        DativeBondId as AstDativeBondId,
+    };
     use umol_chem::element::Element;
 
     use super::*;
+    use crate::atom::AtomAst as PyAtomAst;
 
     #[rstest]
     fn test_molecule_ast_new() {
         assert_eq!(MoleculeAst::new().inner().atoms().count(), 0);
+    }
+
+    #[rstest]
+    fn test_molecule_ast_from_parts() {
+        Python::attach(|py| {
+            let atoms = vec![
+                Py::new(py, PyAtomAst::from_inner(AtomAst::from_element(Element::C))).unwrap(),
+                Py::new(py, PyAtomAst::from_inner(AtomAst::from_element(Element::B))).unwrap(),
+                Py::new(py, PyAtomAst::from_inner(AtomAst::from_element(Element::N))).unwrap(),
+            ];
+            let bonds = vec![(
+                0,
+                1,
+                Py::new(py, BondAst::from_inner(AstBondAst::from_order(1))).unwrap(),
+            )];
+            let dative = vec![(
+                vec![2],
+                1,
+                Py::new(
+                    py,
+                    DativeBondAst::from_inner(AstDativeBondAst::from_order(1)),
+                )
+                .unwrap(),
+            )];
+            let molecule = MoleculeAst::from_parts(py, atoms, bonds, dative);
+            assert_eq!(molecule.inner().atoms().count(), 3);
+            assert_eq!(molecule.inner().bonds().count(), 1);
+            let dative_bonds = molecule.inner().dative_bonds();
+            assert_eq!(dative_bonds.count(), 1);
+            let view = dative_bonds.get(AstDativeBondId(0)).unwrap();
+            assert_eq!(view.acceptor_id(), AstAtomId(1));
+            assert_eq!(view.donor_ids().collect::<Vec<_>>(), vec![AstAtomId(2)]);
+        });
     }
 
     #[rstest]
