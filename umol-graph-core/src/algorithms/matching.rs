@@ -31,16 +31,16 @@ pub struct Matching {
 }
 
 impl Matching {
-    fn from_mate_array(graph: &Graph, mate: &[i32]) -> Self {
+    fn from_mates(graph: &Graph, mates: &[i32]) -> Self {
         let mut edges = Vec::new();
         for eid in graph.edge_ids() {
             let [a, b] = graph.edge_endpoints(eid);
-            if mate[a.index()] == b.0 as i32 {
+            if mates[a.index()] == b.0 as i32 {
                 edges.push(eid);
             }
         }
         edges.sort_unstable();
-        let mate_opt = mate
+        let mate_opt = mates
             .iter()
             .map(|&m| if m >= 0 { Some(NodeId(m as u32)) } else { None })
             .collect();
@@ -134,7 +134,7 @@ impl Graph {
             bfs_augment_bipartite(self, NodeId(start_idx as u32), &mut mate, n);
         }
 
-        Matching::from_mate_array(self, &mate)
+        Matching::from_mates(self, &mate)
     }
 
     // Greedy DFS with backtracking. Walks `node_order` left-to-right; at each
@@ -155,7 +155,7 @@ impl Graph {
         }
         let mut mate = vec![-1i32; n];
         if backtrack_pair(self, node_order, 0, &mut mate) {
-            Some(Matching::from_mate_array(self, &mate))
+            Some(Matching::from_mates(self, &mate))
         } else {
             None
         }
@@ -187,7 +187,7 @@ impl Graph {
             }
         }
 
-        Matching::from_mate_array(self, &mate)
+        Matching::from_mates(self, &mate)
     }
 
     // Branch-and-bound with Edmonds oracle.
@@ -429,7 +429,7 @@ fn enumerate_rec(
 
     if current_size == target_size {
         let mate = build_mate(graph, included);
-        result.push(Matching::from_mate_array(graph, &mate));
+        result.push(Matching::from_mates(graph, &mate));
         return;
     }
 
