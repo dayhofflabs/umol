@@ -1,8 +1,14 @@
 ---
-description: Use this skill whenever the task involves adding, modifying, restructuring, or reviewing unit tests inside any `#[cfg(test)] mod tests` block in a umol-workspace crate. Covers rstest table-test conventions, fixture usage, naming rules, ordering rules (parallel to module definitions), assertion style, identity-comparison patterns, circular-logic avoidance, and crate-specific patterns for macros, AST entities, and defaults configs. Apply before writing the first test in a session and consult on every subsequent test edit.
+description: MANDATORY — load and apply before creating or editing ANY test in a umol-workspace crate, including tests written as part of implementing a feature, fixing a bug, or any larger change (not only when tests are explicitly requested). If you are about to write or edit a `#[test]`/`#[rstest]`/`#[case]`/`#[fixture]` or a test assertion, load this first. Apply on ANY task that adds, extends, revises, writes, updates, renames, restructures, splits, merges, or reviews tests in a umol-workspace crate — a new test, more or changed `#[case]` rows, a new `#[rstest]`/`#[fixture]`, fixing or renaming a test, reordering a `mod tests` block, or porting a `#[test]` to the conventions. Trigger whenever test code is created or edited, or whenever the request mentions tests, test cases, coverage, `#[test]`, `#[rstest]`, `#[case]`, `#[fixture]`, `mod tests`, or assertions in tests — including when test work is only part of a larger change (e.g. adding tests after implementing a feature). Covers the rstest table-test framework, fixture usage, naming rules (no behavior in test names; only `_error`/`_identity`/`_partial` qualifiers), inline-literal construction, assertion style, identity-comparison splits, circular-logic avoidance, ordering parallel to module definitions, and crate-specific patterns for macros, AST entities, and defaults configs. Consult before writing or editing any test, and re-check names and structure on every test edit.
 ---
 
 # umol test-writing conventions
+
+## Conformance (non-negotiable)
+
+- **Every new or edited test follows these conventions** — always, whether the test is the whole task or a small part of a larger change (a feature, a bug fix, a refactor). Apply them as you write, not only when tests are explicitly requested.
+- **Never replicate a neighboring test's shape when it deviates** from these conventions, even when copying an existing test as a starting point. Conform to this skill, not to the surrounding code.
+- **When existing/surrounding tests deviate**, do not silently rewrite them and do not silently copy their pattern. **Ask** whether to bring them into conformance, then act on the answer.
 
 ## Framework
 
@@ -21,9 +27,9 @@ description: Use this skill whenever the task involves adding, modifying, restru
 
 - `test_<function>()` for free functions.
 - `test_<struct>_<method>()` for inherent methods.
-- `test_<struct>_<method>_error()` for the failure path of the same method.
-- **Do not embed test behavior in the name.** No `test_X_returns_zero_when_empty`, no `test_X_handles_negative`. Behavior belongs in `#[case]` labels.
-- Acceptable qualifiers: `_error` (failure path), `_identity` (when split out — see Identity comparisons), `_partial` (when distinguishing related tests on the same method).
+- A name may carry an optional trailing **scenario** qualifier: `test_<struct>_<method>_<scenario>` (e.g. `_error`, `_identity`, `_roundtrip`, `_partial`).
+- **Scenario, not behavior.** A *scenario* is a **noun** — *which* grouping of inputs/conditions is under test (`error`, `identity`, `roundtrip`, `partial`). A *behavior* is a **verb** — *what happens* (`returns_zero`, `handles_negative`, `elides_vacuous`, `drops_x`). A name may name a scenario; it must **never** encode a behavior — behavior belongs in `#[case]::label`. `_error`/`_identity` are common scenarios, **not** a closed whitelist, and `_identity` is not special.
+- The scenario suffix is **optional** — use it only when it earns its keep: (a) splitting that scenario off allows conciser assertions (e.g. `_identity` needs no separate expected value), or (b) the method has enough functionality that grouping tests by scenario keeps each focused. Otherwise omit it; the bare `test_<struct>_<method>` plus `#[case]` labels suffices.
 
 ## Assertions
 

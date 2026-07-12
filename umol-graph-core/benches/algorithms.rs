@@ -171,6 +171,72 @@ fn complete(n: usize) -> Graph {
     Graph::new(n, &edges)
 }
 
+fn grid(rows: usize, columns: usize) -> Graph {
+    let mut edges = Vec::new();
+    for row in 0..rows {
+        for column in 0..columns {
+            let node = (row * columns + column) as u32;
+            if row + 1 < rows {
+                edges.push([node, node + columns as u32]);
+            }
+            if column + 1 < columns {
+                edges.push([node, node + 1]);
+            }
+        }
+    }
+    Graph::new(rows * columns, &edges)
+}
+
+fn hypercube(dimension: usize) -> Graph {
+    let node_count = 1usize << dimension;
+    let mut edges = Vec::new();
+    for node in 0..node_count {
+        for bit in 0..dimension {
+            let neighbor = node ^ (1 << bit);
+            if node < neighbor {
+                edges.push([node as u32, neighbor as u32]);
+            }
+        }
+    }
+    Graph::new(node_count, &edges)
+}
+
+fn disjoint_cycles(cycle_count: usize, cycle_size: usize) -> Graph {
+    let mut edges = Vec::new();
+    for component in 0..cycle_count {
+        let offset = (component * cycle_size) as u32;
+        for node in 0..cycle_size as u32 {
+            edges.push([offset + node, offset + (node + 1) % cycle_size as u32]);
+        }
+    }
+    Graph::new(cycle_count * cycle_size, &edges)
+}
+
+fn subdivided(graph: &Graph) -> Graph {
+    let node_count = graph.node_count();
+    let mut edges = Vec::with_capacity(2 * graph.edge_count());
+    for (position, edge) in graph.edge_ids().enumerate() {
+        let [a, b] = graph.edge_endpoints(edge);
+        let edge_node = (node_count + position) as u32;
+        edges.push([a.0, edge_node]);
+        edges.push([edge_node, b.0]);
+    }
+    Graph::new(node_count + graph.edge_count(), &edges)
+}
+
+fn degree_colors(graph: &Graph) -> Vec<u32> {
+    graph
+        .node_ids()
+        .map(|node| graph.neighbors(node).len() as u32)
+        .collect()
+}
+
+fn incidence_colors(node_count: usize, edge_count: usize) -> Vec<u32> {
+    std::iter::repeat_n(0, node_count)
+        .chain(std::iter::repeat_n(1, edge_count))
+        .collect()
+}
+
 fn cycle_enumeration(c: &mut Criterion) {
     let graphs = [
         ("path_6", path(6)),
@@ -289,7 +355,7 @@ fn maximum_independent_set(c: &mut Criterion) {
 }
 
 fn automorphism(c: &mut Criterion) {
-    let graphs: Vec<(&str, Graph)> = vec![
+    let molecular: Vec<(&str, Graph)> = vec![
         ("path_6", path(6)),
         ("hexagon", cycle(6)),
         ("naphthalene", naphthalene()),
@@ -305,15 +371,116 @@ fn automorphism(c: &mut Criterion) {
         ("K8", complete(8)),
     ];
 
+    let stress: Vec<(&str, Graph)> = vec![
+        ("path_64", path(64)),
+        ("cycle_64", cycle(64)),
+        ("grid_8x8", grid(8, 8)),
+        ("hypercube_6", hypercube(6)),
+        ("four_hexagons", disjoint_cycles(4, 6)),
+        ("K10", complete(10)),
+    ];
+
+    let incidence: Vec<(&str, Graph, Vec<u32>)> =
+        [("adamantane", adamantane()), ("c60", fullerene_c60())]
+            .into_iter()
+            .map(|(name, graph)| {
+                let colors = incidence_colors(graph.node_count(), graph.edge_count());
+                (name, subdivided(&graph), colors)
+            })
+            .collect();
+
     let mut group = c.benchmark_group("automorphism");
-    for (name, g) in &graphs {
-        group.bench_function(format!("{name}/uniform"), |b| {
-            b.iter(|| g.automorphisms(|_: NodeId| 0u8, AutomorphismAlgorithm::Nauty));
+    for (name, graph) in molecular.iter().chain(&stress) {
+        group.bench_function(format!("ordinary/{name}/uniform"), |b| {
+            b.iter(|| graph.automorphisms(|_: NodeId| 0u32, AutomorphismAlgorithm::Nauty));
+        });
+        let colors = degree_colors(graph);
+        group.bench_function(format!("ordinary/{name}/degree"), |b| {
+            b.iter(|| {
+                graph.automorphisms(|node| colors[node.index()], AutomorphismAlgorithm::Nauty)
+            });
+        });
+        group.bench_function(format!("ordinary/{name}/unique"), |b| {
+            b.iter(|| {
+                graph.automorphisms(|node| node.index() as u32, AutomorphismAlgorithm::Nauty)
+            });
         });
     }
-    for (name, g) in &graphs {
-        group.bench_function(format!("{name}/unique"), |b| {
-            b.iter(|| g.automorphisms(|n: NodeId| n.index() as u32, AutomorphismAlgorithm::Nauty));
+    for (name, graph, colors) in &incidence {
+        group.bench_function(format!("incidence/{name}/class"), |b| {
+            b.iter(|| {
+                graph.automorphisms(|node| colors[node.index()], AutomorphismAlgorithm::Nauty)
+            });
+        });
+    }
+    group.finish();
+}
+
+fn automorphism_stabilizer(c: &mut Criterion) {
+    let cases: Vec<(&str, Graph, Vec<u32>, Vec<NodeId>)> = [
+        ("adamantane", adamantane()),
+        ("dodecahedron", dodecahedron()),
+        ("c60", fullerene_c60()),
+        ("four_hexagons", disjoint_cycles(4, 6)),
+    ]
+    .into_iter()
+    .map(|(name, graph)| {
+        let colors = degree_colors(&graph);
+        let sites = [0, graph.node_count() / 3, graph.node_count() / 2]
+            .into_iter()
+            .map(|site| NodeId(site as u32))
+            .collect();
+        (name, graph, colors, sites)
+    })
+    .collect();
+
+    let mut group = c.benchmark_group("automorphism_stabilizer");
+    for (name, graph, colors, sites) in &cases {
+        group.bench_function(format!("{name}/three_sites"), |b| {
+            b.iter(|| {
+                sites
+                    .iter()
+                    .map(|&site| {
+                        graph.automorphisms(
+                            |node| (node == site, colors[node.index()]),
+                            AutomorphismAlgorithm::Nauty,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            });
+        });
+    }
+    group.finish();
+}
+
+fn canonical_key(c: &mut Criterion) {
+    let cases = [
+        ("naphthalene", naphthalene()),
+        ("adamantane", adamantane()),
+        ("dodecahedron", dodecahedron()),
+        ("c60", fullerene_c60()),
+        ("c70", fullerene_c70()),
+        ("grid_8x8", grid(8, 8)),
+    ];
+
+    let mut group = c.benchmark_group("canonical_key");
+    for (name, graph) in &cases {
+        let node_colors: Vec<Vec<u8>> = degree_colors(graph)
+            .into_iter()
+            .map(|color| color.to_le_bytes().to_vec())
+            .collect();
+        let edge_colors: Vec<Vec<u8>> = graph
+            .edge_ids()
+            .map(|edge| vec![(edge.index() % 3) as u8])
+            .collect();
+        group.bench_function(*name, |b| {
+            b.iter(|| {
+                graph.canonical_key(
+                    |node| node_colors[node.index()].clone(),
+                    |edge| edge_colors[edge.index()].clone(),
+                    AutomorphismAlgorithm::Nauty,
+                )
+            });
         });
     }
     group.finish();
@@ -423,6 +590,8 @@ criterion_group!(
     maximum_matching,
     maximum_independent_set,
     automorphism,
+    automorphism_stabilizer,
+    canonical_key,
     subgraph_isomorphism,
     matching_enumeration,
 );
