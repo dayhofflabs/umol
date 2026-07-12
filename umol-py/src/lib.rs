@@ -18,7 +18,7 @@ use crate::{
     },
     dative::{
         DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst,
-        DativeBondConstraintsView, DativeBondRingSizeCounts,
+        DativeBondConstraintsView, DativeBondRingSizeCounts, DativeBondView, DativeBondViews,
     },
     element::Element,
     error::ParseError,
@@ -97,6 +97,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<DativeBondConstraintsAst>()?;
         module.add_class::<DativeBondConstraintsView>()?;
         module.add_class::<DativeBondRingSizeCounts>()?;
+        module.add_class::<DativeBondView>()?;
+        module.add_class::<DativeBondViews>()?;
         module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;

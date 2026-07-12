@@ -8,19 +8,22 @@
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::PyKeyError;
+use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyDict};
+use pyo3::types::{PyAny, PyDict, PyTuple};
 use umol_ast::ast::{
-    DativeBondAst as AstDativeBondAst, DativeBondConstraintAst as AstDativeBondConstraintAst,
+    AtomId as AstAtomId, DativeBondAst as AstDativeBondAst,
+    DativeBondConstraintAst as AstDativeBondConstraintAst,
     DativeBondConstraintKey as AstDativeBondConstraintKey,
-    DativeBondConstraintsAst as AstDativeBondConstraintsAst, RingScope as AstRingScope,
+    DativeBondConstraintsAst as AstDativeBondConstraintsAst, DativeBondId as AstDativeBondId,
+    DativeBondView as AstDativeBondView, MoleculeAst as AstMoleculeAst, RingScope as AstRingScope,
 };
 
 use crate::boolean::{BooleanArg, BooleanAst};
 use crate::constraint::{RingMembershipAst, RingScope};
 use crate::convert::{hash_ast, into_py_variant, variant_repr};
 use crate::error::parse_error;
+use crate::molecule::MoleculeAst;
 use crate::value::{ValueArg, ValueAst};
 
 /// A dative bond: order and bond-scope constraints.
@@ -116,6 +119,262 @@ impl DativeBondAst {
     #[cfg(test)]
     pub(crate) fn from_inner(bond: AstDativeBondAst) -> Self {
         DativeBondAst(bond)
+    }
+}
+
+/// A view of one dative bond within a molecule: a handle to the molecule plus the
+/// bond's index. Field reads rebuild the transient Rust view; the molecule is never
+/// copied. The acceptor and donor atom indices are read-only topology; the order
+/// and constraints are the mutable bond value.
+#[pyclass]
+pub struct DativeBondView {
+    owner: Py<MoleculeAst>,
+    id: AstDativeBondId,
+}
+
+impl DativeBondView {
+    fn dative_bond<'a>(&self, molecule: &'a AstMoleculeAst) -> PyResult<AstDativeBondView<'a>> {
+        molecule
+            .dative_bonds()
+            .get(self.id)
+            .ok_or_else(|| PyIndexError::new_err("dative bond id out of range"))
+    }
+}
+
+#[pymethods]
+impl DativeBondView {
+    #[getter]
+    fn id(&self) -> u32 {
+        self.id.0
+    }
+
+    /// The acceptor atom index (read-only — participants are topology, not part of
+    /// the bond value).
+    #[getter]
+    fn acceptor(&self, py: Python<'_>) -> PyResult<u32> {
+        let molecule = self.owner.bind(py).borrow();
+        Ok(self.dative_bond(molecule.inner())?.acceptor_id().0)
+    }
+
+    /// The donor atom indices (read-only).
+    #[getter]
+    fn donors(&self, py: Python<'_>) -> PyResult<Vec<u32>> {
+        let molecule = self.owner.bind(py).borrow();
+        Ok(self
+            .dative_bond(molecule.inner())?
+            .donor_ids()
+            .map(|donor| donor.0)
+            .collect())
+    }
+
+    /// All atom indices incident to this dative bond — the donors followed by the
+    /// acceptor (read-only).
+    #[getter]
+    fn atom_ids<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        let molecule = self.owner.bind(py).borrow();
+        let atom_ids: Vec<u32> = self
+            .dative_bond(molecule.inner())?
+            .atom_ids()
+            .map(|atom| atom.0)
+            .collect();
+        PyTuple::new(py, atom_ids)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("DativeBondView(id={})", self.id.0)
+    }
+
+    #[getter]
+    fn order(&self, py: Python<'_>) -> PyResult<ValueAst> {
+        let molecule = self.owner.bind(py).borrow();
+        ValueAst::from_ast(py, &self.dative_bond(molecule.inner())?.ast.order)
+    }
+
+    #[setter]
+    fn set_order(&self, py: Python<'_>, value: ValueArg) {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .dative_bond_mut(self.id)
+            .ast
+            .order = value.to_ast(py);
+    }
+
+    /// The dative bond's constraints as a live handle onto the molecule: reads borrow
+    /// the current state, mutators write through to the bond in place.
+    #[getter]
+    fn constraints(&self, py: Python<'_>) -> DativeBondConstraintsView {
+        DativeBondConstraintsView {
+            backing: DativeBondConstraintsBacking::Molecule {
+                owner: self.owner.clone_ref(py),
+                id: self.id,
+            },
+        }
+    }
+
+    /// Replace the whole constraint set of the backing bond in place (wipe-and-set)
+    /// from a value container or a live view.
+    #[setter]
+    fn set_constraints(&self, py: Python<'_>, value: DativeBondConstraintsArg) -> PyResult<()> {
+        self.owner
+            .borrow_mut(py)
+            .inner_mut()
+            .dative_bond_mut(self.id)
+            .ast
+            .constraints = value.to_ast(py)?;
+        Ok(())
+    }
+
+    /// The value fields as a dict keyed by field name; values are the field mirrors —
+    /// symmetric with `DativeBondAst.asdict`, read through the view.
+    fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let molecule = self.owner.bind(py).borrow();
+        let bond = self.dative_bond(molecule.inner())?.ast;
+        let dict = PyDict::new(py);
+        dict.set_item("order", ValueAst::from_ast(py, &bond.order)?)?;
+        dict.set_item(
+            "constraints",
+            dative_bond_constraints_asdict(py, &bond.constraints)?,
+        )?;
+        Ok(dict)
+    }
+}
+
+/// Resolve a possibly-negative Python index (negative counts from the end) into an
+/// existing dative bond id, or `IndexError`. `DativeBondId` is `RelationId`-backed
+/// but contiguous for fresh molecules, so integer positions address it directly.
+fn resolve_dative_bond_index(molecule: &AstMoleculeAst, index: isize) -> PyResult<AstDativeBondId> {
+    let count = molecule.dative_bonds().count();
+    let resolved = if index < 0 {
+        index + count as isize
+    } else {
+        index
+    };
+    if resolved < 0 {
+        return Err(PyIndexError::new_err("dative bond id out of range"));
+    }
+    let id = AstDativeBondId(resolved as u32);
+    if molecule.dative_bonds().contains(id) {
+        Ok(id)
+    } else {
+        Err(PyIndexError::new_err("dative bond id out of range"))
+    }
+}
+
+/// The dative bonds of a molecule, indexed by integer position.
+#[pyclass]
+pub struct DativeBondViews {
+    owner: Py<MoleculeAst>,
+}
+
+#[pymethods]
+impl DativeBondViews {
+    fn __len__(&self, py: Python<'_>) -> usize {
+        self.owner.bind(py).borrow().inner().dative_bonds().count()
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> String {
+        format!(
+            "DativeBondViews(len={})",
+            self.owner.bind(py).borrow().inner().dative_bonds().count()
+        )
+    }
+
+    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<DativeBondView> {
+        let molecule = self.owner.bind(py).borrow();
+        let id = resolve_dative_bond_index(molecule.inner(), index)?;
+        Ok(DativeBondView {
+            owner: self.owner.clone_ref(py),
+            id,
+        })
+    }
+
+    /// Replace the whole dative bond value at `index` in place (participants unchanged).
+    fn __setitem__(
+        &self,
+        py: Python<'_>,
+        index: isize,
+        bond: PyRef<'_, DativeBondAst>,
+    ) -> PyResult<()> {
+        let mut molecule = self.owner.borrow_mut(py);
+        let id = resolve_dative_bond_index(molecule.inner(), index)?;
+        *molecule.inner_mut().dative_bond_mut(id).ast = bond.inner().clone();
+        Ok(())
+    }
+
+    /// The dative bond with exactly this acceptor and donor set, or `None`.
+    fn connecting(
+        &self,
+        py: Python<'_>,
+        donors: Vec<u32>,
+        acceptor: u32,
+    ) -> Option<DativeBondView> {
+        let molecule = self.owner.bind(py).borrow();
+        let donor_ids: Vec<AstAtomId> = donors.into_iter().map(AstAtomId).collect();
+        molecule
+            .inner()
+            .dative_bonds()
+            .connecting_id(AstAtomId(acceptor), &donor_ids)
+            .map(|id| DativeBondView {
+                owner: self.owner.clone_ref(py),
+                id,
+            })
+    }
+
+    /// The dative bonds incident on `atom` (as acceptor or donor).
+    fn incident(&self, py: Python<'_>, atom: u32) -> Vec<DativeBondView> {
+        let molecule = self.owner.bind(py).borrow();
+        molecule
+            .inner()
+            .dative_bonds()
+            .incident_ids(AstAtomId(atom))
+            .map(|id| DativeBondView {
+                owner: self.owner.clone_ref(py),
+                id,
+            })
+            .collect()
+    }
+
+    fn __iter__(&self, py: Python<'_>) -> DativeBondViewIter {
+        let ids = self
+            .owner
+            .bind(py)
+            .borrow()
+            .inner()
+            .dative_bonds()
+            .ids()
+            .collect::<Vec<_>>();
+        DativeBondViewIter {
+            owner: self.owner.clone_ref(py),
+            ids: ids.into_iter(),
+        }
+    }
+}
+
+impl DativeBondViews {
+    /// Build the dative-bond-views handle for `owner` (the `.dative_bonds` accessor).
+    pub(crate) fn new(owner: Py<MoleculeAst>) -> DativeBondViews {
+        DativeBondViews { owner }
+    }
+}
+
+#[pyclass]
+struct DativeBondViewIter {
+    owner: Py<MoleculeAst>,
+    ids: IntoIter<AstDativeBondId>,
+}
+
+#[pymethods]
+impl DativeBondViewIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self, py: Python<'_>) -> Option<DativeBondView> {
+        self.ids.next().map(|id| DativeBondView {
+            owner: self.owner.clone_ref(py),
+            id,
+        })
     }
 }
 
@@ -543,16 +802,19 @@ fn dative_bond_constraints_asdict<'py>(
 }
 
 /// What a `DativeBondConstraintsView` writes through to. Only the standalone
-/// `DativeBondAst` backing exists at this stage; the molecule-bond backing lands
-/// with `DativeBondView`, which constructs it.
+/// `DativeBondAst` backing or a dative bond within a molecule (by index).
 enum DativeBondConstraintsBacking {
+    Molecule {
+        owner: Py<MoleculeAst>,
+        id: AstDativeBondId,
+    },
     DativeBond(Py<DativeBondAst>),
 }
 
-/// A live handle onto one dative bond's constraints, backed by a standalone
-/// `DativeBondAst`. Reads borrow the bond's constraints and read only the item
-/// they need (no whole-container clone); mutators write through to the bond in
-/// place, without a clone-and-writeback.
+/// A live handle onto one dative bond's constraints, backed by either a
+/// molecule-bond or a standalone `DativeBondAst`. Reads borrow the bond's
+/// constraints and read only the item they need (no whole-container clone);
+/// mutators write through to the bond in place, without a clone-and-writeback.
 #[pyclass]
 pub struct DativeBondConstraintsView {
     backing: DativeBondConstraintsBacking,
@@ -566,6 +828,15 @@ impl DativeBondConstraintsView {
         f: impl FnOnce(&AstDativeBondConstraintsAst) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.backing {
+            DativeBondConstraintsBacking::Molecule { owner, id } => {
+                let molecule = owner.bind(py).borrow();
+                let view = molecule
+                    .inner()
+                    .dative_bonds()
+                    .get(*id)
+                    .ok_or_else(|| PyIndexError::new_err("dative bond id out of range"))?;
+                f(&view.ast.constraints)
+            }
             DativeBondConstraintsBacking::DativeBond(bond) => {
                 let bond = bond.bind(py).borrow();
                 f(&bond.inner().constraints)
@@ -580,6 +851,12 @@ impl DativeBondConstraintsView {
         f: impl FnOnce(&mut AstDativeBondConstraintsAst) -> R,
     ) -> R {
         match &self.backing {
+            DativeBondConstraintsBacking::Molecule { owner, id } => f(&mut owner
+                .borrow_mut(py)
+                .inner_mut()
+                .dative_bond_mut(*id)
+                .ast
+                .constraints),
             DativeBondConstraintsBacking::DativeBond(bond) => {
                 f(&mut bond.borrow_mut(py).inner_mut().constraints)
             }
@@ -750,6 +1027,12 @@ impl DativeBondConstraintsView {
     #[getter]
     fn ring_size_count(&self, py: Python<'_>) -> DativeBondRingSizeCounts {
         let backing = match &self.backing {
+            DativeBondConstraintsBacking::Molecule { owner, id } => {
+                DativeBondRingSizeBacking::Molecule {
+                    owner: owner.clone_ref(py),
+                    id: *id,
+                }
+            }
             DativeBondConstraintsBacking::DativeBond(bond) => {
                 DativeBondRingSizeBacking::DativeBond(bond.clone_ref(py))
             }
@@ -763,10 +1046,14 @@ impl DativeBondConstraintsView {
     }
 }
 
-/// What a `DativeBondRingSizeCounts` proxy reads/writes through to: a standalone
-/// `DativeBondAst` or a standalone `DativeBondConstraintsAst` value. The
-/// molecule-bond backing lands with `DativeBondView`.
+/// What a `DativeBondRingSizeCounts` proxy reads/writes through to: a dative bond
+/// within a molecule, a standalone `DativeBondAst`, or a standalone
+/// `DativeBondConstraintsAst` value.
 enum DativeBondRingSizeBacking {
+    Molecule {
+        owner: Py<MoleculeAst>,
+        id: AstDativeBondId,
+    },
     DativeBond(Py<DativeBondAst>),
     Value(Py<DativeBondConstraintsAst>),
 }
@@ -788,6 +1075,15 @@ impl DativeBondRingSizeCounts {
         f: impl FnOnce(&AstDativeBondConstraintsAst) -> PyResult<R>,
     ) -> PyResult<R> {
         match &self.backing {
+            DativeBondRingSizeBacking::Molecule { owner, id } => {
+                let molecule = owner.bind(py).borrow();
+                let view = molecule
+                    .inner()
+                    .dative_bonds()
+                    .get(*id)
+                    .ok_or_else(|| PyIndexError::new_err("dative bond id out of range"))?;
+                f(&view.ast.constraints)
+            }
             DativeBondRingSizeBacking::DativeBond(bond) => {
                 f(&bond.bind(py).borrow().inner().constraints)
             }
@@ -798,6 +1094,12 @@ impl DativeBondRingSizeCounts {
     /// Mutate the backing constraints in place through `f`.
     fn write(&self, py: Python<'_>, f: impl FnOnce(&mut AstDativeBondConstraintsAst)) {
         match &self.backing {
+            DativeBondRingSizeBacking::Molecule { owner, id } => f(&mut owner
+                .borrow_mut(py)
+                .inner_mut()
+                .dative_bond_mut(*id)
+                .ast
+                .constraints),
             DativeBondRingSizeBacking::DativeBond(bond) => {
                 f(&mut bond.borrow_mut(py).inner_mut().constraints)
             }
@@ -950,9 +1252,30 @@ impl DativeBondConstraintItemsIter {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{BooleanAst as AstBooleanAst, ValueAst as AstValueAst};
+    use umol_ast::ast::{
+        AtomAst as AstAtomAst, BooleanAst as AstBooleanAst, MoleculeParts, ValueAst as AstValueAst,
+    };
+    use umol_chem::element::Element as ChemElement;
 
     use super::*;
+
+    /// An ammonia-borane adduct: borane B (id 0) accepts from ammonia N (id 1),
+    /// dative bond id 0 (acceptor B, donor N, order 1).
+    fn ammonia_borane(py: Python<'_>) -> Py<MoleculeAst> {
+        let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AstAtomAst::from_element(ChemElement::B),
+                AstAtomAst::from_element(ChemElement::N),
+            ],
+            dative: vec![(
+                vec![AstAtomId(1)],
+                AstAtomId(0),
+                AstDativeBondAst::from_order(1),
+            )],
+            ..Default::default()
+        });
+        Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()
+    }
 
     #[rstest]
     #[case::single("1")]
@@ -998,6 +1321,169 @@ mod tests {
             dst.set_constraints(py, DativeBondConstraintsArg::View(view))
                 .unwrap();
             assert_eq!(dst.inner().constraints.aromatic(), AstBooleanAst::Lit(true));
+        });
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_order() {
+        Python::attach(|py| {
+            let view = DativeBondView {
+                owner: ammonia_borane(py),
+                id: AstDativeBondId(0),
+            };
+            assert_eq!(view.id(), 0);
+            assert_eq!(view.order(py).unwrap().to_ast(py), AstValueAst::Lit(1));
+        });
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_participants() {
+        Python::attach(|py| {
+            let view = DativeBondView {
+                owner: ammonia_borane(py),
+                id: AstDativeBondId(0),
+            };
+            assert_eq!(view.acceptor(py).unwrap(), 0);
+            assert_eq!(view.donors(py).unwrap(), vec![1]);
+            // atom_ids is donors-then-acceptor
+            let atom_ids: Vec<u32> = view.atom_ids(py).unwrap().extract().unwrap();
+            assert_eq!(atom_ids, vec![1, 0]);
+        });
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_set_order() {
+        Python::attach(|py| {
+            let owner = ammonia_borane(py);
+            let view = DativeBondView {
+                owner: owner.clone_ref(py),
+                id: AstDativeBondId(0),
+            };
+            view.set_order(py, ValueArg::Lit(2));
+            let fresh = DativeBondView {
+                owner,
+                id: AstDativeBondId(0),
+            };
+            assert_eq!(fresh.order(py).unwrap().to_ast(py), AstValueAst::Lit(2));
+        });
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_constraints() {
+        Python::attach(|py| {
+            let view = DativeBondView {
+                owner: ammonia_borane(py),
+                id: AstDativeBondId(0),
+            };
+            match view.constraints(py).backing {
+                DativeBondConstraintsBacking::Molecule { id, .. } => {
+                    assert_eq!(id, AstDativeBondId(0))
+                }
+                _ => panic!("expected molecule-backed view"),
+            }
+        });
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_len_and_getitem() {
+        Python::attach(|py| {
+            let views = DativeBondViews {
+                owner: ammonia_borane(py),
+            };
+            assert_eq!(views.__len__(py), 1);
+            assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
+            assert_eq!(views.__getitem__(py, -1).unwrap().id(), 0);
+            assert!(views.__getitem__(py, 5).is_err());
+            assert!(views.__getitem__(py, -2).is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_setitem() {
+        Python::attach(|py| {
+            let owner = ammonia_borane(py);
+            let views = DativeBondViews {
+                owner: owner.clone_ref(py),
+            };
+            let single = Py::new(
+                py,
+                DativeBondAst::from_inner(AstDativeBondAst::from_order(2)),
+            )
+            .unwrap();
+            views.__setitem__(py, 0, single.bind(py).borrow()).unwrap();
+            let view = views.__getitem__(py, 0).unwrap();
+            // value replaced, participants preserved
+            assert_eq!(view.order(py).unwrap().to_ast(py), AstValueAst::Lit(2));
+            assert_eq!(view.acceptor(py).unwrap(), 0);
+            assert_eq!(view.donors(py).unwrap(), vec![1]);
+        });
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_setitem_error() {
+        Python::attach(|py| {
+            let views = DativeBondViews {
+                owner: ammonia_borane(py),
+            };
+            let single = Py::new(
+                py,
+                DativeBondAst::from_inner(AstDativeBondAst::from_order(2)),
+            )
+            .unwrap();
+            assert!(views.__setitem__(py, 5, single.bind(py).borrow()).is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_connecting() {
+        Python::attach(|py| {
+            let views = DativeBondViews {
+                owner: ammonia_borane(py),
+            };
+            // acceptor B(0), donor N(1)
+            assert_eq!(views.connecting(py, vec![1], 0).unwrap().id(), 0);
+            // roles swapped: no such dative bond
+            assert!(views.connecting(py, vec![0], 1).is_none());
+        });
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_incident() {
+        Python::attach(|py| {
+            // B(0) accepts from N(1); C(2) isolated
+            let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
+                    AstAtomAst::from_element(ChemElement::B),
+                    AstAtomAst::from_element(ChemElement::N),
+                    AstAtomAst::from_element(ChemElement::C),
+                ],
+                dative: vec![(
+                    vec![AstAtomId(1)],
+                    AstAtomId(0),
+                    AstDativeBondAst::from_order(1),
+                )],
+                ..Default::default()
+            });
+            let views = DativeBondViews {
+                owner: Py::new(py, MoleculeAst::from_inner(molecule)).unwrap(),
+            };
+            assert_eq!(
+                views
+                    .incident(py, 0)
+                    .iter()
+                    .map(|v| v.id())
+                    .collect::<Vec<_>>(),
+                vec![0]
+            );
+            assert_eq!(
+                views
+                    .incident(py, 1)
+                    .iter()
+                    .map(|v| v.id())
+                    .collect::<Vec<_>>(),
+                vec![0]
+            );
+            assert!(views.incident(py, 2).is_empty());
         });
     }
 
@@ -1560,6 +2046,70 @@ mod tests {
             }
             sizes.sort_unstable();
             assert_eq!(sizes, vec![5, 6]);
+        });
+    }
+
+    #[rstest]
+    fn test_dative_bond_constraints_view_set_molecule_backed() {
+        Python::attach(|py| {
+            let owner = ammonia_borane(py);
+            let view = DativeBondConstraintsView {
+                backing: DativeBondConstraintsBacking::Molecule {
+                    owner: owner.clone_ref(py),
+                    id: AstDativeBondId(0),
+                },
+            };
+            let aromatic = into_py_variant(
+                py,
+                DativeBondConstraintAst::from_ast(
+                    py,
+                    &AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            view.set(py, aromatic);
+            let fresh = DativeBondConstraintsView {
+                backing: DativeBondConstraintsBacking::Molecule {
+                    owner,
+                    id: AstDativeBondId(0),
+                },
+            };
+            assert_eq!(fresh.__len__(py).unwrap(), 1);
+            assert_eq!(
+                fresh.aromatic(py).unwrap().to_ast(),
+                AstBooleanAst::Lit(true)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_dative_bond_ring_size_counts_molecule_backed() {
+        Python::attach(|py| {
+            let owner = ammonia_borane(py);
+            let view = DativeBondConstraintsView {
+                backing: DativeBondConstraintsBacking::Molecule {
+                    owner: owner.clone_ref(py),
+                    id: AstDativeBondId(0),
+                },
+            };
+            view.ring_size_count(py)
+                .__setitem__(py, 6, ValueArg::Lit(1));
+            let fresh = DativeBondConstraintsView {
+                backing: DativeBondConstraintsBacking::Molecule {
+                    owner,
+                    id: AstDativeBondId(0),
+                },
+            };
+            assert_eq!(
+                fresh
+                    .ring_size_count(py)
+                    .__getitem__(py, 6)
+                    .unwrap()
+                    .unwrap()
+                    .to_ast(py),
+                AstValueAst::Lit(1)
+            );
         });
     }
 }

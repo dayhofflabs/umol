@@ -8,7 +8,7 @@ use umol_ast::ast::{
 
 use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
-use crate::dative::DativeBondAst;
+use crate::dative::{DativeBondAst, DativeBondViews};
 
 /// A molecule: the owned graph-AST root.
 #[pyclass(eq)]
@@ -77,6 +77,12 @@ impl MoleculeAst {
     #[getter]
     fn bonds(slf: Py<Self>) -> BondViews {
         BondViews::new(slf)
+    }
+
+    /// The dative bonds, indexed by integer position.
+    #[getter]
+    fn dative_bonds(slf: Py<Self>) -> DativeBondViews {
+        DativeBondViews::new(slf)
     }
 
     fn __repr__(&self) -> String {

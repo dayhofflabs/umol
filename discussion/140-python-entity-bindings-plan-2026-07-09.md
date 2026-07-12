@@ -2,13 +2,13 @@
 
 Status: Active — **B1 · Bond slice DONE incl. the view half** (value + WET constraint surface +
 `BondView`/`BondViews` + molecule-backed constraint views; Rust/Python green, clippy clean).
-**B2 · Part A (S0) DONE**; **S1a (dative value + WET constraint surface) DONE**
-(`umol-py/src/dative.rs`; 6 value+constraint pyclasses registered; molecule-backing arm deferred to
-S1c); **S1b DONE** (Python `from_atoms_and_bonds` → `from_parts(atoms, *, bonds=[], dative=[])`,
-`dative` wired to `MoleculeParts.dative`; 231 Rust unit + 237 pytest green). Next: **S1c** —
-`DativeBondView`/`DativeBondViews` + `mol.dative_bonds` + re-add the molecule-backing arm +
-`tests/test_dative.py`. See *B2 · Dative — staged impl plan* below and *Bond slice — build state +
-detailed plan* at the end for the WET template.
+**B2 · dative slice COMPLETE** (`umol-py/src/dative.rs`: value + WET constraint surface +
+`DativeBondView`/`DativeBondViews` + molecule-backed constraint views; `mol.dative_bonds` accessor;
+`from_atoms_and_bonds` → `from_parts(atoms, *, bonds=[], dative=[])`; 8 dative pyclasses registered;
+242 Rust unit + 266 pytest green, clippy/fmt clean). Next entity per the order **bonds → dative →
+aromatic → …**: **B3 · aromatic-system slice** (`umol-py/src/aromatic.rs`), following the same WET
+template. See *B2 · Dative — staged impl plan* below and *Bond slice — build state + detailed plan* at
+the end for the WET template.
 Date: 2026-07-09
 Relates: 137 (atom slice — the template being mirrored), 139 (mutability/hashing/equality
 balance), 114 (interning — where stereo/handle-identity deferrals live)
@@ -239,15 +239,16 @@ already owns its `[AtomId;2]`).
   asserted via `inner().dative_bonds()` (Python has no `mol.dative_bonds` accessor until S1c, so the
   dative path has no Python observable yet — its pytest coverage lands with `tests/test_dative.py` in
   S1c). Rust 231 unit + 237 pytest green, clippy/fmt clean. `[dep: S1a]`
-- **S1c** *(additive/green)* — `DativeBondView` (`id`, `acceptor -> int`, `donors -> list[int]`
-  read-only, `atom_ids -> tuple` donors-then-acceptor, settable `order`/`constraints`, `asdict`) +
-  `DativeBondViews` (`mol.dative_bonds`: `__len__`/`__getitem__`/`__setitem__` value-replace/`__iter__`
-  + `connecting(donors, acceptor)` + `incident(atom)`) + `DativeBondViewIter` +
-  `resolve_dative_bond_index` (DativeBondId is RelationId-backed but contiguous for fresh molecules →
-  mirror `resolve_bond_index`). Also **re-adds the `Molecule` backing arm** to
+- **S1c — DONE** *(additive/green)* — `DativeBondView` (`id`, `acceptor -> int`, `donors -> list[int]`
+  read-only, `atom_ids -> tuple` donors-then-acceptor, settable `order`/`constraints`, `asdict` =
+  {order, constraints}) + `DativeBondViews` (`mol.dative_bonds`: `__len__`/`__getitem__`/`__setitem__`
+  value-replace/`__iter__` + `connecting(donors, acceptor)` + `incident(atom)`) + `DativeBondViewIter`
+  + `resolve_dative_bond_index` (mirrors `resolve_bond_index`). Re-added the `Molecule` backing arm to
   `DativeBondConstraintsBacking` + `DativeBondRingSizeBacking` (deferred from S1a) — `DativeBondView`
-  is its constructor, plus the two molecule-backed constraint-view unit tests. Register view pyclasses;
-  Rust unit + `tests/test_dative.py`; maturin rebuild + pytest. `[dep: S1a, S1b]`
+  constructs it — plus the two molecule-backed constraint-view unit tests. Added `mol.dative_bonds`
+  accessor (`molecule.rs`), registered `DativeBondView`/`DativeBondViews` (`lib.rs` + `__init__.py`),
+  11 new Rust unit tests + `tests/test_dative.py` (29 pytest). 242 Rust unit + 266 pytest green,
+  clippy/fmt clean. **B2 · dative slice COMPLETE.** `[dep: S1a, S1b]`
 
 Critical path: S0a → S0b → S1a → S1b → S1c (S0c parallel to S0b; S0d gates Part B). Part A unblocks
 **every** remaining overlay view half (B3–B6 + stereo), not just dative.
