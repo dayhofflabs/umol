@@ -1,16 +1,17 @@
 //! Graph automorphism and canonical labeling.
 
-use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
-use std::mem;
-use std::os::raw::c_int;
+#[cfg(test)]
+use std::{cell::RefCell, mem, os::raw::c_int};
 
+#[cfg(test)]
 use nauty_Traces_sys::*;
 use umol_nauty_sys::{run as run_vendored_nauty, NautyInput};
 
 use crate::graph::{EdgeId, Graph, NodeId};
 
+#[cfg(test)]
 thread_local! {
     /// Accumulates the generators nauty emits via `userautomproc` during one
     /// `sparsenauty` call; cleared before the call and drained right after. The
@@ -20,6 +21,7 @@ thread_local! {
 
 /// nauty `userautomproc`: invoked once per generator with its permutation image
 /// `perm` over the `n` vertices (`perm[i]` is the image of vertex `i`).
+#[cfg(test)]
 unsafe extern "C" fn capture_generator(
     _count: c_int,
     perm: *mut c_int,
@@ -104,7 +106,8 @@ fn exact_scientific_value(mantissa: f64, exponent: i32) -> Option<u128> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Automorphism {
+#[cfg(test)]
+struct LegacyAutomorphism {
     orbits: Vec<NodeId>,
     canonical_lab: Vec<NodeId>,
     node_count: usize,
@@ -125,23 +128,31 @@ pub struct AutomorphismOutput {
     generators: Vec<Vec<NodeId>>,
 }
 
+/// Temporary source-compatibility alias during the workspace migration to
+/// [`AutomorphismOutput`].
+pub type Automorphism = AutomorphismOutput;
+
 impl Graph {
     pub fn automorphisms<C: Ord + Copy>(
         &self,
         node_color: impl Fn(NodeId) -> C,
         alg: AutomorphismAlgorithm,
-    ) -> Automorphism {
+    ) -> AutomorphismOutput {
         match alg {
-            AutomorphismAlgorithm::Nauty => self.automorphisms_nauty(node_color),
+            AutomorphismAlgorithm::Nauty => self.automorphisms_vendored_nauty(node_color),
         }
     }
 
     // McKay & Piperno 2014 "Practical graph isomorphism, II". Impl: nauty-Traces-sys FFI.
-    fn automorphisms_nauty<C: Ord + Copy>(&self, node_color: impl Fn(NodeId) -> C) -> Automorphism {
+    #[cfg(test)]
+    fn automorphisms_nauty<C: Ord + Copy>(
+        &self,
+        node_color: impl Fn(NodeId) -> C,
+    ) -> LegacyAutomorphism {
         let n = self.node_count();
 
         if n == 0 {
-            return Automorphism {
+            return LegacyAutomorphism {
                 orbits: vec![],
                 canonical_lab: vec![],
                 node_count: 0,
@@ -252,7 +263,7 @@ impl Graph {
             }
         };
 
-        Automorphism {
+        LegacyAutomorphism {
             orbits,
             canonical_lab,
             node_count: n,
@@ -262,7 +273,6 @@ impl Graph {
         }
     }
 
-    #[allow(dead_code)] // Becomes the production dispatch in S4b.
     fn automorphisms_vendored_nauty<C: Ord + Copy>(
         &self,
         node_color: impl Fn(NodeId) -> C,
@@ -370,7 +380,7 @@ impl Graph {
 
         let canonical = subdivided
             .automorphisms(|node| ranks[node.index()], alg)
-            .canonical_labeling()
+            .canonical_labels()
             .to_vec();
         let mut position = vec![0u32; subdivided_total];
         for (rank, node) in canonical.iter().enumerate() {
@@ -402,17 +412,14 @@ impl Graph {
     }
 }
 
-impl Automorphism {
+#[cfg(test)]
+impl LegacyAutomorphism {
     pub fn node_count(&self) -> usize {
         self.node_count
     }
 
     pub fn orbit_count(&self) -> usize {
         self.orbit_count
-    }
-
-    pub fn orbit_of(&self, v: NodeId) -> NodeId {
-        self.orbits[v.index()]
     }
 
     pub fn same_orbit(&self, a: NodeId, b: NodeId) -> bool {
@@ -464,6 +471,25 @@ impl AutomorphismOutput {
     /// permutation image over `0..node_count`.
     pub fn generators(&self) -> &[Vec<NodeId>] {
         &self.generators
+    }
+
+    /// Temporary compatibility name; workspace callers migrate in S4c.
+    pub fn canonical_labeling(&self) -> &[NodeId] {
+        self.canonical_labels()
+    }
+
+    /// Temporary compatibility representation; workspace callers migrate in
+    /// S4c and this method is then removed with [`AutoGroupOrder`].
+    pub fn auto_group_order(&self) -> AutoGroupOrder {
+        match self.group_order {
+            AutomorphismGroupOrder::Exact(value) if value <= u32::MAX as u128 => {
+                AutoGroupOrder::Exact(value as u32)
+            }
+            AutomorphismGroupOrder::Exact(value) => AutoGroupOrder::Approx(value as f64),
+            AutomorphismGroupOrder::Scientific { mantissa, exponent } => {
+                AutoGroupOrder::Approx(mantissa * 10.0_f64.powi(exponent))
+            }
+        }
     }
 }
 
