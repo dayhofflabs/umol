@@ -313,63 +313,125 @@ impl Automorphism {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+    use std::fmt::Debug;
+    use std::thread;
+
     use rstest::*;
 
     use super::AutomorphismAlgorithm::Nauty;
     use super::*;
+    use crate::union_find::UnionFind;
 
-    #[test]
-    fn test_automorphisms_empty() {
-        let g = Graph::default();
-        let aut = g.automorphisms(|_: NodeId| 0u8, Nauty);
-        assert_eq!(aut.orbit_count(), 0);
-        assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(1));
+    fn assert_automorphism_semantics<C: Copy + Debug + Eq>(
+        graph: &Graph,
+        colors: &[C],
+        aut: &Automorphism,
+    ) {
+        let expected_nodes: Vec<NodeId> = graph.node_ids().collect();
+        let edges: HashSet<(usize, usize)> = graph
+            .edge_ids()
+            .map(|edge| {
+                let [a, b] = graph.edge_endpoints(edge);
+                (a.index().min(b.index()), a.index().max(b.index()))
+            })
+            .collect();
+        let mut generated_orbits = UnionFind::new(graph.node_count());
+
+        for generator in aut.generators() {
+            let mut image = generator.clone();
+            image.sort_unstable();
+            assert_eq!(image, expected_nodes);
+            for (source, &target) in generator.iter().enumerate() {
+                assert_eq!(colors[source], colors[target.index()]);
+                generated_orbits.union(source, target.index());
+            }
+            for &(a, b) in &edges {
+                let a_image = generator[a].index();
+                let b_image = generator[b].index();
+                assert!(edges.contains(&(a_image.min(b_image), a_image.max(b_image))));
+            }
+        }
+
+        for a in 0..graph.node_count() {
+            for b in 0..graph.node_count() {
+                assert_eq!(
+                    generated_orbits.find(a) == generated_orbits.find(b),
+                    aut.same_orbit(NodeId(a as u32), NodeId(b as u32))
+                );
+            }
+        }
     }
 
-    #[test]
-    fn test_automorphisms_single_vertex() {
-        let g = Graph::new(1, &[]);
-        let aut = g.automorphisms(|_| 0u8, Nauty);
-        assert_eq!(aut.orbit_count(), 1);
-        assert_eq!(aut.orbit_of(NodeId(0)), NodeId(0));
-        assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(1));
-    }
-
-    #[test]
-    fn test_automorphisms_two_same_color() {
-        let g = Graph::new(2, &[[0, 1]]);
-        let aut = g.automorphisms(|_| 0u8, Nauty);
-        assert_eq!(aut.orbit_count(), 1);
-        assert!(aut.same_orbit(NodeId(0), NodeId(1)));
-        assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(2));
-    }
-
-    #[test]
-    fn test_automorphisms_two_different_color() {
-        let g = Graph::new(2, &[[0, 1]]);
-        let aut = g.automorphisms(|n| n.index() as u8, Nauty);
-        assert_eq!(aut.orbit_count(), 2);
-        assert!(!aut.same_orbit(NodeId(0), NodeId(1)));
-        assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(1));
-    }
-
-    #[test]
-    fn test_automorphisms_square_uniform() {
-        let g = Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]);
-        let aut = g.automorphisms(|_| 0u8, Nauty);
-        assert_eq!(aut.orbit_count(), 1);
-        assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(8));
-    }
-
-    #[test]
-    fn test_automorphisms_path_colored() {
-        let g = Graph::new(3, &[[0, 1], [1, 2]]);
-        let colors = [0u8, 1, 0];
-        let aut = g.automorphisms(|n| colors[n.index()], Nauty);
-        assert_eq!(aut.orbit_count(), 2);
-        assert!(aut.same_orbit(NodeId(0), NodeId(2)));
-        assert!(!aut.same_orbit(NodeId(0), NodeId(1)));
-        assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(2));
+    #[rstest]
+    #[case::empty(Graph::default(), vec![], 0, AutoGroupOrder::Exact(1), vec![], vec![])]
+    #[case::singleton(
+        Graph::new(1, &[]),
+        vec![0],
+        1,
+        AutoGroupOrder::Exact(1),
+        vec![(0, 0)],
+        vec![]
+    )]
+    #[case::same_color_edge(
+        Graph::new(2, &[[0, 1]]),
+        vec![0, 0],
+        1,
+        AutoGroupOrder::Exact(2),
+        vec![(0, 1)],
+        vec![]
+    )]
+    #[case::different_color_edge(
+        Graph::new(2, &[[0, 1]]),
+        vec![0, 1],
+        2,
+        AutoGroupOrder::Exact(1),
+        vec![],
+        vec![(0, 1)]
+    )]
+    #[case::uniform_square(
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]),
+        vec![0, 0, 0, 0],
+        1,
+        AutoGroupOrder::Exact(8),
+        vec![(0, 1), (0, 2), (0, 3)],
+        vec![]
+    )]
+    #[case::colored_path(
+        Graph::new(3, &[[0, 1], [1, 2]]),
+        vec![0, 1, 0],
+        2,
+        AutoGroupOrder::Exact(2),
+        vec![(0, 2)],
+        vec![(0, 1)]
+    )]
+    #[case::disconnected_edges(
+        Graph::new(4, &[[0, 1], [2, 3]]),
+        vec![0, 0, 0, 0],
+        1,
+        AutoGroupOrder::Exact(8),
+        vec![(0, 1), (0, 2), (0, 3)],
+        vec![]
+    )]
+    fn test_graph_automorphisms(
+        #[case] graph: Graph,
+        #[case] colors: Vec<u8>,
+        #[case] expected_orbits: usize,
+        #[case] expected_order: AutoGroupOrder,
+        #[case] same_orbit: Vec<(u32, u32)>,
+        #[case] different_orbit: Vec<(u32, u32)>,
+    ) {
+        let aut = graph.automorphisms(|node| colors[node.index()], Nauty);
+        assert_eq!(aut.node_count(), graph.node_count());
+        assert_eq!(aut.orbit_count(), expected_orbits);
+        assert_eq!(aut.auto_group_order(), expected_order);
+        for (a, b) in same_orbit {
+            assert!(aut.same_orbit(NodeId(a), NodeId(b)));
+        }
+        for (a, b) in different_orbit {
+            assert!(!aut.same_orbit(NodeId(a), NodeId(b)));
+        }
+        assert_automorphism_semantics(&graph, &colors, &aut);
     }
 
     #[rstest]
@@ -383,6 +445,70 @@ mod tests {
     ) {
         let aut = g.automorphisms(|n| colors[n.index()], Nauty);
         assert_eq!(aut.generators(), expected);
+    }
+
+    #[rstest]
+    #[case::complete_13(13, 6_227_020_800.0)]
+    fn test_graph_automorphisms_large_order(#[case] nodes: usize, #[case] expected: f64) {
+        let mut edges = Vec::new();
+        for a in 0..nodes as u32 {
+            for b in a + 1..nodes as u32 {
+                edges.push([a, b]);
+            }
+        }
+        let graph = Graph::new(nodes, &edges);
+        let aut = graph.automorphisms(|_| 0u8, Nauty);
+        let AutoGroupOrder::Approx(order) = aut.auto_group_order() else {
+            panic!("order above u32 must use the approximate representation");
+        };
+        assert!((order - expected).abs() < 0.5);
+        assert_automorphism_semantics(&graph, &vec![0; nodes], &aut);
+    }
+
+    #[rstest]
+    #[case::cycle_6(
+        Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
+        NodeId(2),
+        AutoGroupOrder::Exact(2)
+    )]
+    fn test_graph_automorphisms_stabilizer(
+        #[case] graph: Graph,
+        #[case] site: NodeId,
+        #[case] expected_order: AutoGroupOrder,
+    ) {
+        let colors: Vec<bool> = graph.node_ids().map(|node| node == site).collect();
+        let aut = graph.automorphisms(|node| colors[node.index()], Nauty);
+        assert_eq!(aut.auto_group_order(), expected_order);
+        assert!(aut
+            .generators()
+            .iter()
+            .all(|generator| generator[site.index()] == site));
+    }
+
+    #[rstest]
+    #[case::parallel_cycles(8)]
+    fn test_graph_automorphisms_concurrency(#[case] thread_count: usize) {
+        let handles: Vec<_> = (0..thread_count)
+            .map(|site| {
+                thread::spawn(move || {
+                    let graph = Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]);
+                    let site = NodeId((site % graph.node_count()) as u32);
+                    let colors: Vec<bool> = graph.node_ids().map(|node| node == site).collect();
+                    let aut = graph.automorphisms(|node| colors[node.index()], Nauty);
+                    assert_automorphism_semantics(&graph, &colors, &aut);
+                    (site, aut)
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            let (site, aut) = handle.join().expect("automorphism worker succeeds");
+            assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(2));
+            assert!(aut
+                .generators()
+                .iter()
+                .all(|generator| generator[site.index()] == site));
+        }
     }
 
     #[rstest]

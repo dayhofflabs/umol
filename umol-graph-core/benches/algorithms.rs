@@ -1,3 +1,5 @@
+use std::iter;
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
@@ -232,8 +234,8 @@ fn degree_colors(graph: &Graph) -> Vec<u32> {
 }
 
 fn incidence_colors(node_count: usize, edge_count: usize) -> Vec<u32> {
-    std::iter::repeat_n(0, node_count)
-        .chain(std::iter::repeat_n(1, edge_count))
+    iter::repeat_n(0, node_count)
+        .chain(iter::repeat_n(1, edge_count))
         .collect()
 }
 
