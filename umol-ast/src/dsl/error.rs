@@ -35,6 +35,10 @@ pub enum ParseError {
     UnknownDativeBondPredicate(String),
     #[error("duplicate dative-bond predicate: {0}")]
     DuplicateDativeBondPredicate(String),
+    #[error("unknown noncovalent-bond predicate: {0}")]
+    UnknownNoncovalentBondPredicate(String),
+    #[error("duplicate noncovalent-bond predicate: {0}")]
+    DuplicateNoncovalentBondPredicate(String),
     #[error("unknown stereo predicate: {0}")]
     UnknownStereoPredicate(String),
     #[error("duplicate stereo predicate: {0}")]

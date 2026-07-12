@@ -238,8 +238,14 @@ The remaining `reaction_span.rs`-zero-changes and `EntityFold::constraint_key`-u
 held. Net confirmation of the verdict: the friction was the atomic red→green fan-out (~15 `match` sites),
 not any design.
 
-- **B / C / D pending.** B = string-DSL `#I` parse (+ the two `ParseError` variants), C = property
-  strategies + lattice proptests, D = resume B5. `[dep: A]` each; A → (B ∥ C) → D.
+- **B done (2026-07-12).** String-DSL `#I` parse: `NoncovalentBondPredicate` enum +
+  `noncovalent_bond_predicate` parser + `apply_predicates` + `constraint_tag`, wired into
+  `noncovalent_bond`; the two `ParseError` variants; `PartialNoncovalentBondDsl::fmt` now renders
+  undetermined explicitly (`#I*`) so a constraint→undetermined change round-trips. Purely additive —
+  4551 umol-ast tests pass, workspace green. Mirrored the dative `#a` predicate machinery exactly; the
+  only asymmetry is noncovalent's single predicate vs dative's two.
+- **C / D pending.** C = property strategies + lattice proptests, D = resume B5. `[dep: A]` each;
+  (B ∥ C) → D.
 
 ## Open decisions
 

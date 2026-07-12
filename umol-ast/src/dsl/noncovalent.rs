@@ -6,19 +6,19 @@ use std::str::FromStr;
 
 use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
-use winnow::combinator::{alt, delimited};
+use winnow::combinator::{alt, preceded, repeat, terminated};
 use winnow::error::{ErrMode, ParserError};
-use winnow::token::one_of;
+use winnow::token::{one_of, take};
 use winnow::Parser;
 
-use super::boolean::BooleanDsl;
+use super::boolean::{boolean, BooleanDsl};
 use super::config::NoncovalentBondDefaults;
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
 use crate::ast::boolean::BooleanAst;
 use crate::ast::constraint::NoncovalentBondConstraintAst;
 use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
-use crate::ast::traits::{FromAst, IntoAst};
+use crate::ast::traits::{FromAst, IntoAst, Lattice};
 
 /// Surface DSL wrapper around `NoncovalentBondAst`.
 #[repr(transparent)]
@@ -128,8 +128,60 @@ pub fn parse_noncovalent_bond(input: &str) -> Result<NoncovalentBondDsl, ParseEr
 }
 
 pub(crate) fn noncovalent_bond(i: &mut &str) -> PResult<NoncovalentBondDsl> {
-    let kind = delimited(multispace0, kind_expr, multispace0).parse_next(i)?;
-    Ok(NoncovalentBondDsl(NoncovalentBondAst::new(kind)))
+    let kind = preceded(multispace0, terminated(kind_expr, multispace0)).parse_next(i)?;
+    let preds: Vec<NoncovalentBondPredicate> =
+        repeat(0.., terminated(noncovalent_bond_predicate, multispace0)).parse_next(i)?;
+    let mut form = NoncovalentBondDsl(NoncovalentBondAst::new(kind));
+    apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
+    Ok(form)
+}
+
+/// One predicate from a noncovalent-bond-string; the parser yields a `Vec` of
+/// these and the applier folds them into the `NoncovalentBondAst`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NoncovalentBondPredicate {
+    Constraint(NoncovalentBondConstraintAst),
+}
+
+fn noncovalent_bond_predicate(i: &mut &str) -> PResult<NoncovalentBondPredicate> {
+    let start = *i;
+    let prefix: &str = take(2usize).parse_next(i)?;
+    match prefix {
+        "#I" => boolean
+            .map(|b| {
+                NoncovalentBondPredicate::Constraint(NoncovalentBondConstraintAst::Intramolecular(
+                    b.0,
+                ))
+            })
+            .parse_next(i),
+        p if p.starts_with('#') => Err(ErrMode::Cut(
+            ParseError::UnknownNoncovalentBondPredicate(p.to_string()),
+        )),
+        _ => Err(ErrMode::Cut(ParseError::TrailingInput(start.to_string()))),
+    }
+}
+
+fn apply_predicates(
+    form: &mut NoncovalentBondDsl,
+    preds: Vec<NoncovalentBondPredicate>,
+) -> Result<(), ParseError> {
+    let ast = &mut form.0;
+    for pred in preds {
+        let NoncovalentBondPredicate::Constraint(c) = pred;
+        if ast.constraints.contains(c.key()) {
+            return Err(ParseError::DuplicateNoncovalentBondPredicate(
+                constraint_tag(&c).to_string(),
+            ));
+        }
+        ast.constraints.set(c);
+    }
+    Ok(())
+}
+
+fn constraint_tag(c: &NoncovalentBondConstraintAst) -> &'static str {
+    match c {
+        NoncovalentBondConstraintAst::Intramolecular(_) => "#I",
+    }
 }
 
 fn kind_expr(i: &mut &str) -> PResult<NoncovalentBondKindAst> {
@@ -214,7 +266,15 @@ impl FromStr for PartialNoncovalentBondDsl {
 
 impl Display for PartialNoncovalentBondDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_noncovalent_bond_ast(f, &self.0)
+        fmt_kind(f, &self.0.kind)?;
+        for c in self.0.constraints.iter() {
+            if c.is_undetermined() {
+                write!(f, "{}*", constraint_tag(c))?;
+            } else {
+                fmt_constraint(f, c)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -324,6 +384,11 @@ mod tests {
     #[case::vdw("Vdw", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::VanDerWaals)))]
     #[case::whitespace("  Hbd  ", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)))]
     #[case::undetermined("*", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Undetermined)))]
+    #[case::intramolecular("Hbd#I", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true))))]
+    #[case::intramolecular_plus("Hbd#I+", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true))))]
+    #[case::intermolecular("Hbd#I!", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(false))))]
+    #[case::intramolecular_undetermined("Hbd#I*", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::Intramolecular(BooleanAst::Undetermined))))]
+    #[case::undetermined_kind_with_pred("*#I", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Undetermined).with_constraint(NoncovalentBondConstraintAst::intramolecular(true))))]
     fn test_parse_noncovalent(#[case] input: &str, #[case] expected: NoncovalentBondDsl) {
         let result = noncovalent_bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -342,9 +407,18 @@ mod tests {
     }
 
     #[rstest]
+    #[case::unknown_predicate("Hbd#z", ParseError::UnknownNoncovalentBondPredicate("#z".into()))]
+    #[case::duplicate("Hbd#I#I", ParseError::DuplicateNoncovalentBondPredicate("#I".into()))]
+    fn test_parse_noncovalent_predicate_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(parse_noncovalent_bond(input).unwrap_err(), expected);
+    }
+
+    #[rstest]
     #[case::hbond("Hbd")]
     #[case::ion("Ion")]
     #[case::undetermined("*")]
+    #[case::intramolecular("Hbd#I")]
+    #[case::intermolecular("Hbd#I!")]
     fn test_noncovalent_roundtrip(#[case] input: &str) {
         let form: NoncovalentBondDsl = input.parse().unwrap();
         let rendered = form.to_string();
