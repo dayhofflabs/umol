@@ -2,14 +2,14 @@
 
 Status: Active — **B1 · Bond slice DONE incl. the view half** (value + WET constraint surface +
 `BondView`/`BondViews` + molecule-backed constraint views; Rust/Python green, clippy clean).
-**B2 · dative slice COMPLETE**; **B3 · aromatic slice COMPLETE** (`umol-py/src/aromatic.rs` +
-`electrons.rs`: value + WET constraint surface + `AromaticSystemView`/`AromaticSystemViews` +
-molecule-backed constraint views; `mol.aromatic_systems` accessor; `from_parts` `aromatic=[]` kwarg;
-new `ElectronCountsAst` leaf shared by B4; 9 aromatic pyclasses registered; 296 Rust unit + 299 pytest
-green, clippy/fmt clean). Next per the order **bonds → dative → aromatic → multicenter → …**:
-**B4 · multicenter-bond slice** — structurally byte-for-byte identical to aromatic, reusing S0's
-`electrons.rs` leaf. See *B3 · Aromatic — staged impl plan* below and *Bond slice — build state +
-detailed plan* at the end for the WET template.
+**B2 · dative COMPLETE**; **B3 · aromatic COMPLETE** (+ new `ElectronCountsAst` leaf, `electrons.rs`);
+**B4 · multicenter COMPLETE** (`umol-py/src/multicenter.rs`: value + WET constraint surface +
+`MulticenterBondView`/`MulticenterBondViews` + molecule-backed constraint views; `mol.multicenter_bonds`
+accessor; `from_parts` `multicenter=[]` kwarg; reuses the `ElectronCountsAst` leaf, no new foundation;
+9 multicenter pyclasses registered; 344 Rust unit + 332 pytest green, clippy/fmt clean). Next per the
+order **… → multicenter → noncovalent → stereo**: **B5 · noncovalent-bond slice**
+(`umol-py/src/noncovalent.rs`). See *B3 · Aromatic* / *B4 · Multicenter — staged impl plan* below and
+*Bond slice — build state + detailed plan* at the end for the WET template.
 Date: 2026-07-09
 Relates: 137 (atom slice — the template being mirrored), 139 (mutability/hashing/equality
 balance), 114 (interning — where stereo/handle-identity deferrals live)
@@ -461,14 +461,27 @@ constraint `electron_count` (total `ValueAst`) — both exist, no clash.
   3-center bond). Not registered yet (S3c). 44 multicenter Rust tests green, clippy/fmt clean.
   Verification: manual parity — 0 `Aromatic` leaks; `MulticenterBondView` pymethod inventory **identical**
   to `AromaticSystemView` (all 12); 7=7 view tests + the molecule-backed test present. `[dep: S1b]`
-- **S3b** *(additive)* — `resolve_multicenter_bond_index` (mirrors `resolve_bond_index`) +
+- **S3b — DONE** *(additive)* — `resolve_multicenter_bond_index` (mirrors `resolve_bond_index`) +
   `MulticenterBondViews` (`mol.multicenter_bonds`: `__len__`/`__repr__`/`__getitem__`/`__setitem__`
   value-replace/`__iter__` + `connecting(atoms)` + `incident(atom)`) + `MulticenterBondViewIter`. `new` +
-  accessor + registration deferred to S3c → the collection tests construct via struct-literal (no dead
-  code). `[dep: S3a]`
-- **S3c** *(additive)* — `MulticenterBondViews::new` + `mol.multicenter_bonds` accessor (`molecule.rs`) +
-  register `MulticenterBondView`/`MulticenterBondViews` (`lib.rs` + `__init__.py`) +
-  `tests/test_multicenter.py`; maturin rebuild + pytest. `[dep: S3a, S3b]`
+  accessor + registration deferred to S3c → the 7 collection tests construct via struct-literal (no dead
+  code); `_repr` test placed 2nd (per the aromatic S3b fix). 51 multicenter Rust tests green, clippy/fmt
+  clean. Verification: manual parity — 0 leaks; `MulticenterBondViews` pymethod inventory **identical** to
+  `AromaticSystemViews` (all 7); 7=7 collection tests. `[dep: S3a]`
+- **S3c — DONE** *(additive)* — `MulticenterBondViews::new` + `mol.multicenter_bonds` accessor
+  (`molecule.rs`) + registered `MulticenterBondView`/`MulticenterBondViews` (`lib.rs` + `__init__.py`) +
+  `tests/test_multicenter.py` (31 pytest, renamed from `test_aromatic.py`); maturin rebuilt. 344 Rust
+  unit + 332 pytest green, clippy/fmt clean. Verification: manual parity — 0 leaks; 31=31 Python tests
+  vs `test_aromatic.py`. `[dep: S3a, S3b]`
+
+**B4 · multicenter slice COMPLETE** — value + WET constraint surface + `MulticenterBondView`/`Views` +
+`mol.multicenter_bonds`, reusing the S0 `ElectronCountsAst` leaf (no new foundation); 9 multicenter
+pyclasses registered; 344 Rust unit + 332 pytest green. Verbatim rename of the aromatic slice with the
+staging improvements (no S0, merged constraint surface = no gating, backing-with-view). The review
+workflow's structured-output emission reliably dies on the rename-diff prompt shape (S1a twice), so the
+multicenter stages were verified by clean build/clippy/fmt + full test suites + a manual rename-slip +
+method/test-parity diff vs aromatic (semantic correctness inherited from the adversarially-verified
+aromatic slice).
 
 Critical path: **S1 → S2 → S3** (linear). No S0, no gating, no deferrable/red stages. After B4, B5–B7
 (noncovalent, stereo) remain; the `electrons.rs` leaf is now shared by aromatic + multicenter.

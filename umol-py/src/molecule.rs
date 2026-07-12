@@ -10,7 +10,7 @@ use crate::aromatic::{AromaticSystemAst, AromaticSystemViews};
 use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
 use crate::dative::{DativeBondAst, DativeBondViews};
-use crate::multicenter::MulticenterBondAst;
+use crate::multicenter::{MulticenterBondAst, MulticenterBondViews};
 
 /// A molecule: the owned graph-AST root.
 #[pyclass(eq)]
@@ -116,6 +116,12 @@ impl MoleculeAst {
     #[getter]
     fn aromatic_systems(slf: Py<Self>) -> AromaticSystemViews {
         AromaticSystemViews::new(slf)
+    }
+
+    /// The multicenter bonds, indexed by integer position.
+    #[getter]
+    fn multicenter_bonds(slf: Py<Self>) -> MulticenterBondViews {
+        MulticenterBondViews::new(slf)
     }
 
     fn __repr__(&self) -> String {

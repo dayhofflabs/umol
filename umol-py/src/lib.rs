@@ -31,7 +31,8 @@ use crate::{
     molecule::MoleculeAst,
     multicenter::{
         MulticenterBondAst, MulticenterBondConstraintAst, MulticenterBondConstraintKey,
-        MulticenterBondConstraintsAst, MulticenterBondConstraintsView,
+        MulticenterBondConstraintsAst, MulticenterBondConstraintsView, MulticenterBondView,
+        MulticenterBondViews,
     },
     stereo::{
         CisTransStereo, CisTransStereoAst, Permutation, StereoCosetAst, StereoTerm,
@@ -128,6 +129,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<MulticenterBondConstraintKey>()?;
         module.add_class::<MulticenterBondConstraintsAst>()?;
         module.add_class::<MulticenterBondConstraintsView>()?;
+        module.add_class::<MulticenterBondView>()?;
+        module.add_class::<MulticenterBondViews>()?;
         module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;

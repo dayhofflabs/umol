@@ -425,6 +425,13 @@ impl MulticenterBondViews {
     }
 }
 
+impl MulticenterBondViews {
+    /// Build the multicenter-bond-views handle for `owner` (the `.multicenter_bonds` accessor).
+    pub(crate) fn new(owner: Py<MoleculeAst>) -> MulticenterBondViews {
+        MulticenterBondViews { owner }
+    }
+}
+
 #[pyclass]
 struct MulticenterBondViewIter {
     owner: Py<MoleculeAst>,
