@@ -41,9 +41,6 @@ impl ElectronCountsAst {
 }
 
 impl ElectronCountsAst {
-    /// The AST→Python bridge, paired with `to_ast`. Test-only until the aromatic
-    /// value pyclass (S1c) consumes it.
-    #[cfg(test)]
     pub(crate) fn from_ast(ast: &AstElectronCountsAst) -> Self {
         match ast {
             AstElectronCountsAst::Undetermined => Self::Undetermined(),
@@ -60,16 +57,13 @@ impl ElectronCountsAst {
 }
 
 /// Setter coercion for an electron-counts field: a Python `list[int]` → `Lit`, or an
-/// `ElectronCountsAst` passthrough (mirroring `impl From<Vec<i64>>`). Test-only until
-/// the aromatic value pyclass (S1c) consumes it.
-#[cfg(test)]
+/// `ElectronCountsAst` passthrough (mirroring `impl From<Vec<i64>>`).
 #[derive(FromPyObject)]
 pub(crate) enum ElectronCountsArg {
     Lit(Vec<i64>),
     Ast(Py<ElectronCountsAst>),
 }
 
-#[cfg(test)]
 impl ElectronCountsArg {
     pub(crate) fn to_ast(&self, py: Python<'_>) -> AstElectronCountsAst {
         match self {

@@ -3,9 +3,11 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from ._native import (
+    AromaticSystemAst,
     AromaticSystemConstraintAst,
     AromaticSystemConstraintKey,
     AromaticSystemConstraintsAst,
+    AromaticSystemConstraintsView,
     AromaticValenceAst,
     AtomAst,
     AtomConstraintAst,
@@ -63,9 +65,11 @@ except PackageNotFoundError:
     __version__ = "0.0.0"
 
 __all__ = [
+    "AromaticSystemAst",
     "AromaticSystemConstraintAst",
     "AromaticSystemConstraintKey",
     "AromaticSystemConstraintsAst",
+    "AromaticSystemConstraintsView",
     "AromaticValenceAst",
     "AtomAst",
     "AtomConstraintAst",
