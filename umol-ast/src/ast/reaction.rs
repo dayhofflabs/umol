@@ -254,8 +254,13 @@ impl ReactionAst {
                             change: change.clone(),
                         })
                     }
-                    // `NoncovalentBondConstraintAst` is uninhabited — no `Edit` variant, no-op.
-                    NoncovalentBondDelta::ModifyConstraint { .. } => {}
+                    NoncovalentBondDelta::ModifyConstraint { id, old, new } => {
+                        sets.push(Edit::ModifyNoncovalentBondConstraint {
+                            id: NoncovalentBondHandle::Id(host_noncovalent(*id)),
+                            old: old.clone(),
+                            new: new.clone(),
+                        })
+                    }
                     NoncovalentBondDelta::Add { .. } => {}
                     NoncovalentBondDelta::Remove { id, .. } => {
                         removed_host_noncovalent.insert(host_noncovalent(*id));

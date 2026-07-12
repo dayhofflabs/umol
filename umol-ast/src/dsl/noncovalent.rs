@@ -11,8 +11,12 @@ use winnow::error::{ErrMode, ParserError};
 use winnow::token::one_of;
 use winnow::Parser;
 
+use super::boolean::BooleanDsl;
 use super::config::NoncovalentBondDefaults;
+use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
+use crate::ast::boolean::BooleanAst;
+use crate::ast::constraint::NoncovalentBondConstraintAst;
 use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 use crate::ast::traits::{FromAst, IntoAst};
 
@@ -173,7 +177,19 @@ fn kind_symbol(k: NoncovalentBondKind) -> &'static str {
 }
 
 fn fmt_noncovalent_bond_ast(f: &mut fmt::Formatter<'_>, ast: &NoncovalentBondAst) -> fmt::Result {
-    fmt_kind(f, &ast.kind)
+    fmt_kind(f, &ast.kind)?;
+    for c in ast.constraints.iter() {
+        fmt_constraint(f, c)?;
+    }
+    Ok(())
+}
+
+fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &NoncovalentBondConstraintAst) -> fmt::Result {
+    match c {
+        NoncovalentBondConstraintAst::Intramolecular(BooleanAst::Lit(true)) => write!(f, "#I"),
+        NoncovalentBondConstraintAst::Intramolecular(BooleanAst::Lit(false)) => write!(f, "#I!"),
+        NoncovalentBondConstraintAst::Intramolecular(BooleanAst::Undetermined) => Ok(()),
+    }
 }
 
 fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentBondKindAst) -> fmt::Result {
@@ -183,8 +199,8 @@ fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentBondKindAst) -> fmt::R
     }
 }
 
-/// Partial noncovalent bond for a reaction `:modify` payload. The constraint set is uninhabited, so
-/// this is just the kind (`*` = unchanged) — a partial only for uniformity with the other overlays.
+/// Partial noncovalent bond for a reaction `:modify` payload. The kind (`*` = unchanged) followed
+/// by any `#I` intramolecular constraint overlay.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PartialNoncovalentBondDsl(pub NoncovalentBondAst);
 
@@ -223,23 +239,71 @@ impl ToEdn for PartialNoncovalentBondDsl {
     }
 }
 
-/// Surface DSL wrapper around the narrow `NoncovalentBondConstraintAst`.
+/// Surface DSL wrapper around the narrow `NoncovalentBondConstraintAst`. EDN form is a single-key
+/// map `{:intramolecular <bool>}`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum NoncovalentBondConstraintDsl {}
+pub enum NoncovalentBondConstraintDsl {
+    Intramolecular(BooleanAst),
+}
 
 impl<'de> FromEdn<'de> for NoncovalentBondConstraintDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        Err(DeError::TypeMismatch {
-            expected: "no value-only noncovalent-bond constraints exist yet",
-            got: edn.kind(),
-            path: vec!["noncovalent-bond-constraint".into()],
-        })
+        match edn {
+            Edn::Map(m) => {
+                if m.len() != 1 {
+                    return Err(DeError::Custom(format!(
+                        "noncovalent-bond-constraint must have exactly one key, got {}",
+                        m.len()
+                    )));
+                }
+                let (k, v) = m.iter().next().unwrap();
+                let Edn::Keyword(key) = k else {
+                    return Err(DeError::TypeMismatch {
+                        expected: "keyword key",
+                        got: k.kind(),
+                        path: vec!["noncovalent-bond-constraint".into()],
+                    });
+                };
+                Ok(match key.name() {
+                    "intramolecular" => Self::Intramolecular(BooleanDsl::from_edn(v)?.0),
+                    other => {
+                        return Err(DeError::UnknownField {
+                            key: other.to_string(),
+                            path: vec!["noncovalent-bond-constraint".into()],
+                        });
+                    }
+                })
+            }
+            other => Err(DeError::TypeMismatch {
+                expected: "{:intramolecular …}",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
     }
 }
 
 impl ToEdn for NoncovalentBondConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
-        match *self {}
+        match self {
+            Self::Intramolecular(b) => single_key_map("intramolecular", BooleanDsl(*b).to_edn()),
+        }
+    }
+}
+
+impl NoncovalentBondConstraintDsl {
+    /// Build from the narrow inline AST form.
+    pub(crate) fn from_ast(c: &NoncovalentBondConstraintAst) -> Self {
+        match c {
+            NoncovalentBondConstraintAst::Intramolecular(b) => Self::Intramolecular(*b),
+        }
+    }
+
+    /// Convert into the narrow inline AST form.
+    pub(crate) fn into_ast(self) -> NoncovalentBondConstraintAst {
+        match self {
+            Self::Intramolecular(b) => NoncovalentBondConstraintAst::Intramolecular(b),
+        }
     }
 }
 
@@ -311,11 +375,74 @@ mod tests {
         assert_eq!(via_stream, via_tree);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    fn test_noncovalent_bond_constraint_dsl_from_edn_errors() {
-        let edn = read_string("{:contains 1}").unwrap();
+    #[case::intramolecular(NoncovalentBondConstraintAst::intramolecular(true), "Hbd#I")]
+    #[case::intermolecular(NoncovalentBondConstraintAst::intramolecular(false), "Hbd#I!")]
+    #[case::undetermined_elides(NoncovalentBondConstraintAst::Intramolecular(BooleanAst::Undetermined), "Hbd")]
+    fn test_fmt_noncovalent_bond_ast(#[case] c: NoncovalentBondConstraintAst, #[case] expected: &str) {
+        let bond = NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(c);
+        assert_eq!(bond.to_string(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::true_("{:intramolecular true}", NoncovalentBondConstraintDsl::Intramolecular(BooleanAst::Lit(true)))]
+    #[case::false_("{:intramolecular false}", NoncovalentBondConstraintDsl::Intramolecular(BooleanAst::Lit(false)))]
+    #[case::undetermined("{:intramolecular :undetermined}", NoncovalentBondConstraintDsl::Intramolecular(BooleanAst::Undetermined))]
+    fn test_noncovalent_bond_constraint_dsl_from_edn(
+        #[case] input: &str,
+        #[case] expected: NoncovalentBondConstraintDsl,
+    ) {
+        let edn = read_string(input).unwrap();
+        assert_eq!(NoncovalentBondConstraintDsl::from_edn(&edn).unwrap(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::unknown_key("{:contains 1}", |e: &DeError| matches!(e, DeError::UnknownField { .. }))]
+    #[case::two_keys("{:intramolecular true, :contains 1}", |e: &DeError| matches!(e, DeError::Custom(_)))]
+    #[case::not_a_map("42", |e: &DeError| matches!(e, DeError::TypeMismatch { .. }))]
+    fn test_noncovalent_bond_constraint_dsl_from_edn_error(
+        #[case] input: &str,
+        #[case] is_expected: impl Fn(&DeError) -> bool,
+    ) {
+        let edn = read_string(input).unwrap();
         let err = NoncovalentBondConstraintDsl::from_edn(&edn).unwrap_err();
-        assert!(matches!(err, DeError::TypeMismatch { .. }));
+        assert!(is_expected(&err), "unexpected error: {err:?}");
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::true_(NoncovalentBondConstraintDsl::Intramolecular(BooleanAst::Lit(true)), "{:intramolecular true}")]
+    #[case::false_(NoncovalentBondConstraintDsl::Intramolecular(BooleanAst::Lit(false)), "{:intramolecular false}")]
+    #[case::undetermined(NoncovalentBondConstraintDsl::Intramolecular(BooleanAst::Undetermined), "{:intramolecular :undetermined}")]
+    fn test_noncovalent_bond_constraint_dsl_to_edn(
+        #[case] dsl: NoncovalentBondConstraintDsl,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(dsl.to_edn(), read_string(expected).unwrap());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::intramolecular(NoncovalentBondConstraintAst::intramolecular(true), NoncovalentBondConstraintDsl::Intramolecular(BooleanAst::Lit(true)))]
+    #[case::undetermined(NoncovalentBondConstraintAst::Intramolecular(BooleanAst::Undetermined), NoncovalentBondConstraintDsl::Intramolecular(BooleanAst::Undetermined))]
+    fn test_noncovalent_bond_constraint_dsl_from_ast(
+        #[case] ast: NoncovalentBondConstraintAst,
+        #[case] expected: NoncovalentBondConstraintDsl,
+    ) {
+        assert_eq!(NoncovalentBondConstraintDsl::from_ast(&ast), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::intramolecular(NoncovalentBondConstraintDsl::Intramolecular(BooleanAst::Lit(false)), NoncovalentBondConstraintAst::intramolecular(false))]
+    fn test_noncovalent_bond_constraint_dsl_into_ast(
+        #[case] dsl: NoncovalentBondConstraintDsl,
+        #[case] expected: NoncovalentBondConstraintAst,
+    ) {
+        assert_eq!(dsl.into_ast(), expected);
     }
 
     #[rstest]

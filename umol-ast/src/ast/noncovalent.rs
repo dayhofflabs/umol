@@ -50,35 +50,47 @@ impl NoncovalentBondAst {
         self
     }
 
-    /// Add each constraint from the iterator. Vacuous today since
-    /// `NoncovalentBondConstraintAst` is uninhabited; the signature locks in
-    /// the extend semantic so that callers don't develop replace-style
-    /// expectations before inhabited variants land.
-    pub fn with_constraints<I>(self, _constraints: I) -> Self
+    /// Add a single constraint, replacing any existing entry of the same
+    /// kind (last-wins per `NoncovalentBondConstraintsAst::set`). Chainable.
+    pub fn with_constraint(mut self, constraint: impl Into<NoncovalentBondConstraintAst>) -> Self {
+        self.constraints.set(constraint.into());
+        self
+    }
+
+    /// Add each constraint from the iterator, replacing any existing entry
+    /// of the same kind (last-wins per `NoncovalentBondConstraintsAst::set`).
+    /// Does not clear existing constraints; use `bond.constraints.clear()`
+    /// or direct field assignment for wipe-and-replace.
+    pub fn with_constraints<I>(mut self, constraints: I) -> Self
     where
         I: IntoIterator,
         I::Item: Into<NoncovalentBondConstraintAst>,
     {
+        for c in constraints {
+            self.constraints.set(c.into());
+        }
         self
     }
 
-    /// No-op: `NoncovalentBondAst` has no value-bearing fields besides
-    /// `kind`, which is essential and never filled. Provided for API
-    /// symmetry.
+    /// No-op on value fields: `NoncovalentBondAst` has no value-bearing field
+    /// besides `kind`, which is essential and never filled. Constraints are
+    /// preserved. Provided for API symmetry.
     pub fn into_ground(self) -> Self {
         self
     }
 
     /// Overwrite with `other`, keeping the existing kind when `other`'s is
-    /// undetermined. Constraints are uninhabited, so preserved as-is.
+    /// undetermined. Constraints overlay via `NoncovalentBondConstraintsAst::update`.
     pub fn update(&self, other: &NoncovalentBondAst) -> NoncovalentBondAst {
+        let mut constraints = self.constraints.clone();
+        constraints.update(&other.constraints);
         NoncovalentBondAst {
             kind: if other.kind.is_undetermined() {
                 self.kind.clone()
             } else {
                 other.kind.clone()
             },
-            constraints: self.constraints.clone(),
+            constraints,
         }
     }
 }
@@ -205,11 +217,43 @@ mod tests {
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)
             .with_constraints(empty::<NoncovalentBondConstraintAst>()),
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
+    #[case::with_constraint(
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)
+            .with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
+        NoncovalentBondAst { kind: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
+            constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(true)) })]
+    #[case::with_constraints_populated(
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)
+            .with_constraints([NoncovalentBondConstraintAst::intramolecular(false)]),
+        NoncovalentBondAst { kind: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
+            constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(false)) })]
     fn test_noncovalent_bond_ast_with_methods(
         #[case] actual: NoncovalentBondAst,
         #[case] expected: NoncovalentBondAst,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::kind_narrows(
+        NoncovalentBondAst::default(),
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
+    #[case::kind_kept_when_other_undetermined(
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        NoncovalentBondAst::default(),
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
+    #[case::constraints_overlay(
+        NoncovalentBondAst::default(),
+        NoncovalentBondAst::default().with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
+        NoncovalentBondAst::default().with_constraint(NoncovalentBondConstraintAst::intramolecular(true)))]
+    fn test_noncovalent_bond_ast_update(
+        #[case] base: NoncovalentBondAst,
+        #[case] other: NoncovalentBondAst,
+        #[case] expected: NoncovalentBondAst,
+    ) {
+        assert_eq!(base.update(&other), expected);
     }
 
     #[rstest]

@@ -500,9 +500,23 @@ pub(super) fn read_multicenter_bond_constraint_dsl(
 }
 
 pub(super) fn read_noncovalent_bond_constraint_dsl(
-    _de: &mut EdnStreamDeserializer<'_>,
+    de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<NoncovalentBondConstraintDsl, EdnError> {
-    Err(DeError::Custom("no value-only noncovalent-bond constraints exist yet".to_string()).into())
+    let key = read_single_key_map_header(de)?;
+    let c = match key.as_str() {
+        "intramolecular" => {
+            NoncovalentBondConstraintDsl::Intramolecular(read_boolean_dsl(de)?.0)
+        }
+        other => {
+            return Err(DeError::UnknownField {
+                key: other.to_string(),
+                path: vec!["noncovalent-bond-constraint".into()],
+            }
+            .into());
+        }
+    };
+    consume_single_key_map_close(de, "noncovalent-bond-constraint")?;
+    Ok(c)
 }
 
 /// Membership polarity `:in` / `:not-in`. Shared by `#p` and the `#o`/`#g` relations.
@@ -1931,7 +1945,7 @@ impl ToEdn for ConstraintDsl {
             Self::DativeBond(r, c) => entity_leaf_edn("dative-bond", r, c),
             Self::AromaticSystem(r, c) => entity_leaf_edn("aromatic-system", r, c),
             Self::MulticenterBond(r, c) => entity_leaf_edn("multicenter-bond", r, c),
-            Self::NoncovalentBond(_, c) => match *c {},
+            Self::NoncovalentBond(r, c) => entity_leaf_edn("noncovalent-bond", r, c),
             Self::StereoAtom(r, c) => entity_leaf_edn("stereo-atom", r, c),
             Self::StereoBond(r, c) => entity_leaf_edn("stereo-bond", r, c),
             Self::Relational(r) => r.to_edn(),
@@ -1970,7 +1984,10 @@ impl ConstraintDsl {
                 MulticenterBondRef::denote(*id, meta),
                 MulticenterBondConstraintDsl::from_ast(c),
             ),
-            Constraint::NoncovalentBond(_, c) => match *c {},
+            Constraint::NoncovalentBond(id, c) => Self::NoncovalentBond(
+                NoncovalentBondRef::denote(*id, meta),
+                NoncovalentBondConstraintDsl::from_ast(c),
+            ),
             Constraint::StereoAtom(id, kind, c) => Self::StereoAtom(
                 StereoAtomRef::denote(*id, meta),
                 StereoAtomConstraintDsl::from_ast(c, kind),
@@ -2008,7 +2025,9 @@ impl ConstraintDsl {
             Self::MulticenterBond(r, c) => {
                 Constraint::MulticenterBond(r.resolve(namespace)?, c.into_ast())
             }
-            Self::NoncovalentBond(_, c) => match c {},
+            Self::NoncovalentBond(r, c) => {
+                Constraint::NoncovalentBond(r.resolve(namespace)?, c.into_ast())
+            }
             Self::StereoAtom(r, StereoAtomConstraintDsl(kind, c)) => {
                 Constraint::StereoAtom(r.resolve(namespace)?, kind, c)
             }

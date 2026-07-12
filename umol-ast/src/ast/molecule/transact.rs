@@ -638,6 +638,13 @@ impl MoleculeEditor {
                 }
                 self.apply_modify_multicenter_bond_constraint(id, old, new)
             }
+            Edit::ModifyNoncovalentBondConstraint { id, old, new } => {
+                let id = created.noncovalent_bond(id)?;
+                if id.index() >= self.noncovalent_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("noncovalent bond"));
+                }
+                self.apply_modify_noncovalent_bond_constraint(id, old, new)
+            }
             Edit::ModifyStereoAtomConstraint { id, old, new } => {
                 let id = created.stereo_atom(id)?;
                 if id.index() >= self.stereo_atom_count() {
@@ -1275,6 +1282,19 @@ impl MoleculeEditor {
                 self.apply_modify_multicenter_bond_constraint(id, old, new)?;
                 Ok(undo)
             }
+            Edit::ModifyNoncovalentBondConstraint { id, old, new } => {
+                let id = created.noncovalent_bond(id.clone())?;
+                if id.index() >= self.noncovalent_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("noncovalent bond"));
+                }
+                let undo = Undo::ApplyEdit(Box::new(Edit::ModifyNoncovalentBondConstraint {
+                    id: NoncovalentBondHandle::Id(id),
+                    old: new.clone(),
+                    new: old.clone(),
+                }));
+                self.apply_modify_noncovalent_bond_constraint(id, old, new)?;
+                Ok(undo)
+            }
             Edit::ModifyStereoAtomConstraint { id, old, new } => {
                 let id = created.stereo_atom(id.clone())?;
                 if id.index() >= self.stereo_atom_count() {
@@ -1735,6 +1755,21 @@ impl MoleculeEditor {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
         self.multicenter_bond_mut(id)
+            .ast
+            .constraints
+            .compare_and_set(old, new)
+            .map_err(|_| TransactionError::OldStateMismatch)
+    }
+
+    fn apply_modify_noncovalent_bond_constraint(
+        &mut self,
+        id: NoncovalentBondId,
+        old: Option<super::super::constraint::NoncovalentBondConstraintAst>,
+        new: Option<super::super::constraint::NoncovalentBondConstraintAst>,
+    ) -> Result<(), TransactionError> {
+        // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
+        // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
+        self.noncovalent_bond_mut(id)
             .ast
             .constraints
             .compare_and_set(old, new)

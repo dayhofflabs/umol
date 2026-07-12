@@ -2480,8 +2480,20 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                                 }
                             }
                         }
-                        // NoncovalentBondConstraintAst is uninhabited: no constraint payload.
-                        NoncovalentBondDelta::ModifyConstraint { id: j, .. } if *j == id => {}
+                        NoncovalentBondDelta::ModifyConstraint { id: j, old, new }
+                            if *j == id =>
+                        {
+                            match new {
+                                Some(c) => {
+                                    partial.constraints.set(c.clone());
+                                }
+                                None => {
+                                    if let Some(old) = old {
+                                        partial.constraints.set(old.as_undetermined());
+                                    }
+                                }
+                            }
+                        }
                         _ => break,
                     }
                     i += 1;

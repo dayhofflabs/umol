@@ -1463,58 +1463,21 @@ impl EntityPatch for NoncovalentBondDelta {
         NoncovalentBondDelta::ModifyConstraint { id, old, new }
     }
 
-    // Hand-written (not `diff_field_ops!`): `NoncovalentBondConstraintAst` is uninhabited,
-    // so the macro's constraint loop would be unreachable code.
-    fn apply_field(
-        ast: &mut NoncovalentBondAst,
-        change: NoncovalentBondFieldChange,
-    ) -> Result<(), Contradiction> {
-        match change {
-            NoncovalentBondFieldChange::Kind { old, new } => {
-                if !ast.kind.canonical_eq(&old) {
-                    return Err(Contradiction);
-                }
-                ast.kind = new;
-            }
+    diff_field_ops!(
+        NoncovalentBondFieldChange,
+        NoncovalentBondAst,
+        NoncovalentBondConstraintAst,
+        {
+            Kind => kind,
         }
-        Ok(())
-    }
+    );
 
-    fn diff_field(
-        lhs: &NoncovalentBondAst,
-        rhs: &NoncovalentBondAst,
-    ) -> Vec<NoncovalentBondFieldChange> {
-        if !lhs.kind.canonical_eq(&rhs.kind) {
-            vec![NoncovalentBondFieldChange::Kind {
-                old: lhs.kind.clone(),
-                new: rhs.kind.clone(),
-            }]
-        } else {
-            Vec::new()
-        }
-    }
-
-    fn diff_constraints(
-        _lhs: &NoncovalentBondAst,
-        _rhs: &NoncovalentBondAst,
-    ) -> Vec<(
-        Option<NoncovalentBondConstraintAst>,
-        Option<NoncovalentBondConstraintAst>,
-    )> {
-        Vec::new()
-    }
-
-    /// `NoncovalentBondConstraintAst` is uninhabited, so `old`/`new` are always `None`.
     fn apply_constraint(
-        _ast: &mut NoncovalentBondAst,
+        ast: &mut NoncovalentBondAst,
         old: Option<NoncovalentBondConstraintAst>,
         new: Option<NoncovalentBondConstraintAst>,
     ) -> Result<(), Contradiction> {
-        debug_assert!(
-            old.is_none() && new.is_none(),
-            "noncovalent constraints are uninhabited"
-        );
-        Ok(())
+        ast.constraints.compare_and_set(old, new)
     }
 }
 

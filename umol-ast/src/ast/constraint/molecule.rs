@@ -58,10 +58,9 @@ impl Constraint {
     /// leaves delegate to `MoleculeConstraint::is_vacuous`. Combinators
     /// (`And`/`Or`) are vacuous only when empty; `Not(c)` is treated as
     /// non-vacuous (negating a vacuous claim is a meaningful unsat claim).
-    /// `Relational` and `NoncovalentBond` are always non-vacuous (no
-    /// `Undetermined` payload to elide); the stereo leaves delegate to the
-    /// inner `is_undetermined` (a `#o`/`#g` with an `Undetermined` relation
-    /// constrains nothing).
+    /// `Relational` is always non-vacuous (no `Undetermined` payload to
+    /// elide); the stereo leaves delegate to the inner `is_undetermined` (a
+    /// `#o`/`#g` with an `Undetermined` relation constrains nothing).
     pub fn is_vacuous(&self) -> bool {
         match self {
             Self::Atom(_, c) => c.is_undetermined(),
@@ -185,7 +184,7 @@ impl Canonicalize for Constraint {
             Self::DativeBond(id, c) => Self::DativeBond(id, c.canonicalize()?),
             Self::AromaticSystem(id, c) => Self::AromaticSystem(id, c.canonicalize()?),
             Self::MulticenterBond(id, c) => Self::MulticenterBond(id, c.canonicalize()?),
-            Self::NoncovalentBond(_, c) => match c {},
+            Self::NoncovalentBond(id, c) => Self::NoncovalentBond(id, c.canonicalize()?),
             Self::StereoAtom(id, kind, c) => Self::StereoAtom(id, kind, c.canonicalize()?),
             Self::StereoBond(id, kind, c) => Self::StereoBond(id, kind, c.canonicalize()?),
             Self::Relational(r) => Self::Relational(r.canonicalize()?),

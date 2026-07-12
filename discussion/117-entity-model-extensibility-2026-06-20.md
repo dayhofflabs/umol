@@ -121,8 +121,130 @@ mainly the essential design work), not eliminating entity types or auto-generati
 Whether to build that scaffold before the dative/haptic split, or do the split by hand first and extract
 the pattern from it, is the open decision.
 
+## 4. Case study — adding a constraint variant (noncovalent `#I` Intramolecular)
+
+Empirical companion to §3, one axis over: §3 measured the cost of a new *entity*; this measures the
+cost of a new *constraint variant* on an existing entity. Concrete trigger (2026-07-12): the noncovalent
+bond's constraint enum was left **uninhabited** (`enum NoncovalentBondConstraintAst {}`) — a deferral
+("bigger fish to fry"), not a structural claim that noncovalent bonds admit no constraints. It surfaced
+while binding the Python noncovalent slice (doc 140 B5): pyo3 rejects a zero-variant `#[pyclass] enum`
+(`"#[pyclass] can't be used on enums without any variants"`), so the empty enum cannot be mirrored and
+the container cannot carry a mapping API. Rather than build a degenerate Python stub around the emptiness,
+the right move is to inhabit the constraint that should have been there — which also **unblocks B5** (the
+surface becomes an ordinary 1-key Boolean constraint) and documents the feature-addition cost.
+
+### The variant
+
+- `NoncovalentBondConstraintAst::Intramolecular(BooleanAst)`; key `NoncovalentBondConstraintKey::Intramolecular`.
+- String DSL tag `#I`: `#I` / `#I+` → true (intramolecular), `#I!` → false (intermolecular),
+  `#I*` → undetermined. EDN: single-key map `{:intramolecular <bool>}`.
+- Structural twin: dative/bond `Aromatic(BooleanAst)` (`#a`) — same Boolean value, same `+`/`!`/`*`
+  combinator, same single-`#`-tag shape — reduced to a **1-variant** container, whose shape is the
+  aromatic-system `ElectronCount` container (single-value accessor `intramolecular()`, `matches` via the
+  accessor). So: *bond-`Aromatic` value & DSL* + *aromatic-`ElectronCount` container*.
+
+### Scope map (verified against the AST, 8-reader scoping pass — to reconfirm at implementation)
+
+| Subsystem | Files | Change |
+|---|---|---|
+| Constraint element + Key | `ast/constraint/noncovalent.rs` | Add the `Intramolecular(BooleanAst)` variant + `Intramolecular` key; fill the ~15 empty `match self {}`/`match key {}` bodies (`key`/`compact`/`remap`/`Canonicalize`/`Lattice`×6) with the `Aromatic`-arm mirror; add ctor `intramolecular(b)` + `as_undetermined` (noncovalent omits it today). |
+| Constraint container | `ast/constraint/noncovalent.rs` | Real bodies for `find`/`set`/`compare_and_set`/`extend`/`update` (mirror aromatic); container `Canonicalize`/`Lattice` (currently hardcoded trivial); `FromIterator` (currently **ignores** its iterator); missing `IntoIterator`/`From` impls; new `intramolecular() -> BooleanAst` accessor. `get`/`contains`/`remove`/`retain`/`clear`/`take`/`iter`/`len` already delegate — go live unchanged. |
+| Value type | `ast/noncovalent.rs` | `with_constraints` is currently a **no-op** (`_constraints`); there is **no** `with_constraint` singular — fix/add both; check `update`/`into_ground`. `From<&str>`/`RelationData`/`new`/`from_kind`/`with_kind` unaffected. |
+| Molecule-level `Constraint` | `ast/constraint/molecule.rs` | The top-level `Constraint::NoncovalentBond(id, payload)` variant **already exists** (line 45) — no add. Fill its `canonicalize` arm; `is_vacuous` doc; `inline_constraints` arm. |
+| Delta | `ast/delta.rs` | `EntityPatch for NoncovalentBondDelta`: real `apply_constraint` (no-op → `compare_and_set`) + `diff_constraints`. `EntityFold::constraint_key` already `constraint.key()` — no edit. |
+| Edits + transact + undo | `ast/edit.rs`, `ast/transact.rs` | **New** `Edit::ModifyNoncovalentBondConstraint` variant; `apply_edit` + `apply_edit_checked` (undo) dispatch arms; new `apply_modify_noncovalent_bond_constraint` helper. |
+| Reactions | `ast/reaction.rs` | Deltas→Edits lowering arm (`Delta::NoncovalentBond(ModifyConstraint)`); delta→EDN partial-render fold. `apply` has-conflict check already generic. |
+| Reaction span | `ast/reaction_span.rs` | **Zero changes** — `materialize`/classification folds `ModifyField \| ModifyConstraint` and replays through the generic `apply_noncovalent_change`; goes live automatically once delta stops returning empty. |
+| String DSL | `dsl/noncovalent.rs` | **New** `NoncovalentBondPredicate` enum + `noncovalent_bond_predicate` parser + `apply_predicates` + `constraint_tag`/`fmt_constraint` (mirror bond `#a`); wire into `noncovalent_bond`, `fmt_noncovalent_bond_ast`, `PartialNoncovalentBondDsl::fmt`. |
+| EDN serde | `dsl/noncovalent.rs`, `dsl/constraint.rs` | Inhabit the DSL boundary enum `NoncovalentBondConstraintDsl` (also `{}` today) with `Intramolecular(BooleanDsl)` + `from_ast`/`into_ast` (don't exist) + `FromEdn`/`ToEdn`; fill `read_noncovalent_bond_constraint_dsl` + `ConstraintDsl::{to_edn,from_ast,into_ast}` noncovalent arms. |
+| Errors | `dsl/error.rs` | **New** `ParseError::{UnknownNoncovalentBondPredicate, DuplicateNoncovalentBondPredicate}` (mirror the dative pair). |
+| Property tests | `tests/property/strategies.rs`, `tests/property/lattice.rs` | New `noncovalent_bond_constraint(s)_strategy`; wire into `noncovalent_bond_ast_strategy`; new lattice-law proptests for the constraint + value (a today-vacuous coverage slot that becomes meaningful). |
+| Config | `dsl/config.rs` | `NoncovalentBondDefaults` — likely no change (verify). |
+
+**Genuinely new** (everything else fills an empty `match {}` or copies a peer): the `Intramolecular`
+AST variant + key, the `NoncovalentBondConstraintDsl::Intramolecular` variant, the two `ParseError`
+variants, the one `Edit` variant, and the string-DSL predicate machinery. No new *design* — every piece
+has an exact `Aromatic(#a)` / `ElectronCount` precedent.
+
+### Staged impl plan
+
+- **A — inhabit the AST layer (atomic red→green; ~11 files).** Adding the variant breaks *every*
+  exhaustive `match` on the three currently-uninhabited enums (`NoncovalentBondConstraintAst`, `…Key`,
+  `NoncovalentBondConstraintDsl`) at once, so they must all be filled in one edit to restore compilation.
+  Sequence within: constraint element+container → value type → molecule `Constraint` arms → delta
+  apply/diff → new `Edit` variant + transact dispatch/undo/helper → reaction lowering + delta→EDN render
+  → DSL boundary type + `from_ast`/`into_ast`/`FromEdn`/`ToEdn` + `ConstraintDsl` arms + reader +
+  string-DSL **render** (`fmt`). `reaction_span.rs` unchanged. Green when the workspace compiles and the
+  container + lattice unit tests pass. Each edit mirrors a peer — no essential design.
+- **B — string-DSL parse `#I` (additive/green).** The predicate parser/enum/applier + the two
+  `ParseError` variants + parse/roundtrip tests. Purely additive (doesn't break compilation; makes
+  `"#I"`/`"#I+"`/`"#I!"`/`"#I*"` parse). `[dep: A]`
+- **C — property tests (additive/green).** Noncovalent constraint strategies + lattice-law proptests.
+  `[dep: A]`
+- **D — resume B5 (Python noncovalent slice).** Now a standard slice: the *constraint* half is the
+  bond-`Aromatic` Boolean shape in a 1-key container (`intramolecular` getter/setter), the *view* half is
+  bond-shaped (2-atom `(first, second)` pair, `connecting(a, b)`, `atom_ids` 2-tuple) plus the new
+  `NoncovalentBondKindAst`/`NoncovalentBondKind` leaf. The zero-variant-pyclass blocker is gone.
+  `[dep: A (+B for a Python parse test)]`
+
+Critical path: **A → (B ∥ C) → D**.
+
+### Observation — the cost of a constraint variant vs an entity (§3 companion)
+
+- **Wide but shallow.** ~11 files, but every touch either fills an empty `match {}` with a body copied
+  from a peer or adds a variant mirroring `Aromatic(#a)`. New *design* surface ≈ zero. Contrast §3's
+  entity-addition, which is O(entity²) bespoke relational modeling. **Lesson: put new chemistry on an
+  existing entity's constraint axis when locality allows — it is dramatically cheaper than a new entity.**
+- **Atomicity is the only real friction.** The scaffold chose *uninhabited enum + empty `match self {}`*
+  as the placeholder. That compiles cleanly today, but the day a variant lands it breaks all exhaustive
+  matches simultaneously → one large red→green edit that cannot be incrementally green. The alternative
+  placeholders (a first real variant from the start, or an `Option`-free always-inhabited enum) trade a
+  slightly-less-clean today for a much smaller edit later.
+- **The generic layers held.** `reaction_span.rs` needing zero changes, and `Constraint::NoncovalentBond`
+  / `EntityFold::constraint_key` / most container delegators already being real, show the materialization
+  and molecule-scope layers are correctly generic over the constraint payload. The friction is
+  concentrated in the per-entity leaf + its DSL — exactly where a scaffolding macro (§3) would pay off:
+  it would turn this ~11-file spread into a one-line variant addition.
+- **Extensibility verdict.** Adding a value-only constraint variant to an existing entity is a bounded,
+  mechanical, mirror-a-peer task whose cost is proportional to the number of `match` sites, not to
+  conceptual difficulty. This is the encouraging half of the extensibility story (the discouraging half
+  is §3's quadratic entity-pair relations).
+
+### Progress — Stage A done (2026-07-12)
+
+Stage A (inhabit the AST layer) is complete: workspace compiles, 4542 umol-ast tests pass. The edit
+touched 11 files, all mirroring a peer. Refinements against the scope map found at implementation:
+
+- **Delta became *less* special-cased, not more.** The scope map planned "real `apply_constraint` +
+  `diff_constraints`" on the hand-written `EntityPatch for NoncovalentBondDelta`. But the hand-written
+  block existed *only* because the constraint was uninhabited (a comment said the `diff_field_ops!`
+  macro's constraint loop "would be unreachable"). Since the macro's field handling (`Kind => kind`) is
+  byte-identical to the hand-written `apply_field`/`diff_field`, the whole block collapsed to the shared
+  `diff_field_ops!(…, { Kind => kind })` macro + a one-line `apply_constraint` — exactly the peer shape.
+  So the variant *removed* a special case rather than adding one: the cleaner "fill the absence
+  consistently" outcome, not "handle the absence specially."
+- **Two match sites were outside the scope map.** `ast/molecule.rs` (top-level, not
+  `ast/constraint/molecule.rs`) `inline_constraints` had an empty `match inner {}` to fill; its `lift`
+  counterpart (`lift_constraints`) was already generic. The map's "molecule-level `Constraint`" row named
+  only `ast/constraint/molecule.rs`. Lesson: the inline↔molecule-scope constraint plumbing is split
+  across *two* `molecule.rs` files.
+- **Undo needed no new variant.** `transact.rs` (at `ast/molecule/transact.rs`, not `ast/transact.rs`)
+  encodes constraint-edit undo as `Undo::ApplyEdit(Box::new(<inverse Edit>))`, so the only new symbol was
+  the forward `Edit::ModifyNoncovalentBondConstraint` + its two dispatch arms + one apply helper.
+- **`is_vacuous` doc was stale.** The `Constraint::NoncovalentBond` arm already delegated to
+  `is_undetermined`; only a doc comment claiming it "always non-vacuous" needed correcting.
+
+The remaining `reaction_span.rs`-zero-changes and `EntityFold::constraint_key`-unchanged predictions
+held. Net confirmation of the verdict: the friction was the atomic red→green fan-out (~15 `match` sites),
+not any design.
+
+- **B / C / D pending.** B = string-DSL `#I` parse (+ the two `ParseError` variants), C = property
+  strategies + lattice proptests, D = resume B5. `[dep: A]` each; A → (B ∥ C) → D.
+
 ## Open decisions
 
 - Confirm the dative/haptic split and the two target storage shapes (§1).
 - For each §2 candidate: entity vs derived-predicate vs constraint.
 - Whether to invest in an entity-scaffolding mechanism (§3) before or after the first split.
+- §4: resolved — proceeding. Stage A done (2026-07-12); B (string parse) / C (property tests) next, then
+  D (resume B5).

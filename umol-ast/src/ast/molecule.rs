@@ -889,7 +889,9 @@ impl MoleculeAst {
                 Constraint::MulticenterBond(id, inner) => {
                     self.multicenter_bond_mut(id).ast.constraints.set(inner);
                 }
-                Constraint::NoncovalentBond(_, inner) => match inner {},
+                Constraint::NoncovalentBond(id, inner) => {
+                    self.noncovalent_bond_mut(id).ast.constraints.set(inner);
+                }
                 // The carried kind is dropped here; kind/degree consistency
                 // against the element is the C4 validator's job.
                 Constraint::StereoAtom(id, _kind, inner) => {

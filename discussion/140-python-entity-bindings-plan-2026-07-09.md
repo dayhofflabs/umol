@@ -6,10 +6,12 @@ Status: Active — **B1 · Bond slice DONE incl. the view half** (value + WET co
 **B4 · multicenter COMPLETE** (`umol-py/src/multicenter.rs`: value + WET constraint surface +
 `MulticenterBondView`/`MulticenterBondViews` + molecule-backed constraint views; `mol.multicenter_bonds`
 accessor; `from_parts` `multicenter=[]` kwarg; reuses the `ElectronCountsAst` leaf, no new foundation;
-9 multicenter pyclasses registered; 344 Rust unit + 332 pytest green, clippy/fmt clean). Next per the
-order **… → multicenter → noncovalent → stereo**: **B5 · noncovalent-bond slice**
-(`umol-py/src/noncovalent.rs`). See *B3 · Aromatic* / *B4 · Multicenter — staged impl plan* below and
-*Bond slice — build state + detailed plan* at the end for the WET template.
+9 multicenter pyclasses registered; 344 Rust unit + 332 pytest green, clippy/fmt clean). **B5 ·
+noncovalent PAUSED** (2026-07-12): scoping surfaced the uninhabited noncovalent constraint + the pyo3
+zero-variant-enum blocker; resolution is to inhabit the constraint upstream
+(`Intramolecular(BooleanAst)`, `#I`) — scope + staged plan in **doc 117 §4** — after which B5 resumes as
+a standard 1-key Boolean-constraint slice. See the *B5 · Noncovalent bond* section below, doc 117 §4, and
+*B3 · Aromatic* / *B4 · Multicenter — staged impl plan* for the WET template.
 Date: 2026-07-09
 Relates: 137 (atom slice — the template being mirrored), 139 (mutability/hashing/equality
 balance), 114 (interning — where stereo/handle-identity deferrals live)
@@ -488,13 +490,23 @@ Critical path: **S1 → S2 → S3** (linear). No S0, no gating, no deferrable/re
 
 ### B5 · Noncovalent bond
 
+- **PAUSED (2026-07-12) pending an AST change — see doc 117 §4.** Scoping B5 surfaced that the noncovalent
+  constraint enum is uninhabited, and pyo3 rejects a zero-variant `#[pyclass] enum`, so the constraint
+  surface can't be mirrored. Resolution (settled): don't work around the emptiness — inhabit the
+  constraint upstream with `NoncovalentBondConstraintAst::Intramolecular(BooleanAst)` (`#I`), threading it
+  through the whole molecule-AST machinery (doc 117 §4 has the scope + staged plan A–C). B5 then resumes as
+  stage D of that plan: a **standard 1-key Boolean-constraint slice** (constraint half = bond-`Aromatic`
+  shape with an `intramolecular` getter/setter; view half = 2-atom bond-shaped) + the `NoncovalentBondKind`
+  leaf. The two design calls below are thereby **resolved**: constraints are the real 1-key surface (not a
+  stub/omit); `kind` is the ElectronAst-style leaf (settled 2026-07-12).
 - Value `NoncovalentBondAst { kind: NoncovalentBondKindAst, constraints }`.
 - **New leaves: `NoncovalentBondKindAst { Undetermined | Lit(NoncovalentBondKind) }` and
   `NoncovalentBondKind { HydrogenBond, HalogenBond, ChalcogenBond, Ionic, VanDerWaals }`**
-  (a fieldless value enum → hashable, per finding 137-p3-2).
-- Constraints: the enum and key are **uninhabited today** (scaffolding only). Design call:
-  omit the constraints surface entirely (no container/view/key), since no variant can exist,
-  vs. bind an always-empty stub.
+  (a fieldless value enum → hashable, per finding 137-p3-2). Python: `NoncovalentBondKind` pyclass enum +
+  `NoncovalentBondKindAst { Undetermined() \| Lit(NoncovalentBondKind) }` + `NoncovalentBondKindArg`,
+  mirroring `ElementAst`/`Element` (settled 2026-07-12).
+- Constraints: uninhabited today; **being inhabited** with `Intramolecular(BooleanAst)` (doc 117 §4), after
+  which the Python surface is a normal 1-key Boolean constraint (bind the full mapping API — no stub/omit).
 - View: read-only atom pair (fixed 2, unordered); settable `kind`. Collection
   `mol.noncovalent_bonds`: id-indexed + `connecting(a, b)`.
 - Design calls: `kind` wildcard (`Undetermined`) → an optional/nullable surface + coercion;

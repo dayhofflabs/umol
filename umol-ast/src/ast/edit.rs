@@ -13,8 +13,8 @@ use super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::bond::BondAst;
 use super::constraint::{
     AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint, Constraints,
-    DativeBondConstraintAst, MulticenterBondConstraintAst, StereoAtomConstraintAst,
-    StereoBondConstraintAst,
+    DativeBondConstraintAst, MulticenterBondConstraintAst, NoncovalentBondConstraintAst,
+    StereoAtomConstraintAst, StereoBondConstraintAst,
 };
 use super::dative::DativeBondAst;
 use super::electrons::ElectronCountsAst;
@@ -387,6 +387,11 @@ pub enum Edit {
         id: MulticenterBondHandle,
         old: Option<MulticenterBondConstraintAst>,
         new: Option<MulticenterBondConstraintAst>,
+    },
+    ModifyNoncovalentBondConstraint {
+        id: NoncovalentBondHandle,
+        old: Option<NoncovalentBondConstraintAst>,
+        new: Option<NoncovalentBondConstraintAst>,
     },
     ModifyStereoAtomConstraint {
         id: StereoAtomHandle,
