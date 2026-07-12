@@ -512,6 +512,56 @@ Critical path: **S1 → S2 → S3** (linear). No S0, no gating, no deferrable/re
 - Design calls: `kind` wildcard (`Undetermined`) → an optional/nullable surface + coercion;
   the uninhabited-constraints decision above.
 
+#### B5 — staged impl plan (resumed 2026-07-12, after doc 117 §4 A–C)
+
+Composite of three peers: constraint half ≈ **aromatic** (single-key container, single-value
+`intramolecular()` accessor; Boolean value reuses the already-bound `BooleanAst`/`BooleanArg`); view/
+collection half ≈ **bond** (fixed unordered 2-atom pair — `atom_ids` 2-tuple, `connecting(a, b)`,
+`incident(atom)`); kind leaf ≈ **`ElementAst`/`Element`**. The value pyclass is the thinnest of any slice
+(`kind` + `constraints`, no order/charge/spin). New file `umol-py/src/noncovalent.rs`; the whole slice is
+**additive** (new file + additive `molecule.rs` kwarg/accessor) — no red→green. Dead-code discipline
+carries over from B2–B4: an unused `pub(crate)` constructor gets `#[cfg(test)]` until its non-test
+consumer lands; a backing-enum `Molecule` arm lands with the view that constructs it.
+
+- **S0 — kind leaf.**
+  - **S0a** `noncovalent.rs`: `NoncovalentBondKind` (fieldless value pyenum, 5 variants, hashable) +
+    `NoncovalentBondKindAst { Undetermined() | Lit(NoncovalentBondKind) }` (`as_lit`/`__eq__`/`__hash__`/
+    `__repr__` + `from_ast`/`to_ast`) + `NoncovalentBondKindArg` (bare-enum | `Ast` passthrough); register
+    both pyclasses + export; leaf tests. **Additive.** `[dep: —]`
+- **S1 — constraint half** (independent of S0). Merged into one subitem per the B3/B4 lesson (avoids
+  `#[cfg(test)]`-gating `from_ast`; the container's `from_ast` has no non-test consumer until S3's view,
+  but key+element+container ship together so the mapping API exercises it).
+  - **S1a** `noncovalent.rs`: `NoncovalentBondConstraintKey` (`Intramolecular`) + `NoncovalentBondConstraintAst`
+    (`Intramolecular(BooleanAst)`, `key`/`__eq__`/`__hash__`/`__repr__`) + `NoncovalentBondConstraintsAst`
+    container (uniform mapping API `__len__`/`__getitem__`/`__setitem__`/`__delitem__`/`__contains__`/
+    `__iter__` + `intramolecular` getter/setter + `set`/`asdict`) + `NoncovalentBondConstraintsArg`/
+    `…Update` + the three iters (`…ConstraintIter`/`…KeyIter`/`…ItemsIter`); register + export; container
+    tests. **Additive.** `[dep: —]` (Boolean leaf already bound)
+  - **S1b** `noncovalent.rs`: `NoncovalentBondConstraintsView` + `NoncovalentBondConstraintsBacking` with
+    the **own-value arm only** (`Noncovalent(Py<NoncovalentBondConstraintsAst>)`) + `intramolecular`
+    getter/setter + mapping API mirroring the container; register + export; view tests. **Additive.**
+    `[dep: S1a]`
+- **S2 — value pyclass.**
+  - **S2a** `noncovalent.rs`: `NoncovalentBondAst` — `new(kind, *, constraints=[])`, `parse`/`__str__`/
+    `__repr__` (DSL; `#I` now parses, per doc 117 §4 B), `kind`/`constraints` getters+setters (via
+    `NoncovalentBondKindArg` / `NoncovalentBondConstraintsArg`), `asdict`, `inner`/`from_inner`; **ungate**
+    the S0a/S1a constructors it consumes; register + export; value tests incl. a `#I` parse roundtrip.
+    **Additive.** `[dep: S0a, S1a, S1b]`
+- **S3 — view + collection + molecule wiring.**
+  - **S3a** `noncovalent.rs`: `NoncovalentBondView` (read-only `id`/`atom_ids` 2-tuple, `kind`/`constraints`
+    get+set, `asdict`, `__repr__`) + `resolve_noncovalent_bond_index` + **add** the
+    `NoncovalentBondConstraintsBacking::Molecule` arm here (with the view that constructs it); tests.
+    **Additive.** `[dep: S2a, S1b]`
+  - **S3b** `noncovalent.rs`: `NoncovalentBondViews` collection (`__len__`/`__getitem__`/`__setitem__`/
+    `__iter__` + `connecting(a, b)` + `incident(atom)`) + `NoncovalentBondViewIter`; register + export;
+    collection tests. **Additive.** `[dep: S3a]`
+  - **S3c** `molecule.rs`, `lib.rs`, `__init__.py`, `tests/test_noncovalent.py`: `mol.noncovalent_bonds`
+    accessor + `from_parts(noncovalent=[([a, b], NoncovalentBondAst), …])` kwarg; extend
+    `test_molecule_ast_from_parts`; final registration/exports check. **Additive.** `[dep: S3b]`
+
+Critical path: **(S0a ∥ S1a→S1b) → S2a → S3a → S3b → S3c.** No deferrable stages — the slice is small and
+every subitem is on the path to the `mol.noncovalent_bonds` surface.
+
 ### B6 / B7 · Stereo atom / stereo bond (the overlay — a larger sub-project)
 
 - Value `StereoAtomAst` / `StereoBondAst { configuration: StereoConfigurationAst, constraints:
@@ -542,7 +592,7 @@ Critical path: **S1 → S2 → S3** (linear). No S0, no gating, no deferrable/re
 | `CisTransStereoAst` | bond (`CisTransStereo`) | `Undetermined \| NotStereo \| Stereo(StereoCosetAst)` | **Resolved:** full mirror (like `TetrahedralStereoAst`) **plus** a simple `CisTransStereo` enum `.Z`/`.E` for assignment, mirroring `TetrahedralStereo.Ccw/Cw`. `Z → Lit(0)`, `E → Lit(1)` (dsl/stereo.rs:336ff). |
 | `ElectronCountsAst` | aromatic, multicenter | `Undetermined \| Lit(list[int])` | **Resolved:** mirror whose `Lit` variant is a Python `list[int]` (positional, aligned to participant order); no `{atom: count}` dict. |
 | `NoncovalentBondKindAst` + `NoncovalentBondKind` | noncovalent | mirror `Undetermined \| Lit(NoncovalentBondKind)`; fieldless enum `{HydrogenBond, HalogenBond, ChalcogenBond, Ionic, VanDerWaals}` | **Resolved (2026-07-09):** names follow Rust **exactly** (`NoncovalentBondKind.HydrogenBond`, no shortening); a simple hashable value enum (137-p3-2 pattern). `kind` is the full `NoncovalentBondKindAst` mirror (`Undetermined` as a variant, not `None` — the Rust structure, matching `atom.element: ElementAst`), assigned via the bare enum. |
-| noncovalent `constraints` | noncovalent | uninhabited enum/key | **Resolved:** empty stub — an always-empty container/view (`len 0`, empty iteration, `asdict → {}`, no inhabited keys). |
+| noncovalent `constraints` | noncovalent | `Intramolecular(BooleanAst)`, 1 key | **Superseded (2026-07-12):** the earlier "empty stub" is obsolete — the constraint was inhabited upstream (doc 117 §4). Bind the **real** 1-key Boolean surface: `NoncovalentBondConstraintsAst` with an `intramolecular` getter/setter (aromatic-`ElectronCount` container shape, Boolean value via the bound `BooleanAst`). |
 | `StereoConfigurationAst` / `StereoKind` | stereo | `Undetermined \| Kinded(kind, coset)`; 6-kind enum | The coset carries no kind — configuration (kind+coset) must be the surfaced unit; any coset op threads `StereoKind`. |
 | `StereoLigand` / `StereoLigandKind` | stereo | `{atom_id, kind}`; `{Atom, ImplicitHydrogen, LonePair}` | Surface `StereoLigand{atom_id, kind}` vs. bare atom ids; how virtual ligands (bearing-atom id) appear. |
 | `StereoLigandPosition` (vs `ParticipantPosition`) | stereo | `u32` frame index | Which position newtype (if any) surfaces to Python. |

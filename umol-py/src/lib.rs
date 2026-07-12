@@ -34,6 +34,7 @@ use crate::{
         MulticenterBondConstraintsAst, MulticenterBondConstraintsView, MulticenterBondView,
         MulticenterBondViews,
     },
+    noncovalent::{NoncovalentBondKind, NoncovalentBondKindAst},
     stereo::{
         CisTransStereo, CisTransStereoAst, Permutation, StereoCosetAst, StereoTerm,
         TetrahedralStereo, TetrahedralStereoAst,
@@ -65,6 +66,8 @@ mod error;
 mod molecule;
 #[cfg(feature = "graph")]
 mod multicenter;
+#[cfg(feature = "graph")]
+mod noncovalent;
 #[cfg(feature = "graph")]
 mod stereo;
 #[cfg(feature = "graph")]
@@ -131,6 +134,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<MulticenterBondConstraintsView>()?;
         module.add_class::<MulticenterBondView>()?;
         module.add_class::<MulticenterBondViews>()?;
+        module.add_class::<NoncovalentBondKind>()?;
+        module.add_class::<NoncovalentBondKindAst>()?;
         module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;
