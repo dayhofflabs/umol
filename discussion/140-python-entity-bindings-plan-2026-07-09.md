@@ -298,9 +298,17 @@ reuses it (no lopsided dep).
   with a `to_ast` mapping test (both variants); **S1c un-gates it** with `from_ast`. `[dep: S0a]`
 
 **S1 — value + WET constraint surface (`umol-py/src/aromatic.rs`).**
-- **S1a** *(additive)* — `AromaticSystemConstraintKey { ElectronCount() }` +
-  `AromaticSystemConstraintAst { ElectronCount(Py<ValueAst>) }`: `key`/`from_ast`/`to_ast`/`__eq__`/
-  `__hash__`/`__repr__`. One key only — no `RingScope`/`RingMembership`. `[dep: ValueAst leaf]`
+- **S1a — DONE** *(additive)* — `AromaticSystemConstraintKey { ElectronCount() }` +
+  `AromaticSystemConstraintAst { ElectronCount(Py<ValueAst>) }` (new module `umol-py/src/aromatic.rs`):
+  `key`/`__eq__`/`__hash__`/`__repr__` + `from_ast`/`to_ast`. One key only — no `RingScope`/
+  `RingMembership`; the unit key makes `Key::from_ast` infallible (no `py`/`into_py_variant`) and the
+  constraint `key()` getter returns the key directly (not `PyResult`). `AromaticSystemConstraintAst::
+  from_ast` + the `into_py_variant` import are `#[cfg(test)]`-gated (no non-test consumer until S1b —
+  avoids a dead-code warning); **S1b un-gates them**. Registered both pyclasses (`lib.rs` +
+  `__init__.py`); 4 Rust unit test cases; `import umol` + 266 pytest green, clippy/fmt clean.
+  Adversarial verification workflow (3 review dims → verify) confirmed 1 finding (test-ordering: key
+  test before constraint-AST tests, per the skill's group-by-definition-order rule) — fixed; 3 other
+  findings refuted as intended. `[dep: ValueAst leaf]`
 - **S1b** *(additive)* — `AromaticSystemConstraintsAst` container: the uniform mapping API
   (`new`/`set`/`pop`/`update`/`__len__`/`__iter__`/`keys`/`values`/`items`/`get`/`__getitem__`/
   `__delitem__`/`__contains__`) + `electron_count` getter/setter + `asdict` (`{"electron_count"}`) +
