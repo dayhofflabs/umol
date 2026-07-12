@@ -45,17 +45,21 @@ impl Parse for MolInput {
 
 impl MolInput {
     pub(crate) fn paths(&self) -> impl Iterator<Item = &Path> {
-        self.statements.iter().filter_map(|statement| match statement {
-            Statement::Path(path) => Some(path),
-            Statement::Overlay(_) => None,
-        })
+        self.statements
+            .iter()
+            .filter_map(|statement| match statement {
+                Statement::Path(path) => Some(path),
+                Statement::Overlay(_) => None,
+            })
     }
 
     pub(crate) fn overlays(&self) -> impl Iterator<Item = &Overlay> {
-        self.statements.iter().filter_map(|statement| match statement {
-            Statement::Overlay(overlay) => Some(overlay),
-            Statement::Path(_) => None,
-        })
+        self.statements
+            .iter()
+            .filter_map(|statement| match statement {
+                Statement::Overlay(overlay) => Some(overlay),
+                Statement::Path(_) => None,
+            })
     }
 }
 
@@ -181,7 +185,10 @@ pub(crate) enum Bond {
     Triple,
     /// `-[name: "spec"]-` — a full DSL bond spec (order, `#a`, charge, spin, ring), with an optional
     /// label binding the bond in the shared atom/bond namespace.
-    Spec { name: Option<Ident>, spec: LitStr },
+    Spec {
+        name: Option<Ident>,
+        spec: LitStr,
+    },
 }
 
 impl Parse for Bond {
@@ -242,12 +249,33 @@ impl Parse for Ligand {
 /// An overlay statement: a keyword-led relation over already-declared atoms/bonds (references only).
 /// Each desugars to its L2 term; the optional payload is a quoted DSL spec for the entity's own Ast.
 pub(crate) enum Overlay {
-    Aromatic { atoms: Vec<Atom>, payload: Option<LitStr> },
-    Dative { donors: Vec<Atom>, acceptor: Atom, payload: Option<LitStr> },
-    Multicenter { atoms: Vec<Atom>, payload: Option<LitStr> },
-    Noncovalent { atoms: Vec<Atom>, payload: Option<LitStr> },
-    StereoAtom { site: Atom, ligands: Vec<Ligand>, payload: Option<LitStr> },
-    StereoBond { site: Atom, ligands: Vec<Ligand>, payload: Option<LitStr> },
+    Aromatic {
+        atoms: Vec<Atom>,
+        payload: Option<LitStr>,
+    },
+    Dative {
+        donors: Vec<Atom>,
+        acceptor: Atom,
+        payload: Option<LitStr>,
+    },
+    Multicenter {
+        atoms: Vec<Atom>,
+        payload: Option<LitStr>,
+    },
+    Noncovalent {
+        atoms: Vec<Atom>,
+        payload: Option<LitStr>,
+    },
+    StereoAtom {
+        site: Atom,
+        ligands: Vec<Ligand>,
+        payload: Option<LitStr>,
+    },
+    StereoBond {
+        site: Atom,
+        ligands: Vec<Ligand>,
+        payload: Option<LitStr>,
+    },
 }
 
 impl Parse for Overlay {
@@ -255,32 +283,53 @@ impl Parse for Overlay {
         if input.peek(kw::aromatic) {
             input.parse::<kw::aromatic>()?;
             let atoms = bracketed_list(input)?;
-            Ok(Overlay::Aromatic { atoms, payload: payload(input)? })
+            Ok(Overlay::Aromatic {
+                atoms,
+                payload: payload(input)?,
+            })
         } else if input.peek(kw::dative) {
             input.parse::<kw::dative>()?;
             let donors = bracketed_list(input)?;
             let acceptor = input.parse::<Atom>()?;
-            Ok(Overlay::Dative { donors, acceptor, payload: payload(input)? })
+            Ok(Overlay::Dative {
+                donors,
+                acceptor,
+                payload: payload(input)?,
+            })
         } else if input.peek(kw::multicenter) {
             input.parse::<kw::multicenter>()?;
             let atoms = bracketed_list(input)?;
-            Ok(Overlay::Multicenter { atoms, payload: payload(input)? })
+            Ok(Overlay::Multicenter {
+                atoms,
+                payload: payload(input)?,
+            })
         } else if input.peek(kw::noncovalent) {
             input.parse::<kw::noncovalent>()?;
             let atoms = bracketed_list(input)?;
-            Ok(Overlay::Noncovalent { atoms, payload: payload(input)? })
+            Ok(Overlay::Noncovalent {
+                atoms,
+                payload: payload(input)?,
+            })
         } else {
             input.parse::<kw::stereo>()?;
             if input.peek(kw::atom) {
                 input.parse::<kw::atom>()?;
                 let site = input.parse::<Atom>()?;
                 let ligands = bracketed_list(input)?;
-                Ok(Overlay::StereoAtom { site, ligands, payload: payload(input)? })
+                Ok(Overlay::StereoAtom {
+                    site,
+                    ligands,
+                    payload: payload(input)?,
+                })
             } else {
                 input.parse::<kw::bond>()?;
                 let site = input.parse::<Atom>()?;
                 let ligands = bracketed_list(input)?;
-                Ok(Overlay::StereoBond { site, ligands, payload: payload(input)? })
+                Ok(Overlay::StereoBond {
+                    site,
+                    ligands,
+                    payload: payload(input)?,
+                })
             }
         }
     }
@@ -376,7 +425,10 @@ pub(crate) fn resolve_positions(paths: &[&Path]) -> Result<Resolved> {
     }
     for path in paths {
         for (op, _) in &path.rest {
-            if let Bond::Spec { name: Some(name), .. } = op {
+            if let Bond::Spec {
+                name: Some(name), ..
+            } = op
+            {
                 insert_label(&mut labels, name, Label::Bond)?;
             }
         }
@@ -474,7 +526,10 @@ fn overlay_payload(payload: &Option<LitStr>, ast_ty: TokenStream) -> TokenStream
 }
 
 /// The L2 term for one overlay, resolving its references against the shared label namespace.
-pub(crate) fn overlay_term(overlay: &Overlay, labels: &HashMap<String, Label>) -> Result<TokenStream> {
+pub(crate) fn overlay_term(
+    overlay: &Overlay,
+    labels: &HashMap<String, Label>,
+) -> Result<TokenStream> {
     match overlay {
         Overlay::Aromatic { atoms, payload } => {
             let atoms = overlay_atoms(atoms, labels)?;
@@ -539,10 +594,16 @@ pub(crate) fn overlay_term(overlay: &Overlay, labels: &HashMap<String, Label>) -
 }
 
 fn overlay_atoms(atoms: &[Atom], labels: &HashMap<String, Label>) -> Result<Vec<TokenStream>> {
-    atoms.iter().map(|atom| overlay_atom(atom, labels)).collect()
+    atoms
+        .iter()
+        .map(|atom| overlay_atom(atom, labels))
+        .collect()
 }
 
-fn overlay_ligands(ligands: &[Ligand], labels: &HashMap<String, Label>) -> Result<Vec<TokenStream>> {
+fn overlay_ligands(
+    ligands: &[Ligand],
+    labels: &HashMap<String, Label>,
+) -> Result<Vec<TokenStream>> {
     ligands
         .iter()
         .map(|ligand| match ligand {

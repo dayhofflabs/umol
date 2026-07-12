@@ -1,5 +1,4 @@
 use rstest::rstest;
-
 use umol_ast::ast::{AtomAst, AtomId, BondAst, BondId, ElementAst, Fragment, Port};
 use umol_ast::frag;
 

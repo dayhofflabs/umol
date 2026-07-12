@@ -14,7 +14,6 @@
 
 use std::borrow::Cow;
 use std::fmt::{self, Display};
-use std::mem;
 use std::str::FromStr;
 
 use bimap::BiBTreeMap;
@@ -846,30 +845,24 @@ impl FromAst<MoleculeAst> for MoleculeDsl {
 
     fn from_ast(ast: &MoleculeAst, cfg: &Self::Ctx) -> Self {
         let mut ast_out = ast.clone();
-        for atom in ast_out.atoms_mut() {
-            *atom = AtomDsl::from_ast(atom, &cfg.atom).0;
-        }
-        for bond in ast_out.bonds_mut() {
-            *bond = BondDsl::from_ast(bond, &cfg.bond).0;
-        }
-        for system in ast_out.aromatic_systems_mut() {
-            *system = AromaticSystemDsl::from_ast(system, &cfg.aromatic_system).0;
-        }
-        for bond in ast_out.multicenter_bonds_mut() {
-            *bond = MulticenterBondDsl::from_ast(bond, &cfg.multicenter_bond).0;
-        }
-        for bond in ast_out.dative_bonds_mut() {
-            *bond = DativeBondDsl::from_ast(bond, &cfg.dative_bond).0;
-        }
-        for bond in ast_out.noncovalent_bonds_mut() {
-            *bond = NoncovalentBondDsl::from_ast(bond, &cfg.noncovalent_bond).0;
-        }
-        for stereo_atom in ast_out.stereo_atoms_mut() {
-            *stereo_atom = StereoAtomDsl::from_ast(stereo_atom, &cfg.stereo_atom).0;
-        }
-        for stereo_bond in ast_out.stereo_bonds_mut() {
-            *stereo_bond = StereoBondDsl::from_ast(stereo_bond, &cfg.stereo_bond).0;
-        }
+        ast_out.map_atoms(|atom| AtomDsl::from_ast(&atom, &cfg.atom).0);
+        ast_out.map_bonds(|bond| BondDsl::from_ast(&bond, &cfg.bond).0);
+        ast_out.map_aromatic_systems(|system| {
+            AromaticSystemDsl::from_ast(&system, &cfg.aromatic_system).0
+        });
+        ast_out.map_multicenter_bonds(|bond| {
+            MulticenterBondDsl::from_ast(&bond, &cfg.multicenter_bond).0
+        });
+        ast_out.map_dative_bonds(|bond| DativeBondDsl::from_ast(&bond, &cfg.dative_bond).0);
+        ast_out.map_noncovalent_bonds(|bond| {
+            NoncovalentBondDsl::from_ast(&bond, &cfg.noncovalent_bond).0
+        });
+        ast_out.map_stereo_atoms(|stereo_atom| {
+            StereoAtomDsl::from_ast(&stereo_atom, &cfg.stereo_atom).0
+        });
+        ast_out.map_stereo_bonds(|stereo_bond| {
+            StereoBondDsl::from_ast(&stereo_bond, &cfg.stereo_bond).0
+        });
         MoleculeDsl {
             ast: ast_out,
             metadata: MoleculeMetadata::default(),
@@ -882,30 +875,14 @@ impl IntoAst<MoleculeAst> for MoleculeDsl {
 
     fn into_ast(self, cfg: &Self::Ctx) -> MoleculeAst {
         let mut ast = self.ast;
-        for atom in ast.atoms_mut() {
-            *atom = AtomDsl(mem::take(atom)).into_ast(&cfg.atom);
-        }
-        for bond in ast.bonds_mut() {
-            *bond = BondDsl(mem::take(bond)).into_ast(&cfg.bond);
-        }
-        for bond in ast.dative_bonds_mut() {
-            *bond = DativeBondDsl(mem::take(bond)).into_ast(&cfg.dative_bond);
-        }
-        for system in ast.aromatic_systems_mut() {
-            *system = AromaticSystemDsl(mem::take(system)).into_ast(&cfg.aromatic_system);
-        }
-        for bond in ast.multicenter_bonds_mut() {
-            *bond = MulticenterBondDsl(mem::take(bond)).into_ast(&cfg.multicenter_bond);
-        }
-        for bond in ast.noncovalent_bonds_mut() {
-            *bond = NoncovalentBondDsl(mem::take(bond)).into_ast(&cfg.noncovalent_bond);
-        }
-        for stereo_atom in ast.stereo_atoms_mut() {
-            *stereo_atom = StereoAtomDsl(mem::take(stereo_atom)).into_ast(&cfg.stereo_atom);
-        }
-        for stereo_bond in ast.stereo_bonds_mut() {
-            *stereo_bond = StereoBondDsl(mem::take(stereo_bond)).into_ast(&cfg.stereo_bond);
-        }
+        ast.map_atoms(|atom| AtomDsl(atom).into_ast(&cfg.atom));
+        ast.map_bonds(|bond| BondDsl(bond).into_ast(&cfg.bond));
+        ast.map_dative_bonds(|bond| DativeBondDsl(bond).into_ast(&cfg.dative_bond));
+        ast.map_aromatic_systems(|system| AromaticSystemDsl(system).into_ast(&cfg.aromatic_system));
+        ast.map_multicenter_bonds(|bond| MulticenterBondDsl(bond).into_ast(&cfg.multicenter_bond));
+        ast.map_noncovalent_bonds(|bond| NoncovalentBondDsl(bond).into_ast(&cfg.noncovalent_bond));
+        ast.map_stereo_atoms(|stereo_atom| StereoAtomDsl(stereo_atom).into_ast(&cfg.stereo_atom));
+        ast.map_stereo_bonds(|stereo_bond| StereoBondDsl(stereo_bond).into_ast(&cfg.stereo_bond));
         ast
     }
 }

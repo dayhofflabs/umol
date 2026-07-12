@@ -278,33 +278,22 @@ impl<'a> BondView<'a> {
 #[derive(Debug)]
 pub struct BondViewMut<'a> {
     pub id: BondId,
-    atoms: [AtomId; 2],
+    pub atoms: [AtomId; 2],
     pub ast: &'a mut BondAst,
 }
 
-impl<'a> BondViewMut<'a> {
-    pub(crate) fn new(id: BondId, atoms: [AtomId; 2], ast: &'a mut BondAst) -> Self {
-        Self { id, atoms, ast }
-    }
-
-    /// The two atoms incident to this bond.
-    pub fn atoms(&self) -> [AtomId; 2] {
-        self.atoms
-    }
-}
-
-// Builder-scope view bundles for bonds.
+// Editor-scope view bundles for bonds.
 
 pub struct BondEditorView<'a> {
     pub id: BondId,
-    pub ast: &'a BondAst,
     pub atoms: [AtomId; 2],
+    pub ast: &'a BondAst,
 }
 
 pub struct BondEditorViewMut<'a> {
     pub id: BondId,
-    pub ast: &'a mut BondAst,
     pub atoms: [AtomId; 2],
+    pub ast: &'a mut BondAst,
 }
 
 #[cfg(test)]

@@ -265,41 +265,38 @@ impl<'a> DativeBondView<'a> {
 #[derive(Debug)]
 pub struct DativeBondViewMut<'a> {
     pub id: DativeBondId,
-    acceptor: AtomId,
-    donors: Vec<AtomId>,
+    pub donors: Vec<AtomId>,
+    pub acceptor: AtomId,
     pub ast: &'a mut DativeBondAst,
 }
 
-impl<'a> DativeBondViewMut<'a> {
-    /// The acceptor atom id.
-    pub fn acceptor_id(&self) -> AtomId {
-        self.acceptor
-    }
-
-    /// The donor atom ids.
-    pub fn donor_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
-        self.donors.iter().copied()
-    }
-
-    /// All atoms: the donors followed by the acceptor.
-    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
-        self.donors.iter().copied().chain(iter::once(self.acceptor))
-    }
-}
-
-// Builder-scope view bundles for dative bonds.
+// Editor-scope view bundles for dative bonds.
 
 pub struct DativeBondEditorView<'a> {
     pub id: DativeBondId,
+    donors: &'a [NodeId],
+    acceptor: AtomId,
     pub ast: &'a DativeBondAst,
-    pub(crate) donors: &'a [NodeId],
-    pub acceptor_id: AtomId,
 }
 
 impl<'a> DativeBondEditorView<'a> {
+    pub(crate) fn new(
+        id: DativeBondId,
+        donors: &'a [NodeId],
+        acceptor: AtomId,
+        ast: &'a DativeBondAst,
+    ) -> Self {
+        Self {
+            id,
+            donors,
+            acceptor,
+            ast,
+        }
+    }
+
     /// All atoms: donors followed by the acceptor.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
-        let acceptor = self.acceptor_id;
+        let acceptor = self.acceptor;
         self.donors
             .iter()
             .map(|&n| AtomId::from(n))
@@ -309,15 +306,29 @@ impl<'a> DativeBondEditorView<'a> {
 
 pub struct DativeBondEditorViewMut<'a> {
     pub id: DativeBondId,
+    donors: &'a [NodeId],
+    acceptor: AtomId,
     pub ast: &'a mut DativeBondAst,
-    pub(crate) donors: &'a [NodeId],
-    pub acceptor_id: AtomId,
 }
 
 impl<'a> DativeBondEditorViewMut<'a> {
+    pub(crate) fn new(
+        id: DativeBondId,
+        donors: &'a [NodeId],
+        acceptor: AtomId,
+        ast: &'a mut DativeBondAst,
+    ) -> Self {
+        Self {
+            id,
+            donors,
+            acceptor,
+            ast,
+        }
+    }
+
     /// All atoms: donors followed by the acceptor.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
-        let acceptor = self.acceptor_id;
+        let acceptor = self.acceptor;
         self.donors
             .iter()
             .map(|&n| AtomId::from(n))

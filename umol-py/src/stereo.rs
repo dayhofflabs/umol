@@ -220,7 +220,12 @@ impl TetrahedralStereoAst {
             TetrahedralStereoAst::NotStereo() => ("NotStereo", 0),
             TetrahedralStereoAst::Stereo(_) => ("Stereo", 1),
         };
-        variant_repr(slf.bind(py).as_any(), "TetrahedralStereoAst", variant, arity)
+        variant_repr(
+            slf.bind(py).as_any(),
+            "TetrahedralStereoAst",
+            variant,
+            arity,
+        )
     }
 }
 
@@ -434,9 +439,7 @@ mod tests {
     #[case(AstCisTransStereoAst::Undetermined)]
     #[case(AstCisTransStereoAst::NotStereo)]
     #[case(AstCisTransStereoAst::Stereo(AstStereoCosetAst::Lit(1)))]
-    #[case(AstCisTransStereoAst::Stereo(AstStereoCosetAst::Term(Box::new(
-        AstStereoTerm::Lit(0)
-    ))))]
+    #[case(AstCisTransStereoAst::Stereo(AstStereoCosetAst::Term(Box::new(AstStereoTerm::Lit(0)))))]
     fn test_cis_trans_stereo_ast_roundtrip(#[case] ast: AstCisTransStereoAst) {
         Python::attach(|py| {
             assert_eq!(

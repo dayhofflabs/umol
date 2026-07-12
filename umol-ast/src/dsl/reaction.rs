@@ -3200,7 +3200,7 @@ mod tests {
     #[rstest]
     fn test_reaction_input_into_ast_alias_union() {
         // `:lo` is an lhs alias, `:hi` a reaction alias; both `:add` resolve (union),
-        // but each set stays in its own metadata slot for independent round-trip.
+        // but each set stays in its own metadata field for independent round-trip.
         let input = r##"{:lhs {:atoms ["C"] :atom-aliases [:lo "N"]} :atom-aliases [:hi "C#h3"] :deltas [{:atom {:add :lo}} {:atom {:add :hi}}]}"##;
         let (ast, meta) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()

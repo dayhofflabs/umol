@@ -11,8 +11,8 @@ use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst, BooleanAst,
     CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, Lattice,
-    MoleculeAst, MoleculeParts, MulticenterBondAst, NoncovalentBondAst, SpinStateAst, StereoCosetAst,
-    TetrahedralStereoAst, TryIntoAst, ValueAst,
+    MoleculeAst, MoleculeParts, MulticenterBondAst, NoncovalentBondAst, SpinStateAst,
+    StereoCosetAst, TetrahedralStereoAst, TryIntoAst, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_perm::{space, ClassKey, Permutation};

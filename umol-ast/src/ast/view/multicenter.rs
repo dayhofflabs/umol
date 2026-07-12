@@ -263,26 +263,27 @@ impl<'a> MulticenterBondView<'a> {
 #[derive(Debug)]
 pub struct MulticenterBondViewMut<'a> {
     pub id: MulticenterBondId,
-    atoms: Vec<AtomId>,
+    pub atoms: Vec<AtomId>,
     pub ast: &'a mut MulticenterBondAst,
-}
-
-impl<'a> MulticenterBondViewMut<'a> {
-    /// The member atom ids.
-    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
-        self.atoms.iter().copied()
-    }
 }
 
 // Builder-scope view bundles for multicenter bonds.
 
 pub struct MulticenterBondEditorView<'a> {
     pub id: MulticenterBondId,
+    atoms: &'a [NodeId],
     pub ast: &'a MulticenterBondAst,
-    pub(crate) atoms: &'a [NodeId],
 }
 
 impl<'a> MulticenterBondEditorView<'a> {
+    pub(crate) fn new(
+        id: MulticenterBondId,
+        atoms: &'a [NodeId],
+        ast: &'a MulticenterBondAst,
+    ) -> Self {
+        Self { id, atoms, ast }
+    }
+
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
@@ -290,11 +291,19 @@ impl<'a> MulticenterBondEditorView<'a> {
 
 pub struct MulticenterBondEditorViewMut<'a> {
     pub id: MulticenterBondId,
+    atoms: &'a [NodeId],
     pub ast: &'a mut MulticenterBondAst,
-    pub(crate) atoms: &'a [NodeId],
 }
 
 impl<'a> MulticenterBondEditorViewMut<'a> {
+    pub(crate) fn new(
+        id: MulticenterBondId,
+        atoms: &'a [NodeId],
+        ast: &'a mut MulticenterBondAst,
+    ) -> Self {
+        Self { id, atoms, ast }
+    }
+
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }

@@ -84,11 +84,10 @@ pub use id::{
 pub use incidence::{IncidenceGraph, IncidenceNodeSelection};
 pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
-pub use molecule::spec;
 pub use molecule::transact::{Transaction, TransactionError};
 pub use molecule::{
-    AtomArg, Fragment, MoleculeAst, MoleculeBuilder, MoleculeEditor, MoleculeParts, MoleculeSpec,
-    MoleculeSpecTerm, Port, PortArg,
+    spec, AtomArg, Fragment, MoleculeAst, MoleculeBuilder, MoleculeEditor, MoleculeParts,
+    MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
 };
 pub use multicenter::MulticenterBondAst;
 pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
@@ -119,7 +118,7 @@ pub use view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphism, AtomView,
     AtomViewMut, AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
     DativeBondViews, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
-    NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, StereoAtomView,
-    StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut, StereoBondViews,
-    StereoLigandView,
+    NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews,
+    StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut,
+    StereoBondViews, StereoLigandView,
 };

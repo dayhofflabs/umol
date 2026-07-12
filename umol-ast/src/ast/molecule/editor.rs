@@ -136,8 +136,8 @@ where
                 let compacted: Vec<([P; N], D)> = vec
                     .into_iter()
                     .filter_map(|(mut participants, d)| {
-                        for slot in &mut participants {
-                            *slot = (*slot).compact(compaction)?;
+                        for participant in &mut participants {
+                            *participant = (*participant).compact(compaction)?;
                         }
                         Some((participants, d))
                     })
@@ -425,8 +425,8 @@ where
                 let compacted: Vec<([L1; N1], Vec<L2>, D)> = vec
                     .into_iter()
                     .filter_map(|(mut participants_1, participants_2, d)| {
-                        for slot in &mut participants_1 {
-                            *slot = (*slot).compact(compaction)?;
+                        for participant in &mut participants_1 {
+                            *participant = (*participant).compact(compaction)?;
                         }
                         let participants_2: Option<Vec<L2>> = participants_2
                             .into_iter()
@@ -790,21 +790,16 @@ impl MoleculeEditor {
         match &self.dative_bonds {
             FixedVarSetStorage::Shared(arc) => {
                 let rid = RelationId(id.0);
-                DativeBondEditorView {
+                DativeBondEditorView::new(
                     id,
-                    ast: arc.data(rid),
-                    acceptor_id: AtomId::from(arc.participants_1(rid)[0]),
-                    donors: arc.participants_2(rid),
-                }
+                    arc.participants_2(rid),
+                    AtomId::from(arc.participants_1(rid)[0]),
+                    arc.data(rid),
+                )
             }
             FixedVarSetStorage::Mutable(vec) => {
                 let entry = &vec[id.index()];
-                DativeBondEditorView {
-                    id,
-                    ast: &entry.2,
-                    acceptor_id: AtomId::from(entry.0[0]),
-                    donors: &entry.1,
-                }
+                DativeBondEditorView::new(id, &entry.1, AtomId::from(entry.0[0]), &entry.2)
             }
         }
     }
@@ -815,69 +810,41 @@ impl MoleculeEditor {
             unreachable!()
         };
         let entry = &mut vec[id.index()];
-        let acceptor_id = AtomId::from(entry.0[0]);
-        DativeBondEditorViewMut {
-            id,
-            acceptor_id,
-            donors: &entry.1,
-            ast: &mut entry.2,
-        }
+        let acceptor = AtomId::from(entry.0[0]);
+        DativeBondEditorViewMut::new(id, &entry.1, acceptor, &mut entry.2)
     }
 
     pub fn aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemEditorView<'_> {
         match &self.aromatic_systems {
             VarSetStorage::Shared(arc) => {
                 let rid = RelationId(id.0);
-                AromaticSystemEditorView {
-                    id,
-                    ast: arc.data(rid),
-                    atoms: arc.participants(rid),
-                }
+                AromaticSystemEditorView::new(id, arc.participants(rid), arc.data(rid))
             }
             VarSetStorage::Mutable(vec) => {
                 let entry = &vec[id.index()];
-                AromaticSystemEditorView {
-                    id,
-                    ast: &entry.1,
-                    atoms: &entry.0,
-                }
+                AromaticSystemEditorView::new(id, &entry.0, &entry.1)
             }
         }
     }
 
-    pub fn aromatic_system_mut(
-        &mut self,
-        id: AromaticSystemId,
-    ) -> AromaticSystemEditorViewMut<'_> {
+    pub fn aromatic_system_mut(&mut self, id: AromaticSystemId) -> AromaticSystemEditorViewMut<'_> {
         self.aromatic_systems.materialize();
         let VarSetStorage::Mutable(vec) = &mut self.aromatic_systems else {
             unreachable!()
         };
         let entry = &mut vec[id.index()];
-        AromaticSystemEditorViewMut {
-            id,
-            atoms: &entry.0,
-            ast: &mut entry.1,
-        }
+        AromaticSystemEditorViewMut::new(id, &entry.0, &mut entry.1)
     }
 
     pub fn multicenter_bond(&self, id: MulticenterBondId) -> MulticenterBondEditorView<'_> {
         match &self.multicenter_bonds {
             VarSetStorage::Shared(arc) => {
                 let rid = RelationId(id.0);
-                MulticenterBondEditorView {
-                    id,
-                    ast: arc.data(rid),
-                    atoms: arc.participants(rid),
-                }
+                MulticenterBondEditorView::new(id, arc.participants(rid), arc.data(rid))
             }
             VarSetStorage::Mutable(vec) => {
                 let entry = &vec[id.index()];
-                MulticenterBondEditorView {
-                    id,
-                    ast: &entry.1,
-                    atoms: &entry.0,
-                }
+                MulticenterBondEditorView::new(id, &entry.0, &entry.1)
             }
         }
     }
@@ -891,11 +858,7 @@ impl MoleculeEditor {
             unreachable!()
         };
         let entry = &mut vec[id.index()];
-        MulticenterBondEditorViewMut {
-            id,
-            atoms: &entry.0,
-            ast: &mut entry.1,
-        }
+        MulticenterBondEditorViewMut::new(id, &entry.0, &mut entry.1)
     }
 
     pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondEditorView<'_> {

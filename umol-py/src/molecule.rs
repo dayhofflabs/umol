@@ -132,6 +132,9 @@ mod tests {
 
     #[rstest]
     fn test_molecule_ast_repr() {
-        assert_eq!(MoleculeAst::new().__repr__(), "MoleculeAst(atoms=0, bonds=0)");
+        assert_eq!(
+            MoleculeAst::new().__repr__(),
+            "MoleculeAst(atoms=0, bonds=0)"
+        );
     }
 }

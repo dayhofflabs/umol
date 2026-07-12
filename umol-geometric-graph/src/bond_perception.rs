@@ -61,11 +61,11 @@ impl BondDistanceModel {
         let p0 = 1.0 / (1.0 + (-self.sigmoid_alpha * (d - mu_1 - delta)).exp());
 
         let mut out = [p0, 0.0, 0.0, 0.0];
-        for (k, slot) in out.iter_mut().enumerate().skip(1) {
+        for (k, probability) in out.iter_mut().enumerate().skip(1) {
             if let (Some(r_a), Some(r_b)) = (ra.for_order(k as u8), rb.for_order(k as u8)) {
                 let mu_k = (r_a + r_b).as_bohr();
                 let sigma = self.sigma[k - 1].as_bohr();
-                *slot = (-(d - mu_k).powi(2) / (2.0 * sigma * sigma)).exp();
+                *probability = (-(d - mu_k).powi(2) / (2.0 * sigma * sigma)).exp();
             }
         }
         out

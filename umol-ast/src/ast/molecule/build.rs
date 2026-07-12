@@ -52,7 +52,11 @@ impl MoleculeBuilder {
     /// compact atom-string (`"C#h3"`) via `Into<AtomAst>`.
     pub fn atom(&mut self, spec: impl Into<AtomAst>) -> AtomId {
         let atom = spec.into();
-        let atom = if self.ground { atom.into_ground() } else { atom };
+        let atom = if self.ground {
+            atom.into_ground()
+        } else {
+            atom
+        };
         self.editor.add_atom(atom)
     }
 
@@ -244,7 +248,10 @@ mod tests {
         let mol = builder.build();
 
         assert_eq!(bond, BondId(0));
-        assert_eq!(mol.bond(bond).ast, &BondAst::from_order(2).with_charge(-1_i64));
+        assert_eq!(
+            mol.bond(bond).ast,
+            &BondAst::from_order(2).with_charge(-1_i64)
+        );
     }
 
     #[rstest]
@@ -276,8 +283,10 @@ mod tests {
         let mol = builder.build();
 
         let endpoints: Vec<[AtomId; 2]> = bonds.iter().map(|&b| mol.bond(b).atom_ids()).collect();
-        let expected: Vec<[AtomId; 2]> =
-            expected_edges.iter().map(|&(i, j)| [atoms[i], atoms[j]]).collect();
+        let expected: Vec<[AtomId; 2]> = expected_edges
+            .iter()
+            .map(|&(i, j)| [atoms[i], atoms[j]])
+            .collect();
         assert_eq!(endpoints, expected);
     }
 
@@ -294,8 +303,10 @@ mod tests {
         let mol = builder.build();
 
         let endpoints: Vec<[AtomId; 2]> = bonds.iter().map(|&b| mol.bond(b).atom_ids()).collect();
-        let expected: Vec<[AtomId; 2]> =
-            expected_edges.iter().map(|&(i, j)| [atoms[i], atoms[j]]).collect();
+        let expected: Vec<[AtomId; 2]> = expected_edges
+            .iter()
+            .map(|&(i, j)| [atoms[i], atoms[j]])
+            .collect();
         assert_eq!(endpoints, expected);
     }
 
@@ -304,7 +315,8 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let a0 = builder.atom(Element::C);
         let a1 = builder.atom(Element::C);
-        let system = builder.aromatic_system([a0, a1], AromaticSystemAst::from_electrons(vec![1, 1]));
+        let system =
+            builder.aromatic_system([a0, a1], AromaticSystemAst::from_electrons(vec![1, 1]));
         let mol = builder.build();
 
         assert_eq!(system, AromaticSystemId(0));
@@ -328,7 +340,10 @@ mod tests {
         let a0 = builder.atom(Element::B);
         let a1 = builder.atom(Element::B);
         let a2 = builder.atom(Element::H);
-        let bond = builder.multicenter_bond([a0, a1, a2], MulticenterBondAst::from_electrons(vec![1, 1, 1]));
+        let bond = builder.multicenter_bond(
+            [a0, a1, a2],
+            MulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        );
         let mol = builder.build();
 
         assert_eq!(bond, MulticenterBondId(0));
@@ -343,8 +358,11 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let a0 = builder.atom(Element::O);
         let a1 = builder.atom(Element::H);
-        let bond =
-            builder.noncovalent_bond(a0, a1, NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond));
+        let bond = builder.noncovalent_bond(
+            a0,
+            a1,
+            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        );
         let mol = builder.build();
 
         assert_eq!(bond, NoncovalentBondId(0));

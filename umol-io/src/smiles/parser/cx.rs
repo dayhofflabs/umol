@@ -163,7 +163,7 @@ impl BondIndexMap {
             return Some(open as u32);
         }
         // Otherwise it is a sequential bond: the s-th one in close order, whose
-        // open index is the s-th slot once the ring opening positions are skipped.
+        // open index is the s-th position once the ring opening positions are skipped.
         let s = k - self
             .ring_bonds
             .iter()

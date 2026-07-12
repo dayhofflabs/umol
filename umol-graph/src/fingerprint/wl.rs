@@ -129,7 +129,8 @@ mod tests {
         #[case] b: &str,
         #[case] equal: bool,
     ) {
-        let same = featurizer.featurize(&mol_dsl_ground!(a)) == featurizer.featurize(&mol_dsl_ground!(b));
+        let same =
+            featurizer.featurize(&mol_dsl_ground!(a)) == featurizer.featurize(&mol_dsl_ground!(b));
         assert_eq!(same, equal);
     }
 }

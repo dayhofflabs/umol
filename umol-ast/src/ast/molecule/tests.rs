@@ -1691,10 +1691,11 @@ fn test_molecule_ast_index_noncovalent_bond(#[from(rich_molecule)] ast: Molecule
 }
 
 #[rstest]
-fn test_molecule_ast_atoms_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    for a in ast.atoms_mut() {
+fn test_molecule_ast_map_atoms(#[from(rich_molecule)] mut ast: MoleculeAst) {
+    ast.map_atoms(|mut a| {
         a.charge = ValueAst::Lit(1);
-    }
+        a
+    });
     let charges: Vec<ValueAst> = ast.atoms().iter().map(|v| v.ast.charge.clone()).collect();
     assert_eq!(
         charges,
@@ -1708,10 +1709,11 @@ fn test_molecule_ast_atoms_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
 }
 
 #[rstest]
-fn test_molecule_ast_bonds_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    for b in ast.bonds_mut() {
+fn test_molecule_ast_map_bonds(#[from(rich_molecule)] mut ast: MoleculeAst) {
+    ast.map_bonds(|mut b| {
         b.order = ValueAst::Lit(1);
-    }
+        b
+    });
     let orders: Vec<ValueAst> = ast.bonds().iter().map(|v| v.ast.order.clone()).collect();
     assert_eq!(
         orders,
@@ -1721,12 +1723,9 @@ fn test_molecule_ast_bonds_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
 
 #[rstest]
 fn test_molecule_ast_dative_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    ast.dative_bond_mut(DativeBondId(0))
-        .constraints
-        .set(DativeBondConstraintAst::ring_membership(
-            RingScope::Size(6),
-            1,
-        ));
+    ast.dative_bond_mut(DativeBondId(0)).ast.constraints.set(
+        DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
+    );
     assert_eq!(
         ast[DativeBondId(0)].constraints,
         DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(
@@ -1738,7 +1737,7 @@ fn test_molecule_ast_dative_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst
 
 #[rstest]
 fn test_molecule_ast_aromatic_system_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    ast.aromatic_system_mut(AromaticSystemId(0)).electrons = ElectronCountsAst::Lit(vec![1; 3]);
+    ast.aromatic_system_mut(AromaticSystemId(0)).ast.electrons = ElectronCountsAst::Lit(vec![1; 3]);
     assert_eq!(
         ast[AromaticSystemId(0)].electrons,
         ElectronCountsAst::Lit(vec![1, 1, 1]),
@@ -1746,10 +1745,11 @@ fn test_molecule_ast_aromatic_system_mut(#[from(rich_molecule)] mut ast: Molecul
 }
 
 #[rstest]
-fn test_molecule_ast_aromatic_systems_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    for a in ast.aromatic_systems_mut() {
+fn test_molecule_ast_map_aromatic_systems(#[from(rich_molecule)] mut ast: MoleculeAst) {
+    ast.map_aromatic_systems(|mut a| {
         a.electrons = ElectronCountsAst::Lit(vec![1; 3]);
-    }
+        a
+    });
     let electrons: Vec<ElectronCountsAst> = ast
         .aromatic_systems()
         .iter()
@@ -1760,7 +1760,7 @@ fn test_molecule_ast_aromatic_systems_mut(#[from(rich_molecule)] mut ast: Molecu
 
 #[rstest]
 fn test_molecule_ast_multicenter_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    ast.multicenter_bond_mut(MulticenterBondId(0)).electrons =
+    ast.multicenter_bond_mut(MulticenterBondId(0)).ast.electrons =
         ElectronCountsAst::Lit(vec![1, 1, 0]);
     assert_eq!(
         ast[MulticenterBondId(0)].electrons,
@@ -1769,10 +1769,11 @@ fn test_molecule_ast_multicenter_bond_mut(#[from(rich_molecule)] mut ast: Molecu
 }
 
 #[rstest]
-fn test_molecule_ast_multicenter_bonds_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    for m in ast.multicenter_bonds_mut() {
+fn test_molecule_ast_map_multicenter_bonds(#[from(rich_molecule)] mut ast: MoleculeAst) {
+    ast.map_multicenter_bonds(|mut m| {
         m.electrons = ElectronCountsAst::Lit(vec![1, 1, 0]);
-    }
+        m
+    });
     let electrons: Vec<ElectronCountsAst> = ast
         .multicenter_bonds()
         .iter()
@@ -1783,7 +1784,7 @@ fn test_molecule_ast_multicenter_bonds_mut(#[from(rich_molecule)] mut ast: Molec
 
 #[rstest]
 fn test_molecule_ast_noncovalent_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    ast.noncovalent_bond_mut(NoncovalentBondId(0)).kind =
+    ast.noncovalent_bond_mut(NoncovalentBondId(0)).ast.kind =
         NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic);
     assert_eq!(
         ast[NoncovalentBondId(0)].kind,
@@ -1826,12 +1827,9 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
         .ast
         .constraints
         .set(BondConstraintAst::Aromatic(BooleanAst::Lit(true)));
-    ast.dative_bond_mut(DativeBondId(0))
-        .constraints
-        .set(DativeBondConstraintAst::ring_membership(
-            RingScope::All,
-            ValueAst::Lit(1),
-        ));
+    ast.dative_bond_mut(DativeBondId(0)).ast.constraints.set(
+        DativeBondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)),
+    );
 
     ast.lift_constraints();
 
@@ -2013,12 +2011,9 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
         .ast
         .constraints
         .set(BondConstraintAst::Aromatic(BooleanAst::Lit(true)));
-    ast.dative_bond_mut(DativeBondId(0))
-        .constraints
-        .set(DativeBondConstraintAst::ring_membership(
-            RingScope::All,
-            ValueAst::Lit(1),
-        ));
+    ast.dative_bond_mut(DativeBondId(0)).ast.constraints.set(
+        DativeBondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)),
+    );
 
     let original = ast.clone();
 
@@ -2180,7 +2175,10 @@ fn test_molecule_ast_join_constraint() {
         atoms: Some(vec![AtomId(1), AtomId(2)]),
         sum: ValueAst::Lit(0),
     });
-    assert_eq!(union.constraints.iter().collect::<Vec<_>>(), vec![&expected]);
+    assert_eq!(
+        union.constraints.iter().collect::<Vec<_>>(),
+        vec![&expected]
+    );
 }
 
 #[rstest]

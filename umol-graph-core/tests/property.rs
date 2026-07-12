@@ -46,8 +46,8 @@ fn labeled_graph(
         .prop_map(|(n, pairs, node_labels, mask)| {
             let mut edges = Vec::new();
             let mut edge_labels = Vec::new();
-            for (pair, slot) in pairs.iter().zip(mask) {
-                if let Some(label) = slot {
+            for (pair, maybe_label) in pairs.iter().zip(mask) {
+                if let Some(label) = maybe_label {
                     edges.push([pair.0, pair.1]);
                     edge_labels.push(label);
                 }

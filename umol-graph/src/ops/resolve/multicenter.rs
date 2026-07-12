@@ -23,7 +23,7 @@ impl MulticenterBondsResolver {
         &self,
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), MulticenterBondsContradiction>, MulticenterBondsError> {
-        for bond in ast.multicenter_bonds_mut() {
+        ast.map_multicenter_bonds(|mut bond| {
             if matches!(bond.charge, ValueAst::Undetermined) {
                 bond.charge = ValueAst::Lit(0);
             }
@@ -32,7 +32,8 @@ impl MulticenterBondsResolver {
             } else {
                 bond.spin.high_spin_complete();
             }
-        }
+            bond
+        });
         Ok(Solution::Determined(()))
     }
 }

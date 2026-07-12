@@ -2115,9 +2115,11 @@ mod tests {
                     AtomAst::from_element(Element::O),
                 ],
                 bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-                constraints: Constraints::from(Constraint::Molecule(MoleculeConstraint::Connected {
-                    atoms: Some(vec![AtomId(0), AtomId(1)]),
-                })),
+                constraints: Constraints::from(Constraint::Molecule(
+                    MoleculeConstraint::Connected {
+                        atoms: Some(vec![AtomId(0), AtomId(1)]),
+                    },
+                )),
                 ..Default::default()
             }),
             Deltas::from_iter([

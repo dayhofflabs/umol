@@ -379,7 +379,6 @@ impl<'a> AtomView<'a> {
             .filter(|s| s.kind() == StereoKind::Tetrahedral)
     }
 
-
     /// True if this atom belongs to any ring in the molecule's canonical
     /// ring set (Vismara relevant cycles, max ring size 22). Uses the
     /// molecule's cached canonical `RingSet`.
@@ -533,7 +532,7 @@ pub struct AtomViewMut<'a> {
     pub ast: &'a mut AtomAst,
 }
 
-// Builder-scope view bundles for atoms.
+// Editor-scope view bundles for atoms.
 
 pub struct AtomEditorView<'a> {
     pub id: AtomId,
@@ -555,8 +554,7 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::{
-        AromaticValenceAst, AtomConstraintAst, AtomConstraintsAst, MulticenterValenceAst,
-        RingScope,
+        AromaticValenceAst, AtomConstraintAst, AtomConstraintsAst, MulticenterValenceAst, RingScope,
     };
     use crate::ast::dative::DativeBondAst;
     use crate::ast::electrons::ElectronCountsAst;

@@ -2,9 +2,9 @@
 
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
-use std::iter;
 use std::ops::Index;
 use std::sync::{Arc, OnceLock};
+use std::{iter, mem};
 
 pub use build::MoleculeBuilder;
 pub use editor::MoleculeEditor;
@@ -34,10 +34,12 @@ use super::ring::{RingFamily, RingSet};
 use super::stereo::{StereoAtomAst, StereoBondAst};
 use super::traits::Lattice;
 use super::view::{
-    AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
-    BondViewMut, BondViews, DativeBondView, DativeBondViews, GraphView, MulticenterBondView,
-    MulticenterBondViews, NeighborView, NoncovalentBondView, NoncovalentBondViews, StereoAtomView,
-    StereoAtomViews, StereoBondView, StereoBondViews,
+    AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
+    AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
+    DativeBondViews, GraphView, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
+    NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews,
+    StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut,
+    StereoBondViews,
 };
 
 mod build;
@@ -53,14 +55,14 @@ pub(super) mod transact;
 /// itself only allows attribute mutation (`atom_mut`, `bond_mut`); structural
 /// edits go through `MoleculeEditor` via [`MoleculeAst::edit`].
 ///
-/// Carries a single-slot canonical-rings cache (`OnceLock<RingSet>`) populated
+/// Carries a single-value canonical-rings cache (`OnceLock<RingSet>`) populated
 /// lazily on the first call to [`MoleculeAst::rings`]. The cache stores
 /// Vismara relevant cycles up to max ring size 22; non-canonical enumeration
 /// goes through [`MoleculeAst::rings_with`], which is uncached and returns
 /// owned. Topology is invariant across in-place attribute mutation, so the
 /// cache remains valid for the molecule's lifetime; structural edits go
 /// through the builder, which produces a fresh `MoleculeAst` with an empty
-/// cache. The cache slot is excluded from `PartialEq` / `Hash` so identity
+/// cache. The cache field is excluded from `PartialEq` / `Hash` so identity
 /// is independent of cache state.
 #[derive(Debug, Default)]
 pub struct MoleculeAst {
@@ -565,7 +567,7 @@ impl MoleculeAst {
     }
 
     /// Canonical ring set: Vismara relevant cycles up to max ring size 22,
-    /// applied to every atom. Cached in a single-slot `OnceLock` populated
+    /// applied to every atom. Cached in a single-value `OnceLock` populated
     /// lazily on first call; subsequent calls return the same borrow.
     pub fn rings(&self) -> &RingSet {
         self.rings_cache
@@ -588,66 +590,155 @@ impl MoleculeAst {
         AtomViewMut { id, ast }
     }
 
-    pub fn atoms_mut(&mut self) -> impl Iterator<Item = &mut AtomAst> {
-        Arc::make_mut(&mut self.atoms).iter_mut()
+    /// Replace every atom with `f(atom)` in place (owned in, owned out — no
+    /// `&mut AtomAst` escapes, so the container controls any re-interning).
+    pub fn map_atoms(&mut self, mut f: impl FnMut(AtomAst) -> AtomAst) {
+        for atom in Arc::make_mut(&mut self.atoms).iter_mut() {
+            *atom = f(mem::take(atom));
+        }
     }
 
     pub fn bond_mut(&mut self, id: BondId) -> BondViewMut<'_> {
         let [s, t] = self.graph.edge_endpoints(id.into());
-        let data = &mut Arc::make_mut(&mut self.bonds)[id.index()];
-        BondViewMut::new(id, [AtomId::from(s), AtomId::from(t)], data)
+        let atoms = [AtomId::from(s), AtomId::from(t)];
+        let ast = &mut Arc::make_mut(&mut self.bonds)[id.index()];
+        BondViewMut { id, atoms, ast }
     }
 
-    pub fn bonds_mut(&mut self) -> impl Iterator<Item = &mut BondAst> {
-        Arc::make_mut(&mut self.bonds).iter_mut()
+    /// Replace every bond with `f(bond)` in place.
+    pub fn map_bonds(&mut self, mut f: impl FnMut(BondAst) -> BondAst) {
+        for bond in Arc::make_mut(&mut self.bonds).iter_mut() {
+            *bond = f(mem::take(bond));
+        }
     }
 
-    pub fn dative_bond_mut(&mut self, id: DativeBondId) -> &mut DativeBondAst {
-        Arc::make_mut(&mut self.dative_bonds).data_mut(RelationId::from(id))
+    pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondViewMut<'_> {
+        let rid = RelationId::from(id);
+        let set = Arc::make_mut(&mut self.dative_bonds);
+        let acceptor = AtomId::from(set.participants_1(rid)[0]);
+        let donors = set
+            .participants_2(rid)
+            .iter()
+            .map(|&n| AtomId::from(n))
+            .collect();
+        let ast = set.data_mut(rid);
+        DativeBondViewMut {
+            id,
+            donors,
+            acceptor,
+            ast,
+        }
     }
 
-    pub fn dative_bonds_mut(&mut self) -> impl Iterator<Item = &mut DativeBondAst> {
-        Arc::make_mut(&mut self.dative_bonds).data_iter_mut()
+    /// Replace every dative bond with `f(bond)` in place.
+    pub fn map_dative_bonds(&mut self, mut f: impl FnMut(DativeBondAst) -> DativeBondAst) {
+        for dative_bond in Arc::make_mut(&mut self.dative_bonds).data_iter_mut() {
+            *dative_bond = f(mem::take(dative_bond));
+        }
     }
 
-    pub fn aromatic_system_mut(&mut self, id: AromaticSystemId) -> &mut AromaticSystemAst {
-        Arc::make_mut(&mut self.aromatic_systems).data_mut(RelationId::from(id))
+    pub fn aromatic_system_mut(&mut self, id: AromaticSystemId) -> AromaticSystemViewMut<'_> {
+        let rid = RelationId::from(id);
+        let set = Arc::make_mut(&mut self.aromatic_systems);
+        let atoms = set
+            .participants(rid)
+            .iter()
+            .map(|&n| AtomId::from(n))
+            .collect();
+        let ast = set.data_mut(rid);
+        AromaticSystemViewMut { id, atoms, ast }
     }
 
-    pub fn aromatic_systems_mut(&mut self) -> impl Iterator<Item = &mut AromaticSystemAst> {
-        Arc::make_mut(&mut self.aromatic_systems).data_iter_mut()
+    /// Replace every aromatic system with `f(system)` in place.
+    pub fn map_aromatic_systems(
+        &mut self,
+        mut f: impl FnMut(AromaticSystemAst) -> AromaticSystemAst,
+    ) {
+        for aromatic_system in Arc::make_mut(&mut self.aromatic_systems).data_iter_mut() {
+            *aromatic_system = f(mem::take(aromatic_system));
+        }
     }
 
-    pub fn multicenter_bond_mut(&mut self, id: MulticenterBondId) -> &mut MulticenterBondAst {
-        Arc::make_mut(&mut self.multicenter_bonds).data_mut(RelationId::from(id))
+    pub fn multicenter_bond_mut(&mut self, id: MulticenterBondId) -> MulticenterBondViewMut<'_> {
+        let rid = RelationId::from(id);
+        let set = Arc::make_mut(&mut self.multicenter_bonds);
+        let atoms = set
+            .participants(rid)
+            .iter()
+            .map(|&n| AtomId::from(n))
+            .collect();
+        let ast = set.data_mut(rid);
+        MulticenterBondViewMut { id, atoms, ast }
     }
 
-    pub fn multicenter_bonds_mut(&mut self) -> impl Iterator<Item = &mut MulticenterBondAst> {
-        Arc::make_mut(&mut self.multicenter_bonds).data_iter_mut()
+    /// Replace every multicenter bond with `f(bond)` in place.
+    pub fn map_multicenter_bonds(
+        &mut self,
+        mut f: impl FnMut(MulticenterBondAst) -> MulticenterBondAst,
+    ) {
+        for multicenter_bond in Arc::make_mut(&mut self.multicenter_bonds).data_iter_mut() {
+            *multicenter_bond = f(mem::take(multicenter_bond));
+        }
     }
 
-    pub fn noncovalent_bond_mut(&mut self, id: NoncovalentBondId) -> &mut NoncovalentBondAst {
-        Arc::make_mut(&mut self.noncovalent_bonds).data_mut(RelationId::from(id))
+    pub fn noncovalent_bond_mut(&mut self, id: NoncovalentBondId) -> NoncovalentBondViewMut<'_> {
+        let rid = RelationId::from(id);
+        let set = Arc::make_mut(&mut self.noncovalent_bonds);
+        let atoms = (*set.participants(rid)).map(AtomId::from);
+        let ast = set.data_mut(rid);
+        NoncovalentBondViewMut { id, atoms, ast }
     }
 
-    pub fn noncovalent_bonds_mut(&mut self) -> impl Iterator<Item = &mut NoncovalentBondAst> {
-        Arc::make_mut(&mut self.noncovalent_bonds).data_iter_mut()
+    /// Replace every noncovalent bond with `f(bond)` in place.
+    pub fn map_noncovalent_bonds(
+        &mut self,
+        mut f: impl FnMut(NoncovalentBondAst) -> NoncovalentBondAst,
+    ) {
+        for noncovalent_bond in Arc::make_mut(&mut self.noncovalent_bonds).data_iter_mut() {
+            *noncovalent_bond = f(mem::take(noncovalent_bond));
+        }
     }
 
-    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> &mut StereoAtomAst {
-        Arc::make_mut(&mut self.stereo_atoms).data_mut(RelationId::from(id))
+    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomViewMut<'_> {
+        let rid = RelationId::from(id);
+        let set = Arc::make_mut(&mut self.stereo_atoms);
+        let site = AtomId::from(set.participants_1(rid)[0]);
+        let ligands = set.participants_2(rid).to_vec();
+        let ast = set.data_mut(rid);
+        StereoAtomViewMut {
+            id,
+            site,
+            ligands,
+            ast,
+        }
     }
 
-    pub fn stereo_atoms_mut(&mut self) -> impl Iterator<Item = &mut StereoAtomAst> {
-        Arc::make_mut(&mut self.stereo_atoms).data_iter_mut()
+    /// Replace every stereo atom with `f(stereo_atom)` in place.
+    pub fn map_stereo_atoms(&mut self, mut f: impl FnMut(StereoAtomAst) -> StereoAtomAst) {
+        for stereo_atom in Arc::make_mut(&mut self.stereo_atoms).data_iter_mut() {
+            *stereo_atom = f(mem::take(stereo_atom));
+        }
     }
 
-    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> &mut StereoBondAst {
-        Arc::make_mut(&mut self.stereo_bonds).data_mut(RelationId::from(id))
+    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondViewMut<'_> {
+        let rid = RelationId::from(id);
+        let set = Arc::make_mut(&mut self.stereo_bonds);
+        let site = BondId::from(set.participants_1(rid)[0]);
+        let ligands = set.participants_2(rid).to_vec();
+        let ast = set.data_mut(rid);
+        StereoBondViewMut {
+            id,
+            site,
+            ligands,
+            ast,
+        }
     }
 
-    pub fn stereo_bonds_mut(&mut self) -> impl Iterator<Item = &mut StereoBondAst> {
-        Arc::make_mut(&mut self.stereo_bonds).data_iter_mut()
+    /// Replace every stereo bond with `f(stereo_bond)` in place.
+    pub fn map_stereo_bonds(&mut self, mut f: impl FnMut(StereoBondAst) -> StereoBondAst) {
+        for stereo_bond in Arc::make_mut(&mut self.stereo_bonds).data_iter_mut() {
+            *stereo_bond = f(mem::take(stereo_bond));
+        }
     }
 
     pub fn constraints(&self) -> &Constraints {
@@ -722,25 +813,25 @@ impl MoleculeAst {
         }
         for i in 0..dative_count {
             let id = DativeBondId::from(i);
-            for c in self.dative_bond_mut(id).constraints.take() {
+            for c in self.dative_bond_mut(id).ast.constraints.take() {
                 additions.push(Constraint::DativeBond(id, c));
             }
         }
         for i in 0..aromatic_count {
             let id = AromaticSystemId::from(i);
-            for c in self.aromatic_system_mut(id).constraints.take() {
+            for c in self.aromatic_system_mut(id).ast.constraints.take() {
                 additions.push(Constraint::AromaticSystem(id, c));
             }
         }
         for i in 0..multicenter_count {
             let id = MulticenterBondId::from(i);
-            for c in self.multicenter_bond_mut(id).constraints.take() {
+            for c in self.multicenter_bond_mut(id).ast.constraints.take() {
                 additions.push(Constraint::MulticenterBond(id, c));
             }
         }
         for i in 0..noncovalent_count {
             let id = NoncovalentBondId::from(i);
-            for c in self.noncovalent_bond_mut(id).constraints.take() {
+            for c in self.noncovalent_bond_mut(id).ast.constraints.take() {
                 additions.push(Constraint::NoncovalentBond(id, c));
             }
         }
@@ -748,10 +839,11 @@ impl MoleculeAst {
             let id = StereoAtomId::from(i);
             let kind = self
                 .stereo_atom_mut(id)
+                .ast
                 .configuration
                 .kind()
                 .expect("molecule stereo atom has a concrete kind");
-            for c in self.stereo_atom_mut(id).constraints.take() {
+            for c in self.stereo_atom_mut(id).ast.constraints.take() {
                 additions.push(Constraint::StereoAtom(id, kind, c));
             }
         }
@@ -759,10 +851,11 @@ impl MoleculeAst {
             let id = StereoBondId::from(i);
             let kind = self
                 .stereo_bond_mut(id)
+                .ast
                 .configuration
                 .kind()
                 .expect("molecule stereo bond has a concrete kind");
-            for c in self.stereo_bond_mut(id).constraints.take() {
+            for c in self.stereo_bond_mut(id).ast.constraints.take() {
                 additions.push(Constraint::StereoBond(id, kind, c));
             }
         }
@@ -788,22 +881,22 @@ impl MoleculeAst {
                     self.bond_mut(id).ast.constraints.set(inner);
                 }
                 Constraint::DativeBond(id, inner) => {
-                    self.dative_bond_mut(id).constraints.set(inner);
+                    self.dative_bond_mut(id).ast.constraints.set(inner);
                 }
                 Constraint::AromaticSystem(id, inner) => {
-                    self.aromatic_system_mut(id).constraints.set(inner);
+                    self.aromatic_system_mut(id).ast.constraints.set(inner);
                 }
                 Constraint::MulticenterBond(id, inner) => {
-                    self.multicenter_bond_mut(id).constraints.set(inner);
+                    self.multicenter_bond_mut(id).ast.constraints.set(inner);
                 }
                 Constraint::NoncovalentBond(_, inner) => match inner {},
                 // The carried kind is dropped here; kind/degree consistency
                 // against the element is the C4 validator's job.
                 Constraint::StereoAtom(id, _kind, inner) => {
-                    self.stereo_atom_mut(id).constraints.set(inner);
+                    self.stereo_atom_mut(id).ast.constraints.set(inner);
                 }
                 Constraint::StereoBond(id, _kind, inner) => {
-                    self.stereo_bond_mut(id).constraints.set(inner);
+                    self.stereo_bond_mut(id).ast.constraints.set(inner);
                 }
                 c @ (Constraint::Relational(_)
                 | Constraint::Molecule(_)

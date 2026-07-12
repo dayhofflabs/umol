@@ -5,12 +5,12 @@
 //! the nonbonding budget. Literals constrain each step.
 
 use thiserror::Error;
+#[cfg(test)]
+use umol_ast::ast::MoleculeParts;
 use umol_ast::ast::{
     aromatic_increment, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintsAst,
     AtomId, BooleanAst, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
 };
-#[cfg(test)]
-use umol_ast::ast::MoleculeParts;
 use umol_chem::element::Element;
 use umol_chem::spin::{SpinMultiplicity, SpinState};
 use umol_utils::solution::Solution;

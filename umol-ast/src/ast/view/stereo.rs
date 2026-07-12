@@ -848,21 +848,9 @@ fn permutation_for_ligands(
 #[derive(Debug)]
 pub struct StereoAtomViewMut<'a> {
     pub id: StereoAtomId,
-    site: AtomId,
-    ligands: Vec<StereoLigand>,
+    pub site: AtomId,
+    pub ligands: Vec<StereoLigand>,
     pub ast: &'a mut StereoAtomAst,
-}
-
-impl<'a> StereoAtomViewMut<'a> {
-    /// The site atom id.
-    pub fn site_id(&self) -> AtomId {
-        self.site
-    }
-
-    /// The ordered ligand frame.
-    pub fn ligands(&self) -> &[StereoLigand] {
-        &self.ligands
-    }
 }
 
 /// Mutable borrowed view of a stereo bond: its id, site bond + ligand frame
@@ -870,21 +858,9 @@ impl<'a> StereoAtomViewMut<'a> {
 #[derive(Debug)]
 pub struct StereoBondViewMut<'a> {
     pub id: StereoBondId,
-    site: BondId,
-    ligands: Vec<StereoLigand>,
+    pub site: BondId,
+    pub ligands: Vec<StereoLigand>,
     pub ast: &'a mut StereoBondAst,
-}
-
-impl<'a> StereoBondViewMut<'a> {
-    /// The site bond id.
-    pub fn site_id(&self) -> BondId {
-        self.site
-    }
-
-    /// The ordered ligand frame.
-    pub fn ligands(&self) -> &[StereoLigand] {
-        &self.ligands
-    }
 }
 
 // Builder-scope view bundles for stereo elements. `ligands` is a borrow into
@@ -893,30 +869,30 @@ impl<'a> StereoBondViewMut<'a> {
 
 pub struct StereoAtomEditorView<'a> {
     pub id: StereoAtomId,
-    pub ast: &'a StereoAtomAst,
     pub site: AtomId,
     pub ligands: &'a [StereoLigand],
-}
-
-pub struct StereoBondEditorView<'a> {
-    pub id: StereoBondId,
-    pub ast: &'a StereoBondAst,
-    pub site: BondId,
-    pub ligands: &'a [StereoLigand],
+    pub ast: &'a StereoAtomAst,
 }
 
 pub struct StereoAtomEditorViewMut<'a> {
     pub id: StereoAtomId,
-    pub ast: &'a mut StereoAtomAst,
     pub site: AtomId,
     pub ligands: &'a [StereoLigand],
+    pub ast: &'a mut StereoAtomAst,
+}
+
+pub struct StereoBondEditorView<'a> {
+    pub id: StereoBondId,
+    pub site: BondId,
+    pub ligands: &'a [StereoLigand],
+    pub ast: &'a StereoBondAst,
 }
 
 pub struct StereoBondEditorViewMut<'a> {
     pub id: StereoBondId,
-    pub ast: &'a mut StereoBondAst,
     pub site: BondId,
     pub ligands: &'a [StereoLigand],
+    pub ast: &'a mut StereoBondAst,
 }
 
 #[cfg(test)]

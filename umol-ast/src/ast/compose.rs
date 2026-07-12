@@ -852,10 +852,14 @@ mod tests {
     fn test_reaction_ast_compose_apply_equivalence() {
         // compose(A,B).apply(H) == B.apply(A.apply(H)): C-O 1→2 then 2→3 on host C-O order 1.
         let a = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts { atoms: vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::O),
-                ], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
+                ],
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                ..Default::default()
+            }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
@@ -865,10 +869,14 @@ mod tests {
             })]),
         );
         let b = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts { atoms: vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::O),
-                ], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))], ..Default::default() }),
+                ],
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+                ..Default::default()
+            }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
@@ -877,10 +885,14 @@ mod tests {
                 },
             })]),
         );
-        let host = MoleculeAst::from_parts(MoleculeParts { atoms: vec![
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::O),
-            ], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() });
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        });
 
         let composed: Vec<MoleculeAst> = a
             .compose(&b, CompositionScope::Full)
@@ -898,10 +910,14 @@ mod tests {
             })
             .collect();
 
-        let product = MoleculeAst::from_parts(MoleculeParts { atoms: vec![
+        let product = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::O),
-            ], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(3))], ..Default::default() });
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(3))],
+            ..Default::default()
+        });
         assert_eq!(composed, vec![product.clone()]);
         assert_eq!(sequential, vec![product]);
     }
@@ -912,10 +928,14 @@ mod tests {
     #[case::order_fuse(1, 2, 3)]
     fn test_compose_overlap(#[case] start: i64, #[case] mid: i64, #[case] end: i64) {
         let a = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts { atoms: vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::O),
-                ], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(start as u8))], ..Default::default() }),
+                ],
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(start as u8))],
+                ..Default::default()
+            }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
@@ -925,10 +945,14 @@ mod tests {
             })]),
         );
         let b = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts { atoms: vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::O),
-                ], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(mid as u8))], ..Default::default() }),
+                ],
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(mid as u8))],
+                ..Default::default()
+            }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
@@ -966,18 +990,21 @@ mod tests {
         #[case] b_new: u32,
     ) {
         let a = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts { atoms: vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::F),
                     AtomAst::from_element(Element::Cl),
                     AtomAst::from_element(Element::Br),
                     AtomAst::from_element(Element::I),
-                ], bonds: vec![
+                ],
+                bonds: vec![
                     (AtomId(0), AtomId(1), BondAst::from_order(1)),
                     (AtomId(0), AtomId(2), BondAst::from_order(1)),
                     (AtomId(0), AtomId(3), BondAst::from_order(1)),
                     (AtomId(0), AtomId(4), BondAst::from_order(1)),
-                ], stereo_atoms: vec![(
+                ],
+                stereo_atoms: vec![(
                     AtomId(0),
                     vec![
                         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
@@ -986,7 +1013,10 @@ mod tests {
                         StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     ],
                     StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
-                )], constraints: Constraints::new(), ..Default::default() }),
+                )],
+                constraints: Constraints::new(),
+                ..Default::default()
+            }),
             Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
                 id: StereoAtomId(0),
                 change: StereoAtomFieldChange::Configuration {
@@ -1002,25 +1032,31 @@ mod tests {
             })]),
         );
         let b = ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts { atoms: vec![
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
                     AtomAst::from_element(Element::C),
                     AtomAst::from_element(Element::F),
                     AtomAst::from_element(Element::Cl),
                     AtomAst::from_element(Element::Br),
                     AtomAst::from_element(Element::I),
-                ], bonds: vec![
+                ],
+                bonds: vec![
                     (AtomId(0), AtomId(1), BondAst::from_order(1)),
                     (AtomId(0), AtomId(2), BondAst::from_order(1)),
                     (AtomId(0), AtomId(3), BondAst::from_order(1)),
                     (AtomId(0), AtomId(4), BondAst::from_order(1)),
-                ], stereo_atoms: vec![(
+                ],
+                stereo_atoms: vec![(
                     AtomId(0),
                     b_ligands
                         .iter()
                         .map(|&x| StereoLigand::new(AtomId(x), StereoLigandKind::Atom))
                         .collect(),
                     StereoAtomAst::new(StereoKind::Tetrahedral, b_old),
-                )], constraints: Constraints::new(), ..Default::default() }),
+                )],
+                constraints: Constraints::new(),
+                ..Default::default()
+            }),
             Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
                 id: StereoAtomId(0),
                 change: StereoAtomFieldChange::Configuration {

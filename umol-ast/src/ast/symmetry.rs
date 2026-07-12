@@ -710,7 +710,7 @@ mod tests {
         // element contributes no observable descriptor and the orbit partition
         // is still computed.
         let mut mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
-        mol.stereo_atom_mut(StereoAtomId(0)).configuration =
+        mol.stereo_atom_mut(StereoAtomId(0)).ast.configuration =
             StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 9);
         let gs = mol.graph_symmetry(&config());
         assert_eq!(gs.proper_orbit_of(AtomId(0)), vec![AtomId(0)]);

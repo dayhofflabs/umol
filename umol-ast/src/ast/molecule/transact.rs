@@ -2368,9 +2368,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_editor_transact_remove_stereo_atom(
-        mut stereo_atom_skeleton: MoleculeEditor,
-    ) {
+    fn test_molecule_editor_transact_remove_stereo_atom(mut stereo_atom_skeleton: MoleculeEditor) {
         stereo_atom_skeleton.add_stereo_atom(
             AtomId(0),
             tetrahedral_ligands(),
@@ -2472,9 +2470,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_editor_transact_remove_stereo_bond(
-        mut stereo_bond_skeleton: MoleculeEditor,
-    ) {
+    fn test_molecule_editor_transact_remove_stereo_bond(mut stereo_bond_skeleton: MoleculeEditor) {
         stereo_bond_skeleton.add_stereo_bond(
             BondId(1),
             vec![

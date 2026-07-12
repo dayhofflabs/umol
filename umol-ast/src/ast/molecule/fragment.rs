@@ -404,7 +404,10 @@ mod tests {
         assert_eq!(joined.body().atoms().count(), 2);
         assert_eq!(joined.body().bonds().count(), 1);
         assert_eq!(joined.body().bond(BondId(0)).ast, &BondAst::from_order(1));
-        assert_eq!(joined.body().bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
+        assert_eq!(
+            joined.body().bond(BondId(0)).atom_ids(),
+            [AtomId(0), AtomId(1)]
+        );
         assert!(joined.ports().is_empty());
     }
 

@@ -239,9 +239,7 @@ fn test_mol_dsl_to_edn(#[case] input: &str, #[case] expected: MoleculeAst) {
 
 #[rstest]
 fn test_molecule_dsl_display_to_edn_parity() {
-    let dsl = r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#
-        .parse::<MoleculeDsl>()
-        .unwrap();
+    let dsl = r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#.parse::<MoleculeDsl>().unwrap();
     assert_eq!(dsl.to_string(), dsl.to_edn().to_string());
 }
 
@@ -958,7 +956,7 @@ fn test_molecule_dsl_guards() {
     let edn = read_string(source).unwrap();
     let dsl = MoleculeDsl::from_edn(&edn).unwrap();
     // :guards is silently accepted; the rendered form drops it since the
-    // AST has no slot for it yet.
+    // AST has no field for it yet.
     let rendered = dsl.to_edn();
     let Edn::Map(m) = &rendered else {
         panic!("expected map");

@@ -8,13 +8,13 @@ use std::vec::IntoIter;
 use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
+#[cfg(test)]
+use umol_ast::ast::MoleculeParts as AstMoleculeParts;
 use umol_ast::ast::{
     AtomId as AstAtomId, BondAst as AstBondAst, BondConstraintAst as AstBondConstraintAst,
     BondConstraintKey as AstBondConstraintKey, BondConstraintsAst as AstBondConstraintsAst,
     BondId as AstBondId, MoleculeAst as AstMoleculeAst, RingScope as AstRingScope,
 };
-#[cfg(test)]
-use umol_ast::ast::MoleculeParts as AstMoleculeParts;
 
 use crate::atom::SpinStateAst;
 use crate::boolean::{BooleanArg, BooleanAst};
@@ -276,7 +276,10 @@ impl BondView {
         dict.set_item("order", ValueAst::from_ast(py, &bond.order)?)?;
         dict.set_item("charge", ValueAst::from_ast(py, &bond.charge)?)?;
         dict.set_item("spin", SpinStateAst::from_ast(py, &bond.spin)?)?;
-        dict.set_item("constraints", bond_constraints_asdict(py, &bond.constraints)?)?;
+        dict.set_item(
+            "constraints",
+            bond_constraints_asdict(py, &bond.constraints)?,
+        )?;
         Ok(dict)
     }
 }
@@ -285,7 +288,11 @@ impl BondView {
 /// existing bond id, or `IndexError`.
 fn resolve_bond_index(molecule: &AstMoleculeAst, index: isize) -> PyResult<AstBondId> {
     let count = molecule.bonds().count();
-    let resolved = if index < 0 { index + count as isize } else { index };
+    let resolved = if index < 0 {
+        index + count as isize
+    } else {
+        index
+    };
     if resolved < 0 {
         return Err(PyIndexError::new_err("bond id out of range"));
     }
@@ -481,10 +488,9 @@ impl BondConstraintAst {
             AstBondConstraintAst::Aromatic(b) => {
                 Self::Aromatic(into_py_variant(py, BooleanAst::from_ast(b))?)
             }
-            AstBondConstraintAst::CisTransStereo(c) => Self::CisTransStereo(into_py_variant(
-                py,
-                CisTransStereoAst::from_ast(py, c)?,
-            )?),
+            AstBondConstraintAst::CisTransStereo(c) => {
+                Self::CisTransStereo(into_py_variant(py, CisTransStereoAst::from_ast(py, c)?)?)
+            }
             AstBondConstraintAst::RingMembership(m) => {
                 Self::RingMembership(into_py_variant(py, RingMembershipAst::from_ast(py, m)?)?)
             }
@@ -643,7 +649,11 @@ impl BondConstraintsAst {
     }
 
     /// The constraint with the given key; raises `KeyError` if absent.
-    fn __getitem__(&self, py: Python<'_>, key: Py<BondConstraintKey>) -> PyResult<BondConstraintAst> {
+    fn __getitem__(
+        &self,
+        py: Python<'_>,
+        key: Py<BondConstraintKey>,
+    ) -> PyResult<BondConstraintAst> {
         match self.0.get(key.bind(py).borrow().to_ast(py)) {
             Some(constraint) => BondConstraintAst::from_ast(py, constraint),
             None => Err(PyKeyError::new_err(
@@ -826,7 +836,10 @@ fn bond_constraints_asdict<'py>(
 /// What a `BondConstraintsView` writes through to: a bond within a molecule (by
 /// index) or a standalone `BondAst`.
 enum BondConstraintsBacking {
-    Molecule { owner: Py<MoleculeAst>, id: AstBondId },
+    Molecule {
+        owner: Py<MoleculeAst>,
+        id: AstBondId,
+    },
     Bond(Py<BondAst>),
 }
 
@@ -866,9 +879,12 @@ impl BondConstraintsView {
     /// Mutate the backing bond's constraints in place through `f`.
     fn with_mut<R>(&self, py: Python<'_>, f: impl FnOnce(&mut AstBondConstraintsAst) -> R) -> R {
         match &self.backing {
-            BondConstraintsBacking::Molecule { owner, id } => {
-                f(&mut owner.borrow_mut(py).inner_mut().bond_mut(*id).ast.constraints)
-            }
+            BondConstraintsBacking::Molecule { owner, id } => f(&mut owner
+                .borrow_mut(py)
+                .inner_mut()
+                .bond_mut(*id)
+                .ast
+                .constraints),
             BondConstraintsBacking::Bond(bond) => {
                 f(&mut bond.borrow_mut(py).inner_mut().constraints)
             }
@@ -980,7 +996,11 @@ impl BondConstraintsView {
     }
 
     /// The constraint with the given key; raises `KeyError` if absent.
-    fn __getitem__(&self, py: Python<'_>, key: Py<BondConstraintKey>) -> PyResult<BondConstraintAst> {
+    fn __getitem__(
+        &self,
+        py: Python<'_>,
+        key: Py<BondConstraintKey>,
+    ) -> PyResult<BondConstraintAst> {
         let ast_key = key.bind(py).borrow().to_ast(py);
         let found = self.read(py, |cs| {
             cs.get(ast_key)
@@ -1024,7 +1044,10 @@ impl BondConstraintsView {
 
     #[setter]
     fn set_cis_trans_stereo(&self, py: Python<'_>, value: CisTransStereoArg) -> PyResult<()> {
-        self.set_ast(py, AstBondConstraintAst::cis_trans_stereo(value.to_ast(py)?));
+        self.set_ast(
+            py,
+            AstBondConstraintAst::cis_trans_stereo(value.to_ast(py)?),
+        );
         Ok(())
     }
 
@@ -1069,7 +1092,10 @@ impl BondConstraintsView {
 /// What a `BondRingSizeCounts` proxy reads/writes through to: a bond within a
 /// molecule, a standalone `BondAst`, or a standalone `BondConstraintsAst` value.
 enum BondRingSizeBacking {
-    Molecule { owner: Py<MoleculeAst>, id: AstBondId },
+    Molecule {
+        owner: Py<MoleculeAst>,
+        id: AstBondId,
+    },
     Bond(Py<BondAst>),
     Value(Py<BondConstraintsAst>),
 }
@@ -1108,9 +1134,12 @@ impl BondRingSizeCounts {
     /// Mutate the backing constraints in place through `f`.
     fn write(&self, py: Python<'_>, f: impl FnOnce(&mut AstBondConstraintsAst)) {
         match &self.backing {
-            BondRingSizeBacking::Molecule { owner, id } => {
-                f(&mut owner.borrow_mut(py).inner_mut().bond_mut(*id).ast.constraints)
-            }
+            BondRingSizeBacking::Molecule { owner, id } => f(&mut owner
+                .borrow_mut(py)
+                .inner_mut()
+                .bond_mut(*id)
+                .ast
+                .constraints),
             BondRingSizeBacking::Bond(bond) => f(&mut bond.borrow_mut(py).inner_mut().constraints),
             BondRingSizeBacking::Value(value) => f(value.borrow_mut(py).inner_mut()),
         }
@@ -1155,7 +1184,9 @@ impl BondRingSizeCounts {
     /// Remove the sized-ring membership for `size` in place.
     fn __delitem__(&self, py: Python<'_>, size: u8) {
         self.write(py, |cs| {
-            cs.remove(AstBondConstraintKey::RingMembership(AstRingScope::Size(size)));
+            cs.remove(AstBondConstraintKey::RingMembership(AstRingScope::Size(
+                size,
+            )));
         });
     }
 
@@ -1332,7 +1363,9 @@ mod tests {
     #[rstest]
     #[case(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)))]
     #[case(AstBondConstraintAst::cis_trans_stereo(AstCisTransStereoAst::NotStereo))]
-    #[case(AstBondConstraintAst::cis_trans_stereo(AstCisTransStereoAst::Stereo(AstStereoCosetAst::Lit(1))))]
+    #[case(AstBondConstraintAst::cis_trans_stereo(AstCisTransStereoAst::Stereo(
+        AstStereoCosetAst::Lit(1)
+    )))]
     #[case(AstBondConstraintAst::ring_membership(AstRingScope::All, 2))]
     #[case(AstBondConstraintAst::ring_membership(AstRingScope::Size(6), 1))]
     fn test_bond_constraint_ast_roundtrip(#[case] ast: AstBondConstraintAst) {
@@ -1654,7 +1687,10 @@ mod tests {
                 .unwrap();
             match constraints.cis_trans_stereo(py).unwrap().unwrap() {
                 CisTransStereoAst::Stereo(coset) => {
-                    assert_eq!(coset.bind(py).borrow().to_ast(py), AstStereoCosetAst::Lit(1))
+                    assert_eq!(
+                        coset.bind(py).borrow().to_ast(py),
+                        AstStereoCosetAst::Lit(1)
+                    )
                 }
                 _ => panic!("expected Stereo"),
             }
@@ -1817,7 +1853,10 @@ mod tests {
             let fresh = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond),
             };
-            assert_eq!(fresh.aromatic(py).unwrap().to_ast(), AstBooleanAst::Lit(true));
+            assert_eq!(
+                fresh.aromatic(py).unwrap().to_ast(),
+                AstBooleanAst::Lit(true)
+            );
         });
     }
 
@@ -1843,7 +1882,8 @@ mod tests {
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
-            view.ring_size_count(py).__setitem__(py, 5, ValueArg::Lit(1));
+            view.ring_size_count(py)
+                .__setitem__(py, 5, ValueArg::Lit(1));
             let fresh = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond),
             };
@@ -1977,7 +2017,10 @@ mod tests {
                 },
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
-            assert_eq!(fresh.aromatic(py).unwrap().to_ast(), AstBooleanAst::Lit(true));
+            assert_eq!(
+                fresh.aromatic(py).unwrap().to_ast(),
+                AstBooleanAst::Lit(true)
+            );
         });
     }
 
@@ -1991,7 +2034,8 @@ mod tests {
                     id: AstBondId(0),
                 },
             };
-            view.ring_size_count(py).__setitem__(py, 6, ValueArg::Lit(1));
+            view.ring_size_count(py)
+                .__setitem__(py, 6, ValueArg::Lit(1));
             let fresh = BondConstraintsView {
                 backing: BondConstraintsBacking::Molecule {
                     owner,

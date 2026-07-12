@@ -938,12 +938,12 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
         match op {
             EntityOp::Add { .. } => return Err(Contradiction),
             EntityOp::ModifyField(change) => {
-                let slot = discriminant(&change);
-                let fused = match fields.remove(&slot) {
+                let field_key = discriminant(&change);
+                let fused = match fields.remove(&field_key) {
                     Some(prev) => F::fuse_field(prev, change).ok_or(Contradiction)?,
                     None => change,
                 };
-                fields.insert(slot, fused);
+                fields.insert(field_key, fused);
             }
             EntityOp::ModifyConstraint { old, new } => {
                 let key = match old.as_ref().or(new.as_ref()) {

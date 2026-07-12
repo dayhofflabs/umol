@@ -225,7 +225,7 @@ pub fn parse_reaction_smiles_bytes_with(
     Ok(reaction)
 }
 
-// The third tuple slot carries the ring-closure records for CX bond-index remapping
+// The third tuple element carries the ring-closure records for CX bond-index remapping
 // (a tuple for now; a named parse-result struct is the eventual home).
 #[allow(clippy::type_complexity)]
 fn parse_smiles_inner(

@@ -1,6 +1,6 @@
 //! Declarative `+`-spec construction — build a `MoleculeAst` by summing free-function
 //! *terms* into a `MoleculeSpec`, then materializing. Each term lowers onto the L1
-//! `MoleculeBuilder`; every atom slot is an [`AtomArg`] that either creates a fresh atom
+//! `MoleculeBuilder`; every atom position is an [`AtomArg`] that either creates a fresh atom
 //! (optionally named) or references one already introduced (by position or by name).
 
 use std::collections::HashMap;
@@ -481,9 +481,11 @@ impl BuildContext {
                 }
                 id
             }
-            AtomArg::Index(position) => *self.positions.get(position as usize).unwrap_or_else(
-                || panic!("spec references atom position {position} before it is introduced"),
-            ),
+            AtomArg::Index(position) => {
+                *self.positions.get(position as usize).unwrap_or_else(|| {
+                    panic!("spec references atom position {position} before it is introduced")
+                })
+            }
             AtomArg::Name(name) => *self
                 .names
                 .get(&name)
@@ -630,7 +632,10 @@ mod tests {
         bond(0_u32, 1_u32, BondAst::from_order(2).with_charge(-1_i64)),
         BondAst::from_order(2).with_charge(-1_i64)
     )]
-    fn test_molecule_spec_bond_terms(#[case] bond_term: MoleculeSpecTerm, #[case] expected: BondAst) {
+    fn test_molecule_spec_bond_terms(
+        #[case] bond_term: MoleculeSpecTerm,
+        #[case] expected: BondAst,
+    ) {
         let spec = atoms([Element::C, Element::C]) + bond_term;
         let mol = spec.build();
 
@@ -664,13 +669,19 @@ mod tests {
         let mol = spec.build();
 
         assert_eq!(mol.dative_bonds().count(), 1);
-        assert_eq!(mol.dative_bond(DativeBondId(0)).ast, &DativeBondAst::default());
+        assert_eq!(
+            mol.dative_bond(DativeBondId(0)).ast,
+            &DativeBondAst::default()
+        );
     }
 
     #[rstest]
     fn test_molecule_spec_aromatic_system() {
         let spec = atoms([Element::C, Element::C])
-            + aromatic_system([0_u32, 1_u32], AromaticSystemAst::from_electrons(vec![1, 1]));
+            + aromatic_system(
+                [0_u32, 1_u32],
+                AromaticSystemAst::from_electrons(vec![1, 1]),
+            );
         let mol = spec.build();
 
         assert_eq!(
@@ -696,13 +707,12 @@ mod tests {
 
     #[rstest]
     fn test_molecule_spec_noncovalent_bond() {
-        let spec =
-            atoms([Element::O, Element::H])
-                + noncovalent_bond(
-                    0_u32,
-                    1_u32,
-                    NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
-                );
+        let spec = atoms([Element::O, Element::H])
+            + noncovalent_bond(
+                0_u32,
+                1_u32,
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            );
         let mol = spec.build();
 
         assert_eq!(

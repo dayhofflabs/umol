@@ -3,7 +3,7 @@
 //! A `RelationalConstraint` relates one entity kind to one or more other entity kinds
 //! by reference. Every variant carries at least two indices (the outer entity
 //! plus one or more inner atom/bond refs) or one index plus a delegated
-//! predicate over a role slot.
+//! predicate over a role position.
 //!
 //! Relational constraints live **only** at molecule scope — as entries in
 //! `MoleculeAst::constraints` (via `Constraint::Relational(...)`) or inside
@@ -17,7 +17,7 @@
 //!   constrain an atom/bond identity to a role or set membership.
 //! - **Role predicate**: `AllDonors`, `AnyDonor`, `AcceptorSatisfies`,
 //!   `AllAtoms`, `AnyAtom`, `EndsSatisfy` — delegate an `AtomConstraintAst` to a
-//!   role slot, quantified over the matching participants.
+//!   role position, quantified over the matching participants.
 
 use super::super::error::Contradiction;
 use super::super::id::{
@@ -141,7 +141,7 @@ pub enum RelationalConstraint {
     /// The two endpoints of noncovalent bond `bond` satisfy `predicates[0]`
     /// and `predicates[1]` respectively. Order is not symmetric: the bond
     /// stores its endpoints as an unordered pair, but each predicate is
-    /// associated with one specific slot.
+    /// associated with one specific role position.
     NoncovalentBondEndsSatisfy {
         bond: NoncovalentBondId,
         predicates: [Box<AtomConstraintAst>; 2],
@@ -698,7 +698,7 @@ mod tests {
     }
 
     /// Drop atom 1; drop dative 0; preserve other entities. Indices above
-    /// the removed slot shift down by one.
+    /// the removed position shift down by one.
     fn one_atom_one_dative() -> IdCompaction {
         remapping(
             vec![1],

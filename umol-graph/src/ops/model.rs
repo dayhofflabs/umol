@@ -144,8 +144,8 @@ impl Default for RingLimits {
     }
 }
 
-/// Stereo perception model. `kind_models` is a per-`StereoKind` slot map (indexed
-/// by the kind's discriminant); a `None` slot means that kind is not perceived.
+/// Stereo perception model. `kind_models` is a per-`StereoKind` array (indexed
+/// by the kind's discriminant); a `None` entry means that kind is not perceived.
 /// `para_stereo` enables the graph-symmetry fixpoint iteration that resolves
 /// para-stereocenters; `inconsistency` governs how the resolver handles a
 /// `#T`/`#C` assertion it cannot realize.

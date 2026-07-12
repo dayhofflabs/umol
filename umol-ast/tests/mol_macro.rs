@@ -1,5 +1,4 @@
 use rstest::rstest;
-
 use umol_ast::ast::{
     AromaticSystemId, AtomAst, AtomId, BondAst, BondId, MoleculeAst, StereoAtomId, StereoBondId,
 };
@@ -65,8 +64,14 @@ fn test_mol_anonymous_atoms() {
 
     assert_eq!(molecule.atoms().count(), 2);
     assert_eq!(molecule.bonds().count(), 1);
-    assert_eq!(molecule.atom(AtomId(0)).ast, &"C".parse::<AtomAst>().unwrap());
-    assert_eq!(molecule.atom(AtomId(1)).ast, &"O".parse::<AtomAst>().unwrap());
+    assert_eq!(
+        molecule.atom(AtomId(0)).ast,
+        &"C".parse::<AtomAst>().unwrap()
+    );
+    assert_eq!(
+        molecule.atom(AtomId(1)).ast,
+        &"O".parse::<AtomAst>().unwrap()
+    );
     assert_eq!(molecule.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
 }
 

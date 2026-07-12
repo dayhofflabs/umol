@@ -307,26 +307,27 @@ impl<'a> AromaticSystemView<'a> {
 #[derive(Debug)]
 pub struct AromaticSystemViewMut<'a> {
     pub id: AromaticSystemId,
-    atoms: Vec<AtomId>,
+    pub atoms: Vec<AtomId>,
     pub ast: &'a mut AromaticSystemAst,
 }
 
-impl<'a> AromaticSystemViewMut<'a> {
-    /// The member atom ids.
-    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
-        self.atoms.iter().copied()
-    }
-}
-
-// Builder-scope view bundles for aromatic systems.
+// Editor-scope view bundles for aromatic systems.
 
 pub struct AromaticSystemEditorView<'a> {
     pub id: AromaticSystemId,
+    atoms: &'a [NodeId],
     pub ast: &'a AromaticSystemAst,
-    pub(crate) atoms: &'a [NodeId],
 }
 
 impl<'a> AromaticSystemEditorView<'a> {
+    pub(crate) fn new(
+        id: AromaticSystemId,
+        atoms: &'a [NodeId],
+        ast: &'a AromaticSystemAst,
+    ) -> Self {
+        Self { id, atoms, ast }
+    }
+
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
@@ -334,11 +335,19 @@ impl<'a> AromaticSystemEditorView<'a> {
 
 pub struct AromaticSystemEditorViewMut<'a> {
     pub id: AromaticSystemId,
+    atoms: &'a [NodeId],
     pub ast: &'a mut AromaticSystemAst,
-    pub(crate) atoms: &'a [NodeId],
 }
 
 impl<'a> AromaticSystemEditorViewMut<'a> {
+    pub(crate) fn new(
+        id: AromaticSystemId,
+        atoms: &'a [NodeId],
+        ast: &'a mut AromaticSystemAst,
+    ) -> Self {
+        Self { id, atoms, ast }
+    }
+
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }

@@ -9,10 +9,10 @@ use umol_ast::ast::{
     AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, BondDelta, CompositionScope,
     DativeBondConstraintAst, DativeBondDelta, DativeBondFieldChange, Delta, Deltas, DpoValidator,
     MoleculeParts, MulticenterBondDelta, MulticenterBondFieldChange, NoncovalentBondAst,
-    NoncovalentBondDelta,
-    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, ReactionAst, ReactionSpanAst,
-    StereoAtomAst, StereoAtomDelta, StereoAtomFieldChange, StereoBondAst, StereoBondDelta,
-    StereoBondFieldChange, StereoConfigurationAst, StereoKind, StereoLigand,
+    NoncovalentBondDelta, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst,
+    ReactionAst, ReactionSpanAst, StereoAtomAst, StereoAtomDelta, StereoAtomFieldChange,
+    StereoBondAst, StereoBondDelta, StereoBondFieldChange, StereoConfigurationAst, StereoKind,
+    StereoLigand,
 };
 use umol_graph_core::{EdgeId, SubgraphIsomorphismAlgorithm};
 use umol_perm::Permutation;

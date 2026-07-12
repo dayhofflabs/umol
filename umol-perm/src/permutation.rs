@@ -27,8 +27,8 @@ impl Permutation {
     pub fn identity(degree: usize) -> Self {
         assert!(degree <= MAX_DEGREE);
         let mut image = [0u8; MAX_DEGREE];
-        for (i, slot) in image.iter_mut().enumerate() {
-            *slot = i as u8;
+        for (i, target) in image.iter_mut().enumerate() {
+            *target = i as u8;
         }
         Self {
             image,
@@ -49,8 +49,8 @@ impl Permutation {
             seen[x] = true;
         }
         let mut full = [0u8; MAX_DEGREE];
-        for (i, slot) in full.iter_mut().enumerate() {
-            *slot = if i < degree { image[i] } else { i as u8 };
+        for (i, target) in full.iter_mut().enumerate() {
+            *target = if i < degree { image[i] } else { i as u8 };
         }
         Self {
             image: full,
@@ -83,8 +83,8 @@ impl Permutation {
     pub fn compose(self, other: Self) -> Self {
         assert_eq!(self.degree, other.degree);
         let mut image = [0u8; MAX_DEGREE];
-        for (i, slot) in image.iter_mut().enumerate() {
-            *slot = self.image[other.image[i] as usize];
+        for (i, target) in image.iter_mut().enumerate() {
+            *target = self.image[other.image[i] as usize];
         }
         Self {
             image,
@@ -164,11 +164,11 @@ impl Permutation {
         assert!(rank < factorial, "rank out of range");
         let mut available: Vec<u8> = (0..degree as u8).collect();
         let mut image = vec![0u8; degree];
-        for slot in image.iter_mut() {
+        for target in image.iter_mut() {
             factorial /= available.len();
             let idx = rank / factorial;
             rank %= factorial;
-            *slot = available.remove(idx);
+            *target = available.remove(idx);
         }
         Self::from_image(degree, &image)
     }

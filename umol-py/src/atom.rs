@@ -10,13 +10,13 @@ use std::vec::IntoIter;
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+#[cfg(test)]
+use umol_ast::ast::MoleculeParts as AstMoleculeParts;
 use umol_ast::ast::{
     AsLit, AtomAst as AstAtomAst, AtomId as AstAtomId, ElementAst as AstElementAst,
     IsotopeMassAst as AstIsotopeMassAst, MoleculeAst as AstMoleculeAst,
     SpinStateAst as AstSpinStateAst,
 };
-#[cfg(test)]
-use umol_ast::ast::MoleculeParts as AstMoleculeParts;
 use umol_chem::element::Element as ChemElement;
 
 use crate::constraint::{
@@ -210,7 +210,11 @@ impl SpinStateAst {
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
             "SpinStateAst({}, {})",
-            self.unpaired.bind(py).as_any().repr()?.extract::<String>()?,
+            self.unpaired
+                .bind(py)
+                .as_any()
+                .repr()?
+                .extract::<String>()?,
             self.multiplicity
                 .bind(py)
                 .as_any()
@@ -316,7 +320,6 @@ impl AtomAst {
         self.0.charge = value.to_ast(py);
     }
 
-
     #[getter]
     fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<ValueAst> {
         ValueAst::from_ast(py, &self.0.implicit_hydrogens)
@@ -326,7 +329,6 @@ impl AtomAst {
     fn set_implicit_hydrogens(&mut self, py: Python<'_>, value: ValueArg) {
         self.0.implicit_hydrogens = value.to_ast(py);
     }
-
 
     #[getter]
     fn lone_pairs(&self, py: Python<'_>) -> PyResult<ValueAst> {
@@ -650,7 +652,11 @@ impl AtomView {
 /// existing atom id, or `IndexError`.
 fn resolve_atom_index(molecule: &AstMoleculeAst, index: isize) -> PyResult<AstAtomId> {
     let count = molecule.atoms().count();
-    let resolved = if index < 0 { index + count as isize } else { index };
+    let resolved = if index < 0 {
+        index + count as isize
+    } else {
+        index
+    };
     if resolved < 0 {
         return Err(PyIndexError::new_err("atom id out of range"));
     }
@@ -951,9 +957,14 @@ mod tests {
             let views = AtomViews {
                 owner: carbon_oxygen(py),
             };
-            let nitrogen =
-                Py::new(py, AtomAst::from_inner(AstAtomAst::from_element(ChemElement::N))).unwrap();
-            views.__setitem__(py, 0, nitrogen.bind(py).borrow()).unwrap();
+            let nitrogen = Py::new(
+                py,
+                AtomAst::from_inner(AstAtomAst::from_element(ChemElement::N)),
+            )
+            .unwrap();
+            views
+                .__setitem__(py, 0, nitrogen.bind(py).borrow())
+                .unwrap();
             match views.__getitem__(py, 0).unwrap().element(py).unwrap() {
                 ElementAst::Lit(e) => assert_eq!(ChemElement::from(&e), ChemElement::N),
                 _ => panic!("expected Lit"),
@@ -967,8 +978,11 @@ mod tests {
             let views = AtomViews {
                 owner: carbon_oxygen(py),
             };
-            let nitrogen =
-                Py::new(py, AtomAst::from_inner(AstAtomAst::from_element(ChemElement::N))).unwrap();
+            let nitrogen = Py::new(
+                py,
+                AtomAst::from_inner(AstAtomAst::from_element(ChemElement::N)),
+            )
+            .unwrap();
             assert!(views
                 .__setitem__(py, 5, nitrogen.bind(py).borrow())
                 .is_err());

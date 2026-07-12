@@ -752,7 +752,7 @@ fn is_unset_or_vacuous(constraints: &AtomConstraintsAst, key: AtomConstraintKey)
 
 fn raise_atom_constraints(constraints: &mut AtomConstraintsAst, cfg: &AtomDefaults) {
     // One explicit clause per defaulted kind, in ascending key-sort order. No global vacuous
-    // strip: a defaulted kind fills its own absent/vacuous slot; vacuous entries of other kinds
+    // strip: a defaulted kind fills its own absent/vacuous entry; vacuous entries of other kinds
     // are left for lazy canonicalization.
     if matches!(cfg.valence, NumericDefault::Zero)
         && is_unset_or_vacuous(constraints, AtomConstraintKey::Valence)

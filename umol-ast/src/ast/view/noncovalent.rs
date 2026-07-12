@@ -209,29 +209,22 @@ impl<'a> NoncovalentBondView<'a> {
 #[derive(Debug)]
 pub struct NoncovalentBondViewMut<'a> {
     pub id: NoncovalentBondId,
-    atoms: [AtomId; 2],
+    pub atoms: [AtomId; 2],
     pub ast: &'a mut NoncovalentBondAst,
-}
-
-impl<'a> NoncovalentBondViewMut<'a> {
-    /// The two atoms incident to this noncovalent bond.
-    pub fn atom_ids(&self) -> [AtomId; 2] {
-        self.atoms
-    }
 }
 
 // Builder-scope view bundles for noncovalent bonds.
 
 pub struct NoncovalentBondEditorView<'a> {
     pub id: NoncovalentBondId,
-    pub ast: &'a NoncovalentBondAst,
     pub atoms: [AtomId; 2],
+    pub ast: &'a NoncovalentBondAst,
 }
 
 pub struct NoncovalentBondEditorViewMut<'a> {
     pub id: NoncovalentBondId,
-    pub ast: &'a mut NoncovalentBondAst,
     pub atoms: [AtomId; 2],
+    pub ast: &'a mut NoncovalentBondAst,
 }
 
 #[cfg(test)]

@@ -236,10 +236,9 @@ mod tests {
     use crate::ast::constraint::RingScope;
     use crate::ast::{
         AromaticSystemAst, AromaticSystemConstraintAst, AtomAst, AtomConstraintAst, AtomId,
-        BondAst, BondConstraintAst, BooleanAst, DativeBondAst,
-        DativeBondConstraintAst, ElementAst, MoleculeAst, MoleculeParts, MulticenterBondAst,
-        NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst, StereoBondAst, StereoCosetAst,
-        StereoKind, ValueAst,
+        BondAst, BondConstraintAst, BooleanAst, DativeBondAst, DativeBondConstraintAst, ElementAst,
+        MoleculeAst, MoleculeParts, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind,
+        StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind, ValueAst,
     };
     use crate::dsl::molecule::MoleculeMetadata;
     use crate::dsl::{AtomDsl, MoleculeDsl};
