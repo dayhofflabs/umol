@@ -59,8 +59,9 @@ test target with warnings denied.
 
 ### S0b — Consolidate reusable matching graph fixtures
 
-**Module:** `umol-graph-core/test-data/matching/`, graph-core test/benchmark fixture loaders,
-`umol-graph-core/benches/algorithms.rs`, and the existing coronene test consumer
+**Module:** `umol-graph-core/tests/matching/data/`, graph-core integration-test/benchmark fixture
+loaders, `umol-graph-core/benches/algorithms.rs`, and a dedicated higher-crate integration-test
+consumer
 
 **Kind:** additive fixture consolidation (green)
 
@@ -78,6 +79,13 @@ its molecule-specific atom construction locally.
 Fixtures return topology/embedding data only and contain no expected algorithm outputs. Validate
 node/edge counts, face-edge incidence, Euler characteristic, and selected degrees so a malformed
 fixture cannot become a shared false oracle.
+
+The shared parser and the cross-suite asset references introduced here are experimental scaffolding,
+not permanent architecture. In particular, the benchmark may temporarily import the graph-core test
+loader and the higher-crate integration test may temporarily read graph-core test data so Experiment
+A uses byte-identical topologies. S6a must remove both dependencies after the corpus and final API
+requirements settle. No unit test may read these files: every data-driven consumer belongs in an
+integration-test or benchmark target with a dedicated data directory.
 
 **Verification:** existing graph-core benchmarks compile with `cargo bench -p umol-graph-core
 --bench algorithms --no-run`; focused fixture tests and existing aromaticity fixture consumers remain
@@ -395,9 +403,43 @@ local Python-link limitation), Clippy with warnings denied, and `git diff --chec
 **Stage exit:** Experiment A is the trusted general-graph reference and benchmark baseline for Uno;
 the workspace is green.
 
+## S6 — Experimental harness cleanup
+
+### S6a — Localize durable fixtures and remove temporary graph-format coupling
+
+**Module:** graph-core matching integration tests, graph-core matching benchmarks, higher-crate
+matching integration tests, their dedicated data directories, and temporary fixture loaders
+
+**Kind:** cleanup and ownership hardening (green)
+
+**Dependencies:** [dep: S5b]
+
+Classify each Experiment A fixture and consumer after the accepted baseline:
+
+- retain durable algorithm-conformance inputs only under the owning integration test's dedicated
+  data directory;
+- retain benchmark inputs only under the owning benchmark's dedicated data directory and load them
+  through benchmark-local support;
+- remove imports from benchmarks into `tests/` and references from one crate into another crate's
+  test tree;
+- duplicate small declarative inputs when that keeps test and benchmark suites independent;
+- remove unused experimental fixtures and loaders;
+- remove the ad-hoc `.graph` parser/format unless the accepted planar-embedding API has established a
+  durable need for it, in which case document and test the surviving format in its owning integration
+  suite rather than promoting test support into the production API.
+
+Data-backed coverage remains in integration tests; do not move it into unit-test modules. Preserve
+the accepted corpus topologies and counts while changing ownership and loading paths.
+
+**Verification:** all retained integration targets and benchmarks compile independently; searching
+the workspace finds no benchmark import from `tests/` and no cross-crate test-data path; focused
+tests, workspace check, Clippy with warnings denied, formatting, and `git diff --check` are green.
+
+**Stage exit:** no experimental cross-suite dependency or unjustified fixture format remains.
+
 ## Critical path
 
-`S0a → S1a → S2a → S2b → S2c → S3a → S3b → S3c → S4c → S5a → S5b`, with
+`S0a → S1a → S2a → S2b → S2c → S3a → S3b → S3c → S4c → S5a → S5b → S6a`, with
 `S0a → S0b → S4a → S4b → S4c` as the independent counting branch joining at S4c.
 
 S0b may proceed in parallel with S1/S2 after S0a. S4a/S4b may proceed in parallel with S2/S3 once

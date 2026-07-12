@@ -23,6 +23,9 @@ bench = false
 name = "resolution"
 required-features = ["conformance"]
 
+[[test]]
+name = "matching"
+
 [[bin]]
 name = "test_mol_file"
 bench = false

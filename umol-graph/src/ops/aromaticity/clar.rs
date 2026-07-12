@@ -233,32 +233,10 @@ mod tests {
         )
     }
 
-    #[rustfmt::skip]
-    #[fixture]
-    fn coronene() -> MoleculeAst {
-        // 24 atoms, 30 edges: inner hexagon (atoms 0..6), outer 18-cycle
-        // (atoms 6..24), and 6 spokes from inner i to outer 6+3i. Real
-        // coronene topology — 7 hexagonal faces in the planar embedding.
-        let atoms: Vec<(AtomAst, Option<i64>)> =
-            (0..24).map(|_| aromatic(Element::C, 1)).collect();
-        let mut edges = Vec::new();
-        for i in 0..6 {
-            edges.push((i, (i + 1) % 6));
-        }
-        for i in 6..24 {
-            edges.push((i, if i == 23 { 6 } else { i + 1 }));
-        }
-        for i in 0..6 {
-            edges.push((i, 6 + 3 * i));
-        }
-        make_fused(atoms, &edges)
-    }
-
     #[rstest]
     #[case::benzene(make_ring(vec![aromatic(Element::C, 1); 6]), 1)]
     #[case::naphthalene(naphthalene(), 1)]
     #[case::phenanthrene(phenanthrene(), 2)]
-    #[case::coronene(coronene(), 3)]
     fn test_clar_aromaticity_sextet_count(
         #[case] ast: MoleculeAst,
         #[case] expected_sextets: usize,
@@ -273,7 +251,6 @@ mod tests {
     #[case::benzene(make_ring(vec![aromatic(Element::C, 1); 6]), 1, Some(6))]
     #[case::naphthalene(naphthalene(), 1, Some(6))]
     #[case::phenanthrene(phenanthrene(), 1, Some(12))]
-    #[case::coronene(coronene(), 1, Some(18))]
     #[case::cyclohexane(make_ring(vec![plain(Element::C); 6]), 0, None)]
     fn test_clar_aromaticity_find_from_rings(
         #[case] ast: MoleculeAst,

@@ -1,6 +1,9 @@
 use std::iter;
 
 use criterion::{criterion_group, criterion_main, Criterion};
+#[path = "../tests/matching/fixture.rs"]
+#[allow(dead_code)]
+mod matching_graphs;
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
@@ -22,15 +25,8 @@ fn cycle(n: usize) -> Graph {
     Graph::new(n, &edges)
 }
 
-#[rustfmt::skip]
 fn naphthalene() -> Graph {
-    Graph::new(
-        10,
-        &[
-            [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0],
-            [5, 6], [6, 7], [7, 8], [8, 9], [9, 4],
-        ],
-    )
+    matching_graphs::parse(matching_graphs::NAPHTHALENE).graph()
 }
 
 #[rustfmt::skip]
@@ -104,27 +100,8 @@ fn icosahedron() -> Graph {
     )
 }
 
-#[rustfmt::skip]
 fn fullerene_c60() -> Graph {
-    #[rustfmt::skip]
-    let edges: [[u32; 2]; 90] = [
-        [0,1],[0,4],[0,5],[1,2],[1,10],[2,3],
-        [2,15],[3,4],[3,20],[4,25],[5,6],[5,9],
-        [6,7],[6,29],[7,8],[7,54],[8,9],[8,30],
-        [9,11],[10,11],[10,14],[11,12],[12,13],[12,34],
-        [13,14],[13,35],[14,16],[15,16],[15,19],[16,17],
-        [17,18],[17,39],[18,19],[18,40],[19,21],[20,21],
-        [20,24],[21,22],[22,23],[22,44],[23,24],[23,45],
-        [24,26],[25,26],[25,29],[26,27],[27,28],[27,49],
-        [28,29],[28,50],[30,31],[30,34],[31,32],[31,53],
-        [32,33],[32,55],[33,34],[33,36],[35,36],[35,39],
-        [36,37],[37,38],[37,59],[38,39],[38,41],[40,41],
-        [40,44],[41,42],[42,43],[42,58],[43,44],[43,46],
-        [45,46],[45,49],[46,47],[47,48],[47,57],[48,49],
-        [48,51],[50,51],[50,54],[51,52],[52,53],[52,56],
-        [53,54],[55,56],[55,59],[56,57],[57,58],[58,59],
-    ];
-    Graph::new(60, &edges)
+    matching_graphs::parse(matching_graphs::FULLERENE_C60).graph()
 }
 
 #[rustfmt::skip]
@@ -203,15 +180,8 @@ fn hypercube(dimension: usize) -> Graph {
     Graph::new(node_count, &edges)
 }
 
-fn disjoint_cycles(cycle_count: usize, cycle_size: usize) -> Graph {
-    let mut edges = Vec::new();
-    for component in 0..cycle_count {
-        let offset = (component * cycle_size) as u32;
-        for node in 0..cycle_size as u32 {
-            edges.push([offset + node, offset + (node + 1) % cycle_size as u32]);
-        }
-    }
-    Graph::new(cycle_count * cycle_size, &edges)
+fn disconnected_cycles() -> Graph {
+    matching_graphs::parse(matching_graphs::DISCONNECTED_CYCLES).graph()
 }
 
 fn subdivided(graph: &Graph) -> Graph {
@@ -378,7 +348,7 @@ fn automorphism(c: &mut Criterion) {
         ("cycle_64", cycle(64)),
         ("grid_8x8", grid(8, 8)),
         ("hypercube_6", hypercube(6)),
-        ("four_hexagons", disjoint_cycles(4, 6)),
+        ("four_hexagons", disconnected_cycles()),
         ("K10", complete(10)),
     ];
 
@@ -423,7 +393,7 @@ fn automorphism_stabilizer(c: &mut Criterion) {
         ("adamantane", adamantane()),
         ("dodecahedron", dodecahedron()),
         ("c60", fullerene_c60()),
-        ("four_hexagons", disjoint_cycles(4, 6)),
+        ("four_hexagons", disconnected_cycles()),
     ]
     .into_iter()
     .map(|(name, graph)| {
