@@ -453,11 +453,14 @@ constraint `electron_count` (total `ValueAst`) — both exist, no clash.
   Rust tests + 299 pytest green, clippy/fmt clean. Trivial mechanical mirror — no workflow. `[dep: S1b]`
 
 **S3 — views (`umol-py/src/multicenter.rs` + `molecule.rs`).**
-- **S3a** *(additive)* — `MulticenterBondView` (`id`, read-only `atom_ids -> tuple`, settable
+- **S3a — DONE** *(additive)* — `MulticenterBondView` (`id`, read-only `atom_ids -> tuple`, settable
   `electrons`/`charge`/`spin`/`constraints`, `asdict`; write-through via `multicenter_bond_mut(id)`) +
-  **re-add the `Molecule` backing arm** to `MulticenterBondConstraintsBacking` (+ `read`/`with_mut` Molecule
-  arms) — `MulticenterBondView::constraints` constructs it — + the molecule-backed constraint-view unit test.
-  `[dep: S1b]`
+  **re-added the `Molecule` backing arm** to `MulticenterBondConstraintsBacking` (+ `read`/`with_mut`
+  Molecule arms) — `MulticenterBondView::constraints` constructs it — + the molecule-backed constraint-view
+  unit test (drives `set`, matching the aromatic S3a fix). `three_center_bond` fixture (3 borons + one
+  3-center bond). Not registered yet (S3c). 44 multicenter Rust tests green, clippy/fmt clean.
+  Verification: manual parity — 0 `Aromatic` leaks; `MulticenterBondView` pymethod inventory **identical**
+  to `AromaticSystemView` (all 12); 7=7 view tests + the molecule-backed test present. `[dep: S1b]`
 - **S3b** *(additive)* — `resolve_multicenter_bond_index` (mirrors `resolve_bond_index`) +
   `MulticenterBondViews` (`mol.multicenter_bonds`: `__len__`/`__repr__`/`__getitem__`/`__setitem__`
   value-replace/`__iter__` + `connecting(atoms)` + `incident(atom)`) + `MulticenterBondViewIter`. `new` +
