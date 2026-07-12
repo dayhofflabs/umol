@@ -42,7 +42,8 @@ pub enum AutomorphismAlgorithm {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AutoGroupOrder {
+#[cfg(test)]
+enum AutoGroupOrder {
     Exact(u32),
     Approx(f64),
 }
@@ -127,10 +128,6 @@ pub struct AutomorphismOutput {
     group_order: AutomorphismGroupOrder,
     generators: Vec<Vec<NodeId>>,
 }
-
-/// Temporary source-compatibility alias during the workspace migration to
-/// [`AutomorphismOutput`].
-pub type Automorphism = AutomorphismOutput;
 
 impl Graph {
     pub fn automorphisms<C: Ord + Copy>(
@@ -472,25 +469,6 @@ impl AutomorphismOutput {
     pub fn generators(&self) -> &[Vec<NodeId>] {
         &self.generators
     }
-
-    /// Temporary compatibility name; workspace callers migrate in S4c.
-    pub fn canonical_labeling(&self) -> &[NodeId] {
-        self.canonical_labels()
-    }
-
-    /// Temporary compatibility representation; workspace callers migrate in
-    /// S4c and this method is then removed with [`AutoGroupOrder`].
-    pub fn auto_group_order(&self) -> AutoGroupOrder {
-        match self.group_order {
-            AutomorphismGroupOrder::Exact(value) if value <= u32::MAX as u128 => {
-                AutoGroupOrder::Exact(value as u32)
-            }
-            AutomorphismGroupOrder::Exact(value) => AutoGroupOrder::Approx(value as f64),
-            AutomorphismGroupOrder::Scientific { mantissa, exponent } => {
-                AutoGroupOrder::Approx(mantissa * 10.0_f64.powi(exponent))
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -574,7 +552,7 @@ mod tests {
     fn assert_automorphism_semantics<C: Copy + Debug + Eq>(
         graph: &Graph,
         colors: &[C],
-        aut: &Automorphism,
+        aut: &AutomorphismOutput,
     ) {
         let expected_nodes: Vec<NodeId> = graph.node_ids().collect();
         let edges: HashSet<(usize, usize)> = graph
@@ -672,12 +650,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(Graph::default(), vec![], 0, AutoGroupOrder::Exact(1), vec![], vec![])]
+    #[case::empty(Graph::default(), vec![], 0, AutomorphismGroupOrder::Exact(1), vec![], vec![])]
     #[case::singleton(
         Graph::new(1, &[]),
         vec![0],
         1,
-        AutoGroupOrder::Exact(1),
+        AutomorphismGroupOrder::Exact(1),
         vec![(0, 0)],
         vec![]
     )]
@@ -685,7 +663,7 @@ mod tests {
         Graph::new(2, &[[0, 1]]),
         vec![0, 0],
         1,
-        AutoGroupOrder::Exact(2),
+        AutomorphismGroupOrder::Exact(2),
         vec![(0, 1)],
         vec![]
     )]
@@ -693,7 +671,7 @@ mod tests {
         Graph::new(2, &[[0, 1]]),
         vec![0, 1],
         2,
-        AutoGroupOrder::Exact(1),
+        AutomorphismGroupOrder::Exact(1),
         vec![],
         vec![(0, 1)]
     )]
@@ -701,7 +679,7 @@ mod tests {
         Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]),
         vec![0, 0, 0, 0],
         1,
-        AutoGroupOrder::Exact(8),
+        AutomorphismGroupOrder::Exact(8),
         vec![(0, 1), (0, 2), (0, 3)],
         vec![]
     )]
@@ -709,7 +687,7 @@ mod tests {
         Graph::new(3, &[[0, 1], [1, 2]]),
         vec![0, 1, 0],
         2,
-        AutoGroupOrder::Exact(2),
+        AutomorphismGroupOrder::Exact(2),
         vec![(0, 2)],
         vec![(0, 1)]
     )]
@@ -717,7 +695,7 @@ mod tests {
         Graph::new(4, &[[0, 1], [2, 3]]),
         vec![0, 0, 0, 0],
         1,
-        AutoGroupOrder::Exact(8),
+        AutomorphismGroupOrder::Exact(8),
         vec![(0, 1), (0, 2), (0, 3)],
         vec![]
     )]
@@ -725,14 +703,14 @@ mod tests {
         #[case] graph: Graph,
         #[case] colors: Vec<u8>,
         #[case] expected_orbits: usize,
-        #[case] expected_order: AutoGroupOrder,
+        #[case] expected_order: AutomorphismGroupOrder,
         #[case] same_orbit: Vec<(u32, u32)>,
         #[case] different_orbit: Vec<(u32, u32)>,
     ) {
         let aut = graph.automorphisms(|node| colors[node.index()], Nauty);
         assert_eq!(aut.node_count(), graph.node_count());
         assert_eq!(aut.orbit_count(), expected_orbits);
-        assert_eq!(aut.auto_group_order(), expected_order);
+        assert_eq!(aut.group_order(), expected_order);
         for (a, b) in same_orbit {
             assert!(aut.same_orbit(NodeId(a), NodeId(b)));
         }
@@ -805,8 +783,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::complete_13(13, 6_227_020_800.0)]
-    fn test_graph_automorphisms_large_order(#[case] nodes: usize, #[case] expected: f64) {
+    #[case::complete_13(13, 6_227_020_800)]
+    fn test_graph_automorphisms_large_order(#[case] nodes: usize, #[case] expected: u128) {
         let mut edges = Vec::new();
         for a in 0..nodes as u32 {
             for b in a + 1..nodes as u32 {
@@ -815,10 +793,7 @@ mod tests {
         }
         let graph = Graph::new(nodes, &edges);
         let aut = graph.automorphisms(|_| 0u8, Nauty);
-        let AutoGroupOrder::Approx(order) = aut.auto_group_order() else {
-            panic!("order above u32 must use the approximate representation");
-        };
-        assert!((order - expected).abs() < 0.5);
+        assert_eq!(aut.group_order(), AutomorphismGroupOrder::Exact(expected));
         assert_automorphism_semantics(&graph, &vec![0; nodes], &aut);
     }
 
@@ -826,16 +801,16 @@ mod tests {
     #[case::cycle_6(
         Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
         NodeId(2),
-        AutoGroupOrder::Exact(2)
+        AutomorphismGroupOrder::Exact(2)
     )]
     fn test_graph_automorphisms_stabilizer(
         #[case] graph: Graph,
         #[case] site: NodeId,
-        #[case] expected_order: AutoGroupOrder,
+        #[case] expected_order: AutomorphismGroupOrder,
     ) {
         let colors: Vec<bool> = graph.node_ids().map(|node| node == site).collect();
         let aut = graph.automorphisms(|node| colors[node.index()], Nauty);
-        assert_eq!(aut.auto_group_order(), expected_order);
+        assert_eq!(aut.group_order(), expected_order);
         assert!(aut
             .generators()
             .iter()
@@ -860,7 +835,7 @@ mod tests {
 
         for handle in handles {
             let (site, aut) = handle.join().expect("automorphism worker succeeds");
-            assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(2));
+            assert_eq!(aut.group_order(), AutomorphismGroupOrder::Exact(2));
             assert!(aut
                 .generators()
                 .iter()

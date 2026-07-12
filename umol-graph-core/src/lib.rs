@@ -13,9 +13,7 @@ pub(crate) mod relation;
 pub(crate) mod rewriting;
 pub(crate) mod union_find;
 
-pub use algorithms::auto::{
-    AutoGroupOrder, Automorphism, AutomorphismAlgorithm, AutomorphismGroupOrder, AutomorphismOutput,
-};
+pub use algorithms::auto::{AutomorphismAlgorithm, AutomorphismGroupOrder, AutomorphismOutput};
 pub use algorithms::bcc::BiconnectedComponentsAlgorithm;
 pub use algorithms::coloring::BipartitionAlgorithm;
 pub use algorithms::common_subgraph::{

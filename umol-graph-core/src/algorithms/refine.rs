@@ -6,7 +6,7 @@
 //! partition; an order-independent digest of it is a fast graph invariant —
 //! **sound but not complete**: 1-WL fails to separate some non-isomorphic graphs
 //! (e.g. C6 vs two triangles), so a hash match must be confirmed against an exact
-//! canonical form (`Automorphism`).
+//! canonical form (`AutomorphismOutput`).
 //!
 //! The hashing is pluggable through [`RefinementHash`] (plain refinement) and
 //! [`CircularRefinementHash`] (extended connectivity): a custom impl can reproduce

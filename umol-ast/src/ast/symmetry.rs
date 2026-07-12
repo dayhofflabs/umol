@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use umol_graph_core::{Automorphism, AutomorphismAlgorithm, NodeId};
+use umol_graph_core::{AutomorphismAlgorithm, AutomorphismOutput, NodeId};
 use umol_perm::{space, Orientation, OrientedPermutation, OrientedPermutationGroup, Permutation};
 
 use super::coloring::MoleculeColoring;
@@ -519,7 +519,7 @@ fn grade_local(
     }
 }
 
-fn orbit_vec(auto: &Automorphism, node_count: usize) -> Vec<NodeId> {
+fn orbit_vec(auto: &AutomorphismOutput, node_count: usize) -> Vec<NodeId> {
     (0..node_count)
         .map(|i| auto.orbit_of(NodeId(i as u32)))
         .collect()

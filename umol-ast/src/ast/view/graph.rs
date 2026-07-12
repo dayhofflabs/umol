@@ -1,10 +1,10 @@
 //! Graph view: typed adapter over the underlying `Graph`.
 
 use umol_graph_core::{
-    AutoGroupOrder, Automorphism, AutomorphismAlgorithm, BiconnectedComponentsAlgorithm,
-    ConnectedComponentsAlgorithm, CycleEnumerationAlgorithm, EdgeId, Graph,
-    MatchingEnumerationAlgorithm, MaxIndependentSetAlgorithm, MaxMatchingAlgorithm, NodeId,
-    PerfectMatchingAlgorithm, ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
+    AutomorphismAlgorithm, AutomorphismGroupOrder, AutomorphismOutput,
+    BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm, CycleEnumerationAlgorithm,
+    EdgeId, Graph, MatchingEnumerationAlgorithm, MaxIndependentSetAlgorithm, MaxMatchingAlgorithm,
+    NodeId, PerfectMatchingAlgorithm, ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 
 use super::super::id::{AtomId, BondId};
@@ -192,11 +192,11 @@ impl<'a> GraphView<'a> {
     }
 }
 
-/// Atom-level wrapper over `umol_graph_core::Automorphism` — the result of
+/// Atom-level wrapper over `umol_graph_core::AutomorphismOutput` — the result of
 /// [`GraphView::automorphisms`]. Indexes the permutation in terms of `AtomId`
 /// rather than raw `NodeId`.
 #[derive(Clone, Debug)]
-pub struct AtomAutomorphism(Automorphism);
+pub struct AtomAutomorphism(AutomorphismOutput);
 
 impl AtomAutomorphism {
     pub fn atom_count(&self) -> usize {
@@ -215,16 +215,16 @@ impl AtomAutomorphism {
         self.0.same_orbit(NodeId::from(a), NodeId::from(b))
     }
 
-    pub fn canonical_labeling(&self) -> Vec<AtomId> {
+    pub fn canonical_labels(&self) -> Vec<AtomId> {
         self.0
-            .canonical_labeling()
+            .canonical_labels()
             .iter()
             .map(|&n| AtomId::from(n))
             .collect()
     }
 
-    pub fn auto_group_order(&self) -> AutoGroupOrder {
-        self.0.auto_group_order()
+    pub fn group_order(&self) -> AutomorphismGroupOrder {
+        self.0.group_order()
     }
 }
 
@@ -240,83 +240,68 @@ mod tests {
     use crate::ast::id::AtomId;
     use crate::ast::molecule::{MoleculeAst, MoleculeParts};
 
-    fn ring(n: usize) -> MoleculeAst {
-        let atoms = vec![AtomAst::from_element(Element::C); n];
-        let bonds: Vec<_> = (0..n)
-            .map(|i| {
-                (
-                    AtomId(i as u32),
-                    AtomId(((i + 1) % n) as u32),
-                    BondAst::from_order(1),
-                )
-            })
-            .collect();
-        MoleculeAst::from_parts(MoleculeParts {
-            atoms,
-            bonds,
-            ..Default::default()
-        })
-    }
-
-    fn chain(n: usize) -> MoleculeAst {
-        let atoms = vec![AtomAst::from_element(Element::C); n];
-        let bonds: Vec<_> = (0..n.saturating_sub(1))
-            .map(|i| {
-                (
-                    AtomId(i as u32),
-                    AtomId((i + 1) as u32),
-                    BondAst::from_order(1),
-                )
-            })
-            .collect();
-        MoleculeAst::from_parts(MoleculeParts {
-            atoms,
-            bonds,
-            ..Default::default()
-        })
-    }
-
     #[fixture]
     fn hexagon() -> AtomAutomorphism {
-        ring(6)
-            .graph()
-            .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 6],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(3), AtomId(4), BondAst::from_order(1)),
+                (AtomId(4), AtomId(5), BondAst::from_order(1)),
+                (AtomId(5), AtomId(0), BondAst::from_order(1)),
+            ],
+            ..Default::default()
+        })
+        .graph()
+        .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
     }
 
     #[fixture]
     fn chain_3() -> AtomAutomorphism {
-        chain(3)
-            .graph()
-            .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 3],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+            ],
+            ..Default::default()
+        })
+        .graph()
+        .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
     }
 
     #[rstest]
-    #[case::hexagon_wraps_six(hexagon(), 6, 1)]
-    #[case::chain_3_wraps_three(chain_3(), 3, 2)]
-    fn test_atom_automorphism_counts(
-        #[case] auto: AtomAutomorphism,
-        #[case] expected_atom_count: usize,
-        #[case] expected_orbit_count: usize,
+    #[case::hexagon(hexagon(), 6)]
+    #[case::chain_3(chain_3(), 3)]
+    fn test_atom_automorphism_atom_count(
+        #[case] automorphism: AtomAutomorphism,
+        #[case] expected: usize,
     ) {
-        assert_eq!(auto.atom_count(), expected_atom_count);
-        assert_eq!(auto.orbit_count(), expected_orbit_count);
+        assert_eq!(automorphism.atom_count(), expected);
     }
 
     #[rstest]
-    fn test_atom_automorphism_orbit_of_agrees_within_orbit(hexagon: AtomAutomorphism) {
-        // In a hexagon every atom is in the same orbit, so `orbit_of` must
-        // return the same representative for every atom.
-        let rep = hexagon.orbit_of(AtomId(0));
-        for i in 1..6 {
-            assert_eq!(hexagon.orbit_of(AtomId(i)), rep);
-        }
+    #[case::hexagon(hexagon(), 1)]
+    #[case::chain_3(chain_3(), 2)]
+    fn test_atom_automorphism_orbit_count(
+        #[case] automorphism: AtomAutomorphism,
+        #[case] expected: usize,
+    ) {
+        assert_eq!(automorphism.orbit_count(), expected);
     }
 
     #[rstest]
-    fn test_atom_automorphism_orbit_of_distinguishes_non_equivalent(chain_3: AtomAutomorphism) {
-        // In C-C-C the center atom sits in a different orbit from the endpoints.
-        assert_ne!(chain_3.orbit_of(AtomId(0)), chain_3.orbit_of(AtomId(1)));
-        assert_eq!(chain_3.orbit_of(AtomId(0)), chain_3.orbit_of(AtomId(2)));
+    #[case::hexagon(hexagon(), AtomId(3), AtomId(0))]
+    #[case::chain_endpoint(chain_3(), AtomId(2), AtomId(0))]
+    #[case::chain_center(chain_3(), AtomId(1), AtomId(1))]
+    fn test_atom_automorphism_orbit_of(
+        #[case] automorphism: AtomAutomorphism,
+        #[case] atom: AtomId,
+        #[case] expected: AtomId,
+    ) {
+        assert_eq!(automorphism.orbit_of(atom), expected);
     }
 
     #[rstest]
@@ -324,32 +309,32 @@ mod tests {
     #[case::chain_endpoints_equivalent(chain_3(), AtomId(0), AtomId(2), true)]
     #[case::chain_endpoint_vs_middle(chain_3(), AtomId(0), AtomId(1), false)]
     fn test_atom_automorphism_same_orbit(
-        #[case] auto: AtomAutomorphism,
-        #[case] a: AtomId,
-        #[case] b: AtomId,
+        #[case] automorphism: AtomAutomorphism,
+        #[case] first: AtomId,
+        #[case] second: AtomId,
         #[case] expected: bool,
     ) {
-        assert_eq!(auto.same_orbit(a, b), expected);
+        assert_eq!(automorphism.same_orbit(first, second), expected);
     }
 
     #[rstest]
-    fn test_atom_automorphism_canonical_labeling_is_permutation(hexagon: AtomAutomorphism) {
-        let labeling = hexagon.canonical_labeling();
-        assert_eq!(labeling.len(), 6);
-        let mut sorted = labeling.clone();
+    #[case::hexagon(hexagon(), (0..6).map(|index| AtomId(index as u32)).collect::<Vec<_>>())]
+    fn test_atom_automorphism_canonical_labels(
+        #[case] automorphism: AtomAutomorphism,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        let mut sorted = automorphism.canonical_labels();
         sorted.sort_unstable();
-        assert_eq!(sorted, (0..6).map(|i| AtomId(i as u32)).collect::<Vec<_>>());
+        assert_eq!(sorted, expected);
     }
 
     #[rstest]
-    fn test_atom_automorphism_auto_group_order_hexagon(hexagon: AtomAutomorphism) {
-        // D6 has 12 automorphisms on the vertex set.
-        assert_eq!(hexagon.auto_group_order(), AutoGroupOrder::Exact(12));
-    }
-
-    #[rstest]
-    fn test_atom_automorphism_auto_group_order_chain(chain_3: AtomAutomorphism) {
-        // Linear C-C-C: only identity and the endpoint-swap reflection.
-        assert_eq!(chain_3.auto_group_order(), AutoGroupOrder::Exact(2));
+    #[case::hexagon(hexagon(), AutomorphismGroupOrder::Exact(12))]
+    #[case::chain_3(chain_3(), AutomorphismGroupOrder::Exact(2))]
+    fn test_atom_automorphism_group_order(
+        #[case] automorphism: AtomAutomorphism,
+        #[case] expected: AutomorphismGroupOrder,
+    ) {
+        assert_eq!(automorphism.group_order(), expected);
     }
 }
