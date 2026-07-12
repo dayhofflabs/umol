@@ -31,6 +31,7 @@ enum RawError {
     Aborted = 10,
     Killed = 11,
     Unknown = 12,
+    InvalidPartition = 13,
 }
 
 unsafe extern "C" {
@@ -39,6 +40,7 @@ unsafe extern "C" {
         offsets: *const usize,
         neighbors: *const u32,
         colors: *const u32,
+        partition: *const u32,
         canonical_labels: *mut u32,
         orbits: *mut u32,
         report_generator: Option<GeneratorCallback>,
@@ -57,6 +59,10 @@ pub enum NautyError {
     TerminalOffset { expected: usize, actual: usize },
     ColorCount { expected: usize, actual: usize },
     NeighborOutOfBounds { position: usize, neighbor: u32 },
+    PartitionCount { expected: usize, actual: usize },
+    PartitionVertexOutOfBounds { position: usize, vertex: u32 },
+    DuplicatePartitionVertex { vertex: u32 },
+    NonmonotonicPartitionColors { position: usize },
     VertexCountOverflow { count: usize },
     DegreeOverflow { vertex: usize, degree: usize },
     NullPointer,
@@ -71,6 +77,7 @@ pub enum NautyError {
     Aborted,
     Killed,
     Unknown,
+    InvalidPartition,
     GeneratorCallbackPanicked,
 }
 
@@ -98,6 +105,7 @@ impl RawError {
             Self::Aborted => Err(NautyError::Aborted),
             Self::Killed => Err(NautyError::Killed),
             Self::Unknown => Err(NautyError::Unknown),
+            Self::InvalidPartition => Err(NautyError::InvalidPartition),
         }
     }
 }
@@ -108,6 +116,7 @@ pub struct NautyInput {
     offsets: Vec<usize>,
     neighbors: Vec<u32>,
     colors: Vec<u32>,
+    partition: Vec<u32>,
 }
 
 impl NautyInput {
@@ -116,6 +125,7 @@ impl NautyInput {
         offsets: Vec<usize>,
         neighbors: Vec<u32>,
         colors: Vec<u32>,
+        partition: Vec<u32>,
     ) -> Result<Self, NautyError> {
         validate_vertex_count(vertex_count)?;
 
@@ -135,6 +145,12 @@ impl NautyInput {
             return Err(NautyError::ColorCount {
                 expected: vertex_count,
                 actual: colors.len(),
+            });
+        }
+        if partition.len() != vertex_count {
+            return Err(NautyError::PartitionCount {
+                expected: vertex_count,
+                actual: partition.len(),
             });
         }
         if offsets[0] != 0 {
@@ -162,11 +178,34 @@ impl NautyInput {
                 return Err(NautyError::NeighborOutOfBounds { position, neighbor });
             }
         }
+        let mut seen = vec![false; vertex_count];
+        let mut previous_color = None;
+        for (position, &vertex) in partition.iter().enumerate() {
+            let vertex = vertex as usize;
+            if vertex >= vertex_count {
+                return Err(NautyError::PartitionVertexOutOfBounds {
+                    position,
+                    vertex: partition[position],
+                });
+            }
+            if seen[vertex] {
+                return Err(NautyError::DuplicatePartitionVertex {
+                    vertex: partition[position],
+                });
+            }
+            let color = colors[vertex];
+            if previous_color.is_some_and(|previous| color < previous) {
+                return Err(NautyError::NonmonotonicPartitionColors { position });
+            }
+            seen[vertex] = true;
+            previous_color = Some(color);
+        }
 
         Ok(Self {
             offsets,
             neighbors,
             colors,
+            partition,
         })
     }
 
@@ -188,6 +227,10 @@ impl NautyInput {
 
     pub fn colors(&self) -> &[u32] {
         &self.colors
+    }
+
+    pub fn partition(&self) -> &[u32] {
+        &self.partition
     }
 }
 
@@ -276,6 +319,7 @@ pub fn run(input: &NautyInput) -> Result<NautyOutput, NautyError> {
             input.offsets.as_ptr(),
             input.neighbors.as_ptr(),
             input.colors.as_ptr(),
+            input.partition.as_ptr(),
             canonical_labels.as_mut_ptr(),
             orbits.as_mut_ptr(),
             Some(collect_generator),
@@ -303,6 +347,7 @@ pub fn run(input: &NautyInput) -> Result<NautyOutput, NautyError> {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::iter::once;
     use std::thread;
 
     use rstest::*;
@@ -341,42 +386,49 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(0, vec![0], vec![], vec![])]
-    #[case::isolated(1, vec![0, 0], vec![], vec![7])]
-    #[case::edge(2, vec![0, 1, 2], vec![1, 0], vec![3, 3])]
+    #[case::empty(0, vec![0], vec![], vec![], vec![])]
+    #[case::isolated(1, vec![0, 0], vec![], vec![7], vec![0])]
+    #[case::edge(2, vec![0, 1, 2], vec![1, 0], vec![3, 3], vec![0, 1])]
     fn test_nauty_input_try_new(
         #[case] vertex_count: usize,
         #[case] offsets: Vec<usize>,
         #[case] neighbors: Vec<u32>,
         #[case] colors: Vec<u32>,
+        #[case] partition: Vec<u32>,
     ) {
         let expected = NautyInput {
             offsets: offsets.clone(),
             neighbors: neighbors.clone(),
             colors: colors.clone(),
+            partition: partition.clone(),
         };
         assert_eq!(
-            NautyInput::try_new(vertex_count, offsets, neighbors, colors),
+            NautyInput::try_new(vertex_count, offsets, neighbors, colors, partition),
             Ok(expected)
         );
     }
 
     #[rstest]
-    #[case::offset_count(0, vec![], vec![], vec![], NautyError::OffsetCount { expected: 1, actual: 0 })]
-    #[case::color_count(1, vec![0, 0], vec![], vec![], NautyError::ColorCount { expected: 1, actual: 0 })]
-    #[case::first_offset(0, vec![1], vec![], vec![], NautyError::FirstOffset { actual: 1 })]
-    #[case::nonmonotonic(2, vec![0, 2, 1], vec![0], vec![0, 0], NautyError::NonmonotonicOffsets { vertex: 1 })]
-    #[case::terminal(1, vec![0, 1], vec![], vec![0], NautyError::TerminalOffset { expected: 0, actual: 1 })]
-    #[case::neighbor(1, vec![0, 1], vec![1], vec![0], NautyError::NeighborOutOfBounds { position: 0, neighbor: 1 })]
+    #[case::offset_count(0, vec![], vec![], vec![], vec![], NautyError::OffsetCount { expected: 1, actual: 0 })]
+    #[case::color_count(1, vec![0, 0], vec![], vec![], vec![0], NautyError::ColorCount { expected: 1, actual: 0 })]
+    #[case::partition_count(1, vec![0, 0], vec![], vec![0], vec![], NautyError::PartitionCount { expected: 1, actual: 0 })]
+    #[case::first_offset(0, vec![1], vec![], vec![], vec![], NautyError::FirstOffset { actual: 1 })]
+    #[case::nonmonotonic(2, vec![0, 2, 1], vec![0], vec![0, 0], vec![0, 1], NautyError::NonmonotonicOffsets { vertex: 1 })]
+    #[case::terminal(1, vec![0, 1], vec![], vec![0], vec![0], NautyError::TerminalOffset { expected: 0, actual: 1 })]
+    #[case::neighbor(1, vec![0, 1], vec![1], vec![0], vec![0], NautyError::NeighborOutOfBounds { position: 0, neighbor: 1 })]
+    #[case::partition_vertex(2, vec![0, 0, 0], vec![], vec![0, 0], vec![0, 2], NautyError::PartitionVertexOutOfBounds { position: 1, vertex: 2 })]
+    #[case::partition_duplicate(2, vec![0, 0, 0], vec![], vec![0, 0], vec![0, 0], NautyError::DuplicatePartitionVertex { vertex: 0 })]
+    #[case::partition_colors(2, vec![0, 0, 0], vec![], vec![1, 0], vec![0, 1], NautyError::NonmonotonicPartitionColors { position: 1 })]
     fn test_nauty_input_try_new_error(
         #[case] vertex_count: usize,
         #[case] offsets: Vec<usize>,
         #[case] neighbors: Vec<u32>,
         #[case] colors: Vec<u32>,
+        #[case] partition: Vec<u32>,
         #[case] expected: NautyError,
     ) {
         assert_eq!(
-            NautyInput::try_new(vertex_count, offsets, neighbors, colors),
+            NautyInput::try_new(vertex_count, offsets, neighbors, colors, partition),
             Err(expected)
         );
     }
@@ -420,6 +472,7 @@ mod tests {
     #[case::aborted(RawError::Aborted, Err(NautyError::Aborted))]
     #[case::killed(RawError::Killed, Err(NautyError::Killed))]
     #[case::unknown(RawError::Unknown, Err(NautyError::Unknown))]
+    #[case::invalid_partition(RawError::InvalidPartition, Err(NautyError::InvalidPartition))]
     fn test_raw_error_into_result(
         #[case] input: RawError,
         #[case] expected: Result<(), NautyError>,
@@ -429,25 +482,25 @@ mod tests {
 
     #[rstest]
     #[case::empty(
-        NautyInput::try_new(0, vec![0], vec![], vec![]).unwrap(),
+        NautyInput::try_new(0, vec![0], vec![], vec![], vec![]).unwrap(),
         NautyGroupOrder { mantissa: 1.0, exponent: 0 },
         vec![],
         vec![]
     )]
     #[case::singleton(
-        NautyInput::try_new(1, vec![0, 0], vec![], vec![0]).unwrap(),
+        NautyInput::try_new(1, vec![0, 0], vec![], vec![0], vec![0]).unwrap(),
         NautyGroupOrder { mantissa: 1.0, exponent: 0 },
         vec![0],
         vec![0]
     )]
     #[case::same_color_edge(
-        NautyInput::try_new(2, vec![0, 1, 2], vec![1, 0], vec![0, 0]).unwrap(),
+        NautyInput::try_new(2, vec![0, 1, 2], vec![1, 0], vec![0, 0], vec![0, 1]).unwrap(),
         NautyGroupOrder { mantissa: 2.0, exponent: 0 },
         vec![0, 1],
         vec![0, 0]
     )]
     #[case::different_color_edge(
-        NautyInput::try_new(2, vec![0, 1, 2], vec![1, 0], vec![0, 1]).unwrap(),
+        NautyInput::try_new(2, vec![0, 1, 2], vec![1, 0], vec![0, 1], vec![0, 1]).unwrap(),
         NautyGroupOrder { mantissa: 1.0, exponent: 0 },
         vec![0, 1],
         vec![0, 1]
@@ -457,7 +510,8 @@ mod tests {
             3,
             vec![0, 1, 3, 4],
             vec![1, 0, 2, 1],
-            vec![0, 1, 0]
+            vec![0, 1, 0],
+            vec![0, 2, 1]
         ).unwrap(),
         NautyGroupOrder { mantissa: 2.0, exponent: 0 },
         vec![0, 2, 1],
@@ -468,7 +522,8 @@ mod tests {
             4,
             vec![0, 2, 4, 6, 8],
             vec![1, 3, 0, 2, 1, 3, 0, 2],
-            vec![0, 0, 0, 0]
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
         ).unwrap(),
         NautyGroupOrder { mantissa: 8.0, exponent: 0 },
         vec![0, 2, 1, 3],
@@ -479,7 +534,8 @@ mod tests {
             4,
             vec![0, 1, 2, 3, 4],
             vec![1, 0, 3, 2],
-            vec![0, 0, 0, 0]
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
         ).unwrap(),
         NautyGroupOrder { mantissa: 8.0, exponent: 0 },
         vec![0, 2, 3, 1],
@@ -500,11 +556,11 @@ mod tests {
 
     #[rstest]
     #[case::same_color_edge(
-        NautyInput::try_new(2, vec![0, 1, 2], vec![1, 0], vec![0, 0]).unwrap(),
+        NautyInput::try_new(2, vec![0, 1, 2], vec![1, 0], vec![0, 0], vec![0, 1]).unwrap(),
         vec![vec![1, 0]]
     )]
     #[case::different_color_edge(
-        NautyInput::try_new(2, vec![0, 1, 2], vec![1, 0], vec![0, 1]).unwrap(),
+        NautyInput::try_new(2, vec![0, 1, 2], vec![1, 0], vec![0, 1], vec![0, 1]).unwrap(),
         vec![]
     )]
     fn test_run_generators(#[case] input: NautyInput, #[case] expected: Vec<Vec<u32>>) {
@@ -529,8 +585,14 @@ mod tests {
             );
             offsets.push(neighbors.len());
         }
-        let input =
-            NautyInput::try_new(vertex_count, offsets, neighbors, vec![0; vertex_count]).unwrap();
+        let input = NautyInput::try_new(
+            vertex_count,
+            offsets,
+            neighbors,
+            vec![0; vertex_count],
+            (0..vertex_count as u32).collect(),
+        )
+        .unwrap();
         let order = run(&input).unwrap().group_order;
         assert!((order.mantissa - expected_mantissa).abs() < GROUP_ORDER_MANTISSA_TOLERANCE);
         assert_eq!(order.exponent, expected_exponent);
@@ -542,7 +604,8 @@ mod tests {
             6,
             vec![0, 2, 4, 6, 8, 10, 12],
             vec![1, 5, 0, 2, 1, 3, 2, 4, 3, 5, 0, 4],
-            vec![0, 0, 1, 0, 0, 0]
+            vec![0, 0, 1, 0, 0, 0],
+            vec![0, 1, 3, 4, 5, 2]
         ).unwrap(),
         2
     )]
@@ -576,6 +639,10 @@ mod tests {
                         vec![0, 2, 4, 6, 8, 10, 12],
                         vec![1, 5, 0, 2, 1, 3, 2, 4, 3, 5, 0, 4],
                         colors,
+                        (0..6)
+                            .filter(|&vertex| vertex != site as u32)
+                            .chain(once(site as u32))
+                            .collect(),
                     )
                     .unwrap();
                     let output = run(&input).unwrap();

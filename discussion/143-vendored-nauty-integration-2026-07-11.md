@@ -209,6 +209,72 @@ source files stay in the C shim. Canonical permutations and generator sets may d
 engines, so compare canonical graph/key, orbit and group semantics, correctness, and runtime rather
 than raw output arrays.
 
+### S5 benchmark result (2026-07-11)
+
+The post-migration corpus was run on the same baseline host and compiler recorded in
+`umol-graph-core/benches/README.md`, with Criterion's default 3-second warm-up, 100 samples, and
+5-second measurement period. The pre-migration measurements were retained in Criterion's `base`
+dataset and the new measurements were saved as `vendored-nauty`. Raw Criterion data remains local.
+
+Across 69 comparable cases, the median change was a 1.2% slowdown. The distribution was mixed:
+14 cases were more than 5% slower, four were more than 10% slower, and 15 were more than 5% faster.
+
+| Representative case | Old binding | Vendored | Change |
+|---|---:|---:|---:|
+| ordinary path 64, degree colors | 7.07 µs | 8.67 µs | +22.7% |
+| ordinary grid 8×8, degree colors | 7.22 µs | 8.44 µs | +16.9% |
+| C60, three site stabilizers | 19.51 µs | 21.49 µs | +10.1% |
+| dodecahedron, three site stabilizers | 8.33 µs | 9.26 µs | +11.2% |
+| C60 incidence graph | 27.47 µs | 28.09 µs | +2.3% |
+| C60 canonical key | 31.84 µs | 30.56 µs | −4.0% |
+| C70 canonical key | 36.61 µs | 36.04 µs | −1.6% |
+| C60, unique colors | 3.70 µs | 2.78 µs | −25.0% |
+
+The nauty version, `WORDSIZE=64`, `USE_TLS`, and sparse entry point are unchanged. The principal
+adapter-level difference is extra boundary work: graph-core ranks colors and builds CSR, while the C
+shim validates and copies CSR, allocates nauty arrays, and sorts the already-ranked colors again.
+This is consistent with fixed overhead being visible in some small and medium cases, but the mixed
+results do not isolate one cause.
+
+This run does not formally close the performance gate: the design required a regression threshold
+fixed before measurement, but no numeric threshold was recorded before S5. The four regressions
+above 10% should therefore be reviewed or rerun after eliminating redundant color sorting/CSR work
+before sparse nauty is declared accepted for the Python-facing workload.
+
+### S5c no-sort result (2026-07-11)
+
+S5c passes graph-core's Rust-computed vertex partition order through `NautyInput` and the private C
+ABI. The safe Rust boundary validates its length, vertex bounds, uniqueness, and nondecreasing color
+order; the C boundary repeats the memory-safety-critical checks. The shim now initializes `lab` and
+`ptn` directly and contains no `qsort` or colored-vertex comparison machinery.
+
+The identical 69 cases were saved as `vendored-nauty-no-sort`. Relative to the old-binding `base`
+dataset, the median change improved from +1.2% to +0.8%. Cases slower by more than 5% fell from 14
+to five, no case remained slower by more than 10%, and 19 cases were faster by more than 5%.
+Relative to the first vendored run, the median case improved by 1.0%.
+
+| Representative case | Old binding | First vendored | No-sort | No-sort vs old | No-sort vs first |
+|---|---:|---:|---:|---:|---:|
+| ordinary path 64, degree colors | 7.07 µs | 8.67 µs | 6.72 µs | −4.9% | −22.5% |
+| ordinary grid 8×8, degree colors | 7.22 µs | 8.44 µs | 7.42 µs | +2.7% | −12.1% |
+| C60, three site stabilizers | 19.51 µs | 21.49 µs | 18.41 µs | −5.6% | −14.3% |
+| dodecahedron, three site stabilizers | 8.33 µs | 9.26 µs | 8.55 µs | +2.7% | −7.7% |
+| C60 incidence graph | 27.47 µs | 28.09 µs | 27.77 µs | +1.1% | −1.1% |
+| C60 canonical key | 31.84 µs | 30.56 µs | 28.88 µs | −9.3% | −5.5% |
+| C70 canonical key | 36.61 µs | 36.04 µs | 33.55 µs | −8.4% | −6.9% |
+| grid 8×8 canonical key | 38.20 µs | 37.63 µs | 34.99 µs | −8.4% | −7.0% |
+
+All four previous regressions above 10% disappeared. The largest remaining old-binding regression
+was C60 with degree colors at +6.6%; the other four cases above 5% ranged from +5.1% to +6.1%.
+
+**Acceptance decision (2026-07-12):** the S5 performance gate is accepted. Although no numeric
+threshold was fixed before measurement, the accepted basis is the no-sort result: +0.8% median
+change across the full corpus, no regression above 10%, only five regressions above 5%, elimination
+of all four initially material regressions, and representative incidence, stabilizer, and
+canonical-key latencies at or near old-binding parity. Sparse nauty is therefore considered adequate
+for the Python-facing workloads in scope. S5b's LLVM-free platform/package matrix remains a separate
+distribution acceptance gate.
+
 ## Verification
 
 Retain the existing graph cases and add boundary tests at the shim seam:

@@ -312,8 +312,35 @@ Exercise at least `cargo build -p umol-graph-core`, workspace tests, the maturin
 path, and wheel builds for supported Python targets. Confirm the vendored license is included in
 source distributions as required and that no build step searches for libclang.
 
+### S5c — Remove duplicate color sorting and remeasure
+
+**Module:** `umol-graph-core/src/algorithms/auto.rs`, `umol-nauty-sys/src/lib.rs`,
+`umol-nauty-sys/include/umol_nauty.h`, `umol-nauty-sys/src/umol_nauty.c`, and the S5 benchmark note
+
+**Kind:** internal boundary optimization (red→green)
+
+**Dependencies:** [dep: S5a]
+
+Extend the private `NautyInput`/C-shim boundary with the vertex partition order already computed
+while graph-core ranks generic Rust colors. Validate that this order is a permutation of all
+vertices and is nondecreasing by ranked color. Initialize nauty's `lab` and `ptn` arrays directly
+from that order, then remove `umol_colored_vertex`, its comparison function, and the C-side `qsort`.
+Keep CSR validation, canonical-label, orbit, group-order, and generator behavior unchanged.
+
+Update the sys-crate boundary tests for valid and invalid partition orders and retain graph-core's
+backend-semantic conformance suite. Run formatting, Clippy, sys/core tests, and the workspace check
+before benchmarking so the subitem ends green.
+
+Rerun the identical 69-case S0/S5a Criterion corpus on the same host, compiler, profile, warm-up,
+sample count, and measurement period. Save it under a new named baseline, compare it both with the
+old-binding `base` dataset and the first `vendored-nauty` run, and update doc 143 with the complete
+summary and representative molecule, incidence, stabilizer, and canonical-key latencies. Explicitly
+report whether the four regressions above 10% shrink, persist, or move; do not declare the
+performance gate accepted without a recorded acceptance threshold.
+
 **Stage exit:** the performance gate is accepted; the supported native and Python build matrix is
-green without LLVM/libclang. The core deliverable is complete.
+green without LLVM/libclang; and the duplicate color sort is absent with the remeasurement recorded.
+The core deliverable is complete.
 
 ## S6 — Traces backend (deferrable)
 
@@ -323,7 +350,7 @@ This entire stage is optional and is not needed when S5 shows sparse nauty meets
 
 **Module:** `umol-nauty-sys` vendored sources, build script, C header/shim  
 **Kind:** additive (green)  
-**Dependencies:** [dep: S5a]
+**Dependencies:** [dep: S5c]
 
 Only after a benchmark case justifies it, add the minimal Traces source closure and a separate
 `umol_traces_run` entry point over the same umol-owned CSR/color/result convention. Keep
@@ -346,7 +373,9 @@ separate design decision.
 
 ## Critical path
 
-`S0a/S0b → S1a → S1b → S2a → S2b → S3a → S3b → S4a → S4b → S4c → S4d → S5a/S5b`.
+`S0a/S0b → S1a → S1b → S2a → S2b → S3a → S3b → S4a → S4b → S4c → S4d → S5a → S5c`.
+
+S5b can proceed in parallel after S4d and joins S5c at the S5 stage exit.
 
 S1 and S3 may proceed in parallel after S0 because the native foundation and graph-core vocabulary
 are independent. S4a is the join point. S4b–S4d must land as one stage/green commit series because
@@ -360,4 +389,3 @@ the return-type rename and caller migration are inseparable.
 - A pure-Rust individualization/refinement engine is outside this plan.
 - Further allocation reduction or caching is deferred unless the S5 benchmark comparison identifies
   it as necessary for migration parity.
-

@@ -112,6 +112,7 @@ impl Graph {
             }
             colors[vertex] = rank;
         }
+        let partition = indexed.iter().map(|&(vertex, _)| vertex as u32).collect();
 
         let mut offsets = Vec::with_capacity(node_count + 1);
         let mut neighbors = Vec::with_capacity(2 * self.edge_count());
@@ -121,7 +122,7 @@ impl Graph {
             offsets.push(neighbors.len());
         }
 
-        let input = NautyInput::try_new(node_count, offsets, neighbors, colors)
+        let input = NautyInput::try_new(node_count, offsets, neighbors, colors, partition)
             .expect("Graph produces valid nauty input");
         let output = run_vendored_nauty(&input).expect("vendored nauty succeeds");
         let orbits: Vec<NodeId> = output.orbits.into_iter().map(NodeId).collect();

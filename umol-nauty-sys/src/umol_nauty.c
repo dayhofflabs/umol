@@ -9,26 +9,9 @@
 _Static_assert(sizeof(int) == sizeof(uint32_t), "nauty requires 32-bit int");
 _Static_assert(sizeof(int) == sizeof(int32_t), "nauty exponent must fit int32_t");
 
-typedef struct {
-    uint32_t color;
-    int vertex;
-} umol_colored_vertex;
-
 static TLS_ATTR umol_nauty_generator_fn active_report_generator;
 static TLS_ATTR void *active_callback_context;
 static TLS_ATTR int active_call;
-
-static int compare_colored_vertices(const void *left, const void *right)
-{
-    const umol_colored_vertex *a = left;
-    const umol_colored_vertex *b = right;
-
-    if (a->color < b->color) return -1;
-    if (a->color > b->color) return 1;
-    if (a->vertex < b->vertex) return -1;
-    if (a->vertex > b->vertex) return 1;
-    return 0;
-}
 
 static void report_automorphism(
     int count,
@@ -70,6 +53,7 @@ umol_nauty_error umol_nauty_run(
     const size_t *offsets,
     const uint32_t *neighbors,
     const uint32_t *colors,
+    const uint32_t *partition,
     uint32_t *canonical_labels,
     uint32_t *orbits,
     umol_nauty_generator_fn report_generator,
@@ -81,7 +65,6 @@ umol_nauty_error umol_nauty_run(
     sparsegraph graph;
     sparsegraph canonical_graph;
     statsblk stats = {0};
-    umol_colored_vertex *ordered = NULL;
     int *lab = NULL;
     int *ptn = NULL;
     int *nauty_orbits = NULL;
@@ -98,7 +81,7 @@ umol_nauty_error umol_nauty_run(
     if (vertex_count == 0 || vertex_count > (uint32_t)INT_MAX) {
         return UMOL_NAUTY_INVALID_VERTEX_COUNT;
     }
-    if (offsets == NULL || colors == NULL || canonical_labels == NULL ||
+    if (offsets == NULL || colors == NULL || partition == NULL || canonical_labels == NULL ||
         orbits == NULL || group_mantissa == NULL || group_exponent == NULL) {
         return UMOL_NAUTY_NULL_POINTER;
     }
@@ -113,22 +96,20 @@ umol_nauty_error umol_nauty_run(
     }
 
     n = (int)vertex_count;
-    if ((size_t)n > SIZE_MAX / sizeof(*ordered) ||
-        (size_t)n > SIZE_MAX / sizeof(*lab) ||
+    if ((size_t)n > SIZE_MAX / sizeof(*lab) ||
         (size_t)n > SIZE_MAX / sizeof(*graph.v) ||
         (size_t)n > SIZE_MAX / sizeof(*graph.d)) {
         return UMOL_NAUTY_INTEGER_OVERFLOW;
     }
-    ordered = malloc((size_t)n * sizeof(*ordered));
     lab = malloc((size_t)n * sizeof(*lab));
     ptn = malloc((size_t)n * sizeof(*ptn));
-    nauty_orbits = malloc((size_t)n * sizeof(*nauty_orbits));
+    nauty_orbits = calloc((size_t)n, sizeof(*nauty_orbits));
     graph.v = malloc((size_t)n * sizeof(*graph.v));
     graph.d = malloc((size_t)n * sizeof(*graph.d));
     if (directed_edge_count > 0) {
         graph.e = malloc(directed_edge_count * sizeof(*graph.e));
     }
-    if (ordered == NULL || lab == NULL || ptn == NULL || nauty_orbits == NULL ||
+    if (lab == NULL || ptn == NULL || nauty_orbits == NULL ||
         graph.v == NULL || graph.d == NULL ||
         (directed_edge_count > 0 && graph.e == NULL)) {
         result = UMOL_NAUTY_ALLOCATION_FAILED;
@@ -152,9 +133,6 @@ umol_nauty_error umol_nauty_run(
         }
         graph.v[position] = begin;
         graph.d[position] = (int)(end - begin);
-        ordered[position].color = colors[position];
-        ordered[position].vertex = (int)position;
-
         for (edge_position = begin; edge_position < end; ++edge_position) {
             uint32_t neighbor = neighbors[edge_position];
             if (neighbor >= vertex_count) {
@@ -165,11 +143,26 @@ umol_nauty_error umol_nauty_run(
         }
     }
 
-    qsort(ordered, (size_t)n, sizeof(*ordered), compare_colored_vertices);
     for (position = 0; position < (size_t)n; ++position) {
-        lab[position] = ordered[position].vertex;
+        uint32_t vertex = partition[position];
+        if (vertex >= vertex_count) {
+            result = UMOL_NAUTY_INVALID_PARTITION;
+            goto cleanup;
+        }
+        lab[position] = (int)vertex;
+        if (nauty_orbits[vertex] != 0) {
+            result = UMOL_NAUTY_INVALID_PARTITION;
+            goto cleanup;
+        }
+        nauty_orbits[vertex] = 1;
+        if (position > 0 && colors[partition[position - 1]] > colors[vertex]) {
+            result = UMOL_NAUTY_INVALID_PARTITION;
+            goto cleanup;
+        }
+    }
+    for (position = 0; position < (size_t)n; ++position) {
         ptn[position] = position + 1 < (size_t)n &&
-            ordered[position].color == ordered[position + 1].color;
+            colors[partition[position]] == colors[partition[position + 1]];
     }
 
     options.getcanon = TRUE;
@@ -208,7 +201,6 @@ cleanup:
     active_callback_context = NULL;
     active_report_generator = NULL;
     active_call = 0;
-    free(ordered);
     free(lab);
     free(ptn);
     free(nauty_orbits);

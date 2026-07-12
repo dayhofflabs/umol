@@ -21,7 +21,8 @@ typedef enum {
     UMOL_NAUTY_CANON_GRAPH_MISSING = 9,
     UMOL_NAUTY_ABORTED = 10,
     UMOL_NAUTY_KILLED = 11,
-    UMOL_NAUTY_UNKNOWN_ERROR = 12
+    UMOL_NAUTY_UNKNOWN_ERROR = 12,
+    UMOL_NAUTY_INVALID_PARTITION = 13
 } umol_nauty_error;
 
 /* Called synchronously while umol_nauty_run is active. permutation[v] is the
@@ -37,7 +38,8 @@ typedef void (*umol_nauty_generator_fn)(
  * offsets has vertex_count + 1 entries, starts at zero, and ends at the
  * directed edge count. neighbors contains that many entries. The caller owns
  * every input and output buffer. canonical_labels and orbits each have
- * vertex_count entries. Colors need not be contiguous or pre-sorted.
+ * vertex_count entries. partition is a permutation of the vertices ordered by
+ * nondecreasing color. Colors need not be contiguous.
  *
  * This operation is thread-safe but not reentrant on the same thread. */
 umol_nauty_error umol_nauty_run(
@@ -45,6 +47,7 @@ umol_nauty_error umol_nauty_run(
     const size_t *offsets,
     const uint32_t *neighbors,
     const uint32_t *colors,
+    const uint32_t *partition,
     uint32_t *canonical_labels,
     uint32_t *orbits,
     umol_nauty_generator_fn report_generator,
