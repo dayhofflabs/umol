@@ -7,7 +7,8 @@ use pyo3::prelude::*;
 use crate::{
     aromatic::{
         AromaticSystemAst, AromaticSystemConstraintAst, AromaticSystemConstraintKey,
-        AromaticSystemConstraintsAst, AromaticSystemConstraintsView,
+        AromaticSystemConstraintsAst, AromaticSystemConstraintsView, AromaticSystemView,
+        AromaticSystemViews,
     },
     atom::{AtomAst, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst},
     bond::{
@@ -114,6 +115,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AromaticSystemConstraintKey>()?;
         module.add_class::<AromaticSystemConstraintsAst>()?;
         module.add_class::<AromaticSystemConstraintsView>()?;
+        module.add_class::<AromaticSystemView>()?;
+        module.add_class::<AromaticSystemViews>()?;
         module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;

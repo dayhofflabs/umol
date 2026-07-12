@@ -2,13 +2,14 @@
 
 Status: Active — **B1 · Bond slice DONE incl. the view half** (value + WET constraint surface +
 `BondView`/`BondViews` + molecule-backed constraint views; Rust/Python green, clippy clean).
-**B2 · dative slice COMPLETE**; **B3 · aromatic slice in progress** — S0 (new `ElectronCountsAst`
-leaf, `electrons.rs`), S1a (constraint key+enum), S1b (constraints container), **S1c (value pyclass +
-live constraints view) DONE** (`umol-py/src/aromatic.rs`; 7 aromatic pyclasses registered; 281 Rust
-unit + 266 pytest green), **S2 (`from_parts` `aromatic=[]` kwarg) DONE**. Next: **S3** —
-`AromaticSystemView`/`AromaticSystemViews` + `mol.aromatic_systems` + re-add the Molecule constraint
-backing + `tests/test_aromatic.py`. See *B3 · Aromatic — staged impl plan* below and *Bond slice —
-build state + detailed plan* at the end for the WET template.
+**B2 · dative slice COMPLETE**; **B3 · aromatic slice COMPLETE** (`umol-py/src/aromatic.rs` +
+`electrons.rs`: value + WET constraint surface + `AromaticSystemView`/`AromaticSystemViews` +
+molecule-backed constraint views; `mol.aromatic_systems` accessor; `from_parts` `aromatic=[]` kwarg;
+new `ElectronCountsAst` leaf shared by B4; 9 aromatic pyclasses registered; 296 Rust unit + 299 pytest
+green, clippy/fmt clean). Next per the order **bonds → dative → aromatic → multicenter → …**:
+**B4 · multicenter-bond slice** — structurally byte-for-byte identical to aromatic, reusing S0's
+`electrons.rs` leaf. See *B3 · Aromatic — staged impl plan* below and *Bond slice — build state +
+detailed plan* at the end for the WET template.
 Date: 2026-07-09
 Relates: 137 (atom slice — the template being mirrored), 139 (mutability/hashing/equality
 balance), 114 (interning — where stereo/handle-identity deferrals live)
@@ -367,9 +368,16 @@ reuses it (no lopsided dep).
   1 refuted. `[dep: S3a]`
 - **~~S3c~~ — absorbed into S3a** (the Molecule backing arm must land with its constructor,
   `AromaticSystemView`). `[dep: S1c, S3a]`
-- **S3d** *(additive)* — `AromaticSystemViews::new` + `mol.aromatic_systems` accessor (`molecule.rs`) +
-  register `AromaticSystemView`/`AromaticSystemViews` (`lib.rs` + `__init__.py`) + `tests/test_aromatic.py`;
-  maturin rebuild + pytest. `[dep: S3a, S3b]`
+- **S3d — DONE** *(additive)* — `AromaticSystemViews::new` + `mol.aromatic_systems` accessor
+  (`molecule.rs`) + registered `AromaticSystemView`/`AromaticSystemViews` (`lib.rs` + `__init__.py`) +
+  `tests/test_aromatic.py` (33 pytest); maturin rebuilt. 296 Rust unit + 299 pytest green, clippy/fmt
+  clean. Verification workflow confirmed 2 low test-coverage findings (missing `__delitem__`-absent-key
+  KeyError test; `test_..._new` dropped the empty-default-constraints assertion) — both fixed; 5
+  refuted. `[dep: S3a, S3b]`
+
+**B3 · aromatic slice COMPLETE** — value + WET constraint surface + `AromaticSystemView`/`Views` +
+`mol.aromatic_systems` + the new `ElectronCountsAst` leaf (`electrons.rs`, shared by B4); 9 aromatic
+pyclasses registered; 296 Rust unit + 299 pytest green.
 
 Critical path: **S0 → S1 → S2 → S3** (linear). No deferrable stages; no red stages (fully additive).
 B4 (multicenter) reuses S0's `electrons.rs` verbatim and is otherwise byte-for-byte this plan.

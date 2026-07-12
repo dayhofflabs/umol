@@ -421,6 +421,13 @@ impl AromaticSystemViews {
     }
 }
 
+impl AromaticSystemViews {
+    /// Build the aromatic-system-views handle for `owner` (the `.aromatic_systems` accessor).
+    pub(crate) fn new(owner: Py<MoleculeAst>) -> AromaticSystemViews {
+        AromaticSystemViews { owner }
+    }
+}
+
 #[pyclass]
 struct AromaticSystemViewIter {
     owner: Py<MoleculeAst>,

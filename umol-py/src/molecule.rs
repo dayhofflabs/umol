@@ -6,7 +6,7 @@ use umol_ast::ast::{
     AtomId as AstAtomId, MoleculeAst as AstMoleculeAst, MoleculeParts as AstMoleculeParts,
 };
 
-use crate::aromatic::AromaticSystemAst;
+use crate::aromatic::{AromaticSystemAst, AromaticSystemViews};
 use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
 use crate::dative::{DativeBondAst, DativeBondViews};
@@ -96,6 +96,12 @@ impl MoleculeAst {
     #[getter]
     fn dative_bonds(slf: Py<Self>) -> DativeBondViews {
         DativeBondViews::new(slf)
+    }
+
+    /// The aromatic systems, indexed by integer position.
+    #[getter]
+    fn aromatic_systems(slf: Py<Self>) -> AromaticSystemViews {
+        AromaticSystemViews::new(slf)
     }
 
     fn __repr__(&self) -> String {
