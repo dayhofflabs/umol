@@ -94,44 +94,29 @@ green.
 **Stage exit:** the exhaustive oracle and shared fixtures are trusted independently of production
 enumeration; the workspace remains green.
 
-## S1 — Correspondence-aware matching transport
+## S1 — Matching result representation finding
 
-### S1a — Add fallible matching transport through `GraphCorrespondence`
+### S1a — Dropped: correspondence-aware matching transport
 
-**Module:** `umol-graph-core/src/algorithms/matching.rs`,
-`umol-graph-core/src/correspondence.rs`, and `umol-graph-core/src/lib.rs`
+The proposed `Matching::transport`/`GraphCorrespondence::map_matching` API addressed a different
+problem from discussion 145 point iii. Point iii asks whether matching algorithms reinvent a result
+carrier that should instead reuse graph-core's existing correspondence or relation structures. The
+proposed operation would preserve the existing `Matching` carrier and map one matching between two
+graphs; that is useful only for a later extracted/deleted-subgraph workflow and does not answer the
+representation question.
 
-**Kind:** additive API (green)
+Do not add a matching-transport API or transport-specific error type in Experiment A. If a later
+vertex-deletion implementation needs to map selected edges back to a parent graph, design that API
+from the concrete workflow rather than pre-emptively.
 
-**Dependencies:** [dep: S0a]
+The representation question remains a separate localized audit: compare the existing specialized
+`Matching` (selected `EdgeId`s plus mate lookup) with `Correspondence` and graph-core relation
+carriers. A general-graph matching pairs vertices within one id space, whereas `Correspondence`
+relates two id spaces; parallel-edge identity and matching-specific symmetry/disjointness invariants
+must be included in that comparison. Do not change the public result type during Experiment A's
+correctness work.
 
-Add a small graph-core transport API with an explicit error type. A `Matching` on the
-correspondence's left graph can be transported to the right graph only when:
-
-- every matched left edge has a right edge mate;
-- both endpoints have node mates consistent with that edge mate;
-- transported edges remain pairwise vertex-disjoint;
-- graph/count/id bounds agree.
-
-The result is a right-side `Matching` whose mate vector spans the right graph; right-only vertices
-remain exposed. Return specific errors for exposed matched edges/nodes, inconsistent endpoint/edge
-images, and a non-matching image. Do not silently drop entities and do not reinterpret `Matching` as
-a `Correspondence<NodeId>`.
-
-Prefer an inherent operation such as
-`Matching::transport(&GraphCorrespondence, left: &Graph, right: &Graph)` so matching semantics and
-construction invariants remain owned by `Matching`. Re-export only the error type needed by callers.
-
-Tests cover total isomorphism, induced-subgraph→host transport, right-only exposed vertices,
-relabeling, each error variant, and round-trip transport through a total correspondence and its
-reverse. Normalize every edited correspondence/matching test to the test-writing conventions and
-keep tests parallel to definition order.
-
-**Verification:** focused matching/correspondence tests, `cargo test -p umol-graph-core`, and Clippy
-with warnings denied.
-
-**Stage exit:** matching results can cross extraction correspondences without manual id vectors;
-there is no behavior change to enumeration.
+**Stage exit:** S1a is intentionally dropped; no code or public API is added.
 
 ## S2 — Exact extension oracle and correct eager enumeration
 
@@ -141,7 +126,7 @@ there is no behavior change to enumeration.
 
 **Kind:** additive internal primitive (green)
 
-**Dependencies:** [dep: S0a, S1a]
+**Dependencies:** [dep: S0a]
 
 Introduce one internal state representation for binary partition search: included edges, excluded
 edges, covered vertices, and included cardinality. Centralize include/undo and exclude/undo operations
@@ -439,7 +424,7 @@ tests, workspace check, Clippy with warnings denied, formatting, and `git diff -
 
 ## Critical path
 
-`S0a → S1a → S2a → S2b → S2c → S3a → S3b → S3c → S4c → S5a → S5b → S6a`, with
+`S0a → S2a → S2b → S2c → S3a → S3b → S3c → S4c → S5a → S5b → S6a`, with
 `S0a → S0b → S4a → S4b → S4c` as the independent counting branch joining at S4c.
 
 S0b may proceed in parallel with S1/S2 after S0a. S4a/S4b may proceed in parallel with S2/S3 once

@@ -3,6 +3,7 @@
 use std::collections::VecDeque;
 
 use crate::algorithms::coloring::BipartitionAlgorithm;
+use crate::correspondence::{Correspondence, GraphCorrespondence};
 use crate::graph::{EdgeId, Graph, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -530,15 +531,152 @@ fn build_mate(graph: &Graph, included: &[bool]) -> Vec<i32> {
     mate
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MatchingSearchState<'a> {
+    graph: &'a Graph,
+    included: Vec<bool>,
+    excluded: Vec<bool>,
+    covered: Vec<bool>,
+    included_size: usize,
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Debug)]
+struct IncludeUndo {
+    edge: EdgeId,
+    newly_excluded: Vec<EdgeId>,
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Debug)]
+struct ExcludeUndo {
+    edge: EdgeId,
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+impl<'a> MatchingSearchState<'a> {
+    fn new(graph: &'a Graph) -> Self {
+        Self {
+            graph,
+            included: vec![false; graph.edge_bound()],
+            excluded: vec![false; graph.edge_bound()],
+            covered: vec![false; graph.node_bound()],
+            included_size: 0,
+        }
+    }
+
+    fn include(&mut self, edge: EdgeId) -> IncludeUndo {
+        assert!(!self.included[edge.index()], "edge is already included");
+        assert!(!self.excluded[edge.index()], "edge is already excluded");
+        let [first, second] = self.graph.edge_endpoints(edge);
+        assert!(
+            !self.covered[first.index()] && !self.covered[second.index()],
+            "included edges must be vertex-disjoint",
+        );
+
+        self.included[edge.index()] = true;
+        self.covered[first.index()] = true;
+        self.covered[second.index()] = true;
+        self.included_size += 1;
+
+        let mut newly_excluded = Vec::new();
+        for neighbor in self
+            .graph
+            .neighbors(first)
+            .iter()
+            .chain(self.graph.neighbors(second))
+        {
+            let adjacent = neighbor.edge;
+            if adjacent != edge
+                && !self.included[adjacent.index()]
+                && !self.excluded[adjacent.index()]
+            {
+                self.excluded[adjacent.index()] = true;
+                newly_excluded.push(adjacent);
+            }
+        }
+        newly_excluded.sort_unstable();
+        newly_excluded.dedup();
+
+        IncludeUndo {
+            edge,
+            newly_excluded,
+        }
+    }
+
+    fn undo_include(&mut self, undo: IncludeUndo) {
+        let [first, second] = self.graph.edge_endpoints(undo.edge);
+        self.included[undo.edge.index()] = false;
+        self.covered[first.index()] = false;
+        self.covered[second.index()] = false;
+        self.included_size -= 1;
+        for edge in undo.newly_excluded {
+            self.excluded[edge.index()] = false;
+        }
+    }
+
+    fn exclude(&mut self, edge: EdgeId) -> ExcludeUndo {
+        assert!(
+            !self.included[edge.index()],
+            "included edge cannot be excluded"
+        );
+        assert!(!self.excluded[edge.index()], "edge is already excluded");
+        self.excluded[edge.index()] = true;
+        ExcludeUndo { edge }
+    }
+
+    fn undo_exclude(&mut self, undo: ExcludeUndo) {
+        self.excluded[undo.edge.index()] = false;
+    }
+
+    fn residual_graph(&self) -> (Graph, GraphCorrespondence) {
+        let mut original_to_residual = vec![None; self.graph.node_bound()];
+        let mut node_mates = Vec::new();
+        for original in self.graph.node_ids() {
+            if !self.covered[original.index()] {
+                let residual = NodeId(node_mates.len() as u32);
+                original_to_residual[original.index()] = Some(residual);
+                node_mates.push((residual, original));
+            }
+        }
+
+        let mut residual_edges = Vec::new();
+        let mut edge_mates = Vec::new();
+        for original_edge in self.graph.edge_ids() {
+            if self.excluded[original_edge.index()] {
+                continue;
+            }
+            let [first, second] = self.graph.edge_endpoints(original_edge);
+            let (Some(residual_first), Some(residual_second)) = (
+                original_to_residual[first.index()],
+                original_to_residual[second.index()],
+            ) else {
+                continue;
+            };
+            let residual_edge = EdgeId(residual_edges.len() as u32);
+            residual_edges.push([residual_first.0, residual_second.0]);
+            edge_mates.push((residual_edge, original_edge));
+        }
+
+        let residual = Graph::new(node_mates.len(), &residual_edges);
+        let correspondence = GraphCorrespondence::new(
+            Correspondence::new(node_mates, residual.node_count(), self.graph.node_count()),
+            Correspondence::new(edge_mates, residual.edge_count(), self.graph.edge_count()),
+        );
+        (residual, correspondence)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::Matching;
     use super::MatchingEnumerationAlgorithm::BranchAndBound;
     use super::MaxMatchingAlgorithm::{Edmonds, HopcroftKarp};
     use super::PerfectMatchingAlgorithm::BacktrackingDfs;
+    use super::{Matching, MatchingSearchState};
     use crate::graph::{EdgeId, Graph, NodeId};
 
     #[rstest]
@@ -893,6 +1031,182 @@ mod tests {
             exhaustive_maximum_matchings(&graph)[0].len(),
             expected_maximum
         );
+    }
+
+    #[rstest]
+    fn test_matching_search_state_include() {
+        let graph = Graph::new(4, &[[0, 1], [1, 2], [2, 3], [0, 3]]);
+        let mut state = MatchingSearchState::new(&graph);
+        let initial = state.clone();
+
+        let undo = state.include(EdgeId(1));
+        assert_eq!(state.included, vec![false, true, false, false]);
+        assert_eq!(state.excluded, vec![true, false, true, false]);
+        assert_eq!(state.covered, vec![false, true, true, false]);
+        assert_eq!(state.included_size, 1);
+
+        state.undo_include(undo);
+        assert_eq!(state, initial);
+    }
+
+    #[rstest]
+    fn test_matching_search_state_exclude() {
+        let graph = Graph::new(3, &[[0, 1], [1, 2]]);
+        let mut state = MatchingSearchState::new(&graph);
+        let initial = state.clone();
+
+        let undo = state.exclude(EdgeId(1));
+        assert_eq!(state.included, vec![false, false]);
+        assert_eq!(state.excluded, vec![false, true]);
+        assert_eq!(state.covered, vec![false, false, false]);
+        assert_eq!(state.included_size, 0);
+
+        state.undo_exclude(undo);
+        assert_eq!(state, initial);
+    }
+
+    #[rstest]
+    fn test_matching_search_state_residual_graph() {
+        let graph = Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [2, 5]]);
+        let mut state = MatchingSearchState::new(&graph);
+        state.include(EdgeId(0));
+        state.exclude(EdgeId(3));
+
+        let (residual, correspondence) = state.residual_graph();
+
+        assert_eq!(residual, Graph::new(4, &[[0, 1], [2, 3], [0, 3]]));
+        assert_eq!(
+            correspondence.nodes().mates(),
+            &[
+                (NodeId(0), NodeId(2)),
+                (NodeId(1), NodeId(3)),
+                (NodeId(2), NodeId(4)),
+                (NodeId(3), NodeId(5)),
+            ]
+        );
+        assert_eq!(
+            correspondence.edges().mates(),
+            &[
+                (EdgeId(0), EdgeId(2)),
+                (EdgeId(1), EdgeId(4)),
+                (EdgeId(2), EdgeId(5)),
+            ]
+        );
+        assert_eq!(
+            correspondence.nodes().right_exposed(),
+            vec![NodeId(0), NodeId(1)]
+        );
+        assert_eq!(
+            correspondence.edges().right_exposed(),
+            vec![EdgeId(0), EdgeId(1), EdgeId(3)]
+        );
+    }
+
+    #[rstest]
+    fn test_matching_search_state_residual_graph_exhaustive() {
+        let potential_edges = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
+
+        for graph_mask in 0_usize..(1 << potential_edges.len()) {
+            let edges: Vec<_> = potential_edges
+                .iter()
+                .enumerate()
+                .filter_map(|(index, &edge)| (graph_mask & (1 << index) != 0).then_some(edge))
+                .collect();
+            let graph = Graph::new(4, &edges);
+            let state_count = 3_usize.pow(graph.edge_count() as u32);
+
+            for encoded_state in 0..state_count {
+                let mut state = MatchingSearchState::new(&graph);
+                let mut encoding = encoded_state;
+                let mut valid = true;
+                for edge in graph.edge_ids() {
+                    match encoding % 3 {
+                        1 => {
+                            let [first, second] = graph.edge_endpoints(edge);
+                            if state.covered[first.index()] || state.covered[second.index()] {
+                                valid = false;
+                                break;
+                            }
+                            state.included[edge.index()] = true;
+                            state.covered[first.index()] = true;
+                            state.covered[second.index()] = true;
+                            state.included_size += 1;
+                        }
+                        2 => state.excluded[edge.index()] = true,
+                        _ => {}
+                    }
+                    encoding /= 3;
+                }
+                if !valid {
+                    continue;
+                }
+                for edge in graph.edge_ids() {
+                    if state.included[edge.index()] {
+                        continue;
+                    }
+                    let [first, second] = graph.edge_endpoints(edge);
+                    if (state.covered[first.index()] || state.covered[second.index()])
+                        && !state.excluded[edge.index()]
+                    {
+                        valid = false;
+                        break;
+                    }
+                }
+                if !valid {
+                    continue;
+                }
+
+                let expected_nodes: Vec<_> = graph
+                    .node_ids()
+                    .filter(|node| !state.covered[node.index()])
+                    .collect();
+                let mut original_to_residual = vec![None; graph.node_count()];
+                for (index, &original) in expected_nodes.iter().enumerate() {
+                    original_to_residual[original.index()] = Some(NodeId(index as u32));
+                }
+                let expected_edges: Vec<_> = graph
+                    .edge_ids()
+                    .filter(|edge| {
+                        let [first, second] = graph.edge_endpoints(*edge);
+                        !state.excluded[edge.index()]
+                            && !state.covered[first.index()]
+                            && !state.covered[second.index()]
+                    })
+                    .collect();
+                let expected_endpoints: Vec<_> = expected_edges
+                    .iter()
+                    .map(|&edge| {
+                        let [first, second] = graph.edge_endpoints(edge);
+                        [
+                            original_to_residual[first.index()].unwrap().0,
+                            original_to_residual[second.index()].unwrap().0,
+                        ]
+                    })
+                    .collect();
+
+                let (residual, correspondence) = state.residual_graph();
+                assert_eq!(
+                    residual,
+                    Graph::new(expected_nodes.len(), &expected_endpoints)
+                );
+                assert_eq!(
+                    correspondence.nodes().mates(),
+                    expected_nodes
+                        .iter()
+                        .enumerate()
+                        .map(|(index, &original)| (NodeId(index as u32), original))
+                        .collect::<Vec<_>>()
+                );
+                assert_eq!(
+                    correspondence.edges().mates(),
+                    expected_edges
+                        .iter()
+                        .enumerate()
+                        .map(|(index, &original)| (EdgeId(index as u32), original))
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
     }
 
     fn assert_matching_valid(graph: &Graph, matching: &Matching) {
