@@ -20,6 +20,7 @@ use crate::{
         DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst,
         DativeBondConstraintsView, DativeBondRingSizeCounts, DativeBondView, DativeBondViews,
     },
+    electrons::ElectronCountsAst,
     element::Element,
     error::ParseError,
     molecule::MoleculeAst,
@@ -42,6 +43,8 @@ mod constraint;
 mod convert;
 #[cfg(feature = "graph")]
 mod dative;
+#[cfg(feature = "graph")]
+mod electrons;
 #[cfg(feature = "graph")]
 mod element;
 #[cfg(feature = "graph")]
@@ -99,6 +102,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<DativeBondRingSizeCounts>()?;
         module.add_class::<DativeBondView>()?;
         module.add_class::<DativeBondViews>()?;
+        module.add_class::<ElectronCountsAst>()?;
         module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;

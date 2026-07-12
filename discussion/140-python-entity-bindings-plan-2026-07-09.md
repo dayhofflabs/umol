@@ -264,8 +264,76 @@ Critical path: S0a → S0b → S1a → S1b → S1c (S0c parallel to S0b; S0d gat
   `charge`/`spin`; `constraints`. Collection `mol.aromatic_systems`: id-indexed +
   `incident` / `induced`.
 - Design calls: `electrons` is a **positional** `list[int]` aligned to an **unordered**
-  participant set — how each count pairs with its atom in Python (a list aligned to
-  `atom_ids`, or a `{atom: count}` mapping). This is the central aromatic/multicenter call.
+  participant set — how each count pairs with its atom in Python. **Resolved (2026-07-11):
+  positional list leaf** — `ElectronCountsAst { Undetermined() \| Lit(list[int]) }` is a 1:1
+  mirror of the AST enum (the `ValueAst` leaf pattern), and `electrons` is a `list[int]`
+  positionally aligned to `atom_ids` (index i ↔ i-th atom in the participant set). No
+  `{atom: count}` mapping. Shared verbatim by B4 (multicenter).
+
+#### B3 · Aromatic — staged impl plan (settled 2026-07-11)
+
+Mirrors the completed dative slice, adapted to aromatic specifics. **All-additive** — the breaking
+`from_atoms_and_bonds` → `from_parts` rename (dative's S1b) already landed, so adding an `aromatic`
+kwarg is additive; the tree stays green after **every** subitem (no red anywhere). Deltas vs dative:
+(1) a **new foundation leaf** `ElectronCountsAst`/`ElectronCountsArg` in its own `electrons.rs`, shared
+verbatim by B4; (2) the constraint surface is **simpler** — one key `ElectronCount`, so **no** ring
+proxy / `RingSizeCounts` / `ring_count` / `ring_size_count`; (3) participants are a **single unordered
+atom set** → the view exposes `atom_ids` only (no acceptor/donor), collection lookups are
+`connecting(atoms)` + `incident(atom)`; (4) value fields are `electrons`/`charge`/`spin`/`constraints`
+(bond-shaped, `electrons` replaces `order`); (5) `from_parts` gains `aromatic=[]` — **new** (S1b wired
+only `dative`). Naming: the value `electrons` (per-atom `ElectronCountsAst` vector) is distinct from the
+constraint `electron_count` (total-π `ValueAst`) — both exist, no clash.
+
+**S0 — new leaf `ElectronCountsAst` (`umol-py/src/electrons.rs`).** Foundation; own module because B4
+reuses it (no lopsided dep).
+- **S0a** *(additive)* — `ElectronCountsAst` pyclass enum `{ Undetermined(), Lit(Vec<i64>) }`:
+  `from_ast`/`to_ast`, `__eq__`/`__hash__`/`__repr__`, `as_lit() -> Option<list[int]>`. New module;
+  register in `lib.rs` + `__init__.py`; Rust unit tests. `[dep: none]`
+- **S0b** *(additive)* — `ElectronCountsArg` (`FromPyObject` enum `{ Ast(Py<ElectronCountsAst>),
+  Lit(Vec<i64>) }`) + `to_ast(py)`, mirroring `ValueArg`; a bare `list[int]` coerces to `Lit`.
+  `[dep: S0a]`
+
+**S1 — value + WET constraint surface (`umol-py/src/aromatic.rs`).**
+- **S1a** *(additive)* — `AromaticSystemConstraintKey { ElectronCount() }` +
+  `AromaticSystemConstraintAst { ElectronCount(Py<ValueAst>) }`: `key`/`from_ast`/`to_ast`/`__eq__`/
+  `__hash__`/`__repr__`. One key only — no `RingScope`/`RingMembership`. `[dep: ValueAst leaf]`
+- **S1b** *(additive)* — `AromaticSystemConstraintsAst` container: the uniform mapping API
+  (`new`/`set`/`pop`/`update`/`__len__`/`__iter__`/`keys`/`values`/`items`/`get`/`__getitem__`/
+  `__delitem__`/`__contains__`) + `electron_count` getter/setter + `asdict` (`{"electron_count"}`) +
+  `AromaticSystemConstraintsUpdate`/`Arg` + the 3 iterators + `aromatic_system_constraints_asdict`.
+  **No** ring proxy / `RingSizeCounts` / `RingSizeBacking`. `[dep: S1a]`
+- **S1c** *(additive)* — `AromaticSystemAst` value pyclass: `new(electrons: ElectronCountsArg, *,
+  charge=None, spin=None, constraints=None)`, `parse`/`__str__`/`__repr__`, getters/setters
+  `electrons`(→`ElectronCountsArg`)/`charge`(→`ValueArg`)/`spin`(→`SpinStateAst`)/`constraints`,
+  `asdict` (`{electrons, charge, spin, constraints}`), `inner`/`inner_mut`/`from_inner`; plus
+  `AromaticSystemConstraintsView` (live handle) + `AromaticSystemConstraintsBacking {
+  AromaticSystem(Py<AromaticSystemAst>) }` — **Molecule arm deferred to S3** (dative lesson: its only
+  constructor is `AromaticSystemView`, so at S1 it would be an unconstructed variant). Register value +
+  constraint pyclasses (`lib.rs` + `__init__.py`); Rust unit tests. `[dep: S0, S1a, S1b]`
+
+**S2 — `from_parts` wiring (`umol-py/src/molecule.rs`).**
+- **S2a** *(additive)* — add `aromatic=Vec::new()` kwarg to `from_parts` (`(atoms, *, bonds=[],
+  dative=[], aromatic=[])`), wire to `MoleculeParts.aromatic` (Python entry `(list[int],
+  AromaticSystemAst)` → `(Vec<AtomId>, AromaticSystemAst)`). Additive kwarg — **no** Python test-site
+  migration (unlike dative's rename). Rust unit test asserting via `inner().aromatic_systems()`
+  (no `mol.aromatic_systems` Python accessor until S3, so no Python observable yet). `[dep: S1c]`
+
+**S3 — views (`umol-py/src/aromatic.rs` + `molecule.rs`).**
+- **S3a** *(additive)* — `AromaticSystemView`: `id`, read-only `atom_ids -> tuple` (member set),
+  settable `electrons`/`charge`/`spin`/`constraints`, `asdict` (`{electrons, charge, spin,
+  constraints}`). `[dep: S1c]`
+- **S3b** *(additive)* — `resolve_aromatic_system_index` (mirrors `resolve_bond_index`) +
+  `AromaticSystemViews` (`mol.aromatic_systems`: `__len__`/`__getitem__`/`__setitem__` value-replace/
+  `__iter__` + `connecting(atoms)` + `incident(atom)`) + `AromaticSystemViewIter`. `[dep: S3a]`
+- **S3c** *(additive)* — re-add the `Molecule` backing arm to `AromaticSystemConstraintsBacking`
+  (read/with_mut Molecule arms) — `AromaticSystemView::constraints` constructs it — + the
+  molecule-backed constraint-view unit test. `[dep: S1c, S3a]`
+- **S3d** *(additive)* — `mol.aromatic_systems` accessor (`molecule.rs`) + register
+  `AromaticSystemView`/`AromaticSystemViews` (`lib.rs` + `__init__.py`) + `tests/test_aromatic.py`;
+  maturin rebuild + pytest. `[dep: S3a, S3b, S3c]`
+
+Critical path: **S0 → S1 → S2 → S3** (linear). No deferrable stages; no red stages (fully additive).
+B4 (multicenter) reuses S0's `electrons.rs` verbatim and is otherwise byte-for-byte this plan.
 
 ### B4 · Multicenter bond
 
