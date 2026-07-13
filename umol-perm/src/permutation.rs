@@ -18,27 +18,27 @@ pub(crate) const MAX_DEGREE: usize = 6;
 /// A permutation of `0..degree` (`degree <= MAX_DEGREE`) in one-line notation.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct Permutation {
-    image: [u8; MAX_DEGREE],
-    degree: u8,
+    image: [u32; MAX_DEGREE],
+    degree: u32,
 }
 
 impl Permutation {
     /// The identity permutation of the given degree.
     pub fn identity(degree: usize) -> Self {
         assert!(degree <= MAX_DEGREE);
-        let mut image = [0u8; MAX_DEGREE];
+        let mut image = [0u32; MAX_DEGREE];
         for (i, target) in image.iter_mut().enumerate() {
-            *target = i as u8;
+            *target = i as u32;
         }
         Self {
             image,
-            degree: degree as u8,
+            degree: degree as u32,
         }
     }
 
     /// Build from a one-line image; panics unless `image` is a bijection of
     /// `0..degree`.
-    pub fn from_image(degree: usize, image: &[u8]) -> Self {
+    pub fn from_image(degree: usize, image: &[u32]) -> Self {
         assert!(degree <= MAX_DEGREE);
         assert_eq!(image.len(), degree);
         let mut seen = [false; MAX_DEGREE];
@@ -48,13 +48,13 @@ impl Permutation {
             assert!(!seen[x], "image is not a bijection");
             seen[x] = true;
         }
-        let mut full = [0u8; MAX_DEGREE];
+        let mut full = [0u32; MAX_DEGREE];
         for (i, target) in full.iter_mut().enumerate() {
-            *target = if i < degree { image[i] } else { i as u8 };
+            *target = if i < degree { image[i] } else { i as u32 };
         }
         Self {
             image: full,
-            degree: degree as u8,
+            degree: degree as u32,
         }
     }
 
@@ -82,7 +82,7 @@ impl Permutation {
     /// degree mismatch.
     pub fn compose(self, other: Self) -> Self {
         assert_eq!(self.degree, other.degree);
-        let mut image = [0u8; MAX_DEGREE];
+        let mut image = [0u32; MAX_DEGREE];
         for (i, target) in image.iter_mut().enumerate() {
             *target = self.image[other.image[i] as usize];
         }
@@ -94,9 +94,9 @@ impl Permutation {
 
     /// σ⁻¹.
     pub fn inverse(self) -> Self {
-        let mut image = [0u8; MAX_DEGREE];
+        let mut image = [0u32; MAX_DEGREE];
         for i in 0..MAX_DEGREE {
-            image[self.image[i] as usize] = i as u8;
+            image[self.image[i] as usize] = i as u32;
         }
         Self {
             image,
@@ -127,13 +127,13 @@ impl Permutation {
     pub fn between<T: Eq>(from: &[T], to: &[T]) -> Self {
         assert_eq!(from.len(), to.len());
         let degree = from.len();
-        let mut image = vec![0u8; degree];
+        let mut image = vec![0u32; degree];
         for (i, target) in to.iter().enumerate() {
             let pos = from
                 .iter()
                 .position(|source| source == target)
                 .expect("between: slices are not orderings of the same set");
-            image[i] = pos as u8;
+            image[i] = pos as u32;
         }
         Self::from_image(degree, &image)
     }
@@ -162,8 +162,8 @@ impl Permutation {
         assert!(degree <= MAX_DEGREE);
         let mut factorial: usize = (1..=degree).product();
         assert!(rank < factorial, "rank out of range");
-        let mut available: Vec<u8> = (0..degree as u8).collect();
-        let mut image = vec![0u8; degree];
+        let mut available: Vec<u32> = (0..degree as u32).collect();
+        let mut image = vec![0u32; degree];
         for target in image.iter_mut() {
             factorial /= available.len();
             let idx = rank / factorial;
@@ -178,12 +178,12 @@ impl Permutation {
     /// form a bijection of `0..degree`.
     pub fn from_cycles(degree: usize, cycles: &[Vec<usize>]) -> Self {
         assert!(degree <= MAX_DEGREE);
-        let mut image: Vec<u8> = (0..degree as u8).collect();
+        let mut image: Vec<u32> = (0..degree as u32).collect();
         for cycle in cycles {
             let len = cycle.len();
             for (w, &point) in cycle.iter().enumerate() {
                 assert!(point < degree, "cycle point out of range");
-                image[point] = cycle[(w + 1) % len] as u8;
+                image[point] = cycle[(w + 1) % len] as u32;
             }
         }
         Self::from_image(degree, &image)
@@ -261,7 +261,7 @@ mod tests {
     #[case::duplicate(vec![0, 1, 1])]
     #[case::out_of_range(vec![0, 1, 3])]
     #[should_panic]
-    fn test_permutation_from_image_error(#[case] image: Vec<u8>) {
+    fn test_permutation_from_image_error(#[case] image: Vec<u32>) {
         Permutation::from_image(image.len(), &image);
     }
 

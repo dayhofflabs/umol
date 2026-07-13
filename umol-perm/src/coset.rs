@@ -241,13 +241,13 @@ fn trigonal_bipyramidal_reps() -> Vec<Permutation> {
     ];
     AXES.iter()
         .map(|&(from, towards, anticlockwise)| {
-            let mut image = [0u8; 5];
+            let mut image = [0u32; 5];
             image[from as usize] = 0;
             image[towards as usize] = 4;
             let plane: Vec<u8> = (0..5u8).filter(|&l| l != from && l != towards).collect();
             let vertices: [u8; 3] = if anticlockwise { [1, 2, 3] } else { [3, 2, 1] };
             for (&label, &vertex) in plane.iter().zip(vertices.iter()) {
-                image[label as usize] = vertex;
+                image[label as usize] = u32::from(vertex);
             }
             Permutation::from_image(5, &image)
         })
@@ -303,11 +303,11 @@ fn octahedral_reps() -> Vec<Permutation> {
     ARRANGEMENTS
         .iter()
         .map(|&(towards, equatorial)| {
-            let mut image = [0u8; 6];
+            let mut image = [0u32; 6];
             image[towards as usize] = 5;
             let plane: Vec<u8> = (0..6u8).filter(|&l| l != 0 && l != towards).collect();
             for (&label, &vertex) in plane.iter().zip(equatorial.iter()) {
-                image[label as usize] = vertex;
+                image[label as usize] = u32::from(vertex);
             }
             Permutation::from_image(6, &image)
         })
@@ -376,7 +376,7 @@ mod tests {
     #[case::u_shape([0, 1, 2, 3], 0)]
     #[case::four_shape([1, 3, 0, 2], 1)]
     #[case::z_shape([1, 2, 0, 3], 2)]
-    fn test_coset_space_index_square_planar(#[case] image: [u8; 4], #[case] expected: u32) {
+    fn test_coset_space_index_square_planar(#[case] image: [u32; 4], #[case] expected: u32) {
         let space = CosetSpace::new(
             PermutationGroup::symmetric(4),
             PermutationGroup::dihedral(4),

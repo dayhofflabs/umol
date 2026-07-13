@@ -614,10 +614,10 @@ impl Namespace for ReactionNamespace {
             .or_else(|| self.lhs.find_stereo_bond_by_keyword(keyword))
     }
 
-    fn find_bond_by_participants(&self, a: AtomId, b: AtomId) -> Option<BondId> {
+    fn find_bond_by_participants(&self, first: AtomId, second: AtomId) -> Option<BondId> {
         self.deltas
-            .find_bond_by_participants(a, b)
-            .or_else(|| self.lhs.find_bond_by_participants(a, b))
+            .find_bond_by_participants(first, second)
+            .or_else(|| self.lhs.find_bond_by_participants(first, second))
     }
     fn find_dative_bond_by_participants(
         &self,
@@ -640,12 +640,15 @@ impl Namespace for ReactionNamespace {
     }
     fn find_noncovalent_bond_by_participants(
         &self,
-        a: AtomId,
-        b: AtomId,
+        first: AtomId,
+        second: AtomId,
     ) -> Option<NoncovalentBondId> {
         self.deltas
-            .find_noncovalent_bond_by_participants(a, b)
-            .or_else(|| self.lhs.find_noncovalent_bond_by_participants(a, b))
+            .find_noncovalent_bond_by_participants(first, second)
+            .or_else(|| {
+                self.lhs
+                    .find_noncovalent_bond_by_participants(first, second)
+            })
     }
     fn find_stereo_atom_by_participants(
         &self,

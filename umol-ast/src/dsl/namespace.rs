@@ -70,7 +70,7 @@ pub trait Namespace {
     fn find_stereo_atom_by_keyword(&self, keyword: &str) -> Option<StereoAtomId>;
     fn find_stereo_bond_by_keyword(&self, keyword: &str) -> Option<StereoBondId>;
 
-    fn find_bond_by_participants(&self, a: AtomId, b: AtomId) -> Option<BondId>;
+    fn find_bond_by_participants(&self, first: AtomId, second: AtomId) -> Option<BondId>;
     fn find_dative_bond_by_participants(
         &self,
         donors: &[AtomId],
@@ -80,8 +80,8 @@ pub trait Namespace {
     fn find_multicenter_bond_by_participants(&self, atoms: &[AtomId]) -> Option<MulticenterBondId>;
     fn find_noncovalent_bond_by_participants(
         &self,
-        a: AtomId,
-        b: AtomId,
+        first: AtomId,
+        second: AtomId,
     ) -> Option<NoncovalentBondId>;
     fn find_stereo_atom_by_participants(
         &self,
@@ -336,8 +336,13 @@ impl MoleculeNamespace {
         self.stereo_bonds.find_by_keyword(keyword)
     }
 
-    pub(crate) fn find_bond_by_participants(&self, a: AtomId, b: AtomId) -> Option<BondId> {
-        self.bonds.find_by_participants(&atom_pair_key(a, b))
+    pub(crate) fn find_bond_by_participants(
+        &self,
+        first: AtomId,
+        second: AtomId,
+    ) -> Option<BondId> {
+        self.bonds
+            .find_by_participants(&atom_pair_key(first, second))
     }
 
     pub(crate) fn find_dative_bond_by_participants(
@@ -367,11 +372,11 @@ impl MoleculeNamespace {
 
     pub(crate) fn find_noncovalent_bond_by_participants(
         &self,
-        a: AtomId,
-        b: AtomId,
+        first: AtomId,
+        second: AtomId,
     ) -> Option<NoncovalentBondId> {
         self.noncovalent_bonds
-            .find_by_participants(&atom_pair_key(a, b))
+            .find_by_participants(&atom_pair_key(first, second))
     }
 
     pub(crate) fn find_stereo_atom_by_participants(
@@ -505,8 +510,8 @@ impl Namespace for MoleculeNamespace {
         self.find_stereo_bond_by_keyword(keyword)
     }
 
-    fn find_bond_by_participants(&self, a: AtomId, b: AtomId) -> Option<BondId> {
-        self.find_bond_by_participants(a, b)
+    fn find_bond_by_participants(&self, first: AtomId, second: AtomId) -> Option<BondId> {
+        self.find_bond_by_participants(first, second)
     }
     fn find_dative_bond_by_participants(
         &self,
@@ -523,10 +528,10 @@ impl Namespace for MoleculeNamespace {
     }
     fn find_noncovalent_bond_by_participants(
         &self,
-        a: AtomId,
-        b: AtomId,
+        first: AtomId,
+        second: AtomId,
     ) -> Option<NoncovalentBondId> {
-        self.find_noncovalent_bond_by_participants(a, b)
+        self.find_noncovalent_bond_by_participants(first, second)
     }
     fn find_stereo_atom_by_participants(
         &self,

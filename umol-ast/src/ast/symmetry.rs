@@ -456,7 +456,7 @@ fn oriented_permutation(orientation: Orientation, permutation: Permutation) -> O
 /// isn't a ligand atom of the carrier.
 fn project_onto_ligands(ligands: &[StereoLigand], generator: &[NodeId]) -> Option<Permutation> {
     let degree = ligands.len();
-    let mut image = vec![0u8; degree];
+    let mut image = vec![0u32; degree];
     let mut used = vec![false; degree];
     for (i, ligand) in ligands.iter().enumerate() {
         let target = match ligand.kind {
@@ -473,7 +473,7 @@ fn project_onto_ligands(ligands: &[StereoLigand], generator: &[NodeId]) -> Optio
         if used[target] {
             return None;
         }
-        image[i] = target as u8;
+        image[i] = target as u32;
         used[target] = true;
     }
     Some(Permutation::from_image(degree, &image))

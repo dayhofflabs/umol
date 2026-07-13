@@ -79,12 +79,14 @@ impl PermutationGroup {
     }
 
     fn rotation(degree: usize) -> Permutation {
-        let image: Vec<u8> = (0..degree).map(|i| ((i + 1) % degree) as u8).collect();
+        let image: Vec<u32> = (0..degree).map(|i| ((i + 1) % degree) as u32).collect();
         Permutation::from_image(degree, &image)
     }
 
     fn reflection(degree: usize) -> Permutation {
-        let image: Vec<u8> = (0..degree).map(|i| ((degree - i) % degree) as u8).collect();
+        let image: Vec<u32> = (0..degree)
+            .map(|i| ((degree - i) % degree) as u32)
+            .collect();
         Permutation::from_image(degree, &image)
     }
 }
