@@ -40,10 +40,12 @@ use crate::{
     },
     stereo::{
         CisTransStereo, CisTransStereoAst, FluxionalityAst, LigandPermutation, LigandSymmetryAst,
-        Orientation, OrientedLigandPermutation, Permutation, StereoConfigurationAst,
-        StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoTerm,
-        Stereogenicity, StereogenicityAst, TetrahedralStereo, TetrahedralStereoAst, Topicity,
-        TopicityAst, TopicityRelationAst,
+        Orientation, OrientedLigandPermutation, Permutation, StereoAtomConstraintAst,
+        StereoAtomConstraintKey, StereoAtomConstraintsAst, StereoBondConstraintAst,
+        StereoBondConstraintKey, StereoBondConstraintsAst, StereoConfigurationAst, StereoCosetAst,
+        StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoTerm, Stereogenicity,
+        StereogenicityAst, TetrahedralStereo, TetrahedralStereoAst, Topicity, TopicityAst,
+        TopicityRelationAst,
     },
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
 };
@@ -172,6 +174,12 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<LigandSymmetryAst>()?;
         module.add_class::<FluxionalityAst>()?;
         module.add_class::<TopicityAst>()?;
+        module.add_class::<StereoAtomConstraintKey>()?;
+        module.add_class::<StereoAtomConstraintAst>()?;
+        module.add_class::<StereoAtomConstraintsAst>()?;
+        module.add_class::<StereoBondConstraintKey>()?;
+        module.add_class::<StereoBondConstraintAst>()?;
+        module.add_class::<StereoBondConstraintsAst>()?;
     }
     Ok(())
 }

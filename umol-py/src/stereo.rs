@@ -4,8 +4,9 @@
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use std::collections::BTreeSet;
+use std::vec::IntoIter;
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyKeyError, PyValueError};
 use pyo3::prelude::*;
 // A few `from_ast` mirrors stay `#[cfg(test)]` until S2/S4a wire them into the constraint
 // enum and the entity view; their `to_ast` peers are already live (eq/hash).
@@ -18,6 +19,12 @@ use umol_ast::ast::{
     CisTransStereoAst as AstCisTransStereoAst, FluxionalityAst as AstFluxionalityAst, Lattice,
     LigandPermutation as AstLigandPermutation, LigandSymmetryAst as AstLigandSymmetryAst,
     OrientedLigandPermutation as AstOrientedLigandPermutation,
+    StereoAtomConstraintAst as AstStereoAtomConstraintAst,
+    StereoAtomConstraintKey as AstStereoAtomConstraintKey,
+    StereoAtomConstraintsAst as AstStereoAtomConstraintsAst,
+    StereoBondConstraintAst as AstStereoBondConstraintAst,
+    StereoBondConstraintKey as AstStereoBondConstraintKey,
+    StereoBondConstraintsAst as AstStereoBondConstraintsAst,
     StereoConfigurationAst as AstStereoConfigurationAst, StereoCosetAst as AstStereoCosetAst,
     StereoKind as AstStereoKind, StereoLigandPair as AstStereoLigandPair,
     StereoLigandPosition as AstStereoLigandPosition, StereoTerm as AstStereoTerm,
@@ -458,7 +465,6 @@ pub enum Topicity {
 }
 
 impl Topicity {
-    #[cfg(test)]
     pub(crate) fn from_ast(ast: AstTopicity) -> Self {
         match ast {
             AstTopicity::Homotopic => Self::Homotopic,
@@ -488,7 +494,6 @@ pub enum Stereogenicity {
 }
 
 impl Stereogenicity {
-    #[cfg(test)]
     pub(crate) fn from_ast(ast: AstStereogenicity) -> Self {
         match ast {
             AstStereogenicity::Symmetric => Self::Symmetric,
@@ -665,7 +670,6 @@ pub enum Orientation {
 }
 
 impl Orientation {
-    #[cfg(test)]
     pub(crate) fn from_ast(orientation: PermOrientation) -> Self {
         match orientation {
             PermOrientation::Proper => Self::Proper,
@@ -708,7 +712,6 @@ impl LigandPermutation {
 }
 
 impl LigandPermutation {
-    #[cfg(test)]
     pub(crate) fn from_ast(ast: AstLigandPermutation) -> Self {
         LigandPermutation {
             permutation: Permutation::from_inner(ast.0),
@@ -755,7 +758,6 @@ impl OrientedLigandPermutation {
 }
 
 impl OrientedLigandPermutation {
-    #[cfg(test)]
     pub(crate) fn from_ast(ast: AstOrientedLigandPermutation) -> Self {
         OrientedLigandPermutation {
             permutation: LigandPermutation::from_ast(ast.permutation),
@@ -856,7 +858,6 @@ impl TopicityRelationAst {
 }
 
 impl TopicityRelationAst {
-    #[cfg(test)]
     pub(crate) fn from_ast(ast: &AstTopicityRelationAst) -> Self {
         match ast {
             AstTopicityRelationAst::Undetermined => Self::Undetermined(),
@@ -945,7 +946,6 @@ impl StereogenicityAst {
 }
 
 impl StereogenicityAst {
-    #[cfg(test)]
     pub(crate) fn from_ast(ast: &AstStereogenicityAst) -> Self {
         match ast {
             AstStereogenicityAst::Undetermined => Self::Undetermined(),
@@ -1041,7 +1041,6 @@ impl LigandSymmetryAst {
 }
 
 impl LigandSymmetryAst {
-    #[cfg(test)]
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstLigandSymmetryAst) -> PyResult<Self> {
         Ok(LigandSymmetryAst {
             permutation: OrientedLigandPermutation::from_ast(ast.permutation),
@@ -1108,7 +1107,6 @@ impl FluxionalityAst {
 }
 
 impl FluxionalityAst {
-    #[cfg(test)]
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstFluxionalityAst) -> PyResult<Self> {
         Ok(FluxionalityAst {
             permutation: LigandPermutation::from_ast(ast.permutation),
@@ -1183,7 +1181,6 @@ impl TopicityAst {
 }
 
 impl TopicityAst {
-    #[cfg(test)]
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstTopicityAst) -> PyResult<Self> {
         Ok(TopicityAst {
             pair: StereoLigandPair::from_ast(ast.pair),
@@ -1197,6 +1194,495 @@ impl TopicityAst {
             relation: self.relation.bind(py).borrow().to_ast(),
         }
     }
+}
+
+/// Per-entity stereo constraint surface — key + constraint enum + container + args —
+/// macro-generated for the two stereo entities (`StereoAtom`, `StereoBond`), which share the
+/// value types (`LigandSymmetryAst`/`FluxionalityAst`/`TopicityAst`/`StereogenicityAst`) and
+/// key sub-types (`OrientedLigandPermutation`/`LigandPermutation`/`StereoLigandPair`); only
+/// the enum/container/key names and their AST peers differ.
+macro_rules! stereo_constraints {
+    (
+        $key:ident, $constraint:ident, $constraints:ident,
+        $update:ident, $resolved:ident, $arg:ident,
+        $key_iter:ident, $iter:ident, $items_iter:ident,
+        $ast_key:ident, $ast_constraint:ident, $ast_constraints:ident $(,)?
+    ) => {
+        /// The key (identity) of a stereo constraint: the sub-keyed oriented/ligand
+        /// permutation or ligand pair for the per-permutation / per-pair constraints; the
+        /// bare discriminant for stereogenicity.
+        #[pyclass]
+        pub enum $key {
+            LigandSymmetry(Py<OrientedLigandPermutation>),
+            Fluxionality(Py<LigandPermutation>),
+            Topicity(Py<StereoLigandPair>),
+            Stereogenicity(),
+        }
+
+        #[pymethods]
+        impl $key {
+            fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+                self.to_ast(py) == other.to_ast(py)
+            }
+
+            fn __hash__(&self, py: Python<'_>) -> u64 {
+                hash_ast(&self.to_ast(py))
+            }
+
+            fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+                let (variant, arity) = match &*slf.bind(py).borrow() {
+                    $key::LigandSymmetry(_) => ("LigandSymmetry", 1),
+                    $key::Fluxionality(_) => ("Fluxionality", 1),
+                    $key::Topicity(_) => ("Topicity", 1),
+                    $key::Stereogenicity() => ("Stereogenicity", 0),
+                };
+                variant_repr(slf.bind(py).as_any(), stringify!($key), variant, arity)
+            }
+        }
+
+        impl $key {
+            pub(crate) fn from_ast(py: Python<'_>, ast: &$ast_key) -> PyResult<Self> {
+                Ok(match ast {
+                    $ast_key::LigandSymmetry(permutation) => Self::LigandSymmetry(into_py_variant(
+                        py,
+                        OrientedLigandPermutation::from_ast(*permutation),
+                    )?),
+                    $ast_key::Fluxionality(permutation) => Self::Fluxionality(into_py_variant(
+                        py,
+                        LigandPermutation::from_ast(*permutation),
+                    )?),
+                    $ast_key::Topicity(pair) => {
+                        Self::Topicity(into_py_variant(py, StereoLigandPair::from_ast(*pair))?)
+                    }
+                    $ast_key::Stereogenicity => Self::Stereogenicity(),
+                })
+            }
+
+            pub(crate) fn to_ast(&self, py: Python<'_>) -> $ast_key {
+                match self {
+                    Self::LigandSymmetry(permutation) => {
+                        $ast_key::LigandSymmetry(permutation.bind(py).borrow().to_ast())
+                    }
+                    Self::Fluxionality(permutation) => {
+                        $ast_key::Fluxionality(permutation.bind(py).borrow().to_ast())
+                    }
+                    Self::Topicity(pair) => $ast_key::Topicity(pair.bind(py).borrow().to_ast()),
+                    Self::Stereogenicity() => $ast_key::Stereogenicity,
+                }
+            }
+        }
+
+        /// A stereo constraint: a ligand-symmetry, fluxionality, topicity, or stereogenicity
+        /// predicate on a stereo atom / bond.
+        #[pyclass]
+        pub enum $constraint {
+            LigandSymmetry(Py<LigandSymmetryAst>),
+            Fluxionality(Py<FluxionalityAst>),
+            Topicity(Py<TopicityAst>),
+            Stereogenicity(Py<StereogenicityAst>),
+        }
+
+        #[pymethods]
+        impl $constraint {
+            /// The constraint's key (identity).
+            #[getter]
+            fn key(&self, py: Python<'_>) -> PyResult<$key> {
+                $key::from_ast(py, &self.to_ast(py).key())
+            }
+
+            fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+                self.to_ast(py) == other.to_ast(py)
+            }
+
+            fn __hash__(&self, py: Python<'_>) -> u64 {
+                hash_ast(&self.to_ast(py))
+            }
+
+            fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+                let variant = match &*slf.bind(py).borrow() {
+                    $constraint::LigandSymmetry(_) => "LigandSymmetry",
+                    $constraint::Fluxionality(_) => "Fluxionality",
+                    $constraint::Topicity(_) => "Topicity",
+                    $constraint::Stereogenicity(_) => "Stereogenicity",
+                };
+                variant_repr(slf.bind(py).as_any(), stringify!($constraint), variant, 1)
+            }
+        }
+
+        impl $constraint {
+            pub(crate) fn from_ast(py: Python<'_>, ast: &$ast_constraint) -> PyResult<Self> {
+                Ok(match ast {
+                    $ast_constraint::LigandSymmetry(value) => Self::LigandSymmetry(
+                        into_py_variant(py, LigandSymmetryAst::from_ast(py, value)?)?,
+                    ),
+                    $ast_constraint::Fluxionality(value) => Self::Fluxionality(into_py_variant(
+                        py,
+                        FluxionalityAst::from_ast(py, value)?,
+                    )?),
+                    $ast_constraint::Topicity(value) => {
+                        Self::Topicity(into_py_variant(py, TopicityAst::from_ast(py, value)?)?)
+                    }
+                    $ast_constraint::Stereogenicity(value) => Self::Stereogenicity(
+                        into_py_variant(py, StereogenicityAst::from_ast(value))?,
+                    ),
+                })
+            }
+
+            pub(crate) fn to_ast(&self, py: Python<'_>) -> $ast_constraint {
+                match self {
+                    Self::LigandSymmetry(value) => {
+                        $ast_constraint::LigandSymmetry(value.bind(py).borrow().to_ast(py))
+                    }
+                    Self::Fluxionality(value) => {
+                        $ast_constraint::Fluxionality(value.bind(py).borrow().to_ast(py))
+                    }
+                    Self::Topicity(value) => {
+                        $ast_constraint::Topicity(value.bind(py).borrow().to_ast(py))
+                    }
+                    Self::Stereogenicity(value) => {
+                        $ast_constraint::Stereogenicity(value.bind(py).borrow().to_ast())
+                    }
+                }
+            }
+        }
+
+        /// Argument to the container's `update`: another container or a loose iterable of
+        /// constraints. (A live-view arm ships with the entity view in S2b.)
+        #[derive(FromPyObject)]
+        enum $update {
+            Container(Py<$constraints>),
+            Entries(Vec<Py<$constraint>>),
+        }
+
+        impl $update {
+            /// Read every Python object into owned data before any write borrow is taken, so a
+            /// container that aliases the same entity is read while nothing is borrowed
+            /// (otherwise `cs.update(cs)` self-aliases into a double-borrow panic).
+            fn resolve(&self, py: Python<'_>) -> PyResult<$resolved> {
+                Ok(match self {
+                    $update::Container(c) => {
+                        $resolved::Overlay(c.bind(py).borrow().inner().clone())
+                    }
+                    $update::Entries(entries) => $resolved::Entries(
+                        entries
+                            .iter()
+                            .map(|entry| entry.bind(py).borrow().to_ast(py))
+                            .collect(),
+                    ),
+                })
+            }
+        }
+
+        /// A `$update` with all Python reads done, applicable under a write borrow.
+        enum $resolved {
+            Overlay($ast_constraints),
+            Entries(Vec<$ast_constraint>),
+        }
+
+        impl $resolved {
+            fn apply(self, target: &mut $ast_constraints) {
+                match self {
+                    $resolved::Overlay(overlay) => target.update(&overlay),
+                    $resolved::Entries(entries) => {
+                        for entry in entries {
+                            target.set(entry);
+                        }
+                    }
+                }
+            }
+        }
+
+        /// A whole-container argument for the entity `constraints` setter. (A live-view arm
+        /// ships in S2b; the value pyclass that consumes this lands in S3 — gated until then.)
+        #[cfg(test)]
+        #[derive(FromPyObject)]
+        pub(crate) enum $arg {
+            Container(Py<$constraints>),
+        }
+
+        #[cfg(test)]
+        impl $arg {
+            pub(crate) fn to_ast(&self, py: Python<'_>) -> $ast_constraints {
+                match self {
+                    $arg::Container(c) => c.bind(py).borrow().inner().clone(),
+                }
+            }
+        }
+
+        /// The stereo constraints on a stereo atom / bond, in kind-sorted order. Mutable,
+        /// hence value-equal but unhashable.
+        #[pyclass(eq)]
+        #[derive(PartialEq)]
+        pub struct $constraints($ast_constraints);
+
+        #[pymethods]
+        impl $constraints {
+            /// Build from a sequence of constraints (kind-sorted; a unique key replaces an
+            /// earlier one; per-permutation / per-pair entries accumulate).
+            #[new]
+            fn new(py: Python<'_>, entries: Vec<Py<$constraint>>) -> Self {
+                let mut constraints = $ast_constraints::new();
+                constraints.extend(
+                    entries
+                        .into_iter()
+                        .map(|entry| entry.bind(py).borrow().to_ast(py)),
+                );
+                $constraints(constraints)
+            }
+
+            fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+                let mut parts = Vec::with_capacity(self.0.len());
+                for entry in self.0.iter() {
+                    let mirror = into_py_variant(py, $constraint::from_ast(py, entry)?)?;
+                    parts.push(mirror.bind(py).as_any().repr()?.extract::<String>()?);
+                }
+                Ok(format!(
+                    "{}([{}])",
+                    stringify!($constraints),
+                    parts.join(", ")
+                ))
+            }
+
+            /// Insert `c`, replacing any existing entry of the same key (last-wins).
+            fn set(&mut self, py: Python<'_>, c: Py<$constraint>) {
+                self.0.set(c.bind(py).borrow().to_ast(py));
+            }
+
+            /// Remove the entry with the given key, returning it if present (dict `pop`).
+            fn pop(&mut self, py: Python<'_>, key: Py<$key>) -> PyResult<Option<$constraint>> {
+                self.0
+                    .remove(key.bind(py).borrow().to_ast(py))
+                    .map(|c| $constraint::from_ast(py, &c))
+                    .transpose()
+            }
+
+            /// Overlay `other` onto self in place — another container or an iterable of
+            /// constraints (last-wins per key; undetermined entries remove). Takes `slf` by
+            /// handle so `other` is fully read before the write borrow (`cs.update(cs)` is a
+            /// no-op, not a double-borrow panic).
+            fn update(slf: Py<Self>, py: Python<'_>, other: $update) -> PyResult<()> {
+                let resolved = other.resolve(py)?;
+                resolved.apply(&mut slf.borrow_mut(py).0);
+                Ok(())
+            }
+
+            fn __len__(&self) -> usize {
+                self.0.len()
+            }
+
+            /// Iterate the constraint keys (mapping-style, canonical order).
+            fn __iter__(&self, py: Python<'_>) -> PyResult<$key_iter> {
+                self.keys(py)
+            }
+
+            /// The constraint keys, in canonical order.
+            fn keys(&self, py: Python<'_>) -> PyResult<$key_iter> {
+                let keys = self
+                    .0
+                    .iter()
+                    .map(|c| into_py_variant(py, $key::from_ast(py, &c.key())?))
+                    .collect::<PyResult<Vec<_>>>()?;
+                Ok($key_iter {
+                    keys: keys.into_iter(),
+                })
+            }
+
+            /// The constraints, in canonical order.
+            fn values(&self, py: Python<'_>) -> PyResult<$iter> {
+                let entries = self
+                    .0
+                    .iter()
+                    .map(|c| into_py_variant(py, $constraint::from_ast(py, c)?))
+                    .collect::<PyResult<Vec<_>>>()?;
+                Ok($iter {
+                    entries: entries.into_iter(),
+                })
+            }
+
+            /// The `(key, constraint)` pairs, in canonical order.
+            fn items(&self, py: Python<'_>) -> PyResult<$items_iter> {
+                let items = self
+                    .0
+                    .iter()
+                    .map(|c| {
+                        Ok((
+                            into_py_variant(py, $key::from_ast(py, &c.key())?)?,
+                            into_py_variant(py, $constraint::from_ast(py, c)?)?,
+                        ))
+                    })
+                    .collect::<PyResult<Vec<_>>>()?;
+                Ok($items_iter {
+                    items: items.into_iter(),
+                })
+            }
+
+            /// The constraint with the given key, or `default` (`None`) if absent.
+            #[pyo3(signature = (key, default=None))]
+            fn get(
+                &self,
+                py: Python<'_>,
+                key: Py<$key>,
+                default: Option<Py<PyAny>>,
+            ) -> PyResult<Py<PyAny>> {
+                match self.0.get(key.bind(py).borrow().to_ast(py)) {
+                    Some(constraint) => {
+                        Ok(into_py_variant(py, $constraint::from_ast(py, constraint)?)?.into_any())
+                    }
+                    None => Ok(default.unwrap_or_else(|| py.None())),
+                }
+            }
+
+            /// The constraint with the given key; raises `KeyError` if absent.
+            fn __getitem__(&self, py: Python<'_>, key: Py<$key>) -> PyResult<$constraint> {
+                match self.0.get(key.bind(py).borrow().to_ast(py)) {
+                    Some(constraint) => $constraint::from_ast(py, constraint),
+                    None => Err(PyKeyError::new_err(
+                        key.bind(py).as_any().repr()?.extract::<String>()?,
+                    )),
+                }
+            }
+
+            /// Remove the entry with the given key; raises `KeyError` if absent.
+            fn __delitem__(&mut self, py: Python<'_>, key: Py<$key>) -> PyResult<()> {
+                if self.0.remove(key.bind(py).borrow().to_ast(py)).is_some() {
+                    Ok(())
+                } else {
+                    Err(PyKeyError::new_err(
+                        key.bind(py).as_any().repr()?.extract::<String>()?,
+                    ))
+                }
+            }
+
+            fn __contains__(&self, py: Python<'_>, key: Py<$key>) -> bool {
+                self.0.contains(key.bind(py).borrow().to_ast(py))
+            }
+
+            /// The ligand-symmetry constraints.
+            fn ligand_symmetries(&self, py: Python<'_>) -> PyResult<Vec<LigandSymmetryAst>> {
+                self.0
+                    .ligand_symmetries()
+                    .map(|ls| LigandSymmetryAst::from_ast(py, ls))
+                    .collect()
+            }
+
+            /// The ligand-symmetry constraint at `permutation` (undetermined if absent).
+            fn ligand_symmetry(
+                &self,
+                py: Python<'_>,
+                permutation: OrientedLigandPermutation,
+            ) -> PyResult<LigandSymmetryAst> {
+                LigandSymmetryAst::from_ast(py, &self.0.ligand_symmetry(permutation.to_ast()))
+            }
+
+            /// The fluxionality constraints.
+            fn fluxionalities(&self, py: Python<'_>) -> PyResult<Vec<FluxionalityAst>> {
+                self.0
+                    .fluxionalities()
+                    .map(|f| FluxionalityAst::from_ast(py, f))
+                    .collect()
+            }
+
+            /// The fluxionality constraint at `permutation` (undetermined if absent).
+            fn fluxionality(
+                &self,
+                py: Python<'_>,
+                permutation: LigandPermutation,
+            ) -> PyResult<FluxionalityAst> {
+                FluxionalityAst::from_ast(py, &self.0.fluxionality(permutation.to_ast()))
+            }
+
+            /// The topicity constraints.
+            fn topicities(&self, py: Python<'_>) -> PyResult<Vec<TopicityAst>> {
+                self.0
+                    .topicities()
+                    .map(|t| TopicityAst::from_ast(py, t))
+                    .collect()
+            }
+
+            /// The topicity relation at ligand `pair` (undetermined if absent).
+            fn topicity(&self, pair: StereoLigandPair) -> TopicityRelationAst {
+                TopicityRelationAst::from_ast(&self.0.topicity(pair.to_ast()))
+            }
+
+            /// The stereogenicity constraint (undetermined if absent).
+            fn stereogenicity(&self) -> StereogenicityAst {
+                StereogenicityAst::from_ast(&self.0.stereogenicity())
+            }
+        }
+
+        impl $constraints {
+            pub(crate) fn inner(&self) -> &$ast_constraints {
+                &self.0
+            }
+
+            #[cfg(test)]
+            pub(crate) fn from_inner(constraints: $ast_constraints) -> Self {
+                $constraints(constraints)
+            }
+        }
+
+        #[pyclass]
+        pub struct $key_iter {
+            keys: IntoIter<Py<$key>>,
+        }
+
+        #[pymethods]
+        impl $key_iter {
+            fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+                slf
+            }
+
+            fn __next__(&mut self) -> Option<Py<$key>> {
+                self.keys.next()
+            }
+        }
+
+        #[pyclass]
+        pub struct $iter {
+            entries: IntoIter<Py<$constraint>>,
+        }
+
+        #[pymethods]
+        impl $iter {
+            fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+                slf
+            }
+
+            fn __next__(&mut self) -> Option<Py<$constraint>> {
+                self.entries.next()
+            }
+        }
+
+        #[pyclass]
+        pub struct $items_iter {
+            items: IntoIter<(Py<$key>, Py<$constraint>)>,
+        }
+
+        #[pymethods]
+        impl $items_iter {
+            fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+                slf
+            }
+
+            fn __next__(&mut self) -> Option<(Py<$key>, Py<$constraint>)> {
+                self.items.next()
+            }
+        }
+    };
+}
+
+stereo_constraints! {
+    StereoAtomConstraintKey, StereoAtomConstraintAst, StereoAtomConstraintsAst,
+    StereoAtomConstraintsUpdate, ResolvedStereoAtomConstraintsUpdate, StereoAtomConstraintsArg,
+    StereoAtomConstraintKeyIter, StereoAtomConstraintIter, StereoAtomConstraintItemsIter,
+    AstStereoAtomConstraintKey, AstStereoAtomConstraintAst, AstStereoAtomConstraintsAst,
+}
+
+stereo_constraints! {
+    StereoBondConstraintKey, StereoBondConstraintAst, StereoBondConstraintsAst,
+    StereoBondConstraintsUpdate, ResolvedStereoBondConstraintsUpdate, StereoBondConstraintsArg,
+    StereoBondConstraintKeyIter, StereoBondConstraintIter, StereoBondConstraintItemsIter,
+    AstStereoBondConstraintKey, AstStereoBondConstraintAst, AstStereoBondConstraintsAst,
 }
 
 #[cfg(test)]
@@ -1780,6 +2266,286 @@ mod tests {
             ] {
                 assert_eq!(TopicityAst::from_ast(py, &ast).unwrap().to_ast(py), ast);
             }
+        });
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case(AstStereoAtomConstraintAst::LigandSymmetry(AstLigandSymmetryAst { permutation: AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::from_image(4, &[1, 0, 2, 3])), orientation: PermOrientation::Proper }, invariant: AstBooleanAst::Lit(true) }))]
+    #[case(AstStereoAtomConstraintAst::Fluxionality(AstFluxionalityAst { permutation: AstLigandPermutation(PermPermutation::identity(4)), active: AstBooleanAst::Lit(false) }))]
+    #[case(AstStereoAtomConstraintAst::Topicity(AstTopicityAst { pair: AstStereoLigandPair::new(AstStereoLigandPosition(0), AstStereoLigandPosition(1)), relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic) }))]
+    #[case(AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)))]
+    fn test_stereo_atom_constraint_ast_roundtrip(#[case] ast: AstStereoAtomConstraintAst) {
+        Python::attach(|py| {
+            assert_eq!(
+                StereoAtomConstraintAst::from_ast(py, &ast).unwrap().to_ast(py),
+                ast
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraint_ast_key() {
+        Python::attach(|py| {
+            let ast = AstStereoAtomConstraintAst::Topicity(AstTopicityAst {
+                pair: AstStereoLigandPair::new(
+                    AstStereoLigandPosition(0),
+                    AstStereoLigandPosition(1),
+                ),
+                relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
+            });
+            let key = StereoAtomConstraintAst::from_ast(py, &ast)
+                .unwrap()
+                .key(py)
+                .unwrap();
+            assert_eq!(
+                key.to_ast(py),
+                AstStereoAtomConstraintKey::Topicity(AstStereoLigandPair::new(
+                    AstStereoLigandPosition(0),
+                    AstStereoLigandPosition(1),
+                ))
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_ast_get() {
+        Python::attach(|py| {
+            let stereogenicity = AstStereoAtomConstraintAst::Stereogenicity(
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            );
+            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            ast_cs.extend([stereogenicity.clone()]);
+            let constraints = StereoAtomConstraintsAst::from_inner(ast_cs);
+            assert_eq!(constraints.__len__(), 1);
+
+            let present = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
+            assert!(constraints.__contains__(py, present.clone_ref(py)));
+            assert_eq!(
+                constraints
+                    .__getitem__(py, present.clone_ref(py))
+                    .unwrap()
+                    .to_ast(py),
+                stereogenicity
+            );
+
+            let absent = into_py_variant(
+                py,
+                StereoAtomConstraintKey::Topicity(
+                    into_py_variant(py, StereoLigandPair::new(0, 1)).unwrap(),
+                ),
+            )
+            .unwrap();
+            assert!(!constraints.__contains__(py, absent.clone_ref(py)));
+            assert!(constraints.__getitem__(py, absent).is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_ast_set_pop() {
+        Python::attach(|py| {
+            let stereogenicity = into_py_variant(
+                py,
+                StereoAtomConstraintAst::from_ast(
+                    py,
+                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                        AstStereogenicity::Stereogenic,
+                    )),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let mut constraints = StereoAtomConstraintsAst::new(py, Vec::new());
+            constraints.set(py, stereogenicity);
+            assert_eq!(constraints.__len__(), 1);
+
+            let key = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
+            let popped = constraints.pop(py, key.clone_ref(py)).unwrap();
+            assert_eq!(
+                popped.unwrap().to_ast(py),
+                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                    AstStereogenicity::Stereogenic
+                ))
+            );
+            assert_eq!(constraints.__len__(), 0);
+            assert!(constraints.pop(py, key).unwrap().is_none());
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_ast_accessors() {
+        Python::attach(|py| {
+            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            ast_cs.extend([
+                AstStereoAtomConstraintAst::LigandSymmetry(AstLigandSymmetryAst {
+                    permutation: AstOrientedLigandPermutation {
+                        permutation: AstLigandPermutation(PermPermutation::from_image(
+                            4,
+                            &[1, 0, 2, 3],
+                        )),
+                        orientation: PermOrientation::Proper,
+                    },
+                    invariant: AstBooleanAst::Lit(true),
+                }),
+                AstStereoAtomConstraintAst::Topicity(AstTopicityAst {
+                    pair: AstStereoLigandPair::new(
+                        AstStereoLigandPosition(0),
+                        AstStereoLigandPosition(1),
+                    ),
+                    relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
+                }),
+                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                    AstStereogenicity::Stereogenic,
+                )),
+            ]);
+            let constraints = StereoAtomConstraintsAst::from_inner(ast_cs);
+
+            assert_eq!(
+                constraints.stereogenicity().to_ast(),
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+            );
+            assert_eq!(
+                constraints.topicity(StereoLigandPair::new(0, 1)).to_ast(),
+                AstTopicityRelationAst::Lit(AstTopicity::Homotopic)
+            );
+            let ligand_symmetries = constraints.ligand_symmetries(py).unwrap();
+            assert_eq!(ligand_symmetries.len(), 1);
+            assert_eq!(
+                ligand_symmetries[0].to_ast(py).invariant,
+                AstBooleanAst::Lit(true)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_ast_iter() {
+        Python::attach(|py| {
+            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            ast_cs.extend([
+                AstStereoAtomConstraintAst::Topicity(AstTopicityAst {
+                    pair: AstStereoLigandPair::new(
+                        AstStereoLigandPosition(0),
+                        AstStereoLigandPosition(1),
+                    ),
+                    relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
+                }),
+                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                    AstStereogenicity::Stereogenic,
+                )),
+            ]);
+            let constraints = StereoAtomConstraintsAst::from_inner(ast_cs);
+
+            let keys: Vec<AstStereoAtomConstraintKey> = constraints
+                .keys(py)
+                .unwrap()
+                .keys
+                .map(|k| k.bind(py).borrow().to_ast(py))
+                .collect();
+            assert_eq!(
+                keys,
+                vec![
+                    AstStereoAtomConstraintKey::Topicity(AstStereoLigandPair::new(
+                        AstStereoLigandPosition(0),
+                        AstStereoLigandPosition(1),
+                    )),
+                    AstStereoAtomConstraintKey::Stereogenicity,
+                ]
+            );
+            let values: Vec<AstStereoAtomConstraintAst> = constraints
+                .values(py)
+                .unwrap()
+                .entries
+                .map(|c| c.bind(py).borrow().to_ast(py))
+                .collect();
+            assert_eq!(values.len(), 2);
+            assert_eq!(constraints.items(py).unwrap().items.count(), 2);
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_ast_update() {
+        Python::attach(|py| {
+            let base = Py::new(py, StereoAtomConstraintsAst::new(py, Vec::new())).unwrap();
+            let entry = into_py_variant(
+                py,
+                StereoAtomConstraintAst::from_ast(
+                    py,
+                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                        AstStereogenicity::Stereogenic,
+                    )),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            StereoAtomConstraintsAst::update(
+                base.clone_ref(py),
+                py,
+                StereoAtomConstraintsUpdate::Entries(vec![entry]),
+            )
+            .unwrap();
+            assert_eq!(base.borrow(py).__len__(), 1);
+
+            let overlay = Py::new(py, StereoAtomConstraintsAst::new(py, Vec::new())).unwrap();
+            StereoAtomConstraintsAst::update(
+                overlay.clone_ref(py),
+                py,
+                StereoAtomConstraintsUpdate::Container(base),
+            )
+            .unwrap();
+            assert_eq!(overlay.borrow(py).__len__(), 1);
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_arg_to_ast() {
+        Python::attach(|py| {
+            let entry = into_py_variant(
+                py,
+                StereoAtomConstraintAst::from_ast(
+                    py,
+                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                        AstStereogenicity::Stereogenic,
+                    )),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let container = Py::new(py, StereoAtomConstraintsAst::new(py, vec![entry])).unwrap();
+            let arg = StereoAtomConstraintsArg::Container(container);
+            let mut expected = AstStereoAtomConstraintsAst::new();
+            expected.extend([AstStereoAtomConstraintAst::Stereogenicity(
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            )]);
+            assert_eq!(arg.to_ast(py), expected);
+        });
+    }
+
+    // `StereoBondConstraintsAst` is the second `stereo_constraints!` instantiation; the shared
+    // macro is covered by the `StereoAtom` tests above. This confirms the bond instantiation
+    // and exercises its `from_inner` / `Arg::to_ast`.
+    #[rstest]
+    fn test_stereo_bond_constraints_ast() {
+        Python::attach(|py| {
+            let stereogenicity = AstStereoBondConstraintAst::Stereogenicity(
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            );
+            let mut ast_cs = AstStereoBondConstraintsAst::new();
+            ast_cs.extend([stereogenicity.clone()]);
+            let constraints = StereoBondConstraintsAst::from_inner(ast_cs);
+            assert_eq!(constraints.__len__(), 1);
+            assert_eq!(
+                constraints.stereogenicity().to_ast(),
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+            );
+
+            let mut container_ast = AstStereoBondConstraintsAst::new();
+            container_ast.extend([stereogenicity.clone()]);
+            let container =
+                Py::new(py, StereoBondConstraintsAst::from_inner(container_ast)).unwrap();
+            let arg = StereoBondConstraintsArg::Container(container);
+            let mut expected = AstStereoBondConstraintsAst::new();
+            expected.extend([stereogenicity]);
+            assert_eq!(arg.to_ast(py), expected);
         });
     }
 }
