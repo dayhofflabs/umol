@@ -1,10 +1,15 @@
+use std::collections::HashSet;
+
 use rstest::rstest;
 use umol_ast::ast::{
-    AtomId, BondId, ElectronCountsAst, ElementAst, IntoAst, SpinStateAst, ValueAst,
+    AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsAst, ElementAst, IntoAst,
+    SpinStateAst, ValueAst,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_chem::element::Element;
+use umol_graph::ops::invariant::ValenceInvariants;
 use umol_graph::ops::transform::{KekulizationModel, Kekulizer, Transformer};
+use umol_utils::solution::Solution;
 
 #[derive(Debug, PartialEq, Eq)]
 struct KekulizationFixture {
@@ -250,27 +255,62 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: Kekulizatio
 #[case::benzene(
     include_str!("data/benzene_aromatic_input.edn"),
     include_str!("data/benzene_kekulized_expected.edn"),
-    vec![BondId(0), BondId(2), BondId(4)]
+    vec![BondId(0), BondId(2), BondId(4)],
+    None
 )]
 #[case::pyridine(
     include_str!("data/pyridine_aromatic_input.edn"),
     include_str!("data/pyridine_kekulized_expected.edn"),
-    vec![BondId(0), BondId(2), BondId(4)]
+    vec![BondId(0), BondId(2), BondId(4)],
+    None
+)]
+#[case::pyrrole(
+    include_str!("data/pyrrole_aromatic_input.edn"),
+    include_str!("data/pyrrole_kekulized_expected.edn"),
+    vec![BondId(1), BondId(3)],
+    Some(AtomId(0))
+)]
+#[case::furan(
+    include_str!("data/furan_aromatic_input.edn"),
+    include_str!("data/furan_kekulized_expected.edn"),
+    vec![BondId(1), BondId(3)],
+    Some(AtomId(0))
+)]
+#[case::thiophene(
+    include_str!("data/thiophene_aromatic_input.edn"),
+    include_str!("data/thiophene_kekulized_expected.edn"),
+    vec![BondId(1), BondId(3)],
+    Some(AtomId(0))
+)]
+#[case::borepin(
+    include_str!("data/borepin_aromatic_input.edn"),
+    include_str!("data/borepin_kekulized_expected.edn"),
+    vec![BondId(1), BondId(3), BondId(5)],
+    Some(AtomId(0))
 )]
 #[case::boratabenzene(
     include_str!("data/boratabenzene_aromatic_input.edn"),
     include_str!("data/boratabenzene_kekulized_expected.edn"),
-    vec![BondId(0), BondId(2), BondId(4)]
+    vec![BondId(0), BondId(2), BondId(4)],
+    None
 )]
 #[case::azulene(
     include_str!("data/azulene_aromatic_input.edn"),
     include_str!("data/azulene_kekulized_expected.edn"),
-    vec![BondId(0), BondId(2), BondId(5), BondId(7), BondId(9)]
+    vec![BondId(0), BondId(2), BondId(5), BondId(7), BondId(9)],
+    None
+)]
+#[case::indole_prescribed_donor(
+    include_str!("data/indole_prescribed_donor_aromatic_input.edn"),
+    include_str!("data/indole_prescribed_donor_kekulized_expected.edn"),
+    vec![BondId(1), BondId(3), BondId(6), BondId(8)],
+    Some(AtomId(0))
 )]
 fn test_kekulization_fixture_output(
     #[case] source: &str,
     #[case] expected_source: &str,
     #[case] expected_double_bonds: Vec<BondId>,
+    #[case] expected_exposed_atom: Option<AtomId>,
 ) {
     let input_dsl: MoleculeDsl = source.parse().unwrap();
     let input = input_dsl.into_ast(&MoleculeDefaults::ground());
@@ -287,8 +327,65 @@ fn test_kekulization_fixture_output(
         .filter(|bond| bond.ast.order == ValueAst::Lit(2))
         .map(|bond| bond.id)
         .collect();
+    let covered_atoms: HashSet<AtomId> = first
+        .bonds()
+        .iter()
+        .filter(|bond| bond.ast.order == ValueAst::Lit(2))
+        .flat_map(|bond| bond.atom_ids())
+        .collect();
+    let expected_covered_atoms: HashSet<AtomId> = first
+        .atoms()
+        .ids()
+        .filter(|atom| Some(*atom) != expected_exposed_atom)
+        .collect();
+    let input_total_charge: i64 = input
+        .atoms()
+        .iter()
+        .map(|atom| match atom.ast.charge {
+            ValueAst::Lit(charge) => charge,
+            _ => panic!("input atom charge is undetermined"),
+        })
+        .chain(
+            input
+                .aromatic_systems()
+                .iter()
+                .map(|system| match system.ast.charge {
+                    ValueAst::Lit(charge) => charge,
+                    _ => panic!("input aromatic-system charge is undetermined"),
+                }),
+        )
+        .sum();
+    let output_total_charge: i64 = first
+        .atoms()
+        .iter()
+        .map(|atom| match atom.ast.charge {
+            ValueAst::Lit(charge) => charge,
+            _ => panic!("output atom charge is undetermined"),
+        })
+        .sum();
 
     assert_eq!(first, expected);
     assert_eq!(second, expected);
     assert_eq!(double_bonds, expected_double_bonds);
+    assert_eq!(covered_atoms, expected_covered_atoms);
+    assert_eq!(output_total_charge, input_total_charge);
+    assert_eq!(ValenceInvariants::check(&first), Solution::Determined(()));
+    assert_eq!(first.aromatic_systems().count(), 0);
+    assert!(first.atoms().iter().all(|atom| !atom
+        .ast
+        .constraints
+        .contains(AtomConstraintKey::AromaticValence)));
+    assert!(first
+        .bonds()
+        .iter()
+        .all(|bond| !bond.ast.constraints.contains(BondConstraintKey::Aromatic)));
+
+    if let Some(exposed) = expected_exposed_atom {
+        let before = input.atom(exposed).ast;
+        let after = first.atom(exposed).ast;
+        assert_eq!(after.charge, before.charge);
+        assert_eq!(after.lone_pairs, before.lone_pairs);
+        assert_eq!(after.implicit_hydrogens, before.implicit_hydrogens);
+        assert_eq!(after.spin, before.spin);
+    }
 }

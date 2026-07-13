@@ -215,6 +215,12 @@ impl Transformer for Kekulizer {
 
         // Pass 1: bond-order writes and Aromatic-constraint stripping.
         for plan in &plans {
+            debug_assert!(plan.matched_bonds.iter().all(|&bond| {
+                ast.bond(bond)
+                    .atom_ids()
+                    .iter()
+                    .all(|atom| !plan.exposed_atoms.contains(atom))
+            }));
             for &bid in &plan.matched_bonds {
                 let bond = ast.bond_mut(bid).ast;
                 bond.order = ValueAst::Lit(2);

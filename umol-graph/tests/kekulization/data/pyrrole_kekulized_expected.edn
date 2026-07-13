@@ -1,0 +1,6 @@
+{:atoms ["N#h#n1" "C#h" "C#h" "C#h" "C#h"]
+ :bonds [[0 1 :single]
+         [1 2 :double]
+         [2 3 :single]
+         [3 4 :double]
+         [4 0 :single]]}
