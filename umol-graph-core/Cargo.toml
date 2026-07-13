@@ -16,6 +16,7 @@ proptest = []
 
 [dependencies]
 bitvec = "1.0.1"
+num-bigint = "0.4"
 umol-nauty-sys = { path = "../umol-nauty-sys" }
 
 [dev-dependencies]

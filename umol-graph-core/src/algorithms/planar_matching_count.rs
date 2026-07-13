@@ -7,6 +7,8 @@ use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt;
 
+use num_bigint::{BigInt, BigUint};
+
 use crate::{EdgeId, Graph, NodeId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -282,3 +284,406 @@ impl fmt::Display for PlanarEmbeddingError {
 }
 
 impl Error for PlanarEmbeddingError {}
+
+impl Graph {
+    pub fn count_perfect_matchings_planar(
+        &self,
+        embedding: &PlanarEmbedding,
+    ) -> Result<BigUint, PlanarMatchingCountError> {
+        if self != embedding.graph() {
+            return Err(PlanarMatchingCountError::EmbeddingGraphMismatch);
+        }
+        if self.node_count() % 2 == 1 {
+            return Ok(BigUint::from(0_u8));
+        }
+
+        let signs = kasteleyn_signs(embedding)?;
+        let mut matrix = vec![vec![BigInt::from(0); self.node_count()]; self.node_count()];
+        for edge in self.edge_ids() {
+            let [first, second] = self.edge_endpoints(edge);
+            if first == second {
+                continue;
+            }
+            let (lower, upper) = if first < second {
+                (first, second)
+            } else {
+                (second, first)
+            };
+            let value = if signs[edge.index()] {
+                BigInt::from(-1)
+            } else {
+                BigInt::from(1)
+            };
+            matrix[lower.index()][upper.index()] += &value;
+            matrix[upper.index()][lower.index()] -= value;
+        }
+
+        let (_, count) = pfaffian(&matrix)?.into_parts();
+        Ok(count)
+    }
+}
+
+fn kasteleyn_signs(embedding: &PlanarEmbedding) -> Result<Vec<bool>, PlanarMatchingCountError> {
+    let edge_count = embedding.graph.edge_count();
+    let mut equations = Vec::with_capacity(embedding.faces.len().saturating_sub(1));
+    for (face_index, face) in embedding.faces.iter().enumerate() {
+        if face_index == embedding.outer_face {
+            continue;
+        }
+        let mut equation = vec![false; edge_count + 1];
+        let mut negative = face.len() % 2 == 0;
+        for position in 0..face.len() {
+            let first = face.nodes[position];
+            let second = face.nodes[(position + 1) % face.len()];
+            equation[face.edges[position].index()] ^= true;
+            negative ^= first > second;
+        }
+        equation[edge_count] = negative;
+        equations.push(equation);
+    }
+
+    let mut pivot_row = 0;
+    let mut pivots = Vec::new();
+    for column in 0..edge_count {
+        let Some(found) = (pivot_row..equations.len()).find(|&row| equations[row][column]) else {
+            continue;
+        };
+        equations.swap(pivot_row, found);
+        let pivot_equation = equations[pivot_row].clone();
+        for (row, equation) in equations.iter_mut().enumerate() {
+            if row != pivot_row && equation[column] {
+                for (entry, &pivot_entry) in
+                    equation[column..].iter_mut().zip(&pivot_equation[column..])
+                {
+                    *entry ^= pivot_entry;
+                }
+            }
+        }
+        pivots.push((pivot_row, column));
+        pivot_row += 1;
+        if pivot_row == equations.len() {
+            break;
+        }
+    }
+    if equations
+        .iter()
+        .any(|equation| !equation[..edge_count].iter().any(|&entry| entry) && equation[edge_count])
+    {
+        return Err(PlanarMatchingCountError::InconsistentSigning);
+    }
+
+    let mut signs = vec![false; edge_count];
+    for (row, column) in pivots {
+        signs[column] = equations[row][edge_count];
+    }
+    Ok(signs)
+}
+
+fn pfaffian(matrix: &[Vec<BigInt>]) -> Result<BigInt, PlanarMatchingCountError> {
+    let size = matrix.len();
+    if matrix.iter().any(|row| row.len() != size) {
+        return Err(PlanarMatchingCountError::NonSquareMatrix);
+    }
+    for (row, values) in matrix.iter().enumerate() {
+        if values[row] != BigInt::from(0) {
+            return Err(PlanarMatchingCountError::NonSkewSymmetric);
+        }
+        for (column, other) in matrix.iter().enumerate().skip(row + 1) {
+            if values[column] != -&other[row] {
+                return Err(PlanarMatchingCountError::NonSkewSymmetric);
+            }
+        }
+    }
+    if size == 0 {
+        return Ok(BigInt::from(1));
+    }
+    if size % 2 == 1 {
+        return Ok(BigInt::from(0));
+    }
+
+    let mut work = matrix.to_vec();
+    let mut permutation_sign = BigInt::from(1);
+    let mut previous_pivot = BigInt::from(1);
+    for first in (0..size).step_by(2) {
+        let Some(pivot_column) =
+            (first + 1..size).find(|&column| work[first][column] != BigInt::from(0))
+        else {
+            return Ok(BigInt::from(0));
+        };
+        if pivot_column != first + 1 {
+            work.swap(first + 1, pivot_column);
+            for row in &mut work {
+                row.swap(first + 1, pivot_column);
+            }
+            permutation_sign = -permutation_sign;
+        }
+
+        let pivot = work[first][first + 1].clone();
+        if first + 2 == size {
+            return Ok(permutation_sign * pivot);
+        }
+        for row in first + 2..size {
+            for column in row + 1..size {
+                let numerator = &pivot * &work[row][column]
+                    - &work[first][row] * &work[first + 1][column]
+                    + &work[first][column] * &work[first + 1][row];
+                if &numerator % &previous_pivot != BigInt::from(0) {
+                    return Err(PlanarMatchingCountError::InexactDivision { step: first });
+                }
+                let value = numerator / &previous_pivot;
+                work[row][column] = value.clone();
+                work[column][row] = -value;
+            }
+        }
+        previous_pivot = pivot;
+    }
+    unreachable!("even nonempty matrix returns from its final pivot")
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PlanarMatchingCountError {
+    EmbeddingGraphMismatch,
+    InconsistentSigning,
+    NonSquareMatrix,
+    NonSkewSymmetric,
+    InexactDivision { step: usize },
+}
+
+impl fmt::Display for PlanarMatchingCountError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "planar matching count failed: {self:?}")
+    }
+}
+
+impl Error for PlanarMatchingCountError {}
+
+#[cfg(test)]
+mod tests {
+    use num_bigint::{BigInt, BigUint};
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case::empty(vec![], 1)]
+    #[case::pair(vec![vec![0, 3], vec![-3, 0]], 3)]
+    #[case::four(
+        vec![
+            vec![0, 1, 2, 3],
+            vec![-1, 0, 4, 5],
+            vec![-2, -4, 0, 6],
+            vec![-3, -5, -6, 0],
+        ],
+        8,
+    )]
+    #[case::permuted(
+        vec![
+            vec![0, -1, 4, 5],
+            vec![1, 0, 2, 3],
+            vec![-4, -2, 0, 6],
+            vec![-5, -3, -6, 0],
+        ],
+        -8,
+    )]
+    #[case::pivoted(
+        vec![
+            vec![0, 0, 2, 0],
+            vec![0, 0, 0, 3],
+            vec![-2, 0, 0, 0],
+            vec![0, -3, 0, 0],
+        ],
+        -6,
+    )]
+    #[case::six(
+        vec![
+            vec![0, 2, 0, 0, 0, 0],
+            vec![-2, 0, 0, 0, 0, 0],
+            vec![0, 0, 0, 3, 0, 0],
+            vec![0, 0, -3, 0, 0, 0],
+            vec![0, 0, 0, 0, 0, 5],
+            vec![0, 0, 0, 0, -5, 0],
+        ],
+        30,
+    )]
+    #[case::zero(vec![vec![0; 4]; 4], 0)]
+    #[case::odd(vec![vec![0; 3]; 3], 0)]
+    fn test_pfaffian(#[case] matrix: Vec<Vec<i64>>, #[case] expected: i64) {
+        let matrix: Vec<Vec<BigInt>> = matrix
+            .into_iter()
+            .map(|row| row.into_iter().map(BigInt::from).collect())
+            .collect();
+        assert_eq!(pfaffian(&matrix), Ok(BigInt::from(expected)));
+    }
+
+    #[rstest]
+    #[case::nonsquare(
+        vec![vec![0, 1], vec![-1]],
+        PlanarMatchingCountError::NonSquareMatrix,
+    )]
+    #[case::diagonal(
+        vec![vec![1, 0], vec![0, 0]],
+        PlanarMatchingCountError::NonSkewSymmetric,
+    )]
+    #[case::asymmetric(
+        vec![vec![0, 1], vec![1, 0]],
+        PlanarMatchingCountError::NonSkewSymmetric,
+    )]
+    fn test_pfaffian_error(
+        #[case] matrix: Vec<Vec<i64>>,
+        #[case] expected: PlanarMatchingCountError,
+    ) {
+        let matrix: Vec<Vec<BigInt>> = matrix
+            .into_iter()
+            .map(|row| row.into_iter().map(BigInt::from).collect())
+            .collect();
+        assert_eq!(pfaffian(&matrix), Err(expected));
+    }
+
+    #[rstest]
+    #[case::cycle(
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]),
+        vec![
+            FaceBoundary::new(
+                vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
+                vec![EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)],
+            ),
+            FaceBoundary::new(
+                vec![NodeId(0), NodeId(3), NodeId(2), NodeId(1)],
+                vec![EdgeId(3), EdgeId(2), EdgeId(1), EdgeId(0)],
+            ),
+        ],
+        1,
+    )]
+    #[case::k4(
+        Graph::new(4, &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]),
+        vec![
+            FaceBoundary::new(
+                vec![NodeId(0), NodeId(2), NodeId(1)],
+                vec![EdgeId(1), EdgeId(3), EdgeId(0)],
+            ),
+            FaceBoundary::new(
+                vec![NodeId(0), NodeId(1), NodeId(3)],
+                vec![EdgeId(0), EdgeId(4), EdgeId(2)],
+            ),
+            FaceBoundary::new(
+                vec![NodeId(0), NodeId(3), NodeId(2)],
+                vec![EdgeId(2), EdgeId(5), EdgeId(1)],
+            ),
+            FaceBoundary::new(
+                vec![NodeId(1), NodeId(2), NodeId(3)],
+                vec![EdgeId(3), EdgeId(5), EdgeId(4)],
+            ),
+        ],
+        0,
+    )]
+    fn test_kasteleyn_signs(
+        #[case] graph: Graph,
+        #[case] faces: Vec<FaceBoundary>,
+        #[case] outer_face: usize,
+    ) {
+        let embedding = PlanarEmbedding::new(&graph, faces, outer_face).unwrap();
+        let signs = kasteleyn_signs(&embedding).unwrap();
+
+        for face in embedding.bounded_faces() {
+            let mut negative = false;
+            for position in 0..face.len() {
+                let first = face.nodes()[position];
+                let second = face.nodes()[(position + 1) % face.len()];
+                negative ^= first > second;
+                negative ^= signs[face.edges()[position].index()];
+            }
+            assert_eq!(negative, face.len() % 2 == 0);
+        }
+        assert_eq!(kasteleyn_signs(&embedding), Ok(signs));
+    }
+
+    #[rstest]
+    #[case::cycle(
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]),
+        vec![
+            FaceBoundary::new(
+                vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
+                vec![EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)],
+            ),
+            FaceBoundary::new(
+                vec![NodeId(0), NodeId(3), NodeId(2), NodeId(1)],
+                vec![EdgeId(3), EdgeId(2), EdgeId(1), EdgeId(0)],
+            ),
+        ],
+        1,
+        2,
+    )]
+    #[case::bridge(
+        Graph::new(2, &[[0, 1]]),
+        vec![FaceBoundary::new(
+            vec![NodeId(0), NodeId(1)],
+            vec![EdgeId(0), EdgeId(0)],
+        )],
+        0,
+        1,
+    )]
+    #[case::odd(
+        Graph::new(3, &[[0, 1], [1, 2], [2, 0]]),
+        vec![
+            FaceBoundary::new(
+                vec![NodeId(0), NodeId(1), NodeId(2)],
+                vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+            ),
+            FaceBoundary::new(
+                vec![NodeId(0), NodeId(2), NodeId(1)],
+                vec![EdgeId(2), EdgeId(1), EdgeId(0)],
+            ),
+        ],
+        1,
+        0,
+    )]
+    #[case::k4(
+        Graph::new(4, &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]),
+        vec![
+            FaceBoundary::new(vec![NodeId(0), NodeId(2), NodeId(1)], vec![EdgeId(1), EdgeId(3), EdgeId(0)]),
+            FaceBoundary::new(vec![NodeId(0), NodeId(1), NodeId(3)], vec![EdgeId(0), EdgeId(4), EdgeId(2)]),
+            FaceBoundary::new(vec![NodeId(0), NodeId(3), NodeId(2)], vec![EdgeId(2), EdgeId(5), EdgeId(1)]),
+            FaceBoundary::new(vec![NodeId(1), NodeId(2), NodeId(3)], vec![EdgeId(3), EdgeId(5), EdgeId(4)]),
+        ],
+        0,
+        3,
+    )]
+    fn test_graph_count_perfect_matchings_planar(
+        #[case] graph: Graph,
+        #[case] faces: Vec<FaceBoundary>,
+        #[case] outer_face: usize,
+        #[case] expected: u32,
+    ) {
+        let embedding = PlanarEmbedding::new(&graph, faces, outer_face).unwrap();
+        assert_eq!(
+            graph.count_perfect_matchings_planar(&embedding),
+            Ok(BigUint::from(expected))
+        );
+    }
+
+    #[rstest]
+    fn test_graph_count_perfect_matchings_planar_error() {
+        let embedded_graph = Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]);
+        let embedding = PlanarEmbedding::new(
+            &embedded_graph,
+            vec![
+                FaceBoundary::new(
+                    vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
+                    vec![EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)],
+                ),
+                FaceBoundary::new(
+                    vec![NodeId(0), NodeId(3), NodeId(2), NodeId(1)],
+                    vec![EdgeId(3), EdgeId(2), EdgeId(1), EdgeId(0)],
+                ),
+            ],
+            1,
+        )
+        .unwrap();
+        let other = Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 1]]);
+
+        assert_eq!(
+            other.count_perfect_matchings_planar(&embedding),
+            Err(PlanarMatchingCountError::EmbeddingGraphMismatch)
+        );
+    }
+}

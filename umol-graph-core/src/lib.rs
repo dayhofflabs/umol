@@ -27,7 +27,9 @@ pub use algorithms::matching::{
     Matching, MatchingEnumerationAlgorithm, MaxMatchingAlgorithm, PerfectMatchingAlgorithm,
 };
 pub use algorithms::mis::MaxIndependentSetAlgorithm;
-pub use algorithms::planar_matching_count::{FaceBoundary, PlanarEmbedding, PlanarEmbeddingError};
+pub use algorithms::planar_matching_count::{
+    FaceBoundary, PlanarEmbedding, PlanarEmbeddingError, PlanarMatchingCountError,
+};
 pub use algorithms::refine::{
     CircularRefinementAlgorithm, CircularRefinementHash, Refinement, RefinementAlgorithm,
     RefinementHash, RefinementRounds,
