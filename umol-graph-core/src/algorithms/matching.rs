@@ -1,6 +1,7 @@
 //! Maximum matching and matching enumeration.
 
 use std::collections::VecDeque;
+use std::ops::ControlFlow;
 
 use crate::algorithms::coloring::BipartitionAlgorithm;
 use crate::correspondence::{Correspondence, GraphCorrespondence};
@@ -115,6 +116,42 @@ impl Graph {
         }
     }
 
+    /// Visits every perfect matching until traversal completes or the visitor
+    /// returns [`ControlFlow::Break`]. Traversal is deterministic for a fixed
+    /// graph representation, but its order is not a canonical ordering contract.
+    pub fn visit_perfect_matchings<B, F>(
+        &self,
+        alg: MatchingEnumerationAlgorithm,
+        mut visitor: F,
+    ) -> ControlFlow<B>
+    where
+        F: FnMut(Matching) -> ControlFlow<B>,
+    {
+        match alg {
+            MatchingEnumerationAlgorithm::BranchAndBound => {
+                self.visit_perfect_matchings_branch_and_bound(&mut visitor)
+            }
+        }
+    }
+
+    /// Visits every maximum matching until traversal completes or the visitor
+    /// returns [`ControlFlow::Break`]. Traversal is deterministic for a fixed
+    /// graph representation, but its order is not a canonical ordering contract.
+    pub fn visit_maximum_matchings<B, F>(
+        &self,
+        alg: MatchingEnumerationAlgorithm,
+        mut visitor: F,
+    ) -> ControlFlow<B>
+    where
+        F: FnMut(Matching) -> ControlFlow<B>,
+    {
+        match alg {
+            MatchingEnumerationAlgorithm::BranchAndBound => {
+                self.visit_maximum_matchings_branch_and_bound(&mut visitor)
+            }
+        }
+    }
+
     // Bipartite augmenting-path matching. Repeatedly grows the matching by
     // BFS for an augmenting path from each unmatched vertex on the U-side.
     // Each augmenting BFS is O(V+E), repeated up to |M*| ≤ V/2 times, giving
@@ -221,6 +258,34 @@ impl Graph {
         let mut state = MatchingSearchState::new(self);
         enumerate_rec(&mut state, target_size, &mut result);
         result
+    }
+
+    fn visit_perfect_matchings_branch_and_bound<B, F>(&self, visitor: &mut F) -> ControlFlow<B>
+    where
+        F: FnMut(Matching) -> ControlFlow<B>,
+    {
+        let initial = self.maximum_matching_edmonds();
+        if !initial.is_perfect(self.node_count()) {
+            return ControlFlow::Continue(());
+        }
+        if self.node_count() == 0 {
+            return visitor(initial);
+        }
+        let mut state = MatchingSearchState::new(self);
+        visit_rec(&mut state, self.node_count() / 2, visitor)
+    }
+
+    fn visit_maximum_matchings_branch_and_bound<B, F>(&self, visitor: &mut F) -> ControlFlow<B>
+    where
+        F: FnMut(Matching) -> ControlFlow<B>,
+    {
+        let initial = self.maximum_matching_edmonds();
+        let target_size = initial.size();
+        if target_size == 0 {
+            return visitor(initial);
+        }
+        let mut state = MatchingSearchState::new(self);
+        visit_rec(&mut state, target_size, visitor)
     }
 }
 
@@ -429,6 +494,49 @@ fn enumerate_rec(
     state.undo_exclude(exclude_undo);
 }
 
+fn visit_rec<B, F>(
+    state: &mut MatchingSearchState<'_>,
+    target_size: usize,
+    visitor: &mut F,
+) -> ControlFlow<B>
+where
+    F: FnMut(Matching) -> ControlFlow<B>,
+{
+    if state.included_size == target_size {
+        return visitor(state.matching());
+    }
+
+    let branch_edge = state.graph.edge_ids().find(|&edge| {
+        !state.included[edge.index()] && !state.excluded[edge.index()] && {
+            let [first, second] = state.graph.edge_endpoints(edge);
+            !state.covered[first.index()] && !state.covered[second.index()]
+        }
+    });
+    let Some(edge) = branch_edge else {
+        return ControlFlow::Continue(());
+    };
+
+    let include_undo = state.include(edge);
+    let include_result = if state.can_extend_to(target_size) {
+        visit_rec(state, target_size, visitor)
+    } else {
+        ControlFlow::Continue(())
+    };
+    state.undo_include(include_undo);
+    if let ControlFlow::Break(value) = include_result {
+        return ControlFlow::Break(value);
+    }
+
+    let exclude_undo = state.exclude(edge);
+    let exclude_result = if state.can_extend_to(target_size) {
+        visit_rec(state, target_size, visitor)
+    } else {
+        ControlFlow::Continue(())
+    };
+    state.undo_exclude(exclude_undo);
+    exclude_result
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct MatchingSearchState<'a> {
     graph: &'a Graph,
@@ -597,6 +705,7 @@ impl<'a> MatchingSearchState<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::ops::ControlFlow;
     use std::time::{Duration, Instant};
 
     use pretty_assertions::assert_eq;
@@ -993,6 +1102,126 @@ mod tests {
                 Ok(())
             })
             .unwrap();
+    }
+
+    #[rstest]
+    #[case::zero(Graph::new(3, &[[0, 1], [1, 2], [0, 2]]), vec![])]
+    #[case::one(Graph::new(2, &[[0, 1]]), vec![vec![EdgeId(0)]])]
+    #[case::full(
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]),
+        vec![vec![EdgeId(0), EdgeId(2)], vec![EdgeId(1), EdgeId(3)]],
+    )]
+    fn test_graph_visit_perfect_matchings(
+        #[case] graph: Graph,
+        #[case] expected: Vec<Vec<EdgeId>>,
+    ) {
+        let mut visited = Vec::new();
+        let result = graph.visit_perfect_matchings(BranchAndBound, |matching| {
+            visited.push(matching.edges().to_vec());
+            ControlFlow::<()>::Continue(())
+        });
+
+        assert_eq!(result, ControlFlow::Continue(()));
+        assert_eq!(visited, expected);
+    }
+
+    #[rstest]
+    #[case::first(1)]
+    #[case::prefix(2)]
+    fn test_graph_visit_perfect_matchings_break(#[case] stop_after: usize) {
+        let graph = Graph::new(6, &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3], [4, 5]]);
+        let mut visited = Vec::new();
+        let result = graph.visit_perfect_matchings(BranchAndBound, |matching| {
+            visited.push(matching.edges().to_vec());
+            if visited.len() == stop_after {
+                ControlFlow::Break(visited.len())
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+
+        assert_eq!(result, ControlFlow::Break(stop_after));
+        assert_eq!(visited.len(), stop_after);
+    }
+
+    #[rstest]
+    fn test_graph_visit_perfect_matchings_equivalence() {
+        let graph = Graph::new(6, &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3], [4, 5]]);
+        let expected = graph.enumerate_perfect_matchings(BranchAndBound);
+        let mut visited = Vec::new();
+        let result = graph.visit_perfect_matchings(BranchAndBound, |matching| {
+            visited.push(matching);
+            ControlFlow::<()>::Continue(())
+        });
+
+        assert_eq!(result, ControlFlow::Continue(()));
+        assert_eq!(visited, expected);
+    }
+
+    #[rstest]
+    fn test_graph_visit_maximum_matchings() {
+        let graph = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
+        let mut visited = Vec::new();
+        let result = graph.visit_maximum_matchings(BranchAndBound, |matching| {
+            visited.push(matching.edges().to_vec());
+            ControlFlow::<()>::Continue(())
+        });
+
+        assert_eq!(result, ControlFlow::Continue(()));
+        assert_eq!(
+            visited,
+            vec![vec![EdgeId(0)], vec![EdgeId(1)], vec![EdgeId(2)]]
+        );
+    }
+
+    #[rstest]
+    #[case::first(1)]
+    #[case::prefix(2)]
+    fn test_graph_visit_maximum_matchings_break(#[case] stop_after: usize) {
+        let graph = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
+        let mut count = 0;
+        let result = graph.visit_maximum_matchings(BranchAndBound, |matching| {
+            count += 1;
+            assert_eq!(matching.size(), 1);
+            if count == stop_after {
+                ControlFlow::Break(count)
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+
+        assert_eq!(result, ControlFlow::Break(stop_after));
+        assert_eq!(count, stop_after);
+    }
+
+    #[rstest]
+    fn test_graph_visit_maximum_matchings_equivalence() {
+        let graph = Graph::new(4, &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]);
+        let expected = graph.enumerate_maximum_matchings(BranchAndBound);
+        let mut visited = Vec::new();
+        let result = graph.visit_maximum_matchings(BranchAndBound, |matching| {
+            visited.push(matching);
+            ControlFlow::<()>::Continue(())
+        });
+
+        assert_eq!(result, ControlFlow::Continue(()));
+        assert_eq!(visited, expected);
+    }
+
+    #[rstest]
+    fn test_graph_visit_maximum_matchings_retention() {
+        let graph = Graph::new(4, &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]);
+        let mut count = 0;
+        let mut last_size = 0;
+        let result = graph.visit_maximum_matchings(BranchAndBound, |matching| {
+            count += 1;
+            last_size = matching.size();
+            ControlFlow::<()>::Continue(())
+        });
+
+        assert_eq!(result, ControlFlow::Continue(()));
+        assert_eq!(count, 3);
+        assert_eq!(last_size, 2);
     }
 
     fn exhaustive_matchings(graph: &Graph) -> Vec<Vec<EdgeId>> {
