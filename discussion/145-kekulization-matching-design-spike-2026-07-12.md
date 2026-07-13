@@ -276,6 +276,86 @@ Do not present the non-bipartite maximal-matching paper as a C60 fallback. A gen
 Kekulé enumerator would require a separate derivation around blossoms or another exact extension
 oracle.
 
+## Experiment A baseline (2026-07-12)
+
+The branch-and-bound visitor baseline was measured on a 10-core Apple M1 Pro MacBook Pro with
+32 GB RAM, macOS/Darwin 24.6.0, and
+`rustc 1.98.0-nightly (b354133fb 2026-06-03)` targeting `aarch64-apple-darwin`. The workspace
+`bench` profile is optimized release code with debug information. Criterion used its default
+3-second warm-up, 100 samples, and nominal 5-second measurement period; it automatically extended
+the C60 and K6,6 full-traversal measurements. The transient Criterion baseline is named
+`experiment-a`; raw machine data remains local.
+
+Fixture parsing, graph construction, reference output counting, and planar-embedding validation
+were performed once before Criterion timing. “First” therefore includes the enumerator's own state
+construction and exact extension-oracle work through its first output, but excludes corpus setup.
+Times below are Criterion point estimates.
+
+| Case | Outputs | First | Full visitor | Outputs/s | Eager | FKT count |
+|---|---:|---:|---:|---:|---:|---:|
+| benzene | 2 | 0.840 µs | 4.207 µs | 475k | 4.229 µs | 1.789 µs |
+| naphthalene | 3 | 1.969 µs | 11.570 µs | 259k | 11.642 µs | 5.344 µs |
+| coronene | 20 | 8.232 µs | 491.80 µs | 40.7k | 494.35 µs | 42.388 µs |
+| azulene, nonalternant | 2 | 1.930 µs | 9.563 µs | 209k | 9.663 µs | 5.394 µs |
+| C60, nonalternant | 12,500 | 85.064 µs | 331.85 ms | 37.7k | 337.79 ms | 540.74 µs |
+| four disconnected hexagons | 16 | 8.046 µs | 106.45 µs | 150k | 106.24 µs | — |
+| 2×4 ladder | 5 | 1.365 µs | 22.805 µs | 219k | 22.888 µs | 3.336 µs |
+| 3×3 grid, maximum | 18 | 1.869 µs | 49.965 µs | 360k | 50.514 µs | — |
+| prescribed-hole residual path | 1 | 0.464 µs | 1.253 µs | 798k | 1.279 µs | 0.766 µs |
+| K6,6 | 720 | 3.491 µs | 1.687 ms | 427k | 1.712 ms | — |
+
+Representative bounded-prefix results were: coronene `k=10`, 183.81 µs; C60 `k=10`,
+290.87 µs and `k=100`, 2.880 ms; K6,6 `k=10`, 20.694 µs and `k=100`, 226.82 µs. The
+`k=1` measurements agree with the independently registered first-output group, confirming that
+visitor cancellation returns at the requested prefix rather than traversing the remaining tree.
+
+A single untimed diagnostic traversal recorded the following scheduler-sensitive delay samples:
+
+| Case | First delay | Median delay | p95 delay | Maximum delay |
+|---|---:|---:|---:|---:|
+| benzene | 1.750 µs | 1.750 µs | 1.750 µs | 3.125 µs |
+| naphthalene | 3.333 µs | 3.333 µs | 3.333 µs | 6.500 µs |
+| coronene | 12.708 µs | 27.042 µs | 36.125 µs | 39.334 µs |
+| azulene | 3.459 µs | 3.459 µs | 3.459 µs | 6.750 µs |
+| C60 | 116.042 µs | 20.292 µs | 72.375 µs | 237.625 µs |
+| four disconnected hexagons | 12.542 µs | 3.000 µs | 13.959 µs | 21.000 µs |
+| 2×4 ladder | 2.375 µs | 5.917 µs | 7.041 µs | 9.042 µs |
+| 3×3 grid, maximum | 4.000 µs | 3.417 µs | 6.292 µs | 10.208 µs |
+| prescribed-hole residual path | 0.875 µs | 0.875 µs | 0.875 µs | 0.875 µs |
+| K6,6 | 7.208 µs | 2.541 µs | 5.375 µs | 40.458 µs |
+
+No case shows an unexplained delay gap at the tested size. C60 is the dominant total-volume case,
+but its maximum observed gap is below 0.24 ms. FKT is approximately 11.6× faster than enumeration
+for coronene and 614× faster for C60, as expected for counting without output generation.
+
+The visitor retains only the search state, recursion stack, and one delivered `Matching`; the full
+visitor benchmark folds that output into a scalar. Eager collection retains every result, including
+both its edge vector and node-mate vector, so its storage grows as
+`Θ(outputs × (vertices + matching size))`. For C60 that means 12,500 retained matchings, while
+streaming retention remains independent of output count. No allocator-level peak-byte measurement
+was taken; the baseline records this structural retention boundary rather than presenting an
+unmeasured byte estimate. Eager runtime overhead was small (about 1.8% on C60), so memory retention,
+not construction time, is the relevant compatibility cost.
+
+The counts were cross-validated independently: FKT agrees on every connected planar perfect-matching
+fixture, including coronene (20), C60 (12,500), azulene, the ladder, and the prescribed-hole
+residual; K6,6 gives `6! = 720`; four hexagons give `2^4 = 16`; and exhaustive subset counting
+gives 18 maximum matchings for the 3×3 grid. General exhaustive equality holds for every simple
+graph through five vertices, and the relabeling, early-stop, hole-conformance, and FKT cross-check
+tests all pass.
+
+Verification completed with:
+
+- `cargo fmt --all -- --check`;
+- graph-core tests with `proptest` (447 unit tests plus all matching integration suites);
+- workspace tests, green through all non-Python crates; the `umol-py` test binary has the known
+  local link failure because `libpython3.9.dylib` is absent;
+- workspace Clippy over all targets with warnings denied;
+- `git diff --check`.
+
+Experiment A is accepted as the trusted general-graph correctness and performance baseline against
+which an Uno prototype must be compared.
+
 ## Matching result representation
 
 The earlier correspondence proposal conflated two directions. Point iii asks whether matching
