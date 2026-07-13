@@ -12,7 +12,7 @@ use winnow::token::one_of;
 use winnow::Parser;
 
 use super::error::{PResult, ParseError};
-use crate::ast::operators::{MemOp, RelOp};
+use super::operators::{mem_op, mem_op_str, rel_op, rel_op_str};
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::{ValueAst, ValuePredicate, ValueTerm};
 
@@ -192,24 +192,6 @@ fn fmt_term(f: &mut fmt::Formatter<'_>, t: &ValueTerm, parent: u8) -> fmt::Resul
         f.write_char(')')?;
     }
     Ok(())
-}
-
-fn rel_op_str(op: RelOp) -> &'static str {
-    match op {
-        RelOp::Le => "<=",
-        RelOp::Ge => ">=",
-        RelOp::Eq => "==",
-        RelOp::Lt => "<",
-        RelOp::Gt => ">",
-        RelOp::Ne => "!=",
-    }
-}
-
-fn mem_op_str(op: MemOp) -> &'static str {
-    match op {
-        MemOp::In => "::",
-        MemOp::NotIn => "!:",
-    }
 }
 
 fn pred_prec(p: &ValuePredicate) -> u8 {
@@ -433,18 +415,6 @@ fn rel_expr(i: &mut &str) -> PResult<Parsed> {
     }
 }
 
-fn rel_op(i: &mut &str) -> PResult<RelOp> {
-    alt((
-        "<=".value(RelOp::Le),
-        ">=".value(RelOp::Ge),
-        "==".value(RelOp::Eq),
-        "!=".value(RelOp::Ne),
-        '<'.value(RelOp::Lt),
-        '>'.value(RelOp::Gt),
-    ))
-    .parse_next(i)
-}
-
 fn mem_expr(i: &mut &str) -> PResult<Parsed> {
     let head = add_expr.parse_next(i)?;
     let membership =
@@ -460,10 +430,6 @@ fn mem_expr(i: &mut &str) -> PResult<Parsed> {
             )))
         }
     }
-}
-
-fn mem_op(i: &mut &str) -> PResult<MemOp> {
-    alt(("!:".value(MemOp::NotIn), "::".value(MemOp::In))).parse_next(i)
 }
 
 fn add_expr(i: &mut &str) -> PResult<Parsed> {
@@ -553,6 +519,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
+    use crate::ast::operators::{MemOp, RelOp};
 
     #[rustfmt::skip]
     #[rstest]

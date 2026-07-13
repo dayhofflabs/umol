@@ -19,6 +19,7 @@ use super::config::{
 use super::constraint::RingMembershipDsl;
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
+use super::operators::{mem_op, mem_op_str};
 use super::predicate::{
     apply_spin_pair, charge, fmt_charge, fmt_ring_membership, fmt_spin_pair, lower_spin,
     optional_value, raise_spin, ring_membership, SpinPredicate,
@@ -403,23 +404,16 @@ fn element_bind(i: &mut &str) -> PResult<(String, Vec<Element>, MemOp)> {
         delimited('(', delimited(multispace0, element_bind, multispace0), ')'),
         (
             preceded('?', id),
-            preceded(
-                delimited(multispace0, "::", multispace0),
-                element_bind_domain,
-            ),
+            delimited(multispace0, mem_op, multispace0),
+            element_bind_domain,
         )
-            .map(|(id, (set, polarity))| (id, set, polarity)),
+            .map(|(id, op, set)| (id, set, op)),
     ))
     .parse_next(i)
 }
 
-fn element_bind_domain(i: &mut &str) -> PResult<(Vec<Element>, MemOp)> {
-    alt((
-        preceded('!', element_set).map(|s| (s, MemOp::NotIn)),
-        preceded('!', element_literal).map(|e| (vec![e], MemOp::NotIn)),
-        element_set.map(|s| (s, MemOp::In)),
-    ))
-    .parse_next(i)
+fn element_bind_domain(i: &mut &str) -> PResult<Vec<Element>> {
+    alt((element_set, element_literal.map(|e| vec![e]))).parse_next(i)
 }
 
 fn element_ref(i: &mut &str) -> PResult<String> {
@@ -583,10 +577,7 @@ fn fmt_element(f: &mut fmt::Formatter<'_>, expr: &ElementAst) -> fmt::Result {
             let (id, domain) = &**v;
             write!(f, "?{}", id)?;
             if let Some((op, set)) = domain {
-                write!(f, " :: ")?;
-                if matches!(op, MemOp::NotIn) {
-                    write!(f, "!")?;
-                }
+                write!(f, " {} ", mem_op_str(*op))?;
                 fmt_element_set(f, set.iter().copied())?;
             }
             Ok(())
@@ -1373,7 +1364,7 @@ mod tests {
     #[case::element_not_set("!{F,Cl}")]
     #[case::element_var_bare("?e")]
     #[case::element_var_domain("?e :: {C,N}")]
-    #[case::element_var_domain_not_in("?e :: !{F,Cl}")]
+    #[case::element_var_domain_not_in("?e !: {F,Cl}")]
     fn test_atom_display_roundtrip(#[case] input: &str) {
         let parsed = atom.parse(input).unwrap();
         assert_eq!(parsed.to_string(), input);
@@ -1416,9 +1407,9 @@ mod tests {
     #[case::var_domain_paren("(?e :: {C,N})", ElementAst::var_in("e", vec![Element::C, Element::N]))]
     #[case::var_domain_bare("?e :: {C,N}", ElementAst::var_in("e", vec![Element::C, Element::N]))]
     #[case::var_domain_paren_paren("((?e :: {C,N}))", ElementAst::var_in("e", vec![Element::C, Element::N]))]
-    #[case::var_domain_not_in_lit("?e :: !H", ElementAst::var_not_in("e", vec![Element::H]))]
-    #[case::var_domain_not_in_set("?e :: !{F,Cl}", ElementAst::var_not_in("e", vec![Element::F, Element::Cl]))]
-    #[case::var_domain_not_in_paren("(?e :: !{F,Cl})", ElementAst::var_not_in("e", vec![Element::F, Element::Cl]))]
+    #[case::var_domain_not_in_lit("?e !: H", ElementAst::var_not_in("e", vec![Element::H]))]
+    #[case::var_domain_not_in_set("?e !: {F,Cl}", ElementAst::var_not_in("e", vec![Element::F, Element::Cl]))]
+    #[case::var_domain_not_in_paren("(?e !: {F,Cl})", ElementAst::var_not_in("e", vec![Element::F, Element::Cl]))]
     #[case::var_bare("?e", ElementAst::var("e".to_string()))]
     #[case::var_paren("(?e)", ElementAst::var("e".to_string()))]
     #[case::var_paren_paren("((?e))", ElementAst::var("e".to_string()))]

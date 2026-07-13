@@ -226,7 +226,7 @@ not-expr   ::= '!' not-expr
 
 rel-expr   ::= mem-expr ( rel-op mem-expr )?
 
-mem-expr   ::= add-expr ( '::' nat-set )?
+mem-expr   ::= add-expr ( ( '::' | '!:' ) nat-set )?
 
 add-expr ::= mult-expr ( add-op mult-expr )*
 mult-expr ::= unary-expr ( mult-op unary-expr )*
@@ -262,10 +262,10 @@ id  ::= [a-zA-Z][a-zA-Z0-9_]*
 
 **Equality** is **`==`** (not **`=`**). **Finite numeric membership** uses the **`::`** token and a **`nat-set`**: **`?h + 1 :: {2,3}`** parses as **`(?h + 1) :: {2,3}`** — the full **additive** form is built before **`::`**, which sits **below** **relations** and **logic** only (same layering as former **`in`**).
 
-**Meaning of `::`.** The same token **`::`** appears in two shapes:
+**Meaning of `::` / `!:`.** The membership operators — **`::`** (in) and **`!:`** (not-in) — appear in two shapes:
 
-- In **`element-bind`** (**§7.4**), **`?` *id* `::` *element-set*** means: the nominal variable is constrained to **membership in a set of element symbols** (chemical **`element-literal`** values).
-- In **`mem-expr`** (inside **`value-expr`**), ***arith* `::` *nat-set*** means: the left-hand **arithmetic** value **MUST** be a member of the **numeric** set. After matching, concrete values **MUST** fit the slot’s type: **`u8`** for most atom/bond numeric predicates (**§7.2**), **`i8`** for formal charge (**`#c`**), **`u32`** for isotope mass (**`#i`**).
+- In **`element-bind`** (**§7.4**), **`?` *id* `::` *element-domain*** / **`?` *id* `!:` *element-domain*** constrains the nominal variable to **membership in** / **exclusion from** a set (or single) of element symbols (chemical **`element-literal`** values).
+- In **`mem-expr`** (inside **`value-expr`**), ***arith* `::` *nat-set*** / ***arith* `!:` *nat-set*** asserts the left-hand **arithmetic** value **is** / **is not** a member of the **numeric** set. After matching, concrete values **MUST** fit the slot’s type: **`u8`** for most atom/bond numeric predicates (**§7.2**), **`i8`** for formal charge (**`#c`**), **`u32`** for isotope mass (**`#i`**).
 
 **Ground** **`value-expr`** (predicate payloads where allowed) are **`decimal-tail`** / **`nat`** / top-level **`nat-set`** (non-empty, entries valid for the slot), with optional leading **`sign`** sequence on a bare **`nat`** / **`decimal-tail`** only: no **`?`**, **`::`**, relations, logic, **`*`**, or **parentheses** (**§5.4**), except **`#c`** (**§7.3**) also allows a payload consisting **solely** of **`+`** or **`-`** (**+1** / **−1**). Implementations **MAY** use a restricted parser for **Ground** (**§3**).
 
@@ -421,7 +421,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 **Payload extraction.** A **predicate** is **`#`**, one **tag** character **`[A-Za-z_]`**, and a **payload** consisting of all following characters up to (but not including) the **next** **`#`** or **end of string**, after **whitespace normalization** for the purpose of **tokenizing** the payload as **`value-expr`**: the payload text **MAY** contain ignored whitespace between **`value-expr`** tokens as in **§5**. The **payload** **MUST NOT** contain **`#`**.
 
-**Examples (atom):** **`C`**, **`C#h3`**, **`C#h*`**, **`!H`**, **`!{F,Cl}`**, **`?e`**, **`?e :: {Cl,Br}`**, **`?e :: !{F,Cl}`**, **`C#a*`**, **`C#a !`**, **`C#c+`**, **`C#c-`**, **`C#c +`**.
+**Examples (atom):** **`C`**, **`C#h3`**, **`C#h*`**, **`!H`**, **`!{F,Cl}`**, **`?e`**, **`?e :: {Cl,Br}`**, **`?e !: {F,Cl}`**, **`C#a*`**, **`C#a !`**, **`C#c+`**, **`C#c-`**, **`C#c +`**.
 
 - A **`nat`** and an **`id`** contain **no** internal whitespace.
 - A **relational** token is **`<=`**, **`>=`**, **`==`**, or a **single** **`<`** or **`>`** that is **not** part of **`<=` `>=`**. **Multi-character** tokens are one lexical unit. Plain **`=`** is **not** a relational operator.
@@ -494,7 +494,7 @@ isotope-payload ::= '='                           (* Natural — naturally most 
                   | '?' id                         (* Ref — bind reference              *)
                   | '?' id '::' isotope-domain     (* Bind — named domain                *)
 
-isotope-domain  ::= nat-set                        (* MemOp::In                          *)
+isotope-domain  ::= nat-set                        (* in-only; isotope bind has no not-in *)
                   | '!' signed-int                 (* MemOp::NotIn (singleton)           *)
                   | '!' nat-set                    (* MemOp::NotIn                       *)
 ```
@@ -559,10 +559,9 @@ element ::= element-literal
 
 element-set ::= '{' element-literal (',' element-literal)* '}'
 
-element-bind   ::= '?' id '::' element-domain
+element-bind   ::= '?' id ( '::' | '!:' ) element-domain
 element-domain ::= element-set
-                 | '!' element-literal
-                 | '!' element-set
+                 | element-literal
 element-ref    ::= '?' id
 
 element-literal ::= [A-Z][a-z]*
@@ -572,7 +571,7 @@ element-literal ::= [A-Z][a-z]*
 - **`*`**: any element; **invalid** in **Ground** unless narrowed by a containing rule outside this specification.
 - **`element-set`**: finite non-empty disjunction of **one or more** **`element-literal`** entries; **§7.2**. **Query** / **Rule** when **Ground** disallows wildcards.
 - **`!` *element-literal*** / **`!` *element-set***: cofinite **negation** — admits everything in the element domain **except** the named literal / set members. **§7.2** range applies to the excluded entries. **Invalid** in **Ground**.
-- **`element-bind`**: **Query** / **Rule** only. Introduces a **nominal** variable **`id`** constrained to **membership in** (**`MemOp::In`**) or **exclusion from** (**`MemOp::NotIn`**) an **`element-domain`** (**§6**). **`::`** here means **set membership in a set of element symbols** (**§5**). The `!` prefix flips the operator to **`NotIn`**. **Invalid** in **Ground**.
+- **`element-bind`**: **Query** / **Rule** only. Introduces a **nominal** variable **`id`** constrained to **membership in** (**`::`**, **`MemOp::In`**) or **exclusion from** (**`!:`**, **`MemOp::NotIn`**) an **`element-domain`** — a set (or single) of element symbols (**§5**, **§6**). The operator carries the polarity; the domain itself is unnegated (unlike the literal complement **`!{…}`**, which is a field value, not a bind). **Invalid** in **Ground**.
 - **`element-ref`**: **Query** / **Rule** only. **Nominal reference**: **`id`** must already be bound as a nominal in rule scope (**§6**). Appears only in the **element** position at the start of the atom-string. No arithmetic on nominal variables.
 
 **Paren-transparency.** Outer parentheses around an **`element-bind`** or **`element-ref`** are **optional** and **semantically transparent**: implementations **MUST** accept the bare forms (**`?e`**, **`?e :: {C,N}`**) and any nesting depth of outer parens (**`(?e)`**, **`((?e :: {C,N}))`**, …) as identical AST. The **canonical** rendered form is **bare** (no outer parens).
