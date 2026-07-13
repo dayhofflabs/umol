@@ -227,7 +227,7 @@ impl StereoConformanceValidator {
             let op =
                 OrientedPermutation::new(ls.permutation.permutation.0, ls.permutation.orientation);
             let in_group = sym.group().contains(op);
-            let holds = match ls.present {
+            let holds = match ls.invariant {
                 BooleanAst::Lit(true) => in_group,
                 BooleanAst::Lit(false) => !in_group,
                 BooleanAst::Undetermined => true,
@@ -365,7 +365,7 @@ mod tests {
                         permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                         orientation: Orientation::Proper,
                     },
-                    present: BooleanAst::Lit(true),
+                    invariant: BooleanAst::Lit(true),
                 }));
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::LigandSymmetryViolation {
@@ -374,7 +374,7 @@ mod tests {
                     permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                     orientation: Orientation::Proper,
                 },
-                present: BooleanAst::Lit(true),
+                invariant: BooleanAst::Lit(true),
             },
         }
     )]

@@ -21,15 +21,14 @@ pub(crate) use umol_ast::ast::{
     MoleculeConstraint, MoleculeParts, MulticenterBondAst, MulticenterBondConstraintAst,
     MulticenterBondConstraintKey, MulticenterBondConstraintsAst, MulticenterBondHandle,
     MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
-    NoncovalentBondConstraintsAst, NoncovalentBondHandle,
-    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, OrientedLigandPermutation,
-    RelOp, RelationalConstraint, RingMembershipAst, RingScope, SpinStateAst, StereoAtomAst,
-    StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomId, StereoBondAst,
-    StereoBondConstraintAst, StereoBondConstraintsAst, StereoBondId, StereoConfigurationAst,
-    StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
-    StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
-    TetrahedralStereoAst, Topicity, TopicityAst, TopicityRelationAst, ValueAst, ValuePredicate,
-    ValueTerm,
+    NoncovalentBondConstraintsAst, NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind,
+    NoncovalentBondKindAst, OrientedLigandPermutation, RelOp, RelationalConstraint,
+    RingMembershipAst, RingScope, SpinStateAst, StereoAtomAst, StereoAtomConstraintAst,
+    StereoAtomConstraintsAst, StereoAtomId, StereoBondAst, StereoBondConstraintAst,
+    StereoBondConstraintsAst, StereoBondId, StereoConfigurationAst, StereoCosetAst, StereoKind,
+    StereoLigand, StereoLigandKind, StereoLigandPair, StereoLigandPosition, Stereogenicity,
+    StereogenicityAst, SubPatternAnchor, TetrahedralStereoAst, Topicity, TopicityAst,
+    TopicityRelationAst, ValueAst, ValuePredicate, ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, DativeBondParticipants,
@@ -852,20 +851,20 @@ pub(crate) fn ligand_symmetry_strategy(degree: usize) -> impl Strategy<Value = L
         orientation_strategy(),
         any::<bool>(),
     )
-        .prop_map(|(permutation, orientation, present)| LigandSymmetryAst {
+        .prop_map(|(permutation, orientation, invariant)| LigandSymmetryAst {
             permutation: OrientedLigandPermutation {
                 permutation: LigandPermutation(permutation),
                 orientation,
             },
-            present: BooleanAst::Lit(present),
+            invariant: BooleanAst::Lit(invariant),
         })
 }
 
 pub(crate) fn fluxionality_strategy(degree: usize) -> impl Strategy<Value = FluxionalityAst> {
-    (permutation_strategy(degree), any::<bool>()).prop_map(|(permutation, present)| {
+    (permutation_strategy(degree), any::<bool>()).prop_map(|(permutation, active)| {
         FluxionalityAst {
             permutation: LigandPermutation(permutation),
-            present: BooleanAst::Lit(present),
+            active: BooleanAst::Lit(active),
         }
     })
 }
@@ -964,19 +963,19 @@ macro_rules! stereo_constraint_strategy {
                     orientation_strategy(),
                     any::<bool>()
                 )
-                    .prop_map(|(permutation, orientation, present)| {
+                    .prop_map(|(permutation, orientation, invariant)| {
                         $constraint::LigandSymmetry(LigandSymmetryAst {
                             permutation: OrientedLigandPermutation {
                                 permutation: LigandPermutation(permutation),
                                 orientation,
                             },
-                            present: BooleanAst::Lit(present),
+                            invariant: BooleanAst::Lit(invariant),
                         })
                     }),
-                (permutation_strategy(degree), any::<bool>()).prop_map(|(permutation, present)| {
+                (permutation_strategy(degree), any::<bool>()).prop_map(|(permutation, active)| {
                     $constraint::Fluxionality(FluxionalityAst {
                         permutation: LigandPermutation(permutation),
-                        present: BooleanAst::Lit(present),
+                        active: BooleanAst::Lit(active),
                     })
                 }),
                 (ligand_pair_strategy(degree), topicity_relation_strategy()).prop_map(

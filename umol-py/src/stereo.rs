@@ -987,7 +987,7 @@ impl StereogenicityAst {
 #[pyclass]
 pub struct LigandSymmetryAst {
     permutation: OrientedLigandPermutation,
-    present: Py<BooleanAst>,
+    invariant: Py<BooleanAst>,
 }
 
 #[pymethods]
@@ -996,11 +996,11 @@ impl LigandSymmetryAst {
     fn new(
         py: Python<'_>,
         permutation: OrientedLigandPermutation,
-        present: BooleanArg,
+        invariant: BooleanArg,
     ) -> PyResult<Self> {
         Ok(LigandSymmetryAst {
             permutation,
-            present: into_py_variant(py, BooleanAst::from_ast(&present.to_ast(py)))?,
+            invariant: into_py_variant(py, BooleanAst::from_ast(&invariant.to_ast(py)))?,
         })
     }
 
@@ -1010,8 +1010,8 @@ impl LigandSymmetryAst {
     }
 
     #[getter]
-    fn present(&self, py: Python<'_>) -> Py<BooleanAst> {
-        self.present.clone_ref(py)
+    fn invariant(&self, py: Python<'_>) -> Py<BooleanAst> {
+        self.invariant.clone_ref(py)
     }
 
     /// Matches iff the permutations are equal and the presence assertions match.
@@ -1031,7 +1031,11 @@ impl LigandSymmetryAst {
         Ok(format!(
             "LigandSymmetryAst({}, {})",
             self.permutation.__repr__(),
-            self.present.bind(py).as_any().repr()?.extract::<String>()?,
+            self.invariant
+                .bind(py)
+                .as_any()
+                .repr()?
+                .extract::<String>()?,
         ))
     }
 }
@@ -1041,33 +1045,33 @@ impl LigandSymmetryAst {
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstLigandSymmetryAst) -> PyResult<Self> {
         Ok(LigandSymmetryAst {
             permutation: OrientedLigandPermutation::from_ast(ast.permutation),
-            present: into_py_variant(py, BooleanAst::from_ast(&ast.present))?,
+            invariant: into_py_variant(py, BooleanAst::from_ast(&ast.invariant))?,
         })
     }
 
     pub(crate) fn to_ast(&self, py: Python<'_>) -> AstLigandSymmetryAst {
         AstLigandSymmetryAst {
             permutation: self.permutation.to_ast(),
-            present: self.present.bind(py).borrow().to_ast(),
+            invariant: self.invariant.bind(py).borrow().to_ast(),
         }
     }
 }
 
-/// A fluxionality constraint value: a proper ligand permutation realized by dynamics, with a
-/// presence assertion (whether the move is present). Mirrors the Rust `FluxionalityAst`.
+/// A fluxionality constraint value: a proper ligand permutation realized by dynamics, with an
+/// assertion of whether the move is `active`. Mirrors the Rust `FluxionalityAst`.
 #[pyclass]
 pub struct FluxionalityAst {
     permutation: LigandPermutation,
-    present: Py<BooleanAst>,
+    active: Py<BooleanAst>,
 }
 
 #[pymethods]
 impl FluxionalityAst {
     #[new]
-    fn new(py: Python<'_>, permutation: LigandPermutation, present: BooleanArg) -> PyResult<Self> {
+    fn new(py: Python<'_>, permutation: LigandPermutation, active: BooleanArg) -> PyResult<Self> {
         Ok(FluxionalityAst {
             permutation,
-            present: into_py_variant(py, BooleanAst::from_ast(&present.to_ast(py)))?,
+            active: into_py_variant(py, BooleanAst::from_ast(&active.to_ast(py)))?,
         })
     }
 
@@ -1077,8 +1081,8 @@ impl FluxionalityAst {
     }
 
     #[getter]
-    fn present(&self, py: Python<'_>) -> Py<BooleanAst> {
-        self.present.clone_ref(py)
+    fn active(&self, py: Python<'_>) -> Py<BooleanAst> {
+        self.active.clone_ref(py)
     }
 
     /// Matches iff the permutations are equal and the presence assertions match.
@@ -1098,7 +1102,7 @@ impl FluxionalityAst {
         Ok(format!(
             "FluxionalityAst({}, {})",
             self.permutation.__repr__(),
-            self.present.bind(py).as_any().repr()?.extract::<String>()?,
+            self.active.bind(py).as_any().repr()?.extract::<String>()?,
         ))
     }
 }
@@ -1108,14 +1112,14 @@ impl FluxionalityAst {
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstFluxionalityAst) -> PyResult<Self> {
         Ok(FluxionalityAst {
             permutation: LigandPermutation::from_ast(ast.permutation),
-            present: into_py_variant(py, BooleanAst::from_ast(&ast.present))?,
+            active: into_py_variant(py, BooleanAst::from_ast(&ast.active))?,
         })
     }
 
     pub(crate) fn to_ast(&self, py: Python<'_>) -> AstFluxionalityAst {
         AstFluxionalityAst {
             permutation: self.permutation.to_ast(),
-            present: self.present.bind(py).borrow().to_ast(),
+            active: self.active.bind(py).borrow().to_ast(),
         }
     }
 }
@@ -1569,7 +1573,7 @@ mod tests {
             let value = LigandSymmetryAst::new(py, permutation, BooleanArg::Lit(true)).unwrap();
             assert!(value.permutation() == permutation);
             assert_eq!(
-                value.present.bind(py).borrow().to_ast(),
+                value.invariant.bind(py).borrow().to_ast(),
                 AstBooleanAst::Lit(true)
             );
             assert_eq!(
@@ -1592,23 +1596,23 @@ mod tests {
             );
             let wildcard = LigandSymmetryAst {
                 permutation,
-                present: into_py_variant(py, BooleanAst::Undetermined()).unwrap(),
+                invariant: into_py_variant(py, BooleanAst::Undetermined()).unwrap(),
             };
-            let present_true = LigandSymmetryAst {
+            let invariant_true = LigandSymmetryAst {
                 permutation,
-                present: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
+                invariant: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
             };
-            let present_false = LigandSymmetryAst {
+            let invariant_false = LigandSymmetryAst {
                 permutation,
-                present: into_py_variant(py, BooleanAst::Lit(false)).unwrap(),
+                invariant: into_py_variant(py, BooleanAst::Lit(false)).unwrap(),
             };
             let other = LigandSymmetryAst {
                 permutation: other_permutation,
-                present: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
+                invariant: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
             };
-            assert!(wildcard.matches(&present_true, py));
-            assert!(!present_true.matches(&present_false, py));
-            assert!(!present_true.matches(&other, py));
+            assert!(wildcard.matches(&invariant_true, py));
+            assert!(!invariant_true.matches(&invariant_false, py));
+            assert!(!invariant_true.matches(&other, py));
         });
     }
 
@@ -1624,14 +1628,14 @@ mod tests {
                         )),
                         orientation: PermOrientation::Proper,
                     },
-                    present: AstBooleanAst::Lit(true),
+                    invariant: AstBooleanAst::Lit(true),
                 },
                 AstLigandSymmetryAst {
                     permutation: AstOrientedLigandPermutation {
                         permutation: AstLigandPermutation(PermPermutation::identity(4)),
                         orientation: PermOrientation::Improper,
                     },
-                    present: AstBooleanAst::Undetermined,
+                    invariant: AstBooleanAst::Undetermined,
                 },
             ] {
                 assert_eq!(
@@ -1649,7 +1653,7 @@ mod tests {
             let value = FluxionalityAst::new(py, permutation, BooleanArg::Lit(false)).unwrap();
             assert!(value.permutation() == permutation);
             assert_eq!(
-                value.present.bind(py).borrow().to_ast(),
+                value.active.bind(py).borrow().to_ast(),
                 AstBooleanAst::Lit(false)
             );
             assert_eq!(
@@ -1666,23 +1670,23 @@ mod tests {
             let other_permutation = LigandPermutation::new(Permutation::new(vec![0, 1, 2, 3]));
             let wildcard = FluxionalityAst {
                 permutation,
-                present: into_py_variant(py, BooleanAst::Undetermined()).unwrap(),
+                active: into_py_variant(py, BooleanAst::Undetermined()).unwrap(),
             };
-            let present_true = FluxionalityAst {
+            let active_true = FluxionalityAst {
                 permutation,
-                present: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
+                active: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
             };
-            let present_false = FluxionalityAst {
+            let active_false = FluxionalityAst {
                 permutation,
-                present: into_py_variant(py, BooleanAst::Lit(false)).unwrap(),
+                active: into_py_variant(py, BooleanAst::Lit(false)).unwrap(),
             };
             let other = FluxionalityAst {
                 permutation: other_permutation,
-                present: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
+                active: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
             };
-            assert!(wildcard.matches(&present_true, py));
-            assert!(!present_true.matches(&present_false, py));
-            assert!(!present_true.matches(&other, py));
+            assert!(wildcard.matches(&active_true, py));
+            assert!(!active_true.matches(&active_false, py));
+            assert!(!active_true.matches(&other, py));
         });
     }
 
@@ -1695,11 +1699,11 @@ mod tests {
                         4,
                         &[1, 0, 2, 3],
                     )),
-                    present: AstBooleanAst::Lit(false),
+                    active: AstBooleanAst::Lit(false),
                 },
                 AstFluxionalityAst {
                     permutation: AstLigandPermutation(PermPermutation::identity(4)),
-                    present: AstBooleanAst::Undetermined,
+                    active: AstBooleanAst::Undetermined,
                 },
             ] {
                 assert_eq!(FluxionalityAst::from_ast(py, &ast).unwrap().to_ast(py), ast);

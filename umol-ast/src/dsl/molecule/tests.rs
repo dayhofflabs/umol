@@ -398,7 +398,7 @@ fn test_molecule_dsl_edn_roundtrip_with_ids_and_aliases() {
 #[case::constraints_atom_tetrahedral_stereo_expr(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:tetrahedral-stereo {:stereo "~1"}}]}]}"##)]
 #[case::constraints_bond_cis_trans_stereo(r##"{:atoms ["C" "C"] :bonds [[0 1 "2"]] :constraints [{:bond [0 {:cis-trans-stereo {:stereo 1}}]}]}"##)]
 #[case::stereo_atom_inline_constraints(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#f(0,1,2)#g/"}]}"##)]
-#[case::stereo_atom_molecule_constraint(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}] :constraints [{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :present false}}]]}]}"##)]
+#[case::stereo_atom_molecule_constraint(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}] :constraints [{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :invariant false}}]]}]}"##)]
 #[case::stereo_atom_fluxionality_constraint(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}] :constraints [{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1 2]]}}]]}]}"##)]
 #[case::stereo_bond_molecule_constraint(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}] :constraints [{:stereo-bond [0 [:cis-trans {:topicity {:pair [0 1] :relation :diastereotopic}}]]}]}"##)]
 fn test_molecule_dsl_from_edn_str_from_edn_parity(#[case] source: &str) {
@@ -631,7 +631,7 @@ fn test_molecule_dsl_to_edn_structural_ref(#[case] structural: &str, #[case] can
 #[rstest]
 #[case::bond(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [{:atoms [0 1]} {:aromatic true}]}]}"#)]
 #[case::dative(r#"{:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}] :constraints [{:dative-bond [{:donors [0] :acceptor 1} {:ring-membership {:count 1}}]}]}"#)]
-#[case::stereo(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}] :constraints [{:stereo-atom [{:site 0 :ligands [1 2 3 4]} [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :present false}}]]}]}"#)]
+#[case::stereo(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}] :constraints [{:stereo-atom [{:site 0 :ligands [1 2 3 4]} [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :invariant false}}]]}]}"#)]
 fn test_molecule_dsl_from_edn_str_structural_ref(#[case] input: &str) {
     let via_stream = MoleculeDsl::from_edn_str(input).unwrap();
     let via_tree = MoleculeDsl::from_edn(&read_string(input).unwrap()).unwrap();

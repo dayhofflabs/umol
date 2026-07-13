@@ -768,7 +768,7 @@ ring-membership-form ::= { :size nat :count value-expr } | { :count value-expr }
 
 aromatic-system-constraint-form  ::= { :electron-count value-expr }
 multicenter-bond-constraint-form ::= { :electron-count value-expr }
-noncovalent-bond-constraint-form ::= (* uninhabited — no value-only variants yet *)
+noncovalent-bond-constraint-form ::= { :intramolecular bool }
 
 (* A stereo entity-constraint form is a positional 2-vector: the element's *)
 (* :kind (its stereo subtype) first, then a single-key predicate map. Kind is *)
@@ -789,18 +789,15 @@ stereo-kind          ::= :tetrahedral | :cis-trans | :axial | :square-planar
                        | :trigonal-bipyramidal | :octahedral
 permutation-form     ::= [ cycle* ]                 (* vector of disjoint cycles; identity [] *)
 cycle                ::= [ nat+ ]                    (* p0→p1→…→p0, 0-indexed positions *)
-presence             ::= true | false | :undetermined   (* the #p / #f trailing presence, §7.14 *)
+bool                 ::= true | false | :undetermined   (* the #p / #f trailing presence, §7.14 *)
 ligand-symmetry-form ::= { :permutation permutation-form [:orientation (:proper | :improper)]
-                                                         [:present presence] }
-fluxionality-form    ::= { :permutation permutation-form [:present presence] }
+                                                         [:invariant bool] }
+fluxionality-form    ::= { :permutation permutation-form [:active bool] }
 ligand-pair          ::= [ nat nat ]                (* two ligand-frame positions *)
-topicity-form        ::= { :pair ligand-pair :relation topicity-relation [:member (:in | :not-in)] }
-stereogenicity-form  ::= { :relation stereogenicity-relation [:member (:in | :not-in)] }
-(* :present is the #p / #f assertion (default true, omitted). It is distinct from :member, *)
-(* which survives only on topicity / stereogenicity as the relation's set-complement flag:  *)
-(* :member (default :in) with :not-in negates the :relation vector.                          *)
-topicity-relation       ::= :homotopic | :enantiotopic | :diastereotopic | [ keyword+ ] | :undetermined
-stereogenicity-relation ::= :symmetric | :prochiral | :stereogenic       | [ keyword+ ] | :undetermined
+topicity-form        ::= { :pair ligand-pair :relation topicity-relation }
+stereogenicity-form  ::= { :relation stereogenicity-relation }
+topicity-relation       ::= :homotopic | :enantiotopic | :diastereotopic | [ keyword+ ] | { :not-in [ keyword+ ] } | :undetermined
+stereogenicity-relation ::= :symmetric | :prochiral | :stereogenic       | [ keyword+ ] | { :not-in [ keyword+ ] } | :undetermined
 
 stereo-config-form ::= :undetermined | :not-stereo | { :stereo coset-form }
 coset-form ::= int | :undetermined | [ int+ ] | "coset-string"
@@ -829,7 +826,7 @@ stereo-bond-ref      ::= int | keyword | { :site bond-ref :ligands [ligand-ref+]
 
 **Structural refs.** The **map** form of a **non-atom** ref names the entity by its **participants** instead of by position or id: **`:atoms`** for a bond / noncovalent bond (a 2-vector) or an aromatic system / multicenter bond (the atom set); **`:donors`** + **`:acceptor`** for a dative bond; **`:site`** + **`:ligands`** for a stereo atom / stereo bond (the bearing site plus the ordered ligand frame — the same **`(site, ligand-multiset)`** key that identifies the element). It resolves by looking the participant key up among the entities of that kind; because each kind's participants are unique on a molecule (**§4.1**), at most one entity matches, and an **unmatched** key is a **parse error**. A structural ref map **MUST NOT** carry **`:type`** or **`:id`** (those mark an entity *definition*, not a ref). **`atom-ref`** has **no** structural form. Structural refs are **accepted wherever a ref is** — entity entries (a **`stereo-*-entry`** **`:site`**), entity / relational / molecule-scope constraints, sub-pattern anchor pairs, **`:bond-order-sum`** **`:bonds`**, reaction deltas, and reaction-span refs — and by **both** the tree and streaming parsers. They are **input-only**: the emission priority is **keyword > positional**, and a structural ref is **never** re-emitted (serialization produces only the **`:id`** keyword or the positional integer).
 
-**Narrow inner forms for DAMN entities.** **`:aromatic-system`** and **`:multicenter-bond`** narrow leaves carry only the **`:electron-count`** value-only variant; every other predicate on those entities is a relational leaf instead. **`:noncovalent-bond`** narrow leaves have no inhabited inner form yet; every noncovalent predicate is a relational leaf.
+**Narrow inner forms for DAMN entities.** **`:aromatic-system`** and **`:multicenter-bond`** narrow leaves carry only the **`:electron-count`** value-only variant; every other predicate on those entities is a relational leaf instead. **`:noncovalent-bond`** narrow leaves carry only the **`:intramolecular`** value-only variant (**`#I`**, **§7.13**); every other noncovalent predicate is a relational leaf.
 
 **Stereo entity constraints carry the kind.** The **`:stereo-atom`** / **`:stereo-bond`** entity-constraint forms (**`#p`** / **`#f`** / **`#o`** / **`#g`**) are a positional **2-vector** **`[stereo-kind stereo-predicate-map]`** — the element's stereo subtype first, then a single-key predicate map (so the leaf is **`{:stereo-atom [<ref> [<kind> {<predicate>}]]}`**). The kind is redundant with the referenced element at the **entity** level (the inline form omits it — the **`:type`** **`class`** supplies it, **§7.14**) but is **required** at molecule scope, where the constraint is detached from its element: a permutation payload cannot recover its degree, and **`stereo-kind`** is many-to-one on degree (**`:tetrahedral`** and **`:square-planar`** are both degree 4). It is **first** (positional, container-fixed — not a map key) so the degree is known before the predicate value is read. The kind/degree (and the chiral-class restriction on **`'`** values) is cross-checked against the resolved element by the validator (**§6.1**); **`inline_constraints`** drops the carried kind back into the element. These constraints are **distinct** from the atom/bond **`:tetrahedral-stereo`** (**`#T`**) / **`:cis-trans-stereo`** (**`#C`**) inline configurations (which assert the local **coset** at the bearing atom/bond) and from the stereo **relational leaves** (**`:stereo-atom-…`** / **`:stereo-bond-…`**, no inline form).
 
@@ -855,7 +852,7 @@ Parsers **MUST** accept both. Bare per-entity predicates (not nested under **`:a
 - **Dative bond** (**§7.12**): all `dative-bond-constraint-form` variants (`:aromatic`, `:ring-membership`) have inline forms (`#a`, `#R`).
 - **Aromatic system** (**§7.10**): the single `aromatic-system-constraint-form` variant `:electron-count` has the inline form `#e<n>`.
 - **Multicenter bond** (**§7.11**): the single `multicenter-bond-constraint-form` variant `:electron-count` has the inline form `#e<n>`.
-- **Noncovalent bond** (**§7.13**): `noncovalent-bond-constraint-form` is uninhabited; no inline-form question arises.
+- **Noncovalent bond** (**§7.13**): the single `noncovalent-bond-constraint-form` predicate (`:intramolecular`) has an inline form (`#I` on the `:type` string).
 - **Stereo atom / stereo bond** (**§7.14**): all four `stereo-atom-constraint-form` / `stereo-bond-constraint-form` predicates (`:ligand-symmetry`, `:fluxionality`, `:topicity`, `:stereogenicity`) have inline forms (`#p`, `#f`, `#o`, `#g` on the `:type` string). On **inline** the kind is omitted (the `:type` `class` supplies it); on **lift** the element's kind is written as the **first element** of the molecule-scope form's 2-vector (**§7.9**). The atom/bond `:tetrahedral-stereo` / `:cis-trans-stereo` predicates (`#T` / `#C`) are separate atom/bond inline constraints; the `:stereo-atom-…` / `:stereo-bond-…` predicates are relational leaves with no inline form.
 
 **Relational leaves** (**§7.9** `relational-constraint`) and **molecule-scope leaves** (`molecule-constraint`) have **no** inline form regardless of which entity they reference.
@@ -970,10 +967,13 @@ dative-predicate ::= '#' tag payload
 
 ### 7.13 Noncovalent-bond subgrammar
 
-**Noncovalent-string** encodes the **interaction kind** of a single **`noncovalent-bond-entry`** (**§4**) as an expression. It has **no** predicates; the kind is the whole payload.
+**Noncovalent-string** encodes the **interaction kind** of a single **`noncovalent-bond-entry`** (**§4**), optionally followed by the **`#I`** intramolecular predicate. The leading kind is the inherent field; **`#I`** is its one inline constraint.
 
 ```
-noncovalent-string ::= noncovalent-kind-expr
+noncovalent-string ::= noncovalent-kind-expr intramolecular?
+
+intramolecular ::= '#I' ( '' | '+' | '!' | '*' )
+                   (* '' / '+' intramolecular (true); '!' intermolecular (false); '*' undetermined *)
 
 noncovalent-kind-expr ::= noncovalent-kind-literal
                         | '*'
@@ -1004,6 +1004,8 @@ Each **`noncovalent-kind-literal`** is exactly three ASCII characters: one leadi
 **Wildcard and sets.** **`*`** admits any kind. An **`noncovalent-kind-set`** **`{Hbd,Ion}`** admits its members. These forms are **invalid** in **Ground**; **Query** / **Rule** **MAY** use them.
 
 **Bind and ref.** **`noncovalent-kind-bind`** introduces a **nominal** variable **`id`** constrained to membership in the given set (**§6**); **`noncovalent-kind-ref`** references a nominal binding established elsewhere in the rule scope. Both are **invalid** in **Ground**. **`::`** here means **set membership in a set of noncovalent-kind symbols**, parallel to its use in **`element-bind`** (**§7.4**, **§5**).
+
+**Intramolecular predicate (`#I`).** A trailing **`#I`** asserts whether the interaction is **intramolecular** — its two atoms lie in the **same** covalent connected component. The trailing polarity sets the truth value: **`#I`** / **`#I+`** intramolecular (true), **`#I!`** intermolecular (false), **`#I*`** undetermined. It is the noncovalent bond's **only** inline constraint (**`NoncovalentBondConstraint::Intramolecular`**); its structured EDN form is **`{:intramolecular bool}`** (**§7.9**). A **`#I*`** (undetermined) predicate is **vacuous** and **elided** from the canonical rendered string (**§7.1**), equivalent to omitting it.
 
 ### 7.14 Stereo subgrammar
 
@@ -1065,7 +1067,7 @@ Each predicate places its **parameter** (the permutation for **`#p`** / **`#f`**
 
 **Disjoint-cycle notation.** **`cycles`** is a product of disjoint cycles **`(p0,p1,…)(q0,q1,…)`**, **0-indexed** over the ligand frame, each cycle mapping **`p0→p1→…→p0`**; the identity is **`()`**. Cycle points **MUST** be in range (**`< class degree`**) and disjoint. This is the same permutation the **`Permutation`** `Display` emits and the structured **`permutation-form`** (**§7.9**) encodes as a vector of cycles.
 
-**Relation forms.** A **`relation`** has four surface forms, each **faithful to its stored variant** (representation, not canonicalization): **`*`** (**`Undetermined`** — the full domain); a bare **`glyph`** (a **`Lit`** singleton, e.g. **`=`**); a **`glyph-set`** **`{a,b,…}`** (an explicit **`LitSet`** of members, e.g. **`{=,'}`**); or a leading **`!`** on a glyph or set (a **`NotSet`** — the **complement** of the named member(s): **`!/`** = not diastereotopic, **`!{=,'}`** = neither homotopic nor enantiotopic). This mirrors the EDN, which distinguishes the member vector **`[a b]`** (**`LitSet`**) from the complement **`[x] :member :not-in`** (**`NotSet`**, **§7.9**). Over the 3-element topicity / stereogenicity domain every non-empty subset is expressible several ways; **canonicalization** (a **separate** pass) reduces a set to the smaller of its positive / complement side — a 2-set to **`!x`**, a 1-set to a bare glyph — but the surface **round-trips whichever variant the AST holds**. A full-domain (**`Undetermined`**) relation is a **vacuous** predicate: like the atom **`#a*`** / **`#T*`** special forms (**§7.3**) it is **admissible on parse** but **elided** from the canonical rendered string (**§7.1**) — **`#o*`** / **`#g*`** are dropped on render, equivalent to omitting the predicate.
+**Relation forms.** A **`relation`** has four surface forms, each **faithful to its stored variant** (representation, not canonicalization): **`*`** (**`Undetermined`** — the full domain); a bare **`glyph`** (a **`Lit`** singleton, e.g. **`=`**); a **`glyph-set`** **`{a,b,…}`** (an explicit **`LitSet`** of members, e.g. **`{=,'}`**); or a leading **`!`** on a glyph or set (a **`NotSet`** — the **complement** of the named member(s): **`!/`** = not diastereotopic, **`!{=,'}`** = neither homotopic nor enantiotopic). This mirrors the EDN, which distinguishes the member vector **`[a b]`** (**`LitSet`**) from the complement **`{:not-in [x]}`** (**`NotSet`**, **§7.9**). Over the 3-element topicity / stereogenicity domain every non-empty subset is expressible several ways; **canonicalization** (a **separate** pass) reduces a set to the smaller of its positive / complement side — a 2-set to **`!x`**, a 1-set to a bare glyph — but the surface **round-trips whichever variant the AST holds**. A full-domain (**`Undetermined`**) relation is a **vacuous** predicate: like the atom **`#a*`** / **`#T*`** special forms (**§7.3**) it is **admissible on parse** but **elided** from the canonical rendered string (**§7.1**) — **`#o*`** / **`#g*`** are dropped on render, equivalent to omitting the predicate.
 
 **`~` rendering.** A **`#p`** / **`#f`** permutation equal to the class involution (and, for **`#p`**, matching the involution's orientation) renders as **`~`**; otherwise as explicit **`cycles`**.
 

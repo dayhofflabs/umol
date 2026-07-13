@@ -1,1 +1,1 @@
-{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :present false}}]]}
+{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :invariant false}}]]}

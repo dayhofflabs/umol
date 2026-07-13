@@ -45,7 +45,6 @@ use crate::ast::constraint::{
 };
 use crate::ast::id::{AtomId, BondId, StereoLigandPosition};
 use crate::ast::molecule::MoleculeAst;
-use crate::ast::operators::MemOp;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::stereo::{CisTransStereoAst, StereoCosetAst, StereoKind, TetrahedralStereoAst};
 use crate::ast::traits::{FromAst, IntoAst};
@@ -518,14 +517,6 @@ pub(super) fn read_noncovalent_bond_constraint_dsl(
 }
 
 /// Membership polarity `:in` / `:not-in`. Shared by `#p` and the `#o`/`#g` relations.
-fn read_member(de: &mut EdnStreamDeserializer<'_>) -> Result<MemOp, EdnError> {
-    match de.read_keyword_name()?.as_ref() {
-        "in" => Ok(MemOp::In),
-        "not-in" => Ok(MemOp::NotIn),
-        other => Err(DeError::Custom(format!("expected :in | :not-in, got :{other}")).into()),
-    }
-}
-
 /// A permutation as a vector of disjoint cycles `[[0 1 2] [3 4]]`; degree from the
 /// stereo kind. Manual loops so the disjoint-cycle `seen` check borrows linearly.
 fn read_permutation(
@@ -556,19 +547,44 @@ fn read_permutation(
     Ok(Permutation::from_cycles(degree, &cycles))
 }
 
-/// The `:relation` value: `:undetermined`, one keyword, or a keyword vector.
+/// The `:relation` value: `:undetermined`, one keyword, a keyword vector (`LitSet`),
+/// or a `{:not-in [members]}` complement map (`NotSet`).
 fn read_relation_value(de: &mut EdnStreamDeserializer<'_>) -> Result<RelationValue, EdnError> {
-    if de.peek_byte()? == Some(b'[') {
-        Ok(RelationValue::Many(read_vec(de, |de| {
+    match de.peek_byte()? {
+        Some(b'[') => Ok(RelationValue::Many(read_vec(de, |de| {
             Ok(de.read_keyword_name()?.into_owned())
-        })?))
-    } else {
-        let kw = de.read_keyword_name()?.into_owned();
-        Ok(if kw == "undetermined" {
-            RelationValue::Undetermined
-        } else {
-            RelationValue::One(kw)
-        })
+        })?)),
+        Some(b'{') => {
+            let mut complement = None;
+            read_map(de, |de, key| {
+                match key {
+                    "not-in" => {
+                        complement =
+                            Some(read_vec(de, |de| Ok(de.read_keyword_name()?.into_owned()))?);
+                    }
+                    other => {
+                        return Err(DeError::UnknownField {
+                            key: other.to_string(),
+                            path: vec!["relation".into()],
+                        }
+                        .into())
+                    }
+                }
+                Ok(())
+            })?;
+            let complement = complement.ok_or_else(|| {
+                DeError::Custom("relation complement missing :not-in".to_string())
+            })?;
+            Ok(RelationValue::NotIn(complement))
+        }
+        _ => {
+            let kw = de.read_keyword_name()?.into_owned();
+            Ok(if kw == "undetermined" {
+                RelationValue::Undetermined
+            } else {
+                RelationValue::One(kw)
+            })
+        }
     }
 }
 
@@ -578,7 +594,7 @@ fn read_ligand_symmetry(
 ) -> Result<LigandSymmetryAst, EdnError> {
     let mut permutation = None;
     let mut orientation = Orientation::Proper;
-    let mut present = BooleanAst::Lit(true);
+    let mut invariant = BooleanAst::Lit(true);
     read_map(de, |de, key| {
         match key {
             "permutation" => permutation = Some(read_permutation(de, kind.degree())?),
@@ -594,7 +610,7 @@ fn read_ligand_symmetry(
                     }
                 }
             }
-            "present" => present = read_boolean_dsl(de)?.0,
+            "invariant" => invariant = read_boolean_dsl(de)?.0,
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -612,7 +628,7 @@ fn read_ligand_symmetry(
             permutation: LigandPermutation(permutation),
             orientation,
         },
-        present,
+        invariant,
     })
 }
 
@@ -621,11 +637,11 @@ fn read_fluxionality(
     kind: StereoKind,
 ) -> Result<FluxionalityAst, EdnError> {
     let mut permutation = None;
-    let mut present = BooleanAst::Lit(true);
+    let mut active = BooleanAst::Lit(true);
     read_map(de, |de, key| {
         match key {
             "permutation" => permutation = Some(read_permutation(de, kind.degree())?),
-            "present" => present = read_boolean_dsl(de)?.0,
+            "active" => active = read_boolean_dsl(de)?.0,
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -640,14 +656,13 @@ fn read_fluxionality(
         .ok_or_else(|| DeError::Custom("fluxionality missing :permutation".to_string()))?;
     Ok(FluxionalityAst {
         permutation: LigandPermutation(permutation),
-        present,
+        active,
     })
 }
 
 fn read_topicity(de: &mut EdnStreamDeserializer<'_>) -> Result<TopicityAst, EdnError> {
     let mut pair = None;
     let mut value = None;
-    let mut not_in = false;
     read_map(de, |de, key| {
         match key {
             "pair" => {
@@ -661,7 +676,6 @@ fn read_topicity(de: &mut EdnStreamDeserializer<'_>) -> Result<TopicityAst, EdnE
                 ));
             }
             "relation" => value = Some(read_relation_value(de)?),
-            "member" => not_in = read_member(de)? == MemOp::NotIn,
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -676,17 +690,15 @@ fn read_topicity(de: &mut EdnStreamDeserializer<'_>) -> Result<TopicityAst, EdnE
     let value = value.ok_or_else(|| DeError::Custom("topicity missing :relation".to_string()))?;
     Ok(TopicityAst {
         pair,
-        relation: read_topicity_relation(value, not_in)?,
+        relation: read_topicity_relation(value)?,
     })
 }
 
 fn read_stereogenicity(de: &mut EdnStreamDeserializer<'_>) -> Result<StereogenicityAst, EdnError> {
     let mut value = None;
-    let mut not_in = false;
     read_map(de, |de, key| {
         match key {
             "relation" => value = Some(read_relation_value(de)?),
-            "member" => not_in = read_member(de)? == MemOp::NotIn,
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -699,7 +711,7 @@ fn read_stereogenicity(de: &mut EdnStreamDeserializer<'_>) -> Result<Stereogenic
     })?;
     let value =
         value.ok_or_else(|| DeError::Custom("stereogenicity missing :relation".to_string()))?;
-    Ok(read_stereogenicity_relation(value, not_in)?)
+    Ok(read_stereogenicity_relation(value)?)
 }
 
 /// Stream a stereo constraint as the positional 2-vector `[<kind> {<key> <value>}]`:
@@ -2272,23 +2284,23 @@ mod tests {
     #[rstest]
     #[case::fluxionality(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(true) })),
+            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(true) })),
         "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]]}}]]}")]
     #[case::fluxionality_absent(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(false) })),
-        "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]] :present false}}]]}")]
+            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(false) })),
+        "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]] :active false}}]]}")]
     #[case::ligand_symmetry(
         Constraint::StereoAtom(StereoAtomId(1), StereoKind::Tetrahedral,
             StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
                 permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Improper },
-                present: BooleanAst::Lit(false) })),
-        "{:stereo-atom [1 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :present false}}]]}")]
+                invariant: BooleanAst::Lit(false) })),
+        "{:stereo-atom [1 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :invariant false}}]]}")]
     #[case::ligand_symmetry_defaults(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
             StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
                 permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper },
-                present: BooleanAst::Lit(true) })),
+                invariant: BooleanAst::Lit(true) })),
         "{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]]}}]]}")]
     #[case::topicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Octahedral,
