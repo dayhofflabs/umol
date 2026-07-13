@@ -7,11 +7,18 @@ Status: Active — **B1 · Bond slice DONE incl. the view half** (value + WET co
 `MulticenterBondView`/`MulticenterBondViews` + molecule-backed constraint views; `mol.multicenter_bonds`
 accessor; `from_parts` `multicenter=[]` kwarg; reuses the `ElectronCountsAst` leaf, no new foundation;
 9 multicenter pyclasses registered; 344 Rust unit + 332 pytest green, clippy/fmt clean). **B5 ·
-noncovalent PAUSED** (2026-07-12): scoping surfaced the uninhabited noncovalent constraint + the pyo3
-zero-variant-enum blocker; resolution is to inhabit the constraint upstream
-(`Intramolecular(BooleanAst)`, `#I`) — scope + staged plan in **doc 117 §4** — after which B5 resumes as
-a standard 1-key Boolean-constraint slice. See the *B5 · Noncovalent bond* section below, doc 117 §4, and
-*B3 · Aromatic* / *B4 · Multicenter — staged impl plan* for the WET template.
+noncovalent COMPLETE** (2026-07-12): the uninhabited-constraint + pyo3-zero-variant-enum blocker was
+resolved by inhabiting the constraint upstream (`Intramolecular(BooleanAst)`, `#I` — doc 117 §4 stages
+A–C), then binding the full slice (`umol-py/src/noncovalent.rs`: kind leaf, 1-key Boolean constraint
+container + live view, `NoncovalentBondAst` value pyclass, `NoncovalentBondView`/`NoncovalentBondViews`,
+`mol.noncovalent_bonds` accessor, `from_parts(noncovalent=[])` kwarg). 417 Rust unit + 363 pytest green,
+clippy/fmt clean. **A concurrent self-alias `RefCell` double-borrow panic** (surfaced by an adversarial
+review of the noncovalent slice) was fixed in noncovalent AND swept across all peer slices (atom/bond/
+dative/aromatic/multicenter) — resolve-before-borrow; regression tests per entity. The atom-constraint
+container/view machinery was also moved `constraint.rs` → `atom.rs` (renamed `Constraints*` →
+`AtomConstraints*`); `constraint.rs` is now the shared constraint value/scope leaves.
+See the *B5 · Noncovalent bond* section below, doc 117 §4, and *B3 · Aromatic* / *B4 · Multicenter —
+staged impl plan* for the WET template. **Remaining: B6/B7 · stereo** (the overlay sub-project).
 Date: 2026-07-09
 Relates: 137 (atom slice — the template being mirrored), 139 (mutability/hashing/equality
 balance), 114 (interning — where stereo/handle-identity deferrals live)
@@ -572,7 +579,8 @@ every subitem is on the path to the `mol.noncovalent_bonds` surface.
 - **Adversarial review of S2 (4-lens workflow) found 2 real panics the green build missed** (parity + fidelity lenses were clean — the mirror is faithful). Both are self-aliasing `RefCell` double-borrow panics: `bond.constraints = bond.constraints` (the `set_constraints` setter held `&mut self` across `value.to_ast()`, whose `View` arm re-borrows the same bond) and `bond.constraints.update(bond.constraints)` (the view `update` held `with_mut` across `apply()`, whose `View` arm re-reads the bond). **Fixed in noncovalent** by resolving every Python read to owned data *before* the write borrow: `NoncovalentBondConstraintsUpdate::resolve` → `ResolvedNoncovalentBondConstraintsUpdate::apply`, and `set_constraints`/container `update` take `slf: Py<Self>` and snapshot before `borrow_mut`. Regression tests added for all four self-alias paths (view/container `update`-self, `set_constraints` self + from-view). 46 Rust tests, clippy/fmt clean, Python repro confirms no panic.
 - **SYSTEMATIC peer sweep done (2026-07-12).** The same self-alias panic existed in every peer slice; fixed all of them with the resolve-before-borrow transform: `<E>ConstraintsUpdate::apply` → `resolve` + `Resolved<E>ConstraintsUpdate::apply`; container `update` and value `set_constraints` take `slf: Py<Self>` and read before `borrow_mut`; the constraints-view `update` resolves before `with_mut`. Files: `atom.rs` + **`constraint.rs`** (atom's constraint container/view live in the shared `constraint.rs`, not `atom.rs` — a grep-by-`atom.rs` miss the end-to-end Python repro caught), `bond.rs`, `dative.rs`, `aromatic.rs`, `multicenter.rs`. Regression tests added per entity (container update-self, value set-constraints-self/from-view, view update-self). **Already-safe, left alone:** the molecule-view `set_constraints(&self)` (single `owner.borrow_mut()…= value.to_ast()?` — Rust evaluates the RHS read before the LHS place borrow); ring-size sub-containers (setters take `ValueArg`, cannot alias). **Verified:** 405 Rust unit tests, 332 pytest, clippy/fmt clean, and a Python repro proving `x.constraints = x.constraints` / `x.constraints.update(x.constraints)` / `cs.update(cs)` are no-ops (not panics) for all 6 entities.
 - **Lesson (applies to B6/B7 stereo):** any pyo3 method holding a write borrow (via `&mut self`, or `with_mut`) across a call that re-reads a possibly-aliased entity (`value.to_ast()`/`other.apply()` with a `View` arm) self-alias-panics; the fix is always resolve-all-reads-to-owned-data first. Write the stereo constraint surface in the resolved-before-borrow form from the start.
-- **S3a/b/c pending** — molecule-embedded `NoncovalentBondView` (2-atom `atom_ids`, `connecting`/`incident`) + the `Backing::Molecule` arm + `mol.noncovalent_bonds` + `from_parts(noncovalent=…)`.
+- **S3a/b/c done (2026-07-12) — B5 COMPLETE.** S3a: molecule-embedded `NoncovalentBondView` (`id`, 2-tuple `atom_ids`, `kind` get/set, `constraints` get/set, `asdict`) + the `Backing::Molecule` arm on the constraints view. S3b: `NoncovalentBondViews` collection (`__len__`/`__getitem__`/`__setitem__`/`__iter__` + `connecting(a, b)` fixed-pair + `incident(atom)`) + `resolve_noncovalent_bond_index` + `NoncovalentBondViewIter`. S3c: `mol.noncovalent_bonds` accessor + `NoncovalentBondViews::new` + `from_parts(noncovalent=[([a, b], NoncovalentBondAst), …])` kwarg + `tests/test_noncovalent.py`. The view's `set_constraints` uses the safe RHS-first single-assignment form; a molecule-backed self-alias regression is included. **Verified: 417 Rust unit tests, 363 pytest, clippy/fmt clean.**
+- **Slice tally:** new file `noncovalent.rs` binds the full surface — kind leaf (`NoncovalentBondKind`/`NoncovalentBondKindAst`), 1-key Boolean constraint (`Intramolecular`) container + live view, value pyclass (`NoncovalentBondAst`), molecule view + collection, molecule wiring. Pyclasses registered/exported; 31 pytest + ~58 Rust unit tests.
 
 ### B6 / B7 · Stereo atom / stereo bond (the overlay — a larger sub-project)
 

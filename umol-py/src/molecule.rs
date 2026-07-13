@@ -11,6 +11,7 @@ use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
 use crate::dative::{DativeBondAst, DativeBondViews};
 use crate::multicenter::{MulticenterBondAst, MulticenterBondViews};
+use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondViews};
 
 /// A molecule: the owned graph-AST root.
 #[pyclass(eq)]
@@ -31,9 +32,10 @@ impl MoleculeAst {
     /// acceptor atom index, and a `DativeBondAst`. Each aromatic system is an
     /// `(atoms, system)` pair: a list of member atom indices and an `AromaticSystemAst`.
     /// Each multicenter bond is an `(atoms, bond)` pair: a list of member atom indices
-    /// and a `MulticenterBondAst`.
+    /// and a `MulticenterBondAst`. Each noncovalent bond is a `([first, second], bond)`
+    /// pair: the two (unordered) endpoint atom indices and a `NoncovalentBondAst`.
     #[staticmethod]
-    #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative=Vec::new(), aromatic=Vec::new(), multicenter=Vec::new()))]
+    #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative=Vec::new(), aromatic=Vec::new(), multicenter=Vec::new(), noncovalent=Vec::new()))]
     fn from_parts(
         py: Python<'_>,
         atoms: Vec<Py<AtomAst>>,
@@ -41,6 +43,7 @@ impl MoleculeAst {
         dative: Vec<(Vec<u32>, u32, Py<DativeBondAst>)>,
         aromatic: Vec<(Vec<u32>, Py<AromaticSystemAst>)>,
         multicenter: Vec<(Vec<u32>, Py<MulticenterBondAst>)>,
+        noncovalent: Vec<([u32; 2], Py<NoncovalentBondAst>)>,
     ) -> Self {
         let ast_atoms = atoms
             .iter()
@@ -84,12 +87,23 @@ impl MoleculeAst {
                 )
             })
             .collect();
+        let ast_noncovalent = noncovalent
+            .iter()
+            .map(|([first, second], bond)| {
+                (
+                    AstAtomId(*first),
+                    AstAtomId(*second),
+                    bond.bind(py).borrow().inner().clone(),
+                )
+            })
+            .collect();
         MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
             atoms: ast_atoms,
             bonds: ast_bonds,
             dative: ast_dative,
             aromatic: ast_aromatic,
             multicenter: ast_multicenter,
+            noncovalent: ast_noncovalent,
             ..Default::default()
         }))
     }
@@ -122,6 +136,12 @@ impl MoleculeAst {
     #[getter]
     fn multicenter_bonds(slf: Py<Self>) -> MulticenterBondViews {
         MulticenterBondViews::new(slf)
+    }
+
+    /// The noncovalent bonds, indexed by integer position.
+    #[getter]
+    fn noncovalent_bonds(slf: Py<Self>) -> NoncovalentBondViews {
+        NoncovalentBondViews::new(slf)
     }
 
     fn __repr__(&self) -> String {
@@ -160,7 +180,8 @@ mod tests {
         AromaticSystemAst as AstAromaticSystemAst, AromaticSystemId as AstAromaticSystemId,
         AtomAst, BondAst as AstBondAst, DativeBondAst as AstDativeBondAst,
         DativeBondId as AstDativeBondId, MulticenterBondAst as AstMulticenterBondAst,
-        MulticenterBondId as AstMulticenterBondId,
+        MulticenterBondId as AstMulticenterBondId, NoncovalentBondAst as AstNoncovalentBondAst,
+        NoncovalentBondId as AstNoncovalentBondId, NoncovalentBondKind,
     };
     use umol_chem::element::Element;
 
@@ -214,7 +235,25 @@ mod tests {
                 )
                 .unwrap(),
             )];
-            let molecule = MoleculeAst::from_parts(py, atoms, bonds, dative, aromatic, multicenter);
+            let noncovalent = vec![(
+                [0, 2],
+                Py::new(
+                    py,
+                    NoncovalentBondAst::from_inner(AstNoncovalentBondAst::from_kind(
+                        NoncovalentBondKind::HydrogenBond,
+                    )),
+                )
+                .unwrap(),
+            )];
+            let molecule = MoleculeAst::from_parts(
+                py,
+                atoms,
+                bonds,
+                dative,
+                aromatic,
+                multicenter,
+                noncovalent,
+            );
             assert_eq!(molecule.inner().atoms().count(), 3);
             assert_eq!(molecule.inner().bonds().count(), 1);
             let dative_bonds = molecule.inner().dative_bonds();
@@ -239,6 +278,10 @@ mod tests {
                 multicenter_view.atom_ids().collect::<Vec<_>>(),
                 vec![AstAtomId(0), AstAtomId(1), AstAtomId(2)]
             );
+            let noncovalent_bonds = molecule.inner().noncovalent_bonds();
+            assert_eq!(noncovalent_bonds.count(), 1);
+            let noncovalent_view = noncovalent_bonds.get(AstNoncovalentBondId(0)).unwrap();
+            assert_eq!(noncovalent_view.atom_ids(), [AstAtomId(0), AstAtomId(2)]);
         });
     }
 

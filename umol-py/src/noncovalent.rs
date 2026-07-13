@@ -1174,6 +1174,13 @@ impl NoncovalentBondViews {
     }
 }
 
+impl NoncovalentBondViews {
+    /// Build the noncovalent-bond-views handle for `owner` (the `.noncovalent_bonds` accessor).
+    pub(crate) fn new(owner: Py<MoleculeAst>) -> NoncovalentBondViews {
+        NoncovalentBondViews { owner }
+    }
+}
+
 #[pyclass]
 struct NoncovalentBondViewIter {
     owner: Py<MoleculeAst>,
