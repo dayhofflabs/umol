@@ -1,0 +1,10 @@
+{:atoms ["B#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+ :bonds [[0 1 :aromatic]
+         [1 2 :aromatic]
+         [2 3 :aromatic]
+         [3 4 :aromatic]
+         [4 5 :aromatic]
+         [5 6 :aromatic]
+         [6 0 :aromatic]]
+ :aromatic-systems [{:atoms [0 1 2 3 4 5 6]
+                      :type "[0,1,1,1,1,1,1]#c0#u0#s1"}]}
