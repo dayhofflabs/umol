@@ -271,10 +271,13 @@ Tests use multiple canonical atom orders for odd cycles to prove that:
 **Dependencies:** [dep: S3a, S0b]
 
 For a mobile charged plan, add the literal system charge (`-1` or `+1`) to the exposed atom's
-literal charge, then remove the system record. Preserve every other atom field. Apply all plans to
-a candidate clone rather than the caller's AST, run model-independent entity-structure, valence,
-and spin invariant validation on the localized candidate, and replace the caller's AST only after
-all systems and validations succeed.
+literal charge, then remove the system record. A localized `-1` hole also adds one lone pair at the
+exposed atom: in Cp−, the four matched carbons contribute one π electron each and exposed `[CH-]`
+contributes its two-electron lone pair. A localized `+1` hole retains zero lone pairs and represents
+an empty p orbital. Preserve every other atom field. Apply all plans to a candidate clone rather
+than the caller's AST, run model-independent entity-structure, valence, and spin invariant
+validation on the localized candidate, and replace the caller's AST only after all systems and
+validations succeed.
 
 Add `KekulizerError` variants that preserve the specific post-localization structural or invariant
 failure. Any planning, localization, or validation error must leave the original AST unchanged.

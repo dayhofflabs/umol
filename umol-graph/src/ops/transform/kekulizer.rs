@@ -18,11 +18,18 @@ use std::collections::HashSet;
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemId, AromaticSystemView, AtomConstraintKey, AtomId, BondConstraintKey, BondId,
-    ElectronCountsAst, MoleculeAst, ValueAst,
+    ElectronCountsAst, EntityStructureContradiction, EntityStructureError,
+    EntityStructureValidator, MoleculeAst, ValueAst,
 };
 use umol_graph_core::{MaxMatchingAlgorithm, NodeId};
+use umol_utils::solution::Solution;
 
+use crate::ops::invariant::ValenceMismatch;
 use crate::ops::transform::Transformer;
+use crate::ops::validate::{
+    SpinInvariantsContradiction, SpinInvariantsError, SpinInvariantsValidator,
+    ValenceInvariantsError, ValenceInvariantsValidator,
+};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum KekulizerError {
@@ -78,6 +85,28 @@ pub enum KekulizerError {
         expected: usize,
         actual: usize,
     },
+    #[error("charge is undetermined for exposed atom {atom:?} in aromatic system {system:?}")]
+    UndeterminedExposedAtomCharge {
+        system: AromaticSystemId,
+        atom: AtomId,
+    },
+    #[error("lone pairs are undetermined for exposed atom {atom:?} in aromatic system {system:?}")]
+    UndeterminedExposedAtomLonePairs {
+        system: AromaticSystemId,
+        atom: AtomId,
+    },
+    #[error("post-localization entity-structure contradiction: {0}")]
+    PostLocalizationEntityStructure(EntityStructureContradiction),
+    #[error("post-localization entity-structure validation error: {0}")]
+    PostLocalizationEntityStructureError(EntityStructureError),
+    #[error("post-localization valence-invariant contradiction: {0}")]
+    PostLocalizationValenceInvariant(ValenceMismatch),
+    #[error("post-localization valence-invariant validation error: {0}")]
+    PostLocalizationValenceInvariantError(ValenceInvariantsError),
+    #[error("post-localization spin-invariant contradiction: {0}")]
+    PostLocalizationSpinInvariant(SpinInvariantsContradiction),
+    #[error("post-localization spin-invariant validation error: {0}")]
+    PostLocalizationSpinInvariantError(SpinInvariantsError),
     #[error("no perfect matching exists for aromatic system {0:?}")]
     NoMatching(AromaticSystemId),
 }
@@ -220,39 +249,61 @@ impl Transformer for Kekulizer {
         // apply the bond-order writes and structural cleanup in passes that
         // require &mut.
         let plans = self.plan_systems(ast)?;
-        if let Some(plan) = plans.iter().find(|plan| plan.mobile_charge.is_some()) {
-            return Err(KekulizerError::NoMatching(plan.system_idx));
-        }
+        let mut candidate = ast.clone();
 
         // Pass 1: bond-order writes and Aromatic-constraint stripping.
         for plan in &plans {
             debug_assert!(plan.matched_bonds.iter().all(|&bond| {
-                ast.bond(bond)
+                candidate
+                    .bond(bond)
                     .atom_ids()
                     .iter()
                     .all(|atom| !plan.exposed_atoms.contains(atom))
             }));
             for &bid in &plan.matched_bonds {
-                let bond = ast.bond_mut(bid).ast;
+                let bond = candidate.bond_mut(bid).ast;
                 bond.order = ValueAst::Lit(2);
                 bond.constraints.remove(BondConstraintKey::Aromatic);
             }
             for &bid in &plan.unmatched_bonds {
-                let bond = ast.bond_mut(bid).ast;
+                let bond = candidate.bond_mut(bid).ast;
                 bond.order = ValueAst::Lit(1);
                 bond.constraints.remove(BondConstraintKey::Aromatic);
             }
             for &aidx in &plan.atoms {
-                let atom = ast.atom_mut(aidx).ast;
+                let atom = candidate.atom_mut(aidx).ast;
                 atom.constraints.remove(AtomConstraintKey::AromaticValence);
+            }
+            if let Some(system_charge) = plan.mobile_charge {
+                let exposed = plan.exposed_atoms[0];
+                let atom = candidate.atom_mut(exposed).ast;
+                let ValueAst::Lit(local_charge) = atom.charge else {
+                    return Err(KekulizerError::UndeterminedExposedAtomCharge {
+                        system: plan.system_idx,
+                        atom: exposed,
+                    });
+                };
+                atom.charge = ValueAst::Lit(local_charge + system_charge);
+                if system_charge == -1 {
+                    let ValueAst::Lit(lone_pairs) = atom.lone_pairs else {
+                        return Err(KekulizerError::UndeterminedExposedAtomLonePairs {
+                            system: plan.system_idx,
+                            atom: exposed,
+                        });
+                    };
+                    atom.lone_pairs = ValueAst::Lit(lone_pairs + 1);
+                }
             }
         }
 
         // Pass 2: drop the aromatic system entries via the builder.
         let to_remove: Vec<AromaticSystemId> = plans.iter().map(|p| p.system_idx).collect();
-        let mut builder = ast.edit();
+        let mut builder = candidate.edit();
         builder.remove_aromatic_systems(&to_remove);
-        *ast = builder.build();
+        candidate = builder.build();
+
+        validate_localized_candidate(&candidate)?;
+        *ast = candidate;
 
         Ok(())
     }
@@ -263,6 +314,41 @@ impl Transformer for Kekulizer {
     ) -> Box<dyn Iterator<Item = MoleculeAst> + 'a> {
         Box::new(self.transform(ast).ok().into_iter())
     }
+}
+
+fn validate_localized_candidate(candidate: &MoleculeAst) -> Result<(), KekulizerError> {
+    match EntityStructureValidator
+        .validate(candidate)
+        .map_err(KekulizerError::PostLocalizationEntityStructureError)?
+    {
+        Solution::Determined(()) | Solution::Underdetermined(()) => {}
+        Solution::Contradictory(contradiction) => {
+            return Err(KekulizerError::PostLocalizationEntityStructure(
+                contradiction,
+            ));
+        }
+    }
+    match ValenceInvariantsValidator
+        .validate(candidate)
+        .map_err(KekulizerError::PostLocalizationValenceInvariantError)?
+    {
+        Solution::Determined(()) | Solution::Underdetermined(()) => {}
+        Solution::Contradictory(contradiction) => {
+            return Err(KekulizerError::PostLocalizationValenceInvariant(
+                contradiction,
+            ));
+        }
+    }
+    match SpinInvariantsValidator
+        .validate(candidate)
+        .map_err(KekulizerError::PostLocalizationSpinInvariantError)?
+    {
+        Solution::Determined(()) | Solution::Underdetermined(()) => {}
+        Solution::Contradictory(contradiction) => {
+            return Err(KekulizerError::PostLocalizationSpinInvariant(contradiction));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -565,19 +651,19 @@ mod tests {
 
     #[rstest]
     #[case::benzene(
-        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]}"#),
         (0..6).map(AtomId).collect(),
-        mol_dsl_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#)
+        mol_dsl_ground!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#)
     )]
     #[case::embedded_benzene_nonidentity_correspondence(
-        mol_dsl_ground!(r#"{:atoms ["O" "H" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :single] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [2 7 :aromatic]] :aromatic-systems [{:atoms [2 3 4 5 6 7] :type "[1,1,1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["O#h#n2" "H" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :single] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [2 7 :aromatic]] :aromatic-systems [{:atoms [2 3 4 5 6 7] :type "[1,1,1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(2), AtomId(3), AtomId(4), AtomId(5), AtomId(6), AtomId(7), AtomId(1)],
-        mol_dsl_ground!(r#"{:atoms ["O" "H" "C" "C" "C" "C" "C" "C"] :bonds [[0 1 :single] [2 3 :double] [3 4 :single] [4 5 :double] [5 6 :single] [6 7 :double] [2 7 :single]]}"#)
+        mol_dsl_ground!(r#"{:atoms ["O#h#n2" "H" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] :bonds [[0 1 :single] [2 3 :double] [3 4 :single] [4 5 :double] [5 6 :single] [6 7 :double] [2 7 :single]]}"#)
     )]
     #[case::multiple_disjoint_systems(
-        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [7 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :type "[1,1,1,1]"} {:atoms [4 5 6 7] :type "[1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [7 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :type "[1,1,1,1]"} {:atoms [4 5 6 7] :type "[1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(4), AtomId(1), AtomId(5), AtomId(2), AtomId(6), AtomId(3), AtomId(7)],
-        mol_dsl_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 0 :single] [4 5 :double] [5 6 :single] [6 7 :double] [7 4 :single]]}"#)
+        mol_dsl_ground!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 0 :single] [4 5 :double] [5 6 :single] [6 7 :double] [7 4 :single]]}"#)
     )]
     fn test_kekulizer_transform_into(
         #[case] input: MoleculeAst,

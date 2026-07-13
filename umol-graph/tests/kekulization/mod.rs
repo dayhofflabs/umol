@@ -2,13 +2,13 @@ use std::collections::HashSet;
 
 use rstest::rstest;
 use umol_ast::ast::{
-    AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsAst, ElementAst, IntoAst,
-    SpinStateAst, ValueAst,
+    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsAst,
+    ElementAst, IntoAst, SpinStateAst, ValueAst,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_chem::element::Element;
-use umol_graph::ops::invariant::ValenceInvariants;
-use umol_graph::ops::transform::{KekulizationModel, Kekulizer, Transformer};
+use umol_graph::ops::invariant::{ValenceInvariants, ValenceMismatch};
+use umol_graph::ops::transform::{KekulizationModel, Kekulizer, KekulizerError, Transformer};
 use umol_utils::solution::Solution;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -294,6 +294,18 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: Kekulizatio
     vec![BondId(0), BondId(2), BondId(4)],
     None
 )]
+#[case::cyclopentadienyl_anion(
+    include_str!("data/cyclopentadienyl_anion_aromatic_input.edn"),
+    include_str!("data/cyclopentadienyl_anion_kekulized_expected.edn"),
+    vec![BondId(0), BondId(2)],
+    Some(AtomId(4))
+)]
+#[case::tropylium(
+    include_str!("data/tropylium_aromatic_input.edn"),
+    include_str!("data/tropylium_kekulized_expected.edn"),
+    vec![BondId(0), BondId(2), BondId(4)],
+    Some(AtomId(6))
+)]
 #[case::azulene(
     include_str!("data/azulene_aromatic_input.edn"),
     include_str!("data/azulene_kekulized_expected.edn"),
@@ -363,6 +375,10 @@ fn test_kekulization_fixture_output(
             _ => panic!("output atom charge is undetermined"),
         })
         .sum();
+    let system_charge = match input.aromatic_systems().iter().next().unwrap().ast.charge {
+        ValueAst::Lit(charge) => charge,
+        _ => panic!("input aromatic-system charge is undetermined"),
+    };
 
     assert_eq!(first, expected);
     assert_eq!(second, expected);
@@ -383,9 +399,66 @@ fn test_kekulization_fixture_output(
     if let Some(exposed) = expected_exposed_atom {
         let before = input.atom(exposed).ast;
         let after = first.atom(exposed).ast;
-        assert_eq!(after.charge, before.charge);
-        assert_eq!(after.lone_pairs, before.lone_pairs);
+        let ValueAst::Lit(before_charge) = before.charge else {
+            panic!("input exposed-atom charge is undetermined");
+        };
+        assert_eq!(after.charge, ValueAst::Lit(before_charge + system_charge));
+        let ValueAst::Lit(before_lone_pairs) = before.lone_pairs else {
+            panic!("input exposed-atom lone pairs are undetermined");
+        };
+        let expected_lone_pairs = before_lone_pairs + i64::from(system_charge == -1);
+        assert_eq!(after.lone_pairs, ValueAst::Lit(expected_lone_pairs));
         assert_eq!(after.implicit_hydrogens, before.implicit_hydrogens);
         assert_eq!(after.spin, before.spin);
+        if system_charge != 0 {
+            assert_eq!(after.spin, SpinStateAst::from((0, 1)));
+        }
     }
+}
+
+#[rstest]
+#[case::localization(
+    ValueAst::Undetermined,
+    ValueAst::Lit(0),
+    KekulizerError::UndeterminedExposedAtomCharge {
+        system: AromaticSystemId(0),
+        atom: AtomId(4),
+    }
+)]
+#[case::lone_pair_localization(
+    ValueAst::Lit(0),
+    ValueAst::Undetermined,
+    KekulizerError::UndeterminedExposedAtomLonePairs {
+        system: AromaticSystemId(0),
+        atom: AtomId(4),
+    }
+)]
+#[case::valence_invariant(
+    ValueAst::Lit(0),
+    ValueAst::Lit(1),
+    KekulizerError::PostLocalizationValenceInvariant(ValenceMismatch::OrbitalCount {
+        atom_id: AtomId(4),
+        orbital_count: 10,
+        electron_count: 8,
+    })
+)]
+fn test_kekulization_fixture_output_error(
+    #[case] exposed_charge: ValueAst,
+    #[case] exposed_lone_pairs: ValueAst,
+    #[case] expected: KekulizerError,
+) {
+    let dsl: MoleculeDsl = include_str!("data/cyclopentadienyl_anion_aromatic_input.edn")
+        .parse()
+        .unwrap();
+    let mut input = dsl.into_ast(&MoleculeDefaults::ground());
+    input.atom_mut(AtomId(4)).ast.charge = exposed_charge;
+    input.atom_mut(AtomId(4)).ast.lone_pairs = exposed_lone_pairs;
+    let original = input.clone();
+    let node_order: Vec<AtomId> = input.atoms().ids().collect();
+
+    let result =
+        Kekulizer::new(KekulizationModel::default(), node_order).transform_into(&mut input);
+
+    assert_eq!(result, Err(expected));
+    assert_eq!(input, original);
 }
