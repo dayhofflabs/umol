@@ -12,7 +12,8 @@ use pyo3::exceptions::{PyIndexError, PyKeyError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_ast::ast::{
-    AsLit, MoleculeAst as AstMoleculeAst, NoncovalentBondAst as AstNoncovalentBondAst,
+    AsLit, AtomId as AstAtomId, MoleculeAst as AstMoleculeAst,
+    NoncovalentBondAst as AstNoncovalentBondAst,
     NoncovalentBondConstraintAst as AstNoncovalentBondConstraintAst,
     NoncovalentBondConstraintKey as AstNoncovalentBondConstraintKey,
     NoncovalentBondConstraintsAst as AstNoncovalentBondConstraintsAst,
@@ -1055,12 +1056,148 @@ impl NoncovalentBondView {
     }
 }
 
+/// Resolve a possibly-negative Python index (negative counts from the end) into an
+/// existing noncovalent bond id, or `IndexError`. `NoncovalentBondId` is `RelationId`-
+/// backed but contiguous for fresh molecules, so integer positions address it directly.
+fn resolve_noncovalent_bond_index(
+    molecule: &AstMoleculeAst,
+    index: isize,
+) -> PyResult<AstNoncovalentBondId> {
+    let count = molecule.noncovalent_bonds().count();
+    let resolved = if index < 0 {
+        index + count as isize
+    } else {
+        index
+    };
+    if resolved < 0 {
+        return Err(PyIndexError::new_err("noncovalent bond id out of range"));
+    }
+    let id = AstNoncovalentBondId(resolved as u32);
+    if molecule.noncovalent_bonds().contains(id) {
+        Ok(id)
+    } else {
+        Err(PyIndexError::new_err("noncovalent bond id out of range"))
+    }
+}
+
+/// The noncovalent bonds of a molecule, indexed by integer position.
+#[pyclass]
+pub struct NoncovalentBondViews {
+    owner: Py<MoleculeAst>,
+}
+
+#[pymethods]
+impl NoncovalentBondViews {
+    fn __len__(&self, py: Python<'_>) -> usize {
+        self.owner
+            .bind(py)
+            .borrow()
+            .inner()
+            .noncovalent_bonds()
+            .count()
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> String {
+        format!(
+            "NoncovalentBondViews(len={})",
+            self.owner
+                .bind(py)
+                .borrow()
+                .inner()
+                .noncovalent_bonds()
+                .count()
+        )
+    }
+
+    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<NoncovalentBondView> {
+        let molecule = self.owner.bind(py).borrow();
+        let id = resolve_noncovalent_bond_index(molecule.inner(), index)?;
+        Ok(NoncovalentBondView {
+            owner: self.owner.clone_ref(py),
+            id,
+        })
+    }
+
+    /// Replace the whole noncovalent bond value at `index` in place (endpoints unchanged).
+    fn __setitem__(
+        &self,
+        py: Python<'_>,
+        index: isize,
+        bond: PyRef<'_, NoncovalentBondAst>,
+    ) -> PyResult<()> {
+        let mut molecule = self.owner.borrow_mut(py);
+        let id = resolve_noncovalent_bond_index(molecule.inner(), index)?;
+        *molecule.inner_mut().noncovalent_bond_mut(id).ast = bond.inner().clone();
+        Ok(())
+    }
+
+    /// The noncovalent bond between atoms `first` and `second`, or `None`.
+    fn connecting(&self, py: Python<'_>, first: u32, second: u32) -> Option<NoncovalentBondView> {
+        let molecule = self.owner.bind(py).borrow();
+        molecule
+            .inner()
+            .noncovalent_bonds()
+            .connecting_id(AstAtomId(first), AstAtomId(second))
+            .map(|id| NoncovalentBondView {
+                owner: self.owner.clone_ref(py),
+                id,
+            })
+    }
+
+    /// The noncovalent bonds `atom` is an endpoint of.
+    fn incident(&self, py: Python<'_>, atom: u32) -> Vec<NoncovalentBondView> {
+        let molecule = self.owner.bind(py).borrow();
+        molecule
+            .inner()
+            .noncovalent_bonds()
+            .incident_ids(AstAtomId(atom))
+            .map(|id| NoncovalentBondView {
+                owner: self.owner.clone_ref(py),
+                id,
+            })
+            .collect()
+    }
+
+    fn __iter__(&self, py: Python<'_>) -> NoncovalentBondViewIter {
+        let ids = self
+            .owner
+            .bind(py)
+            .borrow()
+            .inner()
+            .noncovalent_bonds()
+            .ids()
+            .collect::<Vec<_>>();
+        NoncovalentBondViewIter {
+            owner: self.owner.clone_ref(py),
+            ids: ids.into_iter(),
+        }
+    }
+}
+
+#[pyclass]
+struct NoncovalentBondViewIter {
+    owner: Py<MoleculeAst>,
+    ids: IntoIter<AstNoncovalentBondId>,
+}
+
+#[pymethods]
+impl NoncovalentBondViewIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self, py: Python<'_>) -> Option<NoncovalentBondView> {
+        self.ids.next().map(|id| NoncovalentBondView {
+            owner: self.owner.clone_ref(py),
+            id,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{
-        AtomAst as AstAtomAst, AtomId as AstAtomId, BooleanAst as AstBooleanAst, MoleculeParts,
-    };
+    use umol_ast::ast::{AtomAst as AstAtomAst, BooleanAst as AstBooleanAst, MoleculeParts};
     use umol_chem::element::Element as ChemElement;
 
     use super::*;
@@ -1879,6 +2016,129 @@ mod tests {
             )
             .unwrap();
             assert!(kind.eq(expected.bind(py)).unwrap());
+        });
+    }
+
+    /// Three atoms, one hydrogen bond over (0, 1), atom 2 isolated. For the collection
+    /// negative cases (`connecting` / `incident` with no bond).
+    fn molecule_with_hbond_and_isolated(py: Python<'_>) -> Py<MoleculeAst> {
+        let molecule = AstMoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AstAtomAst::from_element(ChemElement::O),
+                AstAtomAst::from_element(ChemElement::O),
+                AstAtomAst::from_element(ChemElement::O),
+            ],
+            noncovalent: vec![(
+                AstAtomId(0),
+                AstAtomId(1),
+                AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+            )],
+            ..Default::default()
+        });
+        Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_len_getitem() {
+        Python::attach(|py| {
+            let views = NoncovalentBondViews {
+                owner: molecule_with_hbond(py),
+            };
+            assert_eq!(views.__len__(py), 1);
+            assert_eq!(views.__repr__(py), "NoncovalentBondViews(len=1)");
+            assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
+            // negative index counts from the end
+            assert_eq!(views.__getitem__(py, -1).unwrap().id(), 0);
+            assert!(views.__getitem__(py, 1).is_err());
+            assert!(views.__getitem__(py, -2).is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_setitem() {
+        Python::attach(|py| {
+            let owner = molecule_with_hbond(py);
+            let views = NoncovalentBondViews {
+                owner: owner.clone_ref(py),
+            };
+            let replacement = Py::new(
+                py,
+                NoncovalentBondAst::from_inner(AstNoncovalentBondAst::from_kind(
+                    AstNoncovalentBondKind::Ionic,
+                )),
+            )
+            .unwrap();
+            views
+                .__setitem__(py, 0, replacement.bind(py).borrow())
+                .unwrap();
+            let view = views.__getitem__(py, 0).unwrap();
+            // value replaced, endpoints preserved
+            assert_eq!(
+                view.kind(py).unwrap().to_ast(),
+                AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::Ionic)
+            );
+            assert_eq!(view.atom_ids(py).unwrap(), (0, 1));
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_setitem_out_of_range() {
+        Python::attach(|py| {
+            let views = NoncovalentBondViews {
+                owner: molecule_with_hbond(py),
+            };
+            let bond = Py::new(
+                py,
+                NoncovalentBondAst::from_inner(AstNoncovalentBondAst::from_kind(
+                    AstNoncovalentBondKind::Ionic,
+                )),
+            )
+            .unwrap();
+            assert!(views.__setitem__(py, 5, bond.bind(py).borrow()).is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_iter() {
+        Python::attach(|py| {
+            let views = NoncovalentBondViews {
+                owner: molecule_with_hbond(py),
+            };
+            let mut iter = views.__iter__(py);
+            assert_eq!(iter.__next__(py).unwrap().id(), 0);
+            assert!(iter.__next__(py).is_none());
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_connecting() {
+        Python::attach(|py| {
+            let views = NoncovalentBondViews {
+                owner: molecule_with_hbond_and_isolated(py),
+            };
+            // unordered pair — both orders find the same bond
+            assert_eq!(views.connecting(py, 0, 1).unwrap().id(), 0);
+            assert_eq!(views.connecting(py, 1, 0).unwrap().id(), 0);
+            // no bond between 0 and the isolated atom 2
+            assert!(views.connecting(py, 0, 2).is_none());
+        });
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_incident() {
+        Python::attach(|py| {
+            let views = NoncovalentBondViews {
+                owner: molecule_with_hbond_and_isolated(py),
+            };
+            assert_eq!(
+                views
+                    .incident(py, 0)
+                    .iter()
+                    .map(|v| v.id())
+                    .collect::<Vec<_>>(),
+                vec![0]
+            );
+            assert!(views.incident(py, 2).is_empty());
         });
     }
 }
