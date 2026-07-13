@@ -98,7 +98,7 @@ impl<'a> StereoAtomViews<'a> {
 
     /// Id of the stereo atom on `site` with exactly this ligand multiset, if any. Ligands are a
     /// multiset (virtual ligands repeat); their frame order is not matched.
-    pub fn connecting_id(&self, site: AtomId, ligands: &[StereoLigand]) -> Option<StereoAtomId> {
+    pub fn of_id(&self, site: AtomId, ligands: &[StereoLigand]) -> Option<StereoAtomId> {
         self.stereo_atoms
             .find_by_participants(&[NodeId::from(site)], ligands)
             .map(StereoAtomId::from)
@@ -126,7 +126,7 @@ impl<'a> StereoAtomViews<'a> {
     }
 
     // Ids of stereo atoms incident, in which `atom` is ligand.
-    pub fn incident_at_ligand_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoAtomId> + 'a {
+    pub fn incident_as_ligand_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoAtomId> + 'a {
         let set = self.stereo_atoms;
         let ligand = StereoLigand {
             atom_id: atom,
@@ -139,7 +139,7 @@ impl<'a> StereoAtomViews<'a> {
     }
 
     /// Any stereo atom is incident, in which `atom` is ligand.
-    pub fn has_incident_at_ligand(&self, atom: AtomId) -> bool {
+    pub fn has_incident_as_ligand(&self, atom: AtomId) -> bool {
         let set = self.stereo_atoms;
         let ligand = StereoLigand {
             atom_id: atom,
@@ -151,13 +151,13 @@ impl<'a> StereoAtomViews<'a> {
     }
 
     /// Views of stereo atoms incident, in which `atom` is ligand.
-    pub fn incident_at_ligand(
+    pub fn incident_as_ligand(
         &self,
         atom: AtomId,
     ) -> impl Iterator<Item = StereoAtomView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.stereo_atoms;
-        self.incident_at_ligand_ids(atom).map(move |id| {
+        self.incident_as_ligand_ids(atom).map(move |id| {
             let rid = RelationId::from(id);
             StereoAtomView {
                 id,
@@ -169,8 +169,8 @@ impl<'a> StereoAtomViews<'a> {
         })
     }
 
-    /// Id of the stereo atom coincident with `atom` (its site).
-    pub fn coincident_id(&self, atom: AtomId) -> Option<StereoAtomId> {
+    /// Id of the stereo atom sited on `atom`, if any.
+    pub fn at_id(&self, atom: AtomId) -> Option<StereoAtomId> {
         let set = self.stereo_atoms;
         let site = NodeId::from(atom);
         set.incident(site)
@@ -179,8 +179,8 @@ impl<'a> StereoAtomViews<'a> {
             .map(|&rid| StereoAtomId::from(rid))
     }
 
-    /// Whether any stereo atom is coincident with `atom` (its site).
-    pub fn has_coincident(&self, atom: AtomId) -> bool {
+    /// Whether a stereo atom is sited on `atom`.
+    pub fn is_at(&self, atom: AtomId) -> bool {
         let set = self.stereo_atoms;
         let site = NodeId::from(atom);
         set.incident(site)
@@ -188,11 +188,11 @@ impl<'a> StereoAtomViews<'a> {
             .any(move |&rid| set.participants_1(rid).contains(&site))
     }
 
-    /// View of the stereo atom coincident with `atom` (its site).
-    pub fn coincident(&self, atom: AtomId) -> Option<StereoAtomView<'a>> {
+    /// View of the stereo atom sited on `atom`, if any.
+    pub fn at(&self, atom: AtomId) -> Option<StereoAtomView<'a>> {
         let molecule = self.molecule;
         let set = self.stereo_atoms;
-        self.coincident_id(atom).map(move |id| {
+        self.at_id(atom).map(move |id| {
             let rid = RelationId::from(id);
             StereoAtomView {
                 id,
@@ -387,7 +387,7 @@ impl<'a> StereoBondViews<'a> {
 
     /// Id of the stereo bond on `site` with exactly this ligand multiset, if any. Ligands are a
     /// multiset (virtual ligands repeat); their frame order is not matched.
-    pub fn connecting_id(&self, site: BondId, ligands: &[StereoLigand]) -> Option<StereoBondId> {
+    pub fn of_id(&self, site: BondId, ligands: &[StereoLigand]) -> Option<StereoBondId> {
         self.stereo_bonds
             .find_by_participants(&[EdgeId::from(site)], ligands)
             .map(StereoBondId::from)
@@ -440,14 +440,14 @@ impl<'a> StereoBondViews<'a> {
             .iter()
             .map(|&rid| StereoBondId::from(rid));
         let mut seen = HashSet::new();
-        self.incident_at_site_ids(atom)
+        self.incident_as_site_ids(atom)
             .chain(ligand_ids)
             .filter(move |id| seen.insert(*id))
     }
 
     /// Any stereo bond is incident on `atom` (site endpoint or ligand).
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.stereo_bonds.has_incident(NodeId::from(atom)) || self.has_incident_at_site(atom)
+        self.stereo_bonds.has_incident(NodeId::from(atom)) || self.has_incident_as_site(atom)
     }
 
     /// Views of stereo bonds incident on `atom`.
@@ -468,7 +468,7 @@ impl<'a> StereoBondViews<'a> {
     }
 
     /// Ids of stereo bonds incident, in which `atom` is ligand.
-    pub fn incident_at_ligand_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoBondId> + 'a {
+    pub fn incident_as_ligand_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoBondId> + 'a {
         let set = self.stereo_bonds;
         let ligand = StereoLigand {
             atom_id: atom,
@@ -481,7 +481,7 @@ impl<'a> StereoBondViews<'a> {
     }
 
     /// Any stereo bond is incident, in which `atom` is ligand.
-    pub fn has_incident_at_ligand(&self, atom: AtomId) -> bool {
+    pub fn has_incident_as_ligand(&self, atom: AtomId) -> bool {
         let set = self.stereo_bonds;
         let ligand = StereoLigand {
             atom_id: atom,
@@ -493,13 +493,13 @@ impl<'a> StereoBondViews<'a> {
     }
 
     /// Views of stereo bonds incident, in which `atom` is ligand.
-    pub fn incident_at_ligand(
+    pub fn incident_as_ligand(
         &self,
         atom: AtomId,
     ) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.stereo_bonds;
-        self.incident_at_ligand_ids(atom).map(move |id| {
+        self.incident_as_ligand_ids(atom).map(move |id| {
             let rid = RelationId::from(id);
             StereoBondView {
                 id,
@@ -512,7 +512,7 @@ impl<'a> StereoBondViews<'a> {
     }
 
     /// Ids of stereo bonds, in which `atom` is a site endpoint.
-    pub fn incident_at_site_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoBondId> + 'a {
+    pub fn incident_as_site_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoBondId> + 'a {
         let set = self.stereo_bonds;
         self.molecule
             .neighbors(atom)
@@ -521,7 +521,7 @@ impl<'a> StereoBondViews<'a> {
     }
 
     /// Any stereo bond, in which `atom` is a site endpoint.
-    pub fn has_incident_at_site(&self, atom: AtomId) -> bool {
+    pub fn has_incident_as_site(&self, atom: AtomId) -> bool {
         let set = self.stereo_bonds;
         self.molecule
             .neighbors(atom)
@@ -529,10 +529,10 @@ impl<'a> StereoBondViews<'a> {
     }
 
     /// Views of stereo bonds, in which `atom` is a site endpoint.
-    pub fn incident_at_site(&self, atom: AtomId) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
+    pub fn incident_as_site(&self, atom: AtomId) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.stereo_bonds;
-        self.incident_at_site_ids(atom).map(move |id| {
+        self.incident_as_site_ids(atom).map(move |id| {
             let rid = RelationId::from(id);
             StereoBondView {
                 id,
@@ -544,24 +544,24 @@ impl<'a> StereoBondViews<'a> {
         })
     }
 
-    /// Id of the stereo bond coincident with `bond` (its site).
-    pub fn coincident_id(&self, bond: BondId) -> Option<StereoBondId> {
+    /// Id of the stereo bond sited on `bond`, if any.
+    pub fn at_id(&self, bond: BondId) -> Option<StereoBondId> {
         self.stereo_bonds
             .incident_edge(EdgeId::from(bond))
             .first()
             .map(|&rid| StereoBondId::from(rid))
     }
 
-    /// Whether any stereo bond is coincident with `bond` (its site).
-    pub fn has_coincident(&self, bond: BondId) -> bool {
+    /// Whether a stereo bond is sited on `bond`.
+    pub fn is_at(&self, bond: BondId) -> bool {
         self.stereo_bonds.has_incident_edge(EdgeId::from(bond))
     }
 
-    /// View of the stereo bond coincident with `bond` (its site).
-    pub fn coincident(&self, bond: BondId) -> Option<StereoBondView<'a>> {
+    /// View of the stereo bond sited on `bond`, if any.
+    pub fn at(&self, bond: BondId) -> Option<StereoBondView<'a>> {
         let molecule = self.molecule;
         let set = self.stereo_bonds;
-        self.coincident_id(bond).map(move |id| {
+        self.at_id(bond).map(move |id| {
             let rid = RelationId::from(id);
             StereoBondView {
                 id,
@@ -1095,7 +1095,7 @@ mod tests {
     #[case::ligand(AtomId(2), vec![StereoAtomId(0)])]
     #[case::site_not_ligand(AtomId(0), vec![])]
     #[case::unrelated(AtomId(5), vec![])]
-    fn test_stereo_atom_views_incident_at_ligand(
+    fn test_stereo_atom_views_incident_as_ligand(
         molecule: MoleculeAst,
         #[case] atom: AtomId,
         #[case] expected: Vec<StereoAtomId>,
@@ -1103,7 +1103,7 @@ mod tests {
         assert_eq!(
             molecule
                 .stereo_atoms()
-                .incident_at_ligand_ids(atom)
+                .incident_as_ligand_ids(atom)
                 .collect::<Vec<_>>(),
             expected,
         );
@@ -1113,12 +1113,12 @@ mod tests {
     #[case::site(AtomId(0), Some(StereoAtomId(0)))]
     #[case::ligand_not_site(AtomId(2), None)]
     #[case::unrelated(AtomId(5), None)]
-    fn test_stereo_atom_views_coincident(
+    fn test_stereo_atom_views_at(
         molecule: MoleculeAst,
         #[case] atom: AtomId,
         #[case] expected: Option<StereoAtomId>,
     ) {
-        assert_eq!(molecule.stereo_atoms().coincident_id(atom), expected);
+        assert_eq!(molecule.stereo_atoms().at_id(atom), expected);
     }
 
     #[rstest]
@@ -1540,7 +1540,7 @@ mod tests {
     #[case::site_endpoint(AtomId(2), vec![StereoBondId(0)])]
     #[case::ligand_not_site(AtomId(4), vec![])]
     #[case::unrelated(AtomId(6), vec![])]
-    fn test_stereo_bond_views_incident_at_site(
+    fn test_stereo_bond_views_incident_as_site(
         molecule: MoleculeAst,
         #[case] atom: AtomId,
         #[case] expected: Vec<StereoBondId>,
@@ -1548,7 +1548,7 @@ mod tests {
         assert_eq!(
             molecule
                 .stereo_bonds()
-                .incident_at_site_ids(atom)
+                .incident_as_site_ids(atom)
                 .collect::<Vec<_>>(),
             expected,
         );
@@ -1558,7 +1558,7 @@ mod tests {
     #[case::ligand(AtomId(4), vec![StereoBondId(0)])]
     #[case::site_not_ligand(AtomId(2), vec![])]
     #[case::unrelated(AtomId(6), vec![])]
-    fn test_stereo_bond_views_incident_at_ligand(
+    fn test_stereo_bond_views_incident_as_ligand(
         molecule: MoleculeAst,
         #[case] atom: AtomId,
         #[case] expected: Vec<StereoBondId>,
@@ -1566,7 +1566,7 @@ mod tests {
         assert_eq!(
             molecule
                 .stereo_bonds()
-                .incident_at_ligand_ids(atom)
+                .incident_as_ligand_ids(atom)
                 .collect::<Vec<_>>(),
             expected,
         );
@@ -1575,12 +1575,12 @@ mod tests {
     #[rstest]
     #[case::site(BondId(1), Some(StereoBondId(0)))]
     #[case::non_site(BondId(0), None)]
-    fn test_stereo_bond_views_coincident(
+    fn test_stereo_bond_views_at(
         molecule: MoleculeAst,
         #[case] bond: BondId,
         #[case] expected: Option<StereoBondId>,
     ) {
-        assert_eq!(molecule.stereo_bonds().coincident_id(bond), expected);
+        assert_eq!(molecule.stereo_bonds().at_id(bond), expected);
     }
 
     #[rstest]
@@ -1909,16 +1909,13 @@ mod tests {
         ],
         None
     )]
-    fn test_stereo_atom_views_connecting_id(
+    fn test_stereo_atom_views_of_id(
         molecule: MoleculeAst,
         #[case] site: AtomId,
         #[case] ligands: Vec<StereoLigand>,
         #[case] expected: Option<StereoAtomId>,
     ) {
-        assert_eq!(
-            molecule.stereo_atoms().connecting_id(site, &ligands),
-            expected
-        );
+        assert_eq!(molecule.stereo_atoms().of_id(site, &ligands), expected);
     }
 
     #[rstest]
@@ -1942,15 +1939,12 @@ mod tests {
         ],
         None
     )]
-    fn test_stereo_bond_views_connecting_id(
+    fn test_stereo_bond_views_of_id(
         molecule: MoleculeAst,
         #[case] site: BondId,
         #[case] ligands: Vec<StereoLigand>,
         #[case] expected: Option<StereoBondId>,
     ) {
-        assert_eq!(
-            molecule.stereo_bonds().connecting_id(site, &ligands),
-            expected
-        );
+        assert_eq!(molecule.stereo_bonds().of_id(site, &ligands), expected);
     }
 }

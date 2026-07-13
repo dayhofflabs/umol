@@ -1132,12 +1132,12 @@ impl NoncovalentBondViews {
     }
 
     /// The noncovalent bond between atoms `first` and `second`, or `None`.
-    fn connecting(&self, py: Python<'_>, first: u32, second: u32) -> Option<NoncovalentBondView> {
+    fn of(&self, py: Python<'_>, first: u32, second: u32) -> Option<NoncovalentBondView> {
         let molecule = self.owner.bind(py).borrow();
         molecule
             .inner()
             .noncovalent_bonds()
-            .connecting_id(AstAtomId(first), AstAtomId(second))
+            .of_id(AstAtomId(first), AstAtomId(second))
             .map(|id| NoncovalentBondView {
                 owner: self.owner.clone_ref(py),
                 id,
@@ -2027,7 +2027,7 @@ mod tests {
     }
 
     /// Three atoms, one hydrogen bond over (0, 1), atom 2 isolated. For the collection
-    /// negative cases (`connecting` / `incident` with no bond).
+    /// negative cases (`of` / `incident` with no bond).
     fn molecule_with_hbond_and_isolated(py: Python<'_>) -> Py<MoleculeAst> {
         let molecule = AstMoleculeAst::from_parts(MoleculeParts {
             atoms: vec![
@@ -2118,16 +2118,16 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_views_connecting() {
+    fn test_noncovalent_bond_views_of() {
         Python::attach(|py| {
             let views = NoncovalentBondViews {
                 owner: molecule_with_hbond_and_isolated(py),
             };
             // unordered pair — both orders find the same bond
-            assert_eq!(views.connecting(py, 0, 1).unwrap().id(), 0);
-            assert_eq!(views.connecting(py, 1, 0).unwrap().id(), 0);
+            assert_eq!(views.of(py, 0, 1).unwrap().id(), 0);
+            assert_eq!(views.of(py, 1, 0).unwrap().id(), 0);
             // no bond between 0 and the isolated atom 2
-            assert!(views.connecting(py, 0, 2).is_none());
+            assert!(views.of(py, 0, 2).is_none());
         });
     }
 

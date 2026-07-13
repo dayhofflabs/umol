@@ -295,7 +295,7 @@ impl MoleculeAst {
             let host_site = bonds
                 .right_of(sp.site_id())
                 .expect("a matched pattern bond is mated");
-            let sh = host.bond(host_site).cis_trans_stereo()?;
+            let sh = host.bond(host_site).stereo_bond()?;
             if sp.kind() != sh.kind() {
                 return None;
             }

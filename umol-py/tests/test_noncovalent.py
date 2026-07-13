@@ -217,17 +217,17 @@ def test_noncovalentbondviews_iter():
     assert ids == [0]
 
 
-def test_noncovalentbondviews_connecting():
+def test_noncovalentbondviews_of():
     # three oxygens, one hydrogen bond over (0, 1); atom 2 isolated
     mol = MoleculeAst.from_parts(
         [AtomAst(Element("O")) for _ in range(3)],
         noncovalent_bonds=[([0, 1], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))],
     )
     # unordered pair — both orders find the same bond
-    assert mol.noncovalent_bonds.connecting(0, 1).id == 0
-    assert mol.noncovalent_bonds.connecting(1, 0).id == 0
+    assert mol.noncovalent_bonds.of(0, 1).id == 0
+    assert mol.noncovalent_bonds.of(1, 0).id == 0
     # no bond between 0 and the isolated atom 2
-    assert mol.noncovalent_bonds.connecting(0, 2) is None
+    assert mol.noncovalent_bonds.of(0, 2) is None
 
 
 def test_noncovalentbondviews_incident():

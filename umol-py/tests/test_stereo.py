@@ -209,19 +209,19 @@ def test_stereoatomview_constraints_write_through():
     )
 
 
-def test_stereoatomviews_coincident():
+def test_stereoatomviews_at():
     views = stereo_atom_molecule().stereo_atoms
-    assert views.coincident(0).id == 0
-    assert views.coincident(1) is None
+    assert views.at(0).id == 0
+    assert views.at(1) is None
 
 
-def test_stereoatomviews_connecting():
+def test_stereoatomviews_of():
     views = stereo_atom_molecule().stereo_atoms
     ligands = [StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5)]
     # order-independent full-ligand-set match
-    assert views.connecting(0, list(reversed(ligands))).id == 0
+    assert views.of(0, list(reversed(ligands))).id == 0
     # a partial ligand set does not match
-    assert views.connecting(0, ligands[:2]) is None
+    assert views.of(0, ligands[:2]) is None
 
 
 def test_stereoatomviews_setitem():

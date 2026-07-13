@@ -365,42 +365,39 @@ fn test_molecule_ast_noncovalent_bonds(#[from(rich_molecule)] ast: MoleculeAst) 
 #[case::forward(AtomId(0), AtomId(1), Some(BondId(0)))]
 #[case::reverse(AtomId(1), AtomId(0), Some(BondId(0)))]
 #[case::non_adjacent(AtomId(0), AtomId(3), None)]
-fn test_bond_views_connecting_id(
+fn test_bond_views_of_id(
     #[from(rich_molecule)] ast: MoleculeAst,
     #[case] a: AtomId,
     #[case] b: AtomId,
     #[case] expected: Option<BondId>,
 ) {
-    assert_eq!(ast.bonds().connecting_id(a, b), expected);
+    assert_eq!(ast.bonds().of_id(a, b), expected);
 }
 
 #[rstest]
 #[case::matched(AtomId(3), vec![AtomId(2)], Some(DativeBondId(0)))]
 #[case::role_swap(AtomId(2), vec![AtomId(3)], None)]
 #[case::wrong_donor(AtomId(3), vec![AtomId(1)], None)]
-fn test_dative_bond_views_connecting_id(
+fn test_dative_bond_views_of_id(
     #[from(rich_molecule)] ast: MoleculeAst,
     #[case] acceptor: AtomId,
     #[case] donors: Vec<AtomId>,
     #[case] expected: Option<DativeBondId>,
 ) {
-    assert_eq!(
-        ast.dative_bonds().connecting_id(acceptor, &donors),
-        expected
-    );
+    assert_eq!(ast.dative_bonds().of_id(acceptor, &donors), expected);
 }
 
 #[rstest]
 #[case::forward(AtomId(0), AtomId(3), Some(NoncovalentBondId(0)))]
 #[case::reverse(AtomId(3), AtomId(0), Some(NoncovalentBondId(0)))]
 #[case::unrelated(AtomId(0), AtomId(1), None)]
-fn test_noncovalent_bond_views_connecting_id(
+fn test_noncovalent_bond_views_of_id(
     #[from(rich_molecule)] ast: MoleculeAst,
     #[case] a: AtomId,
     #[case] b: AtomId,
     #[case] expected: Option<NoncovalentBondId>,
 ) {
-    assert_eq!(ast.noncovalent_bonds().connecting_id(a, b), expected);
+    assert_eq!(ast.noncovalent_bonds().of_id(a, b), expected);
 }
 
 #[rstest]
@@ -505,13 +502,13 @@ fn test_noncovalent_bond_views_induced_ids(
 #[case::forward(AtomId(0), AtomId(1), Some(BondId(0)))]
 #[case::reverse(AtomId(1), AtomId(0), Some(BondId(0)))]
 #[case::non_adjacent(AtomId(0), AtomId(3), None)]
-fn test_bond_views_connecting(
+fn test_bond_views_of(
     #[from(rich_molecule)] ast: MoleculeAst,
     #[case] a: AtomId,
     #[case] b: AtomId,
     #[case] expected: Option<BondId>,
 ) {
-    assert_eq!(ast.bonds().connecting(a, b).map(|v| v.id), expected);
+    assert_eq!(ast.bonds().of(a, b).map(|v| v.id), expected);
 }
 
 #[rstest]
@@ -549,16 +546,14 @@ fn test_dative_bond_views_incident(
 #[rstest]
 #[case::matched(AtomId(3), vec![AtomId(2)], Some(DativeBondId(0)))]
 #[case::role_swap(AtomId(2), vec![AtomId(3)], None)]
-fn test_dative_bond_views_connecting(
+fn test_dative_bond_views_of(
     #[from(rich_molecule)] ast: MoleculeAst,
     #[case] acceptor: AtomId,
     #[case] donors: Vec<AtomId>,
     #[case] expected: Option<DativeBondId>,
 ) {
     assert_eq!(
-        ast.dative_bonds()
-            .connecting(acceptor, &donors)
-            .map(|v| v.id),
+        ast.dative_bonds().of(acceptor, &donors).map(|v| v.id),
         expected
     );
 }
@@ -602,15 +597,12 @@ fn test_aromatic_system_views_incident(
     Some(AromaticSystemId(0)),
 )]
 #[case::subset(HashSet::from([AtomId(0), AtomId(1)]), None)]
-fn test_aromatic_system_views_connecting(
+fn test_aromatic_system_views_of(
     #[from(rich_molecule)] ast: MoleculeAst,
     #[case] atoms: HashSet<AtomId>,
     #[case] expected: Option<AromaticSystemId>,
 ) {
-    assert_eq!(
-        ast.aromatic_systems().connecting(atoms).map(|v| v.id),
-        expected
-    );
+    assert_eq!(ast.aromatic_systems().of(atoms).map(|v| v.id), expected);
 }
 
 #[rstest]
@@ -652,15 +644,12 @@ fn test_multicenter_bond_views_incident(
     Some(MulticenterBondId(0)),
 )]
 #[case::subset(HashSet::from([AtomId(0), AtomId(1)]), None)]
-fn test_multicenter_bond_views_connecting(
+fn test_multicenter_bond_views_of(
     #[from(rich_molecule)] ast: MoleculeAst,
     #[case] atoms: HashSet<AtomId>,
     #[case] expected: Option<MulticenterBondId>,
 ) {
-    assert_eq!(
-        ast.multicenter_bonds().connecting(atoms).map(|v| v.id),
-        expected,
-    );
+    assert_eq!(ast.multicenter_bonds().of(atoms).map(|v| v.id), expected,);
 }
 
 #[rstest]
@@ -701,16 +690,13 @@ fn test_noncovalent_bond_views_incident(
 #[case::forward(AtomId(0), AtomId(3), Some(NoncovalentBondId(0)))]
 #[case::reverse(AtomId(3), AtomId(0), Some(NoncovalentBondId(0)))]
 #[case::unrelated(AtomId(0), AtomId(1), None)]
-fn test_noncovalent_bond_views_connecting(
+fn test_noncovalent_bond_views_of(
     #[from(rich_molecule)] ast: MoleculeAst,
     #[case] a: AtomId,
     #[case] b: AtomId,
     #[case] expected: Option<NoncovalentBondId>,
 ) {
-    assert_eq!(
-        ast.noncovalent_bonds().connecting(a, b).map(|v| v.id),
-        expected,
-    );
+    assert_eq!(ast.noncovalent_bonds().of(a, b).map(|v| v.id), expected,);
 }
 
 #[rstest]
@@ -1606,12 +1592,12 @@ fn test_molecule_ast_raw_graph(#[from(rich_molecule)] ast: MoleculeAst) {
     HashSet::from([AtomId(3)]),
     None,
 )]
-fn test_aromatic_system_views_connecting_id(
+fn test_aromatic_system_views_of_id(
     #[from(rich_molecule)] ast: MoleculeAst,
     #[case] atoms: HashSet<AtomId>,
     #[case] expected: Option<AromaticSystemId>,
 ) {
-    assert_eq!(ast.aromatic_systems().connecting_id(atoms), expected);
+    assert_eq!(ast.aromatic_systems().of_id(atoms), expected);
 }
 
 #[rstest]
@@ -1623,12 +1609,12 @@ fn test_aromatic_system_views_connecting_id(
     HashSet::from([AtomId(0), AtomId(1)]),
     None,
 )]
-fn test_multicenter_bond_views_connecting_id(
+fn test_multicenter_bond_views_of_id(
     #[from(rich_molecule)] ast: MoleculeAst,
     #[case] atoms: HashSet<AtomId>,
     #[case] expected: Option<MulticenterBondId>,
 ) {
-    assert_eq!(ast.multicenter_bonds().connecting_id(atoms), expected);
+    assert_eq!(ast.multicenter_bonds().of_id(atoms), expected);
 }
 
 #[rstest]

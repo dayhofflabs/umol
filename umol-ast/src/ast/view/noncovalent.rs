@@ -112,15 +112,15 @@ impl<'a> NoncovalentBondViews<'a> {
     }
 
     /// Id of the noncovalent bond between `a` and `b`, if any.
-    pub fn connecting_id(&self, first: AtomId, second: AtomId) -> Option<NoncovalentBondId> {
+    pub fn of_id(&self, first: AtomId, second: AtomId) -> Option<NoncovalentBondId> {
         self.noncovalent_bonds
             .find_by_participants(&[NodeId::from(first), NodeId::from(second)])
             .map(NoncovalentBondId::from)
     }
 
     /// View of the noncovalent bond between `first` and `second`, if any.
-    pub fn connecting(&self, first: AtomId, second: AtomId) -> Option<NoncovalentBondView<'a>> {
-        self.connecting_id(first, second).map(|id| {
+    pub fn of(&self, first: AtomId, second: AtomId) -> Option<NoncovalentBondView<'a>> {
+        self.of_id(first, second).map(|id| {
             self.get(id).expect(
                 "noncovalent bond id from relation set must refer to a noncovalent bond in this molecule",
             )

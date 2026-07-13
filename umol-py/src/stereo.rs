@@ -52,7 +52,6 @@ impl Permutation {
     /// Construct from the image (one-line notation); the degree is the image length.
     #[new]
     fn new(image: Vec<u32>) -> Self {
-        let image: Vec<u8> = image.iter().map(|&index| index as u8).collect();
         Permutation(PermPermutation::from_image(image.len(), &image))
     }
 
@@ -2222,7 +2221,7 @@ stereo_view! {
 
 /// Per-entity molecule-level stereo collection — `StereoAtomViews` / `StereoBondViews` — the
 /// stereo atoms/bonds of a molecule, indexed by integer position, plus content lookups by
-/// site (`coincident`) and by site + ligand multiset (`connecting`).
+/// site (`at`) and by site + ligand multiset (`of`).
 macro_rules! stereo_views {
     (
         $views:ident, $view:ident, $iter:ident, $ast_id:ident, $site_id:ident, $namespace:ident,
@@ -2290,13 +2289,14 @@ macro_rules! stereo_views {
                 Ok(())
             }
 
-            /// The stereo entity whose site is atom/bond `site`, or `None`.
-            fn coincident(&self, py: Python<'_>, site: u32) -> Option<$view> {
+            /// The stereo entity sitting on the atom/bond with id `site`, or `None`. Keyed by
+            /// site id, *not* by position — use `views[i]` to index by position.
+            fn at(&self, py: Python<'_>, site: u32) -> Option<$view> {
                 let molecule = self.owner.bind(py).borrow();
                 molecule
                     .inner()
                     .$namespace()
-                    .coincident_id($site_id(site))
+                    .at_id($site_id(site))
                     .map(|id| $view {
                         owner: self.owner.clone_ref(py),
                         id,
@@ -2304,19 +2304,14 @@ macro_rules! stereo_views {
             }
 
             /// The stereo entity on `site` with exactly `ligands` (order-independent), or `None`.
-            fn connecting(
-                &self,
-                py: Python<'_>,
-                site: u32,
-                ligands: Vec<StereoLigand>,
-            ) -> Option<$view> {
+            fn of(&self, py: Python<'_>, site: u32, ligands: Vec<StereoLigand>) -> Option<$view> {
                 let ligands: Vec<AstStereoLigand> =
                     ligands.into_iter().map(StereoLigand::to_ast).collect();
                 let molecule = self.owner.bind(py).borrow();
                 molecule
                     .inner()
                     .$namespace()
-                    .connecting_id($site_id(site), &ligands)
+                    .of_id($site_id(site), &ligands)
                     .map(|id| $view {
                         owner: self.owner.clone_ref(py),
                         id,
@@ -4169,23 +4164,23 @@ mod tests {
     #[rstest]
     #[case::has_stereo(0, Some(0))]
     #[case::no_stereo(1, None)]
-    fn test_stereo_atom_views_coincident(#[case] site: u32, #[case] expected_id: Option<u32>) {
+    fn test_stereo_atom_views_at(#[case] site: u32, #[case] expected_id: Option<u32>) {
         Python::attach(|py| {
             let views = StereoAtomViews {
                 owner: stereo_atom_molecule(py),
             };
-            assert_eq!(views.coincident(py, site).map(|v| v.id()), expected_id);
+            assert_eq!(views.at(py, site).map(|v| v.id()), expected_id);
         });
     }
 
     #[rstest]
-    fn test_stereo_atom_views_connecting() {
+    fn test_stereo_atom_views_of() {
         Python::attach(|py| {
             let views = StereoAtomViews {
                 owner: stereo_atom_molecule(py),
             };
             // order-independent full-ligand-set match
-            let matched = views.connecting(
+            let matched = views.of(
                 py,
                 0,
                 vec![
@@ -4197,7 +4192,7 @@ mod tests {
             );
             assert_eq!(matched.map(|v| v.id()), Some(0));
             // a partial ligand set does not match
-            let missed = views.connecting(
+            let missed = views.of(
                 py,
                 0,
                 vec![
@@ -4232,8 +4227,8 @@ mod tests {
             };
             assert_eq!(views.__len__(py), 1);
             assert_eq!(views.__getitem__(py, 0).unwrap().id(), 0);
-            assert_eq!(views.coincident(py, 0).map(|v| v.id()), Some(0));
-            assert!(views.coincident(py, 2).is_none());
+            assert_eq!(views.at(py, 0).map(|v| v.id()), Some(0));
+            assert!(views.at(py, 2).is_none());
         });
     }
 }

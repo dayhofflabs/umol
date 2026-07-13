@@ -131,7 +131,7 @@ impl<'a> DativeBondViews<'a> {
 
     /// Id of the dative bond with exactly this acceptor and donor set, if any. Per-factor: the
     /// donor/acceptor roles are matched, not the merged atom set.
-    pub fn connecting_id(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondId> {
+    pub fn of_id(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondId> {
         let donor_nodes: Vec<NodeId> = donors.iter().map(|&a| NodeId::from(a)).collect();
         self.dative_bonds
             .find_by_participants(&[NodeId::from(acceptor)], &donor_nodes)
@@ -139,8 +139,8 @@ impl<'a> DativeBondViews<'a> {
     }
 
     /// View of the dative bond with exactly this acceptor and donor set, if any.
-    pub fn connecting(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondView<'a>> {
-        self.connecting_id(acceptor, donors).map(|id| {
+    pub fn of(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondView<'a>> {
+        self.of_id(acceptor, donors).map(|id| {
             self.get(id).expect(
                 "dative bond id from relation set must refer to a dative bond in this molecule",
             )

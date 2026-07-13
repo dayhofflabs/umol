@@ -361,22 +361,18 @@ impl<'a> AtomView<'a> {
         self.molecule.noncovalent_bonds().incident_ids(self.id)
     }
 
-    pub fn is_in_tetrahedral_stereo(&self) -> bool {
-        self.tetrahedral_stereo().is_some()
+    pub fn is_stereo_atom(&self) -> bool {
+        self.stereo_atom().is_some()
     }
 
-    pub fn tetrahedral_stereo_id(&self) -> Option<StereoAtomId> {
-        self.tetrahedral_stereo().map(|s| s.id)
+    pub fn stereo_atom_id(&self) -> Option<StereoAtomId> {
+        self.stereo_atom().map(|s| s.id)
     }
 
-    /// The tetrahedral stereo atom sited on this atom, if any. An atom is the
-    /// site of at most one stereo atom; the kind filter selects the tetrahedral
-    /// case from the other coordination geometries that share the relation.
-    pub fn tetrahedral_stereo(&self) -> Option<StereoAtomView<'a>> {
-        self.molecule
-            .stereo_atoms()
-            .coincident(self.id)
-            .filter(|s| s.kind() == StereoKind::Tetrahedral)
+    /// The stereo atom sited on this atom, if any — any coordination geometry. An
+    /// atom is the site of at most one stereo atom.
+    pub fn stereo_atom(&self) -> Option<StereoAtomView<'a>> {
+        self.molecule.stereo_atoms().at(self.id)
     }
 
     /// True if this atom belongs to any ring in the molecule's canonical
@@ -501,7 +497,10 @@ impl<'a> AtomView<'a> {
             ));
         }
 
-        if let Some(stereo) = self.tetrahedral_stereo() {
+        if let Some(stereo) = self
+            .stereo_atom()
+            .filter(|s| s.kind() == StereoKind::Tetrahedral)
+        {
             constraints.set(AtomConstraintAst::tetrahedral_stereo(
                 TetrahedralStereoAst::stereo(stereo.coset().clone()),
             ));
@@ -926,43 +925,38 @@ mod tests {
 
     #[rstest]
     #[case::tetrahedral_site(AtomId(0), true)]
-    #[case::square_planar_site(AtomId(5), false)]
+    #[case::square_planar_site(AtomId(5), true)]
     #[case::ligand(AtomId(1), false)]
-    fn test_atom_view_is_in_tetrahedral_stereo(
+    fn test_atom_view_is_stereo_atom(
         stereo_molecule: MoleculeAst,
         #[case] atom: AtomId,
         #[case] expected: bool,
     ) {
-        assert_eq!(
-            stereo_molecule.atom(atom).is_in_tetrahedral_stereo(),
-            expected
-        );
+        assert_eq!(stereo_molecule.atom(atom).is_stereo_atom(), expected);
     }
 
     #[rstest]
     #[case::tetrahedral_site(AtomId(0), Some(StereoAtomId(0)))]
-    #[case::square_planar_site(AtomId(5), None)]
+    #[case::square_planar_site(AtomId(5), Some(StereoAtomId(1)))]
     #[case::ligand(AtomId(1), None)]
-    fn test_atom_view_tetrahedral_stereo_id(
+    fn test_atom_view_stereo_atom_id(
         stereo_molecule: MoleculeAst,
         #[case] atom: AtomId,
         #[case] expected: Option<StereoAtomId>,
     ) {
-        assert_eq!(stereo_molecule.atom(atom).tetrahedral_stereo_id(), expected);
+        assert_eq!(stereo_molecule.atom(atom).stereo_atom_id(), expected);
     }
 
     #[rstest]
-    fn test_atom_view_tetrahedral_stereo(stereo_molecule: MoleculeAst) {
-        let view = stereo_molecule
-            .atom(AtomId(0))
-            .tetrahedral_stereo()
-            .unwrap();
-        assert_eq!(view.id, StereoAtomId(0));
-        assert_eq!(view.kind(), StereoKind::Tetrahedral);
-        assert!(stereo_molecule
-            .atom(AtomId(5))
-            .tetrahedral_stereo()
-            .is_none());
+    fn test_atom_view_stereo_atom(stereo_molecule: MoleculeAst) {
+        // kind-generic: returns the sited stereo atom of any coordination geometry
+        let tetrahedral = stereo_molecule.atom(AtomId(0)).stereo_atom().unwrap();
+        assert_eq!(tetrahedral.id, StereoAtomId(0));
+        assert_eq!(tetrahedral.kind(), StereoKind::Tetrahedral);
+        let square_planar = stereo_molecule.atom(AtomId(5)).stereo_atom().unwrap();
+        assert_eq!(square_planar.id, StereoAtomId(1));
+        assert_eq!(square_planar.kind(), StereoKind::SquarePlanar);
+        assert!(stereo_molecule.atom(AtomId(1)).stereo_atom().is_none());
     }
 
     #[rstest]

@@ -380,12 +380,12 @@ impl AromaticSystemViews {
     }
 
     /// The aromatic system whose member atom set equals `atoms`, or `None`.
-    fn connecting(&self, py: Python<'_>, atoms: Vec<u32>) -> Option<AromaticSystemView> {
+    fn of(&self, py: Python<'_>, atoms: Vec<u32>) -> Option<AromaticSystemView> {
         let molecule = self.owner.bind(py).borrow();
         molecule
             .inner()
             .aromatic_systems()
-            .connecting_id(atoms.into_iter().map(AstAtomId))
+            .of_id(atoms.into_iter().map(AstAtomId))
             .map(|id| AromaticSystemView {
                 owner: self.owner.clone_ref(py),
                 id,
@@ -1536,15 +1536,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_views_connecting() {
+    fn test_aromatic_system_views_of() {
         Python::attach(|py| {
             let views = AromaticSystemViews { owner: benzene(py) };
-            assert_eq!(
-                views.connecting(py, vec![0, 1, 2, 3, 4, 5]).unwrap().id(),
-                0
-            );
+            assert_eq!(views.of(py, vec![0, 1, 2, 3, 4, 5]).unwrap().id(), 0);
             // a subset is not the system's exact atom set
-            assert!(views.connecting(py, vec![0, 1, 2]).is_none());
+            assert!(views.of(py, vec![0, 1, 2]).is_none());
         });
     }
 

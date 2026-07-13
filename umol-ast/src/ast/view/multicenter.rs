@@ -119,10 +119,7 @@ impl<'a> MulticenterBondViews<'a> {
     }
 
     /// ID of the multicenter bond whose participant set equals `atoms`, if any.
-    pub fn connecting_id(
-        &self,
-        atoms: impl IntoIterator<Item = AtomId>,
-    ) -> Option<MulticenterBondId> {
+    pub fn of_id(&self, atoms: impl IntoIterator<Item = AtomId>) -> Option<MulticenterBondId> {
         let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
         self.multicenter_bonds
             .find_by_participants(&nodes)
@@ -130,11 +127,8 @@ impl<'a> MulticenterBondViews<'a> {
     }
 
     /// View of the multicenter bond whose participant set equals `atoms`, if any.
-    pub fn connecting(
-        &self,
-        atoms: impl IntoIterator<Item = AtomId>,
-    ) -> Option<MulticenterBondView<'a>> {
-        self.connecting_id(atoms).map(|id| {
+    pub fn of(&self, atoms: impl IntoIterator<Item = AtomId>) -> Option<MulticenterBondView<'a>> {
+        self.of_id(atoms).map(|id| {
             self.get(id).expect(
                 "multicenter bond id from relation set must refer to a multicenter bond in this molecule",
             )

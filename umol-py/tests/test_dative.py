@@ -238,11 +238,11 @@ def test_dativebondviews_iter():
     assert orders == [ValueAst.Lit(1)]
 
 
-def test_dativebondviews_connecting():
+def test_dativebondviews_of():
     mol = ammonia_borane()
-    assert mol.dative_bonds.connecting([1], 0).id == 0
+    assert mol.dative_bonds.of([1], 0).id == 0
     # roles swapped: no such dative bond
-    assert mol.dative_bonds.connecting([0], 1) is None
+    assert mol.dative_bonds.of([0], 1) is None
 
 
 def test_dativebondviews_incident():

@@ -233,11 +233,11 @@ def test_multicenterbondviews_iter():
     assert ids == [0]
 
 
-def test_multicenterbondviews_connecting():
+def test_multicenterbondviews_of():
     mol = three_center_bond()
-    assert mol.multicenter_bonds.connecting([0, 1, 2]).id == 0
+    assert mol.multicenter_bonds.of([0, 1, 2]).id == 0
     # a subset is not the bond's exact atom set
-    assert mol.multicenter_bonds.connecting([0, 1]) is None
+    assert mol.multicenter_bonds.of([0, 1]) is None
 
 
 def test_multicenterbondviews_incident():

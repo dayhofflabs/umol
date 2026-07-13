@@ -117,10 +117,7 @@ impl<'a> AromaticSystemViews<'a> {
     }
 
     /// Id of the aromatic system whose atom set equals `atoms`, if any.
-    pub fn connecting_id(
-        &self,
-        atoms: impl IntoIterator<Item = AtomId>,
-    ) -> Option<AromaticSystemId> {
+    pub fn of_id(&self, atoms: impl IntoIterator<Item = AtomId>) -> Option<AromaticSystemId> {
         let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
         self.aromatic_systems
             .find_by_participants(&nodes)
@@ -128,11 +125,8 @@ impl<'a> AromaticSystemViews<'a> {
     }
 
     /// View of the aromatic system whose atom set equals `atoms`, if any.
-    pub fn connecting(
-        &self,
-        atoms: impl IntoIterator<Item = AtomId>,
-    ) -> Option<AromaticSystemView<'a>> {
-        self.connecting_id(atoms).map(|id| {
+    pub fn of(&self, atoms: impl IntoIterator<Item = AtomId>) -> Option<AromaticSystemView<'a>> {
+        self.of_id(atoms).map(|id| {
             self.get(id).expect(
                 "aromatic system id from relation set must refer to an aromatic system in this molecule",
             )

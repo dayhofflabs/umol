@@ -569,14 +569,14 @@ def test_bondviews_iter():
     assert orders == [ValueAst.Lit(2)]
 
 
-def test_bondviews_connecting():
+def test_bondviews_of():
     mol = MoleculeAst.from_parts(
         [AtomAst(Element("C")), AtomAst(Element("C")), AtomAst(Element("C"))],
         bonds=[(0, 1, BondAst(1))],
     )
-    assert mol.bonds.connecting(0, 1).id == 0
-    assert mol.bonds.connecting(1, 0).id == 0
-    assert mol.bonds.connecting(1, 2) is None
+    assert mol.bonds.of(0, 1).id == 0
+    assert mol.bonds.of(1, 0).id == 0
+    assert mol.bonds.of(1, 2) is None
 
 
 def test_bondviews_repr():

@@ -343,13 +343,13 @@ impl BondViews {
         Ok(())
     }
 
-    /// The bond connecting atoms `first` and `second`, or `None`.
-    fn connecting(&self, py: Python<'_>, first: u32, second: u32) -> Option<BondView> {
+    /// The bond between atoms `first` and `second`, or `None`.
+    fn of(&self, py: Python<'_>, first: u32, second: u32) -> Option<BondView> {
         let molecule = self.owner.bind(py).borrow();
         molecule
             .inner()
             .bonds()
-            .connecting_id(AstAtomId(first), AstAtomId(second))
+            .of_id(AstAtomId(first), AstAtomId(second))
             .map(|id| BondView {
                 owner: self.owner.clone_ref(py),
                 id,
@@ -2228,7 +2228,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_views_connecting() {
+    fn test_bond_views_of() {
         Python::attach(|py| {
             // three carbons, one bond 0–1; atom 2 is isolated
             let molecule = AstMoleculeAst::from_parts(AstMoleculeParts {
@@ -2242,9 +2242,9 @@ mod tests {
             });
             let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
             let views = BondViews { owner };
-            assert_eq!(views.connecting(py, 0, 1).unwrap().id(), 0);
-            assert_eq!(views.connecting(py, 1, 0).unwrap().id(), 0);
-            assert!(views.connecting(py, 1, 2).is_none());
+            assert_eq!(views.of(py, 0, 1).unwrap().id(), 0);
+            assert_eq!(views.of(py, 1, 0).unwrap().id(), 0);
+            assert!(views.of(py, 1, 2).is_none());
         });
     }
 }

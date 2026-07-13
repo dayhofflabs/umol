@@ -687,8 +687,8 @@ fn atom_pair_key(a: AtomId, b: AtomId) -> [AtomId; 2] {
     }
 }
 
-/// The canonical key of a stereo element's ligand frame: the ligand **multiset** (sorted, so frame
-/// order doesn't matter but repeats — virtual ligands — do), matching `connecting_id`'s semantics.
+/// The canonical key of a stereo element's ligand frame: the ligand sorted multiset
+/// (can have duplicate virtual ligands).
 fn ligand_multiset(ligands: &[StereoLigand]) -> Vec<StereoLigand> {
     let mut ligands = ligands.to_vec();
     ligands.sort_unstable();

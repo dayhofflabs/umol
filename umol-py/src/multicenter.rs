@@ -384,12 +384,12 @@ impl MulticenterBondViews {
     }
 
     /// The multicenter bond whose member atom set equals `atoms`, or `None`.
-    fn connecting(&self, py: Python<'_>, atoms: Vec<u32>) -> Option<MulticenterBondView> {
+    fn of(&self, py: Python<'_>, atoms: Vec<u32>) -> Option<MulticenterBondView> {
         let molecule = self.owner.bind(py).borrow();
         molecule
             .inner()
             .multicenter_bonds()
-            .connecting_id(atoms.into_iter().map(AstAtomId))
+            .of_id(atoms.into_iter().map(AstAtomId))
             .map(|id| MulticenterBondView {
                 owner: self.owner.clone_ref(py),
                 id,
@@ -1569,14 +1569,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_views_connecting() {
+    fn test_multicenter_bond_views_of() {
         Python::attach(|py| {
             let views = MulticenterBondViews {
                 owner: three_center_bond(py),
             };
-            assert_eq!(views.connecting(py, vec![0, 1, 2]).unwrap().id(), 0);
+            assert_eq!(views.of(py, vec![0, 1, 2]).unwrap().id(), 0);
             // a subset is not the bond's exact atom set
-            assert!(views.connecting(py, vec![0, 1]).is_none());
+            assert!(views.of(py, vec![0, 1]).is_none());
         });
     }
 

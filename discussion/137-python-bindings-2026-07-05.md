@@ -684,6 +684,16 @@ Rust-side changes surfaced while wrapping (the Python-pull of the co-iteration
 principle). Collected here as a running list; applied as a batch on the Rust side,
 not mid-slice.
 
+> **Status (2026-07-13 audit + follow-through):**
+> - **1 (Hash)** — **open, not done.** The Rust `impl Hash` is a clean addition (and would fix the false doc comment), but the Python `#[pyclass(eq, hash, frozen)]` is **not viable** — `frozen` forbids the mutable views the binding relies on, and a mutable molecule shouldn't be hashable. Left for a decision.
+> - **2 (by-id accessor 4-path redundancy)** — **open design question**, slated for a full consolidation discussion (all 8 families, a ~32-method surface; the `MoleculeAst` `Index` impls are near-dead). No code yet.
+> - **3 (`Permutation` `u8`→`u32`) — DONE.** Both `image` and `degree` fields → `u32`; dropped the pyo3 boundary `as u8` truncation. (umol-perm 110 green.)
+> - **4 (`connecting`→`of`) — DONE.** `connecting`/`connecting_id` → `of`/`of_id` across all six entity families (AST views + pyo3 `Views` + the Python entity tests), rename-only/positional; landed stereo-first, then the other five.
+> - **5 (`(a,b)`→`(first,second)`) — DONE.** `find_bond_by_participants` + the noncovalent peer → `(first, second)` (param names only); the symmetric orbit predicates keep `a,b` per the recorded decision.
+> - **6 (uniform `*ViewMut` + retire bulk `&mut` iterators) — already done** (in the dative slice, "S0"): all eight `*_mut(id)` return a `*ViewMut`, bulk `*s_mut()` retired to `map_*(FnMut(XAst)->XAst)`. The Drop re-intern guard remains correctly deferred to interning (114).
+>
+> **Stereo lookup-vocabulary rename (2026-07-13 — emerged from item 4's discussion, not originally listed):** `coincident`→`at`/`is_at`/`at_id` (by site); the reverse `tetrahedral_stereo`/`cis_trans_stereo`→`stereo_atom`/`stereo_bond`, now **kind-generic** (the tetrahedral/cis-trans *constraint* accessor keeps its name; `derive_constraints` filters at the call site); `incident_at_ligand`/`incident_at_site`→`incident_as_ligand`/`incident_as_site`. `incident` (the base relation) unchanged. AST + pyo3 + tests. **Verified: umol-ast 4581, umol-py + pytest 379, clippy/fmt clean.**
+
 1. **`MoleculeAst` has no `Hash` impl** (S0c). `PartialEq`/`Eq` are hand-written
    (excluding `rings_cache`), but there is no `Hash` — yet the struct doc comment
    (`umol-ast/src/ast/molecule.rs:54`) claims the cache is "excluded from PartialEq /
@@ -758,6 +768,14 @@ not mid-slice.
 
 Binding-side work deferred and batched (distinct from the Rust fold-backs above —
 these change only umol-py, not umol-ast).
+
+> **Status (2026-07-13 audit):**
+> - **1 (`__repr__`/`__str__` on value mirrors + `AtomAst`) — DONE.** All seven have a constructor-style `__repr__` (the five complex-enum mirrors via `variant_repr`, `SpinStateAst`/`AtomAst` bespoke); `__str__` was added only where a DSL string form exists (`AtomAst`), which is the right scope.
+> - **2 (terse element `umol.E`) — DONE** (2026-07-08), dynamic `__getattr__` form. The `.pyi`-stub / 118-constants completion sub-option remains open.
+> - **3 (pickling) — deferred.** No pyclass implements the pickle protocol; nothing needs it yet.
+> - **4 (`AtomConstraints` container) — DONE** (2026-07-08): `AtomConstraintsAst` with by-key addressing, named accessors, and `asdict`.
+> - **5 (`FromAst`/`IntoAst` raise/lower binding) — deferred.** Python still gets only the string shortcuts (parse/str/repr); B2–B7 did not increase the need (the newly bound families have empty `*Defaults`).
+> - **6 (structural `append`/`extend` on `AtomViews`) — deferred.** `__setitem__` shipped on every entity `Views`; `append`/`extend` remain unsettled (need a `MoleculeBuilder`/`edit()` surface exposed to Python) and `__delitem__` is held back (dangling-bond semantics).
 
 1. **`__repr__` / `__str__` on the value mirrors + `AtomAst`** (S2a; pulled forward by
    the S4b `AtomAst.__repr__` request). `ValueTerm`, `ValueAst`, `ValuePredicate`,

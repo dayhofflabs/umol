@@ -72,7 +72,7 @@ impl StereoResolver {
         ast: &MoleculeAst,
         id: AtomId,
     ) -> Option<(AtomId, Vec<StereoLigand>, StereoAtomAst)> {
-        if ast.stereo_atoms().has_coincident(id) {
+        if ast.stereo_atoms().is_at(id) {
             return None;
         }
         let atom = ast.atom(id);
@@ -121,7 +121,7 @@ impl StereoResolver {
         ast: &MoleculeAst,
         id: BondId,
     ) -> Option<(BondId, Vec<StereoLigand>, StereoBondAst)> {
-        if ast.stereo_bonds().has_coincident(id) {
+        if ast.stereo_bonds().is_at(id) {
             return None;
         }
         let bond = ast.bond(id);

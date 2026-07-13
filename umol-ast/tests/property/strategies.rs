@@ -774,7 +774,7 @@ pub(crate) fn stereo_atom_kind_strategy() -> impl Strategy<Value = StereoKind> {
 
 /// A permutation of the kind's `degree` positions, as a shuffled one-line image.
 pub(crate) fn permutation_strategy(degree: usize) -> impl Strategy<Value = Permutation> {
-    Just((0..degree as u8).collect::<Vec<u8>>())
+    Just((0..degree as u32).collect::<Vec<u32>>())
         .prop_shuffle()
         .prop_map(move |image| Permutation::from_image(degree, &image))
 }

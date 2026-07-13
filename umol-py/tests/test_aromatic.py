@@ -233,11 +233,11 @@ def test_aromaticsystemviews_iter():
     assert ids == [0]
 
 
-def test_aromaticsystemviews_connecting():
+def test_aromaticsystemviews_of():
     mol = benzene()
-    assert mol.aromatic_systems.connecting([0, 1, 2, 3, 4, 5]).id == 0
+    assert mol.aromatic_systems.of([0, 1, 2, 3, 4, 5]).id == 0
     # a subset is not the system's exact atom set
-    assert mol.aromatic_systems.connecting([0, 1, 2]) is None
+    assert mol.aromatic_systems.of([0, 1, 2]) is None
 
 
 def test_aromaticsystemviews_incident():

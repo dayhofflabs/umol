@@ -74,7 +74,7 @@ impl MoleculeCorrespondence {
             ) else {
                 continue;
             };
-            if let Some(id) = rhs.stereo_atoms().connecting_id(site, &ligands) {
+            if let Some(id) = rhs.stereo_atoms().of_id(site, &ligands) {
                 stereo_atom.push((sp.id, id));
             }
         }
@@ -92,7 +92,7 @@ impl MoleculeCorrespondence {
             ) else {
                 continue;
             };
-            if let Some(id) = rhs.stereo_bonds().connecting_id(site, &ligands) {
+            if let Some(id) = rhs.stereo_bonds().of_id(site, &ligands) {
                 stereo_bond.push((sp.id, id));
             }
         }
@@ -217,7 +217,7 @@ pub(crate) fn induced_dative_bonds(
         ) else {
             continue;
         };
-        if let Some(id) = right.dative_bonds().connecting_id(acceptor, &donors) {
+        if let Some(id) = right.dative_bonds().of_id(acceptor, &donors) {
             mates.push((d.id, id));
         }
     }
@@ -240,7 +240,7 @@ pub(crate) fn induced_aromatic_systems(
         let Some(mapped) = map_atoms(atoms, a.atom_ids()) else {
             continue;
         };
-        if let Some(id) = right.aromatic_systems().connecting_id(mapped) {
+        if let Some(id) = right.aromatic_systems().of_id(mapped) {
             mates.push((a.id, id));
         }
     }
@@ -263,7 +263,7 @@ pub(crate) fn induced_multicenter_bonds(
         let Some(mapped) = map_atoms(atoms, m.atom_ids()) else {
             continue;
         };
-        if let Some(id) = right.multicenter_bonds().connecting_id(mapped) {
+        if let Some(id) = right.multicenter_bonds().of_id(mapped) {
             mates.push((m.id, id));
         }
     }
@@ -287,7 +287,7 @@ pub(crate) fn induced_noncovalent_bonds(
         let (Some(first), Some(second)) = (map_atom(atoms, a), map_atom(atoms, b)) else {
             continue;
         };
-        if let Some(id) = right.noncovalent_bonds().connecting_id(first, second) {
+        if let Some(id) = right.noncovalent_bonds().of_id(first, second) {
             mates.push((nc.id, id));
         }
     }

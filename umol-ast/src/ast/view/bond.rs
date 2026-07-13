@@ -82,7 +82,7 @@ impl<'a> BondViews<'a> {
     }
 
     /// Id of the bond between `first` and `second`, if any.
-    pub fn connecting_id(&self, first: AtomId, second: AtomId) -> Option<BondId> {
+    pub fn of_id(&self, first: AtomId, second: AtomId) -> Option<BondId> {
         self.molecule
             .raw_graph()
             .find_edge(NodeId::from(first), NodeId::from(second))
@@ -90,8 +90,8 @@ impl<'a> BondViews<'a> {
     }
 
     /// View of the bond between `first` and `second`, if any.
-    pub fn connecting(&self, first: AtomId, second: AtomId) -> Option<BondView<'a>> {
-        self.connecting_id(first, second).map(|id| {
+    pub fn of(&self, first: AtomId, second: AtomId) -> Option<BondView<'a>> {
+        self.of_id(first, second).map(|id| {
             self.get(id)
                 .expect("bond id from graph must refer to a bond in this molecule")
         })
@@ -184,22 +184,18 @@ impl<'a> BondView<'a> {
         self.aromatic_system().is_some()
     }
 
-    pub fn is_in_cis_trans_stereo(&self) -> bool {
-        self.cis_trans_stereo().is_some()
+    pub fn is_stereo_bond(&self) -> bool {
+        self.stereo_bond().is_some()
     }
 
-    pub fn cis_trans_stereo_id(&self) -> Option<StereoBondId> {
-        self.cis_trans_stereo().map(|s| s.id)
+    pub fn stereo_bond_id(&self) -> Option<StereoBondId> {
+        self.stereo_bond().map(|s| s.id)
     }
 
-    /// The cis/trans stereo bond sited on this bond, if any. A bond is the
-    /// site of at most one stereo bond; the kind filter selects the cis/trans
-    /// case from any other bond-centered geometries that share the relation.
-    pub fn cis_trans_stereo(&self) -> Option<StereoBondView<'a>> {
-        self.molecule
-            .stereo_bonds()
-            .coincident(self.id)
-            .filter(|s| s.kind() == StereoKind::CisTrans)
+    /// The stereo bond sited on this bond, if any — any bond-centered geometry. A
+    /// bond is the site of at most one stereo bond.
+    pub fn stereo_bond(&self) -> Option<StereoBondView<'a>> {
+        self.molecule.stereo_bonds().at(self.id)
     }
 
     /// True if this bond belongs to any ring in the molecule's canonical
@@ -255,7 +251,10 @@ impl<'a> BondView<'a> {
     /// absent overlay yields `NotStereo`; without it, the cis/trans stereo
     /// constraint is emitted only when the overlay is present.
     pub fn derive_constraints(&self, include_missing: bool) -> BondConstraintsAst {
-        let cis_trans_stereo = match self.cis_trans_stereo() {
+        let cis_trans_stereo = match self
+            .stereo_bond()
+            .filter(|s| s.kind() == StereoKind::CisTrans)
+        {
             Some(stereo) => Some(CisTransStereoAst::stereo(stereo.coset().clone())),
             None if include_missing => Some(CisTransStereoAst::NotStereo),
             None => None,
@@ -484,34 +483,31 @@ mod tests {
     #[rstest]
     #[case::site(BondId(1), true)]
     #[case::non_site(BondId(0), false)]
-    fn test_bond_view_is_in_cis_trans_stereo(
+    fn test_bond_view_is_stereo_bond(
         stereo_molecule: MoleculeAst,
         #[case] bond: BondId,
         #[case] expected: bool,
     ) {
-        assert_eq!(
-            stereo_molecule.bond(bond).is_in_cis_trans_stereo(),
-            expected
-        );
+        assert_eq!(stereo_molecule.bond(bond).is_stereo_bond(), expected);
     }
 
     #[rstest]
     #[case::site(BondId(1), Some(StereoBondId(0)))]
     #[case::non_site(BondId(0), None)]
-    fn test_bond_view_cis_trans_stereo_id(
+    fn test_bond_view_stereo_bond_id(
         stereo_molecule: MoleculeAst,
         #[case] bond: BondId,
         #[case] expected: Option<StereoBondId>,
     ) {
-        assert_eq!(stereo_molecule.bond(bond).cis_trans_stereo_id(), expected);
+        assert_eq!(stereo_molecule.bond(bond).stereo_bond_id(), expected);
     }
 
     #[rstest]
-    fn test_bond_view_cis_trans_stereo(stereo_molecule: MoleculeAst) {
-        let view = stereo_molecule.bond(BondId(1)).cis_trans_stereo().unwrap();
+    fn test_bond_view_stereo_bond(stereo_molecule: MoleculeAst) {
+        let view = stereo_molecule.bond(BondId(1)).stereo_bond().unwrap();
         assert_eq!(view.id, StereoBondId(0));
         assert_eq!(view.kind(), StereoKind::CisTrans);
-        assert!(stereo_molecule.bond(BondId(0)).cis_trans_stereo().is_none());
+        assert!(stereo_molecule.bond(BondId(0)).stereo_bond().is_none());
     }
 
     #[rustfmt::skip]

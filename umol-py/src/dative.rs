@@ -308,18 +308,13 @@ impl DativeBondViews {
     }
 
     /// The dative bond with exactly this acceptor and donor set, or `None`.
-    fn connecting(
-        &self,
-        py: Python<'_>,
-        donors: Vec<u32>,
-        acceptor: u32,
-    ) -> Option<DativeBondView> {
+    fn of(&self, py: Python<'_>, donors: Vec<u32>, acceptor: u32) -> Option<DativeBondView> {
         let molecule = self.owner.bind(py).borrow();
         let donor_ids: Vec<AstAtomId> = donors.into_iter().map(AstAtomId).collect();
         molecule
             .inner()
             .dative_bonds()
-            .connecting_id(AstAtomId(acceptor), &donor_ids)
+            .of_id(AstAtomId(acceptor), &donor_ids)
             .map(|id| DativeBondView {
                 owner: self.owner.clone_ref(py),
                 id,
@@ -1489,15 +1484,15 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_views_connecting() {
+    fn test_dative_bond_views_of() {
         Python::attach(|py| {
             let views = DativeBondViews {
                 owner: ammonia_borane(py),
             };
             // acceptor B(0), donor N(1)
-            assert_eq!(views.connecting(py, vec![1], 0).unwrap().id(), 0);
+            assert_eq!(views.of(py, vec![1], 0).unwrap().id(), 0);
             // roles swapped: no such dative bond
-            assert!(views.connecting(py, vec![0], 1).is_none());
+            assert!(views.of(py, vec![0], 1).is_none());
         });
     }
 
