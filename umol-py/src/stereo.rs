@@ -8,17 +8,22 @@ use std::collections::BTreeSet;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 // The stereo value-leaf AST mirrors are consumed only by the `#[cfg(test)]` `from_ast`/`to_ast`
-// until S0c/S1b/S4a wire them into the config/constraint leaves and the entity view.
+// until S1b/S2/S4a wire them into the constraint values, container, and entity view.
 #[cfg(test)]
 use umol_ast::ast::{
-    AtomId as AstAtomId, StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
+    AtomId as AstAtomId, LigandPermutation as AstLigandPermutation,
+    OrientedLigandPermutation as AstOrientedLigandPermutation, StereoLigand as AstStereoLigand,
     StereoLigandKind as AstStereoLigandKind, Stereogenicity as AstStereogenicity,
-    Topicity as AstTopicity,
 };
 use umol_ast::ast::{
-    CisTransStereoAst as AstCisTransStereoAst, StereoCosetAst as AstStereoCosetAst,
+    CisTransStereoAst as AstCisTransStereoAst, StereoConfigurationAst as AstStereoConfigurationAst,
+    StereoCosetAst as AstStereoCosetAst, StereoKind as AstStereoKind,
+    StereoLigandPair as AstStereoLigandPair, StereoLigandPosition as AstStereoLigandPosition,
     StereoTerm as AstStereoTerm, TetrahedralStereoAst as AstTetrahedralStereoAst,
+    Topicity as AstTopicity, TopicityRelationAst as AstTopicityRelationAst,
 };
+#[cfg(test)]
+use umol_perm::Orientation as PermOrientation;
 use umol_perm::Permutation as PermPermutation;
 
 use crate::convert::{hash_ast, into_py_variant, variant_repr};
@@ -397,7 +402,6 @@ impl StereoKind {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn to_ast(self) -> AstStereoKind {
         match self {
             Self::Tetrahedral => AstStereoKind::Tetrahedral,
@@ -441,9 +445,10 @@ impl StereoLigandKind {
 }
 
 /// Topicity of two ligand positions of a stereo carrier (a derived ground classification).
-/// A fieldless, hashable value enum mirroring the Rust `Topicity`.
+/// A fieldless, hashable value enum mirroring the Rust `Topicity`. `Ord` lets it key the
+/// `BTreeSet` in the `TopicityRelationAst` set variants.
 #[pyclass(eq, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Topicity {
     Homotopic,
     Enantiotopic,
@@ -460,7 +465,6 @@ impl Topicity {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn to_ast(self) -> AstTopicity {
         match self {
             Self::Homotopic => AstTopicity::Homotopic,
@@ -540,6 +544,345 @@ impl StereoLigand {
     #[cfg(test)]
     pub(crate) fn to_ast(self) -> AstStereoLigand {
         AstStereoLigand::new(AstAtomId(self.atom_id), self.kind.to_ast())
+    }
+}
+
+/// A stereo configuration: undetermined (geometry not yet known, so no coset), or `Kinded`
+/// — a concrete coordination geometry bound to a coset that may still be open. Mirrors the
+/// Rust `StereoConfigurationAst`; `Undetermined` and `Kinded(Tetrahedral, Undetermined)` are
+/// distinct.
+#[pyclass]
+pub enum StereoConfigurationAst {
+    Undetermined(),
+    Kinded(StereoKind, Py<StereoCosetAst>),
+}
+
+#[pymethods]
+impl StereoConfigurationAst {
+    /// The coordination-geometry kind, or `None` when undetermined.
+    #[getter]
+    fn kind(&self) -> Option<StereoKind> {
+        match self {
+            Self::Kinded(kind, _) => Some(*kind),
+            Self::Undetermined() => None,
+        }
+    }
+
+    /// The coset, or `None` when undetermined.
+    #[getter]
+    fn coset(&self, py: Python<'_>) -> Option<Py<StereoCosetAst>> {
+        match self {
+            Self::Kinded(_, coset) => Some(coset.clone_ref(py)),
+            Self::Undetermined() => None,
+        }
+    }
+
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            StereoConfigurationAst::Undetermined() => ("Undetermined", 0),
+            StereoConfigurationAst::Kinded(_, _) => ("Kinded", 2),
+        };
+        variant_repr(
+            slf.bind(py).as_any(),
+            "StereoConfigurationAst",
+            variant,
+            arity,
+        )
+    }
+}
+
+impl StereoConfigurationAst {
+    #[cfg(test)]
+    pub(crate) fn from_ast(py: Python<'_>, ast: &AstStereoConfigurationAst) -> PyResult<Self> {
+        Ok(match ast {
+            AstStereoConfigurationAst::Undetermined => Self::Undetermined(),
+            AstStereoConfigurationAst::Kinded(kind, coset) => Self::Kinded(
+                StereoKind::from_ast(*kind),
+                into_py_variant(py, StereoCosetAst::from_ast(py, coset)?)?,
+            ),
+        })
+    }
+
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstStereoConfigurationAst {
+        match self {
+            Self::Undetermined() => AstStereoConfigurationAst::Undetermined,
+            Self::Kinded(kind, coset) => {
+                AstStereoConfigurationAst::Kinded(kind.to_ast(), coset.bind(py).borrow().to_ast(py))
+            }
+        }
+    }
+}
+
+/// Setter coercion for a stereo `configuration` field: the `TetrahedralStereo` (`Ccw`/`Cw`)
+/// or `CisTransStereo` (`Z`/`E`) per-kind coset shorthand, or a `StereoConfigurationAst`
+/// passthrough. Axial/square-planar/etc. have no shorthand — use the full `Kinded` form.
+#[cfg(test)]
+#[derive(FromPyObject)]
+pub(crate) enum StereoConfigurationArg {
+    Tetrahedral(TetrahedralStereo),
+    CisTrans(CisTransStereo),
+    Ast(Py<StereoConfigurationAst>),
+}
+
+#[cfg(test)]
+impl StereoConfigurationArg {
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstStereoConfigurationAst {
+        match self {
+            StereoConfigurationArg::Tetrahedral(t) => match t.to_ast() {
+                AstTetrahedralStereoAst::Stereo(coset) => {
+                    AstStereoConfigurationAst::Kinded(AstStereoKind::Tetrahedral, coset)
+                }
+                _ => unreachable!("TetrahedralStereo shorthand is always a Stereo coset"),
+            },
+            StereoConfigurationArg::CisTrans(c) => match c.to_ast() {
+                AstCisTransStereoAst::Stereo(coset) => {
+                    AstStereoConfigurationAst::Kinded(AstStereoKind::CisTrans, coset)
+                }
+                _ => unreachable!("CisTransStereo shorthand is always a Stereo coset"),
+            },
+            StereoConfigurationArg::Ast(a) => a.bind(py).borrow().to_ast(py),
+        }
+    }
+}
+
+/// Orientation grade of a ligand permutation: a proper rotation, or an improper (mirror)
+/// operation. A fieldless, hashable value enum mirroring `umol_perm::Orientation`.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Orientation {
+    Proper,
+    Improper,
+}
+
+impl Orientation {
+    #[cfg(test)]
+    pub(crate) fn from_ast(orientation: PermOrientation) -> Self {
+        match orientation {
+            PermOrientation::Proper => Self::Proper,
+            PermOrientation::Improper => Self::Improper,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn to_ast(self) -> PermOrientation {
+        match self {
+            Self::Proper => PermOrientation::Proper,
+            Self::Improper => PermOrientation::Improper,
+        }
+    }
+}
+
+/// A permutation of a stereo site's ligand positions (frame-relative). Immutable value,
+/// hashable. Mirrors the Rust `LigandPermutation`.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct LigandPermutation {
+    #[pyo3(get)]
+    permutation: Permutation,
+}
+
+#[pymethods]
+impl LigandPermutation {
+    #[new]
+    fn new(permutation: Permutation) -> Self {
+        LigandPermutation { permutation }
+    }
+
+    /// A pattern matches a target iff they are the same permutation.
+    fn matches(&self, target: &Self) -> bool {
+        self.permutation == target.permutation
+    }
+
+    fn __repr__(&self) -> String {
+        format!("LigandPermutation({:?})", self.permutation.image())
+    }
+}
+
+impl LigandPermutation {
+    #[cfg(test)]
+    pub(crate) fn from_ast(ast: AstLigandPermutation) -> Self {
+        LigandPermutation {
+            permutation: Permutation::from_inner(ast.0),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn to_ast(self) -> AstLigandPermutation {
+        AstLigandPermutation(self.permutation.inner())
+    }
+}
+
+/// A ligand permutation carrying a proper/improper grade. Immutable value, hashable. Mirrors
+/// the Rust `OrientedLigandPermutation`.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OrientedLigandPermutation {
+    #[pyo3(get)]
+    permutation: LigandPermutation,
+    #[pyo3(get)]
+    orientation: Orientation,
+}
+
+#[pymethods]
+impl OrientedLigandPermutation {
+    #[new]
+    fn new(permutation: LigandPermutation, orientation: Orientation) -> Self {
+        OrientedLigandPermutation {
+            permutation,
+            orientation,
+        }
+    }
+
+    fn matches(&self, target: &Self) -> bool {
+        self.permutation.matches(&target.permutation) && self.orientation == target.orientation
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "OrientedLigandPermutation(permutation={}, orientation=Orientation.{:?})",
+            self.permutation.__repr__(),
+            self.orientation
+        )
+    }
+}
+
+impl OrientedLigandPermutation {
+    #[cfg(test)]
+    pub(crate) fn from_ast(ast: AstOrientedLigandPermutation) -> Self {
+        OrientedLigandPermutation {
+            permutation: LigandPermutation::from_ast(ast.permutation),
+            orientation: Orientation::from_ast(ast.orientation),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn to_ast(self) -> AstOrientedLigandPermutation {
+        AstOrientedLigandPermutation {
+            permutation: self.permutation.to_ast(),
+            orientation: self.orientation.to_ast(),
+        }
+    }
+}
+
+/// An unordered pair of ligand positions of a stereo site, normalized so the lower position
+/// is `first`. Keys a per-pair topicity constraint. Immutable value, hashable. Mirrors the
+/// Rust `StereoLigandPair`.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StereoLigandPair {
+    #[pyo3(get)]
+    first: u32,
+    #[pyo3(get)]
+    second: u32,
+}
+
+#[pymethods]
+impl StereoLigandPair {
+    /// Normalizes the pair so the lower position is `first`.
+    #[new]
+    fn new(a: u32, b: u32) -> Self {
+        StereoLigandPair::from_ast(AstStereoLigandPair::new(
+            AstStereoLigandPosition(a),
+            AstStereoLigandPosition(b),
+        ))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("StereoLigandPair({}, {})", self.first, self.second)
+    }
+}
+
+impl StereoLigandPair {
+    fn from_ast(ast: AstStereoLigandPair) -> Self {
+        StereoLigandPair {
+            first: ast.first().0,
+            second: ast.second().0,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn to_ast(self) -> AstStereoLigandPair {
+        AstStereoLigandPair::new(
+            AstStereoLigandPosition(self.first),
+            AstStereoLigandPosition(self.second),
+        )
+    }
+}
+
+/// A topicity relation constraint value: the undetermined wildcard, a single topicity, a set
+/// of admissible topicities, or the complement of a set. A finite-domain subset lattice over
+/// `Topicity`. Mirrors the Rust `TopicityRelationAst`.
+#[pyclass]
+pub enum TopicityRelationAst {
+    Undetermined(),
+    Lit(Topicity),
+    LitSet(BTreeSet<Topicity>),
+    NotSet(BTreeSet<Topicity>),
+}
+
+#[pymethods]
+impl TopicityRelationAst {
+    /// The single topicity this resolves to, or `None` when it is not a bare literal.
+    fn as_lit(&self) -> Option<Topicity> {
+        match self {
+            Self::Lit(topicity) => Some(*topicity),
+            _ => None,
+        }
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_ast() == other.to_ast()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_ast(&self.to_ast())
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            TopicityRelationAst::Undetermined() => ("Undetermined", 0),
+            TopicityRelationAst::Lit(_) => ("Lit", 1),
+            TopicityRelationAst::LitSet(_) => ("LitSet", 1),
+            TopicityRelationAst::NotSet(_) => ("NotSet", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "TopicityRelationAst", variant, arity)
+    }
+}
+
+impl TopicityRelationAst {
+    #[cfg(test)]
+    pub(crate) fn from_ast(ast: &AstTopicityRelationAst) -> Self {
+        match ast {
+            AstTopicityRelationAst::Undetermined => Self::Undetermined(),
+            AstTopicityRelationAst::Lit(topicity) => Self::Lit(Topicity::from_ast(*topicity)),
+            AstTopicityRelationAst::LitSet(topicities) => {
+                Self::LitSet(topicities.iter().map(|t| Topicity::from_ast(*t)).collect())
+            }
+            AstTopicityRelationAst::NotSet(topicities) => {
+                Self::NotSet(topicities.iter().map(|t| Topicity::from_ast(*t)).collect())
+            }
+        }
+    }
+
+    pub(crate) fn to_ast(&self) -> AstTopicityRelationAst {
+        match self {
+            Self::Undetermined() => AstTopicityRelationAst::Undetermined,
+            Self::Lit(topicity) => AstTopicityRelationAst::Lit(topicity.to_ast()),
+            Self::LitSet(topicities) => {
+                AstTopicityRelationAst::LitSet(topicities.iter().map(|t| t.to_ast()).collect())
+            }
+            Self::NotSet(topicities) => {
+                AstTopicityRelationAst::NotSet(topicities.iter().map(|t| t.to_ast()).collect())
+            }
+        }
     }
 }
 
@@ -690,5 +1033,191 @@ mod tests {
     #[case(AstStereoLigand::new(AstAtomId(5), AstStereoLigandKind::LonePair))]
     fn test_stereo_ligand_roundtrip(#[case] ast: AstStereoLigand) {
         assert_eq!(StereoLigand::from_ast(ast).to_ast(), ast);
+    }
+
+    #[rstest]
+    fn test_stereo_configuration_ast_roundtrip() {
+        Python::attach(|py| {
+            for ast in [
+                AstStereoConfigurationAst::Undetermined,
+                AstStereoConfigurationAst::kinded(
+                    AstStereoKind::Tetrahedral,
+                    AstStereoCosetAst::Lit(1),
+                ),
+                AstStereoConfigurationAst::kinded(
+                    AstStereoKind::Octahedral,
+                    AstStereoCosetAst::Undetermined,
+                ),
+            ] {
+                assert_eq!(
+                    StereoConfigurationAst::from_ast(py, &ast)
+                        .unwrap()
+                        .to_ast(py),
+                    ast
+                );
+            }
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_configuration_ast_kind_coset() {
+        Python::attach(|py| {
+            let coset = into_py_variant(py, StereoCosetAst::Lit(1)).unwrap();
+            let config = StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, coset);
+            assert_eq!(config.kind(), Some(StereoKind::Tetrahedral));
+            assert_eq!(
+                config.coset(py).unwrap().bind(py).borrow().to_ast(py),
+                AstStereoCosetAst::Lit(1)
+            );
+            let undetermined = StereoConfigurationAst::Undetermined();
+            assert_eq!(undetermined.kind(), None);
+            assert!(undetermined.coset(py).is_none());
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_configuration_arg_to_ast() {
+        Python::attach(|py| {
+            // the Th shorthand → Kinded(Tetrahedral, coset)
+            assert_eq!(
+                StereoConfigurationArg::Tetrahedral(TetrahedralStereo::Cw).to_ast(py),
+                AstStereoConfigurationAst::kinded(
+                    AstStereoKind::Tetrahedral,
+                    AstStereoCosetAst::Lit(1)
+                )
+            );
+            // the Ct shorthand → Kinded(CisTrans, coset)
+            assert_eq!(
+                StereoConfigurationArg::CisTrans(CisTransStereo::E).to_ast(py),
+                AstStereoConfigurationAst::kinded(
+                    AstStereoKind::CisTrans,
+                    AstStereoCosetAst::Lit(1)
+                )
+            );
+            // a StereoConfigurationAst passes through
+            let config = Py::new(py, StereoConfigurationAst::Undetermined()).unwrap();
+            assert_eq!(
+                StereoConfigurationArg::Ast(config).to_ast(py),
+                AstStereoConfigurationAst::Undetermined
+            );
+        });
+    }
+
+    #[rstest]
+    #[case(PermOrientation::Proper)]
+    #[case(PermOrientation::Improper)]
+    fn test_orientation_roundtrip(#[case] ast: PermOrientation) {
+        assert_eq!(Orientation::from_ast(ast).to_ast(), ast);
+    }
+
+    #[rstest]
+    fn test_ligand_permutation_new() {
+        let ligand_permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]));
+        assert_eq!(ligand_permutation.permutation.image(), vec![1, 0, 2, 3]);
+        assert_eq!(
+            ligand_permutation.__repr__(),
+            "LigandPermutation([1, 0, 2, 3])"
+        );
+    }
+
+    #[rstest]
+    #[case(AstLigandPermutation(PermPermutation::identity(4)))]
+    #[case(AstLigandPermutation(PermPermutation::from_image(4, &[1, 0, 2, 3])))]
+    fn test_ligand_permutation_roundtrip(#[case] ast: AstLigandPermutation) {
+        assert_eq!(LigandPermutation::from_ast(ast).to_ast(), ast);
+    }
+
+    #[rstest]
+    #[case::equal(vec![1, 0, 2, 3], vec![1, 0, 2, 3], true)]
+    #[case::different(vec![1, 0, 2, 3], vec![0, 1, 2, 3], false)]
+    fn test_ligand_permutation_matches(
+        #[case] a: Vec<u32>,
+        #[case] b: Vec<u32>,
+        #[case] expected: bool,
+    ) {
+        let a = LigandPermutation::new(Permutation::new(a));
+        let b = LigandPermutation::new(Permutation::new(b));
+        assert_eq!(a.matches(&b), expected);
+    }
+
+    #[rstest]
+    #[case::equal(vec![1, 0, 2, 3], Orientation::Proper, vec![1, 0, 2, 3], Orientation::Proper, true)]
+    #[case::different_orientation(vec![1, 0, 2, 3], Orientation::Proper, vec![1, 0, 2, 3], Orientation::Improper, false)]
+    #[case::different_permutation(vec![1, 0, 2, 3], Orientation::Proper, vec![0, 1, 2, 3], Orientation::Proper, false)]
+    fn test_oriented_ligand_permutation_matches(
+        #[case] a_permutation: Vec<u32>,
+        #[case] a_orientation: Orientation,
+        #[case] b_permutation: Vec<u32>,
+        #[case] b_orientation: Orientation,
+        #[case] expected: bool,
+    ) {
+        let a = OrientedLigandPermutation::new(
+            LigandPermutation::new(Permutation::new(a_permutation)),
+            a_orientation,
+        );
+        let b = OrientedLigandPermutation::new(
+            LigandPermutation::new(Permutation::new(b_permutation)),
+            b_orientation,
+        );
+        assert_eq!(a.matches(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case(AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::from_image(4, &[1, 0, 2, 3])), orientation: PermOrientation::Proper })]
+    #[case(AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::identity(4)), orientation: PermOrientation::Improper })]
+    fn test_oriented_ligand_permutation_roundtrip(#[case] ast: AstOrientedLigandPermutation) {
+        assert_eq!(OrientedLigandPermutation::from_ast(ast).to_ast(), ast);
+    }
+
+    #[rstest]
+    #[case::ordered(1, 2, 1, 2)]
+    #[case::reversed(2, 1, 1, 2)]
+    #[case::equal(3, 3, 3, 3)]
+    fn test_stereo_ligand_pair_new(
+        #[case] a: u32,
+        #[case] b: u32,
+        #[case] first: u32,
+        #[case] second: u32,
+    ) {
+        let pair = StereoLigandPair::new(a, b);
+        assert_eq!(pair.first, first);
+        assert_eq!(pair.second, second);
+    }
+
+    #[rstest]
+    #[case(AstStereoLigandPair::new(AstStereoLigandPosition(0), AstStereoLigandPosition(3)))]
+    #[case(AstStereoLigandPair::new(AstStereoLigandPosition(2), AstStereoLigandPosition(1)))]
+    fn test_stereo_ligand_pair_roundtrip(#[case] ast: AstStereoLigandPair) {
+        assert_eq!(StereoLigandPair::from_ast(ast).to_ast(), ast);
+    }
+
+    #[rstest]
+    #[case::lit(
+        TopicityRelationAst::Lit(Topicity::Homotopic),
+        Some(Topicity::Homotopic)
+    )]
+    #[case::undetermined(TopicityRelationAst::Undetermined(), None)]
+    #[case::set(
+        TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])),
+        None
+    )]
+    fn test_topicity_relation_ast_as_lit(
+        #[case] relation: TopicityRelationAst,
+        #[case] expected: Option<Topicity>,
+    ) {
+        assert_eq!(relation.as_lit(), expected);
+    }
+
+    #[rstest]
+    #[case(AstTopicityRelationAst::Undetermined)]
+    #[case(AstTopicityRelationAst::Lit(AstTopicity::Homotopic))]
+    #[case(AstTopicityRelationAst::LitSet(BTreeSet::from([
+        AstTopicity::Homotopic,
+        AstTopicity::Enantiotopic,
+    ])))]
+    #[case(AstTopicityRelationAst::NotSet(BTreeSet::from([AstTopicity::Diastereotopic])))]
+    fn test_topicity_relation_ast_roundtrip(#[case] ast: AstTopicityRelationAst) {
+        assert_eq!(TopicityRelationAst::from_ast(&ast).to_ast(), ast);
     }
 }
