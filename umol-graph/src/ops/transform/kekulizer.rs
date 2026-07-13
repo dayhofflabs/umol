@@ -248,9 +248,11 @@ impl Transformer for Kekulizer {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 struct SystemPlan {
     system_idx: AromaticSystemId,
     atoms: Vec<AtomId>,
+    exposed_atoms: Vec<AtomId>,
     matched_bonds: Vec<BondId>,
     unmatched_bonds: Vec<BondId>,
 }
@@ -293,17 +295,33 @@ impl Kekulizer {
             }
 
             let matching_input = MatchingInput::from_system(view)?;
-            let zero_exposure = matching_input.mode == MatchingInputMode::Prescribed
-                && matching_input.exposed_count == 0
-                && matching_input.required_exposed.is_empty()
-                && matching_input.required_covered == system_atoms;
-            if !zero_exposure {
+            if matching_input.mode != MatchingInputMode::Prescribed {
                 return Err(KekulizerError::NoMatching(system_idx));
             }
 
-            let correspondence = view.induced_subgraph();
+            let exposed_atoms: Vec<AtomId> = matching_input
+                .required_exposed
+                .iter()
+                .map(|exposure| exposure.atom)
+                .collect();
+            if exposed_atoms.len() != matching_input.exposed_count {
+                return Err(KekulizerError::NoMatching(system_idx));
+            }
+            let exposed_set: HashSet<AtomId> = exposed_atoms.iter().copied().collect();
+            let residual_host_atoms: Vec<AtomId> = ordered_host_atoms
+                .iter()
+                .copied()
+                .filter(|atom| !exposed_set.contains(atom))
+                .collect();
+            let required_covered: HashSet<AtomId> =
+                matching_input.required_covered.iter().copied().collect();
+            if residual_host_atoms.iter().copied().collect::<HashSet<_>>() != required_covered {
+                return Err(KekulizerError::NoMatching(system_idx));
+            }
+
+            let correspondence = ast.induced_subgraph(&residual_host_atoms);
             let extracted = ast.extract(&correspondence);
-            let sub_order: Vec<AtomId> = ordered_host_atoms
+            let sub_order: Vec<AtomId> = residual_host_atoms
                 .iter()
                 .map(|&host| {
                     AtomId::from(
@@ -329,12 +347,25 @@ impl Kekulizer {
                         .expect("matched bond maps to the host molecule")
                 })
                 .collect();
+            let matched_atoms: HashSet<AtomId> = matched
+                .iter()
+                .flat_map(|&bond| ast.bond(bond).atom_ids())
+                .collect();
+            let actual_exposed: HashSet<AtomId> = system_atoms
+                .iter()
+                .copied()
+                .filter(|atom| !matched_atoms.contains(atom))
+                .collect();
+            if matched_atoms != required_covered || actual_exposed != exposed_set {
+                return Err(KekulizerError::NoMatching(system_idx));
+            }
             let (matched_bonds, unmatched_bonds): (Vec<BondId>, Vec<BondId>) =
                 bonds.iter().copied().partition(|b| matched.contains(b));
 
             plans.push(SystemPlan {
                 system_idx,
                 atoms: system_atoms,
+                exposed_atoms,
                 matched_bonds,
                 unmatched_bonds,
             });
@@ -535,5 +566,74 @@ mod tests {
         let result =
             Kekulizer::new(KekulizationModel::default(), node_order).transform_into(&mut ast);
         assert_eq!(result, Err(expected));
+    }
+
+    #[rstest]
+    #[case::five_membered_ring(
+        mol_dsl_ground!(r#"{:atoms ["N#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[2,1,1,1,1]"}]}"#),
+        (0..5).map(AtomId).collect(),
+        vec![SystemPlan {
+            system_idx: AromaticSystemId(0),
+            atoms: (0..5).map(AtomId).collect(),
+            exposed_atoms: vec![AtomId(0)],
+            matched_bonds: vec![BondId(1), BondId(3)],
+            unmatched_bonds: vec![BondId(0), BondId(4), BondId(2)],
+        }]
+    )]
+    #[case::seven_membered_ring(
+        mol_dsl_ground!(r#"{:atoms ["B#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :type "[0,1,1,1,1,1,1]"}]}"#),
+        (0..7).map(AtomId).collect(),
+        vec![SystemPlan {
+            system_idx: AromaticSystemId(0),
+            atoms: (0..7).map(AtomId).collect(),
+            exposed_atoms: vec![AtomId(0)],
+            matched_bonds: vec![BondId(1), BondId(3), BondId(5)],
+            unmatched_bonds: vec![BondId(0), BondId(6), BondId(2), BondId(4)],
+        }]
+    )]
+    #[case::fused_heterocycle(
+        mol_dsl_ground!(r#"{:atoms ["N#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [7 8 :aromatic] [8 3 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8] :type "[2,1,1,1,1,1,1,1,1]"}]}"#),
+        (0..9).map(AtomId).collect(),
+        vec![SystemPlan {
+            system_idx: AromaticSystemId(0),
+            atoms: (0..9).map(AtomId).collect(),
+            exposed_atoms: vec![AtomId(0)],
+            matched_bonds: vec![BondId(1), BondId(3), BondId(6), BondId(8)],
+            unmatched_bonds: vec![BondId(0), BondId(4), BondId(2), BondId(9), BondId(5), BondId(7)],
+        }]
+    )]
+    #[case::nontrivial_host_ids(
+        mol_dsl_ground!(r#"{:atoms ["O" "H" "N#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :single] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 2 :aromatic]] :aromatic-systems [{:atoms [2 3 4 5 6] :type "[2,1,1,1,1]"}]}"#),
+        vec![AtomId(0), AtomId(2), AtomId(3), AtomId(4), AtomId(5), AtomId(6), AtomId(1)],
+        vec![SystemPlan {
+            system_idx: AromaticSystemId(0),
+            atoms: (2..7).map(AtomId).collect(),
+            exposed_atoms: vec![AtomId(2)],
+            matched_bonds: vec![BondId(2), BondId(4)],
+            unmatched_bonds: vec![BondId(1), BondId(5), BondId(3)],
+        }]
+    )]
+    fn test_kekulizer_plan_systems(
+        #[case] input: MoleculeAst,
+        #[case] node_order: Vec<AtomId>,
+        #[case] expected: Vec<SystemPlan>,
+    ) {
+        let kekulizer = Kekulizer::new(KekulizationModel::default(), node_order);
+        assert_eq!(kekulizer.plan_systems(&input), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::impossible_prescribed_hole(
+        mol_dsl_ground!(r#"{:atoms ["N#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[2,1,1,1,1]"}]}"#),
+        (0..5).map(AtomId).collect(),
+        KekulizerError::NoMatching(AromaticSystemId(0))
+    )]
+    fn test_kekulizer_plan_systems_error(
+        #[case] input: MoleculeAst,
+        #[case] node_order: Vec<AtomId>,
+        #[case] expected: KekulizerError,
+    ) {
+        let kekulizer = Kekulizer::new(KekulizationModel::default(), node_order);
+        assert_eq!(kekulizer.plan_systems(&input), Err(expected));
     }
 }
