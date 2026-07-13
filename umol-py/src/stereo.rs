@@ -11,6 +11,13 @@ use umol_ast::ast::{
     CisTransStereoAst as AstCisTransStereoAst, StereoCosetAst as AstStereoCosetAst,
     StereoTerm as AstStereoTerm, TetrahedralStereoAst as AstTetrahedralStereoAst,
 };
+// The stereo value-enum AST mirrors are consumed only by the `#[cfg(test)]` `from_ast`/`to_ast`
+// until S0b/S0c/S1b wire them into the config/constraint leaves.
+#[cfg(test)]
+use umol_ast::ast::{
+    StereoKind as AstStereoKind, StereoLigandKind as AstStereoLigandKind,
+    Stereogenicity as AstStereogenicity, Topicity as AstTopicity,
+};
 use umol_perm::Permutation as PermPermutation;
 
 use crate::convert::{hash_ast, into_py_variant, variant_repr};
@@ -363,6 +370,135 @@ impl CisTransStereoArg {
     }
 }
 
+/// The coordination geometry of a stereo site. A fieldless, hashable value enum whose
+/// members mirror the Rust `StereoKind` exactly.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum StereoKind {
+    Tetrahedral,
+    CisTrans,
+    Axial,
+    SquarePlanar,
+    TrigonalBipyramidal,
+    Octahedral,
+}
+
+impl StereoKind {
+    #[cfg(test)]
+    pub(crate) fn from_ast(ast: AstStereoKind) -> Self {
+        match ast {
+            AstStereoKind::Tetrahedral => Self::Tetrahedral,
+            AstStereoKind::CisTrans => Self::CisTrans,
+            AstStereoKind::Axial => Self::Axial,
+            AstStereoKind::SquarePlanar => Self::SquarePlanar,
+            AstStereoKind::TrigonalBipyramidal => Self::TrigonalBipyramidal,
+            AstStereoKind::Octahedral => Self::Octahedral,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn to_ast(self) -> AstStereoKind {
+        match self {
+            Self::Tetrahedral => AstStereoKind::Tetrahedral,
+            Self::CisTrans => AstStereoKind::CisTrans,
+            Self::Axial => AstStereoKind::Axial,
+            Self::SquarePlanar => AstStereoKind::SquarePlanar,
+            Self::TrigonalBipyramidal => AstStereoKind::TrigonalBipyramidal,
+            Self::Octahedral => AstStereoKind::Octahedral,
+        }
+    }
+}
+
+/// The kind of a stereo ligand: a real atom, or a virtual ligand (implicit hydrogen or
+/// lone pair). A fieldless, hashable value enum mirroring the Rust `StereoLigandKind`.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum StereoLigandKind {
+    Atom,
+    ImplicitHydrogen,
+    LonePair,
+}
+
+impl StereoLigandKind {
+    #[cfg(test)]
+    pub(crate) fn from_ast(ast: AstStereoLigandKind) -> Self {
+        match ast {
+            AstStereoLigandKind::Atom => Self::Atom,
+            AstStereoLigandKind::ImplicitHydrogen => Self::ImplicitHydrogen,
+            AstStereoLigandKind::LonePair => Self::LonePair,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn to_ast(self) -> AstStereoLigandKind {
+        match self {
+            Self::Atom => AstStereoLigandKind::Atom,
+            Self::ImplicitHydrogen => AstStereoLigandKind::ImplicitHydrogen,
+            Self::LonePair => AstStereoLigandKind::LonePair,
+        }
+    }
+}
+
+/// Topicity of two ligand positions of a stereo carrier (a derived ground classification).
+/// A fieldless, hashable value enum mirroring the Rust `Topicity`.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Topicity {
+    Homotopic,
+    Enantiotopic,
+    Diastereotopic,
+}
+
+impl Topicity {
+    #[cfg(test)]
+    pub(crate) fn from_ast(ast: AstTopicity) -> Self {
+        match ast {
+            AstTopicity::Homotopic => Self::Homotopic,
+            AstTopicity::Enantiotopic => Self::Enantiotopic,
+            AstTopicity::Diastereotopic => Self::Diastereotopic,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn to_ast(self) -> AstTopicity {
+        match self {
+            Self::Homotopic => AstTopicity::Homotopic,
+            Self::Enantiotopic => AstTopicity::Enantiotopic,
+            Self::Diastereotopic => AstTopicity::Diastereotopic,
+        }
+    }
+}
+
+/// Stereogenicity classification of a stereo carrier (a derived ground classification).
+/// A fieldless, hashable value enum mirroring the Rust `Stereogenicity`.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Stereogenicity {
+    Symmetric,
+    Prochiral,
+    Stereogenic,
+}
+
+impl Stereogenicity {
+    #[cfg(test)]
+    pub(crate) fn from_ast(ast: AstStereogenicity) -> Self {
+        match ast {
+            AstStereogenicity::Symmetric => Self::Symmetric,
+            AstStereogenicity::Prochiral => Self::Prochiral,
+            AstStereogenicity::Stereogenic => Self::Stereogenic,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn to_ast(self) -> AstStereogenicity {
+        match self {
+            Self::Symmetric => AstStereogenicity::Symmetric,
+            Self::Prochiral => AstStereogenicity::Prochiral,
+            Self::Stereogenic => AstStereogenicity::Stereogenic,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -457,5 +593,40 @@ mod tests {
         #[case] coset: AstStereoCosetAst,
     ) {
         assert_eq!(config.to_ast(), AstCisTransStereoAst::Stereo(coset));
+    }
+
+    #[rstest]
+    #[case(AstStereoKind::Tetrahedral)]
+    #[case(AstStereoKind::CisTrans)]
+    #[case(AstStereoKind::Axial)]
+    #[case(AstStereoKind::SquarePlanar)]
+    #[case(AstStereoKind::TrigonalBipyramidal)]
+    #[case(AstStereoKind::Octahedral)]
+    fn test_stereo_kind_roundtrip(#[case] ast: AstStereoKind) {
+        assert_eq!(StereoKind::from_ast(ast).to_ast(), ast);
+    }
+
+    #[rstest]
+    #[case(AstStereoLigandKind::Atom)]
+    #[case(AstStereoLigandKind::ImplicitHydrogen)]
+    #[case(AstStereoLigandKind::LonePair)]
+    fn test_stereo_ligand_kind_roundtrip(#[case] ast: AstStereoLigandKind) {
+        assert_eq!(StereoLigandKind::from_ast(ast).to_ast(), ast);
+    }
+
+    #[rstest]
+    #[case(AstTopicity::Homotopic)]
+    #[case(AstTopicity::Enantiotopic)]
+    #[case(AstTopicity::Diastereotopic)]
+    fn test_topicity_roundtrip(#[case] ast: AstTopicity) {
+        assert_eq!(Topicity::from_ast(ast).to_ast(), ast);
+    }
+
+    #[rstest]
+    #[case(AstStereogenicity::Symmetric)]
+    #[case(AstStereogenicity::Prochiral)]
+    #[case(AstStereogenicity::Stereogenic)]
+    fn test_stereogenicity_roundtrip(#[case] ast: AstStereogenicity) {
+        assert_eq!(Stereogenicity::from_ast(ast).to_ast(), ast);
     }
 }
