@@ -101,19 +101,21 @@ impl Graph {
     }
 
     pub fn enumerate_perfect_matchings(&self, alg: MatchingEnumerationAlgorithm) -> Vec<Matching> {
-        match alg {
-            MatchingEnumerationAlgorithm::BranchAndBound => {
-                self.enumerate_perfect_matchings_branch_and_bound()
-            }
-        }
+        let mut result = Vec::new();
+        let _: ControlFlow<()> = self.visit_perfect_matchings(alg, |matching| {
+            result.push(matching);
+            ControlFlow::Continue(())
+        });
+        result
     }
 
     pub fn enumerate_maximum_matchings(&self, alg: MatchingEnumerationAlgorithm) -> Vec<Matching> {
-        match alg {
-            MatchingEnumerationAlgorithm::BranchAndBound => {
-                self.enumerate_maximum_matchings_branch_and_bound()
-            }
-        }
+        let mut result = Vec::new();
+        let _: ControlFlow<()> = self.visit_maximum_matchings(alg, |matching| {
+            result.push(matching);
+            ControlFlow::Continue(())
+        });
+        result
     }
 
     /// Visits every perfect matching until traversal completes or the visitor
@@ -230,34 +232,6 @@ impl Graph {
         }
 
         Matching::from_mates(self, &mate)
-    }
-
-    // Branch-and-bound with Edmonds oracle.
-    fn enumerate_perfect_matchings_branch_and_bound(&self) -> Vec<Matching> {
-        let initial = self.maximum_matching_edmonds();
-        if !initial.is_perfect(self.node_count()) {
-            return Vec::new();
-        }
-        if self.node_count() == 0 {
-            return vec![initial];
-        }
-        let mut result = Vec::new();
-        let mut state = MatchingSearchState::new(self);
-        enumerate_rec(&mut state, self.node_count() / 2, &mut result);
-        result
-    }
-
-    // Branch-and-bound with Edmonds oracle.
-    fn enumerate_maximum_matchings_branch_and_bound(&self) -> Vec<Matching> {
-        let initial = self.maximum_matching_edmonds();
-        let target_size = initial.size();
-        if target_size == 0 {
-            return vec![initial];
-        }
-        let mut result = Vec::new();
-        let mut state = MatchingSearchState::new(self);
-        enumerate_rec(&mut state, target_size, &mut result);
-        result
     }
 
     fn visit_perfect_matchings_branch_and_bound<B, F>(&self, visitor: &mut F) -> ControlFlow<B>
@@ -459,40 +433,6 @@ fn mark_blossom_path(
 }
 
 // ── Branch-and-bound enumeration ────────────────────────────────────
-
-fn enumerate_rec(
-    state: &mut MatchingSearchState<'_>,
-    target_size: usize,
-    result: &mut Vec<Matching>,
-) {
-    if state.included_size == target_size {
-        result.push(state.matching());
-        return;
-    }
-
-    let branch_edge = state.graph.edge_ids().find(|&edge| {
-        !state.included[edge.index()] && !state.excluded[edge.index()] && {
-            let [first, second] = state.graph.edge_endpoints(edge);
-            !state.covered[first.index()] && !state.covered[second.index()]
-        }
-    });
-
-    let Some(edge) = branch_edge else {
-        return;
-    };
-
-    let include_undo = state.include(edge);
-    if state.can_extend_to(target_size) {
-        enumerate_rec(state, target_size, result);
-    }
-    state.undo_include(include_undo);
-
-    let exclude_undo = state.exclude(edge);
-    if state.can_extend_to(target_size) {
-        enumerate_rec(state, target_size, result);
-    }
-    state.undo_exclude(exclude_undo);
-}
 
 fn visit_rec<B, F>(
     state: &mut MatchingSearchState<'_>,
@@ -886,6 +826,44 @@ mod tests {
             assert_matching_valid(&g, m);
         }
         assert_all_distinct(&matchings);
+    }
+
+    #[rstest]
+    fn test_graph_enumerate_perfect_matchings_traversal() {
+        let graph = Graph::new(4, &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]);
+
+        assert_eq!(
+            graph.enumerate_perfect_matchings(BranchAndBound),
+            vec![
+                Matching {
+                    edges: vec![EdgeId(0), EdgeId(5)],
+                    mate: vec![
+                        Some(NodeId(1)),
+                        Some(NodeId(0)),
+                        Some(NodeId(3)),
+                        Some(NodeId(2)),
+                    ],
+                },
+                Matching {
+                    edges: vec![EdgeId(1), EdgeId(4)],
+                    mate: vec![
+                        Some(NodeId(2)),
+                        Some(NodeId(3)),
+                        Some(NodeId(0)),
+                        Some(NodeId(1)),
+                    ],
+                },
+                Matching {
+                    edges: vec![EdgeId(2), EdgeId(3)],
+                    mate: vec![
+                        Some(NodeId(3)),
+                        Some(NodeId(2)),
+                        Some(NodeId(1)),
+                        Some(NodeId(0)),
+                    ],
+                },
+            ]
+        );
     }
 
     #[rstest]
