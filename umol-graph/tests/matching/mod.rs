@@ -1,8 +1,5 @@
-#[path = "../../../umol-graph-core/tests/matching/fixture.rs"]
-#[allow(dead_code)]
-mod fixture;
-
 use rstest::rstest;
+use serde::Deserialize;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
     MoleculeParts, RingFamily, ValueAst,
@@ -10,9 +7,15 @@ use umol_ast::ast::{
 use umol_chem::element::Element;
 use umol_graph::ops::aromaticity::ClarAromaticity;
 
+#[derive(Deserialize)]
+struct GraphFixture {
+    node_count: usize,
+    edges: Vec<[u32; 2]>,
+}
+
 #[rstest]
 fn test_clar_aromaticity_find_from_rings() {
-    let fixture = fixture::parse(fixture::CORONENE);
+    let fixture: GraphFixture = toml::from_str(include_str!("data/coronene_planar.toml")).unwrap();
     let atoms: Vec<_> = (0..fixture.node_count)
         .map(|_| {
             let mut atom = AtomAst::from_element(Element::C);

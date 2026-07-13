@@ -24,6 +24,8 @@ criterion = "0.8.1"
 pretty_assertions = "1.4.1"
 proptest = "1.7.0"
 rstest = "0.26.1"
+serde = { version = "1", features = ["derive"] }
+toml = "1.1.0"
 
 [[test]]
 name = "property"

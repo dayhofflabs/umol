@@ -1,9 +1,6 @@
 use std::iter;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-#[path = "../tests/matching/fixture.rs"]
-#[allow(dead_code)]
-mod matching_graphs;
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
@@ -12,6 +9,38 @@ use umol_graph_core::{
     CycleEnumerationAlgorithm, EdgeId, Graph, MaxIndependentSetAlgorithm, MaxMatchingAlgorithm,
     NodeId, ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
+
+mod matching_graphs {
+    use serde::Deserialize;
+    use umol_graph_core::Graph;
+
+    pub const BENZENE: &str = include_str!("matching/data/benzene_planar.toml");
+    pub const NAPHTHALENE: &str = include_str!("matching/data/naphthalene_planar.toml");
+    pub const CORONENE: &str = include_str!("matching/data/coronene_planar.toml");
+    pub const AZULENE: &str = include_str!("matching/data/azulene_planar.toml");
+    pub const FULLERENE_C60: &str = include_str!("matching/data/fullerene_c60_planar.toml");
+    pub const DISCONNECTED_CYCLES: &str =
+        include_str!("matching/data/four_disconnected_hexagons.toml");
+    pub const LADDER: &str = include_str!("matching/data/ladder_2x4_planar.toml");
+    pub const GRID: &str = include_str!("matching/data/grid_3x3_planar.toml");
+
+    #[derive(Deserialize)]
+    pub struct GraphFixture {
+        pub node_count: usize,
+        pub edges: Vec<[u32; 2]>,
+        pub faces: Vec<Vec<u32>>,
+    }
+
+    impl GraphFixture {
+        pub fn graph(&self) -> Graph {
+            Graph::new(self.node_count, &self.edges)
+        }
+    }
+
+    pub fn parse(source: &str) -> GraphFixture {
+        toml::from_str(source).expect("matching benchmark fixture must be valid TOML")
+    }
+}
 
 fn path(n: usize) -> Graph {
     let edges: Vec<[u32; 2]> = (0..n as u32 - 1).map(|i| [i, i + 1]).collect();

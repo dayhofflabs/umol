@@ -278,6 +278,8 @@ oracle.
 
 ## Experiment A baseline (2026-07-12)
 
+Recorded in [146-kekulization-matching-enumeration-2026-07-12.md](146-kekulization-matching-enumeration-2026-07-12.md).
+
 The branch-and-bound visitor baseline was measured on a 10-core Apple M1 Pro MacBook Pro with
 32 GB RAM, macOS/Darwin 24.6.0, and
 `rustc 1.98.0-nightly (b354133fb 2026-06-03)` targeting `aarch64-apple-darwin`. The workspace
@@ -348,13 +350,23 @@ Verification completed with:
 
 - `cargo fmt --all -- --check`;
 - graph-core tests with `proptest` (447 unit tests plus all matching integration suites);
-- workspace tests, green through all non-Python crates; the `umol-py` test binary has the known
-  local link failure because `libpython3.9.dylib` is absent;
+- workspace tests with `umol-py/.venv` activated, including `umol-py`;
 - workspace Clippy over all targets with warnings denied;
 - `git diff --check`.
 
 Experiment A is accepted as the trusted general-graph correctness and performance baseline against
 which an Uno prototype must be compared.
+
+### Experiment A fixture cleanup
+
+The accepted corpus remains as readable TOML rather than the experimental `.graph` syntax.
+Graph-core integration tests own copies under `tests/matching/data/`; benchmarks own independent
+copies under `benches/matching/data/`. Planar filenames are explicit, including
+`fullerene_c60_planar.toml`, while product cases such as
+`four_disconnected_hexagons.toml` are named by topology. Each suite deserializes its own fixtures,
+so benchmarks no longer import integration-test support. The higher-level `umol-graph` integration
+test likewise owns its coronene TOML input and has no path into graph-core's test tree. No fixture
+parser or corpus type was promoted into the production API.
 
 ## Matching result representation
 

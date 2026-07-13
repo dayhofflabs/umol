@@ -147,3 +147,4 @@
 | [143-vendored-nauty-integration-2026-07-11.md](143-vendored-nauty-integration-2026-07-11.md)                     | Completed     | 2026-07-11   |
 | [144-vendored-nauty-implementation-plan-2026-07-11.md](144-vendored-nauty-implementation-plan-2026-07-11.md)     | Completed     | 2026-07-11   |
 | [145-kekulization-matching-design-spike-2026-07-12.md](145-kekulization-matching-design-spike-2026-07-12.md)     | Informational | 2026-07-12   |
+| [146-kekulization-matching-enumeration-2026-07-12.md](146-kekulization-matching-enumeration-2026-07-12.md)       | Completed     | 2026-07-12   |
