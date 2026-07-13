@@ -123,12 +123,17 @@ chemical corpus independently confirms the intended inputs.
 **Dependencies:** [dep: S0a]
 
 Refactor `plan_systems` to use the `MoleculeCorrespondence` returned by
-`MoleculeAst::induced_subgraph`:
+the generic `AromaticSystemView::induced_subgraph` accessor:
 
 - order the system atoms by filtering the caller-supplied canonical `node_order`;
 - materialize the extracted molecule through that correspondence;
 - map selected subgraph bonds with `correspondence.bonds().right_of(...)`;
-- map subgraph atoms with `correspondence.atoms().right_of(...)`.
+- map selected subgraph atoms with `correspondence.atoms().right_of(...)` when a matching mode
+  produces an exposed atom.
+
+Use the view's existing `atom_ids()` and `bond_ids()` for the system itself. Those are aromatic
+system properties; correspondence mapping is reserved for matching outputs expressed in extracted
+IDs.
 
 Remove the manual `HashMap`, sorted-host reconstruction, and positional assumptions about
 subgraph bond IDs. Validate that the filtered canonical order contains every system atom exactly

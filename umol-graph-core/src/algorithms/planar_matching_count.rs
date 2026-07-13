@@ -3,6 +3,8 @@
 //! This module validates an embedding supplied by the caller. It does not test
 //! planarity or discover an embedding.
 
+// TODO: Move into matching module.
+
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt;
@@ -298,6 +300,8 @@ impl Graph {
         }
 
         let signs = kasteleyn_signs(embedding)?;
+
+        // TODO: Consider moving into separate skewsymmetric_adjacency_matrix function.
         let mut matrix = vec![vec![BigInt::from(0); self.node_count()]; self.node_count()];
         for edge in self.edge_ids() {
             let [first, second] = self.edge_endpoints(edge);

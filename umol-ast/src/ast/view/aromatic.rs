@@ -7,6 +7,7 @@ use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
 use super::super::aromatic::AromaticSystemAst;
 use super::super::constraint::AromaticSystemConstraintsAst;
+use super::super::correspondence::MoleculeCorrespondence;
 use super::super::electrons::ElectronCountsAst;
 use super::super::id::{AromaticSystemId, AtomId, BondId};
 use super::super::molecule::MoleculeAst;
@@ -231,6 +232,12 @@ impl<'a> AromaticSystemView<'a> {
             .map(move |edge| molecule.bond(BondId::from(edge)))
     }
 
+    /// The molecule subgraph induced by this system's atoms, as a sub-to-host correspondence.
+    pub fn induced_subgraph(&self) -> MoleculeCorrespondence {
+        self.molecule
+            .induced_subgraph(&self.atom_ids().collect::<Vec<_>>())
+    }
+
     /// Sum of per-atom electron contributions on this aromatic system.
     /// `Lit(n)` when the counts are concrete; `Undetermined` otherwise.
     pub fn electron_count(&self) -> ValueAst {
@@ -358,6 +365,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_graph_core::NodeId;
 
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
@@ -473,6 +481,16 @@ mod tests {
     }
 
     #[rstest]
+    fn test_aromatic_system_view_atoms(molecule: MoleculeAst) {
+        let ids: Vec<AtomId> = molecule
+            .aromatic_system(AromaticSystemId(0))
+            .atoms()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, vec![AtomId(0), AtomId(1), AtomId(2)]);
+    }
+
+    #[rstest]
     fn test_aromatic_system_view_bond_ids(molecule: MoleculeAst) {
         assert_eq!(
             molecule
@@ -484,16 +502,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_view_atoms(molecule: MoleculeAst) {
-        let ids: Vec<AtomId> = molecule
-            .aromatic_system(AromaticSystemId(0))
-            .atoms()
-            .map(|v| v.id)
-            .collect();
-        assert_eq!(ids, vec![AtomId(0), AtomId(1), AtomId(2)]);
-    }
-
-    #[rstest]
     fn test_aromatic_system_view_bonds(molecule: MoleculeAst) {
         let ids: Vec<BondId> = molecule
             .aromatic_system(AromaticSystemId(0))
@@ -501,6 +509,25 @@ mod tests {
             .map(|v| v.id)
             .collect();
         assert_eq!(ids, vec![BondId(0), BondId(1)]);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_induced_subgraph(molecule: MoleculeAst) {
+        let correspondence = molecule
+            .aromatic_system(AromaticSystemId(0))
+            .induced_subgraph();
+        assert_eq!(
+            correspondence.atoms().mates(),
+            &[
+                (NodeId(0), NodeId(0)),
+                (NodeId(1), NodeId(1)),
+                (NodeId(2), NodeId(2)),
+            ],
+        );
+        assert_eq!(
+            correspondence.bonds().mates(),
+            &[(BondId(0), BondId(0)), (BondId(1), BondId(1))],
+        );
     }
 
     #[rstest]

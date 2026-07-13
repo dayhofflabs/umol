@@ -13,14 +13,14 @@
 //!
 //! TODO: Expand to charged systems.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemId, AromaticSystemView, AtomConstraintKey, AtomId, BondConstraintKey, BondId,
     ElectronCountsAst, MoleculeAst, ValueAst,
 };
-use umol_graph_core::PerfectMatchingAlgorithm;
+use umol_graph_core::{NodeId, PerfectMatchingAlgorithm};
 
 use crate::ops::transform::Transformer;
 
@@ -62,6 +62,14 @@ pub enum KekulizerError {
     },
     #[error("aromatic system {0:?} mixes prescribed and mobile exposed atoms")]
     MixedExposureDemand(AromaticSystemId),
+    #[error(
+        "node order for aromatic system {system:?} has missing atoms {missing:?} and duplicate atoms {duplicates:?}"
+    )]
+    InvalidNodeOrder {
+        system: AromaticSystemId,
+        missing: Vec<AtomId>,
+        duplicates: Vec<AtomId>,
+    },
     #[error("no perfect matching exists for aromatic system {0:?}")]
     NoMatching(AromaticSystemId),
 }
@@ -254,53 +262,68 @@ impl Kekulizer {
         for view in ast.aromatic_systems().iter() {
             let system_idx = view.id;
             let _matching_input = MatchingInput::from_system(view)?;
-            let atoms: Vec<AtomId> = view.atom_ids().collect();
+            let system_atoms: Vec<AtomId> = view.atom_ids().collect();
             let bonds: Vec<BondId> = view.bond_ids().collect();
-
-            let subgraph = ast.induced_subgraph(&atoms);
-            let extracted = ast.extract(&subgraph);
-
-            // extracted has atoms in host-id order; build host→sub map.
-            let mut sorted_host: Vec<AtomId> = subgraph
-                .atoms()
-                .mates()
-                .iter()
-                .map(|&(_, host)| AtomId::from(host))
-                .collect();
-            sorted_host.sort_unstable();
-            let host_to_sub: HashMap<AtomId, AtomId> = sorted_host
-                .iter()
-                .enumerate()
-                .map(|(i, &h)| (h, AtomId(i as u32)))
-                .collect();
-
-            let sub_order: Vec<AtomId> = self
+            let atom_set: HashSet<AtomId> = system_atoms.iter().copied().collect();
+            let mut seen = HashSet::with_capacity(system_atoms.len());
+            let mut ordered_host_atoms = Vec::with_capacity(system_atoms.len());
+            let mut duplicates = Vec::new();
+            for atom in self
                 .node_order
                 .iter()
                 .copied()
-                .filter_map(|a| host_to_sub.get(&a).copied())
-                .collect();
-
-            // Bonds in extracted preserve host-bond-id order, matching the sub→host bond images.
-            let host_bonds: Vec<BondId> = subgraph
-                .bonds()
-                .mates()
+                .filter(|atom| atom_set.contains(atom))
+            {
+                if seen.insert(atom) {
+                    ordered_host_atoms.push(atom);
+                } else if !duplicates.contains(&atom) {
+                    duplicates.push(atom);
+                }
+            }
+            let missing: Vec<AtomId> = system_atoms
                 .iter()
-                .map(|&(_, host)| host)
+                .copied()
+                .filter(|atom| !seen.contains(atom))
+                .collect();
+            if !missing.is_empty() || !duplicates.is_empty() {
+                return Err(KekulizerError::InvalidNodeOrder {
+                    system: system_idx,
+                    missing,
+                    duplicates,
+                });
+            }
+
+            let correspondence = view.induced_subgraph();
+            let extracted = ast.extract(&correspondence);
+            let sub_order: Vec<AtomId> = ordered_host_atoms
+                .iter()
+                .map(|&host| {
+                    AtomId::from(
+                        correspondence
+                            .atoms()
+                            .left_of(NodeId::from(host))
+                            .expect("system atom maps to the extracted molecule"),
+                    )
+                })
                 .collect();
             let matched: HashSet<BondId> = extracted
                 .graph()
                 .perfect_matching(&sub_order, self.model.algorithm)
                 .ok_or(KekulizerError::NoMatching(system_idx))?
                 .bonds()
-                .map(|sub| host_bonds[sub.index()])
+                .map(|sub| {
+                    correspondence
+                        .bonds()
+                        .right_of(sub)
+                        .expect("matched bond maps to the host molecule")
+                })
                 .collect();
             let (matched_bonds, unmatched_bonds): (Vec<BondId>, Vec<BondId>) =
                 bonds.iter().copied().partition(|b| matched.contains(b));
 
             plans.push(SystemPlan {
                 system_idx,
-                atoms,
+                atoms: system_atoms,
                 matched_bonds,
                 unmatched_bonds,
             });
@@ -433,11 +456,26 @@ mod tests {
     #[rstest]
     #[case::benzene(
         mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]}"#),
+        (0..6).map(AtomId).collect(),
         mol_dsl_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#)
     )]
-    fn test_kekulizer_transform_into(#[case] input: MoleculeAst, #[case] expected: MoleculeAst) {
+    #[case::embedded_benzene_nonidentity_correspondence(
+        mol_dsl_ground!(r#"{:atoms ["O" "H" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :single] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [2 7 :aromatic]] :aromatic-systems [{:atoms [2 3 4 5 6 7] :type "[1,1,1,1,1,1]"}]}"#),
+        vec![AtomId(0), AtomId(2), AtomId(3), AtomId(4), AtomId(5), AtomId(6), AtomId(7), AtomId(1)],
+        mol_dsl_ground!(r#"{:atoms ["O" "H" "C" "C" "C" "C" "C" "C"] :bonds [[0 1 :single] [2 3 :double] [3 4 :single] [4 5 :double] [5 6 :single] [6 7 :double] [2 7 :single]]}"#)
+    )]
+    #[case::multiple_disjoint_systems(
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [7 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :type "[1,1,1,1]"} {:atoms [4 5 6 7] :type "[1,1,1,1]"}]}"#),
+        vec![AtomId(0), AtomId(4), AtomId(1), AtomId(5), AtomId(2), AtomId(6), AtomId(3), AtomId(7)],
+        mol_dsl_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 0 :single] [4 5 :double] [5 6 :single] [6 7 :double] [7 4 :single]]}"#)
+    )]
+    fn test_kekulizer_transform_into(
+        #[case] input: MoleculeAst,
+        #[case] node_order: Vec<AtomId>,
+        #[case] expected: MoleculeAst,
+    ) {
         let mut ast = input;
-        Kekulizer::new(KekulizationModel::default(), (0..6).map(AtomId).collect())
+        Kekulizer::new(KekulizationModel::default(), node_order)
             .transform_into(&mut ast)
             .unwrap();
         assert_eq!(ast, expected);
@@ -454,11 +492,37 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_matching( mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]"}]}"#))]
-    fn test_kekulizer_transform_into_error(#[case] input: MoleculeAst) {
+    #[case::no_matching(
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]"}]}"#),
+        (0..5).map(AtomId).collect(),
+        KekulizerError::NoMatching(AromaticSystemId(0))
+    )]
+    #[case::missing_system_atom(
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :type "[1,1,1,1]"}]}"#),
+        vec![AtomId(0), AtomId(1), AtomId(2)],
+        KekulizerError::InvalidNodeOrder {
+            system: AromaticSystemId(0),
+            missing: vec![AtomId(3)],
+            duplicates: vec![],
+        }
+    )]
+    #[case::duplicate_system_atom(
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :type "[1,1,1,1]"}]}"#),
+        vec![AtomId(0), AtomId(1), AtomId(1), AtomId(2), AtomId(3)],
+        KekulizerError::InvalidNodeOrder {
+            system: AromaticSystemId(0),
+            missing: vec![],
+            duplicates: vec![AtomId(1)],
+        }
+    )]
+    fn test_kekulizer_transform_into_error(
+        #[case] input: MoleculeAst,
+        #[case] node_order: Vec<AtomId>,
+        #[case] expected: KekulizerError,
+    ) {
         let mut ast = input;
-        let result = Kekulizer::new(KekulizationModel::default(), (0..5).map(AtomId).collect())
-            .transform_into(&mut ast);
-        assert_eq!(result, Err(KekulizerError::NoMatching(AromaticSystemId(0))));
+        let result =
+            Kekulizer::new(KekulizationModel::default(), node_order).transform_into(&mut ast);
+        assert_eq!(result, Err(expected));
     }
 }

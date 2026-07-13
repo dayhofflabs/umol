@@ -4,7 +4,7 @@ use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_chem::element::Element;
 
 #[derive(Debug, PartialEq, Eq)]
-struct FixtureDemand {
+struct KekulizationFixture {
     participants: Vec<AtomId>,
     electrons: Vec<i64>,
     charge: i64,
@@ -17,7 +17,7 @@ struct FixtureDemand {
 #[rstest]
 #[case::benzene(
     include_str!("data/benzene_aromatic_input.edn"),
-    FixtureDemand {
+    KekulizationFixture {
         participants: (0..6).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1],
         charge: 0,
@@ -29,7 +29,7 @@ struct FixtureDemand {
 )]
 #[case::pyridine(
     include_str!("data/pyridine_aromatic_input.edn"),
-    FixtureDemand {
+    KekulizationFixture {
         participants: (0..6).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1],
         charge: 0,
@@ -48,7 +48,7 @@ struct FixtureDemand {
 )]
 #[case::pyrrole(
     include_str!("data/pyrrole_aromatic_input.edn"),
-    FixtureDemand {
+    KekulizationFixture {
         participants: (0..5).map(AtomId).collect(),
         electrons: vec![2, 1, 1, 1, 1],
         charge: 0,
@@ -66,7 +66,7 @@ struct FixtureDemand {
 )]
 #[case::furan(
     include_str!("data/furan_aromatic_input.edn"),
-    FixtureDemand {
+    KekulizationFixture {
         participants: (0..5).map(AtomId).collect(),
         electrons: vec![2, 1, 1, 1, 1],
         charge: 0,
@@ -84,7 +84,7 @@ struct FixtureDemand {
 )]
 #[case::thiophene(
     include_str!("data/thiophene_aromatic_input.edn"),
-    FixtureDemand {
+    KekulizationFixture {
         participants: (0..5).map(AtomId).collect(),
         electrons: vec![2, 1, 1, 1, 1],
         charge: 0,
@@ -102,7 +102,7 @@ struct FixtureDemand {
 )]
 #[case::borepin(
     include_str!("data/borepin_aromatic_input.edn"),
-    FixtureDemand {
+    KekulizationFixture {
         participants: (0..7).map(AtomId).collect(),
         electrons: vec![0, 1, 1, 1, 1, 1, 1],
         charge: 0,
@@ -122,7 +122,7 @@ struct FixtureDemand {
 )]
 #[case::boratabenzene(
     include_str!("data/boratabenzene_aromatic_input.edn"),
-    FixtureDemand {
+    KekulizationFixture {
         participants: (0..6).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1],
         charge: 0,
@@ -141,7 +141,7 @@ struct FixtureDemand {
 )]
 #[case::cyclopentadienyl_anion(
     include_str!("data/cyclopentadienyl_anion_aromatic_input.edn"),
-    FixtureDemand {
+    KekulizationFixture {
         participants: (0..5).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1],
         charge: -1,
@@ -153,7 +153,7 @@ struct FixtureDemand {
 )]
 #[case::tropylium(
     include_str!("data/tropylium_aromatic_input.edn"),
-    FixtureDemand {
+    KekulizationFixture {
         participants: (0..7).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1, 1],
         charge: 1,
@@ -165,7 +165,7 @@ struct FixtureDemand {
 )]
 #[case::azulene(
     include_str!("data/azulene_aromatic_input.edn"),
-    FixtureDemand {
+    KekulizationFixture {
         participants: (0..10).map(AtomId).collect(),
         electrons: vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         charge: 0,
@@ -177,7 +177,7 @@ struct FixtureDemand {
 )]
 #[case::indole_prescribed_donor(
     include_str!("data/indole_prescribed_donor_aromatic_input.edn"),
-    FixtureDemand {
+    KekulizationFixture {
         participants: (0..9).map(AtomId).collect(),
         electrons: vec![2, 1, 1, 1, 1, 1, 1, 1, 1],
         charge: 0,
@@ -197,7 +197,7 @@ struct FixtureDemand {
         nonzero_lone_pairs: vec![(AtomId(0), 1)],
     }
 )]
-fn test_kekulization_fixture(#[case] source: &str, #[case] expected: FixtureDemand) {
+fn test_kekulization_fixture(#[case] source: &str, #[case] expected: KekulizationFixture) {
     let dsl: MoleculeDsl = source.parse().unwrap();
     let molecule = dsl.into_ast(&MoleculeDefaults::ground());
 
@@ -211,7 +211,7 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: FixtureDema
     let ValueAst::Lit(charge) = system.charge() else {
         panic!("fixture aromatic charge is undetermined");
     };
-    let actual = FixtureDemand {
+    let actual = KekulizationFixture {
         participants: system.atom_ids().collect(),
         electrons: electrons.clone(),
         charge: *charge,
