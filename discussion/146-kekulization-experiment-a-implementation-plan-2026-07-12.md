@@ -239,8 +239,10 @@ on stable fixtures, while completeness tests continue to compare sets.
 **Dependencies:** [dep: S0b, S3b]
 
 For deterministic and property-generated relabelings, enumerate the original and relabeled graphs,
-map relabeled matching edges back through `GraphCorrespondence`, and compare canonical solution sets.
-Cover perfect and maximum enumeration on bipartite/non-bipartite and disconnected graphs.
+map relabeled matching edge IDs back through the existing `GraphCorrespondence` edge family, and
+compare canonical solution sets. This is test-side ID normalization, not a `Matching` transport API;
+S1a remains dropped. Cover perfect and maximum enumeration on bipartite/non-bipartite and
+disconnected graphs.
 
 Model prescribed holes at graph-core level by extracting/deleting chosen vertices, enumerating
 perfect matchings of the remainder, transporting results back, and asserting exactly those vertices
