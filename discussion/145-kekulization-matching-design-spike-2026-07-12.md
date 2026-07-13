@@ -192,6 +192,25 @@ problem: use the automorphism group with Burnside's lemma and count matchings fi
 element (or treat symmetry reduction as a post-enumeration layer). The benchmark oracle must state
 which count it expects.
 
+### Experiment A cross-validation result
+
+S4c established the planar counter as an independent labeled-matching oracle:
+
+- hand/closed-form counts agree for even cycles (`2`), `K4` (`3`), and the cube (`9`);
+- FKT agrees with exhaustive edge-subset counting on every connected spanning path/cycle subgraph
+  of cycles through six vertices for which the test generator supplies an explicit embedding;
+- FKT, exact enumeration, and known labeled counts agree for benzene (`2`), naphthalene (`3`),
+  coronene (`20`), and C60 (`12,500`);
+- prescribed-hole deletion agrees for five- and seven-membered heterocycle-shaped rings, and the
+  one-mobile-hole sum on C5 is `5`, equal to the complete near-perfect maximum-matching set;
+- connected-component counts multiply (`C4 × C6 = 4`), while the embedding carrier intentionally
+  remains connected and components are counted separately;
+- the connected `2 × 186` ladder count is
+  `538522340430300790495419781092981030533`, agreeing with the Fibonacci recurrence and exceeding
+  `u128`.
+
+These are counts of labeled edge matchings. No symmetry quotienting is performed or implied.
+
 ## Experimental sequence
 
 ### Experiment A — correctness baseline
@@ -257,18 +276,19 @@ Do not present the non-bipartite maximal-matching paper as a C60 fallback. A gen
 Kekulé enumerator would require a separate derivation around blossoms or another exact extension
 oracle.
 
-## Correspondence integration
+## Matching result representation
 
-The kekulizer currently reconstructs host/sub maps even though `extract` already supplies a
-`GraphCorrespondence`. When Experiment A or B lands, add one small transport operation at the
-graph-core layer: map a `Matching` on the left graph through a `GraphCorrespondence` to its right-side
-matched edges and exposed-node images (or construct the corresponding right-side `Matching` when a
-right graph is supplied). The API must fail if a matched edge or required node is exposed by the
-correspondence; silently dropping it would corrupt a matching.
+The earlier correspondence proposal conflated two directions. Point iii asks whether matching
+algorithms reinvent a result carrier that should reuse graph-core correspondence/relation types. A
+`Matching` transport operation would instead preserve the existing carrier and map it between two
+graphs; that is useful only for a concrete extracted/deleted-subgraph workflow and does not answer
+the representation question.
 
-Use that operation in kekulization and remove `host_to_sub`/`host_bonds`. Do not make matching itself
-a `Correspondence<NodeId>`: an undirected self-matching and a left↔right partial bijection have
-different semantics, and conflating them would make exposure and cardinality confusing.
+Experiment A therefore adds no matching-transport API. Relabeling and hole-deletion conformance map
+edge IDs through existing `GraphCorrespondence` families only inside tests. A later representation
+audit should compare the specialized `Matching` carrier with existing relation structures while
+accounting for general-graph pairing within one ID space, selected parallel-edge identity, symmetry,
+and vertex-disjointness. Any future transport API should be designed from an actual caller.
 
 ## Decisions and open questions
 
@@ -282,7 +302,8 @@ Recommended decisions:
 - Make enumeration streaming and bounded-memory.
 - Add planar Pfaffian counting as an independent validation/counting path, not as an enumeration
   backend.
-- Land correspondence transport with the first algorithmic change.
+- Audit matching result representation separately; defer correspondence transport until required by
+  a concrete cross-graph workflow.
 
 Questions to settle before an implementation plan:
 
