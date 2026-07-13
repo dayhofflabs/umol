@@ -7,16 +7,17 @@ use std::collections::BTreeSet;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+// The stereo value-leaf AST mirrors are consumed only by the `#[cfg(test)]` `from_ast`/`to_ast`
+// until S0c/S1b/S4a wire them into the config/constraint leaves and the entity view.
+#[cfg(test)]
+use umol_ast::ast::{
+    AtomId as AstAtomId, StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
+    StereoLigandKind as AstStereoLigandKind, Stereogenicity as AstStereogenicity,
+    Topicity as AstTopicity,
+};
 use umol_ast::ast::{
     CisTransStereoAst as AstCisTransStereoAst, StereoCosetAst as AstStereoCosetAst,
     StereoTerm as AstStereoTerm, TetrahedralStereoAst as AstTetrahedralStereoAst,
-};
-// The stereo value-enum AST mirrors are consumed only by the `#[cfg(test)]` `from_ast`/`to_ast`
-// until S0b/S0c/S1b wire them into the config/constraint leaves.
-#[cfg(test)]
-use umol_ast::ast::{
-    StereoKind as AstStereoKind, StereoLigandKind as AstStereoLigandKind,
-    Stereogenicity as AstStereogenicity, Topicity as AstTopicity,
 };
 use umol_perm::Permutation as PermPermutation;
 
@@ -499,6 +500,49 @@ impl Stereogenicity {
     }
 }
 
+/// A stereo ligand occupying a coordination position of a stereo site: the ligand's atom
+/// id and its kind. For a virtual ligand (`ImplicitHydrogen`/`LonePair`) the `atom_id` is
+/// the bearing atom; the `kind` disambiguates. Immutable value, hashable. Mirrors the Rust
+/// `StereoLigand`.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StereoLigand {
+    #[pyo3(get)]
+    atom_id: u32,
+    #[pyo3(get)]
+    kind: StereoLigandKind,
+}
+
+#[pymethods]
+impl StereoLigand {
+    #[new]
+    fn new(atom_id: u32, kind: StereoLigandKind) -> Self {
+        StereoLigand { atom_id, kind }
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "StereoLigand(atom_id={}, kind=StereoLigandKind.{:?})",
+            self.atom_id, self.kind
+        )
+    }
+}
+
+impl StereoLigand {
+    #[cfg(test)]
+    pub(crate) fn from_ast(ast: AstStereoLigand) -> Self {
+        StereoLigand {
+            atom_id: ast.atom_id.0,
+            kind: StereoLigandKind::from_ast(ast.kind),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn to_ast(self) -> AstStereoLigand {
+        AstStereoLigand::new(AstAtomId(self.atom_id), self.kind.to_ast())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -628,5 +672,23 @@ mod tests {
     #[case(AstStereogenicity::Stereogenic)]
     fn test_stereogenicity_roundtrip(#[case] ast: AstStereogenicity) {
         assert_eq!(Stereogenicity::from_ast(ast).to_ast(), ast);
+    }
+
+    #[rstest]
+    fn test_stereo_ligand_new() {
+        let ligand = StereoLigand::new(3, StereoLigandKind::ImplicitHydrogen);
+        assert_eq!(ligand.atom_id, 3);
+        assert_eq!(ligand.kind, StereoLigandKind::ImplicitHydrogen);
+        assert_eq!(
+            ligand.__repr__(),
+            "StereoLigand(atom_id=3, kind=StereoLigandKind.ImplicitHydrogen)"
+        );
+    }
+
+    #[rstest]
+    #[case(AstStereoLigand::new(AstAtomId(0), AstStereoLigandKind::Atom))]
+    #[case(AstStereoLigand::new(AstAtomId(5), AstStereoLigandKind::LonePair))]
+    fn test_stereo_ligand_roundtrip(#[case] ast: AstStereoLigand) {
+        assert_eq!(StereoLigand::from_ast(ast).to_ast(), ast);
     }
 }
