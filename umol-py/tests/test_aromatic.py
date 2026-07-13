@@ -19,7 +19,7 @@ def benzene():
     # six aromatic carbons (atom ids 0-5), one aromatic system over all six
     return MoleculeAst.from_parts(
         [AtomAst(Element("C")) for _ in range(6)],
-        aromatic=[([0, 1, 2, 3, 4, 5], AromaticSystemAst([1, 1, 1, 1, 1, 1]))],
+        aromatic_systems=[([0, 1, 2, 3, 4, 5], AromaticSystemAst([1, 1, 1, 1, 1, 1]))],
     )
 
 
@@ -244,7 +244,7 @@ def test_aromaticsystemviews_incident():
     # benzene's six carbons plus one isolated carbon (atom id 6)
     mol = MoleculeAst.from_parts(
         [AtomAst(Element("C")) for _ in range(7)],
-        aromatic=[([0, 1, 2, 3, 4, 5], AromaticSystemAst([1, 1, 1, 1, 1, 1]))],
+        aromatic_systems=[([0, 1, 2, 3, 4, 5], AromaticSystemAst([1, 1, 1, 1, 1, 1]))],
     )
     assert [view.id for view in mol.aromatic_systems.incident(0)] == [0]
     assert mol.aromatic_systems.incident(6) == []

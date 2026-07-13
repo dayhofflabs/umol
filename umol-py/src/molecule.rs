@@ -3,7 +3,8 @@
 
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    AtomId as AstAtomId, MoleculeAst as AstMoleculeAst, MoleculeParts as AstMoleculeParts,
+    AtomId as AstAtomId, BondId as AstBondId, MoleculeAst as AstMoleculeAst,
+    MoleculeParts as AstMoleculeParts,
 };
 
 use crate::aromatic::{AromaticSystemAst, AromaticSystemViews};
@@ -12,6 +13,7 @@ use crate::bond::{BondAst, BondViews};
 use crate::dative::{DativeBondAst, DativeBondViews};
 use crate::multicenter::{MulticenterBondAst, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondViews};
+use crate::stereo::{StereoAtomAst, StereoAtomViews, StereoBondAst, StereoBondViews, StereoLigand};
 
 /// A molecule: the owned graph-AST root.
 #[pyclass(eq)]
@@ -33,17 +35,22 @@ impl MoleculeAst {
     /// `(atoms, system)` pair: a list of member atom indices and an `AromaticSystemAst`.
     /// Each multicenter bond is an `(atoms, bond)` pair: a list of member atom indices
     /// and a `MulticenterBondAst`. Each noncovalent bond is a `([first, second], bond)`
-    /// pair: the two (unordered) endpoint atom indices and a `NoncovalentBondAst`.
+    /// pair: the two (unordered) endpoint atom indices and a `NoncovalentBondAst`. Each
+    /// stereo atom / stereo bond is a `(site, ligands, value)` triple: the site atom / bond
+    /// index, a list of `StereoLigand`s in frame order, and a `StereoAtomAst` / `StereoBondAst`.
     #[staticmethod]
-    #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative=Vec::new(), aromatic=Vec::new(), multicenter=Vec::new(), noncovalent=Vec::new()))]
+    #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative_bonds=Vec::new(), aromatic_systems=Vec::new(), multicenter_bonds=Vec::new(), noncovalent_bonds=Vec::new(), stereo_atoms=Vec::new(), stereo_bonds=Vec::new()))]
+    #[allow(clippy::too_many_arguments)] // one argument per entity family — the full molecule surface
     fn from_parts(
         py: Python<'_>,
         atoms: Vec<Py<AtomAst>>,
         bonds: Vec<(u32, u32, Py<BondAst>)>,
-        dative: Vec<(Vec<u32>, u32, Py<DativeBondAst>)>,
-        aromatic: Vec<(Vec<u32>, Py<AromaticSystemAst>)>,
-        multicenter: Vec<(Vec<u32>, Py<MulticenterBondAst>)>,
-        noncovalent: Vec<([u32; 2], Py<NoncovalentBondAst>)>,
+        dative_bonds: Vec<(Vec<u32>, u32, Py<DativeBondAst>)>,
+        aromatic_systems: Vec<(Vec<u32>, Py<AromaticSystemAst>)>,
+        multicenter_bonds: Vec<(Vec<u32>, Py<MulticenterBondAst>)>,
+        noncovalent_bonds: Vec<([u32; 2], Py<NoncovalentBondAst>)>,
+        stereo_atoms: Vec<(u32, Vec<StereoLigand>, Py<StereoAtomAst>)>,
+        stereo_bonds: Vec<(u32, Vec<StereoLigand>, Py<StereoBondAst>)>,
     ) -> Self {
         let ast_atoms = atoms
             .iter()
@@ -59,7 +66,7 @@ impl MoleculeAst {
                 )
             })
             .collect();
-        let ast_dative = dative
+        let ast_dative = dative_bonds
             .iter()
             .map(|(donors, acceptor, bond)| {
                 (
@@ -69,7 +76,7 @@ impl MoleculeAst {
                 )
             })
             .collect();
-        let ast_aromatic = aromatic
+        let ast_aromatic = aromatic_systems
             .iter()
             .map(|(atoms, system)| {
                 (
@@ -78,7 +85,7 @@ impl MoleculeAst {
                 )
             })
             .collect();
-        let ast_multicenter = multicenter
+        let ast_multicenter = multicenter_bonds
             .iter()
             .map(|(atoms, bond)| {
                 (
@@ -87,13 +94,33 @@ impl MoleculeAst {
                 )
             })
             .collect();
-        let ast_noncovalent = noncovalent
+        let ast_noncovalent = noncovalent_bonds
             .iter()
             .map(|([first, second], bond)| {
                 (
                     AstAtomId(*first),
                     AstAtomId(*second),
                     bond.bind(py).borrow().inner().clone(),
+                )
+            })
+            .collect();
+        let ast_stereo_atoms = stereo_atoms
+            .iter()
+            .map(|(site, ligands, value)| {
+                (
+                    AstAtomId(*site),
+                    ligands.iter().copied().map(StereoLigand::to_ast).collect(),
+                    value.bind(py).borrow().inner().clone(),
+                )
+            })
+            .collect();
+        let ast_stereo_bonds = stereo_bonds
+            .iter()
+            .map(|(site, ligands, value)| {
+                (
+                    AstBondId(*site),
+                    ligands.iter().copied().map(StereoLigand::to_ast).collect(),
+                    value.bind(py).borrow().inner().clone(),
                 )
             })
             .collect();
@@ -104,6 +131,8 @@ impl MoleculeAst {
             aromatic: ast_aromatic,
             multicenter: ast_multicenter,
             noncovalent: ast_noncovalent,
+            stereo_atoms: ast_stereo_atoms,
+            stereo_bonds: ast_stereo_bonds,
             ..Default::default()
         }))
     }
@@ -144,19 +173,33 @@ impl MoleculeAst {
         NoncovalentBondViews::new(slf)
     }
 
+    /// The stereo atoms, indexed by integer position.
+    #[getter]
+    fn stereo_atoms(slf: Py<Self>) -> StereoAtomViews {
+        StereoAtomViews::new(slf)
+    }
+
+    /// The stereo bonds, indexed by integer position.
+    #[getter]
+    fn stereo_bonds(slf: Py<Self>) -> StereoBondViews {
+        StereoBondViews::new(slf)
+    }
+
     fn __repr__(&self) -> String {
-        // Atoms and bonds always; the other entity families only when present, so a
-        // plain covalent molecule stays uncluttered but dative/aromatic/multicenter/
-        // noncovalent entities surface when they exist. Names match the `from_parts` kwargs.
+        // Atoms and bonds always; the other entity families (dative bonds, aromatic systems,
+        // multicenter bonds, noncovalent bonds, stereo atoms, stereo bonds) only when present,
+        // so a plain covalent molecule stays uncluttered. Names match the `from_parts` kwargs.
         let mut parts = vec![
             format!("atoms={}", self.0.atoms().count()),
             format!("bonds={}", self.0.bonds().count()),
         ];
         for (name, count) in [
-            ("dative", self.0.dative_bonds().count()),
-            ("aromatic", self.0.aromatic_systems().count()),
-            ("multicenter", self.0.multicenter_bonds().count()),
-            ("noncovalent", self.0.noncovalent_bonds().count()),
+            ("dative_bonds", self.0.dative_bonds().count()),
+            ("aromatic_systems", self.0.aromatic_systems().count()),
+            ("multicenter_bonds", self.0.multicenter_bonds().count()),
+            ("noncovalent_bonds", self.0.noncovalent_bonds().count()),
+            ("stereo_atoms", self.0.stereo_atoms().count()),
+            ("stereo_bonds", self.0.stereo_bonds().count()),
         ] {
             if count > 0 {
                 parts.push(format!("{name}={count}"));
@@ -266,6 +309,8 @@ mod tests {
                 aromatic,
                 multicenter,
                 noncovalent,
+                Vec::new(),
+                Vec::new(),
             );
             assert_eq!(molecule.inner().atoms().count(), 3);
             assert_eq!(molecule.inner().bonds().count(), 1);
@@ -346,7 +391,7 @@ mod tests {
         }));
         assert_eq!(
             molecule.__repr__(),
-            "MoleculeAst(atoms=2, bonds=0, noncovalent=1)"
+            "MoleculeAst(atoms=2, bonds=0, noncovalent_bonds=1)"
         );
     }
 }

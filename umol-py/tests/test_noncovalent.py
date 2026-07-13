@@ -19,7 +19,7 @@ def hbond_molecule():
     # two oxygens (atom ids 0-1), one hydrogen bond over them (noncovalent id 0)
     return MoleculeAst.from_parts(
         [AtomAst(Element("O")) for _ in range(2)],
-        noncovalent=[([0, 1], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))],
+        noncovalent_bonds=[([0, 1], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))],
     )
 
 
@@ -221,7 +221,7 @@ def test_noncovalentbondviews_connecting():
     # three oxygens, one hydrogen bond over (0, 1); atom 2 isolated
     mol = MoleculeAst.from_parts(
         [AtomAst(Element("O")) for _ in range(3)],
-        noncovalent=[([0, 1], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))],
+        noncovalent_bonds=[([0, 1], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))],
     )
     # unordered pair — both orders find the same bond
     assert mol.noncovalent_bonds.connecting(0, 1).id == 0
@@ -234,7 +234,7 @@ def test_noncovalentbondviews_incident():
     # three oxygens, one hydrogen bond over (0, 1); atom 2 isolated
     mol = MoleculeAst.from_parts(
         [AtomAst(Element("O")) for _ in range(3)],
-        noncovalent=[([0, 1], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))],
+        noncovalent_bonds=[([0, 1], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))],
     )
     assert [view.id for view in mol.noncovalent_bonds.incident(0)] == [0]
     assert mol.noncovalent_bonds.incident(2) == []

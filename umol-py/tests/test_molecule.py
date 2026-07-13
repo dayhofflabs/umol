@@ -29,10 +29,12 @@ def test_molecule_ast_repr_includes_all_entities():
     mol = MoleculeAst.from_parts(
         [AtomAst(Element("C")), AtomAst(Element("C")), AtomAst(Element("O"))],
         bonds=[(0, 1, BondAst(1))],
-        aromatic=[([0, 1, 2], AromaticSystemAst([1, 1, 1]))],
-        noncovalent=[([0, 2], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))],
+        aromatic_systems=[([0, 1, 2], AromaticSystemAst([1, 1, 1]))],
+        noncovalent_bonds=[([0, 2], NoncovalentBondAst(NoncovalentBondKind.HydrogenBond))],
     )
-    assert repr(mol) == "MoleculeAst(atoms=3, bonds=1, aromatic=1, noncovalent=1)"
+    assert repr(mol) == (
+        "MoleculeAst(atoms=3, bonds=1, aromatic_systems=1, noncovalent_bonds=1)"
+    )
 
 
 def test_molecule_ast_from_parts():

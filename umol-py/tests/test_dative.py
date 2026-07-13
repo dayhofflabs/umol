@@ -20,7 +20,7 @@ def ammonia_borane():
     # borane B (id 0) accepts from ammonia N (id 1); dative bond id 0
     return MoleculeAst.from_parts(
         [AtomAst(Element("B")), AtomAst(Element("N"))],
-        dative=[([1], 0, DativeBondAst(1))],
+        dative_bonds=[([1], 0, DativeBondAst(1))],
     )
 
 
@@ -249,7 +249,7 @@ def test_dativebondviews_incident():
     # B(0) accepts from N(1); C(2) isolated
     mol = MoleculeAst.from_parts(
         [AtomAst(Element("B")), AtomAst(Element("N")), AtomAst(Element("C"))],
-        dative=[([1], 0, DativeBondAst(1))],
+        dative_bonds=[([1], 0, DativeBondAst(1))],
     )
     assert [view.id for view in mol.dative_bonds.incident(0)] == [0]
     assert [view.id for view in mol.dative_bonds.incident(1)] == [0]

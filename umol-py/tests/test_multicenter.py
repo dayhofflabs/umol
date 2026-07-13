@@ -19,7 +19,7 @@ def three_center_bond():
     # three borons (atom ids 0-2), one 3-center multicenter bond over all three
     return MoleculeAst.from_parts(
         [AtomAst(Element("B")) for _ in range(3)],
-        multicenter=[([0, 1, 2], MulticenterBondAst([1, 1, 1]))],
+        multicenter_bonds=[([0, 1, 2], MulticenterBondAst([1, 1, 1]))],
     )
 
 
@@ -244,7 +244,7 @@ def test_multicenterbondviews_incident():
     # three bonded borons plus one isolated boron (atom id 3)
     mol = MoleculeAst.from_parts(
         [AtomAst(Element("B")) for _ in range(4)],
-        multicenter=[([0, 1, 2], MulticenterBondAst([1, 1, 1]))],
+        multicenter_bonds=[([0, 1, 2], MulticenterBondAst([1, 1, 1]))],
     )
     assert [view.id for view in mol.multicenter_bonds.incident(0)] == [0]
     assert mol.multicenter_bonds.incident(3) == []

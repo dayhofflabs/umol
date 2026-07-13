@@ -2339,6 +2339,13 @@ macro_rules! stereo_views {
             }
         }
 
+        impl $views {
+            /// Build the stereo-views handle for `owner` (the `mol.stereo_{atoms,bonds}` accessor).
+            pub(crate) fn new(owner: Py<MoleculeAst>) -> $views {
+                $views { owner }
+            }
+        }
+
         #[pyclass]
         struct $iter {
             owner: Py<MoleculeAst>,
