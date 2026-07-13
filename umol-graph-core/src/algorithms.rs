@@ -9,6 +9,7 @@ pub mod cycles;
 pub mod enumeration;
 pub mod matching;
 pub mod mis;
+pub mod planar_matching_count;
 pub mod refine;
 pub mod subiso;
 pub mod toposort;
