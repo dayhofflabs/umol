@@ -36,7 +36,7 @@ use crate::{
     noncovalent::{
         NoncovalentBondAst, NoncovalentBondConstraintAst, NoncovalentBondConstraintKey,
         NoncovalentBondConstraintsAst, NoncovalentBondConstraintsView, NoncovalentBondKind,
-        NoncovalentBondKindAst,
+        NoncovalentBondKindAst, NoncovalentBondView,
     },
     stereo::{
         CisTransStereo, CisTransStereoAst, Permutation, StereoCosetAst, StereoTerm,
@@ -144,6 +144,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<NoncovalentBondConstraintKey>()?;
         module.add_class::<NoncovalentBondConstraintsAst>()?;
         module.add_class::<NoncovalentBondConstraintsView>()?;
+        module.add_class::<NoncovalentBondView>()?;
         module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;
