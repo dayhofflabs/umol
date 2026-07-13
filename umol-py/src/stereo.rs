@@ -4,10 +4,12 @@
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use std::collections::BTreeSet;
+use std::str::FromStr;
 use std::vec::IntoIter;
 
 use pyo3::exceptions::{PyKeyError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 // A few `from_ast` mirrors stay `#[cfg(test)]` until S2/S4a wire them into the constraint
 // enum and the entity view; their `to_ast` peers are already live (eq/hash).
 #[cfg(test)]
@@ -18,10 +20,10 @@ use umol_ast::ast::{
 use umol_ast::ast::{
     CisTransStereoAst as AstCisTransStereoAst, FluxionalityAst as AstFluxionalityAst, Lattice,
     LigandPermutation as AstLigandPermutation, LigandSymmetryAst as AstLigandSymmetryAst,
-    OrientedLigandPermutation as AstOrientedLigandPermutation,
+    OrientedLigandPermutation as AstOrientedLigandPermutation, StereoAtomAst as AstStereoAtomAst,
     StereoAtomConstraintAst as AstStereoAtomConstraintAst,
     StereoAtomConstraintKey as AstStereoAtomConstraintKey,
-    StereoAtomConstraintsAst as AstStereoAtomConstraintsAst,
+    StereoAtomConstraintsAst as AstStereoAtomConstraintsAst, StereoBondAst as AstStereoBondAst,
     StereoBondConstraintAst as AstStereoBondConstraintAst,
     StereoBondConstraintKey as AstStereoBondConstraintKey,
     StereoBondConstraintsAst as AstStereoBondConstraintsAst,
@@ -36,6 +38,7 @@ use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
 
 use crate::boolean::{BooleanArg, BooleanAst};
 use crate::convert::{hash_ast, into_py_variant, variant_repr};
+use crate::error::parse_error;
 
 /// A permutation of `0..degree` in one-line (image) notation.
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -399,7 +402,6 @@ pub enum StereoKind {
 }
 
 impl StereoKind {
-    #[cfg(test)]
     pub(crate) fn from_ast(ast: AstStereoKind) -> Self {
         match ast {
             AstStereoKind::Tetrahedral => Self::Tetrahedral,
@@ -607,7 +609,6 @@ impl StereoConfigurationAst {
 }
 
 impl StereoConfigurationAst {
-    #[cfg(test)]
     pub(crate) fn from_ast(py: Python<'_>, ast: &AstStereoConfigurationAst) -> PyResult<Self> {
         Ok(match ast {
             AstStereoConfigurationAst::Undetermined => Self::Undetermined(),
@@ -631,7 +632,6 @@ impl StereoConfigurationAst {
 /// Setter coercion for a stereo `configuration` field: the `TetrahedralStereo` (`Ccw`/`Cw`)
 /// or `CisTransStereo` (`Z`/`E`) per-kind coset shorthand, or a `StereoConfigurationAst`
 /// passthrough. Axial/square-planar/etc. have no shorthand — use the full `Kinded` form.
-#[cfg(test)]
 #[derive(FromPyObject)]
 pub(crate) enum StereoConfigurationArg {
     Tetrahedral(TetrahedralStereo),
@@ -639,7 +639,6 @@ pub(crate) enum StereoConfigurationArg {
     Ast(Py<StereoConfigurationAst>),
 }
 
-#[cfg(test)]
 impl StereoConfigurationArg {
     pub(crate) fn to_ast(&self, py: Python<'_>) -> AstStereoConfigurationAst {
         match self {
@@ -1393,14 +1392,12 @@ macro_rules! stereo_constraints {
         }
 
         /// A whole-container argument for the entity `constraints` setter. (A live-view arm
-        /// ships in S2b; the value pyclass that consumes this lands in S3 — gated until then.)
-        #[cfg(test)]
+        /// ships in S2b, with the entity view.)
         #[derive(FromPyObject)]
         pub(crate) enum $arg {
             Container(Py<$constraints>),
         }
 
-        #[cfg(test)]
         impl $arg {
             pub(crate) fn to_ast(&self, py: Python<'_>) -> $ast_constraints {
                 match self {
@@ -1683,6 +1680,108 @@ stereo_constraints! {
     StereoBondConstraintsUpdate, ResolvedStereoBondConstraintsUpdate, StereoBondConstraintsArg,
     StereoBondConstraintKeyIter, StereoBondConstraintIter, StereoBondConstraintItemsIter,
     AstStereoBondConstraintKey, AstStereoBondConstraintAst, AstStereoBondConstraintsAst,
+}
+
+/// Per-entity stereo element value pyclass — `StereoAtomAst` / `StereoBondAst`
+/// `{configuration, constraints}` — macro-generated for the two stereo entities. The live
+/// `constraints` getter (returns the view) lands in S2b with the entity view, which also
+/// consumes `inner` (and adds `inner_mut`); `inner` is test-gated until then.
+macro_rules! stereo_value {
+    ($value:ident, $ast_value:ident, $constraint:ident, $constraints:ident, $arg:ident $(,)?) => {
+        #[pyclass]
+        pub struct $value($ast_value);
+
+        #[pymethods]
+        impl $value {
+            /// Construct from a stereo configuration — a `TetrahedralStereo` / `CisTransStereo`
+            /// per-kind shorthand or a `StereoConfigurationAst` — optionally setting constraints.
+            #[new]
+            #[pyo3(signature = (configuration, *, constraints=None))]
+            fn new(
+                py: Python<'_>,
+                configuration: StereoConfigurationArg,
+                constraints: Option<Py<$constraints>>,
+            ) -> Self {
+                let constraints = constraints
+                    .map(|c| c.bind(py).borrow().inner().clone())
+                    .unwrap_or_default();
+                $value($ast_value {
+                    configuration: configuration.to_ast(py),
+                    constraints,
+                })
+            }
+
+            /// Parse a stereo-DSL string (e.g. `"Th0"`) into the value.
+            #[staticmethod]
+            fn parse(s: &str) -> PyResult<Self> {
+                $ast_value::from_str(s).map(Self).map_err(parse_error)
+            }
+
+            fn __str__(&self) -> String {
+                self.0.to_string()
+            }
+
+            fn __repr__(&self) -> String {
+                format!("{}.parse('{}')", stringify!($value), self.0)
+            }
+
+            /// The stereo configuration (geometry + coset).
+            #[getter]
+            fn configuration(&self, py: Python<'_>) -> PyResult<StereoConfigurationAst> {
+                StereoConfigurationAst::from_ast(py, &self.0.configuration)
+            }
+
+            #[setter]
+            fn set_configuration(&mut self, py: Python<'_>, value: StereoConfigurationArg) {
+                self.0.configuration = value.to_ast(py);
+            }
+
+            /// Replace the whole constraint set (wipe-and-set) from a value container. Snapshots
+            /// `value` before the write borrow (self-alias safe). Infallible while the argument is
+            /// container-only; it goes fallible in S2b when the live-view arm lands.
+            #[setter]
+            fn set_constraints(slf: Py<Self>, py: Python<'_>, value: $arg) {
+                let snapshot = value.to_ast(py);
+                slf.borrow_mut(py).0.constraints = snapshot;
+            }
+
+            /// The fields as a dict: `configuration` plus a `constraints` list of the entries.
+            fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+                let dict = PyDict::new(py);
+                dict.set_item("configuration", self.configuration(py)?)?;
+                let constraints = self
+                    .0
+                    .constraints
+                    .iter()
+                    .map(|c| into_py_variant(py, $constraint::from_ast(py, c)?))
+                    .collect::<PyResult<Vec<_>>>()?;
+                dict.set_item("constraints", constraints)?;
+                Ok(dict)
+            }
+        }
+
+        impl $value {
+            #[cfg(test)]
+            pub(crate) fn inner(&self) -> &$ast_value {
+                &self.0
+            }
+
+            #[cfg(test)]
+            pub(crate) fn from_inner(value: $ast_value) -> Self {
+                $value(value)
+            }
+        }
+    };
+}
+
+stereo_value! {
+    StereoAtomAst, AstStereoAtomAst, StereoAtomConstraintAst, StereoAtomConstraintsAst,
+    StereoAtomConstraintsArg,
+}
+
+stereo_value! {
+    StereoBondAst, AstStereoBondAst, StereoBondConstraintAst, StereoBondConstraintsAst,
+    StereoBondConstraintsArg,
 }
 
 #[cfg(test)]
@@ -2547,5 +2646,241 @@ mod tests {
             expected.extend([stereogenicity]);
             assert_eq!(arg.to_ast(py), expected);
         });
+    }
+
+    #[rstest]
+    #[case::ccw(
+        StereoConfigurationArg::Tetrahedral(TetrahedralStereo::Ccw),
+        AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0))
+    )]
+    #[case::cw(
+        StereoConfigurationArg::Tetrahedral(TetrahedralStereo::Cw),
+        AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(1))
+    )]
+    fn test_stereo_atom_ast_new(
+        #[case] configuration: StereoConfigurationArg,
+        #[case] expected: AstStereoAtomAst,
+    ) {
+        Python::attach(|py| {
+            let value = StereoAtomAst::new(py, configuration, None);
+            assert_eq!(*value.inner(), expected);
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_ast_new_constraints() {
+        Python::attach(|py| {
+            let stereogenicity = AstStereoAtomConstraintAst::Stereogenicity(
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            );
+            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            ast_cs.extend([stereogenicity.clone()]);
+            let container = Py::new(py, StereoAtomConstraintsAst::from_inner(ast_cs)).unwrap();
+            let value = StereoAtomAst::new(
+                py,
+                StereoConfigurationArg::Tetrahedral(TetrahedralStereo::Ccw),
+                Some(container),
+            );
+            let mut expected_cs = AstStereoAtomConstraintsAst::new();
+            expected_cs.extend([stereogenicity]);
+            assert_eq!(
+                *value.inner(),
+                AstStereoAtomAst {
+                    configuration: AstStereoConfigurationAst::Kinded(
+                        AstStereoKind::Tetrahedral,
+                        AstStereoCosetAst::Lit(0)
+                    ),
+                    constraints: expected_cs,
+                }
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::ccw(
+        "Th0",
+        AstStereoConfigurationAst::Kinded(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0))
+    )]
+    #[case::undetermined_coset(
+        "Th*",
+        AstStereoConfigurationAst::Kinded(
+            AstStereoKind::Tetrahedral,
+            AstStereoCosetAst::Undetermined
+        )
+    )]
+    fn test_stereo_atom_ast_parse(
+        #[case] input: &str,
+        #[case] expected: AstStereoConfigurationAst,
+    ) {
+        let value = StereoAtomAst::parse(input).unwrap();
+        assert_eq!(value.inner().configuration, expected);
+    }
+
+    #[rstest]
+    fn test_stereo_atom_ast_parse_error() {
+        assert!(StereoAtomAst::parse("not-a-stereo-atom").is_err());
+    }
+
+    #[rstest]
+    #[case::ccw(
+        AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0)),
+        "Th0"
+    )]
+    #[case::square_planar(
+        AstStereoAtomAst::new(AstStereoKind::SquarePlanar, AstStereoCosetAst::Lit(2)),
+        "Sp2"
+    )]
+    fn test_stereo_atom_ast_str(#[case] ast: AstStereoAtomAst, #[case] expected: &str) {
+        let value = StereoAtomAst::from_inner(ast);
+        assert_eq!(value.__str__(), expected);
+    }
+
+    #[rstest]
+    fn test_stereo_atom_ast_repr() {
+        let value = StereoAtomAst::from_inner(AstStereoAtomAst::new(
+            AstStereoKind::Tetrahedral,
+            AstStereoCosetAst::Lit(0),
+        ));
+        assert_eq!(value.__repr__(), "StereoAtomAst.parse('Th0')");
+    }
+
+    #[rstest]
+    fn test_stereo_atom_ast_configuration() {
+        Python::attach(|py| {
+            let value = StereoAtomAst::from_inner(AstStereoAtomAst::new(
+                AstStereoKind::Tetrahedral,
+                AstStereoCosetAst::Lit(0),
+            ));
+            assert_eq!(
+                value.configuration(py).unwrap().to_ast(py),
+                AstStereoConfigurationAst::Kinded(
+                    AstStereoKind::Tetrahedral,
+                    AstStereoCosetAst::Lit(0)
+                )
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_ast_set_configuration() {
+        Python::attach(|py| {
+            let mut value = StereoAtomAst::from_inner(AstStereoAtomAst::new(
+                AstStereoKind::Tetrahedral,
+                AstStereoCosetAst::Lit(0),
+            ));
+            value.set_configuration(
+                py,
+                StereoConfigurationArg::Tetrahedral(TetrahedralStereo::Cw),
+            );
+            assert_eq!(
+                value.inner().configuration,
+                AstStereoConfigurationAst::Kinded(
+                    AstStereoKind::Tetrahedral,
+                    AstStereoCosetAst::Lit(1)
+                )
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_ast_set_constraints() {
+        Python::attach(|py| {
+            let value = Py::new(
+                py,
+                StereoAtomAst::from_inner(AstStereoAtomAst::new(
+                    AstStereoKind::Tetrahedral,
+                    AstStereoCosetAst::Lit(0),
+                )),
+            )
+            .unwrap();
+            let stereogenicity = AstStereoAtomConstraintAst::Stereogenicity(
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            );
+            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            ast_cs.extend([stereogenicity.clone()]);
+            let container = Py::new(py, StereoAtomConstraintsAst::from_inner(ast_cs)).unwrap();
+            StereoAtomAst::set_constraints(
+                value.clone_ref(py),
+                py,
+                StereoAtomConstraintsArg::Container(container),
+            );
+            let mut expected_cs = AstStereoAtomConstraintsAst::new();
+            expected_cs.extend([stereogenicity]);
+            assert_eq!(value.borrow(py).inner().constraints, expected_cs);
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_ast_asdict() {
+        Python::attach(|py| {
+            let stereogenicity = AstStereoAtomConstraintAst::Stereogenicity(
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            );
+            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            ast_cs.extend([stereogenicity]);
+            let value = StereoAtomAst::from_inner(AstStereoAtomAst {
+                configuration: AstStereoConfigurationAst::Kinded(
+                    AstStereoKind::Tetrahedral,
+                    AstStereoCosetAst::Lit(0),
+                ),
+                constraints: ast_cs,
+            });
+            let dict = value.asdict(py).unwrap();
+            let configuration = dict.get_item("configuration").unwrap().unwrap();
+            let expected = into_py_variant(
+                py,
+                StereoConfigurationAst::from_ast(
+                    py,
+                    &AstStereoConfigurationAst::Kinded(
+                        AstStereoKind::Tetrahedral,
+                        AstStereoCosetAst::Lit(0),
+                    ),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            assert!(configuration.eq(expected.bind(py)).unwrap());
+            let constraints = dict.get_item("constraints").unwrap().unwrap();
+            assert_eq!(constraints.len().unwrap(), 1);
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_bond_ast_new() {
+        Python::attach(|py| {
+            let value = StereoBondAst::new(
+                py,
+                StereoConfigurationArg::CisTrans(CisTransStereo::Z),
+                None,
+            );
+            assert_eq!(
+                *value.inner(),
+                AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0))
+            );
+            assert_eq!(value.__str__(), "Ct0");
+        });
+    }
+
+    #[rstest]
+    #[case::z(
+        "Ct0",
+        AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0))
+    )]
+    #[case::e(
+        "Ct1",
+        AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(1))
+    )]
+    fn test_stereo_bond_ast_parse(#[case] input: &str, #[case] expected: AstStereoBondAst) {
+        let value = StereoBondAst::parse(input).unwrap();
+        assert_eq!(*value.inner(), expected);
+    }
+
+    #[rstest]
+    fn test_stereo_bond_ast_str() {
+        let value = StereoBondAst::from_inner(AstStereoBondAst::new(
+            AstStereoKind::CisTrans,
+            AstStereoCosetAst::Lit(1),
+        ));
+        assert_eq!(value.__str__(), "Ct1");
     }
 }
