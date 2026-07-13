@@ -570,7 +570,8 @@ every subitem is on the path to the `mol.noncovalent_bonds` surface.
 - **S2 done** — `NoncovalentBondAst` value pyclass (`new`/`parse`/`__str__`/`__repr__`/`kind`/`constraints`/`set_constraints`/`asdict`/`inner`/`inner_mut`/`from_inner`) + entity-backed constraints view (full mapping API + write-through) + `…Arg`; ungated the S0a kind `from_ast`/`Arg`. 42 Rust unit tests, clippy/fmt clean, Python write-through verified (`b.constraints.intramolecular = True` re-reads through the bond; `Hbd#I` round-trips).
 - **Lesson for the remaining slices (stereo B6/B7):** an entity-backed constraints view and its owning value pyclass are one atomic unit — never stage the view before the value pyclass. Fix the general B-order note if reused.
 - **Adversarial review of S2 (4-lens workflow) found 2 real panics the green build missed** (parity + fidelity lenses were clean — the mirror is faithful). Both are self-aliasing `RefCell` double-borrow panics: `bond.constraints = bond.constraints` (the `set_constraints` setter held `&mut self` across `value.to_ast()`, whose `View` arm re-borrows the same bond) and `bond.constraints.update(bond.constraints)` (the view `update` held `with_mut` across `apply()`, whose `View` arm re-reads the bond). **Fixed in noncovalent** by resolving every Python read to owned data *before* the write borrow: `NoncovalentBondConstraintsUpdate::resolve` → `ResolvedNoncovalentBondConstraintsUpdate::apply`, and `set_constraints`/container `update` take `slf: Py<Self>` and snapshot before `borrow_mut`. Regression tests added for all four self-alias paths (view/container `update`-self, `set_constraints` self + from-view). 46 Rust tests, clippy/fmt clean, Python repro confirms no panic.
-- **SYSTEMATIC: the same self-alias panic exists in every peer slice** (atom, bond, dative, aromatic, multicenter — each has the identical `set_constraints(&mut self)` + `ConstraintsView::update(with_mut over apply)` + container `update(&mut self)` shape, plus the dative/atom/bond ring-size sub-containers). It is a WET-template flaw, not a noncovalent mistranslation. **Open decision:** sweep all peers with the same resolve-before-borrow fix, or defer. Not blocking B5 S3.
+- **SYSTEMATIC peer sweep done (2026-07-12).** The same self-alias panic existed in every peer slice; fixed all of them with the resolve-before-borrow transform: `<E>ConstraintsUpdate::apply` → `resolve` + `Resolved<E>ConstraintsUpdate::apply`; container `update` and value `set_constraints` take `slf: Py<Self>` and read before `borrow_mut`; the constraints-view `update` resolves before `with_mut`. Files: `atom.rs` + **`constraint.rs`** (atom's constraint container/view live in the shared `constraint.rs`, not `atom.rs` — a grep-by-`atom.rs` miss the end-to-end Python repro caught), `bond.rs`, `dative.rs`, `aromatic.rs`, `multicenter.rs`. Regression tests added per entity (container update-self, value set-constraints-self/from-view, view update-self). **Already-safe, left alone:** the molecule-view `set_constraints(&self)` (single `owner.borrow_mut()…= value.to_ast()?` — Rust evaluates the RHS read before the LHS place borrow); ring-size sub-containers (setters take `ValueArg`, cannot alias). **Verified:** 405 Rust unit tests, 332 pytest, clippy/fmt clean, and a Python repro proving `x.constraints = x.constraints` / `x.constraints.update(x.constraints)` / `cs.update(cs)` are no-ops (not panics) for all 6 entities.
+- **Lesson (applies to B6/B7 stereo):** any pyo3 method holding a write borrow (via `&mut self`, or `with_mut`) across a call that re-reads a possibly-aliased entity (`value.to_ast()`/`other.apply()` with a `View` arm) self-alias-panics; the fix is always resolve-all-reads-to-owned-data first. Write the stereo constraint surface in the resolved-before-borrow form from the start.
 - **S3a/b/c pending** — molecule-embedded `NoncovalentBondView` (2-atom `atom_ids`, `connecting`/`incident`) + the `Backing::Molecule` arm + `mol.noncovalent_bonds` + `from_parts(noncovalent=…)`.
 
 ### B6 / B7 · Stereo atom / stereo bond (the overlay — a larger sub-project)
@@ -594,6 +595,18 @@ every subitem is on the path to the `mol.noncovalent_bonds` surface.
 - Design calls (many — see the stereo block in Part C). This slice is large enough to warrant
   its own doc/staging after the covalent entities land; it also coincides with the deferred
   finding 137-p3-4 (`Permutation.image` shape) "top-level stereo" revisit.
+- **Write the constraint surface in the resolve-before-borrow form from the start** (self-alias panic
+  lesson from the B5 sweep — see the B5 progress note). The stereo constraint bag has four keys
+  (`LigandSymmetryAst`/`FluxionalityAst`/`TopicityAst`/`StereogenicityAst`), so the same three methods
+  recur: the value/overlay `set_constraints`, the container `update`, and the constraints-view `update`.
+  In every one, resolve each `…ConstraintsArg`/`…ConstraintsUpdate` (its `Container`/`View` arms read a
+  possibly-aliased entity via `read`) to owned data **before** taking any write borrow — i.e.
+  `set_constraints`/container `update` take `slf: Py<Self>` and snapshot before `borrow_mut`; the view
+  `update` calls `other.resolve(py)?` before `with_mut`. Do NOT write the naive `&mut self` +
+  `value.to_ast(py)?` / `with_mut(|cs| other.apply(...))` form — it panics on `x.constraints =
+  x.constraints`. Add the four self-alias regression tests per entity. The molecule-view
+  `set_constraints(&self)` single-assignment form (`owner.borrow_mut()…= value.to_ast()?`) is safe as-is
+  (RHS evaluated before the LHS place borrow); mirror it, don't "fix" it.
 
 ## C. Leaf types needing design calls
 

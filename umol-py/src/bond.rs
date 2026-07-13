@@ -110,10 +110,13 @@ impl BondAst {
     }
 
     /// Replace the whole constraint set (wipe-and-set) from a value container or
-    /// a live view.
+    /// a live view. Takes `slf` by handle and snapshots `value` *before* the write
+    /// borrow, so `bond.constraints = bond.constraints` (a view over the same bond)
+    /// reads while the bond is unborrowed instead of a double-borrow panic.
     #[setter]
-    fn set_constraints(&mut self, py: Python<'_>, value: BondConstraintsArg) -> PyResult<()> {
-        self.0.constraints = value.to_ast(py)?;
+    fn set_constraints(slf: Py<Self>, py: Python<'_>, value: BondConstraintsArg) -> PyResult<()> {
+        let snapshot = value.to_ast(py)?;
+        slf.borrow_mut(py).0.constraints = snapshot;
         Ok(())
     }
 
@@ -520,21 +523,49 @@ enum BondConstraintsUpdate {
 }
 
 impl BondConstraintsUpdate {
-    /// Overlay this update onto `target` in place.
-    fn apply(&self, py: Python<'_>, target: &mut AstBondConstraintsAst) -> PyResult<()> {
-        match self {
-            BondConstraintsUpdate::Container(c) => target.update(c.bind(py).borrow().inner()),
-            BondConstraintsUpdate::View(v) => {
-                let snapshot = v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?;
-                target.update(&snapshot);
+    /// Read every Python object into owned data — no write target is touched. Callers
+    /// resolve *before* taking the write borrow so a view (or container) that aliases
+    /// the same bond is read while nothing is borrowed (otherwise
+    /// `bond.constraints.update(bond.constraints)` self-aliases into a double-borrow panic).
+    fn resolve(&self, py: Python<'_>) -> PyResult<ResolvedBondConstraintsUpdate> {
+        Ok(match self {
+            BondConstraintsUpdate::Container(c) => {
+                ResolvedBondConstraintsUpdate::Overlay(c.bind(py).borrow().inner().clone())
             }
-            BondConstraintsUpdate::Entries(entries) => {
+            BondConstraintsUpdate::View(v) => ResolvedBondConstraintsUpdate::Overlay(
+                v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?,
+            ),
+            BondConstraintsUpdate::Entries(entries) => ResolvedBondConstraintsUpdate::Entries(
+                entries
+                    .iter()
+                    .map(|entry| entry.bind(py).borrow().to_ast(py))
+                    .collect(),
+            ),
+        })
+    }
+}
+
+/// A `BondConstraintsUpdate` with all Python-object reads already done, so it can be
+/// applied under a write borrow without re-entering Python.
+enum ResolvedBondConstraintsUpdate {
+    /// A whole container (from another container or a live view): overlaid via `update`
+    /// (last-wins per key; undetermined entries remove).
+    Overlay(AstBondConstraintsAst),
+    /// Loose entries: `set` each (last-wins; undetermined entries stored, not removed).
+    Entries(Vec<AstBondConstraintAst>),
+}
+
+impl ResolvedBondConstraintsUpdate {
+    /// Overlay onto `target` in place. No Python reads.
+    fn apply(self, target: &mut AstBondConstraintsAst) {
+        match self {
+            ResolvedBondConstraintsUpdate::Overlay(overlay) => target.update(&overlay),
+            ResolvedBondConstraintsUpdate::Entries(entries) => {
                 for entry in entries {
-                    target.set(entry.bind(py).borrow().to_ast(py));
+                    target.set(entry);
                 }
             }
         }
-        Ok(())
     }
 }
 
@@ -602,10 +633,14 @@ impl BondConstraintsAst {
             .transpose()
     }
 
-    /// Overlay `other` onto self in place — another container or an iterable of
-    /// `BondConstraintAst` (last-wins per key; undetermined entries remove).
-    fn update(&mut self, py: Python<'_>, other: BondConstraintsUpdate) -> PyResult<()> {
-        other.apply(py, &mut self.0)
+    /// Overlay `other` onto self in place — another container, a live view, or an
+    /// iterable of `BondConstraintAst` (last-wins per key; undetermined entries remove).
+    /// Takes `slf` by handle so `other` is fully read *before* the write borrow —
+    /// `cs.update(cs)` on the same container is then a no-op, not a double-borrow panic.
+    fn update(slf: Py<Self>, py: Python<'_>, other: BondConstraintsUpdate) -> PyResult<()> {
+        let resolved = other.resolve(py)?;
+        resolved.apply(&mut slf.borrow_mut(py).0);
+        Ok(())
     }
 
     fn __len__(&self) -> usize {
@@ -945,10 +980,14 @@ impl BondConstraintsView {
         }
     }
 
-    /// Overlay `other` onto the bond's constraints in place — another container or an
-    /// iterable of `BondConstraintAst` (last-wins per key; undetermined entries remove).
+    /// Overlay `other` onto the bond's constraints in place — another container, a live
+    /// view, or an iterable of `BondConstraintAst` (last-wins per key; undetermined
+    /// entries remove). Resolves `other` to owned data *before* the write borrow, so a
+    /// view aliasing the same bond is not a double-borrow panic.
     fn update(&self, py: Python<'_>, other: BondConstraintsUpdate) -> PyResult<()> {
-        self.with_mut(py, |cs| other.apply(py, cs))
+        let resolved = other.resolve(py)?;
+        self.with_mut(py, |cs| resolved.apply(cs));
+        Ok(())
     }
 
     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -1353,10 +1392,13 @@ mod tests {
                 },
             )
             .unwrap();
-            let mut dst = BondAst::from_inner(AstBondAst::from_order(2));
-            dst.set_constraints(py, BondConstraintsArg::View(view))
+            let dst = Py::new(py, BondAst::from_inner(AstBondAst::from_order(2))).unwrap();
+            BondAst::set_constraints(dst.clone_ref(py), py, BondConstraintsArg::View(view))
                 .unwrap();
-            assert_eq!(dst.inner().constraints.aromatic(), AstBooleanAst::Lit(true));
+            assert_eq!(
+                dst.bind(py).borrow().inner().constraints.aromatic(),
+                AstBooleanAst::Lit(true)
+            );
         });
     }
 
@@ -1617,22 +1659,23 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_ast_update() {
         Python::attach(|py| {
-            let mut constraints = BondConstraintsAst::new(py, vec![]);
+            let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
             let mut other = AstBondConstraintsAst::new();
             other.set(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)));
             other.set(AstBondConstraintAst::ring_membership(AstRingScope::All, 2));
-            constraints
-                .update(
-                    py,
-                    BondConstraintsUpdate::Container(
-                        Py::new(py, BondConstraintsAst::from_inner(other)).unwrap(),
-                    ),
-                )
-                .unwrap();
-            assert_eq!(constraints.__len__(), 2);
-            assert_eq!(constraints.aromatic().to_ast(), AstBooleanAst::Lit(true));
+            BondConstraintsAst::update(
+                constraints.clone_ref(py),
+                py,
+                BondConstraintsUpdate::Container(
+                    Py::new(py, BondConstraintsAst::from_inner(other)).unwrap(),
+                ),
+            )
+            .unwrap();
+            let c = constraints.bind(py).borrow();
+            assert_eq!(c.__len__(), 2);
+            assert_eq!(c.aromatic().to_ast(), AstBooleanAst::Lit(true));
             assert_eq!(
-                constraints.ring_count(py).unwrap().unwrap().to_ast(py),
+                c.ring_count(py).unwrap().unwrap().to_ast(py),
                 AstValueAst::Lit(2)
             );
         });
@@ -1641,7 +1684,7 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_ast_update_entries() {
         Python::attach(|py| {
-            let mut constraints = BondConstraintsAst::new(py, vec![]);
+            let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
             let aromatic = into_py_variant(
                 py,
                 BondConstraintAst::from_ast(
@@ -1660,10 +1703,103 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            constraints
-                .update(py, BondConstraintsUpdate::Entries(vec![aromatic, ring]))
+            BondConstraintsAst::update(
+                constraints.clone_ref(py),
+                py,
+                BondConstraintsUpdate::Entries(vec![aromatic, ring]),
+            )
+            .unwrap();
+            assert_eq!(constraints.bind(py).borrow().__len__(), 2);
+        });
+    }
+
+    /// Regression: a container updating itself resolves `other` before the write borrow,
+    /// so it is an idempotent no-op, not a RefCell double-borrow panic.
+    #[rstest]
+    fn test_bond_constraints_ast_update_self() {
+        Python::attach(|py| {
+            let aromatic = into_py_variant(
+                py,
+                BondConstraintAst::from_ast(
+                    py,
+                    &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let constraints = Py::new(py, BondConstraintsAst::new(py, vec![aromatic])).unwrap();
+            BondConstraintsAst::update(
+                constraints.clone_ref(py),
+                py,
+                BondConstraintsUpdate::Container(constraints.clone_ref(py)),
+            )
+            .unwrap();
+            assert_eq!(
+                constraints.bind(py).borrow().aromatic().to_ast(),
+                AstBooleanAst::Lit(true)
+            );
+        });
+    }
+
+    /// Regression: assigning a bond's own constraints view back to it snapshots before
+    /// the write borrow, so it is a no-op, not a double-borrow panic
+    /// (`bond.constraints = bond.constraints`).
+    #[rstest]
+    fn test_bond_ast_set_constraints_self() {
+        Python::attach(|py| {
+            let bond = Py::new(
+                py,
+                BondAst::from_inner(
+                    AstBondAst::from_order(1)
+                        .with_constraint(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true))),
+                ),
+            )
+            .unwrap();
+            let own_view = Py::new(
+                py,
+                BondConstraintsView {
+                    backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
+                },
+            )
+            .unwrap();
+            BondAst::set_constraints(bond.clone_ref(py), py, BondConstraintsArg::View(own_view))
                 .unwrap();
-            assert_eq!(constraints.__len__(), 2);
+            assert_eq!(
+                bond.bind(py).borrow().inner().constraints.aromatic(),
+                AstBooleanAst::Lit(true)
+            );
+        });
+    }
+
+    /// Regression: a view updating from a view over the same bond resolves `other`
+    /// before the write borrow, so it is an idempotent no-op, not a double-borrow panic
+    /// (`bond.constraints.update(bond.constraints)`).
+    #[rstest]
+    fn test_bond_constraints_view_update_self() {
+        Python::attach(|py| {
+            let bond = Py::new(
+                py,
+                BondAst::from_inner(
+                    AstBondAst::from_order(1)
+                        .with_constraint(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true))),
+                ),
+            )
+            .unwrap();
+            let view = BondConstraintsView {
+                backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
+            };
+            let other = Py::new(
+                py,
+                BondConstraintsView {
+                    backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
+                },
+            )
+            .unwrap();
+            view.update(py, BondConstraintsUpdate::View(other)).unwrap();
+            assert_eq!(
+                bond.bind(py).borrow().inner().constraints.aromatic(),
+                AstBooleanAst::Lit(true)
+            );
         });
     }
 

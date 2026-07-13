@@ -122,11 +122,12 @@ impl MulticenterBondAst {
     /// live view.
     #[setter]
     fn set_constraints(
-        &mut self,
+        slf: Py<Self>,
         py: Python<'_>,
         value: MulticenterBondConstraintsArg,
     ) -> PyResult<()> {
-        self.0.constraints = value.to_ast(py)?;
+        let snapshot = value.to_ast(py)?;
+        slf.borrow_mut(py).0.constraints = snapshot;
         Ok(())
     }
 
@@ -563,23 +564,55 @@ enum MulticenterBondConstraintsUpdate {
 }
 
 impl MulticenterBondConstraintsUpdate {
-    /// Overlay this update onto `target` in place.
-    fn apply(&self, py: Python<'_>, target: &mut AstMulticenterBondConstraintsAst) -> PyResult<()> {
-        match self {
+    /// Read every Python object into owned data — no write target is touched. Callers
+    /// resolve *before* taking the write borrow so a view (or container) that aliases the
+    /// same bond is read while nothing is borrowed (otherwise
+    /// `bond.constraints.update(bond.constraints)` self-aliases into a double-borrow panic).
+    fn resolve(&self, py: Python<'_>) -> PyResult<ResolvedMulticenterBondConstraintsUpdate> {
+        Ok(match self {
             MulticenterBondConstraintsUpdate::Container(c) => {
-                target.update(c.bind(py).borrow().inner())
+                ResolvedMulticenterBondConstraintsUpdate::Overlay(
+                    c.bind(py).borrow().inner().clone(),
+                )
             }
             MulticenterBondConstraintsUpdate::View(v) => {
-                let snapshot = v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?;
-                target.update(&snapshot);
+                ResolvedMulticenterBondConstraintsUpdate::Overlay(
+                    v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?,
+                )
             }
             MulticenterBondConstraintsUpdate::Entries(entries) => {
+                ResolvedMulticenterBondConstraintsUpdate::Entries(
+                    entries
+                        .iter()
+                        .map(|entry| entry.bind(py).borrow().to_ast(py))
+                        .collect(),
+                )
+            }
+        })
+    }
+}
+
+/// A `MulticenterBondConstraintsUpdate` with all Python-object reads already done, so it
+/// can be applied under a write borrow without re-entering Python.
+enum ResolvedMulticenterBondConstraintsUpdate {
+    /// A whole container (from another container or a live view): overlaid via `update`
+    /// (last-wins per key; undetermined entries remove).
+    Overlay(AstMulticenterBondConstraintsAst),
+    /// Loose entries: `set` each (last-wins; undetermined entries stored, not removed).
+    Entries(Vec<AstMulticenterBondConstraintAst>),
+}
+
+impl ResolvedMulticenterBondConstraintsUpdate {
+    /// Overlay onto `target` in place. No Python reads.
+    fn apply(self, target: &mut AstMulticenterBondConstraintsAst) {
+        match self {
+            ResolvedMulticenterBondConstraintsUpdate::Overlay(overlay) => target.update(&overlay),
+            ResolvedMulticenterBondConstraintsUpdate::Entries(entries) => {
                 for entry in entries {
-                    target.set(entry.bind(py).borrow().to_ast(py));
+                    target.set(entry);
                 }
             }
         }
-        Ok(())
     }
 }
 
@@ -652,10 +685,18 @@ impl MulticenterBondConstraintsAst {
             .transpose()
     }
 
-    /// Overlay `other` onto self in place — another container or an iterable of
-    /// `MulticenterBondConstraintAst` (last-wins per key; undetermined entries remove).
-    fn update(&mut self, py: Python<'_>, other: MulticenterBondConstraintsUpdate) -> PyResult<()> {
-        other.apply(py, &mut self.0)
+    /// Overlay `other` onto self in place — another container, a live view, or an
+    /// iterable of `MulticenterBondConstraintAst` (last-wins per key; undetermined entries
+    /// remove). Takes `slf` by handle so `other` is fully read *before* the write borrow —
+    /// `cs.update(cs)` on the same container is then a no-op, not a double-borrow panic.
+    fn update(
+        slf: Py<Self>,
+        py: Python<'_>,
+        other: MulticenterBondConstraintsUpdate,
+    ) -> PyResult<()> {
+        let resolved = other.resolve(py)?;
+        resolved.apply(&mut slf.borrow_mut(py).0);
+        Ok(())
     }
 
     fn __len__(&self) -> usize {
@@ -958,10 +999,14 @@ impl MulticenterBondConstraintsView {
         }
     }
 
-    /// Overlay `other` onto the bond's constraints in place — another container or an
-    /// iterable of `MulticenterBondConstraintAst` (last-wins per key; undetermined entries remove).
+    /// Overlay `other` onto the bond's constraints in place — another container, a live
+    /// view, or an iterable of `MulticenterBondConstraintAst` (last-wins per key;
+    /// undetermined entries remove). Resolves `other` to owned data *before* the write
+    /// borrow, so a view aliasing the same bond is not a double-borrow panic.
     fn update(&self, py: Python<'_>, other: MulticenterBondConstraintsUpdate) -> PyResult<()> {
-        self.with_mut(py, |cs| other.apply(py, cs))
+        let resolved = other.resolve(py)?;
+        self.with_mut(py, |cs| resolved.apply(cs));
+        Ok(())
     }
 
     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -1269,14 +1314,21 @@ mod tests {
                 },
             )
             .unwrap();
-            let mut dst =
+            let dst = Py::new(
+                py,
                 MulticenterBondAst::from_inner(AstMulticenterBondAst::from_electrons(vec![
                     1, 1, 1,
-                ]));
-            dst.set_constraints(py, MulticenterBondConstraintsArg::View(view))
-                .unwrap();
+                ])),
+            )
+            .unwrap();
+            MulticenterBondAst::set_constraints(
+                dst.clone_ref(py),
+                py,
+                MulticenterBondConstraintsArg::View(view),
+            )
+            .unwrap();
             assert_eq!(
-                dst.inner().constraints.electron_count(),
+                dst.bind(py).borrow().inner().constraints.electron_count(),
                 AstValueAst::Lit(6)
             );
         });
@@ -1692,20 +1744,21 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_constraints_ast_update() {
         Python::attach(|py| {
-            let mut constraints = MulticenterBondConstraintsAst::new(py, vec![]);
+            let constraints = Py::new(py, MulticenterBondConstraintsAst::new(py, vec![])).unwrap();
             let mut other = AstMulticenterBondConstraintsAst::new();
             other.set(AstMulticenterBondConstraintAst::electron_count(6));
-            constraints
-                .update(
-                    py,
-                    MulticenterBondConstraintsUpdate::Container(
-                        Py::new(py, MulticenterBondConstraintsAst::from_inner(other)).unwrap(),
-                    ),
-                )
-                .unwrap();
-            assert_eq!(constraints.__len__(), 1);
+            MulticenterBondConstraintsAst::update(
+                constraints.clone_ref(py),
+                py,
+                MulticenterBondConstraintsUpdate::Container(
+                    Py::new(py, MulticenterBondConstraintsAst::from_inner(other)).unwrap(),
+                ),
+            )
+            .unwrap();
+            let c = constraints.bind(py).borrow();
+            assert_eq!(c.__len__(), 1);
             assert_eq!(
-                constraints.electron_count(py).unwrap().to_ast(py),
+                c.electron_count(py).unwrap().to_ast(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -1714,7 +1767,7 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_constraints_ast_update_entries() {
         Python::attach(|py| {
-            let mut constraints = MulticenterBondConstraintsAst::new(py, vec![]);
+            let constraints = Py::new(py, MulticenterBondConstraintsAst::new(py, vec![])).unwrap();
             let ec = into_py_variant(
                 py,
                 MulticenterBondConstraintAst::from_ast(
@@ -1724,12 +1777,115 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            constraints
-                .update(py, MulticenterBondConstraintsUpdate::Entries(vec![ec]))
-                .unwrap();
-            assert_eq!(constraints.__len__(), 1);
+            MulticenterBondConstraintsAst::update(
+                constraints.clone_ref(py),
+                py,
+                MulticenterBondConstraintsUpdate::Entries(vec![ec]),
+            )
+            .unwrap();
+            let c = constraints.bind(py).borrow();
+            assert_eq!(c.__len__(), 1);
             assert_eq!(
-                constraints.electron_count(py).unwrap().to_ast(py),
+                c.electron_count(py).unwrap().to_ast(py),
+                AstValueAst::Lit(6)
+            );
+        });
+    }
+
+    /// Regression: a container updating itself resolves `other` before the write borrow,
+    /// so it is an idempotent no-op, not a RefCell double-borrow panic.
+    #[rstest]
+    fn test_multicenter_bond_constraints_ast_update_self() {
+        Python::attach(|py| {
+            let ec = into_py_variant(
+                py,
+                MulticenterBondConstraintAst::from_ast(
+                    py,
+                    &AstMulticenterBondConstraintAst::electron_count(6),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let constraints =
+                Py::new(py, MulticenterBondConstraintsAst::new(py, vec![ec])).unwrap();
+            MulticenterBondConstraintsAst::update(
+                constraints.clone_ref(py),
+                py,
+                MulticenterBondConstraintsUpdate::Container(constraints.clone_ref(py)),
+            )
+            .unwrap();
+            assert_eq!(
+                constraints
+                    .bind(py)
+                    .borrow()
+                    .electron_count(py)
+                    .unwrap()
+                    .to_ast(py),
+                AstValueAst::Lit(6)
+            );
+        });
+    }
+
+    /// Regression: assigning a bond's own constraints view back to it snapshots before
+    /// the write borrow, so it is a no-op, not a double-borrow panic.
+    #[rstest]
+    fn test_multicenter_bond_ast_set_constraints_self() {
+        Python::attach(|py| {
+            let bond = Py::new(
+                py,
+                MulticenterBondAst::from_inner(
+                    AstMulticenterBondAst::from_electrons(vec![1, 1, 1])
+                        .with_constraint(AstMulticenterBondConstraintAst::electron_count(6)),
+                ),
+            )
+            .unwrap();
+            let own_view = Py::new(
+                py,
+                MulticenterBondConstraintsView {
+                    backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+                },
+            )
+            .unwrap();
+            MulticenterBondAst::set_constraints(
+                bond.clone_ref(py),
+                py,
+                MulticenterBondConstraintsArg::View(own_view),
+            )
+            .unwrap();
+            assert_eq!(
+                bond.bind(py).borrow().inner().constraints.electron_count(),
+                AstValueAst::Lit(6)
+            );
+        });
+    }
+
+    /// Regression: a view updating from a view over the same bond resolves `other`
+    /// before the write borrow, so it is an idempotent no-op, not a double-borrow panic.
+    #[rstest]
+    fn test_multicenter_bond_constraints_view_update_self() {
+        Python::attach(|py| {
+            let bond = Py::new(
+                py,
+                MulticenterBondAst::from_inner(
+                    AstMulticenterBondAst::from_electrons(vec![1, 1, 1])
+                        .with_constraint(AstMulticenterBondConstraintAst::electron_count(6)),
+                ),
+            )
+            .unwrap();
+            let view = MulticenterBondConstraintsView {
+                backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+            };
+            let other = Py::new(
+                py,
+                MulticenterBondConstraintsView {
+                    backing: MulticenterBondConstraintsBacking::MulticenterBond(bond.clone_ref(py)),
+                },
+            )
+            .unwrap();
+            view.update(py, MulticenterBondConstraintsUpdate::View(other))
+                .unwrap();
+            assert_eq!(
+                bond.bind(py).borrow().inner().constraints.electron_count(),
                 AstValueAst::Lit(6)
             );
         });

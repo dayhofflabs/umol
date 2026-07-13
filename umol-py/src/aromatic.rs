@@ -122,11 +122,12 @@ impl AromaticSystemAst {
     /// live view.
     #[setter]
     fn set_constraints(
-        &mut self,
+        slf: Py<Self>,
         py: Python<'_>,
         value: AromaticSystemConstraintsArg,
     ) -> PyResult<()> {
-        self.0.constraints = value.to_ast(py)?;
+        let snapshot = value.to_ast(py)?;
+        slf.borrow_mut(py).0.constraints = snapshot;
         Ok(())
     }
 
@@ -556,23 +557,55 @@ enum AromaticSystemConstraintsUpdate {
 }
 
 impl AromaticSystemConstraintsUpdate {
-    /// Overlay this update onto `target` in place.
-    fn apply(&self, py: Python<'_>, target: &mut AstAromaticSystemConstraintsAst) -> PyResult<()> {
-        match self {
+    /// Read every Python object into owned data — no write target is touched. Callers
+    /// resolve *before* taking the write borrow so a view (or container) that aliases the
+    /// same system is read while nothing is borrowed (otherwise
+    /// `sys.constraints.update(sys.constraints)` self-aliases into a double-borrow panic).
+    fn resolve(&self, py: Python<'_>) -> PyResult<ResolvedAromaticSystemConstraintsUpdate> {
+        Ok(match self {
             AromaticSystemConstraintsUpdate::Container(c) => {
-                target.update(c.bind(py).borrow().inner())
+                ResolvedAromaticSystemConstraintsUpdate::Overlay(
+                    c.bind(py).borrow().inner().clone(),
+                )
             }
             AromaticSystemConstraintsUpdate::View(v) => {
-                let snapshot = v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?;
-                target.update(&snapshot);
+                ResolvedAromaticSystemConstraintsUpdate::Overlay(
+                    v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?,
+                )
             }
             AromaticSystemConstraintsUpdate::Entries(entries) => {
+                ResolvedAromaticSystemConstraintsUpdate::Entries(
+                    entries
+                        .iter()
+                        .map(|entry| entry.bind(py).borrow().to_ast(py))
+                        .collect(),
+                )
+            }
+        })
+    }
+}
+
+/// An `AromaticSystemConstraintsUpdate` with all Python-object reads already done, so it
+/// can be applied under a write borrow without re-entering Python.
+enum ResolvedAromaticSystemConstraintsUpdate {
+    /// A whole container (from another container or a live view): overlaid via `update`
+    /// (last-wins per key; undetermined entries remove).
+    Overlay(AstAromaticSystemConstraintsAst),
+    /// Loose entries: `set` each (last-wins; undetermined entries stored, not removed).
+    Entries(Vec<AstAromaticSystemConstraintAst>),
+}
+
+impl ResolvedAromaticSystemConstraintsUpdate {
+    /// Overlay onto `target` in place. No Python reads.
+    fn apply(self, target: &mut AstAromaticSystemConstraintsAst) {
+        match self {
+            ResolvedAromaticSystemConstraintsUpdate::Overlay(overlay) => target.update(&overlay),
+            ResolvedAromaticSystemConstraintsUpdate::Entries(entries) => {
                 for entry in entries {
-                    target.set(entry.bind(py).borrow().to_ast(py));
+                    target.set(entry);
                 }
             }
         }
-        Ok(())
     }
 }
 
@@ -645,10 +678,18 @@ impl AromaticSystemConstraintsAst {
             .transpose()
     }
 
-    /// Overlay `other` onto self in place — another container or an iterable of
-    /// `AromaticSystemConstraintAst` (last-wins per key; undetermined entries remove).
-    fn update(&mut self, py: Python<'_>, other: AromaticSystemConstraintsUpdate) -> PyResult<()> {
-        other.apply(py, &mut self.0)
+    /// Overlay `other` onto self in place — another container, a live view, or an
+    /// iterable of `AromaticSystemConstraintAst` (last-wins per key; undetermined entries
+    /// remove). Takes `slf` by handle so `other` is fully read *before* the write borrow —
+    /// `cs.update(cs)` on the same container is then a no-op, not a double-borrow panic.
+    fn update(
+        slf: Py<Self>,
+        py: Python<'_>,
+        other: AromaticSystemConstraintsUpdate,
+    ) -> PyResult<()> {
+        let resolved = other.resolve(py)?;
+        resolved.apply(&mut slf.borrow_mut(py).0);
+        Ok(())
     }
 
     fn __len__(&self) -> usize {
@@ -945,10 +986,14 @@ impl AromaticSystemConstraintsView {
         }
     }
 
-    /// Overlay `other` onto the system's constraints in place — another container or an
-    /// iterable of `AromaticSystemConstraintAst` (last-wins per key; undetermined entries remove).
+    /// Overlay `other` onto the system's constraints in place — another container, a live
+    /// view, or an iterable of `AromaticSystemConstraintAst` (last-wins per key;
+    /// undetermined entries remove). Resolves `other` to owned data *before* the write
+    /// borrow, so a view aliasing the same system is not a double-borrow panic.
     fn update(&self, py: Python<'_>, other: AromaticSystemConstraintsUpdate) -> PyResult<()> {
-        self.with_mut(py, |cs| other.apply(py, cs))
+        let resolved = other.resolve(py)?;
+        self.with_mut(py, |cs| resolved.apply(cs));
+        Ok(())
     }
 
     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -1245,12 +1290,19 @@ mod tests {
                 },
             )
             .unwrap();
-            let mut dst =
-                AromaticSystemAst::from_inner(AstAromaticSystemAst::from_electrons(vec![1, 1, 1]));
-            dst.set_constraints(py, AromaticSystemConstraintsArg::View(view))
-                .unwrap();
+            let dst = Py::new(
+                py,
+                AromaticSystemAst::from_inner(AstAromaticSystemAst::from_electrons(vec![1, 1, 1])),
+            )
+            .unwrap();
+            AromaticSystemAst::set_constraints(
+                dst.clone_ref(py),
+                py,
+                AromaticSystemConstraintsArg::View(view),
+            )
+            .unwrap();
             assert_eq!(
-                dst.inner().constraints.electron_count(),
+                dst.bind(py).borrow().inner().constraints.electron_count(),
                 AstValueAst::Lit(6)
             );
         });
@@ -1656,20 +1708,21 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_constraints_ast_update() {
         Python::attach(|py| {
-            let mut constraints = AromaticSystemConstraintsAst::new(py, vec![]);
+            let constraints = Py::new(py, AromaticSystemConstraintsAst::new(py, vec![])).unwrap();
             let mut other = AstAromaticSystemConstraintsAst::new();
             other.set(AstAromaticSystemConstraintAst::electron_count(6));
-            constraints
-                .update(
-                    py,
-                    AromaticSystemConstraintsUpdate::Container(
-                        Py::new(py, AromaticSystemConstraintsAst::from_inner(other)).unwrap(),
-                    ),
-                )
-                .unwrap();
-            assert_eq!(constraints.__len__(), 1);
+            AromaticSystemConstraintsAst::update(
+                constraints.clone_ref(py),
+                py,
+                AromaticSystemConstraintsUpdate::Container(
+                    Py::new(py, AromaticSystemConstraintsAst::from_inner(other)).unwrap(),
+                ),
+            )
+            .unwrap();
+            let c = constraints.bind(py).borrow();
+            assert_eq!(c.__len__(), 1);
             assert_eq!(
-                constraints.electron_count(py).unwrap().to_ast(py),
+                c.electron_count(py).unwrap().to_ast(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -1678,7 +1731,7 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_constraints_ast_update_entries() {
         Python::attach(|py| {
-            let mut constraints = AromaticSystemConstraintsAst::new(py, vec![]);
+            let constraints = Py::new(py, AromaticSystemConstraintsAst::new(py, vec![])).unwrap();
             let ec = into_py_variant(
                 py,
                 AromaticSystemConstraintAst::from_ast(
@@ -1688,12 +1741,124 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            constraints
-                .update(py, AromaticSystemConstraintsUpdate::Entries(vec![ec]))
-                .unwrap();
-            assert_eq!(constraints.__len__(), 1);
+            AromaticSystemConstraintsAst::update(
+                constraints.clone_ref(py),
+                py,
+                AromaticSystemConstraintsUpdate::Entries(vec![ec]),
+            )
+            .unwrap();
+            let c = constraints.bind(py).borrow();
+            assert_eq!(c.__len__(), 1);
             assert_eq!(
-                constraints.electron_count(py).unwrap().to_ast(py),
+                c.electron_count(py).unwrap().to_ast(py),
+                AstValueAst::Lit(6)
+            );
+        });
+    }
+
+    /// Regression: a container updating itself resolves `other` before the write borrow,
+    /// so it is an idempotent no-op, not a RefCell double-borrow panic.
+    #[rstest]
+    fn test_aromatic_system_constraints_ast_update_self() {
+        Python::attach(|py| {
+            let ec = into_py_variant(
+                py,
+                AromaticSystemConstraintAst::from_ast(
+                    py,
+                    &AstAromaticSystemConstraintAst::electron_count(6),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let constraints = Py::new(py, AromaticSystemConstraintsAst::new(py, vec![ec])).unwrap();
+            AromaticSystemConstraintsAst::update(
+                constraints.clone_ref(py),
+                py,
+                AromaticSystemConstraintsUpdate::Container(constraints.clone_ref(py)),
+            )
+            .unwrap();
+            assert_eq!(
+                constraints
+                    .bind(py)
+                    .borrow()
+                    .electron_count(py)
+                    .unwrap()
+                    .to_ast(py),
+                AstValueAst::Lit(6)
+            );
+        });
+    }
+
+    /// Regression: assigning a system's own constraints view back to it snapshots before
+    /// the write borrow, so it is a no-op, not a double-borrow panic.
+    #[rstest]
+    fn test_aromatic_system_ast_set_constraints_self() {
+        Python::attach(|py| {
+            let system = Py::new(
+                py,
+                AromaticSystemAst::from_inner(
+                    AstAromaticSystemAst::from_electrons(vec![1, 1, 1])
+                        .with_constraint(AstAromaticSystemConstraintAst::electron_count(6)),
+                ),
+            )
+            .unwrap();
+            let own_view = Py::new(
+                py,
+                AromaticSystemConstraintsView {
+                    backing: AromaticSystemConstraintsBacking::AromaticSystem(system.clone_ref(py)),
+                },
+            )
+            .unwrap();
+            AromaticSystemAst::set_constraints(
+                system.clone_ref(py),
+                py,
+                AromaticSystemConstraintsArg::View(own_view),
+            )
+            .unwrap();
+            assert_eq!(
+                system
+                    .bind(py)
+                    .borrow()
+                    .inner()
+                    .constraints
+                    .electron_count(),
+                AstValueAst::Lit(6)
+            );
+        });
+    }
+
+    /// Regression: a view updating from a view over the same system resolves `other`
+    /// before the write borrow, so it is an idempotent no-op, not a double-borrow panic.
+    #[rstest]
+    fn test_aromatic_system_constraints_view_update_self() {
+        Python::attach(|py| {
+            let system = Py::new(
+                py,
+                AromaticSystemAst::from_inner(
+                    AstAromaticSystemAst::from_electrons(vec![1, 1, 1])
+                        .with_constraint(AstAromaticSystemConstraintAst::electron_count(6)),
+                ),
+            )
+            .unwrap();
+            let view = AromaticSystemConstraintsView {
+                backing: AromaticSystemConstraintsBacking::AromaticSystem(system.clone_ref(py)),
+            };
+            let other = Py::new(
+                py,
+                AromaticSystemConstraintsView {
+                    backing: AromaticSystemConstraintsBacking::AromaticSystem(system.clone_ref(py)),
+                },
+            )
+            .unwrap();
+            view.update(py, AromaticSystemConstraintsUpdate::View(other))
+                .unwrap();
+            assert_eq!(
+                system
+                    .bind(py)
+                    .borrow()
+                    .inner()
+                    .constraints
+                    .electron_count(),
                 AstValueAst::Lit(6)
             );
         });

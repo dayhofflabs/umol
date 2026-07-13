@@ -10,17 +10,16 @@ use crate::{
         AromaticSystemConstraintsAst, AromaticSystemConstraintsView, AromaticSystemView,
         AromaticSystemViews,
     },
-    atom::{AtomAst, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst},
+    atom::{
+        AtomAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst, AtomConstraintsView,
+        AtomRingSizeCounts, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst,
+    },
     bond::{
         BondAst, BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondConstraintsView,
         BondRingSizeCounts, BondView, BondViews,
     },
     boolean::BooleanAst,
-    constraint::{
-        AromaticValenceAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst,
-        AtomConstraintsView, AtomRingSizeCounts, MulticenterValenceAst, RingMembershipAst,
-        RingScope,
-    },
+    constraint::{AromaticValenceAst, MulticenterValenceAst, RingMembershipAst, RingScope},
     dative::{
         DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst,
         DativeBondConstraintsView, DativeBondRingSizeCounts, DativeBondView, DativeBondViews,
