@@ -211,9 +211,11 @@ than raw output arrays.
 
 ### S5 benchmark result (2026-07-11)
 
-The post-migration corpus was run on the same baseline host and compiler recorded in
-`umol-graph-core/benches/README.md`, with Criterion's default 3-second warm-up, 100 samples, and
-5-second measurement period. The pre-migration measurements were retained in Criterion's `base`
+The post-migration corpus was run with the workspace bench profile on `aarch64-apple-darwin`
+(Darwin 24.6.0) using `rustc 1.98.0-nightly (b354133fb 2026-06-03)`, with Criterion's default
+3-second warm-up, 100 samples, and 5-second measurement period. The pre-migration binding was
+`nauty-Traces-sys` 0.11.0 with nauty 2.9.3, `USE_TLS`, `WORDSIZE=64`, and no `native`,
+`popcnt`, or `lzc` feature. The pre-migration measurements were retained in Criterion's `base`
 dataset and the new measurements were saved as `vendored-nauty`. Raw Criterion data remains local.
 
 Across 69 comparable cases, the median change was a 1.2% slowdown. The distribution was mixed:

@@ -338,8 +338,7 @@ chemical stress fixtures.
 
 ### S5a — Add output-sensitive enumeration benchmarks
 
-**Module:** `umol-graph-core/benches/algorithms.rs`, optional focused matching benchmark module, and
-`umol-graph-core/benches/README.md`
+**Module:** `umol-graph-core/benches/algorithms.rs`
 
 **Kind:** additive benchmark (green)
 

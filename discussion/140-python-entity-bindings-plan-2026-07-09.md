@@ -616,6 +616,41 @@ every subitem is on the path to the `mol.noncovalent_bonds` surface.
   `set_constraints(&self)` single-assignment form (`owner.borrow_mut()…= value.to_ast()?`) is safe as-is
   (RHS evaluated before the LHS place borrow); mirror it, don't "fix" it.
 
+### B6/B7 — resolved design (2026-07-12)
+
+The open calls are now decided (supersedes the "all stereo rows remain open" note in §C):
+
+1. **Constraint sub-surface — bind all four values now** (no deferral): `LigandSymmetryAst`, `FluxionalityAst`, `TopicityAst`, `StereogenicityAst`, on the helper leaves `LigandPermutation`, `OrientedLigandPermutation`, `StereoLigandPair`, `TopicityRelationAst`, plus the derived `Topicity`/`Stereogenicity` enums. (Deferring all four would recreate the empty-pyclass-enum blocker; binding all avoids it.)
+2. **No reframe API** — read/write the stored configuration coset as-is; `permutation_for`/`coset_for`/`transform_frame` are NOT surfaced (interning/114-adjacent, later if ever).
+3. **Overlay addressing** — id-indexed like the covalent slices, plus content lookups `coincident(site)` (the ≤1 relation at a site) and `connecting(site, ligands)` (ordered ligand frame supplied). The AST views already expose `coincident_id`/`connecting_id`/`ids`/`get`/`count`/`contains`.
+4. **Ligands surface as `StereoLigand{atom_id, kind}`** (mirror). A virtual ligand (`ImplicitHydrogen`/`LonePair`) reads out as `{atom_id = bearing atom, kind = …}` — the pair disambiguates. `atom_id` is only non-trivial for stereo *bonds* (two-atom site), but the same `StereoLigand` shape is used for both entities — keep the parallel, don't special-case.
+5. **Configuration setter shorthands** — assignment accepts the already-bound `TetrahedralStereo.Ccw/Cw` → `Kinded(Tetrahedral, Lit)` and `CisTransStereo.Z/E` → `Kinded(CisTrans, Lit)`, plus a full `StereoConfigurationAst.Kinded(kind, coset)`. Axial/SquarePlanar/TrigonalBipyramidal/Octahedral have no shorthand (none exists); they use the full form.
+6. **B6 + B7 together**, macro-driven. The two entities (site = atom `NodeId` vs bond `EdgeId`) are fully parallel — the AST already generates the constraint types via `relation_ast!`; the Python constraint surface + value pyclass + view + collection are generated per entity by a Rust macro. Leaves are shared singletons (bound once).
+
+### B6/B7 — staged impl plan
+
+New file(s): the stereo leaves extend `umol-py/src/stereo.rs` (which already holds `StereoCosetAst`/`StereoTerm`/`Permutation`/`TetrahedralStereoAst`/`CisTransStereoAst` + the `TetrahedralStereo`/`CisTransStereo` shorthands); the per-entity constraint/value/view surface is macro-generated (in `stereo.rs` or a sibling). Every stage is **additive** — no red→green. `slf: Py<Self>`/resolve-before-borrow throughout the constraint surface (per the note above).
+
+- **S0 — stereo leaves (foundation).**
+  - **S0a** `StereoKind` (6-variant fieldless pyenum, hashable) + `StereoLigandKind` (3-variant) + `Topicity` + `Stereogenicity` (derived fieldless pyenums) — all the `NoncovalentBondKind` pattern; register + export + tests. `[dep: —]`
+  - **S0b** `StereoLigand` pyclass `{atom_id, kind}` (`__eq__`/`__hash__`/`__repr__` + getters) + `StereoLigandArg`. `[dep: S0a]`
+  - **S0c** `StereoConfigurationAst` (`Undetermined() | Kinded(StereoKind, StereoCosetAst)`) + `StereoConfiguration` (ground) + `StereoConfigurationArg` (coerces `TetrahedralStereo`/`CisTransStereo` shorthands + `StereoConfigurationAst` passthrough — decision 5). `StereoCosetAst` already bound. `[dep: S0a]`
+- **S1 — constraint value leaves.** `[dep: S0]`
+  - **S1a** helper leaves `LigandPermutation`, `OrientedLigandPermutation`, `StereoLigandPair`, `TopicityRelationAst` (`Permutation` already bound). `[dep: S0b]`
+  - **S1b** the four constraint values `LigandSymmetryAst`, `FluxionalityAst`, `TopicityAst`, `StereogenicityAst` (+ Args) — `Topicity`/`Stereogenicity` values wrap the derived enums; `LigandSymmetry`/`Fluxionality` ride the permutation helpers. `[dep: S1a]`
+- **S2 — constraint container + view (macro, per entity).** `[dep: S1]`
+  - **S2a** Rust macro `stereo_constraint_surface!{ StereoAtom | StereoBond }` → `<E>ConstraintKey` (4 keys; ligand-pair sub-key where the value is pair-scoped — confirm at build) + `<E>ConstraintAst` (4-variant) + `<E>ConstraintsAst` container (mapping API + per-key accessors) + `<E>ConstraintsArg`/`…Update`/`Resolved…` (resolve-before-borrow) + iters; instantiate for both entities. `[dep: S1b]`
+  - **S2b** macro → `<E>ConstraintsView` + backing with the **own-value arm only** (Molecule arm deferred to S4a). `[dep: S2a]`
+- **S3 — value pyclass (macro, per entity).** `[dep: S0c, S2]`
+  - **S3a** macro `stereo_value!{ … }` → `StereoAtomAst`/`StereoBondAst` `{configuration, constraints}`: `new`, `configuration` get/set (via `StereoConfigurationArg`), `constraints` get (→ view) / set, `asdict`, `inner`/`inner_mut`/`from_inner`. (`parse`/`__str__` only if the AST entity has `FromStr`/`Display` — the overlay likely has no standalone string form; confirm, else omit.) `[dep: S0c, S2a, S2b]`
+- **S4 — view + collection (macro, per entity).** `[dep: S3]`
+  - **S4a** macro → `StereoAtomView`/`StereoBondView`: read-only `id`, `site_id` (atom/bond u32), `ligands` (list of `StereoLigand`, from the AST `ligands()`→`StereoLigandView`), `kind`, `coset` (from configuration), settable `configuration`, `constraints` get/set (RHS-first single-assignment `set_constraints`), `asdict`; **add** the `Backing::Molecule` arm to the constraints view (with the view that constructs it). `[dep: S3a, S2b]`
+  - **S4b** macro → `StereoAtomViews`/`StereoBondViews`: `__len__`/`__getitem__`/`__setitem__`/`__iter__` + `coincident(site)` + `connecting(site, ligands)` + `resolve_stereo_{atom,bond}_index` + iter. `[dep: S4a]`
+- **S5 — molecule wiring.** `[dep: S4]`
+  - **S5a** `mol.stereo_atoms`/`mol.stereo_bonds` accessors + `<E>Views::new` + `from_parts(stereo_atoms=[(site, [ligands], StereoAtomAst)], stereo_bonds=[…])` kwargs; extend `MoleculeAst.__repr__` (add `stereo_atom`/`stereo_bond` to the non-zero-extras loop); register/export; `tests/test_stereo.py`. `[dep: S4b]`
+
+Critical path: **S0 → S1 → S2 → S3 → S4 → S5** (linear; the macro lands stereo-atom + stereo-bond together at each of S2–S5). No deferrable stages given decision 1 (all four constraint values) and decision 6 (both entities). Build-time confirmations (non-blocking): the constraint key structure (pair sub-keys), whether the value pyclass has a string DSL, and the `StereoLigandView`→`StereoLigand` mapping.
+
 ## C. Leaf types needing design calls
 
 | Leaf | Used by | Rust shape | The call |
@@ -631,9 +666,9 @@ every subitem is on the path to the `mol.noncovalent_bonds` surface.
 | Stereo constraint values (`LigandSymmetryAst`/`FluxionalityAst`/`TopicityAst`/`StereogenicityAst` + helpers) | stereo | per-site constraint bag, 4 keys | A whole sub-surface — bind now vs. defer within the stereo slice. |
 | Stereo overlay addressing | stereo | id vs `(site, ligand-multiset)` content lookup (order-independent) | How a relation is addressed from Python; whether ligand order is supplied for reframe (`permutation_for`/`coset_for`/`transform_frame`); note this is handle-identity-adjacent (interning, 114). |
 
-The covalent leaf calls are resolved (2026-07-09); **all stereo rows remain open**, deferred
-to the stereo slice (its own doc), alongside the overlay structure and the constraint
-sub-surface.
+The covalent leaf calls are resolved (2026-07-09); **the stereo rows are now resolved
+(2026-07-12) inline** — see *B6/B7 — resolved design* and *B6/B7 — staged impl plan* above (constraint
+sub-surface, overlay addressing, ligand/config representation, and B6+B7 scope all decided).
 
 **Naming: internal type/enum/member names follow the Rust side exactly** (`NoncovalentBondKind.
 HydrogenBond`, never a shortened `HBond`). The only Python-only additions are the assignment-
