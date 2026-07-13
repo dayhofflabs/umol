@@ -81,16 +81,25 @@ mod tests {
 
     #[fixture]
     fn chain_4_matching() -> BondMatching {
-        chain(4)
-            .graph()
-            .maximum_matching(MaxMatchingAlgorithm::Edmonds)
+        chain(4).graph().maximum_matching(
+            &[AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
+            MaxMatchingAlgorithm::Edmonds,
+        )
     }
 
     #[fixture]
     fn ring_6_matching() -> BondMatching {
-        ring(6)
-            .graph()
-            .maximum_matching(MaxMatchingAlgorithm::Edmonds)
+        ring(6).graph().maximum_matching(
+            &[
+                AtomId(0),
+                AtomId(1),
+                AtomId(2),
+                AtomId(3),
+                AtomId(4),
+                AtomId(5),
+            ],
+            MaxMatchingAlgorithm::Edmonds,
+        )
     }
 
     #[rstest]
@@ -138,7 +147,9 @@ mod tests {
         // Single atom is not matched; a "matching" on just {0} is size 0 and
         // atom 0 has no mate.
         let ast = chain(1);
-        let m = ast.graph().maximum_matching(MaxMatchingAlgorithm::Edmonds);
+        let m = ast
+            .graph()
+            .maximum_matching(&[AtomId(0)], MaxMatchingAlgorithm::Edmonds);
         assert!(!m.is_matched(AtomId(0)));
         assert_eq!(m.mate(AtomId(0)), None);
     }

@@ -1,7 +1,10 @@
 use rstest::rstest;
-use umol_ast::ast::{AtomId, ElectronCountsAst, ElementAst, IntoAst, SpinStateAst, ValueAst};
+use umol_ast::ast::{
+    AtomId, BondId, ElectronCountsAst, ElementAst, IntoAst, SpinStateAst, ValueAst,
+};
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_chem::element::Element;
+use umol_graph::ops::transform::{KekulizationModel, Kekulizer, Transformer};
 
 #[derive(Debug, PartialEq, Eq)]
 struct KekulizationFixture {
@@ -241,4 +244,51 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: Kekulizatio
             .collect(),
     };
     assert_eq!(actual, expected);
+}
+
+#[rstest]
+#[case::benzene(
+    include_str!("data/benzene_aromatic_input.edn"),
+    include_str!("data/benzene_kekulized_expected.edn"),
+    vec![BondId(0), BondId(2), BondId(4)]
+)]
+#[case::pyridine(
+    include_str!("data/pyridine_aromatic_input.edn"),
+    include_str!("data/pyridine_kekulized_expected.edn"),
+    vec![BondId(0), BondId(2), BondId(4)]
+)]
+#[case::boratabenzene(
+    include_str!("data/boratabenzene_aromatic_input.edn"),
+    include_str!("data/boratabenzene_kekulized_expected.edn"),
+    vec![BondId(0), BondId(2), BondId(4)]
+)]
+#[case::azulene(
+    include_str!("data/azulene_aromatic_input.edn"),
+    include_str!("data/azulene_kekulized_expected.edn"),
+    vec![BondId(0), BondId(2), BondId(5), BondId(7), BondId(9)]
+)]
+fn test_kekulization_fixture_output(
+    #[case] source: &str,
+    #[case] expected_source: &str,
+    #[case] expected_double_bonds: Vec<BondId>,
+) {
+    let input_dsl: MoleculeDsl = source.parse().unwrap();
+    let input = input_dsl.into_ast(&MoleculeDefaults::ground());
+    let expected_dsl: MoleculeDsl = expected_source.parse().unwrap();
+    let expected = expected_dsl.into_ast(&MoleculeDefaults::ground());
+    let node_order: Vec<AtomId> = input.atoms().iter().map(|atom| atom.id).collect();
+    let kekulizer = Kekulizer::new(KekulizationModel::default(), node_order);
+
+    let first = kekulizer.transform(&input).unwrap();
+    let second = kekulizer.transform(&input).unwrap();
+    let double_bonds: Vec<BondId> = first
+        .bonds()
+        .iter()
+        .filter(|bond| bond.ast.order == ValueAst::Lit(2))
+        .map(|bond| bond.id)
+        .collect();
+
+    assert_eq!(first, expected);
+    assert_eq!(second, expected);
+    assert_eq!(double_bonds, expected_double_bonds);
 }

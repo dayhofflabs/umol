@@ -329,8 +329,9 @@ fn maximum_matching(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("maximum_matching");
     for (name, g) in &graphs {
+        let node_order: Vec<_> = g.node_ids().collect();
         group.bench_function(*name, |b| {
-            b.iter(|| g.maximum_matching(MaxMatchingAlgorithm::Edmonds));
+            b.iter(|| g.maximum_matching(&node_order, MaxMatchingAlgorithm::Edmonds));
         });
     }
     group.finish();

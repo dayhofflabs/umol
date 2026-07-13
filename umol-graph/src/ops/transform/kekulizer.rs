@@ -20,7 +20,7 @@ use umol_ast::ast::{
     AromaticSystemId, AromaticSystemView, AtomConstraintKey, AtomId, BondConstraintKey, BondId,
     ElectronCountsAst, MoleculeAst, ValueAst,
 };
-use umol_graph_core::{NodeId, PerfectMatchingAlgorithm};
+use umol_graph_core::{MaxMatchingAlgorithm, NodeId};
 
 use crate::ops::transform::Transformer;
 
@@ -173,18 +173,18 @@ impl MatchingInput {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KekulizationModel {
-    pub algorithm: PerfectMatchingAlgorithm,
+    pub algorithm: MaxMatchingAlgorithm,
 }
 
 impl KekulizationModel {
-    pub fn new(algorithm: PerfectMatchingAlgorithm) -> Self {
+    pub fn new(algorithm: MaxMatchingAlgorithm) -> Self {
         Self { algorithm }
     }
 }
 
 impl Default for KekulizationModel {
     fn default() -> Self {
-        Self::new(PerfectMatchingAlgorithm::BacktrackingDfs)
+        Self::new(MaxMatchingAlgorithm::Edmonds)
     }
 }
 
@@ -261,7 +261,6 @@ impl Kekulizer {
         let mut plans = Vec::with_capacity(ast.aromatic_systems().count());
         for view in ast.aromatic_systems().iter() {
             let system_idx = view.id;
-            let _matching_input = MatchingInput::from_system(view)?;
             let system_atoms: Vec<AtomId> = view.atom_ids().collect();
             let bonds: Vec<BondId> = view.bond_ids().collect();
             let atom_set: HashSet<AtomId> = system_atoms.iter().copied().collect();
@@ -293,6 +292,15 @@ impl Kekulizer {
                 });
             }
 
+            let matching_input = MatchingInput::from_system(view)?;
+            let zero_exposure = matching_input.mode == MatchingInputMode::Prescribed
+                && matching_input.exposed_count == 0
+                && matching_input.required_exposed.is_empty()
+                && matching_input.required_covered == system_atoms;
+            if !zero_exposure {
+                return Err(KekulizerError::NoMatching(system_idx));
+            }
+
             let correspondence = view.induced_subgraph();
             let extracted = ast.extract(&correspondence);
             let sub_order: Vec<AtomId> = ordered_host_atoms
@@ -306,10 +314,13 @@ impl Kekulizer {
                     )
                 })
                 .collect();
-            let matched: HashSet<BondId> = extracted
+            let matching = extracted
                 .graph()
-                .perfect_matching(&sub_order, self.model.algorithm)
-                .ok_or(KekulizerError::NoMatching(system_idx))?
+                .maximum_matching(&sub_order, self.model.algorithm);
+            if !matching.is_perfect(extracted.atoms().count()) {
+                return Err(KekulizerError::NoMatching(system_idx));
+            }
+            let matched: HashSet<BondId> = matching
                 .bonds()
                 .map(|sub| {
                     correspondence

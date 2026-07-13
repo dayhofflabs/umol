@@ -82,8 +82,13 @@ impl<'a> GraphView<'a> {
             .collect()
     }
 
-    pub fn maximum_matching(&self, alg: MaxMatchingAlgorithm) -> BondMatching {
-        BondMatching(self.graph.maximum_matching(alg))
+    pub fn maximum_matching(
+        &self,
+        node_order: &[AtomId],
+        alg: MaxMatchingAlgorithm,
+    ) -> BondMatching {
+        let nodes: Vec<NodeId> = node_order.iter().copied().map(NodeId::from).collect();
+        BondMatching(self.graph.maximum_matching(&nodes, alg))
     }
 
     pub fn perfect_matching(

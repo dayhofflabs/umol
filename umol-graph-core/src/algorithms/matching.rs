@@ -1,6 +1,6 @@
 //! Maximum matching and matching enumeration.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::ops::ControlFlow;
 
 use crate::algorithms::coloring::BipartitionAlgorithm;
@@ -78,10 +78,23 @@ impl Matching {
 }
 
 impl Graph {
-    pub fn maximum_matching(&self, alg: MaxMatchingAlgorithm) -> Matching {
+    /// Returns a maximum matching, using `node_order` as the deterministic vertex traversal
+    /// priority. `node_order` must contain every graph node exactly once. Neighbor ties retain the
+    /// graph's stable adjacency order.
+    pub fn maximum_matching(&self, node_order: &[NodeId], alg: MaxMatchingAlgorithm) -> Matching {
+        debug_assert_eq!(
+            node_order.len(),
+            self.node_count(),
+            "maximum-matching node order must contain every graph node exactly once",
+        );
+        debug_assert_eq!(
+            node_order.iter().copied().collect::<HashSet<_>>(),
+            self.node_ids().collect::<HashSet<_>>(),
+            "maximum-matching node order must contain every graph node exactly once",
+        );
         match alg {
-            MaxMatchingAlgorithm::Edmonds => self.maximum_matching_edmonds(),
-            MaxMatchingAlgorithm::HopcroftKarp => self.maximum_matching_hopcroft_karp(),
+            MaxMatchingAlgorithm::Edmonds => self.maximum_matching_edmonds(node_order),
+            MaxMatchingAlgorithm::HopcroftKarp => self.maximum_matching_hopcroft_karp(node_order),
         }
     }
 
@@ -160,7 +173,7 @@ impl Graph {
     // O(V·(V+E)). The full Hopcroft-Karp speedup to O(E·√V) — layered BFS
     // plus batched DFS — is a future optimization; the variant name carries
     // the algorithm family rather than the exact complexity.
-    fn maximum_matching_hopcroft_karp(&self) -> Matching {
+    fn maximum_matching_hopcroft_karp(&self, node_order: &[NodeId]) -> Matching {
         let n = self.node_count();
         let bipartition = self.bipartition(BipartitionAlgorithm::Bfs);
         debug_assert!(
@@ -171,11 +184,12 @@ impl Graph {
 
         let mut mate = vec![-1i32; n];
         // Iterate U-side (color = false) in node order.
-        for start_idx in 0..n {
+        for &start in node_order {
+            let start_idx = start.index();
             if colors[start_idx] || mate[start_idx] >= 0 {
                 continue;
             }
-            bfs_augment_bipartite(self, NodeId(start_idx as u32), &mut mate, n);
+            bfs_augment_bipartite(self, start, &mut mate, n);
         }
 
         Matching::from_mates(self, &mate)
@@ -206,7 +220,7 @@ impl Graph {
     }
 
     // Edmonds 1965, Gabow simplification 1976. Ref impl: cp-algorithms.com.
-    fn maximum_matching_edmonds(&self) -> Matching {
+    fn maximum_matching_edmonds(&self, node_order: &[NodeId]) -> Matching {
         let n = self.node_count();
         if n == 0 {
             return Matching {
@@ -217,17 +231,24 @@ impl Graph {
 
         let mut mate = vec![-1i32; n];
 
-        for eid in self.edge_ids() {
-            let [a, b] = self.edge_endpoints(eid);
-            if mate[a.index()] < 0 && mate[b.index()] < 0 {
-                mate[a.index()] = b.0 as i32;
-                mate[b.index()] = a.0 as i32;
+        for &first in node_order {
+            if mate[first.index()] >= 0 {
+                continue;
+            }
+            if let Some(second) = self
+                .neighbors(first)
+                .iter()
+                .map(|neighbor| neighbor.node)
+                .find(|second| mate[second.index()] < 0)
+            {
+                mate[first.index()] = second.0 as i32;
+                mate[second.index()] = first.0 as i32;
             }
         }
 
-        for v in 0..n {
-            if mate[v] < 0 {
-                augment_from(self, &mut mate, v);
+        for &node in node_order {
+            if mate[node.index()] < 0 {
+                augment_from(self, &mut mate, node.index());
             }
         }
 
@@ -238,7 +259,8 @@ impl Graph {
     where
         F: FnMut(Matching) -> ControlFlow<B>,
     {
-        let initial = self.maximum_matching_edmonds();
+        let node_order: Vec<NodeId> = self.node_ids().collect();
+        let initial = self.maximum_matching_edmonds(&node_order);
         if !initial.is_perfect(self.node_count()) {
             return ControlFlow::Continue(());
         }
@@ -253,7 +275,8 @@ impl Graph {
     where
         F: FnMut(Matching) -> ControlFlow<B>,
     {
-        let initial = self.maximum_matching_edmonds();
+        let node_order: Vec<NodeId> = self.node_ids().collect();
+        let initial = self.maximum_matching_edmonds(&node_order);
         let target_size = initial.size();
         if target_size == 0 {
             return visitor(initial);
@@ -623,7 +646,8 @@ impl<'a> MatchingSearchState<'a> {
         }
 
         let (residual, _) = self.residual_graph();
-        self.included_size + residual.maximum_matching_edmonds().size() >= target_size
+        let node_order: Vec<NodeId> = residual.node_ids().collect();
+        self.included_size + residual.maximum_matching_edmonds(&node_order).size() >= target_size
     }
 
     fn matching(&self) -> Matching {
@@ -656,7 +680,7 @@ mod tests {
     use super::MatchingEnumerationAlgorithm::BranchAndBound;
     use super::MaxMatchingAlgorithm::{Edmonds, HopcroftKarp};
     use super::PerfectMatchingAlgorithm::BacktrackingDfs;
-    use super::{Matching, MatchingSearchState};
+    use super::{Matching, MatchingSearchState, MaxMatchingAlgorithm};
     use crate::graph::{EdgeId, Graph, NodeId};
 
     #[rstest]
@@ -685,7 +709,8 @@ mod tests {
         #[case] expected_perfect: bool,
     ) {
         let g = Graph::new(node_count, &edges);
-        let m = g.maximum_matching(Edmonds);
+        let node_order: Vec<NodeId> = g.node_ids().collect();
+        let m = g.maximum_matching(&node_order, Edmonds);
         assert_eq!(m.size(), expected_size, "matching size");
         assert_eq!(m.is_perfect(node_count), expected_perfect, "is_perfect");
         assert_matching_valid(&g, &m);
@@ -710,7 +735,8 @@ mod tests {
         #[case] expected_perfect: bool,
     ) {
         let g = Graph::new(node_count, &edges);
-        let m = g.maximum_matching(HopcroftKarp);
+        let node_order: Vec<NodeId> = g.node_ids().collect();
+        let m = g.maximum_matching(&node_order, HopcroftKarp);
         assert_eq!(m.size(), expected_size, "matching size");
         assert_eq!(m.is_perfect(node_count), expected_perfect, "is_perfect");
         assert_matching_valid(&g, &m);
@@ -737,10 +763,28 @@ mod tests {
         ];
         for (n, edges) in cases {
             let g = Graph::new(*n, edges);
-            let hk = g.maximum_matching(HopcroftKarp);
-            let ed = g.maximum_matching(Edmonds);
+            let node_order: Vec<NodeId> = g.node_ids().collect();
+            let hk = g.maximum_matching(&node_order, HopcroftKarp);
+            let ed = g.maximum_matching(&node_order, Edmonds);
             assert_eq!(hk.size(), ed.size(), "n={}, edges={:?}", n, edges);
         }
+    }
+
+    #[rstest]
+    #[case::edmonds(Edmonds)]
+    #[case::hopcroft_karp(HopcroftKarp)]
+    fn test_graph_maximum_matching_node_order(#[case] algorithm: MaxMatchingAlgorithm) {
+        let graph = Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]);
+        let first_order = [NodeId(0), NodeId(1), NodeId(2), NodeId(3)];
+        let second_order = [NodeId(2), NodeId(0), NodeId(1), NodeId(3)];
+
+        let first = graph.maximum_matching(&first_order, algorithm);
+        let second = graph.maximum_matching(&second_order, algorithm);
+
+        assert_eq!(first.edges(), &[EdgeId(0), EdgeId(2)]);
+        assert_eq!(second.edges(), &[EdgeId(1), EdgeId(3)]);
+        assert_eq!(graph.maximum_matching(&first_order, algorithm), first);
+        assert_eq!(graph.maximum_matching(&second_order, algorithm), second);
     }
 
     #[rstest]
@@ -877,7 +921,8 @@ mod tests {
         #[case] expected_count: usize,
     ) {
         let g = Graph::new(node_count, &edges);
-        let initial = g.maximum_matching(Edmonds);
+        let node_order: Vec<NodeId> = g.node_ids().collect();
+        let initial = g.maximum_matching(&node_order, Edmonds);
         let target = initial.size();
         let matchings = g.enumerate_maximum_matchings(BranchAndBound);
         assert_eq!(

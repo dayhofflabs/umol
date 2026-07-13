@@ -988,14 +988,20 @@ fn test_molecule_ast_maximum_independent_set(#[case] ast: MoleculeAst, #[case] e
 #[case::ring_6(ring(6), 3)]
 #[case::single(chain(1), 0)]
 fn test_molecule_ast_maximum_matching(#[case] ast: MoleculeAst, #[case] expected_size: usize) {
-    let m = ast.graph().maximum_matching(MaxMatchingAlgorithm::Edmonds);
+    let node_order: Vec<AtomId> = ast.atoms().iter().map(|atom| atom.id).collect();
+    let m = ast
+        .graph()
+        .maximum_matching(&node_order, MaxMatchingAlgorithm::Edmonds);
     assert_eq!(m.size(), expected_size);
 }
 
-#[test]
+#[rstest]
 fn test_bond_matching_mate() {
     let ast = chain(4);
-    let m = ast.graph().maximum_matching(MaxMatchingAlgorithm::Edmonds);
+    let m = ast.graph().maximum_matching(
+        &[AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
+        MaxMatchingAlgorithm::Edmonds,
+    );
     assert!(m.is_matched(AtomId(0)));
     let mate = m.mate(AtomId(0));
     assert!(mate.is_some());

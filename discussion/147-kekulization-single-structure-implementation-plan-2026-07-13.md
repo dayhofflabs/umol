@@ -151,8 +151,9 @@ non-identity host/subgraph atom and bond ID mappings.
 
 ### S1b — Migrate the kekulizer model from perfect DFS to general Edmonds
 
-**Module:** `umol-graph/src/ops/transform/kekulizer.rs`,
-`umol-graph/src/ops/transform.rs`, and all `KekulizationModel` callers
+**Module:** `umol-graph-core/src/algorithms/matching.rs`,
+`umol-ast/src/ast/view/graph.rs`, `umol-graph/src/ops/transform/kekulizer.rs`,
+`umol-graph/src/ops/transform.rs`, and all maximum-matching / `KekulizationModel` callers
 
 **Kind:** breaking public model-field migration (red→green within S1)
 
@@ -162,11 +163,16 @@ Change `KekulizationModel::algorithm` from `PerfectMatchingAlgorithm` to
 `MaxMatchingAlgorithm`, with `Edmonds` as the default. Migrate the constructor, exports, tests,
 and all workspace callers in the same subitem.
 
+Make maximum-matching traversal order an explicit, required graph-core input, parallel to the
+existing perfect-matching API. Apply the supplied order uniformly to Edmonds and Hopcroft–Karp;
+callers without a domain order, such as enumeration bounds, explicitly supply natural node order.
+
 For the zero-hole path, compute a maximum matching and accept it only when
 `matching.is_perfect(graph.node_count())`; otherwise preserve the system-specific no-matching
-error. The caller-supplied canonical atom order controls extracted node IDs and therefore the
-deterministic Edmonds result. Keep `PerfectMatchingAlgorithm` and `Graph::perfect_matching` in
-graph-core for unrelated callers; Experiment B does not retire that API.
+error. Map the caller-supplied canonical atom order into extracted IDs through the molecule
+correspondence and pass it to maximum matching, so deterministic choice does not depend on
+reordering the extracted molecule. Keep `PerfectMatchingAlgorithm` and `Graph::perfect_matching`
+in graph-core for unrelated callers; Experiment B does not retire that API.
 
 Add cases for ordinary benzene/pyridine, atom-locally charged boratabenzene, and non-bipartite
 azulene. Assert exact host bond IDs for a fixed canonical order, matching validity, deterministic
