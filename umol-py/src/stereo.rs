@@ -1205,7 +1205,8 @@ macro_rules! stereo_constraints {
         $key:ident, $constraint:ident, $constraints:ident,
         $update:ident, $resolved:ident, $arg:ident,
         $key_iter:ident, $iter:ident, $items_iter:ident,
-        $ast_key:ident, $ast_constraint:ident, $ast_constraints:ident $(,)?
+        $ast_key:ident, $ast_constraint:ident, $ast_constraints:ident,
+        $value:ident, $view:ident, $backing:ident $(,)?
     ) => {
         /// The key (identity) of a stereo constraint: the sub-keyed oriented/ligand
         /// permutation or ligand pair for the per-permutation / per-pair constraints; the
@@ -1345,22 +1346,26 @@ macro_rules! stereo_constraints {
             }
         }
 
-        /// Argument to the container's `update`: another container or a loose iterable of
-        /// constraints. (A live-view arm ships with the entity view in S2b.)
+        /// Argument to the container's `update`: another container, a live view, or a loose
+        /// iterable of constraints.
         #[derive(FromPyObject)]
         enum $update {
             Container(Py<$constraints>),
+            View(Py<$view>),
             Entries(Vec<Py<$constraint>>),
         }
 
         impl $update {
             /// Read every Python object into owned data before any write borrow is taken, so a
-            /// container that aliases the same entity is read while nothing is borrowed
+            /// container or view that aliases the same entity is read while nothing is borrowed
             /// (otherwise `cs.update(cs)` self-aliases into a double-borrow panic).
             fn resolve(&self, py: Python<'_>) -> PyResult<$resolved> {
                 Ok(match self {
                     $update::Container(c) => {
                         $resolved::Overlay(c.bind(py).borrow().inner().clone())
+                    }
+                    $update::View(v) => {
+                        $resolved::Overlay(v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?)
                     }
                     $update::Entries(entries) => $resolved::Entries(
                         entries
@@ -1391,17 +1396,19 @@ macro_rules! stereo_constraints {
             }
         }
 
-        /// A whole-container argument for the entity `constraints` setter. (A live-view arm
-        /// ships in S2b, with the entity view.)
+        /// A whole-container argument for the entity `constraints` setter: a value container
+        /// or a live view (which is read while unborrowed, self-alias safe).
         #[derive(FromPyObject)]
         pub(crate) enum $arg {
             Container(Py<$constraints>),
+            View(Py<$view>),
         }
 
         impl $arg {
-            pub(crate) fn to_ast(&self, py: Python<'_>) -> $ast_constraints {
+            pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<$ast_constraints> {
                 match self {
-                    $arg::Container(c) => c.bind(py).borrow().inner().clone(),
+                    $arg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+                    $arg::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
                 }
             }
         }
@@ -1665,6 +1672,247 @@ macro_rules! stereo_constraints {
                 self.items.next()
             }
         }
+
+        /// What a `$view` writes through to: an own-value stereo entity (`Py<$value>`). The
+        /// molecule-backed arm lands in S4a with the entity view.
+        enum $backing {
+            Value(Py<$value>),
+        }
+
+        /// A live handle onto one stereo entity's constraints, backed by an own-value entity.
+        /// Reads borrow the entity and read only what they need; mutators write through in
+        /// place, without a clone-and-writeback. (A molecule-backed arm lands in S4a.)
+        #[pyclass]
+        pub struct $view {
+            backing: $backing,
+        }
+
+        impl $view {
+            /// Borrow the backing entity's constraints and read through `f` — no clone.
+            fn read<R>(
+                &self,
+                py: Python<'_>,
+                f: impl FnOnce(&$ast_constraints) -> PyResult<R>,
+            ) -> PyResult<R> {
+                match &self.backing {
+                    $backing::Value(entity) => {
+                        let entity = entity.bind(py).borrow();
+                        f(&entity.inner().constraints)
+                    }
+                }
+            }
+
+            /// Mutate the backing entity's constraints in place through `f`.
+            fn with_mut<R>(&self, py: Python<'_>, f: impl FnOnce(&mut $ast_constraints) -> R) -> R {
+                match &self.backing {
+                    $backing::Value(entity) => {
+                        f(&mut entity.borrow_mut(py).inner_mut().constraints)
+                    }
+                }
+            }
+        }
+
+        #[pymethods]
+        impl $view {
+            fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+                let count = self.read(py, |cs| Ok(cs.len()))?;
+                Ok(format!("{}({count} entries)", stringify!($view)))
+            }
+
+            /// Insert `c` on the entity in place, replacing any existing entry of the same key
+            /// (last-wins).
+            fn set(&self, py: Python<'_>, c: Py<$constraint>) {
+                let constraint = c.bind(py).borrow().to_ast(py);
+                self.with_mut(py, |cs| cs.set(constraint));
+            }
+
+            /// Remove the entry with the given key, returning it if present (dict `pop`).
+            fn pop(&self, py: Python<'_>, key: Py<$key>) -> PyResult<Option<$constraint>> {
+                let ast_key = key.bind(py).borrow().to_ast(py);
+                self.with_mut(py, |cs| cs.remove(ast_key))
+                    .map(|c| $constraint::from_ast(py, &c))
+                    .transpose()
+            }
+
+            /// Remove the entry with the given key; raises `KeyError` if absent.
+            fn __delitem__(&self, py: Python<'_>, key: Py<$key>) -> PyResult<()> {
+                let ast_key = key.bind(py).borrow().to_ast(py);
+                if self.with_mut(py, |cs| cs.remove(ast_key)).is_some() {
+                    Ok(())
+                } else {
+                    Err(PyKeyError::new_err(
+                        key.bind(py).as_any().repr()?.extract::<String>()?,
+                    ))
+                }
+            }
+
+            /// Overlay `other` onto the entity's constraints in place — another container, a
+            /// live view, or an iterable of constraints (last-wins per key; undetermined
+            /// entries remove). Resolves `other` before the write borrow (self-alias safe).
+            fn update(&self, py: Python<'_>, other: $update) -> PyResult<()> {
+                let resolved = other.resolve(py)?;
+                self.with_mut(py, |cs| resolved.apply(cs));
+                Ok(())
+            }
+
+            fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+                self.read(py, |cs| Ok(cs.len()))
+            }
+
+            /// Iterate the constraint keys (mapping-style, canonical order).
+            fn __iter__(&self, py: Python<'_>) -> PyResult<$key_iter> {
+                self.keys(py)
+            }
+
+            /// The constraint keys, in canonical order.
+            fn keys(&self, py: Python<'_>) -> PyResult<$key_iter> {
+                let keys = self.read(py, |cs| {
+                    cs.iter()
+                        .map(|c| into_py_variant(py, $key::from_ast(py, &c.key())?))
+                        .collect::<PyResult<Vec<_>>>()
+                })?;
+                Ok($key_iter {
+                    keys: keys.into_iter(),
+                })
+            }
+
+            /// The constraints, in canonical order.
+            fn values(&self, py: Python<'_>) -> PyResult<$iter> {
+                let entries = self.read(py, |cs| {
+                    cs.iter()
+                        .map(|c| into_py_variant(py, $constraint::from_ast(py, c)?))
+                        .collect::<PyResult<Vec<_>>>()
+                })?;
+                Ok($iter {
+                    entries: entries.into_iter(),
+                })
+            }
+
+            /// The `(key, constraint)` pairs, in canonical order.
+            fn items(&self, py: Python<'_>) -> PyResult<$items_iter> {
+                let items = self.read(py, |cs| {
+                    cs.iter()
+                        .map(|c| {
+                            Ok((
+                                into_py_variant(py, $key::from_ast(py, &c.key())?)?,
+                                into_py_variant(py, $constraint::from_ast(py, c)?)?,
+                            ))
+                        })
+                        .collect::<PyResult<Vec<_>>>()
+                })?;
+                Ok($items_iter {
+                    items: items.into_iter(),
+                })
+            }
+
+            /// The constraint with the given key, or `default` (`None`) if absent.
+            #[pyo3(signature = (key, default=None))]
+            fn get(
+                &self,
+                py: Python<'_>,
+                key: Py<$key>,
+                default: Option<Py<PyAny>>,
+            ) -> PyResult<Py<PyAny>> {
+                let ast_key = key.bind(py).borrow().to_ast(py);
+                let found = self.read(py, |cs| {
+                    cs.get(ast_key)
+                        .map(|constraint| $constraint::from_ast(py, constraint))
+                        .transpose()
+                })?;
+                match found {
+                    Some(constraint) => Ok(into_py_variant(py, constraint)?.into_any()),
+                    None => Ok(default.unwrap_or_else(|| py.None())),
+                }
+            }
+
+            /// The constraint with the given key; raises `KeyError` if absent.
+            fn __getitem__(&self, py: Python<'_>, key: Py<$key>) -> PyResult<$constraint> {
+                let ast_key = key.bind(py).borrow().to_ast(py);
+                let found = self.read(py, |cs| {
+                    cs.get(ast_key)
+                        .map(|constraint| $constraint::from_ast(py, constraint))
+                        .transpose()
+                })?;
+                match found {
+                    Some(constraint) => Ok(constraint),
+                    None => Err(PyKeyError::new_err(
+                        key.bind(py).as_any().repr()?.extract::<String>()?,
+                    )),
+                }
+            }
+
+            fn __contains__(&self, py: Python<'_>, key: Py<$key>) -> PyResult<bool> {
+                let ast_key = key.bind(py).borrow().to_ast(py);
+                self.read(py, |cs| Ok(cs.contains(ast_key)))
+            }
+
+            /// The ligand-symmetry constraints.
+            fn ligand_symmetries(&self, py: Python<'_>) -> PyResult<Vec<LigandSymmetryAst>> {
+                self.read(py, |cs| {
+                    cs.ligand_symmetries()
+                        .map(|ls| LigandSymmetryAst::from_ast(py, ls))
+                        .collect()
+                })
+            }
+
+            /// The ligand-symmetry constraint at `permutation` (undetermined if absent).
+            fn ligand_symmetry(
+                &self,
+                py: Python<'_>,
+                permutation: OrientedLigandPermutation,
+            ) -> PyResult<LigandSymmetryAst> {
+                self.read(py, |cs| {
+                    LigandSymmetryAst::from_ast(py, &cs.ligand_symmetry(permutation.to_ast()))
+                })
+            }
+
+            /// The fluxionality constraints.
+            fn fluxionalities(&self, py: Python<'_>) -> PyResult<Vec<FluxionalityAst>> {
+                self.read(py, |cs| {
+                    cs.fluxionalities()
+                        .map(|f| FluxionalityAst::from_ast(py, f))
+                        .collect()
+                })
+            }
+
+            /// The fluxionality constraint at `permutation` (undetermined if absent).
+            fn fluxionality(
+                &self,
+                py: Python<'_>,
+                permutation: LigandPermutation,
+            ) -> PyResult<FluxionalityAst> {
+                self.read(py, |cs| {
+                    FluxionalityAst::from_ast(py, &cs.fluxionality(permutation.to_ast()))
+                })
+            }
+
+            /// The topicity constraints.
+            fn topicities(&self, py: Python<'_>) -> PyResult<Vec<TopicityAst>> {
+                self.read(py, |cs| {
+                    cs.topicities()
+                        .map(|t| TopicityAst::from_ast(py, t))
+                        .collect()
+                })
+            }
+
+            /// The topicity relation at ligand `pair` (undetermined if absent).
+            fn topicity(
+                &self,
+                py: Python<'_>,
+                pair: StereoLigandPair,
+            ) -> PyResult<TopicityRelationAst> {
+                self.read(py, |cs| {
+                    Ok(TopicityRelationAst::from_ast(&cs.topicity(pair.to_ast())))
+                })
+            }
+
+            /// The stereogenicity constraint (undetermined if absent).
+            fn stereogenicity(&self, py: Python<'_>) -> PyResult<StereogenicityAst> {
+                self.read(py, |cs| {
+                    Ok(StereogenicityAst::from_ast(&cs.stereogenicity()))
+                })
+            }
+        }
     };
 }
 
@@ -1673,6 +1921,7 @@ stereo_constraints! {
     StereoAtomConstraintsUpdate, ResolvedStereoAtomConstraintsUpdate, StereoAtomConstraintsArg,
     StereoAtomConstraintKeyIter, StereoAtomConstraintIter, StereoAtomConstraintItemsIter,
     AstStereoAtomConstraintKey, AstStereoAtomConstraintAst, AstStereoAtomConstraintsAst,
+    StereoAtomAst, StereoAtomConstraintsView, StereoAtomConstraintsBacking,
 }
 
 stereo_constraints! {
@@ -1680,6 +1929,7 @@ stereo_constraints! {
     StereoBondConstraintsUpdate, ResolvedStereoBondConstraintsUpdate, StereoBondConstraintsArg,
     StereoBondConstraintKeyIter, StereoBondConstraintIter, StereoBondConstraintItemsIter,
     AstStereoBondConstraintKey, AstStereoBondConstraintAst, AstStereoBondConstraintsAst,
+    StereoBondAst, StereoBondConstraintsView, StereoBondConstraintsBacking,
 }
 
 /// Per-entity stereo element value pyclass — `StereoAtomAst` / `StereoBondAst`
@@ -1687,7 +1937,10 @@ stereo_constraints! {
 /// `constraints` getter (returns the view) lands in S2b with the entity view, which also
 /// consumes `inner` (and adds `inner_mut`); `inner` is test-gated until then.
 macro_rules! stereo_value {
-    ($value:ident, $ast_value:ident, $constraint:ident, $constraints:ident, $arg:ident $(,)?) => {
+    (
+        $value:ident, $ast_value:ident, $constraint:ident, $constraints:ident, $arg:ident,
+        $view:ident, $backing:ident $(,)?
+    ) => {
         #[pyclass]
         pub struct $value($ast_value);
 
@@ -1736,13 +1989,24 @@ macro_rules! stereo_value {
                 self.0.configuration = value.to_ast(py);
             }
 
-            /// Replace the whole constraint set (wipe-and-set) from a value container. Snapshots
-            /// `value` before the write borrow (self-alias safe). Infallible while the argument is
-            /// container-only; it goes fallible in S2b when the live-view arm lands.
+            /// The entity's constraints as a live handle onto this entity: reads borrow the
+            /// current state, mutators write through to the entity in place.
+            #[getter]
+            fn constraints(slf: Py<Self>) -> $view {
+                $view {
+                    backing: $backing::Value(slf),
+                }
+            }
+
+            /// Replace the whole constraint set (wipe-and-set) from a value container or a live
+            /// view. Snapshots `value` *before* the write borrow, so `x.constraints =
+            /// x.constraints` (a view over the same entity) reads while the entity is unborrowed
+            /// instead of self-aliasing into a double-borrow panic.
             #[setter]
-            fn set_constraints(slf: Py<Self>, py: Python<'_>, value: $arg) {
-                let snapshot = value.to_ast(py);
+            fn set_constraints(slf: Py<Self>, py: Python<'_>, value: $arg) -> PyResult<()> {
+                let snapshot = value.to_ast(py)?;
                 slf.borrow_mut(py).0.constraints = snapshot;
+                Ok(())
             }
 
             /// The fields as a dict: `configuration` plus a `constraints` list of the entries.
@@ -1761,9 +2025,14 @@ macro_rules! stereo_value {
         }
 
         impl $value {
-            #[cfg(test)]
+            /// The wrapped AST entity — read access for the entity-backed constraints view.
             pub(crate) fn inner(&self) -> &$ast_value {
                 &self.0
+            }
+
+            /// Mutable access to the wrapped AST entity — write access for the view.
+            pub(crate) fn inner_mut(&mut self) -> &mut $ast_value {
+                &mut self.0
             }
 
             #[cfg(test)]
@@ -1776,12 +2045,12 @@ macro_rules! stereo_value {
 
 stereo_value! {
     StereoAtomAst, AstStereoAtomAst, StereoAtomConstraintAst, StereoAtomConstraintsAst,
-    StereoAtomConstraintsArg,
+    StereoAtomConstraintsArg, StereoAtomConstraintsView, StereoAtomConstraintsBacking,
 }
 
 stereo_value! {
     StereoBondAst, AstStereoBondAst, StereoBondConstraintAst, StereoBondConstraintsAst,
-    StereoBondConstraintsArg,
+    StereoBondConstraintsArg, StereoBondConstraintsView, StereoBondConstraintsBacking,
 }
 
 #[cfg(test)]
@@ -2615,7 +2884,7 @@ mod tests {
             expected.extend([AstStereoAtomConstraintAst::Stereogenicity(
                 AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
             )]);
-            assert_eq!(arg.to_ast(py), expected);
+            assert_eq!(arg.to_ast(py).unwrap(), expected);
         });
     }
 
@@ -2644,7 +2913,370 @@ mod tests {
             let arg = StereoBondConstraintsArg::Container(container);
             let mut expected = AstStereoBondConstraintsAst::new();
             expected.extend([stereogenicity]);
-            assert_eq!(arg.to_ast(py), expected);
+            assert_eq!(arg.to_ast(py).unwrap(), expected);
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_view_set() {
+        Python::attach(|py| {
+            let value = Py::new(
+                py,
+                StereoAtomAst::from_inner(AstStereoAtomAst::new(
+                    AstStereoKind::Tetrahedral,
+                    AstStereoCosetAst::Lit(0),
+                )),
+            )
+            .unwrap();
+            let view = StereoAtomConstraintsView {
+                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+            };
+            let stereogenicity = into_py_variant(
+                py,
+                StereoAtomConstraintAst::from_ast(
+                    py,
+                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                        AstStereogenicity::Stereogenic,
+                    )),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            view.set(py, stereogenicity);
+            assert_eq!(
+                value.borrow(py).inner().constraints.stereogenicity(),
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_view_pop() {
+        Python::attach(|py| {
+            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            ast_cs.extend([AstStereoAtomConstraintAst::Stereogenicity(
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            )]);
+            let value = Py::new(
+                py,
+                StereoAtomAst::from_inner(AstStereoAtomAst {
+                    configuration: AstStereoConfigurationAst::Kinded(
+                        AstStereoKind::Tetrahedral,
+                        AstStereoCosetAst::Lit(0),
+                    ),
+                    constraints: ast_cs,
+                }),
+            )
+            .unwrap();
+            let view = StereoAtomConstraintsView {
+                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+            };
+            let key = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
+            let popped = view.pop(py, key).unwrap();
+            assert_eq!(
+                popped.unwrap().to_ast(py),
+                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                    AstStereogenicity::Stereogenic
+                ))
+            );
+            assert_eq!(value.borrow(py).inner().constraints.len(), 0);
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_view_getitem() {
+        Python::attach(|py| {
+            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            ast_cs.extend([AstStereoAtomConstraintAst::Stereogenicity(
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            )]);
+            let value = Py::new(
+                py,
+                StereoAtomAst::from_inner(AstStereoAtomAst {
+                    configuration: AstStereoConfigurationAst::Kinded(
+                        AstStereoKind::Tetrahedral,
+                        AstStereoCosetAst::Lit(0),
+                    ),
+                    constraints: ast_cs,
+                }),
+            )
+            .unwrap();
+            let view = StereoAtomConstraintsView {
+                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+            };
+            assert_eq!(view.__len__(py).unwrap(), 1);
+            let present = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
+            assert!(view.__contains__(py, present.clone_ref(py)).unwrap());
+            assert_eq!(
+                view.__getitem__(py, present).unwrap().to_ast(py),
+                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                    AstStereogenicity::Stereogenic
+                ))
+            );
+            let absent = into_py_variant(
+                py,
+                StereoAtomConstraintKey::Topicity(
+                    into_py_variant(py, StereoLigandPair::new(0, 1)).unwrap(),
+                ),
+            )
+            .unwrap();
+            assert!(!view.__contains__(py, absent.clone_ref(py)).unwrap());
+            assert!(view.__getitem__(py, absent).is_err());
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_view_items() {
+        Python::attach(|py| {
+            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            ast_cs.extend([
+                AstStereoAtomConstraintAst::Topicity(AstTopicityAst {
+                    pair: AstStereoLigandPair::new(
+                        AstStereoLigandPosition(0),
+                        AstStereoLigandPosition(1),
+                    ),
+                    relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
+                }),
+                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                    AstStereogenicity::Stereogenic,
+                )),
+            ]);
+            let value = Py::new(
+                py,
+                StereoAtomAst::from_inner(AstStereoAtomAst {
+                    configuration: AstStereoConfigurationAst::Kinded(
+                        AstStereoKind::Tetrahedral,
+                        AstStereoCosetAst::Lit(0),
+                    ),
+                    constraints: ast_cs,
+                }),
+            )
+            .unwrap();
+            let view = StereoAtomConstraintsView {
+                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+            };
+            let keys: Vec<AstStereoAtomConstraintKey> = view
+                .keys(py)
+                .unwrap()
+                .keys
+                .map(|k| k.bind(py).borrow().to_ast(py))
+                .collect();
+            assert_eq!(
+                keys,
+                vec![
+                    AstStereoAtomConstraintKey::Topicity(AstStereoLigandPair::new(
+                        AstStereoLigandPosition(0),
+                        AstStereoLigandPosition(1),
+                    )),
+                    AstStereoAtomConstraintKey::Stereogenicity,
+                ]
+            );
+            assert_eq!(view.values(py).unwrap().entries.count(), 2);
+            assert_eq!(view.items(py).unwrap().items.count(), 2);
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_view_update() {
+        Python::attach(|py| {
+            let value = Py::new(
+                py,
+                StereoAtomAst::from_inner(AstStereoAtomAst::new(
+                    AstStereoKind::Tetrahedral,
+                    AstStereoCosetAst::Lit(0),
+                )),
+            )
+            .unwrap();
+            let view = StereoAtomConstraintsView {
+                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+            };
+            let entry = into_py_variant(
+                py,
+                StereoAtomConstraintAst::from_ast(
+                    py,
+                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                        AstStereogenicity::Stereogenic,
+                    )),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            view.update(py, StereoAtomConstraintsUpdate::Entries(vec![entry]))
+                .unwrap();
+            assert_eq!(
+                value.borrow(py).inner().constraints.stereogenicity(),
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_view_accessors() {
+        Python::attach(|py| {
+            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            ast_cs.extend([
+                AstStereoAtomConstraintAst::Topicity(AstTopicityAst {
+                    pair: AstStereoLigandPair::new(
+                        AstStereoLigandPosition(0),
+                        AstStereoLigandPosition(1),
+                    ),
+                    relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
+                }),
+                AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                    AstStereogenicity::Stereogenic,
+                )),
+            ]);
+            let value = Py::new(
+                py,
+                StereoAtomAst::from_inner(AstStereoAtomAst {
+                    configuration: AstStereoConfigurationAst::Kinded(
+                        AstStereoKind::Tetrahedral,
+                        AstStereoCosetAst::Lit(0),
+                    ),
+                    constraints: ast_cs,
+                }),
+            )
+            .unwrap();
+            let view = StereoAtomConstraintsView {
+                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+            };
+            assert_eq!(
+                view.stereogenicity(py).unwrap().to_ast(),
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+            );
+            assert_eq!(
+                view.topicity(py, StereoLigandPair::new(0, 1))
+                    .unwrap()
+                    .to_ast(),
+                AstTopicityRelationAst::Lit(AstTopicity::Homotopic)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_ast_constraints() {
+        Python::attach(|py| {
+            let value = Py::new(
+                py,
+                StereoAtomAst::from_inner(AstStereoAtomAst::new(
+                    AstStereoKind::Tetrahedral,
+                    AstStereoCosetAst::Lit(0),
+                )),
+            )
+            .unwrap();
+            let view = StereoAtomAst::constraints(value.clone_ref(py));
+            let stereogenicity = into_py_variant(
+                py,
+                StereoAtomConstraintAst::from_ast(
+                    py,
+                    &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                        AstStereogenicity::Stereogenic,
+                    )),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            view.set(py, stereogenicity);
+            assert_eq!(
+                value.borrow(py).inner().constraints.stereogenicity(),
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_ast_set_constraints_self() {
+        Python::attach(|py| {
+            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            ast_cs.extend([AstStereoAtomConstraintAst::Stereogenicity(
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            )]);
+            let value = Py::new(
+                py,
+                StereoAtomAst::from_inner(AstStereoAtomAst {
+                    configuration: AstStereoConfigurationAst::Kinded(
+                        AstStereoKind::Tetrahedral,
+                        AstStereoCosetAst::Lit(0),
+                    ),
+                    constraints: ast_cs,
+                }),
+            )
+            .unwrap();
+            let own_view = StereoAtomAst::constraints(value.clone_ref(py));
+            StereoAtomAst::set_constraints(
+                value.clone_ref(py),
+                py,
+                StereoAtomConstraintsArg::View(Py::new(py, own_view).unwrap()),
+            )
+            .unwrap();
+            assert_eq!(
+                value.borrow(py).inner().constraints.stereogenicity(),
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_view_update_self() {
+        Python::attach(|py| {
+            let mut ast_cs = AstStereoAtomConstraintsAst::new();
+            ast_cs.extend([AstStereoAtomConstraintAst::Stereogenicity(
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+            )]);
+            let value = Py::new(
+                py,
+                StereoAtomAst::from_inner(AstStereoAtomAst {
+                    configuration: AstStereoConfigurationAst::Kinded(
+                        AstStereoKind::Tetrahedral,
+                        AstStereoCosetAst::Lit(0),
+                    ),
+                    constraints: ast_cs,
+                }),
+            )
+            .unwrap();
+            let view = StereoAtomConstraintsView {
+                backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
+            };
+            let own = StereoAtomAst::constraints(value.clone_ref(py));
+            view.update(
+                py,
+                StereoAtomConstraintsUpdate::View(Py::new(py, own).unwrap()),
+            )
+            .unwrap();
+            assert_eq!(value.borrow(py).inner().constraints.len(), 1);
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_bond_constraints_view_set() {
+        Python::attach(|py| {
+            let value = Py::new(
+                py,
+                StereoBondAst::from_inner(AstStereoBondAst::new(
+                    AstStereoKind::CisTrans,
+                    AstStereoCosetAst::Lit(0),
+                )),
+            )
+            .unwrap();
+            let view = StereoBondConstraintsView {
+                backing: StereoBondConstraintsBacking::Value(value.clone_ref(py)),
+            };
+            let stereogenicity = into_py_variant(
+                py,
+                StereoBondConstraintAst::from_ast(
+                    py,
+                    &AstStereoBondConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+                        AstStereogenicity::Stereogenic,
+                    )),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            view.set(py, stereogenicity);
+            assert_eq!(
+                value.borrow(py).inner().constraints.stereogenicity(),
+                AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
+            );
         });
     }
 
@@ -2803,7 +3435,8 @@ mod tests {
                 value.clone_ref(py),
                 py,
                 StereoAtomConstraintsArg::Container(container),
-            );
+            )
+            .unwrap();
             let mut expected_cs = AstStereoAtomConstraintsAst::new();
             expected_cs.extend([stereogenicity]);
             assert_eq!(value.borrow(py).inner().constraints, expected_cs);
