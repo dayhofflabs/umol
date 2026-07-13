@@ -7,25 +7,27 @@ use std::collections::BTreeSet;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-// The stereo value-leaf AST mirrors are consumed only by the `#[cfg(test)]` `from_ast`/`to_ast`
-// until S1b/S2/S4a wire them into the constraint values, container, and entity view.
+// A few `from_ast` mirrors stay `#[cfg(test)]` until S2/S4a wire them into the constraint
+// enum and the entity view; their `to_ast` peers are already live (eq/hash).
 #[cfg(test)]
 use umol_ast::ast::{
-    AtomId as AstAtomId, LigandPermutation as AstLigandPermutation,
-    OrientedLigandPermutation as AstOrientedLigandPermutation, StereoLigand as AstStereoLigand,
-    StereoLigandKind as AstStereoLigandKind, Stereogenicity as AstStereogenicity,
+    AtomId as AstAtomId, BooleanAst as AstBooleanAst, StereoLigand as AstStereoLigand,
+    StereoLigandKind as AstStereoLigandKind,
 };
 use umol_ast::ast::{
-    CisTransStereoAst as AstCisTransStereoAst, StereoConfigurationAst as AstStereoConfigurationAst,
-    StereoCosetAst as AstStereoCosetAst, StereoKind as AstStereoKind,
-    StereoLigandPair as AstStereoLigandPair, StereoLigandPosition as AstStereoLigandPosition,
-    StereoTerm as AstStereoTerm, TetrahedralStereoAst as AstTetrahedralStereoAst,
-    Topicity as AstTopicity, TopicityRelationAst as AstTopicityRelationAst,
+    CisTransStereoAst as AstCisTransStereoAst, FluxionalityAst as AstFluxionalityAst, Lattice,
+    LigandPermutation as AstLigandPermutation, LigandSymmetryAst as AstLigandSymmetryAst,
+    OrientedLigandPermutation as AstOrientedLigandPermutation,
+    StereoConfigurationAst as AstStereoConfigurationAst, StereoCosetAst as AstStereoCosetAst,
+    StereoKind as AstStereoKind, StereoLigandPair as AstStereoLigandPair,
+    StereoLigandPosition as AstStereoLigandPosition, StereoTerm as AstStereoTerm,
+    Stereogenicity as AstStereogenicity, StereogenicityAst as AstStereogenicityAst,
+    TetrahedralStereoAst as AstTetrahedralStereoAst, Topicity as AstTopicity,
+    TopicityAst as AstTopicityAst, TopicityRelationAst as AstTopicityRelationAst,
 };
-#[cfg(test)]
-use umol_perm::Orientation as PermOrientation;
-use umol_perm::Permutation as PermPermutation;
+use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
 
+use crate::boolean::{BooleanArg, BooleanAst};
 use crate::convert::{hash_ast, into_py_variant, variant_repr};
 
 /// A permutation of `0..degree` in one-line (image) notation.
@@ -475,9 +477,10 @@ impl Topicity {
 }
 
 /// Stereogenicity classification of a stereo carrier (a derived ground classification).
-/// A fieldless, hashable value enum mirroring the Rust `Stereogenicity`.
+/// A fieldless, hashable value enum mirroring the Rust `Stereogenicity`. `Ord` lets it key
+/// the `BTreeSet` in the `StereogenicityAst` set variants.
 #[pyclass(eq, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Stereogenicity {
     Symmetric,
     Prochiral,
@@ -494,7 +497,6 @@ impl Stereogenicity {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn to_ast(self) -> AstStereogenicity {
         match self {
             Self::Symmetric => AstStereogenicity::Symmetric,
@@ -671,7 +673,6 @@ impl Orientation {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn to_ast(self) -> PermOrientation {
         match self {
             Self::Proper => PermOrientation::Proper,
@@ -714,7 +715,6 @@ impl LigandPermutation {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn to_ast(self) -> AstLigandPermutation {
         AstLigandPermutation(self.permutation.inner())
     }
@@ -763,7 +763,6 @@ impl OrientedLigandPermutation {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn to_ast(self) -> AstOrientedLigandPermutation {
         AstOrientedLigandPermutation {
             permutation: self.permutation.to_ast(),
@@ -808,7 +807,6 @@ impl StereoLigandPair {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn to_ast(self) -> AstStereoLigandPair {
         AstStereoLigandPair::new(
             AstStereoLigandPosition(self.first),
@@ -882,6 +880,317 @@ impl TopicityRelationAst {
             Self::NotSet(topicities) => {
                 AstTopicityRelationAst::NotSet(topicities.iter().map(|t| t.to_ast()).collect())
             }
+        }
+    }
+}
+
+/// Setter coercion for a topicity relation: a `Topicity` literal (→ `Lit`) or a
+/// `TopicityRelationAst` passthrough (mirroring `impl From<Topicity>`).
+#[derive(FromPyObject)]
+pub(crate) enum TopicityRelationArg {
+    Lit(Topicity),
+    Ast(Py<TopicityRelationAst>),
+}
+
+impl TopicityRelationArg {
+    /// Coerce to a `Py<TopicityRelationAst>` (for the `TopicityAst.relation` field).
+    pub(crate) fn to_py(&self, py: Python<'_>) -> PyResult<Py<TopicityRelationAst>> {
+        match self {
+            TopicityRelationArg::Lit(topicity) => {
+                into_py_variant(py, TopicityRelationAst::Lit(*topicity))
+            }
+            TopicityRelationArg::Ast(relation) => Ok(relation.clone_ref(py)),
+        }
+    }
+}
+
+/// A stereogenicity constraint value: the undetermined wildcard, a single classification, a
+/// set of admissible classifications, or the complement of a set. A finite-domain subset
+/// lattice over `Stereogenicity`. Mirrors the Rust `StereogenicityAst`.
+#[pyclass]
+pub enum StereogenicityAst {
+    Undetermined(),
+    Lit(Stereogenicity),
+    LitSet(BTreeSet<Stereogenicity>),
+    NotSet(BTreeSet<Stereogenicity>),
+}
+
+#[pymethods]
+impl StereogenicityAst {
+    /// The single classification this resolves to, or `None` when it is not a bare literal.
+    fn as_lit(&self) -> Option<Stereogenicity> {
+        match self {
+            Self::Lit(stereogenicity) => Some(*stereogenicity),
+            _ => None,
+        }
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_ast() == other.to_ast()
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_ast(&self.to_ast())
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            StereogenicityAst::Undetermined() => ("Undetermined", 0),
+            StereogenicityAst::Lit(_) => ("Lit", 1),
+            StereogenicityAst::LitSet(_) => ("LitSet", 1),
+            StereogenicityAst::NotSet(_) => ("NotSet", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "StereogenicityAst", variant, arity)
+    }
+}
+
+impl StereogenicityAst {
+    #[cfg(test)]
+    pub(crate) fn from_ast(ast: &AstStereogenicityAst) -> Self {
+        match ast {
+            AstStereogenicityAst::Undetermined => Self::Undetermined(),
+            AstStereogenicityAst::Lit(stereogenicity) => {
+                Self::Lit(Stereogenicity::from_ast(*stereogenicity))
+            }
+            AstStereogenicityAst::LitSet(stereogenicities) => Self::LitSet(
+                stereogenicities
+                    .iter()
+                    .map(|g| Stereogenicity::from_ast(*g))
+                    .collect(),
+            ),
+            AstStereogenicityAst::NotSet(stereogenicities) => Self::NotSet(
+                stereogenicities
+                    .iter()
+                    .map(|g| Stereogenicity::from_ast(*g))
+                    .collect(),
+            ),
+        }
+    }
+
+    pub(crate) fn to_ast(&self) -> AstStereogenicityAst {
+        match self {
+            Self::Undetermined() => AstStereogenicityAst::Undetermined,
+            Self::Lit(stereogenicity) => AstStereogenicityAst::Lit(stereogenicity.to_ast()),
+            Self::LitSet(stereogenicities) => {
+                AstStereogenicityAst::LitSet(stereogenicities.iter().map(|g| g.to_ast()).collect())
+            }
+            Self::NotSet(stereogenicities) => {
+                AstStereogenicityAst::NotSet(stereogenicities.iter().map(|g| g.to_ast()).collect())
+            }
+        }
+    }
+}
+
+/// A ligand-symmetry constraint value: an oriented ligand permutation with a presence
+/// assertion (whether the permutation is a ligand symmetry). Mirrors the Rust
+/// `LigandSymmetryAst`.
+#[pyclass]
+pub struct LigandSymmetryAst {
+    permutation: OrientedLigandPermutation,
+    present: Py<BooleanAst>,
+}
+
+#[pymethods]
+impl LigandSymmetryAst {
+    #[new]
+    fn new(
+        py: Python<'_>,
+        permutation: OrientedLigandPermutation,
+        present: BooleanArg,
+    ) -> PyResult<Self> {
+        Ok(LigandSymmetryAst {
+            permutation,
+            present: into_py_variant(py, BooleanAst::from_ast(&present.to_ast(py)))?,
+        })
+    }
+
+    #[getter]
+    fn permutation(&self) -> OrientedLigandPermutation {
+        self.permutation
+    }
+
+    #[getter]
+    fn present(&self, py: Python<'_>) -> Py<BooleanAst> {
+        self.present.clone_ref(py)
+    }
+
+    /// Matches iff the permutations are equal and the presence assertions match.
+    fn matches(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py).matches(&other.to_ast(py))
+    }
+
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(format!(
+            "LigandSymmetryAst({}, {})",
+            self.permutation.__repr__(),
+            self.present.bind(py).as_any().repr()?.extract::<String>()?,
+        ))
+    }
+}
+
+impl LigandSymmetryAst {
+    #[cfg(test)]
+    pub(crate) fn from_ast(py: Python<'_>, ast: &AstLigandSymmetryAst) -> PyResult<Self> {
+        Ok(LigandSymmetryAst {
+            permutation: OrientedLigandPermutation::from_ast(ast.permutation),
+            present: into_py_variant(py, BooleanAst::from_ast(&ast.present))?,
+        })
+    }
+
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstLigandSymmetryAst {
+        AstLigandSymmetryAst {
+            permutation: self.permutation.to_ast(),
+            present: self.present.bind(py).borrow().to_ast(),
+        }
+    }
+}
+
+/// A fluxionality constraint value: a proper ligand permutation realized by dynamics, with a
+/// presence assertion (whether the move is present). Mirrors the Rust `FluxionalityAst`.
+#[pyclass]
+pub struct FluxionalityAst {
+    permutation: LigandPermutation,
+    present: Py<BooleanAst>,
+}
+
+#[pymethods]
+impl FluxionalityAst {
+    #[new]
+    fn new(py: Python<'_>, permutation: LigandPermutation, present: BooleanArg) -> PyResult<Self> {
+        Ok(FluxionalityAst {
+            permutation,
+            present: into_py_variant(py, BooleanAst::from_ast(&present.to_ast(py)))?,
+        })
+    }
+
+    #[getter]
+    fn permutation(&self) -> LigandPermutation {
+        self.permutation
+    }
+
+    #[getter]
+    fn present(&self, py: Python<'_>) -> Py<BooleanAst> {
+        self.present.clone_ref(py)
+    }
+
+    /// Matches iff the permutations are equal and the presence assertions match.
+    fn matches(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py).matches(&other.to_ast(py))
+    }
+
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(format!(
+            "FluxionalityAst({}, {})",
+            self.permutation.__repr__(),
+            self.present.bind(py).as_any().repr()?.extract::<String>()?,
+        ))
+    }
+}
+
+impl FluxionalityAst {
+    #[cfg(test)]
+    pub(crate) fn from_ast(py: Python<'_>, ast: &AstFluxionalityAst) -> PyResult<Self> {
+        Ok(FluxionalityAst {
+            permutation: LigandPermutation::from_ast(ast.permutation),
+            present: into_py_variant(py, BooleanAst::from_ast(&ast.present))?,
+        })
+    }
+
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstFluxionalityAst {
+        AstFluxionalityAst {
+            permutation: self.permutation.to_ast(),
+            present: self.present.bind(py).borrow().to_ast(),
+        }
+    }
+}
+
+/// A per-pair topicity constraint value: a relation between a pair of ligand positions.
+/// Mirrors the Rust `TopicityAst`.
+#[pyclass]
+pub struct TopicityAst {
+    pair: StereoLigandPair,
+    relation: Py<TopicityRelationAst>,
+}
+
+#[pymethods]
+impl TopicityAst {
+    #[new]
+    fn new(
+        py: Python<'_>,
+        pair: StereoLigandPair,
+        relation: TopicityRelationArg,
+    ) -> PyResult<Self> {
+        Ok(TopicityAst {
+            pair,
+            relation: relation.to_py(py)?,
+        })
+    }
+
+    #[getter]
+    fn pair(&self) -> StereoLigandPair {
+        self.pair
+    }
+
+    #[getter]
+    fn relation(&self, py: Python<'_>) -> Py<TopicityRelationAst> {
+        self.relation.clone_ref(py)
+    }
+
+    /// Matches iff the pairs are equal and the per-pair relations match.
+    fn matches(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py).matches(&other.to_ast(py))
+    }
+
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(format!(
+            "TopicityAst({}, {})",
+            self.pair.__repr__(),
+            self.relation
+                .bind(py)
+                .as_any()
+                .repr()?
+                .extract::<String>()?,
+        ))
+    }
+}
+
+impl TopicityAst {
+    #[cfg(test)]
+    pub(crate) fn from_ast(py: Python<'_>, ast: &AstTopicityAst) -> PyResult<Self> {
+        Ok(TopicityAst {
+            pair: StereoLigandPair::from_ast(ast.pair),
+            relation: into_py_variant(py, TopicityRelationAst::from_ast(&ast.relation))?,
+        })
+    }
+
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstTopicityAst {
+        AstTopicityAst {
+            pair: self.pair.to_ast(),
+            relation: self.relation.bind(py).borrow().to_ast(),
         }
     }
 }
@@ -1219,5 +1528,254 @@ mod tests {
     #[case(AstTopicityRelationAst::NotSet(BTreeSet::from([AstTopicity::Diastereotopic])))]
     fn test_topicity_relation_ast_roundtrip(#[case] ast: AstTopicityRelationAst) {
         assert_eq!(TopicityRelationAst::from_ast(&ast).to_ast(), ast);
+    }
+
+    #[rstest]
+    #[case::lit(
+        StereogenicityAst::Lit(Stereogenicity::Prochiral),
+        Some(Stereogenicity::Prochiral)
+    )]
+    #[case::undetermined(StereogenicityAst::Undetermined(), None)]
+    #[case::set(
+        StereogenicityAst::LitSet(BTreeSet::from([Stereogenicity::Symmetric])),
+        None
+    )]
+    fn test_stereogenicity_ast_as_lit(
+        #[case] relation: StereogenicityAst,
+        #[case] expected: Option<Stereogenicity>,
+    ) {
+        assert_eq!(relation.as_lit(), expected);
+    }
+
+    #[rstest]
+    #[case(AstStereogenicityAst::Undetermined)]
+    #[case(AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic))]
+    #[case(AstStereogenicityAst::LitSet(BTreeSet::from([
+        AstStereogenicity::Symmetric,
+        AstStereogenicity::Prochiral,
+    ])))]
+    #[case(AstStereogenicityAst::NotSet(BTreeSet::from([AstStereogenicity::Stereogenic])))]
+    fn test_stereogenicity_ast_roundtrip(#[case] ast: AstStereogenicityAst) {
+        assert_eq!(StereogenicityAst::from_ast(&ast).to_ast(), ast);
+    }
+
+    #[rstest]
+    fn test_ligand_symmetry_ast_new() {
+        Python::attach(|py| {
+            let permutation = OrientedLigandPermutation::new(
+                LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3])),
+                Orientation::Proper,
+            );
+            let value = LigandSymmetryAst::new(py, permutation, BooleanArg::Lit(true)).unwrap();
+            assert!(value.permutation() == permutation);
+            assert_eq!(
+                value.present.bind(py).borrow().to_ast(),
+                AstBooleanAst::Lit(true)
+            );
+            assert_eq!(
+                value.__repr__(py).unwrap(),
+                "LigandSymmetryAst(OrientedLigandPermutation(permutation=LigandPermutation([1, 0, 2, 3]), orientation=Orientation.Proper), BooleanAst.Lit(True))"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_ligand_symmetry_ast_matches() {
+        Python::attach(|py| {
+            let permutation = OrientedLigandPermutation::new(
+                LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3])),
+                Orientation::Proper,
+            );
+            let other_permutation = OrientedLigandPermutation::new(
+                LigandPermutation::new(Permutation::new(vec![0, 1, 2, 3])),
+                Orientation::Proper,
+            );
+            let wildcard = LigandSymmetryAst {
+                permutation,
+                present: into_py_variant(py, BooleanAst::Undetermined()).unwrap(),
+            };
+            let present_true = LigandSymmetryAst {
+                permutation,
+                present: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
+            };
+            let present_false = LigandSymmetryAst {
+                permutation,
+                present: into_py_variant(py, BooleanAst::Lit(false)).unwrap(),
+            };
+            let other = LigandSymmetryAst {
+                permutation: other_permutation,
+                present: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
+            };
+            assert!(wildcard.matches(&present_true, py));
+            assert!(!present_true.matches(&present_false, py));
+            assert!(!present_true.matches(&other, py));
+        });
+    }
+
+    #[rstest]
+    fn test_ligand_symmetry_ast_roundtrip() {
+        Python::attach(|py| {
+            for ast in [
+                AstLigandSymmetryAst {
+                    permutation: AstOrientedLigandPermutation {
+                        permutation: AstLigandPermutation(PermPermutation::from_image(
+                            4,
+                            &[1, 0, 2, 3],
+                        )),
+                        orientation: PermOrientation::Proper,
+                    },
+                    present: AstBooleanAst::Lit(true),
+                },
+                AstLigandSymmetryAst {
+                    permutation: AstOrientedLigandPermutation {
+                        permutation: AstLigandPermutation(PermPermutation::identity(4)),
+                        orientation: PermOrientation::Improper,
+                    },
+                    present: AstBooleanAst::Undetermined,
+                },
+            ] {
+                assert_eq!(
+                    LigandSymmetryAst::from_ast(py, &ast).unwrap().to_ast(py),
+                    ast
+                );
+            }
+        });
+    }
+
+    #[rstest]
+    fn test_fluxionality_ast_new() {
+        Python::attach(|py| {
+            let permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]));
+            let value = FluxionalityAst::new(py, permutation, BooleanArg::Lit(false)).unwrap();
+            assert!(value.permutation() == permutation);
+            assert_eq!(
+                value.present.bind(py).borrow().to_ast(),
+                AstBooleanAst::Lit(false)
+            );
+            assert_eq!(
+                value.__repr__(py).unwrap(),
+                "FluxionalityAst(LigandPermutation([1, 0, 2, 3]), BooleanAst.Lit(False))"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_fluxionality_ast_matches() {
+        Python::attach(|py| {
+            let permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]));
+            let other_permutation = LigandPermutation::new(Permutation::new(vec![0, 1, 2, 3]));
+            let wildcard = FluxionalityAst {
+                permutation,
+                present: into_py_variant(py, BooleanAst::Undetermined()).unwrap(),
+            };
+            let present_true = FluxionalityAst {
+                permutation,
+                present: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
+            };
+            let present_false = FluxionalityAst {
+                permutation,
+                present: into_py_variant(py, BooleanAst::Lit(false)).unwrap(),
+            };
+            let other = FluxionalityAst {
+                permutation: other_permutation,
+                present: into_py_variant(py, BooleanAst::Lit(true)).unwrap(),
+            };
+            assert!(wildcard.matches(&present_true, py));
+            assert!(!present_true.matches(&present_false, py));
+            assert!(!present_true.matches(&other, py));
+        });
+    }
+
+    #[rstest]
+    fn test_fluxionality_ast_roundtrip() {
+        Python::attach(|py| {
+            for ast in [
+                AstFluxionalityAst {
+                    permutation: AstLigandPermutation(PermPermutation::from_image(
+                        4,
+                        &[1, 0, 2, 3],
+                    )),
+                    present: AstBooleanAst::Lit(false),
+                },
+                AstFluxionalityAst {
+                    permutation: AstLigandPermutation(PermPermutation::identity(4)),
+                    present: AstBooleanAst::Undetermined,
+                },
+            ] {
+                assert_eq!(FluxionalityAst::from_ast(py, &ast).unwrap().to_ast(py), ast);
+            }
+        });
+    }
+
+    #[rstest]
+    fn test_topicity_ast_new() {
+        Python::attach(|py| {
+            let pair = StereoLigandPair::new(0, 2);
+            let value =
+                TopicityAst::new(py, pair, TopicityRelationArg::Lit(Topicity::Homotopic)).unwrap();
+            assert!(value.pair() == pair);
+            assert_eq!(
+                value.relation.bind(py).borrow().to_ast(),
+                AstTopicityRelationAst::Lit(AstTopicity::Homotopic)
+            );
+            assert_eq!(
+                value.__repr__(py).unwrap(),
+                "TopicityAst(StereoLigandPair(0, 2), TopicityRelationAst.Lit(Topicity.Homotopic))"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_topicity_ast_matches() {
+        Python::attach(|py| {
+            let pair = StereoLigandPair::new(0, 2);
+            let other_pair = StereoLigandPair::new(1, 3);
+            let wildcard = TopicityAst {
+                pair,
+                relation: into_py_variant(py, TopicityRelationAst::Undetermined()).unwrap(),
+            };
+            let homotopic = TopicityAst {
+                pair,
+                relation: into_py_variant(py, TopicityRelationAst::Lit(Topicity::Homotopic))
+                    .unwrap(),
+            };
+            let enantiotopic = TopicityAst {
+                pair,
+                relation: into_py_variant(py, TopicityRelationAst::Lit(Topicity::Enantiotopic))
+                    .unwrap(),
+            };
+            let other = TopicityAst {
+                pair: other_pair,
+                relation: into_py_variant(py, TopicityRelationAst::Lit(Topicity::Homotopic))
+                    .unwrap(),
+            };
+            assert!(wildcard.matches(&homotopic, py));
+            assert!(!homotopic.matches(&enantiotopic, py));
+            assert!(!homotopic.matches(&other, py));
+        });
+    }
+
+    #[rstest]
+    fn test_topicity_ast_roundtrip() {
+        Python::attach(|py| {
+            for ast in [
+                AstTopicityAst {
+                    pair: AstStereoLigandPair::new(
+                        AstStereoLigandPosition(0),
+                        AstStereoLigandPosition(2),
+                    ),
+                    relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
+                },
+                AstTopicityAst {
+                    pair: AstStereoLigandPair::new(
+                        AstStereoLigandPosition(1),
+                        AstStereoLigandPosition(3),
+                    ),
+                    relation: AstTopicityRelationAst::Undetermined,
+                },
+            ] {
+                assert_eq!(TopicityAst::from_ast(py, &ast).unwrap().to_ast(py), ast);
+            }
+        });
     }
 }

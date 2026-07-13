@@ -39,10 +39,11 @@ use crate::{
         NoncovalentBondKindAst, NoncovalentBondView, NoncovalentBondViews,
     },
     stereo::{
-        CisTransStereo, CisTransStereoAst, LigandPermutation, Orientation,
-        OrientedLigandPermutation, Permutation, StereoConfigurationAst, StereoCosetAst, StereoKind,
-        StereoLigand, StereoLigandKind, StereoLigandPair, StereoTerm, Stereogenicity,
-        TetrahedralStereo, TetrahedralStereoAst, Topicity, TopicityRelationAst,
+        CisTransStereo, CisTransStereoAst, FluxionalityAst, LigandPermutation, LigandSymmetryAst,
+        Orientation, OrientedLigandPermutation, Permutation, StereoConfigurationAst,
+        StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoTerm,
+        Stereogenicity, StereogenicityAst, TetrahedralStereo, TetrahedralStereoAst, Topicity,
+        TopicityAst, TopicityRelationAst,
     },
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
 };
@@ -167,6 +168,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<OrientedLigandPermutation>()?;
         module.add_class::<StereoLigandPair>()?;
         module.add_class::<TopicityRelationAst>()?;
+        module.add_class::<StereogenicityAst>()?;
+        module.add_class::<LigandSymmetryAst>()?;
+        module.add_class::<FluxionalityAst>()?;
+        module.add_class::<TopicityAst>()?;
     }
     Ok(())
 }

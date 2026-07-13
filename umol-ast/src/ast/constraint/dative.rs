@@ -62,9 +62,7 @@ impl Canonicalize for DativeBondConstraintAst {
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             Self::Aromatic(b) => Self::Aromatic(b.canonicalize()?),
-            Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipAst::new(m.scope, m.count.canonicalize()?))
-            }
+            Self::RingMembership(m) => Self::RingMembership(m.canonicalize()?),
         })
     }
 }
@@ -73,24 +71,23 @@ impl Lattice for DativeBondConstraintAst {
     fn is_undetermined(&self) -> bool {
         match self {
             Self::Aromatic(b) => b.is_undetermined(),
-            Self::RingMembership(m) => m.count.is_undetermined(),
+            Self::RingMembership(m) => m.is_undetermined(),
         }
     }
 
     fn is_ground(&self) -> bool {
         match self {
             Self::Aromatic(b) => b.is_ground(),
-            Self::RingMembership(m) => m.count.is_ground(),
+            Self::RingMembership(m) => m.is_ground(),
         }
     }
 
     fn meet(&self, other: &Self) -> Option<Self> {
         match (self, other) {
             (Self::Aromatic(a), Self::Aromatic(b)) => a.meet(b).map(Self::Aromatic),
-            (Self::RingMembership(a), Self::RingMembership(b)) => a
-                .count
-                .meet(&b.count)
-                .map(|count| Self::RingMembership(RingMembershipAst::new(a.scope, count))),
+            (Self::RingMembership(a), Self::RingMembership(b)) => {
+                a.meet(b).map(Self::RingMembership)
+            }
             _ => None,
         }
     }
@@ -98,9 +95,9 @@ impl Lattice for DativeBondConstraintAst {
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
         match (self, other) {
             (Self::Aromatic(a), Self::Aromatic(b)) => Ok(Self::Aromatic(a.join(b)?)),
-            (Self::RingMembership(a), Self::RingMembership(b)) => Ok(Self::RingMembership(
-                RingMembershipAst::new(a.scope, a.count.join(&b.count)?),
-            )),
+            (Self::RingMembership(a), Self::RingMembership(b)) => {
+                a.join(b).map(Self::RingMembership)
+            }
             _ => Err(NoJoin),
         }
     }
@@ -108,9 +105,7 @@ impl Lattice for DativeBondConstraintAst {
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Aromatic(a), Self::Aromatic(b)) => a.matches(b),
-            (Self::RingMembership(a), Self::RingMembership(b)) if a.scope == b.scope => {
-                a.count.matches(&b.count)
-            }
+            (Self::RingMembership(a), Self::RingMembership(b)) => a.matches(b),
             _ => false,
         }
     }
@@ -118,7 +113,7 @@ impl Lattice for DativeBondConstraintAst {
     fn is_compatible(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Aromatic(a), Self::Aromatic(b)) => a.is_compatible(b),
-            (Self::RingMembership(a), Self::RingMembership(b)) => a.count.is_compatible(&b.count),
+            (Self::RingMembership(a), Self::RingMembership(b)) => a.is_compatible(b),
             _ => false,
         }
     }

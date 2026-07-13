@@ -6,8 +6,6 @@ use crate::strategies::*;
 // Lattice-law sweep: every `impl Lattice` type satisfies commutativity,
 // associativity, absorption, idempotence, and `matches`↔`meet` consistency,
 // checked by `assert_lattice_laws` over a generated value triple.
-// `NoncovalentBondConstraintsAst` is omitted: its inner enum is uninhabited, so the
-// collection has the single empty value and the laws would be vacuous.
 
 proptest! {
     #[test]
@@ -342,6 +340,49 @@ proptest! {
         a in topicity_relation_lattice_strategy(),
         b in topicity_relation_lattice_strategy(),
         c in topicity_relation_lattice_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    // Keyed value semilattices: the strategies vary the sub-key (scope /
+    // permutation / pair) so a triple spans fibers, exercising the cross-fiber
+    // `meet` → `None` / `join` → `Err(NoJoin)` path the containers never reach.
+    #[test]
+    fn test_ring_membership_ast_lattice_laws(
+        a in ring_membership_lattice_strategy(),
+        b in ring_membership_lattice_strategy(),
+        c in ring_membership_lattice_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_ligand_symmetry_ast_lattice_laws(
+        a in ligand_symmetry_strategy(4),
+        b in ligand_symmetry_strategy(4),
+        c in ligand_symmetry_strategy(4),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_fluxionality_ast_lattice_laws(
+        a in fluxionality_strategy(4),
+        b in fluxionality_strategy(4),
+        c in fluxionality_strategy(4),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_topicity_ast_lattice_laws(
+        a in topicity_strategy(4),
+        b in topicity_strategy(4),
+        c in topicity_strategy(4),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;

@@ -21,14 +21,15 @@ pub(crate) use umol_ast::ast::{
     MoleculeConstraint, MoleculeParts, MulticenterBondAst, MulticenterBondConstraintAst,
     MulticenterBondConstraintKey, MulticenterBondConstraintsAst, MulticenterBondHandle,
     MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
-    NoncovalentBondConstraintKey, NoncovalentBondConstraintsAst, NoncovalentBondHandle,
+    NoncovalentBondConstraintsAst, NoncovalentBondHandle,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, OrientedLigandPermutation,
-    RelOp, RelationalConstraint, RingScope, SpinStateAst, StereoAtomAst, StereoAtomConstraintAst,
-    StereoAtomConstraintsAst, StereoAtomId, StereoBondAst, StereoBondConstraintAst,
-    StereoBondConstraintsAst, StereoBondId, StereoConfigurationAst, StereoCosetAst, StereoKind,
-    StereoLigand, StereoLigandKind, StereoLigandPair, StereoLigandPosition, Stereogenicity,
-    StereogenicityAst, SubPatternAnchor, TetrahedralStereoAst, Topicity, TopicityAst,
-    TopicityRelationAst, ValueAst, ValuePredicate, ValueTerm,
+    RelOp, RelationalConstraint, RingMembershipAst, RingScope, SpinStateAst, StereoAtomAst,
+    StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomId, StereoBondAst,
+    StereoBondConstraintAst, StereoBondConstraintsAst, StereoBondId, StereoConfigurationAst,
+    StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
+    StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
+    TetrahedralStereoAst, Topicity, TopicityAst, TopicityRelationAst, ValueAst, ValuePredicate,
+    ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, DativeBondParticipants,
@@ -858,6 +859,40 @@ pub(crate) fn ligand_symmetry_strategy(degree: usize) -> impl Strategy<Value = L
             },
             present: BooleanAst::Lit(present),
         })
+}
+
+pub(crate) fn fluxionality_strategy(degree: usize) -> impl Strategy<Value = FluxionalityAst> {
+    (permutation_strategy(degree), any::<bool>()).prop_map(|(permutation, present)| {
+        FluxionalityAst {
+            permutation: LigandPermutation(permutation),
+            present: BooleanAst::Lit(present),
+        }
+    })
+}
+
+pub(crate) fn topicity_strategy(degree: usize) -> impl Strategy<Value = TopicityAst> {
+    (
+        ligand_pair_strategy(degree),
+        topicity_relation_lattice_strategy(),
+    )
+        .prop_map(|(pair, relation)| TopicityAst { pair, relation })
+}
+
+/// Canonical, fiber-spanning `RingMembershipAst`: the `scope` varies (`All` and
+/// `Size(3..=10)`) so a value triple lands in different fibers, exercising the
+/// cross-scope `meet` → `None` / `join` → `Err(NoJoin)` path.
+pub(crate) fn ring_membership_lattice_strategy() -> impl Strategy<Value = RingMembershipAst> {
+    prop_oneof![
+        constraint_value_strategy(0..=6)
+            .prop_map(|count| RingMembershipAst::new(RingScope::All, count)),
+        (3u8..=10, constraint_value_strategy(0..=6))
+            .prop_map(|(size, count)| RingMembershipAst::new(RingScope::Size(size), count)),
+    ]
+    .prop_map(|membership| {
+        membership
+            .canonicalize()
+            .expect("non-empty count strategy never contradicts")
+    })
 }
 
 /// Universal lattice laws — hold for **any** inputs (canonical or not): meet/join

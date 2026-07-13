@@ -155,9 +155,7 @@ impl Canonicalize for AtomConstraintAst {
             Self::RingDegree(v) => Self::RingDegree(v.canonicalize()?),
             Self::RingValence(v) => Self::RingValence(v.canonicalize()?),
             Self::TotalHydrogens(v) => Self::TotalHydrogens(v.canonicalize()?),
-            Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipAst::new(m.scope, m.count.canonicalize()?))
-            }
+            Self::RingMembership(m) => Self::RingMembership(m.canonicalize()?),
         })
     }
 }
@@ -177,7 +175,7 @@ impl Lattice for AtomConstraintAst {
             Self::AromaticValence(c) => c.is_undetermined(),
             Self::MulticenterValence(c) => c.is_undetermined(),
             Self::TetrahedralStereo(c) => c.is_undetermined(),
-            Self::RingMembership(m) => m.count.is_undetermined(),
+            Self::RingMembership(m) => m.is_undetermined(),
         }
     }
 
@@ -195,7 +193,7 @@ impl Lattice for AtomConstraintAst {
             Self::AromaticValence(c) => c.is_ground(),
             Self::MulticenterValence(c) => c.is_ground(),
             Self::TetrahedralStereo(c) => c.is_ground(),
-            Self::RingMembership(m) => m.count.is_ground(),
+            Self::RingMembership(m) => m.is_ground(),
         }
     }
 
@@ -222,10 +220,9 @@ impl Lattice for AtomConstraintAst {
             (Self::TotalHydrogens(a), Self::TotalHydrogens(b)) => {
                 a.meet(b).map(Self::TotalHydrogens)
             }
-            (Self::RingMembership(a), Self::RingMembership(b)) => a
-                .count
-                .meet(&b.count)
-                .map(|count| Self::RingMembership(RingMembershipAst::new(a.scope, count))),
+            (Self::RingMembership(a), Self::RingMembership(b)) => {
+                a.meet(b).map(Self::RingMembership)
+            }
             _ => None,
         }
     }
@@ -253,9 +250,9 @@ impl Lattice for AtomConstraintAst {
             (Self::TotalHydrogens(a), Self::TotalHydrogens(b)) => {
                 Ok(Self::TotalHydrogens(a.join(b)?))
             }
-            (Self::RingMembership(a), Self::RingMembership(b)) => Ok(Self::RingMembership(
-                RingMembershipAst::new(a.scope, a.count.join(&b.count)?),
-            )),
+            (Self::RingMembership(a), Self::RingMembership(b)) => {
+                a.join(b).map(Self::RingMembership)
+            }
             _ => Err(NoJoin),
         }
     }
@@ -276,9 +273,7 @@ impl Lattice for AtomConstraintAst {
             (Self::RingDegree(a), Self::RingDegree(b)) => a.matches(b),
             (Self::RingValence(a), Self::RingValence(b)) => a.matches(b),
             (Self::TotalHydrogens(a), Self::TotalHydrogens(b)) => a.matches(b),
-            (Self::RingMembership(a), Self::RingMembership(b)) if a.scope == b.scope => {
-                a.count.matches(&b.count)
-            }
+            (Self::RingMembership(a), Self::RingMembership(b)) => a.matches(b),
             _ => false,
         }
     }
@@ -300,7 +295,7 @@ impl Lattice for AtomConstraintAst {
             (Self::RingDegree(a), Self::RingDegree(b)) => a.is_compatible(b),
             (Self::RingValence(a), Self::RingValence(b)) => a.is_compatible(b),
             (Self::TotalHydrogens(a), Self::TotalHydrogens(b)) => a.is_compatible(b),
-            (Self::RingMembership(a), Self::RingMembership(b)) => a.count.is_compatible(&b.count),
+            (Self::RingMembership(a), Self::RingMembership(b)) => a.is_compatible(b),
             _ => false,
         }
     }

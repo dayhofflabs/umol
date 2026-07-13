@@ -70,9 +70,7 @@ impl Canonicalize for BondConstraintAst {
         Ok(match self {
             Self::Aromatic(b) => Self::Aromatic(b.canonicalize()?),
             Self::CisTransStereo(c) => Self::CisTransStereo(c.canonicalize()?),
-            Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipAst::new(m.scope, m.count.canonicalize()?))
-            }
+            Self::RingMembership(m) => Self::RingMembership(m.canonicalize()?),
         })
     }
 }
@@ -82,7 +80,7 @@ impl Lattice for BondConstraintAst {
         match self {
             Self::Aromatic(b) => b.is_undetermined(),
             Self::CisTransStereo(c) => c.is_undetermined(),
-            Self::RingMembership(m) => m.count.is_undetermined(),
+            Self::RingMembership(m) => m.is_undetermined(),
         }
     }
 
@@ -90,7 +88,7 @@ impl Lattice for BondConstraintAst {
         match self {
             Self::Aromatic(b) => b.is_ground(),
             Self::CisTransStereo(c) => c.is_ground(),
-            Self::RingMembership(m) => m.count.is_ground(),
+            Self::RingMembership(m) => m.is_ground(),
         }
     }
 
@@ -100,10 +98,9 @@ impl Lattice for BondConstraintAst {
             (Self::CisTransStereo(a), Self::CisTransStereo(b)) => {
                 a.meet(b).map(Self::CisTransStereo)
             }
-            (Self::RingMembership(a), Self::RingMembership(b)) => a
-                .count
-                .meet(&b.count)
-                .map(|count| Self::RingMembership(RingMembershipAst::new(a.scope, count))),
+            (Self::RingMembership(a), Self::RingMembership(b)) => {
+                a.meet(b).map(Self::RingMembership)
+            }
             _ => None,
         }
     }
@@ -114,9 +111,9 @@ impl Lattice for BondConstraintAst {
             (Self::CisTransStereo(a), Self::CisTransStereo(b)) => {
                 Ok(Self::CisTransStereo(a.join(b)?))
             }
-            (Self::RingMembership(a), Self::RingMembership(b)) => Ok(Self::RingMembership(
-                RingMembershipAst::new(a.scope, a.count.join(&b.count)?),
-            )),
+            (Self::RingMembership(a), Self::RingMembership(b)) => {
+                a.join(b).map(Self::RingMembership)
+            }
             _ => Err(NoJoin),
         }
     }
@@ -125,9 +122,7 @@ impl Lattice for BondConstraintAst {
         match (self, target) {
             (Self::Aromatic(a), Self::Aromatic(b)) => a.matches(b),
             (Self::CisTransStereo(a), Self::CisTransStereo(b)) => a.matches(b),
-            (Self::RingMembership(a), Self::RingMembership(b)) if a.scope == b.scope => {
-                a.count.matches(&b.count)
-            }
+            (Self::RingMembership(a), Self::RingMembership(b)) => a.matches(b),
             _ => false,
         }
     }
@@ -136,7 +131,7 @@ impl Lattice for BondConstraintAst {
         match (self, other) {
             (Self::Aromatic(a), Self::Aromatic(b)) => a.is_compatible(b),
             (Self::CisTransStereo(a), Self::CisTransStereo(b)) => a.is_compatible(b),
-            (Self::RingMembership(a), Self::RingMembership(b)) => a.count.is_compatible(&b.count),
+            (Self::RingMembership(a), Self::RingMembership(b)) => a.is_compatible(b),
             _ => false,
         }
     }

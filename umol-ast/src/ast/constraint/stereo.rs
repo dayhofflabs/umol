@@ -82,16 +82,12 @@ macro_rules! stereo_constraint {
         }
 
         impl Canonicalize for $constraint {
-            /// Canonicalize the inner relation value; `#f`/`#p` have no
-            /// canonicalizable inner value (permutation/member are atomic).
+            /// Canonicalize each value in its own fiber; the key is preserved.
             fn canonicalize(self) -> Result<Self, Contradiction> {
                 Ok(match self {
-                    Self::LigandSymmetry(ls) => Self::LigandSymmetry(ls),
-                    Self::Fluxionality(f) => Self::Fluxionality(f),
-                    Self::Topicity(t) => Self::Topicity(TopicityAst {
-                        pair: t.pair,
-                        relation: t.relation.canonicalize()?,
-                    }),
+                    Self::LigandSymmetry(ls) => Self::LigandSymmetry(ls.canonicalize()?),
+                    Self::Fluxionality(f) => Self::Fluxionality(f.canonicalize()?),
+                    Self::Topicity(t) => Self::Topicity(t.canonicalize()?),
                     Self::Stereogenicity(g) => Self::Stereogenicity(g.canonicalize()?),
                 })
             }
@@ -100,18 +96,18 @@ macro_rules! stereo_constraint {
         impl Lattice for $constraint {
             fn is_undetermined(&self) -> bool {
                 match self {
-                    Self::LigandSymmetry(ls) => ls.present.is_undetermined(),
-                    Self::Fluxionality(f) => f.present.is_undetermined(),
-                    Self::Topicity(t) => t.relation.is_undetermined(),
+                    Self::LigandSymmetry(ls) => ls.is_undetermined(),
+                    Self::Fluxionality(f) => f.is_undetermined(),
+                    Self::Topicity(t) => t.is_undetermined(),
                     Self::Stereogenicity(g) => g.is_undetermined(),
                 }
             }
 
             fn is_ground(&self) -> bool {
                 match self {
-                    Self::LigandSymmetry(ls) => ls.present.is_ground(),
-                    Self::Fluxionality(f) => f.present.is_ground(),
-                    Self::Topicity(t) => t.relation.is_ground(),
+                    Self::LigandSymmetry(ls) => ls.is_ground(),
+                    Self::Fluxionality(f) => f.is_ground(),
+                    Self::Topicity(t) => t.is_ground(),
                     Self::Stereogenicity(g) => g.is_ground(),
                 }
             }
@@ -119,29 +115,12 @@ macro_rules! stereo_constraint {
             fn meet(&self, other: &Self) -> Option<Self> {
                 match (self, other) {
                     (Self::LigandSymmetry(a), Self::LigandSymmetry(b)) => {
-                        a.present.meet(&b.present).map(|present| {
-                            Self::LigandSymmetry(LigandSymmetryAst {
-                                permutation: a.permutation,
-                                present,
-                            })
-                        })
+                        a.meet(b).map(Self::LigandSymmetry)
                     }
                     (Self::Fluxionality(a), Self::Fluxionality(b)) => {
-                        a.present.meet(&b.present).map(|present| {
-                            Self::Fluxionality(FluxionalityAst {
-                                permutation: a.permutation,
-                                present,
-                            })
-                        })
+                        a.meet(b).map(Self::Fluxionality)
                     }
-                    (Self::Topicity(a), Self::Topicity(b)) => {
-                        a.relation.meet(&b.relation).map(|relation| {
-                            Self::Topicity(TopicityAst {
-                                pair: a.pair,
-                                relation,
-                            })
-                        })
-                    }
+                    (Self::Topicity(a), Self::Topicity(b)) => a.meet(b).map(Self::Topicity),
                     (Self::Stereogenicity(a), Self::Stereogenicity(b)) => {
                         a.meet(b).map(Self::Stereogenicity)
                     }
@@ -152,23 +131,14 @@ macro_rules! stereo_constraint {
             fn join(&self, other: &Self) -> Result<Self, NoJoin> {
                 match (self, other) {
                     (Self::LigandSymmetry(a), Self::LigandSymmetry(b)) => {
-                        Ok(Self::LigandSymmetry(LigandSymmetryAst {
-                            permutation: a.permutation,
-                            present: a.present.join(&b.present)?,
-                        }))
+                        a.join(b).map(Self::LigandSymmetry)
                     }
                     (Self::Fluxionality(a), Self::Fluxionality(b)) => {
-                        Ok(Self::Fluxionality(FluxionalityAst {
-                            permutation: a.permutation,
-                            present: a.present.join(&b.present)?,
-                        }))
+                        a.join(b).map(Self::Fluxionality)
                     }
-                    (Self::Topicity(a), Self::Topicity(b)) => Ok(Self::Topicity(TopicityAst {
-                        pair: a.pair,
-                        relation: a.relation.join(&b.relation)?,
-                    })),
+                    (Self::Topicity(a), Self::Topicity(b)) => a.join(b).map(Self::Topicity),
                     (Self::Stereogenicity(a), Self::Stereogenicity(b)) => {
-                        Ok(Self::Stereogenicity(a.join(b)?))
+                        a.join(b).map(Self::Stereogenicity)
                     }
                     _ => Err(NoJoin),
                 }
@@ -176,19 +146,9 @@ macro_rules! stereo_constraint {
 
             fn matches(&self, target: &Self) -> bool {
                 match (self, target) {
-                    (Self::LigandSymmetry(a), Self::LigandSymmetry(b))
-                        if a.permutation == b.permutation =>
-                    {
-                        a.present.matches(&b.present)
-                    }
-                    (Self::Fluxionality(a), Self::Fluxionality(b))
-                        if a.permutation == b.permutation =>
-                    {
-                        a.present.matches(&b.present)
-                    }
-                    (Self::Topicity(a), Self::Topicity(b)) if a.pair == b.pair => {
-                        a.relation.matches(&b.relation)
-                    }
+                    (Self::LigandSymmetry(a), Self::LigandSymmetry(b)) => a.matches(b),
+                    (Self::Fluxionality(a), Self::Fluxionality(b)) => a.matches(b),
+                    (Self::Topicity(a), Self::Topicity(b)) => a.matches(b),
                     (Self::Stereogenicity(a), Self::Stereogenicity(b)) => a.matches(b),
                     _ => false,
                 }
@@ -196,13 +156,9 @@ macro_rules! stereo_constraint {
 
             fn is_compatible(&self, other: &Self) -> bool {
                 match (self, other) {
-                    (Self::LigandSymmetry(a), Self::LigandSymmetry(b)) => {
-                        a.present.is_compatible(&b.present)
-                    }
-                    (Self::Fluxionality(a), Self::Fluxionality(b)) => {
-                        a.present.is_compatible(&b.present)
-                    }
-                    (Self::Topicity(a), Self::Topicity(b)) => a.relation.is_compatible(&b.relation),
+                    (Self::LigandSymmetry(a), Self::LigandSymmetry(b)) => a.is_compatible(b),
+                    (Self::Fluxionality(a), Self::Fluxionality(b)) => a.is_compatible(b),
+                    (Self::Topicity(a), Self::Topicity(b)) => a.is_compatible(b),
                     (Self::Stereogenicity(a), Self::Stereogenicity(b)) => a.is_compatible(b),
                     _ => false,
                 }
@@ -754,9 +710,53 @@ pub struct LigandSymmetryAst {
     pub present: BooleanAst,
 }
 
-impl LigandSymmetryAst {
-    pub fn matches(&self, target: &Self) -> bool {
-        self.permutation.matches(&target.permutation) && self.present.matches(&target.present)
+impl Canonicalize for LigandSymmetryAst {
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(Self {
+            permutation: self.permutation,
+            present: self.present.canonicalize()?,
+        })
+    }
+}
+
+/// Meet-semilattice keyed by `permutation`: same permutation delegates to the
+/// `present` boolean lattice, different permutations lie in different fibers
+/// (`meet` → `None`, `join` → `Err(NoJoin)`).
+impl Lattice for LigandSymmetryAst {
+    fn is_undetermined(&self) -> bool {
+        self.present.is_undetermined()
+    }
+
+    fn is_ground(&self) -> bool {
+        self.present.is_ground()
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        if self.permutation != other.permutation {
+            return None;
+        }
+        self.present.meet(&other.present).map(|present| Self {
+            permutation: self.permutation,
+            present,
+        })
+    }
+
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+        if self.permutation != other.permutation {
+            return Err(NoJoin);
+        }
+        Ok(Self {
+            permutation: self.permutation,
+            present: self.present.join(&other.present)?,
+        })
+    }
+
+    fn matches(&self, target: &Self) -> bool {
+        self.permutation == target.permutation && self.present.matches(&target.present)
+    }
+
+    fn is_compatible(&self, other: &Self) -> bool {
+        self.permutation == other.permutation && self.present.is_compatible(&other.present)
     }
 }
 
@@ -768,9 +768,53 @@ pub struct FluxionalityAst {
     pub present: BooleanAst,
 }
 
-impl FluxionalityAst {
-    pub fn matches(&self, target: &Self) -> bool {
-        self.permutation.matches(&target.permutation) && self.present.matches(&target.present)
+impl Canonicalize for FluxionalityAst {
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(Self {
+            permutation: self.permutation,
+            present: self.present.canonicalize()?,
+        })
+    }
+}
+
+/// Meet-semilattice keyed by `permutation`: same permutation delegates to the
+/// `present` boolean lattice, different permutations lie in different fibers
+/// (`meet` → `None`, `join` → `Err(NoJoin)`).
+impl Lattice for FluxionalityAst {
+    fn is_undetermined(&self) -> bool {
+        self.present.is_undetermined()
+    }
+
+    fn is_ground(&self) -> bool {
+        self.present.is_ground()
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        if self.permutation != other.permutation {
+            return None;
+        }
+        self.present.meet(&other.present).map(|present| Self {
+            permutation: self.permutation,
+            present,
+        })
+    }
+
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+        if self.permutation != other.permutation {
+            return Err(NoJoin);
+        }
+        Ok(Self {
+            permutation: self.permutation,
+            present: self.present.join(&other.present)?,
+        })
+    }
+
+    fn matches(&self, target: &Self) -> bool {
+        self.permutation == target.permutation && self.present.matches(&target.present)
+    }
+
+    fn is_compatible(&self, other: &Self) -> bool {
+        self.permutation == other.permutation && self.present.is_compatible(&other.present)
     }
 }
 
@@ -781,12 +825,53 @@ pub struct TopicityAst {
     pub relation: TopicityRelationAst,
 }
 
-impl TopicityAst {
-    /// Matches-only (not a `Lattice`): different pairs are incomparable, so there
-    /// is no global top. `matches` = same `pair` and the per-pair `rel` matches;
-    /// the per-pair lattice lives in [`TopicityRelationAst`].
-    pub fn matches(&self, target: &Self) -> bool {
+impl Canonicalize for TopicityAst {
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(Self {
+            pair: self.pair,
+            relation: self.relation.canonicalize()?,
+        })
+    }
+}
+
+/// Meet-semilattice keyed by `pair`: same pair delegates to the per-pair
+/// `relation` lattice, different pairs lie in different fibers (`meet` → `None`,
+/// `join` → `Err(NoJoin)`) — they are incomparable, there is no global top.
+impl Lattice for TopicityAst {
+    fn is_undetermined(&self) -> bool {
+        self.relation.is_undetermined()
+    }
+
+    fn is_ground(&self) -> bool {
+        self.relation.is_ground()
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        if self.pair != other.pair {
+            return None;
+        }
+        self.relation.meet(&other.relation).map(|relation| Self {
+            pair: self.pair,
+            relation,
+        })
+    }
+
+    fn join(&self, other: &Self) -> Result<Self, NoJoin> {
+        if self.pair != other.pair {
+            return Err(NoJoin);
+        }
+        Ok(Self {
+            pair: self.pair,
+            relation: self.relation.join(&other.relation)?,
+        })
+    }
+
+    fn matches(&self, target: &Self) -> bool {
         self.pair == target.pair && self.relation.matches(&target.relation)
+    }
+
+    fn is_compatible(&self, other: &Self) -> bool {
+        self.pair == other.pair && self.relation.is_compatible(&other.relation)
     }
 }
 
@@ -1062,6 +1147,122 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::same_permutation_narrows(
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Undetermined },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) },
+        Some(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }))]
+    #[case::same_permutation_conflict(
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(false) },
+        None)]
+    #[case::different_permutation(
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) },
+        None)]
+    fn test_ligand_symmetry_ast_meet(
+        #[case] a: LigandSymmetryAst,
+        #[case] b: LigandSymmetryAst,
+        #[case] expected: Option<LigandSymmetryAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::same_permutation(
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) },
+        Ok(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) }))]
+    #[case::different_permutation(
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, present: BooleanAst::Lit(true) },
+        Err(NoJoin))]
+    fn test_ligand_symmetry_ast_join(
+        #[case] a: LigandSymmetryAst,
+        #[case] b: LigandSymmetryAst,
+        #[case] expected: Result<LigandSymmetryAst, NoJoin>,
+    ) {
+        assert_eq!(a.join(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::same_permutation_narrows(
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Undetermined },
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(true) },
+        Some(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(true) }))]
+    #[case::different_permutation(
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(true) },
+        FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Lit(true) },
+        None)]
+    fn test_fluxionality_ast_meet(
+        #[case] a: FluxionalityAst,
+        #[case] b: FluxionalityAst,
+        #[case] expected: Option<FluxionalityAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::same_permutation(
+        FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Lit(true) },
+        FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Lit(true) },
+        Ok(FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Lit(true) }))]
+    #[case::different_permutation(
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), present: BooleanAst::Lit(true) },
+        FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), present: BooleanAst::Lit(true) },
+        Err(NoJoin))]
+    fn test_fluxionality_ast_join(
+        #[case] a: FluxionalityAst,
+        #[case] b: FluxionalityAst,
+        #[case] expected: Result<FluxionalityAst, NoJoin>,
+    ) {
+        assert_eq!(a.join(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::same_pair_narrows(
+        TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined },
+        TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) },
+        Some(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }))]
+    #[case::same_pair_conflict(
+        TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) },
+        TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) },
+        None)]
+    #[case::different_pair(
+        TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) },
+        TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) },
+        None)]
+    fn test_topicity_ast_meet(
+        #[case] a: TopicityAst,
+        #[case] b: TopicityAst,
+        #[case] expected: Option<TopicityAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::same_pair(
+        TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) },
+        TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) },
+        Ok(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }))]
+    #[case::different_pair(
+        TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) },
+        TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) },
+        Err(NoJoin))]
+    fn test_topicity_ast_join(
+        #[case] a: TopicityAst,
+        #[case] b: TopicityAst,
+        #[case] expected: Result<TopicityAst, NoJoin>,
+    ) {
+        assert_eq!(a.join(&b), expected);
     }
 
     #[rustfmt::skip]
