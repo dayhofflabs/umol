@@ -145,11 +145,24 @@ impl MoleculeAst {
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "MoleculeAst(atoms={}, bonds={})",
-            self.0.atoms().count(),
-            self.0.bonds().count()
-        )
+        // Atoms and bonds always; the other entity families only when present, so a
+        // plain covalent molecule stays uncluttered but dative/aromatic/multicenter/
+        // noncovalent entities surface when they exist. Names match the `from_parts` kwargs.
+        let mut parts = vec![
+            format!("atoms={}", self.0.atoms().count()),
+            format!("bonds={}", self.0.bonds().count()),
+        ];
+        for (name, count) in [
+            ("dative", self.0.dative_bonds().count()),
+            ("aromatic", self.0.aromatic_systems().count()),
+            ("multicenter", self.0.multicenter_bonds().count()),
+            ("noncovalent", self.0.noncovalent_bonds().count()),
+        ] {
+            if count > 0 {
+                parts.push(format!("{name}={count}"));
+            }
+        }
+        format!("MoleculeAst({})", parts.join(", "))
     }
 }
 
@@ -313,6 +326,27 @@ mod tests {
         assert_eq!(
             MoleculeAst::new().__repr__(),
             "MoleculeAst(atoms=0, bonds=0)"
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_ast_repr_includes_entities() {
+        // atoms + bonds always; other families only when present
+        let molecule = MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![
+                AtomAst::from_element(Element::O),
+                AtomAst::from_element(Element::O),
+            ],
+            noncovalent: vec![(
+                AstAtomId(0),
+                AstAtomId(1),
+                AstNoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            ..Default::default()
+        }));
+        assert_eq!(
+            molecule.__repr__(),
+            "MoleculeAst(atoms=2, bonds=0, noncovalent=1)"
         );
     }
 }
