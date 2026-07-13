@@ -1683,8 +1683,8 @@ fn test_molecule_ast_index_noncovalent_bond(#[from(rich_molecule)] ast: Molecule
 }
 
 #[rstest]
-fn test_molecule_ast_map_atoms(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    ast.map_atoms(|mut a| {
+fn test_molecule_ast_modify_atoms(#[from(rich_molecule)] mut ast: MoleculeAst) {
+    ast.modify_atoms(|mut a| {
         a.charge = ValueAst::Lit(1);
         a
     });
@@ -1701,8 +1701,8 @@ fn test_molecule_ast_map_atoms(#[from(rich_molecule)] mut ast: MoleculeAst) {
 }
 
 #[rstest]
-fn test_molecule_ast_map_bonds(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    ast.map_bonds(|mut b| {
+fn test_molecule_ast_modify_bonds(#[from(rich_molecule)] mut ast: MoleculeAst) {
+    ast.modify_bonds(|mut b| {
         b.order = ValueAst::Lit(1);
         b
     });
@@ -1737,8 +1737,8 @@ fn test_molecule_ast_aromatic_system_mut(#[from(rich_molecule)] mut ast: Molecul
 }
 
 #[rstest]
-fn test_molecule_ast_map_aromatic_systems(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    ast.map_aromatic_systems(|mut a| {
+fn test_molecule_ast_modify_aromatic_systems(#[from(rich_molecule)] mut ast: MoleculeAst) {
+    ast.modify_aromatic_systems(|mut a| {
         a.electrons = ElectronCountsAst::Lit(vec![1; 3]);
         a
     });
@@ -1761,8 +1761,8 @@ fn test_molecule_ast_multicenter_bond_mut(#[from(rich_molecule)] mut ast: Molecu
 }
 
 #[rstest]
-fn test_molecule_ast_map_multicenter_bonds(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    ast.map_multicenter_bonds(|mut m| {
+fn test_molecule_ast_modify_multicenter_bonds(#[from(rich_molecule)] mut ast: MoleculeAst) {
+    ast.modify_multicenter_bonds(|mut m| {
         m.electrons = ElectronCountsAst::Lit(vec![1, 1, 0]);
         m
     });

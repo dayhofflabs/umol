@@ -845,22 +845,22 @@ impl FromAst<MoleculeAst> for MoleculeDsl {
 
     fn from_ast(ast: &MoleculeAst, cfg: &Self::Ctx) -> Self {
         let mut ast_out = ast.clone();
-        ast_out.map_atoms(|atom| AtomDsl::from_ast(&atom, &cfg.atom).0);
-        ast_out.map_bonds(|bond| BondDsl::from_ast(&bond, &cfg.bond).0);
-        ast_out.map_aromatic_systems(|system| {
+        ast_out.modify_atoms(|atom| AtomDsl::from_ast(&atom, &cfg.atom).0);
+        ast_out.modify_bonds(|bond| BondDsl::from_ast(&bond, &cfg.bond).0);
+        ast_out.modify_aromatic_systems(|system| {
             AromaticSystemDsl::from_ast(&system, &cfg.aromatic_system).0
         });
-        ast_out.map_multicenter_bonds(|bond| {
+        ast_out.modify_multicenter_bonds(|bond| {
             MulticenterBondDsl::from_ast(&bond, &cfg.multicenter_bond).0
         });
-        ast_out.map_dative_bonds(|bond| DativeBondDsl::from_ast(&bond, &cfg.dative_bond).0);
-        ast_out.map_noncovalent_bonds(|bond| {
+        ast_out.modify_dative_bonds(|bond| DativeBondDsl::from_ast(&bond, &cfg.dative_bond).0);
+        ast_out.modify_noncovalent_bonds(|bond| {
             NoncovalentBondDsl::from_ast(&bond, &cfg.noncovalent_bond).0
         });
-        ast_out.map_stereo_atoms(|stereo_atom| {
+        ast_out.modify_stereo_atoms(|stereo_atom| {
             StereoAtomDsl::from_ast(&stereo_atom, &cfg.stereo_atom).0
         });
-        ast_out.map_stereo_bonds(|stereo_bond| {
+        ast_out.modify_stereo_bonds(|stereo_bond| {
             StereoBondDsl::from_ast(&stereo_bond, &cfg.stereo_bond).0
         });
         MoleculeDsl {
@@ -875,14 +875,24 @@ impl IntoAst<MoleculeAst> for MoleculeDsl {
 
     fn into_ast(self, cfg: &Self::Ctx) -> MoleculeAst {
         let mut ast = self.ast;
-        ast.map_atoms(|atom| AtomDsl(atom).into_ast(&cfg.atom));
-        ast.map_bonds(|bond| BondDsl(bond).into_ast(&cfg.bond));
-        ast.map_dative_bonds(|bond| DativeBondDsl(bond).into_ast(&cfg.dative_bond));
-        ast.map_aromatic_systems(|system| AromaticSystemDsl(system).into_ast(&cfg.aromatic_system));
-        ast.map_multicenter_bonds(|bond| MulticenterBondDsl(bond).into_ast(&cfg.multicenter_bond));
-        ast.map_noncovalent_bonds(|bond| NoncovalentBondDsl(bond).into_ast(&cfg.noncovalent_bond));
-        ast.map_stereo_atoms(|stereo_atom| StereoAtomDsl(stereo_atom).into_ast(&cfg.stereo_atom));
-        ast.map_stereo_bonds(|stereo_bond| StereoBondDsl(stereo_bond).into_ast(&cfg.stereo_bond));
+        ast.modify_atoms(|atom| AtomDsl(atom).into_ast(&cfg.atom));
+        ast.modify_bonds(|bond| BondDsl(bond).into_ast(&cfg.bond));
+        ast.modify_dative_bonds(|bond| DativeBondDsl(bond).into_ast(&cfg.dative_bond));
+        ast.modify_aromatic_systems(|system| {
+            AromaticSystemDsl(system).into_ast(&cfg.aromatic_system)
+        });
+        ast.modify_multicenter_bonds(|bond| {
+            MulticenterBondDsl(bond).into_ast(&cfg.multicenter_bond)
+        });
+        ast.modify_noncovalent_bonds(|bond| {
+            NoncovalentBondDsl(bond).into_ast(&cfg.noncovalent_bond)
+        });
+        ast.modify_stereo_atoms(|stereo_atom| {
+            StereoAtomDsl(stereo_atom).into_ast(&cfg.stereo_atom)
+        });
+        ast.modify_stereo_bonds(|stereo_bond| {
+            StereoBondDsl(stereo_bond).into_ast(&cfg.stereo_bond)
+        });
         ast
     }
 }

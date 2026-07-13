@@ -26,7 +26,7 @@ impl BondsResolver {
         &self,
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), BondsContradiction>, BondsError> {
-        ast.map_bonds(|mut bond| {
+        ast.modify_bonds(|mut bond| {
             if matches!(bond.charge, ValueAst::Undetermined) {
                 bond.charge = ValueAst::Lit(0);
             }

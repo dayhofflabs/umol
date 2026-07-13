@@ -592,7 +592,7 @@ impl MoleculeAst {
 
     /// Replace every atom with `f(atom)` in place (owned in, owned out — no
     /// `&mut AtomAst` escapes, so the container controls any re-interning).
-    pub fn map_atoms(&mut self, mut f: impl FnMut(AtomAst) -> AtomAst) {
+    pub fn modify_atoms(&mut self, mut f: impl FnMut(AtomAst) -> AtomAst) {
         for atom in Arc::make_mut(&mut self.atoms).iter_mut() {
             *atom = f(mem::take(atom));
         }
@@ -606,7 +606,7 @@ impl MoleculeAst {
     }
 
     /// Replace every bond with `f(bond)` in place.
-    pub fn map_bonds(&mut self, mut f: impl FnMut(BondAst) -> BondAst) {
+    pub fn modify_bonds(&mut self, mut f: impl FnMut(BondAst) -> BondAst) {
         for bond in Arc::make_mut(&mut self.bonds).iter_mut() {
             *bond = f(mem::take(bond));
         }
@@ -631,7 +631,7 @@ impl MoleculeAst {
     }
 
     /// Replace every dative bond with `f(bond)` in place.
-    pub fn map_dative_bonds(&mut self, mut f: impl FnMut(DativeBondAst) -> DativeBondAst) {
+    pub fn modify_dative_bonds(&mut self, mut f: impl FnMut(DativeBondAst) -> DativeBondAst) {
         for dative_bond in Arc::make_mut(&mut self.dative_bonds).data_iter_mut() {
             *dative_bond = f(mem::take(dative_bond));
         }
@@ -650,7 +650,7 @@ impl MoleculeAst {
     }
 
     /// Replace every aromatic system with `f(system)` in place.
-    pub fn map_aromatic_systems(
+    pub fn modify_aromatic_systems(
         &mut self,
         mut f: impl FnMut(AromaticSystemAst) -> AromaticSystemAst,
     ) {
@@ -672,7 +672,7 @@ impl MoleculeAst {
     }
 
     /// Replace every multicenter bond with `f(bond)` in place.
-    pub fn map_multicenter_bonds(
+    pub fn modify_multicenter_bonds(
         &mut self,
         mut f: impl FnMut(MulticenterBondAst) -> MulticenterBondAst,
     ) {
@@ -690,7 +690,7 @@ impl MoleculeAst {
     }
 
     /// Replace every noncovalent bond with `f(bond)` in place.
-    pub fn map_noncovalent_bonds(
+    pub fn modify_noncovalent_bonds(
         &mut self,
         mut f: impl FnMut(NoncovalentBondAst) -> NoncovalentBondAst,
     ) {
@@ -714,7 +714,7 @@ impl MoleculeAst {
     }
 
     /// Replace every stereo atom with `f(stereo_atom)` in place.
-    pub fn map_stereo_atoms(&mut self, mut f: impl FnMut(StereoAtomAst) -> StereoAtomAst) {
+    pub fn modify_stereo_atoms(&mut self, mut f: impl FnMut(StereoAtomAst) -> StereoAtomAst) {
         for stereo_atom in Arc::make_mut(&mut self.stereo_atoms).data_iter_mut() {
             *stereo_atom = f(mem::take(stereo_atom));
         }
@@ -735,7 +735,7 @@ impl MoleculeAst {
     }
 
     /// Replace every stereo bond with `f(stereo_bond)` in place.
-    pub fn map_stereo_bonds(&mut self, mut f: impl FnMut(StereoBondAst) -> StereoBondAst) {
+    pub fn modify_stereo_bonds(&mut self, mut f: impl FnMut(StereoBondAst) -> StereoBondAst) {
         for stereo_bond in Arc::make_mut(&mut self.stereo_bonds).data_iter_mut() {
             *stereo_bond = f(mem::take(stereo_bond));
         }

@@ -690,7 +690,7 @@ not mid-slice.
 > - **3 (`Permutation` `u8`→`u32`) — DONE.** Both `image` and `degree` fields → `u32`; dropped the pyo3 boundary `as u8` truncation. (umol-perm 110 green.)
 > - **4 (`connecting`→`of`) — DONE.** `connecting`/`connecting_id` → `of`/`of_id` across all six entity families (AST views + pyo3 `Views` + the Python entity tests), rename-only/positional; landed stereo-first, then the other five.
 > - **5 (`(a,b)`→`(first,second)`) — DONE.** `find_bond_by_participants` + the noncovalent peer → `(first, second)` (param names only); the symmetric orbit predicates keep `a,b` per the recorded decision.
-> - **6 (uniform `*ViewMut` + retire bulk `&mut` iterators) — already done** (in the dative slice, "S0"): all eight `*_mut(id)` return a `*ViewMut`, bulk `*s_mut()` retired to `map_*(FnMut(XAst)->XAst)`. The Drop re-intern guard remains correctly deferred to interning (114).
+> - **6 (uniform `*ViewMut` + retire bulk `&mut` iterators) — already done** (in the dative slice, "S0"): all eight `*_mut(id)` return a `*ViewMut`, bulk `*s_mut()` retired to `modify_*(FnMut(XAst)->XAst)` (renamed from `map_*` 2026-07-13 — `map` wrongly implied a returning transform; `modify` matches the delta verb). The Drop re-intern guard remains correctly deferred to interning (114).
 >
 > **Stereo lookup-vocabulary rename (2026-07-13 — emerged from item 4's discussion, not originally listed):** `coincident`→`at`/`is_at`/`at_id` (by site); the reverse `tetrahedral_stereo`/`cis_trans_stereo`→`stereo_atom`/`stereo_bond`, now **kind-generic** (the tetrahedral/cis-trans *constraint* accessor keeps its name; `derive_constraints` filters at the call site); `incident_at_ligand`/`incident_at_site`→`incident_as_ligand`/`incident_as_site`. `incident` (the base relation) unchanged. AST + pyo3 + tests. **Verified: umol-ast 4581, umol-py + pytest 379, clippy/fmt clean.**
 
@@ -760,9 +760,9 @@ not mid-slice.
    **prerequisite**. **Scheduled + fully planned as Part A ("S0") of the dative slice —
    doc 140 §"B2 · Dative — staged impl plan (2026-07-11)".** Resolved there: `*ViewMut`
    carries **owned** participants (clone-then-`data_mut`, borrow-legal, mirrors `BondViewMut`);
-   the eight `*s_mut()` retire to `map_*(FnMut(XAst) -> XAst)` (replace-based — no `&mut`
-   escapes, container owns re-interning); 29 `.ast` migrations + 22 loop→`map_*` rewrites;
-   no `Drop` guard yet (shape only).
+   the eight `*s_mut()` retire to `modify_*(FnMut(XAst) -> XAst)` (replace-based — no `&mut`
+   escapes, container owns re-interning); 29 `.ast` migrations + 22 loop→`modify_*` rewrites;
+   no `Drop` guard yet (shape only). (Named `map_*` originally; renamed to `modify_*` 2026-07-13.)
 
 ## Python-side todos
 
