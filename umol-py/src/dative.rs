@@ -116,9 +116,7 @@ impl DativeBondAst {
         &mut self.0
     }
 
-    /// Wrap an AST bond (the hold-the-value `from_inner` bridge, paired with
-    /// `inner`). Test-only — in-crate construction wraps `DativeBondAst(..)` directly.
-    #[cfg(test)]
+    /// Wrap an owned Rust dative-bond AST.
     pub(crate) fn from_inner(bond: AstDativeBondAst) -> Self {
         DativeBondAst(bond)
     }

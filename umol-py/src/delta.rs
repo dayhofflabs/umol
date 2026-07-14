@@ -5,7 +5,8 @@ use umol_ast::ast::{
     AromaticSystemFieldChange as AstAromaticSystemFieldChange, AtomAst as AstAtomAst,
     AtomDelta as AstAtomDelta, AtomFieldChange as AstAtomFieldChange, AtomId as AstAtomId,
     BondAst as AstBondAst, BondDelta as AstBondDelta, BondFieldChange as AstBondFieldChange,
-    BondId as AstBondId, DativeBondFieldChange as AstDativeBondFieldChange,
+    BondId as AstBondId, DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
+    DativeBondFieldChange as AstDativeBondFieldChange, DativeBondId as AstDativeBondId,
     MulticenterBondFieldChange as AstMulticenterBondFieldChange,
     NoncovalentBondFieldChange as AstNoncovalentBondFieldChange,
     StereoAtomFieldChange as AstStereoAtomFieldChange,
@@ -16,7 +17,9 @@ use crate::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use crate::bond::BondAst;
 use crate::constraint::atom::AtomConstraintAst;
 use crate::constraint::bond::BondConstraintAst;
+use crate::constraint::dative::DativeBondConstraintAst;
 use crate::convert::into_py_variant;
+use crate::dative::DativeBondAst;
 use crate::electrons::ElectronCountsAst;
 use crate::noncovalent::NoncovalentBondKindAst;
 use crate::spin::SpinStateAst;
@@ -695,14 +698,183 @@ impl BondDelta {
     }
 }
 
+pub struct DativeBondDeltaAstValue(Py<DativeBondAst>);
+
+impl FromPyObject<'_, '_> for DativeBondDeltaAstValue {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
+        let source = obj.extract::<PyRef<'_, DativeBondAst>>()?;
+        let ast = source.inner().clone();
+        drop(source);
+        Ok(Self(Py::new(obj.py(), DativeBondAst::from_inner(ast))?))
+    }
+}
+
+impl<'py> IntoPyObject<'py> for &DativeBondDeltaAstValue {
+    type Target = DativeBondAst;
+    type Output = Bound<'py, DativeBondAst>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        Ok(self.0.clone_ref(py).into_bound(py))
+    }
+}
+
+impl DativeBondDeltaAstValue {
+    fn from_rust(py: Python<'_>, ast: &AstDativeBondAst) -> PyResult<Self> {
+        Ok(Self(Py::new(py, DativeBondAst::from_inner(ast.clone()))?))
+    }
+
+    fn to_rust(&self, py: Python<'_>) -> AstDativeBondAst {
+        self.0.bind(py).borrow().inner().clone()
+    }
+}
+
+/// A resolved edit to one dative bond.
+#[pyclass]
+pub enum DativeBondDelta {
+    Add {
+        id: u32,
+        donors: Vec<u32>,
+        acceptor: u32,
+        ast: DativeBondDeltaAstValue,
+    },
+    Remove {
+        id: u32,
+        donors: Vec<u32>,
+        acceptor: u32,
+        ast: DativeBondDeltaAstValue,
+    },
+    ModifyField {
+        id: u32,
+        change: Py<DativeBondFieldChange>,
+    },
+    ModifyConstraint {
+        id: u32,
+        old: Option<Py<DativeBondConstraintAst>>,
+        new: Option<Py<DativeBondConstraintAst>>,
+    },
+}
+
+#[pymethods]
+impl DativeBondDelta {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_rust(py) == other.to_rust(py)
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, fields): (&str, &[&str]) = match &*slf.bind(py).borrow() {
+            Self::Add { .. } => ("Add", &["id", "donors", "acceptor", "ast"]),
+            Self::Remove { .. } => ("Remove", &["id", "donors", "acceptor", "ast"]),
+            Self::ModifyField { .. } => ("ModifyField", &["id", "change"]),
+            Self::ModifyConstraint { .. } => ("ModifyConstraint", &["id", "old", "new"]),
+        };
+        entity_delta_repr(slf.bind(py).as_any(), "DativeBondDelta", variant, fields)
+    }
+
+    /// Return the inverse resolved edit.
+    fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
+        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+    }
+}
+
+impl DativeBondDelta {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &AstDativeBondDelta) -> PyResult<Self> {
+        Ok(match delta {
+            AstDativeBondDelta::Add {
+                id,
+                donors,
+                acceptor,
+                ast,
+            } => Self::Add {
+                id: id.0,
+                donors: donors.iter().map(|atom| atom.0).collect(),
+                acceptor: acceptor.0,
+                ast: DativeBondDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstDativeBondDelta::Remove {
+                id,
+                donors,
+                acceptor,
+                ast,
+            } => Self::Remove {
+                id: id.0,
+                donors: donors.iter().map(|atom| atom.0).collect(),
+                acceptor: acceptor.0,
+                ast: DativeBondDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstDativeBondDelta::ModifyField { id, change } => Self::ModifyField {
+                id: id.0,
+                change: into_py_variant(py, DativeBondFieldChange::from_rust(py, change)?)?,
+            },
+            AstDativeBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id: id.0,
+                old: old
+                    .as_ref()
+                    .map(|constraint| {
+                        into_py_variant(py, DativeBondConstraintAst::from_rust(py, constraint)?)
+                    })
+                    .transpose()?,
+                new: new
+                    .as_ref()
+                    .map(|constraint| {
+                        into_py_variant(py, DativeBondConstraintAst::from_rust(py, constraint)?)
+                    })
+                    .transpose()?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstDativeBondDelta {
+        match self {
+            Self::Add {
+                id,
+                donors,
+                acceptor,
+                ast,
+            } => AstDativeBondDelta::Add {
+                id: AstDativeBondId(*id),
+                donors: donors.iter().copied().map(AstAtomId).collect(),
+                acceptor: AstAtomId(*acceptor),
+                ast: ast.to_rust(py),
+            },
+            Self::Remove {
+                id,
+                donors,
+                acceptor,
+                ast,
+            } => AstDativeBondDelta::Remove {
+                id: AstDativeBondId(*id),
+                donors: donors.iter().copied().map(AstAtomId).collect(),
+                acceptor: AstAtomId(*acceptor),
+                ast: ast.to_rust(py),
+            },
+            Self::ModifyField { id, change } => AstDativeBondDelta::ModifyField {
+                id: AstDativeBondId(*id),
+                change: change.bind(py).borrow().to_rust(py),
+            },
+            Self::ModifyConstraint { id, old, new } => AstDativeBondDelta::ModifyConstraint {
+                id: AstDativeBondId(*id),
+                old: old
+                    .as_ref()
+                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                new: new
+                    .as_ref()
+                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
         AtomConstraintAst as AstAtomConstraintAst, BondConstraintAst as AstBondConstraintAst,
-        BooleanAst as AstBooleanAst, ElectronCountsAst as AstElectronCountsAst,
-        ElementAst as AstElementAst, IsotopeMassAst as AstIsotopeMassAst,
-        NoncovalentBondKind as AstNoncovalentBondKind,
+        BooleanAst as AstBooleanAst, DativeBondConstraintAst as AstDativeBondConstraintAst,
+        ElectronCountsAst as AstElectronCountsAst, ElementAst as AstElementAst,
+        IsotopeMassAst as AstIsotopeMassAst, NoncovalentBondKind as AstNoncovalentBondKind,
         NoncovalentBondKindAst as AstNoncovalentBondKindAst, SpinStateAst as AstSpinStateAst,
         StereoConfigurationAst as AstStereoConfigurationAst, StereoCosetAst as AstStereoCosetAst,
         StereoKind as AstStereoKind, ValueAst as AstValueAst,
@@ -1847,6 +2019,195 @@ mod tests {
     fn test_bond_delta_inverse(#[case] delta: AstBondDelta) {
         Python::attach(|py| {
             let binding = BondDelta::from_rust(py, &delta).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py),
+                delta.clone().inverse()
+            );
+            let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstDativeBondDelta::Add {
+        id: AstDativeBondId(1),
+        donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+        acceptor: AstAtomId(3),
+        ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+    })]
+    #[case::remove(AstDativeBondDelta::Remove {
+        id: AstDativeBondId(1),
+        donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+        acceptor: AstAtomId(3),
+        ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+    })]
+    #[case::modify_field(AstDativeBondDelta::ModifyField {
+        id: AstDativeBondId(1),
+        change: AstDativeBondFieldChange::Order {
+            old: AstValueAst::Lit(1),
+            new: AstValueAst::Lit(2),
+        },
+    })]
+    #[case::constraint_added(AstDativeBondDelta::ModifyConstraint {
+        id: AstDativeBondId(1),
+        old: None,
+        new: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    })]
+    #[case::constraint_removed(AstDativeBondDelta::ModifyConstraint {
+        id: AstDativeBondId(1),
+        old: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+        new: None,
+    })]
+    #[case::constraint_modified(AstDativeBondDelta::ModifyConstraint {
+        id: AstDativeBondId(1),
+        old: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(false))),
+        new: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    })]
+    fn test_dative_bond_delta_roundtrip(#[case] delta: AstDativeBondDelta) {
+        Python::attach(|py| {
+            assert_eq!(
+                DativeBondDelta::from_rust(py, &delta).unwrap().to_rust(py),
+                delta
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        AstDativeBondDelta::Add {
+            id: AstDativeBondId(1),
+            donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            acceptor: AstAtomId(3),
+            ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+        },
+        AstDativeBondDelta::Add {
+            id: AstDativeBondId(1),
+            donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            acceptor: AstAtomId(3),
+            ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+        },
+        true,
+    )]
+    #[case::different_donor_order(
+        AstDativeBondDelta::Add {
+            id: AstDativeBondId(1),
+            donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            acceptor: AstAtomId(3),
+            ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+        },
+        AstDativeBondDelta::Add {
+            id: AstDativeBondId(1),
+            donors: vec![AstAtomId(2), AstAtomId(4), AstAtomId(4)],
+            acceptor: AstAtomId(3),
+            ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+        },
+        false,
+    )]
+    fn test_dative_bond_delta_eq(
+        #[case] lhs: AstDativeBondDelta,
+        #[case] rhs: AstDativeBondDelta,
+        #[case] expected: bool,
+    ) {
+        Python::attach(|py| {
+            let lhs = DativeBondDelta::from_rust(py, &lhs).unwrap();
+            let rhs = DativeBondDelta::from_rust(py, &rhs).unwrap();
+            assert_eq!(lhs.__eq__(&rhs, py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::add(
+        AstDativeBondDelta::Add {
+            id: AstDativeBondId(1),
+            donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            acceptor: AstAtomId(3),
+            ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+        },
+        "DativeBondDelta.Add(id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondAst.parse('1'))",
+    )]
+    #[case::remove(
+        AstDativeBondDelta::Remove {
+            id: AstDativeBondId(1),
+            donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            acceptor: AstAtomId(3),
+            ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+        },
+        "DativeBondDelta.Remove(id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondAst.parse('1'))",
+    )]
+    #[case::modify_field(
+        AstDativeBondDelta::ModifyField {
+            id: AstDativeBondId(1),
+            change: AstDativeBondFieldChange::Order {
+                old: AstValueAst::Lit(1),
+                new: AstValueAst::Lit(2),
+            },
+        },
+        "DativeBondDelta.ModifyField(id=1, change=DativeBondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2)))",
+    )]
+    #[case::modify_constraint(
+        AstDativeBondDelta::ModifyConstraint {
+            id: AstDativeBondId(1),
+            old: None,
+            new: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+        },
+        "DativeBondDelta.ModifyConstraint(id=1, old=None, new=DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)))",
+    )]
+    fn test_dative_bond_delta_repr(#[case] delta: AstDativeBondDelta, #[case] expected: &str) {
+        Python::attach(|py| {
+            let delta =
+                into_py_variant(py, DativeBondDelta::from_rust(py, &delta).unwrap()).unwrap();
+            assert_eq!(
+                delta
+                    .bind(py)
+                    .as_any()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstDativeBondDelta::Add {
+        id: AstDativeBondId(1),
+        donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+        acceptor: AstAtomId(3),
+        ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+    })]
+    #[case::remove(AstDativeBondDelta::Remove {
+        id: AstDativeBondId(1),
+        donors: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+        acceptor: AstAtomId(3),
+        ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+    })]
+    #[case::modify_field(AstDativeBondDelta::ModifyField {
+        id: AstDativeBondId(1),
+        change: AstDativeBondFieldChange::Order {
+            old: AstValueAst::Lit(1),
+            new: AstValueAst::Lit(2),
+        },
+    })]
+    #[case::constraint_added(AstDativeBondDelta::ModifyConstraint {
+        id: AstDativeBondId(1),
+        old: None,
+        new: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    })]
+    #[case::constraint_removed(AstDativeBondDelta::ModifyConstraint {
+        id: AstDativeBondId(1),
+        old: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+        new: None,
+    })]
+    #[case::constraint_modified(AstDativeBondDelta::ModifyConstraint {
+        id: AstDativeBondId(1),
+        old: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(false))),
+        new: Some(AstDativeBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    })]
+    fn test_dative_bond_delta_inverse(#[case] delta: AstDativeBondDelta) {
+        Python::attach(|py| {
+            let binding = DativeBondDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),

@@ -11,6 +11,9 @@ from umol import (
     BondDelta,
     BondFieldChange,
     BooleanAst,
+    DativeBondAst,
+    DativeBondConstraintAst,
+    DativeBondDelta,
     DativeBondFieldChange,
     Element,
     ElementAst,
@@ -787,6 +790,104 @@ def test_bonddelta_modifyconstraint_match():
     inverse = delta.inverse()
     assert isinstance(inverse, BondDelta.ModifyConstraint)
     assert inverse.old == BondConstraintAst.Aromatic(BooleanAst.Lit(True))
+    assert inverse.new is None
+    assert inverse.inverse() == delta
+
+
+def test_dativebonddelta_fields():
+    source = DativeBondAst(1)
+    delta = DativeBondDelta.Add(
+        id=1,
+        donors=[4, 2, 4],
+        acceptor=3,
+        ast=source,
+    )
+
+    source.order = 2
+
+    assert delta.id == 1
+    assert delta.donors == [4, 2, 4]
+    assert isinstance(delta.donors, list)
+    assert delta.acceptor == 3
+    assert delta.ast.order == ValueAst.Lit(1)
+    assert repr(delta) == (
+        "DativeBondDelta.Add(id=1, donors=[4, 2, 4], acceptor=3, "
+        "ast=DativeBondAst.parse('1'))"
+    )
+    delta.ast.order = 3
+    assert delta.ast.order == ValueAst.Lit(3)
+    with pytest.raises(AttributeError):
+        delta.donors = [2, 4, 4]
+    with pytest.raises(TypeError):
+        hash(delta)
+
+
+def test_dativebonddelta_add_match():
+    delta = DativeBondDelta.Add(
+        id=1,
+        donors=[4, 2, 4],
+        acceptor=3,
+        ast=DativeBondAst(1),
+    )
+
+    match delta:
+        case DativeBondDelta.Add(id=id, donors=donors, acceptor=acceptor, ast=ast):
+            assert id == 1
+            assert donors == [4, 2, 4]
+            assert acceptor == 3
+            assert ast == DativeBondAst(1)
+        case _:
+            raise AssertionError("dative bond delta did not match its add variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, DativeBondDelta.Remove)
+    assert inverse.id == 1
+    assert inverse.donors == [4, 2, 4]
+    assert inverse.acceptor == 3
+    assert inverse.ast == DativeBondAst(1)
+    assert inverse.inverse() == delta
+
+
+def test_dativebonddelta_modifyfield_match():
+    delta = DativeBondDelta.ModifyField(
+        id=1,
+        change=DativeBondFieldChange.Order(
+            old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+        ),
+    )
+
+    match delta:
+        case DativeBondDelta.ModifyField(id, change):
+            assert id == 1
+            assert change == DativeBondFieldChange.Order(
+                old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+            )
+        case _:
+            raise AssertionError("dative bond delta did not match its field variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, DativeBondDelta.ModifyField)
+    assert inverse.inverse() == delta
+
+
+def test_dativebonddelta_modifyconstraint_match():
+    delta = DativeBondDelta.ModifyConstraint(
+        id=1,
+        old=None,
+        new=DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+    )
+
+    match delta:
+        case DativeBondDelta.ModifyConstraint(id=id, old=old, new=new):
+            assert id == 1
+            assert old is None
+            assert new == DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))
+        case _:
+            raise AssertionError("dative bond delta did not match its constraint variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, DativeBondDelta.ModifyConstraint)
+    assert inverse.old == DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))
     assert inverse.new is None
     assert inverse.inverse() == delta
 

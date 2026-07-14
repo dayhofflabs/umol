@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S3a complete; S3b is next**
+Status: **ACTIVE — S3b.1 complete; S3b.2 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -606,9 +606,117 @@ scope and membership payloads live in `constraint/ring.rs`.
 
   **Critical path:** `S2a.1 → S3a.1 → S3a.2 → S3a.3`, with `S2a.2` also feeding
   S3a.2. No S3a subitem is deferrable: S4a requires both resolved delta bindings.
-- **S3b — non-stereo overlay deltas** (`delta.rs`): add dative, aromatic,
-  multicenter, and noncovalent mirrors. Cover each participant shape and each
-  family-specific constraint payload. **Additive (green).** `[dep: S2a]`
+- **S3b — non-stereo overlay deltas** (`umol-py/src/delta.rs`, `dative.rs`,
+  `aromatic.rs`, `multicenter.rs`, `noncovalent.rs`, `lib.rs`,
+  `python/umol/__init__.py`): add four separately named native complex-enum
+  bindings with the exact Rust variants and named payloads:
+
+  - `DativeBondDelta::{Add { id: int, donors: list[int], acceptor: int, ast:
+    DativeBondAst }, Remove { id: int, donors: list[int], acceptor: int, ast:
+    DativeBondAst }, ModifyField { id: int, change: DativeBondFieldChange },
+    ModifyConstraint { id: int, old: DativeBondConstraintAst | None, new:
+    DativeBondConstraintAst | None }}`;
+  - `AromaticSystemDelta::{Add { id: int, atoms: list[int], ast:
+    AromaticSystemAst }, Remove { id: int, atoms: list[int], ast:
+    AromaticSystemAst }, ModifyField { id: int, change:
+    AromaticSystemFieldChange }, ModifyConstraint { id: int, old:
+    AromaticSystemConstraintAst | None, new: AromaticSystemConstraintAst |
+    None }}`;
+  - `MulticenterBondDelta::{Add { id: int, atoms: list[int], ast:
+    MulticenterBondAst }, Remove { id: int, atoms: list[int], ast:
+    MulticenterBondAst }, ModifyField { id: int, change:
+    MulticenterBondFieldChange }, ModifyConstraint { id: int, old:
+    MulticenterBondConstraintAst | None, new: MulticenterBondConstraintAst |
+    None }}`;
+  - `NoncovalentBondDelta::{Add { id: int, atoms: tuple[int, int], ast:
+    NoncovalentBondAst }, Remove { id: int, atoms: tuple[int, int], ast:
+    NoncovalentBondAst }, ModifyField { id: int, change:
+    NoncovalentBondFieldChange }, ModifyConstraint { id: int, old:
+    NoncovalentBondConstraintAst | None, new: NoncovalentBondConstraintAst |
+    None }}`.
+
+  All four bindings follow the completed S3a contract: keyword construction,
+  read-only named fields, positional and named class patterns, structural value
+  equality, unhashability, exact named repr, and non-mutating `inverse() ->
+  Self` returning the concrete inverse variant subtype. IDs and the dative
+  acceptor remain bare Python integers. Rust `Vec<AtomId>` participants become
+  ordered Python lists without sorting or deduplication; the noncovalent
+  `[AtomId; 2]` remains an ordered Python two-tuple. Participant payloads occur
+  only on `Add`/`Remove`. Entity-AST constructor inputs are snapshotted into a
+  fresh stored child, while the stored `.ast` remains live and mutable through
+  the delta. Implement each enum and its `from_rust`/`to_rust` conversion
+  explicitly; reuse the existing repr and PyO3 variant helpers, but introduce no
+  generic entity-delta macro or conversion trait. These types do not implement
+  lattice semantics and retain their Rust names without an `Ast` suffix.
+
+  1. **DONE — S3b.1 — `DativeBondDelta` and directed participants** — add the private
+     snapshotting `DativeBondDeltaAstValue` field wrapper and define all four
+     variants directly. Convert `DativeBondId`/`AtomId` to bare integers,
+     preserve donor order and multiplicity in `list[int]`, and keep `acceptor`
+     separate. Wire `DativeBondFieldChange` and optional
+     `DativeBondConstraintAst` payloads through their explicit conversions.
+     Register/export the class. Rust tests cover every variant's conversion,
+     equality, exact repr, inverse, and double inverse, including `None` on each
+     constraint side. Python tests cover keyword construction, read-only fields,
+     positional and named matching, source snapshot isolation, live stored AST
+     mutation, donor order/multiplicity, list representation, and concrete
+     inverse subtypes. **Additive (green).** `[dep: S2a.2, S3a.3]`
+
+     **Implemented verification:** six Rust round-trip rows and six
+     inverse/double-inverse rows cover every variant and all optional-constraint
+     directions; two equality rows preserve donor order, and four repr rows
+     cover the complete variant surface. Four Python tests cover keyword
+     construction, read-only fields, positional and named matching, source
+     snapshot isolation, live stored AST mutation, donor order and duplicates,
+     list representation, unhashability, and concrete inverse subtypes. The
+     focused delta suites pass with 112 Rust tests and 62 Python tests; the
+     complete `umol-py` suites pass with 747 Rust tests and 449 Python tests.
+     `umol-py` clippy, rustfmt, and `git diff --check` pass.
+
+  2. **S3b.2 — `AromaticSystemDelta` and ordered member atoms** — add the private
+     snapshotting `AromaticSystemDeltaAstValue` field wrapper and define the
+     four variants directly. Preserve the variable-length member-atom vector as
+     an ordered Python list and wire `AromaticSystemFieldChange` plus optional
+     `AromaticSystemConstraintAst` payloads. Register/export the class. Give it
+     the complete Rust conversion/equality/repr/inverse matrix and the same
+     Python construction, matching, ownership, optional-constraint, participant
+     order/multiplicity, and inverse coverage as S3b.1. **Additive (green).**
+     `[dep: S2a.3, S3a.3]`
+
+  3. **S3b.3 — `MulticenterBondDelta` and ordered member atoms** — add the
+     private snapshotting `MulticenterBondDeltaAstValue` field wrapper and
+     define the four variants directly. Preserve the variable-length
+     member-atom vector as an ordered Python list and wire
+     `MulticenterBondFieldChange` plus optional
+     `MulticenterBondConstraintAst` payloads. Register/export the class. Give it
+     the complete Rust conversion/equality/repr/inverse matrix and the same
+     Python construction, matching, ownership, optional-constraint, participant
+     order/multiplicity, and inverse coverage as S3b.2. **Additive (green).**
+     `[dep: S2a.3, S3a.3]`
+
+  4. **S3b.4 — `NoncovalentBondDelta` and fixed-pair participants** — add the
+     private snapshotting `NoncovalentBondDeltaAstValue` field wrapper and
+     define the four variants directly. Map `[AtomId; 2]` to `tuple[int, int]`
+     inline without sorting, and wire `NoncovalentBondFieldChange` plus optional
+     `NoncovalentBondConstraintAst` payloads. Register/export the class. Give it
+     the complete Rust conversion/equality/repr/inverse matrix and Python
+     construction, matching, ownership, optional-constraint, ordered-tuple, and
+     inverse coverage. **Additive (green).** `[dep: S2a.4, S3a.3]`
+
+  5. **S3b.5 — non-stereo overlay closure verification** — add a sixteen-row
+     Python matrix spanning every variant of all four classes. Verify exact
+     repr, structural value equality, concrete inverse subtype, inequality
+     after one non-identity inversion, and `inverse().inverse() == original`;
+     retain targeted rows for optional constraints, payload snapshot isolation,
+     live stored payloads, directed dative participants, ordered variable-length
+     participant lists, and the ordered noncovalent pair. Run the complete Rust
+     and Python suites, workspace clippy, rustfmt, and `git diff --check` as the
+     stage gate. **Additive (green).**
+     `[dep: S3b.1, S3b.2, S3b.3, S3b.4]`
+
+  **Critical path:** `{S2a.2 → S3b.1, S2a.3 → {S3b.2, S3b.3}, S2a.4 →
+  S3b.4} → S3b.5`, with S3a.3 supplying the established entity-delta surface to
+  S3b.1–S3b.4. No S3b subitem is deferrable: S4a requires all four bindings.
 - **S3c — stereo deltas** (`delta.rs`): add stereo-atom and stereo-bond mirrors,
   including `Apply`/`Swap`/`Mirror`, ordered ligand frames, optional kind on
   constraint changes, permutation inversion, and all inverse cases. A macro may
