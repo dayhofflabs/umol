@@ -234,9 +234,7 @@ impl NoncovalentBondAst {
         &mut self.0
     }
 
-    /// Wrap an AST bond (the hold-the-value `from_inner` bridge, paired with `inner`).
-    /// Test-only — in-crate construction wraps `NoncovalentBondAst(..)` directly.
-    #[cfg(test)]
+    /// Wrap an owned Rust noncovalent-bond AST.
     pub(crate) fn from_inner(bond: AstNoncovalentBondAst) -> Self {
         NoncovalentBondAst(bond)
     }

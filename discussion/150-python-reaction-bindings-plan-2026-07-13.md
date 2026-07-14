@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S3b.3 complete; S3b.4 is next**
+Status: **ACTIVE — S3b.4 complete; S3b.5 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -716,7 +716,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      complete `umol-py` suites pass with 783 Rust tests and 457 Python tests.
      `umol-py` clippy, rustfmt, and `git diff --check` pass.
 
-  4. **S3b.4 — `NoncovalentBondDelta` and fixed-pair participants** — add the
+  4. **DONE — S3b.4 — `NoncovalentBondDelta` and fixed-pair participants** — add the
      private snapshotting `NoncovalentBondDeltaAstValue` field wrapper and
      define the four variants directly. Map `[AtomId; 2]` to `tuple[int, int]`
      inline without sorting, and wire `NoncovalentBondFieldChange` plus optional
@@ -724,6 +724,17 @@ scope and membership payloads live in `constraint/ring.rs`.
      the complete Rust conversion/equality/repr/inverse matrix and Python
      construction, matching, ownership, optional-constraint, ordered-tuple, and
      inverse coverage. **Additive (green).** `[dep: S2a.4, S3a.3]`
+
+     **Implemented verification:** six Rust round-trip rows and six
+     inverse/double-inverse rows cover every variant and all optional-constraint
+     directions; two equality rows preserve endpoint order, and four repr rows
+     cover the complete variant surface. Four Python tests cover keyword
+     construction, read-only fields, positional and named matching, source
+     snapshot isolation, live stored AST mutation, endpoint order, tuple
+     representation, unhashability, and concrete inverse subtypes. The focused
+     delta suites pass with 166 Rust tests and 74 Python tests; the complete
+     `umol-py` suites pass with 801 Rust tests and 461 Python tests. `umol-py`
+     clippy, rustfmt, and `git diff --check` pass.
 
   5. **S3b.5 — non-stereo overlay closure verification** — add a sixteen-row
      Python matrix spanning every variant of all four classes. Verify exact

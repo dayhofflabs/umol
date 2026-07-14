@@ -26,6 +26,9 @@ from umol import (
     MulticenterBondConstraintAst,
     MulticenterBondDelta,
     MulticenterBondFieldChange,
+    NoncovalentBondAst,
+    NoncovalentBondConstraintAst,
+    NoncovalentBondDelta,
     NoncovalentBondFieldChange,
     NoncovalentBondKind,
     NoncovalentBondKindAst,
@@ -1076,6 +1079,105 @@ def test_multicenterbonddelta_modifyconstraint_match():
     inverse = delta.inverse()
     assert isinstance(inverse, MulticenterBondDelta.ModifyConstraint)
     assert inverse.old == MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))
+    assert inverse.new is None
+    assert inverse.inverse() == delta
+
+
+def test_noncovalentbonddelta_fields():
+    source = NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
+    delta = NoncovalentBondDelta.Add(id=4, atoms=(5, 2), ast=source)
+
+    source.kind = NoncovalentBondKind.Ionic
+
+    assert delta.id == 4
+    assert delta.atoms == (5, 2)
+    assert isinstance(delta.atoms, tuple)
+    assert delta.ast.kind == NoncovalentBondKindAst.Lit(
+        NoncovalentBondKind.HydrogenBond
+    )
+    assert repr(delta) == (
+        "NoncovalentBondDelta.Add(id=4, atoms=(5, 2), "
+        "ast=NoncovalentBondAst.parse('Hbd'))"
+    )
+    delta.ast.kind = NoncovalentBondKind.Ionic
+    assert delta.ast.kind == NoncovalentBondKindAst.Lit(NoncovalentBondKind.Ionic)
+    with pytest.raises(AttributeError):
+        delta.atoms = (2, 5)
+    with pytest.raises(TypeError):
+        hash(delta)
+
+
+def test_noncovalentbonddelta_add_match():
+    delta = NoncovalentBondDelta.Add(
+        id=4,
+        atoms=(5, 2),
+        ast=NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+    )
+
+    match delta:
+        case NoncovalentBondDelta.Add(id=id, atoms=atoms, ast=ast):
+            assert id == 4
+            assert atoms == (5, 2)
+            assert ast == NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
+        case _:
+            raise AssertionError("noncovalent bond delta did not match its add variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, NoncovalentBondDelta.Remove)
+    assert inverse.id == 4
+    assert inverse.atoms == (5, 2)
+    assert inverse.ast == NoncovalentBondAst(NoncovalentBondKind.HydrogenBond)
+    assert inverse.inverse() == delta
+
+
+def test_noncovalentbonddelta_modifyfield_match():
+    delta = NoncovalentBondDelta.ModifyField(
+        id=4,
+        change=NoncovalentBondFieldChange.Kind(
+            old=NoncovalentBondKindAst.Undetermined(),
+            new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond),
+        ),
+    )
+
+    match delta:
+        case NoncovalentBondDelta.ModifyField(id, change):
+            assert id == 4
+            assert change == NoncovalentBondFieldChange.Kind(
+                old=NoncovalentBondKindAst.Undetermined(),
+                new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond),
+            )
+        case _:
+            raise AssertionError("noncovalent bond delta did not match its field variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, NoncovalentBondDelta.ModifyField)
+    assert inverse.inverse() == delta
+
+
+def test_noncovalentbonddelta_modifyconstraint_match():
+    delta = NoncovalentBondDelta.ModifyConstraint(
+        id=4,
+        old=None,
+        new=NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)),
+    )
+
+    match delta:
+        case NoncovalentBondDelta.ModifyConstraint(id=id, old=old, new=new):
+            assert id == 4
+            assert old is None
+            assert new == NoncovalentBondConstraintAst.Intramolecular(
+                BooleanAst.Lit(True)
+            )
+        case _:
+            raise AssertionError(
+                "noncovalent bond delta did not match its constraint variant"
+            )
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, NoncovalentBondDelta.ModifyConstraint)
+    assert inverse.old == NoncovalentBondConstraintAst.Intramolecular(
+        BooleanAst.Lit(True)
+    )
     assert inverse.new is None
     assert inverse.inverse() == delta
 

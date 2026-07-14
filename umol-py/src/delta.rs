@@ -11,9 +11,10 @@ use umol_ast::ast::{
     DativeBondFieldChange as AstDativeBondFieldChange, DativeBondId as AstDativeBondId,
     MulticenterBondAst as AstMulticenterBondAst, MulticenterBondDelta as AstMulticenterBondDelta,
     MulticenterBondFieldChange as AstMulticenterBondFieldChange,
-    MulticenterBondId as AstMulticenterBondId,
+    MulticenterBondId as AstMulticenterBondId, NoncovalentBondAst as AstNoncovalentBondAst,
+    NoncovalentBondDelta as AstNoncovalentBondDelta,
     NoncovalentBondFieldChange as AstNoncovalentBondFieldChange,
-    StereoAtomFieldChange as AstStereoAtomFieldChange,
+    NoncovalentBondId as AstNoncovalentBondId, StereoAtomFieldChange as AstStereoAtomFieldChange,
     StereoBondFieldChange as AstStereoBondFieldChange,
 };
 
@@ -25,11 +26,12 @@ use crate::constraint::atom::AtomConstraintAst;
 use crate::constraint::bond::BondConstraintAst;
 use crate::constraint::dative::DativeBondConstraintAst;
 use crate::constraint::multicenter::MulticenterBondConstraintAst;
+use crate::constraint::noncovalent::NoncovalentBondConstraintAst;
 use crate::convert::into_py_variant;
 use crate::dative::DativeBondAst;
 use crate::electrons::ElectronCountsAst;
 use crate::multicenter::MulticenterBondAst;
-use crate::noncovalent::NoncovalentBondKindAst;
+use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
 use crate::spin::SpinStateAst;
 use crate::stereo::StereoConfigurationAst;
 use crate::value::ValueAst;
@@ -1186,6 +1188,166 @@ impl MulticenterBondDelta {
     }
 }
 
+pub struct NoncovalentBondDeltaAstValue(Py<NoncovalentBondAst>);
+
+impl FromPyObject<'_, '_> for NoncovalentBondDeltaAstValue {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
+        let source = obj.extract::<PyRef<'_, NoncovalentBondAst>>()?;
+        let ast = source.inner().clone();
+        drop(source);
+        Ok(Self(Py::new(
+            obj.py(),
+            NoncovalentBondAst::from_inner(ast),
+        )?))
+    }
+}
+
+impl<'py> IntoPyObject<'py> for &NoncovalentBondDeltaAstValue {
+    type Target = NoncovalentBondAst;
+    type Output = Bound<'py, NoncovalentBondAst>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        Ok(self.0.clone_ref(py).into_bound(py))
+    }
+}
+
+impl NoncovalentBondDeltaAstValue {
+    fn from_rust(py: Python<'_>, ast: &AstNoncovalentBondAst) -> PyResult<Self> {
+        Ok(Self(Py::new(
+            py,
+            NoncovalentBondAst::from_inner(ast.clone()),
+        )?))
+    }
+
+    fn to_rust(&self, py: Python<'_>) -> AstNoncovalentBondAst {
+        self.0.bind(py).borrow().inner().clone()
+    }
+}
+
+/// A resolved edit to one noncovalent bond.
+#[pyclass]
+pub enum NoncovalentBondDelta {
+    Add {
+        id: u32,
+        atoms: (u32, u32),
+        ast: NoncovalentBondDeltaAstValue,
+    },
+    Remove {
+        id: u32,
+        atoms: (u32, u32),
+        ast: NoncovalentBondDeltaAstValue,
+    },
+    ModifyField {
+        id: u32,
+        change: Py<NoncovalentBondFieldChange>,
+    },
+    ModifyConstraint {
+        id: u32,
+        old: Option<Py<NoncovalentBondConstraintAst>>,
+        new: Option<Py<NoncovalentBondConstraintAst>>,
+    },
+}
+
+#[pymethods]
+impl NoncovalentBondDelta {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_rust(py) == other.to_rust(py)
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, fields): (&str, &[&str]) = match &*slf.bind(py).borrow() {
+            Self::Add { .. } => ("Add", &["id", "atoms", "ast"]),
+            Self::Remove { .. } => ("Remove", &["id", "atoms", "ast"]),
+            Self::ModifyField { .. } => ("ModifyField", &["id", "change"]),
+            Self::ModifyConstraint { .. } => ("ModifyConstraint", &["id", "old", "new"]),
+        };
+        entity_delta_repr(
+            slf.bind(py).as_any(),
+            "NoncovalentBondDelta",
+            variant,
+            fields,
+        )
+    }
+
+    /// Return the inverse resolved edit.
+    fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
+        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+    }
+}
+
+impl NoncovalentBondDelta {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &AstNoncovalentBondDelta) -> PyResult<Self> {
+        Ok(match delta {
+            AstNoncovalentBondDelta::Add { id, atoms, ast } => Self::Add {
+                id: id.0,
+                atoms: (atoms[0].0, atoms[1].0),
+                ast: NoncovalentBondDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstNoncovalentBondDelta::Remove { id, atoms, ast } => Self::Remove {
+                id: id.0,
+                atoms: (atoms[0].0, atoms[1].0),
+                ast: NoncovalentBondDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstNoncovalentBondDelta::ModifyField { id, change } => Self::ModifyField {
+                id: id.0,
+                change: into_py_variant(py, NoncovalentBondFieldChange::from_rust(py, change)?)?,
+            },
+            AstNoncovalentBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id: id.0,
+                old: old
+                    .as_ref()
+                    .map(|constraint| {
+                        into_py_variant(
+                            py,
+                            NoncovalentBondConstraintAst::from_rust(py, constraint)?,
+                        )
+                    })
+                    .transpose()?,
+                new: new
+                    .as_ref()
+                    .map(|constraint| {
+                        into_py_variant(
+                            py,
+                            NoncovalentBondConstraintAst::from_rust(py, constraint)?,
+                        )
+                    })
+                    .transpose()?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstNoncovalentBondDelta {
+        match self {
+            Self::Add { id, atoms, ast } => AstNoncovalentBondDelta::Add {
+                id: AstNoncovalentBondId(*id),
+                atoms: [AstAtomId(atoms.0), AstAtomId(atoms.1)],
+                ast: ast.to_rust(py),
+            },
+            Self::Remove { id, atoms, ast } => AstNoncovalentBondDelta::Remove {
+                id: AstNoncovalentBondId(*id),
+                atoms: [AstAtomId(atoms.0), AstAtomId(atoms.1)],
+                ast: ast.to_rust(py),
+            },
+            Self::ModifyField { id, change } => AstNoncovalentBondDelta::ModifyField {
+                id: AstNoncovalentBondId(*id),
+                change: change.bind(py).borrow().to_rust(py),
+            },
+            Self::ModifyConstraint { id, old, new } => AstNoncovalentBondDelta::ModifyConstraint {
+                id: AstNoncovalentBondId(*id),
+                old: old
+                    .as_ref()
+                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                new: new
+                    .as_ref()
+                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -1196,6 +1358,7 @@ mod tests {
         ElectronCountsAst as AstElectronCountsAst, ElementAst as AstElementAst,
         IsotopeMassAst as AstIsotopeMassAst,
         MulticenterBondConstraintAst as AstMulticenterBondConstraintAst,
+        NoncovalentBondConstraintAst as AstNoncovalentBondConstraintAst,
         NoncovalentBondKind as AstNoncovalentBondKind,
         NoncovalentBondKindAst as AstNoncovalentBondKindAst, SpinStateAst as AstSpinStateAst,
         StereoConfigurationAst as AstStereoConfigurationAst, StereoCosetAst as AstStereoCosetAst,
@@ -2898,6 +3061,190 @@ mod tests {
     fn test_multicenter_bond_delta_inverse(#[case] delta: AstMulticenterBondDelta) {
         Python::attach(|py| {
             let binding = MulticenterBondDelta::from_rust(py, &delta).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py),
+                delta.clone().inverse()
+            );
+            let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstNoncovalentBondDelta::Add {
+        id: AstNoncovalentBondId(4),
+        atoms: [AstAtomId(5), AstAtomId(2)],
+        ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+    })]
+    #[case::remove(AstNoncovalentBondDelta::Remove {
+        id: AstNoncovalentBondId(4),
+        atoms: [AstAtomId(5), AstAtomId(2)],
+        ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+    })]
+    #[case::modify_field(AstNoncovalentBondDelta::ModifyField {
+        id: AstNoncovalentBondId(4),
+        change: AstNoncovalentBondFieldChange::Kind {
+            old: AstNoncovalentBondKindAst::Undetermined,
+            new: AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond),
+        },
+    })]
+    #[case::constraint_added(AstNoncovalentBondDelta::ModifyConstraint {
+        id: AstNoncovalentBondId(4),
+        old: None,
+        new: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+    })]
+    #[case::constraint_removed(AstNoncovalentBondDelta::ModifyConstraint {
+        id: AstNoncovalentBondId(4),
+        old: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+        new: None,
+    })]
+    #[case::constraint_modified(AstNoncovalentBondDelta::ModifyConstraint {
+        id: AstNoncovalentBondId(4),
+        old: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(false))),
+        new: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+    })]
+    fn test_noncovalent_bond_delta_roundtrip(#[case] delta: AstNoncovalentBondDelta) {
+        Python::attach(|py| {
+            assert_eq!(
+                NoncovalentBondDelta::from_rust(py, &delta)
+                    .unwrap()
+                    .to_rust(py),
+                delta
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        AstNoncovalentBondDelta::Add {
+            id: AstNoncovalentBondId(4),
+            atoms: [AstAtomId(5), AstAtomId(2)],
+            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        },
+        AstNoncovalentBondDelta::Add {
+            id: AstNoncovalentBondId(4),
+            atoms: [AstAtomId(5), AstAtomId(2)],
+            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        },
+        true,
+    )]
+    #[case::different_atom_order(
+        AstNoncovalentBondDelta::Add {
+            id: AstNoncovalentBondId(4),
+            atoms: [AstAtomId(5), AstAtomId(2)],
+            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        },
+        AstNoncovalentBondDelta::Add {
+            id: AstNoncovalentBondId(4),
+            atoms: [AstAtomId(2), AstAtomId(5)],
+            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        },
+        false,
+    )]
+    fn test_noncovalent_bond_delta_eq(
+        #[case] lhs: AstNoncovalentBondDelta,
+        #[case] rhs: AstNoncovalentBondDelta,
+        #[case] expected: bool,
+    ) {
+        Python::attach(|py| {
+            let lhs = NoncovalentBondDelta::from_rust(py, &lhs).unwrap();
+            let rhs = NoncovalentBondDelta::from_rust(py, &rhs).unwrap();
+            assert_eq!(lhs.__eq__(&rhs, py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::add(
+        AstNoncovalentBondDelta::Add {
+            id: AstNoncovalentBondId(4),
+            atoms: [AstAtomId(5), AstAtomId(2)],
+            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        },
+        "NoncovalentBondDelta.Add(id=4, atoms=(5, 2), ast=NoncovalentBondAst.parse('Hbd'))",
+    )]
+    #[case::remove(
+        AstNoncovalentBondDelta::Remove {
+            id: AstNoncovalentBondId(4),
+            atoms: [AstAtomId(5), AstAtomId(2)],
+            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        },
+        "NoncovalentBondDelta.Remove(id=4, atoms=(5, 2), ast=NoncovalentBondAst.parse('Hbd'))",
+    )]
+    #[case::modify_field(
+        AstNoncovalentBondDelta::ModifyField {
+            id: AstNoncovalentBondId(4),
+            change: AstNoncovalentBondFieldChange::Kind {
+                old: AstNoncovalentBondKindAst::Undetermined,
+                new: AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond),
+            },
+        },
+        "NoncovalentBondDelta.ModifyField(id=4, change=NoncovalentBondFieldChange.Kind(old=NoncovalentBondKindAst.Undetermined(), new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond)))",
+    )]
+    #[case::modify_constraint(
+        AstNoncovalentBondDelta::ModifyConstraint {
+            id: AstNoncovalentBondId(4),
+            old: None,
+            new: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+        },
+        "NoncovalentBondDelta.ModifyConstraint(id=4, old=None, new=NoncovalentBondConstraintAst.Intramolecular(BooleanAst.Lit(True)))",
+    )]
+    fn test_noncovalent_bond_delta_repr(
+        #[case] delta: AstNoncovalentBondDelta,
+        #[case] expected: &str,
+    ) {
+        Python::attach(|py| {
+            let delta =
+                into_py_variant(py, NoncovalentBondDelta::from_rust(py, &delta).unwrap()).unwrap();
+            assert_eq!(
+                delta
+                    .bind(py)
+                    .as_any()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstNoncovalentBondDelta::Add {
+        id: AstNoncovalentBondId(4),
+        atoms: [AstAtomId(5), AstAtomId(2)],
+        ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+    })]
+    #[case::remove(AstNoncovalentBondDelta::Remove {
+        id: AstNoncovalentBondId(4),
+        atoms: [AstAtomId(5), AstAtomId(2)],
+        ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+    })]
+    #[case::modify_field(AstNoncovalentBondDelta::ModifyField {
+        id: AstNoncovalentBondId(4),
+        change: AstNoncovalentBondFieldChange::Kind {
+            old: AstNoncovalentBondKindAst::Undetermined,
+            new: AstNoncovalentBondKindAst::Lit(AstNoncovalentBondKind::HydrogenBond),
+        },
+    })]
+    #[case::constraint_added(AstNoncovalentBondDelta::ModifyConstraint {
+        id: AstNoncovalentBondId(4),
+        old: None,
+        new: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+    })]
+    #[case::constraint_removed(AstNoncovalentBondDelta::ModifyConstraint {
+        id: AstNoncovalentBondId(4),
+        old: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+        new: None,
+    })]
+    #[case::constraint_modified(AstNoncovalentBondDelta::ModifyConstraint {
+        id: AstNoncovalentBondId(4),
+        old: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(false))),
+        new: Some(AstNoncovalentBondConstraintAst::Intramolecular(AstBooleanAst::Lit(true))),
+    })]
+    fn test_noncovalent_bond_delta_inverse(#[case] delta: AstNoncovalentBondDelta) {
+        Python::attach(|py| {
+            let binding = NoncovalentBondDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),
