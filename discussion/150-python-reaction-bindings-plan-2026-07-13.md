@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S2a complete; S2b is next**
+Status: **ACTIVE — S2 complete; S3 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -471,9 +471,65 @@ scope and membership payloads live in `constraint/ring.rs`.
   **Critical path:** `S2a.1 → {S2a.2, S2a.3} → S2a.4`. No S2a subitem is
   deferrable: S3a requires the atom/bond closure and S3b requires the dative,
   aromatic, multicenter, and noncovalent closure.
-- **S2b — stereo field changes** (`delta.rs`): mirror stereo-atom and stereo-bond
-  `Configuration { old, new }`, reusing `StereoConfigurationAst`; cover kinded
-  and undetermined configurations. **Additive (green).** `[dep: —]`
+- **S2b — DONE — stereo field changes** (`umol-py/src/delta.rs`, `lib.rs`,
+  `python/umol/__init__.py`): add the two separately named native complex-enum
+  mirrors. Each has the single struct variant
+  `Configuration { old: StereoConfigurationAst, new: StereoConfigurationAst }`
+  and follows the completed S2a contract exactly: keyword construction,
+  read-only `.old`/`.new`, positional and named class patterns, value equality,
+  unhashability, exact named repr, and non-mutating `inverse() -> Self` returning
+  the concrete variant subtype. Reuse the S2a field-change macro rather than
+  introducing stereo-specific representation machinery. These field-change
+  types do not implement lattice semantics, so they retain their Rust names
+  without an `Ast` suffix and remain ordinary, non-frozen pyclasses.
+
+  1. **DONE — S2b.1 — stereo configuration adapter and atom field change** — implement
+     the local S2a macro's payload adapter for `StereoConfigurationAst`, using
+     its existing Python-aware `from_ast`/`to_ast` conversion, then invoke the
+     macro for `StereoAtomFieldChange::Configuration` and register/export the
+     class. Rust tests cover round-trip conversion, named fields/repr, equality,
+     inverse, and double inverse. Include both top-level `Undetermined` and
+     entity-appropriate `Kinded(Tetrahedral, ...)` payloads, with both
+     `StereoCosetAst::Undetermined` and a concrete coset, so the two kinds of
+     uncertainty remain distinct. Python tests cover keyword construction,
+     read-only fields, exact repr, positional and named class patterns, value
+     equality, and concrete-subtype preservation across inverse. **Additive
+     (green).** `[dep: S2a.1]`
+
+     **Implemented verification:** two Rust round-trip rows, two equality rows,
+     two named-field/repr rows, and two inverse/double-inverse rows distinguish
+     unknown geometry from a tetrahedral configuration with an open or concrete
+     coset. Four Python tests cover keyword construction, read-only fields,
+     unhashability, exact repr, positional and named class patterns, value
+     equality, and concrete inverse subtype. The focused delta suites pass with
+     50 Rust tests and 34 Python tests; the complete `umol-py` suites pass with
+     685 Rust tests and 421 Python tests. Workspace clippy, rustfmt, and
+     `git diff --check` pass.
+
+  2. **DONE — S2b.2 — bond field change and stereo closure verification** — invoke the
+     established machinery for `StereoBondFieldChange::Configuration` and
+     register/export the class. Give it the same Rust and Python surface coverage
+     as S2b.1, using top-level `Undetermined` and entity-appropriate
+     `Kinded(CisTrans, ...)` configurations with open and concrete cosets. Add a
+     closure matrix spanning both S2b classes and all represented uncertainty
+     states; verify exact repr, value equality, concrete inverse subtype, and
+     `inverse().inverse() == original`. The complete Rust and Python suites,
+     workspace clippy, rustfmt, and `git diff --check` form the stage gate.
+     **Additive (green).** `[dep: S2b.1]`
+
+     **Implemented verification:** two Rust round-trip rows, two equality rows,
+     two named-field/repr rows, and two inverse/double-inverse rows cover the
+     cis-trans bond form with unknown geometry, an open coset, and a concrete
+     coset. Four direct Python tests cover the bond class's construction,
+     read-only fields, unhashability, exact repr, positional and named class
+     patterns, value equality, and concrete inverse subtype. A four-row Python
+     closure matrix spans both stereo field-change classes and both uncertainty
+     transitions. The focused delta suites pass with 58 Rust tests and 42 Python
+     tests; the complete `umol-py` suites pass with 693 Rust tests and 429 Python
+     tests. Workspace clippy, rustfmt, and `git diff --check` pass.
+
+  **Critical path:** `S2a.1 → S2b.1 → S2b.2`. No S2b subitem is
+  deferrable: S3c requires both stereo field-change mirrors.
 
 ### S3 — Per-family resolved deltas
 

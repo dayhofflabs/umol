@@ -9,7 +9,9 @@ use umol_ast::ast::{
     MulticenterBondFieldChange as AstMulticenterBondFieldChange,
     NoncovalentBondFieldChange as AstNoncovalentBondFieldChange,
     NoncovalentBondKindAst as AstNoncovalentBondKindAst, SpinStateAst as AstSpinStateAst,
-    ValueAst as AstValueAst,
+    StereoAtomFieldChange as AstStereoAtomFieldChange,
+    StereoBondFieldChange as AstStereoBondFieldChange,
+    StereoConfigurationAst as AstStereoConfigurationAst, ValueAst as AstValueAst,
 };
 
 use crate::atom::{ElementAst, IsotopeMassAst};
@@ -17,6 +19,7 @@ use crate::convert::into_py_variant;
 use crate::electrons::ElectronCountsAst;
 use crate::noncovalent::NoncovalentBondKindAst;
 use crate::spin::SpinStateAst;
+use crate::stereo::StereoConfigurationAst;
 use crate::value::ValueAst;
 
 /// Conversion shared by the bound value types used as old/new field payloads.
@@ -96,6 +99,18 @@ impl FieldValueMirror for NoncovalentBondKindAst {
 
     fn to_ast(&self, _py: Python<'_>) -> Self::Ast {
         self.to_ast()
+    }
+}
+
+impl FieldValueMirror for StereoConfigurationAst {
+    type Ast = AstStereoConfigurationAst;
+
+    fn from_ast(py: Python<'_>, ast: &Self::Ast) -> PyResult<Self> {
+        Self::from_ast(py, ast)
+    }
+
+    fn to_ast(&self, py: Python<'_>) -> Self::Ast {
+        self.to_ast(py)
     }
 }
 
@@ -240,12 +255,26 @@ field_change! {
     }
 }
 
+field_change! {
+    /// A stereo-atom configuration change carrying the field's old and new AST values.
+    StereoAtomFieldChange => AstStereoAtomFieldChange {
+        Configuration(StereoConfigurationAst),
+    }
+}
+
+field_change! {
+    /// A stereo-bond configuration change carrying the field's old and new AST values.
+    StereoBondFieldChange => AstStereoBondFieldChange {
+        Configuration(StereoConfigurationAst),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
         NoncovalentBondKind as AstNoncovalentBondKind, SpinStateAst as AstSpinStateAst,
-        ValueAst as AstValueAst,
+        StereoCosetAst as AstStereoCosetAst, StereoKind as AstStereoKind, ValueAst as AstValueAst,
     };
     use umol_chem::element::Element;
 
@@ -707,6 +736,344 @@ mod tests {
     fn test_noncovalent_bond_field_change_inverse(#[case] change: AstNoncovalentBondFieldChange) {
         Python::attach(|py| {
             let mirror = NoncovalentBondFieldChange::from_ast(py, &change).unwrap();
+            let inverse = mirror.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_ast(py),
+                change.clone().inverse()
+            );
+            let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
+            assert_eq!(roundtrip.bind(py).borrow().to_ast(py), change);
+        });
+    }
+
+    #[rstest]
+    #[case::geometry_unknown(AstStereoAtomFieldChange::Configuration {
+        old: AstStereoConfigurationAst::Undetermined,
+        new: AstStereoConfigurationAst::Kinded(
+            AstStereoKind::Tetrahedral,
+            AstStereoCosetAst::Undetermined,
+        ),
+    })]
+    #[case::coset_resolved(AstStereoAtomFieldChange::Configuration {
+        old: AstStereoConfigurationAst::Kinded(
+            AstStereoKind::Tetrahedral,
+            AstStereoCosetAst::Undetermined,
+        ),
+        new: AstStereoConfigurationAst::Kinded(
+            AstStereoKind::Tetrahedral,
+            AstStereoCosetAst::Lit(1),
+        ),
+    })]
+    fn test_stereo_atom_field_change_roundtrip(#[case] change: AstStereoAtomFieldChange) {
+        Python::attach(|py| {
+            assert_eq!(
+                StereoAtomFieldChange::from_ast(py, &change)
+                    .unwrap()
+                    .to_ast(py),
+                change
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        AstStereoAtomFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Undetermined,
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::Tetrahedral,
+                AstStereoCosetAst::Undetermined,
+            ),
+        },
+        AstStereoAtomFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Undetermined,
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::Tetrahedral,
+                AstStereoCosetAst::Undetermined,
+            ),
+        },
+        true,
+    )]
+    #[case::different(
+        AstStereoAtomFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Undetermined,
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::Tetrahedral,
+                AstStereoCosetAst::Undetermined,
+            ),
+        },
+        AstStereoAtomFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Undetermined,
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::Tetrahedral,
+                AstStereoCosetAst::Lit(1),
+            ),
+        },
+        false,
+    )]
+    fn test_stereo_atom_field_change_eq(
+        #[case] lhs: AstStereoAtomFieldChange,
+        #[case] rhs: AstStereoAtomFieldChange,
+        #[case] expected: bool,
+    ) {
+        Python::attach(|py| {
+            let lhs = StereoAtomFieldChange::from_ast(py, &lhs).unwrap();
+            let rhs = StereoAtomFieldChange::from_ast(py, &rhs).unwrap();
+            assert_eq!(lhs.__eq__(&rhs, py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::geometry_unknown(
+        AstStereoAtomFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Undetermined,
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::Tetrahedral,
+                AstStereoCosetAst::Undetermined,
+            ),
+        },
+        "StereoConfigurationAst.Undetermined()",
+        "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Undetermined())",
+        "StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Undetermined()))",
+    )]
+    #[case::coset_resolved(
+        AstStereoAtomFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::Tetrahedral,
+                AstStereoCosetAst::Undetermined,
+            ),
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::Tetrahedral,
+                AstStereoCosetAst::Lit(1),
+            ),
+        },
+        "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Undetermined())",
+        "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Lit(1))",
+        "StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Undetermined()), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Lit(1)))",
+    )]
+    fn test_stereo_atom_field_change_repr(
+        #[case] change: AstStereoAtomFieldChange,
+        #[case] old: &str,
+        #[case] new: &str,
+        #[case] expected: &str,
+    ) {
+        Python::attach(|py| {
+            let change =
+                into_py_variant(py, StereoAtomFieldChange::from_ast(py, &change).unwrap()).unwrap();
+            let bound = change.bind(py).as_any();
+            assert_eq!(
+                bound
+                    .getattr("old")
+                    .unwrap()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                old
+            );
+            assert_eq!(
+                bound
+                    .getattr("new")
+                    .unwrap()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                new
+            );
+            assert_eq!(bound.repr().unwrap().extract::<String>().unwrap(), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::geometry_unknown(AstStereoAtomFieldChange::Configuration {
+        old: AstStereoConfigurationAst::Undetermined,
+        new: AstStereoConfigurationAst::Kinded(
+            AstStereoKind::Tetrahedral,
+            AstStereoCosetAst::Undetermined,
+        ),
+    })]
+    #[case::coset_resolved(AstStereoAtomFieldChange::Configuration {
+        old: AstStereoConfigurationAst::Kinded(
+            AstStereoKind::Tetrahedral,
+            AstStereoCosetAst::Undetermined,
+        ),
+        new: AstStereoConfigurationAst::Kinded(
+            AstStereoKind::Tetrahedral,
+            AstStereoCosetAst::Lit(1),
+        ),
+    })]
+    fn test_stereo_atom_field_change_inverse(#[case] change: AstStereoAtomFieldChange) {
+        Python::attach(|py| {
+            let mirror = StereoAtomFieldChange::from_ast(py, &change).unwrap();
+            let inverse = mirror.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_ast(py),
+                change.clone().inverse()
+            );
+            let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
+            assert_eq!(roundtrip.bind(py).borrow().to_ast(py), change);
+        });
+    }
+
+    #[rstest]
+    #[case::geometry_unknown(AstStereoBondFieldChange::Configuration {
+        old: AstStereoConfigurationAst::Undetermined,
+        new: AstStereoConfigurationAst::Kinded(
+            AstStereoKind::CisTrans,
+            AstStereoCosetAst::Undetermined,
+        ),
+    })]
+    #[case::coset_resolved(AstStereoBondFieldChange::Configuration {
+        old: AstStereoConfigurationAst::Kinded(
+            AstStereoKind::CisTrans,
+            AstStereoCosetAst::Undetermined,
+        ),
+        new: AstStereoConfigurationAst::Kinded(
+            AstStereoKind::CisTrans,
+            AstStereoCosetAst::Lit(1),
+        ),
+    })]
+    fn test_stereo_bond_field_change_roundtrip(#[case] change: AstStereoBondFieldChange) {
+        Python::attach(|py| {
+            assert_eq!(
+                StereoBondFieldChange::from_ast(py, &change)
+                    .unwrap()
+                    .to_ast(py),
+                change
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        AstStereoBondFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Undetermined,
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Undetermined,
+            ),
+        },
+        AstStereoBondFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Undetermined,
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Undetermined,
+            ),
+        },
+        true,
+    )]
+    #[case::different(
+        AstStereoBondFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Undetermined,
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Undetermined,
+            ),
+        },
+        AstStereoBondFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Undetermined,
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Lit(1),
+            ),
+        },
+        false,
+    )]
+    fn test_stereo_bond_field_change_eq(
+        #[case] lhs: AstStereoBondFieldChange,
+        #[case] rhs: AstStereoBondFieldChange,
+        #[case] expected: bool,
+    ) {
+        Python::attach(|py| {
+            let lhs = StereoBondFieldChange::from_ast(py, &lhs).unwrap();
+            let rhs = StereoBondFieldChange::from_ast(py, &rhs).unwrap();
+            assert_eq!(lhs.__eq__(&rhs, py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::geometry_unknown(
+        AstStereoBondFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Undetermined,
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Undetermined,
+            ),
+        },
+        "StereoConfigurationAst.Undetermined()",
+        "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Undetermined())",
+        "StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Undetermined()))",
+    )]
+    #[case::coset_resolved(
+        AstStereoBondFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Undetermined,
+            ),
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Lit(1),
+            ),
+        },
+        "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Undetermined())",
+        "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Lit(1))",
+        "StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Undetermined()), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Lit(1)))",
+    )]
+    fn test_stereo_bond_field_change_repr(
+        #[case] change: AstStereoBondFieldChange,
+        #[case] old: &str,
+        #[case] new: &str,
+        #[case] expected: &str,
+    ) {
+        Python::attach(|py| {
+            let change =
+                into_py_variant(py, StereoBondFieldChange::from_ast(py, &change).unwrap()).unwrap();
+            let bound = change.bind(py).as_any();
+            assert_eq!(
+                bound
+                    .getattr("old")
+                    .unwrap()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                old
+            );
+            assert_eq!(
+                bound
+                    .getattr("new")
+                    .unwrap()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                new
+            );
+            assert_eq!(bound.repr().unwrap().extract::<String>().unwrap(), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::geometry_unknown(AstStereoBondFieldChange::Configuration {
+        old: AstStereoConfigurationAst::Undetermined,
+        new: AstStereoConfigurationAst::Kinded(
+            AstStereoKind::CisTrans,
+            AstStereoCosetAst::Undetermined,
+        ),
+    })]
+    #[case::coset_resolved(AstStereoBondFieldChange::Configuration {
+        old: AstStereoConfigurationAst::Kinded(
+            AstStereoKind::CisTrans,
+            AstStereoCosetAst::Undetermined,
+        ),
+        new: AstStereoConfigurationAst::Kinded(
+            AstStereoKind::CisTrans,
+            AstStereoCosetAst::Lit(1),
+        ),
+    })]
+    fn test_stereo_bond_field_change_inverse(#[case] change: AstStereoBondFieldChange) {
+        Python::attach(|py| {
+            let mirror = StereoBondFieldChange::from_ast(py, &change).unwrap();
             let inverse = mirror.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_ast(py),

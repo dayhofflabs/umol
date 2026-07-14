@@ -14,6 +14,11 @@ from umol import (
     NoncovalentBondKind,
     NoncovalentBondKindAst,
     SpinStateAst,
+    StereoAtomFieldChange,
+    StereoBondFieldChange,
+    StereoConfigurationAst,
+    StereoCosetAst,
+    StereoKind,
     ValueAst,
 )
 
@@ -200,6 +205,257 @@ def test_noncovalentbondfieldchange_match():
             )
         case _:
             raise AssertionError("noncovalent field change did not match its variant")
+
+
+def test_stereoatomfieldchange_fields():
+    change = StereoAtomFieldChange.Configuration(
+        old=StereoConfigurationAst.Undetermined(),
+        new=StereoConfigurationAst.Kinded(
+            StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+        ),
+    )
+
+    assert change.old == StereoConfigurationAst.Undetermined()
+    assert change.new == StereoConfigurationAst.Kinded(
+        StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+    )
+    assert repr(change) == (
+        "StereoAtomFieldChange.Configuration("
+        "old=StereoConfigurationAst.Undetermined(), "
+        "new=StereoConfigurationAst.Kinded("
+        "StereoKind.Tetrahedral, StereoCosetAst.Undetermined()))"
+    )
+    with pytest.raises(AttributeError):
+        change.old = StereoConfigurationAst.Kinded(
+            StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+        )
+    with pytest.raises(TypeError):
+        hash(change)
+
+
+def test_stereoatomfieldchange_match_positional():
+    change = StereoAtomFieldChange.Configuration(
+        old=StereoConfigurationAst.Kinded(
+            StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+        ),
+        new=StereoConfigurationAst.Kinded(
+            StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+        ),
+    )
+
+    match change:
+        case StereoAtomFieldChange.Configuration(old, new):
+            assert old == StereoConfigurationAst.Kinded(
+                StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+            )
+            assert new == StereoConfigurationAst.Kinded(
+                StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+            )
+        case _:
+            raise AssertionError("stereo atom field change did not match its variant")
+
+
+def test_stereoatomfieldchange_match_named():
+    change = StereoAtomFieldChange.Configuration(
+        old=StereoConfigurationAst.Undetermined(),
+        new=StereoConfigurationAst.Kinded(
+            StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+        ),
+    )
+
+    match change:
+        case StereoAtomFieldChange.Configuration(old=old, new=new):
+            assert old == StereoConfigurationAst.Undetermined()
+            assert new == StereoConfigurationAst.Kinded(
+                StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+            )
+        case _:
+            raise AssertionError("stereo atom field change did not match its variant")
+
+
+def test_stereoatomfieldchange_inverse():
+    change = StereoAtomFieldChange.Configuration(
+        old=StereoConfigurationAst.Kinded(
+            StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+        ),
+        new=StereoConfigurationAst.Kinded(
+            StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+        ),
+    )
+
+    inverse = change.inverse()
+
+    assert isinstance(inverse, StereoAtomFieldChange.Configuration)
+    assert inverse.old == StereoConfigurationAst.Kinded(
+        StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+    )
+    assert inverse.new == StereoConfigurationAst.Kinded(
+        StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+    )
+    assert inverse != change
+    assert inverse.inverse() == change
+
+
+def test_stereobondfieldchange_fields():
+    change = StereoBondFieldChange.Configuration(
+        old=StereoConfigurationAst.Undetermined(),
+        new=StereoConfigurationAst.Kinded(
+            StereoKind.CisTrans, StereoCosetAst.Undetermined()
+        ),
+    )
+
+    assert change.old == StereoConfigurationAst.Undetermined()
+    assert change.new == StereoConfigurationAst.Kinded(
+        StereoKind.CisTrans, StereoCosetAst.Undetermined()
+    )
+    assert repr(change) == (
+        "StereoBondFieldChange.Configuration("
+        "old=StereoConfigurationAst.Undetermined(), "
+        "new=StereoConfigurationAst.Kinded("
+        "StereoKind.CisTrans, StereoCosetAst.Undetermined()))"
+    )
+    with pytest.raises(AttributeError):
+        change.old = StereoConfigurationAst.Kinded(
+            StereoKind.CisTrans, StereoCosetAst.Lit(0)
+        )
+    with pytest.raises(TypeError):
+        hash(change)
+
+
+def test_stereobondfieldchange_match_positional():
+    change = StereoBondFieldChange.Configuration(
+        old=StereoConfigurationAst.Kinded(
+            StereoKind.CisTrans, StereoCosetAst.Undetermined()
+        ),
+        new=StereoConfigurationAst.Kinded(
+            StereoKind.CisTrans, StereoCosetAst.Lit(1)
+        ),
+    )
+
+    match change:
+        case StereoBondFieldChange.Configuration(old, new):
+            assert old == StereoConfigurationAst.Kinded(
+                StereoKind.CisTrans, StereoCosetAst.Undetermined()
+            )
+            assert new == StereoConfigurationAst.Kinded(
+                StereoKind.CisTrans, StereoCosetAst.Lit(1)
+            )
+        case _:
+            raise AssertionError("stereo bond field change did not match its variant")
+
+
+def test_stereobondfieldchange_match_named():
+    change = StereoBondFieldChange.Configuration(
+        old=StereoConfigurationAst.Undetermined(),
+        new=StereoConfigurationAst.Kinded(
+            StereoKind.CisTrans, StereoCosetAst.Undetermined()
+        ),
+    )
+
+    match change:
+        case StereoBondFieldChange.Configuration(old=old, new=new):
+            assert old == StereoConfigurationAst.Undetermined()
+            assert new == StereoConfigurationAst.Kinded(
+                StereoKind.CisTrans, StereoCosetAst.Undetermined()
+            )
+        case _:
+            raise AssertionError("stereo bond field change did not match its variant")
+
+
+def test_stereobondfieldchange_inverse():
+    change = StereoBondFieldChange.Configuration(
+        old=StereoConfigurationAst.Kinded(
+            StereoKind.CisTrans, StereoCosetAst.Undetermined()
+        ),
+        new=StereoConfigurationAst.Kinded(
+            StereoKind.CisTrans, StereoCosetAst.Lit(1)
+        ),
+    )
+
+    inverse = change.inverse()
+
+    assert isinstance(inverse, StereoBondFieldChange.Configuration)
+    assert inverse.old == StereoConfigurationAst.Kinded(
+        StereoKind.CisTrans, StereoCosetAst.Lit(1)
+    )
+    assert inverse.new == StereoConfigurationAst.Kinded(
+        StereoKind.CisTrans, StereoCosetAst.Undetermined()
+    )
+    assert inverse != change
+    assert inverse.inverse() == change
+
+
+@pytest.mark.parametrize(
+    ("change", "expected_repr"),
+    [
+        (
+            StereoAtomFieldChange.Configuration(
+                old=StereoConfigurationAst.Undetermined(),
+                new=StereoConfigurationAst.Kinded(
+                    StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+                ),
+            ),
+            "StereoAtomFieldChange.Configuration("
+            "old=StereoConfigurationAst.Undetermined(), "
+            "new=StereoConfigurationAst.Kinded("
+            "StereoKind.Tetrahedral, StereoCosetAst.Undetermined()))",
+        ),
+        (
+            StereoAtomFieldChange.Configuration(
+                old=StereoConfigurationAst.Kinded(
+                    StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+                ),
+                new=StereoConfigurationAst.Kinded(
+                    StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+                ),
+            ),
+            "StereoAtomFieldChange.Configuration("
+            "old=StereoConfigurationAst.Kinded("
+            "StereoKind.Tetrahedral, StereoCosetAst.Undetermined()), "
+            "new=StereoConfigurationAst.Kinded("
+            "StereoKind.Tetrahedral, StereoCosetAst.Lit(1)))",
+        ),
+        (
+            StereoBondFieldChange.Configuration(
+                old=StereoConfigurationAst.Undetermined(),
+                new=StereoConfigurationAst.Kinded(
+                    StereoKind.CisTrans, StereoCosetAst.Undetermined()
+                ),
+            ),
+            "StereoBondFieldChange.Configuration("
+            "old=StereoConfigurationAst.Undetermined(), "
+            "new=StereoConfigurationAst.Kinded("
+            "StereoKind.CisTrans, StereoCosetAst.Undetermined()))",
+        ),
+        (
+            StereoBondFieldChange.Configuration(
+                old=StereoConfigurationAst.Kinded(
+                    StereoKind.CisTrans, StereoCosetAst.Undetermined()
+                ),
+                new=StereoConfigurationAst.Kinded(
+                    StereoKind.CisTrans, StereoCosetAst.Lit(1)
+                ),
+            ),
+            "StereoBondFieldChange.Configuration("
+            "old=StereoConfigurationAst.Kinded("
+            "StereoKind.CisTrans, StereoCosetAst.Undetermined()), "
+            "new=StereoConfigurationAst.Kinded("
+            "StereoKind.CisTrans, StereoCosetAst.Lit(1)))",
+        ),
+    ],
+    ids=[
+        "atom-geometry-unknown",
+        "atom-coset-resolved",
+        "bond-geometry-unknown",
+        "bond-coset-resolved",
+    ],
+)
+def test_stereofieldchange_closure(change, expected_repr):
+    assert repr(change) == expected_repr
+    inverse = change.inverse()
+    assert type(inverse) is type(change)
+    assert inverse != change
+    assert inverse.inverse() == change
 
 
 @pytest.mark.parametrize(
