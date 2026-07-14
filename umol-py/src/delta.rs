@@ -16,7 +16,9 @@ use umol_ast::ast::{
     NoncovalentBondFieldChange as AstNoncovalentBondFieldChange,
     NoncovalentBondId as AstNoncovalentBondId, StereoAtomAst as AstStereoAtomAst,
     StereoAtomDelta as AstStereoAtomDelta, StereoAtomFieldChange as AstStereoAtomFieldChange,
-    StereoAtomId as AstStereoAtomId, StereoBondFieldChange as AstStereoBondFieldChange,
+    StereoAtomId as AstStereoAtomId, StereoBondAst as AstStereoBondAst,
+    StereoBondDelta as AstStereoBondDelta, StereoBondFieldChange as AstStereoBondFieldChange,
+    StereoBondId as AstStereoBondId,
 };
 
 use crate::aromatic::AromaticSystemAst;
@@ -28,14 +30,16 @@ use crate::constraint::bond::BondConstraintAst;
 use crate::constraint::dative::DativeBondConstraintAst;
 use crate::constraint::multicenter::MulticenterBondConstraintAst;
 use crate::constraint::noncovalent::NoncovalentBondConstraintAst;
-use crate::constraint::stereo::StereoAtomConstraintAst;
+use crate::constraint::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
 use crate::convert::into_py_variant;
 use crate::dative::DativeBondAst;
 use crate::electrons::ElectronCountsAst;
 use crate::multicenter::MulticenterBondAst;
 use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
 use crate::spin::SpinStateAst;
-use crate::stereo::{Permutation, StereoAtomAst, StereoConfigurationAst, StereoKind, StereoLigand};
+use crate::stereo::{
+    Permutation, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind, StereoLigand,
+};
 use crate::value::ValueAst;
 
 /// Render a named old/new complex-enum variant using the child objects' reprs.
@@ -1580,6 +1584,221 @@ impl StereoAtomDelta {
     }
 }
 
+pub struct StereoBondDeltaAstValue(Py<StereoBondAst>);
+
+impl FromPyObject<'_, '_> for StereoBondDeltaAstValue {
+    type Error = PyErr;
+    fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
+        let source = obj.extract::<PyRef<'_, StereoBondAst>>()?;
+        let ast = source.inner().clone();
+        drop(source);
+        Ok(Self(Py::new(obj.py(), StereoBondAst::from_inner(ast))?))
+    }
+}
+
+impl<'py> IntoPyObject<'py> for &StereoBondDeltaAstValue {
+    type Target = StereoBondAst;
+    type Output = Bound<'py, StereoBondAst>;
+    type Error = PyErr;
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        Ok(self.0.clone_ref(py).into_bound(py))
+    }
+}
+
+impl StereoBondDeltaAstValue {
+    fn from_rust(py: Python<'_>, ast: &AstStereoBondAst) -> PyResult<Self> {
+        Ok(Self(Py::new(py, StereoBondAst::from_inner(ast.clone()))?))
+    }
+    fn to_rust(&self, py: Python<'_>) -> AstStereoBondAst {
+        self.0.bind(py).borrow().inner().clone()
+    }
+}
+
+/// A resolved edit to one bond-centered stereo element.
+#[pyclass]
+pub enum StereoBondDelta {
+    Add {
+        id: u32,
+        site: u32,
+        ligands: Vec<StereoLigand>,
+        ast: StereoBondDeltaAstValue,
+    },
+    Remove {
+        id: u32,
+        site: u32,
+        ligands: Vec<StereoLigand>,
+        ast: StereoBondDeltaAstValue,
+    },
+    ModifyField {
+        id: u32,
+        change: Py<StereoBondFieldChange>,
+    },
+    ModifyConstraint {
+        id: u32,
+        kind: Option<StereoKind>,
+        old: Option<Py<StereoBondConstraintAst>>,
+        new: Option<Py<StereoBondConstraintAst>>,
+    },
+    Apply {
+        id: u32,
+        kind: StereoKind,
+        permutation: Permutation,
+    },
+    Swap {
+        id: u32,
+        kind: StereoKind,
+    },
+    Mirror {
+        id: u32,
+        kind: StereoKind,
+    },
+}
+
+#[pymethods]
+impl StereoBondDelta {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_rust(py) == other.to_rust(py)
+    }
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, fields): (&str, &[&str]) = match &*slf.bind(py).borrow() {
+            Self::Add { .. } => ("Add", &["id", "site", "ligands", "ast"]),
+            Self::Remove { .. } => ("Remove", &["id", "site", "ligands", "ast"]),
+            Self::ModifyField { .. } => ("ModifyField", &["id", "change"]),
+            Self::ModifyConstraint { .. } => ("ModifyConstraint", &["id", "kind", "old", "new"]),
+            Self::Apply { .. } => ("Apply", &["id", "kind", "permutation"]),
+            Self::Swap { .. } => ("Swap", &["id", "kind"]),
+            Self::Mirror { .. } => ("Mirror", &["id", "kind"]),
+        };
+        entity_delta_repr(slf.bind(py).as_any(), "StereoBondDelta", variant, fields)
+    }
+    fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
+        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+    }
+}
+
+impl StereoBondDelta {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &AstStereoBondDelta) -> PyResult<Self> {
+        Ok(match delta {
+            AstStereoBondDelta::Add {
+                id,
+                site,
+                ligands,
+                ast,
+            } => Self::Add {
+                id: id.0,
+                site: site.0,
+                ligands: ligands
+                    .iter()
+                    .copied()
+                    .map(StereoLigand::from_rust)
+                    .collect(),
+                ast: StereoBondDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstStereoBondDelta::Remove {
+                id,
+                site,
+                ligands,
+                ast,
+            } => Self::Remove {
+                id: id.0,
+                site: site.0,
+                ligands: ligands
+                    .iter()
+                    .copied()
+                    .map(StereoLigand::from_rust)
+                    .collect(),
+                ast: StereoBondDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstStereoBondDelta::ModifyField { id, change } => Self::ModifyField {
+                id: id.0,
+                change: into_py_variant(py, StereoBondFieldChange::from_rust(py, change)?)?,
+            },
+            AstStereoBondDelta::ModifyConstraint { id, kind, old, new } => Self::ModifyConstraint {
+                id: id.0,
+                kind: kind.map(StereoKind::from_rust),
+                old: old
+                    .as_ref()
+                    .map(|c| into_py_variant(py, StereoBondConstraintAst::from_rust(py, c)?))
+                    .transpose()?,
+                new: new
+                    .as_ref()
+                    .map(|c| into_py_variant(py, StereoBondConstraintAst::from_rust(py, c)?))
+                    .transpose()?,
+            },
+            AstStereoBondDelta::Apply {
+                id,
+                kind,
+                permutation,
+            } => Self::Apply {
+                id: id.0,
+                kind: StereoKind::from_rust(*kind),
+                permutation: Permutation::from_inner(*permutation),
+            },
+            AstStereoBondDelta::Swap { id, kind } => Self::Swap {
+                id: id.0,
+                kind: StereoKind::from_rust(*kind),
+            },
+            AstStereoBondDelta::Mirror { id, kind } => Self::Mirror {
+                id: id.0,
+                kind: StereoKind::from_rust(*kind),
+            },
+        })
+    }
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoBondDelta {
+        match self {
+            Self::Add {
+                id,
+                site,
+                ligands,
+                ast,
+            } => AstStereoBondDelta::Add {
+                id: AstStereoBondId(*id),
+                site: AstBondId(*site),
+                ligands: ligands.iter().copied().map(StereoLigand::to_rust).collect(),
+                ast: ast.to_rust(py),
+            },
+            Self::Remove {
+                id,
+                site,
+                ligands,
+                ast,
+            } => AstStereoBondDelta::Remove {
+                id: AstStereoBondId(*id),
+                site: AstBondId(*site),
+                ligands: ligands.iter().copied().map(StereoLigand::to_rust).collect(),
+                ast: ast.to_rust(py),
+            },
+            Self::ModifyField { id, change } => AstStereoBondDelta::ModifyField {
+                id: AstStereoBondId(*id),
+                change: change.bind(py).borrow().to_rust(py),
+            },
+            Self::ModifyConstraint { id, kind, old, new } => AstStereoBondDelta::ModifyConstraint {
+                id: AstStereoBondId(*id),
+                kind: kind.map(StereoKind::to_rust),
+                old: old.as_ref().map(|c| c.bind(py).borrow().to_rust(py)),
+                new: new.as_ref().map(|c| c.bind(py).borrow().to_rust(py)),
+            },
+            Self::Apply {
+                id,
+                kind,
+                permutation,
+            } => AstStereoBondDelta::Apply {
+                id: AstStereoBondId(*id),
+                kind: kind.to_rust(),
+                permutation: permutation.inner(),
+            },
+            Self::Swap { id, kind } => AstStereoBondDelta::Swap {
+                id: AstStereoBondId(*id),
+                kind: kind.to_rust(),
+            },
+            Self::Mirror { id, kind } => AstStereoBondDelta::Mirror {
+                id: AstStereoBondId(*id),
+                kind: kind.to_rust(),
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -1594,6 +1813,7 @@ mod tests {
         NoncovalentBondKind as AstNoncovalentBondKind,
         NoncovalentBondKindAst as AstNoncovalentBondKindAst, SpinStateAst as AstSpinStateAst,
         StereoAtomConstraintAst as AstStereoAtomConstraintAst,
+        StereoBondConstraintAst as AstStereoBondConstraintAst,
         StereoConfigurationAst as AstStereoConfigurationAst, StereoCosetAst as AstStereoCosetAst,
         StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
         StereoLigandKind as AstStereoLigandKind, Stereogenicity as AstStereogenicity,
@@ -3801,6 +4021,325 @@ mod tests {
     fn test_stereo_atom_delta_inverse(#[case] delta: AstStereoAtomDelta) {
         Python::attach(|py| {
             let binding = StereoAtomDelta::from_rust(py, &delta).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py),
+                delta.clone().inverse()
+            );
+            let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+        });
+    }
+    #[rstest]
+    #[case::add(AstStereoBondDelta::Add {
+        id: AstStereoBondId(5),
+        site: AstBondId(3),
+        ligands: vec![
+            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+            AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+        ],
+        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+    })]
+    #[case::remove(AstStereoBondDelta::Remove {
+        id: AstStereoBondId(5),
+        site: AstBondId(3),
+        ligands: vec![
+            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+            AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+        ],
+        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+    })]
+    #[case::modify_field(AstStereoBondDelta::ModifyField {
+        id: AstStereoBondId(5),
+        change: AstStereoBondFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Undetermined,
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Lit(0),
+            ),
+        },
+    })]
+    #[case::constraint_added_with_kind(AstStereoBondDelta::ModifyConstraint {
+        id: AstStereoBondId(5),
+        kind: Some(AstStereoKind::CisTrans),
+        old: None,
+        new: Some(AstStereoBondConstraintAst::Stereogenicity(
+            AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+        )),
+    })]
+    #[case::constraint_removed_without_kind(AstStereoBondDelta::ModifyConstraint {
+        id: AstStereoBondId(5),
+        kind: None,
+        old: Some(AstStereoBondConstraintAst::Stereogenicity(
+            AstStereogenicityAst::Undetermined,
+        )),
+        new: None,
+    })]
+    #[case::constraint_modified(AstStereoBondDelta::ModifyConstraint {
+        id: AstStereoBondId(5),
+        kind: Some(AstStereoKind::CisTrans),
+        old: Some(AstStereoBondConstraintAst::Stereogenicity(
+            AstStereogenicityAst::Undetermined,
+        )),
+        new: Some(AstStereoBondConstraintAst::Stereogenicity(
+            AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+        )),
+    })]
+    #[case::apply(AstStereoBondDelta::Apply {
+        id: AstStereoBondId(5),
+        kind: AstStereoKind::CisTrans,
+        permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+    })]
+    #[case::swap(AstStereoBondDelta::Swap {
+        id: AstStereoBondId(5),
+        kind: AstStereoKind::CisTrans,
+    })]
+    #[case::mirror(AstStereoBondDelta::Mirror {
+        id: AstStereoBondId(5),
+        kind: AstStereoKind::CisTrans,
+    })]
+    fn test_stereo_bond_delta_roundtrip(#[case] delta: AstStereoBondDelta) {
+        Python::attach(|py| {
+            assert_eq!(
+                StereoBondDelta::from_rust(py, &delta).unwrap().to_rust(py),
+                delta
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        AstStereoBondDelta::Apply {
+            id: AstStereoBondId(5),
+            kind: AstStereoKind::CisTrans,
+            permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+        },
+        AstStereoBondDelta::Apply {
+            id: AstStereoBondId(5),
+            kind: AstStereoKind::CisTrans,
+            permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+        },
+        true,
+    )]
+    #[case::different_ligand_order(
+        AstStereoBondDelta::Add {
+            id: AstStereoBondId(5),
+            site: AstBondId(3),
+            ligands: vec![
+                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+            ],
+            ast: AstStereoBondAst::new(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Lit(0),
+            ),
+        },
+        AstStereoBondDelta::Add {
+            id: AstStereoBondId(5),
+            site: AstBondId(3),
+            ligands: vec![
+                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+            ],
+            ast: AstStereoBondAst::new(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Lit(0),
+            ),
+        },
+        false,
+    )]
+    #[case::different_permutation(
+        AstStereoBondDelta::Apply {
+            id: AstStereoBondId(5),
+            kind: AstStereoKind::CisTrans,
+            permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+        },
+        AstStereoBondDelta::Apply {
+            id: AstStereoBondId(5),
+            kind: AstStereoKind::CisTrans,
+            permutation: PermPermutation::from_image(4, &[2, 0, 1, 3]),
+        },
+        false,
+    )]
+    fn test_stereo_bond_delta_eq(
+        #[case] lhs: AstStereoBondDelta,
+        #[case] rhs: AstStereoBondDelta,
+        #[case] expected: bool,
+    ) {
+        Python::attach(|py| {
+            let lhs = StereoBondDelta::from_rust(py, &lhs).unwrap();
+            let rhs = StereoBondDelta::from_rust(py, &rhs).unwrap();
+            assert_eq!(lhs.__eq__(&rhs, py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::add(
+        AstStereoBondDelta::Add {
+            id: AstStereoBondId(5),
+            site: AstBondId(3),
+            ligands: vec![
+                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::LonePair),
+            ],
+            ast: AstStereoBondAst::new(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Lit(0),
+            ),
+        },
+        "StereoBondDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoBondAst.parse('Ct0'))",
+    )]
+    #[case::remove(
+        AstStereoBondDelta::Remove {
+            id: AstStereoBondId(5),
+            site: AstBondId(3),
+            ligands: vec![
+                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::LonePair),
+            ],
+            ast: AstStereoBondAst::new(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Lit(0),
+            ),
+        },
+        "StereoBondDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoBondAst.parse('Ct0'))",
+    )]
+    #[case::modify_field(
+        AstStereoBondDelta::ModifyField {
+            id: AstStereoBondId(5),
+            change: AstStereoBondFieldChange::Configuration {
+                old: AstStereoConfigurationAst::Undetermined,
+                new: AstStereoConfigurationAst::Kinded(
+                    AstStereoKind::CisTrans,
+                    AstStereoCosetAst::Lit(0),
+                ),
+            },
+        },
+        "StereoBondDelta.ModifyField(id=5, change=StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Lit(0))))",
+    )]
+    #[case::modify_constraint(
+        AstStereoBondDelta::ModifyConstraint {
+            id: AstStereoBondId(5),
+            kind: Some(AstStereoKind::CisTrans),
+            old: None,
+            new: Some(AstStereoBondConstraintAst::Stereogenicity(
+                AstStereogenicityAst::Undetermined,
+            )),
+        },
+        "StereoBondDelta.ModifyConstraint(id=5, kind=StereoKind.CisTrans, old=None, new=StereoBondConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()))",
+    )]
+    #[case::apply(
+        AstStereoBondDelta::Apply {
+            id: AstStereoBondId(5),
+            kind: AstStereoKind::CisTrans,
+            permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+        },
+        "StereoBondDelta.Apply(id=5, kind=StereoKind.CisTrans, permutation=Permutation([1, 2, 0, 3]))",
+    )]
+    #[case::swap(
+        AstStereoBondDelta::Swap {
+            id: AstStereoBondId(5),
+            kind: AstStereoKind::CisTrans,
+        },
+        "StereoBondDelta.Swap(id=5, kind=StereoKind.CisTrans)",
+    )]
+    #[case::mirror(
+        AstStereoBondDelta::Mirror {
+            id: AstStereoBondId(5),
+            kind: AstStereoKind::CisTrans,
+        },
+        "StereoBondDelta.Mirror(id=5, kind=StereoKind.CisTrans)",
+    )]
+    fn test_stereo_bond_delta_repr(#[case] delta: AstStereoBondDelta, #[case] expected: &str) {
+        Python::attach(|py| {
+            let delta =
+                into_py_variant(py, StereoBondDelta::from_rust(py, &delta).unwrap()).unwrap();
+            assert_eq!(
+                delta
+                    .bind(py)
+                    .as_any()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstStereoBondDelta::Add {
+        id: AstStereoBondId(5),
+        site: AstBondId(3),
+        ligands: vec![
+            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+            AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+        ],
+        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+    })]
+    #[case::remove(AstStereoBondDelta::Remove {
+        id: AstStereoBondId(5),
+        site: AstBondId(3),
+        ligands: vec![
+            AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+            AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+        ],
+        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+    })]
+    #[case::modify_field(AstStereoBondDelta::ModifyField {
+        id: AstStereoBondId(5),
+        change: AstStereoBondFieldChange::Configuration {
+            old: AstStereoConfigurationAst::Undetermined,
+            new: AstStereoConfigurationAst::Kinded(
+                AstStereoKind::CisTrans,
+                AstStereoCosetAst::Lit(0),
+            ),
+        },
+    })]
+    #[case::constraint_added_with_kind(AstStereoBondDelta::ModifyConstraint {
+        id: AstStereoBondId(5),
+        kind: Some(AstStereoKind::CisTrans),
+        old: None,
+        new: Some(AstStereoBondConstraintAst::Stereogenicity(
+            AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+        )),
+    })]
+    #[case::constraint_removed_without_kind(AstStereoBondDelta::ModifyConstraint {
+        id: AstStereoBondId(5),
+        kind: None,
+        old: Some(AstStereoBondConstraintAst::Stereogenicity(
+            AstStereogenicityAst::Undetermined,
+        )),
+        new: None,
+    })]
+    #[case::constraint_modified(AstStereoBondDelta::ModifyConstraint {
+        id: AstStereoBondId(5),
+        kind: Some(AstStereoKind::CisTrans),
+        old: Some(AstStereoBondConstraintAst::Stereogenicity(
+            AstStereogenicityAst::Undetermined,
+        )),
+        new: Some(AstStereoBondConstraintAst::Stereogenicity(
+            AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
+        )),
+    })]
+    #[case::apply(AstStereoBondDelta::Apply {
+        id: AstStereoBondId(5),
+        kind: AstStereoKind::CisTrans,
+        permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+    })]
+    #[case::swap(AstStereoBondDelta::Swap {
+        id: AstStereoBondId(5),
+        kind: AstStereoKind::CisTrans,
+    })]
+    #[case::mirror(AstStereoBondDelta::Mirror {
+        id: AstStereoBondId(5),
+        kind: AstStereoKind::CisTrans,
+    })]
+    fn test_stereo_bond_delta_inverse(#[case] delta: AstStereoBondDelta) {
+        Python::attach(|py| {
+            let binding = StereoBondDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),

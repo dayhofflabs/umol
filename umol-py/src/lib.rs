@@ -51,7 +51,7 @@ use crate::{
         AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, AtomFieldChange, BondDelta,
         BondFieldChange, DativeBondDelta, DativeBondFieldChange, MulticenterBondDelta,
         MulticenterBondFieldChange, NoncovalentBondDelta, NoncovalentBondFieldChange,
-        StereoAtomDelta, StereoAtomFieldChange, StereoBondFieldChange,
+        StereoAtomDelta, StereoAtomFieldChange, StereoBondDelta, StereoBondFieldChange,
     },
     electrons::ElectronCountsAst,
     element::Element,
@@ -132,6 +132,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<NoncovalentBondFieldChange>()?;
         module.add_class::<StereoAtomDelta>()?;
         module.add_class::<StereoAtomFieldChange>()?;
+        module.add_class::<StereoBondDelta>()?;
         module.add_class::<StereoBondFieldChange>()?;
         module.add_class::<SubPatternAnchor>()?;
         module.add_class::<RelationalConstraint>()?;

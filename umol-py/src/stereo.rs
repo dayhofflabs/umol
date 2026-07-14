@@ -942,7 +942,7 @@ stereo_value! {
 
 stereo_value! {
     StereoBondAst, AstStereoBondAst, StereoBondConstraintAst, StereoBondConstraintsAst,
-    StereoBondConstraintsArg, StereoBondConstraintsView, StereoBondConstraintsBacking, test,
+    StereoBondConstraintsArg, StereoBondConstraintsView, StereoBondConstraintsBacking, production,
 }
 
 /// Per-entity molecule-embedded stereo view — `StereoAtomView` / `StereoBondView` — a handle

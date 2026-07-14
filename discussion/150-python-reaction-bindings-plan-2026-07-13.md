@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S3c.1 complete; S3c.2 is next**
+Status: **ACTIVE — S3c.2 complete; S3c.3 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -832,7 +832,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      suites pass with 829 Rust tests and 484 Python tests. `umol-py` clippy,
      rustfmt, and `git diff --check` pass.
 
-  2. **S3c.2 — `StereoBondDelta` and bond-centered ligand frames** — promote
+  2. **DONE — S3c.2 — `StereoBondDelta` and bond-centered ligand frames** — promote
      the generated `StereoBondAst` owned-AST constructor to production use, add
      the private snapshotting `StereoBondDeltaAstValue` field wrapper, and
      define all seven variants directly. Map the bond site to a bare integer, preserve the
@@ -844,6 +844,19 @@ scope and membership payloads live in `constraint/ring.rs`.
      matching, ownership, optional-kind/constraint, ligand-frame, permutation,
      and inverse coverage as S3c.1, using bond-appropriate stereo kinds and
      constraints. **Additive (green).** `[dep: S2b.2, S3c.1]`
+
+     **Implemented verification:** nine Rust round-trip rows and nine
+     inverse/double-inverse rows cover all seven variants, both optional-kind
+     states, every optional-constraint direction, non-involutive permutation
+     inversion, and both involutions. Three equality rows cover ordered ligand
+     frames and distinct permutations; seven repr rows cover the complete
+     variant surface. Seven Python tests cover construction, read-only fields,
+     matching, snapshot/live-child ownership, ordered duplicate-preserving
+     ligand lists, optional kind and constraints, permutation degree and image,
+     unhashability, and concrete inverse subtypes. The focused delta suites pass
+     with 222 Rust tests and 104 Python tests; the complete `umol-py` suites pass
+     with 857 Rust tests and 491 Python tests. `umol-py` clippy, rustfmt, and
+     `git diff --check` pass.
 
   3. **S3c.3 — stereo-delta closure verification** — add a fourteen-row Python
      matrix spanning all seven variants of both classes. Verify exact repr,
