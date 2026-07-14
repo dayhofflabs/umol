@@ -69,11 +69,11 @@ impl ReactionAst {
     /// mutated in place, deleted entities are removed (the host renumbers). Molecule-level constraints
     /// are added/removed with their entity refs re-anchored through the match (lhs → host, created →
     /// appended); transact's renumbering compacts them on removal.
-    pub fn apply_at<'h>(
+    pub fn apply_at(
         &self,
-        host: &'h MoleculeAst,
+        host: &MoleculeAst,
         correspondence: &MoleculeCorrespondence,
-    ) -> Result<ReactionDerivation<'h>, ApplyError> {
+    ) -> Result<ReactionDerivation, ApplyError> {
         let mut deltas = self.deltas.clone().canonicalize()?;
         // A stereo coset is stated relative to a ligand ordering; the rule writes its cosets in the
         // rule's frame, the host stores the matched center in its own. Restate the rule's absolute
@@ -765,7 +765,7 @@ impl ReactionAst {
         let atom_map =
             Correspondence::new(atom_mates, host.atoms().count(), product.atoms().count());
         let comap = MoleculeCorrespondence::induce(host, &product, atom_map);
-        Ok(ReactionDerivation::new(host, product, comap))
+        Ok(ReactionDerivation::new(host.clone(), product, comap))
     }
 
     /// Every product of applying the reaction to `host`: one per injective match of `lhs` into
@@ -775,7 +775,7 @@ impl ReactionAst {
         &'h self,
         host: &'h MoleculeAst,
         subiso: SubgraphIsomorphismAlgorithm,
-    ) -> impl Iterator<Item = ReactionDerivation<'h>> + 'h {
+    ) -> impl Iterator<Item = ReactionDerivation> + 'h {
         self.lhs
             .substructure_matches(host, SubstructureMatchAlgorithm::GraphAndOverlays, subiso)
             .into_iter()

@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **PLANNED**
+Status: **ACTIVE — S0a/S0b complete; S0c is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -186,7 +186,7 @@ suite, clippy, and formatting pass.
 
 ### S0 — Migrate `ReactionDerivation` to ownership (Rust)
 
-- **S0a — owned derivation value**
+- **S0a — DONE — owned derivation value**
   (`umol-ast/src/ast/reaction_derivation.rs`): remove the lifetime parameter,
   change `lhs: &'a MoleculeAst` to `lhs: MoleculeAst`, and update `new`, `lhs`,
   `reverse`, and `chain` to ordinary owned signatures; derive `PartialEq`/`Eq`
@@ -194,14 +194,18 @@ suite, clippy, and formatting pass.
   `to_reaction` semantics unchanged. This temporarily breaks
   producers and lifetime-annotated callers; its unit tests cover owned
   independence, reverse, chain, and abstraction back to `ReactionAst`.
-  **Breaking (red until S0b).** `[dep: —]`
-- **S0b — producer and caller migration** (`umol-ast/src/ast/reaction.rs`,
+  **Breaking (red until S0b).** Implemented with the expected three remaining
+  producer errors in `reaction.rs` (two obsolete lifetime arguments and the
+  borrowed `host` passed to the now-owned constructor). `[dep: —]`
+- **S0b — DONE — producer and caller migration** (`umol-ast/src/ast/reaction.rs`,
   `compose.rs`, tests, and workspace callers): make `apply_at` clone the matched
   host into each successful derivation, return `ReactionDerivation` without a
   lifetime, update `apply`'s item type, and remove all derivation lifetime
   annotations. Preserve match enumeration and DPO behavior. Run the focused
   reaction tests plus every workspace crate that consumes derivations. **Breaking
-  migration (red→green).** `[dep: S0a]`
+  migration (red→green).** Implemented: `apply_at` clones the host into the owned
+  result; `apply_at`/`apply` no longer name a derivation lifetime. Focused 9,
+  complete `umol-ast` 4,589, workspace check, and clippy all pass. `[dep: S0a]`
 - **S0c — API documentation cleanup** (affected Rust API docs): remove lifetime
   language, state that derivations are owned values, and record borrowing as a
   future evidence-driven optimization rather than a binding prerequisite.
