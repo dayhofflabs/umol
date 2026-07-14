@@ -2574,6 +2574,102 @@ def test_deltas_sequence():
         hash(deltas)
 
 
+def test_deltas_append():
+    source = Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C"))))
+    deltas = Deltas()
+
+    assert deltas.append(source) is None
+    deltas.append(source)
+    source._0.ast.charge = 1
+
+    assert list(deltas) == [
+        Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+        Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+    ]
+
+
+def test_deltas_extend():
+    target = Deltas(
+        [Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C"))))]
+    )
+    container_source = Deltas(
+        [
+            Delta.Constraint(
+                ConstraintDelta.Add(
+                    constraint=Constraint.Atom(
+                        3,
+                        AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                    )
+                )
+            )
+        ]
+    )
+    iterable_source = [
+        Delta.Atom(AtomDelta.Add(id=4, ast=AtomAst(Element("N")))),
+        Delta.Atom(AtomDelta.Add(id=4, ast=AtomAst(Element("N")))),
+    ]
+
+    assert target.extend(container_source) is None
+    target.extend(iterable_source)
+    container_source.append(
+        Delta.Atom(AtomDelta.Add(id=9, ast=AtomAst(Element("O"))))
+    )
+    iterable_source[0]._0.ast.charge = 1
+
+    assert list(target) == [
+        Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+        Delta.Constraint(
+            ConstraintDelta.Add(
+                constraint=Constraint.Atom(
+                    3,
+                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                )
+            )
+        ),
+        Delta.Atom(AtomDelta.Add(id=4, ast=AtomAst(Element("N")))),
+        Delta.Atom(AtomDelta.Add(id=4, ast=AtomAst(Element("N")))),
+    ]
+
+
+def test_deltas_extend_self():
+    deltas = Deltas(
+        [
+            Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+            Delta.Constraint(
+                ConstraintDelta.Add(
+                    constraint=Constraint.Atom(
+                        3,
+                        AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                    )
+                )
+            ),
+        ]
+    )
+
+    deltas.extend(deltas)
+
+    assert list(deltas) == [
+        Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+        Delta.Constraint(
+            ConstraintDelta.Add(
+                constraint=Constraint.Atom(
+                    3,
+                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                )
+            )
+        ),
+        Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+        Delta.Constraint(
+            ConstraintDelta.Add(
+                constraint=Constraint.Atom(
+                    3,
+                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                )
+            )
+        ),
+    ]
+
+
 def test_deltas_getitem():
     deltas = Deltas(
         [

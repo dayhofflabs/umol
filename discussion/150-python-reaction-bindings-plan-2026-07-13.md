@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S4b.2 complete; S4b.3 is next**
+Status: **ACTIVE — S4b.3 complete; S4b.4 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1057,7 +1057,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      pass with 913 Rust tests and 527 Python tests. `umol-py` clippy, rustfmt, and
      `git diff --check` pass.
 
-  3. **S4b.3 — append and RHS-first extend** (`umol-py/src/delta.rs`) — add
+  3. **DONE — S4b.3 — append and RHS-first extend** (`umol-py/src/delta.rs`) — add
      `append(delta)` and an entity-container-style resolved extend input that
      accepts another `Deltas` or any iterable of `Delta`. Convert the complete
      RHS to owned Rust deltas before borrowing the target for mutation; append in
@@ -1066,6 +1066,15 @@ scope and membership payloads live in `constraint/ring.rs`.
      order and duplicate preservation, and self-extension producing exactly two
      copies of the original sequence without aliasing or a double-borrow panic.
      **Additive (green).** `[dep: S4b.2]`
+
+     **Implemented verification:** four Rust tests cover append, extension from
+     another container, extension from entries, and self-extension. Three Python
+     tests verify return values, insertion order, duplicates, snapshot isolation
+     from both container and iterable sources, and exact doubling under
+     `deltas.extend(deltas)` without aliasing or a double-borrow panic. The
+     focused `Deltas` suites pass with 19 Rust cases and six Python tests; the
+     complete `umol-py` suites pass with 917 Rust tests and 530 Python tests.
+     `umol-py` clippy, rustfmt, and `git diff --check` pass.
 
   4. **S4b.4 — non-mutating canonicalization and container closure**
      (`umol-py/src/delta.rs`) — expose `canonicalize() -> Deltas` by cloning the

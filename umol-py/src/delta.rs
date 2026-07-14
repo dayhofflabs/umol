@@ -2047,12 +2047,7 @@ impl DeltasExtend {
     /// Snapshot every Python input before the target takes a write borrow.
     fn resolve(&self, py: Python<'_>) -> ResolvedDeltasExtend {
         let entries = match self {
-            Self::Container(container) => container
-                .bind(py)
-                .borrow()
-                .to_rust()
-                .as_slice()
-                .to_vec(),
+            Self::Container(container) => container.bind(py).borrow().to_rust().as_slice().to_vec(),
             Self::Entries(entries) => entries
                 .iter()
                 .map(|entry| entry.bind(py).borrow().to_rust(py))
@@ -5129,6 +5124,139 @@ mod tests {
         Python::attach(|py| {
             let deltas = Deltas::from_rust(entries.into_iter().collect());
             assert_eq!(deltas.__repr__(py).unwrap(), expected);
+        });
+    }
+
+    #[rstest]
+    fn test_deltas_append() {
+        let appended = AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+            AstAtomId(3),
+            AstAtomConstraintAst::degree(2),
+        )));
+        Python::attach(|py| {
+            let mut deltas = Deltas::from_rust(
+                vec![AstDelta::Atom(AstAtomDelta::Add {
+                    id: AstAtomId(3),
+                    ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+                })]
+                .into_iter()
+                .collect(),
+            );
+            let value = into_py_variant(py, Delta::from_rust(py, &appended).unwrap()).unwrap();
+
+            deltas.append(py, value);
+
+            assert_eq!(
+                deltas.to_rust().as_slice(),
+                &[
+                    AstDelta::Atom(AstAtomDelta::Add {
+                        id: AstAtomId(3),
+                        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+                    }),
+                    appended,
+                ]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_deltas_extend_container() {
+        Python::attach(|py| {
+            let target = Py::new(
+                py,
+                Deltas::from_rust(
+                    vec![AstDelta::Atom(AstAtomDelta::Add {
+                        id: AstAtomId(3),
+                        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+                    })]
+                    .into_iter()
+                    .collect(),
+                ),
+            )
+            .unwrap();
+            let source = Py::new(
+                py,
+                Deltas::from_rust(
+                    vec![AstDelta::Constraint(AstConstraintDelta::Add(
+                        AstConstraint::Atom(AstAtomId(3), AstAtomConstraintAst::degree(2)),
+                    ))]
+                    .into_iter()
+                    .collect(),
+                ),
+            )
+            .unwrap();
+
+            Deltas::extend(target.clone_ref(py), py, DeltasExtend::Container(source));
+
+            assert_eq!(
+                target.bind(py).borrow().to_rust().as_slice(),
+                &[
+                    AstDelta::Atom(AstAtomDelta::Add {
+                        id: AstAtomId(3),
+                        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+                    }),
+                    AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+                        AstAtomId(3),
+                        AstAtomConstraintAst::degree(2),
+                    ))),
+                ]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_deltas_extend_entries() {
+        Python::attach(|py| {
+            let target = Py::new(py, Deltas::from_rust(AstDeltas::new())).unwrap();
+            let atom = AstDelta::Atom(AstAtomDelta::Add {
+                id: AstAtomId(3),
+                ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+            });
+            let constraint = AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+                AstAtomId(3),
+                AstAtomConstraintAst::degree(2),
+            )));
+            let entries = vec![
+                into_py_variant(py, Delta::from_rust(py, &atom).unwrap()).unwrap(),
+                into_py_variant(py, Delta::from_rust(py, &constraint).unwrap()).unwrap(),
+            ];
+
+            Deltas::extend(target.clone_ref(py), py, DeltasExtend::Entries(entries));
+
+            assert_eq!(
+                target.bind(py).borrow().to_rust().as_slice(),
+                &[atom, constraint]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_deltas_extend_self() {
+        Python::attach(|py| {
+            let atom = AstDelta::Atom(AstAtomDelta::Add {
+                id: AstAtomId(3),
+                ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+            });
+            let constraint = AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+                AstAtomId(3),
+                AstAtomConstraintAst::degree(2),
+            )));
+            let target = Py::new(
+                py,
+                Deltas::from_rust(vec![atom.clone(), constraint.clone()].into_iter().collect()),
+            )
+            .unwrap();
+
+            Deltas::extend(
+                target.clone_ref(py),
+                py,
+                DeltasExtend::Container(target.clone_ref(py)),
+            );
+
+            assert_eq!(
+                target.bind(py).borrow().to_rust().as_slice(),
+                &[atom.clone(), constraint.clone(), atom, constraint]
+            );
         });
     }
 
