@@ -16,6 +16,7 @@ from umol import (
     BooleanAst,
     Constraint,
     ConstraintDelta,
+    ContradictionError,
     DativeBondAst,
     DativeBondConstraintAst,
     DativeBondDelta,
@@ -2715,3 +2716,193 @@ def test_deltas_iter():
     ]
     entries[0]._0.ast.charge = -1
     assert deltas[0]._0.ast.charge == ValueAst.Undetermined()
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            Deltas(
+                [
+                    Delta.Atom(
+                        AtomDelta.ModifyField(
+                            id=0,
+                            change=AtomFieldChange.Charge(
+                                old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                            ),
+                        )
+                    ),
+                    Delta.Atom(
+                        AtomDelta.ModifyField(
+                            id=0,
+                            change=AtomFieldChange.Charge(
+                                old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                            ),
+                        )
+                    ),
+                ]
+            ),
+            Deltas(
+                [
+                    Delta.Atom(
+                        AtomDelta.ModifyField(
+                            id=0,
+                            change=AtomFieldChange.Charge(
+                                old=ValueAst.Lit(0), new=ValueAst.Lit(2)
+                            ),
+                        )
+                    )
+                ]
+            ),
+            id="field-fusion",
+        ),
+        pytest.param(
+            Deltas(
+                [
+                    Delta.Atom(AtomDelta.Add(id=0, ast=AtomAst(Element("C")))),
+                    Delta.Atom(AtomDelta.Remove(id=0, ast=AtomAst(Element("C")))),
+                ]
+            ),
+            Deltas(),
+            id="add-remove-cancellation",
+        ),
+        pytest.param(
+            Deltas(
+                [
+                    Delta.Bond(
+                        BondDelta.ModifyField(
+                            id=0,
+                            change=BondFieldChange.Order(
+                                old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                            ),
+                        )
+                    ),
+                    Delta.Atom(
+                        AtomDelta.ModifyField(
+                            id=0,
+                            change=AtomFieldChange.Charge(
+                                old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                            ),
+                        )
+                    ),
+                ]
+            ),
+            Deltas(
+                [
+                    Delta.Atom(
+                        AtomDelta.ModifyField(
+                            id=0,
+                            change=AtomFieldChange.Charge(
+                                old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                            ),
+                        )
+                    ),
+                    Delta.Bond(
+                        BondDelta.ModifyField(
+                            id=0,
+                            change=BondFieldChange.Order(
+                                old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                            ),
+                        )
+                    ),
+                ]
+            ),
+            id="family-order",
+        ),
+        pytest.param(
+            Deltas(
+                [
+                    Delta.StereoAtom(
+                        StereoAtomDelta.Swap(id=5, kind=StereoKind.Tetrahedral)
+                    ),
+                    Delta.StereoAtom(
+                        StereoAtomDelta.Swap(id=5, kind=StereoKind.Tetrahedral)
+                    ),
+                ]
+            ),
+            Deltas(),
+            id="stereo-involution",
+        ),
+        pytest.param(
+            Deltas(
+                [
+                    Delta.Constraint(
+                        ConstraintDelta.Add(
+                            constraint=Constraint.Atom(
+                                3,
+                                AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                            )
+                        )
+                    ),
+                    Delta.Constraint(
+                        ConstraintDelta.Add(
+                            constraint=Constraint.Atom(
+                                3,
+                                AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                            )
+                        )
+                    ),
+                    Delta.Constraint(
+                        ConstraintDelta.Remove(
+                            constraint=Constraint.Atom(
+                                3,
+                                AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                            )
+                        )
+                    ),
+                ]
+            ),
+            Deltas(
+                [
+                    Delta.Constraint(
+                        ConstraintDelta.Add(
+                            constraint=Constraint.Atom(
+                                3,
+                                AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                            )
+                        )
+                    )
+                ]
+            ),
+            id="constraint-multiplicity",
+        ),
+    ],
+)
+def test_deltas_canonicalize(source, expected):
+    snapshot = Deltas(source)
+
+    canonical = source.canonicalize()
+
+    assert canonical == expected
+    assert canonical is not source
+    assert source == snapshot
+    assert canonical.canonicalize() == canonical
+
+
+def test_deltas_canonicalize_error():
+    source = Deltas(
+        [
+            Delta.Atom(
+                AtomDelta.ModifyField(
+                    id=0,
+                    change=AtomFieldChange.Charge(
+                        old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                    ),
+                )
+            ),
+            Delta.Atom(
+                AtomDelta.ModifyField(
+                    id=0,
+                    change=AtomFieldChange.Charge(
+                        old=ValueAst.Lit(2), new=ValueAst.Lit(3)
+                    ),
+                )
+            ),
+        ]
+    )
+    snapshot = Deltas(source)
+
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        source.canonicalize()
+
+    assert source == snapshot

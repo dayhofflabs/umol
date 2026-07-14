@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S4b.3 complete; S4b.4 is next**
+Status: **ACTIVE — S4 complete; S5a is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1002,7 +1002,7 @@ scope and membership payloads live in `constraint/ring.rs`.
 
   **Critical path:** `S3a.3, S3b.5, S3c.3, S3d.2 → S4a.1 → S4a.2`. Neither
   S4a subitem is deferrable: S4b requires the complete nine-family sum binding.
-- **S4b — Python `Deltas` container** (`umol-py/src/delta.rs`, `error.rs`,
+- **S4b — DONE — Python `Deltas` container** (`umol-py/src/delta.rs`, `error.rs`,
   `lib.rs`, `python/umol/__init__.py`): bind the Rust `Deltas` value with the same
   ownership discipline as `Constraints`. `Deltas(entries=())` snapshots an
   iterable of `Delta` values into an owned Rust container, preserving insertion
@@ -1076,7 +1076,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      complete `umol-py` suites pass with 917 Rust tests and 530 Python tests.
      `umol-py` clippy, rustfmt, and `git diff --check` pass.
 
-  4. **S4b.4 — non-mutating canonicalization and container closure**
+  4. **DONE — S4b.4 — non-mutating canonicalization and container closure**
      (`umol-py/src/delta.rs`) — expose `canonicalize() -> Deltas` by cloning the
      held Rust collection, invoking `Canonicalize`, and mapping failure through
      S4b.1. Test field-change fusion, add/remove cancellation, canonical ordering
@@ -1087,6 +1087,19 @@ scope and membership payloads live in `constraint/ring.rs`.
      constraint deltas. Run the complete Rust and Python suites, workspace
      clippy, rustfmt, and `git diff --check` as the stage gate. **Additive
      (green).** `[dep: S4b.1, S4b.3]`
+
+     **Implemented verification:** three Rust normalization rows cover field-change
+     fusion, add/remove cancellation, and canonical ordering across entity
+     families; one Rust error test verifies the exact `ContradictionError` class
+     and message for a discontinuous field-change chain. Every successful row
+     verifies idempotence and source non-mutation, and the error row also verifies
+     source non-mutation. Five Python normalization rows cover the same ordinary
+     delta semantics plus stereo involution cancellation and constraint
+     multiplicity, and verify a fresh result, exact normalized contents,
+     idempotence, and source non-mutation. The retained construction, detached
+     read, append, and extend tests make the focused closure suite 12 Python
+     cases. The complete `umol-py` suites pass with 921 Rust tests and 536 Python
+     tests. Workspace clippy, rustfmt, and `git diff --check` pass.
 
   **Critical path:** `S4a.2 → S4b.2 → S4b.3 → S4b.4`, with S4b.1 joining at
   S4b.4. No S4b subitem is deferrable: S5a requires the complete owned container

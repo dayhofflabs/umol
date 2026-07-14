@@ -25,10 +25,6 @@ pub(crate) fn parse_error(error: AstParseError) -> PyErr {
 }
 
 /// Map an `umol_ast` contradiction onto the catchable `umol.ContradictionError`.
-#[allow(
-    dead_code,
-    reason = "shared mapper for contradiction-returning binding methods"
-)]
 pub(crate) fn contradiction_error(error: AstContradiction) -> PyErr {
     ContradictionError::new_err(error.to_string())
 }
