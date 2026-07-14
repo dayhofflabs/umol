@@ -9,7 +9,9 @@ use umol_ast::ast::{
     BondDelta as AstBondDelta, BondFieldChange as AstBondFieldChange, BondId as AstBondId,
     DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
     DativeBondFieldChange as AstDativeBondFieldChange, DativeBondId as AstDativeBondId,
+    MulticenterBondAst as AstMulticenterBondAst, MulticenterBondDelta as AstMulticenterBondDelta,
     MulticenterBondFieldChange as AstMulticenterBondFieldChange,
+    MulticenterBondId as AstMulticenterBondId,
     NoncovalentBondFieldChange as AstNoncovalentBondFieldChange,
     StereoAtomFieldChange as AstStereoAtomFieldChange,
     StereoBondFieldChange as AstStereoBondFieldChange,
@@ -22,9 +24,11 @@ use crate::constraint::aromatic::AromaticSystemConstraintAst;
 use crate::constraint::atom::AtomConstraintAst;
 use crate::constraint::bond::BondConstraintAst;
 use crate::constraint::dative::DativeBondConstraintAst;
+use crate::constraint::multicenter::MulticenterBondConstraintAst;
 use crate::convert::into_py_variant;
 use crate::dative::DativeBondAst;
 use crate::electrons::ElectronCountsAst;
+use crate::multicenter::MulticenterBondAst;
 use crate::noncovalent::NoncovalentBondKindAst;
 use crate::spin::SpinStateAst;
 use crate::stereo::StereoConfigurationAst;
@@ -1022,6 +1026,166 @@ impl AromaticSystemDelta {
     }
 }
 
+pub struct MulticenterBondDeltaAstValue(Py<MulticenterBondAst>);
+
+impl FromPyObject<'_, '_> for MulticenterBondDeltaAstValue {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
+        let source = obj.extract::<PyRef<'_, MulticenterBondAst>>()?;
+        let ast = source.inner().clone();
+        drop(source);
+        Ok(Self(Py::new(
+            obj.py(),
+            MulticenterBondAst::from_inner(ast),
+        )?))
+    }
+}
+
+impl<'py> IntoPyObject<'py> for &MulticenterBondDeltaAstValue {
+    type Target = MulticenterBondAst;
+    type Output = Bound<'py, MulticenterBondAst>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        Ok(self.0.clone_ref(py).into_bound(py))
+    }
+}
+
+impl MulticenterBondDeltaAstValue {
+    fn from_rust(py: Python<'_>, ast: &AstMulticenterBondAst) -> PyResult<Self> {
+        Ok(Self(Py::new(
+            py,
+            MulticenterBondAst::from_inner(ast.clone()),
+        )?))
+    }
+
+    fn to_rust(&self, py: Python<'_>) -> AstMulticenterBondAst {
+        self.0.bind(py).borrow().inner().clone()
+    }
+}
+
+/// A resolved edit to one multicenter bond.
+#[pyclass]
+pub enum MulticenterBondDelta {
+    Add {
+        id: u32,
+        atoms: Vec<u32>,
+        ast: MulticenterBondDeltaAstValue,
+    },
+    Remove {
+        id: u32,
+        atoms: Vec<u32>,
+        ast: MulticenterBondDeltaAstValue,
+    },
+    ModifyField {
+        id: u32,
+        change: Py<MulticenterBondFieldChange>,
+    },
+    ModifyConstraint {
+        id: u32,
+        old: Option<Py<MulticenterBondConstraintAst>>,
+        new: Option<Py<MulticenterBondConstraintAst>>,
+    },
+}
+
+#[pymethods]
+impl MulticenterBondDelta {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_rust(py) == other.to_rust(py)
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, fields): (&str, &[&str]) = match &*slf.bind(py).borrow() {
+            Self::Add { .. } => ("Add", &["id", "atoms", "ast"]),
+            Self::Remove { .. } => ("Remove", &["id", "atoms", "ast"]),
+            Self::ModifyField { .. } => ("ModifyField", &["id", "change"]),
+            Self::ModifyConstraint { .. } => ("ModifyConstraint", &["id", "old", "new"]),
+        };
+        entity_delta_repr(
+            slf.bind(py).as_any(),
+            "MulticenterBondDelta",
+            variant,
+            fields,
+        )
+    }
+
+    /// Return the inverse resolved edit.
+    fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
+        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+    }
+}
+
+impl MulticenterBondDelta {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &AstMulticenterBondDelta) -> PyResult<Self> {
+        Ok(match delta {
+            AstMulticenterBondDelta::Add { id, atoms, ast } => Self::Add {
+                id: id.0,
+                atoms: atoms.iter().map(|atom| atom.0).collect(),
+                ast: MulticenterBondDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstMulticenterBondDelta::Remove { id, atoms, ast } => Self::Remove {
+                id: id.0,
+                atoms: atoms.iter().map(|atom| atom.0).collect(),
+                ast: MulticenterBondDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstMulticenterBondDelta::ModifyField { id, change } => Self::ModifyField {
+                id: id.0,
+                change: into_py_variant(py, MulticenterBondFieldChange::from_rust(py, change)?)?,
+            },
+            AstMulticenterBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id: id.0,
+                old: old
+                    .as_ref()
+                    .map(|constraint| {
+                        into_py_variant(
+                            py,
+                            MulticenterBondConstraintAst::from_rust(py, constraint)?,
+                        )
+                    })
+                    .transpose()?,
+                new: new
+                    .as_ref()
+                    .map(|constraint| {
+                        into_py_variant(
+                            py,
+                            MulticenterBondConstraintAst::from_rust(py, constraint)?,
+                        )
+                    })
+                    .transpose()?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstMulticenterBondDelta {
+        match self {
+            Self::Add { id, atoms, ast } => AstMulticenterBondDelta::Add {
+                id: AstMulticenterBondId(*id),
+                atoms: atoms.iter().copied().map(AstAtomId).collect(),
+                ast: ast.to_rust(py),
+            },
+            Self::Remove { id, atoms, ast } => AstMulticenterBondDelta::Remove {
+                id: AstMulticenterBondId(*id),
+                atoms: atoms.iter().copied().map(AstAtomId).collect(),
+                ast: ast.to_rust(py),
+            },
+            Self::ModifyField { id, change } => AstMulticenterBondDelta::ModifyField {
+                id: AstMulticenterBondId(*id),
+                change: change.bind(py).borrow().to_rust(py),
+            },
+            Self::ModifyConstraint { id, old, new } => AstMulticenterBondDelta::ModifyConstraint {
+                id: AstMulticenterBondId(*id),
+                old: old
+                    .as_ref()
+                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                new: new
+                    .as_ref()
+                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -1030,7 +1194,9 @@ mod tests {
         AtomConstraintAst as AstAtomConstraintAst, BondConstraintAst as AstBondConstraintAst,
         BooleanAst as AstBooleanAst, DativeBondConstraintAst as AstDativeBondConstraintAst,
         ElectronCountsAst as AstElectronCountsAst, ElementAst as AstElementAst,
-        IsotopeMassAst as AstIsotopeMassAst, NoncovalentBondKind as AstNoncovalentBondKind,
+        IsotopeMassAst as AstIsotopeMassAst,
+        MulticenterBondConstraintAst as AstMulticenterBondConstraintAst,
+        NoncovalentBondKind as AstNoncovalentBondKind,
         NoncovalentBondKindAst as AstNoncovalentBondKindAst, SpinStateAst as AstSpinStateAst,
         StereoConfigurationAst as AstStereoConfigurationAst, StereoCosetAst as AstStereoCosetAst,
         StereoKind as AstStereoKind, ValueAst as AstValueAst,
@@ -2548,6 +2714,190 @@ mod tests {
     fn test_aromatic_system_delta_inverse(#[case] delta: AstAromaticSystemDelta) {
         Python::attach(|py| {
             let binding = AromaticSystemDelta::from_rust(py, &delta).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py),
+                delta.clone().inverse()
+            );
+            let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstMulticenterBondDelta::Add {
+        id: AstMulticenterBondId(3),
+        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+        ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+    })]
+    #[case::remove(AstMulticenterBondDelta::Remove {
+        id: AstMulticenterBondId(3),
+        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+        ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+    })]
+    #[case::modify_field(AstMulticenterBondDelta::ModifyField {
+        id: AstMulticenterBondId(3),
+        change: AstMulticenterBondFieldChange::Charge {
+            old: AstValueAst::Lit(0),
+            new: AstValueAst::Lit(-1),
+        },
+    })]
+    #[case::constraint_added(AstMulticenterBondDelta::ModifyConstraint {
+        id: AstMulticenterBondId(3),
+        old: None,
+        new: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    })]
+    #[case::constraint_removed(AstMulticenterBondDelta::ModifyConstraint {
+        id: AstMulticenterBondId(3),
+        old: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+        new: None,
+    })]
+    #[case::constraint_modified(AstMulticenterBondDelta::ModifyConstraint {
+        id: AstMulticenterBondId(3),
+        old: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(5))),
+        new: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    })]
+    fn test_multicenter_bond_delta_roundtrip(#[case] delta: AstMulticenterBondDelta) {
+        Python::attach(|py| {
+            assert_eq!(
+                MulticenterBondDelta::from_rust(py, &delta)
+                    .unwrap()
+                    .to_rust(py),
+                delta
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        AstMulticenterBondDelta::Add {
+            id: AstMulticenterBondId(3),
+            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        },
+        AstMulticenterBondDelta::Add {
+            id: AstMulticenterBondId(3),
+            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        },
+        true,
+    )]
+    #[case::different_atom_order(
+        AstMulticenterBondDelta::Add {
+            id: AstMulticenterBondId(3),
+            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        },
+        AstMulticenterBondDelta::Add {
+            id: AstMulticenterBondId(3),
+            atoms: vec![AstAtomId(2), AstAtomId(4), AstAtomId(4)],
+            ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        },
+        false,
+    )]
+    fn test_multicenter_bond_delta_eq(
+        #[case] lhs: AstMulticenterBondDelta,
+        #[case] rhs: AstMulticenterBondDelta,
+        #[case] expected: bool,
+    ) {
+        Python::attach(|py| {
+            let lhs = MulticenterBondDelta::from_rust(py, &lhs).unwrap();
+            let rhs = MulticenterBondDelta::from_rust(py, &rhs).unwrap();
+            assert_eq!(lhs.__eq__(&rhs, py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::add(
+        AstMulticenterBondDelta::Add {
+            id: AstMulticenterBondId(3),
+            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        },
+        "MulticenterBondDelta.Add(id=3, atoms=[4, 2, 4], ast=MulticenterBondAst.parse('[1,1,1]'))",
+    )]
+    #[case::remove(
+        AstMulticenterBondDelta::Remove {
+            id: AstMulticenterBondId(3),
+            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+        },
+        "MulticenterBondDelta.Remove(id=3, atoms=[4, 2, 4], ast=MulticenterBondAst.parse('[1,1,1]'))",
+    )]
+    #[case::modify_field(
+        AstMulticenterBondDelta::ModifyField {
+            id: AstMulticenterBondId(3),
+            change: AstMulticenterBondFieldChange::Charge {
+                old: AstValueAst::Lit(0),
+                new: AstValueAst::Lit(-1),
+            },
+        },
+        "MulticenterBondDelta.ModifyField(id=3, change=MulticenterBondFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
+    )]
+    #[case::modify_constraint(
+        AstMulticenterBondDelta::ModifyConstraint {
+            id: AstMulticenterBondId(3),
+            old: None,
+            new: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+        },
+        "MulticenterBondDelta.ModifyConstraint(id=3, old=None, new=MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6)))",
+    )]
+    fn test_multicenter_bond_delta_repr(
+        #[case] delta: AstMulticenterBondDelta,
+        #[case] expected: &str,
+    ) {
+        Python::attach(|py| {
+            let delta =
+                into_py_variant(py, MulticenterBondDelta::from_rust(py, &delta).unwrap()).unwrap();
+            assert_eq!(
+                delta
+                    .bind(py)
+                    .as_any()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstMulticenterBondDelta::Add {
+        id: AstMulticenterBondId(3),
+        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+        ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+    })]
+    #[case::remove(AstMulticenterBondDelta::Remove {
+        id: AstMulticenterBondId(3),
+        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+        ast: AstMulticenterBondAst::from_electrons(vec![1, 1, 1]),
+    })]
+    #[case::modify_field(AstMulticenterBondDelta::ModifyField {
+        id: AstMulticenterBondId(3),
+        change: AstMulticenterBondFieldChange::Charge {
+            old: AstValueAst::Lit(0),
+            new: AstValueAst::Lit(-1),
+        },
+    })]
+    #[case::constraint_added(AstMulticenterBondDelta::ModifyConstraint {
+        id: AstMulticenterBondId(3),
+        old: None,
+        new: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    })]
+    #[case::constraint_removed(AstMulticenterBondDelta::ModifyConstraint {
+        id: AstMulticenterBondId(3),
+        old: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+        new: None,
+    })]
+    #[case::constraint_modified(AstMulticenterBondDelta::ModifyConstraint {
+        id: AstMulticenterBondId(3),
+        old: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(5))),
+        new: Some(AstMulticenterBondConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    })]
+    fn test_multicenter_bond_delta_inverse(#[case] delta: AstMulticenterBondDelta) {
+        Python::attach(|py| {
+            let binding = MulticenterBondDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),

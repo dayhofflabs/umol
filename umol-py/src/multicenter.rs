@@ -156,9 +156,7 @@ impl MulticenterBondAst {
         &mut self.0
     }
 
-    /// Wrap an AST bond (the hold-the-value `from_inner` bridge, paired with
-    /// `inner`). Test-only — in-crate construction wraps `MulticenterBondAst(..)` directly.
-    #[cfg(test)]
+    /// Wrap an owned Rust multicenter-bond AST.
     pub(crate) fn from_inner(bond: AstMulticenterBondAst) -> Self {
         MulticenterBondAst(bond)
     }

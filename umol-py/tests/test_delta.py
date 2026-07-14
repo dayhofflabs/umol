@@ -22,6 +22,9 @@ from umol import (
     ElementAst,
     ElectronCountsAst,
     IsotopeMassAst,
+    MulticenterBondAst,
+    MulticenterBondConstraintAst,
+    MulticenterBondDelta,
     MulticenterBondFieldChange,
     NoncovalentBondFieldChange,
     NoncovalentBondKind,
@@ -982,6 +985,97 @@ def test_aromaticsystemdelta_modifyconstraint_match():
     inverse = delta.inverse()
     assert isinstance(inverse, AromaticSystemDelta.ModifyConstraint)
     assert inverse.old == AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))
+    assert inverse.new is None
+    assert inverse.inverse() == delta
+
+
+def test_multicenterbonddelta_fields():
+    source = MulticenterBondAst([1, 1, 1])
+    delta = MulticenterBondDelta.Add(id=3, atoms=[4, 2, 4], ast=source)
+
+    source.electrons = [2, 0, 1]
+
+    assert delta.id == 3
+    assert delta.atoms == [4, 2, 4]
+    assert isinstance(delta.atoms, list)
+    assert delta.ast.electrons == ElectronCountsAst.Lit([1, 1, 1])
+    assert repr(delta) == (
+        "MulticenterBondDelta.Add(id=3, atoms=[4, 2, 4], "
+        "ast=MulticenterBondAst.parse('[1,1,1]'))"
+    )
+    delta.ast.charge = -1
+    assert delta.ast.charge == ValueAst.Lit(-1)
+    with pytest.raises(AttributeError):
+        delta.atoms = [2, 4, 4]
+    with pytest.raises(TypeError):
+        hash(delta)
+
+
+def test_multicenterbonddelta_add_match():
+    delta = MulticenterBondDelta.Add(
+        id=3,
+        atoms=[4, 2, 4],
+        ast=MulticenterBondAst([1, 1, 1]),
+    )
+
+    match delta:
+        case MulticenterBondDelta.Add(id=id, atoms=atoms, ast=ast):
+            assert id == 3
+            assert atoms == [4, 2, 4]
+            assert ast == MulticenterBondAst([1, 1, 1])
+        case _:
+            raise AssertionError("multicenter bond delta did not match its add variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, MulticenterBondDelta.Remove)
+    assert inverse.id == 3
+    assert inverse.atoms == [4, 2, 4]
+    assert inverse.ast == MulticenterBondAst([1, 1, 1])
+    assert inverse.inverse() == delta
+
+
+def test_multicenterbonddelta_modifyfield_match():
+    delta = MulticenterBondDelta.ModifyField(
+        id=3,
+        change=MulticenterBondFieldChange.Charge(
+            old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+        ),
+    )
+
+    match delta:
+        case MulticenterBondDelta.ModifyField(id, change):
+            assert id == 3
+            assert change == MulticenterBondFieldChange.Charge(
+                old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+            )
+        case _:
+            raise AssertionError("multicenter bond delta did not match its field variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, MulticenterBondDelta.ModifyField)
+    assert inverse.inverse() == delta
+
+
+def test_multicenterbonddelta_modifyconstraint_match():
+    delta = MulticenterBondDelta.ModifyConstraint(
+        id=3,
+        old=None,
+        new=MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6)),
+    )
+
+    match delta:
+        case MulticenterBondDelta.ModifyConstraint(id=id, old=old, new=new):
+            assert id == 3
+            assert old is None
+            assert new == MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))
+        case _:
+            raise AssertionError(
+                "multicenter bond delta did not match its constraint variant"
+            )
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, MulticenterBondDelta.ModifyConstraint)
+    assert inverse.old == MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6))
     assert inverse.new is None
     assert inverse.inverse() == delta
 
