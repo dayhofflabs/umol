@@ -18,7 +18,7 @@ use crate::constraint::atom::{
     atom_constraints_asdict, AtomConstraintsArg, AtomConstraintsAst, AtomConstraintsBacking,
     AtomConstraintsView,
 };
-use crate::convert::{hash_ast, variant_repr};
+use crate::convert::{hash_rust, variant_repr};
 use crate::element::Element;
 use crate::error::parse_error;
 use crate::molecule::MoleculeAst;
@@ -41,15 +41,15 @@ impl ElementAst {
     /// The single element this resolves to, or `None` when it is not a bare
     /// literal (undetermined, a set, a complement, or a variable).
     fn as_lit(&self) -> Option<Element> {
-        self.to_ast().as_lit().map(Element::from)
+        self.to_rust().as_lit().map(Element::from)
     }
 
     fn __eq__(&self, other: &Self) -> bool {
-        self.to_ast() == other.to_ast()
+        self.to_rust() == other.to_rust()
     }
 
     fn __hash__(&self) -> u64 {
-        hash_ast(&self.to_ast())
+        hash_rust(&self.to_rust())
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -65,7 +65,7 @@ impl ElementAst {
 }
 
 impl ElementAst {
-    pub(crate) fn from_ast(ast: &AstElementAst) -> ElementAst {
+    pub(crate) fn from_rust(ast: &AstElementAst) -> ElementAst {
         match ast {
             AstElementAst::Undetermined => ElementAst::Undetermined(),
             AstElementAst::Lit(e) => ElementAst::Lit(Element::from(*e)),
@@ -81,7 +81,7 @@ impl ElementAst {
                     name.clone(),
                     restriction.as_ref().map(|(op, members)| {
                         (
-                            MemOp::from_ast(*op),
+                            MemOp::from_rust(*op),
                             members.iter().copied().map(Element::from).collect(),
                         )
                     }),
@@ -90,7 +90,7 @@ impl ElementAst {
         }
     }
 
-    pub(crate) fn to_ast(&self) -> AstElementAst {
+    pub(crate) fn to_rust(&self) -> AstElementAst {
         match self {
             ElementAst::Undetermined() => AstElementAst::Undetermined,
             ElementAst::Lit(e) => AstElementAst::Lit(ChemElement::from(e)),
@@ -103,7 +103,10 @@ impl ElementAst {
             ElementAst::Var(name, restriction) => AstElementAst::Var(Box::new((
                 name.clone(),
                 restriction.as_ref().map(|(op, members)| {
-                    (op.to_ast(), members.iter().map(ChemElement::from).collect())
+                    (
+                        op.to_rust(),
+                        members.iter().map(ChemElement::from).collect(),
+                    )
                 }),
             ))),
         }
@@ -126,15 +129,15 @@ impl IsotopeMassAst {
     /// The single mass number this resolves to, or `None` when it is not a bare
     /// literal (undetermined, the natural mixture, a set, or a variable).
     fn as_lit(&self) -> Option<u32> {
-        self.to_ast().as_lit()
+        self.to_rust().as_lit()
     }
 
     fn __eq__(&self, other: &Self) -> bool {
-        self.to_ast() == other.to_ast()
+        self.to_rust() == other.to_rust()
     }
 
     fn __hash__(&self) -> u64 {
-        hash_ast(&self.to_ast())
+        hash_rust(&self.to_rust())
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -150,7 +153,7 @@ impl IsotopeMassAst {
 }
 
 impl IsotopeMassAst {
-    pub(crate) fn from_ast(ast: &AstIsotopeMassAst) -> IsotopeMassAst {
+    pub(crate) fn from_rust(ast: &AstIsotopeMassAst) -> IsotopeMassAst {
         match ast {
             AstIsotopeMassAst::Undetermined => IsotopeMassAst::Undetermined(),
             AstIsotopeMassAst::Natural => IsotopeMassAst::Natural(),
@@ -163,7 +166,7 @@ impl IsotopeMassAst {
         }
     }
 
-    pub(crate) fn to_ast(&self) -> AstIsotopeMassAst {
+    pub(crate) fn to_rust(&self) -> AstIsotopeMassAst {
         match self {
             IsotopeMassAst::Undetermined() => AstIsotopeMassAst::Undetermined,
             IsotopeMassAst::Natural() => AstIsotopeMassAst::Natural,
@@ -199,7 +202,7 @@ impl AtomAst {
         spin: Option<PyRef<'_, SpinStateAst>>,
         constraints: Option<Py<AtomConstraintsAst>>,
     ) -> Self {
-        let atom = AstAtomAst::new(element.to_ast(py));
+        let atom = AstAtomAst::new(element.to_rust(py));
         AtomAst(apply_fields(
             atom,
             py,
@@ -228,62 +231,62 @@ impl AtomAst {
 
     #[getter]
     fn element(&self) -> ElementAst {
-        ElementAst::from_ast(&self.0.element)
+        ElementAst::from_rust(&self.0.element)
     }
 
     #[setter]
     fn set_element(&mut self, py: Python<'_>, value: ElementArg) {
-        self.0.element = value.to_ast(py);
+        self.0.element = value.to_rust(py);
     }
 
     #[getter]
     fn isotope_mass(&self) -> IsotopeMassAst {
-        IsotopeMassAst::from_ast(&self.0.isotope_mass)
+        IsotopeMassAst::from_rust(&self.0.isotope_mass)
     }
 
     #[setter]
     fn set_isotope_mass(&mut self, py: Python<'_>, value: IsotopeMassArg) {
-        self.0.isotope_mass = value.to_ast(py);
+        self.0.isotope_mass = value.to_rust(py);
     }
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_ast(py, &self.0.charge)
+        ValueAst::from_rust(py, &self.0.charge)
     }
 
     #[setter]
     fn set_charge(&mut self, py: Python<'_>, value: ValueArg) {
-        self.0.charge = value.to_ast(py);
+        self.0.charge = value.to_rust(py);
     }
 
     #[getter]
     fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_ast(py, &self.0.implicit_hydrogens)
+        ValueAst::from_rust(py, &self.0.implicit_hydrogens)
     }
 
     #[setter]
     fn set_implicit_hydrogens(&mut self, py: Python<'_>, value: ValueArg) {
-        self.0.implicit_hydrogens = value.to_ast(py);
+        self.0.implicit_hydrogens = value.to_rust(py);
     }
 
     #[getter]
     fn lone_pairs(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_ast(py, &self.0.lone_pairs)
+        ValueAst::from_rust(py, &self.0.lone_pairs)
     }
 
     #[setter]
     fn set_lone_pairs(&mut self, py: Python<'_>, value: ValueArg) {
-        self.0.lone_pairs = value.to_ast(py);
+        self.0.lone_pairs = value.to_rust(py);
     }
 
     #[getter]
     fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
-        SpinStateAst::from_ast(py, &self.0.spin)
+        SpinStateAst::from_rust(py, &self.0.spin)
     }
 
     #[setter]
     fn set_spin(&mut self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
-        self.0.spin = value.to_ast(py);
+        self.0.spin = value.to_rust(py);
     }
 
     /// The atom's constraints as a live handle onto this atom: reads borrow the
@@ -301,12 +304,12 @@ impl AtomAst {
     /// while the atom is unborrowed instead of a double-borrow panic.
     #[setter]
     fn set_constraints(slf: Py<Self>, py: Python<'_>, value: AtomConstraintsArg) -> PyResult<()> {
-        let snapshot = value.to_ast(py)?;
+        let snapshot = value.to_rust(py)?;
         slf.borrow_mut(py).0.constraints = snapshot;
         Ok(())
     }
 
-    /// The fields as a dict keyed by field name; values are the field mirrors.
+    /// The fields as a dict keyed by field name; values are Python objects.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         dict.set_item("element", self.element())?;
@@ -323,10 +326,10 @@ impl AtomAst {
     }
 }
 
-/// A binding argument that coerces a literal *or* a mirror to the AST — the `*Arg`
+/// A binding argument that converts a literal or Python value to its Rust value — the `*Arg`
 /// convention for these inputs (`*Input` is reserved for the DSL side). Extracted as
 /// a PyO3 `FromPyObject` union tried in order; variants are `Ast` = the `*Ast`
-/// wrapper, `Lit` = the literal, mirroring `impl Into<..>` on the Rust builders.
+/// wrapper, `Lit` = the literal, corresponding to `impl Into<..>` on the Rust builders.
 ///
 /// `ElementArg` accepts a concrete `Element` or an `ElementAst`.
 #[derive(FromPyObject)]
@@ -336,9 +339,9 @@ enum ElementArg {
 }
 
 impl ElementArg {
-    fn to_ast(&self, py: Python<'_>) -> AstElementAst {
+    fn to_rust(&self, py: Python<'_>) -> AstElementAst {
         match self {
-            ElementArg::Ast(expr) => expr.bind(py).borrow().to_ast(),
+            ElementArg::Ast(expr) => expr.bind(py).borrow().to_rust(),
             ElementArg::Lit(element) => AstElementAst::Lit(ChemElement::from(element)),
         }
     }
@@ -352,9 +355,9 @@ enum IsotopeMassArg {
 }
 
 impl IsotopeMassArg {
-    fn to_ast(&self, py: Python<'_>) -> AstIsotopeMassAst {
+    fn to_rust(&self, py: Python<'_>) -> AstIsotopeMassAst {
         match self {
-            IsotopeMassArg::Ast(mass) => mass.bind(py).borrow().to_ast(),
+            IsotopeMassArg::Ast(mass) => mass.bind(py).borrow().to_rust(),
             IsotopeMassArg::Lit(number) => AstIsotopeMassAst::Lit(*number),
         }
     }
@@ -372,19 +375,19 @@ fn apply_fields(
     constraints: Option<Py<AtomConstraintsAst>>,
 ) -> AstAtomAst {
     if let Some(isotope_mass) = isotope_mass {
-        atom = atom.with_isotope_mass(isotope_mass.to_ast(py));
+        atom = atom.with_isotope_mass(isotope_mass.to_rust(py));
     }
     if let Some(charge) = charge {
-        atom = atom.with_charge(charge.to_ast(py));
+        atom = atom.with_charge(charge.to_rust(py));
     }
     if let Some(implicit_hydrogens) = implicit_hydrogens {
-        atom = atom.with_implicit_hydrogens(implicit_hydrogens.to_ast(py));
+        atom = atom.with_implicit_hydrogens(implicit_hydrogens.to_rust(py));
     }
     if let Some(lone_pairs) = lone_pairs {
-        atom = atom.with_lone_pairs(lone_pairs.to_ast(py));
+        atom = atom.with_lone_pairs(lone_pairs.to_rust(py));
     }
     if let Some(spin) = spin {
-        atom = atom.with_spin(spin.to_ast(py));
+        atom = atom.with_spin(spin.to_rust(py));
     }
     if let Some(constraints) = constraints {
         atom.constraints = constraints.bind(py).borrow().inner().clone();
@@ -405,8 +408,7 @@ impl AtomAst {
     }
 
     /// Wrap an AST atom (the hold-the-value `from_inner` bridge, paired with
-    /// `inner`). Test-only — in-crate construction wraps `AtomAst(..)` directly.
-    #[cfg(test)]
+    /// `inner`).
     pub(crate) fn from_inner(atom: AstAtomAst) -> Self {
         AtomAst(atom)
     }
@@ -444,7 +446,7 @@ impl AtomView {
     #[getter]
     fn element(&self, py: Python<'_>) -> PyResult<ElementAst> {
         let molecule = self.owner.bind(py).borrow();
-        Ok(ElementAst::from_ast(&self.atom(molecule.inner())?.element))
+        Ok(ElementAst::from_rust(&self.atom(molecule.inner())?.element))
     }
 
     #[setter]
@@ -454,13 +456,13 @@ impl AtomView {
             .inner_mut()
             .atom_mut(self.id)
             .ast
-            .element = value.to_ast(py);
+            .element = value.to_rust(py);
     }
 
     #[getter]
     fn isotope_mass(&self, py: Python<'_>) -> PyResult<IsotopeMassAst> {
         let molecule = self.owner.bind(py).borrow();
-        Ok(IsotopeMassAst::from_ast(
+        Ok(IsotopeMassAst::from_rust(
             &self.atom(molecule.inner())?.isotope_mass,
         ))
     }
@@ -472,13 +474,13 @@ impl AtomView {
             .inner_mut()
             .atom_mut(self.id)
             .ast
-            .isotope_mass = value.to_ast(py);
+            .isotope_mass = value.to_rust(py);
     }
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_ast(py, &self.atom(molecule.inner())?.charge)
+        ValueAst::from_rust(py, &self.atom(molecule.inner())?.charge)
     }
 
     #[setter]
@@ -488,13 +490,13 @@ impl AtomView {
             .inner_mut()
             .atom_mut(self.id)
             .ast
-            .charge = value.to_ast(py);
+            .charge = value.to_rust(py);
     }
 
     #[getter]
     fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<ValueAst> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_ast(py, &self.atom(molecule.inner())?.implicit_hydrogens)
+        ValueAst::from_rust(py, &self.atom(molecule.inner())?.implicit_hydrogens)
     }
 
     #[setter]
@@ -504,13 +506,13 @@ impl AtomView {
             .inner_mut()
             .atom_mut(self.id)
             .ast
-            .implicit_hydrogens = value.to_ast(py);
+            .implicit_hydrogens = value.to_rust(py);
     }
 
     #[getter]
     fn lone_pairs(&self, py: Python<'_>) -> PyResult<ValueAst> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_ast(py, &self.atom(molecule.inner())?.lone_pairs)
+        ValueAst::from_rust(py, &self.atom(molecule.inner())?.lone_pairs)
     }
 
     #[setter]
@@ -520,13 +522,13 @@ impl AtomView {
             .inner_mut()
             .atom_mut(self.id)
             .ast
-            .lone_pairs = value.to_ast(py);
+            .lone_pairs = value.to_rust(py);
     }
 
     #[getter]
     fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
         let molecule = self.owner.bind(py).borrow();
-        SpinStateAst::from_ast(py, &self.atom(molecule.inner())?.spin)
+        SpinStateAst::from_rust(py, &self.atom(molecule.inner())?.spin)
     }
 
     #[setter]
@@ -536,7 +538,7 @@ impl AtomView {
             .inner_mut()
             .atom_mut(self.id)
             .ast
-            .spin = value.to_ast(py);
+            .spin = value.to_rust(py);
     }
 
     /// The atom's constraints as a live handle onto the molecule: reads borrow the
@@ -560,25 +562,28 @@ impl AtomView {
             .inner_mut()
             .atom_mut(self.id)
             .ast
-            .constraints = value.to_ast(py)?;
+            .constraints = value.to_rust(py)?;
         Ok(())
     }
 
-    /// The fields as a dict keyed by field name; values are the field mirrors —
+    /// The fields as a dict keyed by field name; values are Python objects —
     /// symmetric with `AtomAst.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
         let atom = self.atom(molecule.inner())?;
         let dict = PyDict::new(py);
-        dict.set_item("element", ElementAst::from_ast(&atom.element))?;
-        dict.set_item("isotope_mass", IsotopeMassAst::from_ast(&atom.isotope_mass))?;
-        dict.set_item("charge", ValueAst::from_ast(py, &atom.charge)?)?;
+        dict.set_item("element", ElementAst::from_rust(&atom.element))?;
+        dict.set_item(
+            "isotope_mass",
+            IsotopeMassAst::from_rust(&atom.isotope_mass),
+        )?;
+        dict.set_item("charge", ValueAst::from_rust(py, &atom.charge)?)?;
         dict.set_item(
             "implicit_hydrogens",
-            ValueAst::from_ast(py, &atom.implicit_hydrogens)?,
+            ValueAst::from_rust(py, &atom.implicit_hydrogens)?,
         )?;
-        dict.set_item("lone_pairs", ValueAst::from_ast(py, &atom.lone_pairs)?)?;
-        dict.set_item("spin", SpinStateAst::from_ast(py, &atom.spin)?)?;
+        dict.set_item("lone_pairs", ValueAst::from_rust(py, &atom.lone_pairs)?)?;
+        dict.set_item("spin", SpinStateAst::from_rust(py, &atom.spin)?)?;
         dict.set_item(
             "constraints",
             atom_constraints_asdict(py, &atom.constraints)?,
@@ -716,7 +721,7 @@ mod tests {
         Some((AstMemOp::In, BTreeSet::from([ChemElement::C, ChemElement::N]))),
     ))))]
     fn test_element_ast_roundtrip(#[case] ast: AstElementAst) {
-        assert_eq!(ElementAst::from_ast(&ast).to_ast(), ast);
+        assert_eq!(ElementAst::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -724,7 +729,7 @@ mod tests {
     #[case(AstElementAst::Undetermined, None)]
     #[case(AstElementAst::LitSet(Box::new(BTreeSet::from([ChemElement::C, ChemElement::N]))), None)]
     fn test_element_ast_as_lit(#[case] ast: AstElementAst, #[case] expected: Option<ChemElement>) {
-        let got = ElementAst::from_ast(&ast)
+        let got = ElementAst::from_rust(&ast)
             .as_lit()
             .map(|e| ChemElement::from(&e));
         assert_eq!(got, expected);
@@ -741,7 +746,7 @@ mod tests {
         Some(BTreeSet::from([12, 13])),
     ))))]
     fn test_isotope_mass_ast_roundtrip(#[case] ast: AstIsotopeMassAst) {
-        assert_eq!(IsotopeMassAst::from_ast(&ast).to_ast(), ast);
+        assert_eq!(IsotopeMassAst::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -749,7 +754,7 @@ mod tests {
     #[case(AstIsotopeMassAst::Natural, None)]
     #[case(AstIsotopeMassAst::Undetermined, None)]
     fn test_isotope_mass_ast_as_lit(#[case] ast: AstIsotopeMassAst, #[case] expected: Option<u32>) {
-        assert_eq!(IsotopeMassAst::from_ast(&ast).as_lit(), expected);
+        assert_eq!(IsotopeMassAst::from_rust(&ast).as_lit(), expected);
     }
 
     fn carbon_oxygen(py: Python<'_>) -> Py<MoleculeAst> {
@@ -848,7 +853,7 @@ mod tests {
             };
             let spin = Py::new(
                 py,
-                SpinStateAst::from_ast(
+                SpinStateAst::from_rust(
                     py,
                     &AstSpinStateAst {
                         unpaired: AstValueAst::Lit(1),
@@ -864,7 +869,7 @@ mod tests {
                 id: AstAtomId(0),
             };
             assert_eq!(
-                fresh.spin(py).unwrap().to_ast(py),
+                fresh.spin(py).unwrap().to_rust(py),
                 AstSpinStateAst {
                     unpaired: AstValueAst::Lit(1),
                     multiplicity: AstValueAst::Lit(2),
@@ -1048,7 +1053,7 @@ mod tests {
     fn test_atom_constraint_roundtrip(#[case] ast: AstAtomConstraintAst) {
         Python::attach(|py| {
             assert_eq!(
-                AtomConstraintAst::from_ast(py, &ast).unwrap().to_ast(py),
+                AtomConstraintAst::from_rust(py, &ast).unwrap().to_rust(py),
                 ast
             );
         });
@@ -1059,12 +1064,12 @@ mod tests {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::valence(4)).unwrap(),
             )
             .unwrap();
             let degree = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::degree(3)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::degree(3)).unwrap(),
             )
             .unwrap();
             let constraints = AtomConstraintsAst::new(py, vec![valence, degree]);
@@ -1089,41 +1094,41 @@ mod tests {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::valence(4)).unwrap(),
             )
             .unwrap();
             let degree = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::degree(3)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::degree(3)).unwrap(),
             )
             .unwrap();
             let constraints = AtomConstraintsAst::new(py, vec![valence, degree]);
 
             let mut keys = constraints.__iter__(py).unwrap();
             assert_eq!(
-                keys.__next__().unwrap().bind(py).borrow().to_ast(py),
+                keys.__next__().unwrap().bind(py).borrow().to_rust(py),
                 AstAtomConstraintKey::Valence
             );
             assert_eq!(
-                keys.__next__().unwrap().bind(py).borrow().to_ast(py),
+                keys.__next__().unwrap().bind(py).borrow().to_rust(py),
                 AstAtomConstraintKey::Degree
             );
             assert!(keys.__next__().is_none());
 
             let mut values = constraints.values(py).unwrap();
             assert_eq!(
-                values.__next__().unwrap().bind(py).borrow().to_ast(py),
+                values.__next__().unwrap().bind(py).borrow().to_rust(py),
                 AstAtomConstraintAst::valence(4)
             );
 
             let mut items = constraints.items(py).unwrap();
             let (key, value) = items.__next__().unwrap();
             assert_eq!(
-                key.bind(py).borrow().to_ast(py),
+                key.bind(py).borrow().to_rust(py),
                 AstAtomConstraintKey::Valence
             );
             assert_eq!(
-                value.bind(py).borrow().to_ast(py),
+                value.bind(py).borrow().to_rust(py),
                 AstAtomConstraintAst::valence(4)
             );
         });
@@ -1134,7 +1139,7 @@ mod tests {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::valence(4)).unwrap(),
             )
             .unwrap();
             let constraints = AtomConstraintsAst::new(py, vec![valence]);
@@ -1147,7 +1152,7 @@ mod tests {
                 .unwrap();
             let expected = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::valence(4)).unwrap(),
             )
             .unwrap()
             .into_any();
@@ -1179,21 +1184,21 @@ mod tests {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::valence(4)).unwrap(),
             )
             .unwrap();
             let degree = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::degree(3)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::degree(3)).unwrap(),
             )
             .unwrap();
             let constraints = AtomConstraintsAst::new(py, vec![valence, degree]);
             assert_eq!(
-                constraints.valence(py).unwrap().unwrap().to_ast(py),
+                constraints.valence(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(4)
             );
             assert_eq!(
-                constraints.degree(py).unwrap().unwrap().to_ast(py),
+                constraints.degree(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(3)
             );
             assert!(constraints.total_valence(py).unwrap().is_none());
@@ -1206,7 +1211,7 @@ mod tests {
         Python::attach(|py| {
             let membership = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(
+                AtomConstraintAst::from_rust(
                     py,
                     &AstAtomConstraintAst::ring_membership(AstRingScope::Size(6), 1),
                 )
@@ -1216,7 +1221,7 @@ mod tests {
             let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![membership])).unwrap();
             let proxy = AtomConstraintsAst::ring_size_count(constraints.clone_ref(py));
             assert_eq!(
-                proxy.__getitem__(py, 6).unwrap().unwrap().to_ast(py),
+                proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(1)
             );
             assert!(proxy.__getitem__(py, 5).unwrap().is_none());
@@ -1235,13 +1240,13 @@ mod tests {
             let mut constraints = AtomConstraintsAst::new(py, vec![]);
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::valence(4)).unwrap(),
             )
             .unwrap();
             constraints.set(py, valence);
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
-                constraints.valence(py).unwrap().unwrap().to_ast(py),
+                constraints.valence(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(4)
             );
         });
@@ -1252,7 +1257,7 @@ mod tests {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::valence(4)).unwrap(),
             )
             .unwrap();
             let mut constraints = AtomConstraintsAst::new(py, vec![valence]);
@@ -1264,7 +1269,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(AtomConstraintAst::Valence(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_ast(py), AstValueAst::Lit(4))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), AstValueAst::Lit(4))
                 }
                 _ => panic!("expected removed Valence(Lit(4))"),
             }
@@ -1290,11 +1295,11 @@ mod tests {
             let c = constraints.bind(py).borrow();
             assert_eq!(c.__len__(), 2);
             assert_eq!(
-                c.valence(py).unwrap().unwrap().to_ast(py),
+                c.valence(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(4)
             );
             assert_eq!(
-                c.degree(py).unwrap().unwrap().to_ast(py),
+                c.degree(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(3)
             );
         });
@@ -1319,7 +1324,7 @@ mod tests {
             };
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::valence(4)).unwrap(),
             )
             .unwrap();
             view.set(py, valence);
@@ -1338,7 +1343,7 @@ mod tests {
                 .unwrap()
             {
                 AtomConstraintAst::Valence(v) => {
-                    assert_eq!(v.bind(py).borrow().to_ast(py), AstValueAst::Lit(4))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), AstValueAst::Lit(4))
                 }
                 _ => panic!("expected Valence(Lit(4))"),
             }
@@ -1372,7 +1377,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(AtomConstraintAst::Valence(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_ast(py), AstValueAst::Lit(4))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), AstValueAst::Lit(4))
                 }
                 _ => panic!("expected removed Valence(Lit(4))"),
             }
@@ -1436,7 +1441,7 @@ mod tests {
             };
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::valence(4)).unwrap(),
             )
             .unwrap();
             view.set(py, valence);
@@ -1453,7 +1458,7 @@ mod tests {
                 .unwrap()
             {
                 AtomConstraintAst::Valence(v) => {
-                    assert_eq!(v.bind(py).borrow().to_ast(py), AstValueAst::Lit(4))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), AstValueAst::Lit(4))
                 }
                 _ => panic!("expected Valence(Lit(4))"),
             }
@@ -1482,7 +1487,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(AtomConstraintAst::Valence(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_ast(py), AstValueAst::Lit(4))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), AstValueAst::Lit(4))
                 }
                 _ => panic!("expected removed Valence(Lit(4))"),
             }
@@ -1527,7 +1532,7 @@ mod tests {
             let mut constraints = AtomConstraintsAst::new(py, vec![]);
             constraints.set_valence(py, ValueArg::Lit(4));
             assert_eq!(
-                constraints.valence(py).unwrap().unwrap().to_ast(py),
+                constraints.valence(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(4)
             );
         });
@@ -1539,7 +1544,7 @@ mod tests {
             let mut constraints = AtomConstraintsAst::new(py, vec![]);
             constraints.set_ring_count(py, ValueArg::Lit(2));
             assert_eq!(
-                constraints.ring_count(py).unwrap().unwrap().to_ast(py),
+                constraints.ring_count(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(2)
             );
         });
@@ -1553,7 +1558,7 @@ mod tests {
                 .set_aromatic_valence(py, AromaticValenceArg::Value(ValueArg::Lit(1)))
                 .unwrap();
             match constraints.aromatic_valence(py).unwrap().unwrap() {
-                AromaticValenceAst::Aromatic(v) => assert_eq!(v.to_ast(py), AstValueAst::Lit(1)),
+                AromaticValenceAst::Aromatic(v) => assert_eq!(v.to_rust(py), AstValueAst::Lit(1)),
                 _ => panic!("expected Aromatic"),
             }
             constraints
@@ -1586,7 +1591,7 @@ mod tests {
             match constraints.tetrahedral_stereo(py).unwrap().unwrap() {
                 TetrahedralStereoAst::Stereo(coset) => {
                     assert_eq!(
-                        coset.bind(py).borrow().to_ast(py),
+                        coset.bind(py).borrow().to_rust(py),
                         AstStereoCosetAst::Lit(1)
                     )
                 }
@@ -1621,7 +1626,7 @@ mod tests {
                 },
             };
             match fresh.aromatic_valence(py).unwrap().unwrap() {
-                AromaticValenceAst::Aromatic(v) => assert_eq!(v.to_ast(py), AstValueAst::Lit(1)),
+                AromaticValenceAst::Aromatic(v) => assert_eq!(v.to_rust(py), AstValueAst::Lit(1)),
                 _ => panic!("expected Aromatic"),
             }
         });
@@ -1634,7 +1639,7 @@ mod tests {
             let proxy = AtomConstraintsAst::ring_size_count(constraints.clone_ref(py));
             proxy.__setitem__(py, 6, ValueArg::Lit(3));
             assert_eq!(
-                proxy.__getitem__(py, 6).unwrap().unwrap().to_ast(py),
+                proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(3)
             );
             proxy.__delitem__(py, 6);
@@ -1673,7 +1678,7 @@ mod tests {
                     .__getitem__(py, 5)
                     .unwrap()
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 AstValueAst::Lit(1)
             );
         });
@@ -1685,12 +1690,12 @@ mod tests {
             let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![])).unwrap();
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::valence(4)).unwrap(),
             )
             .unwrap();
             let degree = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::degree(3)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::degree(3)).unwrap(),
             )
             .unwrap();
             AtomConstraintsAst::update(
@@ -1710,7 +1715,7 @@ mod tests {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_ast(py, &AstAtomConstraintAst::valence(4)).unwrap(),
+                AtomConstraintAst::from_rust(py, &AstAtomConstraintAst::valence(4)).unwrap(),
             )
             .unwrap();
             let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![valence])).unwrap();
@@ -1727,7 +1732,7 @@ mod tests {
                     .valence(py)
                     .unwrap()
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 AstValueAst::Lit(4)
             );
         });

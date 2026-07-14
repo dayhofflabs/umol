@@ -39,12 +39,12 @@ impl AromaticSystemAst {
         spin: Option<PyRef<'_, SpinStateAst>>,
         constraints: Option<Py<AromaticSystemConstraintsAst>>,
     ) -> Self {
-        let mut system = AstAromaticSystemAst::new(electrons.to_ast(py));
+        let mut system = AstAromaticSystemAst::new(electrons.to_rust(py));
         if let Some(charge) = charge {
-            system = system.with_charge(charge.to_ast(py));
+            system = system.with_charge(charge.to_rust(py));
         }
         if let Some(spin) = spin {
-            system = system.with_spin(spin.to_ast(py));
+            system = system.with_spin(spin.to_rust(py));
         }
         if let Some(constraints) = constraints {
             system.constraints = constraints.bind(py).borrow().inner().clone();
@@ -71,32 +71,32 @@ impl AromaticSystemAst {
     /// The per-member-atom electron counts (positional, aligned to `atom_ids`).
     #[getter]
     fn electrons(&self) -> ElectronCountsAst {
-        ElectronCountsAst::from_ast(&self.0.electrons)
+        ElectronCountsAst::from_rust(&self.0.electrons)
     }
 
     #[setter]
     fn set_electrons(&mut self, py: Python<'_>, value: ElectronCountsArg) {
-        self.0.electrons = value.to_ast(py);
+        self.0.electrons = value.to_rust(py);
     }
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_ast(py, &self.0.charge)
+        ValueAst::from_rust(py, &self.0.charge)
     }
 
     #[setter]
     fn set_charge(&mut self, py: Python<'_>, value: ValueArg) {
-        self.0.charge = value.to_ast(py);
+        self.0.charge = value.to_rust(py);
     }
 
     #[getter]
     fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
-        SpinStateAst::from_ast(py, &self.0.spin)
+        SpinStateAst::from_rust(py, &self.0.spin)
     }
 
     #[setter]
     fn set_spin(&mut self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
-        self.0.spin = value.to_ast(py);
+        self.0.spin = value.to_rust(py);
     }
 
     /// The system's constraints as a live handle onto this system: reads borrow the
@@ -116,12 +116,12 @@ impl AromaticSystemAst {
         py: Python<'_>,
         value: AromaticSystemConstraintsArg,
     ) -> PyResult<()> {
-        let snapshot = value.to_ast(py)?;
+        let snapshot = value.to_rust(py)?;
         slf.borrow_mut(py).0.constraints = snapshot;
         Ok(())
     }
 
-    /// The fields as a dict keyed by field name; values are the field mirrors.
+    /// The fields as a dict keyed by field name; values are Python objects.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         dict.set_item("electrons", self.electrons())?;
@@ -205,7 +205,7 @@ impl AromaticSystemView {
     #[getter]
     fn electrons(&self, py: Python<'_>) -> PyResult<ElectronCountsAst> {
         let molecule = self.owner.bind(py).borrow();
-        Ok(ElectronCountsAst::from_ast(
+        Ok(ElectronCountsAst::from_rust(
             &self.aromatic_system(molecule.inner())?.ast.electrons,
         ))
     }
@@ -217,13 +217,13 @@ impl AromaticSystemView {
             .inner_mut()
             .aromatic_system_mut(self.id)
             .ast
-            .electrons = value.to_ast(py);
+            .electrons = value.to_rust(py);
     }
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_ast(py, &self.aromatic_system(molecule.inner())?.ast.charge)
+        ValueAst::from_rust(py, &self.aromatic_system(molecule.inner())?.ast.charge)
     }
 
     #[setter]
@@ -233,13 +233,13 @@ impl AromaticSystemView {
             .inner_mut()
             .aromatic_system_mut(self.id)
             .ast
-            .charge = value.to_ast(py);
+            .charge = value.to_rust(py);
     }
 
     #[getter]
     fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
         let molecule = self.owner.bind(py).borrow();
-        SpinStateAst::from_ast(py, &self.aromatic_system(molecule.inner())?.ast.spin)
+        SpinStateAst::from_rust(py, &self.aromatic_system(molecule.inner())?.ast.spin)
     }
 
     #[setter]
@@ -249,7 +249,7 @@ impl AromaticSystemView {
             .inner_mut()
             .aromatic_system_mut(self.id)
             .ast
-            .spin = value.to_ast(py);
+            .spin = value.to_rust(py);
     }
 
     /// The system's constraints as a live handle onto the molecule: reads borrow the
@@ -273,19 +273,19 @@ impl AromaticSystemView {
             .inner_mut()
             .aromatic_system_mut(self.id)
             .ast
-            .constraints = value.to_ast(py)?;
+            .constraints = value.to_rust(py)?;
         Ok(())
     }
 
-    /// The value fields as a dict keyed by field name; values are the field mirrors —
+    /// The value fields as a dict keyed by field name; values are Python objects —
     /// symmetric with `AromaticSystemAst.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
         let system = self.aromatic_system(molecule.inner())?.ast;
         let dict = PyDict::new(py);
-        dict.set_item("electrons", ElectronCountsAst::from_ast(&system.electrons))?;
-        dict.set_item("charge", ValueAst::from_ast(py, &system.charge)?)?;
-        dict.set_item("spin", SpinStateAst::from_ast(py, &system.spin)?)?;
+        dict.set_item("electrons", ElectronCountsAst::from_rust(&system.electrons))?;
+        dict.set_item("charge", ValueAst::from_rust(py, &system.charge)?)?;
+        dict.set_item("spin", SpinStateAst::from_rust(py, &system.spin)?)?;
         dict.set_item(
             "constraints",
             aromatic_system_constraints_asdict(py, &system.constraints)?,
@@ -481,7 +481,7 @@ mod tests {
     fn test_aromatic_system_ast_new() {
         Python::attach(|py| {
             let spin_ast = AstSpinStateAst::from((0_u8, 1_u8));
-            let spin = Py::new(py, SpinStateAst::from_ast(py, &spin_ast).unwrap()).unwrap();
+            let spin = Py::new(py, SpinStateAst::from_rust(py, &spin_ast).unwrap()).unwrap();
             let system = AromaticSystemAst::new(
                 py,
                 ElectronCountsArg::Lit(vec![1, 1, 1]),
@@ -503,7 +503,7 @@ mod tests {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -549,12 +549,12 @@ mod tests {
             let mut system =
                 AromaticSystemAst::from_inner(AstAromaticSystemAst::from_electrons(vec![1, 1, 1]));
             assert_eq!(
-                system.electrons().to_ast(),
+                system.electrons().to_rust(),
                 AstElectronCountsAst::Lit(vec![1, 1, 1])
             );
             system.set_electrons(py, ElectronCountsArg::Lit(vec![2, 2]));
             assert_eq!(
-                system.electrons().to_ast(),
+                system.electrons().to_rust(),
                 AstElectronCountsAst::Lit(vec![2, 2])
             );
         });
@@ -566,7 +566,7 @@ mod tests {
             let mut system =
                 AromaticSystemAst::from_inner(AstAromaticSystemAst::from_electrons(vec![1, 1, 1]));
             system.set_charge(py, ValueArg::Lit(-1));
-            assert_eq!(system.charge(py).unwrap().to_ast(py), AstValueAst::Lit(-1));
+            assert_eq!(system.charge(py).unwrap().to_rust(py), AstValueAst::Lit(-1));
         });
     }
 
@@ -574,11 +574,11 @@ mod tests {
     fn test_aromatic_system_ast_spin() {
         Python::attach(|py| {
             let spin_ast = AstSpinStateAst::from((0_u8, 1_u8));
-            let spin = Py::new(py, SpinStateAst::from_ast(py, &spin_ast).unwrap()).unwrap();
+            let spin = Py::new(py, SpinStateAst::from_rust(py, &spin_ast).unwrap()).unwrap();
             let mut system =
                 AromaticSystemAst::from_inner(AstAromaticSystemAst::from_electrons(vec![1, 1, 1]));
             system.set_spin(py, spin.bind(py).borrow());
-            assert_eq!(system.spin(py).unwrap().to_ast(py), spin_ast);
+            assert_eq!(system.spin(py).unwrap().to_rust(py), spin_ast);
         });
     }
 
@@ -659,7 +659,7 @@ mod tests {
                 id: AstAromaticSystemId(0),
             };
             assert_eq!(
-                view.electrons(py).unwrap().to_ast(),
+                view.electrons(py).unwrap().to_rust(),
                 AstElectronCountsAst::Lit(vec![1, 1, 1, 1, 1, 1])
             );
             view.set_electrons(py, ElectronCountsArg::Lit(vec![2, 2, 2, 2, 2, 2]));
@@ -668,7 +668,7 @@ mod tests {
                 id: AstAromaticSystemId(0),
             };
             assert_eq!(
-                fresh.electrons(py).unwrap().to_ast(),
+                fresh.electrons(py).unwrap().to_rust(),
                 AstElectronCountsAst::Lit(vec![2, 2, 2, 2, 2, 2])
             );
         });
@@ -687,7 +687,7 @@ mod tests {
                 owner,
                 id: AstAromaticSystemId(0),
             };
-            assert_eq!(fresh.charge(py).unwrap().to_ast(py), AstValueAst::Lit(-1));
+            assert_eq!(fresh.charge(py).unwrap().to_rust(py), AstValueAst::Lit(-1));
         });
     }
 
@@ -695,7 +695,7 @@ mod tests {
     fn test_aromatic_system_view_spin() {
         Python::attach(|py| {
             let spin_ast = AstSpinStateAst::from((0_u8, 1_u8));
-            let spin = Py::new(py, SpinStateAst::from_ast(py, &spin_ast).unwrap()).unwrap();
+            let spin = Py::new(py, SpinStateAst::from_rust(py, &spin_ast).unwrap()).unwrap();
             let owner = benzene(py);
             let view = AromaticSystemView {
                 owner: owner.clone_ref(py),
@@ -706,7 +706,7 @@ mod tests {
                 owner,
                 id: AstAromaticSystemId(0),
             };
-            assert_eq!(fresh.spin(py).unwrap().to_ast(py), spin_ast);
+            assert_eq!(fresh.spin(py).unwrap().to_rust(py), spin_ast);
         });
     }
 
@@ -740,7 +740,7 @@ mod tests {
                     py,
                     vec![into_py_variant(
                         py,
-                        AromaticSystemConstraintAst::from_ast(
+                        AromaticSystemConstraintAst::from_rust(
                             py,
                             &AstAromaticSystemConstraintAst::electron_count(6),
                         )
@@ -757,7 +757,11 @@ mod tests {
                 id: AstAromaticSystemId(0),
             };
             assert_eq!(
-                fresh.constraints(py).electron_count(py).unwrap().to_ast(py),
+                fresh
+                    .constraints(py)
+                    .electron_count(py)
+                    .unwrap()
+                    .to_rust(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -822,7 +826,7 @@ mod tests {
             let view = views.__getitem__(py, 0).unwrap();
             // value replaced, members preserved
             assert_eq!(
-                view.electrons(py).unwrap().to_ast(),
+                view.electrons(py).unwrap().to_rust(),
                 AstElectronCountsAst::Lit(vec![2, 2, 2, 2, 2, 2])
             );
             let atom_ids: Vec<u32> = view.atom_ids(py).unwrap().extract().unwrap();
@@ -895,18 +899,18 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_constraint_key_roundtrip() {
         let key =
-            AromaticSystemConstraintKey::from_ast(&AstAromaticSystemConstraintKey::ElectronCount);
-        assert_eq!(key.to_ast(), AstAromaticSystemConstraintKey::ElectronCount);
+            AromaticSystemConstraintKey::from_rust(&AstAromaticSystemConstraintKey::ElectronCount);
+        assert_eq!(key.to_rust(), AstAromaticSystemConstraintKey::ElectronCount);
     }
 
     #[rstest]
     fn test_aromatic_system_constraint_ast_key() {
         Python::attach(|py| {
             let constraint = AstAromaticSystemConstraintAst::electron_count(6);
-            let key = AromaticSystemConstraintAst::from_ast(py, &constraint)
+            let key = AromaticSystemConstraintAst::from_rust(py, &constraint)
                 .unwrap()
                 .key(py);
-            assert_eq!(key.to_ast(), AstAromaticSystemConstraintKey::ElectronCount);
+            assert_eq!(key.to_rust(), AstAromaticSystemConstraintKey::ElectronCount);
         });
     }
 
@@ -916,9 +920,9 @@ mod tests {
     fn test_aromatic_system_constraint_ast_roundtrip(#[case] ast: AstAromaticSystemConstraintAst) {
         Python::attach(|py| {
             assert_eq!(
-                AromaticSystemConstraintAst::from_ast(py, &ast)
+                AromaticSystemConstraintAst::from_rust(py, &ast)
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 ast
             );
         });
@@ -929,7 +933,7 @@ mod tests {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -939,7 +943,7 @@ mod tests {
             let constraints = AromaticSystemConstraintsAst::new(py, vec![ec]);
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
-                constraints.electron_count(py).unwrap().to_ast(py),
+                constraints.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -950,7 +954,7 @@ mod tests {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -971,7 +975,7 @@ mod tests {
             let mut constraints = AromaticSystemConstraintsAst::new(py, vec![]);
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -981,7 +985,7 @@ mod tests {
             constraints.set(py, ec);
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
-                constraints.electron_count(py).unwrap().to_ast(py),
+                constraints.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -992,7 +996,7 @@ mod tests {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -1004,7 +1008,7 @@ mod tests {
             let removed = constraints.pop(py, key).unwrap();
             match removed {
                 Some(AromaticSystemConstraintAst::ElectronCount(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_ast(py), AstValueAst::Lit(6))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), AstValueAst::Lit(6))
                 }
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
             }
@@ -1029,7 +1033,7 @@ mod tests {
             let c = constraints.bind(py).borrow();
             assert_eq!(c.__len__(), 1);
             assert_eq!(
-                c.electron_count(py).unwrap().to_ast(py),
+                c.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -1041,7 +1045,7 @@ mod tests {
             let constraints = Py::new(py, AromaticSystemConstraintsAst::new(py, vec![])).unwrap();
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -1057,7 +1061,7 @@ mod tests {
             let c = constraints.bind(py).borrow();
             assert_eq!(c.__len__(), 1);
             assert_eq!(
-                c.electron_count(py).unwrap().to_ast(py),
+                c.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -1070,7 +1074,7 @@ mod tests {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -1090,7 +1094,7 @@ mod tests {
                     .borrow()
                     .electron_count(py)
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -1182,7 +1186,7 @@ mod tests {
             ));
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -1202,7 +1206,7 @@ mod tests {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -1213,25 +1217,25 @@ mod tests {
 
             let mut keys = constraints.__iter__(py).unwrap();
             assert_eq!(
-                keys.__next__().unwrap().bind(py).borrow().to_ast(),
+                keys.__next__().unwrap().bind(py).borrow().to_rust(),
                 AstAromaticSystemConstraintKey::ElectronCount
             );
             assert!(keys.__next__().is_none());
 
             let mut values = constraints.values(py).unwrap();
             assert_eq!(
-                values.__next__().unwrap().bind(py).borrow().to_ast(py),
+                values.__next__().unwrap().bind(py).borrow().to_rust(py),
                 AstAromaticSystemConstraintAst::electron_count(6)
             );
 
             let mut items = constraints.items(py).unwrap();
             let (key, value) = items.__next__().unwrap();
             assert_eq!(
-                key.bind(py).borrow().to_ast(),
+                key.bind(py).borrow().to_rust(),
                 AstAromaticSystemConstraintKey::ElectronCount
             );
             assert_eq!(
-                value.bind(py).borrow().to_ast(py),
+                value.bind(py).borrow().to_rust(py),
                 AstAromaticSystemConstraintAst::electron_count(6)
             );
         });
@@ -1242,7 +1246,7 @@ mod tests {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -1259,7 +1263,7 @@ mod tests {
                 .unwrap();
             let expected = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -1299,12 +1303,12 @@ mod tests {
         Python::attach(|py| {
             let empty = AromaticSystemConstraintsAst::new(py, vec![]);
             assert_eq!(
-                empty.electron_count(py).unwrap().to_ast(py),
+                empty.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Undetermined
             );
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -1313,7 +1317,7 @@ mod tests {
             .unwrap();
             let constraints = AromaticSystemConstraintsAst::new(py, vec![ec]);
             assert_eq!(
-                constraints.electron_count(py).unwrap().to_ast(py),
+                constraints.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -1325,7 +1329,7 @@ mod tests {
             let mut constraints = AromaticSystemConstraintsAst::new(py, vec![]);
             constraints.set_electron_count(py, ValueArg::Lit(6));
             assert_eq!(
-                constraints.electron_count(py).unwrap().to_ast(py),
+                constraints.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -1354,7 +1358,7 @@ mod tests {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -1366,7 +1370,8 @@ mod tests {
             assert_eq!(dict.len(), 1);
             let value = dict.get_item("electron_count").unwrap().unwrap();
             let expected =
-                into_py_variant(py, ValueAst::from_ast(py, &AstValueAst::Lit(6)).unwrap()).unwrap();
+                into_py_variant(py, ValueAst::from_rust(py, &AstValueAst::Lit(6)).unwrap())
+                    .unwrap();
             assert!(value.eq(expected.bind(py)).unwrap());
         });
     }
@@ -1384,7 +1389,7 @@ mod tests {
             };
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -1398,7 +1403,7 @@ mod tests {
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
-                fresh.electron_count(py).unwrap().to_ast(py),
+                fresh.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -1426,7 +1431,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(AromaticSystemConstraintAst::ElectronCount(v)) => {
-                    assert_eq!(v.bind(py).borrow().to_ast(py), AstValueAst::Lit(6))
+                    assert_eq!(v.bind(py).borrow().to_rust(py), AstValueAst::Lit(6))
                 }
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
             }
@@ -1462,7 +1467,7 @@ mod tests {
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
-                fresh.electron_count(py).unwrap().to_ast(py),
+                fresh.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -1480,7 +1485,7 @@ mod tests {
                 backing: AromaticSystemConstraintsBacking::AromaticSystem(system.clone_ref(py)),
             };
             assert_eq!(
-                view.electron_count(py).unwrap().to_ast(py),
+                view.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Undetermined
             );
             view.set_electron_count(py, ValueArg::Lit(6));
@@ -1488,7 +1493,7 @@ mod tests {
                 backing: AromaticSystemConstraintsBacking::AromaticSystem(system),
             };
             assert_eq!(
-                fresh.electron_count(py).unwrap().to_ast(py),
+                fresh.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Lit(6)
             );
         });
@@ -1506,7 +1511,7 @@ mod tests {
             };
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_ast(
+                AromaticSystemConstraintAst::from_rust(
                     py,
                     &AstAromaticSystemConstraintAst::electron_count(6),
                 )
@@ -1522,7 +1527,7 @@ mod tests {
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
-                fresh.electron_count(py).unwrap().to_ast(py),
+                fresh.electron_count(py).unwrap().to_rust(py),
                 AstValueAst::Lit(6)
             );
         });

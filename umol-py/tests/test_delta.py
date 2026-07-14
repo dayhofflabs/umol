@@ -2,8 +2,15 @@ import pytest
 
 from umol import (
     AromaticSystemFieldChange,
+    AtomAst,
+    AtomConstraintAst,
+    AtomDelta,
     AtomFieldChange,
+    BondAst,
+    BondConstraintAst,
+    BondDelta,
     BondFieldChange,
+    BooleanAst,
     DativeBondFieldChange,
     Element,
     ElementAst,
@@ -624,3 +631,248 @@ def test_fieldchange_closure(change, expected_repr):
     assert type(inverse) is type(change)
     assert inverse != change
     assert inverse.inverse() == change
+
+
+def test_atomdelta_fields():
+    source = AtomAst(Element("C"))
+    delta = AtomDelta.Add(id=3, ast=source)
+
+    source.charge = -1
+
+    assert delta.id == 3
+    assert delta.ast.charge == ValueAst.Undetermined()
+    assert repr(delta) == "AtomDelta.Add(id=3, ast=AtomAst.parse('C'))"
+    delta.ast.charge = 1
+    assert delta.ast.charge == ValueAst.Lit(1)
+    with pytest.raises(AttributeError):
+        delta.id = 4
+    with pytest.raises(TypeError):
+        hash(delta)
+
+
+def test_atomdelta_add_match():
+    delta = AtomDelta.Add(id=3, ast=AtomAst(Element("C")))
+
+    match delta:
+        case AtomDelta.Add(id=id, ast=ast):
+            assert id == 3
+            assert ast == AtomAst(Element("C"))
+        case _:
+            raise AssertionError("atom delta did not match its add variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, AtomDelta.Remove)
+    assert inverse.id == 3
+    assert inverse.ast == AtomAst(Element("C"))
+    assert inverse.inverse() == delta
+
+
+def test_atomdelta_modifyfield_match():
+    delta = AtomDelta.ModifyField(
+        id=3,
+        change=AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)),
+    )
+
+    match delta:
+        case AtomDelta.ModifyField(id, change):
+            assert id == 3
+            assert change == AtomFieldChange.Charge(
+                old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+            )
+        case _:
+            raise AssertionError("atom delta did not match its field variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, AtomDelta.ModifyField)
+    assert inverse.inverse() == delta
+
+
+def test_atomdelta_modifyconstraint_match():
+    delta = AtomDelta.ModifyConstraint(
+        id=3,
+        old=None,
+        new=AtomConstraintAst.Valence(ValueAst.Lit(4)),
+    )
+
+    match delta:
+        case AtomDelta.ModifyConstraint(id=id, old=old, new=new):
+            assert id == 3
+            assert old is None
+            assert new == AtomConstraintAst.Valence(ValueAst.Lit(4))
+        case _:
+            raise AssertionError("atom delta did not match its constraint variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, AtomDelta.ModifyConstraint)
+    assert inverse.old == AtomConstraintAst.Valence(ValueAst.Lit(4))
+    assert inverse.new is None
+    assert inverse.inverse() == delta
+
+
+def test_bonddelta_fields():
+    source = BondAst(1)
+    delta = BondDelta.Add(id=2, atoms=(5, 1), ast=source)
+
+    source.order = 2
+
+    assert delta.id == 2
+    assert delta.atoms == (5, 1)
+    assert isinstance(delta.atoms, tuple)
+    assert delta.ast.order == ValueAst.Lit(1)
+    assert repr(delta) == (
+        "BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst.parse('1'))"
+    )
+    delta.ast.order = 3
+    assert delta.ast.order == ValueAst.Lit(3)
+    with pytest.raises(AttributeError):
+        delta.atoms = (1, 5)
+    with pytest.raises(TypeError):
+        hash(delta)
+
+
+def test_bonddelta_add_match():
+    delta = BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst(1))
+
+    match delta:
+        case BondDelta.Add(id=id, atoms=atoms, ast=ast):
+            assert id == 2
+            assert atoms == (5, 1)
+            assert ast == BondAst(1)
+        case _:
+            raise AssertionError("bond delta did not match its add variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, BondDelta.Remove)
+    assert inverse.id == 2
+    assert inverse.atoms == (5, 1)
+    assert inverse.ast == BondAst(1)
+    assert inverse.inverse() == delta
+
+
+def test_bonddelta_modifyfield_match():
+    delta = BondDelta.ModifyField(
+        id=2,
+        change=BondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2)),
+    )
+
+    match delta:
+        case BondDelta.ModifyField(id, change):
+            assert id == 2
+            assert change == BondFieldChange.Order(
+                old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+            )
+        case _:
+            raise AssertionError("bond delta did not match its field variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, BondDelta.ModifyField)
+    assert inverse.inverse() == delta
+
+
+def test_bonddelta_modifyconstraint_match():
+    delta = BondDelta.ModifyConstraint(
+        id=2,
+        old=None,
+        new=BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+    )
+
+    match delta:
+        case BondDelta.ModifyConstraint(id=id, old=old, new=new):
+            assert id == 2
+            assert old is None
+            assert new == BondConstraintAst.Aromatic(BooleanAst.Lit(True))
+        case _:
+            raise AssertionError("bond delta did not match its constraint variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, BondDelta.ModifyConstraint)
+    assert inverse.old == BondConstraintAst.Aromatic(BooleanAst.Lit(True))
+    assert inverse.new is None
+    assert inverse.inverse() == delta
+
+
+@pytest.mark.parametrize(
+    ("delta", "expected_repr", "inverse_type"),
+    [
+        (
+            AtomDelta.Add(id=3, ast=AtomAst(Element("C"))),
+            "AtomDelta.Add(id=3, ast=AtomAst.parse('C'))",
+            AtomDelta.Remove,
+        ),
+        (
+            AtomDelta.Remove(id=3, ast=AtomAst(Element("N"))),
+            "AtomDelta.Remove(id=3, ast=AtomAst.parse('N'))",
+            AtomDelta.Add,
+        ),
+        (
+            AtomDelta.ModifyField(
+                id=3,
+                change=AtomFieldChange.Charge(
+                    old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                ),
+            ),
+            "AtomDelta.ModifyField(id=3, "
+            "change=AtomFieldChange.Charge("
+            "old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
+            AtomDelta.ModifyField,
+        ),
+        (
+            AtomDelta.ModifyConstraint(
+                id=3,
+                old=None,
+                new=AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            ),
+            "AtomDelta.ModifyConstraint(id=3, old=None, "
+            "new=AtomConstraintAst.Valence(ValueAst.Lit(4)))",
+            AtomDelta.ModifyConstraint,
+        ),
+        (
+            BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst(1)),
+            "BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst.parse('1'))",
+            BondDelta.Remove,
+        ),
+        (
+            BondDelta.Remove(id=2, atoms=(1, 5), ast=BondAst(2)),
+            "BondDelta.Remove(id=2, atoms=(1, 5), ast=BondAst.parse('2'))",
+            BondDelta.Add,
+        ),
+        (
+            BondDelta.ModifyField(
+                id=2,
+                change=BondFieldChange.Order(
+                    old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                ),
+            ),
+            "BondDelta.ModifyField(id=2, "
+            "change=BondFieldChange.Order("
+            "old=ValueAst.Lit(1), new=ValueAst.Lit(2)))",
+            BondDelta.ModifyField,
+        ),
+        (
+            BondDelta.ModifyConstraint(
+                id=2,
+                old=None,
+                new=BondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            ),
+            "BondDelta.ModifyConstraint(id=2, old=None, "
+            "new=BondConstraintAst.Aromatic(BooleanAst.Lit(True)))",
+            BondDelta.ModifyConstraint,
+        ),
+    ],
+    ids=[
+        "atom-add",
+        "atom-remove",
+        "atom-modify-field",
+        "atom-modify-constraint",
+        "bond-add",
+        "bond-remove",
+        "bond-modify-field",
+        "bond-modify-constraint",
+    ],
+)
+def test_entitydelta_closure(delta, expected_repr, inverse_type):
+    assert repr(delta) == expected_repr
+    inverse = delta.inverse()
+    assert type(inverse) is inverse_type
+    assert inverse != delta
+    assert inverse.inverse() == delta

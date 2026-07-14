@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 use umol_ast::ast::{RingMembershipAst as AstRingMembershipAst, RingScope as AstRingScope};
 
-use crate::convert::{hash_ast, into_py_variant, variant_repr};
+use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::value::{ValueArg, ValueAst};
 
 #[pyclass]
@@ -15,11 +15,11 @@ pub enum RingScope {
 #[pymethods]
 impl RingScope {
     fn __eq__(&self, other: &Self) -> bool {
-        self.to_ast() == other.to_ast()
+        self.to_rust() == other.to_rust()
     }
 
     fn __hash__(&self) -> u64 {
-        hash_ast(&self.to_ast())
+        hash_rust(&self.to_rust())
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -32,14 +32,14 @@ impl RingScope {
 }
 
 impl RingScope {
-    pub(crate) fn from_ast(ast: &AstRingScope) -> Self {
+    pub(crate) fn from_rust(ast: &AstRingScope) -> Self {
         match ast {
             AstRingScope::All => Self::All(),
             AstRingScope::Size(size) => Self::Size(*size),
         }
     }
 
-    pub(crate) fn to_ast(&self) -> AstRingScope {
+    pub(crate) fn to_rust(&self) -> AstRingScope {
         match self {
             Self::All() => AstRingScope::All,
             Self::Size(size) => AstRingScope::Size(*size),
@@ -66,11 +66,11 @@ impl RingMembershipAst {
     }
 
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -83,17 +83,17 @@ impl RingMembershipAst {
 }
 
 impl RingMembershipAst {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstRingMembershipAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstRingMembershipAst) -> PyResult<Self> {
         Ok(Self {
-            scope: into_py_variant(py, RingScope::from_ast(&ast.scope))?,
-            count: into_py_variant(py, ValueAst::from_ast(py, &ast.count)?)?,
+            scope: into_py_variant(py, RingScope::from_rust(&ast.scope))?,
+            count: into_py_variant(py, ValueAst::from_rust(py, &ast.count)?)?,
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstRingMembershipAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstRingMembershipAst {
         AstRingMembershipAst::new(
-            self.scope.bind(py).borrow().to_ast(),
-            self.count.bind(py).borrow().to_ast(py),
+            self.scope.bind(py).borrow().to_rust(),
+            self.count.bind(py).borrow().to_rust(py),
         )
     }
 }
@@ -108,7 +108,7 @@ mod tests {
     #[case(AstRingScope::All)]
     #[case(AstRingScope::Size(6))]
     fn test_ring_scope_roundtrip(#[case] ast: AstRingScope) {
-        assert_eq!(RingScope::from_ast(&ast).to_ast(), ast);
+        assert_eq!(RingScope::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -117,7 +117,7 @@ mod tests {
     fn test_ring_membership_ast_roundtrip(#[case] ast: AstRingMembershipAst) {
         Python::attach(|py| {
             assert_eq!(
-                RingMembershipAst::from_ast(py, &ast).unwrap().to_ast(py),
+                RingMembershipAst::from_rust(py, &ast).unwrap().to_rust(py),
                 ast
             );
         });

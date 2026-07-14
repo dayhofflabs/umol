@@ -37,12 +37,12 @@ impl BondAst {
         spin: Option<PyRef<'_, SpinStateAst>>,
         constraints: Option<Py<BondConstraintsAst>>,
     ) -> Self {
-        let mut bond = AstBondAst::new(order.to_ast(py));
+        let mut bond = AstBondAst::new(order.to_rust(py));
         if let Some(charge) = charge {
-            bond = bond.with_charge(charge.to_ast(py));
+            bond = bond.with_charge(charge.to_rust(py));
         }
         if let Some(spin) = spin {
-            bond = bond.with_spin(spin.to_ast(py));
+            bond = bond.with_spin(spin.to_rust(py));
         }
         if let Some(constraints) = constraints {
             bond.constraints = constraints.bind(py).borrow().inner().clone();
@@ -66,32 +66,32 @@ impl BondAst {
 
     #[getter]
     fn order(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_ast(py, &self.0.order)
+        ValueAst::from_rust(py, &self.0.order)
     }
 
     #[setter]
     fn set_order(&mut self, py: Python<'_>, value: ValueArg) {
-        self.0.order = value.to_ast(py);
+        self.0.order = value.to_rust(py);
     }
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_ast(py, &self.0.charge)
+        ValueAst::from_rust(py, &self.0.charge)
     }
 
     #[setter]
     fn set_charge(&mut self, py: Python<'_>, value: ValueArg) {
-        self.0.charge = value.to_ast(py);
+        self.0.charge = value.to_rust(py);
     }
 
     #[getter]
     fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
-        SpinStateAst::from_ast(py, &self.0.spin)
+        SpinStateAst::from_rust(py, &self.0.spin)
     }
 
     #[setter]
     fn set_spin(&mut self, py: Python<'_>, value: PyRef<'_, SpinStateAst>) {
-        self.0.spin = value.to_ast(py);
+        self.0.spin = value.to_rust(py);
     }
 
     /// The bond's constraints as a live handle onto this bond: reads borrow the
@@ -109,12 +109,12 @@ impl BondAst {
     /// reads while the bond is unborrowed instead of a double-borrow panic.
     #[setter]
     fn set_constraints(slf: Py<Self>, py: Python<'_>, value: BondConstraintsArg) -> PyResult<()> {
-        let snapshot = value.to_ast(py)?;
+        let snapshot = value.to_rust(py)?;
         slf.borrow_mut(py).0.constraints = snapshot;
         Ok(())
     }
 
-    /// The fields as a dict keyed by field name; values are the field mirrors.
+    /// The fields as a dict keyed by field name; values are Python objects.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         dict.set_item("order", self.order(py)?)?;
@@ -141,8 +141,7 @@ impl BondAst {
     }
 
     /// Wrap an AST bond (the hold-the-value `from_inner` bridge, paired with
-    /// `inner`). Test-only — in-crate construction wraps `BondAst(..)` directly.
-    #[cfg(test)]
+    /// `inner`).
     pub(crate) fn from_inner(bond: AstBondAst) -> Self {
         BondAst(bond)
     }
@@ -194,7 +193,7 @@ impl BondView {
     #[getter]
     fn order(&self, py: Python<'_>) -> PyResult<ValueAst> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_ast(py, &self.bond(molecule.inner())?.order)
+        ValueAst::from_rust(py, &self.bond(molecule.inner())?.order)
     }
 
     #[setter]
@@ -204,13 +203,13 @@ impl BondView {
             .inner_mut()
             .bond_mut(self.id)
             .ast
-            .order = value.to_ast(py);
+            .order = value.to_rust(py);
     }
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<ValueAst> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_ast(py, &self.bond(molecule.inner())?.charge)
+        ValueAst::from_rust(py, &self.bond(molecule.inner())?.charge)
     }
 
     #[setter]
@@ -220,13 +219,13 @@ impl BondView {
             .inner_mut()
             .bond_mut(self.id)
             .ast
-            .charge = value.to_ast(py);
+            .charge = value.to_rust(py);
     }
 
     #[getter]
     fn spin(&self, py: Python<'_>) -> PyResult<SpinStateAst> {
         let molecule = self.owner.bind(py).borrow();
-        SpinStateAst::from_ast(py, &self.bond(molecule.inner())?.spin)
+        SpinStateAst::from_rust(py, &self.bond(molecule.inner())?.spin)
     }
 
     #[setter]
@@ -236,7 +235,7 @@ impl BondView {
             .inner_mut()
             .bond_mut(self.id)
             .ast
-            .spin = value.to_ast(py);
+            .spin = value.to_rust(py);
     }
 
     /// The bond's constraints as a live handle onto the molecule: reads borrow the
@@ -260,19 +259,19 @@ impl BondView {
             .inner_mut()
             .bond_mut(self.id)
             .ast
-            .constraints = value.to_ast(py)?;
+            .constraints = value.to_rust(py)?;
         Ok(())
     }
 
-    /// The fields as a dict keyed by field name; values are the field mirrors —
+    /// The fields as a dict keyed by field name; values are Python objects —
     /// symmetric with `BondAst.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
         let bond = self.bond(molecule.inner())?;
         let dict = PyDict::new(py);
-        dict.set_item("order", ValueAst::from_ast(py, &bond.order)?)?;
-        dict.set_item("charge", ValueAst::from_ast(py, &bond.charge)?)?;
-        dict.set_item("spin", SpinStateAst::from_ast(py, &bond.spin)?)?;
+        dict.set_item("order", ValueAst::from_rust(py, &bond.order)?)?;
+        dict.set_item("charge", ValueAst::from_rust(py, &bond.charge)?)?;
+        dict.set_item("spin", SpinStateAst::from_rust(py, &bond.spin)?)?;
         dict.set_item(
             "constraints",
             bond_constraints_asdict(py, &bond.constraints)?,
@@ -488,7 +487,7 @@ mod tests {
     fn test_bond_constraint_ast_roundtrip(#[case] ast: AstBondConstraintAst) {
         Python::attach(|py| {
             assert_eq!(
-                BondConstraintAst::from_ast(py, &ast).unwrap().to_ast(py),
+                BondConstraintAst::from_rust(py, &ast).unwrap().to_rust(py),
                 ast
             );
         });
@@ -499,7 +498,7 @@ mod tests {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -508,7 +507,7 @@ mod tests {
             .unwrap();
             let ring = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::ring_membership(AstRingScope::All, 2),
                 )
@@ -533,7 +532,7 @@ mod tests {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -542,7 +541,7 @@ mod tests {
             .unwrap();
             let ring = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::ring_membership(AstRingScope::All, 2),
                 )
@@ -553,29 +552,29 @@ mod tests {
 
             let mut keys = constraints.__iter__(py).unwrap();
             assert_eq!(
-                keys.__next__().unwrap().bind(py).borrow().to_ast(py),
+                keys.__next__().unwrap().bind(py).borrow().to_rust(py),
                 AstBondConstraintKey::Aromatic
             );
             assert_eq!(
-                keys.__next__().unwrap().bind(py).borrow().to_ast(py),
+                keys.__next__().unwrap().bind(py).borrow().to_rust(py),
                 AstBondConstraintKey::RingMembership(AstRingScope::All)
             );
             assert!(keys.__next__().is_none());
 
             let mut values = constraints.values(py).unwrap();
             assert_eq!(
-                values.__next__().unwrap().bind(py).borrow().to_ast(py),
+                values.__next__().unwrap().bind(py).borrow().to_rust(py),
                 AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true))
             );
 
             let mut items = constraints.items(py).unwrap();
             let (key, value) = items.__next__().unwrap();
             assert_eq!(
-                key.bind(py).borrow().to_ast(py),
+                key.bind(py).borrow().to_rust(py),
                 AstBondConstraintKey::Aromatic
             );
             assert_eq!(
-                value.bind(py).borrow().to_ast(py),
+                value.bind(py).borrow().to_rust(py),
                 AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true))
             );
         });
@@ -586,7 +585,7 @@ mod tests {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -603,7 +602,7 @@ mod tests {
                 .unwrap();
             let expected = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -638,12 +637,12 @@ mod tests {
     fn test_bond_constraints_ast_aromatic() {
         Python::attach(|py| {
             let empty = BondConstraintsAst::new(py, vec![]);
-            assert_eq!(empty.aromatic().to_ast(), AstBooleanAst::Undetermined);
+            assert_eq!(empty.aromatic().to_rust(), AstBooleanAst::Undetermined);
             assert!(empty.cis_trans_stereo(py).unwrap().is_none());
             assert!(empty.ring_count(py).unwrap().is_none());
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -651,7 +650,7 @@ mod tests {
             )
             .unwrap();
             let constraints = BondConstraintsAst::new(py, vec![aromatic]);
-            assert_eq!(constraints.aromatic().to_ast(), AstBooleanAst::Lit(true));
+            assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(true));
         });
     }
 
@@ -660,7 +659,7 @@ mod tests {
         Python::attach(|py| {
             let membership = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::ring_membership(AstRingScope::Size(6), 1),
                 )
@@ -670,7 +669,7 @@ mod tests {
             let constraints = Py::new(py, BondConstraintsAst::new(py, vec![membership])).unwrap();
             let proxy = BondConstraintsAst::ring_size_count(constraints.clone_ref(py));
             assert_eq!(
-                proxy.__getitem__(py, 6).unwrap().unwrap().to_ast(py),
+                proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(1)
             );
             assert!(proxy.__getitem__(py, 5).unwrap().is_none());
@@ -689,7 +688,7 @@ mod tests {
             let mut constraints = BondConstraintsAst::new(py, vec![]);
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -698,7 +697,7 @@ mod tests {
             .unwrap();
             constraints.set(py, aromatic);
             assert_eq!(constraints.__len__(), 1);
-            assert_eq!(constraints.aromatic().to_ast(), AstBooleanAst::Lit(true));
+            assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(true));
         });
     }
 
@@ -707,7 +706,7 @@ mod tests {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -723,7 +722,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(BondConstraintAst::Aromatic(b)) => {
-                    assert_eq!(b.bind(py).borrow().to_ast(), AstBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), AstBooleanAst::Lit(true))
                 }
                 _ => panic!("expected removed Aromatic(Lit(true))"),
             }
@@ -748,9 +747,9 @@ mod tests {
             .unwrap();
             let c = constraints.bind(py).borrow();
             assert_eq!(c.__len__(), 2);
-            assert_eq!(c.aromatic().to_ast(), AstBooleanAst::Lit(true));
+            assert_eq!(c.aromatic().to_rust(), AstBooleanAst::Lit(true));
             assert_eq!(
-                c.ring_count(py).unwrap().unwrap().to_ast(py),
+                c.ring_count(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(2)
             );
         });
@@ -762,7 +761,7 @@ mod tests {
             let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -771,7 +770,7 @@ mod tests {
             .unwrap();
             let ring = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::ring_membership(AstRingScope::All, 2),
                 )
@@ -795,7 +794,7 @@ mod tests {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -810,7 +809,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(
-                constraints.bind(py).borrow().aromatic().to_ast(),
+                constraints.bind(py).borrow().aromatic().to_rust(),
                 AstBooleanAst::Lit(true)
             );
         });
@@ -883,9 +882,9 @@ mod tests {
         Python::attach(|py| {
             let mut constraints = BondConstraintsAst::new(py, vec![]);
             constraints.set_aromatic(py, BooleanArg::Lit(true));
-            assert_eq!(constraints.aromatic().to_ast(), AstBooleanAst::Lit(true));
+            assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(true));
             constraints.set_aromatic(py, BooleanArg::Lit(false));
-            assert_eq!(constraints.aromatic().to_ast(), AstBooleanAst::Lit(false));
+            assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(false));
         });
     }
 
@@ -899,7 +898,7 @@ mod tests {
             match constraints.cis_trans_stereo(py).unwrap().unwrap() {
                 CisTransStereoAst::Stereo(coset) => {
                     assert_eq!(
-                        coset.bind(py).borrow().to_ast(py),
+                        coset.bind(py).borrow().to_rust(py),
                         AstStereoCosetAst::Lit(1)
                     )
                 }
@@ -931,7 +930,7 @@ mod tests {
             let mut constraints = BondConstraintsAst::new(py, vec![]);
             constraints.set_ring_count(py, ValueArg::Lit(2));
             assert_eq!(
-                constraints.ring_count(py).unwrap().unwrap().to_ast(py),
+                constraints.ring_count(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(2)
             );
         });
@@ -964,7 +963,7 @@ mod tests {
             };
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -985,7 +984,7 @@ mod tests {
                 .unwrap()
             {
                 BondConstraintAst::Aromatic(b) => {
-                    assert_eq!(b.bind(py).borrow().to_ast(), AstBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), AstBooleanAst::Lit(true))
                 }
                 _ => panic!("expected Aromatic(Lit(true))"),
             }
@@ -1014,7 +1013,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(BondConstraintAst::Aromatic(b)) => {
-                    assert_eq!(b.bind(py).borrow().to_ast(), AstBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), AstBooleanAst::Lit(true))
                 }
                 _ => panic!("expected removed Aromatic(Lit(true))"),
             }
@@ -1057,7 +1056,7 @@ mod tests {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
             assert_eq!(
-                view.aromatic(py).unwrap().to_ast(),
+                view.aromatic(py).unwrap().to_rust(),
                 AstBooleanAst::Undetermined
             );
             view.set_aromatic(py, BooleanArg::Lit(true));
@@ -1065,7 +1064,7 @@ mod tests {
                 backing: BondConstraintsBacking::Bond(bond),
             };
             assert_eq!(
-                fresh.aromatic(py).unwrap().to_ast(),
+                fresh.aromatic(py).unwrap().to_rust(),
                 AstBooleanAst::Lit(true)
             );
         });
@@ -1078,7 +1077,7 @@ mod tests {
             let proxy = BondConstraintsAst::ring_size_count(constraints.clone_ref(py));
             proxy.__setitem__(py, 6, ValueArg::Lit(3));
             assert_eq!(
-                proxy.__getitem__(py, 6).unwrap().unwrap().to_ast(py),
+                proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(3)
             );
             proxy.__delitem__(py, 6);
@@ -1104,7 +1103,7 @@ mod tests {
                     .__getitem__(py, 5)
                     .unwrap()
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 AstValueAst::Lit(1)
             );
         });
@@ -1138,7 +1137,7 @@ mod tests {
                 id: AstBondId(0),
             };
             assert_eq!(view.id(), 0);
-            assert_eq!(view.order(py).unwrap().to_ast(py), AstValueAst::Lit(2));
+            assert_eq!(view.order(py).unwrap().to_rust(py), AstValueAst::Lit(2));
         });
     }
 
@@ -1166,7 +1165,7 @@ mod tests {
                 owner,
                 id: AstBondId(0),
             };
-            assert_eq!(fresh.order(py).unwrap().to_ast(py), AstValueAst::Lit(1));
+            assert_eq!(fresh.order(py).unwrap().to_rust(py), AstValueAst::Lit(1));
         });
     }
 
@@ -1183,7 +1182,7 @@ mod tests {
                 owner,
                 id: AstBondId(0),
             };
-            assert_eq!(fresh.charge(py).unwrap().to_ast(py), AstValueAst::Lit(-1));
+            assert_eq!(fresh.charge(py).unwrap().to_rust(py), AstValueAst::Lit(-1));
         });
     }
 
@@ -1213,7 +1212,7 @@ mod tests {
             };
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_ast(
+                BondConstraintAst::from_rust(
                     py,
                     &AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -1229,7 +1228,7 @@ mod tests {
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
-                fresh.aromatic(py).unwrap().to_ast(),
+                fresh.aromatic(py).unwrap().to_rust(),
                 AstBooleanAst::Lit(true)
             );
         });
@@ -1259,7 +1258,7 @@ mod tests {
                     .__getitem__(py, 6)
                     .unwrap()
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 AstValueAst::Lit(1)
             );
         });
@@ -1288,7 +1287,7 @@ mod tests {
             views.__setitem__(py, 0, single.bind(py).borrow()).unwrap();
             let view = views.__getitem__(py, 0).unwrap();
             // value replaced, endpoints preserved
-            assert_eq!(view.order(py).unwrap().to_ast(py), AstValueAst::Lit(1));
+            assert_eq!(view.order(py).unwrap().to_rust(py), AstValueAst::Lit(1));
             assert_eq!(view.atom_ids(py).unwrap(), (0, 1));
         });
     }

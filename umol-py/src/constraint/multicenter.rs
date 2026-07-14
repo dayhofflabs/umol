@@ -1,4 +1,4 @@
-//! Multicenter-bond constraint mirrors, containers, and live views.
+//! Multicenter-bond constraint values, containers, and live views.
 
 use std::vec::IntoIter;
 
@@ -12,7 +12,7 @@ use umol_ast::ast::{
     MulticenterBondId as AstMulticenterBondId,
 };
 
-use crate::convert::{hash_ast, into_py_variant, variant_repr};
+use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::molecule::MoleculeAst;
 use crate::multicenter::MulticenterBondAst;
 use crate::value::{ValueArg, ValueAst};
@@ -27,11 +27,11 @@ pub enum MulticenterBondConstraintKey {
 #[pymethods]
 impl MulticenterBondConstraintKey {
     pub(crate) fn __eq__(&self, other: &Self) -> bool {
-        self.to_ast() == other.to_ast()
+        self.to_rust() == other.to_rust()
     }
 
     pub(crate) fn __hash__(&self) -> u64 {
-        hash_ast(&self.to_ast())
+        hash_rust(&self.to_rust())
     }
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -48,13 +48,13 @@ impl MulticenterBondConstraintKey {
 }
 
 impl MulticenterBondConstraintKey {
-    pub(crate) fn from_ast(ast: &AstMulticenterBondConstraintKey) -> Self {
+    pub(crate) fn from_rust(ast: &AstMulticenterBondConstraintKey) -> Self {
         match ast {
             AstMulticenterBondConstraintKey::ElectronCount => Self::ElectronCount(),
         }
     }
 
-    pub(crate) fn to_ast(&self) -> AstMulticenterBondConstraintKey {
+    pub(crate) fn to_rust(&self) -> AstMulticenterBondConstraintKey {
         match self {
             Self::ElectronCount() => AstMulticenterBondConstraintKey::ElectronCount,
         }
@@ -73,15 +73,15 @@ impl MulticenterBondConstraintAst {
     /// The constraint's key (identity).
     #[getter]
     pub(crate) fn key(&self, py: Python<'_>) -> MulticenterBondConstraintKey {
-        MulticenterBondConstraintKey::from_ast(&self.to_ast(py).key())
+        MulticenterBondConstraintKey::from_rust(&self.to_rust(py).key())
     }
 
     pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -98,21 +98,21 @@ impl MulticenterBondConstraintAst {
 }
 
 impl MulticenterBondConstraintAst {
-    pub(crate) fn from_ast(
+    pub(crate) fn from_rust(
         py: Python<'_>,
         ast: &AstMulticenterBondConstraintAst,
     ) -> PyResult<Self> {
         Ok(match ast {
             AstMulticenterBondConstraintAst::ElectronCount(v) => {
-                Self::ElectronCount(into_py_variant(py, ValueAst::from_ast(py, v)?)?)
+                Self::ElectronCount(into_py_variant(py, ValueAst::from_rust(py, v)?)?)
             }
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstMulticenterBondConstraintAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstMulticenterBondConstraintAst {
         match self {
             Self::ElectronCount(v) => {
-                AstMulticenterBondConstraintAst::ElectronCount(v.bind(py).borrow().to_ast(py))
+                AstMulticenterBondConstraintAst::ElectronCount(v.bind(py).borrow().to_rust(py))
             }
         }
     }
@@ -151,7 +151,7 @@ impl MulticenterBondConstraintsUpdate {
                 ResolvedMulticenterBondConstraintsUpdate::Entries(
                     entries
                         .iter()
-                        .map(|entry| entry.bind(py).borrow().to_ast(py))
+                        .map(|entry| entry.bind(py).borrow().to_rust(py))
                         .collect(),
                 )
             }
@@ -192,7 +192,7 @@ pub(crate) enum MulticenterBondConstraintsArg {
 }
 
 impl MulticenterBondConstraintsArg {
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstMulticenterBondConstraintsAst> {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstMulticenterBondConstraintsAst> {
         match self {
             MulticenterBondConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
             MulticenterBondConstraintsArg::View(v) => {
@@ -218,7 +218,7 @@ impl MulticenterBondConstraintsAst {
         constraints.extend(
             entries
                 .into_iter()
-                .map(|entry| entry.bind(py).borrow().to_ast(py)),
+                .map(|entry| entry.bind(py).borrow().to_rust(py)),
         );
         MulticenterBondConstraintsAst(constraints)
     }
@@ -226,8 +226,8 @@ impl MulticenterBondConstraintsAst {
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {
-            let mirror = into_py_variant(py, MulticenterBondConstraintAst::from_ast(py, entry)?)?;
-            parts.push(mirror.bind(py).as_any().repr()?.extract::<String>()?);
+            let value = into_py_variant(py, MulticenterBondConstraintAst::from_rust(py, entry)?)?;
+            parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
         }
         Ok(format!(
             "MulticenterBondConstraintsAst([{}])",
@@ -237,7 +237,7 @@ impl MulticenterBondConstraintsAst {
 
     /// Insert `c`, replacing any existing entry of the same key (last-wins).
     pub(crate) fn set(&mut self, py: Python<'_>, c: Py<MulticenterBondConstraintAst>) {
-        self.0.set(c.bind(py).borrow().to_ast(py));
+        self.0.set(c.bind(py).borrow().to_rust(py));
     }
 
     /// Remove the entry with the given key, returning it if present (dict `pop`).
@@ -247,8 +247,8 @@ impl MulticenterBondConstraintsAst {
         key: Py<MulticenterBondConstraintKey>,
     ) -> PyResult<Option<MulticenterBondConstraintAst>> {
         self.0
-            .remove(key.bind(py).borrow().to_ast())
-            .map(|c| MulticenterBondConstraintAst::from_ast(py, &c))
+            .remove(key.bind(py).borrow().to_rust())
+            .map(|c| MulticenterBondConstraintAst::from_rust(py, &c))
             .transpose()
     }
 
@@ -298,10 +298,10 @@ impl MulticenterBondConstraintsAst {
         key: Py<MulticenterBondConstraintKey>,
         default: Option<Py<PyAny>>,
     ) -> PyResult<Py<PyAny>> {
-        match self.0.get(key.bind(py).borrow().to_ast()) {
+        match self.0.get(key.bind(py).borrow().to_rust()) {
             Some(constraint) => Ok(into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_ast(py, constraint)?,
+                MulticenterBondConstraintAst::from_rust(py, constraint)?,
             )?
             .into_any()),
             None => Ok(default.unwrap_or_else(|| py.None())),
@@ -314,8 +314,8 @@ impl MulticenterBondConstraintsAst {
         py: Python<'_>,
         key: Py<MulticenterBondConstraintKey>,
     ) -> PyResult<MulticenterBondConstraintAst> {
-        match self.0.get(key.bind(py).borrow().to_ast()) {
-            Some(constraint) => MulticenterBondConstraintAst::from_ast(py, constraint),
+        match self.0.get(key.bind(py).borrow().to_rust()) {
+            Some(constraint) => MulticenterBondConstraintAst::from_rust(py, constraint),
             None => Err(PyKeyError::new_err(
                 key.bind(py).as_any().repr()?.extract::<String>()?,
             )),
@@ -328,7 +328,7 @@ impl MulticenterBondConstraintsAst {
         py: Python<'_>,
         key: Py<MulticenterBondConstraintKey>,
     ) -> PyResult<()> {
-        if self.0.remove(key.bind(py).borrow().to_ast()).is_some() {
+        if self.0.remove(key.bind(py).borrow().to_rust()).is_some() {
             Ok(())
         } else {
             Err(PyKeyError::new_err(
@@ -342,25 +342,25 @@ impl MulticenterBondConstraintsAst {
         py: Python<'_>,
         key: Py<MulticenterBondConstraintKey>,
     ) -> bool {
-        self.0.contains(key.bind(py).borrow().to_ast())
+        self.0.contains(key.bind(py).borrow().to_rust())
     }
 
     /// The asserted total electron count; `Undetermined` when no `ElectronCount`
-    /// constraint is present (mirroring the non-optional Rust accessor).
+    /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_ast(py, &self.0.electron_count())
+        ValueAst::from_rust(py, &self.0.electron_count())
     }
 
     #[setter]
     pub(crate) fn set_electron_count(&mut self, py: Python<'_>, value: ValueArg) {
         self.0.set(AstMulticenterBondConstraintAst::electron_count(
-            value.to_ast(py),
+            value.to_rust(py),
         ));
     }
 
     /// The present constraints as a dict keyed by snake_case name; values are the
-    /// inner-value mirrors.
+    /// Python values.
     pub(crate) fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         multicenter_bond_constraints_asdict(py, &self.0)
     }
@@ -388,7 +388,7 @@ pub(crate) fn multicenter_bond_constraints_iter(
     let entries = constraints
         .iter()
         .map(|constraint| {
-            into_py_variant(py, MulticenterBondConstraintAst::from_ast(py, constraint)?)
+            into_py_variant(py, MulticenterBondConstraintAst::from_rust(py, constraint)?)
         })
         .collect::<PyResult<Vec<_>>>()?;
     Ok(MulticenterBondConstraintIter {
@@ -406,7 +406,7 @@ pub(crate) fn multicenter_bond_constraint_keys(
         .map(|constraint| {
             into_py_variant(
                 py,
-                MulticenterBondConstraintKey::from_ast(&constraint.key()),
+                MulticenterBondConstraintKey::from_rust(&constraint.key()),
             )
         })
         .collect::<PyResult<Vec<_>>>()?;
@@ -426,9 +426,9 @@ pub(crate) fn multicenter_bond_constraint_items(
             Ok((
                 into_py_variant(
                     py,
-                    MulticenterBondConstraintKey::from_ast(&constraint.key()),
+                    MulticenterBondConstraintKey::from_rust(&constraint.key()),
                 )?,
-                into_py_variant(py, MulticenterBondConstraintAst::from_ast(py, constraint)?)?,
+                into_py_variant(py, MulticenterBondConstraintAst::from_rust(py, constraint)?)?,
             ))
         })
         .collect::<PyResult<Vec<_>>>()?;
@@ -438,7 +438,7 @@ pub(crate) fn multicenter_bond_constraint_items(
 }
 
 /// The present constraints as a dict keyed by snake_case name; values are the
-/// inner-value mirrors.
+/// Python values.
 pub(crate) fn multicenter_bond_constraints_asdict<'py>(
     py: Python<'py>,
     constraints: &AstMulticenterBondConstraintsAst,
@@ -447,7 +447,7 @@ pub(crate) fn multicenter_bond_constraints_asdict<'py>(
     for entry in constraints.iter() {
         match entry {
             AstMulticenterBondConstraintAst::ElectronCount(v) => {
-                dict.set_item("electron_count", ValueAst::from_ast(py, v)?)?
+                dict.set_item("electron_count", ValueAst::from_rust(py, v)?)?
             }
         }
     }
@@ -541,7 +541,7 @@ impl MulticenterBondConstraintsView {
     /// Insert `c` on the bond in place, replacing any existing entry of the same key
     /// (last-wins).
     pub(crate) fn set(&self, py: Python<'_>, c: Py<MulticenterBondConstraintAst>) {
-        self.set_ast(py, c.bind(py).borrow().to_ast(py));
+        self.set_ast(py, c.bind(py).borrow().to_rust(py));
     }
 
     /// Remove the entry with the given key from the bond in place, returning it if
@@ -551,8 +551,8 @@ impl MulticenterBondConstraintsView {
         py: Python<'_>,
         key: Py<MulticenterBondConstraintKey>,
     ) -> PyResult<Option<MulticenterBondConstraintAst>> {
-        self.remove_ast(py, key.bind(py).borrow().to_ast())
-            .map(|c| MulticenterBondConstraintAst::from_ast(py, &c))
+        self.remove_ast(py, key.bind(py).borrow().to_rust())
+            .map(|c| MulticenterBondConstraintAst::from_rust(py, &c))
             .transpose()
     }
 
@@ -563,7 +563,7 @@ impl MulticenterBondConstraintsView {
         key: Py<MulticenterBondConstraintKey>,
     ) -> PyResult<()> {
         if self
-            .remove_ast(py, key.bind(py).borrow().to_ast())
+            .remove_ast(py, key.bind(py).borrow().to_rust())
             .is_some()
         {
             Ok(())
@@ -620,10 +620,10 @@ impl MulticenterBondConstraintsView {
         key: Py<MulticenterBondConstraintKey>,
         default: Option<Py<PyAny>>,
     ) -> PyResult<Py<PyAny>> {
-        let key = key.bind(py).borrow().to_ast();
+        let key = key.bind(py).borrow().to_rust();
         let found = self.read(py, |cs| {
             cs.get(key)
-                .map(|constraint| MulticenterBondConstraintAst::from_ast(py, constraint))
+                .map(|constraint| MulticenterBondConstraintAst::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -638,10 +638,10 @@ impl MulticenterBondConstraintsView {
         py: Python<'_>,
         key: Py<MulticenterBondConstraintKey>,
     ) -> PyResult<MulticenterBondConstraintAst> {
-        let ast_key = key.bind(py).borrow().to_ast();
+        let ast_key = key.bind(py).borrow().to_rust();
         let found = self.read(py, |cs| {
             cs.get(ast_key)
-                .map(|constraint| MulticenterBondConstraintAst::from_ast(py, constraint))
+                .map(|constraint| MulticenterBondConstraintAst::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -657,22 +657,22 @@ impl MulticenterBondConstraintsView {
         py: Python<'_>,
         key: Py<MulticenterBondConstraintKey>,
     ) -> PyResult<bool> {
-        let key = key.bind(py).borrow().to_ast();
+        let key = key.bind(py).borrow().to_rust();
         self.read(py, |cs| Ok(cs.contains(key)))
     }
 
     /// The asserted total electron count; `Undetermined` when no `ElectronCount`
-    /// constraint is present (mirroring the non-optional Rust accessor).
+    /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        self.read(py, |cs| ValueAst::from_ast(py, &cs.electron_count()))
+        self.read(py, |cs| ValueAst::from_rust(py, &cs.electron_count()))
     }
 
     #[setter]
     pub(crate) fn set_electron_count(&self, py: Python<'_>, value: ValueArg) {
         self.set_ast(
             py,
-            AstMulticenterBondConstraintAst::electron_count(value.to_ast(py)),
+            AstMulticenterBondConstraintAst::electron_count(value.to_rust(py)),
         );
     }
 

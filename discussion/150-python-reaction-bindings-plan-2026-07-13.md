@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S2 complete; S3 is next**
+Status: **ACTIVE — S3a complete; S3b is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -533,9 +533,79 @@ scope and membership payloads live in `constraint/ring.rs`.
 
 ### S3 — Per-family resolved deltas
 
-- **S3a — atom and bond deltas** (`delta.rs`): add `AtomDelta` and `BondDelta`
-  with all four operation variants, participants on bond add/remove, conversion,
-  pattern-match, and inverse tests. **Additive (green).** `[dep: S2a]`
+- **S3a — DONE — atom and bond deltas** (`umol-py/src/delta.rs`, `atom.rs`,
+  `bond.rs`, `lib.rs`, `python/umol/__init__.py`): add two separately named
+  native complex-enum bindings with the exact Rust variants and named payloads:
+
+  - `AtomDelta::{Add { id: int, ast: AtomAst }, Remove { id: int, ast:
+    AtomAst }, ModifyField { id: int, change: AtomFieldChange },
+    ModifyConstraint { id: int, old: AtomConstraintAst | None, new:
+    AtomConstraintAst | None }}`;
+  - `BondDelta::{Add { id: int, atoms: tuple[int, int], ast: BondAst }, Remove {
+    id: int, atoms: tuple[int, int], ast: BondAst }, ModifyField { id: int,
+    change: BondFieldChange }, ModifyConstraint { id: int, old:
+    BondConstraintAst | None, new: BondConstraintAst | None }}`.
+
+  Both bindings follow the S2 contract: keyword construction, read-only named
+  fields, positional and named class patterns, structural value equality,
+  unhashability, exact named repr, and non-mutating `inverse() -> Self` returning
+  the concrete inverse variant subtype. IDs remain bare Python integers. Bond
+  participants remain an ordered two-tuple exactly as stored; they occur only on
+  `Add`/`Remove`. `AtomAst`/`BondAst` inputs are snapshotted when the delta is
+  constructed, but the stored `.ast` child remains a live mutable object within
+  that delta. These types do not implement lattice semantics and retain their
+  Rust names without an `Ast` suffix.
+
+  1. **DONE — S3a.1 — conversion cleanup and `AtomDelta`** — remove the
+     `FieldValueMirror` trait and give every field-change class its own explicit
+     `from_ast`/`to_ast` implementation. The field-change macro is limited to the
+     actually uniform Python enum declaration, equality, repr, and inverse
+     surface. Define `AtomDelta` and its conversion directly, with no generic
+     entity-delta macro or participant-conversion trait. Promote
+     `AtomAst::from_inner` from its test-only gate. Its concrete Python-field
+     storage clones a constructor `AtomAst` into a fresh `Py<AtomAst>` and field
+     reads return that stored child. Register/export the class.
+
+     Rust tests cover every variant's conversion and inverse/double-inverse,
+     equality, and named fields/repr; constraint rows include `None` on either
+     side and two present values. Python tests cover keyword construction,
+     read-only fields, positional and named patterns, exact repr, unhashability,
+     concrete inverse subtypes (`Add` ↔ `Remove`, both modify variants retain
+     their subtype), and both halves of the ownership contract: later mutation
+     of the constructor source does not affect the delta, while mutation through
+     `delta.ast` does. **Additive (green).** `[dep: S2a.1]`
+
+  2. **DONE — S3a.2 — `BondDelta` and fixed-pair participants** — promote
+     `BondAst::from_inner` from its test-only gate and define `BondDelta` and its
+     `from_ast`/`to_ast` conversion directly. `Add`/`Remove` map Rust
+     `[AtomId; 2]` to Python `tuple[int, int]` inline, without sorting or
+     set-conversion; the modify variants have no participant field. Register and
+     export the class. Give it the same Rust conversion/equality/repr/inverse and
+     Python construction/field/match/ownership coverage as `AtomDelta`, including
+     both optional-constraint directions. Assert that participant order survives
+     conversion and inverse and that Python observes a tuple. **Additive
+     (green).** `[dep: S2a.2, S3a.1]`
+
+  3. **DONE — S3a.3 — atom/bond closure verification** — add an eight-row Python matrix
+     spanning every variant of both classes. Verify exact repr, structural value
+     equality, concrete inverse subtype, and `inverse().inverse() == original`;
+     retain targeted rows for optional constraints, payload snapshot isolation,
+     live stored payloads, and ordered bond participants. Run the complete Rust
+     and Python suites, workspace clippy, rustfmt, and `git diff --check` as the
+     stage gate. **Additive (green).** `[dep: S3a.1, S3a.2]`
+
+     **Implemented verification:** 36 Rust rows cover conversion, equality,
+     exact repr, inverse, and double inverse across all variants and optional
+     constraint directions. Eight direct Python tests cover construction,
+     read-only fields, pattern matching, source snapshot isolation, live stored
+     entity values, ordered tuple participants, and inverse behavior. The
+     eight-row closure matrix covers every atom/bond delta variant. The focused
+     delta suites pass with 94 Rust tests and 58 Python tests; the complete
+     `umol-py` suites pass with 729 Rust tests and 445 Python tests. Workspace
+     clippy, rustfmt, and `git diff --check` pass.
+
+  **Critical path:** `S2a.1 → S3a.1 → S3a.2 → S3a.3`, with `S2a.2` also feeding
+  S3a.2. No S3a subitem is deferrable: S4a requires both resolved delta bindings.
 - **S3b — non-stereo overlay deltas** (`delta.rs`): add dative, aromatic,
   multicenter, and noncovalent mirrors. Cover each participant shape and each
   family-specific constraint payload. **Additive (green).** `[dep: S2a]`

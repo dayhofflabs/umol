@@ -1,4 +1,4 @@
-//! Molecule-level constraint payloads mirroring `umol_ast::ast::constraint`.
+//! Molecule-level constraint payloads matching `umol_ast::ast::constraint`.
 
 use std::vec::IntoIter;
 
@@ -110,7 +110,7 @@ pub enum Constraint {
 #[pymethods]
 impl Constraint {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -134,118 +134,118 @@ impl Constraint {
 }
 
 impl Constraint {
-    pub(crate) fn from_ast(py: Python<'_>, constraint: &AstConstraint) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, constraint: &AstConstraint) -> PyResult<Self> {
         Ok(match constraint {
             AstConstraint::Atom(id, child) => Self::Atom(
                 id.0,
-                into_py_variant(py, AtomConstraintAst::from_ast(py, child)?)?,
+                into_py_variant(py, AtomConstraintAst::from_rust(py, child)?)?,
             ),
             AstConstraint::Bond(id, child) => Self::Bond(
                 id.0,
-                into_py_variant(py, BondConstraintAst::from_ast(py, child)?)?,
+                into_py_variant(py, BondConstraintAst::from_rust(py, child)?)?,
             ),
             AstConstraint::DativeBond(id, child) => Self::DativeBond(
                 id.0,
-                into_py_variant(py, DativeBondConstraintAst::from_ast(py, child)?)?,
+                into_py_variant(py, DativeBondConstraintAst::from_rust(py, child)?)?,
             ),
             AstConstraint::AromaticSystem(id, child) => Self::AromaticSystem(
                 id.0,
-                into_py_variant(py, AromaticSystemConstraintAst::from_ast(py, child)?)?,
+                into_py_variant(py, AromaticSystemConstraintAst::from_rust(py, child)?)?,
             ),
             AstConstraint::MulticenterBond(id, child) => Self::MulticenterBond(
                 id.0,
-                into_py_variant(py, MulticenterBondConstraintAst::from_ast(py, child)?)?,
+                into_py_variant(py, MulticenterBondConstraintAst::from_rust(py, child)?)?,
             ),
             AstConstraint::NoncovalentBond(id, child) => Self::NoncovalentBond(
                 id.0,
-                into_py_variant(py, NoncovalentBondConstraintAst::from_ast(py, child)?)?,
+                into_py_variant(py, NoncovalentBondConstraintAst::from_rust(py, child)?)?,
             ),
             AstConstraint::StereoAtom(id, kind, child) => Self::StereoAtom(
                 id.0,
-                StereoKind::from_ast(*kind),
-                into_py_variant(py, StereoAtomConstraintAst::from_ast(py, child)?)?,
+                StereoKind::from_rust(*kind),
+                into_py_variant(py, StereoAtomConstraintAst::from_rust(py, child)?)?,
             ),
             AstConstraint::StereoBond(id, kind, child) => Self::StereoBond(
                 id.0,
-                StereoKind::from_ast(*kind),
-                into_py_variant(py, StereoBondConstraintAst::from_ast(py, child)?)?,
+                StereoKind::from_rust(*kind),
+                into_py_variant(py, StereoBondConstraintAst::from_rust(py, child)?)?,
             ),
             AstConstraint::Relational(child) => Self::Relational(into_py_variant(
                 py,
-                RelationalConstraint::from_ast(py, child)?,
+                RelationalConstraint::from_rust(py, child)?,
             )?),
             AstConstraint::Molecule(child) => Self::Molecule(into_py_variant(
                 py,
-                MoleculeConstraint::from_ast(py, child)?,
+                MoleculeConstraint::from_rust(py, child)?,
             )?),
             AstConstraint::And(children) => Self::And(
                 children
                     .iter()
-                    .map(|child| into_py_variant(py, Self::from_ast(py, child)?))
+                    .map(|child| into_py_variant(py, Self::from_rust(py, child)?))
                     .collect::<PyResult<_>>()?,
             ),
             AstConstraint::Or(children) => Self::Or(
                 children
                     .iter()
-                    .map(|child| into_py_variant(py, Self::from_ast(py, child)?))
+                    .map(|child| into_py_variant(py, Self::from_rust(py, child)?))
                     .collect::<PyResult<_>>()?,
             ),
             AstConstraint::Not(child) => {
-                Self::Not(into_py_variant(py, Self::from_ast(py, child)?)?)
+                Self::Not(into_py_variant(py, Self::from_rust(py, child)?)?)
             }
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstConstraint {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstConstraint {
         match self {
             Self::Atom(id, child) => {
-                AstConstraint::Atom(AstAtomId(*id), child.bind(py).borrow().to_ast(py))
+                AstConstraint::Atom(AstAtomId(*id), child.bind(py).borrow().to_rust(py))
             }
             Self::Bond(id, child) => {
-                AstConstraint::Bond(AstBondId(*id), child.bind(py).borrow().to_ast(py))
+                AstConstraint::Bond(AstBondId(*id), child.bind(py).borrow().to_rust(py))
             }
             Self::DativeBond(id, child) => {
-                AstConstraint::DativeBond(AstDativeBondId(*id), child.bind(py).borrow().to_ast(py))
+                AstConstraint::DativeBond(AstDativeBondId(*id), child.bind(py).borrow().to_rust(py))
             }
             Self::AromaticSystem(id, child) => AstConstraint::AromaticSystem(
                 AstAromaticSystemId(*id),
-                child.bind(py).borrow().to_ast(py),
+                child.bind(py).borrow().to_rust(py),
             ),
             Self::MulticenterBond(id, child) => AstConstraint::MulticenterBond(
                 AstMulticenterBondId(*id),
-                child.bind(py).borrow().to_ast(py),
+                child.bind(py).borrow().to_rust(py),
             ),
             Self::NoncovalentBond(id, child) => AstConstraint::NoncovalentBond(
                 AstNoncovalentBondId(*id),
-                child.bind(py).borrow().to_ast(py),
+                child.bind(py).borrow().to_rust(py),
             ),
             Self::StereoAtom(id, kind, child) => AstConstraint::StereoAtom(
                 AstStereoAtomId(*id),
-                kind.to_ast(),
-                child.bind(py).borrow().to_ast(py),
+                kind.to_rust(),
+                child.bind(py).borrow().to_rust(py),
             ),
             Self::StereoBond(id, kind, child) => AstConstraint::StereoBond(
                 AstStereoBondId(*id),
-                kind.to_ast(),
-                child.bind(py).borrow().to_ast(py),
+                kind.to_rust(),
+                child.bind(py).borrow().to_rust(py),
             ),
             Self::Relational(child) => {
-                AstConstraint::Relational(child.bind(py).borrow().to_ast(py))
+                AstConstraint::Relational(child.bind(py).borrow().to_rust(py))
             }
-            Self::Molecule(child) => AstConstraint::Molecule(child.bind(py).borrow().to_ast(py)),
+            Self::Molecule(child) => AstConstraint::Molecule(child.bind(py).borrow().to_rust(py)),
             Self::And(children) => AstConstraint::And(
                 children
                     .iter()
-                    .map(|child| child.bind(py).borrow().to_ast(py))
+                    .map(|child| child.bind(py).borrow().to_rust(py))
                     .collect(),
             ),
             Self::Or(children) => AstConstraint::Or(
                 children
                     .iter()
-                    .map(|child| child.bind(py).borrow().to_ast(py))
+                    .map(|child| child.bind(py).borrow().to_rust(py))
                     .collect(),
             ),
-            Self::Not(child) => AstConstraint::Not(Box::new(child.bind(py).borrow().to_ast(py))),
+            Self::Not(child) => AstConstraint::Not(Box::new(child.bind(py).borrow().to_rust(py))),
         }
     }
 }
@@ -268,7 +268,7 @@ fn resolve_constraint_index(len: usize, index: isize) -> PyResult<usize> {
 fn constraint_iter(py: Python<'_>, constraints: &AstConstraints) -> PyResult<ConstraintIter> {
     let entries = constraints
         .iter()
-        .map(|constraint| into_py_variant(py, Constraint::from_ast(py, constraint)?))
+        .map(|constraint| into_py_variant(py, Constraint::from_rust(py, constraint)?))
         .collect::<PyResult<Vec<_>>>()?;
     Ok(ConstraintIter {
         entries: entries.into_iter(),
@@ -315,7 +315,7 @@ impl ConstraintsUpdate {
             Self::Entries(entries) => ResolvedConstraintsUpdate::Entries(
                 entries
                     .iter()
-                    .map(|entry| entry.bind(py).borrow().to_ast(py))
+                    .map(|entry| entry.bind(py).borrow().to_rust(py))
                     .collect(),
             ),
         })
@@ -354,7 +354,7 @@ pub(crate) enum ConstraintsArg {
 }
 
 impl ConstraintsArg {
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstConstraints> {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstConstraints> {
         match self {
             Self::Container(container) => Ok(container.bind(py).borrow().inner().clone()),
             Self::View(view) => view
@@ -379,7 +379,7 @@ impl Constraints {
         Self(AstConstraints::from(
             entries
                 .into_iter()
-                .map(|entry| entry.bind(py).borrow().to_ast(py))
+                .map(|entry| entry.bind(py).borrow().to_rust(py))
                 .collect::<Vec<_>>(),
         ))
     }
@@ -387,15 +387,15 @@ impl Constraints {
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {
-            let mirror = into_py_variant(py, Constraint::from_ast(py, entry)?)?;
-            parts.push(mirror.bind(py).as_any().repr()?.extract::<String>()?);
+            let value = into_py_variant(py, Constraint::from_rust(py, entry)?)?;
+            parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
         }
         Ok(format!("Constraints([{}])", parts.join(", ")))
     }
 
     /// Append one constraint, preserving existing entries and duplicates.
     fn append(&mut self, py: Python<'_>, constraint: Py<Constraint>) {
-        self.0.push(constraint.bind(py).borrow().to_ast(py));
+        self.0.push(constraint.bind(py).borrow().to_rust(py));
     }
 
     fn clear(&mut self) {
@@ -415,7 +415,7 @@ impl Constraints {
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Constraint> {
         let index = resolve_constraint_index(self.0.len(), index)?;
-        Constraint::from_ast(py, &self.0.as_slice()[index])
+        Constraint::from_rust(py, &self.0.as_slice()[index])
     }
 
     fn __iter__(&self, py: Python<'_>) -> PyResult<ConstraintIter> {
@@ -481,7 +481,7 @@ impl ConstraintsView {
 
     /// Append one constraint to the molecule, preserving existing entries and duplicates.
     fn append(&self, py: Python<'_>, constraint: Py<Constraint>) {
-        let constraint = constraint.bind(py).borrow().to_ast(py);
+        let constraint = constraint.bind(py).borrow().to_rust(py);
         self.with_mut(py, |constraints| constraints.push(constraint));
     }
 
@@ -503,7 +503,7 @@ impl ConstraintsView {
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Constraint> {
         self.read(py, |constraints| {
             let index = resolve_constraint_index(constraints.len(), index)?;
-            Constraint::from_ast(py, &constraints.as_slice()[index])
+            Constraint::from_rust(py, &constraints.as_slice()[index])
         })
     }
 
@@ -515,7 +515,7 @@ impl ConstraintsView {
 #[pymethods]
 impl MoleculeConstraint {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -531,25 +531,25 @@ impl MoleculeConstraint {
 }
 
 impl MoleculeConstraint {
-    pub(crate) fn from_ast(py: Python<'_>, constraint: &AstMoleculeConstraint) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, constraint: &AstMoleculeConstraint) -> PyResult<Self> {
         Ok(match constraint {
             AstMoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum(
                 atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
-                into_py_variant(py, ValueAst::from_ast(py, sum)?)?,
+                into_py_variant(py, ValueAst::from_rust(py, sum)?)?,
             ),
             AstMoleculeConstraint::SpinSum { atoms, spin } => Self::SpinSum(
                 atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
-                Py::new(py, SpinStateAst::from_ast(py, spin)?)?,
+                Py::new(py, SpinStateAst::from_rust(py, spin)?)?,
             ),
             AstMoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum(
                 bonds
                     .as_ref()
                     .map(|bonds| bonds.iter().map(|bond| bond.0).collect()),
-                into_py_variant(py, ValueAst::from_ast(py, sum)?)?,
+                into_py_variant(py, ValueAst::from_rust(py, sum)?)?,
             ),
             AstMoleculeConstraint::Connected { atoms } => Self::Connected(
                 atoms
@@ -557,31 +557,31 @@ impl MoleculeConstraint {
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
             ),
             AstMoleculeConstraint::SubPattern { anchor, pattern } => Self::SubPattern(
-                Py::new(py, SubPatternAnchor::from_ast(anchor))?,
+                Py::new(py, SubPatternAnchor::from_rust(anchor))?,
                 Py::new(py, MoleculeAst::from_inner((**pattern).clone()))?,
             ),
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstMoleculeConstraint {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstMoleculeConstraint {
         match self {
             Self::ChargeSum(atoms, sum) => AstMoleculeConstraint::ChargeSum {
                 atoms: atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().copied().map(AstAtomId).collect()),
-                sum: sum.bind(py).borrow().to_ast(py),
+                sum: sum.bind(py).borrow().to_rust(py),
             },
             Self::SpinSum(atoms, spin) => AstMoleculeConstraint::SpinSum {
                 atoms: atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().copied().map(AstAtomId).collect()),
-                spin: spin.bind(py).borrow().to_ast(py),
+                spin: spin.bind(py).borrow().to_rust(py),
             },
             Self::BondOrderSum(bonds, sum) => AstMoleculeConstraint::BondOrderSum {
                 bonds: bonds
                     .as_ref()
                     .map(|bonds| bonds.iter().copied().map(AstBondId).collect()),
-                sum: sum.bind(py).borrow().to_ast(py),
+                sum: sum.bind(py).borrow().to_rust(py),
             },
             Self::Connected(atoms) => AstMoleculeConstraint::Connected {
                 atoms: atoms
@@ -589,7 +589,7 @@ impl MoleculeConstraint {
                     .map(|atoms| atoms.iter().copied().map(AstAtomId).collect()),
             },
             Self::SubPattern(anchor, pattern) => AstMoleculeConstraint::SubPattern {
-                anchor: anchor.bind(py).borrow().to_ast(),
+                anchor: anchor.bind(py).borrow().to_rust(),
                 pattern: Box::new(pattern.bind(py).borrow().inner().clone()),
             },
         }
@@ -599,7 +599,7 @@ impl MoleculeConstraint {
 #[pymethods]
 impl RelationalConstraint {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -641,8 +641,11 @@ impl RelationalConstraint {
 }
 
 impl RelationalConstraint {
-    /// Convert any relational constraint into its Python mirror.
-    pub(crate) fn from_ast(py: Python<'_>, constraint: &AstRelationalConstraint) -> PyResult<Self> {
+    /// Convert any relational constraint into its Python value.
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        constraint: &AstRelationalConstraint,
+    ) -> PyResult<Self> {
         Ok(match constraint {
             AstRelationalConstraint::DativeBondDonors { bond, atoms } => {
                 Self::DativeBondDonors(bond.0, atoms.iter().map(|atom| atom.0).collect())
@@ -656,13 +659,13 @@ impl RelationalConstraint {
             AstRelationalConstraint::DativeBondAllDonors { bond, predicate } => {
                 Self::DativeBondAllDonors(
                     bond.0,
-                    into_py_variant(py, AtomConstraintAst::from_ast(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
             AstRelationalConstraint::DativeBondAnyDonor { bond, predicate } => {
                 Self::DativeBondAnyDonor(
                     bond.0,
-                    into_py_variant(py, AtomConstraintAst::from_ast(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
             AstRelationalConstraint::DativeBondAcceptor { bond, atom } => {
@@ -671,7 +674,7 @@ impl RelationalConstraint {
             AstRelationalConstraint::DativeBondAcceptorSatisfies { bond, predicate } => {
                 Self::DativeBondAcceptorSatisfies(
                     bond.0,
-                    into_py_variant(py, AtomConstraintAst::from_ast(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
             AstRelationalConstraint::DativeBondParallels { dative, parallel } => {
@@ -689,13 +692,13 @@ impl RelationalConstraint {
             AstRelationalConstraint::AromaticSystemAllAtoms { system, predicate } => {
                 Self::AromaticSystemAllAtoms(
                     system.0,
-                    into_py_variant(py, AtomConstraintAst::from_ast(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
             AstRelationalConstraint::AromaticSystemAnyAtom { system, predicate } => {
                 Self::AromaticSystemAnyAtom(
                     system.0,
-                    into_py_variant(py, AtomConstraintAst::from_ast(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
             AstRelationalConstraint::MulticenterBondAtoms { bond, atoms } => {
@@ -710,13 +713,13 @@ impl RelationalConstraint {
             AstRelationalConstraint::MulticenterBondAllAtoms { bond, predicate } => {
                 Self::MulticenterBondAllAtoms(
                     bond.0,
-                    into_py_variant(py, AtomConstraintAst::from_ast(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
             AstRelationalConstraint::MulticenterBondAnyAtom { bond, predicate } => {
                 Self::MulticenterBondAnyAtom(
                     bond.0,
-                    into_py_variant(py, AtomConstraintAst::from_ast(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
                 )
             }
             AstRelationalConstraint::NoncovalentBondEnds { bond, atoms } => {
@@ -729,8 +732,8 @@ impl RelationalConstraint {
                 Self::NoncovalentBondEndsSatisfy(
                     bond.0,
                     [
-                        into_py_variant(py, AtomConstraintAst::from_ast(py, &predicates[0])?)?,
-                        into_py_variant(py, AtomConstraintAst::from_ast(py, &predicates[1])?)?,
+                        into_py_variant(py, AtomConstraintAst::from_rust(py, &predicates[0])?)?,
+                        into_py_variant(py, AtomConstraintAst::from_rust(py, &predicates[1])?)?,
                     ],
                 )
             }
@@ -748,14 +751,14 @@ impl RelationalConstraint {
                 predicate,
             } => Self::StereoAtomAllLigands(
                 stereo_atom.0,
-                into_py_variant(py, AtomConstraintAst::from_ast(py, predicate)?)?,
+                into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
             ),
             AstRelationalConstraint::StereoAtomAnyLigand {
                 stereo_atom,
                 predicate,
             } => Self::StereoAtomAnyLigand(
                 stereo_atom.0,
-                into_py_variant(py, AtomConstraintAst::from_ast(py, predicate)?)?,
+                into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
             ),
             AstRelationalConstraint::StereoBondSite { stereo_bond, bond } => {
                 Self::StereoBondSite(stereo_bond.0, bond.0)
@@ -771,19 +774,19 @@ impl RelationalConstraint {
                 predicate,
             } => Self::StereoBondAllLigands(
                 stereo_bond.0,
-                into_py_variant(py, AtomConstraintAst::from_ast(py, predicate)?)?,
+                into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
             ),
             AstRelationalConstraint::StereoBondAnyLigand {
                 stereo_bond,
                 predicate,
             } => Self::StereoBondAnyLigand(
                 stereo_bond.0,
-                into_py_variant(py, AtomConstraintAst::from_ast(py, predicate)?)?,
+                into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
             ),
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstRelationalConstraint {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstRelationalConstraint {
         match self {
             Self::DativeBondDonors(bond, atoms) => AstRelationalConstraint::DativeBondDonors {
                 bond: AstDativeBondId(*bond),
@@ -802,13 +805,13 @@ impl RelationalConstraint {
             Self::DativeBondAllDonors(bond, predicate) => {
                 AstRelationalConstraint::DativeBondAllDonors {
                     bond: AstDativeBondId(*bond),
-                    predicate: Box::new(predicate.bind(py).borrow().to_ast(py)),
+                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::DativeBondAnyDonor(bond, predicate) => {
                 AstRelationalConstraint::DativeBondAnyDonor {
                     bond: AstDativeBondId(*bond),
-                    predicate: Box::new(predicate.bind(py).borrow().to_ast(py)),
+                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::DativeBondAcceptor(bond, atom) => AstRelationalConstraint::DativeBondAcceptor {
@@ -818,7 +821,7 @@ impl RelationalConstraint {
             Self::DativeBondAcceptorSatisfies(bond, predicate) => {
                 AstRelationalConstraint::DativeBondAcceptorSatisfies {
                     bond: AstDativeBondId(*bond),
-                    predicate: Box::new(predicate.bind(py).borrow().to_ast(py)),
+                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::DativeBondParallels(dative, parallel) => {
@@ -848,13 +851,13 @@ impl RelationalConstraint {
             Self::AromaticSystemAllAtoms(system, predicate) => {
                 AstRelationalConstraint::AromaticSystemAllAtoms {
                     system: AstAromaticSystemId(*system),
-                    predicate: Box::new(predicate.bind(py).borrow().to_ast(py)),
+                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::AromaticSystemAnyAtom(system, predicate) => {
                 AstRelationalConstraint::AromaticSystemAnyAtom {
                     system: AstAromaticSystemId(*system),
-                    predicate: Box::new(predicate.bind(py).borrow().to_ast(py)),
+                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::MulticenterBondAtoms(bond, atoms) => {
@@ -878,13 +881,13 @@ impl RelationalConstraint {
             Self::MulticenterBondAllAtoms(bond, predicate) => {
                 AstRelationalConstraint::MulticenterBondAllAtoms {
                     bond: AstMulticenterBondId(*bond),
-                    predicate: Box::new(predicate.bind(py).borrow().to_ast(py)),
+                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::MulticenterBondAnyAtom(bond, predicate) => {
                 AstRelationalConstraint::MulticenterBondAnyAtom {
                     bond: AstMulticenterBondId(*bond),
-                    predicate: Box::new(predicate.bind(py).borrow().to_ast(py)),
+                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::NoncovalentBondEnds(bond, atoms) => {
@@ -903,8 +906,8 @@ impl RelationalConstraint {
                 AstRelationalConstraint::NoncovalentBondEndsSatisfy {
                     bond: AstNoncovalentBondId(*bond),
                     predicates: [
-                        Box::new(predicates[0].bind(py).borrow().to_ast(py)),
-                        Box::new(predicates[1].bind(py).borrow().to_ast(py)),
+                        Box::new(predicates[0].bind(py).borrow().to_rust(py)),
+                        Box::new(predicates[1].bind(py).borrow().to_rust(py)),
                     ],
                 }
             }
@@ -927,13 +930,13 @@ impl RelationalConstraint {
             Self::StereoAtomAllLigands(stereo_atom, predicate) => {
                 AstRelationalConstraint::StereoAtomAllLigands {
                     stereo_atom: AstStereoAtomId(*stereo_atom),
-                    predicate: Box::new(predicate.bind(py).borrow().to_ast(py)),
+                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::StereoAtomAnyLigand(stereo_atom, predicate) => {
                 AstRelationalConstraint::StereoAtomAnyLigand {
                     stereo_atom: AstStereoAtomId(*stereo_atom),
-                    predicate: Box::new(predicate.bind(py).borrow().to_ast(py)),
+                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::StereoBondSite(stereo_bond, bond) => AstRelationalConstraint::StereoBondSite {
@@ -955,13 +958,13 @@ impl RelationalConstraint {
             Self::StereoBondAllLigands(stereo_bond, predicate) => {
                 AstRelationalConstraint::StereoBondAllLigands {
                     stereo_bond: AstStereoBondId(*stereo_bond),
-                    predicate: Box::new(predicate.bind(py).borrow().to_ast(py)),
+                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
             Self::StereoBondAnyLigand(stereo_bond, predicate) => {
                 AstRelationalConstraint::StereoBondAnyLigand {
                     stereo_bond: AstStereoBondId(*stereo_bond),
-                    predicate: Box::new(predicate.bind(py).borrow().to_ast(py)),
+                    predicate: Box::new(predicate.bind(py).borrow().to_rust(py)),
                 }
             }
         }
@@ -1037,7 +1040,7 @@ impl SubPatternAnchor {
 }
 
 impl SubPatternAnchor {
-    pub(crate) fn from_ast(anchor: &AstSubPatternAnchor) -> Self {
+    pub(crate) fn from_rust(anchor: &AstSubPatternAnchor) -> Self {
         Self {
             atoms: anchor
                 .atoms()
@@ -1082,7 +1085,7 @@ impl SubPatternAnchor {
         }
     }
 
-    pub(crate) fn to_ast(&self) -> AstSubPatternAnchor {
+    pub(crate) fn to_rust(&self) -> AstSubPatternAnchor {
         let mut anchor = AstSubPatternAnchor::new();
         for &(target, pattern) in &self.atoms {
             anchor.push_atom(AstAtomId(target), AstAtomId(pattern));
@@ -1169,7 +1172,7 @@ mod tests {
         anchor.push_stereo_atom(AstStereoAtomId(13), AstStereoAtomId(14));
         anchor.push_stereo_bond(AstStereoBondId(15), AstStereoBondId(16));
 
-        assert_eq!(SubPatternAnchor::from_ast(&anchor).to_ast(), anchor);
+        assert_eq!(SubPatternAnchor::from_rust(&anchor).to_rust(), anchor);
     }
 
     #[rstest]
@@ -1302,8 +1305,8 @@ mod tests {
     })]
     fn test_relational_constraint_roundtrip(#[case] constraint: AstRelationalConstraint) {
         Python::attach(|py| {
-            let mirror = RelationalConstraint::from_ast(py, &constraint).unwrap();
-            assert_eq!(mirror.to_ast(py), constraint);
+            let value = RelationalConstraint::from_rust(py, &constraint).unwrap();
+            assert_eq!(value.to_rust(py), constraint);
         });
     }
 
@@ -1337,8 +1340,8 @@ mod tests {
     })]
     fn test_molecule_constraint_roundtrip(#[case] constraint: AstMoleculeConstraint) {
         Python::attach(|py| {
-            let mirror = MoleculeConstraint::from_ast(py, &constraint).unwrap();
-            assert_eq!(mirror.to_ast(py), constraint);
+            let value = MoleculeConstraint::from_rust(py, &constraint).unwrap();
+            assert_eq!(value.to_rust(py), constraint);
         });
     }
 
@@ -1394,8 +1397,8 @@ mod tests {
     ))))]
     fn test_constraint_roundtrip(#[case] constraint: AstConstraint) {
         Python::attach(|py| {
-            let mirror = Constraint::from_ast(py, &constraint).unwrap();
-            assert_eq!(mirror.to_ast(py), constraint);
+            let value = Constraint::from_rust(py, &constraint).unwrap();
+            assert_eq!(value.to_rust(py), constraint);
         });
     }
 
@@ -1417,19 +1420,15 @@ mod tests {
         ]);
 
         Python::attach(|py| {
-            let mirror =
-                into_py_variant(py, Constraint::from_ast(py, &constraint).unwrap()).unwrap();
+            let value =
+                into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
             let equal =
-                into_py_variant(py, Constraint::from_ast(py, &constraint).unwrap()).unwrap();
+                into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
 
-            assert_eq!(mirror.bind(py).borrow().to_ast(py), constraint);
-            assert!(mirror
-                .bind(py)
-                .as_any()
-                .eq(equal.bind(py).as_any())
-                .unwrap());
+            assert_eq!(value.bind(py).borrow().to_rust(py), constraint);
+            assert!(value.bind(py).as_any().eq(equal.bind(py).as_any()).unwrap());
             assert_eq!(
-                mirror
+                value
                     .bind(py)
                     .as_any()
                     .repr()
@@ -1439,7 +1438,7 @@ mod tests {
                 "Constraint.And([Constraint.Atom(17, AtomConstraintAst.Valence(ValueAst.Lit(4))), Constraint.Or([Constraint.Relational(RelationalConstraint.DativeBondDonor(18, 19)), Constraint.Not(Constraint.Molecule(MoleculeConstraint.Connected([20, 21])))])])"
             );
 
-            let children = mirror.bind(py).as_any().getattr("_0").unwrap();
+            let children = value.bind(py).as_any().getattr("_0").unwrap();
             assert_eq!(children.len().unwrap(), 2);
             assert_eq!(
                 children
@@ -1453,7 +1452,7 @@ mod tests {
             );
 
             let locals = PyDict::new(py);
-            locals.set_item("node", &mirror).unwrap();
+            locals.set_item("node", &value).unwrap();
             let source = CString::new(
                 r#"
 And = type(node)
@@ -1530,9 +1529,9 @@ match node:
                     .unwrap(),
                 1
             );
-            assert_eq!(first_mirror.bind(py).borrow().to_ast(py), first);
+            assert_eq!(first_mirror.bind(py).borrow().to_rust(py), first);
             assert_eq!(
-                iter.__next__().unwrap().bind(py).borrow().to_ast(py),
+                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
                 second
             );
             assert!(iter.__next__().is_none());
@@ -1540,7 +1539,7 @@ match node:
     }
 
     #[rstest]
-    fn test_constraints_arg_to_ast_container() {
+    fn test_constraints_arg_to_rust_container() {
         let expected = AstConstraints::from(vec![
             AstConstraint::And(Vec::new()),
             AstConstraint::And(Vec::new()),
@@ -1550,12 +1549,12 @@ match node:
             let container = Py::new(py, Constraints::from_inner(expected.clone())).unwrap();
             let arg = ConstraintsArg::Container(container);
 
-            assert_eq!(arg.to_ast(py).unwrap(), expected);
+            assert_eq!(arg.to_rust(py).unwrap(), expected);
         });
     }
 
     #[rstest]
-    fn test_constraints_arg_to_ast_view() {
+    fn test_constraints_arg_to_rust_view() {
         let expected = AstConstraints::from(vec![
             AstConstraint::Or(Vec::new()),
             AstConstraint::Or(Vec::new()),
@@ -1568,7 +1567,7 @@ match node:
             let view = Py::new(py, ConstraintsView::new(owner)).unwrap();
             let arg = ConstraintsArg::View(view);
 
-            assert_eq!(arg.to_ast(py).unwrap(), expected);
+            assert_eq!(arg.to_rust(py).unwrap(), expected);
         });
     }
 
@@ -1580,11 +1579,13 @@ match node:
     ])]
     fn test_constraints_new(#[case] entries: Vec<AstConstraint>) {
         Python::attach(|py| {
-            let mirrors = entries
+            let values = entries
                 .iter()
-                .map(|entry| into_py_variant(py, Constraint::from_ast(py, entry).unwrap()).unwrap())
+                .map(|entry| {
+                    into_py_variant(py, Constraint::from_rust(py, entry).unwrap()).unwrap()
+                })
                 .collect();
-            let constraints = Constraints::new(py, mirrors);
+            let constraints = Constraints::new(py, values);
 
             assert_eq!(constraints.inner().as_slice(), entries.as_slice());
         });
@@ -1633,10 +1634,10 @@ match node:
         Python::attach(|py| {
             let mut constraints =
                 Constraints::from_inner(AstConstraints::from(vec![constraint.clone()]));
-            let mirror =
-                into_py_variant(py, Constraint::from_ast(py, &constraint).unwrap()).unwrap();
+            let value =
+                into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
 
-            constraints.append(py, mirror);
+            constraints.append(py, value);
 
             assert_eq!(
                 constraints.inner().as_slice(),
@@ -1682,7 +1683,7 @@ match node:
             )
             .unwrap();
             let entry =
-                into_py_variant(py, Constraint::from_ast(py, &from_entries).unwrap()).unwrap();
+                into_py_variant(py, Constraint::from_rust(py, &from_entries).unwrap()).unwrap();
 
             Constraints::update(
                 target.clone_ref(py),
@@ -1753,7 +1754,7 @@ match node:
             ]));
             let actual = constraints.__getitem__(py, index).unwrap();
 
-            assert_eq!(actual.to_ast(py), expected);
+            assert_eq!(actual.to_rust(py), expected);
         });
     }
 
@@ -1789,9 +1790,12 @@ match node:
                 .inner_mut()
                 .push(AstConstraint::Not(Box::new(AstConstraint::And(Vec::new()))));
 
-            assert_eq!(iter.__next__().unwrap().bind(py).borrow().to_ast(py), first);
             assert_eq!(
-                iter.__next__().unwrap().bind(py).borrow().to_ast(py),
+                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
+                first
+            );
+            assert_eq!(
+                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
                 second
             );
             assert!(iter.__next__().is_none());
@@ -1837,10 +1841,10 @@ match node:
         Python::attach(|py| {
             let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
             let view = ConstraintsView::new(owner.clone_ref(py));
-            let mirror =
-                into_py_variant(py, Constraint::from_ast(py, &constraint).unwrap()).unwrap();
+            let value =
+                into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
 
-            view.append(py, mirror);
+            view.append(py, value);
 
             assert_eq!(
                 owner.bind(py).borrow().inner().constraints().as_slice(),
@@ -1897,7 +1901,7 @@ match node:
             )
             .unwrap();
             let entry =
-                into_py_variant(py, Constraint::from_ast(py, &from_entries).unwrap()).unwrap();
+                into_py_variant(py, Constraint::from_rust(py, &from_entries).unwrap()).unwrap();
 
             target
                 .update(py, ConstraintsUpdate::Container(container))
@@ -1979,7 +1983,7 @@ match node:
             let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
             let view = ConstraintsView::new(owner);
 
-            assert_eq!(view.__getitem__(py, index).unwrap().to_ast(py), expected);
+            assert_eq!(view.__getitem__(py, index).unwrap().to_rust(py), expected);
         });
     }
 
@@ -2021,9 +2025,12 @@ match node:
                 .constraints_mut()
                 .push(AstConstraint::Not(Box::new(AstConstraint::And(Vec::new()))));
 
-            assert_eq!(iter.__next__().unwrap().bind(py).borrow().to_ast(py), first);
             assert_eq!(
-                iter.__next__().unwrap().bind(py).borrow().to_ast(py),
+                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
+                first
+            );
+            assert_eq!(
+                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
                 second
             );
             assert!(iter.__next__().is_none());

@@ -1,4 +1,4 @@
-//! `ValueTerm` — arithmetic term over integers, mirroring `umol_ast::ast::ValueTerm`
+//! `ValueTerm` — arithmetic term over integers, matching `umol_ast::ast::ValueTerm`
 //! as a native PyO3 complex enum. AST recursion (`Box<Self>` / `Vec<Self>`) becomes
 //! `Py<Self>` / `Vec<Py<Self>>`; per-variant construction and `match` work natively
 //! on the Python side.
@@ -14,7 +14,7 @@ use umol_ast::ast::{
     ValuePredicate as AstValuePredicate, ValueTerm as AstValueTerm,
 };
 
-use crate::convert::{hash_ast, into_py_variant, variant_repr};
+use crate::convert::{hash_rust, into_py_variant, variant_repr};
 
 /// Relational operator in a value predicate (`<=`, `>=`, `==`, `<`, `>`, `!=`).
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -29,7 +29,7 @@ pub enum RelOp {
 }
 
 impl RelOp {
-    pub(crate) fn from_ast(ast: AstRelOp) -> RelOp {
+    pub(crate) fn from_rust(ast: AstRelOp) -> RelOp {
         match ast {
             AstRelOp::Le => RelOp::Le,
             AstRelOp::Ge => RelOp::Ge,
@@ -40,7 +40,7 @@ impl RelOp {
         }
     }
 
-    pub(crate) fn to_ast(&self) -> AstRelOp {
+    pub(crate) fn to_rust(&self) -> AstRelOp {
         match self {
             RelOp::Le => AstRelOp::Le,
             RelOp::Ge => AstRelOp::Ge,
@@ -61,14 +61,14 @@ pub enum MemOp {
 }
 
 impl MemOp {
-    pub(crate) fn from_ast(ast: AstMemOp) -> MemOp {
+    pub(crate) fn from_rust(ast: AstMemOp) -> MemOp {
         match ast {
             AstMemOp::In => MemOp::In,
             AstMemOp::NotIn => MemOp::NotIn,
         }
     }
 
-    pub(crate) fn to_ast(&self) -> AstMemOp {
+    pub(crate) fn to_rust(&self) -> AstMemOp {
         match self {
             MemOp::In => AstMemOp::In,
             MemOp::NotIn => AstMemOp::NotIn,
@@ -91,11 +91,11 @@ pub enum ValueTerm {
 #[pymethods]
 impl ValueTerm {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -113,60 +113,60 @@ impl ValueTerm {
 }
 
 impl ValueTerm {
-    /// Build the Python mirror from the AST term (one Python object per node).
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstValueTerm) -> PyResult<ValueTerm> {
+    /// Build the Python value from the AST term (one Python object per node).
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstValueTerm) -> PyResult<ValueTerm> {
         Ok(match ast {
             AstValueTerm::Lit(n) => ValueTerm::Lit(*n),
             AstValueTerm::Var(name) => ValueTerm::Var(name.clone()),
-            AstValueTerm::Neg(t) => ValueTerm::Neg(into_py_variant(py, Self::from_ast(py, t)?)?),
+            AstValueTerm::Neg(t) => ValueTerm::Neg(into_py_variant(py, Self::from_rust(py, t)?)?),
             AstValueTerm::Sum(terms) => ValueTerm::Sum(
                 terms
                     .iter()
-                    .map(|t| into_py_variant(py, Self::from_ast(py, t)?))
+                    .map(|t| into_py_variant(py, Self::from_rust(py, t)?))
                     .collect::<PyResult<_>>()?,
             ),
             AstValueTerm::Product(terms) => ValueTerm::Product(
                 terms
                     .iter()
-                    .map(|t| into_py_variant(py, Self::from_ast(py, t)?))
+                    .map(|t| into_py_variant(py, Self::from_rust(py, t)?))
                     .collect::<PyResult<_>>()?,
             ),
             AstValueTerm::Div(a, b) => ValueTerm::Div(
-                into_py_variant(py, Self::from_ast(py, a)?)?,
-                into_py_variant(py, Self::from_ast(py, b)?)?,
+                into_py_variant(py, Self::from_rust(py, a)?)?,
+                into_py_variant(py, Self::from_rust(py, b)?)?,
             ),
             AstValueTerm::Rem(a, b) => ValueTerm::Rem(
-                into_py_variant(py, Self::from_ast(py, a)?)?,
-                into_py_variant(py, Self::from_ast(py, b)?)?,
+                into_py_variant(py, Self::from_rust(py, a)?)?,
+                into_py_variant(py, Self::from_rust(py, b)?)?,
             ),
         })
     }
 
-    /// Lower the Python mirror back to the AST term.
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstValueTerm {
+    /// Lower the Python value back to the AST term.
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstValueTerm {
         match self {
             ValueTerm::Lit(n) => AstValueTerm::Lit(*n),
             ValueTerm::Var(name) => AstValueTerm::Var(name.clone()),
-            ValueTerm::Neg(t) => AstValueTerm::Neg(Box::new(t.bind(py).borrow().to_ast(py))),
+            ValueTerm::Neg(t) => AstValueTerm::Neg(Box::new(t.bind(py).borrow().to_rust(py))),
             ValueTerm::Sum(terms) => AstValueTerm::Sum(
                 terms
                     .iter()
-                    .map(|t| t.bind(py).borrow().to_ast(py))
+                    .map(|t| t.bind(py).borrow().to_rust(py))
                     .collect(),
             ),
             ValueTerm::Product(terms) => AstValueTerm::Product(
                 terms
                     .iter()
-                    .map(|t| t.bind(py).borrow().to_ast(py))
+                    .map(|t| t.bind(py).borrow().to_rust(py))
                     .collect(),
             ),
             ValueTerm::Div(a, b) => AstValueTerm::Div(
-                Box::new(a.bind(py).borrow().to_ast(py)),
-                Box::new(b.bind(py).borrow().to_ast(py)),
+                Box::new(a.bind(py).borrow().to_rust(py)),
+                Box::new(b.bind(py).borrow().to_rust(py)),
             ),
             ValueTerm::Rem(a, b) => AstValueTerm::Rem(
-                Box::new(a.bind(py).borrow().to_ast(py)),
-                Box::new(b.bind(py).borrow().to_ast(py)),
+                Box::new(a.bind(py).borrow().to_rust(py)),
+                Box::new(b.bind(py).borrow().to_rust(py)),
             ),
         }
     }
@@ -185,11 +185,11 @@ pub enum ValuePredicate {
 #[pymethods]
 impl ValuePredicate {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -205,52 +205,54 @@ impl ValuePredicate {
 }
 
 impl ValuePredicate {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstValuePredicate) -> PyResult<ValuePredicate> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstValuePredicate) -> PyResult<ValuePredicate> {
         Ok(match ast {
             AstValuePredicate::Rel(a, op, b) => ValuePredicate::Rel(
-                into_py_variant(py, ValueTerm::from_ast(py, a)?)?,
-                RelOp::from_ast(*op),
-                into_py_variant(py, ValueTerm::from_ast(py, b)?)?,
+                into_py_variant(py, ValueTerm::from_rust(py, a)?)?,
+                RelOp::from_rust(*op),
+                into_py_variant(py, ValueTerm::from_rust(py, b)?)?,
             ),
             AstValuePredicate::Mem(t, op, members) => ValuePredicate::Mem(
-                into_py_variant(py, ValueTerm::from_ast(py, t)?)?,
-                MemOp::from_ast(*op),
+                into_py_variant(py, ValueTerm::from_rust(py, t)?)?,
+                MemOp::from_rust(*op),
                 members.clone(),
             ),
             AstValuePredicate::Not(p) => {
-                ValuePredicate::Not(into_py_variant(py, Self::from_ast(py, p)?)?)
+                ValuePredicate::Not(into_py_variant(py, Self::from_rust(py, p)?)?)
             }
             AstValuePredicate::And(ps) => ValuePredicate::And(
                 ps.iter()
-                    .map(|p| into_py_variant(py, Self::from_ast(py, p)?))
+                    .map(|p| into_py_variant(py, Self::from_rust(py, p)?))
                     .collect::<PyResult<_>>()?,
             ),
             AstValuePredicate::Or(ps) => ValuePredicate::Or(
                 ps.iter()
-                    .map(|p| into_py_variant(py, Self::from_ast(py, p)?))
+                    .map(|p| into_py_variant(py, Self::from_rust(py, p)?))
                     .collect::<PyResult<_>>()?,
             ),
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstValuePredicate {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstValuePredicate {
         match self {
             ValuePredicate::Rel(a, op, b) => AstValuePredicate::Rel(
-                a.bind(py).borrow().to_ast(py),
-                op.to_ast(),
-                b.bind(py).borrow().to_ast(py),
+                a.bind(py).borrow().to_rust(py),
+                op.to_rust(),
+                b.bind(py).borrow().to_rust(py),
             ),
-            ValuePredicate::Mem(t, op, members) => {
-                AstValuePredicate::Mem(t.bind(py).borrow().to_ast(py), op.to_ast(), members.clone())
-            }
+            ValuePredicate::Mem(t, op, members) => AstValuePredicate::Mem(
+                t.bind(py).borrow().to_rust(py),
+                op.to_rust(),
+                members.clone(),
+            ),
             ValuePredicate::Not(p) => {
-                AstValuePredicate::Not(Box::new(p.bind(py).borrow().to_ast(py)))
+                AstValuePredicate::Not(Box::new(p.bind(py).borrow().to_rust(py)))
             }
             ValuePredicate::And(ps) => {
-                AstValuePredicate::And(ps.iter().map(|p| p.bind(py).borrow().to_ast(py)).collect())
+                AstValuePredicate::And(ps.iter().map(|p| p.bind(py).borrow().to_rust(py)).collect())
             }
             ValuePredicate::Or(ps) => {
-                AstValuePredicate::Or(ps.iter().map(|p| p.bind(py).borrow().to_ast(py)).collect())
+                AstValuePredicate::Or(ps.iter().map(|p| p.bind(py).borrow().to_rust(py)).collect())
             }
         }
     }
@@ -274,15 +276,15 @@ impl ValueAst {
     /// The concrete integer this resolves to, or `None` when it is not a bare
     /// literal (undetermined, a set, a range, or an expression).
     fn as_lit(&self, py: Python<'_>) -> Option<i64> {
-        self.to_ast(py).as_lit()
+        self.to_rust(py).as_lit()
     }
 
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -300,7 +302,7 @@ impl ValueAst {
 }
 
 impl ValueAst {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstValueAst) -> PyResult<ValueAst> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstValueAst) -> PyResult<ValueAst> {
         Ok(match ast {
             AstValueAst::Undetermined => ValueAst::Undetermined(),
             AstValueAst::Lit(n) => ValueAst::Lit(*n),
@@ -308,30 +310,30 @@ impl ValueAst {
             AstValueAst::RangeFrom(n) => ValueAst::RangeFrom(*n),
             AstValueAst::RangeTo(n) => ValueAst::RangeTo(*n),
             AstValueAst::Term(t) => {
-                ValueAst::Term(into_py_variant(py, ValueTerm::from_ast(py, t)?)?)
+                ValueAst::Term(into_py_variant(py, ValueTerm::from_rust(py, t)?)?)
             }
             AstValueAst::Predicate(p) => {
-                ValueAst::Predicate(into_py_variant(py, ValuePredicate::from_ast(py, p)?)?)
+                ValueAst::Predicate(into_py_variant(py, ValuePredicate::from_rust(py, p)?)?)
             }
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstValueAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstValueAst {
         match self {
             ValueAst::Undetermined() => AstValueAst::Undetermined,
             ValueAst::Lit(n) => AstValueAst::Lit(*n),
             ValueAst::LitSet(members) => AstValueAst::LitSet(Box::new(members.clone())),
             ValueAst::RangeFrom(n) => AstValueAst::RangeFrom(*n),
             ValueAst::RangeTo(n) => AstValueAst::RangeTo(*n),
-            ValueAst::Term(t) => AstValueAst::Term(Box::new(t.bind(py).borrow().to_ast(py))),
+            ValueAst::Term(t) => AstValueAst::Term(Box::new(t.bind(py).borrow().to_rust(py))),
             ValueAst::Predicate(p) => {
-                AstValueAst::Predicate(Box::new(p.bind(py).borrow().to_ast(py)))
+                AstValueAst::Predicate(Box::new(p.bind(py).borrow().to_rust(py)))
             }
         }
     }
 }
 
-/// A `ValueAst` or a Python `int` (→ `ValueAst::Lit`), mirroring `impl Into<ValueAst>`
+/// A `ValueAst` or a Python `int` (→ `ValueAst::Lit`), matching `impl Into<ValueAst>`
 /// on the Rust builders. The `*Arg` convention for binding coercion inputs (`*Input`
 /// is the DSL side); shared by the atom fields, spin, and ring-membership count.
 #[derive(FromPyObject)]
@@ -342,14 +344,14 @@ pub enum ValueArg {
 
 impl ValueArg {
     /// Coerce to the value AST (for `impl Into<ValueAst>` Rust builders).
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstValueAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstValueAst {
         match self {
-            ValueArg::Ast(value) => value.bind(py).borrow().to_ast(py),
+            ValueArg::Ast(value) => value.bind(py).borrow().to_rust(py),
             ValueArg::Lit(number) => AstValueAst::Lit(*number),
         }
     }
 
-    /// Coerce to a `Py<ValueAst>` (for mirror structs that store the value field).
+    /// Coerce to a `Py<ValueAst>` (for value structs that store the value field).
     pub(crate) fn to_py(&self, py: Python<'_>) -> PyResult<Py<ValueAst>> {
         match self {
             ValueArg::Ast(value) => Ok(value.clone_ref(py)),
@@ -385,14 +387,14 @@ mod tests {
     #[case(AstRelOp::Gt)]
     #[case(AstRelOp::Ne)]
     fn test_rel_op_roundtrip(#[case] ast: AstRelOp) {
-        assert_eq!(RelOp::from_ast(ast).to_ast(), ast);
+        assert_eq!(RelOp::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
     #[case(AstMemOp::In)]
     #[case(AstMemOp::NotIn)]
     fn test_mem_op_roundtrip(#[case] ast: AstMemOp) {
-        assert_eq!(MemOp::from_ast(ast).to_ast(), ast);
+        assert_eq!(MemOp::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -403,8 +405,8 @@ mod tests {
     #[case(AstValueTerm::Div(Box::new(AstValueTerm::Lit(6)), Box::new(AstValueTerm::Lit(2))))]
     fn test_value_term_roundtrip(#[case] ast: AstValueTerm) {
         Python::attach(|py| {
-            let mirror = ValueTerm::from_ast(py, &ast).unwrap();
-            assert_eq!(mirror.to_ast(py), ast);
+            let value = ValueTerm::from_rust(py, &ast).unwrap();
+            assert_eq!(value.to_rust(py), ast);
         });
     }
 
@@ -422,8 +424,8 @@ mod tests {
     ]))]
     fn test_value_predicate_roundtrip(#[case] ast: AstValuePredicate) {
         Python::attach(|py| {
-            let mirror = ValuePredicate::from_ast(py, &ast).unwrap();
-            assert_eq!(mirror.to_ast(py), ast);
+            let value = ValuePredicate::from_rust(py, &ast).unwrap();
+            assert_eq!(value.to_rust(py), ast);
         });
     }
 
@@ -441,8 +443,8 @@ mod tests {
     ))))]
     fn test_value_ast_roundtrip(#[case] ast: AstValueAst) {
         Python::attach(|py| {
-            let mirror = ValueAst::from_ast(py, &ast).unwrap();
-            assert_eq!(mirror.to_ast(py), ast);
+            let value = ValueAst::from_rust(py, &ast).unwrap();
+            assert_eq!(value.to_rust(py), ast);
         });
     }
 
@@ -454,7 +456,7 @@ mod tests {
     #[case(AstValueAst::LitSet(Box::new(BTreeSet::from([1, 2]))), None)]
     fn test_value_ast_as_lit(#[case] ast: AstValueAst, #[case] expected: Option<i64>) {
         Python::attach(|py| {
-            assert_eq!(ValueAst::from_ast(py, &ast).unwrap().as_lit(py), expected);
+            assert_eq!(ValueAst::from_rust(py, &ast).unwrap().as_lit(py), expected);
         });
     }
 }

@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-// The `BooleanAst` mirror is still `#[cfg(test)]` (only tests build it directly); its `to_ast`
+// The `BooleanAst` Rust value is still `#[cfg(test)]` (only tests build it directly); its `to_rust`
 // peer is already live.
 #[cfg(test)]
 use umol_ast::ast::BooleanAst as AstBooleanAst;
@@ -27,7 +27,7 @@ use umol_ast::ast::{
 };
 use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
 
-use crate::convert::{hash_ast, into_py_variant, variant_repr};
+use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::error::parse_error;
 use crate::molecule::MoleculeAst;
 
@@ -92,11 +92,11 @@ pub enum StereoTerm {
 #[pymethods]
 impl StereoTerm {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -113,7 +113,7 @@ impl StereoTerm {
 }
 
 impl StereoTerm {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstStereoTerm) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstStereoTerm) -> PyResult<Self> {
         Ok(match ast {
             AstStereoTerm::Var(boxed) => {
                 let (name, restriction) = &**boxed;
@@ -122,19 +122,19 @@ impl StereoTerm {
             AstStereoTerm::Lit(index) => StereoTerm::Lit(*index),
             AstStereoTerm::LitSet(members) => StereoTerm::LitSet(members.clone()),
             AstStereoTerm::Swap(inner) => {
-                StereoTerm::Swap(into_py_variant(py, StereoTerm::from_ast(py, inner)?)?)
+                StereoTerm::Swap(into_py_variant(py, StereoTerm::from_rust(py, inner)?)?)
             }
             AstStereoTerm::Mirror(inner) => {
-                StereoTerm::Mirror(into_py_variant(py, StereoTerm::from_ast(py, inner)?)?)
+                StereoTerm::Mirror(into_py_variant(py, StereoTerm::from_rust(py, inner)?)?)
             }
             AstStereoTerm::Apply(inner, permutation) => StereoTerm::Apply(
-                into_py_variant(py, StereoTerm::from_ast(py, inner)?)?,
+                into_py_variant(py, StereoTerm::from_rust(py, inner)?)?,
                 Permutation::from_inner(*permutation),
             ),
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstStereoTerm {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoTerm {
         match self {
             StereoTerm::Var(name, restriction) => {
                 AstStereoTerm::Var(Box::new((name.clone(), restriction.clone())))
@@ -142,13 +142,13 @@ impl StereoTerm {
             StereoTerm::Lit(index) => AstStereoTerm::Lit(*index),
             StereoTerm::LitSet(members) => AstStereoTerm::LitSet(members.clone()),
             StereoTerm::Swap(inner) => {
-                AstStereoTerm::Swap(Box::new(inner.bind(py).borrow().to_ast(py)))
+                AstStereoTerm::Swap(Box::new(inner.bind(py).borrow().to_rust(py)))
             }
             StereoTerm::Mirror(inner) => {
-                AstStereoTerm::Mirror(Box::new(inner.bind(py).borrow().to_ast(py)))
+                AstStereoTerm::Mirror(Box::new(inner.bind(py).borrow().to_rust(py)))
             }
             StereoTerm::Apply(inner, permutation) => AstStereoTerm::Apply(
-                Box::new(inner.bind(py).borrow().to_ast(py)),
+                Box::new(inner.bind(py).borrow().to_rust(py)),
                 permutation.inner(),
             ),
         }
@@ -168,11 +168,11 @@ pub enum StereoCosetAst {
 #[pymethods]
 impl StereoCosetAst {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -187,24 +187,24 @@ impl StereoCosetAst {
 }
 
 impl StereoCosetAst {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstStereoCosetAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstStereoCosetAst) -> PyResult<Self> {
         Ok(match ast {
             AstStereoCosetAst::Undetermined => Self::Undetermined(),
             AstStereoCosetAst::Lit(index) => Self::Lit(*index),
             AstStereoCosetAst::LitSet(members) => Self::LitSet(members.clone()),
             AstStereoCosetAst::Term(inner) => {
-                Self::Term(into_py_variant(py, StereoTerm::from_ast(py, inner)?)?)
+                Self::Term(into_py_variant(py, StereoTerm::from_rust(py, inner)?)?)
             }
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstStereoCosetAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoCosetAst {
         match self {
             Self::Undetermined() => AstStereoCosetAst::Undetermined,
             Self::Lit(index) => AstStereoCosetAst::Lit(*index),
             Self::LitSet(members) => AstStereoCosetAst::LitSet(members.clone()),
             Self::Term(inner) => {
-                AstStereoCosetAst::Term(Box::new(inner.bind(py).borrow().to_ast(py)))
+                AstStereoCosetAst::Term(Box::new(inner.bind(py).borrow().to_rust(py)))
             }
         }
     }
@@ -222,11 +222,11 @@ pub enum TetrahedralStereoAst {
 #[pymethods]
 impl TetrahedralStereoAst {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -245,22 +245,22 @@ impl TetrahedralStereoAst {
 }
 
 impl TetrahedralStereoAst {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstTetrahedralStereoAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstTetrahedralStereoAst) -> PyResult<Self> {
         Ok(match ast {
             AstTetrahedralStereoAst::Undetermined => Self::Undetermined(),
             AstTetrahedralStereoAst::NotStereo => Self::NotStereo(),
             AstTetrahedralStereoAst::Stereo(coset) => {
-                Self::Stereo(into_py_variant(py, StereoCosetAst::from_ast(py, coset)?)?)
+                Self::Stereo(into_py_variant(py, StereoCosetAst::from_rust(py, coset)?)?)
             }
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstTetrahedralStereoAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstTetrahedralStereoAst {
         match self {
             Self::Undetermined() => AstTetrahedralStereoAst::Undetermined,
             Self::NotStereo() => AstTetrahedralStereoAst::NotStereo,
             Self::Stereo(coset) => {
-                AstTetrahedralStereoAst::Stereo(coset.bind(py).borrow().to_ast(py))
+                AstTetrahedralStereoAst::Stereo(coset.bind(py).borrow().to_rust(py))
             }
         }
     }
@@ -277,7 +277,7 @@ pub enum TetrahedralStereo {
 
 impl TetrahedralStereo {
     /// The tetrahedral-stereo AST for this configuration (a literal coset).
-    pub(crate) fn to_ast(self) -> AstTetrahedralStereoAst {
+    pub(crate) fn to_rust(self) -> AstTetrahedralStereoAst {
         let coset = match self {
             TetrahedralStereo::Ccw => AstStereoCosetAst::Lit(0),
             TetrahedralStereo::Cw => AstStereoCosetAst::Lit(1),
@@ -297,11 +297,11 @@ pub enum CisTransStereoAst {
 #[pymethods]
 impl CisTransStereoAst {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -315,21 +315,23 @@ impl CisTransStereoAst {
 }
 
 impl CisTransStereoAst {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstCisTransStereoAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstCisTransStereoAst) -> PyResult<Self> {
         Ok(match ast {
             AstCisTransStereoAst::Undetermined => Self::Undetermined(),
             AstCisTransStereoAst::NotStereo => Self::NotStereo(),
             AstCisTransStereoAst::Stereo(coset) => {
-                Self::Stereo(into_py_variant(py, StereoCosetAst::from_ast(py, coset)?)?)
+                Self::Stereo(into_py_variant(py, StereoCosetAst::from_rust(py, coset)?)?)
             }
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstCisTransStereoAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstCisTransStereoAst {
         match self {
             Self::Undetermined() => AstCisTransStereoAst::Undetermined,
             Self::NotStereo() => AstCisTransStereoAst::NotStereo,
-            Self::Stereo(coset) => AstCisTransStereoAst::Stereo(coset.bind(py).borrow().to_ast(py)),
+            Self::Stereo(coset) => {
+                AstCisTransStereoAst::Stereo(coset.bind(py).borrow().to_rust(py))
+            }
         }
     }
 }
@@ -345,7 +347,7 @@ pub enum CisTransStereo {
 
 impl CisTransStereo {
     /// The cis/trans-stereo AST for this configuration (a literal coset).
-    pub(crate) fn to_ast(self) -> AstCisTransStereoAst {
+    pub(crate) fn to_rust(self) -> AstCisTransStereoAst {
         let coset = match self {
             CisTransStereo::Z => AstStereoCosetAst::Lit(0),
             CisTransStereo::E => AstStereoCosetAst::Lit(1),
@@ -364,7 +366,7 @@ pub(crate) enum CisTransStereoArg {
 }
 
 impl CisTransStereoArg {
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstCisTransStereoAst> {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstCisTransStereoAst> {
         Ok(match self {
             CisTransStereoArg::Flag(false) => AstCisTransStereoAst::NotStereo,
             CisTransStereoArg::Flag(true) => {
@@ -372,14 +374,14 @@ impl CisTransStereoArg {
                     "cis_trans_stereo = True is not meaningful; use CisTransStereo.Z/E or False",
                 ))
             }
-            CisTransStereoArg::Config(cts) => cts.to_ast(),
-            CisTransStereoArg::Ast(a) => a.bind(py).borrow().to_ast(py),
+            CisTransStereoArg::Config(cts) => cts.to_rust(),
+            CisTransStereoArg::Ast(a) => a.bind(py).borrow().to_rust(py),
         })
     }
 }
 
 /// The coordination geometry of a stereo site. A fieldless, hashable value enum whose
-/// members mirror the Rust `StereoKind` exactly.
+/// members correspond exactly to the Rust `StereoKind`.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StereoKind {
@@ -392,7 +394,7 @@ pub enum StereoKind {
 }
 
 impl StereoKind {
-    pub(crate) fn from_ast(ast: AstStereoKind) -> Self {
+    pub(crate) fn from_rust(ast: AstStereoKind) -> Self {
         match ast {
             AstStereoKind::Tetrahedral => Self::Tetrahedral,
             AstStereoKind::CisTrans => Self::CisTrans,
@@ -403,7 +405,7 @@ impl StereoKind {
         }
     }
 
-    pub(crate) fn to_ast(self) -> AstStereoKind {
+    pub(crate) fn to_rust(self) -> AstStereoKind {
         match self {
             Self::Tetrahedral => AstStereoKind::Tetrahedral,
             Self::CisTrans => AstStereoKind::CisTrans,
@@ -416,7 +418,7 @@ impl StereoKind {
 }
 
 /// The kind of a stereo ligand: a real atom, or a virtual ligand (implicit hydrogen or
-/// lone pair). A fieldless, hashable value enum mirroring the Rust `StereoLigandKind`.
+/// lone pair). A fieldless, hashable value enum corresponding to the Rust `StereoLigandKind`.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StereoLigandKind {
@@ -426,7 +428,7 @@ pub enum StereoLigandKind {
 }
 
 impl StereoLigandKind {
-    pub(crate) fn from_ast(ast: AstStereoLigandKind) -> Self {
+    pub(crate) fn from_rust(ast: AstStereoLigandKind) -> Self {
         match ast {
             AstStereoLigandKind::Atom => Self::Atom,
             AstStereoLigandKind::ImplicitHydrogen => Self::ImplicitHydrogen,
@@ -434,7 +436,7 @@ impl StereoLigandKind {
         }
     }
 
-    pub(crate) fn to_ast(self) -> AstStereoLigandKind {
+    pub(crate) fn to_rust(self) -> AstStereoLigandKind {
         match self {
             Self::Atom => AstStereoLigandKind::Atom,
             Self::ImplicitHydrogen => AstStereoLigandKind::ImplicitHydrogen,
@@ -444,7 +446,7 @@ impl StereoLigandKind {
 }
 
 /// Topicity of two ligand positions of a stereo carrier (a derived ground classification).
-/// A fieldless, hashable value enum mirroring the Rust `Topicity`. `Ord` lets it key the
+/// A fieldless, hashable value enum corresponding to the Rust `Topicity`. `Ord` lets it key the
 /// `BTreeSet` in the `TopicityRelationAst` set variants.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -455,7 +457,7 @@ pub enum Topicity {
 }
 
 impl Topicity {
-    pub(crate) fn from_ast(ast: AstTopicity) -> Self {
+    pub(crate) fn from_rust(ast: AstTopicity) -> Self {
         match ast {
             AstTopicity::Homotopic => Self::Homotopic,
             AstTopicity::Enantiotopic => Self::Enantiotopic,
@@ -463,7 +465,7 @@ impl Topicity {
         }
     }
 
-    pub(crate) fn to_ast(self) -> AstTopicity {
+    pub(crate) fn to_rust(self) -> AstTopicity {
         match self {
             Self::Homotopic => AstTopicity::Homotopic,
             Self::Enantiotopic => AstTopicity::Enantiotopic,
@@ -473,7 +475,7 @@ impl Topicity {
 }
 
 /// Stereogenicity classification of a stereo carrier (a derived ground classification).
-/// A fieldless, hashable value enum mirroring the Rust `Stereogenicity`. `Ord` lets it key
+/// A fieldless, hashable value enum corresponding to the Rust `Stereogenicity`. `Ord` lets it key
 /// the `BTreeSet` in the `StereogenicityAst` set variants.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -484,7 +486,7 @@ pub enum Stereogenicity {
 }
 
 impl Stereogenicity {
-    pub(crate) fn from_ast(ast: AstStereogenicity) -> Self {
+    pub(crate) fn from_rust(ast: AstStereogenicity) -> Self {
         match ast {
             AstStereogenicity::Symmetric => Self::Symmetric,
             AstStereogenicity::Prochiral => Self::Prochiral,
@@ -492,7 +494,7 @@ impl Stereogenicity {
         }
     }
 
-    pub(crate) fn to_ast(self) -> AstStereogenicity {
+    pub(crate) fn to_rust(self) -> AstStereogenicity {
         match self {
             Self::Symmetric => AstStereogenicity::Symmetric,
             Self::Prochiral => AstStereogenicity::Prochiral,
@@ -503,7 +505,7 @@ impl Stereogenicity {
 
 /// A stereo ligand occupying a coordination position of a stereo site: the ligand's atom
 /// id and its kind. For a virtual ligand (`ImplicitHydrogen`/`LonePair`) the `atom_id` is
-/// the bearing atom; the `kind` disambiguates. Immutable value, hashable. Mirrors the Rust
+/// the bearing atom; the `kind` disambiguates. Immutable value, hashable. Corresponds to the Rust
 /// `StereoLigand`.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -530,20 +532,20 @@ impl StereoLigand {
 }
 
 impl StereoLigand {
-    pub(crate) fn from_ast(ast: AstStereoLigand) -> Self {
+    pub(crate) fn from_rust(ast: AstStereoLigand) -> Self {
         StereoLigand {
             atom_id: ast.atom_id.0,
-            kind: StereoLigandKind::from_ast(ast.kind),
+            kind: StereoLigandKind::from_rust(ast.kind),
         }
     }
 
-    pub(crate) fn to_ast(self) -> AstStereoLigand {
-        AstStereoLigand::new(AstAtomId(self.atom_id), self.kind.to_ast())
+    pub(crate) fn to_rust(self) -> AstStereoLigand {
+        AstStereoLigand::new(AstAtomId(self.atom_id), self.kind.to_rust())
     }
 }
 
 /// A stereo configuration: undetermined (geometry not yet known, so no coset), or `Kinded`
-/// — a concrete coordination geometry bound to a coset that may still be open. Mirrors the
+/// — a concrete coordination geometry bound to a coset that may still be open. Corresponds to the
 /// Rust `StereoConfigurationAst`; `Undetermined` and `Kinded(Tetrahedral, Undetermined)` are
 /// distinct.
 #[pyclass]
@@ -573,11 +575,11 @@ impl StereoConfigurationAst {
     }
 
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -595,22 +597,23 @@ impl StereoConfigurationAst {
 }
 
 impl StereoConfigurationAst {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstStereoConfigurationAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstStereoConfigurationAst) -> PyResult<Self> {
         Ok(match ast {
             AstStereoConfigurationAst::Undetermined => Self::Undetermined(),
             AstStereoConfigurationAst::Kinded(kind, coset) => Self::Kinded(
-                StereoKind::from_ast(*kind),
-                into_py_variant(py, StereoCosetAst::from_ast(py, coset)?)?,
+                StereoKind::from_rust(*kind),
+                into_py_variant(py, StereoCosetAst::from_rust(py, coset)?)?,
             ),
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstStereoConfigurationAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoConfigurationAst {
         match self {
             Self::Undetermined() => AstStereoConfigurationAst::Undetermined,
-            Self::Kinded(kind, coset) => {
-                AstStereoConfigurationAst::Kinded(kind.to_ast(), coset.bind(py).borrow().to_ast(py))
-            }
+            Self::Kinded(kind, coset) => AstStereoConfigurationAst::Kinded(
+                kind.to_rust(),
+                coset.bind(py).borrow().to_rust(py),
+            ),
         }
     }
 }
@@ -626,27 +629,27 @@ pub(crate) enum StereoConfigurationArg {
 }
 
 impl StereoConfigurationArg {
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstStereoConfigurationAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoConfigurationAst {
         match self {
-            StereoConfigurationArg::Tetrahedral(t) => match t.to_ast() {
+            StereoConfigurationArg::Tetrahedral(t) => match t.to_rust() {
                 AstTetrahedralStereoAst::Stereo(coset) => {
                     AstStereoConfigurationAst::Kinded(AstStereoKind::Tetrahedral, coset)
                 }
                 _ => unreachable!("TetrahedralStereo shorthand is always a Stereo coset"),
             },
-            StereoConfigurationArg::CisTrans(c) => match c.to_ast() {
+            StereoConfigurationArg::CisTrans(c) => match c.to_rust() {
                 AstCisTransStereoAst::Stereo(coset) => {
                     AstStereoConfigurationAst::Kinded(AstStereoKind::CisTrans, coset)
                 }
                 _ => unreachable!("CisTransStereo shorthand is always a Stereo coset"),
             },
-            StereoConfigurationArg::Ast(a) => a.bind(py).borrow().to_ast(py),
+            StereoConfigurationArg::Ast(a) => a.bind(py).borrow().to_rust(py),
         }
     }
 }
 
 /// Orientation grade of a ligand permutation: a proper rotation, or an improper (mirror)
-/// operation. A fieldless, hashable value enum mirroring `umol_perm::Orientation`.
+/// operation. A fieldless, hashable value enum corresponding to `umol_perm::Orientation`.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Orientation {
@@ -655,14 +658,14 @@ pub enum Orientation {
 }
 
 impl Orientation {
-    pub(crate) fn from_ast(orientation: PermOrientation) -> Self {
+    pub(crate) fn from_rust(orientation: PermOrientation) -> Self {
         match orientation {
             PermOrientation::Proper => Self::Proper,
             PermOrientation::Improper => Self::Improper,
         }
     }
 
-    pub(crate) fn to_ast(self) -> PermOrientation {
+    pub(crate) fn to_rust(self) -> PermOrientation {
         match self {
             Self::Proper => PermOrientation::Proper,
             Self::Improper => PermOrientation::Improper,
@@ -671,7 +674,7 @@ impl Orientation {
 }
 
 /// A permutation of a stereo site's ligand positions (frame-relative). Immutable value,
-/// hashable. Mirrors the Rust `LigandPermutation`.
+/// hashable. Corresponds to the Rust `LigandPermutation`.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LigandPermutation {
@@ -697,18 +700,18 @@ impl LigandPermutation {
 }
 
 impl LigandPermutation {
-    pub(crate) fn from_ast(ast: AstLigandPermutation) -> Self {
+    pub(crate) fn from_rust(ast: AstLigandPermutation) -> Self {
         LigandPermutation {
             permutation: Permutation::from_inner(ast.0),
         }
     }
 
-    pub(crate) fn to_ast(self) -> AstLigandPermutation {
+    pub(crate) fn to_rust(self) -> AstLigandPermutation {
         AstLigandPermutation(self.permutation.inner())
     }
 }
 
-/// A ligand permutation carrying a proper/improper grade. Immutable value, hashable. Mirrors
+/// A ligand permutation carrying a proper/improper grade. Immutable value, hashable. Corresponds
 /// the Rust `OrientedLigandPermutation`.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -743,23 +746,23 @@ impl OrientedLigandPermutation {
 }
 
 impl OrientedLigandPermutation {
-    pub(crate) fn from_ast(ast: AstOrientedLigandPermutation) -> Self {
+    pub(crate) fn from_rust(ast: AstOrientedLigandPermutation) -> Self {
         OrientedLigandPermutation {
-            permutation: LigandPermutation::from_ast(ast.permutation),
-            orientation: Orientation::from_ast(ast.orientation),
+            permutation: LigandPermutation::from_rust(ast.permutation),
+            orientation: Orientation::from_rust(ast.orientation),
         }
     }
 
-    pub(crate) fn to_ast(self) -> AstOrientedLigandPermutation {
+    pub(crate) fn to_rust(self) -> AstOrientedLigandPermutation {
         AstOrientedLigandPermutation {
-            permutation: self.permutation.to_ast(),
-            orientation: self.orientation.to_ast(),
+            permutation: self.permutation.to_rust(),
+            orientation: self.orientation.to_rust(),
         }
     }
 }
 
 /// An unordered pair of ligand positions of a stereo site, normalized so the lower position
-/// is `first`. Keys a per-pair topicity constraint. Immutable value, hashable. Mirrors the
+/// is `first`. Keys a per-pair topicity constraint. Immutable value, hashable. Corresponds to the
 /// Rust `StereoLigandPair`.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -775,7 +778,7 @@ impl StereoLigandPair {
     /// Normalizes the pair so the lower position is `first`.
     #[new]
     pub(crate) fn new(a: u32, b: u32) -> Self {
-        StereoLigandPair::from_ast(AstStereoLigandPair::new(
+        StereoLigandPair::from_rust(AstStereoLigandPair::new(
             AstStereoLigandPosition(a),
             AstStereoLigandPosition(b),
         ))
@@ -787,14 +790,14 @@ impl StereoLigandPair {
 }
 
 impl StereoLigandPair {
-    pub(crate) fn from_ast(ast: AstStereoLigandPair) -> Self {
+    pub(crate) fn from_rust(ast: AstStereoLigandPair) -> Self {
         StereoLigandPair {
             first: ast.first().0,
             second: ast.second().0,
         }
     }
 
-    pub(crate) fn to_ast(self) -> AstStereoLigandPair {
+    pub(crate) fn to_rust(self) -> AstStereoLigandPair {
         AstStereoLigandPair::new(
             AstStereoLigandPosition(self.first),
             AstStereoLigandPosition(self.second),
@@ -841,7 +844,7 @@ macro_rules! stereo_value {
                     .map(|c| c.bind(py).borrow().inner().clone())
                     .unwrap_or_default();
                 $value($ast_value {
-                    configuration: configuration.to_ast(py),
+                    configuration: configuration.to_rust(py),
                     constraints,
                 })
             }
@@ -863,12 +866,12 @@ macro_rules! stereo_value {
             /// The stereo configuration (geometry + coset).
             #[getter]
             fn configuration(&self, py: Python<'_>) -> PyResult<StereoConfigurationAst> {
-                StereoConfigurationAst::from_ast(py, &self.0.configuration)
+                StereoConfigurationAst::from_rust(py, &self.0.configuration)
             }
 
             #[setter]
             fn set_configuration(&mut self, py: Python<'_>, value: StereoConfigurationArg) {
-                self.0.configuration = value.to_ast(py);
+                self.0.configuration = value.to_rust(py);
             }
 
             /// The entity's constraints as a live handle onto this entity: reads borrow the
@@ -886,7 +889,7 @@ macro_rules! stereo_value {
             /// instead of self-aliasing into a double-borrow panic.
             #[setter]
             fn set_constraints(slf: Py<Self>, py: Python<'_>, value: $arg) -> PyResult<()> {
-                let snapshot = value.to_ast(py)?;
+                let snapshot = value.to_rust(py)?;
                 slf.borrow_mut(py).0.constraints = snapshot;
                 Ok(())
             }
@@ -899,7 +902,7 @@ macro_rules! stereo_value {
                     .0
                     .constraints
                     .iter()
-                    .map(|c| into_py_variant(py, $constraint::from_ast(py, c)?))
+                    .map(|c| into_py_variant(py, $constraint::from_rust(py, c)?))
                     .collect::<PyResult<Vec<_>>>()?;
                 dict.set_item("constraints", constraints)?;
                 Ok(dict)
@@ -988,7 +991,7 @@ macro_rules! stereo_view {
                     .view(molecule.inner())?
                     .ligand_frame()
                     .into_iter()
-                    .map(StereoLigand::from_ast)
+                    .map(StereoLigand::from_rust)
                     .collect())
             }
 
@@ -996,21 +999,21 @@ macro_rules! stereo_view {
             #[getter]
             fn kind(&self, py: Python<'_>) -> PyResult<StereoKind> {
                 let molecule = self.owner.bind(py).borrow();
-                Ok(StereoKind::from_ast(self.view(molecule.inner())?.kind()))
+                Ok(StereoKind::from_rust(self.view(molecule.inner())?.kind()))
             }
 
             /// The coset (from the configuration).
             #[getter]
             fn coset(&self, py: Python<'_>) -> PyResult<StereoCosetAst> {
                 let molecule = self.owner.bind(py).borrow();
-                StereoCosetAst::from_ast(py, self.view(molecule.inner())?.coset())
+                StereoCosetAst::from_rust(py, self.view(molecule.inner())?.coset())
             }
 
             /// The stereo configuration (geometry + coset).
             #[getter]
             fn configuration(&self, py: Python<'_>) -> PyResult<StereoConfigurationAst> {
                 let molecule = self.owner.bind(py).borrow();
-                StereoConfigurationAst::from_ast(
+                StereoConfigurationAst::from_rust(
                     py,
                     &self.view(molecule.inner())?.ast.configuration,
                 )
@@ -1023,7 +1026,7 @@ macro_rules! stereo_view {
                     .inner_mut()
                     .$entity_mut(self.id)
                     .ast
-                    .configuration = value.to_ast(py);
+                    .configuration = value.to_rust(py);
             }
 
             /// The entity's constraints as a live handle onto the molecule: reads borrow the
@@ -1047,7 +1050,7 @@ macro_rules! stereo_view {
                     .inner_mut()
                     .$entity_mut(self.id)
                     .ast
-                    .constraints = value.to_ast(py)?;
+                    .constraints = value.to_rust(py)?;
                 Ok(())
             }
 
@@ -1059,12 +1062,12 @@ macro_rules! stereo_view {
                 let dict = PyDict::new(py);
                 dict.set_item(
                     "configuration",
-                    StereoConfigurationAst::from_ast(py, &ast.configuration)?,
+                    StereoConfigurationAst::from_rust(py, &ast.configuration)?,
                 )?;
                 let constraints = ast
                     .constraints
                     .iter()
-                    .map(|c| into_py_variant(py, $constraint::from_ast(py, c)?))
+                    .map(|c| into_py_variant(py, $constraint::from_rust(py, c)?))
                     .collect::<PyResult<Vec<_>>>()?;
                 dict.set_item("constraints", constraints)?;
                 Ok(dict)
@@ -1172,7 +1175,7 @@ macro_rules! stereo_views {
             /// The stereo entity on `site` with exactly `ligands` (order-independent), or `None`.
             fn of(&self, py: Python<'_>, site: u32, ligands: Vec<StereoLigand>) -> Option<$view> {
                 let ligands: Vec<AstStereoLigand> =
-                    ligands.into_iter().map(StereoLigand::to_ast).collect();
+                    ligands.into_iter().map(StereoLigand::to_rust).collect();
                 let molecule = self.owner.bind(py).borrow();
                 molecule
                     .inner()
@@ -1284,7 +1287,7 @@ mod tests {
     #[case(AstStereoTerm::Apply(Box::new(AstStereoTerm::Lit(0)), PermPermutation::from_image(4, &[1, 0, 2, 3])))]
     fn test_stereo_term_roundtrip(#[case] ast: AstStereoTerm) {
         Python::attach(|py| {
-            assert_eq!(StereoTerm::from_ast(py, &ast).unwrap().to_ast(py), ast);
+            assert_eq!(StereoTerm::from_rust(py, &ast).unwrap().to_rust(py), ast);
         });
     }
 
@@ -1295,7 +1298,10 @@ mod tests {
     #[case(AstStereoCosetAst::Term(Box::new(AstStereoTerm::Lit(1))))]
     fn test_stereo_coset_ast_roundtrip(#[case] ast: AstStereoCosetAst) {
         Python::attach(|py| {
-            assert_eq!(StereoCosetAst::from_ast(py, &ast).unwrap().to_ast(py), ast);
+            assert_eq!(
+                StereoCosetAst::from_rust(py, &ast).unwrap().to_rust(py),
+                ast
+            );
         });
     }
 
@@ -1309,7 +1315,9 @@ mod tests {
     fn test_tetrahedral_stereo_ast_roundtrip(#[case] ast: AstTetrahedralStereoAst) {
         Python::attach(|py| {
             assert_eq!(
-                TetrahedralStereoAst::from_ast(py, &ast).unwrap().to_ast(py),
+                TetrahedralStereoAst::from_rust(py, &ast)
+                    .unwrap()
+                    .to_rust(py),
                 ast
             );
         });
@@ -1318,11 +1326,11 @@ mod tests {
     #[rstest]
     #[case(TetrahedralStereo::Ccw, AstStereoCosetAst::Lit(0))]
     #[case(TetrahedralStereo::Cw, AstStereoCosetAst::Lit(1))]
-    fn test_tetrahedral_stereo_to_ast(
+    fn test_tetrahedral_stereo_to_rust(
         #[case] config: TetrahedralStereo,
         #[case] coset: AstStereoCosetAst,
     ) {
-        assert_eq!(config.to_ast(), AstTetrahedralStereoAst::Stereo(coset));
+        assert_eq!(config.to_rust(), AstTetrahedralStereoAst::Stereo(coset));
     }
 
     #[rstest]
@@ -1333,7 +1341,7 @@ mod tests {
     fn test_cis_trans_stereo_ast_roundtrip(#[case] ast: AstCisTransStereoAst) {
         Python::attach(|py| {
             assert_eq!(
-                CisTransStereoAst::from_ast(py, &ast).unwrap().to_ast(py),
+                CisTransStereoAst::from_rust(py, &ast).unwrap().to_rust(py),
                 ast
             );
         });
@@ -1342,11 +1350,11 @@ mod tests {
     #[rstest]
     #[case(CisTransStereo::Z, AstStereoCosetAst::Lit(0))]
     #[case(CisTransStereo::E, AstStereoCosetAst::Lit(1))]
-    fn test_cis_trans_stereo_to_ast(
+    fn test_cis_trans_stereo_to_rust(
         #[case] config: CisTransStereo,
         #[case] coset: AstStereoCosetAst,
     ) {
-        assert_eq!(config.to_ast(), AstCisTransStereoAst::Stereo(coset));
+        assert_eq!(config.to_rust(), AstCisTransStereoAst::Stereo(coset));
     }
 
     #[rstest]
@@ -1357,7 +1365,7 @@ mod tests {
     #[case(AstStereoKind::TrigonalBipyramidal)]
     #[case(AstStereoKind::Octahedral)]
     fn test_stereo_kind_roundtrip(#[case] ast: AstStereoKind) {
-        assert_eq!(StereoKind::from_ast(ast).to_ast(), ast);
+        assert_eq!(StereoKind::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -1365,7 +1373,7 @@ mod tests {
     #[case(AstStereoLigandKind::ImplicitHydrogen)]
     #[case(AstStereoLigandKind::LonePair)]
     fn test_stereo_ligand_kind_roundtrip(#[case] ast: AstStereoLigandKind) {
-        assert_eq!(StereoLigandKind::from_ast(ast).to_ast(), ast);
+        assert_eq!(StereoLigandKind::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -1373,7 +1381,7 @@ mod tests {
     #[case(AstTopicity::Enantiotopic)]
     #[case(AstTopicity::Diastereotopic)]
     fn test_topicity_roundtrip(#[case] ast: AstTopicity) {
-        assert_eq!(Topicity::from_ast(ast).to_ast(), ast);
+        assert_eq!(Topicity::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -1381,7 +1389,7 @@ mod tests {
     #[case(AstStereogenicity::Prochiral)]
     #[case(AstStereogenicity::Stereogenic)]
     fn test_stereogenicity_roundtrip(#[case] ast: AstStereogenicity) {
-        assert_eq!(Stereogenicity::from_ast(ast).to_ast(), ast);
+        assert_eq!(Stereogenicity::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -1399,7 +1407,7 @@ mod tests {
     #[case(AstStereoLigand::new(AstAtomId(0), AstStereoLigandKind::Atom))]
     #[case(AstStereoLigand::new(AstAtomId(5), AstStereoLigandKind::LonePair))]
     fn test_stereo_ligand_roundtrip(#[case] ast: AstStereoLigand) {
-        assert_eq!(StereoLigand::from_ast(ast).to_ast(), ast);
+        assert_eq!(StereoLigand::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -1417,9 +1425,9 @@ mod tests {
                 ),
             ] {
                 assert_eq!(
-                    StereoConfigurationAst::from_ast(py, &ast)
+                    StereoConfigurationAst::from_rust(py, &ast)
                         .unwrap()
-                        .to_ast(py),
+                        .to_rust(py),
                     ast
                 );
             }
@@ -1433,7 +1441,7 @@ mod tests {
             let config = StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, coset);
             assert_eq!(config.kind(), Some(StereoKind::Tetrahedral));
             assert_eq!(
-                config.coset(py).unwrap().bind(py).borrow().to_ast(py),
+                config.coset(py).unwrap().bind(py).borrow().to_rust(py),
                 AstStereoCosetAst::Lit(1)
             );
             let undetermined = StereoConfigurationAst::Undetermined();
@@ -1443,11 +1451,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_configuration_arg_to_ast() {
+    fn test_stereo_configuration_arg_to_rust() {
         Python::attach(|py| {
             // the Th shorthand → Kinded(Tetrahedral, coset)
             assert_eq!(
-                StereoConfigurationArg::Tetrahedral(TetrahedralStereo::Cw).to_ast(py),
+                StereoConfigurationArg::Tetrahedral(TetrahedralStereo::Cw).to_rust(py),
                 AstStereoConfigurationAst::kinded(
                     AstStereoKind::Tetrahedral,
                     AstStereoCosetAst::Lit(1)
@@ -1455,7 +1463,7 @@ mod tests {
             );
             // the Ct shorthand → Kinded(CisTrans, coset)
             assert_eq!(
-                StereoConfigurationArg::CisTrans(CisTransStereo::E).to_ast(py),
+                StereoConfigurationArg::CisTrans(CisTransStereo::E).to_rust(py),
                 AstStereoConfigurationAst::kinded(
                     AstStereoKind::CisTrans,
                     AstStereoCosetAst::Lit(1)
@@ -1464,7 +1472,7 @@ mod tests {
             // a StereoConfigurationAst passes through
             let config = Py::new(py, StereoConfigurationAst::Undetermined()).unwrap();
             assert_eq!(
-                StereoConfigurationArg::Ast(config).to_ast(py),
+                StereoConfigurationArg::Ast(config).to_rust(py),
                 AstStereoConfigurationAst::Undetermined
             );
         });
@@ -1474,7 +1482,7 @@ mod tests {
     #[case(PermOrientation::Proper)]
     #[case(PermOrientation::Improper)]
     fn test_orientation_roundtrip(#[case] ast: PermOrientation) {
-        assert_eq!(Orientation::from_ast(ast).to_ast(), ast);
+        assert_eq!(Orientation::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -1491,7 +1499,7 @@ mod tests {
     #[case(AstLigandPermutation(PermPermutation::identity(4)))]
     #[case(AstLigandPermutation(PermPermutation::from_image(4, &[1, 0, 2, 3])))]
     fn test_ligand_permutation_roundtrip(#[case] ast: AstLigandPermutation) {
-        assert_eq!(LigandPermutation::from_ast(ast).to_ast(), ast);
+        assert_eq!(LigandPermutation::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -1534,7 +1542,7 @@ mod tests {
     #[case(AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::from_image(4, &[1, 0, 2, 3])), orientation: PermOrientation::Proper })]
     #[case(AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::identity(4)), orientation: PermOrientation::Improper })]
     fn test_oriented_ligand_permutation_roundtrip(#[case] ast: AstOrientedLigandPermutation) {
-        assert_eq!(OrientedLigandPermutation::from_ast(ast).to_ast(), ast);
+        assert_eq!(OrientedLigandPermutation::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -1556,7 +1564,7 @@ mod tests {
     #[case(AstStereoLigandPair::new(AstStereoLigandPosition(0), AstStereoLigandPosition(3)))]
     #[case(AstStereoLigandPair::new(AstStereoLigandPosition(2), AstStereoLigandPosition(1)))]
     fn test_stereo_ligand_pair_roundtrip(#[case] ast: AstStereoLigandPair) {
-        assert_eq!(StereoLigandPair::from_ast(ast).to_ast(), ast);
+        assert_eq!(StereoLigandPair::from_rust(ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -1585,7 +1593,7 @@ mod tests {
     ])))]
     #[case(AstTopicityRelationAst::NotSet(BTreeSet::from([AstTopicity::Diastereotopic])))]
     fn test_topicity_relation_ast_roundtrip(#[case] ast: AstTopicityRelationAst) {
-        assert_eq!(TopicityRelationAst::from_ast(&ast).to_ast(), ast);
+        assert_eq!(TopicityRelationAst::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -1614,7 +1622,7 @@ mod tests {
     ])))]
     #[case(AstStereogenicityAst::NotSet(BTreeSet::from([AstStereogenicity::Stereogenic])))]
     fn test_stereogenicity_ast_roundtrip(#[case] ast: AstStereogenicityAst) {
-        assert_eq!(StereogenicityAst::from_ast(&ast).to_ast(), ast);
+        assert_eq!(StereogenicityAst::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -1627,7 +1635,7 @@ mod tests {
             let value = LigandSymmetryAst::new(py, permutation, BooleanArg::Lit(true)).unwrap();
             assert!(value.permutation() == permutation);
             assert_eq!(
-                value.invariant.bind(py).borrow().to_ast(),
+                value.invariant.bind(py).borrow().to_rust(),
                 AstBooleanAst::Lit(true)
             );
             assert_eq!(
@@ -1693,7 +1701,7 @@ mod tests {
                 },
             ] {
                 assert_eq!(
-                    LigandSymmetryAst::from_ast(py, &ast).unwrap().to_ast(py),
+                    LigandSymmetryAst::from_rust(py, &ast).unwrap().to_rust(py),
                     ast
                 );
             }
@@ -1707,7 +1715,7 @@ mod tests {
             let value = FluxionalityAst::new(py, permutation, BooleanArg::Lit(false)).unwrap();
             assert!(value.permutation() == permutation);
             assert_eq!(
-                value.active.bind(py).borrow().to_ast(),
+                value.active.bind(py).borrow().to_rust(),
                 AstBooleanAst::Lit(false)
             );
             assert_eq!(
@@ -1760,7 +1768,10 @@ mod tests {
                     active: AstBooleanAst::Undetermined,
                 },
             ] {
-                assert_eq!(FluxionalityAst::from_ast(py, &ast).unwrap().to_ast(py), ast);
+                assert_eq!(
+                    FluxionalityAst::from_rust(py, &ast).unwrap().to_rust(py),
+                    ast
+                );
             }
         });
     }
@@ -1773,7 +1784,7 @@ mod tests {
                 TopicityAst::new(py, pair, TopicityRelationArg::Lit(Topicity::Homotopic)).unwrap();
             assert!(value.pair() == pair);
             assert_eq!(
-                value.relation.bind(py).borrow().to_ast(),
+                value.relation.bind(py).borrow().to_rust(),
                 AstTopicityRelationAst::Lit(AstTopicity::Homotopic)
             );
             assert_eq!(
@@ -1832,7 +1843,7 @@ mod tests {
                     relation: AstTopicityRelationAst::Undetermined,
                 },
             ] {
-                assert_eq!(TopicityAst::from_ast(py, &ast).unwrap().to_ast(py), ast);
+                assert_eq!(TopicityAst::from_rust(py, &ast).unwrap().to_rust(py), ast);
             }
         });
     }
@@ -1846,7 +1857,7 @@ mod tests {
     fn test_stereo_atom_constraint_ast_roundtrip(#[case] ast: AstStereoAtomConstraintAst) {
         Python::attach(|py| {
             assert_eq!(
-                StereoAtomConstraintAst::from_ast(py, &ast).unwrap().to_ast(py),
+                StereoAtomConstraintAst::from_rust(py, &ast).unwrap().to_rust(py),
                 ast
             );
         });
@@ -1862,12 +1873,12 @@ mod tests {
                 ),
                 relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic),
             });
-            let key = StereoAtomConstraintAst::from_ast(py, &ast)
+            let key = StereoAtomConstraintAst::from_rust(py, &ast)
                 .unwrap()
                 .key(py)
                 .unwrap();
             assert_eq!(
-                key.to_ast(py),
+                key.to_rust(py),
                 AstStereoAtomConstraintKey::Topicity(AstStereoLigandPair::new(
                     AstStereoLigandPosition(0),
                     AstStereoLigandPosition(1),
@@ -1893,7 +1904,7 @@ mod tests {
                 constraints
                     .__getitem__(py, present.clone_ref(py))
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 stereogenicity
             );
 
@@ -1914,7 +1925,7 @@ mod tests {
         Python::attach(|py| {
             let stereogenicity = into_py_variant(
                 py,
-                StereoAtomConstraintAst::from_ast(
+                StereoAtomConstraintAst::from_rust(
                     py,
                     &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
                         AstStereogenicity::Stereogenic,
@@ -1930,7 +1941,7 @@ mod tests {
             let key = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
             let popped = constraints.pop(py, key.clone_ref(py)).unwrap();
             assert_eq!(
-                popped.unwrap().to_ast(py),
+                popped.unwrap().to_rust(py),
                 AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
                     AstStereogenicity::Stereogenic
                 ))
@@ -1969,17 +1980,17 @@ mod tests {
             let constraints = StereoAtomConstraintsAst::from_inner(ast_cs);
 
             assert_eq!(
-                constraints.stereogenicity().to_ast(),
+                constraints.stereogenicity().to_rust(),
                 AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
             );
             assert_eq!(
-                constraints.topicity(StereoLigandPair::new(0, 1)).to_ast(),
+                constraints.topicity(StereoLigandPair::new(0, 1)).to_rust(),
                 AstTopicityRelationAst::Lit(AstTopicity::Homotopic)
             );
             let ligand_symmetries = constraints.ligand_symmetries(py).unwrap();
             assert_eq!(ligand_symmetries.len(), 1);
             assert_eq!(
-                ligand_symmetries[0].to_ast(py).invariant,
+                ligand_symmetries[0].to_rust(py).invariant,
                 AstBooleanAst::Lit(true)
             );
         });
@@ -2007,7 +2018,7 @@ mod tests {
                 .keys(py)
                 .unwrap()
                 .keys
-                .map(|k| k.bind(py).borrow().to_ast(py))
+                .map(|k| k.bind(py).borrow().to_rust(py))
                 .collect();
             assert_eq!(
                 keys,
@@ -2023,7 +2034,7 @@ mod tests {
                 .values(py)
                 .unwrap()
                 .entries
-                .map(|c| c.bind(py).borrow().to_ast(py))
+                .map(|c| c.bind(py).borrow().to_rust(py))
                 .collect();
             assert_eq!(values.len(), 2);
             assert_eq!(constraints.items(py).unwrap().items.count(), 2);
@@ -2036,7 +2047,7 @@ mod tests {
             let base = Py::new(py, StereoAtomConstraintsAst::new(py, Vec::new())).unwrap();
             let entry = into_py_variant(
                 py,
-                StereoAtomConstraintAst::from_ast(
+                StereoAtomConstraintAst::from_rust(
                     py,
                     &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
                         AstStereogenicity::Stereogenic,
@@ -2065,11 +2076,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_constraints_arg_to_ast() {
+    fn test_stereo_atom_constraints_arg_to_rust() {
         Python::attach(|py| {
             let entry = into_py_variant(
                 py,
-                StereoAtomConstraintAst::from_ast(
+                StereoAtomConstraintAst::from_rust(
                     py,
                     &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
                         AstStereogenicity::Stereogenic,
@@ -2084,13 +2095,13 @@ mod tests {
             expected.extend([AstStereoAtomConstraintAst::Stereogenicity(
                 AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic),
             )]);
-            assert_eq!(arg.to_ast(py).unwrap(), expected);
+            assert_eq!(arg.to_rust(py).unwrap(), expected);
         });
     }
 
     // `StereoBondConstraintsAst` is the second `stereo_constraints!` instantiation; the shared
     // macro is covered by the `StereoAtom` tests above. This confirms the bond instantiation
-    // and exercises its `from_inner` / `Arg::to_ast`.
+    // and exercises its `from_inner` / `Arg::to_rust`.
     #[rstest]
     fn test_stereo_bond_constraints_ast() {
         Python::attach(|py| {
@@ -2102,7 +2113,7 @@ mod tests {
             let constraints = StereoBondConstraintsAst::from_inner(ast_cs);
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
-                constraints.stereogenicity().to_ast(),
+                constraints.stereogenicity().to_rust(),
                 AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
             );
 
@@ -2113,7 +2124,7 @@ mod tests {
             let arg = StereoBondConstraintsArg::Container(container);
             let mut expected = AstStereoBondConstraintsAst::new();
             expected.extend([stereogenicity]);
-            assert_eq!(arg.to_ast(py).unwrap(), expected);
+            assert_eq!(arg.to_rust(py).unwrap(), expected);
         });
     }
 
@@ -2133,7 +2144,7 @@ mod tests {
             };
             let stereogenicity = into_py_variant(
                 py,
-                StereoAtomConstraintAst::from_ast(
+                StereoAtomConstraintAst::from_rust(
                     py,
                     &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
                         AstStereogenicity::Stereogenic,
@@ -2174,7 +2185,7 @@ mod tests {
             let key = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
             let popped = view.pop(py, key).unwrap();
             assert_eq!(
-                popped.unwrap().to_ast(py),
+                popped.unwrap().to_rust(py),
                 AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
                     AstStereogenicity::Stereogenic
                 ))
@@ -2208,7 +2219,7 @@ mod tests {
             let present = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
             assert!(view.__contains__(py, present.clone_ref(py)).unwrap());
             assert_eq!(
-                view.__getitem__(py, present).unwrap().to_ast(py),
+                view.__getitem__(py, present).unwrap().to_rust(py),
                 AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
                     AstStereogenicity::Stereogenic
                 ))
@@ -2259,7 +2270,7 @@ mod tests {
                 .keys(py)
                 .unwrap()
                 .keys
-                .map(|k| k.bind(py).borrow().to_ast(py))
+                .map(|k| k.bind(py).borrow().to_rust(py))
                 .collect();
             assert_eq!(
                 keys,
@@ -2292,7 +2303,7 @@ mod tests {
             };
             let entry = into_py_variant(
                 py,
-                StereoAtomConstraintAst::from_ast(
+                StereoAtomConstraintAst::from_rust(
                     py,
                     &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
                         AstStereogenicity::Stereogenic,
@@ -2341,13 +2352,13 @@ mod tests {
                 backing: StereoAtomConstraintsBacking::Value(value.clone_ref(py)),
             };
             assert_eq!(
-                view.stereogenicity(py).unwrap().to_ast(),
+                view.stereogenicity(py).unwrap().to_rust(),
                 AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
             );
             assert_eq!(
                 view.topicity(py, StereoLigandPair::new(0, 1))
                     .unwrap()
-                    .to_ast(),
+                    .to_rust(),
                 AstTopicityRelationAst::Lit(AstTopicity::Homotopic)
             );
         });
@@ -2367,7 +2378,7 @@ mod tests {
             let view = StereoAtomAst::constraints(value.clone_ref(py));
             let stereogenicity = into_py_variant(
                 py,
-                StereoAtomConstraintAst::from_ast(
+                StereoAtomConstraintAst::from_rust(
                     py,
                     &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
                         AstStereogenicity::Stereogenic,
@@ -2463,7 +2474,7 @@ mod tests {
             };
             let stereogenicity = into_py_variant(
                 py,
-                StereoBondConstraintAst::from_ast(
+                StereoBondConstraintAst::from_rust(
                     py,
                     &AstStereoBondConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
                         AstStereogenicity::Stereogenic,
@@ -2584,7 +2595,7 @@ mod tests {
                 AstStereoCosetAst::Lit(0),
             ));
             assert_eq!(
-                value.configuration(py).unwrap().to_ast(py),
+                value.configuration(py).unwrap().to_rust(py),
                 AstStereoConfigurationAst::Kinded(
                     AstStereoKind::Tetrahedral,
                     AstStereoCosetAst::Lit(0)
@@ -2662,7 +2673,7 @@ mod tests {
             let configuration = dict.get_item("configuration").unwrap().unwrap();
             let expected = into_py_variant(
                 py,
-                StereoConfigurationAst::from_ast(
+                StereoConfigurationAst::from_rust(
                     py,
                     &AstStereoConfigurationAst::Kinded(
                         AstStereoKind::Tetrahedral,
@@ -2821,7 +2832,7 @@ mod tests {
                 id: AstStereoAtomId(0),
             };
             assert_eq!(
-                view.coset(py).unwrap().to_ast(py),
+                view.coset(py).unwrap().to_rust(py),
                 AstStereoCosetAst::Lit(0)
             );
         });
@@ -2835,7 +2846,7 @@ mod tests {
                 id: AstStereoAtomId(0),
             };
             assert_eq!(
-                view.configuration(py).unwrap().to_ast(py),
+                view.configuration(py).unwrap().to_rust(py),
                 AstStereoConfigurationAst::Kinded(
                     AstStereoKind::Tetrahedral,
                     AstStereoCosetAst::Lit(0)
@@ -2856,7 +2867,7 @@ mod tests {
                 StereoConfigurationArg::Tetrahedral(TetrahedralStereo::Cw),
             );
             assert_eq!(
-                view.configuration(py).unwrap().to_ast(py),
+                view.configuration(py).unwrap().to_rust(py),
                 AstStereoConfigurationAst::Kinded(
                     AstStereoKind::Tetrahedral,
                     AstStereoCosetAst::Lit(1)
@@ -2874,7 +2885,7 @@ mod tests {
             };
             let stereogenicity = into_py_variant(
                 py,
-                StereoAtomConstraintAst::from_ast(
+                StereoAtomConstraintAst::from_rust(
                     py,
                     &AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
                         AstStereogenicity::Stereogenic,
@@ -2886,7 +2897,7 @@ mod tests {
             view.constraints(py).set(py, stereogenicity);
             // a fresh molecule-backed handle proves the write hit the molecule
             assert_eq!(
-                view.constraints(py).stereogenicity(py).unwrap().to_ast(),
+                view.constraints(py).stereogenicity(py).unwrap().to_rust(),
                 AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
             );
         });
@@ -2907,7 +2918,7 @@ mod tests {
             view.set_constraints(py, StereoAtomConstraintsArg::Container(container))
                 .unwrap();
             assert_eq!(
-                view.constraints(py).stereogenicity(py).unwrap().to_ast(),
+                view.constraints(py).stereogenicity(py).unwrap().to_rust(),
                 AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)
             );
         });
@@ -2924,7 +2935,7 @@ mod tests {
             let configuration = dict.get_item("configuration").unwrap().unwrap();
             let expected = into_py_variant(
                 py,
-                StereoConfigurationAst::from_ast(
+                StereoConfigurationAst::from_rust(
                     py,
                     &AstStereoConfigurationAst::Kinded(
                         AstStereoKind::Tetrahedral,
@@ -2967,7 +2978,7 @@ mod tests {
             assert_eq!(view.id(), 0);
             assert_eq!(view.site_id(py).unwrap(), 0);
             assert_eq!(
-                view.configuration(py).unwrap().to_ast(py),
+                view.configuration(py).unwrap().to_rust(py),
                 AstStereoConfigurationAst::Kinded(
                     AstStereoKind::CisTrans,
                     AstStereoCosetAst::Lit(0)
@@ -3028,7 +3039,7 @@ mod tests {
             let view = views.__getitem__(py, 0).unwrap();
             // value replaced
             assert_eq!(
-                view.configuration(py).unwrap().to_ast(py),
+                view.configuration(py).unwrap().to_rust(py),
                 AstStereoConfigurationAst::Kinded(
                     AstStereoKind::Tetrahedral,
                     AstStereoCosetAst::Lit(1)

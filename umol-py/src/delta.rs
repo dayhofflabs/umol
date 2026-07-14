@@ -1,118 +1,27 @@
-//! Python mirrors for resolved molecule deltas and their field-change payloads.
+//! Python bindings for resolved molecule deltas and their field-change payloads.
 
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    AromaticSystemFieldChange as AstAromaticSystemFieldChange,
-    AtomFieldChange as AstAtomFieldChange, BondFieldChange as AstBondFieldChange,
-    DativeBondFieldChange as AstDativeBondFieldChange, ElectronCountsAst as AstElectronCountsAst,
-    ElementAst as AstElementAst, IsotopeMassAst as AstIsotopeMassAst,
+    AromaticSystemFieldChange as AstAromaticSystemFieldChange, AtomAst as AstAtomAst,
+    AtomDelta as AstAtomDelta, AtomFieldChange as AstAtomFieldChange, AtomId as AstAtomId,
+    BondAst as AstBondAst, BondDelta as AstBondDelta, BondFieldChange as AstBondFieldChange,
+    BondId as AstBondId, DativeBondFieldChange as AstDativeBondFieldChange,
     MulticenterBondFieldChange as AstMulticenterBondFieldChange,
     NoncovalentBondFieldChange as AstNoncovalentBondFieldChange,
-    NoncovalentBondKindAst as AstNoncovalentBondKindAst, SpinStateAst as AstSpinStateAst,
     StereoAtomFieldChange as AstStereoAtomFieldChange,
     StereoBondFieldChange as AstStereoBondFieldChange,
-    StereoConfigurationAst as AstStereoConfigurationAst, ValueAst as AstValueAst,
 };
 
-use crate::atom::{ElementAst, IsotopeMassAst};
+use crate::atom::{AtomAst, ElementAst, IsotopeMassAst};
+use crate::bond::BondAst;
+use crate::constraint::atom::AtomConstraintAst;
+use crate::constraint::bond::BondConstraintAst;
 use crate::convert::into_py_variant;
 use crate::electrons::ElectronCountsAst;
 use crate::noncovalent::NoncovalentBondKindAst;
 use crate::spin::SpinStateAst;
 use crate::stereo::StereoConfigurationAst;
 use crate::value::ValueAst;
-
-/// Conversion shared by the bound value types used as old/new field payloads.
-trait FieldValueMirror: Sized {
-    type Ast;
-
-    fn from_ast(py: Python<'_>, ast: &Self::Ast) -> PyResult<Self>;
-    fn to_ast(&self, py: Python<'_>) -> Self::Ast;
-}
-
-impl FieldValueMirror for ElementAst {
-    type Ast = AstElementAst;
-
-    fn from_ast(_py: Python<'_>, ast: &Self::Ast) -> PyResult<Self> {
-        Ok(Self::from_ast(ast))
-    }
-
-    fn to_ast(&self, _py: Python<'_>) -> Self::Ast {
-        self.to_ast()
-    }
-}
-
-impl FieldValueMirror for IsotopeMassAst {
-    type Ast = AstIsotopeMassAst;
-
-    fn from_ast(_py: Python<'_>, ast: &Self::Ast) -> PyResult<Self> {
-        Ok(Self::from_ast(ast))
-    }
-
-    fn to_ast(&self, _py: Python<'_>) -> Self::Ast {
-        self.to_ast()
-    }
-}
-
-impl FieldValueMirror for ValueAst {
-    type Ast = AstValueAst;
-
-    fn from_ast(py: Python<'_>, ast: &Self::Ast) -> PyResult<Self> {
-        Self::from_ast(py, ast)
-    }
-
-    fn to_ast(&self, py: Python<'_>) -> Self::Ast {
-        self.to_ast(py)
-    }
-}
-
-impl FieldValueMirror for SpinStateAst {
-    type Ast = AstSpinStateAst;
-
-    fn from_ast(py: Python<'_>, ast: &Self::Ast) -> PyResult<Self> {
-        Self::from_ast(py, ast)
-    }
-
-    fn to_ast(&self, py: Python<'_>) -> Self::Ast {
-        self.to_ast(py)
-    }
-}
-
-impl FieldValueMirror for ElectronCountsAst {
-    type Ast = AstElectronCountsAst;
-
-    fn from_ast(_py: Python<'_>, ast: &Self::Ast) -> PyResult<Self> {
-        Ok(Self::from_ast(ast))
-    }
-
-    fn to_ast(&self, _py: Python<'_>) -> Self::Ast {
-        self.to_ast()
-    }
-}
-
-impl FieldValueMirror for NoncovalentBondKindAst {
-    type Ast = AstNoncovalentBondKindAst;
-
-    fn from_ast(_py: Python<'_>, ast: &Self::Ast) -> PyResult<Self> {
-        Ok(Self::from_ast(ast))
-    }
-
-    fn to_ast(&self, _py: Python<'_>) -> Self::Ast {
-        self.to_ast()
-    }
-}
-
-impl FieldValueMirror for StereoConfigurationAst {
-    type Ast = AstStereoConfigurationAst;
-
-    fn from_ast(py: Python<'_>, ast: &Self::Ast) -> PyResult<Self> {
-        Self::from_ast(py, ast)
-    }
-
-    fn to_ast(&self, py: Python<'_>) -> Self::Ast {
-        self.to_ast(py)
-    }
-}
 
 /// Render a named old/new complex-enum variant using the child objects' reprs.
 fn field_change_repr(obj: &Bound<'_, PyAny>, type_name: &str, variant: &str) -> PyResult<String> {
@@ -121,10 +30,25 @@ fn field_change_repr(obj: &Bound<'_, PyAny>, type_name: &str, variant: &str) -> 
     Ok(format!("{type_name}.{variant}(old={old}, new={new})"))
 }
 
+/// Render a named complex-enum variant from its declared field names.
+fn entity_delta_repr(
+    obj: &Bound<'_, PyAny>,
+    type_name: &str,
+    variant: &str,
+    fields: &[&str],
+) -> PyResult<String> {
+    let mut parts = Vec::with_capacity(fields.len());
+    for field in fields {
+        let value = obj.getattr(*field)?.repr()?.extract::<String>()?;
+        parts.push(format!("{field}={value}"));
+    }
+    Ok(format!("{type_name}.{variant}({})", parts.join(", ")))
+}
+
 macro_rules! field_change {
     (
         $(#[$meta:meta])*
-        $name:ident => $ast:ident {
+        $name:ident {
             $(
                 $variant:ident($value:ty)
             ),+ $(,)?
@@ -144,7 +68,7 @@ macro_rules! field_change {
         #[pymethods]
         impl $name {
             fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-                self.to_ast(py) == other.to_ast(py)
+                self.to_rust(py) == other.to_rust(py)
             }
 
             fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -160,51 +84,16 @@ macro_rules! field_change {
 
             /// Return the same field change with its old and new values exchanged.
             fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
-                into_py_variant(py, Self::from_ast(py, &self.to_ast(py).inverse())?)
+                into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
             }
         }
 
-        impl $name {
-            pub(crate) fn from_ast(py: Python<'_>, change: &$ast) -> PyResult<Self> {
-                Ok(match change {
-                    $(
-                        $ast::$variant { old, new } => Self::$variant {
-                            old: into_py_variant(
-                                py,
-                                <$value as FieldValueMirror>::from_ast(py, old)?,
-                            )?,
-                            new: into_py_variant(
-                                py,
-                                <$value as FieldValueMirror>::from_ast(py, new)?,
-                            )?,
-                        },
-                    )+
-                })
-            }
-
-            pub(crate) fn to_ast(&self, py: Python<'_>) -> $ast {
-                match self {
-                    $(
-                        Self::$variant { old, new } => $ast::$variant {
-                            old: <$value as FieldValueMirror>::to_ast(
-                                &old.bind(py).borrow(),
-                                py,
-                            ),
-                            new: <$value as FieldValueMirror>::to_ast(
-                                &new.bind(py).borrow(),
-                                py,
-                            ),
-                        },
-                    )+
-                }
-            }
-        }
     };
 }
 
 field_change! {
     /// An atom attribute change carrying the field's old and new AST values.
-    AtomFieldChange => AstAtomFieldChange {
+    AtomFieldChange {
         Element(ElementAst),
         IsotopeMass(IsotopeMassAst),
         Charge(ValueAst),
@@ -216,7 +105,7 @@ field_change! {
 
 field_change! {
     /// A covalent-bond attribute change carrying the field's old and new AST values.
-    BondFieldChange => AstBondFieldChange {
+    BondFieldChange {
         Order(ValueAst),
         Charge(ValueAst),
         Spin(SpinStateAst),
@@ -225,14 +114,14 @@ field_change! {
 
 field_change! {
     /// A dative-bond attribute change carrying the field's old and new AST values.
-    DativeBondFieldChange => AstDativeBondFieldChange {
+    DativeBondFieldChange {
         Order(ValueAst),
     }
 }
 
 field_change! {
     /// An aromatic-system attribute change carrying the field's old and new AST values.
-    AromaticSystemFieldChange => AstAromaticSystemFieldChange {
+    AromaticSystemFieldChange {
         Electrons(ElectronCountsAst),
         Charge(ValueAst),
         Spin(SpinStateAst),
@@ -241,7 +130,7 @@ field_change! {
 
 field_change! {
     /// A multicenter-bond attribute change carrying the field's old and new AST values.
-    MulticenterBondFieldChange => AstMulticenterBondFieldChange {
+    MulticenterBondFieldChange {
         Electrons(ElectronCountsAst),
         Charge(ValueAst),
         Spin(SpinStateAst),
@@ -250,22 +139,559 @@ field_change! {
 
 field_change! {
     /// A noncovalent-bond kind change carrying the field's old and new AST values.
-    NoncovalentBondFieldChange => AstNoncovalentBondFieldChange {
+    NoncovalentBondFieldChange {
         Kind(NoncovalentBondKindAst),
     }
 }
 
 field_change! {
     /// A stereo-atom configuration change carrying the field's old and new AST values.
-    StereoAtomFieldChange => AstStereoAtomFieldChange {
+    StereoAtomFieldChange {
         Configuration(StereoConfigurationAst),
     }
 }
 
 field_change! {
     /// A stereo-bond configuration change carrying the field's old and new AST values.
-    StereoBondFieldChange => AstStereoBondFieldChange {
+    StereoBondFieldChange {
         Configuration(StereoConfigurationAst),
+    }
+}
+
+impl AtomFieldChange {
+    pub(crate) fn from_rust(py: Python<'_>, change: &AstAtomFieldChange) -> PyResult<Self> {
+        Ok(match change {
+            AstAtomFieldChange::Element { old, new } => Self::Element {
+                old: into_py_variant(py, ElementAst::from_rust(old))?,
+                new: into_py_variant(py, ElementAst::from_rust(new))?,
+            },
+            AstAtomFieldChange::IsotopeMass { old, new } => Self::IsotopeMass {
+                old: into_py_variant(py, IsotopeMassAst::from_rust(old))?,
+                new: into_py_variant(py, IsotopeMassAst::from_rust(new))?,
+            },
+            AstAtomFieldChange::Charge { old, new } => Self::Charge {
+                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
+                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+            },
+            AstAtomFieldChange::ImplicitHydrogens { old, new } => Self::ImplicitHydrogens {
+                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
+                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+            },
+            AstAtomFieldChange::LonePairs { old, new } => Self::LonePairs {
+                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
+                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+            },
+            AstAtomFieldChange::Spin { old, new } => Self::Spin {
+                old: Py::new(py, SpinStateAst::from_rust(py, old)?)?,
+                new: Py::new(py, SpinStateAst::from_rust(py, new)?)?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstAtomFieldChange {
+        match self {
+            Self::Element { old, new } => AstAtomFieldChange::Element {
+                old: old.bind(py).borrow().to_rust(),
+                new: new.bind(py).borrow().to_rust(),
+            },
+            Self::IsotopeMass { old, new } => AstAtomFieldChange::IsotopeMass {
+                old: old.bind(py).borrow().to_rust(),
+                new: new.bind(py).borrow().to_rust(),
+            },
+            Self::Charge { old, new } => AstAtomFieldChange::Charge {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+            Self::ImplicitHydrogens { old, new } => AstAtomFieldChange::ImplicitHydrogens {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+            Self::LonePairs { old, new } => AstAtomFieldChange::LonePairs {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+            Self::Spin { old, new } => AstAtomFieldChange::Spin {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+        }
+    }
+}
+
+impl BondFieldChange {
+    pub(crate) fn from_rust(py: Python<'_>, change: &AstBondFieldChange) -> PyResult<Self> {
+        Ok(match change {
+            AstBondFieldChange::Order { old, new } => Self::Order {
+                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
+                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+            },
+            AstBondFieldChange::Charge { old, new } => Self::Charge {
+                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
+                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+            },
+            AstBondFieldChange::Spin { old, new } => Self::Spin {
+                old: Py::new(py, SpinStateAst::from_rust(py, old)?)?,
+                new: Py::new(py, SpinStateAst::from_rust(py, new)?)?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstBondFieldChange {
+        match self {
+            Self::Order { old, new } => AstBondFieldChange::Order {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+            Self::Charge { old, new } => AstBondFieldChange::Charge {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+            Self::Spin { old, new } => AstBondFieldChange::Spin {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+        }
+    }
+}
+
+impl DativeBondFieldChange {
+    pub(crate) fn from_rust(py: Python<'_>, change: &AstDativeBondFieldChange) -> PyResult<Self> {
+        Ok(match change {
+            AstDativeBondFieldChange::Order { old, new } => Self::Order {
+                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
+                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstDativeBondFieldChange {
+        match self {
+            Self::Order { old, new } => AstDativeBondFieldChange::Order {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+        }
+    }
+}
+
+impl AromaticSystemFieldChange {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        change: &AstAromaticSystemFieldChange,
+    ) -> PyResult<Self> {
+        Ok(match change {
+            AstAromaticSystemFieldChange::Electrons { old, new } => Self::Electrons {
+                old: into_py_variant(py, ElectronCountsAst::from_rust(old))?,
+                new: into_py_variant(py, ElectronCountsAst::from_rust(new))?,
+            },
+            AstAromaticSystemFieldChange::Charge { old, new } => Self::Charge {
+                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
+                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+            },
+            AstAromaticSystemFieldChange::Spin { old, new } => Self::Spin {
+                old: Py::new(py, SpinStateAst::from_rust(py, old)?)?,
+                new: Py::new(py, SpinStateAst::from_rust(py, new)?)?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstAromaticSystemFieldChange {
+        match self {
+            Self::Electrons { old, new } => AstAromaticSystemFieldChange::Electrons {
+                old: old.bind(py).borrow().to_rust(),
+                new: new.bind(py).borrow().to_rust(),
+            },
+            Self::Charge { old, new } => AstAromaticSystemFieldChange::Charge {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+            Self::Spin { old, new } => AstAromaticSystemFieldChange::Spin {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+        }
+    }
+}
+
+impl MulticenterBondFieldChange {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        change: &AstMulticenterBondFieldChange,
+    ) -> PyResult<Self> {
+        Ok(match change {
+            AstMulticenterBondFieldChange::Electrons { old, new } => Self::Electrons {
+                old: into_py_variant(py, ElectronCountsAst::from_rust(old))?,
+                new: into_py_variant(py, ElectronCountsAst::from_rust(new))?,
+            },
+            AstMulticenterBondFieldChange::Charge { old, new } => Self::Charge {
+                old: into_py_variant(py, ValueAst::from_rust(py, old)?)?,
+                new: into_py_variant(py, ValueAst::from_rust(py, new)?)?,
+            },
+            AstMulticenterBondFieldChange::Spin { old, new } => Self::Spin {
+                old: Py::new(py, SpinStateAst::from_rust(py, old)?)?,
+                new: Py::new(py, SpinStateAst::from_rust(py, new)?)?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstMulticenterBondFieldChange {
+        match self {
+            Self::Electrons { old, new } => AstMulticenterBondFieldChange::Electrons {
+                old: old.bind(py).borrow().to_rust(),
+                new: new.bind(py).borrow().to_rust(),
+            },
+            Self::Charge { old, new } => AstMulticenterBondFieldChange::Charge {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+            Self::Spin { old, new } => AstMulticenterBondFieldChange::Spin {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+        }
+    }
+}
+
+impl NoncovalentBondFieldChange {
+    pub(crate) fn from_rust(
+        py: Python<'_>,
+        change: &AstNoncovalentBondFieldChange,
+    ) -> PyResult<Self> {
+        Ok(match change {
+            AstNoncovalentBondFieldChange::Kind { old, new } => Self::Kind {
+                old: into_py_variant(py, NoncovalentBondKindAst::from_rust(old))?,
+                new: into_py_variant(py, NoncovalentBondKindAst::from_rust(new))?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstNoncovalentBondFieldChange {
+        match self {
+            Self::Kind { old, new } => AstNoncovalentBondFieldChange::Kind {
+                old: old.bind(py).borrow().to_rust(),
+                new: new.bind(py).borrow().to_rust(),
+            },
+        }
+    }
+}
+
+impl StereoAtomFieldChange {
+    pub(crate) fn from_rust(py: Python<'_>, change: &AstStereoAtomFieldChange) -> PyResult<Self> {
+        Ok(match change {
+            AstStereoAtomFieldChange::Configuration { old, new } => Self::Configuration {
+                old: into_py_variant(py, StereoConfigurationAst::from_rust(py, old)?)?,
+                new: into_py_variant(py, StereoConfigurationAst::from_rust(py, new)?)?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoAtomFieldChange {
+        match self {
+            Self::Configuration { old, new } => AstStereoAtomFieldChange::Configuration {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+        }
+    }
+}
+
+impl StereoBondFieldChange {
+    pub(crate) fn from_rust(py: Python<'_>, change: &AstStereoBondFieldChange) -> PyResult<Self> {
+        Ok(match change {
+            AstStereoBondFieldChange::Configuration { old, new } => Self::Configuration {
+                old: into_py_variant(py, StereoConfigurationAst::from_rust(py, old)?)?,
+                new: into_py_variant(py, StereoConfigurationAst::from_rust(py, new)?)?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoBondFieldChange {
+        match self {
+            Self::Configuration { old, new } => AstStereoBondFieldChange::Configuration {
+                old: old.bind(py).borrow().to_rust(py),
+                new: new.bind(py).borrow().to_rust(py),
+            },
+        }
+    }
+}
+
+pub struct AtomDeltaAstValue(Py<AtomAst>);
+
+impl FromPyObject<'_, '_> for AtomDeltaAstValue {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
+        let source = obj.extract::<PyRef<'_, AtomAst>>()?;
+        let ast = source.inner().clone();
+        drop(source);
+        Ok(Self(Py::new(obj.py(), AtomAst::from_inner(ast))?))
+    }
+}
+
+impl<'py> IntoPyObject<'py> for &AtomDeltaAstValue {
+    type Target = AtomAst;
+    type Output = Bound<'py, AtomAst>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        Ok(self.0.clone_ref(py).into_bound(py))
+    }
+}
+
+impl AtomDeltaAstValue {
+    fn from_rust(py: Python<'_>, ast: &AstAtomAst) -> PyResult<Self> {
+        Ok(Self(Py::new(py, AtomAst::from_inner(ast.clone()))?))
+    }
+
+    fn to_rust(&self, py: Python<'_>) -> AstAtomAst {
+        self.0.bind(py).borrow().inner().clone()
+    }
+}
+
+/// A resolved edit to one atom.
+#[pyclass]
+pub enum AtomDelta {
+    Add {
+        id: u32,
+        ast: AtomDeltaAstValue,
+    },
+    Remove {
+        id: u32,
+        ast: AtomDeltaAstValue,
+    },
+    ModifyField {
+        id: u32,
+        change: Py<AtomFieldChange>,
+    },
+    ModifyConstraint {
+        id: u32,
+        old: Option<Py<AtomConstraintAst>>,
+        new: Option<Py<AtomConstraintAst>>,
+    },
+}
+
+#[pymethods]
+impl AtomDelta {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_rust(py) == other.to_rust(py)
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, fields): (&str, &[&str]) = match &*slf.bind(py).borrow() {
+            Self::Add { .. } => ("Add", &["id", "ast"]),
+            Self::Remove { .. } => ("Remove", &["id", "ast"]),
+            Self::ModifyField { .. } => ("ModifyField", &["id", "change"]),
+            Self::ModifyConstraint { .. } => ("ModifyConstraint", &["id", "old", "new"]),
+        };
+        entity_delta_repr(slf.bind(py).as_any(), "AtomDelta", variant, fields)
+    }
+
+    /// Return the inverse resolved edit.
+    fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
+        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+    }
+}
+
+impl AtomDelta {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &AstAtomDelta) -> PyResult<Self> {
+        Ok(match delta {
+            AstAtomDelta::Add { id, ast } => Self::Add {
+                id: id.0,
+                ast: AtomDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstAtomDelta::Remove { id, ast } => Self::Remove {
+                id: id.0,
+                ast: AtomDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstAtomDelta::ModifyField { id, change } => Self::ModifyField {
+                id: id.0,
+                change: into_py_variant(py, AtomFieldChange::from_rust(py, change)?)?,
+            },
+            AstAtomDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id: id.0,
+                old: old
+                    .as_ref()
+                    .map(|constraint| {
+                        into_py_variant(py, AtomConstraintAst::from_rust(py, constraint)?)
+                    })
+                    .transpose()?,
+                new: new
+                    .as_ref()
+                    .map(|constraint| {
+                        into_py_variant(py, AtomConstraintAst::from_rust(py, constraint)?)
+                    })
+                    .transpose()?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstAtomDelta {
+        match self {
+            Self::Add { id, ast } => AstAtomDelta::Add {
+                id: AstAtomId(*id),
+                ast: ast.to_rust(py),
+            },
+            Self::Remove { id, ast } => AstAtomDelta::Remove {
+                id: AstAtomId(*id),
+                ast: ast.to_rust(py),
+            },
+            Self::ModifyField { id, change } => AstAtomDelta::ModifyField {
+                id: AstAtomId(*id),
+                change: change.bind(py).borrow().to_rust(py),
+            },
+            Self::ModifyConstraint { id, old, new } => AstAtomDelta::ModifyConstraint {
+                id: AstAtomId(*id),
+                old: old
+                    .as_ref()
+                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                new: new
+                    .as_ref()
+                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+            },
+        }
+    }
+}
+
+pub struct BondDeltaAstValue(Py<BondAst>);
+
+impl FromPyObject<'_, '_> for BondDeltaAstValue {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
+        let source = obj.extract::<PyRef<'_, BondAst>>()?;
+        let ast = source.inner().clone();
+        drop(source);
+        Ok(Self(Py::new(obj.py(), BondAst::from_inner(ast))?))
+    }
+}
+
+impl<'py> IntoPyObject<'py> for &BondDeltaAstValue {
+    type Target = BondAst;
+    type Output = Bound<'py, BondAst>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        Ok(self.0.clone_ref(py).into_bound(py))
+    }
+}
+
+impl BondDeltaAstValue {
+    fn from_rust(py: Python<'_>, ast: &AstBondAst) -> PyResult<Self> {
+        Ok(Self(Py::new(py, BondAst::from_inner(ast.clone()))?))
+    }
+
+    fn to_rust(&self, py: Python<'_>) -> AstBondAst {
+        self.0.bind(py).borrow().inner().clone()
+    }
+}
+
+/// A resolved edit to one covalent bond.
+#[pyclass]
+pub enum BondDelta {
+    Add {
+        id: u32,
+        atoms: (u32, u32),
+        ast: BondDeltaAstValue,
+    },
+    Remove {
+        id: u32,
+        atoms: (u32, u32),
+        ast: BondDeltaAstValue,
+    },
+    ModifyField {
+        id: u32,
+        change: Py<BondFieldChange>,
+    },
+    ModifyConstraint {
+        id: u32,
+        old: Option<Py<BondConstraintAst>>,
+        new: Option<Py<BondConstraintAst>>,
+    },
+}
+
+#[pymethods]
+impl BondDelta {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_rust(py) == other.to_rust(py)
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, fields): (&str, &[&str]) = match &*slf.bind(py).borrow() {
+            Self::Add { .. } => ("Add", &["id", "atoms", "ast"]),
+            Self::Remove { .. } => ("Remove", &["id", "atoms", "ast"]),
+            Self::ModifyField { .. } => ("ModifyField", &["id", "change"]),
+            Self::ModifyConstraint { .. } => ("ModifyConstraint", &["id", "old", "new"]),
+        };
+        entity_delta_repr(slf.bind(py).as_any(), "BondDelta", variant, fields)
+    }
+
+    /// Return the inverse resolved edit.
+    fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
+        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+    }
+}
+
+impl BondDelta {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &AstBondDelta) -> PyResult<Self> {
+        Ok(match delta {
+            AstBondDelta::Add { id, atoms, ast } => Self::Add {
+                id: id.0,
+                atoms: (atoms[0].0, atoms[1].0),
+                ast: BondDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstBondDelta::Remove { id, atoms, ast } => Self::Remove {
+                id: id.0,
+                atoms: (atoms[0].0, atoms[1].0),
+                ast: BondDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstBondDelta::ModifyField { id, change } => Self::ModifyField {
+                id: id.0,
+                change: into_py_variant(py, BondFieldChange::from_rust(py, change)?)?,
+            },
+            AstBondDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id: id.0,
+                old: old
+                    .as_ref()
+                    .map(|constraint| {
+                        into_py_variant(py, BondConstraintAst::from_rust(py, constraint)?)
+                    })
+                    .transpose()?,
+                new: new
+                    .as_ref()
+                    .map(|constraint| {
+                        into_py_variant(py, BondConstraintAst::from_rust(py, constraint)?)
+                    })
+                    .transpose()?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstBondDelta {
+        match self {
+            Self::Add { id, atoms, ast } => AstBondDelta::Add {
+                id: AstBondId(*id),
+                atoms: [AstAtomId(atoms.0), AstAtomId(atoms.1)],
+                ast: ast.to_rust(py),
+            },
+            Self::Remove { id, atoms, ast } => AstBondDelta::Remove {
+                id: AstBondId(*id),
+                atoms: [AstAtomId(atoms.0), AstAtomId(atoms.1)],
+                ast: ast.to_rust(py),
+            },
+            Self::ModifyField { id, change } => AstBondDelta::ModifyField {
+                id: AstBondId(*id),
+                change: change.bind(py).borrow().to_rust(py),
+            },
+            Self::ModifyConstraint { id, old, new } => AstBondDelta::ModifyConstraint {
+                id: AstBondId(*id),
+                old: old
+                    .as_ref()
+                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                new: new
+                    .as_ref()
+                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+            },
+        }
     }
 }
 
@@ -273,17 +699,22 @@ field_change! {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        NoncovalentBondKind as AstNoncovalentBondKind, SpinStateAst as AstSpinStateAst,
-        StereoCosetAst as AstStereoCosetAst, StereoKind as AstStereoKind, ValueAst as AstValueAst,
+        AtomConstraintAst as AstAtomConstraintAst, BondConstraintAst as AstBondConstraintAst,
+        BooleanAst as AstBooleanAst, ElectronCountsAst as AstElectronCountsAst,
+        ElementAst as AstElementAst, IsotopeMassAst as AstIsotopeMassAst,
+        NoncovalentBondKind as AstNoncovalentBondKind,
+        NoncovalentBondKindAst as AstNoncovalentBondKindAst, SpinStateAst as AstSpinStateAst,
+        StereoConfigurationAst as AstStereoConfigurationAst, StereoCosetAst as AstStereoCosetAst,
+        StereoKind as AstStereoKind, ValueAst as AstValueAst,
     };
-    use umol_chem::element::Element;
+    use umol_chem::element::Element as ChemElement;
 
     use super::*;
 
     #[rstest]
     #[case::element(AstAtomFieldChange::Element {
-        old: AstElementAst::Lit(Element::C),
-        new: AstElementAst::Lit(Element::N),
+        old: AstElementAst::Lit(ChemElement::C),
+        new: AstElementAst::Lit(ChemElement::N),
     })]
     #[case::isotope_mass(AstAtomFieldChange::IsotopeMass {
         old: AstIsotopeMassAst::Lit(12),
@@ -314,7 +745,7 @@ mod tests {
     fn test_atom_field_change_roundtrip(#[case] change: AstAtomFieldChange) {
         Python::attach(|py| {
             assert_eq!(
-                AtomFieldChange::from_ast(py, &change).unwrap().to_ast(py),
+                AtomFieldChange::from_rust(py, &change).unwrap().to_rust(py),
                 change
             );
         });
@@ -349,8 +780,8 @@ mod tests {
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
-            let lhs = AtomFieldChange::from_ast(py, &lhs).unwrap();
-            let rhs = AtomFieldChange::from_ast(py, &rhs).unwrap();
+            let lhs = AtomFieldChange::from_rust(py, &lhs).unwrap();
+            let rhs = AtomFieldChange::from_rust(py, &rhs).unwrap();
             assert_eq!(lhs.__eq__(&rhs, py), expected);
         });
     }
@@ -358,8 +789,8 @@ mod tests {
     #[rstest]
     #[case::element(
         AstAtomFieldChange::Element {
-            old: AstElementAst::Lit(Element::C),
-            new: AstElementAst::Lit(Element::N),
+            old: AstElementAst::Lit(ChemElement::C),
+            new: AstElementAst::Lit(ChemElement::N),
         },
         "ElementAst.Lit(Element('C'))",
         "ElementAst.Lit(Element('N'))",
@@ -424,7 +855,7 @@ mod tests {
     ) {
         Python::attach(|py| {
             let change =
-                into_py_variant(py, AtomFieldChange::from_ast(py, &change).unwrap()).unwrap();
+                into_py_variant(py, AtomFieldChange::from_rust(py, &change).unwrap()).unwrap();
             let bound = change.bind(py).as_any();
             assert_eq!(
                 bound
@@ -452,8 +883,8 @@ mod tests {
 
     #[rstest]
     #[case::element(AstAtomFieldChange::Element {
-        old: AstElementAst::Lit(Element::C),
-        new: AstElementAst::Lit(Element::N),
+        old: AstElementAst::Lit(ChemElement::C),
+        new: AstElementAst::Lit(ChemElement::N),
     })]
     #[case::isotope_mass(AstAtomFieldChange::IsotopeMass {
         old: AstIsotopeMassAst::Lit(12),
@@ -483,14 +914,14 @@ mod tests {
     })]
     fn test_atom_field_change_inverse(#[case] change: AstAtomFieldChange) {
         Python::attach(|py| {
-            let mirror = AtomFieldChange::from_ast(py, &change).unwrap();
-            let inverse = mirror.inverse(py).unwrap();
+            let binding = AtomFieldChange::from_rust(py, &change).unwrap();
+            let inverse = binding.inverse(py).unwrap();
             assert_eq!(
-                inverse.bind(py).borrow().to_ast(py),
+                inverse.bind(py).borrow().to_rust(py),
                 change.clone().inverse()
             );
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
-            assert_eq!(roundtrip.bind(py).borrow().to_ast(py), change);
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), change);
         });
     }
 
@@ -516,7 +947,7 @@ mod tests {
     fn test_bond_field_change_roundtrip(#[case] change: AstBondFieldChange) {
         Python::attach(|py| {
             assert_eq!(
-                BondFieldChange::from_ast(py, &change).unwrap().to_ast(py),
+                BondFieldChange::from_rust(py, &change).unwrap().to_rust(py),
                 change
             );
         });
@@ -543,14 +974,14 @@ mod tests {
     })]
     fn test_bond_field_change_inverse(#[case] change: AstBondFieldChange) {
         Python::attach(|py| {
-            let mirror = BondFieldChange::from_ast(py, &change).unwrap();
-            let inverse = mirror.inverse(py).unwrap();
+            let binding = BondFieldChange::from_rust(py, &change).unwrap();
+            let inverse = binding.inverse(py).unwrap();
             assert_eq!(
-                inverse.bind(py).borrow().to_ast(py),
+                inverse.bind(py).borrow().to_rust(py),
                 change.clone().inverse()
             );
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
-            assert_eq!(roundtrip.bind(py).borrow().to_ast(py), change);
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), change);
         });
     }
 
@@ -562,9 +993,9 @@ mod tests {
     fn test_dative_bond_field_change_roundtrip(#[case] change: AstDativeBondFieldChange) {
         Python::attach(|py| {
             assert_eq!(
-                DativeBondFieldChange::from_ast(py, &change)
+                DativeBondFieldChange::from_rust(py, &change)
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 change
             );
         });
@@ -577,14 +1008,14 @@ mod tests {
     })]
     fn test_dative_bond_field_change_inverse(#[case] change: AstDativeBondFieldChange) {
         Python::attach(|py| {
-            let mirror = DativeBondFieldChange::from_ast(py, &change).unwrap();
-            let inverse = mirror.inverse(py).unwrap();
+            let binding = DativeBondFieldChange::from_rust(py, &change).unwrap();
+            let inverse = binding.inverse(py).unwrap();
             assert_eq!(
-                inverse.bind(py).borrow().to_ast(py),
+                inverse.bind(py).borrow().to_rust(py),
                 change.clone().inverse()
             );
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
-            assert_eq!(roundtrip.bind(py).borrow().to_ast(py), change);
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), change);
         });
     }
 
@@ -610,9 +1041,9 @@ mod tests {
     fn test_aromatic_system_field_change_roundtrip(#[case] change: AstAromaticSystemFieldChange) {
         Python::attach(|py| {
             assert_eq!(
-                AromaticSystemFieldChange::from_ast(py, &change)
+                AromaticSystemFieldChange::from_rust(py, &change)
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 change
             );
         });
@@ -639,14 +1070,14 @@ mod tests {
     })]
     fn test_aromatic_system_field_change_inverse(#[case] change: AstAromaticSystemFieldChange) {
         Python::attach(|py| {
-            let mirror = AromaticSystemFieldChange::from_ast(py, &change).unwrap();
-            let inverse = mirror.inverse(py).unwrap();
+            let binding = AromaticSystemFieldChange::from_rust(py, &change).unwrap();
+            let inverse = binding.inverse(py).unwrap();
             assert_eq!(
-                inverse.bind(py).borrow().to_ast(py),
+                inverse.bind(py).borrow().to_rust(py),
                 change.clone().inverse()
             );
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
-            assert_eq!(roundtrip.bind(py).borrow().to_ast(py), change);
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), change);
         });
     }
 
@@ -672,9 +1103,9 @@ mod tests {
     fn test_multicenter_bond_field_change_roundtrip(#[case] change: AstMulticenterBondFieldChange) {
         Python::attach(|py| {
             assert_eq!(
-                MulticenterBondFieldChange::from_ast(py, &change)
+                MulticenterBondFieldChange::from_rust(py, &change)
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 change
             );
         });
@@ -701,14 +1132,14 @@ mod tests {
     })]
     fn test_multicenter_bond_field_change_inverse(#[case] change: AstMulticenterBondFieldChange) {
         Python::attach(|py| {
-            let mirror = MulticenterBondFieldChange::from_ast(py, &change).unwrap();
-            let inverse = mirror.inverse(py).unwrap();
+            let binding = MulticenterBondFieldChange::from_rust(py, &change).unwrap();
+            let inverse = binding.inverse(py).unwrap();
             assert_eq!(
-                inverse.bind(py).borrow().to_ast(py),
+                inverse.bind(py).borrow().to_rust(py),
                 change.clone().inverse()
             );
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
-            assert_eq!(roundtrip.bind(py).borrow().to_ast(py), change);
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), change);
         });
     }
 
@@ -720,9 +1151,9 @@ mod tests {
     fn test_noncovalent_bond_field_change_roundtrip(#[case] change: AstNoncovalentBondFieldChange) {
         Python::attach(|py| {
             assert_eq!(
-                NoncovalentBondFieldChange::from_ast(py, &change)
+                NoncovalentBondFieldChange::from_rust(py, &change)
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 change
             );
         });
@@ -735,14 +1166,14 @@ mod tests {
     })]
     fn test_noncovalent_bond_field_change_inverse(#[case] change: AstNoncovalentBondFieldChange) {
         Python::attach(|py| {
-            let mirror = NoncovalentBondFieldChange::from_ast(py, &change).unwrap();
-            let inverse = mirror.inverse(py).unwrap();
+            let binding = NoncovalentBondFieldChange::from_rust(py, &change).unwrap();
+            let inverse = binding.inverse(py).unwrap();
             assert_eq!(
-                inverse.bind(py).borrow().to_ast(py),
+                inverse.bind(py).borrow().to_rust(py),
                 change.clone().inverse()
             );
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
-            assert_eq!(roundtrip.bind(py).borrow().to_ast(py), change);
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), change);
         });
     }
 
@@ -767,9 +1198,9 @@ mod tests {
     fn test_stereo_atom_field_change_roundtrip(#[case] change: AstStereoAtomFieldChange) {
         Python::attach(|py| {
             assert_eq!(
-                StereoAtomFieldChange::from_ast(py, &change)
+                StereoAtomFieldChange::from_rust(py, &change)
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 change
             );
         });
@@ -816,8 +1247,8 @@ mod tests {
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
-            let lhs = StereoAtomFieldChange::from_ast(py, &lhs).unwrap();
-            let rhs = StereoAtomFieldChange::from_ast(py, &rhs).unwrap();
+            let lhs = StereoAtomFieldChange::from_rust(py, &lhs).unwrap();
+            let rhs = StereoAtomFieldChange::from_rust(py, &rhs).unwrap();
             assert_eq!(lhs.__eq__(&rhs, py), expected);
         });
     }
@@ -858,7 +1289,8 @@ mod tests {
     ) {
         Python::attach(|py| {
             let change =
-                into_py_variant(py, StereoAtomFieldChange::from_ast(py, &change).unwrap()).unwrap();
+                into_py_variant(py, StereoAtomFieldChange::from_rust(py, &change).unwrap())
+                    .unwrap();
             let bound = change.bind(py).as_any();
             assert_eq!(
                 bound
@@ -904,14 +1336,14 @@ mod tests {
     })]
     fn test_stereo_atom_field_change_inverse(#[case] change: AstStereoAtomFieldChange) {
         Python::attach(|py| {
-            let mirror = StereoAtomFieldChange::from_ast(py, &change).unwrap();
-            let inverse = mirror.inverse(py).unwrap();
+            let binding = StereoAtomFieldChange::from_rust(py, &change).unwrap();
+            let inverse = binding.inverse(py).unwrap();
             assert_eq!(
-                inverse.bind(py).borrow().to_ast(py),
+                inverse.bind(py).borrow().to_rust(py),
                 change.clone().inverse()
             );
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
-            assert_eq!(roundtrip.bind(py).borrow().to_ast(py), change);
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), change);
         });
     }
 
@@ -936,9 +1368,9 @@ mod tests {
     fn test_stereo_bond_field_change_roundtrip(#[case] change: AstStereoBondFieldChange) {
         Python::attach(|py| {
             assert_eq!(
-                StereoBondFieldChange::from_ast(py, &change)
+                StereoBondFieldChange::from_rust(py, &change)
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 change
             );
         });
@@ -985,8 +1417,8 @@ mod tests {
         #[case] expected: bool,
     ) {
         Python::attach(|py| {
-            let lhs = StereoBondFieldChange::from_ast(py, &lhs).unwrap();
-            let rhs = StereoBondFieldChange::from_ast(py, &rhs).unwrap();
+            let lhs = StereoBondFieldChange::from_rust(py, &lhs).unwrap();
+            let rhs = StereoBondFieldChange::from_rust(py, &rhs).unwrap();
             assert_eq!(lhs.__eq__(&rhs, py), expected);
         });
     }
@@ -1027,7 +1459,8 @@ mod tests {
     ) {
         Python::attach(|py| {
             let change =
-                into_py_variant(py, StereoBondFieldChange::from_ast(py, &change).unwrap()).unwrap();
+                into_py_variant(py, StereoBondFieldChange::from_rust(py, &change).unwrap())
+                    .unwrap();
             let bound = change.bind(py).as_any();
             assert_eq!(
                 bound
@@ -1073,14 +1506,354 @@ mod tests {
     })]
     fn test_stereo_bond_field_change_inverse(#[case] change: AstStereoBondFieldChange) {
         Python::attach(|py| {
-            let mirror = StereoBondFieldChange::from_ast(py, &change).unwrap();
-            let inverse = mirror.inverse(py).unwrap();
+            let binding = StereoBondFieldChange::from_rust(py, &change).unwrap();
+            let inverse = binding.inverse(py).unwrap();
             assert_eq!(
-                inverse.bind(py).borrow().to_ast(py),
+                inverse.bind(py).borrow().to_rust(py),
                 change.clone().inverse()
             );
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
-            assert_eq!(roundtrip.bind(py).borrow().to_ast(py), change);
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), change);
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstAtomDelta::Add {
+        id: AstAtomId(3),
+        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    })]
+    #[case::remove(AstAtomDelta::Remove {
+        id: AstAtomId(3),
+        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    })]
+    #[case::modify_field(AstAtomDelta::ModifyField {
+        id: AstAtomId(3),
+        change: AstAtomFieldChange::Charge {
+            old: AstValueAst::Lit(0),
+            new: AstValueAst::Lit(-1),
+        },
+    })]
+    #[case::constraint_added(AstAtomDelta::ModifyConstraint {
+        id: AstAtomId(3),
+        old: None,
+        new: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+    })]
+    #[case::constraint_removed(AstAtomDelta::ModifyConstraint {
+        id: AstAtomId(3),
+        old: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+        new: None,
+    })]
+    #[case::constraint_modified(AstAtomDelta::ModifyConstraint {
+        id: AstAtomId(3),
+        old: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(3))),
+        new: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+    })]
+    fn test_atom_delta_roundtrip(#[case] delta: AstAtomDelta) {
+        Python::attach(|py| {
+            assert_eq!(AtomDelta::from_rust(py, &delta).unwrap().to_rust(py), delta);
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        },
+        AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        },
+        true,
+    )]
+    #[case::different(
+        AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        },
+        AstAtomDelta::Add {
+            id: AstAtomId(4),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        },
+        false,
+    )]
+    fn test_atom_delta_eq(
+        #[case] lhs: AstAtomDelta,
+        #[case] rhs: AstAtomDelta,
+        #[case] expected: bool,
+    ) {
+        Python::attach(|py| {
+            let lhs = AtomDelta::from_rust(py, &lhs).unwrap();
+            let rhs = AtomDelta::from_rust(py, &rhs).unwrap();
+            assert_eq!(lhs.__eq__(&rhs, py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::add(
+        AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        },
+        "AtomDelta.Add(id=3, ast=AtomAst.parse('C'))",
+    )]
+    #[case::remove(
+        AstAtomDelta::Remove {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        },
+        "AtomDelta.Remove(id=3, ast=AtomAst.parse('C'))",
+    )]
+    #[case::modify_field(
+        AstAtomDelta::ModifyField {
+            id: AstAtomId(3),
+            change: AstAtomFieldChange::Charge {
+                old: AstValueAst::Lit(0),
+                new: AstValueAst::Lit(-1),
+            },
+        },
+        "AtomDelta.ModifyField(id=3, change=AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
+    )]
+    #[case::modify_constraint(
+        AstAtomDelta::ModifyConstraint {
+            id: AstAtomId(3),
+            old: None,
+            new: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+        },
+        "AtomDelta.ModifyConstraint(id=3, old=None, new=AtomConstraintAst.Valence(ValueAst.Lit(4)))",
+    )]
+    fn test_atom_delta_repr(#[case] delta: AstAtomDelta, #[case] expected: &str) {
+        Python::attach(|py| {
+            let delta = into_py_variant(py, AtomDelta::from_rust(py, &delta).unwrap()).unwrap();
+            assert_eq!(
+                delta
+                    .bind(py)
+                    .as_any()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstAtomDelta::Add {
+        id: AstAtomId(3),
+        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    })]
+    #[case::remove(AstAtomDelta::Remove {
+        id: AstAtomId(3),
+        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    })]
+    #[case::modify_field(AstAtomDelta::ModifyField {
+        id: AstAtomId(3),
+        change: AstAtomFieldChange::Charge {
+            old: AstValueAst::Lit(0),
+            new: AstValueAst::Lit(-1),
+        },
+    })]
+    #[case::constraint_added(AstAtomDelta::ModifyConstraint {
+        id: AstAtomId(3),
+        old: None,
+        new: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+    })]
+    #[case::constraint_removed(AstAtomDelta::ModifyConstraint {
+        id: AstAtomId(3),
+        old: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+        new: None,
+    })]
+    #[case::constraint_modified(AstAtomDelta::ModifyConstraint {
+        id: AstAtomId(3),
+        old: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(3))),
+        new: Some(AstAtomConstraintAst::Valence(AstValueAst::Lit(4))),
+    })]
+    fn test_atom_delta_inverse(#[case] delta: AstAtomDelta) {
+        Python::attach(|py| {
+            let binding = AtomDelta::from_rust(py, &delta).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py),
+                delta.clone().inverse()
+            );
+            let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstBondDelta::Add {
+        id: AstBondId(2),
+        atoms: [AstAtomId(5), AstAtomId(1)],
+        ast: AstBondAst::new(AstValueAst::Lit(1)),
+    })]
+    #[case::remove(AstBondDelta::Remove {
+        id: AstBondId(2),
+        atoms: [AstAtomId(5), AstAtomId(1)],
+        ast: AstBondAst::new(AstValueAst::Lit(1)),
+    })]
+    #[case::modify_field(AstBondDelta::ModifyField {
+        id: AstBondId(2),
+        change: AstBondFieldChange::Order {
+            old: AstValueAst::Lit(1),
+            new: AstValueAst::Lit(2),
+        },
+    })]
+    #[case::constraint_added(AstBondDelta::ModifyConstraint {
+        id: AstBondId(2),
+        old: None,
+        new: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    })]
+    #[case::constraint_removed(AstBondDelta::ModifyConstraint {
+        id: AstBondId(2),
+        old: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+        new: None,
+    })]
+    #[case::constraint_modified(AstBondDelta::ModifyConstraint {
+        id: AstBondId(2),
+        old: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(false))),
+        new: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    })]
+    fn test_bond_delta_roundtrip(#[case] delta: AstBondDelta) {
+        Python::attach(|py| {
+            assert_eq!(BondDelta::from_rust(py, &delta).unwrap().to_rust(py), delta);
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        AstBondDelta::Add {
+            id: AstBondId(2),
+            atoms: [AstAtomId(5), AstAtomId(1)],
+            ast: AstBondAst::new(AstValueAst::Lit(1)),
+        },
+        AstBondDelta::Add {
+            id: AstBondId(2),
+            atoms: [AstAtomId(5), AstAtomId(1)],
+            ast: AstBondAst::new(AstValueAst::Lit(1)),
+        },
+        true,
+    )]
+    #[case::different_order(
+        AstBondDelta::Add {
+            id: AstBondId(2),
+            atoms: [AstAtomId(5), AstAtomId(1)],
+            ast: AstBondAst::new(AstValueAst::Lit(1)),
+        },
+        AstBondDelta::Add {
+            id: AstBondId(2),
+            atoms: [AstAtomId(1), AstAtomId(5)],
+            ast: AstBondAst::new(AstValueAst::Lit(1)),
+        },
+        false,
+    )]
+    fn test_bond_delta_eq(
+        #[case] lhs: AstBondDelta,
+        #[case] rhs: AstBondDelta,
+        #[case] expected: bool,
+    ) {
+        Python::attach(|py| {
+            let lhs = BondDelta::from_rust(py, &lhs).unwrap();
+            let rhs = BondDelta::from_rust(py, &rhs).unwrap();
+            assert_eq!(lhs.__eq__(&rhs, py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::add(
+        AstBondDelta::Add {
+            id: AstBondId(2),
+            atoms: [AstAtomId(5), AstAtomId(1)],
+            ast: AstBondAst::new(AstValueAst::Lit(1)),
+        },
+        "BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst.parse('1'))",
+    )]
+    #[case::remove(
+        AstBondDelta::Remove {
+            id: AstBondId(2),
+            atoms: [AstAtomId(5), AstAtomId(1)],
+            ast: AstBondAst::new(AstValueAst::Lit(1)),
+        },
+        "BondDelta.Remove(id=2, atoms=(5, 1), ast=BondAst.parse('1'))",
+    )]
+    #[case::modify_field(
+        AstBondDelta::ModifyField {
+            id: AstBondId(2),
+            change: AstBondFieldChange::Order {
+                old: AstValueAst::Lit(1),
+                new: AstValueAst::Lit(2),
+            },
+        },
+        "BondDelta.ModifyField(id=2, change=BondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2)))",
+    )]
+    #[case::modify_constraint(
+        AstBondDelta::ModifyConstraint {
+            id: AstBondId(2),
+            old: None,
+            new: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+        },
+        "BondDelta.ModifyConstraint(id=2, old=None, new=BondConstraintAst.Aromatic(BooleanAst.Lit(True)))",
+    )]
+    fn test_bond_delta_repr(#[case] delta: AstBondDelta, #[case] expected: &str) {
+        Python::attach(|py| {
+            let delta = into_py_variant(py, BondDelta::from_rust(py, &delta).unwrap()).unwrap();
+            assert_eq!(
+                delta
+                    .bind(py)
+                    .as_any()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstBondDelta::Add {
+        id: AstBondId(2),
+        atoms: [AstAtomId(5), AstAtomId(1)],
+        ast: AstBondAst::new(AstValueAst::Lit(1)),
+    })]
+    #[case::remove(AstBondDelta::Remove {
+        id: AstBondId(2),
+        atoms: [AstAtomId(5), AstAtomId(1)],
+        ast: AstBondAst::new(AstValueAst::Lit(1)),
+    })]
+    #[case::modify_field(AstBondDelta::ModifyField {
+        id: AstBondId(2),
+        change: AstBondFieldChange::Order {
+            old: AstValueAst::Lit(1),
+            new: AstValueAst::Lit(2),
+        },
+    })]
+    #[case::constraint_added(AstBondDelta::ModifyConstraint {
+        id: AstBondId(2),
+        old: None,
+        new: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    })]
+    #[case::constraint_removed(AstBondDelta::ModifyConstraint {
+        id: AstBondId(2),
+        old: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+        new: None,
+    })]
+    #[case::constraint_modified(AstBondDelta::ModifyConstraint {
+        id: AstBondId(2),
+        old: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(false))),
+        new: Some(AstBondConstraintAst::Aromatic(AstBooleanAst::Lit(true))),
+    })]
+    fn test_bond_delta_inverse(#[case] delta: AstBondDelta) {
+        Python::attach(|py| {
+            let binding = BondDelta::from_rust(py, &delta).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py),
+                delta.clone().inverse()
+            );
+            let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
         });
     }
 }

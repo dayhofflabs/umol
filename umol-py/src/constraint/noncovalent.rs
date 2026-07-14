@@ -1,4 +1,4 @@
-//! Noncovalent-bond constraint mirrors, containers, and live views.
+//! Noncovalent-bond constraint values, containers, and live views.
 
 use std::vec::IntoIter;
 
@@ -13,7 +13,7 @@ use umol_ast::ast::{
 };
 
 use crate::boolean::{BooleanArg, BooleanAst};
-use crate::convert::{hash_ast, into_py_variant, variant_repr};
+use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::molecule::MoleculeAst;
 use crate::noncovalent::NoncovalentBondAst;
 
@@ -27,11 +27,11 @@ pub enum NoncovalentBondConstraintKey {
 #[pymethods]
 impl NoncovalentBondConstraintKey {
     pub(crate) fn __eq__(&self, other: &Self) -> bool {
-        self.to_ast() == other.to_ast()
+        self.to_rust() == other.to_rust()
     }
 
     pub(crate) fn __hash__(&self) -> u64 {
-        hash_ast(&self.to_ast())
+        hash_rust(&self.to_rust())
     }
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -48,13 +48,13 @@ impl NoncovalentBondConstraintKey {
 }
 
 impl NoncovalentBondConstraintKey {
-    pub(crate) fn from_ast(ast: &AstNoncovalentBondConstraintKey) -> Self {
+    pub(crate) fn from_rust(ast: &AstNoncovalentBondConstraintKey) -> Self {
         match ast {
             AstNoncovalentBondConstraintKey::Intramolecular => Self::Intramolecular(),
         }
     }
 
-    pub(crate) fn to_ast(&self) -> AstNoncovalentBondConstraintKey {
+    pub(crate) fn to_rust(&self) -> AstNoncovalentBondConstraintKey {
         match self {
             Self::Intramolecular() => AstNoncovalentBondConstraintKey::Intramolecular,
         }
@@ -73,15 +73,15 @@ impl NoncovalentBondConstraintAst {
     /// The constraint's key (identity).
     #[getter]
     pub(crate) fn key(&self, py: Python<'_>) -> NoncovalentBondConstraintKey {
-        NoncovalentBondConstraintKey::from_ast(&self.to_ast(py).key())
+        NoncovalentBondConstraintKey::from_rust(&self.to_rust(py).key())
     }
 
     pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -98,21 +98,21 @@ impl NoncovalentBondConstraintAst {
 }
 
 impl NoncovalentBondConstraintAst {
-    pub(crate) fn from_ast(
+    pub(crate) fn from_rust(
         py: Python<'_>,
         ast: &AstNoncovalentBondConstraintAst,
     ) -> PyResult<Self> {
         Ok(match ast {
             AstNoncovalentBondConstraintAst::Intramolecular(b) => {
-                Self::Intramolecular(into_py_variant(py, BooleanAst::from_ast(b))?)
+                Self::Intramolecular(into_py_variant(py, BooleanAst::from_rust(b))?)
             }
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstNoncovalentBondConstraintAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstNoncovalentBondConstraintAst {
         match self {
             Self::Intramolecular(b) => {
-                AstNoncovalentBondConstraintAst::Intramolecular(b.bind(py).borrow().to_ast())
+                AstNoncovalentBondConstraintAst::Intramolecular(b.bind(py).borrow().to_rust())
             }
         }
     }
@@ -152,7 +152,7 @@ impl NoncovalentBondConstraintsUpdate {
                 ResolvedNoncovalentBondConstraintsUpdate::Entries(
                     entries
                         .iter()
-                        .map(|entry| entry.bind(py).borrow().to_ast(py))
+                        .map(|entry| entry.bind(py).borrow().to_rust(py))
                         .collect(),
                 )
             }
@@ -200,7 +200,7 @@ impl NoncovalentBondConstraintsAst {
         constraints.extend(
             entries
                 .into_iter()
-                .map(|entry| entry.bind(py).borrow().to_ast(py)),
+                .map(|entry| entry.bind(py).borrow().to_rust(py)),
         );
         NoncovalentBondConstraintsAst(constraints)
     }
@@ -208,8 +208,8 @@ impl NoncovalentBondConstraintsAst {
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {
-            let mirror = into_py_variant(py, NoncovalentBondConstraintAst::from_ast(py, entry)?)?;
-            parts.push(mirror.bind(py).as_any().repr()?.extract::<String>()?);
+            let value = into_py_variant(py, NoncovalentBondConstraintAst::from_rust(py, entry)?)?;
+            parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
         }
         Ok(format!(
             "NoncovalentBondConstraintsAst([{}])",
@@ -219,7 +219,7 @@ impl NoncovalentBondConstraintsAst {
 
     /// Insert `c`, replacing any existing entry of the same key (last-wins).
     pub(crate) fn set(&mut self, py: Python<'_>, c: Py<NoncovalentBondConstraintAst>) {
-        self.0.set(c.bind(py).borrow().to_ast(py));
+        self.0.set(c.bind(py).borrow().to_rust(py));
     }
 
     /// Remove the entry with the given key, returning it if present (dict `pop`).
@@ -229,8 +229,8 @@ impl NoncovalentBondConstraintsAst {
         key: Py<NoncovalentBondConstraintKey>,
     ) -> PyResult<Option<NoncovalentBondConstraintAst>> {
         self.0
-            .remove(key.bind(py).borrow().to_ast())
-            .map(|c| NoncovalentBondConstraintAst::from_ast(py, &c))
+            .remove(key.bind(py).borrow().to_rust())
+            .map(|c| NoncovalentBondConstraintAst::from_rust(py, &c))
             .transpose()
     }
 
@@ -281,10 +281,10 @@ impl NoncovalentBondConstraintsAst {
         key: Py<NoncovalentBondConstraintKey>,
         default: Option<Py<PyAny>>,
     ) -> PyResult<Py<PyAny>> {
-        match self.0.get(key.bind(py).borrow().to_ast()) {
+        match self.0.get(key.bind(py).borrow().to_rust()) {
             Some(constraint) => Ok(into_py_variant(
                 py,
-                NoncovalentBondConstraintAst::from_ast(py, constraint)?,
+                NoncovalentBondConstraintAst::from_rust(py, constraint)?,
             )?
             .into_any()),
             None => Ok(default.unwrap_or_else(|| py.None())),
@@ -297,8 +297,8 @@ impl NoncovalentBondConstraintsAst {
         py: Python<'_>,
         key: Py<NoncovalentBondConstraintKey>,
     ) -> PyResult<NoncovalentBondConstraintAst> {
-        match self.0.get(key.bind(py).borrow().to_ast()) {
-            Some(constraint) => NoncovalentBondConstraintAst::from_ast(py, constraint),
+        match self.0.get(key.bind(py).borrow().to_rust()) {
+            Some(constraint) => NoncovalentBondConstraintAst::from_rust(py, constraint),
             None => Err(PyKeyError::new_err(
                 key.bind(py).as_any().repr()?.extract::<String>()?,
             )),
@@ -311,7 +311,7 @@ impl NoncovalentBondConstraintsAst {
         py: Python<'_>,
         key: Py<NoncovalentBondConstraintKey>,
     ) -> PyResult<()> {
-        if self.0.remove(key.bind(py).borrow().to_ast()).is_some() {
+        if self.0.remove(key.bind(py).borrow().to_rust()).is_some() {
             Ok(())
         } else {
             Err(PyKeyError::new_err(
@@ -325,25 +325,25 @@ impl NoncovalentBondConstraintsAst {
         py: Python<'_>,
         key: Py<NoncovalentBondConstraintKey>,
     ) -> bool {
-        self.0.contains(key.bind(py).borrow().to_ast())
+        self.0.contains(key.bind(py).borrow().to_rust())
     }
 
     /// Whether the bond is intramolecular; `Undetermined` when no `Intramolecular`
-    /// constraint is present (mirroring the non-optional Rust accessor).
+    /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn intramolecular(&self) -> BooleanAst {
-        BooleanAst::from_ast(&self.0.intramolecular())
+        BooleanAst::from_rust(&self.0.intramolecular())
     }
 
     #[setter]
     pub(crate) fn set_intramolecular(&mut self, py: Python<'_>, value: BooleanArg) {
         self.0.set(AstNoncovalentBondConstraintAst::intramolecular(
-            value.to_ast(py),
+            value.to_rust(py),
         ));
     }
 
     /// The present constraints as a dict keyed by snake_case name; values are the
-    /// inner-value mirrors.
+    /// Python values.
     pub(crate) fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         noncovalent_bond_constraints_asdict(py, &self.0)
     }
@@ -371,7 +371,7 @@ pub(crate) fn noncovalent_bond_constraints_iter(
     let entries = constraints
         .iter()
         .map(|constraint| {
-            into_py_variant(py, NoncovalentBondConstraintAst::from_ast(py, constraint)?)
+            into_py_variant(py, NoncovalentBondConstraintAst::from_rust(py, constraint)?)
         })
         .collect::<PyResult<Vec<_>>>()?;
     Ok(NoncovalentBondConstraintIter {
@@ -389,7 +389,7 @@ pub(crate) fn noncovalent_bond_constraint_keys(
         .map(|constraint| {
             into_py_variant(
                 py,
-                NoncovalentBondConstraintKey::from_ast(&constraint.key()),
+                NoncovalentBondConstraintKey::from_rust(&constraint.key()),
             )
         })
         .collect::<PyResult<Vec<_>>>()?;
@@ -409,9 +409,9 @@ pub(crate) fn noncovalent_bond_constraint_items(
             Ok((
                 into_py_variant(
                     py,
-                    NoncovalentBondConstraintKey::from_ast(&constraint.key()),
+                    NoncovalentBondConstraintKey::from_rust(&constraint.key()),
                 )?,
-                into_py_variant(py, NoncovalentBondConstraintAst::from_ast(py, constraint)?)?,
+                into_py_variant(py, NoncovalentBondConstraintAst::from_rust(py, constraint)?)?,
             ))
         })
         .collect::<PyResult<Vec<_>>>()?;
@@ -421,7 +421,7 @@ pub(crate) fn noncovalent_bond_constraint_items(
 }
 
 /// The present constraints as a dict keyed by snake_case name; values are the
-/// inner-value mirrors.
+/// Python values.
 pub(crate) fn noncovalent_bond_constraints_asdict<'py>(
     py: Python<'py>,
     constraints: &AstNoncovalentBondConstraintsAst,
@@ -430,7 +430,7 @@ pub(crate) fn noncovalent_bond_constraints_asdict<'py>(
     for entry in constraints.iter() {
         match entry {
             AstNoncovalentBondConstraintAst::Intramolecular(b) => {
-                dict.set_item("intramolecular", BooleanAst::from_ast(b))?
+                dict.set_item("intramolecular", BooleanAst::from_rust(b))?
             }
         }
     }
@@ -502,7 +502,7 @@ pub(crate) enum NoncovalentBondConstraintsArg {
 }
 
 impl NoncovalentBondConstraintsArg {
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstNoncovalentBondConstraintsAst> {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstNoncovalentBondConstraintsAst> {
         match self {
             NoncovalentBondConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
             NoncovalentBondConstraintsArg::View(v) => {
@@ -599,7 +599,7 @@ impl NoncovalentBondConstraintsView {
     /// Insert `c` on the bond in place, replacing any existing entry of the same key
     /// (last-wins).
     pub(crate) fn set(&self, py: Python<'_>, c: Py<NoncovalentBondConstraintAst>) {
-        self.set_ast(py, c.bind(py).borrow().to_ast(py));
+        self.set_ast(py, c.bind(py).borrow().to_rust(py));
     }
 
     /// Remove the entry with the given key from the bond in place, returning it if
@@ -609,8 +609,8 @@ impl NoncovalentBondConstraintsView {
         py: Python<'_>,
         key: Py<NoncovalentBondConstraintKey>,
     ) -> PyResult<Option<NoncovalentBondConstraintAst>> {
-        self.remove_ast(py, key.bind(py).borrow().to_ast())
-            .map(|c| NoncovalentBondConstraintAst::from_ast(py, &c))
+        self.remove_ast(py, key.bind(py).borrow().to_rust())
+            .map(|c| NoncovalentBondConstraintAst::from_rust(py, &c))
             .transpose()
     }
 
@@ -621,7 +621,7 @@ impl NoncovalentBondConstraintsView {
         key: Py<NoncovalentBondConstraintKey>,
     ) -> PyResult<()> {
         if self
-            .remove_ast(py, key.bind(py).borrow().to_ast())
+            .remove_ast(py, key.bind(py).borrow().to_rust())
             .is_some()
         {
             Ok(())
@@ -680,10 +680,10 @@ impl NoncovalentBondConstraintsView {
         key: Py<NoncovalentBondConstraintKey>,
         default: Option<Py<PyAny>>,
     ) -> PyResult<Py<PyAny>> {
-        let key = key.bind(py).borrow().to_ast();
+        let key = key.bind(py).borrow().to_rust();
         let found = self.read(py, |cs| {
             cs.get(key)
-                .map(|constraint| NoncovalentBondConstraintAst::from_ast(py, constraint))
+                .map(|constraint| NoncovalentBondConstraintAst::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -698,10 +698,10 @@ impl NoncovalentBondConstraintsView {
         py: Python<'_>,
         key: Py<NoncovalentBondConstraintKey>,
     ) -> PyResult<NoncovalentBondConstraintAst> {
-        let ast_key = key.bind(py).borrow().to_ast();
+        let ast_key = key.bind(py).borrow().to_rust();
         let found = self.read(py, |cs| {
             cs.get(ast_key)
-                .map(|constraint| NoncovalentBondConstraintAst::from_ast(py, constraint))
+                .map(|constraint| NoncovalentBondConstraintAst::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -717,22 +717,22 @@ impl NoncovalentBondConstraintsView {
         py: Python<'_>,
         key: Py<NoncovalentBondConstraintKey>,
     ) -> PyResult<bool> {
-        let key = key.bind(py).borrow().to_ast();
+        let key = key.bind(py).borrow().to_rust();
         self.read(py, |cs| Ok(cs.contains(key)))
     }
 
     /// Whether the bond is intramolecular; `Undetermined` when no `Intramolecular`
-    /// constraint is present (mirroring the non-optional Rust accessor).
+    /// constraint is present (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn intramolecular(&self, py: Python<'_>) -> PyResult<BooleanAst> {
-        self.read(py, |cs| Ok(BooleanAst::from_ast(&cs.intramolecular())))
+        self.read(py, |cs| Ok(BooleanAst::from_rust(&cs.intramolecular())))
     }
 
     #[setter]
     pub(crate) fn set_intramolecular(&self, py: Python<'_>, value: BooleanArg) {
         self.set_ast(
             py,
-            AstNoncovalentBondConstraintAst::intramolecular(value.to_ast(py)),
+            AstNoncovalentBondConstraintAst::intramolecular(value.to_rust(py)),
         );
     }
 

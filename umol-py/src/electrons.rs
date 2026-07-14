@@ -1,4 +1,4 @@
-//! Electron-counts AST mirror: `Undetermined`, or a positional per-member-atom
+//! Electron-counts AST value: `Undetermined`, or a positional per-member-atom
 //! count vector. A value leaf shared by the aromatic-system and multicenter-bond
 //! bindings; the vector is positional (cell = member atom), aligned to the owning
 //! entity's participant order.
@@ -6,7 +6,7 @@
 use pyo3::prelude::*;
 use umol_ast::ast::{AsLit, ElectronCountsAst as AstElectronCountsAst};
 
-use crate::convert::{hash_ast, variant_repr};
+use crate::convert::{hash_rust, variant_repr};
 
 /// A per-member-atom electron-count vector: undetermined, or a concrete list of
 /// counts positionally aligned to the owning entity's atoms.
@@ -20,15 +20,15 @@ pub enum ElectronCountsAst {
 impl ElectronCountsAst {
     /// The concrete count vector, or `None` when undetermined.
     fn as_lit(&self) -> Option<Vec<i64>> {
-        self.to_ast().as_lit()
+        self.to_rust().as_lit()
     }
 
     fn __eq__(&self, other: &Self) -> bool {
-        self.to_ast() == other.to_ast()
+        self.to_rust() == other.to_rust()
     }
 
     fn __hash__(&self) -> u64 {
-        hash_ast(&self.to_ast())
+        hash_rust(&self.to_rust())
     }
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -41,14 +41,14 @@ impl ElectronCountsAst {
 }
 
 impl ElectronCountsAst {
-    pub(crate) fn from_ast(ast: &AstElectronCountsAst) -> Self {
+    pub(crate) fn from_rust(ast: &AstElectronCountsAst) -> Self {
         match ast {
             AstElectronCountsAst::Undetermined => Self::Undetermined(),
             AstElectronCountsAst::Lit(counts) => Self::Lit(counts.clone()),
         }
     }
 
-    pub(crate) fn to_ast(&self) -> AstElectronCountsAst {
+    pub(crate) fn to_rust(&self) -> AstElectronCountsAst {
         match self {
             Self::Undetermined() => AstElectronCountsAst::Undetermined,
             Self::Lit(counts) => AstElectronCountsAst::Lit(counts.clone()),
@@ -57,7 +57,7 @@ impl ElectronCountsAst {
 }
 
 /// Setter coercion for an electron-counts field: a Python `list[int]` → `Lit`, or an
-/// `ElectronCountsAst` passthrough (mirroring `impl From<Vec<i64>>`).
+/// `ElectronCountsAst` passthrough (matching `impl From<Vec<i64>>`).
 #[derive(FromPyObject)]
 pub(crate) enum ElectronCountsArg {
     Lit(Vec<i64>),
@@ -65,10 +65,10 @@ pub(crate) enum ElectronCountsArg {
 }
 
 impl ElectronCountsArg {
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstElectronCountsAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstElectronCountsAst {
         match self {
             ElectronCountsArg::Lit(counts) => AstElectronCountsAst::Lit(counts.clone()),
-            ElectronCountsArg::Ast(a) => a.bind(py).borrow().to_ast(),
+            ElectronCountsArg::Ast(a) => a.bind(py).borrow().to_rust(),
         }
     }
 }
@@ -84,7 +84,7 @@ mod tests {
     #[case(AstElectronCountsAst::Lit(vec![1, 1, 1, 1, 1, 1]))]
     #[case(AstElectronCountsAst::Lit(vec![]))]
     fn test_electron_counts_ast_roundtrip(#[case] ast: AstElectronCountsAst) {
-        assert_eq!(ElectronCountsAst::from_ast(&ast).to_ast(), ast);
+        assert_eq!(ElectronCountsAst::from_rust(&ast).to_rust(), ast);
     }
 
     #[rstest]
@@ -94,21 +94,21 @@ mod tests {
         #[case] ast: AstElectronCountsAst,
         #[case] expected: Option<Vec<i64>>,
     ) {
-        assert_eq!(ElectronCountsAst::from_ast(&ast).as_lit(), expected);
+        assert_eq!(ElectronCountsAst::from_rust(&ast).as_lit(), expected);
     }
 
     #[rstest]
-    fn test_electron_counts_arg_to_ast() {
+    fn test_electron_counts_arg_to_rust() {
         Python::attach(|py| {
             // a bare list coerces to Lit
             assert_eq!(
-                ElectronCountsArg::Lit(vec![1, 0, 1]).to_ast(py),
+                ElectronCountsArg::Lit(vec![1, 0, 1]).to_rust(py),
                 AstElectronCountsAst::Lit(vec![1, 0, 1])
             );
             // an ElectronCountsAst passes through
             let ast = Py::new(py, ElectronCountsAst::Lit(vec![2, 2])).unwrap();
             assert_eq!(
-                ElectronCountsArg::Ast(ast).to_ast(py),
+                ElectronCountsArg::Ast(ast).to_rust(py),
                 AstElectronCountsAst::Lit(vec![2, 2])
             );
         });

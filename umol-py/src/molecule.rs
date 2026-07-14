@@ -111,7 +111,7 @@ impl MoleculeAst {
             .map(|(site, ligands, value)| {
                 (
                     AstAtomId(*site),
-                    ligands.iter().copied().map(StereoLigand::to_ast).collect(),
+                    ligands.iter().copied().map(StereoLigand::to_rust).collect(),
                     value.bind(py).borrow().inner().clone(),
                 )
             })
@@ -121,14 +121,14 @@ impl MoleculeAst {
             .map(|(site, ligands, value)| {
                 (
                     AstBondId(*site),
-                    ligands.iter().copied().map(StereoLigand::to_ast).collect(),
+                    ligands.iter().copied().map(StereoLigand::to_rust).collect(),
                     value.bind(py).borrow().inner().clone(),
                 )
             })
             .collect();
         let ast_constraints = constraints
             .iter()
-            .map(|constraint| constraint.bind(py).borrow().to_ast(py))
+            .map(|constraint| constraint.bind(py).borrow().to_rust(py))
             .collect::<Vec<_>>();
         MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
             atoms: ast_atoms,
@@ -200,7 +200,7 @@ impl MoleculeAst {
     /// Replace the molecule-level constraints from an owned container or live view.
     #[setter]
     fn set_constraints(slf: Py<Self>, py: Python<'_>, value: ConstraintsArg) -> PyResult<()> {
-        let constraints = value.to_ast(py)?;
+        let constraints = value.to_rust(py)?;
         *slf.borrow_mut(py).inner_mut().constraints_mut() = constraints;
         Ok(())
     }
@@ -253,13 +253,14 @@ mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
         AromaticSystemAst as AstAromaticSystemAst, AromaticSystemId as AstAromaticSystemId,
-        AtomAst, BondAst as AstBondAst, Constraint as AstConstraint, Constraints as AstConstraints,
-        DativeBondAst as AstDativeBondAst, DativeBondId as AstDativeBondId,
-        MoleculeConstraint as AstMoleculeConstraint, MulticenterBondAst as AstMulticenterBondAst,
-        MulticenterBondId as AstMulticenterBondId, NoncovalentBondAst as AstNoncovalentBondAst,
-        NoncovalentBondId as AstNoncovalentBondId, NoncovalentBondKind,
+        AtomAst as AstAtomAst, BondAst as AstBondAst, Constraint as AstConstraint,
+        Constraints as AstConstraints, DativeBondAst as AstDativeBondAst,
+        DativeBondId as AstDativeBondId, MoleculeConstraint as AstMoleculeConstraint,
+        MulticenterBondAst as AstMulticenterBondAst, MulticenterBondId as AstMulticenterBondId,
+        NoncovalentBondAst as AstNoncovalentBondAst, NoncovalentBondId as AstNoncovalentBondId,
+        NoncovalentBondKind as AstNoncovalentBondKind,
     };
-    use umol_chem::element::Element;
+    use umol_chem::element::Element as ChemElement;
 
     use super::*;
     use crate::atom::AtomAst as PyAtomAst;
@@ -275,9 +276,21 @@ mod tests {
     fn test_molecule_ast_from_parts() {
         Python::attach(|py| {
             let atoms = vec![
-                Py::new(py, PyAtomAst::from_inner(AtomAst::from_element(Element::C))).unwrap(),
-                Py::new(py, PyAtomAst::from_inner(AtomAst::from_element(Element::B))).unwrap(),
-                Py::new(py, PyAtomAst::from_inner(AtomAst::from_element(Element::N))).unwrap(),
+                Py::new(
+                    py,
+                    PyAtomAst::from_inner(AstAtomAst::from_element(ChemElement::C)),
+                )
+                .unwrap(),
+                Py::new(
+                    py,
+                    PyAtomAst::from_inner(AstAtomAst::from_element(ChemElement::B)),
+                )
+                .unwrap(),
+                Py::new(
+                    py,
+                    PyAtomAst::from_inner(AstAtomAst::from_element(ChemElement::N)),
+                )
+                .unwrap(),
             ];
             let bonds = vec![(
                 0,
@@ -318,7 +331,7 @@ mod tests {
                 Py::new(
                     py,
                     NoncovalentBondAst::from_inner(AstNoncovalentBondAst::from_kind(
-                        NoncovalentBondKind::HydrogenBond,
+                        AstNoncovalentBondKind::HydrogenBond,
                     )),
                 )
                 .unwrap(),
@@ -327,7 +340,7 @@ mod tests {
                 atoms: Some(vec![AstAtomId(0), AstAtomId(2)]),
             });
             let constraints =
-                vec![into_py_variant(py, Constraint::from_ast(py, &constraint).unwrap()).unwrap()];
+                vec![into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap()];
             let molecule = MoleculeAst::from_parts(
                 py,
                 atoms,
@@ -374,10 +387,10 @@ mod tests {
 
     #[rstest]
     #[case(vec![], 0)]
-    #[case(vec![Element::C], 1)]
-    #[case(vec![Element::C, Element::O], 2)]
-    fn test_molecule_ast_atoms(#[case] elements: Vec<Element>, #[case] expected: usize) {
-        let atoms = elements.into_iter().map(AtomAst::from_element).collect();
+    #[case(vec![ChemElement::C], 1)]
+    #[case(vec![ChemElement::C, ChemElement::O], 2)]
+    fn test_molecule_ast_atoms(#[case] elements: Vec<ChemElement>, #[case] expected: usize) {
+        let atoms = elements.into_iter().map(AstAtomAst::from_element).collect();
         let molecule = MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
             atoms,
             ..Default::default()
@@ -461,7 +474,7 @@ mod tests {
     fn test_molecule_ast_eq() {
         assert_eq!(MoleculeAst::new(), MoleculeAst::new());
         let carbon = MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
-            atoms: vec![AtomAst::from_element(Element::C)],
+            atoms: vec![AstAtomAst::from_element(ChemElement::C)],
             ..Default::default()
         }));
         assert_ne!(MoleculeAst::new(), carbon);
@@ -480,13 +493,13 @@ mod tests {
         // atoms + bonds always; other families only when present
         let molecule = MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
             atoms: vec![
-                AtomAst::from_element(Element::O),
-                AtomAst::from_element(Element::O),
+                AstAtomAst::from_element(ChemElement::O),
+                AstAtomAst::from_element(ChemElement::O),
             ],
             noncovalent: vec![(
                 AstAtomId(0),
                 AstAtomId(1),
-                AstNoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+                AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
         }));

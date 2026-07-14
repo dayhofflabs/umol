@@ -1,12 +1,12 @@
-//! Conversion helpers shared by the mirror types.
+//! Conversion helpers shared by the Python binding types.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use pyo3::prelude::*;
 
-/// Hash an AST value with the default hasher, for the mirrors' `__hash__`.
-pub(crate) fn hash_ast<T: Hash>(value: &T) -> u64 {
+/// Hash a Rust value with the default hasher for a binding type's `__hash__`.
+pub(crate) fn hash_rust<T: Hash>(value: &T) -> u64 {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
     hasher.finish()
@@ -35,7 +35,7 @@ pub(crate) fn variant_repr(
 ///
 /// `Py::new(py, value)` creates a *base*-type instance whose variant fields (`_0`,
 /// …) and `match` support are absent from Python; `IntoPyObject` creates the proper
-/// variant subtype. Use this for every nested `Py<…>` child in a `from_ast`.
+/// variant subtype. Use this for every nested `Py<…>` child in a `from_rust`.
 pub(crate) fn into_py_variant<'py, T>(py: Python<'py>, value: T) -> PyResult<Py<T>>
 where
     T: IntoPyObject<'py, Output = Bound<'py, T>>,

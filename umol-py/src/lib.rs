@@ -1,5 +1,5 @@
 //! Python bindings for umol: the `umol._native` extension module backing the
-//! `umol` Python package. Types mirror the Rust API (see `umol-ast`).
+//! `umol` Python package. Types correspond to the Rust API (see `umol-ast`).
 
 use pyo3::prelude::*;
 
@@ -48,9 +48,9 @@ use crate::{
     },
     dative::{DativeBondAst, DativeBondView, DativeBondViews},
     delta::{
-        AromaticSystemFieldChange, AtomFieldChange, BondFieldChange, DativeBondFieldChange,
-        MulticenterBondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
-        StereoBondFieldChange,
+        AromaticSystemFieldChange, AtomDelta, AtomFieldChange, BondDelta, BondFieldChange,
+        DativeBondFieldChange, MulticenterBondFieldChange, NoncovalentBondFieldChange,
+        StereoAtomFieldChange, StereoBondFieldChange,
     },
     electrons::ElectronCountsAst,
     element::Element,
@@ -117,7 +117,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Element>()?;
         module.add("ParseError", module.py().get_type::<ParseError>())?;
         module.add_class::<MoleculeAst>()?;
+        module.add_class::<AtomDelta>()?;
         module.add_class::<AtomFieldChange>()?;
+        module.add_class::<BondDelta>()?;
         module.add_class::<BondFieldChange>()?;
         module.add_class::<DativeBondFieldChange>()?;
         module.add_class::<AromaticSystemFieldChange>()?;

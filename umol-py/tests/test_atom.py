@@ -256,7 +256,7 @@ def test_atomview_charge_through_handle():
 
 
 def test_atomast_charge_nested_variant_readable():
-    # A from_ast-built nested child (ValueTerm inside ValueAst.Term) must read back
+    # A conversion-built nested child (ValueTerm inside ValueAst.Term) must read back
     # as a proper variant from Python, not a base instance — regression for the
     # Py::new-vs-IntoPyObject bug.
     atom = AtomAst(Element("C"))

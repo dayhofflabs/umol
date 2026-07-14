@@ -1,4 +1,4 @@
-//! Python mirrors for molecule and entity constraints.
+//! Python bindings for molecule and entity constraints.
 
 pub(crate) mod aromatic;
 pub(crate) mod atom;

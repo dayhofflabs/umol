@@ -39,7 +39,7 @@ impl DativeBondAst {
         order: ValueArg,
         constraints: Option<Py<DativeBondConstraintsAst>>,
     ) -> Self {
-        let mut bond = AstDativeBondAst::new(order.to_ast(py));
+        let mut bond = AstDativeBondAst::new(order.to_rust(py));
         if let Some(constraints) = constraints {
             bond.constraints = constraints.bind(py).borrow().inner().clone();
         }
@@ -62,12 +62,12 @@ impl DativeBondAst {
 
     #[getter]
     fn order(&self, py: Python<'_>) -> PyResult<ValueAst> {
-        ValueAst::from_ast(py, &self.0.order)
+        ValueAst::from_rust(py, &self.0.order)
     }
 
     #[setter]
     fn set_order(&mut self, py: Python<'_>, value: ValueArg) {
-        self.0.order = value.to_ast(py);
+        self.0.order = value.to_rust(py);
     }
 
     /// The dative bond's constraints as a live handle onto this bond: reads borrow
@@ -87,12 +87,12 @@ impl DativeBondAst {
         py: Python<'_>,
         value: DativeBondConstraintsArg,
     ) -> PyResult<()> {
-        let snapshot = value.to_ast(py)?;
+        let snapshot = value.to_rust(py)?;
         slf.borrow_mut(py).0.constraints = snapshot;
         Ok(())
     }
 
-    /// The fields as a dict keyed by field name; values are the field mirrors.
+    /// The fields as a dict keyed by field name; values are Python objects.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         dict.set_item("order", self.order(py)?)?;
@@ -189,7 +189,7 @@ impl DativeBondView {
     #[getter]
     fn order(&self, py: Python<'_>) -> PyResult<ValueAst> {
         let molecule = self.owner.bind(py).borrow();
-        ValueAst::from_ast(py, &self.dative_bond(molecule.inner())?.ast.order)
+        ValueAst::from_rust(py, &self.dative_bond(molecule.inner())?.ast.order)
     }
 
     #[setter]
@@ -199,7 +199,7 @@ impl DativeBondView {
             .inner_mut()
             .dative_bond_mut(self.id)
             .ast
-            .order = value.to_ast(py);
+            .order = value.to_rust(py);
     }
 
     /// The dative bond's constraints as a live handle onto the molecule: reads borrow
@@ -223,17 +223,17 @@ impl DativeBondView {
             .inner_mut()
             .dative_bond_mut(self.id)
             .ast
-            .constraints = value.to_ast(py)?;
+            .constraints = value.to_rust(py)?;
         Ok(())
     }
 
-    /// The value fields as a dict keyed by field name; values are the field mirrors —
+    /// The value fields as a dict keyed by field name; values are Python objects —
     /// symmetric with `DativeBondAst.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
         let bond = self.dative_bond(molecule.inner())?.ast;
         let dict = PyDict::new(py);
-        dict.set_item("order", ValueAst::from_ast(py, &bond.order)?)?;
+        dict.set_item("order", ValueAst::from_rust(py, &bond.order)?)?;
         dict.set_item(
             "constraints",
             dative_bond_constraints_asdict(py, &bond.constraints)?,
@@ -476,7 +476,7 @@ mod tests {
                 id: AstDativeBondId(0),
             };
             assert_eq!(view.id(), 0);
-            assert_eq!(view.order(py).unwrap().to_ast(py), AstValueAst::Lit(1));
+            assert_eq!(view.order(py).unwrap().to_rust(py), AstValueAst::Lit(1));
         });
     }
 
@@ -508,7 +508,7 @@ mod tests {
                 owner,
                 id: AstDativeBondId(0),
             };
-            assert_eq!(fresh.order(py).unwrap().to_ast(py), AstValueAst::Lit(2));
+            assert_eq!(fresh.order(py).unwrap().to_rust(py), AstValueAst::Lit(2));
         });
     }
 
@@ -557,7 +557,7 @@ mod tests {
             views.__setitem__(py, 0, single.bind(py).borrow()).unwrap();
             let view = views.__getitem__(py, 0).unwrap();
             // value replaced, participants preserved
-            assert_eq!(view.order(py).unwrap().to_ast(py), AstValueAst::Lit(2));
+            assert_eq!(view.order(py).unwrap().to_rust(py), AstValueAst::Lit(2));
             assert_eq!(view.acceptor(py).unwrap(), 0);
             assert_eq!(view.donors(py).unwrap(), vec![1]);
         });
@@ -638,9 +638,9 @@ mod tests {
     fn test_dative_bond_constraint_ast_roundtrip(#[case] ast: AstDativeBondConstraintAst) {
         Python::attach(|py| {
             assert_eq!(
-                DativeBondConstraintAst::from_ast(py, &ast)
+                DativeBondConstraintAst::from_rust(py, &ast)
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 ast
             );
         });
@@ -651,7 +651,7 @@ mod tests {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -660,7 +660,7 @@ mod tests {
             .unwrap();
             let ring = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::ring_membership(AstRingScope::All, 2),
                 )
@@ -691,7 +691,7 @@ mod tests {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -700,7 +700,7 @@ mod tests {
             .unwrap();
             let ring = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::ring_membership(AstRingScope::All, 2),
                 )
@@ -711,29 +711,29 @@ mod tests {
 
             let mut keys = constraints.__iter__(py).unwrap();
             assert_eq!(
-                keys.__next__().unwrap().bind(py).borrow().to_ast(py),
+                keys.__next__().unwrap().bind(py).borrow().to_rust(py),
                 AstDativeBondConstraintKey::Aromatic
             );
             assert_eq!(
-                keys.__next__().unwrap().bind(py).borrow().to_ast(py),
+                keys.__next__().unwrap().bind(py).borrow().to_rust(py),
                 AstDativeBondConstraintKey::RingMembership(AstRingScope::All)
             );
             assert!(keys.__next__().is_none());
 
             let mut values = constraints.values(py).unwrap();
             assert_eq!(
-                values.__next__().unwrap().bind(py).borrow().to_ast(py),
+                values.__next__().unwrap().bind(py).borrow().to_rust(py),
                 AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true))
             );
 
             let mut items = constraints.items(py).unwrap();
             let (key, value) = items.__next__().unwrap();
             assert_eq!(
-                key.bind(py).borrow().to_ast(py),
+                key.bind(py).borrow().to_rust(py),
                 AstDativeBondConstraintKey::Aromatic
             );
             assert_eq!(
-                value.bind(py).borrow().to_ast(py),
+                value.bind(py).borrow().to_rust(py),
                 AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true))
             );
         });
@@ -744,7 +744,7 @@ mod tests {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -761,7 +761,7 @@ mod tests {
                 .unwrap();
             let expected = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -803,11 +803,11 @@ mod tests {
     fn test_dative_bond_constraints_ast_aromatic() {
         Python::attach(|py| {
             let empty = DativeBondConstraintsAst::new(py, vec![]);
-            assert_eq!(empty.aromatic().to_ast(), AstBooleanAst::Undetermined);
+            assert_eq!(empty.aromatic().to_rust(), AstBooleanAst::Undetermined);
             assert!(empty.ring_count(py).unwrap().is_none());
             let aromatic = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -815,7 +815,7 @@ mod tests {
             )
             .unwrap();
             let constraints = DativeBondConstraintsAst::new(py, vec![aromatic]);
-            assert_eq!(constraints.aromatic().to_ast(), AstBooleanAst::Lit(true));
+            assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(true));
         });
     }
 
@@ -824,7 +824,7 @@ mod tests {
         Python::attach(|py| {
             let membership = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::ring_membership(AstRingScope::Size(6), 1),
                 )
@@ -835,7 +835,7 @@ mod tests {
                 Py::new(py, DativeBondConstraintsAst::new(py, vec![membership])).unwrap();
             let proxy = DativeBondConstraintsAst::ring_size_count(constraints.clone_ref(py));
             assert_eq!(
-                proxy.__getitem__(py, 6).unwrap().unwrap().to_ast(py),
+                proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(1)
             );
             assert!(proxy.__getitem__(py, 5).unwrap().is_none());
@@ -854,7 +854,7 @@ mod tests {
             let mut constraints = DativeBondConstraintsAst::new(py, vec![]);
             let aromatic = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -863,7 +863,7 @@ mod tests {
             .unwrap();
             constraints.set(py, aromatic);
             assert_eq!(constraints.__len__(), 1);
-            assert_eq!(constraints.aromatic().to_ast(), AstBooleanAst::Lit(true));
+            assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(true));
         });
     }
 
@@ -872,7 +872,7 @@ mod tests {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -888,7 +888,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(DativeBondConstraintAst::Aromatic(b)) => {
-                    assert_eq!(b.bind(py).borrow().to_ast(), AstBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), AstBooleanAst::Lit(true))
                 }
                 _ => panic!("expected removed Aromatic(Lit(true))"),
             }
@@ -918,9 +918,9 @@ mod tests {
             .unwrap();
             let c = constraints.bind(py).borrow();
             assert_eq!(c.__len__(), 2);
-            assert_eq!(c.aromatic().to_ast(), AstBooleanAst::Lit(true));
+            assert_eq!(c.aromatic().to_rust(), AstBooleanAst::Lit(true));
             assert_eq!(
-                c.ring_count(py).unwrap().unwrap().to_ast(py),
+                c.ring_count(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(2)
             );
         });
@@ -932,7 +932,7 @@ mod tests {
             let constraints = Py::new(py, DativeBondConstraintsAst::new(py, vec![])).unwrap();
             let aromatic = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -941,7 +941,7 @@ mod tests {
             .unwrap();
             let ring = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::ring_membership(AstRingScope::All, 2),
                 )
@@ -965,7 +965,7 @@ mod tests {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -981,7 +981,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(
-                constraints.bind(py).borrow().aromatic().to_ast(),
+                constraints.bind(py).borrow().aromatic().to_rust(),
                 AstBooleanAst::Lit(true)
             );
         });
@@ -1055,9 +1055,9 @@ mod tests {
         Python::attach(|py| {
             let mut constraints = DativeBondConstraintsAst::new(py, vec![]);
             constraints.set_aromatic(py, BooleanArg::Lit(true));
-            assert_eq!(constraints.aromatic().to_ast(), AstBooleanAst::Lit(true));
+            assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(true));
             constraints.set_aromatic(py, BooleanArg::Lit(false));
-            assert_eq!(constraints.aromatic().to_ast(), AstBooleanAst::Lit(false));
+            assert_eq!(constraints.aromatic().to_rust(), AstBooleanAst::Lit(false));
         });
     }
 
@@ -1067,7 +1067,7 @@ mod tests {
             let mut constraints = DativeBondConstraintsAst::new(py, vec![]);
             constraints.set_ring_count(py, ValueArg::Lit(2));
             assert_eq!(
-                constraints.ring_count(py).unwrap().unwrap().to_ast(py),
+                constraints.ring_count(py).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(2)
             );
         });
@@ -1104,7 +1104,7 @@ mod tests {
             };
             let aromatic = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -1125,7 +1125,7 @@ mod tests {
                 .unwrap()
             {
                 DativeBondConstraintAst::Aromatic(b) => {
-                    assert_eq!(b.bind(py).borrow().to_ast(), AstBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), AstBooleanAst::Lit(true))
                 }
                 _ => panic!("expected Aromatic(Lit(true))"),
             }
@@ -1153,7 +1153,7 @@ mod tests {
                 .unwrap();
             match removed {
                 Some(DativeBondConstraintAst::Aromatic(b)) => {
-                    assert_eq!(b.bind(py).borrow().to_ast(), AstBooleanAst::Lit(true))
+                    assert_eq!(b.bind(py).borrow().to_rust(), AstBooleanAst::Lit(true))
                 }
                 _ => panic!("expected removed Aromatic(Lit(true))"),
             }
@@ -1209,7 +1209,7 @@ mod tests {
                 backing: DativeBondConstraintsBacking::DativeBond(bond.clone_ref(py)),
             };
             assert_eq!(
-                view.aromatic(py).unwrap().to_ast(),
+                view.aromatic(py).unwrap().to_rust(),
                 AstBooleanAst::Undetermined
             );
             view.set_aromatic(py, BooleanArg::Lit(true));
@@ -1217,7 +1217,7 @@ mod tests {
                 backing: DativeBondConstraintsBacking::DativeBond(bond),
             };
             assert_eq!(
-                fresh.aromatic(py).unwrap().to_ast(),
+                fresh.aromatic(py).unwrap().to_rust(),
                 AstBooleanAst::Lit(true)
             );
         });
@@ -1230,7 +1230,7 @@ mod tests {
             let proxy = DativeBondConstraintsAst::ring_size_count(constraints.clone_ref(py));
             proxy.__setitem__(py, 6, ValueArg::Lit(3));
             assert_eq!(
-                proxy.__getitem__(py, 6).unwrap().unwrap().to_ast(py),
+                proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 AstValueAst::Lit(3)
             );
             proxy.__delitem__(py, 6);
@@ -1260,7 +1260,7 @@ mod tests {
                     .__getitem__(py, 5)
                     .unwrap()
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 AstValueAst::Lit(1)
             );
         });
@@ -1298,7 +1298,7 @@ mod tests {
             };
             let aromatic = into_py_variant(
                 py,
-                DativeBondConstraintAst::from_ast(
+                DativeBondConstraintAst::from_rust(
                     py,
                     &AstDativeBondConstraintAst::aromatic(AstBooleanAst::Lit(true)),
                 )
@@ -1314,7 +1314,7 @@ mod tests {
             };
             assert_eq!(fresh.__len__(py).unwrap(), 1);
             assert_eq!(
-                fresh.aromatic(py).unwrap().to_ast(),
+                fresh.aromatic(py).unwrap().to_rust(),
                 AstBooleanAst::Lit(true)
             );
         });
@@ -1344,7 +1344,7 @@ mod tests {
                     .__getitem__(py, 6)
                     .unwrap()
                     .unwrap()
-                    .to_ast(py),
+                    .to_rust(py),
                 AstValueAst::Lit(1)
             );
         });

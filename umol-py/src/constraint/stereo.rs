@@ -19,7 +19,7 @@ use umol_ast::ast::{
 };
 
 use crate::boolean::{BooleanArg, BooleanAst};
-use crate::convert::{hash_ast, into_py_variant, variant_repr};
+use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::molecule::MoleculeAst;
 use crate::stereo::{
     LigandPermutation, OrientedLigandPermutation, StereoAtomAst, StereoBondAst, StereoLigandPair,
@@ -28,7 +28,7 @@ use crate::stereo::{
 
 /// A topicity relation constraint value: the undetermined wildcard, a single topicity, a set
 /// of admissible topicities, or the complement of a set. A finite-domain subset lattice over
-/// `Topicity`. Mirrors the Rust `TopicityRelationAst`.
+/// `Topicity`. Corresponds to the Rust `TopicityRelationAst`.
 #[pyclass]
 pub enum TopicityRelationAst {
     Undetermined(),
@@ -48,11 +48,11 @@ impl TopicityRelationAst {
     }
 
     pub(crate) fn __eq__(&self, other: &Self) -> bool {
-        self.to_ast() == other.to_ast()
+        self.to_rust() == other.to_rust()
     }
 
     pub(crate) fn __hash__(&self) -> u64 {
-        hash_ast(&self.to_ast())
+        hash_rust(&self.to_rust())
     }
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -67,35 +67,35 @@ impl TopicityRelationAst {
 }
 
 impl TopicityRelationAst {
-    pub(crate) fn from_ast(ast: &AstTopicityRelationAst) -> Self {
+    pub(crate) fn from_rust(ast: &AstTopicityRelationAst) -> Self {
         match ast {
             AstTopicityRelationAst::Undetermined => Self::Undetermined(),
-            AstTopicityRelationAst::Lit(topicity) => Self::Lit(Topicity::from_ast(*topicity)),
+            AstTopicityRelationAst::Lit(topicity) => Self::Lit(Topicity::from_rust(*topicity)),
             AstTopicityRelationAst::LitSet(topicities) => {
-                Self::LitSet(topicities.iter().map(|t| Topicity::from_ast(*t)).collect())
+                Self::LitSet(topicities.iter().map(|t| Topicity::from_rust(*t)).collect())
             }
             AstTopicityRelationAst::NotSet(topicities) => {
-                Self::NotSet(topicities.iter().map(|t| Topicity::from_ast(*t)).collect())
+                Self::NotSet(topicities.iter().map(|t| Topicity::from_rust(*t)).collect())
             }
         }
     }
 
-    pub(crate) fn to_ast(&self) -> AstTopicityRelationAst {
+    pub(crate) fn to_rust(&self) -> AstTopicityRelationAst {
         match self {
             Self::Undetermined() => AstTopicityRelationAst::Undetermined,
-            Self::Lit(topicity) => AstTopicityRelationAst::Lit(topicity.to_ast()),
+            Self::Lit(topicity) => AstTopicityRelationAst::Lit(topicity.to_rust()),
             Self::LitSet(topicities) => {
-                AstTopicityRelationAst::LitSet(topicities.iter().map(|t| t.to_ast()).collect())
+                AstTopicityRelationAst::LitSet(topicities.iter().map(|t| t.to_rust()).collect())
             }
             Self::NotSet(topicities) => {
-                AstTopicityRelationAst::NotSet(topicities.iter().map(|t| t.to_ast()).collect())
+                AstTopicityRelationAst::NotSet(topicities.iter().map(|t| t.to_rust()).collect())
             }
         }
     }
 }
 
 /// Setter coercion for a topicity relation: a `Topicity` literal (→ `Lit`) or a
-/// `TopicityRelationAst` passthrough (mirroring `impl From<Topicity>`).
+/// `TopicityRelationAst` passthrough (matching `impl From<Topicity>`).
 #[derive(FromPyObject)]
 pub(crate) enum TopicityRelationArg {
     Lit(Topicity),
@@ -116,7 +116,7 @@ impl TopicityRelationArg {
 
 /// A stereogenicity constraint value: the undetermined wildcard, a single classification, a
 /// set of admissible classifications, or the complement of a set. A finite-domain subset
-/// lattice over `Stereogenicity`. Mirrors the Rust `StereogenicityAst`.
+/// lattice over `Stereogenicity`. Corresponds to the Rust `StereogenicityAst`.
 #[pyclass]
 pub enum StereogenicityAst {
     Undetermined(),
@@ -136,11 +136,11 @@ impl StereogenicityAst {
     }
 
     pub(crate) fn __eq__(&self, other: &Self) -> bool {
-        self.to_ast() == other.to_ast()
+        self.to_rust() == other.to_rust()
     }
 
     pub(crate) fn __hash__(&self) -> u64 {
-        hash_ast(&self.to_ast())
+        hash_rust(&self.to_rust())
     }
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -155,43 +155,43 @@ impl StereogenicityAst {
 }
 
 impl StereogenicityAst {
-    pub(crate) fn from_ast(ast: &AstStereogenicityAst) -> Self {
+    pub(crate) fn from_rust(ast: &AstStereogenicityAst) -> Self {
         match ast {
             AstStereogenicityAst::Undetermined => Self::Undetermined(),
             AstStereogenicityAst::Lit(stereogenicity) => {
-                Self::Lit(Stereogenicity::from_ast(*stereogenicity))
+                Self::Lit(Stereogenicity::from_rust(*stereogenicity))
             }
             AstStereogenicityAst::LitSet(stereogenicities) => Self::LitSet(
                 stereogenicities
                     .iter()
-                    .map(|g| Stereogenicity::from_ast(*g))
+                    .map(|g| Stereogenicity::from_rust(*g))
                     .collect(),
             ),
             AstStereogenicityAst::NotSet(stereogenicities) => Self::NotSet(
                 stereogenicities
                     .iter()
-                    .map(|g| Stereogenicity::from_ast(*g))
+                    .map(|g| Stereogenicity::from_rust(*g))
                     .collect(),
             ),
         }
     }
 
-    pub(crate) fn to_ast(&self) -> AstStereogenicityAst {
+    pub(crate) fn to_rust(&self) -> AstStereogenicityAst {
         match self {
             Self::Undetermined() => AstStereogenicityAst::Undetermined,
-            Self::Lit(stereogenicity) => AstStereogenicityAst::Lit(stereogenicity.to_ast()),
+            Self::Lit(stereogenicity) => AstStereogenicityAst::Lit(stereogenicity.to_rust()),
             Self::LitSet(stereogenicities) => {
-                AstStereogenicityAst::LitSet(stereogenicities.iter().map(|g| g.to_ast()).collect())
+                AstStereogenicityAst::LitSet(stereogenicities.iter().map(|g| g.to_rust()).collect())
             }
             Self::NotSet(stereogenicities) => {
-                AstStereogenicityAst::NotSet(stereogenicities.iter().map(|g| g.to_ast()).collect())
+                AstStereogenicityAst::NotSet(stereogenicities.iter().map(|g| g.to_rust()).collect())
             }
         }
     }
 }
 
 /// A ligand-symmetry constraint value: an oriented ligand permutation with a presence
-/// assertion (whether the permutation is a ligand symmetry). Mirrors the Rust
+/// assertion (whether the permutation is a ligand symmetry). Corresponds to the Rust
 /// `LigandSymmetryAst`.
 #[pyclass]
 pub struct LigandSymmetryAst {
@@ -209,7 +209,7 @@ impl LigandSymmetryAst {
     ) -> PyResult<Self> {
         Ok(LigandSymmetryAst {
             permutation,
-            invariant: into_py_variant(py, BooleanAst::from_ast(&invariant.to_ast(py)))?,
+            invariant: into_py_variant(py, BooleanAst::from_rust(&invariant.to_rust(py)))?,
         })
     }
 
@@ -225,15 +225,15 @@ impl LigandSymmetryAst {
 
     /// Matches iff the permutations are equal and the presence assertions match.
     pub(crate) fn matches(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py).matches(&other.to_ast(py))
+        self.to_rust(py).matches(&other.to_rust(py))
     }
 
     pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -250,23 +250,23 @@ impl LigandSymmetryAst {
 }
 
 impl LigandSymmetryAst {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstLigandSymmetryAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstLigandSymmetryAst) -> PyResult<Self> {
         Ok(LigandSymmetryAst {
-            permutation: OrientedLigandPermutation::from_ast(ast.permutation),
-            invariant: into_py_variant(py, BooleanAst::from_ast(&ast.invariant))?,
+            permutation: OrientedLigandPermutation::from_rust(ast.permutation),
+            invariant: into_py_variant(py, BooleanAst::from_rust(&ast.invariant))?,
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstLigandSymmetryAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstLigandSymmetryAst {
         AstLigandSymmetryAst {
-            permutation: self.permutation.to_ast(),
-            invariant: self.invariant.bind(py).borrow().to_ast(),
+            permutation: self.permutation.to_rust(),
+            invariant: self.invariant.bind(py).borrow().to_rust(),
         }
     }
 }
 
 /// A fluxionality constraint value: a proper ligand permutation realized by dynamics, with an
-/// assertion of whether the move is `active`. Mirrors the Rust `FluxionalityAst`.
+/// assertion of whether the move is `active`. Corresponds to the Rust `FluxionalityAst`.
 #[pyclass]
 pub struct FluxionalityAst {
     pub(crate) permutation: LigandPermutation,
@@ -283,7 +283,7 @@ impl FluxionalityAst {
     ) -> PyResult<Self> {
         Ok(FluxionalityAst {
             permutation,
-            active: into_py_variant(py, BooleanAst::from_ast(&active.to_ast(py)))?,
+            active: into_py_variant(py, BooleanAst::from_rust(&active.to_rust(py)))?,
         })
     }
 
@@ -299,15 +299,15 @@ impl FluxionalityAst {
 
     /// Matches iff the permutations are equal and the presence assertions match.
     pub(crate) fn matches(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py).matches(&other.to_ast(py))
+        self.to_rust(py).matches(&other.to_rust(py))
     }
 
     pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -320,23 +320,23 @@ impl FluxionalityAst {
 }
 
 impl FluxionalityAst {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstFluxionalityAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstFluxionalityAst) -> PyResult<Self> {
         Ok(FluxionalityAst {
-            permutation: LigandPermutation::from_ast(ast.permutation),
-            active: into_py_variant(py, BooleanAst::from_ast(&ast.active))?,
+            permutation: LigandPermutation::from_rust(ast.permutation),
+            active: into_py_variant(py, BooleanAst::from_rust(&ast.active))?,
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstFluxionalityAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstFluxionalityAst {
         AstFluxionalityAst {
-            permutation: self.permutation.to_ast(),
-            active: self.active.bind(py).borrow().to_ast(),
+            permutation: self.permutation.to_rust(),
+            active: self.active.bind(py).borrow().to_rust(),
         }
     }
 }
 
 /// A per-pair topicity constraint value: a relation between a pair of ligand positions.
-/// Mirrors the Rust `TopicityAst`.
+/// Corresponds to the Rust `TopicityAst`.
 #[pyclass]
 pub struct TopicityAst {
     pub(crate) pair: StereoLigandPair,
@@ -369,15 +369,15 @@ impl TopicityAst {
 
     /// Matches iff the pairs are equal and the per-pair relations match.
     pub(crate) fn matches(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py).matches(&other.to_ast(py))
+        self.to_rust(py).matches(&other.to_rust(py))
     }
 
     pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -394,17 +394,17 @@ impl TopicityAst {
 }
 
 impl TopicityAst {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstTopicityAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstTopicityAst) -> PyResult<Self> {
         Ok(TopicityAst {
-            pair: StereoLigandPair::from_ast(ast.pair),
-            relation: into_py_variant(py, TopicityRelationAst::from_ast(&ast.relation))?,
+            pair: StereoLigandPair::from_rust(ast.pair),
+            relation: into_py_variant(py, TopicityRelationAst::from_rust(&ast.relation))?,
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstTopicityAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstTopicityAst {
         AstTopicityAst {
-            pair: self.pair.to_ast(),
-            relation: self.relation.bind(py).borrow().to_ast(),
+            pair: self.pair.to_rust(),
+            relation: self.relation.bind(py).borrow().to_rust(),
         }
     }
 }
@@ -437,11 +437,11 @@ macro_rules! stereo_constraints {
         #[pymethods]
         impl $key {
             pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-                self.to_ast(py) == other.to_ast(py)
+                self.to_rust(py) == other.to_rust(py)
             }
 
             pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
-                hash_ast(&self.to_ast(py))
+                hash_rust(&self.to_rust(py))
             }
 
             pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -456,32 +456,32 @@ macro_rules! stereo_constraints {
         }
 
         impl $key {
-            pub(crate) fn from_ast(py: Python<'_>, ast: &$ast_key) -> PyResult<Self> {
+            pub(crate) fn from_rust(py: Python<'_>, ast: &$ast_key) -> PyResult<Self> {
                 Ok(match ast {
                     $ast_key::LigandSymmetry(permutation) => Self::LigandSymmetry(into_py_variant(
                         py,
-                        OrientedLigandPermutation::from_ast(*permutation),
+                        OrientedLigandPermutation::from_rust(*permutation),
                     )?),
                     $ast_key::Fluxionality(permutation) => Self::Fluxionality(into_py_variant(
                         py,
-                        LigandPermutation::from_ast(*permutation),
+                        LigandPermutation::from_rust(*permutation),
                     )?),
                     $ast_key::Topicity(pair) => {
-                        Self::Topicity(into_py_variant(py, StereoLigandPair::from_ast(*pair))?)
+                        Self::Topicity(into_py_variant(py, StereoLigandPair::from_rust(*pair))?)
                     }
                     $ast_key::Stereogenicity => Self::Stereogenicity(),
                 })
             }
 
-            pub(crate) fn to_ast(&self, py: Python<'_>) -> $ast_key {
+            pub(crate) fn to_rust(&self, py: Python<'_>) -> $ast_key {
                 match self {
                     Self::LigandSymmetry(permutation) => {
-                        $ast_key::LigandSymmetry(permutation.bind(py).borrow().to_ast())
+                        $ast_key::LigandSymmetry(permutation.bind(py).borrow().to_rust())
                     }
                     Self::Fluxionality(permutation) => {
-                        $ast_key::Fluxionality(permutation.bind(py).borrow().to_ast())
+                        $ast_key::Fluxionality(permutation.bind(py).borrow().to_rust())
                     }
-                    Self::Topicity(pair) => $ast_key::Topicity(pair.bind(py).borrow().to_ast()),
+                    Self::Topicity(pair) => $ast_key::Topicity(pair.bind(py).borrow().to_rust()),
                     Self::Stereogenicity() => $ast_key::Stereogenicity,
                 }
             }
@@ -502,15 +502,15 @@ macro_rules! stereo_constraints {
             /// The constraint's key (identity).
             #[getter]
             pub(crate) fn key(&self, py: Python<'_>) -> PyResult<$key> {
-                $key::from_ast(py, &self.to_ast(py).key())
+                $key::from_rust(py, &self.to_rust(py).key())
             }
 
             pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-                self.to_ast(py) == other.to_ast(py)
+                self.to_rust(py) == other.to_rust(py)
             }
 
             pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
-                hash_ast(&self.to_ast(py))
+                hash_rust(&self.to_rust(py))
             }
 
             pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -525,37 +525,37 @@ macro_rules! stereo_constraints {
         }
 
         impl $constraint {
-            pub(crate) fn from_ast(py: Python<'_>, ast: &$ast_constraint) -> PyResult<Self> {
+            pub(crate) fn from_rust(py: Python<'_>, ast: &$ast_constraint) -> PyResult<Self> {
                 Ok(match ast {
                     $ast_constraint::LigandSymmetry(value) => Self::LigandSymmetry(
-                        into_py_variant(py, LigandSymmetryAst::from_ast(py, value)?)?,
+                        into_py_variant(py, LigandSymmetryAst::from_rust(py, value)?)?,
                     ),
                     $ast_constraint::Fluxionality(value) => Self::Fluxionality(into_py_variant(
                         py,
-                        FluxionalityAst::from_ast(py, value)?,
+                        FluxionalityAst::from_rust(py, value)?,
                     )?),
                     $ast_constraint::Topicity(value) => {
-                        Self::Topicity(into_py_variant(py, TopicityAst::from_ast(py, value)?)?)
+                        Self::Topicity(into_py_variant(py, TopicityAst::from_rust(py, value)?)?)
                     }
                     $ast_constraint::Stereogenicity(value) => Self::Stereogenicity(
-                        into_py_variant(py, StereogenicityAst::from_ast(value))?,
+                        into_py_variant(py, StereogenicityAst::from_rust(value))?,
                     ),
                 })
             }
 
-            pub(crate) fn to_ast(&self, py: Python<'_>) -> $ast_constraint {
+            pub(crate) fn to_rust(&self, py: Python<'_>) -> $ast_constraint {
                 match self {
                     Self::LigandSymmetry(value) => {
-                        $ast_constraint::LigandSymmetry(value.bind(py).borrow().to_ast(py))
+                        $ast_constraint::LigandSymmetry(value.bind(py).borrow().to_rust(py))
                     }
                     Self::Fluxionality(value) => {
-                        $ast_constraint::Fluxionality(value.bind(py).borrow().to_ast(py))
+                        $ast_constraint::Fluxionality(value.bind(py).borrow().to_rust(py))
                     }
                     Self::Topicity(value) => {
-                        $ast_constraint::Topicity(value.bind(py).borrow().to_ast(py))
+                        $ast_constraint::Topicity(value.bind(py).borrow().to_rust(py))
                     }
                     Self::Stereogenicity(value) => {
-                        $ast_constraint::Stereogenicity(value.bind(py).borrow().to_ast())
+                        $ast_constraint::Stereogenicity(value.bind(py).borrow().to_rust())
                     }
                 }
             }
@@ -585,7 +585,7 @@ macro_rules! stereo_constraints {
                     $update::Entries(entries) => $resolved::Entries(
                         entries
                             .iter()
-                            .map(|entry| entry.bind(py).borrow().to_ast(py))
+                            .map(|entry| entry.bind(py).borrow().to_rust(py))
                             .collect(),
                     ),
                 })
@@ -620,7 +620,7 @@ macro_rules! stereo_constraints {
         }
 
         impl $arg {
-            pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<$ast_constraints> {
+            pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<$ast_constraints> {
                 match self {
                     $arg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
                     $arg::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
@@ -644,7 +644,7 @@ macro_rules! stereo_constraints {
                 constraints.extend(
                     entries
                         .into_iter()
-                        .map(|entry| entry.bind(py).borrow().to_ast(py)),
+                        .map(|entry| entry.bind(py).borrow().to_rust(py)),
                 );
                 $constraints(constraints)
             }
@@ -652,8 +652,8 @@ macro_rules! stereo_constraints {
             pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
                 let mut parts = Vec::with_capacity(self.0.len());
                 for entry in self.0.iter() {
-                    let mirror = into_py_variant(py, $constraint::from_ast(py, entry)?)?;
-                    parts.push(mirror.bind(py).as_any().repr()?.extract::<String>()?);
+                    let value = into_py_variant(py, $constraint::from_rust(py, entry)?)?;
+                    parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
                 }
                 Ok(format!(
                     "{}([{}])",
@@ -664,7 +664,7 @@ macro_rules! stereo_constraints {
 
             /// Insert `c`, replacing any existing entry of the same key (last-wins).
             pub(crate) fn set(&mut self, py: Python<'_>, c: Py<$constraint>) {
-                self.0.set(c.bind(py).borrow().to_ast(py));
+                self.0.set(c.bind(py).borrow().to_rust(py));
             }
 
             /// Remove the entry with the given key, returning it if present (dict `pop`).
@@ -674,8 +674,8 @@ macro_rules! stereo_constraints {
                 key: Py<$key>,
             ) -> PyResult<Option<$constraint>> {
                 self.0
-                    .remove(key.bind(py).borrow().to_ast(py))
-                    .map(|c| $constraint::from_ast(py, &c))
+                    .remove(key.bind(py).borrow().to_rust(py))
+                    .map(|c| $constraint::from_rust(py, &c))
                     .transpose()
             }
 
@@ -703,7 +703,7 @@ macro_rules! stereo_constraints {
                 let keys = self
                     .0
                     .iter()
-                    .map(|c| into_py_variant(py, $key::from_ast(py, &c.key())?))
+                    .map(|c| into_py_variant(py, $key::from_rust(py, &c.key())?))
                     .collect::<PyResult<Vec<_>>>()?;
                 Ok($key_iter {
                     keys: keys.into_iter(),
@@ -715,7 +715,7 @@ macro_rules! stereo_constraints {
                 let entries = self
                     .0
                     .iter()
-                    .map(|c| into_py_variant(py, $constraint::from_ast(py, c)?))
+                    .map(|c| into_py_variant(py, $constraint::from_rust(py, c)?))
                     .collect::<PyResult<Vec<_>>>()?;
                 Ok($iter {
                     entries: entries.into_iter(),
@@ -729,8 +729,8 @@ macro_rules! stereo_constraints {
                     .iter()
                     .map(|c| {
                         Ok((
-                            into_py_variant(py, $key::from_ast(py, &c.key())?)?,
-                            into_py_variant(py, $constraint::from_ast(py, c)?)?,
+                            into_py_variant(py, $key::from_rust(py, &c.key())?)?,
+                            into_py_variant(py, $constraint::from_rust(py, c)?)?,
                         ))
                     })
                     .collect::<PyResult<Vec<_>>>()?;
@@ -747,10 +747,12 @@ macro_rules! stereo_constraints {
                 key: Py<$key>,
                 default: Option<Py<PyAny>>,
             ) -> PyResult<Py<PyAny>> {
-                match self.0.get(key.bind(py).borrow().to_ast(py)) {
-                    Some(constraint) => {
-                        Ok(into_py_variant(py, $constraint::from_ast(py, constraint)?)?.into_any())
-                    }
+                match self.0.get(key.bind(py).borrow().to_rust(py)) {
+                    Some(constraint) => Ok(into_py_variant(
+                        py,
+                        $constraint::from_rust(py, constraint)?,
+                    )?
+                    .into_any()),
                     None => Ok(default.unwrap_or_else(|| py.None())),
                 }
             }
@@ -761,8 +763,8 @@ macro_rules! stereo_constraints {
                 py: Python<'_>,
                 key: Py<$key>,
             ) -> PyResult<$constraint> {
-                match self.0.get(key.bind(py).borrow().to_ast(py)) {
-                    Some(constraint) => $constraint::from_ast(py, constraint),
+                match self.0.get(key.bind(py).borrow().to_rust(py)) {
+                    Some(constraint) => $constraint::from_rust(py, constraint),
                     None => Err(PyKeyError::new_err(
                         key.bind(py).as_any().repr()?.extract::<String>()?,
                     )),
@@ -771,7 +773,7 @@ macro_rules! stereo_constraints {
 
             /// Remove the entry with the given key; raises `KeyError` if absent.
             pub(crate) fn __delitem__(&mut self, py: Python<'_>, key: Py<$key>) -> PyResult<()> {
-                if self.0.remove(key.bind(py).borrow().to_ast(py)).is_some() {
+                if self.0.remove(key.bind(py).borrow().to_rust(py)).is_some() {
                     Ok(())
                 } else {
                     Err(PyKeyError::new_err(
@@ -781,7 +783,7 @@ macro_rules! stereo_constraints {
             }
 
             pub(crate) fn __contains__(&self, py: Python<'_>, key: Py<$key>) -> bool {
-                self.0.contains(key.bind(py).borrow().to_ast(py))
+                self.0.contains(key.bind(py).borrow().to_rust(py))
             }
 
             /// The ligand-symmetry constraints.
@@ -791,7 +793,7 @@ macro_rules! stereo_constraints {
             ) -> PyResult<Vec<LigandSymmetryAst>> {
                 self.0
                     .ligand_symmetries()
-                    .map(|ls| LigandSymmetryAst::from_ast(py, ls))
+                    .map(|ls| LigandSymmetryAst::from_rust(py, ls))
                     .collect()
             }
 
@@ -801,14 +803,14 @@ macro_rules! stereo_constraints {
                 py: Python<'_>,
                 permutation: OrientedLigandPermutation,
             ) -> PyResult<LigandSymmetryAst> {
-                LigandSymmetryAst::from_ast(py, &self.0.ligand_symmetry(permutation.to_ast()))
+                LigandSymmetryAst::from_rust(py, &self.0.ligand_symmetry(permutation.to_rust()))
             }
 
             /// The fluxionality constraints.
             pub(crate) fn fluxionalities(&self, py: Python<'_>) -> PyResult<Vec<FluxionalityAst>> {
                 self.0
                     .fluxionalities()
-                    .map(|f| FluxionalityAst::from_ast(py, f))
+                    .map(|f| FluxionalityAst::from_rust(py, f))
                     .collect()
             }
 
@@ -818,25 +820,25 @@ macro_rules! stereo_constraints {
                 py: Python<'_>,
                 permutation: LigandPermutation,
             ) -> PyResult<FluxionalityAst> {
-                FluxionalityAst::from_ast(py, &self.0.fluxionality(permutation.to_ast()))
+                FluxionalityAst::from_rust(py, &self.0.fluxionality(permutation.to_rust()))
             }
 
             /// The topicity constraints.
             pub(crate) fn topicities(&self, py: Python<'_>) -> PyResult<Vec<TopicityAst>> {
                 self.0
                     .topicities()
-                    .map(|t| TopicityAst::from_ast(py, t))
+                    .map(|t| TopicityAst::from_rust(py, t))
                     .collect()
             }
 
             /// The topicity relation at ligand `pair` (undetermined if absent).
             pub(crate) fn topicity(&self, pair: StereoLigandPair) -> TopicityRelationAst {
-                TopicityRelationAst::from_ast(&self.0.topicity(pair.to_ast()))
+                TopicityRelationAst::from_rust(&self.0.topicity(pair.to_rust()))
             }
 
             /// The stereogenicity constraint (undetermined if absent).
             pub(crate) fn stereogenicity(&self) -> StereogenicityAst {
-                StereogenicityAst::from_ast(&self.0.stereogenicity())
+                StereogenicityAst::from_rust(&self.0.stereogenicity())
             }
         }
 
@@ -968,7 +970,7 @@ macro_rules! stereo_constraints {
             /// Insert `c` on the entity in place, replacing any existing entry of the same key
             /// (last-wins).
             pub(crate) fn set(&self, py: Python<'_>, c: Py<$constraint>) {
-                let constraint = c.bind(py).borrow().to_ast(py);
+                let constraint = c.bind(py).borrow().to_rust(py);
                 self.with_mut(py, |cs| cs.set(constraint));
             }
 
@@ -978,15 +980,15 @@ macro_rules! stereo_constraints {
                 py: Python<'_>,
                 key: Py<$key>,
             ) -> PyResult<Option<$constraint>> {
-                let ast_key = key.bind(py).borrow().to_ast(py);
+                let ast_key = key.bind(py).borrow().to_rust(py);
                 self.with_mut(py, |cs| cs.remove(ast_key))
-                    .map(|c| $constraint::from_ast(py, &c))
+                    .map(|c| $constraint::from_rust(py, &c))
                     .transpose()
             }
 
             /// Remove the entry with the given key; raises `KeyError` if absent.
             pub(crate) fn __delitem__(&self, py: Python<'_>, key: Py<$key>) -> PyResult<()> {
-                let ast_key = key.bind(py).borrow().to_ast(py);
+                let ast_key = key.bind(py).borrow().to_rust(py);
                 if self.with_mut(py, |cs| cs.remove(ast_key)).is_some() {
                     Ok(())
                 } else {
@@ -1018,7 +1020,7 @@ macro_rules! stereo_constraints {
             pub(crate) fn keys(&self, py: Python<'_>) -> PyResult<$key_iter> {
                 let keys = self.read(py, |cs| {
                     cs.iter()
-                        .map(|c| into_py_variant(py, $key::from_ast(py, &c.key())?))
+                        .map(|c| into_py_variant(py, $key::from_rust(py, &c.key())?))
                         .collect::<PyResult<Vec<_>>>()
                 })?;
                 Ok($key_iter {
@@ -1030,7 +1032,7 @@ macro_rules! stereo_constraints {
             pub(crate) fn values(&self, py: Python<'_>) -> PyResult<$iter> {
                 let entries = self.read(py, |cs| {
                     cs.iter()
-                        .map(|c| into_py_variant(py, $constraint::from_ast(py, c)?))
+                        .map(|c| into_py_variant(py, $constraint::from_rust(py, c)?))
                         .collect::<PyResult<Vec<_>>>()
                 })?;
                 Ok($iter {
@@ -1044,8 +1046,8 @@ macro_rules! stereo_constraints {
                     cs.iter()
                         .map(|c| {
                             Ok((
-                                into_py_variant(py, $key::from_ast(py, &c.key())?)?,
-                                into_py_variant(py, $constraint::from_ast(py, c)?)?,
+                                into_py_variant(py, $key::from_rust(py, &c.key())?)?,
+                                into_py_variant(py, $constraint::from_rust(py, c)?)?,
                             ))
                         })
                         .collect::<PyResult<Vec<_>>>()
@@ -1063,10 +1065,10 @@ macro_rules! stereo_constraints {
                 key: Py<$key>,
                 default: Option<Py<PyAny>>,
             ) -> PyResult<Py<PyAny>> {
-                let ast_key = key.bind(py).borrow().to_ast(py);
+                let ast_key = key.bind(py).borrow().to_rust(py);
                 let found = self.read(py, |cs| {
                     cs.get(ast_key)
-                        .map(|constraint| $constraint::from_ast(py, constraint))
+                        .map(|constraint| $constraint::from_rust(py, constraint))
                         .transpose()
                 })?;
                 match found {
@@ -1081,10 +1083,10 @@ macro_rules! stereo_constraints {
                 py: Python<'_>,
                 key: Py<$key>,
             ) -> PyResult<$constraint> {
-                let ast_key = key.bind(py).borrow().to_ast(py);
+                let ast_key = key.bind(py).borrow().to_rust(py);
                 let found = self.read(py, |cs| {
                     cs.get(ast_key)
-                        .map(|constraint| $constraint::from_ast(py, constraint))
+                        .map(|constraint| $constraint::from_rust(py, constraint))
                         .transpose()
                 })?;
                 match found {
@@ -1096,7 +1098,7 @@ macro_rules! stereo_constraints {
             }
 
             pub(crate) fn __contains__(&self, py: Python<'_>, key: Py<$key>) -> PyResult<bool> {
-                let ast_key = key.bind(py).borrow().to_ast(py);
+                let ast_key = key.bind(py).borrow().to_rust(py);
                 self.read(py, |cs| Ok(cs.contains(ast_key)))
             }
 
@@ -1107,7 +1109,7 @@ macro_rules! stereo_constraints {
             ) -> PyResult<Vec<LigandSymmetryAst>> {
                 self.read(py, |cs| {
                     cs.ligand_symmetries()
-                        .map(|ls| LigandSymmetryAst::from_ast(py, ls))
+                        .map(|ls| LigandSymmetryAst::from_rust(py, ls))
                         .collect()
                 })
             }
@@ -1119,7 +1121,7 @@ macro_rules! stereo_constraints {
                 permutation: OrientedLigandPermutation,
             ) -> PyResult<LigandSymmetryAst> {
                 self.read(py, |cs| {
-                    LigandSymmetryAst::from_ast(py, &cs.ligand_symmetry(permutation.to_ast()))
+                    LigandSymmetryAst::from_rust(py, &cs.ligand_symmetry(permutation.to_rust()))
                 })
             }
 
@@ -1127,7 +1129,7 @@ macro_rules! stereo_constraints {
             pub(crate) fn fluxionalities(&self, py: Python<'_>) -> PyResult<Vec<FluxionalityAst>> {
                 self.read(py, |cs| {
                     cs.fluxionalities()
-                        .map(|f| FluxionalityAst::from_ast(py, f))
+                        .map(|f| FluxionalityAst::from_rust(py, f))
                         .collect()
                 })
             }
@@ -1139,7 +1141,7 @@ macro_rules! stereo_constraints {
                 permutation: LigandPermutation,
             ) -> PyResult<FluxionalityAst> {
                 self.read(py, |cs| {
-                    FluxionalityAst::from_ast(py, &cs.fluxionality(permutation.to_ast()))
+                    FluxionalityAst::from_rust(py, &cs.fluxionality(permutation.to_rust()))
                 })
             }
 
@@ -1147,7 +1149,7 @@ macro_rules! stereo_constraints {
             pub(crate) fn topicities(&self, py: Python<'_>) -> PyResult<Vec<TopicityAst>> {
                 self.read(py, |cs| {
                     cs.topicities()
-                        .map(|t| TopicityAst::from_ast(py, t))
+                        .map(|t| TopicityAst::from_rust(py, t))
                         .collect()
                 })
             }
@@ -1159,14 +1161,14 @@ macro_rules! stereo_constraints {
                 pair: StereoLigandPair,
             ) -> PyResult<TopicityRelationAst> {
                 self.read(py, |cs| {
-                    Ok(TopicityRelationAst::from_ast(&cs.topicity(pair.to_ast())))
+                    Ok(TopicityRelationAst::from_rust(&cs.topicity(pair.to_rust())))
                 })
             }
 
             /// The stereogenicity constraint (undetermined if absent).
             pub(crate) fn stereogenicity(&self, py: Python<'_>) -> PyResult<StereogenicityAst> {
                 self.read(py, |cs| {
-                    Ok(StereogenicityAst::from_ast(&cs.stereogenicity()))
+                    Ok(StereogenicityAst::from_rust(&cs.stereogenicity()))
                 })
             }
         }

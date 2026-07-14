@@ -1,4 +1,4 @@
-//! Bond constraint mirrors, containers, and live views.
+//! Bond constraint values, containers, and live views.
 
 use std::vec::IntoIter;
 
@@ -13,7 +13,7 @@ use umol_ast::ast::{
 use super::ring::{RingMembershipAst, RingScope};
 use crate::bond::BondAst;
 use crate::boolean::{BooleanArg, BooleanAst};
-use crate::convert::{hash_ast, into_py_variant, variant_repr};
+use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::molecule::MoleculeAst;
 use crate::stereo::{CisTransStereoArg, CisTransStereoAst};
 use crate::value::{ValueArg, ValueAst};
@@ -30,11 +30,11 @@ pub enum BondConstraintKey {
 #[pymethods]
 impl BondConstraintKey {
     pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -48,22 +48,22 @@ impl BondConstraintKey {
 }
 
 impl BondConstraintKey {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstBondConstraintKey) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstBondConstraintKey) -> PyResult<Self> {
         Ok(match ast {
             AstBondConstraintKey::Aromatic => Self::Aromatic(),
             AstBondConstraintKey::CisTransStereo => Self::CisTransStereo(),
             AstBondConstraintKey::RingMembership(scope) => {
-                Self::RingMembership(into_py_variant(py, RingScope::from_ast(scope))?)
+                Self::RingMembership(into_py_variant(py, RingScope::from_rust(scope))?)
             }
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstBondConstraintKey {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstBondConstraintKey {
         match self {
             Self::Aromatic() => AstBondConstraintKey::Aromatic,
             Self::CisTransStereo() => AstBondConstraintKey::CisTransStereo,
             Self::RingMembership(scope) => {
-                AstBondConstraintKey::RingMembership(scope.bind(py).borrow().to_ast())
+                AstBondConstraintKey::RingMembership(scope.bind(py).borrow().to_rust())
             }
         }
     }
@@ -83,15 +83,15 @@ impl BondConstraintAst {
     /// The constraint's key (identity).
     #[getter]
     pub(crate) fn key(&self, py: Python<'_>) -> PyResult<BondConstraintKey> {
-        BondConstraintKey::from_ast(py, &self.to_ast(py).key())
+        BondConstraintKey::from_rust(py, &self.to_rust(py).key())
     }
 
     pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
@@ -105,28 +105,28 @@ impl BondConstraintAst {
 }
 
 impl BondConstraintAst {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstBondConstraintAst) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstBondConstraintAst) -> PyResult<Self> {
         Ok(match ast {
             AstBondConstraintAst::Aromatic(b) => {
-                Self::Aromatic(into_py_variant(py, BooleanAst::from_ast(b))?)
+                Self::Aromatic(into_py_variant(py, BooleanAst::from_rust(b))?)
             }
             AstBondConstraintAst::CisTransStereo(c) => {
-                Self::CisTransStereo(into_py_variant(py, CisTransStereoAst::from_ast(py, c)?)?)
+                Self::CisTransStereo(into_py_variant(py, CisTransStereoAst::from_rust(py, c)?)?)
             }
             AstBondConstraintAst::RingMembership(m) => {
-                Self::RingMembership(into_py_variant(py, RingMembershipAst::from_ast(py, m)?)?)
+                Self::RingMembership(into_py_variant(py, RingMembershipAst::from_rust(py, m)?)?)
             }
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstBondConstraintAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstBondConstraintAst {
         match self {
-            Self::Aromatic(b) => AstBondConstraintAst::Aromatic(b.bind(py).borrow().to_ast()),
+            Self::Aromatic(b) => AstBondConstraintAst::Aromatic(b.bind(py).borrow().to_rust()),
             Self::CisTransStereo(c) => {
-                AstBondConstraintAst::CisTransStereo(c.bind(py).borrow().to_ast(py))
+                AstBondConstraintAst::CisTransStereo(c.bind(py).borrow().to_rust(py))
             }
             Self::RingMembership(m) => {
-                AstBondConstraintAst::RingMembership(m.bind(py).borrow().to_ast(py))
+                AstBondConstraintAst::RingMembership(m.bind(py).borrow().to_rust(py))
             }
         }
     }
@@ -157,7 +157,7 @@ impl BondConstraintsUpdate {
             BondConstraintsUpdate::Entries(entries) => ResolvedBondConstraintsUpdate::Entries(
                 entries
                     .iter()
-                    .map(|entry| entry.bind(py).borrow().to_ast(py))
+                    .map(|entry| entry.bind(py).borrow().to_rust(py))
                     .collect(),
             ),
         })
@@ -197,7 +197,7 @@ pub(crate) enum BondConstraintsArg {
 }
 
 impl BondConstraintsArg {
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstBondConstraintsAst> {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<AstBondConstraintsAst> {
         match self {
             BondConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
             BondConstraintsArg::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
@@ -221,7 +221,7 @@ impl BondConstraintsAst {
         constraints.extend(
             entries
                 .into_iter()
-                .map(|entry| entry.bind(py).borrow().to_ast(py)),
+                .map(|entry| entry.bind(py).borrow().to_rust(py)),
         );
         BondConstraintsAst(constraints)
     }
@@ -229,15 +229,15 @@ impl BondConstraintsAst {
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {
-            let mirror = into_py_variant(py, BondConstraintAst::from_ast(py, entry)?)?;
-            parts.push(mirror.bind(py).as_any().repr()?.extract::<String>()?);
+            let value = into_py_variant(py, BondConstraintAst::from_rust(py, entry)?)?;
+            parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
         }
         Ok(format!("BondConstraintsAst([{}])", parts.join(", ")))
     }
 
     /// Insert `c`, replacing any existing entry of the same key (last-wins).
     pub(crate) fn set(&mut self, py: Python<'_>, c: Py<BondConstraintAst>) {
-        self.0.set(c.bind(py).borrow().to_ast(py));
+        self.0.set(c.bind(py).borrow().to_rust(py));
     }
 
     /// Remove the entry with the given key, returning it if present (dict `pop`).
@@ -247,8 +247,8 @@ impl BondConstraintsAst {
         key: Py<BondConstraintKey>,
     ) -> PyResult<Option<BondConstraintAst>> {
         self.0
-            .remove(key.bind(py).borrow().to_ast(py))
-            .map(|c| BondConstraintAst::from_ast(py, &c))
+            .remove(key.bind(py).borrow().to_rust(py))
+            .map(|c| BondConstraintAst::from_rust(py, &c))
             .transpose()
     }
 
@@ -298,9 +298,9 @@ impl BondConstraintsAst {
         key: Py<BondConstraintKey>,
         default: Option<Py<PyAny>>,
     ) -> PyResult<Py<PyAny>> {
-        match self.0.get(key.bind(py).borrow().to_ast(py)) {
+        match self.0.get(key.bind(py).borrow().to_rust(py)) {
             Some(constraint) => {
-                Ok(into_py_variant(py, BondConstraintAst::from_ast(py, constraint)?)?.into_any())
+                Ok(into_py_variant(py, BondConstraintAst::from_rust(py, constraint)?)?.into_any())
             }
             None => Ok(default.unwrap_or_else(|| py.None())),
         }
@@ -312,8 +312,8 @@ impl BondConstraintsAst {
         py: Python<'_>,
         key: Py<BondConstraintKey>,
     ) -> PyResult<BondConstraintAst> {
-        match self.0.get(key.bind(py).borrow().to_ast(py)) {
-            Some(constraint) => BondConstraintAst::from_ast(py, constraint),
+        match self.0.get(key.bind(py).borrow().to_rust(py)) {
+            Some(constraint) => BondConstraintAst::from_rust(py, constraint),
             None => Err(PyKeyError::new_err(
                 key.bind(py).as_any().repr()?.extract::<String>()?,
             )),
@@ -326,7 +326,7 @@ impl BondConstraintsAst {
         py: Python<'_>,
         key: Py<BondConstraintKey>,
     ) -> PyResult<()> {
-        if self.0.remove(key.bind(py).borrow().to_ast(py)).is_some() {
+        if self.0.remove(key.bind(py).borrow().to_rust(py)).is_some() {
             Ok(())
         } else {
             Err(PyKeyError::new_err(
@@ -336,19 +336,20 @@ impl BondConstraintsAst {
     }
 
     pub(crate) fn __contains__(&self, py: Python<'_>, key: Py<BondConstraintKey>) -> bool {
-        self.0.contains(key.bind(py).borrow().to_ast(py))
+        self.0.contains(key.bind(py).borrow().to_rust(py))
     }
 
     /// The aromatic value; `Undetermined` when no `Aromatic` constraint is present
-    /// (mirroring the non-optional Rust accessor).
+    /// (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn aromatic(&self) -> BooleanAst {
-        BooleanAst::from_ast(&self.0.aromatic())
+        BooleanAst::from_rust(&self.0.aromatic())
     }
 
     #[setter]
     pub(crate) fn set_aromatic(&mut self, py: Python<'_>, value: BooleanArg) {
-        self.0.set(AstBondConstraintAst::aromatic(value.to_ast(py)));
+        self.0
+            .set(AstBondConstraintAst::aromatic(value.to_rust(py)));
     }
 
     /// The cis/trans-stereo state, or `None`.
@@ -356,7 +357,7 @@ impl BondConstraintsAst {
     pub(crate) fn cis_trans_stereo(&self, py: Python<'_>) -> PyResult<Option<CisTransStereoAst>> {
         self.0
             .cis_trans_stereo()
-            .map(|c| CisTransStereoAst::from_ast(py, c))
+            .map(|c| CisTransStereoAst::from_rust(py, c))
             .transpose()
     }
 
@@ -367,7 +368,7 @@ impl BondConstraintsAst {
         value: CisTransStereoArg,
     ) -> PyResult<()> {
         self.0
-            .set(AstBondConstraintAst::cis_trans_stereo(value.to_ast(py)?));
+            .set(AstBondConstraintAst::cis_trans_stereo(value.to_rust(py)?));
         Ok(())
     }
 
@@ -376,7 +377,7 @@ impl BondConstraintsAst {
     pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
         self.0
             .ring_count()
-            .map(|v| ValueAst::from_ast(py, v))
+            .map(|v| ValueAst::from_rust(py, v))
             .transpose()
     }
 
@@ -384,7 +385,7 @@ impl BondConstraintsAst {
     pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: ValueArg) {
         self.0.set(AstBondConstraintAst::ring_membership(
             AstRingScope::All,
-            value.to_ast(py),
+            value.to_rust(py),
         ));
     }
 
@@ -398,7 +399,7 @@ impl BondConstraintsAst {
     }
 
     /// The present constraints as a dict keyed by snake_case name; values are the
-    /// inner-value mirrors. Ring memberships key by scope: `ring_count` for the
+    /// Python values. Ring memberships key by scope: `ring_count` for the
     /// all-rings scope, `ring_size_count_<n>` for a specific ring size.
     pub(crate) fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         bond_constraints_asdict(py, &self.0)
@@ -431,7 +432,7 @@ pub(crate) fn bond_constraints_iter(
 ) -> PyResult<BondConstraintIter> {
     let entries = constraints
         .iter()
-        .map(|constraint| into_py_variant(py, BondConstraintAst::from_ast(py, constraint)?))
+        .map(|constraint| into_py_variant(py, BondConstraintAst::from_rust(py, constraint)?))
         .collect::<PyResult<Vec<_>>>()?;
     Ok(BondConstraintIter {
         entries: entries.into_iter(),
@@ -445,7 +446,7 @@ pub(crate) fn bond_constraint_keys(
 ) -> PyResult<BondConstraintKeyIter> {
     let keys = constraints
         .iter()
-        .map(|constraint| into_py_variant(py, BondConstraintKey::from_ast(py, &constraint.key())?))
+        .map(|constraint| into_py_variant(py, BondConstraintKey::from_rust(py, &constraint.key())?))
         .collect::<PyResult<Vec<_>>>()?;
     Ok(BondConstraintKeyIter {
         keys: keys.into_iter(),
@@ -461,8 +462,8 @@ pub(crate) fn bond_constraint_items(
         .iter()
         .map(|constraint| {
             Ok((
-                into_py_variant(py, BondConstraintKey::from_ast(py, &constraint.key())?)?,
-                into_py_variant(py, BondConstraintAst::from_ast(py, constraint)?)?,
+                into_py_variant(py, BondConstraintKey::from_rust(py, &constraint.key())?)?,
+                into_py_variant(py, BondConstraintAst::from_rust(py, constraint)?)?,
             ))
         })
         .collect::<PyResult<Vec<_>>>()?;
@@ -472,7 +473,7 @@ pub(crate) fn bond_constraint_items(
 }
 
 /// The present constraints as a dict keyed by snake_case name; values are the
-/// inner-value mirrors. Ring memberships key by scope: `ring_count` for the
+/// Python values. Ring memberships key by scope: `ring_count` for the
 /// all-rings scope, `ring_size_count_<n>` for a specific ring size.
 pub(crate) fn bond_constraints_asdict<'py>(
     py: Python<'py>,
@@ -482,17 +483,17 @@ pub(crate) fn bond_constraints_asdict<'py>(
     for entry in constraints.iter() {
         match entry {
             AstBondConstraintAst::Aromatic(b) => {
-                dict.set_item("aromatic", BooleanAst::from_ast(b))?
+                dict.set_item("aromatic", BooleanAst::from_rust(b))?
             }
             AstBondConstraintAst::CisTransStereo(c) => {
-                dict.set_item("cis_trans_stereo", CisTransStereoAst::from_ast(py, c)?)?
+                dict.set_item("cis_trans_stereo", CisTransStereoAst::from_rust(py, c)?)?
             }
             AstBondConstraintAst::RingMembership(m) => {
                 let key = match m.scope {
                     AstRingScope::All => "ring_count".to_string(),
                     AstRingScope::Size(size) => format!("ring_size_count_{size}"),
                 };
-                dict.set_item(key, ValueAst::from_ast(py, &m.count)?)?
+                dict.set_item(key, ValueAst::from_rust(py, &m.count)?)?
             }
         }
     }
@@ -586,7 +587,7 @@ impl BondConstraintsView {
     /// Insert `c` on the bond in place, replacing any existing entry of the same
     /// key (last-wins).
     pub(crate) fn set(&self, py: Python<'_>, c: Py<BondConstraintAst>) {
-        self.set_ast(py, c.bind(py).borrow().to_ast(py));
+        self.set_ast(py, c.bind(py).borrow().to_rust(py));
     }
 
     /// Remove the entry with the given key from the bond in place, returning it if
@@ -596,15 +597,15 @@ impl BondConstraintsView {
         py: Python<'_>,
         key: Py<BondConstraintKey>,
     ) -> PyResult<Option<BondConstraintAst>> {
-        self.remove_ast(py, key.bind(py).borrow().to_ast(py))
-            .map(|c| BondConstraintAst::from_ast(py, &c))
+        self.remove_ast(py, key.bind(py).borrow().to_rust(py))
+            .map(|c| BondConstraintAst::from_rust(py, &c))
             .transpose()
     }
 
     /// Remove the entry with the given key; raises `KeyError` if absent.
     pub(crate) fn __delitem__(&self, py: Python<'_>, key: Py<BondConstraintKey>) -> PyResult<()> {
         if self
-            .remove_ast(py, key.bind(py).borrow().to_ast(py))
+            .remove_ast(py, key.bind(py).borrow().to_rust(py))
             .is_some()
         {
             Ok(())
@@ -657,10 +658,10 @@ impl BondConstraintsView {
         key: Py<BondConstraintKey>,
         default: Option<Py<PyAny>>,
     ) -> PyResult<Py<PyAny>> {
-        let key = key.bind(py).borrow().to_ast(py);
+        let key = key.bind(py).borrow().to_rust(py);
         let found = self.read(py, |cs| {
             cs.get(key)
-                .map(|constraint| BondConstraintAst::from_ast(py, constraint))
+                .map(|constraint| BondConstraintAst::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -675,10 +676,10 @@ impl BondConstraintsView {
         py: Python<'_>,
         key: Py<BondConstraintKey>,
     ) -> PyResult<BondConstraintAst> {
-        let ast_key = key.bind(py).borrow().to_ast(py);
+        let ast_key = key.bind(py).borrow().to_rust(py);
         let found = self.read(py, |cs| {
             cs.get(ast_key)
-                .map(|constraint| BondConstraintAst::from_ast(py, constraint))
+                .map(|constraint| BondConstraintAst::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -694,20 +695,20 @@ impl BondConstraintsView {
         py: Python<'_>,
         key: Py<BondConstraintKey>,
     ) -> PyResult<bool> {
-        let key = key.bind(py).borrow().to_ast(py);
+        let key = key.bind(py).borrow().to_rust(py);
         self.read(py, |cs| Ok(cs.contains(key)))
     }
 
     /// The aromatic value; `Undetermined` when no `Aromatic` constraint is present
-    /// (mirroring the non-optional Rust accessor).
+    /// (matching the non-optional Rust accessor).
     #[getter]
     pub(crate) fn aromatic(&self, py: Python<'_>) -> PyResult<BooleanAst> {
-        self.read(py, |cs| Ok(BooleanAst::from_ast(&cs.aromatic())))
+        self.read(py, |cs| Ok(BooleanAst::from_rust(&cs.aromatic())))
     }
 
     #[setter]
     pub(crate) fn set_aromatic(&self, py: Python<'_>, value: BooleanArg) {
-        self.set_ast(py, AstBondConstraintAst::aromatic(value.to_ast(py)));
+        self.set_ast(py, AstBondConstraintAst::aromatic(value.to_rust(py)));
     }
 
     /// The cis/trans-stereo state, or `None`.
@@ -715,7 +716,7 @@ impl BondConstraintsView {
     pub(crate) fn cis_trans_stereo(&self, py: Python<'_>) -> PyResult<Option<CisTransStereoAst>> {
         self.read(py, |cs| {
             cs.cis_trans_stereo()
-                .map(|c| CisTransStereoAst::from_ast(py, c))
+                .map(|c| CisTransStereoAst::from_rust(py, c))
                 .transpose()
         })
     }
@@ -728,7 +729,7 @@ impl BondConstraintsView {
     ) -> PyResult<()> {
         self.set_ast(
             py,
-            AstBondConstraintAst::cis_trans_stereo(value.to_ast(py)?),
+            AstBondConstraintAst::cis_trans_stereo(value.to_rust(py)?),
         );
         Ok(())
     }
@@ -738,7 +739,7 @@ impl BondConstraintsView {
     pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
         self.read(py, |cs| {
             cs.ring_count()
-                .map(|v| ValueAst::from_ast(py, v))
+                .map(|v| ValueAst::from_rust(py, v))
                 .transpose()
         })
     }
@@ -747,7 +748,7 @@ impl BondConstraintsView {
     pub(crate) fn set_ring_count(&self, py: Python<'_>, value: ValueArg) {
         self.set_ast(
             py,
-            AstBondConstraintAst::ring_membership(AstRingScope::All, value.to_ast(py)),
+            AstBondConstraintAst::ring_membership(AstRingScope::All, value.to_rust(py)),
         );
     }
 
@@ -834,7 +835,7 @@ impl BondRingSizeCounts {
     pub(crate) fn __getitem__(&self, py: Python<'_>, size: u8) -> PyResult<Option<ValueAst>> {
         self.read(py, |cs| {
             cs.ring_size_count(size)
-                .map(|v| ValueAst::from_ast(py, v))
+                .map(|v| ValueAst::from_rust(py, v))
                 .transpose()
         })
     }
@@ -859,7 +860,7 @@ impl BondRingSizeCounts {
     /// Set the membership count for rings of `size` in place.
     pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: ValueArg) {
         let constraint =
-            AstBondConstraintAst::ring_membership(AstRingScope::Size(size), count.to_ast(py));
+            AstBondConstraintAst::ring_membership(AstRingScope::Size(size), count.to_rust(py));
         self.write(py, |cs| cs.set(constraint));
     }
 
@@ -878,7 +879,7 @@ impl BondRingSizeCounts {
             for entry in cs.iter() {
                 if let AstBondConstraintAst::RingMembership(m) = entry {
                     if let AstRingScope::Size(size) = m.scope {
-                        let count = into_py_variant(py, ValueAst::from_ast(py, &m.count)?)?;
+                        let count = into_py_variant(py, ValueAst::from_rust(py, &m.count)?)?;
                         parts.push(format!(
                             "{size}: {}",
                             count.bind(py).as_any().repr()?.extract::<String>()?

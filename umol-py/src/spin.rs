@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 use umol_ast::ast::SpinStateAst as AstSpinStateAst;
 
-use crate::convert::{hash_ast, into_py_variant};
+use crate::convert::{hash_rust, into_py_variant};
 use crate::value::{ValueArg, ValueAst};
 
 /// Spin state: unpaired-electron count and multiplicity as independent value fields.
@@ -26,11 +26,11 @@ impl SpinStateAst {
     }
 
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_ast(py) == other.to_ast(py)
+        self.to_rust(py) == other.to_rust(py)
     }
 
     fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_ast(&self.to_ast(py))
+        hash_rust(&self.to_rust(py))
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -51,17 +51,17 @@ impl SpinStateAst {
 }
 
 impl SpinStateAst {
-    pub(crate) fn from_ast(py: Python<'_>, ast: &AstSpinStateAst) -> PyResult<SpinStateAst> {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstSpinStateAst) -> PyResult<SpinStateAst> {
         Ok(SpinStateAst {
-            unpaired: into_py_variant(py, ValueAst::from_ast(py, &ast.unpaired)?)?,
-            multiplicity: into_py_variant(py, ValueAst::from_ast(py, &ast.multiplicity)?)?,
+            unpaired: into_py_variant(py, ValueAst::from_rust(py, &ast.unpaired)?)?,
+            multiplicity: into_py_variant(py, ValueAst::from_rust(py, &ast.multiplicity)?)?,
         })
     }
 
-    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstSpinStateAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstSpinStateAst {
         AstSpinStateAst {
-            unpaired: self.unpaired.bind(py).borrow().to_ast(py),
-            multiplicity: self.multiplicity.bind(py).borrow().to_ast(py),
+            unpaired: self.unpaired.bind(py).borrow().to_rust(py),
+            multiplicity: self.multiplicity.bind(py).borrow().to_rust(py),
         }
     }
 }
@@ -81,7 +81,7 @@ mod tests {
     })]
     fn test_spin_state_ast_roundtrip(#[case] ast: AstSpinStateAst) {
         Python::attach(|py| {
-            assert_eq!(SpinStateAst::from_ast(py, &ast).unwrap().to_ast(py), ast);
+            assert_eq!(SpinStateAst::from_rust(py, &ast).unwrap().to_rust(py), ast);
         });
     }
 }
