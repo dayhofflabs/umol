@@ -58,7 +58,10 @@ mod tests {
         #[case] spin: SpinStateAst,
     ) {
         MulticenterBondsResolver::new().resolve(&mut mol).unwrap();
-        assert_eq!(mol[MulticenterBondId(0)].charge, charge);
-        assert_eq!(mol[MulticenterBondId(0)].spin, spin);
+        assert_eq!(
+            mol.multicenter_bond(MulticenterBondId(0)).ast.charge,
+            charge
+        );
+        assert_eq!(mol.multicenter_bond(MulticenterBondId(0)).ast.spin, spin);
     }
 }

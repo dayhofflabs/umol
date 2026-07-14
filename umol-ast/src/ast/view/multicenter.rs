@@ -1,7 +1,6 @@
 //! Multicenter bond views.
 
 use std::collections::{BTreeSet, HashSet};
-use std::ops::Index;
 
 use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
@@ -160,13 +159,6 @@ impl<'a> MulticenterBondViews<'a> {
                 )
             })
             .collect()
-    }
-}
-
-impl<'a> Index<MulticenterBondId> for MulticenterBondViews<'a> {
-    type Output = MulticenterBondAst;
-    fn index(&self, id: MulticenterBondId) -> &MulticenterBondAst {
-        self.multicenter_bonds.data(RelationId::from(id))
     }
 }
 
@@ -404,11 +396,6 @@ mod tests {
     fn test_multicenter_bond_views_get_none(molecule: MoleculeAst) {
         let res = molecule.multicenter_bonds().get(MulticenterBondId(99));
         assert!(res.is_none());
-    }
-
-    #[rstest]
-    fn test_multicenter_bond_views_index(molecule: MoleculeAst) {
-        let _: &MulticenterBondAst = &molecule.multicenter_bonds()[MulticenterBondId(0)];
     }
 
     #[rstest]

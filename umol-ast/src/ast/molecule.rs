@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
-use std::ops::Index;
 use std::sync::Arc;
 use std::{iter, mem};
 
@@ -1055,7 +1054,7 @@ impl MoleculeAst {
             .map(|(component, atoms)| {
                 let mut editor = MoleculeAst::new().edit();
                 for atom in atoms {
-                    editor.add_atom(self[*atom].clone());
+                    editor.add_atom(self.atom(*atom).ast.clone());
                 }
                 let mut bond_compact: HashMap<BondId, BondId> = HashMap::new();
                 for (original, bond) in self.bonds().iter().enumerate() {
@@ -1424,62 +1423,6 @@ fn idremapping_from_correspondence(correspondence: &MoleculeCorrespondence) -> I
             .map(|&(compact, original)| (original, compact))
             .collect(),
     )
-}
-
-impl Index<AtomId> for MoleculeAst {
-    type Output = AtomAst;
-    fn index(&self, id: AtomId) -> &AtomAst {
-        &self.atoms[id.index()]
-    }
-}
-
-impl Index<BondId> for MoleculeAst {
-    type Output = BondAst;
-    fn index(&self, id: BondId) -> &BondAst {
-        &self.bonds[id.index()]
-    }
-}
-
-impl Index<DativeBondId> for MoleculeAst {
-    type Output = DativeBondAst;
-    fn index(&self, id: DativeBondId) -> &DativeBondAst {
-        self.dative_bonds.data(RelationId::from(id))
-    }
-}
-
-impl Index<AromaticSystemId> for MoleculeAst {
-    type Output = AromaticSystemAst;
-    fn index(&self, id: AromaticSystemId) -> &AromaticSystemAst {
-        self.aromatic_systems.data(RelationId::from(id))
-    }
-}
-
-impl Index<MulticenterBondId> for MoleculeAst {
-    type Output = MulticenterBondAst;
-    fn index(&self, id: MulticenterBondId) -> &MulticenterBondAst {
-        self.multicenter_bonds.data(RelationId::from(id))
-    }
-}
-
-impl Index<NoncovalentBondId> for MoleculeAst {
-    type Output = NoncovalentBondAst;
-    fn index(&self, id: NoncovalentBondId) -> &NoncovalentBondAst {
-        self.noncovalent_bonds.data(RelationId::from(id))
-    }
-}
-
-impl Index<StereoAtomId> for MoleculeAst {
-    type Output = StereoAtomAst;
-    fn index(&self, id: StereoAtomId) -> &StereoAtomAst {
-        self.stereo_atoms.data(RelationId::from(id))
-    }
-}
-
-impl Index<StereoBondId> for MoleculeAst {
-    type Output = StereoBondAst;
-    fn index(&self, id: StereoBondId) -> &StereoBondAst {
-        self.stereo_bonds.data(RelationId::from(id))
-    }
 }
 
 #[cfg(test)]

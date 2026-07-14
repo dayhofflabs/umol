@@ -2,7 +2,6 @@
 //! `BondEditorView` / `BondEditorViewMut` builder bundles.
 
 use std::collections::HashSet;
-use std::ops::Index;
 
 use umol_graph_core::{EdgeId, NodeId};
 
@@ -116,13 +115,6 @@ impl<'a> BondViews<'a> {
                     .expect("bond id from graph must refer to a bond in this molecule")
             })
             .collect()
-    }
-}
-
-impl<'a> Index<BondId> for BondViews<'a> {
-    type Output = BondAst;
-    fn index(&self, id: BondId) -> &BondAst {
-        &self.bonds[id.index()]
     }
 }
 
@@ -347,12 +339,6 @@ mod tests {
     fn test_bond_views_get_none(molecule: MoleculeAst) {
         let res = molecule.bonds().get(BondId(99));
         assert!(res.is_none());
-    }
-
-    #[rstest]
-    fn test_bond_views_index(molecule: MoleculeAst) {
-        let bond: &BondAst = &molecule.bonds()[BondId(1)];
-        assert_eq!(*bond, BondAst::from_order(2));
     }
 
     #[rstest]

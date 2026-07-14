@@ -1,7 +1,6 @@
 //! Noncovalent bond views.
 
 use std::collections::HashSet;
-use std::ops::Index;
 
 use umol_graph_core::{FixedRelationSet, NodeId, RelationId, Unordered};
 
@@ -152,13 +151,6 @@ impl<'a> NoncovalentBondViews<'a> {
                 )
             })
             .collect()
-    }
-}
-
-impl<'a> Index<NoncovalentBondId> for NoncovalentBondViews<'a> {
-    type Output = NoncovalentBondAst;
-    fn index(&self, id: NoncovalentBondId) -> &NoncovalentBondAst {
-        self.noncovalent_bonds.data(RelationId::from(id))
     }
 }
 
@@ -328,11 +320,6 @@ mod tests {
     fn test_noncovalent_bond_views_get_none(molecule: MoleculeAst) {
         let res = molecule.noncovalent_bonds().get(NoncovalentBondId(99));
         assert!(res.is_none());
-    }
-
-    #[rstest]
-    fn test_noncovalent_bond_views_index(molecule: MoleculeAst) {
-        let _: &NoncovalentBondAst = &molecule.noncovalent_bonds()[NoncovalentBondId(0)];
     }
 
     #[rstest]

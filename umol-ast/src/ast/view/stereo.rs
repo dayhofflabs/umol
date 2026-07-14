@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 use std::iter;
-use std::ops::Index;
 
 use umol_graph_core::{EdgeId, FixedVarBirelationSet, NodeId, Ordered, RelationId};
 use umol_perm::{OrientedPermutationGroup, Permutation};
@@ -201,13 +200,6 @@ impl<'a> StereoAtomViews<'a> {
                 molecule,
             }
         })
-    }
-}
-
-impl<'a> Index<StereoAtomId> for StereoAtomViews<'a> {
-    type Output = StereoAtomAst;
-    fn index(&self, id: StereoAtomId) -> &StereoAtomAst {
-        self.stereo_atoms.data(RelationId::from(id))
     }
 }
 
@@ -560,13 +552,6 @@ impl<'a> StereoBondViews<'a> {
                 molecule,
             }
         })
-    }
-}
-
-impl<'a> Index<StereoBondId> for StereoBondViews<'a> {
-    type Output = StereoBondAst;
-    fn index(&self, id: StereoBondId) -> &StereoBondAst {
-        self.stereo_bonds.data(RelationId::from(id))
     }
 }
 
@@ -1429,14 +1414,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_views_index(molecule: MoleculeAst) {
-        assert_eq!(
-            &molecule.stereo_atoms()[StereoAtomId(0)],
-            &StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
-        );
-    }
-
-    #[rstest]
     fn test_stereo_bond_views_count(molecule: MoleculeAst) {
         assert_eq!(molecule.stereo_bonds().count(), 1);
     }
@@ -1812,14 +1789,6 @@ mod tests {
                 .atom_ids()
                 .collect::<Vec<_>>(),
             vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
-        );
-    }
-
-    #[rstest]
-    fn test_stereo_bond_views_index(molecule: MoleculeAst) {
-        assert_eq!(
-            &molecule.stereo_bonds()[StereoBondId(0)],
-            &StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
         );
     }
 

@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::iter;
-use std::ops::Index;
 
 use umol_graph_core::{FixedVarBirelationSet, NodeId, Ordered, RelationId, Unordered};
 
@@ -176,13 +175,6 @@ impl<'a> DativeBondViews<'a> {
     }
 }
 
-impl<'a> Index<DativeBondId> for DativeBondViews<'a> {
-    type Output = DativeBondAst;
-    fn index(&self, id: DativeBondId) -> &DativeBondAst {
-        self.dative_bonds.data(RelationId::from(id))
-    }
-}
-
 /// Borrowed view of a dative bond: index, the designated acceptor atom,
 /// and underlying `DativeBondAst`. Donor atoms via `donors()` / `donor_ids()`;
 /// the full participant set (donors then acceptor) via `atoms()` / `atom_ids()`.
@@ -350,7 +342,6 @@ mod tests {
     use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
-    use crate::ast::value::ValueAst;
 
     #[fixture]
     fn molecule() -> MoleculeAst {
@@ -434,12 +425,6 @@ mod tests {
     fn test_dative_bond_views_get_none(molecule: MoleculeAst) {
         let res = molecule.dative_bonds().get(DativeBondId(99));
         assert!(res.is_none());
-    }
-
-    #[rstest]
-    fn test_dative_bond_views_index(molecule: MoleculeAst) {
-        let dative: &DativeBondAst = &molecule.dative_bonds()[DativeBondId(0)];
-        assert_eq!(dative.order, ValueAst::Lit(1));
     }
 
     #[rstest]

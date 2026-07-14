@@ -1,7 +1,6 @@
 //! Aromatic system views.
 
 use std::collections::HashSet;
-use std::ops::Index;
 
 use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
@@ -157,13 +156,6 @@ impl<'a> AromaticSystemViews<'a> {
                 )
             })
             .collect()
-    }
-}
-
-impl<'a> Index<AromaticSystemId> for AromaticSystemViews<'a> {
-    type Output = AromaticSystemAst;
-    fn index(&self, id: AromaticSystemId) -> &AromaticSystemAst {
-        self.aromatic_systems.data(RelationId::from(id))
     }
 }
 
@@ -445,11 +437,6 @@ mod tests {
     fn test_aromatic_system_views_get_none(molecule: MoleculeAst) {
         let res = molecule.aromatic_systems().get(AromaticSystemId(99));
         assert!(res.is_none());
-    }
-
-    #[rstest]
-    fn test_aromatic_system_views_index(molecule: MoleculeAst) {
-        let _: &AromaticSystemAst = &molecule.aromatic_systems()[AromaticSystemId(0)];
     }
 
     #[rstest]

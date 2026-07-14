@@ -141,31 +141,31 @@ proptest! {
 
         for (id, key) in atom_keys {
             prop_assert!(
-                a[id].constraints.contains(key),
+                a.atom(id).ast.constraints.contains(key),
                 "atom {id:?} missing key {key:?} after inline",
             );
         }
         for (id, key) in bond_keys {
             prop_assert!(
-                a[id].constraints.contains(key),
+                a.bond(id).ast.constraints.contains(key),
                 "bond {id:?} missing key {key:?} after inline",
             );
         }
         for (id, key) in dative_keys {
             prop_assert!(
-                a[id].constraints.contains(key),
+                a.dative_bond(id).ast.constraints.contains(key),
                 "dative bond {id:?} missing key {key:?} after inline",
             );
         }
         for (id, key) in aromatic_keys {
             prop_assert!(
-                a[id].constraints.contains(key),
+                a.aromatic_system(id).ast.constraints.contains(key),
                 "aromatic system {id:?} missing key {key:?} after inline",
             );
         }
         for (id, key) in multicenter_keys {
             prop_assert!(
-                a[id].constraints.contains(key),
+                a.multicenter_bond(id).ast.constraints.contains(key),
                 "multicenter bond {id:?} missing key {key:?} after inline",
             );
         }

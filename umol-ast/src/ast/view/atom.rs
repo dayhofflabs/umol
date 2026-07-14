@@ -1,8 +1,6 @@
 //! Atom views: `AtomViews` namespace, `AtomView` / `AtomViewMut` AST bundles,
 //! `AtomEditorView` / `AtomEditorViewMut` builder bundles.
 
-use std::ops::Index;
-
 use umol_chem::element::Element;
 use umol_graph_core::NodeId;
 
@@ -71,13 +69,6 @@ impl<'a> AtomViews<'a> {
             ast: &self.atoms[id.index()],
             molecule: self.molecule,
         })
-    }
-}
-
-impl<'a> Index<AtomId> for AtomViews<'a> {
-    type Output = AtomAst;
-    fn index(&self, id: AtomId) -> &AtomAst {
-        &self.atoms[id.index()]
     }
 }
 
@@ -578,12 +569,6 @@ mod tests {
     fn test_atom_views_get_none(molecule: MoleculeAst) {
         let res = molecule.atoms().get(AtomId(999));
         assert!(res.is_none());
-    }
-
-    #[rstest]
-    fn test_atom_views_index(molecule: MoleculeAst) {
-        let atom: &AtomAst = &molecule.atoms()[AtomId(2)];
-        assert_eq!(*atom, AtomAst::from_element(Element::N));
     }
 
     #[rstest]

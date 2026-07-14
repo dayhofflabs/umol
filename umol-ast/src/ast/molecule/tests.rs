@@ -1237,8 +1237,11 @@ fn test_molecule_editor_atom_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.atom_mut(AtomId(0)).ast.element = ElementAst::Lit(Element::N);
     let result = b.build();
-    assert_eq!(result[AtomId(0)].element, ElementAst::Lit(Element::N));
-    assert_eq!(ast[AtomId(0)].element, ElementAst::Lit(Element::C));
+    assert_eq!(
+        result.atom(AtomId(0)).ast.element,
+        ElementAst::Lit(Element::N)
+    );
+    assert_eq!(ast.atom(AtomId(0)).ast.element, ElementAst::Lit(Element::C));
 }
 
 #[rstest]
@@ -1246,8 +1249,8 @@ fn test_molecule_editor_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.bond_mut(BondId(0)).ast.order = ValueAst::Lit(3);
     let result = b.build();
-    assert_eq!(result[BondId(0)].order, ValueAst::Lit(3));
-    assert_eq!(ast[BondId(0)].order, ValueAst::Lit(1));
+    assert_eq!(result.bond(BondId(0)).ast.order, ValueAst::Lit(3));
+    assert_eq!(ast.bond(BondId(0)).ast.order, ValueAst::Lit(1));
 }
 
 #[rstest]
@@ -1259,10 +1262,10 @@ fn test_molecule_editor_atom_constraint_mut(#[from(rich_molecule)] ast: Molecule
         .set(AtomConstraintAst::Degree(ValueAst::Lit(2)));
     let result = b.build();
     assert_eq!(
-        result[AtomId(0)].constraints,
+        result.atom(AtomId(0)).ast.constraints,
         AtomConstraintsAst::from_iter([AtomConstraintAst::Degree(ValueAst::Lit(2))])
     );
-    assert!(ast[AtomId(0)].constraints.is_empty());
+    assert!(ast.atom(AtomId(0)).ast.constraints.is_empty());
 }
 
 #[rstest]
@@ -1326,8 +1329,12 @@ fn test_molecule_editor_dative_bond_mut(#[from(rich_molecule)] ast: MoleculeAst)
         DativeBondConstraintAst::ring_membership(RingScope::Size(5), 1),
     );
     let result = b.build();
-    assert!(!result[DativeBondId(0)].constraints.is_empty());
-    assert!(ast[DativeBondId(0)].constraints.is_empty());
+    assert!(!result
+        .dative_bond(DativeBondId(0))
+        .ast
+        .constraints
+        .is_empty());
+    assert!(ast.dative_bond(DativeBondId(0)).ast.constraints.is_empty());
 }
 
 #[rstest]
@@ -1335,7 +1342,10 @@ fn test_molecule_editor_aromatic_system_mut(#[from(rich_molecule)] ast: Molecule
     let mut b = ast.edit();
     b.aromatic_system_mut(AromaticSystemId(0)).ast.charge = ValueAst::Lit(0);
     let result = b.build();
-    assert_eq!(result[AromaticSystemId(0)].charge, ValueAst::Lit(0));
+    assert_eq!(
+        result.aromatic_system(AromaticSystemId(0)).ast.charge,
+        ValueAst::Lit(0)
+    );
 }
 
 #[rstest]
@@ -1345,7 +1355,7 @@ fn test_molecule_editor_multicenter_bond_mut(#[from(rich_molecule)] ast: Molecul
         ElectronCountsAst::Lit(vec![1, 1, 0]);
     let result = b.build();
     assert_eq!(
-        result[MulticenterBondId(0)].electrons,
+        result.multicenter_bond(MulticenterBondId(0)).ast.electrons,
         ElectronCountsAst::Lit(vec![1, 1, 0]),
     );
 }
@@ -1357,7 +1367,7 @@ fn test_molecule_editor_noncovalent_bond_mut(#[from(rich_molecule)] ast: Molecul
         NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic);
     let result = b.build();
     assert_eq!(
-        result[NoncovalentBondId(0)].kind,
+        result.noncovalent_bond(NoncovalentBondId(0)).ast.kind,
         NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic),
     );
 }
@@ -1620,23 +1630,23 @@ fn test_molecule_ast_enumerate_maximum_matchings() {
 
 #[rstest]
 fn test_molecule_ast_index_atom(#[from(rich_molecule)] ast: MoleculeAst) {
-    assert_eq!(ast[AtomId(2)].element, ElementAst::Lit(Element::N));
+    assert_eq!(ast.atom(AtomId(2)).ast.element, ElementAst::Lit(Element::N));
 }
 
 #[rstest]
 fn test_molecule_ast_index_bond(#[from(rich_molecule)] ast: MoleculeAst) {
-    assert_eq!(ast[BondId(1)].order, ValueAst::Lit(2));
+    assert_eq!(ast.bond(BondId(1)).ast.order, ValueAst::Lit(2));
 }
 
 #[rstest]
 fn test_molecule_ast_index_dative_bond(#[from(rich_molecule)] ast: MoleculeAst) {
-    assert_eq!(ast[DativeBondId(0)].order, ValueAst::Lit(1));
+    assert_eq!(ast.dative_bond(DativeBondId(0)).ast.order, ValueAst::Lit(1));
 }
 
 #[rstest]
 fn test_molecule_ast_index_aromatic_system(#[from(rich_molecule)] ast: MoleculeAst) {
     assert_eq!(
-        ast[AromaticSystemId(0)].electrons,
+        ast.aromatic_system(AromaticSystemId(0)).ast.electrons,
         ElectronCountsAst::Undetermined
     );
 }
@@ -1644,7 +1654,7 @@ fn test_molecule_ast_index_aromatic_system(#[from(rich_molecule)] ast: MoleculeA
 #[rstest]
 fn test_molecule_ast_index_multicenter_bond(#[from(rich_molecule)] ast: MoleculeAst) {
     assert_eq!(
-        ast[MulticenterBondId(0)].electrons,
+        ast.multicenter_bond(MulticenterBondId(0)).ast.electrons,
         ElectronCountsAst::Undetermined
     );
 }
@@ -1652,7 +1662,7 @@ fn test_molecule_ast_index_multicenter_bond(#[from(rich_molecule)] ast: Molecule
 #[rstest]
 fn test_molecule_ast_index_noncovalent_bond(#[from(rich_molecule)] ast: MoleculeAst) {
     assert_eq!(
-        ast[NoncovalentBondId(0)].kind,
+        ast.noncovalent_bond(NoncovalentBondId(0)).ast.kind,
         NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)
     );
 }
@@ -1694,7 +1704,7 @@ fn test_molecule_ast_dative_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst
         DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1),
     );
     assert_eq!(
-        ast[DativeBondId(0)].constraints,
+        ast.dative_bond(DativeBondId(0)).ast.constraints,
         DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(
             RingScope::Size(6),
             1
@@ -1706,7 +1716,7 @@ fn test_molecule_ast_dative_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst
 fn test_molecule_ast_aromatic_system_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
     ast.aromatic_system_mut(AromaticSystemId(0)).ast.electrons = ElectronCountsAst::Lit(vec![1; 3]);
     assert_eq!(
-        ast[AromaticSystemId(0)].electrons,
+        ast.aromatic_system(AromaticSystemId(0)).ast.electrons,
         ElectronCountsAst::Lit(vec![1, 1, 1]),
     );
 }
@@ -1730,7 +1740,7 @@ fn test_molecule_ast_multicenter_bond_mut(#[from(rich_molecule)] mut ast: Molecu
     ast.multicenter_bond_mut(MulticenterBondId(0)).ast.electrons =
         ElectronCountsAst::Lit(vec![1, 1, 0]);
     assert_eq!(
-        ast[MulticenterBondId(0)].electrons,
+        ast.multicenter_bond(MulticenterBondId(0)).ast.electrons,
         ElectronCountsAst::Lit(vec![1, 1, 0]),
     );
 }
@@ -1754,7 +1764,7 @@ fn test_molecule_ast_noncovalent_bond_mut(#[from(rich_molecule)] mut ast: Molecu
     ast.noncovalent_bond_mut(NoncovalentBondId(0)).ast.kind =
         NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic);
     assert_eq!(
-        ast[NoncovalentBondId(0)].kind,
+        ast.noncovalent_bond(NoncovalentBondId(0)).ast.kind,
         NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic)
     );
 }
@@ -1800,10 +1810,10 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
 
     ast.lift_constraints();
 
-    assert!(ast[AtomId(0)].constraints.is_empty());
-    assert!(ast[AtomId(2)].constraints.is_empty());
-    assert!(ast[BondId(0)].constraints.is_empty());
-    assert!(ast[DativeBondId(0)].constraints.is_empty());
+    assert!(ast.atom(AtomId(0)).ast.constraints.is_empty());
+    assert!(ast.atom(AtomId(2)).ast.constraints.is_empty());
+    assert!(ast.bond(BondId(0)).ast.constraints.is_empty());
+    assert!(ast.dative_bond(DativeBondId(0)).ast.constraints.is_empty());
 
     let mut expected = Constraints::new();
     expected.push(Constraint::Atom(
@@ -1871,15 +1881,15 @@ fn test_molecule_ast_inline_constraints_drains_top_level_leaves(
 
     assert!(ast.constraints().is_empty());
     assert_eq!(
-        ast[AtomId(0)].constraints,
+        ast.atom(AtomId(0)).ast.constraints,
         AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(ValueAst::Lit(4))])
     );
     assert_eq!(
-        ast[BondId(0)].constraints,
+        ast.bond(BondId(0)).ast.constraints,
         BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))])
     );
     assert_eq!(
-        ast[DativeBondId(0)].constraints,
+        ast.dative_bond(DativeBondId(0)).ast.constraints,
         DativeBondConstraintsAst::from_iter([DativeBondConstraintAst::ring_membership(
             RingScope::Size(5),
             1
@@ -1904,8 +1914,15 @@ fn test_molecule_ast_inline_constraints_last_wins_on_collision(
 
     // Only one Valence survives; with two competing inserts of the same kind,
     // exactly one wins (which one is unspecified). Verify count and kind.
-    assert_eq!(ast[AtomId(0)].constraints.len(), 1);
-    let v = ast[AtomId(0)].constraints.iter().next().unwrap().clone();
+    assert_eq!(ast.atom(AtomId(0)).ast.constraints.len(), 1);
+    let v = ast
+        .atom(AtomId(0))
+        .ast
+        .constraints
+        .iter()
+        .next()
+        .unwrap()
+        .clone();
     assert!(matches!(v, AtomConstraintAst::Valence(_)));
 }
 
@@ -1928,8 +1945,8 @@ fn test_molecule_ast_inline_constraints_skips_combinator_nested(
     let mut expected = Constraints::new();
     expected.push(nested);
     assert_same_constraints(ast.constraints(), &expected);
-    assert!(ast[AtomId(0)].constraints.is_empty());
-    assert!(ast[BondId(0)].constraints.is_empty());
+    assert!(ast.atom(AtomId(0)).ast.constraints.is_empty());
+    assert!(ast.bond(BondId(0)).ast.constraints.is_empty());
 }
 
 #[rstest]
@@ -1957,7 +1974,7 @@ fn test_molecule_ast_inline_constraints_skips_relational_and_molecule(
     expected.push(mol);
     assert_same_constraints(ast.constraints(), &expected);
     assert_eq!(
-        ast[AtomId(0)].constraints,
+        ast.atom(AtomId(0)).ast.constraints,
         AtomConstraintsAst::from_iter([AtomConstraintAst::Valence(ValueAst::Lit(4))])
     );
 }
@@ -1985,7 +2002,7 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
     let original = ast.clone();
 
     ast.lift_constraints();
-    assert!(ast[AtomId(0)].constraints.is_empty());
+    assert!(ast.atom(AtomId(0)).ast.constraints.is_empty());
     ast.inline_constraints();
 
     assert_eq!(ast, original);

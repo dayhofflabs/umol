@@ -61,7 +61,7 @@ mod tests {
         #[case] spin: SpinStateAst,
     ) {
         BondsResolver::new().resolve(&mut mol).unwrap();
-        assert_eq!(mol[BondId(0)].charge, charge);
-        assert_eq!(mol[BondId(0)].spin, spin);
+        assert_eq!(mol.bond(BondId(0)).ast.charge, charge);
+        assert_eq!(mol.bond(BondId(0)).ast.spin, spin);
     }
 }
