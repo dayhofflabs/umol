@@ -32,12 +32,19 @@ from umol import (
     NoncovalentBondFieldChange,
     NoncovalentBondKind,
     NoncovalentBondKindAst,
+    Permutation,
     SpinStateAst,
+    StereoAtomAst,
+    StereoAtomConstraintAst,
+    StereoAtomDelta,
     StereoAtomFieldChange,
     StereoBondFieldChange,
     StereoConfigurationAst,
     StereoCosetAst,
     StereoKind,
+    StereoLigand,
+    StereoLigandKind,
+    StereogenicityAst,
     ValueAst,
 )
 
@@ -1180,6 +1187,223 @@ def test_noncovalentbonddelta_modifyconstraint_match():
     )
     assert inverse.new is None
     assert inverse.inverse() == delta
+
+
+def test_stereoatomdelta_fields():
+    source = StereoAtomAst(
+        StereoConfigurationAst.Kinded(
+            StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+        )
+    )
+    delta = StereoAtomDelta.Add(
+        id=5,
+        site=3,
+        ligands=[
+            StereoLigand(4, StereoLigandKind.Atom),
+            StereoLigand(2, StereoLigandKind.LonePair),
+            StereoLigand(4, StereoLigandKind.Atom),
+        ],
+        ast=source,
+    )
+
+    source.configuration = StereoConfigurationAst.Kinded(
+        StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+    )
+
+    assert delta.id == 5
+    assert delta.site == 3
+    assert delta.ligands == [
+        StereoLigand(4, StereoLigandKind.Atom),
+        StereoLigand(2, StereoLigandKind.LonePair),
+        StereoLigand(4, StereoLigandKind.Atom),
+    ]
+    assert isinstance(delta.ligands, list)
+    assert delta.ast.configuration == StereoConfigurationAst.Kinded(
+        StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+    )
+    assert repr(delta) == (
+        "StereoAtomDelta.Add(id=5, site=3, ligands=["
+        "StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), "
+        "StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair), "
+        "StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], "
+        "ast=StereoAtomAst.parse('Th0'))"
+    )
+    delta.ast.configuration = StereoConfigurationAst.Kinded(
+        StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+    )
+    assert delta.ast.configuration == StereoConfigurationAst.Kinded(
+        StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+    )
+    with pytest.raises(AttributeError):
+        delta.ligands = []
+    with pytest.raises(TypeError):
+        hash(delta)
+
+
+def test_stereoatomdelta_add_match():
+    delta = StereoAtomDelta.Add(
+        id=5,
+        site=3,
+        ligands=[
+            StereoLigand(4, StereoLigandKind.Atom),
+            StereoLigand(2, StereoLigandKind.LonePair),
+        ],
+        ast=StereoAtomAst(
+            StereoConfigurationAst.Kinded(
+                StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+            )
+        ),
+    )
+
+    match delta:
+        case StereoAtomDelta.Add(id=id, site=site, ligands=ligands, ast=ast):
+            assert id == 5
+            assert site == 3
+            assert ligands == [
+                StereoLigand(4, StereoLigandKind.Atom),
+                StereoLigand(2, StereoLigandKind.LonePair),
+            ]
+            assert ast.configuration == StereoConfigurationAst.Kinded(
+                StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+            )
+        case _:
+            raise AssertionError("stereo atom delta did not match its add variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, StereoAtomDelta.Remove)
+    assert inverse.site == 3
+    assert inverse.ligands == delta.ligands
+    assert inverse.inverse() == delta
+
+
+def test_stereoatomdelta_modifyfield_match():
+    delta = StereoAtomDelta.ModifyField(
+        id=5,
+        change=StereoAtomFieldChange.Configuration(
+            old=StereoConfigurationAst.Undetermined(),
+            new=StereoConfigurationAst.Kinded(
+                StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+            ),
+        ),
+    )
+
+    match delta:
+        case StereoAtomDelta.ModifyField(id, change):
+            assert id == 5
+            assert change == StereoAtomFieldChange.Configuration(
+                old=StereoConfigurationAst.Undetermined(),
+                new=StereoConfigurationAst.Kinded(
+                    StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+                ),
+            )
+        case _:
+            raise AssertionError("stereo atom delta did not match its field variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, StereoAtomDelta.ModifyField)
+    assert inverse != delta
+    assert inverse.inverse() == delta
+
+
+def test_stereoatomdelta_modifyconstraint_match():
+    delta = StereoAtomDelta.ModifyConstraint(
+        id=5,
+        kind=StereoKind.Tetrahedral,
+        old=None,
+        new=StereoAtomConstraintAst.Stereogenicity(
+            StereogenicityAst.Undetermined()
+        ),
+    )
+
+    match delta:
+        case StereoAtomDelta.ModifyConstraint(
+            id=id, kind=kind, old=old, new=new
+        ):
+            assert id == 5
+            assert kind is StereoKind.Tetrahedral
+            assert old is None
+            assert new == StereoAtomConstraintAst.Stereogenicity(
+                StereogenicityAst.Undetermined()
+            )
+        case _:
+            raise AssertionError("stereo atom delta did not match its constraint variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, StereoAtomDelta.ModifyConstraint)
+    assert inverse.kind is StereoKind.Tetrahedral
+    assert inverse.old == StereoAtomConstraintAst.Stereogenicity(
+        StereogenicityAst.Undetermined()
+    )
+    assert inverse.new is None
+    assert inverse.inverse() == delta
+
+
+def test_stereoatomdelta_modifyconstraint_kind_none():
+    delta = StereoAtomDelta.ModifyConstraint(
+        id=5,
+        kind=None,
+        old=StereoAtomConstraintAst.Stereogenicity(
+            StereogenicityAst.Undetermined()
+        ),
+        new=None,
+    )
+
+    assert delta.kind is None
+    inverse = delta.inverse()
+    assert inverse.kind is None
+    assert inverse.old is None
+    assert inverse.new == StereoAtomConstraintAst.Stereogenicity(
+        StereogenicityAst.Undetermined()
+    )
+    assert inverse.inverse() == delta
+
+
+def test_stereoatomdelta_apply_match():
+    delta = StereoAtomDelta.Apply(
+        id=5,
+        kind=StereoKind.Tetrahedral,
+        permutation=Permutation([1, 2, 0, 3]),
+    )
+
+    match delta:
+        case StereoAtomDelta.Apply(id, kind, permutation):
+            assert id == 5
+            assert kind is StereoKind.Tetrahedral
+            assert permutation.degree == 4
+            assert permutation.image() == [1, 2, 0, 3]
+        case _:
+            raise AssertionError("stereo atom delta did not match its apply variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, StereoAtomDelta.Apply)
+    assert inverse.kind is StereoKind.Tetrahedral
+    assert inverse.permutation.degree == 4
+    assert inverse.permutation.image() == [2, 0, 1, 3]
+    assert inverse != delta
+    assert inverse.inverse() == delta
+
+
+def test_stereoatomdelta_involutions():
+    swap = StereoAtomDelta.Swap(id=5, kind=StereoKind.Tetrahedral)
+    mirror = StereoAtomDelta.Mirror(id=5, kind=StereoKind.Tetrahedral)
+
+    match swap:
+        case StereoAtomDelta.Swap(id=id, kind=kind):
+            assert id == 5
+            assert kind is StereoKind.Tetrahedral
+        case _:
+            raise AssertionError("stereo atom delta did not match its swap variant")
+    match mirror:
+        case StereoAtomDelta.Mirror(id=id, kind=kind):
+            assert id == 5
+            assert kind is StereoKind.Tetrahedral
+        case _:
+            raise AssertionError("stereo atom delta did not match its mirror variant")
+
+    assert isinstance(swap.inverse(), StereoAtomDelta.Swap)
+    assert swap.inverse() == swap
+    assert isinstance(mirror.inverse(), StereoAtomDelta.Mirror)
+    assert mirror.inverse() == mirror
 
 
 @pytest.mark.parametrize(

@@ -818,13 +818,23 @@ use crate::constraint::stereo::{
 };
 
 /// Per-entity stereo element value pyclass — `StereoAtomAst` / `StereoBondAst`
-/// `{configuration, constraints}` — macro-generated for the two stereo entities. The live
-/// `constraints` getter (returns the view) lands in S2b with the entity view, which also
-/// consumes `inner` (and adds `inner_mut`); `inner` is test-gated until then.
+/// `{configuration, constraints}` — macro-generated for the two stereo entities.
 macro_rules! stereo_value {
+    (@from_inner production, $value:ident, $ast_value:ident) => {
+        /// Wrap an owned Rust stereo-entity AST.
+        pub(crate) fn from_inner(value: $ast_value) -> Self {
+            $value(value)
+        }
+    };
+    (@from_inner test, $value:ident, $ast_value:ident) => {
+        #[cfg(test)]
+        pub(crate) fn from_inner(value: $ast_value) -> Self {
+            $value(value)
+        }
+    };
     (
         $value:ident, $ast_value:ident, $constraint:ident, $constraints:ident, $arg:ident,
-        $view:ident, $backing:ident $(,)?
+        $view:ident, $backing:ident, $from_inner:ident $(,)?
     ) => {
         #[pyclass]
         pub struct $value($ast_value);
@@ -920,22 +930,19 @@ macro_rules! stereo_value {
                 &mut self.0
             }
 
-            #[cfg(test)]
-            pub(crate) fn from_inner(value: $ast_value) -> Self {
-                $value(value)
-            }
+            stereo_value!(@from_inner $from_inner, $value, $ast_value);
         }
     };
 }
 
 stereo_value! {
     StereoAtomAst, AstStereoAtomAst, StereoAtomConstraintAst, StereoAtomConstraintsAst,
-    StereoAtomConstraintsArg, StereoAtomConstraintsView, StereoAtomConstraintsBacking,
+    StereoAtomConstraintsArg, StereoAtomConstraintsView, StereoAtomConstraintsBacking, production,
 }
 
 stereo_value! {
     StereoBondAst, AstStereoBondAst, StereoBondConstraintAst, StereoBondConstraintsAst,
-    StereoBondConstraintsArg, StereoBondConstraintsView, StereoBondConstraintsBacking,
+    StereoBondConstraintsArg, StereoBondConstraintsView, StereoBondConstraintsBacking, test,
 }
 
 /// Per-entity molecule-embedded stereo view — `StereoAtomView` / `StereoBondView` — a handle

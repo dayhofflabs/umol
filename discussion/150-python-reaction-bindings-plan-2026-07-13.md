@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S3b complete; S3c is next**
+Status: **ACTIVE — S3c.1 complete; S3c.2 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -762,10 +762,104 @@ scope and membership payloads live in `constraint/ring.rs`.
   **Critical path:** `{S2a.2 → S3b.1, S2a.3 → {S3b.2, S3b.3}, S2a.4 →
   S3b.4} → S3b.5`, with S3a.3 supplying the established entity-delta surface to
   S3b.1–S3b.4. No S3b subitem is deferrable: S4a requires all four bindings.
-- **S3c — stereo deltas** (`delta.rs`): add stereo-atom and stereo-bond mirrors,
-  including `Apply`/`Swap`/`Mirror`, ordered ligand frames, optional kind on
-  constraint changes, permutation inversion, and all inverse cases. A macro may
-  generate the symmetric halves. **Additive (green).** `[dep: S2b]`
+- **S3c — stereo deltas** (`umol-py/src/delta.rs`, `stereo.rs`, `lib.rs`,
+  `python/umol/__init__.py`): add two separately named native complex-enum
+  bindings with the exact Rust variants and named payloads:
+
+  - `StereoAtomDelta::{Add { id: int, site: int, ligands:
+    list[StereoLigand], ast: StereoAtomAst }, Remove { id: int, site: int,
+    ligands: list[StereoLigand], ast: StereoAtomAst }, ModifyField { id: int,
+    change: StereoAtomFieldChange }, ModifyConstraint { id: int, kind:
+    StereoKind | None, old: StereoAtomConstraintAst | None, new:
+    StereoAtomConstraintAst | None }, Apply { id: int, kind: StereoKind,
+    permutation: Permutation }, Swap { id: int, kind: StereoKind }, Mirror {
+    id: int, kind: StereoKind }}`;
+  - `StereoBondDelta::{Add { id: int, site: int, ligands:
+    list[StereoLigand], ast: StereoBondAst }, Remove { id: int, site: int,
+    ligands: list[StereoLigand], ast: StereoBondAst }, ModifyField { id: int,
+    change: StereoBondFieldChange }, ModifyConstraint { id: int, kind:
+    StereoKind | None, old: StereoBondConstraintAst | None, new:
+    StereoBondConstraintAst | None }, Apply { id: int, kind: StereoKind,
+    permutation: Permutation }, Swap { id: int, kind: StereoKind }, Mirror {
+    id: int, kind: StereoKind }}`.
+
+  Both bindings follow the completed overlay contract: keyword construction,
+  read-only named fields, positional and named class patterns, structural value
+  equality, unhashability, exact named repr, and non-mutating `inverse() ->
+  Self` returning the concrete inverse variant subtype. IDs and sites remain
+  bare Python integers. Ligand frames become ordered Python lists without
+  sorting or deduplication and occur only on `Add`/`Remove`. Entity-AST
+  constructor inputs are snapshotted into a fresh stored child, while the
+  stored `.ast` remains live and mutable through the delta. `ModifyConstraint`
+  preserves `kind` independently while exchanging `old` and `new`. `Apply`
+  retains its kind and replaces its permutation with the inverse; `Swap` and
+  `Mirror` are involutions. Implement each enum and its `from_rust`/`to_rust`
+  conversion explicitly, without a shared stereo-delta macro or conversion
+  trait. These types do not implement lattice semantics and retain their Rust
+  names without an `Ast` suffix.
+
+  1. **DONE — S3c.1 — `StereoAtomDelta` and atom-centered ligand frames** — promote
+     the `stereo_value!`-generated `StereoAtomAst` owned-AST constructor to
+     production use, add the private snapshotting `StereoAtomDeltaAstValue`
+     field wrapper, and define all seven variants directly. Convert
+     `StereoAtomId`, the atom site, and ligand-frame members to the existing
+     Python scalar/value types while preserving frame order and multiplicity.
+     Wire `StereoAtomFieldChange`,
+     optional-kind `StereoAtomConstraintAst` changes, and `Permutation` through
+     their existing explicit conversions. Register and export the class.
+
+     Rust tests cover every variant's round trip, equality, exact repr, inverse,
+     and double inverse; constraint rows cover `kind=None` and `Some`, `None` on
+     either constraint side, and two present constraints. Use a non-involutive
+     permutation for `Apply` so the inverse-image assertion is meaningful, and
+     verify `Swap` and `Mirror` are self-inverse. Python tests cover keyword
+     construction, read-only fields, positional and named matching, source
+     snapshot isolation, live stored AST mutation, ordered duplicate-preserving
+     ligand lists, optional kind/constraints, permutation degree and image, and
+     concrete inverse subtypes. **Additive (green).** `[dep: S2b.2]`
+
+     **Implemented verification:** nine Rust round-trip rows and nine
+     inverse/double-inverse rows cover all seven variants, both optional-kind
+     states, every optional-constraint direction, non-involutive permutation
+     inversion, and the `Swap`/`Mirror` involutions. Three equality rows cover
+     ordered ligand frames and distinct permutations; seven repr rows cover the
+     complete variant surface. Seven Python tests cover keyword construction,
+     read-only fields, positional and named matching, source snapshot isolation,
+     live stored AST mutation, ordered duplicate-preserving ligand lists,
+     optional kind independent of optional constraints, permutation degree and
+     image, unhashability, and concrete inverse subtypes. The focused delta
+     suites pass with 194 Rust tests and 97 Python tests; the complete `umol-py`
+     suites pass with 829 Rust tests and 484 Python tests. `umol-py` clippy,
+     rustfmt, and `git diff --check` pass.
+
+  2. **S3c.2 — `StereoBondDelta` and bond-centered ligand frames** — promote
+     the generated `StereoBondAst` owned-AST constructor to production use, add
+     the private snapshotting `StereoBondDeltaAstValue` field wrapper, and
+     define all seven variants directly. Map the bond site to a bare integer, preserve the
+     ligand frame as an ordered duplicate-preserving list, and wire
+     `StereoBondFieldChange`, optional-kind `StereoBondConstraintAst` changes,
+     and `Permutation` through separate `StereoBondDelta` conversions. Register
+     and export the class. Give it the same exhaustive Rust conversion,
+     equality, repr, and inverse matrix and the same Python construction,
+     matching, ownership, optional-kind/constraint, ligand-frame, permutation,
+     and inverse coverage as S3c.1, using bond-appropriate stereo kinds and
+     constraints. **Additive (green).** `[dep: S2b.2, S3c.1]`
+
+  3. **S3c.3 — stereo-delta closure verification** — add a fourteen-row Python
+     matrix spanning all seven variants of both classes. Verify exact repr,
+     structural value equality, concrete inverse subtype, and double inversion
+     on every row. Require inequality after one inversion for `Add`, `Remove`,
+     non-identity `ModifyField`/`ModifyConstraint`, and non-involutive `Apply`;
+     require equality after one inversion for the self-inverse `Swap` and
+     `Mirror` rows. Retain targeted rows for source snapshot isolation, live
+     stored payloads, optional kind independent of optional constraints,
+     ordered duplicate-preserving ligand frames, and permutation image/degree.
+     Run the complete Rust and Python suites, workspace clippy, rustfmt, and
+     `git diff --check` as the stage gate. **Additive (green).**
+     `[dep: S3c.1, S3c.2]`
+
+  **Critical path:** `S2b.2 → S3c.1 → S3c.2 → S3c.3`. No S3c subitem is
+  deferrable: S4a requires both complete seven-variant bindings.
 - **S3d — molecule constraint delta** (`delta.rs`): add
   `ConstraintDelta::{Add, Remove}` over the S1 recursive mirror with conversion,
   match, and inverse tests. **Additive (green).** `[dep: S1b]`
