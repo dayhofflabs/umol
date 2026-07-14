@@ -14,6 +14,8 @@ from umol import (
     BondDelta,
     BondFieldChange,
     BooleanAst,
+    Constraint,
+    ConstraintDelta,
     DativeBondAst,
     DativeBondConstraintAst,
     DativeBondDelta,
@@ -22,6 +24,8 @@ from umol import (
     ElementAst,
     ElectronCountsAst,
     IsotopeMassAst,
+    MoleculeAst,
+    MoleculeConstraint,
     MulticenterBondAst,
     MulticenterBondConstraintAst,
     MulticenterBondDelta,
@@ -48,6 +52,7 @@ from umol import (
     StereoLigand,
     StereoLigandKind,
     StereogenicityAst,
+    SubPatternAnchor,
     ValueAst,
 )
 
@@ -2091,4 +2096,142 @@ def test_stereodelta_closure(delta, expected_repr, inverse_type, self_inverse):
     inverse = delta.inverse()
     assert type(inverse) is inverse_type
     assert (inverse == delta) is self_inverse
+    assert inverse.inverse() == delta
+
+
+def test_constraintdelta_fields():
+    source = Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2)))
+    delta = ConstraintDelta.Add(constraint=source)
+
+    assert delta.constraint == source
+    assert delta.constraint is not source
+    assert delta.constraint is delta.constraint
+    assert repr(delta) == (
+        "ConstraintDelta.Add(constraint=Constraint.Atom(3, "
+        "AtomConstraintAst.Degree(ValueAst.Lit(2))))"
+    )
+    with pytest.raises(AttributeError):
+        delta.constraint = Constraint.Or([])
+    with pytest.raises(TypeError):
+        hash(delta)
+
+
+def test_constraintdelta_add_match():
+    delta = ConstraintDelta.Add(
+        constraint=Constraint.Atom(
+            3,
+            AtomConstraintAst.Degree(ValueAst.Lit(2)),
+        )
+    )
+
+    match delta:
+        case ConstraintDelta.Add(Constraint.Atom(atom_id, constraint)):
+            assert (atom_id, constraint) == (
+                3,
+                AtomConstraintAst.Degree(ValueAst.Lit(2)),
+            )
+        case _:
+            raise AssertionError("constraint delta did not match its add variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, ConstraintDelta.Remove)
+    assert inverse.constraint == delta.constraint
+    assert inverse.inverse() == delta
+
+
+def test_constraintdelta_remove_match():
+    delta = ConstraintDelta.Remove(
+        constraint=Constraint.And(
+            [
+                Constraint.Atom(
+                    7,
+                    AtomConstraintAst.Valence(ValueAst.Lit(4)),
+                ),
+                Constraint.Not(Constraint.Or([])),
+            ]
+        )
+    )
+
+    match delta:
+        case ConstraintDelta.Remove(
+            constraint=Constraint.And(
+                [
+                    Constraint.Atom(atom_id, constraint),
+                    Constraint.Not(Constraint.Or([])),
+                ]
+            )
+        ):
+            assert (atom_id, constraint) == (
+                7,
+                AtomConstraintAst.Valence(ValueAst.Lit(4)),
+            )
+        case _:
+            raise AssertionError("constraint delta did not match its remove variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, ConstraintDelta.Add)
+    assert inverse.constraint == delta.constraint
+    assert inverse.inverse() == delta
+
+
+def test_constraintdelta_payload_ownership():
+    source_molecule = MoleculeAst.from_parts([AtomAst(Element("C"))])
+    source = Constraint.Molecule(
+        MoleculeConstraint.SubPattern(SubPatternAnchor(), source_molecule)
+    )
+    delta = ConstraintDelta.Add(constraint=source)
+
+    source_molecule.atoms[0].charge = 1
+
+    match delta.constraint:
+        case Constraint.Molecule(MoleculeConstraint.SubPattern(_, stored_molecule)):
+            assert stored_molecule.atoms[0].charge == ValueAst.Undetermined()
+            stored_molecule.atoms[0].charge = -1
+        case _:
+            raise AssertionError("constraint delta did not retain its stored subpattern")
+
+    inverse = delta.inverse()
+    match inverse.constraint:
+        case Constraint.Molecule(MoleculeConstraint.SubPattern(_, stored_molecule)):
+            assert stored_molecule.atoms[0].charge == ValueAst.Lit(-1)
+        case _:
+            raise AssertionError("inverse did not retain the changed stored subpattern")
+
+
+@pytest.mark.parametrize(
+    ("delta", "expected_repr", "inverse_type"),
+    [
+        (
+            ConstraintDelta.Add(
+                constraint=Constraint.Atom(
+                    3,
+                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                )
+            ),
+            "ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2))))",
+            ConstraintDelta.Remove,
+        ),
+        (
+            ConstraintDelta.Remove(
+                constraint=Constraint.And(
+                    [
+                        Constraint.Atom(
+                            7,
+                            AtomConstraintAst.Valence(ValueAst.Lit(4)),
+                        ),
+                        Constraint.Not(Constraint.Or([])),
+                    ]
+                )
+            ),
+            "ConstraintDelta.Remove(constraint=Constraint.And([Constraint.Atom(7, AtomConstraintAst.Valence(ValueAst.Lit(4))), Constraint.Not(Constraint.Or([]))]))",
+            ConstraintDelta.Add,
+        ),
+    ],
+    ids=["add-leaf", "remove-recursive"],
+)
+def test_constraintdelta_closure(delta, expected_repr, inverse_type):
+    assert repr(delta) == expected_repr
+    inverse = delta.inverse()
+    assert type(inverse) is inverse_type
+    assert inverse != delta
     assert inverse.inverse() == delta

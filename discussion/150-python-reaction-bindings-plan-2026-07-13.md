@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S3c complete; S3d is next**
+Status: **ACTIVE — S3 complete; S4a is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -882,9 +882,61 @@ scope and membership payloads live in `constraint/ring.rs`.
 
   **Critical path:** `S2b.2 → S3c.1 → S3c.2 → S3c.3`. No S3c subitem is
   deferrable: S4a requires both complete seven-variant bindings.
-- **S3d — molecule constraint delta** (`delta.rs`): add
-  `ConstraintDelta::{Add, Remove}` over the S1 recursive mirror with conversion,
-  match, and inverse tests. **Additive (green).** `[dep: S1b]`
+- **S3d — DONE — molecule constraint delta** (`umol-py/src/delta.rs`, `lib.rs`,
+  `python/umol/__init__.py`): add `ConstraintDelta::{Add, Remove}` over the
+  recursive S1 `Constraint` binding. Expose both variants as named-field
+  classes, `Add { constraint: Constraint }` and
+  `Remove { constraint: Constraint }`, with keyword construction, a read-only
+  `.constraint`, positional and named class patterns, structural value equality,
+  unhashability, exact named repr, and non-mutating `inverse() -> Self` returning
+  the concrete opposite variant subtype. Snapshot the constructor's recursive
+  constraint tree into a fresh stored `Constraint`; subsequent access to
+  `.constraint` returns that stored child, so changes made through its nested
+  bound payloads remain visible to conversion and inversion. Implement
+  `from_rust` and `to_rust` directly for `ConstraintDelta`, using a private field
+  wrapper only for snapshotting and exposing the stored child. The type has no
+  lattice semantics and therefore retains the Rust name without an `Ast` suffix.
+
+  1. **DONE — S3d.1 — `ConstraintDelta` binding and recursive payload ownership** — add
+     the private snapshotting field wrapper and the two-variant public enum;
+     implement exact repr, equality, inverse, and explicit Rust conversion;
+     register and export the class. Rust tests cover both conversion directions,
+     equality, exact repr, inverse, and double inverse for `Add` and `Remove`,
+     using both an entity leaf and a recursive Boolean constraint tree. Python
+     tests cover keyword construction, read-only fields, positional and named
+     matching, source snapshot isolation, access to the stored child, live
+     nested-payload changes, unhashability, and concrete inverse subtypes.
+     **Additive (green).** `[dep: S1d]`
+
+     **Implemented verification:** two Rust round-trip rows, three equality rows,
+     two exact-repr rows, and two inverse/double-inverse rows cover both variants,
+     an entity leaf, and a recursive Boolean tree. Four Python tests cover public
+     import, keyword construction, read-only fields, positional and named
+     matching, constructor snapshot isolation, stable access to the stored child,
+     live mutation through a nested subpattern molecule, unhashability, and
+     concrete inverse subtypes. The focused suites pass with nine Rust cases and
+     four Python tests; the complete `umol-py` suites pass with 866 Rust tests and
+     509 Python tests. `umol-py` clippy, rustfmt, and `git diff --check` pass.
+
+  2. **DONE — S3d.2 — constraint-delta closure verification** — add a two-row Python
+     matrix spanning `Add` and `Remove`, with distinct leaf and recursive
+     constraints. Every row verifies exact repr, structural equality, the
+     concrete inverse subtype, inequality after one inversion, and equality
+     after double inversion. Retain the targeted ownership tests from S3d.1 and
+     run the complete Rust and Python suites, workspace clippy, rustfmt, and
+     `git diff --check` as the stage gate. **Additive (green).** `[dep: S3d.1]`
+
+     **Implemented verification:** the two-row Python closure matrix covers
+     `Add` with an entity leaf and `Remove` with a recursive Boolean constraint.
+     Both rows verify exact repr, structural inequality after one inversion, the
+     concrete opposite variant subtype, and equality after double inversion.
+     The focused constraint-delta suite passes with six Python tests, including
+     the four targeted S3d.1 ownership and matching tests. The complete
+     `umol-py` suites pass with 866 Rust tests and 511 Python tests. Workspace
+     clippy, rustfmt, and `git diff --check` pass.
+
+  **Critical path:** `S1d → S3d.1 → S3d.2`. Neither S3d subitem is
+  deferrable: S4a requires the complete `ConstraintDelta` binding.
 
 ### S4 — `Delta` and `Deltas`
 

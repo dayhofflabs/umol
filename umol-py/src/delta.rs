@@ -7,6 +7,7 @@ use umol_ast::ast::{
     AromaticSystemId as AstAromaticSystemId, AtomAst as AstAtomAst, AtomDelta as AstAtomDelta,
     AtomFieldChange as AstAtomFieldChange, AtomId as AstAtomId, BondAst as AstBondAst,
     BondDelta as AstBondDelta, BondFieldChange as AstBondFieldChange, BondId as AstBondId,
+    Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
     DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
     DativeBondFieldChange as AstDativeBondFieldChange, DativeBondId as AstDativeBondId,
     MulticenterBondAst as AstMulticenterBondAst, MulticenterBondDelta as AstMulticenterBondDelta,
@@ -28,6 +29,7 @@ use crate::constraint::aromatic::AromaticSystemConstraintAst;
 use crate::constraint::atom::AtomConstraintAst;
 use crate::constraint::bond::BondConstraintAst;
 use crate::constraint::dative::DativeBondConstraintAst;
+use crate::constraint::molecule::Constraint;
 use crate::constraint::multicenter::MulticenterBondConstraintAst;
 use crate::constraint::noncovalent::NoncovalentBondConstraintAst;
 use crate::constraint::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
@@ -1795,6 +1797,97 @@ impl StereoBondDelta {
                 id: AstStereoBondId(*id),
                 kind: kind.to_rust(),
             },
+        }
+    }
+}
+
+pub struct ConstraintDeltaValue(Py<Constraint>);
+
+impl FromPyObject<'_, '_> for ConstraintDeltaValue {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
+        let source = obj.extract::<PyRef<'_, Constraint>>()?;
+        let constraint = source.to_rust(obj.py());
+        drop(source);
+        Ok(Self(into_py_variant(
+            obj.py(),
+            Constraint::from_rust(obj.py(), &constraint)?,
+        )?))
+    }
+}
+
+impl<'py> IntoPyObject<'py> for &ConstraintDeltaValue {
+    type Target = Constraint;
+    type Output = Bound<'py, Constraint>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        Ok(self.0.clone_ref(py).into_bound(py))
+    }
+}
+
+impl ConstraintDeltaValue {
+    fn from_rust(py: Python<'_>, constraint: &AstConstraint) -> PyResult<Self> {
+        Ok(Self(into_py_variant(
+            py,
+            Constraint::from_rust(py, constraint)?,
+        )?))
+    }
+
+    fn to_rust(&self, py: Python<'_>) -> AstConstraint {
+        self.0.bind(py).borrow().to_rust(py)
+    }
+}
+
+/// A resolved edit adding or removing a molecule constraint.
+#[pyclass]
+pub enum ConstraintDelta {
+    Add { constraint: ConstraintDeltaValue },
+    Remove { constraint: ConstraintDeltaValue },
+}
+
+#[pymethods]
+impl ConstraintDelta {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_rust(py) == other.to_rust(py)
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let variant = match &*slf.bind(py).borrow() {
+            Self::Add { .. } => "Add",
+            Self::Remove { .. } => "Remove",
+        };
+        entity_delta_repr(
+            slf.bind(py).as_any(),
+            "ConstraintDelta",
+            variant,
+            &["constraint"],
+        )
+    }
+
+    /// Return the inverse resolved edit.
+    fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
+        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+    }
+}
+
+impl ConstraintDelta {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &AstConstraintDelta) -> PyResult<Self> {
+        Ok(match delta {
+            AstConstraintDelta::Add(constraint) => Self::Add {
+                constraint: ConstraintDeltaValue::from_rust(py, constraint)?,
+            },
+            AstConstraintDelta::Remove(constraint) => Self::Remove {
+                constraint: ConstraintDeltaValue::from_rust(py, constraint)?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstConstraintDelta {
+        match self {
+            Self::Add { constraint } => AstConstraintDelta::Add(constraint.to_rust(py)),
+            Self::Remove { constraint } => AstConstraintDelta::Remove(constraint.to_rust(py)),
         }
     }
 }
@@ -4340,6 +4433,122 @@ mod tests {
     fn test_stereo_bond_delta_inverse(#[case] delta: AstStereoBondDelta) {
         Python::attach(|py| {
             let binding = StereoBondDelta::from_rust(py, &delta).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py),
+                delta.clone().inverse()
+            );
+            let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+        });
+    }
+
+    #[rstest]
+    #[case::add_leaf(AstConstraintDelta::Add(AstConstraint::Atom(
+        AstAtomId(3),
+        AstAtomConstraintAst::degree(2),
+    )))]
+    #[case::remove_recursive(AstConstraintDelta::Remove(AstConstraint::And(vec![
+        AstConstraint::Atom(AstAtomId(7), AstAtomConstraintAst::valence(4)),
+        AstConstraint::Not(Box::new(AstConstraint::Or(Vec::new()))),
+    ])))]
+    fn test_constraint_delta_roundtrip(#[case] delta: AstConstraintDelta) {
+        Python::attach(|py| {
+            let binding = ConstraintDelta::from_rust(py, &delta).unwrap();
+            assert_eq!(binding.to_rust(py), delta);
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        AstConstraintDelta::Add(AstConstraint::Atom(
+            AstAtomId(3),
+            AstAtomConstraintAst::degree(2),
+        )),
+        AstConstraintDelta::Add(AstConstraint::Atom(
+            AstAtomId(3),
+            AstAtomConstraintAst::degree(2),
+        )),
+        true
+    )]
+    #[case::variant(
+        AstConstraintDelta::Add(AstConstraint::Atom(
+            AstAtomId(3),
+            AstAtomConstraintAst::degree(2),
+        )),
+        AstConstraintDelta::Remove(AstConstraint::Atom(
+            AstAtomId(3),
+            AstAtomConstraintAst::degree(2),
+        )),
+        false
+    )]
+    #[case::constraint(
+        AstConstraintDelta::Add(AstConstraint::Atom(
+            AstAtomId(3),
+            AstAtomConstraintAst::degree(2),
+        )),
+        AstConstraintDelta::Add(AstConstraint::Atom(
+            AstAtomId(3),
+            AstAtomConstraintAst::valence(2),
+        )),
+        false
+    )]
+    fn test_constraint_delta_eq(
+        #[case] left: AstConstraintDelta,
+        #[case] right: AstConstraintDelta,
+        #[case] expected: bool,
+    ) {
+        Python::attach(|py| {
+            let left = ConstraintDelta::from_rust(py, &left).unwrap();
+            let right = ConstraintDelta::from_rust(py, &right).unwrap();
+            assert_eq!(left.__eq__(&right, py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::add_leaf(
+        AstConstraintDelta::Add(AstConstraint::Atom(
+            AstAtomId(3),
+            AstAtomConstraintAst::degree(2),
+        )),
+        "ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2))))",
+    )]
+    #[case::remove_recursive(
+        AstConstraintDelta::Remove(AstConstraint::And(vec![
+            AstConstraint::Atom(AstAtomId(7), AstAtomConstraintAst::valence(4)),
+            AstConstraint::Not(Box::new(AstConstraint::Or(Vec::new()))),
+        ])),
+        "ConstraintDelta.Remove(constraint=Constraint.And([Constraint.Atom(7, AtomConstraintAst.Valence(ValueAst.Lit(4))), Constraint.Not(Constraint.Or([]))]))",
+    )]
+    fn test_constraint_delta_repr(#[case] delta: AstConstraintDelta, #[case] expected: &str) {
+        Python::attach(|py| {
+            let binding =
+                into_py_variant(py, ConstraintDelta::from_rust(py, &delta).unwrap()).unwrap();
+            assert_eq!(
+                binding
+                    .bind(py)
+                    .as_any()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::add_leaf(AstConstraintDelta::Add(AstConstraint::Atom(
+        AstAtomId(3),
+        AstAtomConstraintAst::degree(2),
+    )))]
+    #[case::remove_recursive(AstConstraintDelta::Remove(AstConstraint::And(vec![
+        AstConstraint::Atom(AstAtomId(7), AstAtomConstraintAst::valence(4)),
+        AstConstraint::Not(Box::new(AstConstraint::Or(Vec::new()))),
+    ])))]
+    fn test_constraint_delta_inverse(#[case] delta: AstConstraintDelta) {
+        Python::attach(|py| {
+            let binding = ConstraintDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),

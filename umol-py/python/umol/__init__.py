@@ -37,6 +37,7 @@ from ._native import (
     CisTransStereo,
     CisTransStereoAst,
     Constraint,
+    ConstraintDelta,
     Constraints,
     ConstraintsView,
     DativeBondAst,
