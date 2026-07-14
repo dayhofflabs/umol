@@ -75,6 +75,8 @@ mod error;
 #[cfg(feature = "graph")]
 mod molecule;
 #[cfg(feature = "graph")]
+mod molecule_constraint;
+#[cfg(feature = "graph")]
 mod multicenter;
 #[cfg(feature = "graph")]
 mod noncovalent;

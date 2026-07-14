@@ -222,8 +222,7 @@ impl MoleculeAst {
     }
 
     /// Wrap an AST molecule (the hold-the-value `from_inner` bridge, paired with
-    /// `inner`). Test-only — in-crate construction wraps `MoleculeAst(..)` directly.
-    #[cfg(test)]
+    /// `inner`).
     pub(crate) fn from_inner(molecule: AstMoleculeAst) -> Self {
         MoleculeAst(molecule)
     }

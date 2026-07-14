@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S0a/S0b complete; S0c is next**
+Status: **ACTIVE — S0 complete; S1a is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -11,10 +11,8 @@ Bind the resolved reaction data model to Python: the complete `Delta` algebra,
 its `Deltas` collection, and `ReactionAst`. The core deliverable is a reaction
 that Python can construct structurally, parse/render, inspect and mutate through
 its owned `lhs` and `deltas`, normalize, reverse, build from two sides, compose,
-and apply to host molecules. Before the binding work,
-`ReactionDerivation<'a>` is migrated to a fully owned Rust value. The current
-borrow is treated as a premature optimization, not as a constraint the Python
-surface must accommodate.
+and apply to host molecules. `ReactionDerivation` is a fully owned Rust value,
+so the Python surface wraps the same value model directly.
 
 This follows doc 140's rule: bind a complete semantic slice, not only the easy
 variants. In particular, `Delta::Constraint` makes the currently unbound
@@ -50,25 +48,17 @@ network/interning types, and the general transaction/edit vocabulary.
 - `ReactionAst { lhs, deltas }` is an owned value. Its directly usable operations
   are `new`, `from_sides`, `canonicalize`, `reverse`, `compose`, and its EDN
   `FromStr`/`Display` surface. `to_reaction_span` needs a span wrapper.
-- Today `apply_at` takes a `MoleculeCorrespondence` and returns a borrowed
-  `ReactionDerivation<'h>`; `apply` consumes a
-  `SubgraphIsomorphismAlgorithm` and iterates borrowed derivations. That lifetime
-  is not semantically necessary: the derivation already owns `rhs` and its
-  correspondence, and can own a snapshot of `lhs` as well.
+- `apply_at` takes a `MoleculeCorrespondence` and returns an owned
+  `ReactionDerivation`; `apply` consumes a `SubgraphIsomorphismAlgorithm` and
+  iterates owned derivations. Each derivation owns `lhs`, `rhs`, and its
+  correspondence.
 
-### Rust ownership migration (settled)
+### Rust ownership model (settled)
 
-Replace `ReactionDerivation<'a>` with a non-generic, fully owned
-`ReactionDerivation { lhs: MoleculeAst, rhs: MoleculeAst, comap }`. `apply_at`
-clones the host once when it constructs the successful result; `reverse` and
-`chain` return ordinary owned values with no lifetime coupling. All producers,
-consumers, tests, and public signatures migrate together.
-
-The clone is an accepted cost for the clear value model. Do not preserve a
-borrowed second representation or add an owned/borrowed enum in this migration.
-If profiling later shows that the lhs clone materially affects reaction
-application, revisit borrowing as an explicit optimization with benchmark
-evidence while keeping the owned type as the default public result.
+`ReactionDerivation { lhs: MoleculeAst, rhs: MoleculeAst, comap }` is
+non-generic and fully owned. `apply_at` clones the host once when it constructs
+a successful result; `reverse` and `chain` return ordinary owned values. The
+Python binding wraps this type directly.
 
 ## Settled Python surface
 
@@ -184,41 +174,74 @@ suite, clippy, and formatting pass.
 
 ## Staged implementation plan
 
-### S0 — Migrate `ReactionDerivation` to ownership (Rust)
+### S0 — Owned `ReactionDerivation` (Rust)
 
 - **S0a — DONE — owned derivation value**
-  (`umol-ast/src/ast/reaction_derivation.rs`): remove the lifetime parameter,
-  change `lhs: &'a MoleculeAst` to `lhs: MoleculeAst`, and update `new`, `lhs`,
-  `reverse`, and `chain` to ordinary owned signatures; derive `PartialEq`/`Eq`
-  now that the complete value is owned. Keep `rhs`, `comap`, `atom_map`, and
-  `to_reaction` semantics unchanged. This temporarily breaks
-  producers and lifetime-annotated callers; its unit tests cover owned
-  independence, reverse, chain, and abstraction back to `ReactionAst`.
-  **Breaking (red until S0b).** Implemented with the expected three remaining
-  producer errors in `reaction.rs` (two obsolete lifetime arguments and the
-  borrowed `host` passed to the now-owned constructor). `[dep: —]`
+  (`umol-ast/src/ast/reaction_derivation.rs`): `ReactionDerivation` owns `lhs`,
+  `rhs`, and `comap`; its constructor, accessors, `reverse`, and `chain` use
+  ordinary owned signatures. It derives `PartialEq`/`Eq`. Unit tests cover
+  owned independence, reverse, chain, and abstraction back to `ReactionAst`.
+  **Breaking.** `[dep: —]`
 - **S0b — DONE — producer and caller migration** (`umol-ast/src/ast/reaction.rs`,
-  `compose.rs`, tests, and workspace callers): make `apply_at` clone the matched
-  host into each successful derivation, return `ReactionDerivation` without a
-  lifetime, update `apply`'s item type, and remove all derivation lifetime
-  annotations. Preserve match enumeration and DPO behavior. Run the focused
-  reaction tests plus every workspace crate that consumes derivations. **Breaking
-  migration (red→green).** Implemented: `apply_at` clones the host into the owned
-  result; `apply_at`/`apply` no longer name a derivation lifetime. Focused 9,
-  complete `umol-ast` 4,589, workspace check, and clippy all pass. `[dep: S0a]`
-- **S0c — API documentation cleanup** (affected Rust API docs): remove lifetime
-  language, state that derivations are owned values, and record borrowing as a
-  future evidence-driven optimization rather than a binding prerequisite.
-  Documentation-only. **Additive (green).** `[dep: S0b]`
+  `compose.rs`, tests, and workspace callers): `apply_at` clones the matched host
+  into each successful derivation; `apply_at` and `apply` return owned
+  `ReactionDerivation` values while preserving match enumeration and DPO
+  behavior. Focused 9, complete `umol-ast` 4,589, workspace check, and clippy all
+  pass. **Breaking migration (red→green).** `[dep: S0a]`
+- **S0c — DONE — API documentation cleanup** (affected Rust API and design docs):
+  documentation describes `ReactionDerivation` as an owned value and matches the
+  implemented signatures. Documentation-only. **Additive (green).** `[dep: S0b]`
 
 ### S1 — Complete the constraint payload foundation
 
 - **S1a — constraint leaves and anchors** (`umol-py/src/molecule_constraint.rs`):
-  add structural mirrors for `SubPatternAnchor`, `RelationalConstraint`, and
-  `MoleculeConstraint`, reusing every entity-constraint/value/stereo wrapper
-  already shipped in doc 140. Include per-variant round trips, nested atom
-  predicates, optional whole-molecule subsets, and subpattern payload tests.
-  **Additive (green).** `[dep: —]`
+  add the following exact type closure, in the listed dependency order:
+
+  1. **`SubPatternAnchor` mirror struct** — eight `(target, pattern)` id-pair
+     collections: `atoms`, `bonds`, `dative_bonds`, `aromatic_systems`,
+     `multicenter_bonds`, `noncovalent_bonds`, `stereo_atoms`, and
+     `stereo_bonds`. Constructor/getters use bare `int` pairs. Its
+     `from_ast`/`to_ast` bridge is required by `MoleculeConstraint::SubPattern`.
+  2. **`RelationalConstraint` structural mirror enum** — all 31 Rust variants,
+     grouped by referenced entity:
+     - dative (8): `DativeBondDonors`, `DativeBondDonor`,
+       `DativeBondContainsAllDonors`, `DativeBondAllDonors`,
+       `DativeBondAnyDonor`, `DativeBondAcceptor`,
+       `DativeBondAcceptorSatisfies`, `DativeBondParallels`;
+     - aromatic (5): `AromaticSystemAtoms`, `AromaticSystemContains`,
+       `AromaticSystemContainsAll`, `AromaticSystemAllAtoms`,
+       `AromaticSystemAnyAtom`;
+     - multicenter (5): `MulticenterBondAtoms`, `MulticenterBondContains`,
+       `MulticenterBondContainsAll`, `MulticenterBondAllAtoms`,
+       `MulticenterBondAnyAtom`;
+     - noncovalent (3): `NoncovalentBondEnds`,
+       `NoncovalentBondContains`, `NoncovalentBondEndsSatisfy`;
+     - stereo atom (5): `StereoAtomSite`, `StereoAtomContains`,
+       `StereoAtomLigands`, `StereoAtomAllLigands`,
+       `StereoAtomAnyLigand`;
+     - stereo bond (5): `StereoBondSite`, `StereoBondContains`,
+       `StereoBondLigands`, `StereoBondAllLigands`,
+       `StereoBondAnyLigand`.
+  3. **`MoleculeConstraint` structural mirror enum** — all five Rust variants:
+     `ChargeSum { atoms, sum }`, `SpinSum { atoms, spin }`,
+     `BondOrderSum { bonds, sum }`, `Connected { atoms }`, and
+     `SubPattern { anchor, pattern }`. `None` on an atom/bond subset continues
+     to mean the whole molecule; `Some([])` remains a distinct empty subset.
+
+  **Reused bound children:** `AtomConstraintAst` for the 12 predicate-bearing
+  relational variants (13 payload values because `EndsSatisfy` carries two),
+  `ValueAst`, `SpinStateAst`, and `MoleculeAst`. The eight Rust id newtypes map
+  to bare Python `int`; S1a adds no Python id classes. Shared conversion support
+  is `into_py_variant`/`variant_repr`. `MoleculeAst::from_inner` must lose its
+  test-only gate so `MoleculeConstraint::SubPattern` can wrap a nested pattern
+  at runtime. Add `mod molecule_constraint` to compile the slice, but defer
+  native-module registration and `python/umol/__init__.py` exports to S1d.
+
+  **Tests:** one populated anchor round trip covering all eight families, one
+  round-trip case for every relational variant (31), one for every molecule
+  variant (5, including whole/subset distinctions), Python-visible variant
+  construction/field access for each new enum family, and nested atom-predicate
+  and subpattern payload coverage. **Additive (green).** `[dep: —]`
 - **S1b — recursive `Constraint` mirror** (`molecule_constraint.rs`): add all
   thirteen variants, including recursive `And`/`Or`/`Not`, with
   `from_ast`/`to_ast`, Python pattern matching, value equality, and deep recursive
@@ -318,8 +341,8 @@ suite, clippy, and formatting pass.
   fully owned Rust value from S0 and expose lhs/rhs/comap/atom-map, `reverse`,
   `chain`, and `to_reaction`. The derivation is an immutable result; molecule-side
   getters return explicit owned snapshots so Python cannot mutate a side and
-  silently invalidate its correspondence. Test ownership past host/result
-  lifetimes and every operation. **Additive (green).** `[dep: S0b, S5a, S7a]`
+  silently invalidate its correspondence. Test independence from the input host
+  and every operation. **Additive (green).** `[dep: S0b, S5a, S7a]`
 - **S7c — `apply_at` and `apply`** (`reaction.rs`, `error.rs`): expose exact-match
   application over `MoleculeCorrespondence` and all-match application over the
   algorithm mirror, returning owned derivations; map every `ApplyError` variant to
@@ -349,10 +372,9 @@ end-to-end contract through S6c. `S2a/S2b → S3a/S3b/S3c` proceeds alongside th
 constraint path and joins at S4a. `S5b` and `S6a` proceed alongside
 `S5c → S6b` once S5a lands.
 
-Only `ReactionSpanAst`/`EntitySpan<T>`, reaction metadata/alias preservation, and
-any future borrowing optimization are deferrable. A borrowed derivation may be
-reintroduced only as an additional profiled optimization; it does not replace
-the owned public result or gate the Python binding.
+Only `ReactionSpanAst`/`EntitySpan<T>` and reaction metadata/alias preservation
+are deferrable. `ReactionDerivation` remains part of the required owned Python
+surface.
 
 S0 is the sole breaking stage and must restore a green workspace before S1.
 S1–S7 are additive, and every stage must end green.
