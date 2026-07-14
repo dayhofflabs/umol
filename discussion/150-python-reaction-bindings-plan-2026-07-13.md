@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S3b.4 complete; S3b.5 is next**
+Status: **ACTIVE — S3b complete; S3c is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -736,7 +736,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      `umol-py` suites pass with 801 Rust tests and 461 Python tests. `umol-py`
      clippy, rustfmt, and `git diff --check` pass.
 
-  5. **S3b.5 — non-stereo overlay closure verification** — add a sixteen-row
+  5. **DONE — S3b.5 — non-stereo overlay closure verification** — add a sixteen-row
      Python matrix spanning every variant of all four classes. Verify exact
      repr, structural value equality, concrete inverse subtype, inequality
      after one non-identity inversion, and `inverse().inverse() == original`;
@@ -746,6 +746,18 @@ scope and membership payloads live in `constraint/ring.rs`.
      and Python suites, workspace clippy, rustfmt, and `git diff --check` as the
      stage gate. **Additive (green).**
      `[dep: S3b.1, S3b.2, S3b.3, S3b.4]`
+
+     **Implemented verification:** the sixteen-row Python closure matrix covers
+     `Add`, `Remove`, `ModifyField`, and `ModifyConstraint` for each of
+     `DativeBondDelta`, `AromaticSystemDelta`, `MulticenterBondDelta`, and
+     `NoncovalentBondDelta`. Every row verifies exact repr, structural value
+     equality through double inversion, the concrete inverse subtype, and
+     inequality after one non-identity inversion. The targeted ownership,
+     optional-constraint, directed-participant, ordered-list, duplicate-member,
+     and ordered-tuple tests remain in place. The focused delta suite passes
+     with 90 Python tests; the complete `umol-py` suites pass with 801 Rust
+     tests and 477 Python tests. Workspace clippy, rustfmt, and
+     `git diff --check` pass.
 
   **Critical path:** `{S2a.2 → S3b.1, S2a.3 → {S3b.2, S3b.3}, S2a.4 →
   S3b.4} → S3b.5`, with S3a.3 supplying the established entity-delta surface to

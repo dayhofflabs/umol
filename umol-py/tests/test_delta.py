@@ -1267,3 +1267,197 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
     assert type(inverse) is inverse_type
     assert inverse != delta
     assert inverse.inverse() == delta
+
+
+@pytest.mark.parametrize(
+    ("delta", "expected_repr", "inverse_type"),
+    [
+        (
+            DativeBondDelta.Add(
+                id=1, donors=[4, 2, 4], acceptor=3, ast=DativeBondAst(1)
+            ),
+            "DativeBondDelta.Add(id=1, donors=[4, 2, 4], acceptor=3, "
+            "ast=DativeBondAst.parse('1'))",
+            DativeBondDelta.Remove,
+        ),
+        (
+            DativeBondDelta.Remove(
+                id=1, donors=[2, 4, 2], acceptor=3, ast=DativeBondAst(2)
+            ),
+            "DativeBondDelta.Remove(id=1, donors=[2, 4, 2], acceptor=3, "
+            "ast=DativeBondAst.parse('2'))",
+            DativeBondDelta.Add,
+        ),
+        (
+            DativeBondDelta.ModifyField(
+                id=1,
+                change=DativeBondFieldChange.Order(
+                    old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                ),
+            ),
+            "DativeBondDelta.ModifyField(id=1, "
+            "change=DativeBondFieldChange.Order("
+            "old=ValueAst.Lit(1), new=ValueAst.Lit(2)))",
+            DativeBondDelta.ModifyField,
+        ),
+        (
+            DativeBondDelta.ModifyConstraint(
+                id=1,
+                old=None,
+                new=DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)),
+            ),
+            "DativeBondDelta.ModifyConstraint(id=1, old=None, "
+            "new=DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True)))",
+            DativeBondDelta.ModifyConstraint,
+        ),
+        (
+            AromaticSystemDelta.Add(
+                id=2, atoms=[4, 2, 4], ast=AromaticSystemAst([1, 1, 1])
+            ),
+            "AromaticSystemDelta.Add(id=2, atoms=[4, 2, 4], "
+            "ast=AromaticSystemAst.parse('[1,1,1]'))",
+            AromaticSystemDelta.Remove,
+        ),
+        (
+            AromaticSystemDelta.Remove(
+                id=2, atoms=[2, 4, 2], ast=AromaticSystemAst([2, 0, 1])
+            ),
+            "AromaticSystemDelta.Remove(id=2, atoms=[2, 4, 2], "
+            "ast=AromaticSystemAst.parse('[2,0,1]'))",
+            AromaticSystemDelta.Add,
+        ),
+        (
+            AromaticSystemDelta.ModifyField(
+                id=2,
+                change=AromaticSystemFieldChange.Charge(
+                    old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                ),
+            ),
+            "AromaticSystemDelta.ModifyField(id=2, "
+            "change=AromaticSystemFieldChange.Charge("
+            "old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
+            AromaticSystemDelta.ModifyField,
+        ),
+        (
+            AromaticSystemDelta.ModifyConstraint(
+                id=2,
+                old=None,
+                new=AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)),
+            ),
+            "AromaticSystemDelta.ModifyConstraint(id=2, old=None, "
+            "new=AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)))",
+            AromaticSystemDelta.ModifyConstraint,
+        ),
+        (
+            MulticenterBondDelta.Add(
+                id=3, atoms=[4, 2, 4], ast=MulticenterBondAst([1, 1, 1])
+            ),
+            "MulticenterBondDelta.Add(id=3, atoms=[4, 2, 4], "
+            "ast=MulticenterBondAst.parse('[1,1,1]'))",
+            MulticenterBondDelta.Remove,
+        ),
+        (
+            MulticenterBondDelta.Remove(
+                id=3, atoms=[2, 4, 2], ast=MulticenterBondAst([2, 0, 1])
+            ),
+            "MulticenterBondDelta.Remove(id=3, atoms=[2, 4, 2], "
+            "ast=MulticenterBondAst.parse('[2,0,1]'))",
+            MulticenterBondDelta.Add,
+        ),
+        (
+            MulticenterBondDelta.ModifyField(
+                id=3,
+                change=MulticenterBondFieldChange.Charge(
+                    old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+                ),
+            ),
+            "MulticenterBondDelta.ModifyField(id=3, "
+            "change=MulticenterBondFieldChange.Charge("
+            "old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
+            MulticenterBondDelta.ModifyField,
+        ),
+        (
+            MulticenterBondDelta.ModifyConstraint(
+                id=3,
+                old=None,
+                new=MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6)),
+            ),
+            "MulticenterBondDelta.ModifyConstraint(id=3, old=None, "
+            "new=MulticenterBondConstraintAst.ElectronCount(ValueAst.Lit(6)))",
+            MulticenterBondDelta.ModifyConstraint,
+        ),
+        (
+            NoncovalentBondDelta.Add(
+                id=4,
+                atoms=(5, 2),
+                ast=NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+            ),
+            "NoncovalentBondDelta.Add(id=4, atoms=(5, 2), "
+            "ast=NoncovalentBondAst.parse('Hbd'))",
+            NoncovalentBondDelta.Remove,
+        ),
+        (
+            NoncovalentBondDelta.Remove(
+                id=4,
+                atoms=(2, 5),
+                ast=NoncovalentBondAst(NoncovalentBondKind.Ionic),
+            ),
+            "NoncovalentBondDelta.Remove(id=4, atoms=(2, 5), "
+            "ast=NoncovalentBondAst.parse('Ion'))",
+            NoncovalentBondDelta.Add,
+        ),
+        (
+            NoncovalentBondDelta.ModifyField(
+                id=4,
+                change=NoncovalentBondFieldChange.Kind(
+                    old=NoncovalentBondKindAst.Undetermined(),
+                    new=NoncovalentBondKindAst.Lit(
+                        NoncovalentBondKind.HydrogenBond
+                    ),
+                ),
+            ),
+            "NoncovalentBondDelta.ModifyField(id=4, "
+            "change=NoncovalentBondFieldChange.Kind("
+            "old=NoncovalentBondKindAst.Undetermined(), "
+            "new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond)))",
+            NoncovalentBondDelta.ModifyField,
+        ),
+        (
+            NoncovalentBondDelta.ModifyConstraint(
+                id=4,
+                old=None,
+                new=NoncovalentBondConstraintAst.Intramolecular(
+                    BooleanAst.Lit(True)
+                ),
+            ),
+            "NoncovalentBondDelta.ModifyConstraint(id=4, old=None, "
+            "new=NoncovalentBondConstraintAst.Intramolecular("
+            "BooleanAst.Lit(True)))",
+            NoncovalentBondDelta.ModifyConstraint,
+        ),
+    ],
+    ids=[
+        "dative-add",
+        "dative-remove",
+        "dative-modify-field",
+        "dative-modify-constraint",
+        "aromatic-add",
+        "aromatic-remove",
+        "aromatic-modify-field",
+        "aromatic-modify-constraint",
+        "multicenter-add",
+        "multicenter-remove",
+        "multicenter-modify-field",
+        "multicenter-modify-constraint",
+        "noncovalent-add",
+        "noncovalent-remove",
+        "noncovalent-modify-field",
+        "noncovalent-modify-constraint",
+    ],
+)
+def test_overlaydelta_closure(delta, expected_repr, inverse_type):
+    assert repr(delta) == expected_repr
+    inverse = delta.inverse()
+    assert type(inverse) is inverse_type
+    assert inverse != delta
+    assert inverse.inverse() == delta
