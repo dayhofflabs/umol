@@ -103,6 +103,8 @@ mod multicenter;
 #[cfg(feature = "graph")]
 mod noncovalent;
 #[cfg(feature = "graph")]
+mod reaction;
+#[cfg(feature = "graph")]
 mod spin;
 #[cfg(feature = "graph")]
 mod stereo;

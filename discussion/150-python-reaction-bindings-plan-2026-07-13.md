@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S4 complete; S5a is next**
+Status: **ACTIVE — S5a.1 complete; S5a.2 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1107,16 +1107,68 @@ scope and membership payloads live in `constraint/ring.rs`.
 
 ### S5 — `ReactionAst` owned component facade
 
-- **S5a — facade and conversions** (`umol-py/src/reaction.rs`): add
-  `ReactionAst { lhs: Py<MoleculeAst>, deltas: Py<Deltas> }`, snapshotting
-  constructor, live component getters, snapshotting setters, structural equality,
-  `to_ast`/`from_ast`, and repr scaffolding. Test constructor non-aliasing, live
-  nested writes through both components, whole-component self-assignment, and
-  Rust round trips. **Additive (green).** `[dep: S1d, S4b]`
-- **S5b — reaction DSL shortcut** (`reaction.rs`): add `parse`, `str`, and
-  constructor-style `repr` through Rust `FromStr`/`Display`; reuse `ParseError`.
-  Test representative add/remove/modify/stereo/molecule-constraint reactions and
-  canonical render/parse stability. **Additive (green).** `[dep: S5a]`
+- **S5a — facade and conversions** (`umol-py/src/reaction.rs`, `lib.rs`,
+  `python/umol/__init__.py`, `tests/test_reaction.py`): bind `ReactionAst` as an
+  owned component facade whose molecule and delta components remain live inside
+  the reaction while every whole-component input is snapshotted.
+
+  1. **DONE — S5a.1 — owned component kernel and Rust conversions**
+     (`umol-py/src/reaction.rs`, `lib.rs`) — add
+     `ReactionAst { lhs: Py<MoleculeAst>, deltas: Py<Deltas> }` and the inherent
+     boundary conversions
+     `from_rust(py, umol_ast::ast::ReactionAst) -> PyResult<Self>` and
+     `to_rust(&self, py) -> umol_ast::ast::ReactionAst`. `from_rust` moves the
+     Rust fields into freshly allocated Python component wrappers; `to_rust`
+     snapshots the current values held by both live components. Add Rust tests
+     for empty and populated conversions, exact structural round trips, and
+     independence between the Rust input/output values and the Python-held
+     components. **Additive (green).** `[dep: S1d, S4b]`
+
+     **Implemented verification:** `reaction.rs` now holds the private
+     `ReactionAst { lhs: Py<MoleculeAst>, deltas: Py<Deltas> }` component kernel;
+     `lib.rs` compiles the module without registering it as a Python class.
+     `from_rust` moves both Rust fields into fresh Python allocations and
+     `to_rust` snapshots their current values. Two Rust round-trip rows cover
+     empty and populated reactions, and a third test mutates both fields of a
+     returned Rust snapshot and verifies that the Python-held reaction is
+     unchanged. The complete `umol-py` Rust suite passes with 924 tests; focused
+     clippy with warnings denied and rustfmt pass.
+
+  2. **S5a.2 — constructor and live component facade**
+     (`umol-py/src/reaction.rs`) — add
+     `ReactionAst(lhs=None, deltas=None)`, resolving `None` to the corresponding
+     empty Rust component and snapshotting every supplied component through the
+     S5a.1 conversions. Add live `.lhs` and `.deltas` getters that return the
+     held `Py` components, plus whole-component setters that first resolve the
+     complete right-hand-side snapshot and only then replace the held component;
+     this ordering makes `reaction.lhs = reaction.lhs` and
+     `reaction.deltas = reaction.deltas` safe. Add structural equality,
+     unhashability, and the component-based constructor repr
+     `ReactionAst(lhs=..., deltas=...)`. Rust tests cover default and populated
+     construction, constructor non-aliasing, stable getter identity, nested
+     write-through for both components, setter snapshot isolation,
+     whole-component self-assignment, equality, unhashability, and exact repr.
+     **Additive (green).** `[dep: S5a.1]`
+
+  3. **S5a.3 — public registration and facade closure** (`umol-py/src/lib.rs`,
+     `python/umol/__init__.py`, `tests/test_reaction.py`) — register and export
+     `ReactionAst`, then repeat the owned-facade contract through the installed
+     Python package: default and supplied construction; mutation of the original
+     constructor arguments without aliasing; live nested molecule and delta
+     writes; snapshotting replacement and both self-assignment paths; structural
+     equality, unhashability, and exact repr. Include one populated Python → Rust
+     → Python closure case in the Rust tests, then run the complete Rust and
+     Python suites, workspace clippy, rustfmt, and `git diff --check` as the S5a
+     gate. **Additive (green).** `[dep: S5a.2]`
+
+  **Critical path:** `S4b.4 → S5a.1 → S5a.2 → S5a.3`. No S5a subitem is
+  deferrable: every later reaction operation rebuilds a Rust reaction through
+  `to_rust` and wraps its result through `from_rust`.
+- **S5b — reaction DSL shortcut** (`reaction.rs`): add `parse` and `str` through
+  Rust `FromStr`/`Display`, retaining S5a's constructor-style `repr`; reuse
+  `ParseError`. Test representative add/remove/modify/stereo/molecule-constraint
+  reactions and canonical render/parse stability. **Additive (green).**
+  `[dep: S5a]`
 - **S5c — canonicalize and reverse** (`reaction.rs`): return fresh component
   facades and map `Contradiction`; verify the source is unchanged, normal forms
   are idempotent, reverse twice round-trips, and live components on results remain
