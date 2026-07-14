@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S4a.1 complete; S4a.2 is next**
+Status: **ACTIVE — S4a complete; S4b is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -940,7 +940,7 @@ scope and membership payloads live in `constraint/ring.rs`.
 
 ### S4 — `Delta` and `Deltas`
 
-- **S4a — top-level `Delta` sum** (`umol-py/src/delta.rs`, `lib.rs`,
+- **S4a — DONE — top-level `Delta` sum** (`umol-py/src/delta.rs`, `lib.rs`,
   `python/umol/__init__.py`): add the tuple-shaped
   `Delta::{Atom, Bond, DativeBond, AromaticSystem, MulticenterBond,
   NoncovalentBond, StereoAtom, StereoBond, Constraint}` binding over the nine
@@ -978,7 +978,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      and two Python tests; the complete `umol-py` suites pass with 890 Rust tests
      and 513 Python tests. `umol-py` clippy, rustfmt, and `git diff --check` pass.
 
-  2. **S4a.2 — top-level delta closure verification** — add a nine-row Python
+  2. **DONE — S4a.2 — top-level delta closure verification** — add a nine-row Python
      matrix with one representative `Add` from each family. Every row verifies
      exact repr, structural equality, the retained concrete outer variant,
      the concrete nested `Remove` inverse subtype, inequality after one
@@ -988,6 +988,17 @@ scope and membership payloads live in `constraint/ring.rs`.
      from Python. Retain the S4a.1 ownership tests and run the complete Rust and
      Python suites, workspace clippy, rustfmt, and `git diff --check` as the stage
      gate. **Additive (green).** `[dep: S4a.1]`
+
+     **Implemented verification:** the nine-row Python closure matrix covers one
+     `Add` from every outer family. Every row verifies exact repr, the concrete
+     outer variant before and after inversion, the concrete nested `Remove`
+     subtype, inequality after one inversion, and structural equality after
+     double inversion. A separate exhaustive traversal class-matches through all
+     nine `Delta` variants into the corresponding family `Add` and verifies its
+     structural payload. The focused top-level delta suite passes with 12 Python
+     tests, including the two targeted S4a.1 ownership tests. The complete
+     `umol-py` suites pass with 890 Rust tests and 523 Python tests. Workspace
+     clippy, rustfmt, and `git diff --check` pass.
 
   **Critical path:** `S3a.3, S3b.5, S3c.3, S3d.2 → S4a.1 → S4a.2`. Neither
   S4a subitem is deferrable: S4b requires the complete nine-family sum binding.

@@ -2271,3 +2271,278 @@ def test_delta_atom_match():
     assert inverse._0 is not delta._0
     assert inverse != delta
     assert inverse.inverse() == delta
+
+
+@pytest.mark.parametrize(
+    ("delta", "expected_repr", "outer_type", "inverse_type"),
+    [
+        (
+            Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+            "Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C')))",
+            Delta.Atom,
+            AtomDelta.Remove,
+        ),
+        (
+            Delta.Bond(BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst(1))),
+            "Delta.Bond(BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst.parse('1')))",
+            Delta.Bond,
+            BondDelta.Remove,
+        ),
+        (
+            Delta.DativeBond(
+                DativeBondDelta.Add(
+                    id=1,
+                    donors=[4, 2],
+                    acceptor=3,
+                    ast=DativeBondAst(1),
+                )
+            ),
+            "Delta.DativeBond(DativeBondDelta.Add(id=1, donors=[4, 2], acceptor=3, ast=DativeBondAst.parse('1')))",
+            Delta.DativeBond,
+            DativeBondDelta.Remove,
+        ),
+        (
+            Delta.AromaticSystem(
+                AromaticSystemDelta.Add(
+                    id=2,
+                    atoms=[4, 2],
+                    ast=AromaticSystemAst([1, 1]),
+                )
+            ),
+            "Delta.AromaticSystem(AromaticSystemDelta.Add(id=2, atoms=[4, 2], ast=AromaticSystemAst.parse('[1,1]')))",
+            Delta.AromaticSystem,
+            AromaticSystemDelta.Remove,
+        ),
+        (
+            Delta.MulticenterBond(
+                MulticenterBondDelta.Add(
+                    id=3,
+                    atoms=[4, 2],
+                    ast=MulticenterBondAst([1, 1]),
+                )
+            ),
+            "Delta.MulticenterBond(MulticenterBondDelta.Add(id=3, atoms=[4, 2], ast=MulticenterBondAst.parse('[1,1]')))",
+            Delta.MulticenterBond,
+            MulticenterBondDelta.Remove,
+        ),
+        (
+            Delta.NoncovalentBond(
+                NoncovalentBondDelta.Add(
+                    id=4,
+                    atoms=(5, 2),
+                    ast=NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+                )
+            ),
+            "Delta.NoncovalentBond(NoncovalentBondDelta.Add(id=4, atoms=(5, 2), ast=NoncovalentBondAst.parse('Hbd')))",
+            Delta.NoncovalentBond,
+            NoncovalentBondDelta.Remove,
+        ),
+        (
+            Delta.StereoAtom(
+                StereoAtomDelta.Add(
+                    id=5,
+                    site=3,
+                    ligands=[StereoLigand(4, StereoLigandKind.Atom)],
+                    ast=StereoAtomAst(
+                        StereoConfigurationAst.Kinded(
+                            StereoKind.Tetrahedral,
+                            StereoCosetAst.Lit(0),
+                        )
+                    ),
+                )
+            ),
+            "Delta.StereoAtom(StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], ast=StereoAtomAst.parse('Th0')))",
+            Delta.StereoAtom,
+            StereoAtomDelta.Remove,
+        ),
+        (
+            Delta.StereoBond(
+                StereoBondDelta.Add(
+                    id=5,
+                    site=3,
+                    ligands=[StereoLigand(4, StereoLigandKind.Atom)],
+                    ast=StereoBondAst(
+                        StereoConfigurationAst.Kinded(
+                            StereoKind.CisTrans,
+                            StereoCosetAst.Lit(0),
+                        )
+                    ),
+                )
+            ),
+            "Delta.StereoBond(StereoBondDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], ast=StereoBondAst.parse('Ct0')))",
+            Delta.StereoBond,
+            StereoBondDelta.Remove,
+        ),
+        (
+            Delta.Constraint(
+                ConstraintDelta.Add(
+                    constraint=Constraint.Atom(
+                        3,
+                        AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                    )
+                )
+            ),
+            "Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2)))))",
+            Delta.Constraint,
+            ConstraintDelta.Remove,
+        ),
+    ],
+    ids=[
+        "atom",
+        "bond",
+        "dative-bond",
+        "aromatic-system",
+        "multicenter-bond",
+        "noncovalent-bond",
+        "stereo-atom",
+        "stereo-bond",
+        "constraint",
+    ],
+)
+def test_delta_closure(delta, expected_repr, outer_type, inverse_type):
+    assert repr(delta) == expected_repr
+    assert type(delta) is outer_type
+    inverse = delta.inverse()
+    assert type(inverse) is outer_type
+    assert type(inverse._0) is inverse_type
+    assert inverse != delta
+    assert inverse.inverse() == delta
+
+
+def test_delta_match():
+    seen = []
+    for delta in [
+        Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+        Delta.Bond(BondDelta.Add(id=2, atoms=(5, 1), ast=BondAst(1))),
+        Delta.DativeBond(
+            DativeBondDelta.Add(
+                id=1,
+                donors=[4, 2],
+                acceptor=3,
+                ast=DativeBondAst(1),
+            )
+        ),
+        Delta.AromaticSystem(
+            AromaticSystemDelta.Add(
+                id=2,
+                atoms=[4, 2],
+                ast=AromaticSystemAst([1, 1]),
+            )
+        ),
+        Delta.MulticenterBond(
+            MulticenterBondDelta.Add(
+                id=3,
+                atoms=[4, 2],
+                ast=MulticenterBondAst([1, 1]),
+            )
+        ),
+        Delta.NoncovalentBond(
+            NoncovalentBondDelta.Add(
+                id=4,
+                atoms=(5, 2),
+                ast=NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+            )
+        ),
+        Delta.StereoAtom(
+            StereoAtomDelta.Add(
+                id=5,
+                site=3,
+                ligands=[StereoLigand(4, StereoLigandKind.Atom)],
+                ast=StereoAtomAst(
+                    StereoConfigurationAst.Kinded(
+                        StereoKind.Tetrahedral,
+                        StereoCosetAst.Lit(0),
+                    )
+                ),
+            )
+        ),
+        Delta.StereoBond(
+            StereoBondDelta.Add(
+                id=5,
+                site=3,
+                ligands=[StereoLigand(4, StereoLigandKind.Atom)],
+                ast=StereoBondAst(
+                    StereoConfigurationAst.Kinded(
+                        StereoKind.CisTrans,
+                        StereoCosetAst.Lit(0),
+                    )
+                ),
+            )
+        ),
+        Delta.Constraint(
+            ConstraintDelta.Add(
+                constraint=Constraint.Atom(
+                    3,
+                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                )
+            )
+        ),
+    ]:
+        match delta:
+            case Delta.Atom(AtomDelta.Add(id=3, ast=ast)):
+                assert ast == AtomAst(Element("C"))
+                seen.append("atom")
+            case Delta.Bond(BondDelta.Add(id=2, atoms=atoms, ast=ast)):
+                assert (atoms, ast) == ((5, 1), BondAst(1))
+                seen.append("bond")
+            case Delta.DativeBond(
+                DativeBondDelta.Add(id=1, donors=donors, acceptor=3, ast=ast)
+            ):
+                assert (donors, ast) == ([4, 2], DativeBondAst(1))
+                seen.append("dative-bond")
+            case Delta.AromaticSystem(
+                AromaticSystemDelta.Add(id=2, atoms=atoms, ast=ast)
+            ):
+                assert (atoms, ast) == ([4, 2], AromaticSystemAst([1, 1]))
+                seen.append("aromatic-system")
+            case Delta.MulticenterBond(
+                MulticenterBondDelta.Add(id=3, atoms=atoms, ast=ast)
+            ):
+                assert (atoms, ast) == ([4, 2], MulticenterBondAst([1, 1]))
+                seen.append("multicenter-bond")
+            case Delta.NoncovalentBond(
+                NoncovalentBondDelta.Add(id=4, atoms=atoms, ast=ast)
+            ):
+                assert (atoms, ast) == (
+                    (5, 2),
+                    NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
+                )
+                seen.append("noncovalent-bond")
+            case Delta.StereoAtom(
+                StereoAtomDelta.Add(id=5, site=3, ligands=ligands, ast=ast)
+            ):
+                assert ligands == [StereoLigand(4, StereoLigandKind.Atom)]
+                assert ast.configuration == StereoConfigurationAst.Kinded(
+                    StereoKind.Tetrahedral,
+                    StereoCosetAst.Lit(0),
+                )
+                seen.append("stereo-atom")
+            case Delta.StereoBond(
+                StereoBondDelta.Add(id=5, site=3, ligands=ligands, ast=ast)
+            ):
+                assert ligands == [StereoLigand(4, StereoLigandKind.Atom)]
+                assert ast.configuration == StereoConfigurationAst.Kinded(
+                    StereoKind.CisTrans,
+                    StereoCosetAst.Lit(0),
+                )
+                seen.append("stereo-bond")
+            case Delta.Constraint(ConstraintDelta.Add(constraint=constraint)):
+                assert constraint == Constraint.Atom(
+                    3,
+                    AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                )
+                seen.append("constraint")
+            case _:
+                raise AssertionError("delta did not match a complete family arm")
+
+    assert seen == [
+        "atom",
+        "bond",
+        "dative-bond",
+        "aromatic-system",
+        "multicenter-bond",
+        "noncovalent-bond",
+        "stereo-atom",
+        "stereo-bond",
+        "constraint",
+    ]
