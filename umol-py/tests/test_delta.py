@@ -1,0 +1,370 @@
+import pytest
+
+from umol import (
+    AromaticSystemFieldChange,
+    AtomFieldChange,
+    BondFieldChange,
+    DativeBondFieldChange,
+    Element,
+    ElementAst,
+    ElectronCountsAst,
+    IsotopeMassAst,
+    MulticenterBondFieldChange,
+    NoncovalentBondFieldChange,
+    NoncovalentBondKind,
+    NoncovalentBondKindAst,
+    SpinStateAst,
+    ValueAst,
+)
+
+
+def test_atomfieldchange_fields():
+    change = AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1))
+
+    assert change.old == ValueAst.Lit(0)
+    assert change.new == ValueAst.Lit(-1)
+    assert repr(change) == (
+        "AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1))"
+    )
+    with pytest.raises(AttributeError):
+        change.old = ValueAst.Lit(1)
+    with pytest.raises(TypeError):
+        hash(change)
+
+
+def test_atomfieldchange_match_scalar():
+    change = AtomFieldChange.ImplicitHydrogens(
+        old=ValueAst.Lit(3), new=ValueAst.Lit(2)
+    )
+
+    match change:
+        case AtomFieldChange.ImplicitHydrogens(old, new):
+            assert (old, new) == (ValueAst.Lit(3), ValueAst.Lit(2))
+        case _:
+            raise AssertionError("atom field change did not match its scalar variant")
+
+
+def test_atomfieldchange_match_structured():
+    change = AtomFieldChange.Element(
+        old=ElementAst.Lit(Element("C")),
+        new=ElementAst.Lit(Element("N")),
+    )
+
+    match change:
+        case AtomFieldChange.Element(old=old, new=new):
+            assert (old, new) == (
+                ElementAst.Lit(Element("C")),
+                ElementAst.Lit(Element("N")),
+            )
+        case _:
+            raise AssertionError("atom field change did not match its structured variant")
+
+
+def test_atomfieldchange_inverse():
+    change = AtomFieldChange.Spin(old=SpinStateAst(0, 1), new=SpinStateAst(1, 2))
+
+    inverse = change.inverse()
+
+    assert isinstance(inverse, AtomFieldChange.Spin)
+    assert inverse.old == SpinStateAst(1, 2)
+    assert inverse.new == SpinStateAst(0, 1)
+    assert inverse.inverse() == change
+
+
+def test_bondfieldchange_fields():
+    change = BondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2))
+
+    assert change.old == ValueAst.Lit(1)
+    assert change.new == ValueAst.Lit(2)
+    assert repr(change) == (
+        "BondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2))"
+    )
+
+
+def test_bondfieldchange_match():
+    change = BondFieldChange.Spin(old=SpinStateAst(0, 1), new=SpinStateAst(1, 2))
+
+    match change:
+        case BondFieldChange.Spin(old, new):
+            assert (old, new) == (SpinStateAst(0, 1), SpinStateAst(1, 2))
+        case _:
+            raise AssertionError("bond field change did not match its variant")
+
+
+def test_dativebondfieldchange_fields():
+    change = DativeBondFieldChange.Order(
+        old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+    )
+
+    assert change.old == ValueAst.Lit(1)
+    assert change.new == ValueAst.Lit(2)
+    assert repr(change) == (
+        "DativeBondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2))"
+    )
+
+
+def test_dativebondfieldchange_match():
+    change = DativeBondFieldChange.Order(
+        old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+    )
+
+    match change:
+        case DativeBondFieldChange.Order(old=old, new=new):
+            assert (old, new) == (ValueAst.Lit(1), ValueAst.Lit(2))
+        case _:
+            raise AssertionError("dative bond field change did not match its variant")
+
+    inverse = change.inverse()
+    assert isinstance(inverse, DativeBondFieldChange.Order)
+    assert inverse == DativeBondFieldChange.Order(
+        old=ValueAst.Lit(2), new=ValueAst.Lit(1)
+    )
+
+
+def test_aromaticsystemfieldchange_fields():
+    change = AromaticSystemFieldChange.Electrons(
+        old=ElectronCountsAst.Undetermined(),
+        new=ElectronCountsAst.Lit([1, 1, 1]),
+    )
+
+    assert change.old == ElectronCountsAst.Undetermined()
+    assert change.new == ElectronCountsAst.Lit([1, 1, 1])
+    assert repr(change) == (
+        "AromaticSystemFieldChange.Electrons("
+        "old=ElectronCountsAst.Undetermined(), "
+        "new=ElectronCountsAst.Lit([1, 1, 1]))"
+    )
+
+
+def test_aromaticsystemfieldchange_match():
+    change = AromaticSystemFieldChange.Electrons(
+        old=ElectronCountsAst.Lit([2, 0, 2]),
+        new=ElectronCountsAst.Lit([1, 1, 1]),
+    )
+
+    match change:
+        case AromaticSystemFieldChange.Electrons(old=old, new=new):
+            assert (old, new) == (
+                ElectronCountsAst.Lit([2, 0, 2]),
+                ElectronCountsAst.Lit([1, 1, 1]),
+            )
+        case _:
+            raise AssertionError("aromatic field change did not match its variant")
+
+
+def test_multicenterbondfieldchange_fields():
+    change = MulticenterBondFieldChange.Charge(
+        old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+    )
+
+    assert change.old == ValueAst.Lit(0)
+    assert change.new == ValueAst.Lit(1)
+    assert repr(change) == (
+        "MulticenterBondFieldChange.Charge("
+        "old=ValueAst.Lit(0), new=ValueAst.Lit(1))"
+    )
+
+
+def test_multicenterbondfieldchange_match():
+    change = MulticenterBondFieldChange.Electrons(
+        old=ElectronCountsAst.Lit([1, 0, 1]),
+        new=ElectronCountsAst.Lit([2, 0, 1]),
+    )
+
+    match change:
+        case MulticenterBondFieldChange.Electrons(old, new):
+            assert (old, new) == (
+                ElectronCountsAst.Lit([1, 0, 1]),
+                ElectronCountsAst.Lit([2, 0, 1]),
+            )
+        case _:
+            raise AssertionError("multicenter field change did not match its variant")
+
+    inverse = change.inverse()
+    assert isinstance(inverse, MulticenterBondFieldChange.Electrons)
+    assert inverse.old == ElectronCountsAst.Lit([2, 0, 1])
+    assert inverse.new == ElectronCountsAst.Lit([1, 0, 1])
+
+
+def test_noncovalentbondfieldchange_match():
+    change = NoncovalentBondFieldChange.Kind(
+        old=NoncovalentBondKindAst.Undetermined(),
+        new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond),
+    )
+
+    match change:
+        case NoncovalentBondFieldChange.Kind(old=old, new=new):
+            assert old == NoncovalentBondKindAst.Undetermined()
+            assert new == NoncovalentBondKindAst.Lit(
+                NoncovalentBondKind.HydrogenBond
+            )
+        case _:
+            raise AssertionError("noncovalent field change did not match its variant")
+
+
+@pytest.mark.parametrize(
+    ("change", "expected_repr"),
+    [
+        (
+            AtomFieldChange.Element(
+                old=ElementAst.Lit(Element("C")),
+                new=ElementAst.Lit(Element("N")),
+            ),
+            "AtomFieldChange.Element(old=ElementAst.Lit(Element('C')), "
+            "new=ElementAst.Lit(Element('N')))",
+        ),
+        (
+            AtomFieldChange.IsotopeMass(
+                old=IsotopeMassAst.Lit(12),
+                new=IsotopeMassAst.Lit(13),
+            ),
+            "AtomFieldChange.IsotopeMass(old=IsotopeMassAst.Lit(12), "
+            "new=IsotopeMassAst.Lit(13))",
+        ),
+        (
+            AtomFieldChange.Charge(
+                old=ValueAst.Lit(0),
+                new=ValueAst.Lit(-1),
+            ),
+            "AtomFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1))",
+        ),
+        (
+            AtomFieldChange.ImplicitHydrogens(
+                old=ValueAst.Lit(3),
+                new=ValueAst.Lit(2),
+            ),
+            "AtomFieldChange.ImplicitHydrogens(old=ValueAst.Lit(3), "
+            "new=ValueAst.Lit(2))",
+        ),
+        (
+            AtomFieldChange.LonePairs(
+                old=ValueAst.Lit(1),
+                new=ValueAst.Lit(2),
+            ),
+            "AtomFieldChange.LonePairs(old=ValueAst.Lit(1), new=ValueAst.Lit(2))",
+        ),
+        (
+            AtomFieldChange.Spin(
+                old=SpinStateAst(0, 1),
+                new=SpinStateAst(1, 2),
+            ),
+            "AtomFieldChange.Spin(old=SpinStateAst(ValueAst.Lit(0), "
+            "ValueAst.Lit(1)), new=SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2)))",
+        ),
+        (
+            BondFieldChange.Order(
+                old=ValueAst.Lit(1),
+                new=ValueAst.Lit(2),
+            ),
+            "BondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2))",
+        ),
+        (
+            BondFieldChange.Charge(
+                old=ValueAst.Lit(0),
+                new=ValueAst.Lit(1),
+            ),
+            "BondFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(1))",
+        ),
+        (
+            BondFieldChange.Spin(
+                old=SpinStateAst(0, 1),
+                new=SpinStateAst(1, 2),
+            ),
+            "BondFieldChange.Spin(old=SpinStateAst(ValueAst.Lit(0), "
+            "ValueAst.Lit(1)), new=SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2)))",
+        ),
+        (
+            DativeBondFieldChange.Order(
+                old=ValueAst.Lit(1),
+                new=ValueAst.Lit(2),
+            ),
+            "DativeBondFieldChange.Order(old=ValueAst.Lit(1), new=ValueAst.Lit(2))",
+        ),
+        (
+            AromaticSystemFieldChange.Electrons(
+                old=ElectronCountsAst.Undetermined(),
+                new=ElectronCountsAst.Lit([1, 1, 1]),
+            ),
+            "AromaticSystemFieldChange.Electrons("
+            "old=ElectronCountsAst.Undetermined(), "
+            "new=ElectronCountsAst.Lit([1, 1, 1]))",
+        ),
+        (
+            AromaticSystemFieldChange.Charge(
+                old=ValueAst.Lit(0),
+                new=ValueAst.Lit(-1),
+            ),
+            "AromaticSystemFieldChange.Charge(old=ValueAst.Lit(0), "
+            "new=ValueAst.Lit(-1))",
+        ),
+        (
+            AromaticSystemFieldChange.Spin(
+                old=SpinStateAst(0, 1),
+                new=SpinStateAst(1, 2),
+            ),
+            "AromaticSystemFieldChange.Spin(old=SpinStateAst(ValueAst.Lit(0), "
+            "ValueAst.Lit(1)), new=SpinStateAst(ValueAst.Lit(1), ValueAst.Lit(2)))",
+        ),
+        (
+            MulticenterBondFieldChange.Electrons(
+                old=ElectronCountsAst.Lit([1, 0, 1]),
+                new=ElectronCountsAst.Lit([2, 0, 1]),
+            ),
+            "MulticenterBondFieldChange.Electrons("
+            "old=ElectronCountsAst.Lit([1, 0, 1]), "
+            "new=ElectronCountsAst.Lit([2, 0, 1]))",
+        ),
+        (
+            MulticenterBondFieldChange.Charge(
+                old=ValueAst.Lit(0),
+                new=ValueAst.Lit(1),
+            ),
+            "MulticenterBondFieldChange.Charge(old=ValueAst.Lit(0), "
+            "new=ValueAst.Lit(1))",
+        ),
+        (
+            MulticenterBondFieldChange.Spin(
+                old=SpinStateAst(0, 1),
+                new=SpinStateAst(2, 3),
+            ),
+            "MulticenterBondFieldChange.Spin(old=SpinStateAst(ValueAst.Lit(0), "
+            "ValueAst.Lit(1)), new=SpinStateAst(ValueAst.Lit(2), ValueAst.Lit(3)))",
+        ),
+        (
+            NoncovalentBondFieldChange.Kind(
+                old=NoncovalentBondKindAst.Undetermined(),
+                new=NoncovalentBondKindAst.Lit(
+                    NoncovalentBondKind.HydrogenBond
+                ),
+            ),
+            "NoncovalentBondFieldChange.Kind("
+            "old=NoncovalentBondKindAst.Undetermined(), "
+            "new=NoncovalentBondKindAst.Lit(NoncovalentBondKind.HydrogenBond))",
+        ),
+    ],
+    ids=[
+        "atom-element",
+        "atom-isotope-mass",
+        "atom-charge",
+        "atom-implicit-hydrogens",
+        "atom-lone-pairs",
+        "atom-spin",
+        "bond-order",
+        "bond-charge",
+        "bond-spin",
+        "dative-order",
+        "aromatic-electrons",
+        "aromatic-charge",
+        "aromatic-spin",
+        "multicenter-electrons",
+        "multicenter-charge",
+        "multicenter-spin",
+        "noncovalent-kind",
+    ],
+)
+def test_fieldchange_closure(change, expected_repr):
+    assert repr(change) == expected_repr
+    inverse = change.inverse()
+    assert type(inverse) is type(change)
+    assert inverse != change
+    assert inverse.inverse() == change

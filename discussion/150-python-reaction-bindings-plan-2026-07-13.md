@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S0 complete; S1a is next**
+Status: **ACTIVE — S2a complete; S2b is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -381,11 +381,96 @@ scope and membership payloads live in `constraint/ring.rs`.
 
 ### S2 — Old/new field-change vocabulary
 
-- **S2a — ordinary entity field changes** (`umol-py/src/delta.rs`): mirror the
-  atom, bond, dative, aromatic, multicenter, and noncovalent field-change enums,
-  preferably through a local macro that still emits separately named pyclasses.
-  Add conversion and `inverse` tests for every variant and Python match tests for
-  at least one scalar and one multi-field family. **Additive (green).** `[dep: —]`
+- **S2a — DONE — ordinary entity field changes** (`umol-py/src/delta.rs`, `lib.rs`,
+  `python/umol/__init__.py`): add six separately named native complex-enum
+  mirrors. Every variant is a struct variant with read-only, named `old` and
+  `new` fields of the same bound payload type, so construction supports keywords,
+  attribute reads use `.old`/`.new`, and positional or named class patterns work.
+  These types do not themselves implement lattice semantics and therefore keep
+  the Rust names without an `Ast` suffix. Use ordinary `#[pyclass]`, not
+  `#[pyclass(frozen)]`; PyO3's generated complex-enum fields are already
+  getter-only. All six mirrors are value-equal, unhashable, have an exact named
+  repr, and expose non-mutating `inverse() -> Self` returning the concrete
+  variant subtype through `into_py_variant`.
+
+  1. **DONE — S2a.1 — shared field-change machinery and `AtomFieldChange`** — create
+     `delta.rs`, wire the private module into `lib.rs`, and add a local macro for
+     the common named-variant representation, AST conversion, equality, repr,
+     and inverse surface while still emitting a separately named pyclass. Prove
+     the complete payload vocabulary with all six atom variants:
+     `Element { old: ElementAst, new: ElementAst }`,
+     `IsotopeMass { old: IsotopeMassAst, new: IsotopeMassAst }`,
+     `Charge { old: ValueAst, new: ValueAst }`,
+     `ImplicitHydrogens { old: ValueAst, new: ValueAst }`,
+     `LonePairs { old: ValueAst, new: ValueAst }`, and
+     `Spin { old: SpinStateAst, new: SpinStateAst }`. Register/export the class.
+     Rust tests cover every variant's conversion, named fields/repr, equality,
+     `inverse`, and double inverse; Python tests cover keyword construction,
+     attribute reads, scalar and structured class patterns, and concrete-subtype
+     preservation across `inverse`. **Additive (green).** `[dep: —]`
+
+     **Implemented verification:** six Rust round-trip rows cover the full atom
+     variant closure; two equality rows, six named-field/repr rows, and six
+     inverse/double-inverse rows exercise the generated common surface. Four
+     Python tests cover keyword construction, read-only `old`/`new`, positional
+     and named class patterns, exact repr, value equality, and concrete subtype
+     preservation. The complete `umol-py` suites pass with 655 Rust tests and
+     391 Python tests; workspace clippy and rustfmt pass.
+  2. **DONE — S2a.2 — bond field changes** — invoke the established machinery for
+     `BondFieldChange::{Order, Charge, Spin}` over `ValueAst`, `ValueAst`, and
+     `SpinStateAst`, and for the single
+     `DativeBondFieldChange::Order { old: ValueAst, new: ValueAst }` variant.
+     Register/export both classes. Add exhaustive Rust conversion/inverse rows
+     and Python construction, named-field, repr, and match coverage for both
+     enums. **Additive (green).** `[dep: S2a.1]`
+
+     **Implemented verification:** three Rust round-trip rows and three
+     inverse/double-inverse rows cover every `BondFieldChange` variant; one row
+     of each kind covers `DativeBondFieldChange::Order`. Four Python tests cover
+     construction, named fields, exact repr, positional and named class patterns,
+     value equality, and concrete inverse subtypes for both enums. The focused
+     delta suites pass with 28 Rust tests and eight Python tests; the complete
+     `umol-py` suites pass with 663 Rust tests and 395 Python tests. Workspace
+     clippy and rustfmt pass.
+  3. **DONE — S2a.3 — delocalized field changes** — add the symmetric three-variant
+     `AromaticSystemFieldChange` and `MulticenterBondFieldChange` mirrors:
+     `Electrons { old: ElectronCountsAst, new: ElectronCountsAst }`,
+     `Charge { old: ValueAst, new: ValueAst }`, and
+     `Spin { old: SpinStateAst, new: SpinStateAst }`. Register/export both
+     classes. Test every Rust round trip/inverse and exercise an `Electrons`
+     variant from Python so the multi-value electron-count payload and named
+     class-pattern surface are covered. **Additive (green).** `[dep: S2a.1]`
+
+     **Implemented verification:** three Rust round-trip rows and three
+     inverse/double-inverse rows cover every variant of each enum, including
+     undetermined and concrete electron vectors. Four Python tests cover both
+     registered classes, named fields, exact repr, positional and named class
+     patterns, electron-vector payloads, and concrete inverse subtypes. The
+     focused delta suites pass with 40 Rust tests and 12 Python tests; the
+     complete `umol-py` suites pass with 675 Rust tests and 399 Python tests.
+     Workspace clippy and rustfmt pass.
+  4. **DONE — S2a.4 — noncovalent field change and closure verification** — add and
+     register/export `NoncovalentBondFieldChange::Kind {
+     old: NoncovalentBondKindAst, new: NoncovalentBondKindAst }`. Test its Rust
+     conversion/inverse and Python named-field/match surface, then run a closure
+     matrix over all 17 S2a variants to verify exact repr, value equality,
+     concrete subtype returns, and `inverse().inverse() == original`. The
+     complete Rust and Python suites, clippy, rustfmt, and `git diff --check`
+     form the stage gate. **Additive (green).**
+     `[dep: S2a.1, S2a.2, S2a.3]`
+
+     **Implemented verification:** one Rust round-trip row and one
+     inverse/double-inverse row cover `NoncovalentBondFieldChange::Kind`; its
+     Python test covers named fields and class matching. A 17-row Python closure
+     matrix covers every S2a variant's exact repr, value inequality after one
+     inversion, concrete inverse subtype, and equality after double inversion.
+     The focused delta suites pass with 42 Rust tests and 30 Python tests; the
+     complete `umol-py` suites pass with 677 Rust tests and 417 Python tests.
+     Workspace clippy, rustfmt, and `git diff --check` pass.
+
+  **Critical path:** `S2a.1 → {S2a.2, S2a.3} → S2a.4`. No S2a subitem is
+  deferrable: S3a requires the atom/bond closure and S3b requires the dative,
+  aromatic, multicenter, and noncovalent closure.
 - **S2b — stereo field changes** (`delta.rs`): mirror stereo-atom and stereo-bond
   `Configuration { old, new }`, reusing `StereoConfigurationAst`; cover kinded
   and undetermined configurations. **Additive (green).** `[dep: —]`

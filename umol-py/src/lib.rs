@@ -47,6 +47,10 @@ use crate::{
         },
     },
     dative::{DativeBondAst, DativeBondView, DativeBondViews},
+    delta::{
+        AromaticSystemFieldChange, AtomFieldChange, BondFieldChange, DativeBondFieldChange,
+        MulticenterBondFieldChange, NoncovalentBondFieldChange,
+    },
     electrons::ElectronCountsAst,
     element::Element,
     error::ParseError,
@@ -82,6 +86,8 @@ mod convert;
 #[cfg(feature = "graph")]
 mod dative;
 #[cfg(feature = "graph")]
+mod delta;
+#[cfg(feature = "graph")]
 mod electrons;
 #[cfg(feature = "graph")]
 mod element;
@@ -110,6 +116,12 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Element>()?;
         module.add("ParseError", module.py().get_type::<ParseError>())?;
         module.add_class::<MoleculeAst>()?;
+        module.add_class::<AtomFieldChange>()?;
+        module.add_class::<BondFieldChange>()?;
+        module.add_class::<DativeBondFieldChange>()?;
+        module.add_class::<AromaticSystemFieldChange>()?;
+        module.add_class::<MulticenterBondFieldChange>()?;
+        module.add_class::<NoncovalentBondFieldChange>()?;
         module.add_class::<SubPatternAnchor>()?;
         module.add_class::<RelationalConstraint>()?;
         module.add_class::<MoleculeConstraint>()?;
