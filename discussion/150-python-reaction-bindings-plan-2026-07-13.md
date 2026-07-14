@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S3 complete; S4a is next**
+Status: **ACTIVE — S4a.1 complete; S4a.2 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -940,10 +940,57 @@ scope and membership payloads live in `constraint/ring.rs`.
 
 ### S4 — `Delta` and `Deltas`
 
-- **S4a — top-level `Delta` sum** (`delta.rs`): add all nine variants,
-  conversion dispatch, `inverse`, structural value equality, registration/export,
-  and an exhaustive Python match test that traverses one value from every
-  family. **Additive (green).** `[dep: S3a, S3b, S3c, S3d]`
+- **S4a — top-level `Delta` sum** (`umol-py/src/delta.rs`, `lib.rs`,
+  `python/umol/__init__.py`): add the tuple-shaped
+  `Delta::{Atom, Bond, DativeBond, AromaticSystem, MulticenterBond,
+  NoncovalentBond, StereoAtom, StereoBond, Constraint}` binding over the nine
+  completed family-delta classes. Each variant takes exactly one positional
+  child in Rust declaration order, exposes the corresponding read-only `_0`
+  field, and supports positional class patterns. The supplied family-delta
+  object becomes the stored child rather than being copied again, so nested
+  entity AST changes remain live through the top-level sum; the family-delta
+  constructors remain the snapshot boundary for their AST inputs, and S4b's
+  `Deltas` container will snapshot whole `Delta` entries. Give `Delta`
+  structural value equality, unhashability, exact positional repr, and a
+  non-mutating `inverse() -> Self`. Implement the nine-arm `from_rust` and
+  `to_rust` dispatch directly, without a conversion trait or dispatch macro.
+  `Delta` has no lattice semantics and retains the Rust name without an `Ast`
+  suffix.
+
+  1. **DONE — S4a.1 — `Delta` binding and nine-family conversion dispatch** — define
+     the complete enum, explicit conversions, equality, repr, and inverse;
+     register and export it. Rust tests cover round trips and inverse/double
+     inverse for all nine variants, plus representative equality and exact-repr
+     rows. Targeted Python tests cover public import, construction, the read-only
+     direct field, positional matching, child identity, live nested entity-AST
+     mutation, structural equality, unhashability, and a detached inverse whose
+     outer family variant is retained while its child is inverted. **Additive
+     (green).** `[dep: S3a.3, S3b.5, S3c.3, S3d.2]`
+
+     **Implemented verification:** nine Rust round-trip rows and nine
+     inverse/double-inverse rows cover every outer family; three equality rows
+     distinguish equal values, outer variants, and nested children; three exact-
+     repr rows cover ordinary entity, stereo, and recursive-constraint payloads.
+     Two Python tests cover public import, positional construction and matching,
+     read-only direct fields, retained child identity, live nested AST mutation,
+     structural equality, unhashability, and detached nested inversion while the
+     outer family remains unchanged. The focused suites pass with 24 Rust cases
+     and two Python tests; the complete `umol-py` suites pass with 890 Rust tests
+     and 513 Python tests. `umol-py` clippy, rustfmt, and `git diff --check` pass.
+
+  2. **S4a.2 — top-level delta closure verification** — add a nine-row Python
+     matrix with one representative `Add` from each family. Every row verifies
+     exact repr, structural equality, the retained concrete outer variant,
+     the concrete nested `Remove` inverse subtype, inequality after one
+     inversion, and equality after double inversion. Add one exhaustive class-
+     pattern traversal whose nine arms descend through `Delta` into the expected
+     family-delta type and payload, proving that every dispatch arm is observable
+     from Python. Retain the S4a.1 ownership tests and run the complete Rust and
+     Python suites, workspace clippy, rustfmt, and `git diff --check` as the stage
+     gate. **Additive (green).** `[dep: S4a.1]`
+
+  **Critical path:** `S3a.3, S3b.5, S3c.3, S3d.2 → S4a.1 → S4a.2`. Neither
+  S4a subitem is deferrable: S4b requires the complete nine-family sum binding.
 - **S4b — Python `Deltas` container** (`umol-py/src/delta.rs`): implement the
   owned sequence surface, `append`/`extend`, and consuming-style `canonicalize`;
   add `ContradictionError` mapping in `error.rs`. Test canonical

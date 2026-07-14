@@ -20,6 +20,7 @@ from umol import (
     DativeBondConstraintAst,
     DativeBondDelta,
     DativeBondFieldChange,
+    Delta,
     Element,
     ElementAst,
     ElectronCountsAst,
@@ -2233,5 +2234,40 @@ def test_constraintdelta_closure(delta, expected_repr, inverse_type):
     assert repr(delta) == expected_repr
     inverse = delta.inverse()
     assert type(inverse) is inverse_type
+    assert inverse != delta
+    assert inverse.inverse() == delta
+
+
+def test_delta_fields():
+    child = AtomDelta.Add(id=3, ast=AtomAst(Element("C")))
+    delta = Delta.Atom(child)
+
+    assert delta._0 is child
+    assert delta == Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C"))))
+    assert repr(delta) == "Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C')))"
+
+    child.ast.charge = 1
+    assert delta._0.ast.charge == ValueAst.Lit(1)
+
+    with pytest.raises(AttributeError):
+        delta._0 = AtomDelta.Remove(id=3, ast=AtomAst(Element("C")))
+    with pytest.raises(TypeError):
+        hash(delta)
+
+
+def test_delta_atom_match():
+    delta = Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C"))))
+
+    match delta:
+        case Delta.Atom(AtomDelta.Add(id=atom_id, ast=ast)):
+            assert atom_id == 3
+            assert ast == AtomAst(Element("C"))
+        case _:
+            raise AssertionError("delta did not match its atom family and add operation")
+
+    inverse = delta.inverse()
+    assert type(inverse) is Delta.Atom
+    assert type(inverse._0) is AtomDelta.Remove
+    assert inverse._0 is not delta._0
     assert inverse != delta
     assert inverse.inverse() == delta

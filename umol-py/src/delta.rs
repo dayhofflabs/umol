@@ -10,7 +10,8 @@ use umol_ast::ast::{
     Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
     DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
     DativeBondFieldChange as AstDativeBondFieldChange, DativeBondId as AstDativeBondId,
-    MulticenterBondAst as AstMulticenterBondAst, MulticenterBondDelta as AstMulticenterBondDelta,
+    Delta as AstDelta, MulticenterBondAst as AstMulticenterBondAst,
+    MulticenterBondDelta as AstMulticenterBondDelta,
     MulticenterBondFieldChange as AstMulticenterBondFieldChange,
     MulticenterBondId as AstMulticenterBondId, NoncovalentBondAst as AstNoncovalentBondAst,
     NoncovalentBondDelta as AstNoncovalentBondDelta,
@@ -33,7 +34,7 @@ use crate::constraint::molecule::Constraint;
 use crate::constraint::multicenter::MulticenterBondConstraintAst;
 use crate::constraint::noncovalent::NoncovalentBondConstraintAst;
 use crate::constraint::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
-use crate::convert::into_py_variant;
+use crate::convert::{into_py_variant, variant_repr};
 use crate::dative::DativeBondAst;
 use crate::electrons::ElectronCountsAst;
 use crate::multicenter::MulticenterBondAst;
@@ -1888,6 +1889,104 @@ impl ConstraintDelta {
         match self {
             Self::Add { constraint } => AstConstraintDelta::Add(constraint.to_rust(py)),
             Self::Remove { constraint } => AstConstraintDelta::Remove(constraint.to_rust(py)),
+        }
+    }
+}
+
+/// One resolved edit from any localized-topology family.
+#[pyclass]
+pub enum Delta {
+    Atom(Py<AtomDelta>),
+    Bond(Py<BondDelta>),
+    DativeBond(Py<DativeBondDelta>),
+    AromaticSystem(Py<AromaticSystemDelta>),
+    MulticenterBond(Py<MulticenterBondDelta>),
+    NoncovalentBond(Py<NoncovalentBondDelta>),
+    StereoAtom(Py<StereoAtomDelta>),
+    StereoBond(Py<StereoBondDelta>),
+    Constraint(Py<ConstraintDelta>),
+}
+
+#[pymethods]
+impl Delta {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_rust(py) == other.to_rust(py)
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let variant = match &*slf.bind(py).borrow() {
+            Self::Atom(_) => "Atom",
+            Self::Bond(_) => "Bond",
+            Self::DativeBond(_) => "DativeBond",
+            Self::AromaticSystem(_) => "AromaticSystem",
+            Self::MulticenterBond(_) => "MulticenterBond",
+            Self::NoncovalentBond(_) => "NoncovalentBond",
+            Self::StereoAtom(_) => "StereoAtom",
+            Self::StereoBond(_) => "StereoBond",
+            Self::Constraint(_) => "Constraint",
+        };
+        variant_repr(slf.bind(py).as_any(), "Delta", variant, 1)
+    }
+
+    /// Return the inverse resolved edit.
+    fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
+        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+    }
+}
+
+impl Delta {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &AstDelta) -> PyResult<Self> {
+        Ok(match delta {
+            AstDelta::Atom(delta) => {
+                Self::Atom(into_py_variant(py, AtomDelta::from_rust(py, delta)?)?)
+            }
+            AstDelta::Bond(delta) => {
+                Self::Bond(into_py_variant(py, BondDelta::from_rust(py, delta)?)?)
+            }
+            AstDelta::DativeBond(delta) => {
+                Self::DativeBond(into_py_variant(py, DativeBondDelta::from_rust(py, delta)?)?)
+            }
+            AstDelta::AromaticSystem(delta) => Self::AromaticSystem(into_py_variant(
+                py,
+                AromaticSystemDelta::from_rust(py, delta)?,
+            )?),
+            AstDelta::MulticenterBond(delta) => Self::MulticenterBond(into_py_variant(
+                py,
+                MulticenterBondDelta::from_rust(py, delta)?,
+            )?),
+            AstDelta::NoncovalentBond(delta) => Self::NoncovalentBond(into_py_variant(
+                py,
+                NoncovalentBondDelta::from_rust(py, delta)?,
+            )?),
+            AstDelta::StereoAtom(delta) => {
+                Self::StereoAtom(into_py_variant(py, StereoAtomDelta::from_rust(py, delta)?)?)
+            }
+            AstDelta::StereoBond(delta) => {
+                Self::StereoBond(into_py_variant(py, StereoBondDelta::from_rust(py, delta)?)?)
+            }
+            AstDelta::Constraint(delta) => {
+                Self::Constraint(into_py_variant(py, ConstraintDelta::from_rust(py, delta)?)?)
+            }
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstDelta {
+        match self {
+            Self::Atom(delta) => AstDelta::Atom(delta.bind(py).borrow().to_rust(py)),
+            Self::Bond(delta) => AstDelta::Bond(delta.bind(py).borrow().to_rust(py)),
+            Self::DativeBond(delta) => AstDelta::DativeBond(delta.bind(py).borrow().to_rust(py)),
+            Self::AromaticSystem(delta) => {
+                AstDelta::AromaticSystem(delta.bind(py).borrow().to_rust(py))
+            }
+            Self::MulticenterBond(delta) => {
+                AstDelta::MulticenterBond(delta.bind(py).borrow().to_rust(py))
+            }
+            Self::NoncovalentBond(delta) => {
+                AstDelta::NoncovalentBond(delta.bind(py).borrow().to_rust(py))
+            }
+            Self::StereoAtom(delta) => AstDelta::StereoAtom(delta.bind(py).borrow().to_rust(py)),
+            Self::StereoBond(delta) => AstDelta::StereoBond(delta.bind(py).borrow().to_rust(py)),
+            Self::Constraint(delta) => AstDelta::Constraint(delta.bind(py).borrow().to_rust(py)),
         }
     }
 }
@@ -4549,6 +4648,220 @@ mod tests {
     fn test_constraint_delta_inverse(#[case] delta: AstConstraintDelta) {
         Python::attach(|py| {
             let binding = ConstraintDelta::from_rust(py, &delta).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py),
+                delta.clone().inverse()
+            );
+            let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+        });
+    }
+
+    #[rstest]
+    #[case::atom(AstDelta::Atom(AstAtomDelta::Add {
+        id: AstAtomId(3),
+        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    }))]
+    #[case::bond(AstDelta::Bond(AstBondDelta::Add {
+        id: AstBondId(2),
+        atoms: [AstAtomId(5), AstAtomId(1)],
+        ast: AstBondAst::new(AstValueAst::Lit(1)),
+    }))]
+    #[case::dative_bond(AstDelta::DativeBond(AstDativeBondDelta::Add {
+        id: AstDativeBondId(1),
+        donors: vec![AstAtomId(4), AstAtomId(2)],
+        acceptor: AstAtomId(3),
+        ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+    }))]
+    #[case::aromatic_system(AstDelta::AromaticSystem(AstAromaticSystemDelta::Add {
+        id: AstAromaticSystemId(2),
+        atoms: vec![AstAtomId(4), AstAtomId(2)],
+        ast: AstAromaticSystemAst::from_electrons(vec![1, 1]),
+    }))]
+    #[case::multicenter_bond(AstDelta::MulticenterBond(AstMulticenterBondDelta::Add {
+        id: AstMulticenterBondId(3),
+        atoms: vec![AstAtomId(4), AstAtomId(2)],
+        ast: AstMulticenterBondAst::from_electrons(vec![1, 1]),
+    }))]
+    #[case::noncovalent_bond(AstDelta::NoncovalentBond(AstNoncovalentBondDelta::Add {
+        id: AstNoncovalentBondId(4),
+        atoms: [AstAtomId(5), AstAtomId(2)],
+        ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+    }))]
+    #[case::stereo_atom(AstDelta::StereoAtom(AstStereoAtomDelta::Add {
+        id: AstStereoAtomId(5),
+        site: AstAtomId(3),
+        ligands: vec![AstStereoLigand::new(
+            AstAtomId(4),
+            AstStereoLigandKind::Atom,
+        )],
+        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0)),
+    }))]
+    #[case::stereo_bond(AstDelta::StereoBond(AstStereoBondDelta::Add {
+        id: AstStereoBondId(5),
+        site: AstBondId(3),
+        ligands: vec![AstStereoLigand::new(
+            AstAtomId(4),
+            AstStereoLigandKind::Atom,
+        )],
+        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+    }))]
+    #[case::constraint(AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+        AstAtomId(3),
+        AstAtomConstraintAst::degree(2)
+    ),)))]
+    fn test_delta_roundtrip(#[case] delta: AstDelta) {
+        Python::attach(|py| {
+            let binding = Delta::from_rust(py, &delta).unwrap();
+            assert_eq!(binding.to_rust(py), delta);
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        AstDelta::Atom(AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        }),
+        AstDelta::Atom(AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        }),
+        true,
+    )]
+    #[case::outer_variant(
+        AstDelta::Atom(AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        }),
+        AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+            AstAtomId(3),
+            AstAtomConstraintAst::degree(2),
+        ))),
+        false,
+    )]
+    #[case::child(
+        AstDelta::Atom(AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        }),
+        AstDelta::Atom(AstAtomDelta::Add {
+            id: AstAtomId(4),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        }),
+        false,
+    )]
+    fn test_delta_eq(#[case] left: AstDelta, #[case] right: AstDelta, #[case] expected: bool) {
+        Python::attach(|py| {
+            let left = Delta::from_rust(py, &left).unwrap();
+            let right = Delta::from_rust(py, &right).unwrap();
+            assert_eq!(left.__eq__(&right, py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::atom(
+        AstDelta::Atom(AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        }),
+        "Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C')))"
+    )]
+    #[case::stereo_atom(
+        AstDelta::StereoAtom(AstStereoAtomDelta::Add {
+            id: AstStereoAtomId(5),
+            site: AstAtomId(3),
+            ligands: vec![AstStereoLigand::new(
+                AstAtomId(4),
+                AstStereoLigandKind::Atom,
+            )],
+            ast: AstStereoAtomAst::new(
+                AstStereoKind::Tetrahedral,
+                AstStereoCosetAst::Lit(0),
+            ),
+        }),
+        "Delta.StereoAtom(StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], ast=StereoAtomAst.parse('Th0')))"
+    )]
+    #[case::constraint(
+        AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+            AstAtomId(3),
+            AstAtomConstraintAst::degree(2),
+        ))),
+        "Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2)))))"
+    )]
+    fn test_delta_repr(#[case] delta: AstDelta, #[case] expected: &str) {
+        Python::attach(|py| {
+            let binding = into_py_variant(py, Delta::from_rust(py, &delta).unwrap()).unwrap();
+            assert_eq!(
+                binding
+                    .bind(py)
+                    .as_any()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::atom(AstDelta::Atom(AstAtomDelta::Add {
+        id: AstAtomId(3),
+        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    }))]
+    #[case::bond(AstDelta::Bond(AstBondDelta::Add {
+        id: AstBondId(2),
+        atoms: [AstAtomId(5), AstAtomId(1)],
+        ast: AstBondAst::new(AstValueAst::Lit(1)),
+    }))]
+    #[case::dative_bond(AstDelta::DativeBond(AstDativeBondDelta::Add {
+        id: AstDativeBondId(1),
+        donors: vec![AstAtomId(4), AstAtomId(2)],
+        acceptor: AstAtomId(3),
+        ast: AstDativeBondAst::new(AstValueAst::Lit(1)),
+    }))]
+    #[case::aromatic_system(AstDelta::AromaticSystem(AstAromaticSystemDelta::Add {
+        id: AstAromaticSystemId(2),
+        atoms: vec![AstAtomId(4), AstAtomId(2)],
+        ast: AstAromaticSystemAst::from_electrons(vec![1, 1]),
+    }))]
+    #[case::multicenter_bond(AstDelta::MulticenterBond(AstMulticenterBondDelta::Add {
+        id: AstMulticenterBondId(3),
+        atoms: vec![AstAtomId(4), AstAtomId(2)],
+        ast: AstMulticenterBondAst::from_electrons(vec![1, 1]),
+    }))]
+    #[case::noncovalent_bond(AstDelta::NoncovalentBond(AstNoncovalentBondDelta::Add {
+        id: AstNoncovalentBondId(4),
+        atoms: [AstAtomId(5), AstAtomId(2)],
+        ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+    }))]
+    #[case::stereo_atom(AstDelta::StereoAtom(AstStereoAtomDelta::Add {
+        id: AstStereoAtomId(5),
+        site: AstAtomId(3),
+        ligands: vec![AstStereoLigand::new(
+            AstAtomId(4),
+            AstStereoLigandKind::Atom,
+        )],
+        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0)),
+    }))]
+    #[case::stereo_bond(AstDelta::StereoBond(AstStereoBondDelta::Add {
+        id: AstStereoBondId(5),
+        site: AstBondId(3),
+        ligands: vec![AstStereoLigand::new(
+            AstAtomId(4),
+            AstStereoLigandKind::Atom,
+        )],
+        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+    }))]
+    #[case::constraint(AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+        AstAtomId(3),
+        AstAtomConstraintAst::degree(2)
+    ),)))]
+    fn test_delta_inverse(#[case] delta: AstDelta) {
+        Python::attach(|py| {
+            let binding = Delta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),

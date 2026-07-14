@@ -50,6 +50,7 @@ from ._native import (
     DativeBondRingSizeCounts,
     DativeBondView,
     DativeBondViews,
+    Delta,
     ElectronCountsAst,
     Element,
     ElementAst,
