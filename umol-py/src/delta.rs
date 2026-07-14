@@ -1,5 +1,8 @@
 //! Python bindings for resolved molecule deltas and their field-change payloads.
 
+use std::vec::IntoIter;
+
+use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use umol_ast::ast::{
     AromaticSystemAst as AstAromaticSystemAst, AromaticSystemDelta as AstAromaticSystemDelta,
@@ -10,7 +13,7 @@ use umol_ast::ast::{
     Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
     DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
     DativeBondFieldChange as AstDativeBondFieldChange, DativeBondId as AstDativeBondId,
-    Delta as AstDelta, MulticenterBondAst as AstMulticenterBondAst,
+    Delta as AstDelta, Deltas as AstDeltas, MulticenterBondAst as AstMulticenterBondAst,
     MulticenterBondDelta as AstMulticenterBondDelta,
     MulticenterBondFieldChange as AstMulticenterBondFieldChange,
     MulticenterBondId as AstMulticenterBondId, NoncovalentBondAst as AstNoncovalentBondAst,
@@ -1988,6 +1991,157 @@ impl Delta {
             Self::StereoBond(delta) => AstDelta::StereoBond(delta.bind(py).borrow().to_rust(py)),
             Self::Constraint(delta) => AstDelta::Constraint(delta.bind(py).borrow().to_rust(py)),
         }
+    }
+}
+
+/// Resolve a possibly-negative Python index into an existing delta position.
+fn resolve_delta_index(len: usize, index: isize) -> PyResult<usize> {
+    let resolved = if index < 0 {
+        index + len as isize
+    } else {
+        index
+    };
+    if resolved < 0 || resolved as usize >= len {
+        Err(PyIndexError::new_err("delta index out of range"))
+    } else {
+        Ok(resolved as usize)
+    }
+}
+
+/// Build a detached iterator of concrete Python delta variants.
+fn delta_iter(py: Python<'_>, deltas: &AstDeltas) -> PyResult<DeltaIter> {
+    let entries = deltas
+        .iter()
+        .map(|delta| into_py_variant(py, Delta::from_rust(py, delta)?))
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(DeltaIter {
+        entries: entries.into_iter(),
+    })
+}
+
+/// A snapshot iterator over resolved deltas.
+#[pyclass]
+pub(crate) struct DeltaIter {
+    entries: IntoIter<Py<Delta>>,
+}
+
+#[pymethods]
+impl DeltaIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> Option<Py<Delta>> {
+        self.entries.next()
+    }
+}
+
+/// The argument to `Deltas.extend`: another container or delta entries.
+#[derive(FromPyObject)]
+pub(crate) enum DeltasExtend {
+    Container(Py<Deltas>),
+    Entries(Vec<Py<Delta>>),
+}
+
+impl DeltasExtend {
+    /// Snapshot every Python input before the target takes a write borrow.
+    fn resolve(&self, py: Python<'_>) -> ResolvedDeltasExtend {
+        let entries = match self {
+            Self::Container(container) => container
+                .bind(py)
+                .borrow()
+                .to_rust()
+                .as_slice()
+                .to_vec(),
+            Self::Entries(entries) => entries
+                .iter()
+                .map(|entry| entry.bind(py).borrow().to_rust(py))
+                .collect(),
+        };
+        ResolvedDeltasExtend(entries)
+    }
+}
+
+/// An extend input containing no Python references that need to be read.
+pub(crate) struct ResolvedDeltasExtend(Vec<AstDelta>);
+
+impl ResolvedDeltasExtend {
+    /// Append the resolved deltas in order, preserving duplicates.
+    fn apply(self, target: &mut AstDeltas) {
+        for delta in self.0 {
+            target.push(delta);
+        }
+    }
+}
+
+/// Resolved deltas in insertion order. Mutable, value-equal, and unhashable.
+#[pyclass(eq)]
+#[derive(Debug, PartialEq)]
+pub struct Deltas(AstDeltas);
+
+#[pymethods]
+impl Deltas {
+    /// Build an owned container from delta entries, preserving order and duplicates.
+    #[new]
+    #[pyo3(signature = (entries=Vec::new()))]
+    fn new(py: Python<'_>, entries: Vec<Py<Delta>>) -> Self {
+        Self::from_rust(
+            entries
+                .into_iter()
+                .map(|entry| entry.bind(py).borrow().to_rust(py))
+                .collect(),
+        )
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let mut parts = Vec::with_capacity(self.0.len());
+        for entry in self.0.iter() {
+            let value = into_py_variant(py, Delta::from_rust(py, entry)?)?;
+            parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
+        }
+        Ok(format!("Deltas([{}])", parts.join(", ")))
+    }
+
+    /// Append one detached delta snapshot.
+    fn append(&mut self, py: Python<'_>, delta: Py<Delta>) {
+        self.0.push(delta.bind(py).borrow().to_rust(py));
+    }
+
+    /// Append another container or iterable after snapshotting the complete RHS.
+    fn extend(slf: Py<Self>, py: Python<'_>, other: DeltasExtend) {
+        let resolved = other.resolve(py);
+        resolved.apply(slf.borrow_mut(py).inner_mut());
+    }
+
+    fn __len__(&self) -> usize {
+        self.0.len()
+    }
+
+    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Delta> {
+        let index = resolve_delta_index(self.0.len(), index)?;
+        Delta::from_rust(py, &self.0.as_slice()[index])
+    }
+
+    fn __iter__(&self, py: Python<'_>) -> PyResult<DeltaIter> {
+        delta_iter(py, &self.0)
+    }
+}
+
+impl Deltas {
+    pub(crate) fn from_rust(deltas: AstDeltas) -> Self {
+        Self(deltas)
+    }
+
+    #[allow(
+        dead_code,
+        reason = "component snapshot conversion for owning wrappers"
+    )]
+    pub(crate) fn to_rust(&self) -> AstDeltas {
+        self.0.clone()
+    }
+
+    fn inner_mut(&mut self) -> &mut AstDeltas {
+        &mut self.0
     }
 }
 
@@ -4870,5 +5024,217 @@ mod tests {
             let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
             assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
         });
+    }
+
+    #[rstest]
+    #[case::positive_first(3, 0, 0)]
+    #[case::positive_last(3, 2, 2)]
+    #[case::negative_last(3, -1, 2)]
+    #[case::negative_first(3, -3, 0)]
+    fn test_resolve_delta_index(#[case] len: usize, #[case] index: isize, #[case] expected: usize) {
+        assert_eq!(resolve_delta_index(len, index).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::empty(0, 0)]
+    #[case::positive(2, 2)]
+    #[case::negative(2, -3)]
+    fn test_resolve_delta_index_error(#[case] len: usize, #[case] index: isize) {
+        Python::attach(|py| {
+            let error = resolve_delta_index(len, index).unwrap_err();
+            assert!(error.is_instance_of::<PyIndexError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "delta index out of range"
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::empty(Vec::new())]
+    #[case::populated(vec![
+        AstDelta::Atom(AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        }),
+        AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+            AstAtomId(3),
+            AstAtomConstraintAst::degree(2),
+        ))),
+    ])]
+    fn test_deltas_new(#[case] entries: Vec<AstDelta>) {
+        Python::attach(|py| {
+            let python_entries = entries
+                .iter()
+                .map(|entry| into_py_variant(py, Delta::from_rust(py, entry).unwrap()).unwrap())
+                .collect();
+            assert_eq!(
+                Deltas::new(py, python_entries).to_rust(),
+                entries.into_iter().collect()
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        vec![AstDelta::Atom(AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        })],
+        vec![AstDelta::Atom(AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        })],
+        true,
+    )]
+    #[case::different(
+        vec![AstDelta::Atom(AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        })],
+        vec![AstDelta::Atom(AstAtomDelta::Add {
+            id: AstAtomId(4),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        })],
+        false,
+    )]
+    fn test_deltas_eq(
+        #[case] left: Vec<AstDelta>,
+        #[case] right: Vec<AstDelta>,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            Deltas::from_rust(left.into_iter().collect())
+                == Deltas::from_rust(right.into_iter().collect()),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::empty(Vec::new(), "Deltas([])")]
+    #[case::populated(
+        vec![
+            AstDelta::Atom(AstAtomDelta::Add {
+                id: AstAtomId(3),
+                ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+            }),
+            AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+                AstAtomId(3),
+                AstAtomConstraintAst::degree(2),
+            ))),
+        ],
+        "Deltas([Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C'))), Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(ValueAst.Lit(2)))))])",
+    )]
+    fn test_deltas_repr(#[case] entries: Vec<AstDelta>, #[case] expected: &str) {
+        Python::attach(|py| {
+            let deltas = Deltas::from_rust(entries.into_iter().collect());
+            assert_eq!(deltas.__repr__(py).unwrap(), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::empty(Vec::new(), 0)]
+    #[case::populated(
+        vec![AstDelta::Atom(AstAtomDelta::Add {
+            id: AstAtomId(3),
+            ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+        })],
+        1,
+    )]
+    fn test_deltas_len(#[case] entries: Vec<AstDelta>, #[case] expected: usize) {
+        assert_eq!(
+            Deltas::from_rust(entries.into_iter().collect()).__len__(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::positive(0, AstDelta::Atom(AstAtomDelta::Add {
+        id: AstAtomId(3),
+        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    }))]
+    #[case::negative(-1, AstDelta::Constraint(AstConstraintDelta::Add(
+        AstConstraint::Atom(AstAtomId(3), AstAtomConstraintAst::degree(2)),
+    )))]
+    fn test_deltas_getitem(#[case] index: isize, #[case] expected: AstDelta) {
+        Python::attach(|py| {
+            let deltas = Deltas::from_rust(
+                vec![
+                    AstDelta::Atom(AstAtomDelta::Add {
+                        id: AstAtomId(3),
+                        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+                    }),
+                    AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+                        AstAtomId(3),
+                        AstAtomConstraintAst::degree(2),
+                    ))),
+                ]
+                .into_iter()
+                .collect(),
+            );
+            assert_eq!(deltas.__getitem__(py, index).unwrap().to_rust(py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::positive(2)]
+    #[case::negative(-3)]
+    fn test_deltas_getitem_error(#[case] index: isize) {
+        Python::attach(|py| {
+            let deltas = Deltas::from_rust(
+                vec![
+                    AstDelta::Atom(AstAtomDelta::Add {
+                        id: AstAtomId(3),
+                        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+                    }),
+                    AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+                        AstAtomId(3),
+                        AstAtomConstraintAst::degree(2),
+                    ))),
+                ]
+                .into_iter()
+                .collect(),
+            );
+            let error = deltas.__getitem__(py, index).err().unwrap();
+            assert!(error.is_instance_of::<PyIndexError>(py));
+        });
+    }
+
+    #[rstest]
+    fn test_deltas_iter() {
+        let expected = vec![
+            AstDelta::Atom(AstAtomDelta::Add {
+                id: AstAtomId(3),
+                ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+            }),
+            AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
+                AstAtomId(3),
+                AstAtomConstraintAst::degree(2),
+            ))),
+        ];
+        Python::attach(|py| {
+            let deltas = Deltas::from_rust(expected.clone().into_iter().collect());
+            let mut iter = deltas.__iter__(py).unwrap();
+            assert_eq!(
+                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
+                expected[0]
+            );
+            assert_eq!(
+                iter.__next__().unwrap().bind(py).borrow().to_rust(py),
+                expected[1]
+            );
+            assert!(iter.__next__().is_none());
+        });
+    }
+
+    #[rstest]
+    #[case::empty(Vec::new())]
+    #[case::populated(vec![AstDelta::Atom(AstAtomDelta::Add {
+        id: AstAtomId(3),
+        ast: AstAtomAst::new(AstElementAst::Lit(ChemElement::C)),
+    })])]
+    fn test_deltas_roundtrip(#[case] entries: Vec<AstDelta>) {
+        let rust: AstDeltas = entries.into_iter().collect();
+        assert_eq!(Deltas::from_rust(rust.clone()).to_rust(), rust);
     }
 }

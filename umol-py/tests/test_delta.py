@@ -21,6 +21,7 @@ from umol import (
     DativeBondDelta,
     DativeBondFieldChange,
     Delta,
+    Deltas,
     Element,
     ElementAst,
     ElectronCountsAst,
@@ -2546,3 +2547,75 @@ def test_delta_match():
         "stereo-bond",
         "constraint",
     ]
+
+
+def test_deltas_sequence():
+    source = Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C"))))
+    deltas = Deltas([source, source])
+
+    source._0.ast.charge = 1
+
+    assert Deltas() == Deltas([])
+    assert len(deltas) == 2
+    assert bool(deltas)
+    assert not Deltas()
+    assert deltas == Deltas(
+        [
+            Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+            Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+        ]
+    )
+    assert repr(deltas) == (
+        "Deltas([Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C'))), "
+        "Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst.parse('C')))])"
+    )
+    assert deltas[0]._0.ast.charge == ValueAst.Undetermined()
+    with pytest.raises(TypeError):
+        hash(deltas)
+
+
+def test_deltas_getitem():
+    deltas = Deltas(
+        [
+            Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+            Delta.Constraint(
+                ConstraintDelta.Add(
+                    constraint=Constraint.Atom(
+                        3,
+                        AtomConstraintAst.Degree(ValueAst.Lit(2)),
+                    )
+                )
+            ),
+        ]
+    )
+
+    first = deltas[0]
+    assert type(first) is Delta.Atom
+    assert first._0 == AtomDelta.Add(id=3, ast=AtomAst(Element("C")))
+    assert type(deltas[-1]) is Delta.Constraint
+
+    first._0.ast.charge = 1
+    assert deltas[0]._0.ast.charge == ValueAst.Undetermined()
+
+    with pytest.raises(IndexError, match="delta index out of range"):
+        deltas[2]
+    with pytest.raises(IndexError, match="delta index out of range"):
+        deltas[-3]
+
+
+def test_deltas_iter():
+    deltas = Deltas(
+        [
+            Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+            Delta.Atom(AtomDelta.Add(id=4, ast=AtomAst(Element("N")))),
+        ]
+    )
+
+    entries = list(deltas)
+
+    assert entries == [
+        Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("C")))),
+        Delta.Atom(AtomDelta.Add(id=4, ast=AtomAst(Element("N")))),
+    ]
+    entries[0]._0.ast.charge = -1
+    assert deltas[0]._0.ast.charge == ValueAst.Undetermined()

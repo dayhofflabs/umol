@@ -8,3 +8,13 @@ def test_import_umol():
 
 def test_native_present():
     assert hasattr(umol, "_native")
+
+
+def test_contradictionerror():
+    from umol import ContradictionError
+
+    error = ContradictionError("reached a contradiction")
+
+    assert umol.ContradictionError is ContradictionError
+    assert isinstance(error, Exception)
+    assert str(error) == "reached a contradiction"

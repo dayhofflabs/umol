@@ -49,14 +49,14 @@ use crate::{
     dative::{DativeBondAst, DativeBondView, DativeBondViews},
     delta::{
         AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, AtomFieldChange, BondDelta,
-        BondFieldChange, ConstraintDelta, DativeBondDelta, DativeBondFieldChange, Delta,
+        BondFieldChange, ConstraintDelta, DativeBondDelta, DativeBondFieldChange, Delta, Deltas,
         MulticenterBondDelta, MulticenterBondFieldChange, NoncovalentBondDelta,
         NoncovalentBondFieldChange, StereoAtomDelta, StereoAtomFieldChange, StereoBondDelta,
         StereoBondFieldChange,
     },
     electrons::ElectronCountsAst,
     element::Element,
-    error::ParseError,
+    error::{ContradictionError, ParseError},
     molecule::MoleculeAst,
     multicenter::{MulticenterBondAst, MulticenterBondView, MulticenterBondViews},
     noncovalent::{
@@ -117,6 +117,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "graph")]
     {
         module.add_class::<Element>()?;
+        module.add(
+            "ContradictionError",
+            module.py().get_type::<ContradictionError>(),
+        )?;
         module.add("ParseError", module.py().get_type::<ParseError>())?;
         module.add_class::<MoleculeAst>()?;
         module.add_class::<AromaticSystemDelta>()?;
@@ -137,6 +141,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<StereoBondFieldChange>()?;
         module.add_class::<ConstraintDelta>()?;
         module.add_class::<Delta>()?;
+        module.add_class::<Deltas>()?;
         module.add_class::<SubPatternAnchor>()?;
         module.add_class::<RelationalConstraint>()?;
         module.add_class::<MoleculeConstraint>()?;

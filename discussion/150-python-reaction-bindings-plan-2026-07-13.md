@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S4a complete; S4b is next**
+Status: **ACTIVE — S4b.2 complete; S4b.3 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1002,11 +1002,86 @@ scope and membership payloads live in `constraint/ring.rs`.
 
   **Critical path:** `S3a.3, S3b.5, S3c.3, S3d.2 → S4a.1 → S4a.2`. Neither
   S4a subitem is deferrable: S4b requires the complete nine-family sum binding.
-- **S4b — Python `Deltas` container** (`umol-py/src/delta.rs`): implement the
-  owned sequence surface, `append`/`extend`, and consuming-style `canonicalize`;
-  add `ContradictionError` mapping in `error.rs`. Test canonical
-  fusion/cancellation, discontinuous-chain failure, negative indexing,
-  iteration, and input snapshot semantics. **Additive (green).** `[dep: S4a]`
+- **S4b — Python `Deltas` container** (`umol-py/src/delta.rs`, `error.rs`,
+  `lib.rs`, `python/umol/__init__.py`): bind the Rust `Deltas` value with the same
+  ownership discipline as `Constraints`. `Deltas(entries=())` snapshots an
+  iterable of `Delta` values into an owned Rust container, preserving insertion
+  order and duplicates. `append` and `extend` snapshot their complete inputs
+  before mutating the target; `deltas.extend(deltas)` therefore appends exactly
+  one copy of the original sequence without a PyO3 double-borrow. Integer
+  indexing, negative indexing, and iteration return detached `Delta` snapshots,
+  and `__len__` supplies ordinary Python truthiness. Give the container
+  structural value equality, unhashability, and exact constructor-style repr.
+  Unlike `Constraints`, it has no live view, `clear`, item assignment/removal, or
+  general `update`: the Rust API exposes append-only input construction before
+  normalization. `canonicalize() -> Deltas` clones the stored Rust value before
+  invoking consuming Rust canonicalization, returns a fresh container, leaves
+  the source unchanged, and maps `Contradiction` to the dedicated public
+  `ContradictionError`.
+
+  1. **DONE — S4b.1 — `ContradictionError` boundary** (`umol-py/src/error.rs`, `lib.rs`,
+     `python/umol/__init__.py`) — add the public exception and a focused mapping
+     function from `umol_ast::ast::Contradiction`, preserving the Rust message
+     `"reached a contradiction"`. Register/export it independently of the
+     container. Rust and Python tests verify the exact exception class, message,
+     and public import. **Additive (green).** `[dep: none]`
+
+     **Implemented verification:** one Rust test verifies that the shared mapper
+     produces the exact `ContradictionError` type and the message
+     `"reached a contradiction"`. One Python test verifies the public import,
+     identity with `umol.ContradictionError`, exception inheritance, and exact
+     message. The complete `umol-py` suites pass with 891 Rust tests and 524
+     Python tests. `umol-py` clippy, rustfmt, and `git diff --check` pass.
+
+  2. **DONE — S4b.2 — owned sequence, conversion, and detached reads**
+     (`umol-py/src/delta.rs`, `lib.rs`, `python/umol/__init__.py`) — add the
+     Rust-backed `Deltas` pyclass, private snapshot `DeltaIter`, negative-index
+     resolver, explicit Rust conversion helpers, default-empty iterable
+     constructor, exact repr, equality, `__len__`, `__getitem__`, and `__iter__`;
+     register/export the public container while keeping the iterator internal.
+     Rust tests cover empty and populated conversion, repr/equality, positive and
+     negative indexing, range errors, and detached iteration. Python tests cover
+     default and iterable construction, order and duplicate preservation,
+     truthiness, unhashability, exact repr, range errors, and prove that mutating
+     a value returned by indexing or iteration does not change the container.
+     **Additive (green).** `[dep: S4a.2]`
+
+     **Implemented verification:** seven Rust index-resolution rows cover valid
+     positive/negative positions and exact range errors; 15 container rows cover
+     empty and populated construction/conversion, equality, exact repr, length,
+     positive/negative indexing, range errors, and detached iteration. Three
+     Python tests cover the default-empty and iterable constructors, insertion
+     order and duplicates, truthiness, equality, unhashability, exact repr,
+     constructor snapshot isolation, positive/negative indexing, exact range
+     errors, and detached indexed/iterated values. The complete `umol-py` suites
+     pass with 913 Rust tests and 527 Python tests. `umol-py` clippy, rustfmt, and
+     `git diff --check` pass.
+
+  3. **S4b.3 — append and RHS-first extend** (`umol-py/src/delta.rs`) — add
+     `append(delta)` and an entity-container-style resolved extend input that
+     accepts another `Deltas` or any iterable of `Delta`. Convert the complete
+     RHS to owned Rust deltas before borrowing the target for mutation; append in
+     source order without sorting or deduplication. Rust and Python tests cover
+     single append, container and iterable extension, source snapshot isolation,
+     order and duplicate preservation, and self-extension producing exactly two
+     copies of the original sequence without aliasing or a double-borrow panic.
+     **Additive (green).** `[dep: S4b.2]`
+
+  4. **S4b.4 — non-mutating canonicalization and container closure**
+     (`umol-py/src/delta.rs`) — expose `canonicalize() -> Deltas` by cloning the
+     held Rust collection, invoking `Canonicalize`, and mapping failure through
+     S4b.1. Test field-change fusion, add/remove cancellation, canonical ordering
+     across families, idempotence, and source non-mutation; test a discontinuous
+     old/new chain raises the exact `ContradictionError` without changing the
+     source. Add a Python closure matrix covering construction, detached reads,
+     append, extend, and canonicalize over representative ordinary, stereo, and
+     constraint deltas. Run the complete Rust and Python suites, workspace
+     clippy, rustfmt, and `git diff --check` as the stage gate. **Additive
+     (green).** `[dep: S4b.1, S4b.3]`
+
+  **Critical path:** `S4a.2 → S4b.2 → S4b.3 → S4b.4`, with S4b.1 joining at
+  S4b.4. No S4b subitem is deferrable: S5a requires the complete owned container
+  and its canonicalization error contract.
 
 ### S5 — `ReactionAst` owned component facade
 
