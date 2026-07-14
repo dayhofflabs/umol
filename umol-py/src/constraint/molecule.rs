@@ -1,9 +1,12 @@
 //! Molecule-level constraint payloads mirroring `umol_ast::ast::constraint`.
 
+use std::vec::IntoIter;
+
+use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use umol_ast::ast::{
     AromaticSystemId as AstAromaticSystemId, AtomId as AstAtomId, BondId as AstBondId,
-    Constraint as AstConstraint, DativeBondId as AstDativeBondId,
+    Constraint as AstConstraint, Constraints as AstConstraints, DativeBondId as AstDativeBondId,
     MoleculeConstraint as AstMoleculeConstraint, MulticenterBondId as AstMulticenterBondId,
     NoncovalentBondId as AstNoncovalentBondId, RelationalConstraint as AstRelationalConstraint,
     StereoAtomId as AstStereoAtomId, StereoBondId as AstStereoBondId,
@@ -130,10 +133,6 @@ impl Constraint {
     }
 }
 
-#[allow(
-    dead_code,
-    reason = "conversion support for an unregistered mirror type"
-)]
 impl Constraint {
     pub(crate) fn from_ast(py: Python<'_>, constraint: &AstConstraint) -> PyResult<Self> {
         Ok(match constraint {
@@ -251,6 +250,277 @@ impl Constraint {
     }
 }
 
+/// Resolve a possibly-negative Python index into an existing constraint position.
+fn resolve_constraint_index(len: usize, index: isize) -> PyResult<usize> {
+    let resolved = if index < 0 {
+        index + len as isize
+    } else {
+        index
+    };
+    if resolved < 0 || resolved as usize >= len {
+        Err(PyIndexError::new_err("constraint index out of range"))
+    } else {
+        Ok(resolved as usize)
+    }
+}
+
+/// Build a detached iterator of concrete Python constraint variants.
+fn constraint_iter(py: Python<'_>, constraints: &AstConstraints) -> PyResult<ConstraintIter> {
+    let entries = constraints
+        .iter()
+        .map(|constraint| into_py_variant(py, Constraint::from_ast(py, constraint)?))
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(ConstraintIter {
+        entries: entries.into_iter(),
+    })
+}
+
+/// A snapshot iterator over molecule-level constraints.
+#[pyclass]
+pub(crate) struct ConstraintIter {
+    entries: IntoIter<Py<Constraint>>,
+}
+
+#[pymethods]
+impl ConstraintIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> Option<Py<Constraint>> {
+        self.entries.next()
+    }
+}
+
+/// The argument to `update`: another value container, a live view, or constraint entries.
+#[derive(FromPyObject)]
+pub(crate) enum ConstraintsUpdate {
+    Container(Py<Constraints>),
+    View(Py<ConstraintsView>),
+    Entries(Vec<Py<Constraint>>),
+}
+
+impl ConstraintsUpdate {
+    /// Snapshot every Python input before the target takes a write borrow.
+    pub(crate) fn resolve(&self, py: Python<'_>) -> PyResult<ResolvedConstraintsUpdate> {
+        Ok(match self {
+            Self::Container(container) => {
+                ResolvedConstraintsUpdate::Overlay(container.bind(py).borrow().inner().clone())
+            }
+            Self::View(view) => ResolvedConstraintsUpdate::Overlay(
+                view.bind(py)
+                    .borrow()
+                    .read(py, |constraints| Ok(constraints.clone()))?,
+            ),
+            Self::Entries(entries) => ResolvedConstraintsUpdate::Entries(
+                entries
+                    .iter()
+                    .map(|entry| entry.bind(py).borrow().to_ast(py))
+                    .collect(),
+            ),
+        })
+    }
+}
+
+/// A resolved update containing no Python references that need to be read.
+pub(crate) enum ResolvedConstraintsUpdate {
+    Overlay(AstConstraints),
+    Entries(Vec<AstConstraint>),
+}
+
+impl ResolvedConstraintsUpdate {
+    /// Append the resolved entries in order, preserving duplicates.
+    pub(crate) fn apply(self, target: &mut AstConstraints) {
+        match self {
+            Self::Overlay(overlay) => {
+                for entry in overlay {
+                    target.push(entry);
+                }
+            }
+            Self::Entries(entries) => {
+                for entry in entries {
+                    target.push(entry);
+                }
+            }
+        }
+    }
+}
+
+/// A whole-container input that snapshots either a value container or a live view.
+#[allow(
+    dead_code,
+    reason = "whole-container input for the unregistered molecule constraints surface"
+)]
+#[derive(FromPyObject)]
+pub(crate) enum ConstraintsArg {
+    Container(Py<Constraints>),
+    View(Py<ConstraintsView>),
+}
+
+#[allow(
+    dead_code,
+    reason = "whole-container input for the unregistered molecule constraints surface"
+)]
+impl ConstraintsArg {
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstConstraints> {
+        match self {
+            Self::Container(container) => Ok(container.bind(py).borrow().inner().clone()),
+            Self::View(view) => view
+                .bind(py)
+                .borrow()
+                .read(py, |constraints| Ok(constraints.clone())),
+        }
+    }
+}
+
+/// The molecule-level constraints in insertion order. Mutable, value-equal,
+/// and unhashable.
+#[pyclass(eq)]
+#[derive(Debug, PartialEq)]
+pub struct Constraints(AstConstraints);
+
+#[pymethods]
+impl Constraints {
+    /// Build an owned container from constraint entries, preserving order and duplicates.
+    #[new]
+    fn new(py: Python<'_>, entries: Vec<Py<Constraint>>) -> Self {
+        Self(AstConstraints::from(
+            entries
+                .into_iter()
+                .map(|entry| entry.bind(py).borrow().to_ast(py))
+                .collect::<Vec<_>>(),
+        ))
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let mut parts = Vec::with_capacity(self.0.len());
+        for entry in self.0.iter() {
+            let mirror = into_py_variant(py, Constraint::from_ast(py, entry)?)?;
+            parts.push(mirror.bind(py).as_any().repr()?.extract::<String>()?);
+        }
+        Ok(format!("Constraints([{}])", parts.join(", ")))
+    }
+
+    /// Append one constraint, preserving existing entries and duplicates.
+    fn append(&mut self, py: Python<'_>, constraint: Py<Constraint>) {
+        self.0.push(constraint.bind(py).borrow().to_ast(py));
+    }
+
+    fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    /// Append another container, live view, or iterable after snapshotting the RHS.
+    fn update(slf: Py<Self>, py: Python<'_>, other: ConstraintsUpdate) -> PyResult<()> {
+        let resolved = other.resolve(py)?;
+        resolved.apply(slf.borrow_mut(py).inner_mut());
+        Ok(())
+    }
+
+    fn __len__(&self) -> usize {
+        self.0.len()
+    }
+
+    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Constraint> {
+        let index = resolve_constraint_index(self.0.len(), index)?;
+        Constraint::from_ast(py, &self.0.as_slice()[index])
+    }
+
+    fn __iter__(&self, py: Python<'_>) -> PyResult<ConstraintIter> {
+        constraint_iter(py, &self.0)
+    }
+}
+
+impl Constraints {
+    pub(crate) fn inner(&self) -> &AstConstraints {
+        &self.0
+    }
+
+    pub(crate) fn inner_mut(&mut self) -> &mut AstConstraints {
+        &mut self.0
+    }
+
+    #[allow(
+        dead_code,
+        reason = "AST conversion for the unregistered Constraints pyclass"
+    )]
+    pub(crate) fn from_inner(constraints: AstConstraints) -> Self {
+        Self(constraints)
+    }
+}
+
+/// A live handle onto the molecule-level constraints of one `MoleculeAst`.
+#[pyclass]
+pub struct ConstraintsView {
+    pub(crate) owner: Py<MoleculeAst>,
+}
+
+impl ConstraintsView {
+    #[allow(dead_code, reason = "constructor for the unregistered ConstraintsView")]
+    pub(crate) fn new(owner: Py<MoleculeAst>) -> Self {
+        Self { owner }
+    }
+
+    /// Borrow the current constraints and read through `f` without cloning the store.
+    pub(crate) fn read<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&AstConstraints) -> PyResult<R>,
+    ) -> PyResult<R> {
+        let molecule = self.owner.bind(py).borrow();
+        f(molecule.inner().constraints())
+    }
+
+    /// Mutate the molecule's constraint store in place through `f`.
+    pub(crate) fn with_mut<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut AstConstraints) -> R,
+    ) -> R {
+        f(self.owner.borrow_mut(py).inner_mut().constraints_mut())
+    }
+}
+
+#[pymethods]
+impl ConstraintsView {
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let count = self.read(py, |constraints| Ok(constraints.len()))?;
+        Ok(format!("ConstraintsView({count} entries)"))
+    }
+
+    /// Append one constraint to the molecule, preserving existing entries and duplicates.
+    fn append(&self, py: Python<'_>, constraint: Py<Constraint>) {
+        let constraint = constraint.bind(py).borrow().to_ast(py);
+        self.with_mut(py, |constraints| constraints.push(constraint));
+    }
+
+    fn clear(&self, py: Python<'_>) {
+        self.with_mut(py, AstConstraints::clear);
+    }
+
+    /// Append another container, live view, or iterable after snapshotting the RHS.
+    fn update(&self, py: Python<'_>, other: ConstraintsUpdate) -> PyResult<()> {
+        let resolved = other.resolve(py)?;
+        self.with_mut(py, |constraints| resolved.apply(constraints));
+        Ok(())
+    }
+
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        self.read(py, |constraints| Ok(constraints.len()))
+    }
+
+    fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Constraint> {
+        self.read(py, |constraints| {
+            let index = resolve_constraint_index(constraints.len(), index)?;
+            Constraint::from_ast(py, &constraints.as_slice()[index])
+        })
+    }
+
+    fn __iter__(&self, py: Python<'_>) -> PyResult<ConstraintIter> {
+        self.read(py, |constraints| constraint_iter(py, constraints))
+    }
+}
+
 #[pymethods]
 impl MoleculeConstraint {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
@@ -269,10 +539,6 @@ impl MoleculeConstraint {
     }
 }
 
-#[allow(
-    dead_code,
-    reason = "conversion support for an unregistered mirror type"
-)]
 impl MoleculeConstraint {
     pub(crate) fn from_ast(py: Python<'_>, constraint: &AstMoleculeConstraint) -> PyResult<Self> {
         Ok(match constraint {
@@ -383,10 +649,6 @@ impl RelationalConstraint {
     }
 }
 
-#[allow(
-    dead_code,
-    reason = "conversion support for an unregistered mirror type"
-)]
 impl RelationalConstraint {
     /// Convert any relational constraint into its Python mirror.
     pub(crate) fn from_ast(py: Python<'_>, constraint: &AstRelationalConstraint) -> PyResult<Self> {
@@ -783,10 +1045,6 @@ impl SubPatternAnchor {
     }
 }
 
-#[allow(
-    dead_code,
-    reason = "conversion support for an unregistered mirror type"
-)]
 impl SubPatternAnchor {
     pub(crate) fn from_ast(anchor: &AstSubPatternAnchor) -> Self {
         Self {
@@ -1231,6 +1489,553 @@ match node:
                     .unwrap(),
                 17
             );
+        });
+    }
+
+    #[rstest]
+    #[case::positive_first(3, 0, 0)]
+    #[case::positive_last(3, 2, 2)]
+    #[case::negative_last(3, -1, 2)]
+    #[case::negative_first(3, -3, 0)]
+    fn test_resolve_constraint_index(
+        #[case] len: usize,
+        #[case] index: isize,
+        #[case] expected: usize,
+    ) {
+        assert_eq!(resolve_constraint_index(len, index).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::empty(0, 0)]
+    #[case::positive(3, 3)]
+    #[case::negative(3, -4)]
+    fn test_resolve_constraint_index_error(#[case] len: usize, #[case] index: isize) {
+        assert_eq!(
+            resolve_constraint_index(len, index)
+                .unwrap_err()
+                .to_string(),
+            "IndexError: constraint index out of range"
+        );
+    }
+
+    #[rstest]
+    fn test_constraint_iter() {
+        let first = AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2));
+        let second = AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
+        let mut constraints = AstConstraints::from(vec![first.clone(), second.clone()]);
+
+        Python::attach(|py| {
+            let mut iter = constraint_iter(py, &constraints).unwrap();
+            constraints.push(AstConstraint::Or(Vec::new()));
+
+            let first_mirror = iter.__next__().unwrap();
+            assert_eq!(
+                first_mirror
+                    .bind(py)
+                    .as_any()
+                    .getattr("_0")
+                    .unwrap()
+                    .extract::<u32>()
+                    .unwrap(),
+                1
+            );
+            assert_eq!(first_mirror.bind(py).borrow().to_ast(py), first);
+            assert_eq!(
+                iter.__next__().unwrap().bind(py).borrow().to_ast(py),
+                second
+            );
+            assert!(iter.__next__().is_none());
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_arg_to_ast_container() {
+        let expected = AstConstraints::from(vec![
+            AstConstraint::And(Vec::new()),
+            AstConstraint::And(Vec::new()),
+        ]);
+
+        Python::attach(|py| {
+            let container = Py::new(py, Constraints::from_inner(expected.clone())).unwrap();
+            let arg = ConstraintsArg::Container(container);
+
+            assert_eq!(arg.to_ast(py).unwrap(), expected);
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_arg_to_ast_view() {
+        let expected = AstConstraints::from(vec![
+            AstConstraint::Or(Vec::new()),
+            AstConstraint::Or(Vec::new()),
+        ]);
+        let mut molecule = AstMoleculeAst::new();
+        *molecule.constraints_mut() = expected.clone();
+
+        Python::attach(|py| {
+            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let view = Py::new(py, ConstraintsView::new(owner)).unwrap();
+            let arg = ConstraintsArg::View(view);
+
+            assert_eq!(arg.to_ast(py).unwrap(), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::empty(Vec::new())]
+    #[case::populated(vec![
+        AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2)),
+        AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None }),
+    ])]
+    fn test_constraints_new(#[case] entries: Vec<AstConstraint>) {
+        Python::attach(|py| {
+            let mirrors = entries
+                .iter()
+                .map(|entry| into_py_variant(py, Constraint::from_ast(py, entry).unwrap()).unwrap())
+                .collect();
+            let constraints = Constraints::new(py, mirrors);
+
+            assert_eq!(constraints.inner().as_slice(), entries.as_slice());
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        AstConstraints::from(vec![AstConstraint::And(Vec::new())]),
+        AstConstraints::from(vec![AstConstraint::And(Vec::new())]),
+        true,
+    )]
+    #[case::different(
+        AstConstraints::from(vec![AstConstraint::And(Vec::new())]),
+        AstConstraints::from(vec![AstConstraint::Or(Vec::new())]),
+        false,
+    )]
+    fn test_constraints_eq(
+        #[case] left: AstConstraints,
+        #[case] right: AstConstraints,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            Constraints::from_inner(left) == Constraints::from_inner(right),
+            expected
+        );
+    }
+
+    #[rstest]
+    fn test_constraints_repr() {
+        Python::attach(|py| {
+            let constraints = Constraints::from_inner(AstConstraints::from(vec![
+                AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2)),
+                AstConstraint::Or(Vec::new()),
+            ]));
+
+            assert_eq!(
+                constraints.__repr__(py).unwrap(),
+                "Constraints([Constraint.Atom(1, AtomConstraintAst.Degree(ValueAst.Lit(2))), Constraint.Or([])])"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_append() {
+        let constraint = AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
+        Python::attach(|py| {
+            let mut constraints =
+                Constraints::from_inner(AstConstraints::from(vec![constraint.clone()]));
+            let mirror =
+                into_py_variant(py, Constraint::from_ast(py, &constraint).unwrap()).unwrap();
+
+            constraints.append(py, mirror);
+
+            assert_eq!(
+                constraints.inner().as_slice(),
+                &[constraint.clone(), constraint]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_clear() {
+        let mut constraints =
+            Constraints::from_inner(AstConstraints::from(vec![AstConstraint::And(Vec::new())]));
+
+        constraints.clear();
+
+        assert_eq!(constraints.inner(), &AstConstraints::new());
+    }
+
+    #[rstest]
+    fn test_constraints_update() {
+        let initial = AstConstraint::And(Vec::new());
+        let from_container = AstConstraint::Or(Vec::new());
+        let from_view = AstConstraint::Not(Box::new(AstConstraint::And(Vec::new())));
+        let from_entries =
+            AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
+
+        Python::attach(|py| {
+            let target = Py::new(
+                py,
+                Constraints::from_inner(AstConstraints::from(vec![initial.clone()])),
+            )
+            .unwrap();
+            let container = Py::new(
+                py,
+                Constraints::from_inner(AstConstraints::from(vec![from_container.clone()])),
+            )
+            .unwrap();
+            let mut molecule = AstMoleculeAst::new();
+            molecule.constraints_mut().push(from_view.clone());
+            let view = Py::new(
+                py,
+                ConstraintsView::new(Py::new(py, MoleculeAst::from_inner(molecule)).unwrap()),
+            )
+            .unwrap();
+            let entry =
+                into_py_variant(py, Constraint::from_ast(py, &from_entries).unwrap()).unwrap();
+
+            Constraints::update(
+                target.clone_ref(py),
+                py,
+                ConstraintsUpdate::Container(container),
+            )
+            .unwrap();
+            Constraints::update(target.clone_ref(py), py, ConstraintsUpdate::View(view)).unwrap();
+            Constraints::update(
+                target.clone_ref(py),
+                py,
+                ConstraintsUpdate::Entries(vec![entry]),
+            )
+            .unwrap();
+
+            assert_eq!(
+                target.bind(py).borrow().inner().as_slice(),
+                &[initial, from_container, from_view, from_entries]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_update_self() {
+        let entry = AstConstraint::And(Vec::new());
+
+        Python::attach(|py| {
+            let target = Py::new(
+                py,
+                Constraints::from_inner(AstConstraints::from(vec![entry.clone()])),
+            )
+            .unwrap();
+
+            Constraints::update(
+                target.clone_ref(py),
+                py,
+                ConstraintsUpdate::Container(target.clone_ref(py)),
+            )
+            .unwrap();
+
+            assert_eq!(
+                target.bind(py).borrow().inner().as_slice(),
+                &[entry.clone(), entry]
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::empty(AstConstraints::new(), 0)]
+    #[case::populated(AstConstraints::from(vec![
+        AstConstraint::And(Vec::new()),
+        AstConstraint::Or(Vec::new()),
+    ]), 2)]
+    fn test_constraints_len(#[case] inner: AstConstraints, #[case] expected: usize) {
+        assert_eq!(Constraints::from_inner(inner).__len__(), expected);
+    }
+
+    #[rstest]
+    #[case::positive(0, AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2),))]
+    #[case::negative(-1, AstConstraint::Molecule(
+        AstMoleculeConstraint::Connected { atoms: None },
+    ))]
+    fn test_constraints_getitem(#[case] index: isize, #[case] expected: AstConstraint) {
+        Python::attach(|py| {
+            let constraints = Constraints::from_inner(AstConstraints::from(vec![
+                AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2)),
+                AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None }),
+            ]));
+            let actual = constraints.__getitem__(py, index).unwrap();
+
+            assert_eq!(actual.to_ast(py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::positive(1)]
+    #[case::negative(-2)]
+    fn test_constraints_getitem_error(#[case] index: isize) {
+        Python::attach(|py| {
+            let constraints =
+                Constraints::from_inner(AstConstraints::from(vec![AstConstraint::And(Vec::new())]));
+
+            assert_eq!(
+                constraints
+                    .__getitem__(py, index)
+                    .err()
+                    .unwrap()
+                    .to_string(),
+                "IndexError: constraint index out of range"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_iter() {
+        let first = AstConstraint::And(Vec::new());
+        let second = AstConstraint::Or(Vec::new());
+        let mut constraints =
+            Constraints::from_inner(AstConstraints::from(vec![first.clone(), second.clone()]));
+
+        Python::attach(|py| {
+            let mut iter = constraints.__iter__(py).unwrap();
+            constraints
+                .inner_mut()
+                .push(AstConstraint::Not(Box::new(AstConstraint::And(Vec::new()))));
+
+            assert_eq!(iter.__next__().unwrap().bind(py).borrow().to_ast(py), first);
+            assert_eq!(
+                iter.__next__().unwrap().bind(py).borrow().to_ast(py),
+                second
+            );
+            assert!(iter.__next__().is_none());
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_from_inner() {
+        let entries = vec![AstConstraint::Or(Vec::new())];
+
+        assert_eq!(
+            Constraints::from_inner(AstConstraints::from(entries.clone()))
+                .inner()
+                .as_slice(),
+            entries.as_slice()
+        );
+    }
+
+    #[rstest]
+    fn test_constraints_view_repr() {
+        let mut molecule = AstMoleculeAst::new();
+        molecule
+            .constraints_mut()
+            .push(AstConstraint::And(Vec::new()));
+        molecule
+            .constraints_mut()
+            .push(AstConstraint::Or(Vec::new()));
+
+        Python::attach(|py| {
+            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let view = ConstraintsView::new(owner);
+
+            assert_eq!(view.__repr__(py).unwrap(), "ConstraintsView(2 entries)");
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_view_append() {
+        let constraint = AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
+        let mut molecule = AstMoleculeAst::new();
+        molecule.constraints_mut().push(constraint.clone());
+
+        Python::attach(|py| {
+            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let view = ConstraintsView::new(owner.clone_ref(py));
+            let mirror =
+                into_py_variant(py, Constraint::from_ast(py, &constraint).unwrap()).unwrap();
+
+            view.append(py, mirror);
+
+            assert_eq!(
+                owner.bind(py).borrow().inner().constraints().as_slice(),
+                &[constraint.clone(), constraint]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_view_clear() {
+        let mut molecule = AstMoleculeAst::new();
+        molecule
+            .constraints_mut()
+            .push(AstConstraint::And(Vec::new()));
+
+        Python::attach(|py| {
+            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let view = ConstraintsView::new(owner.clone_ref(py));
+
+            view.clear(py);
+
+            assert_eq!(
+                owner.bind(py).borrow().inner().constraints(),
+                &AstConstraints::new()
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_view_update() {
+        let initial = AstConstraint::And(Vec::new());
+        let from_container = AstConstraint::Or(Vec::new());
+        let from_view = AstConstraint::Not(Box::new(AstConstraint::And(Vec::new())));
+        let from_entries =
+            AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
+        let mut target_molecule = AstMoleculeAst::new();
+        target_molecule.constraints_mut().push(initial.clone());
+
+        Python::attach(|py| {
+            let target_owner = Py::new(py, MoleculeAst::from_inner(target_molecule)).unwrap();
+            let target = ConstraintsView::new(target_owner.clone_ref(py));
+            let container = Py::new(
+                py,
+                Constraints::from_inner(AstConstraints::from(vec![from_container.clone()])),
+            )
+            .unwrap();
+            let mut source_molecule = AstMoleculeAst::new();
+            source_molecule.constraints_mut().push(from_view.clone());
+            let source_view = Py::new(
+                py,
+                ConstraintsView::new(
+                    Py::new(py, MoleculeAst::from_inner(source_molecule)).unwrap(),
+                ),
+            )
+            .unwrap();
+            let entry =
+                into_py_variant(py, Constraint::from_ast(py, &from_entries).unwrap()).unwrap();
+
+            target
+                .update(py, ConstraintsUpdate::Container(container))
+                .unwrap();
+            target
+                .update(py, ConstraintsUpdate::View(source_view))
+                .unwrap();
+            target
+                .update(py, ConstraintsUpdate::Entries(vec![entry]))
+                .unwrap();
+
+            assert_eq!(
+                target_owner
+                    .bind(py)
+                    .borrow()
+                    .inner()
+                    .constraints()
+                    .as_slice(),
+                &[initial, from_container, from_view, from_entries]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_view_update_self() {
+        let entry = AstConstraint::Or(Vec::new());
+        let mut molecule = AstMoleculeAst::new();
+        molecule.constraints_mut().push(entry.clone());
+
+        Python::attach(|py| {
+            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let view = Py::new(py, ConstraintsView::new(owner.clone_ref(py))).unwrap();
+
+            view.bind(py)
+                .borrow()
+                .update(py, ConstraintsUpdate::View(view.clone_ref(py)))
+                .unwrap();
+
+            assert_eq!(
+                owner.bind(py).borrow().inner().constraints().as_slice(),
+                &[entry.clone(), entry]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_view_len() {
+        Python::attach(|py| {
+            let owner = Py::new(py, MoleculeAst::from_inner(AstMoleculeAst::new())).unwrap();
+            let view = ConstraintsView::new(owner.clone_ref(py));
+            assert_eq!(view.__len__(py).unwrap(), 0);
+
+            owner
+                .borrow_mut(py)
+                .inner_mut()
+                .constraints_mut()
+                .push(AstConstraint::And(Vec::new()));
+
+            assert_eq!(view.__len__(py).unwrap(), 1);
+        });
+    }
+
+    #[rstest]
+    #[case::positive(0, AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2),))]
+    #[case::negative(-1, AstConstraint::Molecule(
+        AstMoleculeConstraint::Connected { atoms: None },
+    ))]
+    fn test_constraints_view_getitem(#[case] index: isize, #[case] expected: AstConstraint) {
+        let mut molecule = AstMoleculeAst::new();
+        molecule.constraints_mut().push(AstConstraint::Atom(
+            AstAtomId(1),
+            AstAtomConstraintAst::degree(2),
+        ));
+        molecule.constraints_mut().push(AstConstraint::Molecule(
+            AstMoleculeConstraint::Connected { atoms: None },
+        ));
+
+        Python::attach(|py| {
+            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let view = ConstraintsView::new(owner);
+
+            assert_eq!(view.__getitem__(py, index).unwrap().to_ast(py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::positive(1)]
+    #[case::negative(-2)]
+    fn test_constraints_view_getitem_error(#[case] index: isize) {
+        let mut molecule = AstMoleculeAst::new();
+        molecule
+            .constraints_mut()
+            .push(AstConstraint::And(Vec::new()));
+
+        Python::attach(|py| {
+            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let view = ConstraintsView::new(owner);
+
+            assert_eq!(
+                view.__getitem__(py, index).err().unwrap().to_string(),
+                "IndexError: constraint index out of range"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_constraints_view_iter() {
+        let first = AstConstraint::And(Vec::new());
+        let second = AstConstraint::Or(Vec::new());
+        let mut molecule = AstMoleculeAst::new();
+        molecule.constraints_mut().push(first.clone());
+        molecule.constraints_mut().push(second.clone());
+
+        Python::attach(|py| {
+            let owner = Py::new(py, MoleculeAst::from_inner(molecule)).unwrap();
+            let view = ConstraintsView::new(owner.clone_ref(py));
+            let mut iter = view.__iter__(py).unwrap();
+            owner
+                .borrow_mut(py)
+                .inner_mut()
+                .constraints_mut()
+                .push(AstConstraint::Not(Box::new(AstConstraint::And(Vec::new()))));
+
+            assert_eq!(iter.__next__().unwrap().bind(py).borrow().to_ast(py), first);
+            assert_eq!(
+                iter.__next__().unwrap().bind(py).borrow().to_ast(py),
+                second
+            );
+            assert!(iter.__next__().is_none());
         });
     }
 }

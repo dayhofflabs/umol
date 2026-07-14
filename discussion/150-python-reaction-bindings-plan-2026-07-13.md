@@ -313,11 +313,56 @@ scope and membership payloads live in `constraint/ring.rs`.
   pattern matching from Rust-side PyO3. The focused S1a/S1b suite has 53 cases;
   import-level Python coverage remains in S1d when the type is registered.
   **Additive (green).** `[dep: S1a]`
-- **S1c — molecule constraint container** (`constraint/molecule.rs`): add
-  `Constraints`, `ConstraintsView`, and their iterators with sequence operations
-  and safe RHS-first update helpers. Test owned mutation, live molecule
-  write-through, negative indexing, and self-aliasing. **Additive (green).**
-  `[dep: S1b]`
+- **S1c — DONE — molecule constraint container** (`constraint/molecule.rs`): follow the
+  entity constraint containers directly: the same value-container/live-view
+  split, shared snapshot iterator, `Update`/resolved-update pair, whole-container
+  `Arg`, and resolve-before-write discipline. The storage is an ordered sequence,
+  so the principal semantic difference is that `update` appends every resolved
+  entry in order and preserves duplicates instead of deduplicating by key.
+
+  1. **DONE — Shared conversion and iteration support** — add the direct sequence
+     analogue of the entity containers' iterator builder: one shared
+     negative-index normalizer and one `ConstraintIter` pyclass holding an owned
+     snapshot of concrete Python `Constraint` variants. Both container forms use
+     this same code. Test positive, negative, and out-of-range normalization plus
+     snapshot iteration. **Additive (green).** `[dep: S1b]`
+  2. **DONE — Owned `Constraints` value** — add a mutable, value-equal, unhashable
+     `#[pyclass]` around `ast::Constraints`, in the same hold-the-value shape as
+     `AtomConstraintsAst`/`BondConstraintsAst` and their peers. Expose the
+     sequence equivalents of their operations: constructor from entries, exact
+     recursive repr, `append`, `clear`, `__len__`, integer `__getitem__`, and
+     `__iter__`; return detached concrete variants. Provide crate-private
+     `inner`, `inner_mut`, and `from_inner` bridges. Test empty/populated
+     construction, structural equality and repr, append/clear, negative indexing,
+     bounds errors, and detached iteration. **Additive (green).** `[dep: S1c.1]`
+  3. **DONE — Live `ConstraintsView`** — add the direct analogue of the entity
+     `*ConstraintsView` pyclasses, backed here by `Py<MoleculeAst>` and using
+     `read`/`with_mut` over `MoleculeAst::{constraints,constraints_mut}`. Mirror
+     the owned container's operations and reuse the same index and iterator
+     helpers. Test write-through, observation of later molecule changes,
+     negative indexing parity, and detached iteration. **Additive (green).**
+     `[dep: S1c.1]`
+  4. **DONE — Entity-style RHS-first inputs and update** — add
+     `ConstraintsUpdate::{Container, View, Entries}`,
+     `ResolvedConstraintsUpdate`, and `ConstraintsArg::{Container, View}` with
+     the same responsibilities as the entity-container counterparts. Add
+     `update` to both targets. Resolve the complete RHS before the target write
+     borrow; `ResolvedConstraintsUpdate::apply` differs only in applying every
+     entry with `push`, retaining order and duplicates. Test all three RHS forms
+     and both self-alias cases: owned-from-self and view-from-the-same-view each
+     append exactly one snapshot without a PyO3 double-borrow panic. **Additive
+     (green).** `[dep: S1c.2, S1c.3]`
+
+  **Implemented verification:** S1c.1 has eight index/iterator cases. S1c.2 has
+  15 owned-container cases covering construction, equality, repr, mutation,
+  indexing, detached iteration, and conversion. S1c.3 has nine live-view cases
+  covering count repr, duplicate-preserving append, clear, observation of later
+  molecule mutation, indexing, and detached iteration. S1c.4 adds six cases for
+  both whole-container inputs, all three update RHS forms on both targets, and
+  owned/view self-aliasing; updates preserve order and duplicates. The focused
+  S1 suite has 91 cases and the complete `umol-py` library suite has 632; clippy,
+  rustfmt, and `git diff --check` pass. Native registration and Python
+  import-level coverage remain in S1d. `[dep: S1b]`
 - **S1d — `MoleculeAst` wiring** (`umol-py/src/molecule.rs`, `lib.rs`,
   `python/umol/__init__.py`): expose `mol.constraints`, add the keyword-only
   `constraints=()` input to `from_parts`, and register/export the S1 classes.
