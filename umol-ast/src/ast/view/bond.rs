@@ -7,10 +7,9 @@ use std::ops::Index;
 use umol_graph_core::{EdgeId, NodeId};
 
 use super::super::bond::BondAst;
-use super::super::constraint::{BondConstraintAst, BondConstraintsAst, RingScope};
+use super::super::constraint::{BondConstraintAst, BondConstraintsAst};
 use super::super::id::{AtomId, BondId, StereoBondId};
 use super::super::molecule::MoleculeAst;
-use super::super::ring::{RingSet, RingView};
 use super::super::spin::SpinStateAst;
 use super::super::stereo::{CisTransStereoAst, StereoKind};
 use super::super::traits::Lattice;
@@ -198,54 +197,6 @@ impl<'a> BondView<'a> {
         self.molecule.stereo_bonds().at(self.id)
     }
 
-    /// True if this bond belongs to any ring in the molecule's canonical
-    /// ring set (Vismara relevant cycles, max ring size 22). Uses the
-    /// molecule's cached canonical `RingSet`.
-    pub fn is_in_ring(&self) -> bool {
-        self.molecule.rings().contains_bond(self.id)
-    }
-
-    /// True if this bond appears in any ring of the supplied set.
-    pub fn is_in_ring_from(&self, rings: &RingSet) -> bool {
-        rings.contains_bond(self.id)
-    }
-
-    /// Rings containing this bond drawn from the molecule's canonical
-    /// `RingSet` (Vismara relevant cycles, max ring size 22).
-    pub fn rings(&self) -> impl Iterator<Item = RingView<'a>> + 'a {
-        let id = self.id;
-        self.molecule
-            .rings()
-            .iter()
-            .filter(move |v| v.bonds().contains(&id))
-    }
-
-    /// Rings from the supplied set that contain this bond.
-    pub fn rings_from<'r>(&self, rings: &'r RingSet) -> impl Iterator<Item = RingView<'r>> + 'r {
-        let id = self.id;
-        rings.iter().filter(move |v| v.bonds().contains(&id))
-    }
-
-    /// Derived count of canonical rings containing this bond matching
-    /// `scope` (`All` = any, `Size(s)` = size `s`). Always `Lit`.
-    pub fn ring_membership(&self, scope: RingScope) -> ValueAst {
-        let count = match scope {
-            RingScope::All => self.rings().count(),
-            RingScope::Size(s) => self.rings().filter(|r| r.len() == s as usize).count(),
-        };
-        ValueAst::Lit(count as i64)
-    }
-
-    /// `ring_membership(RingScope::All)`.
-    pub fn ring_count(&self) -> ValueAst {
-        self.ring_membership(RingScope::All)
-    }
-
-    /// `ring_membership(RingScope::Size(s))`.
-    pub fn ring_size_count(&self, s: u8) -> ValueAst {
-        self.ring_membership(RingScope::Size(s))
-    }
-
     /// Derive topological constraints from bond properties.
     /// See [`AtomView::derive_constraints`] for `include_missing`: with it, an
     /// absent overlay yields `NotStereo`; without it, the cis/trans stereo
@@ -304,16 +255,14 @@ mod tests {
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::{BondConstraintAst, BondConstraintsAst, RingScope};
+    use crate::ast::constraint::{BondConstraintAst, BondConstraintsAst};
     use crate::ast::dative::DativeBondAst;
     use crate::ast::id::{AromaticSystemId, AtomId, BondId, StereoBondId};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
-    use crate::ast::ring::RingFamily;
     use crate::ast::stereo::{CisTransStereoAst, StereoBondAst, StereoCosetAst, StereoKind};
-    use crate::ast::value::ValueAst;
 
     #[fixture]
     fn molecule() -> MoleculeAst {
@@ -343,23 +292,6 @@ mod tests {
                 AtomId(3),
                 NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
-            ..Default::default()
-        })
-    }
-
-    #[fixture]
-    fn ring_with_chain() -> MoleculeAst {
-        MoleculeAst::from_parts(MoleculeParts {
-            atoms: vec![AtomAst::from_element(Element::C); 7],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondAst::from_order(1)),
-                (AtomId(1), AtomId(2), BondAst::from_order(1)),
-                (AtomId(2), AtomId(3), BondAst::from_order(1)),
-                (AtomId(3), AtomId(4), BondAst::from_order(1)),
-                (AtomId(4), AtomId(5), BondAst::from_order(1)),
-                (AtomId(5), AtomId(0), BondAst::from_order(1)),
-                (AtomId(0), AtomId(6), BondAst::from_order(1)),
-            ],
             ..Default::default()
         })
     }
@@ -524,81 +456,5 @@ mod tests {
         #[case] expected: BondConstraintsAst,
     ) {
         assert_eq!(stereo_molecule.bond(bond).derive_constraints(true), expected);
-    }
-
-    #[rstest]
-    #[case::ring_bond_0_1(BondId(0), true)]
-    #[case::ring_bond_5_0(BondId(5), true)]
-    #[case::chain_bond_0_6(BondId(6), false)]
-    fn test_bond_view_is_in_ring(
-        ring_with_chain: MoleculeAst,
-        #[case] bond: BondId,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(ring_with_chain.bond(bond).is_in_ring(), expected);
-    }
-
-    #[rstest]
-    #[case::ring_bond(BondId(0), true)]
-    #[case::chain_bond(BondId(6), false)]
-    fn test_bond_view_is_in_ring_from(
-        ring_with_chain: MoleculeAst,
-        #[case] bond: BondId,
-        #[case] expected: bool,
-    ) {
-        let rings = ring_with_chain.rings_with(RingFamily::Relevant, 22, |_| true);
-        assert_eq!(ring_with_chain.bond(bond).is_in_ring_from(&rings), expected);
-    }
-
-    #[rstest]
-    #[case::ring_bond(BondId(0), 1)]
-    #[case::chain_bond(BondId(6), 0)]
-    fn test_bond_view_rings_from(
-        ring_with_chain: MoleculeAst,
-        #[case] bond: BondId,
-        #[case] expected_count: usize,
-    ) {
-        let rings = ring_with_chain.rings_with(RingFamily::Relevant, 22, |_| true);
-        let count = ring_with_chain.bond(bond).rings_from(&rings).count();
-        assert_eq!(count, expected_count);
-    }
-
-    #[rstest]
-    #[case::all_ring_bond(BondId(0), RingScope::All, ValueAst::Lit(1))]
-    #[case::size_match(BondId(0), RingScope::Size(6), ValueAst::Lit(1))]
-    #[case::size_no_match(BondId(0), RingScope::Size(5), ValueAst::Lit(0))]
-    #[case::all_chain_bond(BondId(6), RingScope::All, ValueAst::Lit(0))]
-    #[case::size_chain_bond(BondId(6), RingScope::Size(6), ValueAst::Lit(0))]
-    fn test_bond_view_ring_membership(
-        ring_with_chain: MoleculeAst,
-        #[case] bond: BondId,
-        #[case] scope: RingScope,
-        #[case] expected: ValueAst,
-    ) {
-        assert_eq!(ring_with_chain.bond(bond).ring_membership(scope), expected);
-    }
-
-    #[rstest]
-    #[case::ring_bond(BondId(0), ValueAst::Lit(1))]
-    #[case::chain_bond(BondId(6), ValueAst::Lit(0))]
-    fn test_bond_view_ring_count(
-        ring_with_chain: MoleculeAst,
-        #[case] bond: BondId,
-        #[case] expected: ValueAst,
-    ) {
-        assert_eq!(ring_with_chain.bond(bond).ring_count(), expected);
-    }
-
-    #[rstest]
-    #[case::size_match(BondId(0), 6, ValueAst::Lit(1))]
-    #[case::size_no_match(BondId(0), 5, ValueAst::Lit(0))]
-    #[case::chain_bond(BondId(6), 6, ValueAst::Lit(0))]
-    fn test_bond_view_ring_size_count(
-        ring_with_chain: MoleculeAst,
-        #[case] bond: BondId,
-        #[case] size: u8,
-        #[case] expected: ValueAst,
-    ) {
-        assert_eq!(ring_with_chain.bond(bond).ring_size_count(size), expected);
     }
 }

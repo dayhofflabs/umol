@@ -6,7 +6,7 @@
 //! `xxh3_64` with [`ECFP_SEED`]; the paper leaves the hash unspecified, so this is
 //! a frozen choice (placeholder identity, like the WL schemes).
 
-use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
+use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst, RingSet};
 use umol_graph_core::CircularRefinementAlgorithm;
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
@@ -39,8 +39,9 @@ impl EcfpFeaturizer {
 
     /// The circular-refinement identifier multiset (one per surviving environment).
     fn identifiers(&self, mol: &MoleculeAst) -> Vec<u64> {
+        let rings = mol.rings().into_ring_set();
         mol.raw_graph().circular_refine(
-            |node| atom_components(mol, AtomId::from(node)),
+            |node| atom_components(mol, &rings, AtomId::from(node)),
             |edge| bond_label(mol, BondId::from(edge)),
             CircularRefinementAlgorithm::Ec {
                 radius: self.radius,
@@ -53,7 +54,7 @@ impl EcfpFeaturizer {
 /// Daylight initial invariant (Rogers & Hahn 2010): heavy-atom degree, heavy
 /// valence, atomic number, isotope mass (natural → 0), formal charge, attached
 /// hydrogens, and ring membership.
-fn atom_components(mol: &MoleculeAst, id: AtomId) -> Vec<u32> {
+fn atom_components(mol: &MoleculeAst, rings: &RingSet, id: AtomId) -> Vec<u32> {
     let atom = mol.atom(id);
     let element = atom.element().as_lit().expect("ground atom");
     vec![
@@ -63,7 +64,7 @@ fn atom_components(mol: &MoleculeAst, id: AtomId) -> Vec<u32> {
         atom.total_hydrogens().as_lit().expect("ground atom") as u32,
         atom.charge().as_lit().expect("ground atom") as i32 as u32,
         atom.isotope_mass().as_lit().unwrap_or(0),
-        u32::from(atom.is_in_ring()),
+        u32::from(rings.contains_atom(id)),
     ]
 }
 

@@ -10,7 +10,6 @@ use umol_perm::{OrientedPermutationGroup, Permutation};
 use super::super::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::MoleculeAst;
-use super::super::ring::RingView;
 use super::super::stereo::{
     coset_apply_permutation, StereoAtomAst, StereoBondAst, StereoKind, Stereogenicity, Topicity,
 };
@@ -345,16 +344,6 @@ impl<'a> StereoAtomView<'a> {
         iter::once(site)
             .chain(ligands.iter().map(|l| l.atom_id))
             .filter(move |id| seen.insert(*id))
-    }
-
-    /// Rings from the molecule's canonical `RingSet` sharing at least one atom
-    /// with this stereo atom (site or ligand).
-    pub fn overlapping_rings(&self) -> impl Iterator<Item = RingView<'a>> + 'a {
-        let atoms: Vec<AtomId> = self.atom_ids().collect();
-        self.molecule
-            .rings()
-            .iter()
-            .filter(move |r| r.atoms().iter().any(|a| atoms.contains(a)))
     }
 
     pub fn is_ground(&self) -> bool {
@@ -715,16 +704,6 @@ impl<'a> StereoBondView<'a> {
             .into_iter()
             .chain(ligands.iter().map(|l| l.atom_id))
             .filter(move |id| seen.insert(*id))
-    }
-
-    /// Rings from the molecule's canonical `RingSet` sharing at least one atom
-    /// with this stereo bond (site endpoints or ligands).
-    pub fn overlapping_rings(&self) -> impl Iterator<Item = RingView<'a>> + 'a {
-        let atoms: Vec<AtomId> = self.atom_ids().collect();
-        self.molecule
-            .rings()
-            .iter()
-            .filter(move |r| r.atoms().iter().any(|a| atoms.contains(a)))
     }
 
     pub fn is_ground(&self) -> bool {
@@ -1450,23 +1429,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_view_overlapping_rings(ring_molecule: MoleculeAst) {
-        let rings: Vec<Vec<AtomId>> = ring_molecule
-            .stereo_atom(StereoAtomId(0))
-            .overlapping_rings()
-            .map(|r| {
-                let mut atoms = r.atoms().to_vec();
-                atoms.sort_by_key(|a| a.0);
-                atoms
-            })
-            .collect();
-        assert_eq!(
-            rings,
-            vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]],
-        );
-    }
-
-    #[rstest]
     fn test_stereo_atom_views_index(molecule: MoleculeAst) {
         assert_eq!(
             &molecule.stereo_atoms()[StereoAtomId(0)],
@@ -1850,23 +1812,6 @@ mod tests {
                 .atom_ids()
                 .collect::<Vec<_>>(),
             vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
-        );
-    }
-
-    #[rstest]
-    fn test_stereo_bond_view_overlapping_rings(ring_molecule: MoleculeAst) {
-        let rings: Vec<Vec<AtomId>> = ring_molecule
-            .stereo_bond(StereoBondId(0))
-            .overlapping_rings()
-            .map(|r| {
-                let mut atoms = r.atoms().to_vec();
-                atoms.sort_by_key(|a| a.0);
-                atoms
-            })
-            .collect();
-        assert_eq!(
-            rings,
-            vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]],
         );
     }
 

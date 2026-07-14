@@ -96,7 +96,7 @@ pub use reaction::ReactionAst;
 pub use reaction_derivation::ReactionDerivation;
 pub use reaction_span::ReactionSpanAst;
 pub use remap::{IdCompaction, UndoCompaction};
-pub use ring::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
+pub use ring::{RingFamily, RingGraph, RingConnection, RingId, RingRelation, RingSet};
 pub use spin::SpinStateAst;
 pub use stereo::{
     CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfiguration, StereoConfigurationAst,
@@ -119,6 +119,6 @@ pub use view::{
     AtomViewMut, AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
     DativeBondViews, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
     NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, RingAtomView,
-    RingBondView, RingsView, StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView,
-    StereoBondViewMut, StereoBondViews, StereoLigandView,
+    RingBondView, RingView, RingViews, StereoAtomView, StereoAtomViewMut, StereoAtomViews,
+    StereoBondView, StereoBondViewMut, StereoBondViews, StereoLigandView,
 };

@@ -1,6 +1,6 @@
 # 149 · MoleculeAst ring cache placement & hashing semantics
 
-Status: Active
+Status: Active — Part A (ring cache) implemented S0–S3; Part B (hashing) open
 Date: 2026-07-13
 Relates: 137 (Python-binding R1 audit — where this surfaced), 113/095 (lazy
 canonicalization; structural vs canonical equality), 114 (interning; the future
@@ -82,23 +82,37 @@ Why this over the cache or the `_from` surface:
 
 ### Next steps (staged, tree green after each stage)
 
-- **S0 — add the `RingsView` type family** *(additive).* `RingsView<'a>`,
+The collection type is named **`RingViews`** (plural of `RingView`, matching
+`AtomViews` / `BondViews`) — not `RingsView`.
+
+- **S0 — add the `RingViews` type family** ✓ *(additive, done).* `RingViews<'a>`,
   `RingAtomView<'a>`, `RingBondView<'a>`, with the surface above (ring-set-level
-  accessors returning `RingView`; the no-arg per-entity ring queries). Expose it via a
-  temporary accessor (e.g. `rings_view()` / `rings_view_with(...)`) alongside the
-  still-present cache. Tests for the new surface. The cache and the existing
-  `AtomView` / `BondView` ring methods are untouched — green.
-- **S1 — migrate consumers to `RingsView`** *(breaking → green).* Repoint every
-  consumer of the cached ring queries — `AtomView` / `BondView`
-  `is_in_ring` / `ring_count` / …, the two `_from` methods, `derive_constraints`, and
-  any perception / aromatic-system step reaching `self.molecule.rings()` — to compute
-  a `RingsView` once and query it. Per-atom / per-bond loops (e.g. constraint
-  derivation) compute the `RingsView` up front and reuse it, never per element.
-- **S2 — remove the cache and the old query surface** *(breaking → green).* Delete
-  `rings_cache`, the cached `rings() -> &RingSet`, and the `AtomView` / `BondView`
-  ring methods (including the `_from` pair, now subsumed by the sub-views). Rename the
-  S0 accessor to `rings()` (now `-> RingsView`). Replace the hand-written `Clone` /
-  `PartialEq` on `MoleculeAst` with derives. Payoff: `MoleculeAst` is a plain value.
+  accessors returning `RingView`; the no-arg per-entity ring queries). Exposed via
+  temporary `rings_view()` / `rings_view_with(...)` alongside the still-present cache.
+  Tests for the new surface. Cache + existing `AtomView` / `BondView` ring methods
+  untouched.
+- **S1 — migrate consumers to `RingViews`** ✓ *(breaking → green, done).* The only
+  production consumers of the cache were `morgan` / `ecfp` (`is_in_ring`) and
+  `overlapping_rings` on the three overlay views; everything else was test-only.
+  `morgan` / `ecfp` compute the ring set once (`mol.rings_view().into_ring_set()`) and
+  pass `&RingSet` down. `overlapping_rings` was **removed** from the aromatic / stereo
+  views (it reached rings from outside the ring views — no view is ever an argument,
+  and nothing reaches a ring set except through the ring-view types); its
+  `_from(&RingSet)` replacement is deferred. `derive_constraints` turned out not to use
+  ring queries. Added `RingViews::into_ring_set(self) -> RingSet`.
+- **S2 — remove the cache and the old query surface** ✓ *(breaking → green, done).*
+  Deleted `rings_cache`, the cached `rings() -> &RingSet`, and the `AtomView` /
+  `BondView` ring methods (incl. the `_from` pair — subsumed by `RingSet::contains_*`
+  and the sub-views) + their tests + the 3 cache-behavior tests. `rings()` and
+  `rings_with(...)` now both return `RingViews` (owned `RingSet` via `.into_ring_set()`);
+  the ~5 aromaticity/matching callers gained `.into_ring_set()`. Hand-written `Clone` /
+  `PartialEq` / `Eq` on `MoleculeAst` replaced with derives — it is now a plain value.
+- **S3 — relocate `RingView`** ✓ *(done).* Moved `RingView` from `ast/ring.rs` to
+  `ast/view/ring.rs` beside the other ring views (`pub(crate) new`; `intersection` made
+  `pub(crate)`; `RingSet::iter` / `get` build via `new`; re-exports moved to `view::`).
+  Its shape is unchanged — the backref / `shared_atoms(RingId)` redesign in *API shapes*
+  below remains an open follow-up. `RingView`'s tests stay in `ast/ring.rs` (they use
+  explicit `RingSet` fixtures built from the private `Ring` type).
 
 Design note: `ring_valence` / `ring_degree` need the atom's incident bonds, so the
 sub-views hold `&MoleculeAst` alongside `&RingSet`; pure membership / count queries

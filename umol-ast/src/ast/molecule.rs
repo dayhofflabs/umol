@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::ops::Index;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::{iter, mem};
 
 pub use build::MoleculeBuilder;
@@ -37,7 +37,7 @@ use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
     DativeBondViews, GraphView, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
-    NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, RingsView,
+    NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, RingViews,
     StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut,
     StereoBondViews,
 };
@@ -49,22 +49,11 @@ mod pushout;
 pub mod spec;
 pub(super) mod transact;
 
-/// Molecule AST: structural representation of a molecule (ground or pattern).
+/// Molecule AST: atom-bond topology, overlays (typed hyperedges), and constraints.
 ///
-/// Topology and per-atom/bond data are `Arc`-shared (copy-on-write). The AST
-/// itself only allows attribute mutation (`atom_mut`, `bond_mut`); structural
-/// edits go through `MoleculeEditor` via [`MoleculeAst::edit`].
-///
-/// Carries a single-value canonical-rings cache (`OnceLock<RingSet>`) populated
-/// lazily on the first call to [`MoleculeAst::rings`]. The cache stores
-/// Vismara relevant cycles up to max ring size 22; non-canonical enumeration
-/// goes through [`MoleculeAst::rings_with`], which is uncached and returns
-/// owned. Topology is invariant across in-place attribute mutation, so the
-/// cache remains valid for the molecule's lifetime; structural edits go
-/// through the builder, which produces a fresh `MoleculeAst` with an empty
-/// cache. The cache field is excluded from `PartialEq` / `Hash` so identity
-/// is independent of cache state.
-#[derive(Debug, Default)]
+/// Per-entity data are `Arc`-shared (copy-on-write). The AST itself only allows
+/// attribute mutation; structural edits go through `MoleculeEditor` via [`MoleculeAst::edit`].
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct MoleculeAst {
     graph: Graph,
     atoms: Arc<Vec<AtomAst>>,
@@ -78,43 +67,7 @@ pub struct MoleculeAst {
     stereo_bonds:
         Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>>,
     constraints: Constraints,
-    rings_cache: OnceLock<RingSet>,
 }
-
-impl Clone for MoleculeAst {
-    fn clone(&self) -> Self {
-        Self {
-            graph: self.graph.clone(),
-            atoms: self.atoms.clone(),
-            bonds: self.bonds.clone(),
-            dative_bonds: self.dative_bonds.clone(),
-            aromatic_systems: self.aromatic_systems.clone(),
-            multicenter_bonds: self.multicenter_bonds.clone(),
-            noncovalent_bonds: self.noncovalent_bonds.clone(),
-            stereo_atoms: self.stereo_atoms.clone(),
-            stereo_bonds: self.stereo_bonds.clone(),
-            constraints: self.constraints.clone(),
-            rings_cache: OnceLock::new(),
-        }
-    }
-}
-
-impl PartialEq for MoleculeAst {
-    fn eq(&self, other: &Self) -> bool {
-        self.graph == other.graph
-            && self.atoms == other.atoms
-            && self.bonds == other.bonds
-            && self.dative_bonds == other.dative_bonds
-            && self.aromatic_systems == other.aromatic_systems
-            && self.multicenter_bonds == other.multicenter_bonds
-            && self.noncovalent_bonds == other.noncovalent_bonds
-            && self.stereo_atoms == other.stereo_atoms
-            && self.stereo_bonds == other.stereo_bonds
-            && self.constraints == other.constraints
-    }
-}
-
-impl Eq for MoleculeAst {}
 
 impl AsRef<MoleculeAst> for MoleculeAst {
     fn as_ref(&self) -> &MoleculeAst {
@@ -137,8 +90,7 @@ pub struct MoleculeParts {
 }
 
 impl MoleculeAst {
-    /// Empty molecule: zero atoms, zero bonds, zero relations, zero
-    /// constraints. Mirrors `Vec::new()` / `HashMap::new()`.
+    /// Empty molecule: zero atoms, zero bonds, zero overlays, zero constraints.
     pub fn new() -> Self {
         Self::default()
     }
@@ -233,7 +185,6 @@ impl MoleculeAst {
             stereo_atoms: Arc::new(stereo_atoms),
             stereo_bonds: Arc::new(stereo_bonds),
             constraints,
-            rings_cache: OnceLock::new(),
         }
     }
 
@@ -267,7 +218,6 @@ impl MoleculeAst {
             stereo_atoms,
             stereo_bonds,
             constraints,
-            rings_cache: OnceLock::new(),
         }
     }
 
@@ -279,7 +229,6 @@ impl MoleculeAst {
     /// Raw underlying graph with `NodeId` / `EdgeId` types. Escape hatch
     /// for code that needs the graph-core API directly; use [`Self::graph`]
     /// for AtomId/BondId-typed access.
-    #[inline]
     pub fn raw_graph(&self) -> &Graph {
         &self.graph
     }
@@ -566,43 +515,22 @@ impl MoleculeAst {
                 .all(|id| self.stereo_bonds.data(id).is_ground())
     }
 
-    /// Canonical ring set: Vismara relevant cycles up to max ring size 22,
-    /// applied to every atom. Cached in a single-value `OnceLock` populated
-    /// lazily on first call; subsequent calls return the same borrow.
-    pub fn rings(&self) -> &RingSet {
-        self.rings_cache
-            .get_or_init(|| RingSet::enumerate(RingFamily::Relevant, 22, |_| true, &self.graph))
-    }
-
-    /// Ring enumeration with caller-specified family, maximum size, and
-    /// atom filter. Uncached; each call recomputes.
-    pub fn rings_with(
-        &self,
-        family: RingFamily,
-        max_ring_size: usize,
-        atom_filter: impl Fn(AtomId) -> bool,
-    ) -> RingSet {
-        RingSet::enumerate(family, max_ring_size, atom_filter, &self.graph)
-    }
-
-    /// The molecule's canonical rings as a [`RingsView`]: the ring-collection
-    /// surface plus per-atom / per-bond ring sub-views. Recomputed per call.
-    pub fn rings_view(&self) -> RingsView<'_> {
-        RingsView::new(
+    /// Canonical ring set (Vismara relevant cycles up to max ring size 22).
+    pub fn rings(&self) -> RingViews<'_> {
+        RingViews::new(
             self,
             RingSet::enumerate(RingFamily::Relevant, 22, |_| true, &self.graph),
         )
     }
 
-    /// [`rings_view`](Self::rings_view) with caller-specified family, maximum
-    /// size, and atom filter.
-    pub fn rings_view_with(
+    /// Ring set with caller-specified family, maximum size, and atom filter.
+    pub fn rings_with(
         &self,
         family: RingFamily,
         max_ring_size: usize,
         atom_filter: impl Fn(AtomId) -> bool,
-    ) -> RingsView<'_> {
-        RingsView::new(
+    ) -> RingViews<'_> {
+        RingViews::new(
             self,
             RingSet::enumerate(family, max_ring_size, atom_filter, &self.graph),
         )

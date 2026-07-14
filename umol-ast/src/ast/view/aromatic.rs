@@ -11,7 +11,6 @@ use super::super::correspondence::MoleculeCorrespondence;
 use super::super::electrons::ElectronCountsAst;
 use super::super::id::{AromaticSystemId, AtomId, BondId};
 use super::super::molecule::MoleculeAst;
-use super::super::ring::RingView;
 use super::super::spin::SpinStateAst;
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
@@ -280,16 +279,6 @@ impl<'a> AromaticSystemView<'a> {
             .map(BondId::from)
             .filter(move |b| subset.contains(b))
             .map(move |id| molecule.bond(id))
-    }
-
-    /// Rings from the molecule's canonical `RingSet` that share at least
-    /// one atom with this aromatic system.
-    pub fn overlapping_rings(&self) -> impl Iterator<Item = RingView<'a>> + 'a {
-        let atoms: Vec<AtomId> = self.atoms.iter().map(|&n| AtomId::from(n)).collect();
-        self.molecule
-            .rings()
-            .iter()
-            .filter(move |r| r.atoms().iter().any(|a| atoms.contains(a)))
     }
 
     /// Is aromatic system ground
@@ -582,15 +571,5 @@ mod tests {
             .map(|v| v.id)
             .collect();
         assert_eq!(ids, expected);
-    }
-
-    #[rstest]
-    fn test_aromatic_system_view_overlapping_rings(molecule: MoleculeAst) {
-        let ids: Vec<usize> = molecule
-            .aromatic_system(AromaticSystemId(0))
-            .overlapping_rings()
-            .map(|r| r.len())
-            .collect();
-        assert_eq!(ids, Vec::<usize>::new());
     }
 }

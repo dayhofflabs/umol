@@ -1,28 +1,19 @@
 //! Ring views over a molecule.
-//!
-//! [`RingsView`] is a molecule's rings — an owned canonical `RingSet` plus a
-//! borrow of the molecule it was enumerated from — with the ring-collection
-//! surface (`count` / `ids` / `iter` / `get` / `contains`) mirroring the entity
-//! namespace accessors, and per-atom / per-bond ring sub-views carrying the
-//! topology-derived ring queries. Built by [`MoleculeAst::rings_view`]. The
-//! borrow means a ring view cannot be held across a structural mutation of the
-//! molecule.
 
 use super::super::constraint::RingScope;
 use super::super::id::{AtomId, BondId};
 use super::super::molecule::MoleculeAst;
-use super::super::ring::{RingFamily, RingId, RingSet, RingView};
+use super::super::ring::{intersection, RingFamily, RingId, RingSet};
 use super::super::value::ValueAst;
 
-/// The rings of a molecule: an owned canonical `RingSet` plus a borrow of the
-/// molecule. Shape mirrors `AtomsView` / `BondsView`.
+/// Molecule ring views: owned ring set plus borrow of molecule.
 #[derive(Debug)]
-pub struct RingsView<'a> {
+pub struct RingViews<'a> {
     molecule: &'a MoleculeAst,
     rings: RingSet,
 }
 
-impl<'a> RingsView<'a> {
+impl<'a> RingViews<'a> {
     pub(crate) fn new(molecule: &'a MoleculeAst, rings: RingSet) -> Self {
         Self { molecule, rings }
     }
@@ -71,9 +62,52 @@ impl<'a> RingsView<'a> {
     pub fn max_ring_size(&self) -> usize {
         self.rings.max_ring_size()
     }
+
+    /// Consume this view, returning its owned `RingSet`.
+    pub fn into_ring_set(self) -> RingSet {
+        self.rings
+    }
 }
 
-/// One atom's ring situation within a [`RingsView`].
+/// Borrowed view of a single ring.
+#[derive(Debug, Clone, Copy)]
+pub struct RingView<'a> {
+    pub id: RingId,
+    atoms: &'a [AtomId],
+    bonds: &'a [BondId],
+}
+
+impl<'a> RingView<'a> {
+    pub(crate) fn new(id: RingId, atoms: &'a [AtomId], bonds: &'a [BondId]) -> Self {
+        Self { id, atoms, bonds }
+    }
+
+    pub fn atoms(&self) -> &'a [AtomId] {
+        self.atoms
+    }
+
+    pub fn bonds(&self) -> &'a [BondId] {
+        self.bonds
+    }
+
+    pub fn len(&self) -> usize {
+        self.atoms.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.atoms.is_empty()
+    }
+
+    pub fn shared_atoms(&self, other: &RingView<'_>) -> Vec<AtomId> {
+        intersection(self.atoms, other.atoms)
+    }
+
+    pub fn shared_bonds(&self, other: &RingView<'_>) -> Vec<BondId> {
+        intersection(self.bonds, other.bonds)
+    }
+}
+
+/// Ring atom data with reference to ring set and molecule.
 #[derive(Debug, Clone, Copy)]
 pub struct RingAtomView<'a> {
     rings: &'a RingSet,
@@ -139,7 +173,7 @@ impl<'a> RingAtomView<'a> {
     }
 }
 
-/// One bond's ring situation within a [`RingsView`].
+/// Ring bond data with reference to ring set.
 #[derive(Debug, Clone, Copy)]
 pub struct RingBondView<'a> {
     rings: &'a RingSet,
@@ -212,22 +246,66 @@ mod tests {
     }
 
     #[rstest]
-    fn test_rings_view_count(ring_with_chain: MoleculeAst) {
-        let rings = ring_with_chain.rings_view();
-        assert_eq!(rings.count(), 1);
-        assert_eq!(rings.family(), RingFamily::Relevant);
-        assert_eq!(rings.max_ring_size(), 22);
+    fn test_ring_views_count(ring_with_chain: MoleculeAst) {
+        assert_eq!(ring_with_chain.rings().count(), 1);
     }
 
     #[rstest]
-    fn test_rings_view_get_contains(ring_with_chain: MoleculeAst) {
-        let rings = ring_with_chain.rings_view();
-        assert!(rings.contains(RingId(0)));
-        assert!(!rings.contains(RingId(1)));
-        assert_eq!(rings.get(RingId(0)).unwrap().len(), 6);
-        assert!(rings.get(RingId(1)).is_none());
-        assert_eq!(rings.ids().collect::<Vec<_>>(), vec![RingId(0)]);
-        assert_eq!(rings.iter().count(), 1);
+    fn test_ring_views_ids(ring_with_chain: MoleculeAst) {
+        assert_eq!(
+            ring_with_chain.rings().ids().collect::<Vec<_>>(),
+            vec![RingId(0)],
+        );
+    }
+
+    #[rstest]
+    fn test_ring_views_iter(ring_with_chain: MoleculeAst) {
+        let rings = ring_with_chain.rings();
+        let rings: Vec<(RingId, usize)> = rings.iter().map(|r| (r.id, r.len())).collect();
+        assert_eq!(rings, vec![(RingId(0), 6)]);
+    }
+
+    #[rstest]
+    #[case::present(RingId(0), Some(6))]
+    #[case::absent(RingId(1), None)]
+    fn test_ring_views_get(
+        ring_with_chain: MoleculeAst,
+        #[case] ring: RingId,
+        #[case] expected_len: Option<usize>,
+    ) {
+        assert_eq!(
+            ring_with_chain.rings().get(ring).map(|r| r.len()),
+            expected_len
+        );
+    }
+
+    #[rstest]
+    #[case::present(RingId(0), true)]
+    #[case::absent(RingId(1), false)]
+    fn test_ring_views_contains(
+        ring_with_chain: MoleculeAst,
+        #[case] ring: RingId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(ring_with_chain.rings().contains(ring), expected);
+    }
+
+    #[rstest]
+    fn test_ring_views_family(ring_with_chain: MoleculeAst) {
+        assert_eq!(ring_with_chain.rings().family(), RingFamily::Relevant);
+    }
+
+    #[rstest]
+    fn test_ring_views_max_ring_size(ring_with_chain: MoleculeAst) {
+        assert_eq!(ring_with_chain.rings().max_ring_size(), 22);
+    }
+
+    #[rstest]
+    fn test_ring_views_into_ring_set(ring_with_chain: MoleculeAst) {
+        let ring_set = ring_with_chain.rings().into_ring_set();
+        assert_eq!(ring_set.count(), 1);
+        assert!(ring_set.contains_atom(AtomId(0)));
+        assert!(!ring_set.contains_atom(AtomId(6)));
     }
 
     #[rstest]
@@ -238,25 +316,104 @@ mod tests {
         #[case] atom: AtomId,
         #[case] expected: bool,
     ) {
+        assert_eq!(ring_with_chain.rings().atom(atom).is_in_ring(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), vec![RingId(0)])]
+    #[case::chain_atom(AtomId(6), vec![])]
+    fn test_ring_atom_view_rings(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<RingId>,
+    ) {
+        let ids: Vec<RingId> = ring_with_chain
+            .rings()
+            .atom(atom)
+            .rings()
+            .map(|r| r.id)
+            .collect();
+        assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    #[case::all_ring_atom(AtomId(0), RingScope::All, ValueAst::Lit(1))]
+    #[case::size_match(AtomId(0), RingScope::Size(6), ValueAst::Lit(1))]
+    #[case::size_no_match(AtomId(0), RingScope::Size(5), ValueAst::Lit(0))]
+    #[case::chain_atom(AtomId(6), RingScope::All, ValueAst::Lit(0))]
+    fn test_ring_atom_view_ring_membership(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] scope: RingScope,
+        #[case] expected: ValueAst,
+    ) {
         assert_eq!(
-            ring_with_chain.rings_view().atom(atom).is_in_ring(),
+            ring_with_chain.rings().atom(atom).ring_membership(scope),
             expected
         );
     }
 
     #[rstest]
-    fn test_ring_atom_view_counts(ring_with_chain: MoleculeAst) {
-        let rings = ring_with_chain.rings_view();
-        let atom = rings.atom(AtomId(0));
-        assert_eq!(atom.ring_count(), ValueAst::Lit(1));
-        assert_eq!(atom.ring_size_count(6), ValueAst::Lit(1));
-        assert_eq!(atom.ring_size_count(5), ValueAst::Lit(0));
-        assert_eq!(atom.smallest_ring_size(), Some(6));
-        // atom 0 has two incident ring bonds (0-1, 0-5) and one chain bond (0-6)
-        assert_eq!(atom.ring_degree(), ValueAst::Lit(2));
-        assert_eq!(atom.ring_valence(), ValueAst::Lit(2));
-        assert_eq!(rings.atom(AtomId(6)).smallest_ring_size(), None);
-        assert_eq!(rings.atom(AtomId(6)).ring_count(), ValueAst::Lit(0));
+    #[case::ring_atom(AtomId(0), ValueAst::Lit(1))]
+    #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
+    fn test_ring_atom_view_ring_count(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.rings().atom(atom).ring_count(), expected);
+    }
+
+    #[rstest]
+    #[case::size_match(AtomId(0), 6, ValueAst::Lit(1))]
+    #[case::size_no_match(AtomId(0), 5, ValueAst::Lit(0))]
+    #[case::chain_atom(AtomId(6), 6, ValueAst::Lit(0))]
+    fn test_ring_atom_view_ring_size_count(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] size: u8,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(
+            ring_with_chain.rings().atom(atom).ring_size_count(size),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), Some(6))]
+    #[case::chain_atom(AtomId(6), None)]
+    fn test_ring_atom_view_smallest_ring_size(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Option<usize>,
+    ) {
+        assert_eq!(
+            ring_with_chain.rings().atom(atom).smallest_ring_size(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), ValueAst::Lit(2))]
+    #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
+    fn test_ring_atom_view_ring_degree(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.rings().atom(atom).ring_degree(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), ValueAst::Lit(2))]
+    #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
+    fn test_ring_atom_view_ring_valence(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.rings().atom(atom).ring_valence(), expected);
     }
 
     #[rstest]
@@ -267,19 +424,81 @@ mod tests {
         #[case] bond: BondId,
         #[case] expected: bool,
     ) {
+        assert_eq!(ring_with_chain.rings().bond(bond).is_in_ring(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_bond(BondId(0), vec![RingId(0)])]
+    #[case::chain_bond(BondId(6), vec![])]
+    fn test_ring_bond_view_rings(
+        ring_with_chain: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: Vec<RingId>,
+    ) {
+        let ids: Vec<RingId> = ring_with_chain
+            .rings()
+            .bond(bond)
+            .rings()
+            .map(|r| r.id)
+            .collect();
+        assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    #[case::all_ring_bond(BondId(0), RingScope::All, ValueAst::Lit(1))]
+    #[case::size_match(BondId(0), RingScope::Size(6), ValueAst::Lit(1))]
+    #[case::size_no_match(BondId(0), RingScope::Size(5), ValueAst::Lit(0))]
+    #[case::chain_bond(BondId(6), RingScope::All, ValueAst::Lit(0))]
+    fn test_ring_bond_view_ring_membership(
+        ring_with_chain: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] scope: RingScope,
+        #[case] expected: ValueAst,
+    ) {
         assert_eq!(
-            ring_with_chain.rings_view().bond(bond).is_in_ring(),
+            ring_with_chain.rings().bond(bond).ring_membership(scope),
             expected
         );
     }
 
     #[rstest]
-    fn test_ring_bond_view_counts(ring_with_chain: MoleculeAst) {
-        let rings = ring_with_chain.rings_view();
-        assert_eq!(rings.bond(BondId(0)).ring_count(), ValueAst::Lit(1));
-        assert_eq!(rings.bond(BondId(0)).ring_size_count(6), ValueAst::Lit(1));
-        assert_eq!(rings.bond(BondId(0)).smallest_ring_size(), Some(6));
-        assert_eq!(rings.bond(BondId(6)).ring_count(), ValueAst::Lit(0));
-        assert_eq!(rings.bond(BondId(6)).smallest_ring_size(), None);
+    #[case::ring_bond(BondId(0), ValueAst::Lit(1))]
+    #[case::chain_bond(BondId(6), ValueAst::Lit(0))]
+    fn test_ring_bond_view_ring_count(
+        ring_with_chain: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.rings().bond(bond).ring_count(), expected);
+    }
+
+    #[rstest]
+    #[case::size_match(BondId(0), 6, ValueAst::Lit(1))]
+    #[case::size_no_match(BondId(0), 5, ValueAst::Lit(0))]
+    #[case::chain_bond(BondId(6), 6, ValueAst::Lit(0))]
+    fn test_ring_bond_view_ring_size_count(
+        ring_with_chain: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] size: u8,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(
+            ring_with_chain.rings().bond(bond).ring_size_count(size),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::ring_bond(BondId(0), Some(6))]
+    #[case::chain_bond(BondId(6), None)]
+    fn test_ring_bond_view_smallest_ring_size(
+        ring_with_chain: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: Option<usize>,
+    ) {
+        assert_eq!(
+            ring_with_chain.rings().bond(bond).smallest_ring_size(),
+            expected
+        );
     }
 }

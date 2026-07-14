@@ -378,6 +378,7 @@ mod tests {
 
     fn enumerate_simple(ast: &MoleculeAst) -> RingSet {
         ast.rings_with(RingFamily::Simple, 22, |_| true)
+            .into_ring_set()
     }
 
     #[fixture]

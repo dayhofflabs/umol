@@ -35,7 +35,9 @@ fn test_clar_aromaticity_find_from_rings() {
         bonds,
         ..Default::default()
     });
-    let rings = ast.rings_with(RingFamily::Simple, 6, |_| true);
+    let rings = ast
+        .rings_with(RingFamily::Simple, 6, |_| true)
+        .into_ring_set();
     let systems = ClarAromaticity
         .find_from_rings(&ast, &rings, &|view| match &view.ast.element {
             ElementAst::Lit(Element::C) => Some(1),

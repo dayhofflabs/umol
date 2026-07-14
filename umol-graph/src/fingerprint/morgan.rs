@@ -8,7 +8,7 @@
 //! integer truncation is table-sensitive, so isotope bit-exactness depends on our
 //! mass tables agreeing with RDKit's; natural atoms are always 0.
 
-use umol_ast::ast::{AsLit, AtomId, BondId, IsotopeMassAst, MoleculeAst};
+use umol_ast::ast::{AsLit, AtomId, BondId, IsotopeMassAst, MoleculeAst, RingSet};
 use umol_chem::isotope::Isotope;
 use umol_graph_core::CircularRefinementAlgorithm;
 
@@ -39,8 +39,9 @@ impl MorganFeaturizer {
     /// The circular-refinement identifier multiset (one per surviving environment);
     /// dedup yields the binary set, counting yields the counted set.
     fn identifiers(&self, mol: &MoleculeAst) -> Vec<u64> {
+        let rings = mol.rings().into_ring_set();
         mol.raw_graph().circular_refine(
-            |node| atom_components(mol, AtomId::from(node)),
+            |node| atom_components(mol, &rings, AtomId::from(node)),
             |edge| bond_type(mol, BondId::from(edge)),
             CircularRefinementAlgorithm::Ec {
                 radius: self.radius,
@@ -53,7 +54,7 @@ impl MorganFeaturizer {
 /// RDKit `getConnectivityInvariants` component vector: atomic number, total degree
 /// (heavy + H), attached H count, formal charge, deltaMass, and a trailing `1` if
 /// the atom is in a ring.
-fn atom_components(mol: &MoleculeAst, id: AtomId) -> Vec<u32> {
+fn atom_components(mol: &MoleculeAst, rings: &RingSet, id: AtomId) -> Vec<u32> {
     let atom = mol.atom(id);
     let element = atom.element().as_lit().expect("ground atom");
     let heavy_degree = atom.heavy_atom_degree().as_lit().expect("ground atom");
@@ -75,7 +76,7 @@ fn atom_components(mol: &MoleculeAst, id: AtomId) -> Vec<u32> {
         charge as i32 as u32,
         delta_mass as u32,
     ];
-    if atom.is_in_ring() {
+    if rings.contains_atom(id) {
         components.push(1);
     }
     components

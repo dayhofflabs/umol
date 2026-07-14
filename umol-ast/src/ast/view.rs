@@ -38,7 +38,7 @@ pub use noncovalent::{
     NoncovalentBondEditorView, NoncovalentBondEditorViewMut, NoncovalentBondView,
     NoncovalentBondViewMut, NoncovalentBondViews,
 };
-pub use ring::{RingAtomView, RingBondView, RingsView};
+pub use ring::{RingAtomView, RingBondView, RingView, RingViews};
 pub use stereo::{
     StereoAtomEditorView, StereoAtomEditorViewMut, StereoAtomView, StereoAtomViewMut,
     StereoAtomViews, StereoBondEditorView, StereoBondEditorViewMut, StereoBondView,

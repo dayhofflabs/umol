@@ -1,13 +1,11 @@
-//! Ring detection and ring-system analysis.
-//!
-//! Ring enumeration uses Vismara's relevant-cycle algorithm from
-//! `umol_graph_core`, decomposed over biconnected components.
+//! Ring detection and enumeration.
 
 use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use umol_graph_core::{CycleEnumerationAlgorithm, Graph, NodeId};
 
 use super::id::{AtomId, BondId};
+use super::view::RingView;
 
 /// Index of a ring within a `RingSet`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -34,47 +32,13 @@ impl Ring {
     }
 }
 
-fn intersection<T: Copy + Eq>(a: &[T], b: &[T]) -> Vec<T> {
+pub(crate) fn intersection<T: Copy + Eq>(a: &[T], b: &[T]) -> Vec<T> {
     let (small, large) = if a.len() <= b.len() { (a, b) } else { (b, a) };
     small
         .iter()
         .copied()
         .filter(|x| large.contains(x))
         .collect()
-}
-
-/// Borrowed view of a ring: its index plus its atom and bond membership.
-#[derive(Debug, Clone, Copy)]
-pub struct RingView<'a> {
-    pub id: RingId,
-    atoms: &'a [AtomId],
-    bonds: &'a [BondId],
-}
-
-impl<'a> RingView<'a> {
-    pub fn atoms(&self) -> &'a [AtomId] {
-        self.atoms
-    }
-
-    pub fn bonds(&self) -> &'a [BondId] {
-        self.bonds
-    }
-
-    pub fn len(&self) -> usize {
-        self.atoms.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.atoms.is_empty()
-    }
-
-    pub fn shared_atoms(&self, other: &RingView<'_>) -> Vec<AtomId> {
-        intersection(self.atoms, other.atoms)
-    }
-
-    pub fn shared_bonds(&self, other: &RingView<'_>) -> Vec<BondId> {
-        intersection(self.bonds, other.bonds)
-    }
 }
 
 /// Topological relation between two rings in a `RingSet`.
@@ -213,20 +177,15 @@ impl RingSet {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = RingView<'_>> + '_ {
-        self.rings.iter().enumerate().map(|(i, r)| RingView {
-            id: RingId(i as u32),
-            atoms: &r.atoms,
-            bonds: &r.bonds,
-        })
+        self.rings
+            .iter()
+            .enumerate()
+            .map(|(i, r)| RingView::new(RingId(i as u32), &r.atoms, &r.bonds))
     }
 
     pub fn get(&self, id: RingId) -> Option<RingView<'_>> {
         let r = self.rings.get(id.index())?;
-        Some(RingView {
-            id,
-            atoms: &r.atoms,
-            bonds: &r.bonds,
-        })
+        Some(RingView::new(id, &r.atoms, &r.bonds))
     }
 
     pub fn shared_atoms(&self, a: RingId, b: RingId) -> Vec<AtomId> {
@@ -363,18 +322,18 @@ impl RingSet {
 
 /// Edge in a `RingGraph`: the two rings it connects and their relation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RingGraphEdge {
+pub struct RingConnection {
     pub first: RingId,
     pub second: RingId,
     pub relation: RingRelation,
 }
 
-/// Graph over rings, with `RingRelation`-labeled edges. Connected
+/// Ring graph: `RingConnection`s plus adjacency lists. Connected
 /// components of the fused/bridged/spiro subgraph correspond to ring
 /// systems.
 #[derive(Debug, Clone)]
 pub struct RingGraph {
-    edges: Vec<RingGraphEdge>,
+    edges: Vec<RingConnection>,
     neighbors: Vec<Vec<(RingId, RingRelation)>>,
 }
 
@@ -389,7 +348,7 @@ impl RingGraph {
                 if relation == RingRelation::Disjoint || relation == RingRelation::Identical {
                     continue;
                 }
-                edges.push(RingGraphEdge {
+                edges.push(RingConnection {
                     first: a,
                     second: b,
                     relation,
@@ -405,7 +364,7 @@ impl RingGraph {
         Self { edges, neighbors }
     }
 
-    pub fn edges(&self) -> &[RingGraphEdge] {
+    pub fn edges(&self) -> &[RingConnection] {
         &self.edges
     }
 
@@ -1018,7 +977,7 @@ mod tests {
         let graph = fused_pair.graph();
         assert_eq!(
             graph.edges(),
-            &[RingGraphEdge {
+            &[RingConnection {
                 first: RingId(0),
                 second: RingId(1),
                 relation: RingRelation::Fused,

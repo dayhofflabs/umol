@@ -26,7 +26,7 @@ use super::super::id::{
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
-use super::super::ring::{RingFamily, RingSet};
+use super::super::ring::RingFamily;
 use super::super::spin::SpinStateAst;
 use super::super::stereo::{StereoAtomAst, StereoCosetAst, StereoKind};
 use super::super::value::ValueAst;
@@ -1398,33 +1398,6 @@ fn test_molecule_ast_rings_with_atom_filter() {
 }
 
 #[test]
-fn test_molecule_ast_rings_returns_same_slot() {
-    let ast = ring(6);
-    let first: *const RingSet = ast.rings();
-    let second: *const RingSet = ast.rings();
-    assert_eq!(first, second);
-}
-
-#[test]
-fn test_molecule_ast_rings_cache_survives_attribute_mutation() {
-    let mut ast = ring(6);
-    let first: *const RingSet = ast.rings();
-    ast.atom_mut(AtomId(0)).ast.charge = ValueAst::Lit(1);
-    let second: *const RingSet = ast.rings();
-    assert_eq!(first, second);
-}
-
-#[test]
-fn test_molecule_ast_rings_cache_reset_after_build() {
-    let ast = ring(6);
-    let count_before = ast.rings().count();
-    let mut b = ast.edit();
-    b.atom_mut(AtomId(0)).ast.element = ElementAst::Lit(Element::N);
-    let next = b.build();
-    assert_eq!(next.rings().count(), count_before);
-}
-
-#[test]
 fn test_molecule_ast_rings_induced() {
     let ast = mol_dsl!(
         r#"{
@@ -1458,7 +1431,9 @@ fn test_molecule_ast_rings_induced_naphthalene() {
 #[test]
 fn test_rings_membership() {
     let ast = ring(6);
-    let rs = ast.rings_with(RingFamily::Simple, 6, |_| true);
+    let rs = ast
+        .rings_with(RingFamily::Simple, 6, |_| true)
+        .into_ring_set();
     assert!(rs.contains_atom(AtomId(0)));
     assert!(rs.contains_bond(BondId(0)));
     assert_eq!(rs.atom_smallest_ring_size(AtomId(0)), Some(6));
