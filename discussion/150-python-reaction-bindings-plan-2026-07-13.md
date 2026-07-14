@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S5a.1 complete; S5a.2 is next**
+Status: **ACTIVE — S5a.2 complete; S5a.3 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1134,7 +1134,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      unchanged. The complete `umol-py` Rust suite passes with 924 tests; focused
      clippy with warnings denied and rustfmt pass.
 
-  2. **S5a.2 — constructor and live component facade**
+  2. **DONE — S5a.2 — constructor and live component facade**
      (`umol-py/src/reaction.rs`) — add
      `ReactionAst(lhs=None, deltas=None)`, resolving `None` to the corresponding
      empty Rust component and snapshotting every supplied component through the
@@ -1149,6 +1149,21 @@ scope and membership payloads live in `constraint/ring.rs`.
      write-through for both components, setter snapshot isolation,
      whole-component self-assignment, equality, unhashability, and exact repr.
      **Additive (green).** `[dep: S5a.1]`
+
+     **Implemented verification:** the optional constructor resolves absent
+     components to empty Rust values and routes supplied values through the
+     snapshot conversion kernel. The two getters return stable handles to the
+     held components, so molecule edits and delta appends write through. Both
+     setters allocate the complete replacement snapshot before mutably borrowing
+     the reaction, making external-source mutation and self-assignment safe.
+     Structural equality compares current Rust snapshots, Python hashing is
+     disabled, and repr renders
+     `ReactionAst(lhs=MoleculeAst(...), deltas=Deltas(...))`. Eight new Rust
+     cases cover default and populated construction, constructor isolation,
+     getter identity and live writes, replacement isolation, both self-assignment
+     paths, equality/unhashability, and exact repr. All 11 focused reaction cases
+     and the complete 932-test `umol-py` Rust suite pass; focused clippy with
+     warnings denied and rustfmt pass.
 
   3. **S5a.3 — public registration and facade closure** (`umol-py/src/lib.rs`,
      `python/umol/__init__.py`, `tests/test_reaction.py`) — register and export
