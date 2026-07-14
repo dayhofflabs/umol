@@ -1,0 +1,1659 @@
+//! Constraint payloads specific to atoms.
+
+use std::vec::IntoIter;
+
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
+use pyo3::prelude::*;
+use pyo3::types::{PyAny, PyDict};
+use umol_ast::ast::{
+    AromaticValenceAst as AstAromaticValenceAst, AtomConstraintAst as AstAtomConstraintAst,
+    AtomConstraintKey as AstAtomConstraintKey, AtomConstraintsAst as AstAtomConstraintsAst,
+    AtomId as AstAtomId, MulticenterValenceAst as AstMulticenterValenceAst,
+    RingScope as AstRingScope, TetrahedralStereoAst as AstTetrahedralStereoAst,
+};
+
+use super::ring::{RingMembershipAst, RingScope};
+use crate::atom::AtomAst;
+use crate::convert::{hash_ast, into_py_variant, variant_repr};
+use crate::molecule::MoleculeAst;
+use crate::stereo::{TetrahedralStereo, TetrahedralStereoAst};
+use crate::value::{ValueArg, ValueAst};
+
+/// Aromatic-valence state: undetermined, explicitly not aromatic, or aromatic with
+/// an aromatic-valence count. `Aromatic` coerces `int | ValueAst` on construction.
+#[pyclass]
+pub enum AromaticValenceAst {
+    Undetermined(),
+    NotAromatic(),
+    Aromatic(ValueArg),
+}
+
+#[pymethods]
+impl AromaticValenceAst {
+    pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            Self::Undetermined() => ("Undetermined", 0),
+            Self::NotAromatic() => ("NotAromatic", 0),
+            Self::Aromatic(_) => ("Aromatic", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "AromaticValenceAst", variant, arity)
+    }
+}
+
+impl AromaticValenceAst {
+    pub(crate) fn from_ast(py: Python<'_>, ast: &AstAromaticValenceAst) -> PyResult<Self> {
+        Ok(match ast {
+            AstAromaticValenceAst::Undetermined => Self::Undetermined(),
+            AstAromaticValenceAst::NotAromatic => Self::NotAromatic(),
+            AstAromaticValenceAst::Aromatic(v) => Self::Aromatic(ValueArg::Ast(into_py_variant(
+                py,
+                ValueAst::from_ast(py, v)?,
+            )?)),
+        })
+    }
+
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstAromaticValenceAst {
+        match self {
+            Self::Undetermined() => AstAromaticValenceAst::Undetermined,
+            Self::NotAromatic() => AstAromaticValenceAst::NotAromatic,
+            Self::Aromatic(v) => AstAromaticValenceAst::Aromatic(v.to_ast(py)),
+        }
+    }
+}
+
+#[derive(FromPyObject)]
+pub(crate) enum AromaticValenceArg {
+    Flag(bool),
+    Value(ValueArg),
+    Ast(Py<AromaticValenceAst>),
+}
+
+impl AromaticValenceArg {
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstAromaticValenceAst> {
+        Ok(match self {
+            Self::Flag(false) => AstAromaticValenceAst::NotAromatic,
+            Self::Flag(true) => {
+                return Err(PyValueError::new_err(
+                    "aromatic_valence = True is not meaningful; use an int count or False",
+                ))
+            }
+            Self::Value(v) => AstAromaticValenceAst::Aromatic(v.to_ast(py)),
+            Self::Ast(a) => a.bind(py).borrow().to_ast(py),
+        })
+    }
+}
+
+/// Multicenter-valence state: undetermined, explicitly not multicenter, or
+/// multicenter with a multicenter-valence count.
+#[pyclass]
+pub enum MulticenterValenceAst {
+    Undetermined(),
+    NotMulticenter(),
+    Multicenter(ValueArg),
+}
+
+#[pymethods]
+impl MulticenterValenceAst {
+    pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            Self::Undetermined() => ("Undetermined", 0),
+            Self::NotMulticenter() => ("NotMulticenter", 0),
+            Self::Multicenter(_) => ("Multicenter", 1),
+        };
+        variant_repr(
+            slf.bind(py).as_any(),
+            "MulticenterValenceAst",
+            variant,
+            arity,
+        )
+    }
+}
+
+impl MulticenterValenceAst {
+    pub(crate) fn from_ast(py: Python<'_>, ast: &AstMulticenterValenceAst) -> PyResult<Self> {
+        Ok(match ast {
+            AstMulticenterValenceAst::Undetermined => Self::Undetermined(),
+            AstMulticenterValenceAst::NotMulticenter => Self::NotMulticenter(),
+            AstMulticenterValenceAst::Multicenter(v) => Self::Multicenter(ValueArg::Ast(
+                into_py_variant(py, ValueAst::from_ast(py, v)?)?,
+            )),
+        })
+    }
+
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstMulticenterValenceAst {
+        match self {
+            Self::Undetermined() => AstMulticenterValenceAst::Undetermined,
+            Self::NotMulticenter() => AstMulticenterValenceAst::NotMulticenter,
+            Self::Multicenter(v) => AstMulticenterValenceAst::Multicenter(v.to_ast(py)),
+        }
+    }
+}
+
+#[derive(FromPyObject)]
+pub(crate) enum MulticenterValenceArg {
+    Flag(bool),
+    Value(ValueArg),
+    Ast(Py<MulticenterValenceAst>),
+}
+
+impl MulticenterValenceArg {
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstMulticenterValenceAst> {
+        Ok(match self {
+            Self::Flag(false) => AstMulticenterValenceAst::NotMulticenter,
+            Self::Flag(true) => {
+                return Err(PyValueError::new_err(
+                    "multicenter_valence = True is not meaningful; use an int count or False",
+                ))
+            }
+            Self::Value(v) => AstMulticenterValenceAst::Multicenter(v.to_ast(py)),
+            Self::Ast(a) => a.bind(py).borrow().to_ast(py),
+        })
+    }
+}
+
+#[derive(FromPyObject)]
+pub(crate) enum TetrahedralStereoArg {
+    Flag(bool),
+    Config(TetrahedralStereo),
+    Ast(Py<TetrahedralStereoAst>),
+}
+
+impl TetrahedralStereoArg {
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstTetrahedralStereoAst> {
+        Ok(match self {
+            Self::Flag(false) => AstTetrahedralStereoAst::NotStereo,
+            Self::Flag(true) => {
+                return Err(PyValueError::new_err(
+                    "tetrahedral_stereo = True is not meaningful; use TetrahedralStereo.Ccw/Cw or False",
+                ))
+            }
+            Self::Config(ts) => ts.to_ast(),
+            Self::Ast(a) => a.bind(py).borrow().to_ast(py),
+        })
+    }
+}
+
+/// The key (identity) of an atom constraint, for keyed lookup. The ring-membership
+/// key carries its ring scope; all other keys are the bare discriminant.
+#[pyclass]
+pub enum AtomConstraintKey {
+    Valence(),
+    DonatedPairs(),
+    AcceptedPairs(),
+    AromaticValence(),
+    MulticenterValence(),
+    TetrahedralStereo(),
+    Degree(),
+    TotalDegree(),
+    TotalValence(),
+    RingDegree(),
+    RingValence(),
+    TotalHydrogens(),
+    RingMembership(Py<RingScope>),
+}
+
+#[pymethods]
+impl AtomConstraintKey {
+    pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            AtomConstraintKey::Valence() => ("Valence", 0),
+            AtomConstraintKey::DonatedPairs() => ("DonatedPairs", 0),
+            AtomConstraintKey::AcceptedPairs() => ("AcceptedPairs", 0),
+            AtomConstraintKey::AromaticValence() => ("AromaticValence", 0),
+            AtomConstraintKey::MulticenterValence() => ("MulticenterValence", 0),
+            AtomConstraintKey::TetrahedralStereo() => ("TetrahedralStereo", 0),
+            AtomConstraintKey::Degree() => ("Degree", 0),
+            AtomConstraintKey::TotalDegree() => ("TotalDegree", 0),
+            AtomConstraintKey::TotalValence() => ("TotalValence", 0),
+            AtomConstraintKey::RingDegree() => ("RingDegree", 0),
+            AtomConstraintKey::RingValence() => ("RingValence", 0),
+            AtomConstraintKey::TotalHydrogens() => ("TotalHydrogens", 0),
+            AtomConstraintKey::RingMembership(_) => ("RingMembership", 1),
+        };
+        variant_repr(slf.bind(py).as_any(), "AtomConstraintKey", variant, arity)
+    }
+}
+
+impl AtomConstraintKey {
+    pub(crate) fn from_ast(py: Python<'_>, ast: &AstAtomConstraintKey) -> PyResult<Self> {
+        Ok(match ast {
+            AstAtomConstraintKey::Valence => Self::Valence(),
+            AstAtomConstraintKey::DonatedPairs => Self::DonatedPairs(),
+            AstAtomConstraintKey::AcceptedPairs => Self::AcceptedPairs(),
+            AstAtomConstraintKey::AromaticValence => Self::AromaticValence(),
+            AstAtomConstraintKey::MulticenterValence => Self::MulticenterValence(),
+            AstAtomConstraintKey::TetrahedralStereo => Self::TetrahedralStereo(),
+            AstAtomConstraintKey::Degree => Self::Degree(),
+            AstAtomConstraintKey::TotalDegree => Self::TotalDegree(),
+            AstAtomConstraintKey::TotalValence => Self::TotalValence(),
+            AstAtomConstraintKey::RingDegree => Self::RingDegree(),
+            AstAtomConstraintKey::RingValence => Self::RingValence(),
+            AstAtomConstraintKey::TotalHydrogens => Self::TotalHydrogens(),
+            AstAtomConstraintKey::RingMembership(scope) => {
+                Self::RingMembership(into_py_variant(py, RingScope::from_ast(scope))?)
+            }
+        })
+    }
+
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstAtomConstraintKey {
+        match self {
+            Self::Valence() => AstAtomConstraintKey::Valence,
+            Self::DonatedPairs() => AstAtomConstraintKey::DonatedPairs,
+            Self::AcceptedPairs() => AstAtomConstraintKey::AcceptedPairs,
+            Self::AromaticValence() => AstAtomConstraintKey::AromaticValence,
+            Self::MulticenterValence() => AstAtomConstraintKey::MulticenterValence,
+            Self::TetrahedralStereo() => AstAtomConstraintKey::TetrahedralStereo,
+            Self::Degree() => AstAtomConstraintKey::Degree,
+            Self::TotalDegree() => AstAtomConstraintKey::TotalDegree,
+            Self::TotalValence() => AstAtomConstraintKey::TotalValence,
+            Self::RingDegree() => AstAtomConstraintKey::RingDegree,
+            Self::RingValence() => AstAtomConstraintKey::RingValence,
+            Self::TotalHydrogens() => AstAtomConstraintKey::TotalHydrogens,
+            Self::RingMembership(scope) => {
+                AstAtomConstraintKey::RingMembership(scope.bind(py).borrow().to_ast())
+            }
+        }
+    }
+}
+
+/// An atom-scope constraint: a predicate on a valence, degree, ring, or stereo
+/// property of a single atom.
+#[pyclass]
+pub enum AtomConstraintAst {
+    Valence(Py<ValueAst>),
+    TotalValence(Py<ValueAst>),
+    AromaticValence(Py<AromaticValenceAst>),
+    MulticenterValence(Py<MulticenterValenceAst>),
+    DonatedPairs(Py<ValueAst>),
+    AcceptedPairs(Py<ValueAst>),
+    Degree(Py<ValueAst>),
+    TotalDegree(Py<ValueAst>),
+    RingDegree(Py<ValueAst>),
+    RingValence(Py<ValueAst>),
+    TotalHydrogens(Py<ValueAst>),
+    RingMembership(Py<RingMembershipAst>),
+    TetrahedralStereo(Py<TetrahedralStereoAst>),
+}
+
+#[pymethods]
+impl AtomConstraintAst {
+    /// The constraint's key (identity).
+    #[getter]
+    pub(crate) fn key(&self, py: Python<'_>) -> PyResult<AtomConstraintKey> {
+        AtomConstraintKey::from_ast(py, &self.to_ast(py).key())
+    }
+
+    pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let variant = match &*slf.bind(py).borrow() {
+            AtomConstraintAst::Valence(_) => "Valence",
+            AtomConstraintAst::TotalValence(_) => "TotalValence",
+            AtomConstraintAst::AromaticValence(_) => "AromaticValence",
+            AtomConstraintAst::MulticenterValence(_) => "MulticenterValence",
+            AtomConstraintAst::DonatedPairs(_) => "DonatedPairs",
+            AtomConstraintAst::AcceptedPairs(_) => "AcceptedPairs",
+            AtomConstraintAst::Degree(_) => "Degree",
+            AtomConstraintAst::TotalDegree(_) => "TotalDegree",
+            AtomConstraintAst::RingDegree(_) => "RingDegree",
+            AtomConstraintAst::RingValence(_) => "RingValence",
+            AtomConstraintAst::TotalHydrogens(_) => "TotalHydrogens",
+            AtomConstraintAst::RingMembership(_) => "RingMembership",
+            AtomConstraintAst::TetrahedralStereo(_) => "TetrahedralStereo",
+        };
+        variant_repr(slf.bind(py).as_any(), "AtomConstraintAst", variant, 1)
+    }
+}
+
+impl AtomConstraintAst {
+    pub(crate) fn from_ast(py: Python<'_>, ast: &AstAtomConstraintAst) -> PyResult<Self> {
+        Ok(match ast {
+            AstAtomConstraintAst::Valence(v) => {
+                Self::Valence(into_py_variant(py, ValueAst::from_ast(py, v)?)?)
+            }
+            AstAtomConstraintAst::TotalValence(v) => {
+                Self::TotalValence(into_py_variant(py, ValueAst::from_ast(py, v)?)?)
+            }
+            AstAtomConstraintAst::AromaticValence(c) => {
+                Self::AromaticValence(into_py_variant(py, AromaticValenceAst::from_ast(py, c)?)?)
+            }
+            AstAtomConstraintAst::MulticenterValence(c) => Self::MulticenterValence(
+                into_py_variant(py, MulticenterValenceAst::from_ast(py, c)?)?,
+            ),
+            AstAtomConstraintAst::DonatedPairs(v) => {
+                Self::DonatedPairs(into_py_variant(py, ValueAst::from_ast(py, v)?)?)
+            }
+            AstAtomConstraintAst::AcceptedPairs(v) => {
+                Self::AcceptedPairs(into_py_variant(py, ValueAst::from_ast(py, v)?)?)
+            }
+            AstAtomConstraintAst::Degree(v) => {
+                Self::Degree(into_py_variant(py, ValueAst::from_ast(py, v)?)?)
+            }
+            AstAtomConstraintAst::TotalDegree(v) => {
+                Self::TotalDegree(into_py_variant(py, ValueAst::from_ast(py, v)?)?)
+            }
+            AstAtomConstraintAst::RingDegree(v) => {
+                Self::RingDegree(into_py_variant(py, ValueAst::from_ast(py, v)?)?)
+            }
+            AstAtomConstraintAst::RingValence(v) => {
+                Self::RingValence(into_py_variant(py, ValueAst::from_ast(py, v)?)?)
+            }
+            AstAtomConstraintAst::TotalHydrogens(v) => {
+                Self::TotalHydrogens(into_py_variant(py, ValueAst::from_ast(py, v)?)?)
+            }
+            AstAtomConstraintAst::RingMembership(m) => {
+                Self::RingMembership(into_py_variant(py, RingMembershipAst::from_ast(py, m)?)?)
+            }
+            AstAtomConstraintAst::TetrahedralStereo(c) => Self::TetrahedralStereo(into_py_variant(
+                py,
+                TetrahedralStereoAst::from_ast(py, c)?,
+            )?),
+        })
+    }
+
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstAtomConstraintAst {
+        match self {
+            Self::Valence(v) => AstAtomConstraintAst::Valence(v.bind(py).borrow().to_ast(py)),
+            Self::TotalValence(v) => {
+                AstAtomConstraintAst::TotalValence(v.bind(py).borrow().to_ast(py))
+            }
+            Self::AromaticValence(c) => {
+                AstAtomConstraintAst::AromaticValence(c.bind(py).borrow().to_ast(py))
+            }
+            Self::MulticenterValence(c) => {
+                AstAtomConstraintAst::MulticenterValence(c.bind(py).borrow().to_ast(py))
+            }
+            Self::DonatedPairs(v) => {
+                AstAtomConstraintAst::DonatedPairs(v.bind(py).borrow().to_ast(py))
+            }
+            Self::AcceptedPairs(v) => {
+                AstAtomConstraintAst::AcceptedPairs(v.bind(py).borrow().to_ast(py))
+            }
+            Self::Degree(v) => AstAtomConstraintAst::Degree(v.bind(py).borrow().to_ast(py)),
+            Self::TotalDegree(v) => {
+                AstAtomConstraintAst::TotalDegree(v.bind(py).borrow().to_ast(py))
+            }
+            Self::RingDegree(v) => AstAtomConstraintAst::RingDegree(v.bind(py).borrow().to_ast(py)),
+            Self::RingValence(v) => {
+                AstAtomConstraintAst::RingValence(v.bind(py).borrow().to_ast(py))
+            }
+            Self::TotalHydrogens(v) => {
+                AstAtomConstraintAst::TotalHydrogens(v.bind(py).borrow().to_ast(py))
+            }
+            Self::RingMembership(m) => {
+                AstAtomConstraintAst::RingMembership(m.bind(py).borrow().to_ast(py))
+            }
+            Self::TetrahedralStereo(c) => {
+                AstAtomConstraintAst::TetrahedralStereo(c.bind(py).borrow().to_ast(py))
+            }
+        }
+    }
+}
+
+/// The argument to `update`: another constraint container (value or live view) or
+/// an iterable of `AtomConstraintAst` (each `set`, last-wins).
+#[derive(FromPyObject)]
+pub(crate) enum AtomConstraintsUpdate {
+    Container(Py<AtomConstraintsAst>),
+    View(Py<AtomConstraintsView>),
+    Entries(Vec<Py<AtomConstraintAst>>),
+}
+
+impl AtomConstraintsUpdate {
+    /// Read every Python object into owned data — no write target is touched. Callers
+    /// resolve *before* taking the write borrow so a view (or container) that aliases the
+    /// same atom is read while nothing is borrowed (otherwise
+    /// `atom.constraints.update(atom.constraints)` self-aliases into a double-borrow panic).
+    pub(crate) fn resolve(&self, py: Python<'_>) -> PyResult<ResolvedAtomConstraintsUpdate> {
+        Ok(match self {
+            AtomConstraintsUpdate::Container(c) => {
+                ResolvedAtomConstraintsUpdate::Overlay(c.bind(py).borrow().inner().clone())
+            }
+            AtomConstraintsUpdate::View(v) => ResolvedAtomConstraintsUpdate::Overlay(
+                v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?,
+            ),
+            AtomConstraintsUpdate::Entries(entries) => ResolvedAtomConstraintsUpdate::Entries(
+                entries
+                    .iter()
+                    .map(|entry| entry.bind(py).borrow().to_ast(py))
+                    .collect(),
+            ),
+        })
+    }
+}
+
+/// A `AtomConstraintsUpdate` with all Python-object reads already done, so it can be applied
+/// under a write borrow without re-entering Python.
+pub(crate) enum ResolvedAtomConstraintsUpdate {
+    /// A whole container (from another container or a live view): overlaid via `update`
+    /// (last-wins per key; undetermined entries remove).
+    Overlay(AstAtomConstraintsAst),
+    /// Loose entries: `set` each (last-wins; undetermined entries stored, not removed).
+    Entries(Vec<AstAtomConstraintAst>),
+}
+
+impl ResolvedAtomConstraintsUpdate {
+    /// Overlay onto `target` in place. No Python reads.
+    pub(crate) fn apply(self, target: &mut AstAtomConstraintsAst) {
+        match self {
+            ResolvedAtomConstraintsUpdate::Overlay(overlay) => target.update(&overlay),
+            ResolvedAtomConstraintsUpdate::Entries(entries) => {
+                for entry in entries {
+                    target.set(entry);
+                }
+            }
+        }
+    }
+}
+
+/// A whole-container argument that snapshots either a value container or a live
+/// view — for the atom `constraints` setter, which accepts either.
+#[derive(FromPyObject)]
+pub(crate) enum AtomConstraintsArg {
+    Container(Py<AtomConstraintsAst>),
+    View(Py<AtomConstraintsView>),
+}
+
+impl AtomConstraintsArg {
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstAtomConstraintsAst> {
+        match self {
+            AtomConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            AtomConstraintsArg::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
+        }
+    }
+}
+
+/// The atom-scope constraints on an atom, in kind-sorted order. Mutable, hence
+/// value-equal but unhashable (matching `AtomAst`).
+#[pyclass(eq)]
+#[derive(PartialEq)]
+pub struct AtomConstraintsAst(AstAtomConstraintsAst);
+
+#[pymethods]
+impl AtomConstraintsAst {
+    /// Build from a sequence of constraints (kind-sorted; a unique kind replaces
+    /// an earlier one, ring memberships accumulate per scope).
+    #[new]
+    pub(crate) fn new(py: Python<'_>, entries: Vec<Py<AtomConstraintAst>>) -> Self {
+        let mut constraints = AstAtomConstraintsAst::new();
+        constraints.extend(
+            entries
+                .into_iter()
+                .map(|entry| entry.bind(py).borrow().to_ast(py)),
+        );
+        AtomConstraintsAst(constraints)
+    }
+
+    pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let mut parts = Vec::with_capacity(self.0.len());
+        for entry in self.0.iter() {
+            let mirror = into_py_variant(py, AtomConstraintAst::from_ast(py, entry)?)?;
+            parts.push(mirror.bind(py).as_any().repr()?.extract::<String>()?);
+        }
+        Ok(format!("AtomConstraintsAst([{}])", parts.join(", ")))
+    }
+
+    /// Insert `c`, replacing any existing entry of the same key (last-wins).
+    pub(crate) fn set(&mut self, py: Python<'_>, c: Py<AtomConstraintAst>) {
+        self.0.set(c.bind(py).borrow().to_ast(py));
+    }
+
+    /// Remove the entry with the given key, returning it if present (dict `pop`).
+    pub(crate) fn pop(
+        &mut self,
+        py: Python<'_>,
+        key: Py<AtomConstraintKey>,
+    ) -> PyResult<Option<AtomConstraintAst>> {
+        self.0
+            .remove(key.bind(py).borrow().to_ast(py))
+            .map(|c| AtomConstraintAst::from_ast(py, &c))
+            .transpose()
+    }
+
+    /// Overlay `other` onto self in place — another container, a live view, or an
+    /// iterable of `AtomConstraintAst` (last-wins per key; undetermined entries remove).
+    /// Takes `slf` by handle so `other` is fully read *before* the write borrow —
+    /// `cs.update(cs)` on the same container is then a no-op, not a double-borrow panic.
+    pub(crate) fn update(
+        slf: Py<Self>,
+        py: Python<'_>,
+        other: AtomConstraintsUpdate,
+    ) -> PyResult<()> {
+        let resolved = other.resolve(py)?;
+        resolved.apply(&mut slf.borrow_mut(py).0);
+        Ok(())
+    }
+
+    pub(crate) fn __len__(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Iterate the constraint keys (mapping-style, canonical order).
+    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<AtomConstraintKeyIter> {
+        atom_constraint_keys(py, &self.0)
+    }
+
+    /// The constraint keys, in canonical order.
+    pub(crate) fn keys(&self, py: Python<'_>) -> PyResult<AtomConstraintKeyIter> {
+        atom_constraint_keys(py, &self.0)
+    }
+
+    /// The constraints, in canonical order.
+    pub(crate) fn values(&self, py: Python<'_>) -> PyResult<AtomConstraintIter> {
+        atom_constraints_iter(py, &self.0)
+    }
+
+    /// The `(key, constraint)` pairs, in canonical order.
+    pub(crate) fn items(&self, py: Python<'_>) -> PyResult<AtomConstraintItemsIter> {
+        atom_constraint_items(py, &self.0)
+    }
+
+    /// The constraint with the given key, or `default` (`None`) if absent.
+    #[pyo3(signature = (key, default=None))]
+    pub(crate) fn get(
+        &self,
+        py: Python<'_>,
+        key: Py<AtomConstraintKey>,
+        default: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        match self.0.get(key.bind(py).borrow().to_ast(py)) {
+            Some(constraint) => {
+                Ok(into_py_variant(py, AtomConstraintAst::from_ast(py, constraint)?)?.into_any())
+            }
+            None => Ok(default.unwrap_or_else(|| py.None())),
+        }
+    }
+
+    /// The constraint with the given key; raises `KeyError` if absent.
+    pub(crate) fn __getitem__(
+        &self,
+        py: Python<'_>,
+        key: Py<AtomConstraintKey>,
+    ) -> PyResult<AtomConstraintAst> {
+        match self.0.get(key.bind(py).borrow().to_ast(py)) {
+            Some(constraint) => AtomConstraintAst::from_ast(py, constraint),
+            None => Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            )),
+        }
+    }
+
+    /// Remove the entry with the given key; raises `KeyError` if absent.
+    pub(crate) fn __delitem__(
+        &mut self,
+        py: Python<'_>,
+        key: Py<AtomConstraintKey>,
+    ) -> PyResult<()> {
+        if self.0.remove(key.bind(py).borrow().to_ast(py)).is_some() {
+            Ok(())
+        } else {
+            Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            ))
+        }
+    }
+
+    pub(crate) fn __contains__(&self, py: Python<'_>, key: Py<AtomConstraintKey>) -> bool {
+        self.0.contains(key.bind(py).borrow().to_ast(py))
+    }
+
+    /// The valence value, or `None`.
+    #[getter]
+    pub(crate) fn valence(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .valence()
+            .map(|v| ValueAst::from_ast(py, v))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_valence(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0.set(AstAtomConstraintAst::valence(value.to_ast(py)));
+    }
+
+    /// The donated-pairs value, or `None`.
+    #[getter]
+    pub(crate) fn donated_pairs(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .donated_pairs()
+            .map(|v| ValueAst::from_ast(py, v))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_donated_pairs(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0
+            .set(AstAtomConstraintAst::donated_pairs(value.to_ast(py)));
+    }
+
+    /// The accepted-pairs value, or `None`.
+    #[getter]
+    pub(crate) fn accepted_pairs(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .accepted_pairs()
+            .map(|v| ValueAst::from_ast(py, v))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_accepted_pairs(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0
+            .set(AstAtomConstraintAst::accepted_pairs(value.to_ast(py)));
+    }
+
+    /// The aromatic-valence state, or `None`.
+    #[getter]
+    pub(crate) fn aromatic_valence(&self, py: Python<'_>) -> PyResult<Option<AromaticValenceAst>> {
+        self.0
+            .aromatic_valence()
+            .map(|c| AromaticValenceAst::from_ast(py, c))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_aromatic_valence(
+        &mut self,
+        py: Python<'_>,
+        value: AromaticValenceArg,
+    ) -> PyResult<()> {
+        self.0
+            .set(AstAtomConstraintAst::aromatic_valence(value.to_ast(py)?));
+        Ok(())
+    }
+
+    /// The multicenter-valence state, or `None`.
+    #[getter]
+    pub(crate) fn multicenter_valence(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<Option<MulticenterValenceAst>> {
+        self.0
+            .multicenter_valence()
+            .map(|c| MulticenterValenceAst::from_ast(py, c))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_multicenter_valence(
+        &mut self,
+        py: Python<'_>,
+        value: MulticenterValenceArg,
+    ) -> PyResult<()> {
+        self.0
+            .set(AstAtomConstraintAst::multicenter_valence(value.to_ast(py)?));
+        Ok(())
+    }
+
+    /// The tetrahedral-stereo state, or `None`.
+    #[getter]
+    pub(crate) fn tetrahedral_stereo(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<Option<TetrahedralStereoAst>> {
+        self.0
+            .tetrahedral_stereo()
+            .map(|c| TetrahedralStereoAst::from_ast(py, c))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_tetrahedral_stereo(
+        &mut self,
+        py: Python<'_>,
+        value: TetrahedralStereoArg,
+    ) -> PyResult<()> {
+        self.0
+            .set(AstAtomConstraintAst::tetrahedral_stereo(value.to_ast(py)?));
+        Ok(())
+    }
+
+    /// The degree value, or `None`.
+    #[getter]
+    pub(crate) fn degree(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .degree()
+            .map(|v| ValueAst::from_ast(py, v))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_degree(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0.set(AstAtomConstraintAst::degree(value.to_ast(py)));
+    }
+
+    /// The total-degree value, or `None`.
+    #[getter]
+    pub(crate) fn total_degree(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .total_degree()
+            .map(|v| ValueAst::from_ast(py, v))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_total_degree(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0
+            .set(AstAtomConstraintAst::total_degree(value.to_ast(py)));
+    }
+
+    /// The total-valence value, or `None`.
+    #[getter]
+    pub(crate) fn total_valence(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .total_valence()
+            .map(|v| ValueAst::from_ast(py, v))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_total_valence(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0
+            .set(AstAtomConstraintAst::total_valence(value.to_ast(py)));
+    }
+
+    /// The ring-degree value, or `None`.
+    #[getter]
+    pub(crate) fn ring_degree(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .ring_degree()
+            .map(|v| ValueAst::from_ast(py, v))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_ring_degree(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0
+            .set(AstAtomConstraintAst::ring_degree(value.to_ast(py)));
+    }
+
+    /// The ring-valence value, or `None`.
+    #[getter]
+    pub(crate) fn ring_valence(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .ring_valence()
+            .map(|v| ValueAst::from_ast(py, v))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_ring_valence(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0
+            .set(AstAtomConstraintAst::ring_valence(value.to_ast(py)));
+    }
+
+    /// The total-hydrogens value, or `None`.
+    #[getter]
+    pub(crate) fn total_hydrogens(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .total_hydrogens()
+            .map(|v| ValueAst::from_ast(py, v))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_total_hydrogens(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0
+            .set(AstAtomConstraintAst::total_hydrogens(value.to_ast(py)));
+    }
+
+    /// The all-rings membership count, or `None`.
+    #[getter]
+    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.0
+            .ring_count()
+            .map(|v| ValueAst::from_ast(py, v))
+            .transpose()
+    }
+
+    #[setter]
+    pub(crate) fn set_ring_count(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0.set(AstAtomConstraintAst::ring_membership(
+            AstRingScope::All,
+            value.to_ast(py),
+        ));
+    }
+
+    /// The sized-ring membership counts, as a subscriptable proxy keyed by ring
+    /// size: `constraints.ring_size_count[6]`, `[6] = 3`, `del [6]`.
+    #[getter]
+    pub(crate) fn ring_size_count(slf: Py<Self>) -> AtomRingSizeCounts {
+        AtomRingSizeCounts {
+            backing: AtomRingSizeBacking::Value(slf),
+        }
+    }
+
+    /// The present constraints as a dict keyed by snake_case name; values are the
+    /// inner-value mirrors. Ring memberships key by scope: `ring_count` for the
+    /// all-rings scope, `ring_size_count_<n>` for a specific ring size.
+    pub(crate) fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        atom_constraints_asdict(py, &self.0)
+    }
+}
+
+impl AtomConstraintsAst {
+    /// The wrapped AST constraints — read access for atom construction.
+    pub(crate) fn inner(&self) -> &AstAtomConstraintsAst {
+        &self.0
+    }
+
+    /// Mutable access to the wrapped AST constraints — for the value-backed proxy.
+    pub(crate) fn inner_mut(&mut self) -> &mut AstAtomConstraintsAst {
+        &mut self.0
+    }
+
+    /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
+    /// in-crate construction wraps `AtomConstraintsAst(..)` directly.
+    #[cfg(test)]
+    pub(crate) fn from_inner(constraints: AstAtomConstraintsAst) -> Self {
+        AtomConstraintsAst(constraints)
+    }
+}
+
+/// Build the per-constraint iterator handle from a borrowed container.
+pub(crate) fn atom_constraints_iter(
+    py: Python<'_>,
+    constraints: &AstAtomConstraintsAst,
+) -> PyResult<AtomConstraintIter> {
+    let entries = constraints
+        .iter()
+        .map(|constraint| into_py_variant(py, AtomConstraintAst::from_ast(py, constraint)?))
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(AtomConstraintIter {
+        entries: entries.into_iter(),
+    })
+}
+
+/// Build the key iterator handle from a borrowed container (mapping-style keys).
+pub(crate) fn atom_constraint_keys(
+    py: Python<'_>,
+    constraints: &AstAtomConstraintsAst,
+) -> PyResult<AtomConstraintKeyIter> {
+    let keys = constraints
+        .iter()
+        .map(|constraint| into_py_variant(py, AtomConstraintKey::from_ast(py, &constraint.key())?))
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(AtomConstraintKeyIter {
+        keys: keys.into_iter(),
+    })
+}
+
+/// Build the item iterator handle (`(key, constraint)` pairs) from a borrowed container.
+pub(crate) fn atom_constraint_items(
+    py: Python<'_>,
+    constraints: &AstAtomConstraintsAst,
+) -> PyResult<AtomConstraintItemsIter> {
+    let items = constraints
+        .iter()
+        .map(|constraint| {
+            Ok((
+                into_py_variant(py, AtomConstraintKey::from_ast(py, &constraint.key())?)?,
+                into_py_variant(py, AtomConstraintAst::from_ast(py, constraint)?)?,
+            ))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(AtomConstraintItemsIter {
+        items: items.into_iter(),
+    })
+}
+
+/// The present constraints as a dict keyed by snake_case name; values are the
+/// inner-value mirrors. Ring memberships key by scope: `ring_count` for the
+/// all-rings scope, `ring_size_count_<n>` for a specific ring size.
+pub(crate) fn atom_constraints_asdict<'py>(
+    py: Python<'py>,
+    constraints: &AstAtomConstraintsAst,
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    for entry in constraints.iter() {
+        match entry {
+            AstAtomConstraintAst::Valence(v) => {
+                dict.set_item("valence", ValueAst::from_ast(py, v)?)?
+            }
+            AstAtomConstraintAst::DonatedPairs(v) => {
+                dict.set_item("donated_pairs", ValueAst::from_ast(py, v)?)?
+            }
+            AstAtomConstraintAst::AcceptedPairs(v) => {
+                dict.set_item("accepted_pairs", ValueAst::from_ast(py, v)?)?
+            }
+            AstAtomConstraintAst::AromaticValence(c) => {
+                dict.set_item("aromatic_valence", AromaticValenceAst::from_ast(py, c)?)?
+            }
+            AstAtomConstraintAst::MulticenterValence(c) => dict.set_item(
+                "multicenter_valence",
+                MulticenterValenceAst::from_ast(py, c)?,
+            )?,
+            AstAtomConstraintAst::TetrahedralStereo(c) => {
+                dict.set_item("tetrahedral_stereo", TetrahedralStereoAst::from_ast(py, c)?)?
+            }
+            AstAtomConstraintAst::Degree(v) => {
+                dict.set_item("degree", ValueAst::from_ast(py, v)?)?
+            }
+            AstAtomConstraintAst::TotalDegree(v) => {
+                dict.set_item("total_degree", ValueAst::from_ast(py, v)?)?
+            }
+            AstAtomConstraintAst::TotalValence(v) => {
+                dict.set_item("total_valence", ValueAst::from_ast(py, v)?)?
+            }
+            AstAtomConstraintAst::RingDegree(v) => {
+                dict.set_item("ring_degree", ValueAst::from_ast(py, v)?)?
+            }
+            AstAtomConstraintAst::RingValence(v) => {
+                dict.set_item("ring_valence", ValueAst::from_ast(py, v)?)?
+            }
+            AstAtomConstraintAst::TotalHydrogens(v) => {
+                dict.set_item("total_hydrogens", ValueAst::from_ast(py, v)?)?
+            }
+            AstAtomConstraintAst::RingMembership(m) => {
+                let key = match m.scope {
+                    AstRingScope::All => "ring_count".to_string(),
+                    AstRingScope::Size(size) => format!("ring_size_count_{size}"),
+                };
+                dict.set_item(key, ValueAst::from_ast(py, &m.count)?)?
+            }
+        }
+    }
+    Ok(dict)
+}
+
+/// What an `AtomConstraintsView` writes through to: an atom within a molecule
+/// (by index) or a standalone `AtomAst`.
+pub(crate) enum AtomConstraintsBacking {
+    Molecule {
+        owner: Py<MoleculeAst>,
+        id: AstAtomId,
+    },
+    Atom(Py<AtomAst>),
+}
+
+/// A live handle onto one atom's constraints, backed by either a molecule-atom or
+/// a standalone `AtomAst`. Reads borrow the atom's constraints and read only the
+/// item they need (no whole-container clone); mutators write through to the atom in
+/// place, without a clone-and-writeback.
+#[pyclass]
+pub struct AtomConstraintsView {
+    pub(crate) backing: AtomConstraintsBacking,
+}
+
+impl AtomConstraintsView {
+    /// Borrow the backing atom's constraints and read one item through `f` — no clone.
+    pub(crate) fn read<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&AstAtomConstraintsAst) -> PyResult<R>,
+    ) -> PyResult<R> {
+        match &self.backing {
+            AtomConstraintsBacking::Molecule { owner, id } => {
+                let molecule = owner.bind(py).borrow();
+                let view = molecule
+                    .inner()
+                    .atoms()
+                    .get(*id)
+                    .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
+                f(&view.ast.constraints)
+            }
+            AtomConstraintsBacking::Atom(atom) => {
+                let atom = atom.bind(py).borrow();
+                f(&atom.inner().constraints)
+            }
+        }
+    }
+
+    /// Mutate the backing atom's constraints in place through `f`.
+    pub(crate) fn with_mut<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut AstAtomConstraintsAst) -> R,
+    ) -> R {
+        match &self.backing {
+            AtomConstraintsBacking::Molecule { owner, id } => f(&mut owner
+                .borrow_mut(py)
+                .inner_mut()
+                .atom_mut(*id)
+                .ast
+                .constraints),
+            AtomConstraintsBacking::Atom(atom) => {
+                f(&mut atom.borrow_mut(py).inner_mut().constraints)
+            }
+        }
+    }
+
+    /// Set one constraint on the backing atom in place (last-wins per key).
+    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: AstAtomConstraintAst) {
+        self.with_mut(py, |cs| cs.set(constraint));
+    }
+
+    /// Remove one key from the backing atom in place, returning the removed entry.
+    pub(crate) fn remove_ast(
+        &self,
+        py: Python<'_>,
+        key: AstAtomConstraintKey,
+    ) -> Option<AstAtomConstraintAst> {
+        self.with_mut(py, |cs| cs.remove(key))
+    }
+}
+
+#[pymethods]
+impl AtomConstraintsView {
+    pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let count = self.read(py, |cs| Ok(cs.len()))?;
+        Ok(format!("AtomConstraintsView({count} entries)"))
+    }
+
+    /// Insert `c` on the atom in place, replacing any existing entry of the same
+    /// key (last-wins).
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<AtomConstraintAst>) {
+        self.set_ast(py, c.bind(py).borrow().to_ast(py));
+    }
+
+    /// Remove the entry with the given key from the atom in place, returning it if
+    /// present (dict `pop`).
+    pub(crate) fn pop(
+        &self,
+        py: Python<'_>,
+        key: Py<AtomConstraintKey>,
+    ) -> PyResult<Option<AtomConstraintAst>> {
+        self.remove_ast(py, key.bind(py).borrow().to_ast(py))
+            .map(|c| AtomConstraintAst::from_ast(py, &c))
+            .transpose()
+    }
+
+    /// Remove the entry with the given key; raises `KeyError` if absent.
+    pub(crate) fn __delitem__(&self, py: Python<'_>, key: Py<AtomConstraintKey>) -> PyResult<()> {
+        if self
+            .remove_ast(py, key.bind(py).borrow().to_ast(py))
+            .is_some()
+        {
+            Ok(())
+        } else {
+            Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            ))
+        }
+    }
+
+    /// Overlay `other` onto the atom's constraints in place — another container, a live
+    /// view, or an iterable of `AtomConstraintAst` (last-wins per key; undetermined
+    /// entries remove). Resolves `other` to owned data *before* the write borrow, so a
+    /// view aliasing the same atom is not a double-borrow panic.
+    pub(crate) fn update(&self, py: Python<'_>, other: AtomConstraintsUpdate) -> PyResult<()> {
+        let resolved = other.resolve(py)?;
+        self.with_mut(py, |cs| resolved.apply(cs));
+        Ok(())
+    }
+
+    pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        self.read(py, |cs| Ok(cs.len()))
+    }
+
+    /// Iterate the constraint keys (mapping-style, canonical order).
+    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<AtomConstraintKeyIter> {
+        self.read(py, |cs| atom_constraint_keys(py, cs))
+    }
+
+    /// The constraint keys, in canonical order.
+    pub(crate) fn keys(&self, py: Python<'_>) -> PyResult<AtomConstraintKeyIter> {
+        self.read(py, |cs| atom_constraint_keys(py, cs))
+    }
+
+    /// The constraints, in canonical order.
+    pub(crate) fn values(&self, py: Python<'_>) -> PyResult<AtomConstraintIter> {
+        self.read(py, |cs| atom_constraints_iter(py, cs))
+    }
+
+    /// The `(key, constraint)` pairs, in canonical order.
+    pub(crate) fn items(&self, py: Python<'_>) -> PyResult<AtomConstraintItemsIter> {
+        self.read(py, |cs| atom_constraint_items(py, cs))
+    }
+
+    /// The constraint with the given key, or `default` (`None`) if absent.
+    #[pyo3(signature = (key, default=None))]
+    pub(crate) fn get(
+        &self,
+        py: Python<'_>,
+        key: Py<AtomConstraintKey>,
+        default: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        let key = key.bind(py).borrow().to_ast(py);
+        let found = self.read(py, |cs| {
+            cs.get(key)
+                .map(|constraint| AtomConstraintAst::from_ast(py, constraint))
+                .transpose()
+        })?;
+        match found {
+            Some(constraint) => Ok(into_py_variant(py, constraint)?.into_any()),
+            None => Ok(default.unwrap_or_else(|| py.None())),
+        }
+    }
+
+    /// The constraint with the given key; raises `KeyError` if absent.
+    pub(crate) fn __getitem__(
+        &self,
+        py: Python<'_>,
+        key: Py<AtomConstraintKey>,
+    ) -> PyResult<AtomConstraintAst> {
+        let ast_key = key.bind(py).borrow().to_ast(py);
+        let found = self.read(py, |cs| {
+            cs.get(ast_key)
+                .map(|constraint| AtomConstraintAst::from_ast(py, constraint))
+                .transpose()
+        })?;
+        match found {
+            Some(constraint) => Ok(constraint),
+            None => Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            )),
+        }
+    }
+
+    pub(crate) fn __contains__(
+        &self,
+        py: Python<'_>,
+        key: Py<AtomConstraintKey>,
+    ) -> PyResult<bool> {
+        let key = key.bind(py).borrow().to_ast(py);
+        self.read(py, |cs| Ok(cs.contains(key)))
+    }
+
+    /// The valence value, or `None`.
+    #[getter]
+    pub(crate) fn valence(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.read(py, |cs| {
+            cs.valence().map(|v| ValueAst::from_ast(py, v)).transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_valence(&self, py: Python<'_>, value: ValueArg) {
+        self.set_ast(py, AstAtomConstraintAst::valence(value.to_ast(py)));
+    }
+
+    /// The donated-pairs value, or `None`.
+    #[getter]
+    pub(crate) fn donated_pairs(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.read(py, |cs| {
+            cs.donated_pairs()
+                .map(|v| ValueAst::from_ast(py, v))
+                .transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_donated_pairs(&self, py: Python<'_>, value: ValueArg) {
+        self.set_ast(py, AstAtomConstraintAst::donated_pairs(value.to_ast(py)));
+    }
+
+    /// The accepted-pairs value, or `None`.
+    #[getter]
+    pub(crate) fn accepted_pairs(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.read(py, |cs| {
+            cs.accepted_pairs()
+                .map(|v| ValueAst::from_ast(py, v))
+                .transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_accepted_pairs(&self, py: Python<'_>, value: ValueArg) {
+        self.set_ast(py, AstAtomConstraintAst::accepted_pairs(value.to_ast(py)));
+    }
+
+    /// The aromatic-valence state, or `None`.
+    #[getter]
+    pub(crate) fn aromatic_valence(&self, py: Python<'_>) -> PyResult<Option<AromaticValenceAst>> {
+        self.read(py, |cs| {
+            cs.aromatic_valence()
+                .map(|c| AromaticValenceAst::from_ast(py, c))
+                .transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_aromatic_valence(
+        &self,
+        py: Python<'_>,
+        value: AromaticValenceArg,
+    ) -> PyResult<()> {
+        self.set_ast(
+            py,
+            AstAtomConstraintAst::aromatic_valence(value.to_ast(py)?),
+        );
+        Ok(())
+    }
+
+    /// The multicenter-valence state, or `None`.
+    #[getter]
+    pub(crate) fn multicenter_valence(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<Option<MulticenterValenceAst>> {
+        self.read(py, |cs| {
+            cs.multicenter_valence()
+                .map(|c| MulticenterValenceAst::from_ast(py, c))
+                .transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_multicenter_valence(
+        &self,
+        py: Python<'_>,
+        value: MulticenterValenceArg,
+    ) -> PyResult<()> {
+        self.set_ast(
+            py,
+            AstAtomConstraintAst::multicenter_valence(value.to_ast(py)?),
+        );
+        Ok(())
+    }
+
+    /// The tetrahedral-stereo state, or `None`.
+    #[getter]
+    pub(crate) fn tetrahedral_stereo(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<Option<TetrahedralStereoAst>> {
+        self.read(py, |cs| {
+            cs.tetrahedral_stereo()
+                .map(|c| TetrahedralStereoAst::from_ast(py, c))
+                .transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_tetrahedral_stereo(
+        &self,
+        py: Python<'_>,
+        value: TetrahedralStereoArg,
+    ) -> PyResult<()> {
+        self.set_ast(
+            py,
+            AstAtomConstraintAst::tetrahedral_stereo(value.to_ast(py)?),
+        );
+        Ok(())
+    }
+
+    /// The degree value, or `None`.
+    #[getter]
+    pub(crate) fn degree(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.read(py, |cs| {
+            cs.degree().map(|v| ValueAst::from_ast(py, v)).transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_degree(&self, py: Python<'_>, value: ValueArg) {
+        self.set_ast(py, AstAtomConstraintAst::degree(value.to_ast(py)));
+    }
+
+    /// The total-degree value, or `None`.
+    #[getter]
+    pub(crate) fn total_degree(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.read(py, |cs| {
+            cs.total_degree()
+                .map(|v| ValueAst::from_ast(py, v))
+                .transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_total_degree(&self, py: Python<'_>, value: ValueArg) {
+        self.set_ast(py, AstAtomConstraintAst::total_degree(value.to_ast(py)));
+    }
+
+    /// The total-valence value, or `None`.
+    #[getter]
+    pub(crate) fn total_valence(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.read(py, |cs| {
+            cs.total_valence()
+                .map(|v| ValueAst::from_ast(py, v))
+                .transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_total_valence(&self, py: Python<'_>, value: ValueArg) {
+        self.set_ast(py, AstAtomConstraintAst::total_valence(value.to_ast(py)));
+    }
+
+    /// The ring-degree value, or `None`.
+    #[getter]
+    pub(crate) fn ring_degree(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.read(py, |cs| {
+            cs.ring_degree()
+                .map(|v| ValueAst::from_ast(py, v))
+                .transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_ring_degree(&self, py: Python<'_>, value: ValueArg) {
+        self.set_ast(py, AstAtomConstraintAst::ring_degree(value.to_ast(py)));
+    }
+
+    /// The ring-valence value, or `None`.
+    #[getter]
+    pub(crate) fn ring_valence(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.read(py, |cs| {
+            cs.ring_valence()
+                .map(|v| ValueAst::from_ast(py, v))
+                .transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_ring_valence(&self, py: Python<'_>, value: ValueArg) {
+        self.set_ast(py, AstAtomConstraintAst::ring_valence(value.to_ast(py)));
+    }
+
+    /// The total-hydrogens value, or `None`.
+    #[getter]
+    pub(crate) fn total_hydrogens(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.read(py, |cs| {
+            cs.total_hydrogens()
+                .map(|v| ValueAst::from_ast(py, v))
+                .transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_total_hydrogens(&self, py: Python<'_>, value: ValueArg) {
+        self.set_ast(py, AstAtomConstraintAst::total_hydrogens(value.to_ast(py)));
+    }
+
+    /// The all-rings membership count, or `None`.
+    #[getter]
+    pub(crate) fn ring_count(&self, py: Python<'_>) -> PyResult<Option<ValueAst>> {
+        self.read(py, |cs| {
+            cs.ring_count()
+                .map(|v| ValueAst::from_ast(py, v))
+                .transpose()
+        })
+    }
+
+    #[setter]
+    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: ValueArg) {
+        self.set_ast(
+            py,
+            AstAtomConstraintAst::ring_membership(AstRingScope::All, value.to_ast(py)),
+        );
+    }
+
+    /// The sized-ring membership counts, as a subscriptable proxy keyed by ring
+    /// size: `constraints.ring_size_count[6]`, `[6] = 3`, `del [6]`.
+    #[getter]
+    pub(crate) fn ring_size_count(&self, py: Python<'_>) -> AtomRingSizeCounts {
+        let backing = match &self.backing {
+            AtomConstraintsBacking::Molecule { owner, id } => AtomRingSizeBacking::Molecule {
+                owner: owner.clone_ref(py),
+                id: *id,
+            },
+            AtomConstraintsBacking::Atom(atom) => AtomRingSizeBacking::Atom(atom.clone_ref(py)),
+        };
+        AtomRingSizeCounts { backing }
+    }
+
+    /// The present constraints as a dict keyed by snake_case name.
+    pub(crate) fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.read(py, |cs| atom_constraints_asdict(py, cs))
+    }
+}
+
+/// What a `AtomRingSizeCounts` proxy reads/writes through to: an atom within a molecule,
+/// a standalone `AtomAst`, or a standalone `AtomConstraintsAst` value.
+pub(crate) enum AtomRingSizeBacking {
+    Molecule {
+        owner: Py<MoleculeAst>,
+        id: AstAtomId,
+    },
+    Atom(Py<AtomAst>),
+    Value(Py<AtomConstraintsAst>),
+}
+
+/// A subscriptable proxy over the sized-ring membership counts of an atom, keyed by
+/// ring size: `proxy[size]` reads, `proxy[size] = count` sets, `del proxy[size]`
+/// removes. Backs onto whichever container produced it (dual-backing, like
+/// `AtomConstraintsView`).
+#[pyclass]
+pub struct AtomRingSizeCounts {
+    pub(crate) backing: AtomRingSizeBacking,
+}
+
+impl AtomRingSizeCounts {
+    /// Borrow the backing constraints and read through `f` — no clone.
+    pub(crate) fn read<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&AstAtomConstraintsAst) -> PyResult<R>,
+    ) -> PyResult<R> {
+        match &self.backing {
+            AtomRingSizeBacking::Molecule { owner, id } => {
+                let molecule = owner.bind(py).borrow();
+                let view = molecule
+                    .inner()
+                    .atoms()
+                    .get(*id)
+                    .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
+                f(&view.ast.constraints)
+            }
+            AtomRingSizeBacking::Atom(atom) => f(&atom.bind(py).borrow().inner().constraints),
+            AtomRingSizeBacking::Value(value) => f(value.bind(py).borrow().inner()),
+        }
+    }
+
+    /// Mutate the backing constraints in place through `f`.
+    pub(crate) fn write(&self, py: Python<'_>, f: impl FnOnce(&mut AstAtomConstraintsAst)) {
+        match &self.backing {
+            AtomRingSizeBacking::Molecule { owner, id } => f(&mut owner
+                .borrow_mut(py)
+                .inner_mut()
+                .atom_mut(*id)
+                .ast
+                .constraints),
+            AtomRingSizeBacking::Atom(atom) => f(&mut atom.borrow_mut(py).inner_mut().constraints),
+            AtomRingSizeBacking::Value(value) => f(value.borrow_mut(py).inner_mut()),
+        }
+    }
+}
+
+#[pymethods]
+impl AtomRingSizeCounts {
+    /// The membership count for rings of `size`, or `None`.
+    pub(crate) fn __getitem__(&self, py: Python<'_>, size: u8) -> PyResult<Option<ValueAst>> {
+        self.read(py, |cs| {
+            cs.ring_size_count(size)
+                .map(|v| ValueAst::from_ast(py, v))
+                .transpose()
+        })
+    }
+
+    /// The number of distinct ring sizes with a membership constraint.
+    pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        self.read(py, |cs| Ok(ring_sizes(cs).count()))
+    }
+
+    pub(crate) fn __contains__(&self, py: Python<'_>, size: u8) -> PyResult<bool> {
+        self.read(py, |cs| Ok(cs.ring_size_count(size).is_some()))
+    }
+
+    /// Iterate the present ring sizes (as ints).
+    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<AtomRingSizeIter> {
+        let sizes = self.read(py, |cs| Ok(ring_sizes(cs).collect::<Vec<u8>>()))?;
+        Ok(AtomRingSizeIter {
+            sizes: sizes.into_iter(),
+        })
+    }
+
+    /// Set the membership count for rings of `size` in place.
+    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: ValueArg) {
+        let constraint =
+            AstAtomConstraintAst::ring_membership(AstRingScope::Size(size), count.to_ast(py));
+        self.write(py, |cs| cs.set(constraint));
+    }
+
+    /// Remove the sized-ring membership for `size` in place.
+    pub(crate) fn __delitem__(&self, py: Python<'_>, size: u8) {
+        self.write(py, |cs| {
+            cs.remove(AstAtomConstraintKey::RingMembership(AstRingScope::Size(
+                size,
+            )));
+        });
+    }
+
+    pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        self.read(py, |cs| {
+            let mut parts = Vec::new();
+            for entry in cs.iter() {
+                if let AstAtomConstraintAst::RingMembership(m) = entry {
+                    if let AstRingScope::Size(size) = m.scope {
+                        let count = into_py_variant(py, ValueAst::from_ast(py, &m.count)?)?;
+                        parts.push(format!(
+                            "{size}: {}",
+                            count.bind(py).as_any().repr()?.extract::<String>()?
+                        ));
+                    }
+                }
+            }
+            Ok(format!("AtomRingSizeCounts({{{}}})", parts.join(", ")))
+        })
+    }
+}
+
+/// The ring sizes with a membership constraint, in kind-sorted order.
+pub(crate) fn ring_sizes(constraints: &AstAtomConstraintsAst) -> impl Iterator<Item = u8> + '_ {
+    constraints.iter().filter_map(|entry| match entry {
+        AstAtomConstraintAst::RingMembership(m) => match m.scope {
+            AstRingScope::Size(size) => Some(size),
+            AstRingScope::All => None,
+        },
+        _ => None,
+    })
+}
+
+#[pyclass]
+pub(crate) struct AtomRingSizeIter {
+    sizes: IntoIter<u8>,
+}
+
+#[pymethods]
+impl AtomRingSizeIter {
+    pub(crate) fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    pub(crate) fn __next__(&mut self) -> Option<u8> {
+        self.sizes.next()
+    }
+}
+
+#[pyclass]
+pub(crate) struct AtomConstraintIter {
+    entries: IntoIter<Py<AtomConstraintAst>>,
+}
+
+#[pymethods]
+impl AtomConstraintIter {
+    pub(crate) fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    pub(crate) fn __next__(&mut self) -> Option<Py<AtomConstraintAst>> {
+        self.entries.next()
+    }
+}
+
+#[pyclass]
+pub(crate) struct AtomConstraintKeyIter {
+    keys: IntoIter<Py<AtomConstraintKey>>,
+}
+
+#[pymethods]
+impl AtomConstraintKeyIter {
+    pub(crate) fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    pub(crate) fn __next__(&mut self) -> Option<Py<AtomConstraintKey>> {
+        self.keys.next()
+    }
+}
+
+#[pyclass]
+pub(crate) struct AtomConstraintItemsIter {
+    items: IntoIter<(Py<AtomConstraintKey>, Py<AtomConstraintAst>)>,
+}
+
+#[pymethods]
+impl AtomConstraintItemsIter {
+    pub(crate) fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    pub(crate) fn __next__(&mut self) -> Option<(Py<AtomConstraintKey>, Py<AtomConstraintAst>)> {
+        self.items.next()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case(AstAromaticValenceAst::Undetermined)]
+    #[case(AstAromaticValenceAst::NotAromatic)]
+    #[case(AstAromaticValenceAst::aromatic(1))]
+    pub(crate) fn test_aromatic_valence_ast_roundtrip(#[case] ast: AstAromaticValenceAst) {
+        Python::attach(|py| {
+            assert_eq!(
+                AromaticValenceAst::from_ast(py, &ast).unwrap().to_ast(py),
+                ast
+            );
+        });
+    }
+
+    #[rstest]
+    #[case(AstMulticenterValenceAst::Undetermined)]
+    #[case(AstMulticenterValenceAst::NotMulticenter)]
+    #[case(AstMulticenterValenceAst::multicenter(2))]
+    pub(crate) fn test_multicenter_valence_ast_roundtrip(#[case] ast: AstMulticenterValenceAst) {
+        Python::attach(|py| {
+            assert_eq!(
+                MulticenterValenceAst::from_ast(py, &ast)
+                    .unwrap()
+                    .to_ast(py),
+                ast
+            );
+        });
+    }
+}

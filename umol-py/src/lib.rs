@@ -5,49 +5,60 @@ use pyo3::prelude::*;
 
 #[cfg(feature = "graph")]
 use crate::{
-    aromatic::{
-        AromaticSystemAst, AromaticSystemConstraintAst, AromaticSystemConstraintKey,
-        AromaticSystemConstraintsAst, AromaticSystemConstraintsView, AromaticSystemView,
-        AromaticSystemViews,
-    },
-    atom::{
-        AtomAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst, AtomConstraintsView,
-        AtomRingSizeCounts, AtomView, AtomViews, ElementAst, IsotopeMassAst, SpinStateAst,
-    },
-    bond::{
-        BondAst, BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondConstraintsView,
-        BondRingSizeCounts, BondView, BondViews,
-    },
+    aromatic::{AromaticSystemAst, AromaticSystemView, AromaticSystemViews},
+    atom::{AtomAst, AtomView, AtomViews, ElementAst, IsotopeMassAst},
+    bond::{BondAst, BondView, BondViews},
     boolean::BooleanAst,
-    constraint::{AromaticValenceAst, MulticenterValenceAst, RingMembershipAst, RingScope},
-    dative::{
-        DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst,
-        DativeBondConstraintsView, DativeBondRingSizeCounts, DativeBondView, DativeBondViews,
+    constraint::{
+        aromatic::{
+            AromaticSystemConstraintAst, AromaticSystemConstraintKey, AromaticSystemConstraintsAst,
+            AromaticSystemConstraintsView,
+        },
+        atom::{
+            AromaticValenceAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst,
+            AtomConstraintsView, AtomRingSizeCounts, MulticenterValenceAst,
+        },
+        bond::{
+            BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondConstraintsView,
+            BondRingSizeCounts,
+        },
+        dative::{
+            DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst,
+            DativeBondConstraintsView, DativeBondRingSizeCounts,
+        },
+        multicenter::{
+            MulticenterBondConstraintAst, MulticenterBondConstraintKey,
+            MulticenterBondConstraintsAst, MulticenterBondConstraintsView,
+        },
+        noncovalent::{
+            NoncovalentBondConstraintAst, NoncovalentBondConstraintKey,
+            NoncovalentBondConstraintsAst, NoncovalentBondConstraintsView,
+        },
+        ring::{RingMembershipAst, RingScope},
+        stereo::{
+            FluxionalityAst, LigandSymmetryAst, StereoAtomConstraintAst, StereoAtomConstraintKey,
+            StereoAtomConstraintsAst, StereoAtomConstraintsView, StereoBondConstraintAst,
+            StereoBondConstraintKey, StereoBondConstraintsAst, StereoBondConstraintsView,
+            StereogenicityAst, TopicityAst, TopicityRelationAst,
+        },
     },
+    dative::{DativeBondAst, DativeBondView, DativeBondViews},
     electrons::ElectronCountsAst,
     element::Element,
     error::ParseError,
     molecule::MoleculeAst,
-    multicenter::{
-        MulticenterBondAst, MulticenterBondConstraintAst, MulticenterBondConstraintKey,
-        MulticenterBondConstraintsAst, MulticenterBondConstraintsView, MulticenterBondView,
-        MulticenterBondViews,
-    },
+    multicenter::{MulticenterBondAst, MulticenterBondView, MulticenterBondViews},
     noncovalent::{
-        NoncovalentBondAst, NoncovalentBondConstraintAst, NoncovalentBondConstraintKey,
-        NoncovalentBondConstraintsAst, NoncovalentBondConstraintsView, NoncovalentBondKind,
-        NoncovalentBondKindAst, NoncovalentBondView, NoncovalentBondViews,
+        NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst, NoncovalentBondView,
+        NoncovalentBondViews,
     },
+    spin::SpinStateAst,
     stereo::{
-        CisTransStereo, CisTransStereoAst, FluxionalityAst, LigandPermutation, LigandSymmetryAst,
-        Orientation, OrientedLigandPermutation, Permutation, StereoAtomAst,
-        StereoAtomConstraintAst, StereoAtomConstraintKey, StereoAtomConstraintsAst,
-        StereoAtomConstraintsView, StereoAtomView, StereoAtomViews, StereoBondAst,
-        StereoBondConstraintAst, StereoBondConstraintKey, StereoBondConstraintsAst,
-        StereoBondConstraintsView, StereoBondView, StereoBondViews, StereoConfigurationAst,
-        StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoTerm,
-        Stereogenicity, StereogenicityAst, TetrahedralStereo, TetrahedralStereoAst, Topicity,
-        TopicityAst, TopicityRelationAst,
+        CisTransStereo, CisTransStereoAst, LigandPermutation, Orientation,
+        OrientedLigandPermutation, Permutation, StereoAtomAst, StereoAtomView, StereoAtomViews,
+        StereoBondAst, StereoBondView, StereoBondViews, StereoConfigurationAst, StereoCosetAst,
+        StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoTerm, Stereogenicity,
+        TetrahedralStereo, TetrahedralStereoAst, Topicity,
     },
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
 };
@@ -75,11 +86,11 @@ mod error;
 #[cfg(feature = "graph")]
 mod molecule;
 #[cfg(feature = "graph")]
-mod molecule_constraint;
-#[cfg(feature = "graph")]
 mod multicenter;
 #[cfg(feature = "graph")]
 mod noncovalent;
+#[cfg(feature = "graph")]
+mod spin;
 #[cfg(feature = "graph")]
 mod stereo;
 #[cfg(feature = "graph")]

@@ -194,15 +194,23 @@ suite, clippy, and formatting pass.
 
 ### S1 — Complete the constraint payload foundation
 
-- **S1a — constraint leaves and anchors** (`umol-py/src/molecule_constraint.rs`):
-  add the following exact type closure, in the listed dependency order:
+The Python constraint bindings live under the singular `umol-py/src/constraint/`
+module, grouped by domain: `atom`, `bond`, `dative`, `aromatic`, `multicenter`,
+`noncovalent`, `stereo`, `molecule`, and `ring`. Entity modules retain the owned
+entity values and molecule-backed entity views. Aromatic- and multicenter-valence
+payloads are atom constraints and therefore live in `constraint/atom.rs`; ring
+scope and membership payloads live in `constraint/ring.rs`.
 
-  1. **`SubPatternAnchor` mirror struct** — eight `(target, pattern)` id-pair
+- **S1a — DONE — constraint leaves and anchors**
+  (`umol-py/src/constraint/molecule.rs`): the following exact type closure is
+  implemented in dependency order:
+
+  1. **DONE — `SubPatternAnchor` mirror struct** — eight `(target, pattern)` id-pair
      collections: `atoms`, `bonds`, `dative_bonds`, `aromatic_systems`,
      `multicenter_bonds`, `noncovalent_bonds`, `stereo_atoms`, and
      `stereo_bonds`. Constructor/getters use bare `int` pairs. Its
      `from_ast`/`to_ast` bridge is required by `MoleculeConstraint::SubPattern`.
-  2. **`RelationalConstraint` structural mirror enum** — all 31 Rust variants,
+  2. **DONE — `RelationalConstraint` structural mirror enum** — all 31 Rust variants,
      grouped by referenced entity:
      - dative (8): `DativeBondDonors`, `DativeBondDonor`,
        `DativeBondContainsAllDonors`, `DativeBondAllDonors`,
@@ -222,7 +230,7 @@ suite, clippy, and formatting pass.
      - stereo bond (5): `StereoBondSite`, `StereoBondContains`,
        `StereoBondLigands`, `StereoBondAllLigands`,
        `StereoBondAnyLigand`.
-  3. **`MoleculeConstraint` structural mirror enum** — all five Rust variants:
+  3. **DONE — `MoleculeConstraint` structural mirror enum** — all five Rust variants:
      `ChargeSum { atoms, sum }`, `SpinSum { atoms, spin }`,
      `BondOrderSum { bonds, sum }`, `Connected { atoms }`, and
      `SubPattern { anchor, pattern }`. `None` on an atom/bond subset continues
@@ -232,21 +240,83 @@ suite, clippy, and formatting pass.
   relational variants (13 payload values because `EndsSatisfy` carries two),
   `ValueAst`, `SpinStateAst`, and `MoleculeAst`. The eight Rust id newtypes map
   to bare Python `int`; S1a adds no Python id classes. Shared conversion support
-  is `into_py_variant`/`variant_repr`. `MoleculeAst::from_inner` must lose its
-  test-only gate so `MoleculeConstraint::SubPattern` can wrap a nested pattern
-  at runtime. Add `mod molecule_constraint` to compile the slice, but defer
-  native-module registration and `python/umol/__init__.py` exports to S1d.
+  is `into_py_variant`/`variant_repr`. `MoleculeAst::from_inner` is available at
+  runtime so `MoleculeConstraint::SubPattern` can wrap a nested pattern. The
+  `constraint::molecule` compiles, while native-module registration and
+  `python/umol/__init__.py` exports remain deferred to S1d.
 
-  **Tests:** one populated anchor round trip covering all eight families, one
-  round-trip case for every relational variant (31), one for every molecule
-  variant (5, including whole/subset distinctions), Python-visible variant
-  construction/field access for each new enum family, and nested atom-predicate
-  and subpattern payload coverage. **Additive (green).** `[dep: —]`
-- **S1b — recursive `Constraint` mirror** (`molecule_constraint.rs`): add all
-  thirteen variants, including recursive `And`/`Or`/`Not`, with
-  `from_ast`/`to_ast`, Python pattern matching, value equality, and deep recursive
-  round trips. **Additive (green).** `[dep: S1a]`
-- **S1c — molecule constraint container** (`molecule_constraint.rs`): add
+  **Implemented verification:** two anchor tests (constructor/getters and one
+  populated round trip covering all eight families), one round-trip case for
+  every relational variant (31), and six molecule-constraint cases covering all
+  five variants plus the `None` versus `Some([])` distinction. Nested atom
+  predicates, the ordered noncovalent predicate pair, spin/value payloads, and a
+  nested subpattern all round-trip. The 39 focused tests, `cargo check`, clippy,
+  rustfmt, and `git diff --check` pass. Python import-level construction,
+  field-access, and pattern-match tests land with registration in S1d.
+  **Additive (green).** `[dep: —]`
+- **S1b — recursive `Constraint` mirror** (`constraint/molecule.rs`): add one
+  native complex-enum mirror with the following exact 13-variant closure:
+
+  1. **DONE — Ordinary entity leaves (6)** — the entity id is a bare Python `int`; the
+     second field reuses the already-bound structural constraint enum:
+     - `Atom(int, AtomConstraintAst)` ↔
+       `Constraint::Atom(AtomId, ast::AtomConstraintAst)`;
+     - `Bond(int, BondConstraintAst)` ↔
+       `Constraint::Bond(BondId, ast::BondConstraintAst)`;
+     - `DativeBond(int, DativeBondConstraintAst)` ↔
+       `Constraint::DativeBond(DativeBondId, ast::DativeBondConstraintAst)`;
+     - `AromaticSystem(int, AromaticSystemConstraintAst)` ↔
+       `Constraint::AromaticSystem(AromaticSystemId,
+       ast::AromaticSystemConstraintAst)`;
+     - `MulticenterBond(int, MulticenterBondConstraintAst)` ↔
+       `Constraint::MulticenterBond(MulticenterBondId,
+       ast::MulticenterBondConstraintAst)`;
+     - `NoncovalentBond(int, NoncovalentBondConstraintAst)` ↔
+       `Constraint::NoncovalentBond(NoncovalentBondId,
+       ast::NoncovalentBondConstraintAst)`.
+  2. **DONE — Stereo entity leaves (2)** — preserve the extra geometry discriminator;
+     ids remain bare `int`, `StereoKind` reuses the bound value enum, and the
+     final field reuses the corresponding structural constraint enum:
+     - `StereoAtom(int, StereoKind, StereoAtomConstraintAst)` ↔
+       `Constraint::StereoAtom(StereoAtomId, ast::StereoKind,
+       ast::StereoAtomConstraintAst)`;
+     - `StereoBond(int, StereoKind, StereoBondConstraintAst)` ↔
+       `Constraint::StereoBond(StereoBondId, ast::StereoKind,
+       ast::StereoBondConstraintAst)`.
+  3. **Aggregate leaves (2)** — reuse the S1a mirrors directly:
+     - `Relational(RelationalConstraint)` ↔
+       `Constraint::Relational(ast::RelationalConstraint)`;
+     - `Molecule(MoleculeConstraint)` ↔
+       `Constraint::Molecule(ast::MoleculeConstraint)`.
+  4. **Recursive combinators (3)** — recursive children are native variant
+     instances, not base-enum objects:
+     - `And(list[Constraint])` ↔ `Constraint::And(Vec<Constraint>)`;
+     - `Or(list[Constraint])` ↔ `Constraint::Or(Vec<Constraint>)`;
+     - `Not(Constraint)` ↔ `Constraint::Not(Box<Constraint>)`.
+
+  The Rust representation is therefore `Py<...>` for every nested complex-enum
+  child, `Vec<Py<Constraint>>` for `And`/`Or`, and `Py<Constraint>` for `Not`.
+  `from_ast` must call `into_py_variant` at every such edge—including entity,
+  relational, molecule, and recursive children—so Python receives the concrete
+  variant subtype with `_0`/`_1`/`_2`, `__match_args__`, and `match` support;
+  `Py::new` would create an unusable base-enum instance. `to_ast` recursively
+  borrows each child and rebuilds owned Rust values. Equality delegates to the
+  complete Rust tree; `variant_repr` uses arity 2 for ordinary leaves, arity 3
+  for stereo leaves, and arity 1 for aggregate/combinator variants. The mirror
+  is value-equal and unhashable.
+
+  **Implemented verification:** one round-trip case for each of the six ordinary
+  and two stereo entity leaves, including distinct stereo kinds and their bound
+  structural constraint payloads. The focused S1a/S1b suite has 47 cases.
+
+  **Tests:** one round-trip row for every variant (13), with distinct stereo
+  kinds and representative child constraints; explicit empty `And([])` and
+  `Or([])` cases; and one deep tree combining entity, relational, and molecule
+  leaves beneath `And`/`Or`/`Not`. Exercise native variant construction, field
+  access, repr, equality, and recursive pattern matching from Rust-side PyO3;
+  import-level Python coverage remains in S1d when the type is registered.
+  **Additive (green).** `[dep: S1a]`
+- **S1c — molecule constraint container** (`constraint/molecule.rs`): add
   `Constraints`, `ConstraintsView`, and their iterators with sequence operations
   and safe RHS-first update helpers. Test owned mutation, live molecule
   write-through, negative indexing, and self-aliasing. **Additive (green).**

@@ -3,15 +3,24 @@
 use pyo3::prelude::*;
 use umol_ast::ast::{
     AromaticSystemId as AstAromaticSystemId, AtomId as AstAtomId, BondId as AstBondId,
-    DativeBondId as AstDativeBondId, MoleculeConstraint as AstMoleculeConstraint,
-    MulticenterBondId as AstMulticenterBondId, NoncovalentBondId as AstNoncovalentBondId,
-    RelationalConstraint as AstRelationalConstraint, StereoAtomId as AstStereoAtomId,
-    StereoBondId as AstStereoBondId, SubPatternAnchor as AstSubPatternAnchor,
+    Constraint as AstConstraint, DativeBondId as AstDativeBondId,
+    MoleculeConstraint as AstMoleculeConstraint, MulticenterBondId as AstMulticenterBondId,
+    NoncovalentBondId as AstNoncovalentBondId, RelationalConstraint as AstRelationalConstraint,
+    StereoAtomId as AstStereoAtomId, StereoBondId as AstStereoBondId,
+    SubPatternAnchor as AstSubPatternAnchor,
 };
 
-use crate::atom::{AtomConstraintAst, SpinStateAst};
+use super::aromatic::AromaticSystemConstraintAst;
+use super::atom::AtomConstraintAst;
+use super::bond::BondConstraintAst;
+use super::dative::DativeBondConstraintAst;
+use super::multicenter::MulticenterBondConstraintAst;
+use super::noncovalent::NoncovalentBondConstraintAst;
+use super::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
 use crate::convert::{into_py_variant, variant_repr};
 use crate::molecule::MoleculeAst;
+use crate::spin::SpinStateAst;
+use crate::stereo::StereoKind;
 use crate::value::ValueAst;
 
 /// Entity correspondences anchoring a subpattern match. Each collection holds
@@ -74,6 +83,122 @@ pub enum MoleculeConstraint {
     BondOrderSum(Option<Vec<u32>>, Py<ValueAst>),
     Connected(Option<Vec<u32>>),
     SubPattern(Py<SubPatternAnchor>, Py<MoleculeAst>),
+}
+
+/// A recursive molecule-constraint tree. This slice contains the ordinary and
+/// stereo entity leaves; aggregate and combinator variants follow in S1b.
+#[pyclass]
+pub enum Constraint {
+    Atom(u32, Py<AtomConstraintAst>),
+    Bond(u32, Py<BondConstraintAst>),
+    DativeBond(u32, Py<DativeBondConstraintAst>),
+    AromaticSystem(u32, Py<AromaticSystemConstraintAst>),
+    MulticenterBond(u32, Py<MulticenterBondConstraintAst>),
+    NoncovalentBond(u32, Py<NoncovalentBondConstraintAst>),
+    StereoAtom(u32, StereoKind, Py<StereoAtomConstraintAst>),
+    StereoBond(u32, StereoKind, Py<StereoBondConstraintAst>),
+}
+
+#[pymethods]
+impl Constraint {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            Self::Atom(_, _) => ("Atom", 2),
+            Self::Bond(_, _) => ("Bond", 2),
+            Self::DativeBond(_, _) => ("DativeBond", 2),
+            Self::AromaticSystem(_, _) => ("AromaticSystem", 2),
+            Self::MulticenterBond(_, _) => ("MulticenterBond", 2),
+            Self::NoncovalentBond(_, _) => ("NoncovalentBond", 2),
+            Self::StereoAtom(_, _, _) => ("StereoAtom", 3),
+            Self::StereoBond(_, _, _) => ("StereoBond", 3),
+        };
+        variant_repr(slf.bind(py).as_any(), "Constraint", variant, arity)
+    }
+}
+
+#[allow(dead_code, reason = "consumed by the constraint container later in S1")]
+impl Constraint {
+    /// Convert an entity leaf. Other variants return `None` until the remaining
+    /// S1b slices extend this mirror.
+    pub(crate) fn from_ast(py: Python<'_>, constraint: &AstConstraint) -> PyResult<Option<Self>> {
+        Ok(Some(match constraint {
+            AstConstraint::Atom(id, child) => Self::Atom(
+                id.0,
+                into_py_variant(py, AtomConstraintAst::from_ast(py, child)?)?,
+            ),
+            AstConstraint::Bond(id, child) => Self::Bond(
+                id.0,
+                into_py_variant(py, BondConstraintAst::from_ast(py, child)?)?,
+            ),
+            AstConstraint::DativeBond(id, child) => Self::DativeBond(
+                id.0,
+                into_py_variant(py, DativeBondConstraintAst::from_ast(py, child)?)?,
+            ),
+            AstConstraint::AromaticSystem(id, child) => Self::AromaticSystem(
+                id.0,
+                into_py_variant(py, AromaticSystemConstraintAst::from_ast(py, child)?)?,
+            ),
+            AstConstraint::MulticenterBond(id, child) => Self::MulticenterBond(
+                id.0,
+                into_py_variant(py, MulticenterBondConstraintAst::from_ast(py, child)?)?,
+            ),
+            AstConstraint::NoncovalentBond(id, child) => Self::NoncovalentBond(
+                id.0,
+                into_py_variant(py, NoncovalentBondConstraintAst::from_ast(py, child)?)?,
+            ),
+            AstConstraint::StereoAtom(id, kind, child) => Self::StereoAtom(
+                id.0,
+                StereoKind::from_ast(*kind),
+                into_py_variant(py, StereoAtomConstraintAst::from_ast(py, child)?)?,
+            ),
+            AstConstraint::StereoBond(id, kind, child) => Self::StereoBond(
+                id.0,
+                StereoKind::from_ast(*kind),
+                into_py_variant(py, StereoBondConstraintAst::from_ast(py, child)?)?,
+            ),
+            _ => return Ok(None),
+        }))
+    }
+
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstConstraint {
+        match self {
+            Self::Atom(id, child) => {
+                AstConstraint::Atom(AstAtomId(*id), child.bind(py).borrow().to_ast(py))
+            }
+            Self::Bond(id, child) => {
+                AstConstraint::Bond(AstBondId(*id), child.bind(py).borrow().to_ast(py))
+            }
+            Self::DativeBond(id, child) => {
+                AstConstraint::DativeBond(AstDativeBondId(*id), child.bind(py).borrow().to_ast(py))
+            }
+            Self::AromaticSystem(id, child) => AstConstraint::AromaticSystem(
+                AstAromaticSystemId(*id),
+                child.bind(py).borrow().to_ast(py),
+            ),
+            Self::MulticenterBond(id, child) => AstConstraint::MulticenterBond(
+                AstMulticenterBondId(*id),
+                child.bind(py).borrow().to_ast(py),
+            ),
+            Self::NoncovalentBond(id, child) => AstConstraint::NoncovalentBond(
+                AstNoncovalentBondId(*id),
+                child.bind(py).borrow().to_ast(py),
+            ),
+            Self::StereoAtom(id, kind, child) => AstConstraint::StereoAtom(
+                AstStereoAtomId(*id),
+                kind.to_ast(),
+                child.bind(py).borrow().to_ast(py),
+            ),
+            Self::StereoBond(id, kind, child) => AstConstraint::StereoBond(
+                AstStereoBondId(*id),
+                kind.to_ast(),
+                child.bind(py).borrow().to_ast(py),
+            ),
+        }
+    }
 }
 
 #[pymethods]
@@ -694,8 +819,15 @@ impl SubPatternAnchor {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AtomConstraintAst as AstAtomConstraintAst, MoleculeAst as AstMoleculeAst,
-        SpinStateAst as AstSpinStateAst, ValueAst as AstValueAst,
+        AromaticSystemConstraintAst as AstAromaticSystemConstraintAst,
+        AtomConstraintAst as AstAtomConstraintAst, BondConstraintAst as AstBondConstraintAst,
+        DativeBondConstraintAst as AstDativeBondConstraintAst, MoleculeAst as AstMoleculeAst,
+        MulticenterBondConstraintAst as AstMulticenterBondConstraintAst,
+        NoncovalentBondConstraintAst as AstNoncovalentBondConstraintAst,
+        SpinStateAst as AstSpinStateAst, StereoAtomConstraintAst as AstStereoAtomConstraintAst,
+        StereoBondConstraintAst as AstStereoBondConstraintAst, StereoKind as AstStereoKind,
+        Stereogenicity as AstStereogenicity, StereogenicityAst as AstStereogenicityAst,
+        ValueAst as AstValueAst,
     };
 
     use super::*;
@@ -904,6 +1036,48 @@ mod tests {
     fn test_molecule_constraint_roundtrip(#[case] constraint: AstMoleculeConstraint) {
         Python::attach(|py| {
             let mirror = MoleculeConstraint::from_ast(py, &constraint).unwrap();
+            assert_eq!(mirror.to_ast(py), constraint);
+        });
+    }
+
+    #[rstest]
+    #[case::atom(AstConstraint::Atom(AstAtomId(1), AstAtomConstraintAst::degree(2),))]
+    #[case::bond(AstConstraint::Bond(AstBondId(3), AstBondConstraintAst::aromatic(true),))]
+    #[case::dative_bond(AstConstraint::DativeBond(
+        AstDativeBondId(4),
+        AstDativeBondConstraintAst::aromatic(false),
+    ))]
+    #[case::aromatic_system(AstConstraint::AromaticSystem(
+        AstAromaticSystemId(5),
+        AstAromaticSystemConstraintAst::electron_count(6),
+    ))]
+    #[case::multicenter_bond(AstConstraint::MulticenterBond(
+        AstMulticenterBondId(7),
+        AstMulticenterBondConstraintAst::electron_count(8),
+    ))]
+    #[case::noncovalent_bond(AstConstraint::NoncovalentBond(
+        AstNoncovalentBondId(9),
+        AstNoncovalentBondConstraintAst::intramolecular(true),
+    ))]
+    #[case::stereo_atom(AstConstraint::StereoAtom(
+        AstStereoAtomId(10),
+        AstStereoKind::Tetrahedral,
+        AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+            AstStereogenicity::Stereogenic,
+        )),
+    ))]
+    #[case::stereo_bond(AstConstraint::StereoBond(
+        AstStereoBondId(11),
+        AstStereoKind::CisTrans,
+        AstStereoBondConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(
+            AstStereogenicity::Prochiral,
+        )),
+    ))]
+    fn test_constraint_roundtrip(#[case] constraint: AstConstraint) {
+        Python::attach(|py| {
+            let mirror = Constraint::from_ast(py, &constraint)
+                .unwrap()
+                .expect("ordinary entity leaf");
             assert_eq!(mirror.to_ast(py), constraint);
         });
     }

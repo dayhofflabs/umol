@@ -1,0 +1,730 @@
+//! Aromatic-system constraint mirrors, containers, and live views.
+
+use std::vec::IntoIter;
+
+use pyo3::exceptions::{PyIndexError, PyKeyError};
+use pyo3::prelude::*;
+use pyo3::types::{PyAny, PyDict};
+use umol_ast::ast::{
+    AromaticSystemConstraintAst as AstAromaticSystemConstraintAst,
+    AromaticSystemConstraintKey as AstAromaticSystemConstraintKey,
+    AromaticSystemConstraintsAst as AstAromaticSystemConstraintsAst,
+    AromaticSystemId as AstAromaticSystemId,
+};
+
+use crate::aromatic::AromaticSystemAst;
+use crate::convert::{hash_ast, into_py_variant, variant_repr};
+use crate::molecule::MoleculeAst;
+use crate::value::{ValueArg, ValueAst};
+
+/// The key (identity) of an aromatic-system constraint, for keyed lookup. The
+/// single key `ElectronCount` is the bare discriminant (no sub-key).
+#[pyclass]
+pub enum AromaticSystemConstraintKey {
+    ElectronCount(),
+}
+
+#[pymethods]
+impl AromaticSystemConstraintKey {
+    pub(crate) fn __eq__(&self, other: &Self) -> bool {
+        self.to_ast() == other.to_ast()
+    }
+
+    pub(crate) fn __hash__(&self) -> u64 {
+        hash_ast(&self.to_ast())
+    }
+
+    pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, arity) = match &*slf.bind(py).borrow() {
+            AromaticSystemConstraintKey::ElectronCount() => ("ElectronCount", 0),
+        };
+        variant_repr(
+            slf.bind(py).as_any(),
+            "AromaticSystemConstraintKey",
+            variant,
+            arity,
+        )
+    }
+}
+
+impl AromaticSystemConstraintKey {
+    pub(crate) fn from_ast(ast: &AstAromaticSystemConstraintKey) -> Self {
+        match ast {
+            AstAromaticSystemConstraintKey::ElectronCount => Self::ElectronCount(),
+        }
+    }
+
+    pub(crate) fn to_ast(&self) -> AstAromaticSystemConstraintKey {
+        match self {
+            Self::ElectronCount() => AstAromaticSystemConstraintKey::ElectronCount,
+        }
+    }
+}
+
+/// An aromatic-system-scope constraint: the asserted total π-electron count of the
+/// system (cross-checked against `sum(AromaticSystemAst::electrons)`).
+#[pyclass]
+pub enum AromaticSystemConstraintAst {
+    ElectronCount(Py<ValueAst>),
+}
+
+#[pymethods]
+impl AromaticSystemConstraintAst {
+    /// The constraint's key (identity).
+    #[getter]
+    pub(crate) fn key(&self, py: Python<'_>) -> AromaticSystemConstraintKey {
+        AromaticSystemConstraintKey::from_ast(&self.to_ast(py).key())
+    }
+
+    pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_ast(py) == other.to_ast(py)
+    }
+
+    pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
+        hash_ast(&self.to_ast(py))
+    }
+
+    pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let variant = match &*slf.bind(py).borrow() {
+            AromaticSystemConstraintAst::ElectronCount(_) => "ElectronCount",
+        };
+        variant_repr(
+            slf.bind(py).as_any(),
+            "AromaticSystemConstraintAst",
+            variant,
+            1,
+        )
+    }
+}
+
+impl AromaticSystemConstraintAst {
+    pub(crate) fn from_ast(py: Python<'_>, ast: &AstAromaticSystemConstraintAst) -> PyResult<Self> {
+        Ok(match ast {
+            AstAromaticSystemConstraintAst::ElectronCount(v) => {
+                Self::ElectronCount(into_py_variant(py, ValueAst::from_ast(py, v)?)?)
+            }
+        })
+    }
+
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> AstAromaticSystemConstraintAst {
+        match self {
+            Self::ElectronCount(v) => {
+                AstAromaticSystemConstraintAst::ElectronCount(v.bind(py).borrow().to_ast(py))
+            }
+        }
+    }
+}
+
+/// The argument to `update`: another constraint container (value or live view) or an
+/// iterable of `AromaticSystemConstraintAst` (each `set`, last-wins).
+#[derive(FromPyObject)]
+pub(crate) enum AromaticSystemConstraintsUpdate {
+    Container(Py<AromaticSystemConstraintsAst>),
+    View(Py<AromaticSystemConstraintsView>),
+    Entries(Vec<Py<AromaticSystemConstraintAst>>),
+}
+
+impl AromaticSystemConstraintsUpdate {
+    /// Read every Python object into owned data — no write target is touched. Callers
+    /// resolve *before* taking the write borrow so a view (or container) that aliases the
+    /// same system is read while nothing is borrowed (otherwise
+    /// `sys.constraints.update(sys.constraints)` self-aliases into a double-borrow panic).
+    pub(crate) fn resolve(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<ResolvedAromaticSystemConstraintsUpdate> {
+        Ok(match self {
+            AromaticSystemConstraintsUpdate::Container(c) => {
+                ResolvedAromaticSystemConstraintsUpdate::Overlay(
+                    c.bind(py).borrow().inner().clone(),
+                )
+            }
+            AromaticSystemConstraintsUpdate::View(v) => {
+                ResolvedAromaticSystemConstraintsUpdate::Overlay(
+                    v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?,
+                )
+            }
+            AromaticSystemConstraintsUpdate::Entries(entries) => {
+                ResolvedAromaticSystemConstraintsUpdate::Entries(
+                    entries
+                        .iter()
+                        .map(|entry| entry.bind(py).borrow().to_ast(py))
+                        .collect(),
+                )
+            }
+        })
+    }
+}
+
+/// An `AromaticSystemConstraintsUpdate` with all Python-object reads already done, so it
+/// can be applied under a write borrow without re-entering Python.
+pub(crate) enum ResolvedAromaticSystemConstraintsUpdate {
+    /// A whole container (from another container or a live view): overlaid via `update`
+    /// (last-wins per key; undetermined entries remove).
+    Overlay(AstAromaticSystemConstraintsAst),
+    /// Loose entries: `set` each (last-wins; undetermined entries stored, not removed).
+    Entries(Vec<AstAromaticSystemConstraintAst>),
+}
+
+impl ResolvedAromaticSystemConstraintsUpdate {
+    /// Overlay onto `target` in place. No Python reads.
+    pub(crate) fn apply(self, target: &mut AstAromaticSystemConstraintsAst) {
+        match self {
+            ResolvedAromaticSystemConstraintsUpdate::Overlay(overlay) => target.update(&overlay),
+            ResolvedAromaticSystemConstraintsUpdate::Entries(entries) => {
+                for entry in entries {
+                    target.set(entry);
+                }
+            }
+        }
+    }
+}
+
+/// A whole-container argument that snapshots either a value container or a live view
+/// — for the aromatic system `constraints` setter, which accepts either.
+#[derive(FromPyObject)]
+pub(crate) enum AromaticSystemConstraintsArg {
+    Container(Py<AromaticSystemConstraintsAst>),
+    View(Py<AromaticSystemConstraintsView>),
+}
+
+impl AromaticSystemConstraintsArg {
+    pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstAromaticSystemConstraintsAst> {
+        match self {
+            AromaticSystemConstraintsArg::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            AromaticSystemConstraintsArg::View(v) => {
+                v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))
+            }
+        }
+    }
+}
+
+/// The aromatic-system-scope constraints on an aromatic system, in kind-sorted order.
+/// Mutable, hence value-equal but unhashable (matching `AromaticSystemAst`).
+#[pyclass(eq)]
+#[derive(PartialEq)]
+pub struct AromaticSystemConstraintsAst(AstAromaticSystemConstraintsAst);
+
+#[pymethods]
+impl AromaticSystemConstraintsAst {
+    /// Build from a sequence of constraints (a later entry of the same key replaces
+    /// an earlier one, last-wins).
+    #[new]
+    pub(crate) fn new(py: Python<'_>, entries: Vec<Py<AromaticSystemConstraintAst>>) -> Self {
+        let mut constraints = AstAromaticSystemConstraintsAst::new();
+        constraints.extend(
+            entries
+                .into_iter()
+                .map(|entry| entry.bind(py).borrow().to_ast(py)),
+        );
+        AromaticSystemConstraintsAst(constraints)
+    }
+
+    pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let mut parts = Vec::with_capacity(self.0.len());
+        for entry in self.0.iter() {
+            let mirror = into_py_variant(py, AromaticSystemConstraintAst::from_ast(py, entry)?)?;
+            parts.push(mirror.bind(py).as_any().repr()?.extract::<String>()?);
+        }
+        Ok(format!(
+            "AromaticSystemConstraintsAst([{}])",
+            parts.join(", ")
+        ))
+    }
+
+    /// Insert `c`, replacing any existing entry of the same key (last-wins).
+    pub(crate) fn set(&mut self, py: Python<'_>, c: Py<AromaticSystemConstraintAst>) {
+        self.0.set(c.bind(py).borrow().to_ast(py));
+    }
+
+    /// Remove the entry with the given key, returning it if present (dict `pop`).
+    pub(crate) fn pop(
+        &mut self,
+        py: Python<'_>,
+        key: Py<AromaticSystemConstraintKey>,
+    ) -> PyResult<Option<AromaticSystemConstraintAst>> {
+        self.0
+            .remove(key.bind(py).borrow().to_ast())
+            .map(|c| AromaticSystemConstraintAst::from_ast(py, &c))
+            .transpose()
+    }
+
+    /// Overlay `other` onto self in place — another container, a live view, or an
+    /// iterable of `AromaticSystemConstraintAst` (last-wins per key; undetermined entries
+    /// remove). Takes `slf` by handle so `other` is fully read *before* the write borrow —
+    /// `cs.update(cs)` on the same container is then a no-op, not a double-borrow panic.
+    pub(crate) fn update(
+        slf: Py<Self>,
+        py: Python<'_>,
+        other: AromaticSystemConstraintsUpdate,
+    ) -> PyResult<()> {
+        let resolved = other.resolve(py)?;
+        resolved.apply(&mut slf.borrow_mut(py).0);
+        Ok(())
+    }
+
+    pub(crate) fn __len__(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Iterate the constraint keys (mapping-style, canonical order).
+    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<AromaticSystemConstraintKeyIter> {
+        aromatic_system_constraint_keys(py, &self.0)
+    }
+
+    /// The constraint keys, in canonical order.
+    pub(crate) fn keys(&self, py: Python<'_>) -> PyResult<AromaticSystemConstraintKeyIter> {
+        aromatic_system_constraint_keys(py, &self.0)
+    }
+
+    /// The constraints, in canonical order.
+    pub(crate) fn values(&self, py: Python<'_>) -> PyResult<AromaticSystemConstraintIter> {
+        aromatic_system_constraints_iter(py, &self.0)
+    }
+
+    /// The `(key, constraint)` pairs, in canonical order.
+    pub(crate) fn items(&self, py: Python<'_>) -> PyResult<AromaticSystemConstraintItemsIter> {
+        aromatic_system_constraint_items(py, &self.0)
+    }
+
+    /// The constraint with the given key, or `default` (`None`) if absent.
+    #[pyo3(signature = (key, default=None))]
+    pub(crate) fn get(
+        &self,
+        py: Python<'_>,
+        key: Py<AromaticSystemConstraintKey>,
+        default: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        match self.0.get(key.bind(py).borrow().to_ast()) {
+            Some(constraint) => Ok(into_py_variant(
+                py,
+                AromaticSystemConstraintAst::from_ast(py, constraint)?,
+            )?
+            .into_any()),
+            None => Ok(default.unwrap_or_else(|| py.None())),
+        }
+    }
+
+    /// The constraint with the given key; raises `KeyError` if absent.
+    pub(crate) fn __getitem__(
+        &self,
+        py: Python<'_>,
+        key: Py<AromaticSystemConstraintKey>,
+    ) -> PyResult<AromaticSystemConstraintAst> {
+        match self.0.get(key.bind(py).borrow().to_ast()) {
+            Some(constraint) => AromaticSystemConstraintAst::from_ast(py, constraint),
+            None => Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            )),
+        }
+    }
+
+    /// Remove the entry with the given key; raises `KeyError` if absent.
+    pub(crate) fn __delitem__(
+        &mut self,
+        py: Python<'_>,
+        key: Py<AromaticSystemConstraintKey>,
+    ) -> PyResult<()> {
+        if self.0.remove(key.bind(py).borrow().to_ast()).is_some() {
+            Ok(())
+        } else {
+            Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            ))
+        }
+    }
+
+    pub(crate) fn __contains__(
+        &self,
+        py: Python<'_>,
+        key: Py<AromaticSystemConstraintKey>,
+    ) -> bool {
+        self.0.contains(key.bind(py).borrow().to_ast())
+    }
+
+    /// The asserted total π-electron count; `Undetermined` when no `ElectronCount`
+    /// constraint is present (mirroring the non-optional Rust accessor).
+    #[getter]
+    pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<ValueAst> {
+        ValueAst::from_ast(py, &self.0.electron_count())
+    }
+
+    #[setter]
+    pub(crate) fn set_electron_count(&mut self, py: Python<'_>, value: ValueArg) {
+        self.0.set(AstAromaticSystemConstraintAst::electron_count(
+            value.to_ast(py),
+        ));
+    }
+
+    /// The present constraints as a dict keyed by snake_case name; values are the
+    /// inner-value mirrors.
+    pub(crate) fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        aromatic_system_constraints_asdict(py, &self.0)
+    }
+}
+
+impl AromaticSystemConstraintsAst {
+    /// The wrapped AST constraints — read access for aromatic system construction.
+    pub(crate) fn inner(&self) -> &AstAromaticSystemConstraintsAst {
+        &self.0
+    }
+
+    /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
+    /// in-crate construction wraps `AromaticSystemConstraintsAst(..)` directly.
+    #[cfg(test)]
+    pub(crate) fn from_inner(constraints: AstAromaticSystemConstraintsAst) -> Self {
+        AromaticSystemConstraintsAst(constraints)
+    }
+}
+
+/// Build the per-constraint iterator handle from a borrowed container.
+pub(crate) fn aromatic_system_constraints_iter(
+    py: Python<'_>,
+    constraints: &AstAromaticSystemConstraintsAst,
+) -> PyResult<AromaticSystemConstraintIter> {
+    let entries = constraints
+        .iter()
+        .map(|constraint| {
+            into_py_variant(py, AromaticSystemConstraintAst::from_ast(py, constraint)?)
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(AromaticSystemConstraintIter {
+        entries: entries.into_iter(),
+    })
+}
+
+/// Build the key iterator handle from a borrowed container (mapping-style keys).
+pub(crate) fn aromatic_system_constraint_keys(
+    py: Python<'_>,
+    constraints: &AstAromaticSystemConstraintsAst,
+) -> PyResult<AromaticSystemConstraintKeyIter> {
+    let keys = constraints
+        .iter()
+        .map(|constraint| {
+            into_py_variant(py, AromaticSystemConstraintKey::from_ast(&constraint.key()))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(AromaticSystemConstraintKeyIter {
+        keys: keys.into_iter(),
+    })
+}
+
+/// Build the item iterator handle (`(key, constraint)` pairs) from a borrowed container.
+pub(crate) fn aromatic_system_constraint_items(
+    py: Python<'_>,
+    constraints: &AstAromaticSystemConstraintsAst,
+) -> PyResult<AromaticSystemConstraintItemsIter> {
+    let items = constraints
+        .iter()
+        .map(|constraint| {
+            Ok((
+                into_py_variant(py, AromaticSystemConstraintKey::from_ast(&constraint.key()))?,
+                into_py_variant(py, AromaticSystemConstraintAst::from_ast(py, constraint)?)?,
+            ))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(AromaticSystemConstraintItemsIter {
+        items: items.into_iter(),
+    })
+}
+
+/// The present constraints as a dict keyed by snake_case name; values are the
+/// inner-value mirrors.
+pub(crate) fn aromatic_system_constraints_asdict<'py>(
+    py: Python<'py>,
+    constraints: &AstAromaticSystemConstraintsAst,
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    for entry in constraints.iter() {
+        match entry {
+            AstAromaticSystemConstraintAst::ElectronCount(v) => {
+                dict.set_item("electron_count", ValueAst::from_ast(py, v)?)?
+            }
+        }
+    }
+    Ok(dict)
+}
+
+/// What an `AromaticSystemConstraintsView` writes through to: an aromatic system
+/// within a molecule (by index) or a standalone `AromaticSystemAst`.
+pub(crate) enum AromaticSystemConstraintsBacking {
+    Molecule {
+        owner: Py<MoleculeAst>,
+        id: AstAromaticSystemId,
+    },
+    AromaticSystem(Py<AromaticSystemAst>),
+}
+
+/// A live handle onto one aromatic system's constraints, backed by either a
+/// molecule-system or a standalone `AromaticSystemAst`. Reads borrow the constraints
+/// and read only the item they need (no whole-container clone); mutators write through
+/// to the system in place, without a clone-and-writeback.
+#[pyclass]
+pub struct AromaticSystemConstraintsView {
+    pub(crate) backing: AromaticSystemConstraintsBacking,
+}
+
+impl AromaticSystemConstraintsView {
+    /// Borrow the backing system's constraints and read one item through `f` — no clone.
+    pub(crate) fn read<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&AstAromaticSystemConstraintsAst) -> PyResult<R>,
+    ) -> PyResult<R> {
+        match &self.backing {
+            AromaticSystemConstraintsBacking::Molecule { owner, id } => {
+                let molecule = owner.bind(py).borrow();
+                let view = molecule
+                    .inner()
+                    .aromatic_systems()
+                    .get(*id)
+                    .ok_or_else(|| PyIndexError::new_err("aromatic system id out of range"))?;
+                f(&view.ast.constraints)
+            }
+            AromaticSystemConstraintsBacking::AromaticSystem(system) => {
+                let system = system.bind(py).borrow();
+                f(&system.inner().constraints)
+            }
+        }
+    }
+
+    /// Mutate the backing system's constraints in place through `f`.
+    pub(crate) fn with_mut<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut AstAromaticSystemConstraintsAst) -> R,
+    ) -> R {
+        match &self.backing {
+            AromaticSystemConstraintsBacking::Molecule { owner, id } => f(&mut owner
+                .borrow_mut(py)
+                .inner_mut()
+                .aromatic_system_mut(*id)
+                .ast
+                .constraints),
+            AromaticSystemConstraintsBacking::AromaticSystem(system) => {
+                f(&mut system.borrow_mut(py).inner_mut().constraints)
+            }
+        }
+    }
+
+    /// Set one constraint on the backing system in place (last-wins per key).
+    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: AstAromaticSystemConstraintAst) {
+        self.with_mut(py, |cs| cs.set(constraint));
+    }
+
+    /// Remove one key from the backing system in place, returning the removed entry.
+    pub(crate) fn remove_ast(
+        &self,
+        py: Python<'_>,
+        key: AstAromaticSystemConstraintKey,
+    ) -> Option<AstAromaticSystemConstraintAst> {
+        self.with_mut(py, |cs| cs.remove(key))
+    }
+}
+
+#[pymethods]
+impl AromaticSystemConstraintsView {
+    pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let count = self.read(py, |cs| Ok(cs.len()))?;
+        Ok(format!("AromaticSystemConstraintsView({count} entries)"))
+    }
+
+    /// Insert `c` on the system in place, replacing any existing entry of the same key
+    /// (last-wins).
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<AromaticSystemConstraintAst>) {
+        self.set_ast(py, c.bind(py).borrow().to_ast(py));
+    }
+
+    /// Remove the entry with the given key from the system in place, returning it if
+    /// present (dict `pop`).
+    pub(crate) fn pop(
+        &self,
+        py: Python<'_>,
+        key: Py<AromaticSystemConstraintKey>,
+    ) -> PyResult<Option<AromaticSystemConstraintAst>> {
+        self.remove_ast(py, key.bind(py).borrow().to_ast())
+            .map(|c| AromaticSystemConstraintAst::from_ast(py, &c))
+            .transpose()
+    }
+
+    /// Remove the entry with the given key; raises `KeyError` if absent.
+    pub(crate) fn __delitem__(
+        &self,
+        py: Python<'_>,
+        key: Py<AromaticSystemConstraintKey>,
+    ) -> PyResult<()> {
+        if self
+            .remove_ast(py, key.bind(py).borrow().to_ast())
+            .is_some()
+        {
+            Ok(())
+        } else {
+            Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            ))
+        }
+    }
+
+    /// Overlay `other` onto the system's constraints in place — another container, a live
+    /// view, or an iterable of `AromaticSystemConstraintAst` (last-wins per key;
+    /// undetermined entries remove). Resolves `other` to owned data *before* the write
+    /// borrow, so a view aliasing the same system is not a double-borrow panic.
+    pub(crate) fn update(
+        &self,
+        py: Python<'_>,
+        other: AromaticSystemConstraintsUpdate,
+    ) -> PyResult<()> {
+        let resolved = other.resolve(py)?;
+        self.with_mut(py, |cs| resolved.apply(cs));
+        Ok(())
+    }
+
+    pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        self.read(py, |cs| Ok(cs.len()))
+    }
+
+    /// Iterate the constraint keys (mapping-style, canonical order).
+    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<AromaticSystemConstraintKeyIter> {
+        self.read(py, |cs| aromatic_system_constraint_keys(py, cs))
+    }
+
+    /// The constraint keys, in canonical order.
+    pub(crate) fn keys(&self, py: Python<'_>) -> PyResult<AromaticSystemConstraintKeyIter> {
+        self.read(py, |cs| aromatic_system_constraint_keys(py, cs))
+    }
+
+    /// The constraints, in canonical order.
+    pub(crate) fn values(&self, py: Python<'_>) -> PyResult<AromaticSystemConstraintIter> {
+        self.read(py, |cs| aromatic_system_constraints_iter(py, cs))
+    }
+
+    /// The `(key, constraint)` pairs, in canonical order.
+    pub(crate) fn items(&self, py: Python<'_>) -> PyResult<AromaticSystemConstraintItemsIter> {
+        self.read(py, |cs| aromatic_system_constraint_items(py, cs))
+    }
+
+    /// The constraint with the given key, or `default` (`None`) if absent.
+    #[pyo3(signature = (key, default=None))]
+    pub(crate) fn get(
+        &self,
+        py: Python<'_>,
+        key: Py<AromaticSystemConstraintKey>,
+        default: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        let key = key.bind(py).borrow().to_ast();
+        let found = self.read(py, |cs| {
+            cs.get(key)
+                .map(|constraint| AromaticSystemConstraintAst::from_ast(py, constraint))
+                .transpose()
+        })?;
+        match found {
+            Some(constraint) => Ok(into_py_variant(py, constraint)?.into_any()),
+            None => Ok(default.unwrap_or_else(|| py.None())),
+        }
+    }
+
+    /// The constraint with the given key; raises `KeyError` if absent.
+    pub(crate) fn __getitem__(
+        &self,
+        py: Python<'_>,
+        key: Py<AromaticSystemConstraintKey>,
+    ) -> PyResult<AromaticSystemConstraintAst> {
+        let ast_key = key.bind(py).borrow().to_ast();
+        let found = self.read(py, |cs| {
+            cs.get(ast_key)
+                .map(|constraint| AromaticSystemConstraintAst::from_ast(py, constraint))
+                .transpose()
+        })?;
+        match found {
+            Some(constraint) => Ok(constraint),
+            None => Err(PyKeyError::new_err(
+                key.bind(py).as_any().repr()?.extract::<String>()?,
+            )),
+        }
+    }
+
+    pub(crate) fn __contains__(
+        &self,
+        py: Python<'_>,
+        key: Py<AromaticSystemConstraintKey>,
+    ) -> PyResult<bool> {
+        let key = key.bind(py).borrow().to_ast();
+        self.read(py, |cs| Ok(cs.contains(key)))
+    }
+
+    /// The asserted total π-electron count; `Undetermined` when no `ElectronCount`
+    /// constraint is present (mirroring the non-optional Rust accessor).
+    #[getter]
+    pub(crate) fn electron_count(&self, py: Python<'_>) -> PyResult<ValueAst> {
+        self.read(py, |cs| ValueAst::from_ast(py, &cs.electron_count()))
+    }
+
+    #[setter]
+    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: ValueArg) {
+        self.set_ast(
+            py,
+            AstAromaticSystemConstraintAst::electron_count(value.to_ast(py)),
+        );
+    }
+
+    /// The present constraints as a dict keyed by snake_case name.
+    pub(crate) fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.read(py, |cs| aromatic_system_constraints_asdict(py, cs))
+    }
+}
+
+#[pyclass]
+pub(crate) struct AromaticSystemConstraintIter {
+    entries: IntoIter<Py<AromaticSystemConstraintAst>>,
+}
+
+#[pymethods]
+impl AromaticSystemConstraintIter {
+    pub(crate) fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    pub(crate) fn __next__(&mut self) -> Option<Py<AromaticSystemConstraintAst>> {
+        self.entries.next()
+    }
+}
+
+#[pyclass]
+pub(crate) struct AromaticSystemConstraintKeyIter {
+    keys: IntoIter<Py<AromaticSystemConstraintKey>>,
+}
+
+#[pymethods]
+impl AromaticSystemConstraintKeyIter {
+    pub(crate) fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    pub(crate) fn __next__(&mut self) -> Option<Py<AromaticSystemConstraintKey>> {
+        self.keys.next()
+    }
+}
+
+#[pyclass]
+pub(crate) struct AromaticSystemConstraintItemsIter {
+    items: IntoIter<(
+        Py<AromaticSystemConstraintKey>,
+        Py<AromaticSystemConstraintAst>,
+    )>,
+}
+
+#[pymethods]
+impl AromaticSystemConstraintItemsIter {
+    pub(crate) fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    pub(crate) fn __next__(
+        &mut self,
+    ) -> Option<(
+        Py<AromaticSystemConstraintKey>,
+        Py<AromaticSystemConstraintAst>,
+    )> {
+        self.items.next()
+    }
+}
