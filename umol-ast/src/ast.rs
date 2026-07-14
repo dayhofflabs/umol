@@ -118,7 +118,7 @@ pub use view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphism, AtomView,
     AtomViewMut, AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
     DativeBondViews, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
-    NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews,
-    StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut,
-    StereoBondViews, StereoLigandView,
+    NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, RingAtomView,
+    RingBondView, RingsView, StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView,
+    StereoBondViewMut, StereoBondViews, StereoLigandView,
 };

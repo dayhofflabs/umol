@@ -14,6 +14,7 @@ mod ligand;
 mod multicenter;
 mod neighbor;
 mod noncovalent;
+mod ring;
 mod stereo;
 
 pub use aromatic::{
@@ -37,6 +38,7 @@ pub use noncovalent::{
     NoncovalentBondEditorView, NoncovalentBondEditorViewMut, NoncovalentBondView,
     NoncovalentBondViewMut, NoncovalentBondViews,
 };
+pub use ring::{RingAtomView, RingBondView, RingsView};
 pub use stereo::{
     StereoAtomEditorView, StereoAtomEditorViewMut, StereoAtomView, StereoAtomViewMut,
     StereoAtomViews, StereoBondEditorView, StereoBondEditorViewMut, StereoBondView,

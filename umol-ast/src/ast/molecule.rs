@@ -37,7 +37,7 @@ use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
     DativeBondViews, GraphView, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
-    NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews,
+    NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, RingsView,
     StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut,
     StereoBondViews,
 };
@@ -583,6 +583,29 @@ impl MoleculeAst {
         atom_filter: impl Fn(AtomId) -> bool,
     ) -> RingSet {
         RingSet::enumerate(family, max_ring_size, atom_filter, &self.graph)
+    }
+
+    /// The molecule's canonical rings as a [`RingsView`]: the ring-collection
+    /// surface plus per-atom / per-bond ring sub-views. Recomputed per call.
+    pub fn rings_view(&self) -> RingsView<'_> {
+        RingsView::new(
+            self,
+            RingSet::enumerate(RingFamily::Relevant, 22, |_| true, &self.graph),
+        )
+    }
+
+    /// [`rings_view`](Self::rings_view) with caller-specified family, maximum
+    /// size, and atom filter.
+    pub fn rings_view_with(
+        &self,
+        family: RingFamily,
+        max_ring_size: usize,
+        atom_filter: impl Fn(AtomId) -> bool,
+    ) -> RingsView<'_> {
+        RingsView::new(
+            self,
+            RingSet::enumerate(family, max_ring_size, atom_filter, &self.graph),
+        )
     }
 
     pub fn atom_mut(&mut self, id: AtomId) -> AtomViewMut<'_> {
