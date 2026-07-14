@@ -36,12 +36,14 @@ Two coupled deliverables:
 
   | Shape | Types | Can be a `#[pyclass]`? |
   | --- | --- | --- |
-  | Owned, non-generic | `MoleculeAst`, `ReactionSpanAst` | Yes, directly |
-  | Borrowed `<'a>` | `ReactionDerivation<'a>`, and the whole read API: `AtomView`, `BondView`, `GraphView`, `RingView`, `AromaticSystemView`, `DativeBondView`, `MulticenterBondView`, `NeighborView`, `StereoLigandView`, … | No |
+  | Owned, non-generic | `MoleculeAst`, `ReactionSpanAst`; `ReactionDerivation` after doc 150 S0 | Yes, directly |
+  | Borrowed `<'a>` | The read API: `AtomView`, `BondView`, `GraphView`, `RingView`, `AromaticSystemView`, `DativeBondView`, `MulticenterBondView`, `NeighborView`, `StereoLigandView`, … | No |
   | Generic | `EntitySpan<T>`, `GraphSymmetryConfig<C>` | No |
 
   PyO3 `#[pyclass]` requires `'static`, non-generic, owned types. The owned AST
   roots cross directly; the borrowed view layer and the generic types do not.
+  `ReactionDerivation<'a>` is migrated into the owned row by doc 150 rather than
+  preserved as a special borrowed result.
 
 ## Binding stack (settled)
 
@@ -102,10 +104,12 @@ Per surface, resolved:
   `borrow_mut` while any borrow is live raises `PyBorrowMutError`. Shared reads
   compose; mutation through a live child object is the aliasing hazard, so mutators
   live on the owner where only one borrow is in play.
-- **Borrowed derivations** (`ReactionDerivation<'a>`): materialize an owned result.
-  Since it borrows strictly for efficiency, add a Rust method that produces an owned
-  products type (`into_owned()` / an owned reaction result) and wrap that — a real
-  Python-pull change to the Rust API, and the owned type may serve Rust callers too.
+- **Reaction derivations**: migrate `ReactionDerivation<'a>` itself to a fully
+  owned value before binding it; do not add a parallel owned-result type around
+  the borrowed representation. The lhs clone is accepted in favor of a clear
+  value model. Borrowing may return later only as an evidence-driven optimization
+  while the owned derivation remains the default public result (superseded by
+  doc 150).
 - **Generic types** monomorphize at the boundary:
   - `EntitySpan<T>` → one Python type per entity family (atoms, bonds, and the
     overlay relations): `AtomSpan`, `BondSpan`, … Bounded, mechanical.
@@ -436,8 +440,9 @@ Settled:
   a complex enum *does* hold recursive `Py<Self>`/`Vec<Py<Self>>` fields — construct,
   field-read, and `match` all work). Pure-Python fallback dropped. Each mirror type is
   a distinct native enum bridged to the AST by `pub(crate)` `from_ast`/`to_ast`.
-- **Borrowed derivations** — `ReactionDerivation<'a>` gets an owned Rust result type
-  the binding wraps (Python-pull change to the Rust API).
+- **Reaction derivations** — `ReactionDerivation<'a>` itself migrates to a fully
+  owned Rust value; the binding wraps that type directly. No parallel owned-result
+  type (superseded by doc 150).
 - **Generics** — monomorphize at the boundary: per-entity-family `EntitySpan<T>`
   types; only the surfaced coloring(s) for `GraphSymmetryConfig<C>`.
 - **Errors** — Python exception hierarchy mirrors the three tiers; structured fields

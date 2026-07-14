@@ -148,4 +148,6 @@
 | [144-vendored-nauty-implementation-plan-2026-07-11.md](144-vendored-nauty-implementation-plan-2026-07-11.md)     | Completed     | 2026-07-11   |
 | [145-kekulization-matching-design-spike-2026-07-12.md](145-kekulization-matching-design-spike-2026-07-12.md)     | Informational | 2026-07-12   |
 | [146-kekulization-matching-enumeration-2026-07-12.md](146-kekulization-matching-enumeration-2026-07-12.md)       | Completed     | 2026-07-12   |
+| [147-kekulization-single-structure-2026-07-13.md](147-kekulization-single-structure-2026-07-13.md)               | Active        | 2026-07-13   |
+| [148-validated-transactions-operations-2026-07-13.md](148-validated-transactions-operations-2026-07-13.md)       | Active        | 2026-07-13   |
 | [149-molecule-ring-cache-and-hashing-2026-07-13.md](149-molecule-ring-cache-and-hashing-2026-07-13.md)           | Active        | 2026-07-13   |

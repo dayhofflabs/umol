@@ -14,6 +14,11 @@ The design therefore has four coupled parts:
 3. transformer atomicity and selection of postconditions;
 4. resolver atomicity, partial information, and fallback.
 
+It also has a public-API constraint: these mechanisms must make the ordinary operation simpler, not
+force callers to assemble validators, prepared values, witness types, transaction policies, and
+diagnostic reports before they can transform a molecule. The internal lifecycle may have several
+phases while the normal entry point remains a direct method call.
+
 This is a design discussion, not an implementation plan. The working direction below is intended to
 make the semantic boundaries explicit before APIs are selected.
 
@@ -115,6 +120,129 @@ The following concepts should remain distinct:
   rejection. It belongs above an individual validator.
 
 Calling all of these "validation hooks" obscures important differences.
+
+Two further outcomes matter for operations that search over candidates:
+
+- A **candidate rejection** means that valid operation input and valid target data do not produce an
+  acceptable result for one particular choice, match, or embedding. This is expected search control
+  flow, not an exceptional error.
+- An **internal failure** means that validated inputs reached an impossible lowering, transaction,
+  or rollback state. It must remain visible and must not be silently treated as candidate rejection.
+
+## Public API economy
+
+The semantic distinctions in this document do not imply one public type per distinction. In
+particular, prepared-operation types, validation witness types, application-report types, and
+separate checked/unchecked public method families should not be introduced merely to encode the
+lifecycle in the type system. They may become useful if repeated validation is measurably expensive
+or a real caller needs detailed rejected-candidate diagnostics, but they are not the default design.
+
+The preferred public shape is:
+
+```rust
+let products = reaction.apply(&molecule, algorithm)?;
+let fingerprint = featurizer.featurize(&molecule)?;
+transformer.transform_into(&mut molecule)?;
+```
+
+Each operation owns the validation and transaction policy required by its contract. Advanced users
+may call validators, planners, low-level transactions, and resolvers separately, but ordinary users
+should not have to reproduce the operation's correct pipeline. Validation should normally occur at
+the public boundary and then be reused internally for the duration of that call; this does not by
+itself require a caller-visible validated wrapper.
+
+An operation that is infallible for valid inputs may still return `Result` when it accepts a general
+`MoleculeAst` or `ReactionAst`, because those AST types deliberately represent incomplete or
+inconsistent values. The error belongs to entry into the operation's valid domain, not to its core
+algorithm. Conversely, a condition that can be made impossible by an ordinary constructor or
+argument type should be designed out rather than rediscovered by validation.
+
+## Operation failure taxonomy
+
+### Reaction application
+
+The current `ApplyError` combines three categories that require different treatment.
+
+**Reaction or host precondition failures** should be found once before match enumeration. These
+include inconsistent delta sequences, invalid delta references, rule-local DPO violations, malformed
+added entities, an invalid reaction left-hand side, and any host integrity or chemistry conditions
+required by application. The existing `DpoValidator::validate_reaction` covers only the rule-local
+dangling condition; reaction validation must also cover the remaining delta and reference
+invariants. Canonicalizing deltas once at this boundary is sufficient; a public `PreparedReaction`
+type is not required.
+
+**Match-specific rejection** can occur even when the reaction and host are both valid. For example,
+a pattern atom selected for deletion may map to a host atom with additional incident bonds, or a bond
+addition may conflict with additional host topology under a non-induced embedding. Chemistry or
+structural postconditions can likewise reject only the product of a particular embedding. These
+conditions cannot be eliminated by validating the reaction and host independently. The normal
+product-enumeration API may omit such embeddings, while an explicitly diagnostic API could expose
+rejection reasons if a concrete consumer needs them.
+
+**Internal application failures** include malformed edits produced from validated deltas, invalid
+symbolic references, unexpected old-state mismatches for a matcher-produced correspondence, and
+rollback failure. These indicate a lowering or transaction defect. The current
+`ReactionAst::apply` uses `filter_map(... .ok())` and therefore silently discards these together with
+ordinary match rejection. That behavior must change: only classified match rejection may be
+filtered. Internal failures must terminate the operation and preserve their diagnostic.
+
+Reaction application is therefore an important consumer of the transaction acceptance gate:
+
+```text
+validate reaction and host once
+    -> enumerate matches
+    -> check match-local conditions
+    -> tentatively apply
+    -> validate selected product postconditions
+    -> emit product | reject match | surface internal failure
+```
+
+The phases are an implementation model, not a proposed multi-step caller API.
+
+### Fingerprints
+
+Fingerprint generation should be computationally infallible once its actual input contract is met.
+For the current molecular featurizers, the principal shared precondition is a ground molecule. The
+present API is inconsistent: the `Featurizer` enum checks `MoleculeAst::is_ground`, whereas public
+concrete featurizers call `expect("ground atom")` internally.
+
+The public entry points should check the same preconditions uniformly and then call an internal
+infallible implementation. A caller-visible `GroundMolecule` witness is unnecessary unless repeated
+validation becomes a demonstrated cost or a broader API needs to pass the guarantee between
+independent operations. Valid input should not produce an algorithmic fingerprint error.
+
+Reaction fingerprints follow the same rule: reaction validity and derivation of the product are
+preconditions; feature calculation over valid ground sides is not itself fallible.
+
+### Dynamic fingerprint arguments
+
+`BitFp` width and index conditions are API argument constraints, not molecular validation or
+transaction concerns. Nonzero fold width can be expressed with `NonZeroUsize`; indexed access can
+return `Option`; comparisons of runtime-width fingerprints must either check equal widths or define
+semantics for unequal widths. These should not be classified as internal invariants while the public
+type permits callers to violate them.
+
+## Error handling at operation boundaries
+
+Doc 065's narrow per-concern errors remain useful, as does the separation between a chemistry
+contradiction in `Solution` and an execution/configuration error in the outer `Result`. Its blanket
+rule that cross-module composition returns `Box<dyn UmolError>` is less successful for fixed public
+operations. The resolved SMILES path, for example, always composes the known sequence parse, raise,
+and resolve; type erasure makes that operation easier to implement but harder for Rust and Python
+callers to interpret.
+
+The replacement should not be a workspace-wide error hierarchy or another layer callers must
+navigate. A public operation should expose one compact diagnostic type containing only distinctions
+that its caller can act upon. Internally it may preserve narrow source errors. Python should map
+stable semantic categories--parse failure, invalid input, contradiction, underdetermination,
+invalid argument, and internal failure--rather than mirror the Rust crate hierarchy. Dynamic boxing
+remains appropriate for genuinely open-ended extension boundaries, not merely because two known
+crates participate in one operation.
+
+The exact operation error types should be chosen together with validation policy. If validation
+makes a failure impossible for accepted inputs, that failure should not remain as an ordinary public
+variant. If it can still occur only because of an implementation invariant, it should be reported as
+an internal failure rather than misrepresented as invalid user data.
 
 ## Transaction lifecycle design
 
@@ -395,6 +523,12 @@ This keeps responsibilities narrow:
    status, or an orchestration-level fixpoint condition?
 9. How are typed validator diagnostics composed without recreating a manually closed global union?
 10. Which current direct mutations cannot yet be represented faithfully as `Edit`s?
+11. Which reaction-application outcomes are input-validation failures, match rejection, and internal
+    failures, and which product postconditions are part of the default operation contract?
+12. Which fixed public operations still need `Box<dyn UmolError>`, rather than a compact diagnostic
+    specific to that operation?
+13. Can concrete and enum-dispatched fingerprint entry points share one checked public contract and
+    one infallible internal implementation without introducing caller-visible witness types?
 
 ## Suggested design-spike sequence
 
@@ -404,8 +538,11 @@ Before producing a staged implementation plan:
    `MoleculeAst` and `MoleculeEditor`;
 2. prototype one-shot `transact_validated` using the existing journal and a generic closure error;
 3. lower kekulization to an edit batch and use it as the post-acceptance reference consumer;
-4. construct a resolver failure case that currently leaves partial mutation, then compare whole-call,
+4. classify and separate the current `ReactionAst::apply_at` outcomes, then use reaction application
+   to verify that ordinary match rejection is filtered while transaction defects remain visible;
+5. construct a resolver failure case that currently leaves partial mutation, then compare whole-call,
    stage, and per-entity rollback semantics;
-5. use that resolver case to decide whether captured context is enough or explicit savepoints are
+6. use that resolver case to decide whether captured context is enough or explicit savepoints are
    required;
-6. only then settle the validator composition API and operation trait changes.
+7. only then settle the validator composition API and operation trait changes, preferring direct
+   convenience methods over caller-visible lifecycle types.
