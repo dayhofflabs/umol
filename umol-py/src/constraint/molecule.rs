@@ -347,20 +347,12 @@ impl ResolvedConstraintsUpdate {
 }
 
 /// A whole-container input that snapshots either a value container or a live view.
-#[allow(
-    dead_code,
-    reason = "whole-container input for the unregistered molecule constraints surface"
-)]
 #[derive(FromPyObject)]
 pub(crate) enum ConstraintsArg {
     Container(Py<Constraints>),
     View(Py<ConstraintsView>),
 }
 
-#[allow(
-    dead_code,
-    reason = "whole-container input for the unregistered molecule constraints surface"
-)]
 impl ConstraintsArg {
     pub(crate) fn to_ast(&self, py: Python<'_>) -> PyResult<AstConstraints> {
         match self {
@@ -456,7 +448,6 @@ pub struct ConstraintsView {
 }
 
 impl ConstraintsView {
-    #[allow(dead_code, reason = "constructor for the unregistered ConstraintsView")]
     pub(crate) fn new(owner: Py<MoleculeAst>) -> Self {
         Self { owner }
     }

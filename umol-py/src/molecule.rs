@@ -10,6 +10,7 @@ use umol_ast::ast::{
 use crate::aromatic::{AromaticSystemAst, AromaticSystemViews};
 use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
+use crate::constraint::molecule::{Constraint, ConstraintsArg, ConstraintsView};
 use crate::dative::{DativeBondAst, DativeBondViews};
 use crate::multicenter::{MulticenterBondAst, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondViews};
@@ -39,7 +40,7 @@ impl MoleculeAst {
     /// stereo atom / stereo bond is a `(site, ligands, value)` triple: the site atom / bond
     /// index, a list of `StereoLigand`s in frame order, and a `StereoAtomAst` / `StereoBondAst`.
     #[staticmethod]
-    #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative_bonds=Vec::new(), aromatic_systems=Vec::new(), multicenter_bonds=Vec::new(), noncovalent_bonds=Vec::new(), stereo_atoms=Vec::new(), stereo_bonds=Vec::new()))]
+    #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative_bonds=Vec::new(), aromatic_systems=Vec::new(), multicenter_bonds=Vec::new(), noncovalent_bonds=Vec::new(), stereo_atoms=Vec::new(), stereo_bonds=Vec::new(), constraints=Vec::new()))]
     #[allow(clippy::too_many_arguments)] // one argument per entity family — the full molecule surface
     fn from_parts(
         py: Python<'_>,
@@ -51,6 +52,7 @@ impl MoleculeAst {
         noncovalent_bonds: Vec<([u32; 2], Py<NoncovalentBondAst>)>,
         stereo_atoms: Vec<(u32, Vec<StereoLigand>, Py<StereoAtomAst>)>,
         stereo_bonds: Vec<(u32, Vec<StereoLigand>, Py<StereoBondAst>)>,
+        constraints: Vec<Py<Constraint>>,
     ) -> Self {
         let ast_atoms = atoms
             .iter()
@@ -124,6 +126,10 @@ impl MoleculeAst {
                 )
             })
             .collect();
+        let ast_constraints = constraints
+            .iter()
+            .map(|constraint| constraint.bind(py).borrow().to_ast(py))
+            .collect::<Vec<_>>();
         MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
             atoms: ast_atoms,
             bonds: ast_bonds,
@@ -133,7 +139,7 @@ impl MoleculeAst {
             noncovalent: ast_noncovalent,
             stereo_atoms: ast_stereo_atoms,
             stereo_bonds: ast_stereo_bonds,
-            ..Default::default()
+            constraints: ast_constraints.into(),
         }))
     }
 
@@ -185,6 +191,20 @@ impl MoleculeAst {
         StereoBondViews::new(slf)
     }
 
+    /// The molecule-level constraints in insertion order.
+    #[getter]
+    fn constraints(slf: Py<Self>) -> ConstraintsView {
+        ConstraintsView::new(slf)
+    }
+
+    /// Replace the molecule-level constraints from an owned container or live view.
+    #[setter]
+    fn set_constraints(slf: Py<Self>, py: Python<'_>, value: ConstraintsArg) -> PyResult<()> {
+        let constraints = value.to_ast(py)?;
+        *slf.borrow_mut(py).inner_mut().constraints_mut() = constraints;
+        Ok(())
+    }
+
     fn __repr__(&self) -> String {
         // Atoms and bonds always; the other entity families (dative bonds, aromatic systems,
         // multicenter bonds, noncovalent bonds, stereo atoms, stereo bonds) only when present,
@@ -233,8 +253,9 @@ mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
         AromaticSystemAst as AstAromaticSystemAst, AromaticSystemId as AstAromaticSystemId,
-        AtomAst, BondAst as AstBondAst, DativeBondAst as AstDativeBondAst,
-        DativeBondId as AstDativeBondId, MulticenterBondAst as AstMulticenterBondAst,
+        AtomAst, BondAst as AstBondAst, Constraint as AstConstraint, Constraints as AstConstraints,
+        DativeBondAst as AstDativeBondAst, DativeBondId as AstDativeBondId,
+        MoleculeConstraint as AstMoleculeConstraint, MulticenterBondAst as AstMulticenterBondAst,
         MulticenterBondId as AstMulticenterBondId, NoncovalentBondAst as AstNoncovalentBondAst,
         NoncovalentBondId as AstNoncovalentBondId, NoncovalentBondKind,
     };
@@ -242,6 +263,8 @@ mod tests {
 
     use super::*;
     use crate::atom::AtomAst as PyAtomAst;
+    use crate::constraint::molecule::Constraints;
+    use crate::convert::into_py_variant;
 
     #[rstest]
     fn test_molecule_ast_new() {
@@ -300,6 +323,11 @@ mod tests {
                 )
                 .unwrap(),
             )];
+            let constraint = AstConstraint::Molecule(AstMoleculeConstraint::Connected {
+                atoms: Some(vec![AstAtomId(0), AstAtomId(2)]),
+            });
+            let constraints =
+                vec![into_py_variant(py, Constraint::from_ast(py, &constraint).unwrap()).unwrap()];
             let molecule = MoleculeAst::from_parts(
                 py,
                 atoms,
@@ -310,6 +338,7 @@ mod tests {
                 noncovalent,
                 Vec::new(),
                 Vec::new(),
+                constraints,
             );
             assert_eq!(molecule.inner().atoms().count(), 3);
             assert_eq!(molecule.inner().bonds().count(), 1);
@@ -339,6 +368,7 @@ mod tests {
             assert_eq!(noncovalent_bonds.count(), 1);
             let noncovalent_view = noncovalent_bonds.get(AstNoncovalentBondId(0)).unwrap();
             assert_eq!(noncovalent_view.atom_ids(), [AstAtomId(0), AstAtomId(2)]);
+            assert_eq!(molecule.inner().constraints().as_slice(), &[constraint]);
         });
     }
 
@@ -353,6 +383,78 @@ mod tests {
             ..Default::default()
         }));
         assert_eq!(molecule.inner().atoms().count(), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_ast_constraints() {
+        Python::attach(|py| {
+            let molecule = Py::new(py, MoleculeAst::new()).unwrap();
+            let view = MoleculeAst::constraints(molecule.clone_ref(py));
+            let constraint =
+                AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
+            view.with_mut(py, |constraints| constraints.push(constraint.clone()));
+
+            assert_eq!(
+                molecule.bind(py).borrow().inner().constraints().as_slice(),
+                &[constraint]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_ast_set_constraints() {
+        Python::attach(|py| {
+            let molecule = Py::new(py, MoleculeAst::new()).unwrap();
+            let constraint = AstConstraint::Molecule(AstMoleculeConstraint::Connected {
+                atoms: Some(vec![]),
+            });
+            let constraints = Py::new(
+                py,
+                Constraints::from_inner(AstConstraints::from(vec![constraint.clone()])),
+            )
+            .unwrap();
+
+            MoleculeAst::set_constraints(
+                molecule.clone_ref(py),
+                py,
+                ConstraintsArg::Container(constraints),
+            )
+            .unwrap();
+
+            assert_eq!(
+                molecule.bind(py).borrow().inner().constraints().as_slice(),
+                &[constraint]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_ast_set_constraints_self() {
+        Python::attach(|py| {
+            let constraint =
+                AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None });
+            let molecule = Py::new(
+                py,
+                MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
+                    constraints: AstConstraints::from(vec![constraint.clone()]),
+                    ..Default::default()
+                })),
+            )
+            .unwrap();
+            let own_view = Py::new(py, MoleculeAst::constraints(molecule.clone_ref(py))).unwrap();
+
+            MoleculeAst::set_constraints(
+                molecule.clone_ref(py),
+                py,
+                ConstraintsArg::View(own_view),
+            )
+            .unwrap();
+
+            assert_eq!(
+                molecule.bind(py).borrow().inner().constraints().as_slice(),
+                &[constraint]
+            );
+        });
     }
 
     #[rstest]

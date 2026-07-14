@@ -26,6 +26,10 @@ use crate::{
             DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst,
             DativeBondConstraintsView, DativeBondRingSizeCounts,
         },
+        molecule::{
+            Constraint, Constraints, ConstraintsView, MoleculeConstraint, RelationalConstraint,
+            SubPatternAnchor,
+        },
         multicenter::{
             MulticenterBondConstraintAst, MulticenterBondConstraintKey,
             MulticenterBondConstraintsAst, MulticenterBondConstraintsView,
@@ -106,6 +110,12 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Element>()?;
         module.add("ParseError", module.py().get_type::<ParseError>())?;
         module.add_class::<MoleculeAst>()?;
+        module.add_class::<SubPatternAnchor>()?;
+        module.add_class::<RelationalConstraint>()?;
+        module.add_class::<MoleculeConstraint>()?;
+        module.add_class::<Constraint>()?;
+        module.add_class::<Constraints>()?;
+        module.add_class::<ConstraintsView>()?;
         module.add_class::<RelOp>()?;
         module.add_class::<MemOp>()?;
         module.add_class::<ValueTerm>()?;

@@ -363,10 +363,21 @@ scope and membership payloads live in `constraint/ring.rs`.
   S1 suite has 91 cases and the complete `umol-py` library suite has 632; clippy,
   rustfmt, and `git diff --check` pass. Native registration and Python
   import-level coverage remain in S1d. `[dep: S1b]`
-- **S1d — `MoleculeAst` wiring** (`umol-py/src/molecule.rs`, `lib.rs`,
+- **S1d — DONE — `MoleculeAst` wiring** (`umol-py/src/molecule.rs`, `lib.rs`,
   `python/umol/__init__.py`): expose `mol.constraints`, add the keyword-only
   `constraints=()` input to `from_parts`, and register/export the S1 classes.
-  Existing calls remain valid. **Additive (green).** `[dep: S1c]`
+  The property returns a live `ConstraintsView` and accepts either `Constraints`
+  or another live view on assignment, using the same snapshot-before-write
+  discipline as the entity containers. `ConstraintIter` remains an internal
+  implementation type. Existing calls remain valid.
+
+  **Implemented verification:** three Rust wiring tests cover `from_parts`, live
+  store access, whole-container replacement, and self-view assignment. Eight
+  Python tests cover public imports, anchor fields, nested class-pattern matching,
+  duplicate-preserving sequence behavior, constructor input, live mutation, and
+  assignment from owned, external-view, and self-view inputs. The complete
+  `umol-py` suites pass with 635 Rust tests and 387 Python tests; workspace clippy,
+  rustfmt, and `git diff --check` pass. **Additive (green).** `[dep: S1c]`
 
 ### S2 — Old/new field-change vocabulary
 
