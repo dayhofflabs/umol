@@ -2,10 +2,12 @@
 
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    AromaticSystemFieldChange as AstAromaticSystemFieldChange, AtomAst as AstAtomAst,
-    AtomDelta as AstAtomDelta, AtomFieldChange as AstAtomFieldChange, AtomId as AstAtomId,
-    BondAst as AstBondAst, BondDelta as AstBondDelta, BondFieldChange as AstBondFieldChange,
-    BondId as AstBondId, DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
+    AromaticSystemAst as AstAromaticSystemAst, AromaticSystemDelta as AstAromaticSystemDelta,
+    AromaticSystemFieldChange as AstAromaticSystemFieldChange,
+    AromaticSystemId as AstAromaticSystemId, AtomAst as AstAtomAst, AtomDelta as AstAtomDelta,
+    AtomFieldChange as AstAtomFieldChange, AtomId as AstAtomId, BondAst as AstBondAst,
+    BondDelta as AstBondDelta, BondFieldChange as AstBondFieldChange, BondId as AstBondId,
+    DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
     DativeBondFieldChange as AstDativeBondFieldChange, DativeBondId as AstDativeBondId,
     MulticenterBondFieldChange as AstMulticenterBondFieldChange,
     NoncovalentBondFieldChange as AstNoncovalentBondFieldChange,
@@ -13,8 +15,10 @@ use umol_ast::ast::{
     StereoBondFieldChange as AstStereoBondFieldChange,
 };
 
+use crate::aromatic::AromaticSystemAst;
 use crate::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use crate::bond::BondAst;
+use crate::constraint::aromatic::AromaticSystemConstraintAst;
 use crate::constraint::atom::AtomConstraintAst;
 use crate::constraint::bond::BondConstraintAst;
 use crate::constraint::dative::DativeBondConstraintAst;
@@ -867,10 +871,162 @@ impl DativeBondDelta {
     }
 }
 
+pub struct AromaticSystemDeltaAstValue(Py<AromaticSystemAst>);
+
+impl FromPyObject<'_, '_> for AromaticSystemDeltaAstValue {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
+        let source = obj.extract::<PyRef<'_, AromaticSystemAst>>()?;
+        let ast = source.inner().clone();
+        drop(source);
+        Ok(Self(Py::new(obj.py(), AromaticSystemAst::from_inner(ast))?))
+    }
+}
+
+impl<'py> IntoPyObject<'py> for &AromaticSystemDeltaAstValue {
+    type Target = AromaticSystemAst;
+    type Output = Bound<'py, AromaticSystemAst>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        Ok(self.0.clone_ref(py).into_bound(py))
+    }
+}
+
+impl AromaticSystemDeltaAstValue {
+    fn from_rust(py: Python<'_>, ast: &AstAromaticSystemAst) -> PyResult<Self> {
+        Ok(Self(Py::new(
+            py,
+            AromaticSystemAst::from_inner(ast.clone()),
+        )?))
+    }
+
+    fn to_rust(&self, py: Python<'_>) -> AstAromaticSystemAst {
+        self.0.bind(py).borrow().inner().clone()
+    }
+}
+
+/// A resolved edit to one aromatic system.
+#[pyclass]
+pub enum AromaticSystemDelta {
+    Add {
+        id: u32,
+        atoms: Vec<u32>,
+        ast: AromaticSystemDeltaAstValue,
+    },
+    Remove {
+        id: u32,
+        atoms: Vec<u32>,
+        ast: AromaticSystemDeltaAstValue,
+    },
+    ModifyField {
+        id: u32,
+        change: Py<AromaticSystemFieldChange>,
+    },
+    ModifyConstraint {
+        id: u32,
+        old: Option<Py<AromaticSystemConstraintAst>>,
+        new: Option<Py<AromaticSystemConstraintAst>>,
+    },
+}
+
+#[pymethods]
+impl AromaticSystemDelta {
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self.to_rust(py) == other.to_rust(py)
+    }
+
+    fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
+        let (variant, fields): (&str, &[&str]) = match &*slf.bind(py).borrow() {
+            Self::Add { .. } => ("Add", &["id", "atoms", "ast"]),
+            Self::Remove { .. } => ("Remove", &["id", "atoms", "ast"]),
+            Self::ModifyField { .. } => ("ModifyField", &["id", "change"]),
+            Self::ModifyConstraint { .. } => ("ModifyConstraint", &["id", "old", "new"]),
+        };
+        entity_delta_repr(
+            slf.bind(py).as_any(),
+            "AromaticSystemDelta",
+            variant,
+            fields,
+        )
+    }
+
+    /// Return the inverse resolved edit.
+    fn inverse(&self, py: Python<'_>) -> PyResult<Py<Self>> {
+        into_py_variant(py, Self::from_rust(py, &self.to_rust(py).inverse())?)
+    }
+}
+
+impl AromaticSystemDelta {
+    pub(crate) fn from_rust(py: Python<'_>, delta: &AstAromaticSystemDelta) -> PyResult<Self> {
+        Ok(match delta {
+            AstAromaticSystemDelta::Add { id, atoms, ast } => Self::Add {
+                id: id.0,
+                atoms: atoms.iter().map(|atom| atom.0).collect(),
+                ast: AromaticSystemDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstAromaticSystemDelta::Remove { id, atoms, ast } => Self::Remove {
+                id: id.0,
+                atoms: atoms.iter().map(|atom| atom.0).collect(),
+                ast: AromaticSystemDeltaAstValue::from_rust(py, ast)?,
+            },
+            AstAromaticSystemDelta::ModifyField { id, change } => Self::ModifyField {
+                id: id.0,
+                change: into_py_variant(py, AromaticSystemFieldChange::from_rust(py, change)?)?,
+            },
+            AstAromaticSystemDelta::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id: id.0,
+                old: old
+                    .as_ref()
+                    .map(|constraint| {
+                        into_py_variant(py, AromaticSystemConstraintAst::from_rust(py, constraint)?)
+                    })
+                    .transpose()?,
+                new: new
+                    .as_ref()
+                    .map(|constraint| {
+                        into_py_variant(py, AromaticSystemConstraintAst::from_rust(py, constraint)?)
+                    })
+                    .transpose()?,
+            },
+        })
+    }
+
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstAromaticSystemDelta {
+        match self {
+            Self::Add { id, atoms, ast } => AstAromaticSystemDelta::Add {
+                id: AstAromaticSystemId(*id),
+                atoms: atoms.iter().copied().map(AstAtomId).collect(),
+                ast: ast.to_rust(py),
+            },
+            Self::Remove { id, atoms, ast } => AstAromaticSystemDelta::Remove {
+                id: AstAromaticSystemId(*id),
+                atoms: atoms.iter().copied().map(AstAtomId).collect(),
+                ast: ast.to_rust(py),
+            },
+            Self::ModifyField { id, change } => AstAromaticSystemDelta::ModifyField {
+                id: AstAromaticSystemId(*id),
+                change: change.bind(py).borrow().to_rust(py),
+            },
+            Self::ModifyConstraint { id, old, new } => AstAromaticSystemDelta::ModifyConstraint {
+                id: AstAromaticSystemId(*id),
+                old: old
+                    .as_ref()
+                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+                new: new
+                    .as_ref()
+                    .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
+        AromaticSystemConstraintAst as AstAromaticSystemConstraintAst,
         AtomConstraintAst as AstAtomConstraintAst, BondConstraintAst as AstBondConstraintAst,
         BooleanAst as AstBooleanAst, DativeBondConstraintAst as AstDativeBondConstraintAst,
         ElectronCountsAst as AstElectronCountsAst, ElementAst as AstElementAst,
@@ -2208,6 +2364,190 @@ mod tests {
     fn test_dative_bond_delta_inverse(#[case] delta: AstDativeBondDelta) {
         Python::attach(|py| {
             let binding = DativeBondDelta::from_rust(py, &delta).unwrap();
+            let inverse = binding.inverse(py).unwrap();
+            assert_eq!(
+                inverse.bind(py).borrow().to_rust(py),
+                delta.clone().inverse()
+            );
+            let roundtrip = inverse.bind(py).borrow().inverse(py).unwrap();
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), delta);
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstAromaticSystemDelta::Add {
+        id: AstAromaticSystemId(2),
+        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+        ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+    })]
+    #[case::remove(AstAromaticSystemDelta::Remove {
+        id: AstAromaticSystemId(2),
+        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+        ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+    })]
+    #[case::modify_field(AstAromaticSystemDelta::ModifyField {
+        id: AstAromaticSystemId(2),
+        change: AstAromaticSystemFieldChange::Charge {
+            old: AstValueAst::Lit(0),
+            new: AstValueAst::Lit(-1),
+        },
+    })]
+    #[case::constraint_added(AstAromaticSystemDelta::ModifyConstraint {
+        id: AstAromaticSystemId(2),
+        old: None,
+        new: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    })]
+    #[case::constraint_removed(AstAromaticSystemDelta::ModifyConstraint {
+        id: AstAromaticSystemId(2),
+        old: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+        new: None,
+    })]
+    #[case::constraint_modified(AstAromaticSystemDelta::ModifyConstraint {
+        id: AstAromaticSystemId(2),
+        old: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(5))),
+        new: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    })]
+    fn test_aromatic_system_delta_roundtrip(#[case] delta: AstAromaticSystemDelta) {
+        Python::attach(|py| {
+            assert_eq!(
+                AromaticSystemDelta::from_rust(py, &delta)
+                    .unwrap()
+                    .to_rust(py),
+                delta
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::equal(
+        AstAromaticSystemDelta::Add {
+            id: AstAromaticSystemId(2),
+            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        },
+        AstAromaticSystemDelta::Add {
+            id: AstAromaticSystemId(2),
+            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        },
+        true,
+    )]
+    #[case::different_atom_order(
+        AstAromaticSystemDelta::Add {
+            id: AstAromaticSystemId(2),
+            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        },
+        AstAromaticSystemDelta::Add {
+            id: AstAromaticSystemId(2),
+            atoms: vec![AstAtomId(2), AstAtomId(4), AstAtomId(4)],
+            ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        },
+        false,
+    )]
+    fn test_aromatic_system_delta_eq(
+        #[case] lhs: AstAromaticSystemDelta,
+        #[case] rhs: AstAromaticSystemDelta,
+        #[case] expected: bool,
+    ) {
+        Python::attach(|py| {
+            let lhs = AromaticSystemDelta::from_rust(py, &lhs).unwrap();
+            let rhs = AromaticSystemDelta::from_rust(py, &rhs).unwrap();
+            assert_eq!(lhs.__eq__(&rhs, py), expected);
+        });
+    }
+
+    #[rstest]
+    #[case::add(
+        AstAromaticSystemDelta::Add {
+            id: AstAromaticSystemId(2),
+            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        },
+        "AromaticSystemDelta.Add(id=2, atoms=[4, 2, 4], ast=AromaticSystemAst.parse('[1,1,1]'))",
+    )]
+    #[case::remove(
+        AstAromaticSystemDelta::Remove {
+            id: AstAromaticSystemId(2),
+            atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+            ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        },
+        "AromaticSystemDelta.Remove(id=2, atoms=[4, 2, 4], ast=AromaticSystemAst.parse('[1,1,1]'))",
+    )]
+    #[case::modify_field(
+        AstAromaticSystemDelta::ModifyField {
+            id: AstAromaticSystemId(2),
+            change: AstAromaticSystemFieldChange::Charge {
+                old: AstValueAst::Lit(0),
+                new: AstValueAst::Lit(-1),
+            },
+        },
+        "AromaticSystemDelta.ModifyField(id=2, change=AromaticSystemFieldChange.Charge(old=ValueAst.Lit(0), new=ValueAst.Lit(-1)))",
+    )]
+    #[case::modify_constraint(
+        AstAromaticSystemDelta::ModifyConstraint {
+            id: AstAromaticSystemId(2),
+            old: None,
+            new: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+        },
+        "AromaticSystemDelta.ModifyConstraint(id=2, old=None, new=AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)))",
+    )]
+    fn test_aromatic_system_delta_repr(
+        #[case] delta: AstAromaticSystemDelta,
+        #[case] expected: &str,
+    ) {
+        Python::attach(|py| {
+            let delta =
+                into_py_variant(py, AromaticSystemDelta::from_rust(py, &delta).unwrap()).unwrap();
+            assert_eq!(
+                delta
+                    .bind(py)
+                    .as_any()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::add(AstAromaticSystemDelta::Add {
+        id: AstAromaticSystemId(2),
+        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+        ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+    })]
+    #[case::remove(AstAromaticSystemDelta::Remove {
+        id: AstAromaticSystemId(2),
+        atoms: vec![AstAtomId(4), AstAtomId(2), AstAtomId(4)],
+        ast: AstAromaticSystemAst::from_electrons(vec![1, 1, 1]),
+    })]
+    #[case::modify_field(AstAromaticSystemDelta::ModifyField {
+        id: AstAromaticSystemId(2),
+        change: AstAromaticSystemFieldChange::Charge {
+            old: AstValueAst::Lit(0),
+            new: AstValueAst::Lit(-1),
+        },
+    })]
+    #[case::constraint_added(AstAromaticSystemDelta::ModifyConstraint {
+        id: AstAromaticSystemId(2),
+        old: None,
+        new: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    })]
+    #[case::constraint_removed(AstAromaticSystemDelta::ModifyConstraint {
+        id: AstAromaticSystemId(2),
+        old: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+        new: None,
+    })]
+    #[case::constraint_modified(AstAromaticSystemDelta::ModifyConstraint {
+        id: AstAromaticSystemId(2),
+        old: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(5))),
+        new: Some(AstAromaticSystemConstraintAst::ElectronCount(AstValueAst::Lit(6))),
+    })]
+    fn test_aromatic_system_delta_inverse(#[case] delta: AstAromaticSystemDelta) {
+        Python::attach(|py| {
+            let binding = AromaticSystemDelta::from_rust(py, &delta).unwrap();
             let inverse = binding.inverse(py).unwrap();
             assert_eq!(
                 inverse.bind(py).borrow().to_rust(py),

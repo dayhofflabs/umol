@@ -147,9 +147,7 @@ impl AromaticSystemAst {
         &mut self.0
     }
 
-    /// Wrap an AST system (the hold-the-value `from_inner` bridge, paired with
-    /// `inner`). Test-only — in-crate construction wraps `AromaticSystemAst(..)` directly.
-    #[cfg(test)]
+    /// Wrap an owned Rust aromatic-system AST.
     pub(crate) fn from_inner(system: AstAromaticSystemAst) -> Self {
         AromaticSystemAst(system)
     }

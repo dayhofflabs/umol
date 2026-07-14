@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S3b.1 complete; S3b.2 is next**
+Status: **ACTIVE — S3b.2 complete; S3b.3 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -673,7 +673,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      complete `umol-py` suites pass with 747 Rust tests and 449 Python tests.
      `umol-py` clippy, rustfmt, and `git diff --check` pass.
 
-  2. **S3b.2 — `AromaticSystemDelta` and ordered member atoms** — add the private
+  2. **DONE — S3b.2 — `AromaticSystemDelta` and ordered member atoms** — add the private
      snapshotting `AromaticSystemDeltaAstValue` field wrapper and define the
      four variants directly. Preserve the variable-length member-atom vector as
      an ordered Python list and wire `AromaticSystemFieldChange` plus optional
@@ -682,6 +682,17 @@ scope and membership payloads live in `constraint/ring.rs`.
      Python construction, matching, ownership, optional-constraint, participant
      order/multiplicity, and inverse coverage as S3b.1. **Additive (green).**
      `[dep: S2a.3, S3a.3]`
+
+     **Implemented verification:** six Rust round-trip rows and six
+     inverse/double-inverse rows cover every variant and all optional-constraint
+     directions; two equality rows preserve member-atom order, and four repr
+     rows cover the complete variant surface. Four Python tests cover keyword
+     construction, read-only fields, positional and named matching, source
+     snapshot isolation, live stored AST mutation, member order and duplicates,
+     list representation, unhashability, and concrete inverse subtypes. The
+     focused delta suites pass with 130 Rust tests and 66 Python tests; the
+     complete `umol-py` suites pass with 765 Rust tests and 453 Python tests.
+     `umol-py` clippy, rustfmt, and `git diff --check` pass.
 
   3. **S3b.3 — `MulticenterBondDelta` and ordered member atoms** — add the
      private snapshotting `MulticenterBondDeltaAstValue` field wrapper and

@@ -1,6 +1,9 @@
 import pytest
 
 from umol import (
+    AromaticSystemAst,
+    AromaticSystemConstraintAst,
+    AromaticSystemDelta,
     AromaticSystemFieldChange,
     AtomAst,
     AtomConstraintAst,
@@ -888,6 +891,97 @@ def test_dativebonddelta_modifyconstraint_match():
     inverse = delta.inverse()
     assert isinstance(inverse, DativeBondDelta.ModifyConstraint)
     assert inverse.old == DativeBondConstraintAst.Aromatic(BooleanAst.Lit(True))
+    assert inverse.new is None
+    assert inverse.inverse() == delta
+
+
+def test_aromaticsystemdelta_fields():
+    source = AromaticSystemAst([1, 1, 1])
+    delta = AromaticSystemDelta.Add(id=2, atoms=[4, 2, 4], ast=source)
+
+    source.electrons = [2, 0, 1]
+
+    assert delta.id == 2
+    assert delta.atoms == [4, 2, 4]
+    assert isinstance(delta.atoms, list)
+    assert delta.ast.electrons == ElectronCountsAst.Lit([1, 1, 1])
+    assert repr(delta) == (
+        "AromaticSystemDelta.Add(id=2, atoms=[4, 2, 4], "
+        "ast=AromaticSystemAst.parse('[1,1,1]'))"
+    )
+    delta.ast.charge = -1
+    assert delta.ast.charge == ValueAst.Lit(-1)
+    with pytest.raises(AttributeError):
+        delta.atoms = [2, 4, 4]
+    with pytest.raises(TypeError):
+        hash(delta)
+
+
+def test_aromaticsystemdelta_add_match():
+    delta = AromaticSystemDelta.Add(
+        id=2,
+        atoms=[4, 2, 4],
+        ast=AromaticSystemAst([1, 1, 1]),
+    )
+
+    match delta:
+        case AromaticSystemDelta.Add(id=id, atoms=atoms, ast=ast):
+            assert id == 2
+            assert atoms == [4, 2, 4]
+            assert ast == AromaticSystemAst([1, 1, 1])
+        case _:
+            raise AssertionError("aromatic system delta did not match its add variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, AromaticSystemDelta.Remove)
+    assert inverse.id == 2
+    assert inverse.atoms == [4, 2, 4]
+    assert inverse.ast == AromaticSystemAst([1, 1, 1])
+    assert inverse.inverse() == delta
+
+
+def test_aromaticsystemdelta_modifyfield_match():
+    delta = AromaticSystemDelta.ModifyField(
+        id=2,
+        change=AromaticSystemFieldChange.Charge(
+            old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+        ),
+    )
+
+    match delta:
+        case AromaticSystemDelta.ModifyField(id, change):
+            assert id == 2
+            assert change == AromaticSystemFieldChange.Charge(
+                old=ValueAst.Lit(0), new=ValueAst.Lit(-1)
+            )
+        case _:
+            raise AssertionError("aromatic system delta did not match its field variant")
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, AromaticSystemDelta.ModifyField)
+    assert inverse.inverse() == delta
+
+
+def test_aromaticsystemdelta_modifyconstraint_match():
+    delta = AromaticSystemDelta.ModifyConstraint(
+        id=2,
+        old=None,
+        new=AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6)),
+    )
+
+    match delta:
+        case AromaticSystemDelta.ModifyConstraint(id=id, old=old, new=new):
+            assert id == 2
+            assert old is None
+            assert new == AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))
+        case _:
+            raise AssertionError(
+                "aromatic system delta did not match its constraint variant"
+            )
+
+    inverse = delta.inverse()
+    assert isinstance(inverse, AromaticSystemDelta.ModifyConstraint)
+    assert inverse.old == AromaticSystemConstraintAst.ElectronCount(ValueAst.Lit(6))
     assert inverse.new is None
     assert inverse.inverse() == delta
 

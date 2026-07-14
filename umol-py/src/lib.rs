@@ -48,8 +48,8 @@ use crate::{
     },
     dative::{DativeBondAst, DativeBondView, DativeBondViews},
     delta::{
-        AromaticSystemFieldChange, AtomDelta, AtomFieldChange, BondDelta, BondFieldChange,
-        DativeBondDelta, DativeBondFieldChange, MulticenterBondFieldChange,
+        AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, AtomFieldChange, BondDelta,
+        BondFieldChange, DativeBondDelta, DativeBondFieldChange, MulticenterBondFieldChange,
         NoncovalentBondFieldChange, StereoAtomFieldChange, StereoBondFieldChange,
     },
     electrons::ElectronCountsAst,
@@ -117,6 +117,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Element>()?;
         module.add("ParseError", module.py().get_type::<ParseError>())?;
         module.add_class::<MoleculeAst>()?;
+        module.add_class::<AromaticSystemDelta>()?;
         module.add_class::<AtomDelta>()?;
         module.add_class::<AtomFieldChange>()?;
         module.add_class::<BondDelta>()?;
