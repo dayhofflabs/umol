@@ -254,7 +254,7 @@ scope and membership payloads live in `constraint/ring.rs`.
   rustfmt, and `git diff --check` pass. Python import-level construction,
   field-access, and pattern-match tests land with registration in S1d.
   **Additive (green).** `[dep: —]`
-- **S1b — recursive `Constraint` mirror** (`constraint/molecule.rs`): add one
+- **S1b — DONE — recursive `Constraint` mirror** (`constraint/molecule.rs`): add one
   native complex-enum mirror with the following exact 13-variant closure:
 
   1. **DONE — Ordinary entity leaves (6)** — the entity id is a bare Python `int`; the
@@ -283,12 +283,12 @@ scope and membership payloads live in `constraint/ring.rs`.
      - `StereoBond(int, StereoKind, StereoBondConstraintAst)` ↔
        `Constraint::StereoBond(StereoBondId, ast::StereoKind,
        ast::StereoBondConstraintAst)`.
-  3. **Aggregate leaves (2)** — reuse the S1a mirrors directly:
+  3. **DONE — Aggregate leaves (2)** — reuse the S1a mirrors directly:
      - `Relational(RelationalConstraint)` ↔
        `Constraint::Relational(ast::RelationalConstraint)`;
      - `Molecule(MoleculeConstraint)` ↔
        `Constraint::Molecule(ast::MoleculeConstraint)`.
-  4. **Recursive combinators (3)** — recursive children are native variant
+  4. **DONE — Recursive combinators (3)** — recursive children are native variant
      instances, not base-enum objects:
      - `And(list[Constraint])` ↔ `Constraint::And(Vec<Constraint>)`;
      - `Or(list[Constraint])` ↔ `Constraint::Or(Vec<Constraint>)`;
@@ -305,15 +305,12 @@ scope and membership payloads live in `constraint/ring.rs`.
   for stereo leaves, and arity 1 for aggregate/combinator variants. The mirror
   is value-equal and unhashable.
 
-  **Implemented verification:** one round-trip case for each of the six ordinary
-  and two stereo entity leaves, including distinct stereo kinds and their bound
-  structural constraint payloads. The focused S1a/S1b suite has 47 cases.
-
-  **Tests:** one round-trip row for every variant (13), with distinct stereo
-  kinds and representative child constraints; explicit empty `And([])` and
-  `Or([])` cases; and one deep tree combining entity, relational, and molecule
-  leaves beneath `And`/`Or`/`Not`. Exercise native variant construction, field
-  access, repr, equality, and recursive pattern matching from Rust-side PyO3;
+  **Implemented verification:** one round-trip row covers each of the exact 13
+  variants, with distinct stereo kinds, representative child constraints, and
+  explicit empty `And([])` and `Or([])` cases. A deep tree combines entity,
+  relational, and molecule leaves beneath `And`/`Or`/`Not` and exercises the
+  concrete Python variant fields, exact recursive repr, equality, and class
+  pattern matching from Rust-side PyO3. The focused S1a/S1b suite has 53 cases;
   import-level Python coverage remains in S1d when the type is registered.
   **Additive (green).** `[dep: S1a]`
 - **S1c — molecule constraint container** (`constraint/molecule.rs`): add

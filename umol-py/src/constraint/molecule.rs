@@ -85,8 +85,8 @@ pub enum MoleculeConstraint {
     SubPattern(Py<SubPatternAnchor>, Py<MoleculeAst>),
 }
 
-/// A recursive molecule-constraint tree. This slice contains the ordinary and
-/// stereo entity leaves; aggregate and combinator variants follow in S1b.
+/// A recursive molecule-constraint tree containing entity leaves, aggregate
+/// leaves, and Boolean combinators.
 #[pyclass]
 pub enum Constraint {
     Atom(u32, Py<AtomConstraintAst>),
@@ -97,6 +97,11 @@ pub enum Constraint {
     NoncovalentBond(u32, Py<NoncovalentBondConstraintAst>),
     StereoAtom(u32, StereoKind, Py<StereoAtomConstraintAst>),
     StereoBond(u32, StereoKind, Py<StereoBondConstraintAst>),
+    Relational(Py<RelationalConstraint>),
+    Molecule(Py<MoleculeConstraint>),
+    And(Vec<Py<Constraint>>),
+    Or(Vec<Py<Constraint>>),
+    Not(Py<Constraint>),
 }
 
 #[pymethods]
@@ -115,17 +120,23 @@ impl Constraint {
             Self::NoncovalentBond(_, _) => ("NoncovalentBond", 2),
             Self::StereoAtom(_, _, _) => ("StereoAtom", 3),
             Self::StereoBond(_, _, _) => ("StereoBond", 3),
+            Self::Relational(_) => ("Relational", 1),
+            Self::Molecule(_) => ("Molecule", 1),
+            Self::And(_) => ("And", 1),
+            Self::Or(_) => ("Or", 1),
+            Self::Not(_) => ("Not", 1),
         };
         variant_repr(slf.bind(py).as_any(), "Constraint", variant, arity)
     }
 }
 
-#[allow(dead_code, reason = "consumed by the constraint container later in S1")]
+#[allow(
+    dead_code,
+    reason = "conversion support for an unregistered mirror type"
+)]
 impl Constraint {
-    /// Convert an entity leaf. Other variants return `None` until the remaining
-    /// S1b slices extend this mirror.
-    pub(crate) fn from_ast(py: Python<'_>, constraint: &AstConstraint) -> PyResult<Option<Self>> {
-        Ok(Some(match constraint {
+    pub(crate) fn from_ast(py: Python<'_>, constraint: &AstConstraint) -> PyResult<Self> {
+        Ok(match constraint {
             AstConstraint::Atom(id, child) => Self::Atom(
                 id.0,
                 into_py_variant(py, AtomConstraintAst::from_ast(py, child)?)?,
@@ -160,8 +171,30 @@ impl Constraint {
                 StereoKind::from_ast(*kind),
                 into_py_variant(py, StereoBondConstraintAst::from_ast(py, child)?)?,
             ),
-            _ => return Ok(None),
-        }))
+            AstConstraint::Relational(child) => Self::Relational(into_py_variant(
+                py,
+                RelationalConstraint::from_ast(py, child)?,
+            )?),
+            AstConstraint::Molecule(child) => Self::Molecule(into_py_variant(
+                py,
+                MoleculeConstraint::from_ast(py, child)?,
+            )?),
+            AstConstraint::And(children) => Self::And(
+                children
+                    .iter()
+                    .map(|child| into_py_variant(py, Self::from_ast(py, child)?))
+                    .collect::<PyResult<_>>()?,
+            ),
+            AstConstraint::Or(children) => Self::Or(
+                children
+                    .iter()
+                    .map(|child| into_py_variant(py, Self::from_ast(py, child)?))
+                    .collect::<PyResult<_>>()?,
+            ),
+            AstConstraint::Not(child) => {
+                Self::Not(into_py_variant(py, Self::from_ast(py, child)?)?)
+            }
+        })
     }
 
     pub(crate) fn to_ast(&self, py: Python<'_>) -> AstConstraint {
@@ -197,6 +230,23 @@ impl Constraint {
                 kind.to_ast(),
                 child.bind(py).borrow().to_ast(py),
             ),
+            Self::Relational(child) => {
+                AstConstraint::Relational(child.bind(py).borrow().to_ast(py))
+            }
+            Self::Molecule(child) => AstConstraint::Molecule(child.bind(py).borrow().to_ast(py)),
+            Self::And(children) => AstConstraint::And(
+                children
+                    .iter()
+                    .map(|child| child.bind(py).borrow().to_ast(py))
+                    .collect(),
+            ),
+            Self::Or(children) => AstConstraint::Or(
+                children
+                    .iter()
+                    .map(|child| child.bind(py).borrow().to_ast(py))
+                    .collect(),
+            ),
+            Self::Not(child) => AstConstraint::Not(Box::new(child.bind(py).borrow().to_ast(py))),
         }
     }
 }
@@ -221,7 +271,7 @@ impl MoleculeConstraint {
 
 #[allow(
     dead_code,
-    reason = "consumed by the recursive constraint mirror later in S1a"
+    reason = "conversion support for an unregistered mirror type"
 )]
 impl MoleculeConstraint {
     pub(crate) fn from_ast(py: Python<'_>, constraint: &AstMoleculeConstraint) -> PyResult<Self> {
@@ -335,7 +385,7 @@ impl RelationalConstraint {
 
 #[allow(
     dead_code,
-    reason = "consumed by the recursive constraint mirror later in S1a"
+    reason = "conversion support for an unregistered mirror type"
 )]
 impl RelationalConstraint {
     /// Convert any relational constraint into its Python mirror.
@@ -735,7 +785,7 @@ impl SubPatternAnchor {
 
 #[allow(
     dead_code,
-    reason = "consumed by the molecule constraint mirror later in S1a"
+    reason = "conversion support for an unregistered mirror type"
 )]
 impl SubPatternAnchor {
     pub(crate) fn from_ast(anchor: &AstSubPatternAnchor) -> Self {
@@ -817,6 +867,9 @@ impl SubPatternAnchor {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::CString;
+
+    use pyo3::types::PyDict;
     use rstest::rstest;
     use umol_ast::ast::{
         AromaticSystemConstraintAst as AstAromaticSystemConstraintAst,
@@ -1073,12 +1126,111 @@ mod tests {
             AstStereogenicity::Prochiral,
         )),
     ))]
+    #[case::relational(AstConstraint::Relational(
+        AstRelationalConstraint::DativeBondDonor {
+            bond: AstDativeBondId(12),
+            atom: AstAtomId(13),
+        },
+    ))]
+    #[case::molecule(AstConstraint::Molecule(
+        AstMoleculeConstraint::Connected {
+            atoms: Some(vec![AstAtomId(14), AstAtomId(15)]),
+        },
+    ))]
+    #[case::and(AstConstraint::And(Vec::new()))]
+    #[case::or(AstConstraint::Or(Vec::new()))]
+    #[case::not(AstConstraint::Not(Box::new(AstConstraint::Atom(
+        AstAtomId(16),
+        AstAtomConstraintAst::degree(3),
+    ))))]
     fn test_constraint_roundtrip(#[case] constraint: AstConstraint) {
         Python::attach(|py| {
-            let mirror = Constraint::from_ast(py, &constraint)
-                .unwrap()
-                .expect("ordinary entity leaf");
+            let mirror = Constraint::from_ast(py, &constraint).unwrap();
             assert_eq!(mirror.to_ast(py), constraint);
+        });
+    }
+
+    #[rstest]
+    fn test_constraint_roundtrip_recursive() {
+        let constraint = AstConstraint::And(vec![
+            AstConstraint::Atom(AstAtomId(17), AstAtomConstraintAst::valence(4)),
+            AstConstraint::Or(vec![
+                AstConstraint::Relational(AstRelationalConstraint::DativeBondDonor {
+                    bond: AstDativeBondId(18),
+                    atom: AstAtomId(19),
+                }),
+                AstConstraint::Not(Box::new(AstConstraint::Molecule(
+                    AstMoleculeConstraint::Connected {
+                        atoms: Some(vec![AstAtomId(20), AstAtomId(21)]),
+                    },
+                ))),
+            ]),
+        ]);
+
+        Python::attach(|py| {
+            let mirror =
+                into_py_variant(py, Constraint::from_ast(py, &constraint).unwrap()).unwrap();
+            let equal =
+                into_py_variant(py, Constraint::from_ast(py, &constraint).unwrap()).unwrap();
+
+            assert_eq!(mirror.bind(py).borrow().to_ast(py), constraint);
+            assert!(mirror
+                .bind(py)
+                .as_any()
+                .eq(equal.bind(py).as_any())
+                .unwrap());
+            assert_eq!(
+                mirror
+                    .bind(py)
+                    .as_any()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "Constraint.And([Constraint.Atom(17, AtomConstraintAst.Valence(ValueAst.Lit(4))), Constraint.Or([Constraint.Relational(RelationalConstraint.DativeBondDonor(18, 19)), Constraint.Not(Constraint.Molecule(MoleculeConstraint.Connected([20, 21])))])])"
+            );
+
+            let children = mirror.bind(py).as_any().getattr("_0").unwrap();
+            assert_eq!(children.len().unwrap(), 2);
+            assert_eq!(
+                children
+                    .get_item(0)
+                    .unwrap()
+                    .getattr("_0")
+                    .unwrap()
+                    .extract::<u32>()
+                    .unwrap(),
+                17
+            );
+
+            let locals = PyDict::new(py);
+            locals.set_item("node", &mirror).unwrap();
+            let source = CString::new(
+                r#"
+And = type(node)
+Atom = type(node._0[0])
+Or = type(node._0[1])
+Relational = type(node._0[1]._0[0])
+Not = type(node._0[1]._0[1])
+Molecule = type(node._0[1]._0[1]._0)
+match node:
+    case And([Atom(atom_id, _), Or([Relational(_), Not(Molecule(_))])]):
+        matched_atom_id = atom_id
+    case _:
+        matched_atom_id = None
+"#,
+            )
+            .unwrap();
+            py.run(source.as_c_str(), None, Some(&locals)).unwrap();
+            assert_eq!(
+                locals
+                    .get_item("matched_atom_id")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<u32>()
+                    .unwrap(),
+                17
+            );
         });
     }
 }
