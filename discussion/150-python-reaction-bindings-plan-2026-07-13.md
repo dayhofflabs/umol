@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S3c.2 complete; S3c.3 is next**
+Status: **ACTIVE — S3c complete; S3d is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -858,7 +858,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      with 857 Rust tests and 491 Python tests. `umol-py` clippy, rustfmt, and
      `git diff --check` pass.
 
-  3. **S3c.3 — stereo-delta closure verification** — add a fourteen-row Python
+  3. **DONE — S3c.3 — stereo-delta closure verification** — add a fourteen-row Python
      matrix spanning all seven variants of both classes. Verify exact repr,
      structural value equality, concrete inverse subtype, and double inversion
      on every row. Require inequality after one inversion for `Add`, `Remove`,
@@ -870,6 +870,15 @@ scope and membership payloads live in `constraint/ring.rs`.
      Run the complete Rust and Python suites, workspace clippy, rustfmt, and
      `git diff --check` as the stage gate. **Additive (green).**
      `[dep: S3c.1, S3c.2]`
+
+     **Implemented verification:** the fourteen-row Python closure matrix covers
+     every variant of `StereoAtomDelta` and `StereoBondDelta`. Every row verifies
+     exact repr, structural equality through double inversion, and the concrete
+     inverse subtype. The ten transforming rows verify inequality after one
+     inversion; the four `Swap`/`Mirror` rows verify equality after one inversion.
+     The focused delta suite passes with 118 Python tests; the complete
+     `umol-py` suites pass with 857 Rust tests and 505 Python tests. Workspace
+     clippy, rustfmt, and `git diff --check` pass.
 
   **Critical path:** `S2b.2 → S3c.1 → S3c.2 → S3c.3`. No S3c subitem is
   deferrable: S4a requires both complete seven-variant bindings.

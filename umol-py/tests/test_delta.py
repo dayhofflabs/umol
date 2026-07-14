@@ -1905,3 +1905,190 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
     assert type(inverse) is inverse_type
     assert inverse != delta
     assert inverse.inverse() == delta
+
+
+@pytest.mark.parametrize(
+    ("delta", "expected_repr", "inverse_type", "self_inverse"),
+    [
+        (
+            StereoAtomDelta.Add(
+                id=5,
+                site=3,
+                ligands=[StereoLigand(4, StereoLigandKind.Atom)],
+                ast=StereoAtomAst(
+                    StereoConfigurationAst.Kinded(
+                        StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+                    )
+                ),
+            ),
+            "StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], ast=StereoAtomAst.parse('Th0'))",
+            StereoAtomDelta.Remove,
+            False,
+        ),
+        (
+            StereoAtomDelta.Remove(
+                id=5,
+                site=3,
+                ligands=[StereoLigand(4, StereoLigandKind.Atom)],
+                ast=StereoAtomAst(
+                    StereoConfigurationAst.Kinded(
+                        StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+                    )
+                ),
+            ),
+            "StereoAtomDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], ast=StereoAtomAst.parse('Th0'))",
+            StereoAtomDelta.Add,
+            False,
+        ),
+        (
+            StereoAtomDelta.ModifyField(
+                id=5,
+                change=StereoAtomFieldChange.Configuration(
+                    old=StereoConfigurationAst.Undetermined(),
+                    new=StereoConfigurationAst.Kinded(
+                        StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+                    ),
+                ),
+            ),
+            "StereoAtomDelta.ModifyField(id=5, change=StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Lit(0))))",
+            StereoAtomDelta.ModifyField,
+            False,
+        ),
+        (
+            StereoAtomDelta.ModifyConstraint(
+                id=5,
+                kind=StereoKind.Tetrahedral,
+                old=None,
+                new=StereoAtomConstraintAst.Stereogenicity(
+                    StereogenicityAst.Undetermined()
+                ),
+            ),
+            "StereoAtomDelta.ModifyConstraint(id=5, kind=StereoKind.Tetrahedral, old=None, new=StereoAtomConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()))",
+            StereoAtomDelta.ModifyConstraint,
+            False,
+        ),
+        (
+            StereoAtomDelta.Apply(
+                id=5,
+                kind=StereoKind.Tetrahedral,
+                permutation=Permutation([1, 2, 0, 3]),
+            ),
+            "StereoAtomDelta.Apply(id=5, kind=StereoKind.Tetrahedral, permutation=Permutation([1, 2, 0, 3]))",
+            StereoAtomDelta.Apply,
+            False,
+        ),
+        (
+            StereoAtomDelta.Swap(id=5, kind=StereoKind.Tetrahedral),
+            "StereoAtomDelta.Swap(id=5, kind=StereoKind.Tetrahedral)",
+            StereoAtomDelta.Swap,
+            True,
+        ),
+        (
+            StereoAtomDelta.Mirror(id=5, kind=StereoKind.Tetrahedral),
+            "StereoAtomDelta.Mirror(id=5, kind=StereoKind.Tetrahedral)",
+            StereoAtomDelta.Mirror,
+            True,
+        ),
+        (
+            StereoBondDelta.Add(
+                id=5,
+                site=3,
+                ligands=[StereoLigand(4, StereoLigandKind.Atom)],
+                ast=StereoBondAst(
+                    StereoConfigurationAst.Kinded(
+                        StereoKind.CisTrans, StereoCosetAst.Lit(0)
+                    )
+                ),
+            ),
+            "StereoBondDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], ast=StereoBondAst.parse('Ct0'))",
+            StereoBondDelta.Remove,
+            False,
+        ),
+        (
+            StereoBondDelta.Remove(
+                id=5,
+                site=3,
+                ligands=[StereoLigand(4, StereoLigandKind.Atom)],
+                ast=StereoBondAst(
+                    StereoConfigurationAst.Kinded(
+                        StereoKind.CisTrans, StereoCosetAst.Lit(0)
+                    )
+                ),
+            ),
+            "StereoBondDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], ast=StereoBondAst.parse('Ct0'))",
+            StereoBondDelta.Add,
+            False,
+        ),
+        (
+            StereoBondDelta.ModifyField(
+                id=5,
+                change=StereoBondFieldChange.Configuration(
+                    old=StereoConfigurationAst.Undetermined(),
+                    new=StereoConfigurationAst.Kinded(
+                        StereoKind.CisTrans, StereoCosetAst.Lit(0)
+                    ),
+                ),
+            ),
+            "StereoBondDelta.ModifyField(id=5, change=StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Lit(0))))",
+            StereoBondDelta.ModifyField,
+            False,
+        ),
+        (
+            StereoBondDelta.ModifyConstraint(
+                id=5,
+                kind=StereoKind.CisTrans,
+                old=None,
+                new=StereoBondConstraintAst.Stereogenicity(
+                    StereogenicityAst.Undetermined()
+                ),
+            ),
+            "StereoBondDelta.ModifyConstraint(id=5, kind=StereoKind.CisTrans, old=None, new=StereoBondConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()))",
+            StereoBondDelta.ModifyConstraint,
+            False,
+        ),
+        (
+            StereoBondDelta.Apply(
+                id=5,
+                kind=StereoKind.CisTrans,
+                permutation=Permutation([1, 2, 0, 3]),
+            ),
+            "StereoBondDelta.Apply(id=5, kind=StereoKind.CisTrans, permutation=Permutation([1, 2, 0, 3]))",
+            StereoBondDelta.Apply,
+            False,
+        ),
+        (
+            StereoBondDelta.Swap(id=5, kind=StereoKind.CisTrans),
+            "StereoBondDelta.Swap(id=5, kind=StereoKind.CisTrans)",
+            StereoBondDelta.Swap,
+            True,
+        ),
+        (
+            StereoBondDelta.Mirror(id=5, kind=StereoKind.CisTrans),
+            "StereoBondDelta.Mirror(id=5, kind=StereoKind.CisTrans)",
+            StereoBondDelta.Mirror,
+            True,
+        ),
+    ],
+    ids=[
+        "atom-add",
+        "atom-remove",
+        "atom-modify-field",
+        "atom-modify-constraint",
+        "atom-apply",
+        "atom-swap",
+        "atom-mirror",
+        "bond-add",
+        "bond-remove",
+        "bond-modify-field",
+        "bond-modify-constraint",
+        "bond-apply",
+        "bond-swap",
+        "bond-mirror",
+    ],
+)
+def test_stereodelta_closure(delta, expected_repr, inverse_type, self_inverse):
+    assert repr(delta) == expected_repr
+    inverse = delta.inverse()
+    assert type(inverse) is inverse_type
+    assert (inverse == delta) is self_inverse
+    assert inverse.inverse() == delta
