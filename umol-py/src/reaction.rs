@@ -426,4 +426,38 @@ mod tests {
             assert_eq!(reaction.to_rust(py), expected);
         });
     }
+
+    #[rstest]
+    fn test_reaction_ast_to_rust_roundtrip() {
+        Python::attach(|py| {
+            let expected = AstReactionAst::new(
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+                    ..Default::default()
+                }),
+                vec![AstDelta::Atom(AstAtomDelta::Add {
+                    id: AstAtomId(1),
+                    ast: AstAtomAst::from_element(ChemElement::O),
+                })]
+                .into_iter()
+                .collect(),
+            );
+            let python =
+                Py::new(py, ReactionAst::from_rust(py, expected.clone()).unwrap()).unwrap();
+
+            let rust = python.bind(py).borrow().to_rust(py);
+            let roundtrip = Py::new(py, ReactionAst::from_rust(py, rust).unwrap()).unwrap();
+
+            assert_eq!(roundtrip.bind(py).borrow().to_rust(py), expected);
+            assert_ne!(python.as_ptr(), roundtrip.as_ptr());
+            assert_ne!(
+                python.bind(py).borrow().lhs.as_ptr(),
+                roundtrip.bind(py).borrow().lhs.as_ptr()
+            );
+            assert_ne!(
+                python.bind(py).borrow().deltas.as_ptr(),
+                roundtrip.bind(py).borrow().deltas.as_ptr()
+            );
+        });
+    }
 }

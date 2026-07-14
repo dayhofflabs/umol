@@ -63,6 +63,7 @@ use crate::{
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst, NoncovalentBondView,
         NoncovalentBondViews,
     },
+    reaction::ReactionAst,
     spin::SpinStateAst,
     stereo::{
         CisTransStereo, CisTransStereoAst, LigandPermutation, Orientation,
@@ -144,6 +145,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ConstraintDelta>()?;
         module.add_class::<Delta>()?;
         module.add_class::<Deltas>()?;
+        module.add_class::<ReactionAst>()?;
         module.add_class::<SubPatternAnchor>()?;
         module.add_class::<RelationalConstraint>()?;
         module.add_class::<MoleculeConstraint>()?;

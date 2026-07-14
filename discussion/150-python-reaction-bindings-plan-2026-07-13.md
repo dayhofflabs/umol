@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S5a.2 complete; S5a.3 is next**
+Status: **ACTIVE — S5a complete; S5b is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1107,7 +1107,7 @@ scope and membership payloads live in `constraint/ring.rs`.
 
 ### S5 — `ReactionAst` owned component facade
 
-- **S5a — facade and conversions** (`umol-py/src/reaction.rs`, `lib.rs`,
+- **S5a — DONE — facade and conversions** (`umol-py/src/reaction.rs`, `lib.rs`,
   `python/umol/__init__.py`, `tests/test_reaction.py`): bind `ReactionAst` as an
   owned component facade whose molecule and delta components remain live inside
   the reaction while every whole-component input is snapshotted.
@@ -1165,7 +1165,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      and the complete 932-test `umol-py` Rust suite pass; focused clippy with
      warnings denied and rustfmt pass.
 
-  3. **S5a.3 — public registration and facade closure** (`umol-py/src/lib.rs`,
+  3. **DONE — S5a.3 — public registration and facade closure** (`umol-py/src/lib.rs`,
      `python/umol/__init__.py`, `tests/test_reaction.py`) — register and export
      `ReactionAst`, then repeat the owned-facade contract through the installed
      Python package: default and supplied construction; mutation of the original
@@ -1175,6 +1175,18 @@ scope and membership payloads live in `constraint/ring.rs`.
      → Python closure case in the Rust tests, then run the complete Rust and
      Python suites, workspace clippy, rustfmt, and `git diff --check` as the S5a
      gate. **Additive (green).** `[dep: S5a.2]`
+
+     **Implemented verification:** `ReactionAst` is registered in the native
+     module and exported from the public `umol` package. One Rust closure test
+     converts a populated Python-held facade to Rust and back, verifies exact
+     structural preservation, and proves that the returned facade and both of
+     its components are fresh allocations. Six installed-package tests cover
+     default and supplied construction, constructor isolation, stable live
+     component identity and nested writes, snapshotting replacement,
+     self-assignment of both components, structural equality, unhashability, and
+     exact repr. The complete `umol-py` suites pass with 933 Rust tests and 542
+     Python tests. Workspace clippy with warnings denied, rustfmt, and
+     `git diff --check` pass.
 
   **Critical path:** `S4b.4 → S5a.1 → S5a.2 → S5a.3`. No S5a subitem is
   deferrable: every later reaction operation rebuilds a Rust reaction through
