@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S6b complete; S6c.1 is next**
+Status: **ACTIVE — S6 complete; S7a is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1411,7 +1411,7 @@ scope and membership payloads live in `constraint/ring.rs`.
   already public from S5a; this stage adds `CompositionScope` rather than
   re-registering existing vocabulary.
 
-  1. **S6c.1 — composition-scope registration and public compose matrix**
+  1. **DONE — S6c.1 — composition-scope registration and public compose matrix**
      (`umol-py/src/lib.rs`, `python/umol/__init__.py`,
      `tests/test_reaction.py`) — register/export `CompositionScope`, verify its
      public import, two variants, equality, hashing, and exact repr, then exercise
@@ -1420,7 +1420,18 @@ scope and membership payloads live in `constraint/ring.rs`.
      Full-versus-RcAnchored count, ordering, source-preservation, and fresh-result
      contracts. **Additive (green).** `[dep: S6a.3, S6b.2]`
 
-  2. **S6c.2 — end-to-end reaction-data closure**
+     **Implemented verification:** `CompositionScope` is registered in the
+     native module and exported from `umol`/`__all__`. Installed Python tests
+     verify both public variants, value equality, hashing, and exact repr, then
+     pin empty/no-match and fused composition, omitted-default parity with
+     explicit `RcAnchored`, the exact `Full` result set and
+     empty-overlap-before-fused order, source preservation including
+     self-composition, and fresh writable components on every result. All 27
+     focused reaction tests pass. The complete binding suites pass with 978
+     Rust tests and 563 Python tests; focused clippy with warnings denied,
+     rustfmt, and `git diff --check` pass.
+
+  2. **DONE — S6c.2 — end-to-end reaction-data closure**
      (`umol-py/tests/test_reaction.py`) — exercise one coherent public workflow:
      construct a reaction from two sides, normalize it, render and parse it,
      reverse it, compose it with a second reaction, and inspect/mutate the live
@@ -1430,11 +1441,28 @@ scope and membership payloads live in `constraint/ring.rs`.
      independently in S6a/S6b so the joined path proves the full data vocabulary
      remains closed. **Additive (green).** `[dep: S6c.1]`
 
-  3. **S6c.3 — complete reaction-data stage gate** (`umol-py`) — run the full
-     Rust and installed Python suites, workspace clippy with warnings denied,
-     rustfmt, and `git diff --check`; record the final S6 counts and close the
-     reaction-data path before S7 application bindings begin. **Additive
-     (green).** `[dep: S6c.2]`
+     **Implemented verification:** one installed-Python workflow constructs a
+     reaction from independently owned sides, canonicalizes it, renders and
+     parses the canonical form, reverses it, and composes the reverse with a
+     second reaction under `CompositionScope.Full`. Exact intermediate and
+     composite structures pin tetrahedral atom stereo and connected-constraint
+     add/remove deltas alongside the composed atom modification. Mutations after
+     every operation verify that each source remains unchanged and every
+     returned molecule and delta container is fresh; the final facade's live
+     components remain writable and identity-stable. All 28 focused reaction
+     tests and the complete 564-test installed Python suite pass.
+
+  3. **DONE — S6c.3 — complete reaction-data stage gate** (`umol-py`) — run the
+     full Rust and installed Python suites, workspace clippy with warnings
+     denied, rustfmt, and `git diff --check`; record the final S6 counts and
+     close the reaction-data path before S7 application bindings begin.
+     **Additive (green).** `[dep: S6c.2]`
+
+     **Implemented verification:** the complete `umol-py` Rust suite passes with
+     978 tests and the installed-package Python suite passes with 564 tests.
+     Workspace clippy across all targets passes with warnings denied, and
+     rustfmt plus `git diff --check` pass. This closes the complete reaction-data
+     path; S7 application bindings are next.
 
   **Critical path:** `S6a.3, S6b.2 → S6c.1 → S6c.2 → S6c.3`. No S6c subitem is
   deferrable: S6c is the join and public completion gate for the reaction-data

@@ -4,6 +4,7 @@ from umol import (
     AtomAst,
     AtomDelta,
     AtomFieldChange,
+    CompositionScope,
     ContradictionError,
     Delta,
     Deltas,
@@ -13,6 +14,20 @@ from umol import (
     ReactionAst,
     ValueAst,
 )
+
+
+def test_compositionscope_value():
+    assert CompositionScope.RcAnchored == CompositionScope.RcAnchored
+    assert CompositionScope.RcAnchored != CompositionScope.Full
+    assert len(
+        {
+            CompositionScope.RcAnchored,
+            CompositionScope.RcAnchored,
+            CompositionScope.Full,
+        }
+    ) == 2
+    assert repr(CompositionScope.RcAnchored) == "CompositionScope.RcAnchored"
+    assert repr(CompositionScope.Full) == "CompositionScope.Full"
 
 
 def test_reactionast_constructor():
@@ -435,3 +450,256 @@ def test_reactionast_reverse():
     )
     assert reversed_reaction.lhs.atoms[0].charge == ValueAst.Lit(1)
     assert len(reversed_reaction.deltas) == 3
+
+
+@pytest.mark.parametrize(
+    "first,second,scope,expected",
+    [
+        pytest.param(
+            '{:lhs {:atoms ["C#c0"]} :deltas '
+            '[{:atom {:modify [0 "#c+"]}}]}',
+            '{:lhs {:atoms ["N#c0"]} :deltas '
+            '[{:atom {:modify [0 "#c+"]}}]}',
+            CompositionScope.RcAnchored,
+            [],
+            id="no-match",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["C#c0"]} :deltas '
+            '[{:atom {:modify [0 "#c+"]}}]}',
+            '{:lhs {:atoms ["C#c+"]} :deltas '
+            '[{:atom {:modify [0 "#c+2"]}}]}',
+            CompositionScope.RcAnchored,
+            [
+                '{:lhs {:atoms ["C#c0"]} :deltas '
+                '[{:atom {:modify [0 "#c+2"]}}]}'
+            ],
+            id="admissible",
+        ),
+    ],
+)
+def test_reactionast_compose(first, second, scope, expected):
+    first = ReactionAst.parse(first)
+    second = ReactionAst.parse(second)
+
+    composites = first.compose(second, scope)
+
+    assert composites == [ReactionAst.parse(reaction) for reaction in expected]
+
+
+def test_reactionast_compose_scope():
+    first = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c0"]} :deltas '
+        '[{:atom {:modify [0 "#c+"]}}]}'
+    )
+    second = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c+"]} :deltas '
+        '[{:atom {:modify [0 "#c+2"]}}]}'
+    )
+    fused = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c0"]} :deltas '
+        '[{:atom {:modify [0 "#c+2"]}}]}'
+    )
+    disjoint = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c0" "C#c+"]} :deltas '
+        '[{:atom {:modify [0 "#c+"]}} '
+        '{:atom {:modify [1 "#c+2"]}}]}'
+    )
+
+    omitted = first.compose(second)
+    rc_anchored = first.compose(second, CompositionScope.RcAnchored)
+    full = first.compose(second, CompositionScope.Full)
+
+    assert omitted == [fused]
+    assert rc_anchored == [fused]
+    assert full == [disjoint, fused]
+
+
+def test_reactionast_compose_snapshot():
+    first = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c0"]} :deltas '
+        '[{:atom {:modify [0 "#c+"]}}]}'
+    )
+    second = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c+"]} :deltas '
+        '[{:atom {:modify [0 "#c+2"]}}]}'
+    )
+    first_snapshot = ReactionAst(first.lhs, first.deltas)
+    second_snapshot = ReactionAst(second.lhs, second.deltas)
+
+    first.compose(first, CompositionScope.Full)
+    composites = first.compose(second, CompositionScope.Full)
+
+    assert first == first_snapshot
+    assert second == second_snapshot
+    assert len(composites) == 2
+    assert composites[0].lhs is not first.lhs
+    assert composites[0].lhs is not second.lhs
+    assert composites[0].deltas is not first.deltas
+    assert composites[0].deltas is not second.deltas
+    assert composites[0].lhs is not composites[1].lhs
+    assert composites[0].deltas is not composites[1].deltas
+
+    for composite in composites:
+        composite.lhs.atoms[0].charge = 7
+        composite.deltas.append(
+            Delta.Atom(
+                AtomDelta.Add(id=8, ast=AtomAst(Element("Cl")))
+            )
+        )
+
+        assert composite.lhs.atoms[0].charge == ValueAst.Lit(7)
+        assert composite.deltas[-1] == Delta.Atom(
+            AtomDelta.Add(id=8, ast=AtomAst(Element("Cl")))
+        )
+
+    assert first == first_snapshot
+    assert second == second_snapshot
+
+
+def test_reactionast_workflow():
+    lhs = ReactionAst.parse(
+        '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
+        ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]} '
+        ':deltas []}'
+    ).lhs
+    rhs = ReactionAst.parse(
+        '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
+        ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
+        ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th0"}] '
+        ':constraints [{:connected {}}]} :deltas []}'
+    ).lhs
+    lhs_snapshot = ReactionAst(lhs).lhs
+    rhs_snapshot = ReactionAst(rhs).lhs
+    expected_forward = ReactionAst.parse(
+        '{:deltas ['
+        '{:stereo-atom {:add {:ligands [1 2 3 4] :site 0 :type :ccw}}} '
+        '{:constraint {:add {:connected {}}}}] '
+        ':lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
+        ':bonds [[0 1 :single] [0 2 :single] [0 3 :single] '
+        '[0 4 :single]]}}'
+    )
+
+    reaction = ReactionAst.from_sides(
+        lhs,
+        rhs,
+        ((atom_id, atom_id) for atom_id in range(5)),
+    )
+
+    assert reaction == expected_forward
+    assert lhs == lhs_snapshot
+    assert rhs == rhs_snapshot
+    assert reaction.lhs is not lhs
+
+    normalized = reaction.canonicalize()
+
+    assert normalized == expected_forward
+    assert reaction == expected_forward
+    assert normalized.lhs is not reaction.lhs
+    assert normalized.deltas is not reaction.deltas
+
+    reaction.lhs.atoms[0].charge = 1
+    reaction.deltas.append(
+        Delta.Atom(AtomDelta.Add(id=5, ast=AtomAst(Element("Xe"))))
+    )
+
+    assert normalized == expected_forward
+    assert lhs == lhs_snapshot
+    assert rhs == rhs_snapshot
+
+    rendered = str(normalized)
+
+    assert rendered == (
+        '{:deltas [{:stereo-atom {:add {:ligands [1 2 3 4] '
+        ':site 0 :type :ccw}}} {:constraint {:add {:connected {}}}}] '
+        ':lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
+        ':bonds [[0 1 :single] [0 2 :single] [0 3 :single] '
+        '[0 4 :single]]}}'
+    )
+    assert normalized == expected_forward
+
+    parsed = ReactionAst.parse(rendered)
+
+    assert parsed == expected_forward
+    assert normalized == expected_forward
+    assert parsed.lhs is not normalized.lhs
+    assert parsed.deltas is not normalized.deltas
+
+    normalized.lhs.atoms[0].charge = 2
+    normalized.deltas.append(
+        Delta.Atom(AtomDelta.Add(id=5, ast=AtomAst(Element("Ne"))))
+    )
+
+    assert parsed == expected_forward
+
+    expected_reverse = ReactionAst.parse(
+        '{:deltas ['
+        '{:stereo-atom {:remove 0}} '
+        '{:constraint {:remove {:connected {}}}}] '
+        ':lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
+        ':bonds [[0 1 :single] [0 2 :single] [0 3 :single] '
+        '[0 4 :single]] :constraints [{:connected {}}] '
+        ':stereo-atoms [{:ligands [1 2 3 4] :site 0 :type :ccw}]}}'
+    )
+    reversed_reaction = parsed.reverse()
+
+    assert reversed_reaction == expected_reverse
+    assert parsed == expected_forward
+    assert reversed_reaction.lhs is not parsed.lhs
+    assert reversed_reaction.deltas is not parsed.deltas
+
+    parsed.lhs.atoms[0].charge = 3
+    parsed.deltas.append(
+        Delta.Atom(AtomDelta.Add(id=5, ast=AtomAst(Element("Ar"))))
+    )
+
+    assert reversed_reaction == expected_reverse
+
+    second = ReactionAst.parse(
+        '{:lhs {:atoms ["Xe#c0"]} :deltas '
+        '[{:atom {:modify [0 "#c+"]}}]}'
+    )
+    second_snapshot = ReactionAst(second.lhs, second.deltas)
+    expected_composite = ReactionAst.parse(
+        '{:deltas ['
+        '{:atom {:modify [5 "#c+"]}} '
+        '{:stereo-atom {:remove 0}} '
+        '{:constraint {:remove {:connected {}}}}] '
+        ':lhs {:atoms ["C" "F" "Cl" "Br" "I" "Xe#c0"] '
+        ':bonds [[0 1 :single] [0 2 :single] [0 3 :single] '
+        '[0 4 :single]] :constraints [{:connected {}}] '
+        ':stereo-atoms [{:ligands [1 2 3 4] :site 0 :type :ccw}]}}'
+    )
+
+    composites = reversed_reaction.compose(second, CompositionScope.Full)
+
+    assert composites == [expected_composite]
+    assert reversed_reaction == expected_reverse
+    assert second == second_snapshot
+    assert composites[0].lhs is not reversed_reaction.lhs
+    assert composites[0].lhs is not second.lhs
+    assert composites[0].deltas is not reversed_reaction.deltas
+    assert composites[0].deltas is not second.deltas
+
+    reversed_reaction.lhs.atoms[0].charge = 4
+    reversed_reaction.deltas.append(
+        Delta.Atom(AtomDelta.Add(id=5, ast=AtomAst(Element("Kr"))))
+    )
+
+    assert composites == [expected_composite]
+    assert second == second_snapshot
+
+    composite_lhs = composites[0].lhs
+    composite_deltas = composites[0].deltas
+    composite_lhs.atoms[5].charge = 2
+    composite_deltas.append(
+        Delta.Atom(AtomDelta.Add(id=6, ast=AtomAst(Element("O"))))
+    )
+
+    assert composites[0].lhs is composite_lhs
+    assert composites[0].deltas is composite_deltas
+    assert composites[0].lhs.atoms[5].charge == ValueAst.Lit(2)
+    assert composites[0].deltas[-1] == Delta.Atom(
+        AtomDelta.Add(id=6, ast=AtomAst(Element("O")))
+    )
+    assert second == second_snapshot
