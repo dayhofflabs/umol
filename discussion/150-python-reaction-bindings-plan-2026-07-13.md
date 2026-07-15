@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S7a complete; S7b.1 is next**
+Status: **ACTIVE — S7b complete; S7c.1 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1542,7 +1542,7 @@ scope and membership payloads live in `constraint/ring.rs`.
   Molecule and correspondence getters return owned snapshots, so Python cannot
   mutate a side while retaining a stale comap.
 
-  1. **S7b.1 — owned derivation value and observations**
+  1. **DONE — S7b.1 — owned derivation value and observations**
      (`umol-py/src/reaction.rs`) — add a non-constructible `ReactionDerivation`
      pyclass holding an owned Rust `ReactionDerivation`, with crate-private
      `from_rust`/`to_rust`. Expose `lhs` and `rhs` as fresh `MoleculeAst`
@@ -1552,20 +1552,42 @@ scope and membership payloads live in `constraint/ring.rs`.
      independence from the matched host used to produce the derivation.
      **Additive (green).** `[dep: S0b, S5a, S7a.2]`
 
-  2. **S7b.2 — derivation reversal and chaining**
+     **Implemented verification:** the frozen, non-constructible pyclass holds
+     an owned Rust derivation and implements inherent `from_rust`/`to_rust`.
+     `lhs`, `rhs`, `comap`, and `atom_map` return fresh snapshots; structural
+     equality and exact repr observe the held value. Three Rust tests use a real
+     `apply_at` result to cover conversion, every getter, repeated-getter
+     independence, and isolation from both the original host and mutations to a
+     returned molecule.
+
+  2. **DONE — S7b.2 — derivation reversal and chaining**
      (`umol-py/src/reaction.rs`) — expose `reverse() -> ReactionDerivation` and
      `chain(next) -> ReactionDerivation` by snapshotting both operands before
      invoking the Rust operations. Verify exact side/comap reversal, compatible
      two-step composition, source preservation, and fresh owned results.
      **Additive (green).** `[dep: S7b.1]`
 
-  3. **S7b.3 — abstraction back to `ReactionAst`**
+     **Implemented verification:** `reverse` snapshots the held derivation and
+     returns swapped sides with the inverted comap. `chain` snapshots both
+     operands before composing them. Two tests pin exact reversal and a concrete
+     single-to-double-to-triple chain, preserve every source, and prove returned
+     molecule sides are detached.
+
+  3. **DONE — S7b.3 — abstraction back to `ReactionAst`**
      (`umol-py/src/reaction.rs`) — expose
      `to_reaction() -> ReactionAst`, wrapping the Rust delta-normal-form result
      in fresh live Python components. Tests pin the recovered lhs/deltas,
      preserve the source derivation, and prove mutations to the returned
      reaction do not affect it. Public registration remains deferred to S7d.
      **Additive (green).** `[dep: S5a, S7b.1]`
+
+     **Implemented verification:** `to_reaction` wraps the Rust delta-normal-form
+     result in fresh live `ReactionAst` components. Its test pins the recovered
+     single-to-double rule, proves repeated calls share neither molecule nor
+     delta components, and verifies mutations to one result affect neither a
+     second result nor the derivation. All six focused derivation tests pass.
+     The complete binding suites pass with 1,012 Rust tests and 564 installed
+     Python tests; all-target `umol-py` clippy passes with warnings denied.
 
   **Critical path:** `S7b.1 → S7b.2`; S7b.3 branches from S7b.1 and both join
   at S7d. No S7b subitem is deferrable.

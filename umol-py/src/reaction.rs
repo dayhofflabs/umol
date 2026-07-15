@@ -8,9 +8,13 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use umol_ast::ast::{
     Canonicalize, CompositionScope as AstCompositionScope, ReactionAst as AstReactionAst,
+    ReactionDerivation as AstReactionDerivation,
 };
 use umol_graph_core::{Correspondence, NodeId};
 
+use crate::correspondence::{
+    Correspondence as PyCorrespondence, MoleculeCorrespondence as PyMoleculeCorrespondence,
+};
 use crate::delta::Deltas;
 use crate::error::{contradiction_error, parse_error};
 use crate::molecule::MoleculeAst;
@@ -232,11 +236,82 @@ impl ReactionAst {
     }
 }
 
+/// One owned firing of a reaction, exposed as an immutable result value.
+#[pyclass(eq, frozen, skip_from_py_object)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReactionDerivation(AstReactionDerivation);
+
+#[pymethods]
+impl ReactionDerivation {
+    /// The molecule matched by the reaction, as a fresh snapshot.
+    #[getter]
+    fn lhs(&self) -> MoleculeAst {
+        MoleculeAst::from_inner(self.0.lhs().clone())
+    }
+
+    /// The molecule produced by the reaction, as a fresh snapshot.
+    #[getter]
+    fn rhs(&self) -> MoleculeAst {
+        MoleculeAst::from_inner(self.0.rhs().clone())
+    }
+
+    /// The correspondence between the two molecule sides, as a fresh snapshot.
+    #[getter]
+    fn comap(&self) -> PyMoleculeCorrespondence {
+        PyMoleculeCorrespondence::from_rust(self.0.comap().clone())
+    }
+
+    /// The atom-level correspondence, as a fresh snapshot.
+    #[getter]
+    fn atom_map(&self) -> PyCorrespondence {
+        PyCorrespondence::from_rust(self.0.atom_map())
+    }
+
+    /// Return the reverse derivation with swapped sides and inverted correspondence.
+    fn reverse(&self) -> Self {
+        Self::from_rust(self.to_rust().reverse())
+    }
+
+    /// Chain this derivation onto a compatible following derivation.
+    fn chain(&self, next: &Self) -> Self {
+        let first = self.to_rust();
+        let next = next.to_rust();
+        Self::from_rust(first.chain(&next))
+    }
+
+    /// Recover the reaction rule represented by this concrete firing.
+    fn to_reaction(&self, py: Python<'_>) -> PyResult<ReactionAst> {
+        ReactionAst::from_rust(py, self.to_rust().to_reaction())
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let lhs = Py::new(py, self.lhs())?;
+        let rhs = Py::new(py, self.rhs())?;
+        let comap = Py::new(py, self.comap())?;
+        Ok(format!(
+            "ReactionDerivation(lhs={}, rhs={}, comap={})",
+            lhs.bind(py).repr()?.extract::<String>()?,
+            rhs.bind(py).repr()?.extract::<String>()?,
+            comap.bind(py).repr()?.extract::<String>()?,
+        ))
+    }
+}
+
+impl ReactionDerivation {
+    pub(crate) fn from_rust(derivation: AstReactionDerivation) -> Self {
+        Self(derivation)
+    }
+
+    pub(crate) fn to_rust(&self) -> AstReactionDerivation {
+        self.0.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pyo3::exceptions::{PyTypeError, PyValueError};
     use pyo3::types::PyList;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
     use umol_ast::ast::{
         AromaticSystemAst as AstAromaticSystemAst, AromaticSystemDelta as AstAromaticSystemDelta,
         AromaticSystemId as AstAromaticSystemId, AtomAst as AstAtomAst, AtomDelta as AstAtomDelta,
@@ -246,7 +321,8 @@ mod tests {
         DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
         DativeBondId as AstDativeBondId, Delta as AstDelta, Deltas as AstDeltas,
         MoleculeAst as AstMoleculeAst, MoleculeConstraint as AstMoleculeConstraint,
-        MoleculeParts as AstMoleculeParts, MulticenterBondAst as AstMulticenterBondAst,
+        MoleculeCorrespondence as AstMoleculeCorrespondence, MoleculeParts as AstMoleculeParts,
+        MulticenterBondAst as AstMulticenterBondAst,
         MulticenterBondDelta as AstMulticenterBondDelta, MulticenterBondId as AstMulticenterBondId,
         NoncovalentBondAst as AstNoncovalentBondAst,
         NoncovalentBondDelta as AstNoncovalentBondDelta, NoncovalentBondId as AstNoncovalentBondId,
@@ -1559,5 +1635,231 @@ mod tests {
                 roundtrip.bind(py).borrow().deltas.as_ptr()
             );
         });
+    }
+
+    #[fixture]
+    fn derivation_and_host() -> (AstReactionDerivation, AstMoleculeAst) {
+        let pattern = AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![
+                AstAtomAst::from_element(ChemElement::C),
+                AstAtomAst::from_element(ChemElement::C),
+            ],
+            bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
+            ..Default::default()
+        });
+        let host = pattern.clone();
+        let reaction = AstReactionAst::new(
+            pattern.clone(),
+            AstDeltas::from_iter([AstDelta::Bond(AstBondDelta::ModifyField {
+                id: AstBondId(0),
+                change: AstBondFieldChange::Order {
+                    old: AstValueAst::Lit(1),
+                    new: AstValueAst::Lit(2),
+                },
+            })]),
+        );
+        let correspondence = AstMoleculeCorrespondence::induce(
+            &pattern,
+            &host,
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2),
+        );
+        let derivation = reaction.apply_at(&host, &correspondence).unwrap();
+        (derivation, host)
+    }
+
+    #[rstest]
+    fn test_reaction_derivation_observations(
+        derivation_and_host: (AstReactionDerivation, AstMoleculeAst),
+    ) {
+        let (expected, mut host) = derivation_and_host;
+        let derivation = ReactionDerivation::from_rust(expected.clone());
+
+        assert_eq!(derivation.lhs().inner(), expected.lhs());
+        assert_eq!(derivation.rhs().inner(), expected.rhs());
+        assert_eq!(
+            derivation.comap(),
+            PyMoleculeCorrespondence::from_rust(expected.comap().clone())
+        );
+        assert_eq!(
+            derivation.atom_map(),
+            PyCorrespondence::from_rust(expected.atom_map())
+        );
+
+        *host.atom_mut(AstAtomId(0)).ast = AstAtomAst::from_element(ChemElement::F);
+        let mut lhs = derivation.lhs();
+        *lhs.inner_mut().atom_mut(AstAtomId(0)).ast = AstAtomAst::from_element(ChemElement::N);
+
+        assert_eq!(derivation.to_rust(), expected);
+        assert_ne!(derivation.lhs().inner(), &host);
+        assert_ne!(derivation.lhs().inner(), lhs.inner());
+    }
+
+    #[rstest]
+    fn test_reaction_derivation_reverse(
+        derivation_and_host: (AstReactionDerivation, AstMoleculeAst),
+    ) {
+        let (expected, _) = derivation_and_host;
+        let derivation = ReactionDerivation::from_rust(expected.clone());
+        let reversed = derivation.reverse();
+        let mut reversed_lhs = reversed.lhs();
+        *reversed_lhs.inner_mut().atom_mut(AstAtomId(0)).ast =
+            AstAtomAst::from_element(ChemElement::N);
+
+        assert_eq!(reversed.to_rust(), expected.reverse());
+        assert_eq!(derivation.to_rust(), expected);
+        assert_ne!(reversed.lhs().inner(), reversed_lhs.inner());
+    }
+
+    #[rstest]
+    fn test_reaction_derivation_chain(
+        derivation_and_host: (AstReactionDerivation, AstMoleculeAst),
+    ) {
+        let (first, _) = derivation_and_host;
+        let middle = first.rhs().clone();
+        let reaction = AstReactionAst::new(
+            middle.clone(),
+            AstDeltas::from_iter([AstDelta::Bond(AstBondDelta::ModifyField {
+                id: AstBondId(0),
+                change: AstBondFieldChange::Order {
+                    old: AstValueAst::Lit(2),
+                    new: AstValueAst::Lit(3),
+                },
+            })]),
+        );
+        let correspondence = AstMoleculeCorrespondence::induce(
+            &middle,
+            &middle,
+            Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 2),
+        );
+        let second = reaction.apply_at(&middle, &correspondence).unwrap();
+        let first_value = ReactionDerivation::from_rust(first.clone());
+        let second_value = ReactionDerivation::from_rust(second.clone());
+        let chained = first_value.chain(&second_value);
+        let mut chained_rhs = chained.rhs();
+        *chained_rhs.inner_mut().atom_mut(AstAtomId(0)).ast =
+            AstAtomAst::from_element(ChemElement::N);
+
+        assert_eq!(chained.to_rust(), first.chain(&second));
+        assert_eq!(first_value.to_rust(), first);
+        assert_eq!(second_value.to_rust(), second);
+        assert_ne!(chained.rhs().inner(), chained_rhs.inner());
+    }
+
+    #[rstest]
+    fn test_reaction_derivation_to_reaction(
+        derivation_and_host: (AstReactionDerivation, AstMoleculeAst),
+    ) {
+        let (expected_derivation, _) = derivation_and_host;
+        let expected_reaction = AstReactionAst::new(
+            AstMoleculeAst::from_parts(AstMoleculeParts {
+                atoms: vec![
+                    AstAtomAst::from_element(ChemElement::C),
+                    AstAtomAst::from_element(ChemElement::C),
+                ],
+                bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
+                ..Default::default()
+            }),
+            AstDeltas::from_iter([AstDelta::Bond(AstBondDelta::ModifyField {
+                id: AstBondId(0),
+                change: AstBondFieldChange::Order {
+                    old: AstValueAst::Lit(1),
+                    new: AstValueAst::Lit(2),
+                },
+            })]),
+        );
+        let derivation = ReactionDerivation::from_rust(expected_derivation.clone());
+
+        Python::attach(|py| {
+            let first = derivation.to_reaction(py).unwrap();
+            let second = derivation.to_reaction(py).unwrap();
+
+            assert_eq!(first.to_rust(py), expected_reaction);
+            assert_eq!(second.to_rust(py), expected_reaction);
+            assert_ne!(first.lhs.as_ptr(), second.lhs.as_ptr());
+            assert_ne!(first.deltas.as_ptr(), second.deltas.as_ptr());
+
+            *first.lhs.bind(py).borrow_mut().inner_mut() = AstMoleculeAst::new();
+            let delta = into_py_variant(
+                py,
+                Delta::from_rust(
+                    py,
+                    &AstDelta::Atom(AstAtomDelta::Add {
+                        id: AstAtomId(2),
+                        ast: AstAtomAst::from_element(ChemElement::O),
+                    }),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            first
+                .deltas
+                .bind(py)
+                .call_method1("append", (delta,))
+                .unwrap();
+
+            assert_eq!(second.to_rust(py), expected_reaction);
+            assert_eq!(derivation.to_rust(), expected_derivation);
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_derivation_value(
+        derivation_and_host: (AstReactionDerivation, AstMoleculeAst),
+    ) {
+        let (expected, _) = derivation_and_host;
+        Python::attach(|py| {
+            let derivation = Py::new(py, ReactionDerivation::from_rust(expected.clone())).unwrap();
+            let equal = Py::new(py, ReactionDerivation::from_rust(expected.clone())).unwrap();
+            let unequal = Py::new(py, ReactionDerivation::from_rust(expected.reverse())).unwrap();
+            let first_lhs = derivation.bind(py).getattr("lhs").unwrap();
+            let second_lhs = derivation.bind(py).getattr("lhs").unwrap();
+            let first_comap = derivation.bind(py).getattr("comap").unwrap();
+            let second_comap = derivation.bind(py).getattr("comap").unwrap();
+
+            assert!(derivation
+                .bind(py)
+                .as_any()
+                .eq(equal.bind(py).as_any())
+                .unwrap());
+            assert!(!derivation
+                .bind(py)
+                .as_any()
+                .eq(unequal.bind(py).as_any())
+                .unwrap());
+            assert!(!first_lhs.is(&second_lhs));
+            assert!(!first_comap.is(&second_comap));
+            assert_eq!(
+                derivation
+                    .bind(py)
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                concat!(
+                    "ReactionDerivation(lhs=MoleculeAst(atoms=2, bonds=1), ",
+                    "rhs=MoleculeAst(atoms=2, bonds=1), ",
+                    "comap=MoleculeCorrespondence(",
+                    "atoms=Correspondence(mates=[(0, 0), (1, 1)], left_count=2, right_count=2), ",
+                    "bonds=Correspondence(mates=[(0, 0)], left_count=1, right_count=1), ",
+                    "dative_bonds=Correspondence(mates=[], left_count=0, right_count=0), ",
+                    "aromatic_systems=Correspondence(mates=[], left_count=0, right_count=0), ",
+                    "multicenter_bonds=Correspondence(mates=[], left_count=0, right_count=0), ",
+                    "noncovalent_bonds=Correspondence(mates=[], left_count=0, right_count=0), ",
+                    "stereo_atoms=Correspondence(mates=[], left_count=0, right_count=0), ",
+                    "stereo_bonds=Correspondence(mates=[], left_count=0, right_count=0)))"
+                )
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_derivation_roundtrip(
+        derivation_and_host: (AstReactionDerivation, AstMoleculeAst),
+    ) {
+        let (expected, _) = derivation_and_host;
+        assert_eq!(
+            ReactionDerivation::from_rust(expected.clone()).to_rust(),
+            expected
+        );
     }
 }
