@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S6a.1 complete; S6a.2 is next**
+Status: **ACTIVE — S6a.2 complete; S6a.3 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1307,7 +1307,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      complete `umol-py` Rust suite passes with 956 tests; focused clippy with
      warnings denied and rustfmt pass.
 
-  2. **S6a.2 — owned `from_sides` facade method**
+  2. **DONE — S6a.2 — owned `from_sides` facade method**
      (`umol-py/src/reaction.rs`) — add static
      `ReactionAst.from_sides(lhs, rhs, atom_pairs)`. Snapshot both molecule
      arguments first, derive their atom counts, validate/build the correspondence
@@ -1316,6 +1316,17 @@ scope and membership payloads live in `constraint/ring.rs`.
      atom additions/removals, a preserved-bond field change, argument snapshot
      isolation, source non-mutation, and fresh writable result components.
      **Additive (green).** `[dep: S6a.1]`
+
+     **Implemented verification:** the static facade method snapshots both
+     molecule arguments, derives their sizes from those snapshots, validates
+     the atom pairs through S6a.1, and returns fresh Python-owned components
+     around the Rust side difference. Three Rust table rows cover identity,
+     partial correspondence with atom removal/addition, and a preserved bond
+     order change. A separate ownership test proves later source mutations do
+     not affect the result and that both returned components remain writable.
+     The four focused tests and the complete 960-test `umol-py` Rust suite pass;
+     focused clippy with warnings denied, rustfmt, and `git diff --check` also
+     pass.
 
   3. **S6a.3 — entity-family closure and installed Python contract**
      (`umol-py/src/reaction.rs`, `tests/test_reaction.py`) — add a focused matrix

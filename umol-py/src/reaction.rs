@@ -13,10 +13,6 @@ use crate::error::{contradiction_error, parse_error};
 use crate::molecule::MoleculeAst;
 
 /// Validate atom pairs and construct their partial bijection over the two side sizes.
-#[allow(
-    dead_code,
-    reason = "atom-pair validation for reaction side construction"
-)]
 fn atom_correspondence(
     pairs: Vec<(usize, usize)>,
     lhs_count: usize,
@@ -87,6 +83,21 @@ impl ReactionAst {
     fn parse(py: Python<'_>, text: &str) -> PyResult<Self> {
         let reaction = AstReactionAst::from_str(text).map_err(parse_error)?;
         Self::from_rust(py, reaction)
+    }
+
+    /// Construct a reaction by comparing two molecule snapshots under an atom correspondence.
+    #[staticmethod]
+    fn from_sides(
+        py: Python<'_>,
+        lhs: Py<MoleculeAst>,
+        rhs: Py<MoleculeAst>,
+        atom_pairs: Vec<(usize, usize)>,
+    ) -> PyResult<Self> {
+        let lhs = lhs.bind(py).borrow().inner().clone();
+        let rhs = rhs.bind(py).borrow().inner().clone();
+        let atom = atom_correspondence(atom_pairs, lhs.atoms().count(), rhs.atoms().count())?;
+
+        Self::from_rust(py, AstReactionAst::from_sides(lhs, rhs, atom))
     }
 
     /// The live left-hand molecule component.
@@ -174,11 +185,12 @@ mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
         AtomAst as AstAtomAst, AtomDelta as AstAtomDelta, AtomFieldChange as AstAtomFieldChange,
-        AtomId as AstAtomId, Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
-        Delta as AstDelta, Deltas as AstDeltas, MoleculeAst as AstMoleculeAst,
-        MoleculeConstraint as AstMoleculeConstraint, MoleculeParts as AstMoleculeParts,
-        StereoAtomDelta as AstStereoAtomDelta, StereoAtomId as AstStereoAtomId,
-        StereoKind as AstStereoKind, ValueAst as AstValueAst,
+        AtomId as AstAtomId, BondAst as AstBondAst, BondDelta as AstBondDelta,
+        BondFieldChange as AstBondFieldChange, BondId as AstBondId, Constraint as AstConstraint,
+        ConstraintDelta as AstConstraintDelta, Delta as AstDelta, Deltas as AstDeltas,
+        MoleculeAst as AstMoleculeAst, MoleculeConstraint as AstMoleculeConstraint,
+        MoleculeParts as AstMoleculeParts, StereoAtomDelta as AstStereoAtomDelta,
+        StereoAtomId as AstStereoAtomId, StereoKind as AstStereoKind, ValueAst as AstValueAst,
     };
     use umol_chem::element::Element as ChemElement;
 
@@ -410,6 +422,195 @@ mod tests {
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 "EDN parse: unexpected token 'n' at byte 0"
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::identity(
+        AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+            ..Default::default()
+        }),
+        AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+            ..Default::default()
+        }),
+        vec![(0, 0)],
+        AstReactionAst::new(
+            AstMoleculeAst::from_parts(AstMoleculeParts {
+                atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+                ..Default::default()
+            }),
+            AstDeltas::default(),
+        ),
+    )]
+    #[case::partial_correspondence(
+        AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![
+                AstAtomAst::from_element(ChemElement::C),
+                AstAtomAst::from_element(ChemElement::O),
+            ],
+            ..Default::default()
+        }),
+        AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![
+                AstAtomAst::from_element(ChemElement::C),
+                AstAtomAst::from_element(ChemElement::N),
+            ],
+            ..Default::default()
+        }),
+        vec![(0, 0)],
+        AstReactionAst::new(
+            AstMoleculeAst::from_parts(AstMoleculeParts {
+                atoms: vec![
+                    AstAtomAst::from_element(ChemElement::C),
+                    AstAtomAst::from_element(ChemElement::O),
+                ],
+                ..Default::default()
+            }),
+            vec![
+                AstDelta::Atom(AstAtomDelta::Remove {
+                    id: AstAtomId(1),
+                    ast: AstAtomAst::from_element(ChemElement::O),
+                }),
+                AstDelta::Atom(AstAtomDelta::Add {
+                    id: AstAtomId(2),
+                    ast: AstAtomAst::from_element(ChemElement::N),
+                }),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+    )]
+    #[case::bond_order(
+        AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![
+                AstAtomAst::from_element(ChemElement::C),
+                AstAtomAst::from_element(ChemElement::C),
+            ],
+            bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
+            ..Default::default()
+        }),
+        AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![
+                AstAtomAst::from_element(ChemElement::C),
+                AstAtomAst::from_element(ChemElement::C),
+            ],
+            bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(2))],
+            ..Default::default()
+        }),
+        vec![(0, 0), (1, 1)],
+        AstReactionAst::new(
+            AstMoleculeAst::from_parts(AstMoleculeParts {
+                atoms: vec![
+                    AstAtomAst::from_element(ChemElement::C),
+                    AstAtomAst::from_element(ChemElement::C),
+                ],
+                bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
+                ..Default::default()
+            }),
+            vec![AstDelta::Bond(AstBondDelta::ModifyField {
+                id: AstBondId(0),
+                change: AstBondFieldChange::Order {
+                    old: AstValueAst::Lit(1),
+                    new: AstValueAst::Lit(2),
+                },
+            })]
+            .into_iter()
+            .collect(),
+        ),
+    )]
+    fn test_reaction_ast_from_sides(
+        #[case] lhs: AstMoleculeAst,
+        #[case] rhs: AstMoleculeAst,
+        #[case] atom_pairs: Vec<(usize, usize)>,
+        #[case] expected: AstReactionAst,
+    ) {
+        Python::attach(|py| {
+            let lhs_before = lhs.clone();
+            let rhs_before = rhs.clone();
+            let lhs = Py::new(py, MoleculeAst::from_inner(lhs)).unwrap();
+            let rhs = Py::new(py, MoleculeAst::from_inner(rhs)).unwrap();
+
+            let reaction =
+                ReactionAst::from_sides(py, lhs.clone_ref(py), rhs.clone_ref(py), atom_pairs)
+                    .unwrap();
+
+            assert_eq!(reaction.to_rust(py), expected);
+            assert_eq!(*lhs.bind(py).borrow().inner(), lhs_before);
+            assert_eq!(*rhs.bind(py).borrow().inner(), rhs_before);
+            assert_ne!(reaction.lhs.as_ptr(), lhs.as_ptr());
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_from_sides_snapshot() {
+        Python::attach(|py| {
+            let lhs_before = AstMoleculeAst::from_parts(AstMoleculeParts {
+                atoms: vec![
+                    AstAtomAst::from_element(ChemElement::C),
+                    AstAtomAst::from_element(ChemElement::O),
+                ],
+                ..Default::default()
+            });
+            let rhs_before = AstMoleculeAst::from_parts(AstMoleculeParts {
+                atoms: vec![
+                    AstAtomAst::from_element(ChemElement::C),
+                    AstAtomAst::from_element(ChemElement::N),
+                ],
+                ..Default::default()
+            });
+            let lhs = Py::new(py, MoleculeAst::from_inner(lhs_before.clone())).unwrap();
+            let rhs = Py::new(py, MoleculeAst::from_inner(rhs_before.clone())).unwrap();
+            let reaction =
+                ReactionAst::from_sides(py, lhs.clone_ref(py), rhs.clone_ref(py), vec![(0, 0)])
+                    .unwrap();
+            let expected = reaction.to_rust(py);
+
+            *lhs.bind(py).borrow_mut().inner_mut() = AstMoleculeAst::new();
+            *rhs.bind(py).borrow_mut().inner_mut() = AstMoleculeAst::new();
+
+            assert_eq!(reaction.to_rust(py), expected);
+            assert_ne!(reaction.lhs.as_ptr(), lhs.as_ptr());
+
+            *reaction.lhs.bind(py).borrow_mut().inner_mut() =
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![AstAtomAst::from_element(ChemElement::F)],
+                    ..Default::default()
+                });
+            let delta = into_py_variant(
+                py,
+                Delta::from_rust(
+                    py,
+                    &AstDelta::Atom(AstAtomDelta::Add {
+                        id: AstAtomId(3),
+                        ast: AstAtomAst::from_element(ChemElement::Cl),
+                    }),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            reaction
+                .deltas
+                .bind(py)
+                .call_method1("append", (delta,))
+                .unwrap();
+            let changed = reaction.to_rust(py);
+
+            assert_eq!(
+                changed.lhs,
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![AstAtomAst::from_element(ChemElement::F)],
+                    ..Default::default()
+                })
+            );
+            assert_eq!(
+                changed.deltas.as_slice().last(),
+                Some(&AstDelta::Atom(AstAtomDelta::Add {
+                    id: AstAtomId(3),
+                    ast: AstAtomAst::from_element(ChemElement::Cl),
+                }))
             );
         });
     }
