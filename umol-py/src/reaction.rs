@@ -3,10 +3,10 @@
 use std::str::FromStr;
 
 use pyo3::prelude::*;
-use umol_ast::ast::ReactionAst as AstReactionAst;
+use umol_ast::ast::{Canonicalize, ReactionAst as AstReactionAst};
 
 use crate::delta::Deltas;
-use crate::error::parse_error;
+use crate::error::{contradiction_error, parse_error};
 use crate::molecule::MoleculeAst;
 
 /// A reaction whose molecule and delta components remain live Python values.
@@ -76,6 +76,21 @@ impl ReactionAst {
         Ok(())
     }
 
+    /// Return a fresh canonical reaction, leaving this facade unchanged.
+    fn canonicalize(&self, py: Python<'_>) -> PyResult<Self> {
+        let reaction = self
+            .to_rust(py)
+            .canonicalize()
+            .map_err(contradiction_error)?;
+        Self::from_rust(py, reaction)
+    }
+
+    /// Return the reverse reaction in the product's compacted id space.
+    fn reverse(&self, py: Python<'_>) -> PyResult<Self> {
+        let reaction = self.to_rust(py).reverse().map_err(contradiction_error)?;
+        Self::from_rust(py, reaction)
+    }
+
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -126,7 +141,7 @@ mod tests {
     use super::*;
     use crate::convert::into_py_variant;
     use crate::delta::Delta;
-    use crate::error::ParseError;
+    use crate::error::{ContradictionError, ParseError};
 
     #[rstest]
     #[case::empty(None, None, AstReactionAst::default())]
@@ -408,6 +423,140 @@ mod tests {
             ReactionAst::set_deltas(reaction.clone_ref(py), py, own_deltas).unwrap();
 
             assert_eq!(reaction.bind(py).borrow().to_rust(py), expected);
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_canonicalize() {
+        Python::attach(|py| {
+            let source = ReactionAst::from_rust(
+                py,
+                AstReactionAst::new(
+                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                        atoms: vec![AstAtomAst::from_element(ChemElement::C).with_charge(0)],
+                        ..Default::default()
+                    }),
+                    vec![
+                        AstDelta::Atom(AstAtomDelta::ModifyField {
+                            id: AstAtomId(0),
+                            change: AstAtomFieldChange::Charge {
+                                old: AstValueAst::Lit(0),
+                                new: AstValueAst::Lit(1),
+                            },
+                        }),
+                        AstDelta::Atom(AstAtomDelta::ModifyField {
+                            id: AstAtomId(0),
+                            change: AstAtomFieldChange::Charge {
+                                old: AstValueAst::Lit(1),
+                                new: AstValueAst::Lit(2),
+                            },
+                        }),
+                    ]
+                    .into_iter()
+                    .collect(),
+                ),
+            )
+            .unwrap();
+            let before = source.to_rust(py);
+            let expected = AstReactionAst::new(
+                before.lhs.clone(),
+                vec![AstDelta::Atom(AstAtomDelta::ModifyField {
+                    id: AstAtomId(0),
+                    change: AstAtomFieldChange::Charge {
+                        old: AstValueAst::Lit(0),
+                        new: AstValueAst::Lit(2),
+                    },
+                })]
+                .into_iter()
+                .collect(),
+            );
+
+            let canonical = source.canonicalize(py).unwrap();
+            let twice = canonical.canonicalize(py).unwrap();
+
+            assert_eq!(canonical.to_rust(py), expected);
+            assert_eq!(twice.to_rust(py), expected);
+            assert_eq!(source.to_rust(py), before);
+            assert_ne!(canonical.lhs.as_ptr(), source.lhs.as_ptr());
+            assert_ne!(canonical.deltas.as_ptr(), source.deltas.as_ptr());
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_canonicalize_error() {
+        Python::attach(|py| {
+            let source = ReactionAst::from_rust(
+                py,
+                AstReactionAst::new(
+                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                        atoms: vec![AstAtomAst::from_element(ChemElement::C).with_charge(0)],
+                        ..Default::default()
+                    }),
+                    vec![
+                        AstDelta::Atom(AstAtomDelta::ModifyField {
+                            id: AstAtomId(0),
+                            change: AstAtomFieldChange::Charge {
+                                old: AstValueAst::Lit(0),
+                                new: AstValueAst::Lit(1),
+                            },
+                        }),
+                        AstDelta::Atom(AstAtomDelta::ModifyField {
+                            id: AstAtomId(0),
+                            change: AstAtomFieldChange::Charge {
+                                old: AstValueAst::Lit(2),
+                                new: AstValueAst::Lit(3),
+                            },
+                        }),
+                    ]
+                    .into_iter()
+                    .collect(),
+                ),
+            )
+            .unwrap();
+            let before = source.to_rust(py);
+
+            let error = source.canonicalize(py).err().unwrap();
+
+            assert!(error.is_instance_of::<ContradictionError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "reached a contradiction"
+            );
+            assert_eq!(source.to_rust(py), before);
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_reverse() {
+        Python::attach(|py| {
+            let source = ReactionAst::parse(
+                py,
+                r##"{:lhs {:atoms ["C" "O"]} :deltas [{:atom {:add "N"}} {:atom {:remove 1}}]}"##,
+            )
+            .unwrap();
+            let before = source.to_rust(py);
+            let expected_roundtrip = before.clone().canonicalize().unwrap();
+
+            let reversed = source.reverse(py).unwrap();
+            let roundtrip = reversed.reverse(py).unwrap();
+
+            assert_eq!(
+                reversed.to_rust(py).lhs,
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![
+                        AstAtomAst::from_element(ChemElement::C),
+                        AstAtomAst::from_element(ChemElement::N),
+                    ],
+                    ..Default::default()
+                })
+            );
+            assert_eq!(
+                roundtrip.to_rust(py).canonicalize().unwrap(),
+                expected_roundtrip
+            );
+            assert_eq!(source.to_rust(py), before);
+            assert_ne!(reversed.lhs.as_ptr(), source.lhs.as_ptr());
+            assert_ne!(reversed.deltas.as_ptr(), source.deltas.as_ptr());
         });
     }
 

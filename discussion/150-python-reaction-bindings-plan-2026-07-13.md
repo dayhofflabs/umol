@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S5b complete; S5c is next**
+Status: **ACTIVE — S5 complete; S6a is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1257,10 +1257,23 @@ scope and membership payloads live in `constraint/ring.rs`.
   **Critical path:** `S5a.3 → S5b.1 → S5b.2 → S5b.3`. No S5b subitem is
   deferrable: the complete reaction-data surface requires both directions of the
   DSL boundary and their installed-package error/closure contract.
-- **S5c — canonicalize and reverse** (`reaction.rs`): return fresh component
+- **S5c — DONE — canonicalize and reverse** (`reaction.rs`): return fresh component
   facades and map `Contradiction`; verify the source is unchanged, normal forms
   are idempotent, reverse twice round-trips, and live components on results remain
   writable. **Additive (green).** `[dep: S5a]`
+
+  **Implemented verification:** both methods snapshot through `to_rust`, invoke
+  the Rust operation, map `Contradiction` through the shared error boundary, and
+  wrap successful values through `from_rust`. Rust tests verify exact field-change
+  fusion, canonicalization idempotence, fresh result components, source
+  preservation, exact contradiction type/message, the expected product-side LHS
+  after reversal, and double-reverse equality in canonical form. Three Python
+  tests repeat the non-mutating/idempotent canonicalization contract, exact error
+  contract, product-side reversal and canonical double-reverse contract, and
+  prove that both result facades retain writable molecule and delta components.
+  All 16 focused reaction tests pass. The complete `umol-py` suites pass with 948
+  Rust tests and 552 Python tests. Workspace clippy with warnings denied,
+  rustfmt, and `git diff --check` pass.
 
 ### S6 — Side construction and composition
 

@@ -3,6 +3,8 @@ import pytest
 from umol import (
     AtomAst,
     AtomDelta,
+    AtomFieldChange,
+    ContradictionError,
     Delta,
     Deltas,
     Element,
@@ -204,3 +206,114 @@ def test_reactionast_parse_repr():
         "deltas=Deltas([Delta.Atom(AtomDelta.Add("
         "id=1, ast=AtomAst.parse('O')))]))"
     )
+
+
+def test_reactionast_canonicalize():
+    source = ReactionAst(
+        MoleculeAst.from_parts([AtomAst(Element("C"), charge=0)]),
+        Deltas(
+            [
+                Delta.Atom(
+                    AtomDelta.ModifyField(
+                        id=0,
+                        change=AtomFieldChange.Charge(
+                            old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                        ),
+                    )
+                ),
+                Delta.Atom(
+                    AtomDelta.ModifyField(
+                        id=0,
+                        change=AtomFieldChange.Charge(
+                            old=ValueAst.Lit(1), new=ValueAst.Lit(2)
+                        ),
+                    )
+                ),
+            ]
+        ),
+    )
+    snapshot = ReactionAst(source.lhs, source.deltas)
+
+    canonical = source.canonicalize()
+
+    assert canonical.deltas == Deltas(
+        [
+            Delta.Atom(
+                AtomDelta.ModifyField(
+                    id=0,
+                    change=AtomFieldChange.Charge(
+                        old=ValueAst.Lit(0), new=ValueAst.Lit(2)
+                    ),
+                )
+            )
+        ]
+    )
+    assert canonical.canonicalize() == canonical
+    assert source == snapshot
+    assert canonical.lhs is not source.lhs
+    assert canonical.deltas is not source.deltas
+
+    canonical.lhs.atoms[0].charge = 3
+    canonical.deltas.append(
+        Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))
+    )
+    assert canonical.lhs.atoms[0].charge == ValueAst.Lit(3)
+    assert len(canonical.deltas) == 2
+
+
+def test_reactionast_canonicalize_error():
+    source = ReactionAst(
+        MoleculeAst.from_parts([AtomAst(Element("C"), charge=0)]),
+        Deltas(
+            [
+                Delta.Atom(
+                    AtomDelta.ModifyField(
+                        id=0,
+                        change=AtomFieldChange.Charge(
+                            old=ValueAst.Lit(0), new=ValueAst.Lit(1)
+                        ),
+                    )
+                ),
+                Delta.Atom(
+                    AtomDelta.ModifyField(
+                        id=0,
+                        change=AtomFieldChange.Charge(
+                            old=ValueAst.Lit(2), new=ValueAst.Lit(3)
+                        ),
+                    )
+                ),
+            ]
+        ),
+    )
+    snapshot = ReactionAst(source.lhs, source.deltas)
+
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        source.canonicalize()
+
+    assert source == snapshot
+
+
+def test_reactionast_reverse():
+    source = ReactionAst.parse(
+        '{:lhs {:atoms ["C" "O"]} :deltas '
+        '[{:atom {:add "N"}} {:atom {:remove 1}}]}'
+    )
+    snapshot = ReactionAst(source.lhs, source.deltas)
+
+    reversed_reaction = source.reverse()
+    roundtrip = reversed_reaction.reverse()
+
+    assert reversed_reaction.lhs == MoleculeAst.from_parts(
+        [AtomAst(Element("C")), AtomAst(Element("N"))]
+    )
+    assert roundtrip.canonicalize() == source.canonicalize()
+    assert source == snapshot
+    assert reversed_reaction.lhs is not source.lhs
+    assert reversed_reaction.deltas is not source.deltas
+
+    reversed_reaction.lhs.atoms[0].charge = 1
+    reversed_reaction.deltas.append(
+        Delta.Atom(AtomDelta.Add(id=2, ast=AtomAst(Element("F"))))
+    )
+    assert reversed_reaction.lhs.atoms[0].charge == ValueAst.Lit(1)
+    assert len(reversed_reaction.deltas) == 3
