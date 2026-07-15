@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S7c complete; S7d.1 is next**
+Status: **COMPLETE (2026-07-14) — S0–S7 implemented and verified.**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1650,7 +1650,7 @@ scope and membership payloads live in `constraint/ring.rs`.
   `tests/test_reaction.py`): publish the complete application vocabulary and
   close the owned Python workflow.
 
-  1. **S7d.1 — native registration and package exports**
+  1. **DONE — S7d.1 — native registration and package exports**
      (`umol-py/src/lib.rs`, `python/umol/__init__.py`) — register and export
      `Correspondence`, `MoleculeCorrespondence`,
      `SubgraphIsomorphismAlgorithm`, and `ReactionDerivation`; add every public
@@ -1659,7 +1659,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      public constructor. **Additive (green).** `[dep: S7a.2, S7a.3, S7b.2,
      S7b.3, S7c.2]`
 
-  2. **S7d.2 — complete public application workflow**
+  2. **DONE — S7d.2 — complete public application workflow**
      (`umol-py/tests/test_reaction.py`) — exercise one coherent installed-Python
      path: parse or construct a reaction and host, create its application
      iterator, consume one derivation with `next`, consume the remainder,
@@ -1671,11 +1671,21 @@ scope and membership payloads live in `constraint/ring.rs`.
      successful multi-step workflow. **Additive (green).**
      `[dep: S6c.3, S7d.1]`
 
-  3. **S7d.3 — complete application stage gate** (`umol-py`, workspace) — run
+  3. **DONE — S7d.3 — complete application stage gate** (`umol-py`, workspace) — run
      the complete `umol-py` Rust and installed Python suites, workspace clippy
      across all targets with warnings denied, rustfmt, and `git diff --check`;
      record the final S7 counts and close the required reaction binding
      deliverable. **Additive (green).** `[dep: S7d.2]`
+
+  **Implemented verification:** the four application value types are registered
+  natively, imported by the package, and listed in `__all__`; the two
+  correspondence types and `ReactionDerivation` remain return-only. Installed
+  tests cover every algorithm variant and one complete eager-match,
+  lazy-derivation workflow with ordered multiple results, all correspondence
+  families, reverse, chain, reaction recovery, snapshot independence, repeated
+  exhaustion, and zero matches. The final gates pass with 1,024 `umol-py` Rust
+  tests and 575 installed Python tests; workspace all-target clippy passes with
+  warnings denied, and rustfmt plus `git diff --check` are clean.
 
   **Critical path:** `S7d.1 → S7d.2 → S7d.3`. No S7d subitem is deferrable.
 

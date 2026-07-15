@@ -1,4 +1,5 @@
 import pytest
+import umol
 
 from umol import (
     AtomAst,
@@ -6,12 +7,16 @@ from umol import (
     AtomFieldChange,
     CompositionScope,
     ContradictionError,
+    Correspondence,
     Delta,
     Deltas,
     Element,
     MoleculeAst,
+    MoleculeCorrespondence,
     ParseError,
     ReactionAst,
+    ReactionDerivation,
+    SubgraphIsomorphismAlgorithm,
     ValueAst,
 )
 
@@ -28,6 +33,83 @@ def test_compositionscope_value():
     ) == 2
     assert repr(CompositionScope.RcAnchored) == "CompositionScope.RcAnchored"
     assert repr(CompositionScope.Full) == "CompositionScope.Full"
+
+
+def test_application_exports():
+    assert {
+        "Correspondence",
+        "MoleculeCorrespondence",
+        "ReactionDerivation",
+        "SubgraphIsomorphismAlgorithm",
+    } <= set(umol.__all__)
+    assert umol.Correspondence is Correspondence
+    assert umol.MoleculeCorrespondence is MoleculeCorrespondence
+    assert umol.ReactionDerivation is ReactionDerivation
+    assert umol.SubgraphIsomorphismAlgorithm is SubgraphIsomorphismAlgorithm
+
+
+@pytest.mark.parametrize(
+    "algorithm,expected",
+    [
+        pytest.param(
+            SubgraphIsomorphismAlgorithm.Vf2(),
+            "SubgraphIsomorphismAlgorithm.Vf2()",
+            id="vf2",
+        ),
+        pytest.param(
+            SubgraphIsomorphismAlgorithm.Ullmann(),
+            "SubgraphIsomorphismAlgorithm.Ullmann()",
+            id="ullmann",
+        ),
+        pytest.param(
+            SubgraphIsomorphismAlgorithm.Ri(),
+            "SubgraphIsomorphismAlgorithm.Ri()",
+            id="ri",
+        ),
+        pytest.param(
+            SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6),
+            "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6)",
+            id="arc-match",
+        ),
+        pytest.param(
+            SubgraphIsomorphismAlgorithm.Vf2Rdkit(),
+            "SubgraphIsomorphismAlgorithm.Vf2Rdkit()",
+            id="vf2-rdkit",
+        ),
+        pytest.param(
+            SubgraphIsomorphismAlgorithm.RayKirsch(),
+            "SubgraphIsomorphismAlgorithm.RayKirsch()",
+            id="ray-kirsch",
+        ),
+    ],
+)
+def test_subgraphisomorphismalgorithm_value(algorithm, expected):
+    assert repr(algorithm) == expected
+
+
+@pytest.mark.parametrize(
+    "value_type,message",
+    [
+        pytest.param(
+            Correspondence,
+            "cannot create 'builtins.Correspondence' instances",
+            id="correspondence",
+        ),
+        pytest.param(
+            MoleculeCorrespondence,
+            "cannot create 'builtins.MoleculeCorrespondence' instances",
+            id="molecule-correspondence",
+        ),
+        pytest.param(
+            ReactionDerivation,
+            "cannot create 'builtins.ReactionDerivation' instances",
+            id="reaction-derivation",
+        ),
+    ],
+)
+def test_return_only_value_constructor_error(value_type, message):
+    with pytest.raises(TypeError, match=f"^{message}$"):
+        value_type()
 
 
 def test_reactionast_constructor():
@@ -555,6 +637,145 @@ def test_reactionast_compose_snapshot():
 
     assert first == first_snapshot
     assert second == second_snapshot
+
+
+def test_reactionast_apply():
+    reaction = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c0"]} :deltas '
+        '[{:atom {:modify [0 "#c+"]}}]}'
+    )
+    host = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c0" "C#c0"]} :deltas []}'
+    ).lhs
+    reaction_snapshot = ReactionAst(reaction.lhs, reaction.deltas)
+    host_snapshot = ReactionAst(host).lhs
+    first_product = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c+" "C#c0"]} :deltas []}'
+    ).lhs
+    second_product = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c0" "C#c+"]} :deltas []}'
+    ).lhs
+
+    application = reaction.apply(
+        host, SubgraphIsomorphismAlgorithm.Vf2()
+    )
+
+    assert iter(application) is application
+    assert reaction == reaction_snapshot
+    assert host == host_snapshot
+
+    reaction.lhs.atoms[0].charge = 7
+    reaction.deltas.append(
+        Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("N"))))
+    )
+    host.atoms[0].charge = 8
+
+    first = next(application)
+    remaining = list(application)
+
+    assert len(remaining) == 1
+    second = remaining[0]
+    assert first.lhs == host_snapshot
+    assert first.rhs == first_product
+    assert second.lhs == host_snapshot
+    assert second.rhs == second_product
+    with pytest.raises(StopIteration):
+        next(application)
+    with pytest.raises(StopIteration):
+        next(application)
+
+    comap = first.comap
+    atom_map = first.atom_map
+
+    assert first.comap == comap
+    assert first.comap is not comap
+    assert first.atom_map == atom_map
+    assert first.atom_map is not atom_map
+    assert atom_map == comap.atoms
+    assert comap.atoms.mates == [(0, 0), (1, 1)]
+    assert comap.atoms.left_count == 2
+    assert comap.atoms.right_count == 2
+    assert comap.atoms.left_exposed == []
+    assert comap.atoms.right_exposed == []
+    for entity_map in (
+        comap.bonds,
+        comap.dative_bonds,
+        comap.aromatic_systems,
+        comap.multicenter_bonds,
+        comap.noncovalent_bonds,
+        comap.stereo_atoms,
+        comap.stereo_bonds,
+    ):
+        assert entity_map.mates == []
+        assert entity_map.left_count == 0
+        assert entity_map.right_count == 0
+        assert entity_map.left_exposed == []
+        assert entity_map.right_exposed == []
+
+    detached_lhs = first.lhs
+    detached_rhs = first.rhs
+    detached_lhs.atoms[0].charge = 5
+    detached_rhs.atoms[0].charge = 6
+
+    assert first.lhs == host_snapshot
+    assert first.rhs == first_product
+    assert second.lhs == host_snapshot
+    assert second.rhs == second_product
+
+    reversed_first = first.reverse()
+
+    assert reversed_first.lhs == first_product
+    assert reversed_first.rhs == host_snapshot
+    assert reversed_first.reverse() == first
+
+    second_step = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c+"]} :deltas '
+        '[{:atom {:modify [0 "#c+2"]}}]}'
+    )
+    following = next(
+        second_step.apply(
+            first.rhs, SubgraphIsomorphismAlgorithm.Vf2()
+        )
+    )
+    chained = first.chain(following)
+    chained_product = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c+2" "C#c0"]} :deltas []}'
+    ).lhs
+
+    assert chained.lhs == host_snapshot
+    assert chained.rhs == chained_product
+    assert first.rhs == first_product
+    assert following.lhs == first_product
+
+    expected_reaction = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c0" "C#c0"]} :deltas '
+        '[{:atom {:modify [0 "#c+2"]}}]}'
+    )
+    recovered = chained.to_reaction()
+    independent = chained.to_reaction()
+
+    assert recovered == expected_reaction
+    assert independent == expected_reaction
+    assert recovered.lhs is not independent.lhs
+    assert recovered.deltas is not independent.deltas
+
+    recovered.lhs.atoms[1].charge = 9
+    recovered.deltas.append(
+        Delta.Atom(AtomDelta.Add(id=2, ast=AtomAst(Element("O"))))
+    )
+
+    assert independent == expected_reaction
+    assert chained.lhs == host_snapshot
+    assert chained.rhs == chained_product
+
+    zero = ReactionAst.parse(
+        '{:lhs {:atoms ["N"]} :deltas []}'
+    ).apply(host_snapshot, SubgraphIsomorphismAlgorithm.Vf2())
+
+    assert iter(zero) is zero
+    assert list(zero) == []
+    with pytest.raises(StopIteration):
+        next(zero)
 
 
 def test_reactionast_workflow():

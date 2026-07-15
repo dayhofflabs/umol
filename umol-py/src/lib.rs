@@ -46,6 +46,7 @@ use crate::{
             StereogenicityAst, TopicityAst, TopicityRelationAst,
         },
     },
+    correspondence::{Correspondence, MoleculeCorrespondence, SubgraphIsomorphismAlgorithm},
     dative::{DativeBondAst, DativeBondView, DativeBondViews},
     delta::{
         AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, AtomFieldChange, BondDelta,
@@ -63,7 +64,7 @@ use crate::{
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst, NoncovalentBondView,
         NoncovalentBondViews,
     },
-    reaction::{CompositionScope, ReactionAst},
+    reaction::{CompositionScope, ReactionAst, ReactionDerivation},
     spin::SpinStateAst,
     stereo::{
         CisTransStereo, CisTransStereoAst, LigandPermutation, Orientation,
@@ -149,6 +150,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Deltas>()?;
         module.add_class::<CompositionScope>()?;
         module.add_class::<ReactionAst>()?;
+        module.add_class::<ReactionDerivation>()?;
+        module.add_class::<Correspondence>()?;
+        module.add_class::<MoleculeCorrespondence>()?;
+        module.add_class::<SubgraphIsomorphismAlgorithm>()?;
         module.add_class::<SubPatternAnchor>()?;
         module.add_class::<RelationalConstraint>()?;
         module.add_class::<MoleculeConstraint>()?;
