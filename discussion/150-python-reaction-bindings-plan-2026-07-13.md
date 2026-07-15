@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S7 implementation plans added; S7a.1 is next**
+Status: **ACTIVE — S7a complete; S7b.1 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1477,7 +1477,7 @@ scope and membership payloads live in `constraint/ring.rs`.
   `ReactionAst.apply` is the sole application entry point and performs matching
   itself.
 
-  1. **S7a.1 — return-only `Correspondence` value**
+  1. **DONE — S7a.1 — return-only `Correspondence` value**
      (`umol-py/src/correspondence.rs`) — add one frozen, value-equal Python value
      that snapshots a Rust `Correspondence<Id>` into integer mated pairs plus
      left/right id-space sizes. Expose `mates`, `left_exposed`, and
@@ -1488,7 +1488,15 @@ scope and membership payloads live in `constraint/ring.rs`.
      ordering, equality, repr, and detached return values. **Additive (green).**
      `[dep: S6a.1]`
 
-  2. **S7a.2 — return-only `MoleculeCorrespondence` value**
+     **Implemented verification:** `Correspondence` stores integer mated pairs
+     and both id-space sizes, exposes detached `mates`, `left_exposed`, and
+     `right_exposed` lists plus the two counts, and has structural equality and
+     exact repr. A private ID conversion trait covers exactly the eight molecule
+     correspondence families. Four conversion rows cover empty, partial, total,
+     and unsorted Rust inputs; three accessor rows pin exposed-id derivation, and
+     one value test proves detached results, equality, and repr.
+
+  2. **DONE — S7a.2 — return-only `MoleculeCorrespondence` value**
      (`umol-py/src/correspondence.rs`) — wrap the owned Rust
      `MoleculeCorrespondence` and expose read-only `atoms`, `bonds`,
      `dative_bonds`, `aromatic_systems`, `multicenter_bonds`,
@@ -1500,14 +1508,31 @@ scope and membership payloads live in `constraint/ring.rs`.
      structural equality, repr, and independence of repeated getter results.
      **Additive (green).** `[dep: S7a.1]`
 
-  3. **S7a.3 — `SubgraphIsomorphismAlgorithm` binding**
-     (`umol-py/src/correspondence.rs`) — bind all six Rust variants: `Vf2`,
-     `Ullmann`, `Ri`, `ArcMatch(path_length)`, `Vf2Rdkit`, and `RayKirsch`.
+     **Implemented verification:** the owned return-only wrapper exposes fresh
+     `Correspondence` values for atoms, bonds, dative bonds, aromatic systems,
+     multicenter bonds, noncovalent bonds, stereo atoms, and stereo bonds. One
+     accessor test pins all eight families; one Python-object test verifies
+     repeated getters are independent and pins structural equality and exact
+     repr. The only conversion direction is the crate-private `from_rust` used
+     by derivation results.
+
+  3. **DONE — S7a.3 — `SubgraphIsomorphismAlgorithm` binding**
+     (`umol-py/src/correspondence.rs`) — bind all six Rust variants: `Vf2()`,
+     `Ullmann()`, `Ri()`, `ArcMatch(path_length)`, `Vf2Rdkit()`, and
+     `RayKirsch()`.
      Implement inherent `from_rust`/`to_rust`, value equality, and exact repr;
      preserve `ArcMatch.path_length` without adding Python-side policy or a
      second default. Rust table tests cover conversion and Python value behavior
      for every variant. Public registration remains deferred to S7d. **Additive
      (green).** `[dep: S6a.1]`
+
+     **Implemented verification:** the PyO3 complex enum uses explicit
+     zero-argument constructors for the five fieldless variants and a named,
+     read-only `path_length` field for `ArcMatch`. Six Rust-to-Python rows, six
+     Python-to-Rust rows, and six Python-object rows cover every variant,
+     equality, exact constructor-shaped repr, and payload access. The complete
+     binding suites pass with 1,006 Rust tests and 564 installed Python tests;
+     all-target `umol-py` clippy passes with warnings denied.
 
   **Critical path:** `S7a.1 → S7a.2`; `S7a.3` proceeds independently after
   S6a.1, and both branches join at S7c. No S7a subitem is deferrable.
