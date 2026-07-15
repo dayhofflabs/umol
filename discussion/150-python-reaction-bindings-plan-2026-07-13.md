@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S6b.1 complete; S6b.2 is next**
+Status: **ACTIVE — S6b complete; S6c.1 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1378,7 +1378,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      clippy with warnings denied, rustfmt, and `git diff --check` pass.
      Registration remains deferred to S6c as planned.
 
-  2. **S6b.2 — sequential `compose` facade method**
+  2. **DONE — S6b.2 — sequential `compose` facade method**
      (`umol-py/src/reaction.rs`) — add
      `compose(other, scope=CompositionScope.RcAnchored) -> list[ReactionAst]`.
      Snapshot both live facades through `to_rust`, pass the explicit converted
@@ -1388,6 +1388,18 @@ scope and membership payloads live in `constraint/ring.rs`.
      source non-mutation (including self-composition), result ordering, and fresh
      writable components on every returned facade. **Additive (green).**
      `[dep: S6b.1]`
+
+     **Implemented verification:** `compose` snapshots both facades through
+     `to_rust`, converts the explicit scope, preserves Rust result order, and
+     wraps every composite through `from_rust`; its PyO3 signature defaults to
+     `CompositionScope.RcAnchored`. Rust tests pin an empty no-match result and
+     one fused charge composite, the exact one-result RC-anchored versus
+     two-result Full sets, empty-overlap-before-fused ordering, and omitted
+     default parity through an actual Python method call. A separate ownership
+     test covers source preservation including self-composition, distinct fresh
+     components on every result, and writable returned molecules and deltas.
+     All five focused tests and the complete 978-test `umol-py` Rust suite pass;
+     focused clippy with warnings denied, rustfmt, and `git diff --check` pass.
 
   **Critical path:** `S5c → S6b.1 → S6b.2`. No S6b subitem is deferrable:
   S6c requires both scope variants and the complete owned-result composition

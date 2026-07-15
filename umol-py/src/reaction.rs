@@ -23,11 +23,11 @@ pub enum CompositionScope {
     Full,
 }
 
-#[allow(
-    dead_code,
-    reason = "Rust/Python conversion API for composition scope values"
-)]
 impl CompositionScope {
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion API for composition scope values"
+    )]
     pub(crate) fn from_rust(scope: AstCompositionScope) -> Self {
         match scope {
             AstCompositionScope::RcAnchored => Self::RcAnchored,
@@ -179,6 +179,24 @@ impl ReactionAst {
     fn reverse(&self, py: Python<'_>) -> PyResult<Self> {
         let reaction = self.to_rust(py).reverse().map_err(contradiction_error)?;
         Self::from_rust(py, reaction)
+    }
+
+    /// Return the sequential composites with another reaction.
+    #[pyo3(signature = (other, scope=CompositionScope::RcAnchored))]
+    fn compose(
+        &self,
+        py: Python<'_>,
+        other: &Self,
+        scope: CompositionScope,
+    ) -> PyResult<Vec<Self>> {
+        let first = self.to_rust(py);
+        let second = other.to_rust(py);
+
+        first
+            .compose(&second, scope.to_rust())
+            .into_iter()
+            .map(|reaction| Self::from_rust(py, reaction))
+            .collect()
     }
 
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
@@ -1103,6 +1121,213 @@ mod tests {
             assert_eq!(source.to_rust(py), before);
             assert_ne!(reversed.lhs.as_ptr(), source.lhs.as_ptr());
             assert_ne!(reversed.deltas.as_ptr(), source.deltas.as_ptr());
+        });
+    }
+
+    #[rstest]
+    #[case::no_match(
+        r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
+        r##"{:lhs {:atoms ["N#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
+        CompositionScope::RcAnchored,
+        Vec::new()
+    )]
+    #[case::admissible(
+        r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
+        r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
+        CompositionScope::RcAnchored,
+        vec![r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##],
+    )]
+    fn test_reaction_ast_compose(
+        #[case] first: &str,
+        #[case] second: &str,
+        #[case] scope: CompositionScope,
+        #[case] expected: Vec<&str>,
+    ) {
+        Python::attach(|py| {
+            let first = ReactionAst::parse(py, first).unwrap();
+            let second = ReactionAst::parse(py, second).unwrap();
+            let expected: Vec<AstReactionAst> = expected
+                .into_iter()
+                .map(|reaction| AstReactionAst::from_str(reaction).unwrap())
+                .collect();
+
+            let actual: Vec<AstReactionAst> = first
+                .compose(py, &second, scope)
+                .unwrap()
+                .iter()
+                .map(|reaction| reaction.to_rust(py))
+                .collect();
+
+            assert_eq!(actual, expected);
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_compose_scope() {
+        Python::attach(|py| {
+            let first = ReactionAst::parse(
+                py,
+                r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
+            )
+            .unwrap();
+            let second = ReactionAst::parse(
+                py,
+                r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
+            )
+            .unwrap();
+            let fused = AstReactionAst::from_str(
+                r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
+            )
+            .unwrap();
+            let disjoint = AstReactionAst::from_str(
+                r##"{:lhs {:atoms ["C#c0" "C#c+"]} :deltas [{:atom {:modify [0 "#c+"]}} {:atom {:modify [1 "#c+2"]}}]}"##,
+            )
+            .unwrap();
+
+            let rc_anchored: Vec<AstReactionAst> = first
+                .compose(py, &second, CompositionScope::RcAnchored)
+                .unwrap()
+                .iter()
+                .map(|reaction| reaction.to_rust(py))
+                .collect();
+            let full: Vec<AstReactionAst> = first
+                .compose(py, &second, CompositionScope::Full)
+                .unwrap()
+                .iter()
+                .map(|reaction| reaction.to_rust(py))
+                .collect();
+
+            assert_eq!(rc_anchored, vec![fused.clone()]);
+            assert_eq!(full, vec![disjoint, fused]);
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_compose_default() {
+        Python::attach(|py| {
+            let first = Py::new(
+                py,
+                ReactionAst::parse(
+                    py,
+                    r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let second = Py::new(
+                py,
+                ReactionAst::parse(
+                    py,
+                    r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let scope = Py::new(py, CompositionScope::RcAnchored).unwrap();
+
+            let omitted: Vec<Py<ReactionAst>> = first
+                .bind(py)
+                .call_method1("compose", (second.clone_ref(py),))
+                .unwrap()
+                .extract()
+                .unwrap();
+            let explicit: Vec<Py<ReactionAst>> = first
+                .bind(py)
+                .call_method1("compose", (second, scope))
+                .unwrap()
+                .extract()
+                .unwrap();
+            let omitted: Vec<AstReactionAst> = omitted
+                .iter()
+                .map(|reaction| reaction.bind(py).borrow().to_rust(py))
+                .collect();
+            let explicit: Vec<AstReactionAst> = explicit
+                .iter()
+                .map(|reaction| reaction.bind(py).borrow().to_rust(py))
+                .collect();
+
+            assert_eq!(omitted, explicit);
+            assert_eq!(
+                omitted,
+                vec![AstReactionAst::from_str(
+                    r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
+                )
+                .unwrap()]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_compose_snapshot() {
+        Python::attach(|py| {
+            let first = ReactionAst::parse(
+                py,
+                r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
+            )
+            .unwrap();
+            let second = ReactionAst::parse(
+                py,
+                r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
+            )
+            .unwrap();
+            let first_before = first.to_rust(py);
+            let second_before = second.to_rust(py);
+
+            let _self_composites = first.compose(py, &first, CompositionScope::Full).unwrap();
+            let composites = first.compose(py, &second, CompositionScope::Full).unwrap();
+
+            assert_eq!(first.to_rust(py), first_before);
+            assert_eq!(second.to_rust(py), second_before);
+            assert_eq!(composites.len(), 2);
+            assert_ne!(composites[0].lhs.as_ptr(), first.lhs.as_ptr());
+            assert_ne!(composites[0].lhs.as_ptr(), second.lhs.as_ptr());
+            assert_ne!(composites[0].deltas.as_ptr(), first.deltas.as_ptr());
+            assert_ne!(composites[0].deltas.as_ptr(), second.deltas.as_ptr());
+            assert_ne!(composites[0].lhs.as_ptr(), composites[1].lhs.as_ptr());
+            assert_ne!(composites[0].deltas.as_ptr(), composites[1].deltas.as_ptr());
+
+            for composite in &composites {
+                *composite.lhs.bind(py).borrow_mut().inner_mut() =
+                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                        atoms: vec![AstAtomAst::from_element(ChemElement::F)],
+                        ..Default::default()
+                    });
+                let delta = into_py_variant(
+                    py,
+                    Delta::from_rust(
+                        py,
+                        &AstDelta::Atom(AstAtomDelta::Add {
+                            id: AstAtomId(8),
+                            ast: AstAtomAst::from_element(ChemElement::Cl),
+                        }),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+                composite
+                    .deltas
+                    .bind(py)
+                    .call_method1("append", (delta,))
+                    .unwrap();
+
+                assert_eq!(
+                    composite.to_rust(py).lhs,
+                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                        atoms: vec![AstAtomAst::from_element(ChemElement::F)],
+                        ..Default::default()
+                    })
+                );
+                assert_eq!(
+                    composite.to_rust(py).deltas.as_slice().last(),
+                    Some(&AstDelta::Atom(AstAtomDelta::Add {
+                        id: AstAtomId(8),
+                        ast: AstAtomAst::from_element(ChemElement::Cl),
+                    }))
+                );
+            }
+
+            assert_eq!(first.to_rust(py), first_before);
+            assert_eq!(second.to_rust(py), second_before);
         });
     }
 
