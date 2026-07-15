@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S5 complete; S6a is next**
+Status: **ACTIVE — S6a.1 complete; S6a.2 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1277,29 +1277,131 @@ scope and membership payloads live in `constraint/ring.rs`.
 
 ### S6 — Side construction and composition
 
-- **S6a — `from_sides`** (`reaction.rs`): convert integer atom pairs to
-  `Correspondence<NodeId>` using the two molecule sizes, reject duplicate or
-  out-of-range pairs with a Python argument error before entering the AST, and
-  wrap `ReactionAst::from_sides`. Test partial maps, additions/removals, overlay
-  induction, and invalid pairs. **Additive (green).** `[dep: S5a]`
-- **S6b — composition scope and compose** (`reaction.rs`): mirror the simple
-  `CompositionScope` enum and expose `compose`, defaulting to `RcAnchored` at the
-  Python signature while passing the explicit Rust argument. Test empty/no-match,
-  one admissible composite, full-vs-anchored result counts, and source
-  non-mutation. **Additive (green).** `[dep: S5c]`
-- **S6c — reaction-data registration and contract** (`lib.rs`,
-  `python/umol/__init__.py`, `tests/test_reaction.py`): export the reaction data
-  vocabulary and exercise construct → normalize → render/parse → reverse →
-  compose from Python. **Additive (green).** `[dep: S6a, S6b]`
+- **S6a — `from_sides`** (`umol-py/Cargo.toml`, `src/reaction.rs`,
+  `tests/test_reaction.py`): accept an iterable of integer atom pairs, validate
+  it against the supplied molecule snapshots, construct the Rust atom
+  correspondence, and return the owned component facade produced by the Rust
+  side-difference operation.
+
+  1. **DONE — S6a.1 — direct graph dependency and atom-pair validation**
+     (`umol-py/Cargo.toml`, `src/reaction.rs`) — add the optional direct
+     `umol-graph-core` dependency to the `graph` feature, then add a private
+     `atom_correspondence(pairs, lhs_count, rhs_count)` helper returning
+     `Correspondence<NodeId>`. Validate both endpoints against their inferred
+     side sizes and reject duplicate left or duplicate right ids before calling
+     `Correspondence::new`; rely on the correspondence constructor only for
+     canonical left-id ordering. Return `ValueError` with stable side/id-specific
+     messages for semantic failures. Rust table tests cover empty, partial,
+     total, and unsorted valid inputs; duplicate-left, duplicate-right,
+     left-out-of-range, and right-out-of-range errors. **Additive (green).**
+     `[dep: S5a.3]`
+
+     **Implemented verification:** `umol-graph-core` is now a direct optional
+     dependency enabled by `umol-py`'s `graph` feature. The private validator
+     accepts `(usize, usize)` pairs, rejects out-of-range endpoints and repeated
+     ids on either side with stable `ValueError` messages, converts valid ids to
+     `NodeId`, and lets `Correspondence::new` establish left-id ordering. Four
+     positive Rust rows cover empty, partial, total, and unsorted inputs; four
+     error rows cover duplicate-left, duplicate-right, left-range, and
+     right-range failures with exact exception class/message assertions. The
+     complete `umol-py` Rust suite passes with 956 tests; focused clippy with
+     warnings denied and rustfmt pass.
+
+  2. **S6a.2 — owned `from_sides` facade method**
+     (`umol-py/src/reaction.rs`) — add static
+     `ReactionAst.from_sides(lhs, rhs, atom_pairs)`. Snapshot both molecule
+     arguments first, derive their atom counts, validate/build the correspondence
+     through S6a.1, invoke Rust `ReactionAst::from_sides`, and wrap the result
+     through `from_rust`. Rust tests cover identity and partial correspondences,
+     atom additions/removals, a preserved-bond field change, argument snapshot
+     isolation, source non-mutation, and fresh writable result components.
+     **Additive (green).** `[dep: S6a.1]`
+
+  3. **S6a.3 — entity-family closure and installed Python contract**
+     (`umol-py/src/reaction.rs`, `tests/test_reaction.py`) — add a focused matrix
+     proving that side construction delegates the induced correspondence and
+     difference across dative bonds, aromatic systems, multicenter bonds,
+     noncovalent bonds, stereo atoms, stereo bonds, and molecule constraints in
+     addition to ordinary atoms/bonds. Repeat the ordinary partial-map,
+     addition/removal, snapshot/freshness, and exact invalid-pair contracts
+     through public Python. Run the complete binding suites and focused clippy,
+     rustfmt, and `git diff --check` as the S6a gate. **Additive (green).**
+     `[dep: S6a.2]`
+
+  **Critical path:** `S5a.3 → S6a.1 → S6a.2 → S6a.3`. No S6a subitem is
+  deferrable: S6c's complete reaction-data workflow requires validated side
+  construction and closure over every already-bound entity family.
+
+- **S6b — composition scope and compose** (`umol-py/src/reaction.rs`): bind the
+  Rust overlap scope and expose sequential composition over current component
+  snapshots. Public registration is deliberately left to S6c so all remaining
+  reaction-data exports land together.
+
+  1. **S6b.1 — `CompositionScope` value binding**
+     (`umol-py/src/reaction.rs`) — add the frozen, value-equal, hashable
+     `CompositionScope::{RcAnchored, Full}` pyclass with inherent `from_rust` and
+     `to_rust` conversions and ordinary enum repr. Rust tests cover both
+     conversion directions, equality/hash behavior, and exact variant repr.
+     **Additive (green).** `[dep: S5c]`
+
+  2. **S6b.2 — sequential `compose` facade method**
+     (`umol-py/src/reaction.rs`) — add
+     `compose(other, scope=CompositionScope.RcAnchored) -> list[ReactionAst]`.
+     Snapshot both live facades through `to_rust`, pass the explicit converted
+     scope to Rust `ReactionAst::compose`, and wrap every result through
+     `from_rust`. Rust tests cover empty/no-match composition, one admissible
+     composite, exact Full-versus-RcAnchored result counts, default-scope parity,
+     source non-mutation (including self-composition), result ordering, and fresh
+     writable components on every returned facade. **Additive (green).**
+     `[dep: S6b.1]`
+
+  **Critical path:** `S5c → S6b.1 → S6b.2`. No S6b subitem is deferrable:
+  S6c requires both scope variants and the complete owned-result composition
+  path.
+
+- **S6c — reaction-data registration and contract** (`umol-py/src/lib.rs`,
+  `python/umol/__init__.py`, `tests/test_reaction.py`): publish the one remaining
+  reaction-data type and close the complete Python workflow. `ReactionAst` is
+  already public from S5a; this stage adds `CompositionScope` rather than
+  re-registering existing vocabulary.
+
+  1. **S6c.1 — composition-scope registration and public compose matrix**
+     (`umol-py/src/lib.rs`, `python/umol/__init__.py`,
+     `tests/test_reaction.py`) — register/export `CompositionScope`, verify its
+     public import, two variants, equality, hashing, and exact repr, then exercise
+     `ReactionAst.compose` with the omitted default and both explicit scopes.
+     Python tests reproduce the Rust empty/no-match, admissible-composite,
+     Full-versus-RcAnchored count, ordering, source-preservation, and fresh-result
+     contracts. **Additive (green).** `[dep: S6a.3, S6b.2]`
+
+  2. **S6c.2 — end-to-end reaction-data closure**
+     (`umol-py/tests/test_reaction.py`) — exercise one coherent public workflow:
+     construct a reaction from two sides, normalize it, render and parse it,
+     reverse it, compose it with a second reaction, and inspect/mutate the live
+     components of the resulting facades. Assert structural results and
+     non-mutation at every source boundary rather than only successful calls.
+     Include the representative constraint and stereo payloads already covered
+     independently in S6a/S6b so the joined path proves the full data vocabulary
+     remains closed. **Additive (green).** `[dep: S6c.1]`
+
+  3. **S6c.3 — complete reaction-data stage gate** (`umol-py`) — run the full
+     Rust and installed Python suites, workspace clippy with warnings denied,
+     rustfmt, and `git diff --check`; record the final S6 counts and close the
+     reaction-data path before S7 application bindings begin. **Additive
+     (green).** `[dep: S6c.2]`
+
+  **Critical path:** `S6a.3, S6b.2 → S6c.1 → S6c.2 → S6c.3`. No S6c subitem is
+  deferrable: S6c is the join and public completion gate for the reaction-data
+  surface.
 
 ### S7 — Reaction application (required)
 
 - **S7a — correspondence and algorithm mirrors**
   (`umol-py/src/correspondence.rs`): bind read-only per-family correspondence
   views (mated pairs and left/right exposed ids), `MoleculeCorrespondence`, and
-  `SubgraphIsomorphismAlgorithm` including `ArcMatch(path_length)`. Add the direct
-  `umol-graph-core` dependency required at the binding boundary. **Additive
-  (green).** `[dep: S0b]`
+  `SubgraphIsomorphismAlgorithm` including `ArcMatch(path_length)`, reusing the
+  direct `umol-graph-core` dependency introduced by S6a.1. **Additive (green).**
+  `[dep: S0b, S6a.1]`
 - **S7b — Python `ReactionDerivation`** (`umol-py/src/reaction.rs`): wrap the
   fully owned Rust value from S0 and expose lhs/rhs/comap/atom-map, `reverse`,
   `chain`, and `to_reaction`. The derivation is an immutable result; molecule-side
@@ -1324,16 +1426,18 @@ At S7 the required deliverable is complete. Application is not deferrable.
 
 The reaction-data path is:
 
-`S1a → S1b → S1c → S1d → S3d → S4a → S4b → S5a → S5c → S6b → S6c`
+`S1a → S1b → S1c → S1d → S3d → S4a → S4b → S5a`, then
+`S5a → S6a` and `S5a → S5c → S6b` join at `S6c`.
 
 The ownership/application path is:
 
-`S0a → S0b → S7a → S7b → S7c → S7d`
+`S0a → S0b` joins the direct-dependency branch from `S6a.1` at
+`S7a → S7b → S7c → S7d`.
 
-The paths join at S7b through its dependency on S5a and at the final S7d
-end-to-end contract through S6c. `S2a/S2b → S3a/S3b/S3c` proceeds alongside the
-constraint path and joins at S4a. `S5b` and `S6a` proceed alongside
-`S5c → S6b` once S5a lands.
+The paths first join at S7a through its dependency on S6a.1, and the complete
+reaction-data/application contracts join at S7d through S6c. `S2a/S2b →
+S3a/S3b/S3c` proceeds alongside the constraint path and joins at S4a. `S5b` and
+`S6a` proceed alongside `S5c → S6b` once S5a lands.
 
 Only `ReactionSpanAst`/`EntitySpan<T>` and reaction metadata/alias preservation
 are deferrable. `ReactionDerivation` remains part of the required owned Python

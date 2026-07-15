@@ -1,13 +1,57 @@
 //! `ReactionAst` — an owned Python component facade over the Rust reaction AST.
 
+use std::collections::HashSet;
 use std::str::FromStr;
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use umol_ast::ast::{Canonicalize, ReactionAst as AstReactionAst};
+use umol_graph_core::{Correspondence, NodeId};
 
 use crate::delta::Deltas;
 use crate::error::{contradiction_error, parse_error};
 use crate::molecule::MoleculeAst;
+
+/// Validate atom pairs and construct their partial bijection over the two side sizes.
+#[allow(
+    dead_code,
+    reason = "atom-pair validation for reaction side construction"
+)]
+fn atom_correspondence(
+    pairs: Vec<(usize, usize)>,
+    lhs_count: usize,
+    rhs_count: usize,
+) -> PyResult<Correspondence<NodeId>> {
+    let mut left_ids = HashSet::with_capacity(pairs.len());
+    let mut right_ids = HashSet::with_capacity(pairs.len());
+    let mut mates = Vec::with_capacity(pairs.len());
+
+    for (left, right) in pairs {
+        if left >= lhs_count {
+            return Err(PyValueError::new_err(format!(
+                "left atom id {left} out of range for {lhs_count} atoms"
+            )));
+        }
+        if right >= rhs_count {
+            return Err(PyValueError::new_err(format!(
+                "right atom id {right} out of range for {rhs_count} atoms"
+            )));
+        }
+        if !left_ids.insert(left) {
+            return Err(PyValueError::new_err(format!(
+                "duplicate left atom id {left}"
+            )));
+        }
+        if !right_ids.insert(right) {
+            return Err(PyValueError::new_err(format!(
+                "duplicate right atom id {right}"
+            )));
+        }
+        mates.push((NodeId::from(left), NodeId::from(right)));
+    }
+
+    Ok(Correspondence::new(mates, lhs_count, rhs_count))
+}
 
 /// A reaction whose molecule and delta components remain live Python values.
 #[pyclass]
@@ -126,7 +170,7 @@ impl ReactionAst {
 
 #[cfg(test)]
 mod tests {
-    use pyo3::exceptions::PyTypeError;
+    use pyo3::exceptions::{PyTypeError, PyValueError};
     use rstest::rstest;
     use umol_ast::ast::{
         AtomAst as AstAtomAst, AtomDelta as AstAtomDelta, AtomFieldChange as AstAtomFieldChange,
@@ -142,6 +186,78 @@ mod tests {
     use crate::convert::into_py_variant;
     use crate::delta::Delta;
     use crate::error::{ContradictionError, ParseError};
+
+    #[rstest]
+    #[case::empty(Vec::new(), 0, 0, Vec::new())]
+    #[case::partial(vec![(1, 2)], 3, 4, vec![(NodeId(1), NodeId(2))])]
+    #[case::total(
+        vec![(0, 1), (1, 0)],
+        2,
+        2,
+        vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
+    )]
+    #[case::unsorted(
+        vec![(2, 0), (0, 2)],
+        3,
+        3,
+        vec![(NodeId(0), NodeId(2)), (NodeId(2), NodeId(0))],
+    )]
+    fn test_atom_correspondence(
+        #[case] pairs: Vec<(usize, usize)>,
+        #[case] lhs_count: usize,
+        #[case] rhs_count: usize,
+        #[case] expected_mates: Vec<(NodeId, NodeId)>,
+    ) {
+        let correspondence = atom_correspondence(pairs, lhs_count, rhs_count).unwrap();
+
+        assert_eq!(correspondence.mates(), expected_mates.as_slice());
+        assert_eq!(correspondence.left_count(), lhs_count);
+        assert_eq!(correspondence.right_count(), rhs_count);
+    }
+
+    #[rstest]
+    #[case::duplicate_left(
+        vec![(0, 0), (0, 1)],
+        2,
+        2,
+        "duplicate left atom id 0",
+    )]
+    #[case::duplicate_right(
+        vec![(0, 1), (1, 1)],
+        2,
+        2,
+        "duplicate right atom id 1",
+    )]
+    #[case::left_out_of_range(
+        vec![(2, 0)],
+        2,
+        1,
+        "left atom id 2 out of range for 2 atoms",
+    )]
+    #[case::right_out_of_range(
+        vec![(0, 1)],
+        1,
+        1,
+        "right atom id 1 out of range for 1 atoms",
+    )]
+    fn test_atom_correspondence_error(
+        #[case] pairs: Vec<(usize, usize)>,
+        #[case] lhs_count: usize,
+        #[case] rhs_count: usize,
+        #[case] expected: &str,
+    ) {
+        Python::attach(|py| {
+            let error = atom_correspondence(pairs, lhs_count, rhs_count)
+                .err()
+                .unwrap();
+
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                expected
+            );
+        });
+    }
 
     #[rstest]
     #[case::empty(None, None, AstReactionAst::default())]
