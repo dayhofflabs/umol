@@ -88,6 +88,8 @@ mod constraint;
 #[cfg(feature = "graph")]
 mod convert;
 #[cfg(feature = "graph")]
+mod correspondence;
+#[cfg(feature = "graph")]
 mod dative;
 #[cfg(feature = "graph")]
 mod delta;

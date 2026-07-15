@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S6 complete; S7a is next**
+Status: **ACTIVE — S7 implementation plans added; S7a.1 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1470,29 +1470,159 @@ scope and membership payloads live in `constraint/ring.rs`.
 
 ### S7 — Reaction application (required)
 
-- **S7a — correspondence and algorithm mirrors**
-  (`umol-py/src/correspondence.rs`): bind read-only per-family correspondence
-  views (mated pairs and left/right exposed ids), `MoleculeCorrespondence`, and
-  `SubgraphIsomorphismAlgorithm` including `ArcMatch(path_length)`, reusing the
-  direct `umol-graph-core` dependency introduced by S6a.1. **Additive (green).**
-  `[dep: S0b, S6a.1]`
+- **S7a — correspondence and algorithm bindings**
+  (`umol-py/src/correspondence.rs`): add the return-only correspondence values
+  needed to inspect derivations and the algorithm argument consumed by
+  application. Python does not construct exact pattern-to-host correspondences:
+  `ReactionAst.apply` is the sole application entry point and performs matching
+  itself.
+
+  1. **S7a.1 — return-only `Correspondence` value**
+     (`umol-py/src/correspondence.rs`) — add one frozen, value-equal Python value
+     that snapshots a Rust `Correspondence<Id>` into integer mated pairs plus
+     left/right id-space sizes. Expose `mates`, `left_exposed`, and
+     `right_exposed` as detached Python lists; keep construction and
+     `from_rust` crate-private because Python only receives these values from a
+     molecule correspondence or derivation. Rust tests cover empty, partial,
+     total, and unsorted-input correspondences and verify exact pair/exposed-id
+     ordering, equality, repr, and detached return values. **Additive (green).**
+     `[dep: S6a.1]`
+
+  2. **S7a.2 — return-only `MoleculeCorrespondence` value**
+     (`umol-py/src/correspondence.rs`) — wrap the owned Rust
+     `MoleculeCorrespondence` and expose read-only `atoms`, `bonds`,
+     `dative_bonds`, `aromatic_systems`, `multicenter_bonds`,
+     `noncovalent_bonds`, `stereo_atoms`, and `stereo_bonds` getters, each
+     returning a fresh `Correspondence` snapshot. Provide crate-private
+     `from_rust` conversion for derivation plumbing, but deliberately no
+     `to_rust`, public constructor, or mutator because this value is never a
+     Python-to-Rust application input. Tests exercise all eight families,
+     structural equality, repr, and independence of repeated getter results.
+     **Additive (green).** `[dep: S7a.1]`
+
+  3. **S7a.3 — `SubgraphIsomorphismAlgorithm` binding**
+     (`umol-py/src/correspondence.rs`) — bind all six Rust variants: `Vf2`,
+     `Ullmann`, `Ri`, `ArcMatch(path_length)`, `Vf2Rdkit`, and `RayKirsch`.
+     Implement inherent `from_rust`/`to_rust`, value equality, and exact repr;
+     preserve `ArcMatch.path_length` without adding Python-side policy or a
+     second default. Rust table tests cover conversion and Python value behavior
+     for every variant. Public registration remains deferred to S7d. **Additive
+     (green).** `[dep: S6a.1]`
+
+  **Critical path:** `S7a.1 → S7a.2`; `S7a.3` proceeds independently after
+  S6a.1, and both branches join at S7c. No S7a subitem is deferrable.
+
 - **S7b — Python `ReactionDerivation`** (`umol-py/src/reaction.rs`): wrap the
-  fully owned Rust value from S0 and expose lhs/rhs/comap/atom-map, `reverse`,
-  `chain`, and `to_reaction`. The derivation is an immutable result; molecule-side
-  getters return explicit owned snapshots so Python cannot mutate a side and
-  silently invalidate its correspondence. Test independence from the input host
-  and every operation. **Additive (green).** `[dep: S0b, S5a, S7a]`
-- **S7c — `apply_at` and `apply`** (`reaction.rs`, `error.rs`): expose exact-match
-  application over `MoleculeCorrespondence` and all-match application over the
-  algorithm mirror, returning owned derivations; map every `ApplyError` variant to
-  a typed Python exception with structured fields where present. Cover dangling,
-  inconsistent, structural-conflict, transaction-failure, zero-match, and
-  multi-match cases. **Additive (green).** `[dep: S7b]`
-- **S7d — full public registration and end-to-end application contract**
-  (`lib.rs`, `python/umol/__init__.py`, `tests/test_reaction.py`): export the
-  derivation, correspondence, algorithm, and application-error types; exercise
-  parse/construct → apply → inspect atom map → reverse/chain → recover reaction
-  from Python. **Additive (green).** `[dep: S6c, S7c]`
+  fully owned Rust value from S0 as an immutable, return-only Python result.
+  Molecule and correspondence getters return owned snapshots, so Python cannot
+  mutate a side while retaining a stale comap.
+
+  1. **S7b.1 — owned derivation value and observations**
+     (`umol-py/src/reaction.rs`) — add a non-constructible `ReactionDerivation`
+     pyclass holding an owned Rust `ReactionDerivation`, with crate-private
+     `from_rust`/`to_rust`. Expose `lhs` and `rhs` as fresh `MoleculeAst`
+     snapshots, `comap` as a fresh `MoleculeCorrespondence`, and `atom_map` as a
+     fresh `Correspondence`; add structural equality and repr without exposing
+     mutation. Rust tests verify every getter, repeated-getter independence, and
+     independence from the matched host used to produce the derivation.
+     **Additive (green).** `[dep: S0b, S5a, S7a.2]`
+
+  2. **S7b.2 — derivation reversal and chaining**
+     (`umol-py/src/reaction.rs`) — expose `reverse() -> ReactionDerivation` and
+     `chain(next) -> ReactionDerivation` by snapshotting both operands before
+     invoking the Rust operations. Verify exact side/comap reversal, compatible
+     two-step composition, source preservation, and fresh owned results.
+     **Additive (green).** `[dep: S7b.1]`
+
+  3. **S7b.3 — abstraction back to `ReactionAst`**
+     (`umol-py/src/reaction.rs`) — expose
+     `to_reaction() -> ReactionAst`, wrapping the Rust delta-normal-form result
+     in fresh live Python components. Tests pin the recovered lhs/deltas,
+     preserve the source derivation, and prove mutations to the returned
+     reaction do not affect it. Public registration remains deferred to S7d.
+     **Additive (green).** `[dep: S5a, S7b.1]`
+
+  **Critical path:** `S7b.1 → S7b.2`; S7b.3 branches from S7b.1 and both join
+  at S7d. No S7b subitem is deferrable.
+
+- **S7c — classified all-match application** (`umol-ast/src/ast/reaction.rs`,
+  workspace callers, `umol-py/src/error.rs`, `umol-py/src/reaction.rs`): expose
+  only `ReactionAst.apply`. It performs matching itself, omits ordinary
+  match-specific rejection, and preserves reaction-precondition or internal
+  transaction failures instead of silently filtering every `ApplyError`.
+
+  1. **S7c.1 — lossless Rust all-match contract**
+     (`umol-ast/src/ast/reaction.rs`, `compose.rs`, tests, and workspace
+     callers) — canonicalize the reaction's deltas once before match
+     enumeration, factor the already-canonicalized per-match application into
+     a private helper, and change `ReactionAst::apply` to return
+     `Result<Vec<ReactionDerivation>, ApplyError>`. Skip only match-local
+     `Dangling` and `StructuralConflict` outcomes; return `Inconsistent` before
+     enumeration and propagate any `Transaction` failure rather than returning
+     a partial result. Migrate all Rust callers in the same subitem. Tests cover
+     invalid zero-match input, dangling and structural-conflict rejection,
+     transaction propagation, zero valid products, one product, and stable
+     multi-product order. **Breaking caller migration (red→green).**
+     `[dep: S0b]`
+
+  2. **S7c.2 — Python application exception hierarchy**
+     (`umol-py/src/error.rs`) — add catchable base `ApplyError` and subclasses
+     `DanglingError`, `InconsistentReactionError`, `StructuralConflictError`,
+     and `TransactionError`. Map every Rust variant to its subclass, preserve
+     `DanglingError.host_atom`, and retain the Rust transaction diagnostic in
+     the transaction exception message without binding the general edit or
+     transaction vocabulary. Rust tests pin subclass/base relationships,
+     structured fields, and exact messages for all variants. Registration is
+     deferred to S7d. **Additive (green).** `[dep: S7c.1]`
+
+  3. **S7c.3 — Python `ReactionAst.apply`**
+     (`umol-py/src/reaction.rs`) — add
+     `apply(host, algorithm) -> list[ReactionDerivation]`: snapshot the live
+     reaction and host, convert the explicit algorithm argument with `to_rust`,
+     call the classified Rust API, map a fatal error through S7c.2, and wrap
+     every successful derivation as an owned result. Do not expose `apply_at` or
+     a Python correspondence constructor. Tests cover source preservation,
+     zero- and multi-match results, deterministic result order, fresh result
+     ownership, an inconsistent reaction error, and parity across all six
+     algorithm variants on a shared fixture. **Additive (green).**
+     `[dep: S7a.3, S7b.1, S7c.1, S7c.2]`
+
+  **Critical path:** `S7c.1 → S7c.2 → S7c.3`, with S7a.3 and S7b.1 joining at
+  S7c.3. No S7c subitem is deferrable; S7c.1 and its caller migration form one
+  green stage boundary.
+
+- **S7d — public registration and end-to-end application contract**
+  (`umol-py/src/lib.rs`, `python/umol/__init__.py`,
+  `tests/test_reaction.py`): publish the complete application vocabulary and
+  close the owned Python workflow.
+
+  1. **S7d.1 — native registration and package exports**
+     (`umol-py/src/lib.rs`, `python/umol/__init__.py`) — register and export
+     `Correspondence`, `MoleculeCorrespondence`,
+     `SubgraphIsomorphismAlgorithm`, `ReactionDerivation`, `ApplyError`, and its
+     four subclasses; add every public name to `__all__`. Installed-package
+     tests verify imports, exception inheritance, all algorithm variants, and
+     that the two correspondence classes and derivation have no public
+     constructor. **Additive (green).** `[dep: S7a.2, S7a.3, S7b.2, S7b.3,
+     S7c.3]`
+
+  2. **S7d.2 — complete public application workflow**
+     (`umol-py/tests/test_reaction.py`) — exercise one coherent installed-Python
+     path: parse or construct a reaction and host, apply it, inspect every
+     correspondence family and the atom map, reverse the derivation, chain
+     compatible steps, and recover a `ReactionAst`. Assert exact structures,
+     source non-mutation, detached observation snapshots, and independence of
+     every returned derivation/reaction. Include zero-match and typed fatal-error
+     paths beside the successful multi-step workflow. **Additive (green).**
+     `[dep: S6c.3, S7d.1]`
+
+  3. **S7d.3 — complete application stage gate** (`umol-py`, workspace) — run
+     the complete `umol-py` Rust and installed Python suites, workspace clippy
+     across all targets with warnings denied, rustfmt, and `git diff --check`;
+     record the final S7 counts and close the required reaction binding
+     deliverable. **Additive (green).** `[dep: S7d.2]`
+
+  **Critical path:** `S7d.1 → S7d.2 → S7d.3`. No S7d subitem is deferrable.
 
 At S7 the required deliverable is complete. Application is not deferrable.
 
@@ -1517,5 +1647,6 @@ Only `ReactionSpanAst`/`EntitySpan<T>` and reaction metadata/alias preservation
 are deferrable. `ReactionDerivation` remains part of the required owned Python
 surface.
 
-S0 is the sole breaking stage and must restore a green workspace before S1.
-S1–S7 are additive, and every stage must end green.
+S0 and S7c.1 contain the only breaking migrations. Each restores a green
+workspace within its own stage; every other subitem is additive, and every stage
+must end green.
