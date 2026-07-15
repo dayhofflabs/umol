@@ -182,6 +182,124 @@ def test_reactionast_parse_error():
         ReactionAst.parse("not edn")
 
 
+def test_reactionast_from_sides():
+    lhs = MoleculeAst.from_parts(
+        [AtomAst(Element("C")), AtomAst(Element("O"))]
+    )
+    rhs = MoleculeAst.from_parts(
+        [AtomAst(Element("C")), AtomAst(Element("N"))]
+    )
+    lhs_snapshot = MoleculeAst.from_parts(
+        [AtomAst(Element("C")), AtomAst(Element("O"))]
+    )
+    rhs_snapshot = MoleculeAst.from_parts(
+        [AtomAst(Element("C")), AtomAst(Element("N"))]
+    )
+
+    reaction = ReactionAst.from_sides(
+        lhs,
+        rhs,
+        ((left, right) for left, right in [(0, 0)]),
+    )
+
+    assert reaction == ReactionAst(
+        lhs_snapshot,
+        Deltas(
+            [
+                Delta.Atom(
+                    AtomDelta.Remove(id=1, ast=AtomAst(Element("O")))
+                ),
+                Delta.Atom(
+                    AtomDelta.Add(id=2, ast=AtomAst(Element("N")))
+                ),
+            ]
+        ),
+    )
+    assert lhs == lhs_snapshot
+    assert rhs == rhs_snapshot
+    assert reaction.lhs is not lhs
+
+
+def test_reactionast_from_sides_snapshot():
+    lhs = MoleculeAst.from_parts(
+        [AtomAst(Element("C")), AtomAst(Element("O"))]
+    )
+    rhs = MoleculeAst.from_parts(
+        [AtomAst(Element("C")), AtomAst(Element("N"))]
+    )
+    reaction = ReactionAst.from_sides(lhs, rhs, [(0, 0)])
+    expected = ReactionAst(reaction.lhs, reaction.deltas)
+
+    lhs.atoms[0].charge = 1
+    rhs.atoms[0].charge = -1
+
+    assert reaction == expected
+    assert reaction.lhs is not lhs
+
+    reaction.lhs.atoms[0].charge = 2
+    reaction.deltas.append(
+        Delta.Atom(AtomDelta.Add(id=3, ast=AtomAst(Element("F"))))
+    )
+
+    assert reaction.lhs.atoms[0].charge == ValueAst.Lit(2)
+    assert reaction.deltas[-1] == Delta.Atom(
+        AtomDelta.Add(id=3, ast=AtomAst(Element("F")))
+    )
+    assert lhs.atoms[0].charge == ValueAst.Lit(1)
+    assert rhs.atoms[0].charge == ValueAst.Lit(-1)
+
+
+@pytest.mark.parametrize(
+    "lhs_count,rhs_count,atom_pairs,message",
+    [
+        pytest.param(
+            2,
+            2,
+            [(0, 0), (0, 1)],
+            "duplicate left atom id 0",
+            id="duplicate-left",
+        ),
+        pytest.param(
+            2,
+            2,
+            [(0, 1), (1, 1)],
+            "duplicate right atom id 1",
+            id="duplicate-right",
+        ),
+        pytest.param(
+            2,
+            1,
+            [(2, 0)],
+            "left atom id 2 out of range for 2 atoms",
+            id="left-out-of-range",
+        ),
+        pytest.param(
+            1,
+            1,
+            [(0, 1)],
+            "right atom id 1 out of range for 1 atoms",
+            id="right-out-of-range",
+        ),
+    ],
+)
+def test_reactionast_from_sides_error(
+    lhs_count, rhs_count, atom_pairs, message
+):
+    lhs = MoleculeAst.from_parts(
+        [AtomAst(Element("C")) for _ in range(lhs_count)]
+    )
+    rhs = MoleculeAst.from_parts(
+        [AtomAst(Element("C")) for _ in range(rhs_count)]
+    )
+
+    with pytest.raises(ValueError, match=f"^{message}$"):
+        ReactionAst.from_sides(
+            lhs,
+            rhs,
+            (pair for pair in atom_pairs),
+        )
+
+
 def test_reactionast_str_components():
     reaction = ReactionAst.parse('{:lhs {:atoms ["C"]} :deltas []}')
 

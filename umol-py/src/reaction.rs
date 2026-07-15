@@ -91,10 +91,14 @@ impl ReactionAst {
         py: Python<'_>,
         lhs: Py<MoleculeAst>,
         rhs: Py<MoleculeAst>,
-        atom_pairs: Vec<(usize, usize)>,
+        atom_pairs: &Bound<'_, PyAny>,
     ) -> PyResult<Self> {
         let lhs = lhs.bind(py).borrow().inner().clone();
         let rhs = rhs.bind(py).borrow().inner().clone();
+        let atom_pairs = atom_pairs
+            .try_iter()?
+            .map(|item| item?.extract::<(usize, usize)>())
+            .collect::<PyResult<Vec<_>>>()?;
         let atom = atom_correspondence(atom_pairs, lhs.atoms().count(), rhs.atoms().count())?;
 
         Self::from_rust(py, AstReactionAst::from_sides(lhs, rhs, atom))
@@ -182,15 +186,27 @@ impl ReactionAst {
 #[cfg(test)]
 mod tests {
     use pyo3::exceptions::{PyTypeError, PyValueError};
+    use pyo3::types::PyList;
     use rstest::rstest;
     use umol_ast::ast::{
-        AtomAst as AstAtomAst, AtomDelta as AstAtomDelta, AtomFieldChange as AstAtomFieldChange,
-        AtomId as AstAtomId, BondAst as AstBondAst, BondDelta as AstBondDelta,
-        BondFieldChange as AstBondFieldChange, BondId as AstBondId, Constraint as AstConstraint,
-        ConstraintDelta as AstConstraintDelta, Delta as AstDelta, Deltas as AstDeltas,
+        AromaticSystemAst as AstAromaticSystemAst, AromaticSystemDelta as AstAromaticSystemDelta,
+        AromaticSystemId as AstAromaticSystemId, AtomAst as AstAtomAst, AtomDelta as AstAtomDelta,
+        AtomFieldChange as AstAtomFieldChange, AtomId as AstAtomId, BondAst as AstBondAst,
+        BondDelta as AstBondDelta, BondFieldChange as AstBondFieldChange, BondId as AstBondId,
+        Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
+        DativeBondAst as AstDativeBondAst, DativeBondDelta as AstDativeBondDelta,
+        DativeBondId as AstDativeBondId, Delta as AstDelta, Deltas as AstDeltas,
         MoleculeAst as AstMoleculeAst, MoleculeConstraint as AstMoleculeConstraint,
-        MoleculeParts as AstMoleculeParts, StereoAtomDelta as AstStereoAtomDelta,
-        StereoAtomId as AstStereoAtomId, StereoKind as AstStereoKind, ValueAst as AstValueAst,
+        MoleculeParts as AstMoleculeParts, MulticenterBondAst as AstMulticenterBondAst,
+        MulticenterBondDelta as AstMulticenterBondDelta, MulticenterBondId as AstMulticenterBondId,
+        NoncovalentBondAst as AstNoncovalentBondAst,
+        NoncovalentBondDelta as AstNoncovalentBondDelta, NoncovalentBondId as AstNoncovalentBondId,
+        NoncovalentBondKind as AstNoncovalentBondKind, StereoAtomAst as AstStereoAtomAst,
+        StereoAtomDelta as AstStereoAtomDelta, StereoAtomId as AstStereoAtomId,
+        StereoBondAst as AstStereoBondAst, StereoBondDelta as AstStereoBondDelta,
+        StereoBondId as AstStereoBondId, StereoCosetAst as AstStereoCosetAst,
+        StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
+        StereoLigandKind as AstStereoLigandKind, ValueAst as AstValueAst,
     };
     use umol_chem::element::Element as ChemElement;
 
@@ -533,14 +549,124 @@ mod tests {
             let lhs = Py::new(py, MoleculeAst::from_inner(lhs)).unwrap();
             let rhs = Py::new(py, MoleculeAst::from_inner(rhs)).unwrap();
 
-            let reaction =
-                ReactionAst::from_sides(py, lhs.clone_ref(py), rhs.clone_ref(py), atom_pairs)
-                    .unwrap();
+            let atom_pairs = PyList::new(py, atom_pairs).unwrap();
+            let reaction = ReactionAst::from_sides(
+                py,
+                lhs.clone_ref(py),
+                rhs.clone_ref(py),
+                atom_pairs.as_any(),
+            )
+            .unwrap();
 
             assert_eq!(reaction.to_rust(py), expected);
             assert_eq!(*lhs.bind(py).borrow().inner(), lhs_before);
             assert_eq!(*rhs.bind(py).borrow().inner(), rhs_before);
             assert_ne!(reaction.lhs.as_ptr(), lhs.as_ptr());
+        });
+    }
+
+    #[rstest]
+    #[case::dative_bond(
+        r#"{:atoms ["N" "B"] :bonds []}"#,
+        r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#,
+        vec![(0, 0), (1, 1)],
+        vec![AstDelta::DativeBond(AstDativeBondDelta::Add {
+            id: AstDativeBondId(0),
+            donors: vec![AstAtomId(0)],
+            acceptor: AstAtomId(1),
+            ast: AstDativeBondAst::from_order(1),
+        })],
+    )]
+    #[case::aromatic_system(
+        r#"{:atoms ["C" "C"] :bonds []}"#,
+        r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "[1,1]"}]}"#,
+        vec![(0, 0), (1, 1)],
+        vec![AstDelta::AromaticSystem(AstAromaticSystemDelta::Add {
+            id: AstAromaticSystemId(0),
+            atoms: vec![AstAtomId(0), AstAtomId(1)],
+            ast: AstAromaticSystemAst::from_electrons(vec![1, 1]),
+        })],
+    )]
+    #[case::multicenter_bond(
+        r#"{:atoms ["B" "H" "B"] :bonds []}"#,
+        r#"{:atoms ["B" "H" "B"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "[3,5,7]"}]}"#,
+        vec![(0, 0), (1, 1), (2, 2)],
+        vec![AstDelta::MulticenterBond(AstMulticenterBondDelta::Add {
+            id: AstMulticenterBondId(0),
+            atoms: vec![AstAtomId(0), AstAtomId(1), AstAtomId(2)],
+            ast: AstMulticenterBondAst::from_electrons(vec![3, 5, 7]),
+        })],
+    )]
+    #[case::noncovalent_bond(
+        r#"{:atoms ["O" "O"] :bonds []}"#,
+        r#"{:atoms ["O" "O"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}]}"#,
+        vec![(0, 0), (1, 1)],
+        vec![AstDelta::NoncovalentBond(AstNoncovalentBondDelta::Add {
+            id: AstNoncovalentBondId(0),
+            atoms: [AstAtomId(0), AstAtomId(1)],
+            ast: AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
+        })],
+    )]
+    #[case::stereo_atom(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds []}"#,
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#,
+        vec![(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)],
+        vec![AstDelta::StereoAtom(AstStereoAtomDelta::Add {
+            id: AstStereoAtomId(0),
+            site: AstAtomId(0),
+            ligands: vec![
+                AstStereoLigand::new(AstAtomId(1), AstStereoLigandKind::Atom),
+                AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
+                AstStereoLigand::new(AstAtomId(3), AstStereoLigandKind::Atom),
+                AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
+            ],
+            ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(1)),
+        })],
+    )]
+    #[case::stereo_bond(
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]}"#,
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#,
+        vec![(0, 0), (1, 1), (2, 2), (3, 3)],
+        vec![AstDelta::StereoBond(AstStereoBondDelta::Add {
+            id: AstStereoBondId(0),
+            site: AstBondId(1),
+            ligands: vec![
+                AstStereoLigand::new(AstAtomId(0), AstStereoLigandKind::Atom),
+                AstStereoLigand::new(AstAtomId(3), AstStereoLigandKind::Atom),
+            ],
+            ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(1)),
+        })],
+    )]
+    #[case::molecule_constraint(
+        r#"{:atoms ["C"] :bonds []}"#,
+        r#"{:atoms ["C"] :bonds [] :constraints [{:connected {}}]}"#,
+        vec![(0, 0)],
+        vec![AstDelta::Constraint(AstConstraintDelta::Add(
+            AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None }),
+        ))],
+    )]
+    fn test_reaction_ast_from_sides_entities(
+        #[case] lhs: &str,
+        #[case] rhs: &str,
+        #[case] atom_pairs: Vec<(usize, usize)>,
+        #[case] expected_deltas: Vec<AstDelta>,
+    ) {
+        Python::attach(|py| {
+            let lhs = lhs.parse::<AstMoleculeAst>().unwrap();
+            let rhs = rhs.parse::<AstMoleculeAst>().unwrap();
+            let atom_pairs = PyList::new(py, atom_pairs).unwrap();
+            let reaction = ReactionAst::from_sides(
+                py,
+                Py::new(py, MoleculeAst::from_inner(lhs.clone())).unwrap(),
+                Py::new(py, MoleculeAst::from_inner(rhs)).unwrap(),
+                atom_pairs.as_any(),
+            )
+            .unwrap();
+
+            assert_eq!(
+                reaction.to_rust(py),
+                AstReactionAst::new(lhs, expected_deltas.into_iter().collect())
+            );
         });
     }
 
@@ -563,9 +689,14 @@ mod tests {
             });
             let lhs = Py::new(py, MoleculeAst::from_inner(lhs_before.clone())).unwrap();
             let rhs = Py::new(py, MoleculeAst::from_inner(rhs_before.clone())).unwrap();
-            let reaction =
-                ReactionAst::from_sides(py, lhs.clone_ref(py), rhs.clone_ref(py), vec![(0, 0)])
-                    .unwrap();
+            let atom_pairs = PyList::new(py, [(0, 0)]).unwrap();
+            let reaction = ReactionAst::from_sides(
+                py,
+                lhs.clone_ref(py),
+                rhs.clone_ref(py),
+                atom_pairs.as_any(),
+            )
+            .unwrap();
             let expected = reaction.to_rust(py);
 
             *lhs.bind(py).borrow_mut().inner_mut() = AstMoleculeAst::new();

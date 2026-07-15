@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S6a.2 complete; S6a.3 is next**
+Status: **ACTIVE — S6a complete; S6b.1 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1328,7 +1328,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      focused clippy with warnings denied, rustfmt, and `git diff --check` also
      pass.
 
-  3. **S6a.3 — entity-family closure and installed Python contract**
+  3. **DONE — S6a.3 — entity-family closure and installed Python contract**
      (`umol-py/src/reaction.rs`, `tests/test_reaction.py`) — add a focused matrix
      proving that side construction delegates the induced correspondence and
      difference across dative bonds, aromatic systems, multicenter bonds,
@@ -1338,6 +1338,19 @@ scope and membership payloads live in `constraint/ring.rs`.
      through public Python. Run the complete binding suites and focused clippy,
      rustfmt, and `git diff --check` as the S6a gate. **Additive (green).**
      `[dep: S6a.2]`
+
+     **Implemented verification:** the public method now consumes any Python
+     iterable of integer pairs, including generators, before applying the S6a.1
+     validation. Seven Rust table rows exercise non-empty additions for dative
+     bonds, aromatic systems, multicenter bonds, noncovalent bonds, stereo
+     atoms, stereo bonds, and molecule constraints under induced
+     correspondences. Installed Python tests cover a partial atom map with
+     removal/addition, generator input, source preservation, fresh writable
+     result components, and the exact duplicate-left, duplicate-right,
+     left-range, and right-range `ValueError` messages. All 22 focused reaction
+     tests pass. The complete binding suites pass with 967 Rust tests and 558
+     Python tests; focused clippy with warnings denied, rustfmt, and
+     `git diff --check` pass.
 
   **Critical path:** `S5a.3 → S6a.1 → S6a.2 → S6a.3`. No S6a subitem is
   deferrable: S6c's complete reaction-data workflow requires validated side
