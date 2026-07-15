@@ -3,17 +3,20 @@
 
 use std::collections::HashSet;
 use std::str::FromStr;
+use std::vec::IntoIter;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    Canonicalize, CompositionScope as AstCompositionScope, ReactionAst as AstReactionAst,
-    ReactionDerivation as AstReactionDerivation,
+    Canonicalize, CompositionScope as AstCompositionScope, MoleculeAst as AstMoleculeAst,
+    MoleculeCorrespondence as AstMoleculeCorrespondence, ReactionAst as AstReactionAst,
+    ReactionDerivation as AstReactionDerivation, SubstructureMatchAlgorithm,
 };
 use umol_graph_core::{Correspondence, NodeId};
 
 use crate::correspondence::{
     Correspondence as PyCorrespondence, MoleculeCorrespondence as PyMoleculeCorrespondence,
+    SubgraphIsomorphismAlgorithm,
 };
 use crate::delta::Deltas;
 use crate::error::{contradiction_error, parse_error};
@@ -203,6 +206,27 @@ impl ReactionAst {
             .collect()
     }
 
+    /// Return one-shot application results with eager matching and lazy derivation construction.
+    fn apply(
+        &self,
+        py: Python<'_>,
+        host: Py<MoleculeAst>,
+        algorithm: SubgraphIsomorphismAlgorithm,
+    ) -> PyResult<Py<ReactionApplicationIter>> {
+        let reaction = self.to_rust(py);
+        let host = host.bind(py).borrow().inner().clone();
+        let correspondences = reaction.lhs.substructure_matches(
+            &host,
+            SubstructureMatchAlgorithm::GraphAndOverlays,
+            algorithm.to_rust(),
+        );
+
+        Py::new(
+            py,
+            ReactionApplicationIter::new(reaction, host, correspondences),
+        )
+    }
+
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -304,6 +328,44 @@ impl ReactionDerivation {
 
     pub(crate) fn to_rust(&self) -> AstReactionDerivation {
         self.0.clone()
+    }
+}
+
+/// One-shot application results over an eagerly enumerated correspondence set.
+#[pyclass(skip_from_py_object)]
+pub(crate) struct ReactionApplicationIter {
+    reaction: AstReactionAst,
+    host: AstMoleculeAst,
+    correspondences: IntoIter<AstMoleculeCorrespondence>,
+}
+
+impl ReactionApplicationIter {
+    pub(crate) fn new(
+        reaction: AstReactionAst,
+        host: AstMoleculeAst,
+        correspondences: Vec<AstMoleculeCorrespondence>,
+    ) -> Self {
+        Self {
+            reaction,
+            host,
+            correspondences: correspondences.into_iter(),
+        }
+    }
+}
+
+#[pymethods]
+impl ReactionApplicationIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> Option<ReactionDerivation> {
+        self.correspondences.by_ref().find_map(|correspondence| {
+            self.reaction
+                .apply_at(&self.host, &correspondence)
+                .ok()
+                .map(ReactionDerivation::from_rust)
+        })
     }
 }
 
@@ -1408,6 +1470,160 @@ mod tests {
     }
 
     #[rstest]
+    fn test_reaction_ast_apply(
+        reaction_application: (
+            AstReactionAst,
+            AstMoleculeAst,
+            Vec<AstMoleculeCorrespondence>,
+        ),
+    ) {
+        let (expected_reaction, expected_host, _) = reaction_application;
+        Python::attach(|py| {
+            let reaction = ReactionAst::from_rust(py, expected_reaction.clone()).unwrap();
+            let host = Py::new(py, MoleculeAst::from_inner(expected_host.clone())).unwrap();
+            let application = reaction
+                .apply(py, host.clone_ref(py), SubgraphIsomorphismAlgorithm::Vf2())
+                .unwrap();
+
+            assert_eq!(application.borrow(py).correspondences.len(), 2);
+            assert_eq!(reaction.to_rust(py), expected_reaction);
+            assert_eq!(host.bind(py).borrow().inner(), &expected_host);
+
+            let first = application.borrow_mut(py).__next__().unwrap();
+            assert_eq!(application.borrow(py).correspondences.len(), 1);
+            let second = application.borrow_mut(py).__next__().unwrap();
+            assert_eq!(application.borrow(py).correspondences.len(), 0);
+            assert_eq!(application.borrow_mut(py).__next__(), None);
+            assert_eq!(
+                [first.rhs().inner().clone(), second.rhs().inner().clone()],
+                [
+                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                        atoms: vec![
+                            AstAtomAst::from_element(ChemElement::C).with_charge(1),
+                            AstAtomAst::from_element(ChemElement::C),
+                        ],
+                        ..Default::default()
+                    }),
+                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                        atoms: vec![
+                            AstAtomAst::from_element(ChemElement::C),
+                            AstAtomAst::from_element(ChemElement::C).with_charge(1),
+                        ],
+                        ..Default::default()
+                    }),
+                ]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_apply_snapshot(
+        reaction_application: (
+            AstReactionAst,
+            AstMoleculeAst,
+            Vec<AstMoleculeCorrespondence>,
+        ),
+    ) {
+        let (expected_reaction, expected_host, _) = reaction_application;
+        Python::attach(|py| {
+            let mut reaction = ReactionAst::from_rust(py, expected_reaction).unwrap();
+            let host = Py::new(py, MoleculeAst::from_inner(expected_host)).unwrap();
+            let application = reaction
+                .apply(py, host.clone_ref(py), SubgraphIsomorphismAlgorithm::Vf2())
+                .unwrap();
+
+            *reaction.lhs.bind(py).borrow_mut().inner_mut() =
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![AstAtomAst::from_element(ChemElement::N)],
+                    ..Default::default()
+                });
+            reaction.deltas = Py::new(py, Deltas::from_rust(AstDeltas::default())).unwrap();
+            *host.bind(py).borrow_mut().inner_mut() =
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![AstAtomAst::from_element(ChemElement::F)],
+                    ..Default::default()
+                });
+
+            let products: Vec<AstMoleculeAst> = std::iter::from_fn(|| {
+                application
+                    .borrow_mut(py)
+                    .__next__()
+                    .map(|derivation| derivation.rhs().inner().clone())
+            })
+            .collect();
+            assert_eq!(
+                products,
+                vec![
+                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                        atoms: vec![
+                            AstAtomAst::from_element(ChemElement::C).with_charge(1),
+                            AstAtomAst::from_element(ChemElement::C),
+                        ],
+                        ..Default::default()
+                    }),
+                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                        atoms: vec![
+                            AstAtomAst::from_element(ChemElement::C),
+                            AstAtomAst::from_element(ChemElement::C).with_charge(1),
+                        ],
+                        ..Default::default()
+                    }),
+                ]
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::vf2(SubgraphIsomorphismAlgorithm::Vf2())]
+    #[case::ullmann(SubgraphIsomorphismAlgorithm::Ullmann())]
+    #[case::ri(SubgraphIsomorphismAlgorithm::Ri())]
+    #[case::arc_match(SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 })]
+    #[case::vf2_rdkit(SubgraphIsomorphismAlgorithm::Vf2Rdkit())]
+    #[case::ray_kirsch(SubgraphIsomorphismAlgorithm::RayKirsch())]
+    fn test_reaction_ast_apply_algorithm(
+        reaction_application: (
+            AstReactionAst,
+            AstMoleculeAst,
+            Vec<AstMoleculeCorrespondence>,
+        ),
+        #[case] algorithm: SubgraphIsomorphismAlgorithm,
+    ) {
+        let (reaction, host, _) = reaction_application;
+        Python::attach(|py| {
+            let reaction = ReactionAst::from_rust(py, reaction).unwrap();
+            let host = Py::new(py, MoleculeAst::from_inner(host)).unwrap();
+            let application = reaction.apply(py, host, algorithm).unwrap();
+
+            let products: Vec<AstMoleculeAst> = std::iter::from_fn(|| {
+                application
+                    .borrow_mut(py)
+                    .__next__()
+                    .map(|derivation| derivation.rhs().inner().clone())
+            })
+            .collect();
+            assert_eq!(
+                products,
+                vec![
+                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                        atoms: vec![
+                            AstAtomAst::from_element(ChemElement::C).with_charge(1),
+                            AstAtomAst::from_element(ChemElement::C),
+                        ],
+                        ..Default::default()
+                    }),
+                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                        atoms: vec![
+                            AstAtomAst::from_element(ChemElement::C),
+                            AstAtomAst::from_element(ChemElement::C).with_charge(1),
+                        ],
+                        ..Default::default()
+                    }),
+                ]
+            );
+        });
+    }
+
+    #[rstest]
     fn test_reaction_ast_eq() {
         Python::attach(|py| {
             let empty = ReactionAst::new(py, None, None).unwrap();
@@ -1861,5 +2077,166 @@ mod tests {
             ReactionDerivation::from_rust(expected.clone()).to_rust(),
             expected
         );
+    }
+
+    #[fixture]
+    fn reaction_application() -> (
+        AstReactionAst,
+        AstMoleculeAst,
+        Vec<AstMoleculeCorrespondence>,
+    ) {
+        let reaction = AstReactionAst::new(
+            AstMoleculeAst::from_parts(AstMoleculeParts {
+                atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+                ..Default::default()
+            }),
+            AstDeltas::from_iter([AstDelta::Atom(AstAtomDelta::ModifyField {
+                id: AstAtomId(0),
+                change: AstAtomFieldChange::Charge {
+                    old: AstValueAst::Undetermined,
+                    new: AstValueAst::Lit(1),
+                },
+            })]),
+        );
+        let host = AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![
+                AstAtomAst::from_element(ChemElement::C),
+                AstAtomAst::from_element(ChemElement::C),
+            ],
+            ..Default::default()
+        });
+        let correspondences = [NodeId(0), NodeId(1)]
+            .into_iter()
+            .map(|host_atom| {
+                AstMoleculeCorrespondence::induce(
+                    &reaction.lhs,
+                    &host,
+                    Correspondence::from_images(&[host_atom], host.atoms().count()),
+                )
+            })
+            .collect();
+        (reaction, host, correspondences)
+    }
+
+    #[rstest]
+    fn test_reaction_application_iter(
+        reaction_application: (
+            AstReactionAst,
+            AstMoleculeAst,
+            Vec<AstMoleculeCorrespondence>,
+        ),
+    ) {
+        let (reaction, host, correspondences) = reaction_application;
+        let mut application = ReactionApplicationIter::new(reaction, host, correspondences);
+
+        let first = application.__next__().unwrap();
+        let second = application.__next__().unwrap();
+        assert_eq!(
+            [first.rhs().inner().clone(), second.rhs().inner().clone()],
+            [
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![
+                        AstAtomAst::from_element(ChemElement::C).with_charge(1),
+                        AstAtomAst::from_element(ChemElement::C),
+                    ],
+                    ..Default::default()
+                }),
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![
+                        AstAtomAst::from_element(ChemElement::C),
+                        AstAtomAst::from_element(ChemElement::C).with_charge(1),
+                    ],
+                    ..Default::default()
+                }),
+            ]
+        );
+        assert_eq!(application.__next__(), None);
+        assert_eq!(application.__next__(), None);
+
+        let expected_first = first.to_rust();
+        let expected_second = second.to_rust();
+        let mut detached = first.rhs();
+        *detached.inner_mut().atom_mut(AstAtomId(0)).ast = AstAtomAst::from_element(ChemElement::F);
+        assert_eq!(first.to_rust(), expected_first);
+        assert_eq!(second.to_rust(), expected_second);
+    }
+
+    #[rstest]
+    fn test_reaction_application_iter_empty() {
+        let mut application = ReactionApplicationIter::new(
+            AstReactionAst::default(),
+            AstMoleculeAst::default(),
+            Vec::new(),
+        );
+
+        assert_eq!(application.__next__(), None);
+    }
+
+    #[rstest]
+    fn test_reaction_application_iter_identity(
+        reaction_application: (
+            AstReactionAst,
+            AstMoleculeAst,
+            Vec<AstMoleculeCorrespondence>,
+        ),
+    ) {
+        let (reaction, host, correspondences) = reaction_application;
+        Python::attach(|py| {
+            let application = Py::new(
+                py,
+                ReactionApplicationIter::new(reaction, host, correspondences),
+            )
+            .unwrap();
+
+            let iter = application.bind(py).call_method0("__iter__").unwrap();
+            assert!(iter.is(application.bind(py)));
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_application_iter_rejection() {
+        let reaction = AstReactionAst::new(
+            AstMoleculeAst::from_parts(AstMoleculeParts {
+                atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+                ..Default::default()
+            }),
+            AstDeltas::from_iter([AstDelta::Atom(AstAtomDelta::Remove {
+                id: AstAtomId(0),
+                ast: AstAtomAst::from_element(ChemElement::C),
+            })]),
+        );
+        let host = AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![
+                AstAtomAst::from_element(ChemElement::C),
+                AstAtomAst::from_element(ChemElement::C),
+                AstAtomAst::from_element(ChemElement::O),
+            ],
+            bonds: vec![(AstAtomId(0), AstAtomId(2), AstBondAst::from_order(1))],
+            ..Default::default()
+        });
+        let correspondences = [NodeId(0), NodeId(1)]
+            .into_iter()
+            .map(|host_atom| {
+                AstMoleculeCorrespondence::induce(
+                    &reaction.lhs,
+                    &host,
+                    Correspondence::from_images(&[host_atom], host.atoms().count()),
+                )
+            })
+            .collect();
+        let mut application = ReactionApplicationIter::new(reaction, host, correspondences);
+
+        assert_eq!(
+            application.__next__().unwrap().rhs().inner(),
+            &AstMoleculeAst::from_parts(AstMoleculeParts {
+                atoms: vec![
+                    AstAtomAst::from_element(ChemElement::C),
+                    AstAtomAst::from_element(ChemElement::O),
+                ],
+                bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
+                ..Default::default()
+            })
+        );
+        assert_eq!(application.__next__(), None);
     }
 }
