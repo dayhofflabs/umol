@@ -1,9 +1,12 @@
 //! `ReactionAst` — an owned Python component facade over the Rust reaction AST.
 
+use std::str::FromStr;
+
 use pyo3::prelude::*;
 use umol_ast::ast::ReactionAst as AstReactionAst;
 
 use crate::delta::Deltas;
+use crate::error::parse_error;
 use crate::molecule::MoleculeAst;
 
 /// A reaction whose molecule and delta components remain live Python values.
@@ -33,6 +36,13 @@ impl ReactionAst {
                     .unwrap_or_default(),
             ),
         )
+    }
+
+    /// Parse a reaction from its EDN representation.
+    #[staticmethod]
+    fn parse(py: Python<'_>, text: &str) -> PyResult<Self> {
+        let reaction = AstReactionAst::from_str(text).map_err(parse_error)?;
+        Self::from_rust(py, reaction)
     }
 
     /// The live left-hand molecule component.
@@ -70,6 +80,10 @@ impl ReactionAst {
         self.to_rust(py) == other.to_rust(py)
     }
 
+    fn __str__(&self, py: Python<'_>) -> String {
+        self.to_rust(py).to_string()
+    }
+
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let lhs = self.lhs.bind(py).repr()?.extract::<String>()?;
         let deltas = self.deltas.bind(py).repr()?.extract::<String>()?;
@@ -100,14 +114,19 @@ mod tests {
     use pyo3::exceptions::PyTypeError;
     use rstest::rstest;
     use umol_ast::ast::{
-        AtomAst as AstAtomAst, AtomDelta as AstAtomDelta, AtomId as AstAtomId, Delta as AstDelta,
-        Deltas as AstDeltas, MoleculeAst as AstMoleculeAst, MoleculeParts as AstMoleculeParts,
+        AtomAst as AstAtomAst, AtomDelta as AstAtomDelta, AtomFieldChange as AstAtomFieldChange,
+        AtomId as AstAtomId, Constraint as AstConstraint, ConstraintDelta as AstConstraintDelta,
+        Delta as AstDelta, Deltas as AstDeltas, MoleculeAst as AstMoleculeAst,
+        MoleculeConstraint as AstMoleculeConstraint, MoleculeParts as AstMoleculeParts,
+        StereoAtomDelta as AstStereoAtomDelta, StereoAtomId as AstStereoAtomId,
+        StereoKind as AstStereoKind, ValueAst as AstValueAst,
     };
     use umol_chem::element::Element as ChemElement;
 
     use super::*;
     use crate::convert::into_py_variant;
     use crate::delta::Delta;
+    use crate::error::ParseError;
 
     #[rstest]
     #[case::empty(None, None, AstReactionAst::default())]
@@ -194,6 +213,73 @@ mod tests {
             assert_eq!(reaction.to_rust(py), expected);
             assert_ne!(reaction.lhs.as_ptr(), lhs.as_ptr());
             assert_ne!(reaction.deltas.as_ptr(), deltas.as_ptr());
+        });
+    }
+
+    #[rstest]
+    #[case::atom_add_remove(
+        r##"{:lhs {:atoms ["C" "O"]} :deltas [{:atom {:add "N"}} {:atom {:remove 1}}]}"##,
+        2,
+        vec![
+            AstDelta::Atom(AstAtomDelta::Add {
+                id: AstAtomId(2),
+                ast: AstAtomAst::from_element(ChemElement::N),
+            }),
+            AstDelta::Atom(AstAtomDelta::Remove {
+                id: AstAtomId(1),
+                ast: AstAtomAst::from_element(ChemElement::O),
+            }),
+        ],
+    )]
+    #[case::atom_modify(
+        r##"{:lhs {:atoms ["Br#c0"]} :deltas [{:atom {:modify [0 "#c-1"]}}]}"##,
+        1,
+        vec![AstDelta::Atom(AstAtomDelta::ModifyField {
+            id: AstAtomId(0),
+            change: AstAtomFieldChange::Charge {
+                old: AstValueAst::Lit(0),
+                new: AstValueAst::Lit(-1),
+            },
+        })],
+    )]
+    #[case::stereo_mirror(
+        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}"##,
+        5,
+        vec![AstDelta::StereoAtom(AstStereoAtomDelta::Mirror {
+            id: AstStereoAtomId(0),
+            kind: AstStereoKind::Tetrahedral,
+        })],
+    )]
+    #[case::molecule_constraint(
+        r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}"##,
+        1,
+        vec![AstDelta::Constraint(AstConstraintDelta::Add(
+            AstConstraint::Molecule(AstMoleculeConstraint::Connected { atoms: None }),
+        ))],
+    )]
+    fn test_reaction_ast_parse(
+        #[case] text: &str,
+        #[case] atom_count: usize,
+        #[case] expected_deltas: Vec<AstDelta>,
+    ) {
+        Python::attach(|py| {
+            let reaction = ReactionAst::parse(py, text).unwrap().to_rust(py);
+
+            assert_eq!(reaction.lhs.atoms().count(), atom_count);
+            assert_eq!(reaction.deltas.as_slice(), expected_deltas.as_slice());
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_parse_error() {
+        Python::attach(|py| {
+            let error = ReactionAst::parse(py, "not edn").err().unwrap();
+
+            assert!(error.is_instance_of::<ParseError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "EDN parse: unexpected token 'n' at byte 0"
+            );
         });
     }
 
@@ -350,6 +436,100 @@ mod tests {
                 .hash()
                 .unwrap_err()
                 .is_instance_of::<PyTypeError>(py));
+        });
+    }
+
+    #[rstest]
+    #[case::empty(
+        AstReactionAst::default(),
+        r##"{:deltas [] :lhs {:atoms [] :bonds []}}"##
+    )]
+    #[case::populated(
+        AstReactionAst::new(
+            AstMoleculeAst::from_parts(AstMoleculeParts {
+                atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+                ..Default::default()
+            }),
+            vec![AstDelta::Atom(AstAtomDelta::Add {
+                id: AstAtomId(1),
+                ast: AstAtomAst::from_element(ChemElement::O),
+            })].into_iter().collect(),
+        ),
+        r##"{:deltas [{:atom {:add "O"}}] :lhs {:atoms ["C"] :bonds []}}"##,
+    )]
+    fn test_reaction_ast_str(#[case] input: AstReactionAst, #[case] expected: &str) {
+        Python::attach(|py| {
+            let reaction = ReactionAst::from_rust(py, input).unwrap();
+
+            assert_eq!(reaction.__str__(py), expected);
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_str_components() {
+        Python::attach(|py| {
+            let reaction = ReactionAst::from_rust(
+                py,
+                AstReactionAst::new(
+                    AstMoleculeAst::from_parts(AstMoleculeParts {
+                        atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+                        ..Default::default()
+                    }),
+                    AstDeltas::new(),
+                ),
+            )
+            .unwrap();
+
+            *reaction.lhs.bind(py).borrow_mut().inner_mut() =
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![AstAtomAst::from_element(ChemElement::C).with_charge(1)],
+                    ..Default::default()
+                });
+            let delta = into_py_variant(
+                py,
+                Delta::from_rust(
+                    py,
+                    &AstDelta::Atom(AstAtomDelta::Add {
+                        id: AstAtomId(1),
+                        ast: AstAtomAst::from_element(ChemElement::O),
+                    }),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            reaction
+                .deltas
+                .bind(py)
+                .call_method1("append", (delta,))
+                .unwrap();
+
+            assert_eq!(
+                reaction.__str__(py),
+                r##"{:deltas [{:atom {:add "O"}}] :lhs {:atoms ["C#c+"] :bonds []}}"##
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::atom_add_remove(
+        r##"{:lhs {:atoms ["C" "O"]} :deltas [{:atom {:add "N"}} {:atom {:remove 1}}]}"##
+    )]
+    #[case::atom_modify(r##"{:lhs {:atoms ["Br#c0"]} :deltas [{:atom {:modify [0 "#c-1"]}}]}"##)]
+    #[case::stereo_mirror(
+        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}"##
+    )]
+    #[case::molecule_constraint(
+        r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}"##
+    )]
+    fn test_reaction_ast_str_roundtrip(#[case] text: &str) {
+        Python::attach(|py| {
+            let first = ReactionAst::parse(py, text).unwrap();
+
+            let canonical = first.__str__(py);
+            let second = ReactionAst::parse(py, &canonical).unwrap();
+
+            assert!(first.__eq__(&second, py));
+            assert_eq!(second.__str__(py), canonical);
         });
     }
 

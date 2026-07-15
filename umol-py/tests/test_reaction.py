@@ -7,6 +7,7 @@ from umol import (
     Deltas,
     Element,
     MoleculeAst,
+    ParseError,
     ReactionAst,
     ValueAst,
 )
@@ -130,3 +131,76 @@ def test_reactionast_value():
     )
     with pytest.raises(TypeError):
         hash(reaction)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param(
+            '{:lhs {:atoms ["C" "O"]} :deltas '
+            '[{:atom {:add "N"}} {:atom {:remove 1}}]}',
+            id="atom-add-remove",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["Br#c0"]} :deltas '
+            '[{:atom {:modify [0 "#c-1"]}}]}',
+            id="atom-modify",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
+            ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
+            ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} '
+            ':deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}',
+            id="stereo-mirror",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["C"]} :deltas '
+            '[{:constraint {:add {:connected {}}}}]}',
+            id="molecule-constraint",
+        ),
+    ],
+)
+def test_reactionast_parse(text):
+    first = ReactionAst.parse(text)
+
+    canonical = str(first)
+    second = ReactionAst.parse(canonical)
+
+    assert second == first
+    assert str(second) == canonical
+    assert second.lhs is not first.lhs
+    assert second.deltas is not first.deltas
+
+
+def test_reactionast_parse_error():
+    with pytest.raises(
+        ParseError,
+        match="^EDN parse: unexpected token 'n' at byte 0$",
+    ):
+        ReactionAst.parse("not edn")
+
+
+def test_reactionast_str_components():
+    reaction = ReactionAst.parse('{:lhs {:atoms ["C"]} :deltas []}')
+
+    reaction.lhs.atoms[0].charge = 1
+    reaction.deltas.append(
+        Delta.Atom(AtomDelta.Add(id=1, ast=AtomAst(Element("O"))))
+    )
+
+    assert str(reaction) == (
+        '{:deltas [{:atom {:add "O"}}] '
+        ':lhs {:atoms ["C#c+"] :bonds []}}'
+    )
+
+
+def test_reactionast_parse_repr():
+    reaction = ReactionAst.parse(
+        '{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}}]}'
+    )
+
+    assert repr(reaction) == (
+        "ReactionAst(lhs=MoleculeAst(atoms=1, bonds=0), "
+        "deltas=Deltas([Delta.Atom(AtomDelta.Add("
+        "id=1, ast=AtomAst.parse('O')))]))"
+    )

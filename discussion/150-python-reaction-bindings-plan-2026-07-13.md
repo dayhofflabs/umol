@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S5a complete; S5b is next**
+Status: **ACTIVE — S5b complete; S5c is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1191,11 +1191,72 @@ scope and membership payloads live in `constraint/ring.rs`.
   **Critical path:** `S4b.4 → S5a.1 → S5a.2 → S5a.3`. No S5a subitem is
   deferrable: every later reaction operation rebuilds a Rust reaction through
   `to_rust` and wraps its result through `from_rust`.
-- **S5b — reaction DSL shortcut** (`reaction.rs`): add `parse` and `str` through
-  Rust `FromStr`/`Display`, retaining S5a's constructor-style `repr`; reuse
-  `ParseError`. Test representative add/remove/modify/stereo/molecule-constraint
-  reactions and canonical render/parse stability. **Additive (green).**
-  `[dep: S5a]`
+- **S5b — DONE — reaction DSL shortcut** (`umol-py/src/reaction.rs`,
+  `tests/test_reaction.py`): expose the Rust reaction EDN surface without adding
+  a second Python representation. Parsing produces the S5a owned component
+  facade; rendering snapshots its current live components. S5a's component-based
+  constructor repr remains unchanged.
+
+  1. **DONE — S5b.1 — parse boundary and typed failure**
+     (`umol-py/src/reaction.rs`) — add
+     `ReactionAst.parse(text) -> ReactionAst` as a static method. Parse with
+     `umol_ast::ast::ReactionAst::from_str`, map the existing DSL error through
+     the shared `parse_error` function, then wrap the successful Rust value with
+     `ReactionAst::from_rust` so both returned components are fresh owned Python
+     allocations. Add Rust table rows for representative atom addition/removal,
+     field modification, stereo operation, and molecule-constraint reactions;
+     assert their resolved component structure rather than only successful
+     parsing. Add an invalid-input test for the exact public `ParseError` class
+     and message. **Additive (green).** `[dep: S5a.3]`
+
+     **Implemented verification:** `ReactionAst.parse` invokes the Rust
+     `FromStr` implementation, maps failures through `parse_error`, and wraps
+     successful values through `from_rust`. Four Rust rows verify resolved atom
+     add/remove, atom field modification, stereo mirror, and molecule-constraint
+     delta structures together with the LHS atom count. One error test verifies
+     the exact public `ParseError` class and
+     `"EDN parse: unexpected token 'n' at byte 0"` message.
+
+  2. **DONE — S5b.2 — rendering and canonical parse/render closure**
+     (`umol-py/src/reaction.rs`) — add `__str__` by calling `to_rust` at render
+     time and formatting the resulting Rust `ReactionAst` through `Display`.
+     Test exact canonical EDN for empty and populated reactions, prove that
+     mutations made through both live components appear in later renders, and
+     run the representative S5b.1 matrix through
+     parse → canonical string → parse. Assert structural equality after the
+     second parse, stable canonical text after the second render, and unchanged
+     constructor-style repr. **Additive (green).** `[dep: S5b.1]`
+
+     **Implemented verification:** `__str__` snapshots the current facade with
+     `to_rust` and delegates to Rust `Display`. Two Rust rows verify exact empty
+     and populated canonical EDN; one live-component test verifies that an LHS
+     charge edit and appended atom delta both appear in the next render. Four
+     Rust closure rows verify structural equality and stable canonical text
+     across parse → string → parse → string. The existing exact repr test remains
+     green.
+
+  3. **DONE — S5b.3 — installed-package DSL closure and stage gate**
+     (`umol-py/tests/test_reaction.py`) — exercise the public `umol.ReactionAst`
+     parse/str contract over addition/removal, modification, stereo, and
+     molecule-constraint inputs. Verify fresh live components on parsed values,
+     exact `ParseError` identity/message for invalid EDN, canonical
+     render/parse stability, render updates after live molecule and delta
+     mutation, and retention of S5a's exact repr. Run the complete Rust and
+     Python suites, workspace clippy with warnings denied, rustfmt, and
+     `git diff --check` as the S5b gate. **Additive (green).** `[dep: S5b.2]`
+
+     **Implemented verification:** four installed-package rows cover atom
+     add/remove, atom modification, stereo mirror, and molecule constraint;
+     every row verifies fresh reparsed components, structural equality, and
+     stable canonical text. Three further Python tests verify the exact public
+     parse error, rendering after live molecule/delta mutation, and the exact
+     retained constructor repr. All 13 focused reaction tests pass. The complete
+     `umol-py` suites pass with 945 Rust tests and 549 Python tests. Workspace
+     clippy with warnings denied, rustfmt, and `git diff --check` pass.
+
+  **Critical path:** `S5a.3 → S5b.1 → S5b.2 → S5b.3`. No S5b subitem is
+  deferrable: the complete reaction-data surface requires both directions of the
+  DSL boundary and their installed-package error/closure contract.
 - **S5c — canonicalize and reverse** (`reaction.rs`): return fresh component
   facades and map `Contradiction`; verify the source is unchanged, normal forms
   are idempotent, reverse twice round-trips, and live components on results remain
