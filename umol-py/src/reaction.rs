@@ -1,16 +1,47 @@
 //! `ReactionAst` — an owned Python component facade over the Rust reaction AST.
+#![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use std::collections::HashSet;
 use std::str::FromStr;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use umol_ast::ast::{Canonicalize, ReactionAst as AstReactionAst};
+use umol_ast::ast::{
+    Canonicalize, CompositionScope as AstCompositionScope, ReactionAst as AstReactionAst,
+};
 use umol_graph_core::{Correspondence, NodeId};
 
 use crate::delta::Deltas;
 use crate::error::{contradiction_error, parse_error};
 use crate::molecule::MoleculeAst;
+
+/// Which overlaps sequential reaction composition retains.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CompositionScope {
+    RcAnchored,
+    Full,
+}
+
+#[allow(
+    dead_code,
+    reason = "Rust/Python conversion API for composition scope values"
+)]
+impl CompositionScope {
+    pub(crate) fn from_rust(scope: AstCompositionScope) -> Self {
+        match scope {
+            AstCompositionScope::RcAnchored => Self::RcAnchored,
+            AstCompositionScope::Full => Self::Full,
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> AstCompositionScope {
+        match self {
+            Self::RcAnchored => AstCompositionScope::RcAnchored,
+            Self::Full => AstCompositionScope::Full,
+        }
+    }
+}
 
 /// Validate atom pairs and construct their partial bijection over the two side sizes.
 fn atom_correspondence(
@@ -214,6 +245,73 @@ mod tests {
     use crate::convert::into_py_variant;
     use crate::delta::Delta;
     use crate::error::{ContradictionError, ParseError};
+
+    #[rstest]
+    #[case::rc_anchored(AstCompositionScope::RcAnchored, CompositionScope::RcAnchored)]
+    #[case::full(AstCompositionScope::Full, CompositionScope::Full)]
+    fn test_composition_scope_from_rust(
+        #[case] scope: AstCompositionScope,
+        #[case] expected: CompositionScope,
+    ) {
+        assert_eq!(CompositionScope::from_rust(scope), expected);
+    }
+
+    #[rstest]
+    #[case::rc_anchored(CompositionScope::RcAnchored, AstCompositionScope::RcAnchored)]
+    #[case::full(CompositionScope::Full, AstCompositionScope::Full)]
+    fn test_composition_scope_to_rust(
+        #[case] scope: CompositionScope,
+        #[case] expected: AstCompositionScope,
+    ) {
+        assert_eq!(scope.to_rust(), expected);
+    }
+
+    #[rstest]
+    #[case::rc_anchored(
+        CompositionScope::RcAnchored,
+        CompositionScope::RcAnchored,
+        CompositionScope::Full,
+        "CompositionScope.RcAnchored"
+    )]
+    #[case::full(
+        CompositionScope::Full,
+        CompositionScope::Full,
+        CompositionScope::RcAnchored,
+        "CompositionScope.Full"
+    )]
+    fn test_composition_scope_python_value(
+        #[case] scope: CompositionScope,
+        #[case] equal: CompositionScope,
+        #[case] unequal: CompositionScope,
+        #[case] expected_repr: &str,
+    ) {
+        Python::attach(|py| {
+            let scope = Py::new(py, scope).unwrap();
+            let equal = Py::new(py, equal).unwrap();
+            let unequal = Py::new(py, unequal).unwrap();
+
+            assert!(scope.bind(py).as_any().eq(equal.bind(py).as_any()).unwrap());
+            assert!(!scope
+                .bind(py)
+                .as_any()
+                .eq(unequal.bind(py).as_any())
+                .unwrap());
+            assert_eq!(
+                scope.bind(py).as_any().hash().unwrap(),
+                equal.bind(py).as_any().hash().unwrap()
+            );
+            assert_eq!(
+                scope
+                    .bind(py)
+                    .as_any()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                expected_repr
+            );
+        });
+    }
 
     #[rstest]
     #[case::empty(Vec::new(), 0, 0, Vec::new())]

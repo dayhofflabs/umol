@@ -1,6 +1,6 @@
 # 150 · Python bindings for `Deltas` and `ReactionAst` (plan)
 
-Status: **ACTIVE — S6a complete; S6b.1 is next**
+Status: **ACTIVE — S6b.1 complete; S6b.2 is next**
 Date: 2026-07-13
 Relates: 131–135 (reaction semantics and implementation), 137 (Python binding
 strategy), 139 (Python mutability/equality), 140 (entity-binding template)
@@ -1361,12 +1361,22 @@ scope and membership payloads live in `constraint/ring.rs`.
   snapshots. Public registration is deliberately left to S6c so all remaining
   reaction-data exports land together.
 
-  1. **S6b.1 — `CompositionScope` value binding**
+  1. **DONE — S6b.1 — `CompositionScope` value binding**
      (`umol-py/src/reaction.rs`) — add the frozen, value-equal, hashable
      `CompositionScope::{RcAnchored, Full}` pyclass with inherent `from_rust` and
      `to_rust` conversions and ordinary enum repr. Rust tests cover both
      conversion directions, equality/hash behavior, and exact variant repr.
      **Additive (green).** `[dep: S5c]`
+
+     **Implemented verification:** `CompositionScope` is a frozen fieldless
+     pyclass with `RcAnchored` and `Full` variants, generated value equality and
+     hashing, and inherent `from_rust`/`to_rust` conversions. Two rows in each
+     conversion direction cover both variants; two Python-object rows verify
+     equal values compare and hash equally, unequal variants differ, and repr is
+     exactly `CompositionScope.RcAnchored` or `CompositionScope.Full`. All six
+     focused rows and the complete 973-test `umol-py` Rust suite pass; focused
+     clippy with warnings denied, rustfmt, and `git diff --check` pass.
+     Registration remains deferred to S6c as planned.
 
   2. **S6b.2 — sequential `compose` facade method**
      (`umol-py/src/reaction.rs`) — add
