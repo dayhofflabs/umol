@@ -152,3 +152,4 @@
 | [148-validated-transactions-operations-2026-07-13.md](148-validated-transactions-operations-2026-07-13.md)       | Active        | 2026-07-13   |
 | [149-molecule-ring-cache-and-hashing-2026-07-13.md](149-molecule-ring-cache-and-hashing-2026-07-13.md)           | Active        | 2026-07-13   |
 | [150-python-reaction-bindings-plan-2026-07-13.md](150-python-reaction-bindings-plan-2026-07-13.md)               | Completed     | 2026-07-14   |
+| [151-python-molecule-workflows-2026-07-13.md](151-python-molecule-workflows-2026-07-13.md)                       | Active        | 2026-07-15   |
