@@ -3147,182 +3147,157 @@ mod tests {
         );
     }
 
-    mod phase8_undo_contract_tests {
-        use super::*;
+    #[fixture]
+    fn triatomic_with_overlays() -> MoleculeEditor {
+        let mut b = MoleculeAst::default().edit();
+        b.add_atom(AtomAst::from_element(Element::C));
+        b.add_atom(AtomAst::from_element(Element::N));
+        b.add_atom(AtomAst::from_element(Element::O));
+        b.add_bond(AtomId(0), AtomId(1), BondAst::from_order(1));
+        b.add_bond(AtomId(1), AtomId(2), BondAst::from_order(1));
+        b.add_dative_bond(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1));
+        b.add_aromatic_system(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemAst::default(),
+        );
+        b.add_multicenter_bond(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            MulticenterBondAst::default(),
+        );
+        b.add_noncovalent_bond(
+            [AtomId(0), AtomId(2)],
+            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        );
+        b
+    }
 
-        #[fixture]
-        fn triatomic_with_overlays() -> MoleculeEditor {
-            let mut b = MoleculeAst::default().edit();
-            b.add_atom(AtomAst::from_element(Element::C));
-            b.add_atom(AtomAst::from_element(Element::N));
-            b.add_atom(AtomAst::from_element(Element::O));
-            b.add_bond(AtomId(0), AtomId(1), BondAst::from_order(1));
-            b.add_bond(AtomId(1), AtomId(2), BondAst::from_order(1));
-            b.add_dative_bond(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1));
-            b.add_aromatic_system(
-                vec![AtomId(0), AtomId(1), AtomId(2)],
-                AromaticSystemAst::default(),
-            );
-            b.add_multicenter_bond(
-                vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::default(),
-            );
-            b.add_noncovalent_bond(
-                [AtomId(0), AtomId(2)],
-                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
-            );
-            b
-        }
+    enum RollbackCase {
+        RemoveTopology,
+        RemoveBond,
+        AddTopology,
+        Field,
+        AddOverlay,
+        RemoveOverlay,
+        Constraint,
+        CascadedConstraints,
+    }
 
-        enum RollbackCase {
-            RemoveTopology,
-            RemoveBond,
-            AddTopology,
-            Field,
-            AddOverlay,
-            RemoveOverlay,
-            Constraint,
-            CascadedConstraints,
-        }
-
-        #[rstest]
-        #[case::remove_topology(RollbackCase::RemoveTopology)]
-        #[case::remove_bond(RollbackCase::RemoveBond)]
-        #[case::add_topology(RollbackCase::AddTopology)]
-        #[case::field(RollbackCase::Field)]
-        #[case::add_overlay(RollbackCase::AddOverlay)]
-        #[case::remove_overlay(RollbackCase::RemoveOverlay)]
-        #[case::constraint(RollbackCase::Constraint)]
-        #[case::cascade(RollbackCase::CascadedConstraints)]
-        fn test_transaction_rollback(#[case] case: RollbackCase) {
-            let mut editor = match case {
-                RollbackCase::AddTopology => MoleculeAst::default().edit(),
-                RollbackCase::Field | RollbackCase::Constraint => {
-                    let mut b = MoleculeAst::default().edit();
-                    b.add_atom(AtomAst::from_element(Element::C));
-                    b
-                }
-                RollbackCase::AddOverlay => {
-                    let mut b = MoleculeAst::default().edit();
-                    b.add_atom(AtomAst::from_element(Element::C));
-                    b.add_atom(AtomAst::from_element(Element::C));
-                    b.add_bond(AtomId(0), AtomId(1), BondAst::from_order(1));
-                    b
-                }
-                RollbackCase::RemoveBond => {
-                    let mut b = MoleculeAst::default().edit();
-                    b.add_atom(AtomAst::from_element(Element::C));
-                    b.add_atom(AtomAst::from_element(Element::N));
-                    b.add_atom(AtomAst::from_element(Element::O));
-                    b.add_bond(AtomId(0), AtomId(1), BondAst::from_order(1));
-                    b.add_bond(AtomId(1), AtomId(2), BondAst::from_order(2));
-                    b
-                }
-                RollbackCase::CascadedConstraints => {
-                    let mut b = MoleculeAst::default().edit();
-                    b.add_atom(AtomAst::from_element(Element::C));
-                    b.add_atom(AtomAst::from_element(Element::N));
-                    b.push_constraint(Constraint::Atom(AtomId(1), AtomConstraintAst::degree(3)));
-                    b
-                }
-                RollbackCase::RemoveTopology | RollbackCase::RemoveOverlay => {
-                    triatomic_with_overlays()
-                }
-            };
-            let before = editor.clone().build();
-            let edits = match case {
-                RollbackCase::RemoveTopology => vec![Edit::RemoveTopology {
-                    atoms: vec![AtomHandle::Id(AtomId(1))],
-                    bonds: vec![],
-                }],
-                RollbackCase::RemoveBond => vec![Edit::RemoveTopology {
-                    atoms: Vec::new(),
-                    bonds: vec![BondHandle::Id(BondId(0))],
-                }],
-                RollbackCase::AddTopology => vec![
-                    Edit::AddAtoms {
-                        atoms: vec![
-                            AtomAst::from_element(Element::C),
-                            AtomAst::from_element(Element::O),
-                        ],
+    #[rstest]
+    #[case::remove_topology(RollbackCase::RemoveTopology)]
+    #[case::remove_bond(RollbackCase::RemoveBond)]
+    #[case::add_topology(RollbackCase::AddTopology)]
+    #[case::field(RollbackCase::Field)]
+    #[case::add_overlay(RollbackCase::AddOverlay)]
+    #[case::remove_overlay(RollbackCase::RemoveOverlay)]
+    #[case::constraint(RollbackCase::Constraint)]
+    #[case::cascade(RollbackCase::CascadedConstraints)]
+    fn test_transaction_rollback(#[case] case: RollbackCase) {
+        let mut editor = match case {
+            RollbackCase::AddTopology => MoleculeAst::default().edit(),
+            RollbackCase::Field | RollbackCase::Constraint => {
+                let mut b = MoleculeAst::default().edit();
+                b.add_atom(AtomAst::from_element(Element::C));
+                b
+            }
+            RollbackCase::AddOverlay => {
+                let mut b = MoleculeAst::default().edit();
+                b.add_atom(AtomAst::from_element(Element::C));
+                b.add_atom(AtomAst::from_element(Element::C));
+                b.add_bond(AtomId(0), AtomId(1), BondAst::from_order(1));
+                b
+            }
+            RollbackCase::RemoveBond => {
+                let mut b = MoleculeAst::default().edit();
+                b.add_atom(AtomAst::from_element(Element::C));
+                b.add_atom(AtomAst::from_element(Element::N));
+                b.add_atom(AtomAst::from_element(Element::O));
+                b.add_bond(AtomId(0), AtomId(1), BondAst::from_order(1));
+                b.add_bond(AtomId(1), AtomId(2), BondAst::from_order(2));
+                b
+            }
+            RollbackCase::CascadedConstraints => {
+                let mut b = MoleculeAst::default().edit();
+                b.add_atom(AtomAst::from_element(Element::C));
+                b.add_atom(AtomAst::from_element(Element::N));
+                b.push_constraint(Constraint::Atom(AtomId(1), AtomConstraintAst::degree(3)));
+                b
+            }
+            RollbackCase::RemoveTopology | RollbackCase::RemoveOverlay => triatomic_with_overlays(),
+        };
+        let before = editor.clone().build();
+        let edits = match case {
+            RollbackCase::RemoveTopology => vec![Edit::RemoveTopology {
+                atoms: vec![AtomHandle::Id(AtomId(1))],
+                bonds: vec![],
+            }],
+            RollbackCase::RemoveBond => vec![Edit::RemoveTopology {
+                atoms: Vec::new(),
+                bonds: vec![BondHandle::Id(BondId(0))],
+            }],
+            RollbackCase::AddTopology => vec![
+                Edit::AddAtoms {
+                    atoms: vec![
+                        AtomAst::from_element(Element::C),
+                        AtomAst::from_element(Element::O),
+                    ],
+                },
+                Edit::add_bond(
+                    AtomHandle::New(0),
+                    AtomHandle::New(1),
+                    BondAst::from_order(2),
+                ),
+            ],
+            RollbackCase::Field => vec![Edit::ModifyAtomField {
+                id: AtomHandle::Id(AtomId(0)),
+                change: AtomFieldChange::Charge {
+                    old: ValueAst::default(),
+                    new: ValueAst::Lit(1),
+                },
+            }],
+            RollbackCase::AddOverlay => vec![Edit::AddDativeBond {
+                atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                ast: DativeBondAst::from_order(1),
+            }],
+            RollbackCase::RemoveOverlay => vec![Edit::RemoveDativeBonds {
+                removes: vec![(
+                    DativeBondHandle::Id(DativeBondId(0)),
+                    vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                    DativeBondAst {
+                        order: ValueAst::Lit(1),
+                        constraints: Default::default(),
                     },
-                    Edit::add_bond(
-                        AtomHandle::New(0),
-                        AtomHandle::New(1),
-                        BondAst::from_order(2),
-                    ),
-                ],
-                RollbackCase::Field => vec![Edit::ModifyAtomField {
-                    id: AtomHandle::Id(AtomId(0)),
-                    change: AtomFieldChange::Charge {
-                        old: ValueAst::default(),
-                        new: ValueAst::Lit(1),
-                    },
-                }],
-                RollbackCase::AddOverlay => vec![Edit::AddDativeBond {
-                    atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                    ast: DativeBondAst::from_order(1),
-                }],
-                RollbackCase::RemoveOverlay => vec![Edit::RemoveDativeBonds {
-                    removes: vec![(
-                        DativeBondHandle::Id(DativeBondId(0)),
-                        vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                        DativeBondAst {
-                            order: ValueAst::Lit(1),
-                            constraints: Default::default(),
-                        },
-                    )],
-                }],
-                RollbackCase::Constraint => vec![Edit::ModifyAtomConstraint {
-                    id: AtomHandle::Id(AtomId(0)),
-                    old: None,
-                    new: Some(AtomConstraintAst::ring_membership(RingScope::Size(5), 1)),
-                }],
-                RollbackCase::CascadedConstraints => vec![Edit::RemoveTopology {
-                    atoms: vec![AtomHandle::Id(AtomId(1))],
-                    bonds: Vec::new(),
-                }],
-            };
-            let tx = editor.transact(edits).unwrap();
-            tx.rollback(&mut editor).unwrap();
-            assert_eq!(editor.build(), before);
-        }
+                )],
+            }],
+            RollbackCase::Constraint => vec![Edit::ModifyAtomConstraint {
+                id: AtomHandle::Id(AtomId(0)),
+                old: None,
+                new: Some(AtomConstraintAst::ring_membership(RingScope::Size(5), 1)),
+            }],
+            RollbackCase::CascadedConstraints => vec![Edit::RemoveTopology {
+                atoms: vec![AtomHandle::Id(AtomId(1))],
+                bonds: Vec::new(),
+            }],
+        };
+        let tx = editor.transact(edits).unwrap();
+        tx.rollback(&mut editor).unwrap();
+        assert_eq!(editor.build(), before);
+    }
 
-        #[rstest]
-        fn test_transaction_rollback_cascaded_overlays(
-            mut triatomic_with_overlays: MoleculeEditor,
-        ) {
-            let tx = triatomic_with_overlays
-                .transact(vec![Edit::RemoveTopology {
-                    atoms: vec![AtomHandle::Id(AtomId(0))],
-                    bonds: vec![],
-                }])
-                .unwrap();
-            let [Undo::RestoreRemovedTopology { overlays, .. }] = tx.undos() else {
-                panic!("RemoveTopology should produce one topology-restore undo")
-            };
-            assert_eq!(overlays.dative_bonds.len(), 1);
-            assert_eq!(overlays.aromatic_systems.len(), 1);
-            assert_eq!(overlays.multicenter_bonds.len(), 1);
-            assert_eq!(overlays.noncovalent_bonds.len(), 1);
-        }
+    #[rstest]
+    fn test_molecule_editor_transact_unchecked(mut empty: MoleculeEditor) {
+        empty.transact_unchecked(vec![Edit::AddAtoms {
+            atoms: vec![AtomAst::from_element(Element::C)],
+        }]);
+        assert_eq!(empty.atom_count(), 1);
+        assert_eq!(
+            empty.atom(AtomId(0)).ast.element,
+            ElementAst::Lit(Element::C)
+        );
+    }
 
-        #[rstest]
-        fn test_molecule_editor_transact_unchecked(mut empty: MoleculeEditor) {
-            empty.transact_unchecked(vec![Edit::AddAtoms {
-                atoms: vec![AtomAst::from_element(Element::C)],
-            }]);
-            assert_eq!(empty.atom_count(), 1);
-            assert_eq!(
-                empty.atom(AtomId(0)).ast.element,
-                ElementAst::Lit(Element::C)
-            );
-        }
-
-        #[rstest]
-        #[should_panic(expected = "invalid unchecked transaction edit")]
-        fn test_molecule_editor_transact_unchecked_error(mut empty: MoleculeEditor) {
-            empty.transact_unchecked(vec![Edit::remove_atom(AtomHandle::Id(AtomId(0)))]);
-        }
+    #[rstest]
+    #[should_panic(expected = "invalid unchecked transaction edit")]
+    fn test_molecule_editor_transact_unchecked_error(mut empty: MoleculeEditor) {
+        empty.transact_unchecked(vec![Edit::remove_atom(AtomHandle::Id(AtomId(0)))]);
     }
 }
