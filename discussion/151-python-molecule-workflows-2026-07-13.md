@@ -975,37 +975,70 @@ covered by cross-family properties.
   removal, and unchanged input on perception contradiction/planning error.
   **Public planner plus atomic resolver migration (green).** `[dep: S0k, S1c]`
 - **S1e — stereo edit planner**
-  (`umol-graph/src/ops/resolve/stereo.rs`): compute atom/bond sites, canonical
-  ligand frames, and final stereo ASTs from the materialized aromaticity state;
-  emit `AddStereoAtom`/`AddStereoBond` directly and express opt-in removal of
-  consumed tetrahedral/cis-trans constraints through `AtomUpdate`/`BondUpdate`.
-  Tests cover both supported stereo kinds, ligand-frame identity, reset on/off,
-  no-op sites, and unchanged input on the configured inconsistency path.
-  **Additive internal refactor (green).**
-  `[dep: S0k, S1d]`
+  (`umol-graph/src/ops/resolve/stereo.rs`): add public
+  `StereoResolverConfig { reset_stereo_constraints }`, defaulting to `false`,
+  and expose
+
+  ```rust
+  pub fn plan(
+      &self,
+      ast: &MoleculeAst,
+  ) -> Result<Solution<Vec<Edit>, StereoContradiction>, StereoError>;
+  ```
+
+  Planning computes atom/bond sites, canonical ligand frames, and final stereo
+  ASTs from the materialized aromaticity state. Realizable assertions emit
+  `AddStereoAtom`/`AddStereoBond` directly; opt-in removal of consumed
+  tetrahedral/cis-trans constraints is projected through `AtomUpdate` and
+  `BondUpdate`. The existing model-level `InconsistencyPolicy` is now enforced:
+  `Keep` retains an unrealizable assertion, `Strip` emits its canonical keyed
+  removal, and `Error` returns `UnrealizableAtom`/`UnrealizableBond` without
+  mutation. `resolve` applies a determined plan in one checked transaction.
+  Exact-plan and full-result tests cover both supported kinds and ligand frames,
+  reset on/off, no-op sites, all three inconsistency policies, and unchanged
+  input on contradiction. **Public planner plus atomic resolver migration
+  (green).** `[dep: S0k, S1d]`
 - **S1f — localized-bond default edit planner**
-  (`umol-graph/src/ops/resolve/bonds.rs`): replace direct charge/spin defaulting
-  with read-only `BondUpdate` construction, `Edit::for_bond_update`, and one
-  transaction batch. Tests assert exact old/new fields, preservation of
-  determined values, no-op batches, and rollback. **Additive internal refactor
-  (green).** `[dep: S0k]`
+  (`umol-graph/src/ops/resolve/bonds.rs`): add public
+  `plan(&MoleculeAst) -> Vec<Edit>`. For each localized bond, derive the target
+  charge and spin without mutation, express independent spin-component changes
+  through `SpinStateAst::difference_to`, project the resulting `BondUpdate`
+  through `Edit::for_bond_update`, and apply the complete vector in one checked
+  transaction from `resolve`. Completely undetermined spin still defaults to a
+  closed shell; partially determined spin retains its known component and uses
+  the existing high-spin completion rule. Tests assert exact old/new fields,
+  determined-value identity, full resolved output, and complete batch rollback
+  after a later stale precondition. **Public planner plus atomic resolver
+  migration (green).** `[dep: S0k]`
 - **S1g — multicenter default edit planner**
-  (`umol-graph/src/ops/resolve/multicenter.rs`): replace direct charge/spin
-  defaulting with read-only `MulticenterBondUpdate` construction,
-  `Edit::for_multicenter_bond_update`, and one transaction batch. Tests mirror
-  S1f over multicenter values and assert complete restoration. **Additive
-  internal refactor (green).** `[dep: S0k]`
+  (`umol-graph/src/ops/resolve/multicenter.rs`): add public
+  `plan(&MoleculeAst) -> Vec<Edit>` and mirror S1f over
+  `MulticenterBondUpdate`/`Edit::for_multicenter_bond_update`, including the
+  independent spin-component semantics and one checked transaction in
+  `resolve`. Tests mirror the exact-plan, identity, full-result, and stale-plan
+  restoration coverage over multicenter values. **Public planner plus atomic
+  resolver migration (green).** `[dep: S0k]`
 - **S1h — composite resolver transaction**
-  (`umol-graph/src/ops/resolve.rs`): plan and apply valence, aromaticity, stereo,
-  localized-bond, and multicenter batches in order. Each batch is materially
-  present before the next planner runs; each returned transaction is appended to
-  the composite journal. `Determined` and `Underdetermined` retain the final
-  state; contradiction or execution failure restores the original input. Extend
-  `ResolverError` only as needed to preserve transaction and dual-cause rollback
-  failures, migrating exhaustive workspace matches in the same subitem. Tests
-  prove stage-to-stage observation, complete reverse rollback from every stage,
-  accepted underdetermined narrowing, and both-cause diagnostics. **Breaking
-  error-enum migration (red→green).** `[dep: S0b, S1c, S1d, S1e, S1f, S1g]`
+  (`umol-graph/src/ops/resolve.rs`): the composite resolver now plans and applies
+  valence, aromaticity, stereo, localized-bond, and multicenter batches in
+  order. After each successful batch it consumes the editor with `build()` and
+  immediately opens `state.edit()` for the next batch. This materially exposes
+  the preceding stage to the next read-only planner without cloning a
+  materialized editor; the accumulated `Transaction` journal remains valid for
+  the equivalent reopened editor state. Each returned transaction is appended
+  to that journal.
+
+  A final `Determined` or `Underdetermined` result publishes the final state. A
+  contradiction or execution failure reverse-replays the composite journal and
+  publishes the restored editor state before returning. `ResolverError` adds
+  `RollbackFailed { cause: ResolverRollbackCause, rollback }`; the cause
+  distinguishes the original resolver contradiction from the original resolver
+  execution error, so rollback failure never erases either diagnostic. Tests
+  prove valence-to-aromaticity and aromaticity-to-stereo observation, reverse
+  rollback after later aromaticity/stereo contradictions, accepted
+  underdetermined narrowing, identity, and both dual-cause diagnostic shapes.
+  **Composite transactional resolver and error-enum migration (green).** `[dep:
+  S0b, S1c, S1d, S1e, S1f, S1g]`
 
 S1 is the atomic-resolution milestone. The general resolver is correct without
 clone-and-publish, `transact_validated`, validator combinators, or savepoints.

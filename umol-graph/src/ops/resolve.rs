@@ -19,7 +19,7 @@ pub use multicenter::{
 };
 pub use stereo::{StereoContradiction, StereoError, StereoResolver, StereoResolverConfig};
 use thiserror::Error;
-use umol_ast::ast::MoleculeAst;
+use umol_ast::ast::{MoleculeAst, Transaction, TransactionError};
 use umol_utils::error::UmolError;
 use umol_utils::solution::Solution;
 pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
@@ -62,6 +62,19 @@ pub enum ResolverError {
     Bonds(#[from] BondsError),
     #[error(transparent)]
     MulticenterBonds(#[from] MulticenterBondsError),
+    #[error("rollback failed after {cause}: {rollback}")]
+    RollbackFailed {
+        cause: ResolverRollbackCause,
+        rollback: TransactionError,
+    },
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum ResolverRollbackCause {
+    #[error("resolver contradiction: {0}")]
+    Contradiction(ResolverContradiction),
+    #[error("resolver error: {0}")]
+    Error(Box<ResolverError>),
 }
 
 impl UmolError for ResolverError {
@@ -103,46 +116,174 @@ impl<'a> Resolver<'a> {
         &self,
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), ResolverContradiction>, ResolverError> {
-        match self.valence.resolve(ast)? {
-            Solution::Determined(()) | Solution::Underdetermined(()) => {}
-            Solution::Contradictory(c) => {
-                return Ok(Solution::Contradictory(ResolverContradiction::Valence(c)));
+        let mut editor = ast.edit();
+        let mut journal = Transaction::default();
+
+        let edits = match self.valence.plan(ast) {
+            Ok(edits) => edits,
+            Err(contradiction) => {
+                let contradiction = ResolverContradiction::Valence(contradiction);
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Contradiction(contradiction),
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
+        match editor.transact(edits) {
+            Ok(transaction) => journal.append(transaction),
+            Err(transaction) => {
+                let error = ResolverError::Valence(ValenceError::Transaction(transaction));
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Error(Box::new(error)),
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Err(error);
             }
         }
-        match self.aromaticity.resolve(ast)? {
-            Solution::Determined(()) | Solution::Underdetermined(()) => {}
-            Solution::Contradictory(c) => {
-                return Ok(Solution::Contradictory(ResolverContradiction::Aromaticity(
-                    c,
-                )));
+        let mut state = editor.build();
+        editor = state.edit();
+
+        let outcome = match self.aromaticity.plan(&state) {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                let error = ResolverError::Aromaticity(error);
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Error(Box::new(error)),
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Err(error);
+            }
+        };
+        let edits = match outcome {
+            Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
+            Solution::Contradictory(contradiction) => {
+                let contradiction = ResolverContradiction::Aromaticity(contradiction);
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Contradiction(contradiction),
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
+        match editor.transact(edits) {
+            Ok(transaction) => journal.append(transaction),
+            Err(transaction) => {
+                let error = ResolverError::Aromaticity(AromaticityError::Transaction(transaction));
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Error(Box::new(error)),
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Err(error);
             }
         }
-        match self.stereo.resolve(ast)? {
-            Solution::Determined(()) | Solution::Underdetermined(()) => {}
-            Solution::Contradictory(c) => {
-                return Ok(Solution::Contradictory(ResolverContradiction::Stereo(c)));
+        state = editor.build();
+        editor = state.edit();
+
+        let outcome = match self.stereo.plan(&state) {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                let error = ResolverError::Stereo(error);
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Error(Box::new(error)),
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Err(error);
+            }
+        };
+        let edits = match outcome {
+            Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
+            Solution::Contradictory(contradiction) => {
+                let contradiction = ResolverContradiction::Stereo(contradiction);
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Contradiction(contradiction),
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
+        match editor.transact(edits) {
+            Ok(transaction) => journal.append(transaction),
+            Err(transaction) => {
+                let error = ResolverError::Stereo(StereoError::Transaction(transaction));
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Error(Box::new(error)),
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Err(error);
             }
         }
-        match self.bonds.resolve(ast)? {
-            Solution::Determined(()) | Solution::Underdetermined(()) => {}
-            Solution::Contradictory(c) => {
-                return Ok(Solution::Contradictory(ResolverContradiction::Bonds(c)));
+        state = editor.build();
+        editor = state.edit();
+
+        let edits = self.bonds.plan(&state);
+        match editor.transact(edits) {
+            Ok(transaction) => journal.append(transaction),
+            Err(transaction) => {
+                let error = ResolverError::Bonds(BondsError::Transaction(transaction));
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Error(Box::new(error)),
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Err(error);
             }
         }
-        match self.multicenter_bonds.resolve(ast)? {
-            Solution::Determined(()) | Solution::Underdetermined(()) => {}
-            Solution::Contradictory(c) => {
-                return Ok(Solution::Contradictory(
-                    ResolverContradiction::MulticenterBonds(c),
+        state = editor.build();
+        editor = state.edit();
+
+        let edits = self.multicenter_bonds.plan(&state);
+        match editor.transact(edits) {
+            Ok(transaction) => journal.append(transaction),
+            Err(transaction) => {
+                let error = ResolverError::MulticenterBonds(MulticenterBondsError::Transaction(
+                    transaction,
                 ));
+                if let Err(rollback) = journal.rollback(&mut editor) {
+                    return Err(ResolverError::RollbackFailed {
+                        cause: ResolverRollbackCause::Error(Box::new(error)),
+                        rollback,
+                    });
+                }
+                *ast = editor.build();
+                return Err(error);
             }
         }
 
-        Ok(if ast.is_ground() {
+        let resolved = editor.build();
+        let solution = if resolved.is_ground() {
             Solution::Determined(())
         } else {
             Solution::Underdetermined(())
-        })
+        };
+        *ast = resolved;
+        Ok(solution)
     }
 }
 
@@ -150,9 +291,9 @@ impl<'a> Resolver<'a> {
 mod tests {
     use std::borrow::Cow;
 
-    use rstest::*;
-    use umol_ast::ast::MoleculeAst;
-    use umol_ast::mol_dsl_ground;
+    use rstest::{fixture, rstest};
+    use umol_ast::ast::{AtomId, IsotopeMassAst, NoncovalentBondAst};
+    use umol_ast::{atom_dsl, mol_dsl, mol_dsl_ground};
     use umol_chem::element::Element;
 
     use super::*;
@@ -162,20 +303,8 @@ mod tests {
     };
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
-    fn methane() -> MoleculeAst {
-        mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#)
-    }
-
-    fn benzene() -> MoleculeAst {
-        mol_dsl_ground!(
-            r#"{
-            :atoms ["C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-        }"#
-        )
-    }
-
-    fn counts_model() -> ChemistryModel {
+    #[fixture]
+    fn chemistry_model() -> ChemistryModel {
         ChemistryModel {
             valence: ValenceModel::Counts(CountsModel {
                 table: Cow::Borrowed(ValenceTable::default_table()),
@@ -188,54 +317,166 @@ mod tests {
         }
     }
 
-    fn atom_typing_model() -> ChemistryModel {
-        ChemistryModel {
-            valence: ValenceModel::AtomTyping(AtomTypingModel {
-                registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
-            }),
+    #[rstest]
+    #[case::contradiction(
+        ResolverError::RollbackFailed {
+            cause: ResolverRollbackCause::Contradiction(
+                ResolverContradiction::Stereo(StereoContradiction::UnrealizableAtom(AtomId(1))),
+            ),
+            rollback: TransactionError::OldStateMismatch,
+        },
+        "rollback failed after resolver contradiction: tetrahedral stereo assertion at atom AtomId(1) cannot be realized: precondition failed: old state does not match current"
+    )]
+    #[case::execution(
+        ResolverError::RollbackFailed {
+            cause: ResolverRollbackCause::Error(Box::new(ResolverError::Bonds(
+                BondsError::Transaction(TransactionError::IdOutOfRange("bond")),
+            ))),
+            rollback: TransactionError::OldStateMismatch,
+        },
+        "rollback failed after resolver error: id out of range: bond: precondition failed: old state does not match current"
+    )]
+    fn test_resolver_error(#[case] error: ResolverError, #[case] expected: &str) {
+        assert_eq!(error.to_string(), expected);
+    }
+
+    #[rstest]
+    #[case::counts(ValenceModel::Counts(CountsModel {
+        table: Cow::Borrowed(ValenceTable::default_table()),
+    }))]
+    #[case::atom_typing(ValenceModel::AtomTyping(AtomTypingModel {
+        registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
+            "C#i=#c0#h4#n0#u0#s#v0#a!"
+        )])),
+    }))]
+    fn test_resolver_resolve(#[case] valence: ValenceModel) {
+        let model = ChemistryModel {
+            valence,
             aromaticity: AromaticityModel::HueckelRule {
                 scope: ElementScope::AllowList(vec![Element::C]),
                 ring_limits: RingLimits::default(),
             },
             stereo: StereoModel::default(),
-        }
+        };
+        let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s#v0#a!"]}"#);
+        assert_eq!(
+            Resolver::new(&model).resolve(&mut molecule),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(
+            molecule,
+            mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#a!"]}"#)
+        );
     }
 
     #[rstest]
-    fn test_resolver_resolve_ground_methane_determined() {
-        let model = counts_model();
-        let resolver = Resolver::new(&model);
-        let mut ast = methane();
-        let solution = resolver.resolve(&mut ast).unwrap();
-        assert!(matches!(solution, Solution::Determined(())));
+    #[case::aromaticity(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        }"#),
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h#v2#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
+                    [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+        }"#)
+    )]
+    #[case::stereo(
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h#T1" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+        }"#),
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h#v3#a!#T1" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]
+        }"#)
+    )]
+    fn test_resolver_resolve_stages(
+        chemistry_model: ChemistryModel,
+        #[case] mut molecule: MoleculeAst,
+        #[case] expected: MoleculeAst,
+    ) {
+        molecule.atom_mut(AtomId(0)).ast.isotope_mass = IsotopeMassAst::Undetermined;
+        assert_eq!(
+            Resolver::new(&chemistry_model).resolve(&mut molecule),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(molecule, expected);
     }
 
     #[rstest]
-    fn test_resolver_resolve_ground_methane_atom_typing_determined() {
-        let model = atom_typing_model();
-        let resolver = Resolver::new(&model);
-        let mut ast = methane();
-        let solution = resolver.resolve(&mut ast).unwrap();
-        assert!(matches!(solution, Solution::Determined(())));
+    fn test_resolver_resolve_underdetermined(chemistry_model: ChemistryModel) {
+        let molecule = mol_dsl_ground!(r#"{:atoms ["C#h4#v0#a!" "C#h4"]}"#);
+        let mut editor = molecule.edit();
+        editor.add_noncovalent_bond([AtomId(0), AtomId(1)], NoncovalentBondAst::default());
+        let expected = editor.build();
+        let mut molecule = expected.clone();
+        molecule.atom_mut(AtomId(0)).ast.isotope_mass = IsotopeMassAst::Undetermined;
+        assert_eq!(
+            Resolver::new(&chemistry_model).resolve(&mut molecule),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(molecule, expected);
     }
 
     #[rstest]
-    fn test_resolver_resolve_benzene_writes_aromatic_system() {
-        let model = counts_model();
-        let resolver = Resolver::new(&model);
-        let mut ast = benzene();
-        let solution = resolver.resolve(&mut ast).unwrap();
-        assert!(matches!(solution, Solution::Determined(())));
-        assert_eq!(ast.aromatic_systems().count(), 1);
+    #[case::aromaticity(
+        AromaticityModel::Clar {
+            scope: ElementScope::Any,
+            ring_limits: RingLimits::default(),
+        },
+        mol_dsl_ground!(r#"{
+            :atoms ["N#h#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+        }"#),
+        ResolverContradiction::Aromaticity(AromaticityContradiction::ClarNonBenzenoid(
+            "Clar model requires benzenoid input but non-carbon aromatic atoms are present".to_string(),
+        ))
+    )]
+    #[case::stereo(
+        AromaticityModel::HueckelRule {
+            scope: ElementScope::AllowList(vec![Element::C]),
+            ring_limits: RingLimits::default(),
+        },
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h#a#T1" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        }"#),
+        ResolverContradiction::Stereo(StereoContradiction::UnrealizableAtom(AtomId(0)))
+    )]
+    fn test_resolver_resolve_contradiction(
+        mut chemistry_model: ChemistryModel,
+        #[case] aromaticity: AromaticityModel,
+        #[case] mut molecule: MoleculeAst,
+        #[case] expected: ResolverContradiction,
+    ) {
+        chemistry_model.aromaticity = aromaticity;
+        molecule.atom_mut(AtomId(0)).ast.isotope_mass = IsotopeMassAst::Undetermined;
+        let original = molecule.clone();
+        assert_eq!(
+            Resolver::new(&chemistry_model).resolve(&mut molecule),
+            Ok(Solution::Contradictory(expected))
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]
-    fn test_resolver_resolve_benzene_idempotent() {
-        let model = counts_model();
-        let resolver = Resolver::new(&model);
-        let mut ast = benzene();
-        resolver.resolve(&mut ast).unwrap();
-        resolver.resolve(&mut ast).unwrap();
-        assert_eq!(ast.aromatic_systems().count(), 1);
+    fn test_resolver_resolve_identity(chemistry_model: ChemistryModel) {
+        let mut molecule = mol_dsl_ground!(
+            r#"{
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
+                    [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+        }"#
+        );
+        let expected = molecule.clone();
+        assert_eq!(
+            Resolver::new(&chemistry_model).resolve(&mut molecule),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(molecule, expected);
     }
 }
