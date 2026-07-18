@@ -29,6 +29,9 @@ name = "matching"
 [[test]]
 name = "kekulization"
 
+[[test]]
+name = "fingerprint"
+
 [[bin]]
 name = "test_mol_file"
 bench = false

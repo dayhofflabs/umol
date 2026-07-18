@@ -14,9 +14,12 @@ use std::fs::read_to_string;
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use umol_ast::ast::MoleculeAst;
+use umol_ast::ast::{
+    AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, MoleculeAst, ReactionAst,
+};
 use umol_graph::fingerprint::{
-    EcfpFeaturizer, MorganFeaturizer, PatternFingerprinter, SubstructureFeaturizer, WlFeaturizer,
+    featurize_reaction, EcfpFeaturizer, Featurizer, MorganFeaturizer, PatternFingerprinter,
+    ReactionCombinator, SubstructureFeaturizer, WlFeaturizer,
 };
 use umol_graph::hash::RefinementXxh3Scheme;
 use umol_graph::parse::parse_smiles;
@@ -58,6 +61,80 @@ fn load_corpus() -> Vec<MoleculeAst> {
         }
     }
     molecules
+}
+
+fn ethanol_deoxygenation(molecule: &MoleculeAst) -> ReactionAst {
+    ReactionAst::new(
+        molecule.clone(),
+        Deltas::from_iter([
+            Delta::Atom(AtomDelta::Remove {
+                id: AtomId(2),
+                ast: molecule.atom(AtomId(2)).ast.clone(),
+            }),
+            Delta::Bond(BondDelta::Remove {
+                id: BondId(1),
+                atoms: [AtomId(1), AtomId(2)],
+                ast: molecule.bond(BondId(1)).ast.clone(),
+            }),
+        ]),
+    )
+}
+
+fn fixture_benchmark(c: &mut Criterion) {
+    let molecule = parse_smiles("CCO").unwrap();
+    let reaction = ethanol_deoxygenation(&molecule);
+    let wl = WlFeaturizer {
+        rounds: RefinementRounds::Fixed(WL_ROUNDS),
+        scheme: RefinementXxh3Scheme::albatross(),
+    };
+    let ecfp = EcfpFeaturizer::new(CIRCULAR_RADIUS);
+    let morgan = MorganFeaturizer::new(CIRCULAR_RADIUS);
+    let pattern = PatternFingerprinter::new();
+    let substructure = SubstructureFeaturizer::new(2);
+    let reaction_featurizer = Featurizer::Morgan(MorganFeaturizer::new(1));
+    let mut group = c.benchmark_group("fingerprint_fixture");
+
+    group.bench_function("wl", |b| {
+        b.iter(|| black_box(wl.featurize(black_box(&molecule))))
+    });
+    group.bench_function("ecfp", |b| {
+        b.iter(|| black_box(ecfp.featurize(black_box(&molecule))))
+    });
+    group.bench_function("morgan", |b| {
+        b.iter(|| black_box(morgan.featurize(black_box(&molecule))))
+    });
+    group.bench_function("pattern", |b| {
+        b.iter(|| black_box(pattern.fingerprint(black_box(&molecule)).unwrap()))
+    });
+    group.bench_function("structural", |b| {
+        b.iter(|| black_box(substructure.featurize(black_box(&molecule)).unwrap()))
+    });
+    group.bench_function("reaction_difference", |b| {
+        b.iter(|| {
+            black_box(
+                featurize_reaction(
+                    black_box(&reaction),
+                    &reaction_featurizer,
+                    ReactionCombinator::Difference,
+                )
+                .unwrap(),
+            )
+        })
+    });
+    group.bench_function("reaction_disjoint_union", |b| {
+        b.iter(|| {
+            black_box(
+                featurize_reaction(
+                    black_box(&reaction),
+                    &reaction_featurizer,
+                    ReactionCombinator::DisjointUnion,
+                )
+                .unwrap(),
+            )
+        })
+    });
+
+    group.finish();
 }
 
 fn circular_benchmark(c: &mut Criterion) {
@@ -126,5 +203,10 @@ fn structural_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, circular_benchmark, structural_benchmark);
+criterion_group!(
+    benches,
+    fixture_benchmark,
+    circular_benchmark,
+    structural_benchmark
+);
 criterion_main!(benches);
