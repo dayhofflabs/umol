@@ -78,13 +78,14 @@ impl Molecule {
         let mut charge = 0i32;
 
         for atom in &self.atoms {
-            let element = atom.element;
-            match element {
-                Element::C => c_count += 1,
-                Element::H => h_count += 1,
-                e => {
-                    let key = element_symbol_key(e);
-                    atom_counts.entry(key).or_insert((e, 0)).1 += 1;
+            if let Some(element) = atom.element {
+                match element {
+                    Element::C => c_count += 1,
+                    Element::H => h_count += 1,
+                    e => {
+                        let key = element_symbol_key(e);
+                        atom_counts.entry(key).or_insert((e, 0)).1 += 1;
+                    }
                 }
             }
             if let Some(ch) = atom.charge {

@@ -134,7 +134,10 @@ impl TryIntoAst<AtomAst> for &TableAtom {
 
     fn try_into_ast(self, _ctx: &Self::Ctx) -> Result<AtomAst, RaiseError> {
         let mut atom = AtomAst {
-            element: ElementAst::Lit(self.element),
+            element: match self.element {
+                Some(element) => ElementAst::Lit(element),
+                None => ElementAst::Undetermined,
+            },
             isotope_mass: match self.isotope_mass {
                 Some(m) => IsotopeMassAst::Lit(m),
                 None => IsotopeMassAst::Undetermined,
@@ -167,7 +170,7 @@ impl TryIntoAst<AtomAst> for &TableAtom {
                 ));
                 // A bare aromatic heteroatom specifies zero H; any H must be bracketed
                 // ([nH]), which arrives above as an explicit count.
-                if self.element != Element::C
+                if matches!(self.element, Some(element) if element != Element::C)
                     && matches!(atom.implicit_hydrogens, ValueAst::Undetermined)
                 {
                     atom.implicit_hydrogens = ValueAst::Lit(0);
@@ -385,8 +388,8 @@ mod tests {
     use super::*;
     use crate::ctfile::parse_mol_to_ast;
     use crate::ctfile::parser::parse_mol_bytes_to_table_ir;
-    use crate::smiles::parse_smiles_to_ast;
     use crate::smiles::parser::parse_smiles_bytes_to_table_ir;
+    use crate::smiles::Smiles;
     use crate::table_ir::atom::Atom as TableAtom;
     use crate::table_ir::bond::{Bond as TableBond, BondOrder as TableBondOrder};
     use crate::table_ir::Molecule as TableMolecule;
@@ -549,8 +552,9 @@ mod tests {
 
     #[rstest]
     #[case::organic("C", "C#i=#c0#u0#a!")]
-    fn test_parse_smiles_to_ast(#[case] input: &str, #[case] expected_atom: &str) {
-        let ast = parse_smiles_to_ast(input).unwrap();
+    fn test_table_molecule_try_into_ast_smiles(#[case] input: &str, #[case] expected_atom: &str) {
+        let smiles = Smiles::parse(input).unwrap();
+        let ast: MoleculeAst = smiles.as_table_ir().try_into_ast(&()).unwrap();
         let atom = ast.atom(AtomId(0)).ast;
         assert_eq!(atom.charge, ValueAst::Lit(0));
         assert!(matches!(atom.implicit_hydrogens, ValueAst::Undetermined));

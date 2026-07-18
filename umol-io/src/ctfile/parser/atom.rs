@@ -320,7 +320,7 @@ pub fn atom_input<'inp>(
             &input[offset..],
             (
                 Atom {
-                    element,
+                    element: Some(element),
                     charge,
                     isotope_mass,
                     implicit_hydrogens: hydrogens,

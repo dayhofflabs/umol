@@ -68,7 +68,7 @@ fn test_atom_block(
     assert!(approx_eq!(f64, position.x, x), "{:?} x: {:?} != {:?}", input_str, position.x, x);
     assert!(approx_eq!(f64, position.y, y), "{:?} y: {:?} != {:?}", input_str, position.y, y);
     assert!(approx_eq!(f64, position.z, z), "{:?} z: {:?} != {:?}", input_str, position.z, z);
-    assert_eq!(atom.element, element, "{:?} element", input_str);
+    assert_eq!(atom.element, Some(element), "{:?} element", input_str);
     assert_eq!(atom.isotope_mass, isotope_mass, "{:?} isotope_mass", input_str);
     assert_eq!(atom.charge, charge, "{:?} charge", input_str);
     assert_eq!(atom.chirality, chirality, "{:?} chirality", input_str);
@@ -296,7 +296,7 @@ fn test_atom_input(
         z,
     );
     assert_eq!(
-        atom.element, element,
+        atom.element, Some(element),
         "{:?} has returned element {:?}, expected {:?}",
         input_str, atom.element, element
     );
@@ -416,7 +416,7 @@ fn test_atom_input_strict(
         z,
     );
     assert_eq!(
-        atom.element, element,
+        atom.element, Some(element),
         "{:?} has returned element {:?}, expected {:?}",
         input_str, atom.element, element
     );
@@ -506,7 +506,7 @@ fn test_atom_input_ignore_positions(
     let (remaining, (atom, _position)) = result.unwrap();
     assert!(remaining.is_empty(), "{:?} should consume all input, remaining: {:?}", input_str, remaining);
     assert_eq!(
-        atom.element, element,
+        atom.element, Some(element),
         "{:?} has returned element {:?}, expected {:?}",
         input_str, atom.element, element
     );

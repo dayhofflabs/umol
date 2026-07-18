@@ -34,9 +34,9 @@ pub fn get_atom_neighbors(mol: &Molecule, atom_idx: u32) -> Vec<u32> {
 /// Returns (atom_index, element, chirality, sorted_neighbors) or None if no chiral atom found.
 pub fn find_chiral_center(mol: &Molecule) -> Option<(usize, Element, Chirality, Vec<u32>)> {
     for (idx, atom) in mol.atoms.iter().enumerate() {
-        if let Some(chir) = atom.chirality {
+        if let (Some(element), Some(chir)) = (atom.element, atom.chirality) {
             let neighbors = get_atom_neighbors(mol, idx as u32);
-            return Some((idx, atom.element, chir, neighbors));
+            return Some((idx, element, chir, neighbors));
         }
     }
     None

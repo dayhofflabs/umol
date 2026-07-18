@@ -80,7 +80,7 @@ impl MoleculeEditor {
     pub(crate) fn on_atom(&mut self, a: AtomData) -> usize {
         let span = a.span;
         let atom = Atom {
-            element: a.element,
+            element: Some(a.element),
             charge: a.charge,
             isotope_mass: a.isotope,
             implicit_hydrogens: a.implicit_hydrogens,

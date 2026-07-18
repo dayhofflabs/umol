@@ -60,7 +60,7 @@ fn test_ctab_block(
         expected_bonds
     );
     assert_eq!(
-        molecule.atoms[0].element, expected_element0,
+        molecule.atoms[0].element, Some(expected_element0),
         "{:?}: element0: {:?} != expected {:?}",
         input_str, molecule.atoms[0], expected_element0
     );

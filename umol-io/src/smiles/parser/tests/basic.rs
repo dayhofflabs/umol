@@ -604,7 +604,7 @@ fn test_bracket(
     let mol = res.unwrap();
     assert_eq!(mol.atoms.len(), 1, "expected single atom");
     let a = &mol.atoms[0];
-    assert_eq!(a.element, elem);
+    assert_eq!(a.element, Some(elem));
     assert_eq!(a.aromatic, Some(aromatic));
     assert_eq!(a.isotope_mass, isotope);
     assert_eq!(a.chirality, chirality);
@@ -748,7 +748,7 @@ fn test_bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aro
     let mol = res.unwrap();
     assert_eq!(mol.atoms.len(), 1, "expected single atom");
     let a = &mol.atoms[0];
-    assert_eq!(a.element, elem);
+    assert_eq!(a.element, Some(elem));
     assert_eq!(a.aromatic, Some(aromatic));
 }
 

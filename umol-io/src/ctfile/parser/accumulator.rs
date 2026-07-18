@@ -716,9 +716,12 @@ impl PropertyAccumulator {
 
             // Apply isotope
             if let Some(isotope) = props.isotope_mass {
-                let mass =
-                    convert_atom_isotope_mass_number(atom.element, isotope, extended_isotopes)?;
-                atom.isotope_mass = mass;
+                atom.isotope_mass = match atom.element {
+                    Some(element) => {
+                        convert_atom_isotope_mass_number(element, isotope, extended_isotopes)?
+                    }
+                    None => Some(isotope),
+                };
             }
 
             // Apply hydrogen count

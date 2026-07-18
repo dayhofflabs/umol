@@ -13,7 +13,8 @@ use super::span::Span;
 /// Basic Atom IR
 #[derive(Clone, Debug, PartialEq)]
 pub struct Atom {
-    pub element: Element,
+    /// Concrete element, or `None` for the OpenSMILES `*` wildcard.
+    pub element: Option<Element>,
     pub isotope_mass: Option<u32>,
     pub charge: Option<i8>,
     pub implicit_hydrogens: Option<u8>,
@@ -33,7 +34,7 @@ impl Atom {
     /// Create new atom from element (default for MOL/CTFile)
     pub fn from_element(element: Element) -> Self {
         Self {
-            element,
+            element: Some(element),
             isotope_mass: None,
             charge: None,
             implicit_hydrogens: None,
@@ -49,10 +50,39 @@ impl Atom {
             span: None,
         }
     }
+
+    /// Create an OpenSMILES `*` wildcard atom.
+    pub fn wildcard() -> Self {
+        Self {
+            element: None,
+            isotope_mass: None,
+            charge: None,
+            implicit_hydrogens: None,
+            valence: None,
+            lone_pairs: None,
+            unpaired_electrons: None,
+            multiplicity: None,
+            aromatic: None,
+            chirality: None,
+            class: None,
+            label: None,
+            value: None,
+            span: None,
+        }
+    }
+
+    /// Create an OpenSMILES `*` wildcard atom including its source span.
+    pub fn wildcard_with_span(span: Span) -> Self {
+        Self {
+            span: Some(span),
+            ..Self::wildcard()
+        }
+    }
+
     /// Create new aliphatic atom (aromatic flag false, infer implicit hydrogens)
     pub fn aliphatic_atom(element: Element) -> Self {
         Self {
-            element,
+            element: Some(element),
             isotope_mass: None,
             charge: None,
             implicit_hydrogens: None,
@@ -72,7 +102,7 @@ impl Atom {
     /// Create new aliphatic atom including span
     pub fn aliphatic_atom_with_span(element: Element, span: Span) -> Self {
         Self {
-            element,
+            element: Some(element),
             isotope_mass: None,
             charge: None,
             implicit_hydrogens: None,
@@ -92,7 +122,7 @@ impl Atom {
     /// Create new aromatic atom (aromatic flag true, infer implicit hydrogens)
     pub fn aromatic_atom(element: Element) -> Self {
         Self {
-            element,
+            element: Some(element),
             isotope_mass: None,
             charge: None,
             implicit_hydrogens: None,
@@ -112,7 +142,7 @@ impl Atom {
     /// Create new aromatic atom including span
     pub fn aromatic_atom_with_span(element: Element, span: Span) -> Self {
         Self {
-            element,
+            element: Some(element),
             isotope_mass: None,
             charge: None,
             implicit_hydrogens: None,
@@ -326,8 +356,12 @@ impl ExtendedAtom {
 
     /// Check if this atom has extended features that would be lost in conversion to basic Atom.
     pub fn has_extended_features(&self) -> bool {
-        self.symbol.is_extended()
-            || self.pattern.is_some()
+        !matches!(
+            self.symbol,
+            AtomSymbol::Element(_)
+                | AtomSymbol::NamedIsotope(_)
+                | AtomSymbol::WildcardAtom(WildcardAtom::Any)
+        ) || self.pattern.is_some()
             || self.stereo_care.is_some()
             || self.inversion_retention.is_some()
             || self.exact_change.is_some()
@@ -352,7 +386,10 @@ fn has_extended_properties(properties: &HashMap<String, String>) -> bool {
 impl From<Atom> for ExtendedAtom {
     fn from(atom: Atom) -> Self {
         Self {
-            symbol: AtomSymbol::Element(atom.element),
+            symbol: match atom.element {
+                Some(element) => AtomSymbol::Element(element),
+                None => AtomSymbol::WildcardAtom(WildcardAtom::Any),
+            },
             isotope_mass: atom.isotope_mass,
             charge: atom.charge,
             implicit_hydrogens: atom.implicit_hydrogens,
@@ -386,19 +423,16 @@ impl TryFrom<ExtendedAtom> for Atom {
     type Error = ConversionError;
 
     fn try_from(extended: ExtendedAtom) -> Result<Self, Self::Error> {
-        // Extract element from symbol (must be Element or NamedIsotope)
-        let element = match extended.symbol {
-            AtomSymbol::Element(e) => e,
-            AtomSymbol::NamedIsotope(ni) => ni.element(),
-            _ => {
-                return Err(ConversionError::HasExtendedFeatures);
-            }
-        };
-
-        // Check for extended features
         if extended.has_extended_features() {
             return Err(ConversionError::HasExtendedFeatures);
         }
+
+        let element = match extended.symbol {
+            AtomSymbol::Element(element) => Some(element),
+            AtomSymbol::NamedIsotope(isotope) => Some(isotope.element()),
+            AtomSymbol::WildcardAtom(WildcardAtom::Any) => None,
+            _ => unreachable!("extended symbols were rejected above"),
+        };
 
         Ok(Self {
             element,
@@ -498,25 +532,73 @@ pub struct LinkAtom {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
-    #[test]
-    fn test_atom_aliphatic() {
+    #[rstest]
+    fn test_atom_aliphatic_atom() {
         let atom = Atom::aliphatic_atom(Element::C);
-        assert_eq!(atom.element, Element::C);
+        assert_eq!(atom.element, Some(Element::C));
         assert_eq!(atom.aromatic, Some(false));
         assert_eq!(atom.implicit_hydrogens, None);
     }
 
-    #[test]
-    fn test_atom_aromatic() {
+    #[rstest]
+    fn test_atom_aromatic_atom() {
         let atom = Atom::aromatic_atom(Element::C);
-        assert_eq!(atom.element, Element::C);
+        assert_eq!(atom.element, Some(Element::C));
         assert_eq!(atom.aromatic, Some(true));
         assert_eq!(atom.implicit_hydrogens, None);
     }
 
-    #[test]
+    #[rstest]
+    fn test_atom_wildcard() {
+        assert_eq!(
+            Atom::wildcard(),
+            Atom {
+                element: None,
+                isotope_mass: None,
+                charge: None,
+                implicit_hydrogens: None,
+                valence: None,
+                lone_pairs: None,
+                unpaired_electrons: None,
+                multiplicity: None,
+                aromatic: None,
+                chirality: None,
+                class: None,
+                label: None,
+                value: None,
+                span: None,
+            }
+        );
+    }
+
+    #[rstest]
+    fn test_atom_wildcard_with_span() {
+        assert_eq!(
+            Atom::wildcard_with_span(Span::bytes(2, 3)),
+            Atom {
+                element: None,
+                isotope_mass: None,
+                charge: None,
+                implicit_hydrogens: None,
+                valence: None,
+                lone_pairs: None,
+                unpaired_electrons: None,
+                multiplicity: None,
+                aromatic: None,
+                chirality: None,
+                class: None,
+                label: None,
+                value: None,
+                span: Some(Span::bytes(2, 3)),
+            }
+        );
+    }
+
+    #[rstest]
     fn test_extended_atom_from_element() {
         let extended = ExtendedAtom::from_element(Element::N);
         assert_eq!(extended.symbol, AtomSymbol::Element(Element::N));
@@ -526,10 +608,10 @@ mod tests {
         assert!(!extended.has_extended_features());
     }
 
-    #[test]
-    fn test_from_atom_to_extended_atom() {
+    #[rstest]
+    fn test_extended_atom_from_atom() {
         let atom = Atom {
-            element: Element::C,
+            element: Some(Element::C),
             isotope_mass: Some(13),
             charge: Some(1),
             implicit_hydrogens: Some(3),
@@ -560,8 +642,8 @@ mod tests {
         assert!(!extended.has_extended_features());
     }
 
-    #[test]
-    fn test_try_from_extended_atom_to_atom_element() {
+    #[rstest]
+    fn test_atom_try_from_element() {
         let extended = ExtendedAtom {
             symbol: AtomSymbol::Element(Element::O),
             isotope_mass: None,
@@ -592,7 +674,7 @@ mod tests {
         };
 
         let atom: Atom = extended.try_into().unwrap();
-        assert_eq!(atom.element, Element::O);
+        assert_eq!(atom.element, Some(Element::O));
         assert_eq!(atom.isotope_mass, None);
         assert_eq!(atom.charge, Some(-1));
         assert_eq!(atom.implicit_hydrogens, None);
@@ -603,12 +685,12 @@ mod tests {
         assert_eq!(atom.aromatic, Some(false));
     }
 
-    #[test]
-    fn test_try_from_extended_atom_to_atom_named_isotope() {
+    #[rstest]
+    fn test_atom_try_from_named_isotope() {
         let named_isotope = NamedIsotope::D;
         let extended = ExtendedAtom::from_named_isotope(named_isotope);
         let atom: Atom = extended.try_into().unwrap();
-        assert_eq!(atom.element, Element::H);
+        assert_eq!(atom.element, Some(Element::H));
         assert_eq!(atom.isotope_mass, Some(2));
         assert_eq!(atom.charge, None);
         assert_eq!(atom.implicit_hydrogens, None);
@@ -618,47 +700,34 @@ mod tests {
         assert_eq!(atom.aromatic, None);
     }
 
-    #[test]
-    fn test_try_from_extended_atom_to_atom_invalid() {
-        let extended = ExtendedAtom {
-            symbol: AtomSymbol::WildcardAtom(WildcardAtom::Any),
-            isotope_mass: None,
-            charge: None,
-            implicit_hydrogens: None,
-            valence: None,
-            lone_pairs: None,
-            unpaired_electrons: None,
-            multiplicity: None,
-            aromatic: None,
-            chirality: None,
-            class: None,
-            label: None,
-            value: None,
-            pattern: None,
-            stereo_care: None,
-            inversion_retention: None,
-            exact_change: None,
-            attachment_point: None,
-            attachment_order: None,
-            ligand_order: None,
-            ring_bond_count: None,
-            substitution_count: None,
-            unsaturated: None,
-            link_atom: None,
-            properties: HashMap::new(),
-            span: None,
-        };
-
-        let result: Result<Atom, _> = extended.try_into();
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            ConversionError::HasExtendedFeatures
-        ));
+    #[rstest]
+    fn test_atom_try_from_wildcard() {
+        let atom = Atom::try_from(ExtendedAtom::from_atom_symbol(AtomSymbol::WildcardAtom(
+            WildcardAtom::Any,
+        )))
+        .unwrap();
+        assert_eq!(atom, Atom::wildcard());
     }
 
-    #[test]
-    fn test_has_extended_features_basic() {
+    #[rstest]
+    #[case::heavy(WildcardAtom::Heavy)]
+    #[case::heteroatom(WildcardAtom::Heteroatom)]
+    #[case::halogen(WildcardAtom::Halogen)]
+    #[case::metal(WildcardAtom::Metal)]
+    #[case::heavy_or_h(WildcardAtom::HeavyOrH)]
+    #[case::heteroatom_or_h(WildcardAtom::HeteroatomOrH)]
+    #[case::halogen_or_h(WildcardAtom::HalogenOrH)]
+    #[case::metal_or_h(WildcardAtom::MetalOrH)]
+    fn test_atom_try_from_error(#[case] wildcard: WildcardAtom) {
+        let extended = ExtendedAtom::from_atom_symbol(AtomSymbol::WildcardAtom(wildcard));
+        assert_eq!(
+            Atom::try_from(extended),
+            Err(ConversionError::HasExtendedFeatures)
+        );
+    }
+
+    #[rstest]
+    fn test_extended_atom_has_extended_features_basic_fields() {
         let extended = ExtendedAtom {
             symbol: AtomSymbol::Element(Element::C),
             isotope_mass: Some(13),
@@ -691,8 +760,24 @@ mod tests {
         assert!(!extended.has_extended_features());
     }
 
-    #[test]
-    fn test_has_extended_features_extended() {
+    #[rstest]
+    #[case::element(AtomSymbol::Element(Element::C), false)]
+    #[case::named_isotope(AtomSymbol::NamedIsotope(NamedIsotope::D), false)]
+    #[case::wildcard(AtomSymbol::WildcardAtom(WildcardAtom::Any), false)]
+    #[case::heavy(AtomSymbol::WildcardAtom(WildcardAtom::Heavy), true)]
+    #[case::atom_list(AtomSymbol::AtomList(AtomList::empty()), true)]
+    fn test_extended_atom_has_extended_features_symbol(
+        #[case] symbol: AtomSymbol,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            ExtendedAtom::from_atom_symbol(symbol).has_extended_features(),
+            expected
+        );
+    }
+
+    #[rstest]
+    fn test_extended_atom_has_extended_features() {
         let extended = ExtendedAtom {
             symbol: AtomSymbol::Element(Element::C),
             isotope_mass: None,
@@ -725,10 +810,10 @@ mod tests {
         assert!(extended.has_extended_features());
     }
 
-    #[test]
-    fn test_roundtrip_atom_to_extended_atom_to_atom() {
+    #[rstest]
+    fn test_atom_try_from_roundtrip() {
         let atom = Atom {
-            element: Element::N,
+            element: Some(Element::N),
             isotope_mass: Some(15),
             charge: Some(-1),
             implicit_hydrogens: Some(2),
@@ -747,19 +832,6 @@ mod tests {
         let extended: ExtendedAtom = atom.clone().into();
         let atom2: Atom = extended.try_into().unwrap();
 
-        assert_eq!(atom.element, atom2.element);
-        assert_eq!(atom.isotope_mass, atom2.isotope_mass);
-        assert_eq!(atom.charge, atom2.charge);
-        assert_eq!(atom.implicit_hydrogens, atom2.implicit_hydrogens);
-        assert_eq!(atom.valence, atom2.valence);
-        assert_eq!(atom.lone_pairs, atom2.lone_pairs);
-        assert_eq!(atom.unpaired_electrons, atom2.unpaired_electrons);
-        assert_eq!(atom.multiplicity, atom2.multiplicity);
-        assert_eq!(atom.aromatic, atom2.aromatic);
-        assert_eq!(atom.chirality, atom2.chirality);
-        assert_eq!(atom.class, atom2.class);
-        assert_eq!(atom.label, atom2.label);
-        assert_eq!(atom.value, atom2.value);
-        assert_eq!(atom.span, atom2.span);
+        assert_eq!(atom2, atom);
     }
 }

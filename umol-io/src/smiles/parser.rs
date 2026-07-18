@@ -9,9 +9,6 @@ mod builder;
 mod cx;
 mod utils;
 
-use umol_ast::ast::{MoleculeAst, TryIntoAst};
-use umol_utils::error::UmolError;
-
 use self::builder::{AtomData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeEditor};
 use self::cx::{
     parse_cx_annotations, parse_extended_cx_annotations, remap_cx_bond_indices,
@@ -30,39 +27,14 @@ use crate::table_ir::{
     Molecule, Reaction, SourceFormat, Span, WildcardAtom,
 };
 
-/// Parse SMILES to [`MoleculeAst`] without running the solver.
-pub fn parse_smiles_to_ast(input: &str) -> Result<MoleculeAst, Box<dyn UmolError>> {
-    parse_smiles_bytes_to_ast(input.as_bytes())
-}
-
-/// Parse SMILES bytes to [`MoleculeAst`] without running the solver. Spans the parse (`ParseError`)
-/// and raise (`RaiseError`) concerns, so per doc 065 it returns the boxed boundary error.
-pub fn parse_smiles_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, Box<dyn UmolError>> {
-    let table_mol = parse_smiles_bytes_to_table_ir(input)?;
-    let ast: MoleculeAst = (&table_mol).try_into_ast(&())?;
-    Ok(ast)
-}
-
-/// Parse SMILES string to `table_ir::Molecule` with basic OpenSMILES configuration.
-pub fn parse_smiles_to_table_ir(input: &str) -> Result<Molecule, ParseError> {
-    parse_smiles_bytes_to_table_ir(input.as_bytes())
-}
-
-/// Parse SMILES string to `table_ir::Molecule` with configuration.
-pub fn parse_smiles_to_table_ir_with(
-    input: &str,
-    config: &SmilesIoConfig,
-) -> Result<Molecule, ParseError> {
-    parse_smiles_bytes_to_table_ir_with(input.as_bytes(), config)
-}
-
 /// Parse SMILES bytes to `table_ir::Molecule` with basic OpenSMILES rules.
-pub fn parse_smiles_bytes_to_table_ir(input: &[u8]) -> Result<Molecule, ParseError> {
+#[cfg(test)]
+pub(crate) fn parse_smiles_bytes_to_table_ir(input: &[u8]) -> Result<Molecule, ParseError> {
     parse_smiles_bytes_to_table_ir_with(input, &SmilesIoConfig::basic_opensmiles())
 }
 
 /// Parse SMILES bytes to `table_ir::Molecule` with configuration.
-pub fn parse_smiles_bytes_to_table_ir_with(
+pub(crate) fn parse_smiles_bytes_to_table_ir_with(
     input: &[u8],
     config: &SmilesIoConfig,
 ) -> Result<Molecule, ParseError> {

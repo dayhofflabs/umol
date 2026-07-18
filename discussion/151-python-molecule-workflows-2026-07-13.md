@@ -4,7 +4,7 @@ Status: **Active design / general implementation plan**
 
 Date: 2026-07-13
 
-Updated: 2026-07-15
+Updated: 2026-07-18
 
 Relates: 126 (fingerprints), 131–135 (reaction AST and application), 137 and 140
 (Python binding conventions), 148 (operation boundaries and validation), 150
@@ -174,12 +174,16 @@ public diagnostic report.
 
 ### Resolved boundary
 
-There are currently two relevant Rust paths:
+The Rust API now exposes the two boundaries separately and a compact combined
+operation:
 
-- `umol_io::smiles::parse_smiles_to_ast` parses and raises to AST but does not
-  resolve the result;
-- `umol_graph::parse::parse_smiles` parses, raises, and runs `Resolver` with
-  `SmilesIoConfig::basic_opensmiles()` and `ChemistryModel::default()`.
+- `Smiles::parse*` performs syntax parsing and returns the checked SMILES format
+  value backed by TableIR;
+- `Ingest::ingest` interprets a borrowed format value under an explicit
+  `ChemistryModel` and returns a determined `MoleculeAst`;
+- `umol_graph::ingest::smiles*` composes both boundaries for ordinary callers,
+  using `SmilesIoConfig::basic_opensmiles()` and `ChemistryModel::default()` in
+  the unconfigured form.
 
 Python exposes the resolved operation:
 
@@ -1121,20 +1125,213 @@ clone-and-publish, `transact_validated`, validator combinators, or savepoints.
   under distinct chemistry models. **Additive (green).** `[dep: S1h]`
 - **S2b — SMILES ingestion migration**
   (`umol-io/src/smiles.rs`, `umol-graph/src/ingest.rs`, the former
-  `umol-graph/src/parse.rs`, and workspace callers): migrate resolved SMILES
-  callers to `Smiles::parse*` followed by `Ingest::ingest`, and expose a compact
-  `umol_graph::ingest::smiles*` convenience surface returning
-  `SmilesInputError` for callers that want the combined operation. Preserve the
-  default `SmilesIoConfig::basic_opensmiles()` and explicit configured path.
-  Retire the public SMILES-to-AST helpers in `umol-io` and the
-  `parse_smiles*_to_table_ir*` naming pileup after migrating all workspace
-  callers and tests; `parse` then means syntax-to-format-value rather than
-  syntax-to-graph-model. End-to-end cases distinguish syntax,
-  TableIR-to-model conversion, contradiction, underdetermination, and successful
-  determined output. Python's later `Molecule.from_smiles` composes the same two
-  boundaries without requiring a public Python `Smiles` wrapper; a future
+  `umol-graph/src/parse.rs`, and workspace callers): resolved workspace callers
+  use either `Smiles::parse*` followed by `Ingest::ingest` or the compact
+  `umol_graph::ingest::smiles*` convenience surface. The latter returns
+  `SmilesInputError`, retains `SmilesIoConfig::basic_opensmiles()` plus
+  `ChemistryModel::default()` as its unconfigured default, and provides explicit
+  text/bytes configured paths. The public unresolved SMILES-to-AST helpers and
+  public `parse_smiles*_to_table_ir*` functions are retired; the raw byte parser
+  remains crate-private for parser implementation and tests. `parse` therefore
+  means syntax-to-format-value rather than syntax-to-graph-model. End-to-end
+  cases distinguish syntax, TableIR-to-model conversion, contradiction,
+  underdetermination, and successful determined output. Python's later
+  `Molecule.from_smiles` composes the same two boundaries without requiring a
+  public Python `Smiles` wrapper; a future
   `Molecule.to_smiles` likewise converts through the Rust `Smiles` value before
-  rendering. **Breaking API migration (red→green).** `[dep: S2a]`
+  rendering. **Breaking API migration (green).** `[dep: S2a]`
+
+#### S2b follow-up — TableIR and format-boundary unification
+
+The wildcard configuration failure exposes a lower-level design problem rather
+than a missing validation check. `table_ir::Molecule` predates `MoleculeAst` and
+was introduced as an optimized representation of fixed-composition molecules.
+`ExtendedMolecule` is a strict representational superset: it replaces `Atom`
+with `ExtendedAtom` and `Bond` with `ExtendedBond`, and adds optional CTFile and
+CX annotation payloads. The basic/extended distinction then propagates into two
+SMILES parsers, two MOL parsers, two SDF parsers, capability presets that select
+between them, conversion helpers, tests, and benchmarks.
+
+That optimization boundary no longer matches the semantic boundaries of the
+system. OpenSMILES includes the `*` wildcard, and `MoleculeAst` represents it
+natively as `ElementAst::Undetermined`; parsing it need not fail merely because
+the result is not ground. A workflow that promises a determined molecule may
+still report underdetermination after conversion and resolution, while a plain
+format-to-model conversion can return the patterned `MoleculeAst`. Groundness
+belongs at the model or workflow boundary, not in selection of the TableIR
+storage type.
+
+The proposed direction is therefore to collapse `Molecule` and
+`ExtendedMolecule` into one TableIR `Molecule`, using the current extended
+representation as the semantic superset. `ExtendedAtom` and `ExtendedBond`
+likewise become the sole `Atom` and `Bond` representations. Each external
+format then has one parser and one TableIR result type. Parser configuration may
+control acceptance policy, strictness, vendor deviations, ignored data, and
+diagnostics, but it must not select a different result structure. The current
+`basic_*`/`extended_*` parser families and `BASIC_MAX`/`EXTENDED_MAX`
+representation split can disappear.
+
+The extended atom and bond structures do have a larger inline footprint:
+`ExtendedAtom` carries query fields, optional vectors, and a property map, while
+`ExtendedBond` carries query fields and a property map. Empty collections avoid
+their backing allocations but still increase the containing value's size. That
+is a storage-layout question, not a reason to retain two semantic types and two
+parser implementations. If measurement shows that ordinary concrete molecules
+are materially affected, the single TableIR type can later hide cold fields
+behind an optional boxed extension record or side tables. Such an optimization
+would preserve the unified API and parser.
+
+The existing `umol-io/benches` suites provide the migration gate. The SMILES
+benchmark runs the same chain, branch, bond, ring, component, bracket, and
+whitespace corpora through the basic and extended parser paths, with a separate
+wildcard corpus for the extended path. It can therefore measure the direct cost
+of changing the ordinary result representation while verifying that wildcard
+support remains effective. The MOL benchmark compares the basic and extended
+atom, bond, and property parsers on overlapping inputs, isolating where the
+larger representation enters parsing cost. It is mostly a token/parser-component
+benchmark rather than a whole-MOL/SDF workload, so unification should retain
+those comparisons and add representative end-to-end records before removing
+the old path. The decision rule is not that the unified representation must be
+free: it is that measured cost must justify a storage optimization inside the
+single type, rather than preservation of duplicate public semantics.
+
+TableIR unification does not require every format to share a boundary wrapper.
+The wrappers express grammar provenance and rendering guarantees, while the
+unified TableIR expresses what was parsed:
+
+- `Smiles` accepts the complete OpenSMILES grammar, including `*`, and wraps the
+  unified `table_ir::Molecule`. `WILDCARDS` and `basic_opensmiles` cease to be
+  optional capabilities; they are part of the format.
+- A future `CxSmiles` may separately accept OpenSMILES plus CXSMILES annotations
+  and wrap the same TableIR type. This is useful because CXSMILES has its own
+  parsing and rendering invariant and carries useful additions such as radical
+  annotations. `Smiles -> CxSmiles` is lossless; `CxSmiles -> Smiles` is
+  fallible when CX-only information would be discarded.
+- Other graph-string systems such as HELM, DeepSMILES, BigSMILES, or SELFIES are
+  independent formats if they are supported at all; they should not be folded
+  into an open-ended SMILES dialect flag set.
+- `Mol` and `Sdf` likewise wrap the unified TableIR representation. Query
+  features, SGroups, RGroups, and vendor extensions affect accepted syntax and
+  retained payload, not whether the parser returns `Molecule` or
+  `ExtendedMolecule`.
+
+`EXTENDED_AROMATICS` and `EXTENDED_BONDS` are not CXSMILES-specific. Implementations
+such as RDKit support varying subsets of this wider SMILES syntax, including
+bond forms such as `$` and `~`. They may remain options of the ordinary SMILES
+boundary; CX tag parsing and rendering are the part that belongs specifically
+to a future `CxSmiles` boundary and configuration.
+
+The next decision is benchmark-gated rather than an unconditional unification:
+
+```text
+Measure the ordinary-input cost of ExtendedMolecule
+├── acceptable
+│   ├── settle the complete umol-io migration scope
+│   │   ├── OpenSMILES plus extended aromatic/bond syntax
+│   │   ├── CXSMILES
+│   │   └── MOL/SDF
+│   └── unify TableIR molecule/atom/bond types and parser result types
+└── too high
+    ├── add OpenSMILES `*` support to basic Molecule
+    ├── audit and remove only Smiles options that truly require ExtendedMolecule
+    ├── retain the Molecule/ExtendedMolecule split inside umol-io
+    └── schedule a focused representation-design spike
+```
+
+In either branch, only ordinary SMILES ingestion propagates into `umol-graph`
+and `umol-py` in this implementation round. CXSMILES, MOL, and SDF support stop
+at the `umol-io` boundary and are scheduled for the next Python workflow pass.
+If the cost is acceptable, they should nevertheless be included far enough in
+the Rust-side migration to avoid retaining duplicate TableIR and parser APIs
+that would have to be removed immediately afterward.
+
+The cost gate measures both parsing latency and retained representation size.
+The SMILES suite already supplies a direct basic/extended comparison over the
+same ordinary inputs. The MOL suite supplies component-level atom, bond, and
+property comparisons; representative whole-record MOL/SDF cases must be added
+or measured before using it to justify removal of the basic path. No arbitrary
+percentage defines “acceptable” before seeing the data: report the relative
+cost across small, ordinary drug-like, and larger structures, together with
+atom/bond size and allocation differences. If a material cost appears, first
+consider optimizing cold storage inside one semantic type; preserve duplicate
+types and parsers only if the evidence justifies that larger design cost.
+
+The fallback audit is feature-specific. It must not remove
+`EXTENDED_AROMATICS` or `EXTENDED_BONDS` merely because they currently travel
+through an extended parser. Features that the basic representation already can
+hold remain available; only syntax whose result genuinely requires
+`ExtendedMolecule` is excluded from the `Smiles` boundary until the design
+spike resolves it.
+
+This gate precedes S4c-S4e. Python must not freeze the current capability and
+configuration split before the Rust representation decision is made.
+
+##### Benchmark gate result
+
+The current `ExtendedMolecule` representation is not an acceptable direct
+replacement for `Molecule`. Measurements on 2026-07-18 used the existing
+Criterion suites on the same machine and release profile. Representative quick
+runs gave the following parser costs; the 10-carbon chain was also repeated as
+a standard 100-sample Criterion run and confirmed the directional result.
+
+| Input | Basic path | Extended path | Extended cost |
+|---|---:|---:|---:|
+| SMILES linear `C10` | 396 ns | 576 ns | +46% |
+| SMILES cyclohexane | 372 ns | 474 ns | +27% |
+| SMILES mixed-bond `C10` | 460 ns | 609 ns | +32% |
+| SMILES adamantane | 485 ns | 771 ns | +59% |
+| SMILES 50 bracket atoms | 1.29 us | 2.15 us | +66% |
+| MOL 69-column atom record | 86.5 ns | 97.6 ns | +13% |
+| MOL 21-column bond record | 26.3 ns | 34.5 ns | +31% |
+| MOL single charge property | 49.4 ns | 52.0 ns | +5% |
+
+The inline representation difference is also substantial:
+
+| Type | Basic | Extended | Ratio |
+|---|---:|---:|---:|
+| atom | 104 bytes | 288 bytes | 2.77x |
+| bond | 40 bytes | 96 bytes | 2.40x |
+| molecule header | 200 bytes | 440 bytes | 2.20x |
+
+These sizes do not include backing allocations, but they directly increase the
+atom and bond vector allocations and retained cache footprint for ordinary
+molecules. The consistent SMILES latency increase shows that this is not only a
+dormant-data size concern. The component-level MOL results vary with how much
+work is representation-independent, reinforcing the need for whole-record MOL
+and SDF benchmarks before a later representation redesign.
+
+The immediate path therefore follows the high-cost branch:
+
+1. Add OpenSMILES `*` to basic `Molecule` and raise it to
+   `ElementAst::Undetermined`; do not route ordinary SMILES through
+   `ExtendedMolecule` merely to represent one core token.
+2. Audit `EXTENDED_AROMATICS` and `EXTENDED_BONDS` against the actual basic atom
+   and bond structures. Retain every supported form whose value already fits;
+   parser provenance alone is not evidence that a feature requires
+   `ExtendedMolecule`.
+3. Remove CXSMILES-specific flags and presets from the ordinary `Smiles`
+   configuration. Keep the extended parser and `ExtendedMolecule` inside
+   `umol-io` for CXSMILES, MOL, and SDF while their boundary design is deferred
+   to the next pass.
+4. Replace `basic_opensmiles` with one complete OpenSMILES default after `*` is
+   supported. The distinction between ordinary and extended aromatic/bond
+   syntax remains an acceptance-policy option within SMILES rather than a
+   result-type choice.
+5. Schedule a representation-design spike for eventual TableIR unification.
+   Its target is a compact semantic superset, potentially with cold extension
+   records or side tables, measured against these baselines. It must not begin
+   by renaming the current extended structures and accepting their cost.
+
+The focused implementation plan for items 1 and 4 is
+[152-basic-molecule-wildcards-2026-07-18.md](152-basic-molecule-wildcards-2026-07-18.md).
+It includes the compact basic-atom representation migration, basic parser and
+raise changes, removal of the wildcard configuration split, migration of both
+the `umol-graph` classification tools and the `umol-io` parsing-conformance
+suite, and the required unit, property, fuzz, and benchmark gates.
+
+CXSMILES, MOL, and SDF do not propagate into `umol-graph` or `umol-py` in this
+round. Their current Rust support remains available inside `umol-io`; unified
+boundary types and downstream ingestion belong to the next workflow pass.
 
 ### S3 — Safe and reproducible Rust fingerprint contracts
 
