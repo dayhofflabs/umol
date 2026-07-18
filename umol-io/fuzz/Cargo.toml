@@ -11,6 +11,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+umol-ast = { path = "../../umol-ast" }
 
 [dependencies.umol-io]
 path = ".."

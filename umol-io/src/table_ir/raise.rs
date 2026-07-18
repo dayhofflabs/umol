@@ -470,6 +470,19 @@ mod tests {
     }
 
     #[rstest]
+    #[case::shared_cis_trans_ligand(
+        parse_smiles_bytes_to_table_ir(b"SSC=S1CC1\\2C=112").unwrap(),
+        RaiseError::DanglingBondDirection { bond: 6 }
+    )]
+    fn test_table_molecule_try_into_ast_error(
+        #[case] molecule: TableMolecule,
+        #[case] expected: RaiseError,
+    ) {
+        let actual: Result<MoleculeAst, RaiseError> = (&molecule).try_into_ast(&());
+        assert_eq!(actual, Err(expected));
+    }
+
+    #[rstest]
     #[case::bare(
         None,
         None,
@@ -712,6 +725,7 @@ mod tests {
 
     #[rstest]
     #[case::dimethyl_sulfide(parse_smiles_bytes_to_table_ir(b"C[S@]C").unwrap(), 1, RaiseError::TetrahedralLigandCount { atom: 1, count: 2 })]
+    #[case::parallel_bonds(parse_smiles_bytes_to_table_ir(b"C[C]2[C@@]2[C-]").unwrap(), 2, RaiseError::TetrahedralLigandCount { atom: 2, count: 2 })]
     #[case::wedge_conflict(parse_mol_bytes_to_table_ir(WEDGE_CONFLICT_MOL.as_bytes()).unwrap(), 0, RaiseError::WedgeConflict { atom: 0 })]
     #[case::cfclbri_inconsistent_wedges(parse_mol_bytes_to_table_ir(CFCLBRI_INCONSISTENT_WEDGE_MOL.as_bytes()).unwrap(), 1, RaiseError::WedgeConflict { atom: 1 })]
     fn test_raise_tetrahedral_stereo_error(

@@ -223,7 +223,7 @@ basic-versus-OpenSMILES conformance category.
 
 ### S3 — Fuzz and performance gates
 
-- **S3a — wildcard fuzz coverage**
+- **S3a — wildcard fuzz coverage** **Done**
   (`umol-io/fuzz`): add corpus seeds for a bare wildcard, a mixed wildcard
   chain, a branch with a bracketed/classed wildcard, a wildcard ring, and
   representative bracket fields. On a successful parse, extend the existing
@@ -232,6 +232,15 @@ basic-versus-OpenSMILES conformance category.
   wildcard-only target. Compile the fuzz crate, replay the seed corpus, and run
   a bounded fuzz session. **Additive fuzz coverage (green).**
   `[dep: S1b, S2b]`
+
+  **Implemented verification:** the parse fuzz target now raises every
+  successfully parsed `Smiles` value to `MoleculeAst`. The seed corpus includes
+  bare, chain, branch/class, ring, and bracket-field wildcard forms, plus
+  stereochemistry regression inputs for tetrahedral duplicate-neighbor and
+  cis/trans shared-ligand cases. Raising those malformed stereo inputs returns
+  structured `RaiseError` variants instead of panicking. The fuzz crate builds,
+  all 13 fixed seeds replay cleanly, and a 15-second bounded run completed
+  365,681 executions without producing an artifact.
 
 - **S3b — paired basic/extended benchmarks**
   (`umol-io/benches/smiles_parsing.rs`): activate a representative wildcard

@@ -63,26 +63,31 @@ fn atom_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<usize> {
         .map(|other| other as usize)
         .collect();
     indices.sort_unstable();
+    indices.dedup();
     indices
 }
 
-/// Number of bonds incident on `atom_idx`. Counts directly, without building the ordering.
+/// Number of distinct atoms neighboring `atom_idx`.
 pub(super) fn neighbor_count(mol: &TableMolecule, atom_idx: usize) -> usize {
-    mol.bonds
-        .iter()
-        .filter(|bond| bond.atoms.contains(atom_idx as u32))
-        .count()
+    atom_ordering(mol, atom_idx).len()
 }
 
 /// Neighbor atom ordering of `atom_idx` by bond ordering (used by SMILES, which refers to it as parse ordering).
 /// Neighbor atoms appear in the order of incident bonds (including ring-closure indices).
 /// Can differ from the ascending atom index order when rings are present.
 fn bond_neighbor_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<usize> {
-    mol.bonds
+    let mut indices = Vec::new();
+    for other in mol
+        .bonds
         .iter()
         .filter_map(|bond| bond.atoms.other(atom_idx as u32))
         .map(|other| other as usize)
-        .collect()
+    {
+        if !indices.contains(&other) {
+            indices.push(other);
+        }
+    }
+    indices
 }
 
 /// Ligand ordering used in tetrahedral stereo constraints (#T): neighbors ascending as `Atom`,
@@ -232,9 +237,17 @@ pub(super) fn validate_bond_direction(
     }
 }
 
-/// Double bond is cis-trans capable iff its both ends are substituted.
+/// Double bond is cis-trans capable iff both ends have distinct substituents.
 pub(super) fn cis_trans_capable(mol: &TableMolecule, atom_1: usize, atom_2: usize) -> bool {
-    neighbor_count(mol, atom_1) > 1 && neighbor_count(mol, atom_2) > 1
+    let side_1: Vec<_> = atom_ordering(mol, atom_1)
+        .into_iter()
+        .filter(|&atom| atom != atom_2)
+        .collect();
+    let side_2: Vec<_> = atom_ordering(mol, atom_2)
+        .into_iter()
+        .filter(|&atom| atom != atom_1)
+        .collect();
+    !side_1.is_empty() && !side_2.is_empty() && side_1.iter().all(|atom| !side_2.contains(atom))
 }
 
 /// Arrangement of the bond atom `atom_idx` of stereogenic double bond. Errors when its markers disagree.
