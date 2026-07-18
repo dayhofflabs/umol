@@ -281,7 +281,11 @@ pub fn build_from_graph(spec: &str) -> Molecule {
     let mut mol = mols.pop().unwrap_or_else(Molecule::empty);
 
     mol.source_format = SourceFormat::SMILES;
-    mol.chirality_frame = Some(ChiralityFrame::FirstNeighborToward);
+    mol.chirality_frame = mol
+        .atoms
+        .iter()
+        .any(|atom| atom.chirality.is_some())
+        .then_some(ChiralityFrame::FirstNeighborToward);
     mol
 }
 
@@ -356,6 +360,10 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
     let mut mol = mols.pop().unwrap_or_else(ExtendedMolecule::empty);
 
     mol.source_format = SourceFormat::SMILES;
-    mol.chirality_frame = Some(ChiralityFrame::FirstNeighborToward);
+    mol.chirality_frame = mol
+        .atoms
+        .iter()
+        .any(|atom| atom.chirality.is_some())
+        .then_some(ChiralityFrame::FirstNeighborToward);
     mol
 }

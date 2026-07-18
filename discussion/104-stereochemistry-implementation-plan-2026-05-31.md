@@ -335,11 +335,12 @@ Phases A–E are in scope; F (3D) and G follow.
     behind). raise reads **this** (not `source_format`) to map (`Chirality` token, atom-list neighbor order, the
     frame's H-placement + viewpoint + winding) → coset. Chosen over parser-level normalization (reorders neighbors,
     discards raw fidelity) and over `source_format`-implicit dispatch (undocumented coupling).
-    - **Set with `source_format`, not with the scope flag.** A parser sets `chirality_frame` unconditionally for a
-      parsed (non-empty) molecule — SMILES/SMARTS → `FirstNeighborToward` in `parse_smiles_inner` /
-      `parse_extended_smiles_inner`; MOL → `LastNeighborAway` in `build_molecule` / `build_extended_molecule`. This is
-      a per-format constant, unlike `ConfigurationScope` (the renamed `StereoInterpretation`, `{ Absolute, Relative }`),
-      which is content-derived (MOL chiral flag, CXSMILES `a:`/`r`) and stays `None` absent such a marker.
+    - **Set only when a raw atom chirality descriptor is present.** SMILES/SMARTS uses
+      `FirstNeighborToward`; MOL uses `LastNeighborAway`. Achiral and empty molecules keep
+      `chirality_frame = None`, because the frame has no semantics without an `Atom.chirality`
+      value to interpret. This differs from `ConfigurationScope` (the renamed
+      `StereoInterpretation`, `{ Absolute, Relative }`), which is content-derived from the MOL
+      chiral flag or CXSMILES `a:`/`r` markers.
     - **The parser parses; it does not interpret.** The parser only records the raw descriptors
       (`Atom.chirality`, `Bond.wedge`, `Bond.stereo`, `positions`); converting them is raise's job, not the parser's.
 

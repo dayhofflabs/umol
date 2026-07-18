@@ -1333,6 +1333,13 @@ The immediate path therefore follows the high-cost branch:
    Its target is a compact semantic superset, potentially with cold extension
    records or side tables, measured against these baselines. It must not begin
    by renaming the current extended structures and accepting their cost.
+6. Revisit `ChiralityFrame` placement as part of the CXSMILES/MOL/SDF boundary
+   and representation spike. The immediate parser invariant keeps the
+   molecule-level field `None` unless an `Atom.chirality` descriptor is present;
+   the spike should determine whether the frame belongs directly with that raw
+   descriptor so the representation cannot express a descriptor without its
+   required source frame. Expand this section after the focused work in 152 is
+   complete.
 
 The focused implementation plan for items 1 and 4 is
 [152-basic-molecule-wildcards-2026-07-18.md](152-basic-molecule-wildcards-2026-07-18.md).

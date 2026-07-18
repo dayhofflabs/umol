@@ -12,7 +12,9 @@ pub enum ConfigurationScope {
 
 /// The frame in which a per-atom chirality descriptor is read into a 3D
 /// arrangement. It governs tetrahedral atom chirality only, not other
-/// stereogenic elements (e.g. E/Z bonds), and is set per source format.
+/// stereogenic elements (e.g. E/Z bonds). It is present only when the molecule
+/// contains a raw atom chirality descriptor whose source convention must be
+/// retained.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ChiralityFrame {
     /// First-listed neighbor points toward the viewer; remaining neighbors,

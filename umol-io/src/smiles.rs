@@ -77,7 +77,7 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::table_ir::{Atom, ChiralityFrame, Span};
+    use crate::table_ir::{Atom, Span};
 
     #[rstest]
     #[case::carbon(
@@ -88,7 +88,7 @@ mod tests {
             positions: None,
             multicenter_bonds: Vec::new(),
             configuration_scope: None,
-            chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+            chirality_frame: None,
             comments: Vec::new(),
             properties: IndexMap::new(),
             source_format: SourceFormat::SMILES,
@@ -102,7 +102,7 @@ mod tests {
             positions: None,
             multicenter_bonds: Vec::new(),
             configuration_scope: None,
-            chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+            chirality_frame: None,
             comments: Vec::new(),
             properties: IndexMap::new(),
             source_format: SourceFormat::SMILES,

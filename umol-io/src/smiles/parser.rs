@@ -640,7 +640,11 @@ fn parse_smiles_inner(
         .pop()
         .map(|mut mol| {
             mol.source_format = SourceFormat::SMILES;
-            mol.chirality_frame = Some(ChiralityFrame::FirstNeighborToward);
+            mol.chirality_frame = mol
+                .atoms
+                .iter()
+                .any(|atom| atom.chirality.is_some())
+                .then_some(ChiralityFrame::FirstNeighborToward);
             mol
         })
         .unwrap_or_else(Molecule::empty);
@@ -1254,7 +1258,11 @@ fn parse_extended_smiles_inner(
         .pop()
         .map(|mut mol| {
             mol.source_format = SourceFormat::SMILES;
-            mol.chirality_frame = Some(ChiralityFrame::FirstNeighborToward);
+            mol.chirality_frame = mol
+                .atoms
+                .iter()
+                .any(|atom| atom.chirality.is_some())
+                .then_some(ChiralityFrame::FirstNeighborToward);
             mol
         })
         .unwrap_or_else(ExtendedMolecule::empty);

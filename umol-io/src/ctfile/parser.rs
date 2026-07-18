@@ -170,7 +170,7 @@ fn build_molecule(
         comments: Vec::new(),
         properties: IndexMap::new(),
         configuration_scope: None,
-        chirality_frame: Some(ChiralityFrame::LastNeighborAway),
+        chirality_frame: None,
         source_format: SourceFormat::MOL,
     };
 
@@ -179,6 +179,11 @@ fn build_molecule(
         acc.add_entry(entry, flags)?;
     }
     acc.update_molecule(&mut molecule, flags)?;
+    molecule.chirality_frame = molecule
+        .atoms
+        .iter()
+        .any(|atom| atom.chirality.is_some())
+        .then_some(ChiralityFrame::LastNeighborAway);
 
     Ok(molecule)
 }
@@ -201,7 +206,7 @@ fn build_extended_molecule(
         properties: IndexMap::new(),
         ctfile_data: None,
         cx_data: None,
-        chirality_frame: Some(ChiralityFrame::LastNeighborAway),
+        chirality_frame: None,
         source_format: SourceFormat::MOL,
     };
 
@@ -211,6 +216,11 @@ fn build_extended_molecule(
     }
 
     acc.update_extended_molecule(&mut molecule, flags)?;
+    molecule.chirality_frame = molecule
+        .atoms
+        .iter()
+        .any(|atom| atom.chirality.is_some())
+        .then_some(ChiralityFrame::LastNeighborAway);
 
     Ok(molecule)
 }

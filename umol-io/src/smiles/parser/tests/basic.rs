@@ -991,7 +991,6 @@ fn test_stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecul
     b"*",
     Molecule {
         atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))],
-        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
         source_format: SourceFormat::SMILES,
         ..Molecule::empty()
     }
@@ -1008,7 +1007,6 @@ fn test_stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecul
             Bond { span: Some(Span::bytes(1, 2)), ..Bond::new(0, 1, BondOrder::Single) },
             Bond { span: Some(Span::bytes(2, 3)), ..Bond::new(1, 2, BondOrder::Single) },
         ],
-        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
         source_format: SourceFormat::SMILES,
         ..Molecule::empty()
     }
@@ -1025,7 +1023,6 @@ fn test_stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecul
             Bond { span: Some(Span::bytes(2, 3)), ..Bond::new(0, 1, BondOrder::Single) },
             Bond { span: Some(Span::bytes(4, 5)), ..Bond::new(0, 2, BondOrder::Single) },
         ],
-        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
         source_format: SourceFormat::SMILES,
         ..Molecule::empty()
     }
@@ -1038,7 +1035,6 @@ fn test_stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecul
             Atom::wildcard_with_span(Span::bytes(2, 3)),
         ],
         bonds: vec![Bond { span: Some(Span::bytes(1, 2)), ..Bond::new(0, 1, BondOrder::Single) }],
-        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
         source_format: SourceFormat::SMILES,
         ..Molecule::empty()
     }
@@ -1050,7 +1046,6 @@ fn test_stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecul
             Atom::wildcard_with_span(Span::bytes(0, 1)),
             Atom::wildcard_with_span(Span::bytes(2, 3)),
         ],
-        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
         source_format: SourceFormat::SMILES,
         ..Molecule::empty()
     }
@@ -1068,7 +1063,6 @@ fn test_stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecul
             Bond { span: Some(Span::bytes(2, 3)), ..Bond::new(0, 1, BondOrder::Single) },
             Bond { span: Some(Span::bytes(3, 4)), ..Bond::new(1, 2, BondOrder::Single) },
         ],
-        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
         source_format: SourceFormat::SMILES,
         ..Molecule::empty()
     }
@@ -1081,7 +1075,6 @@ fn test_stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecul
             span: Some(Span::bytes(0, 3)),
             ..Atom::wildcard()
         }],
-        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
         source_format: SourceFormat::SMILES,
         ..Molecule::empty()
     }
@@ -1095,7 +1088,6 @@ fn test_stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecul
             span: Some(Span::bytes(0, 5)),
             ..Atom::wildcard()
         }],
-        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
         source_format: SourceFormat::SMILES,
         ..Molecule::empty()
     }

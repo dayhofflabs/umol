@@ -7,7 +7,7 @@ use crate::ctfile::parser::{
     parse_mol_bytes_to_table_ir, parse_mol_bytes_to_table_ir_with, parse_mol_to_table_ir,
     parse_mol_to_table_ir_with,
 };
-use crate::table_ir::ConfigurationScope;
+use crate::table_ir::{ChiralityFrame, ConfigurationScope};
 
 #[fixture]
 fn methane_mol() -> &'static str {
@@ -52,6 +52,25 @@ fn test_parse_mol_to_table_ir(ethane_mol: &[u8]) {
     let molecule = result.unwrap();
     assert_eq!(molecule.atom_count(), 2, "should have 2 atoms");
     assert_eq!(molecule.bond_count(), 1, "should have 1 bond");
+}
+
+#[rstest]
+#[case::achiral(
+    "\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\nM  END\n",
+    None,
+)]
+#[case::atom_parity(
+    "\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  1  0  0  0  0  0  0  0  0  0\nM  END\n",
+    Some(ChiralityFrame::LastNeighborAway),
+)]
+fn test_parse_mol_to_table_ir_chirality(
+    #[case] input: &str,
+    #[case] expected: Option<ChiralityFrame>,
+) {
+    assert_eq!(
+        parse_mol_to_table_ir(input).map(|molecule| molecule.chirality_frame),
+        Ok(expected)
+    );
 }
 
 #[rstest]
@@ -188,6 +207,25 @@ fn test_parse_extended_mol(methane_mol: &str) {
     );
     assert_eq!(molecule.atom_count(), 1, "should have 1 atom");
     assert_eq!(molecule.bond_count(), 0, "should have 0 bonds");
+}
+
+#[rstest]
+#[case::achiral(
+    "\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\nM  END\n",
+    None,
+)]
+#[case::atom_parity(
+    "\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  1  0  0  0  0  0  0  0  0  0\nM  END\n",
+    Some(ChiralityFrame::LastNeighborAway),
+)]
+fn test_parse_extended_mol_chirality(
+    #[case] input: &str,
+    #[case] expected: Option<ChiralityFrame>,
+) {
+    assert_eq!(
+        parse_extended_mol(input).map(|molecule| molecule.chirality_frame),
+        Ok(expected)
+    );
 }
 
 #[rstest]

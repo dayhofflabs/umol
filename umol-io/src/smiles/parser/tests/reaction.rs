@@ -1,104 +1,80 @@
 use std::collections::BTreeMap;
 
-use bstr::ByteSlice;
-use indexmap::IndexMap;
 use map_macro::btree_map;
 use pretty_assertions::assert_eq;
 use rstest::*;
+use umol_chem::element::Element;
 
 use super::super::*;
-use super::utils::{build_extended_from_graph, build_from_graph};
 use crate::table_ir::{
-    Atom, ChiralityFrame, ExtendedReaction, Molecule, Reaction, SourceFormat, Span,
+    Atom, Bond, BondDonation, BondOrder, ExtendedMolecule, ExtendedReaction, Molecule, Reaction,
+    SourceFormat, Span,
 };
 
-fn reaction_from_sides(
-    reactants: &'static str,
-    products: &'static str,
-    agents: &'static str,
-) -> Reaction {
-    let reactants = build_from_graph(reactants);
-    let products = build_from_graph(products);
-    let agents = build_from_graph(agents);
-    Reaction::from_molecules(reactants, products, agents)
-}
-
-fn extended_reaction_from_sides(
-    reactants: &'static str,
-    products: &'static str,
-    agents: &'static str,
-) -> ExtendedReaction {
-    let reactants = build_extended_from_graph(reactants);
-    let products = build_extended_from_graph(products);
-    let agents = build_extended_from_graph(agents);
-    ExtendedReaction::from_extended_molecules(reactants, products, agents)
-}
-
 #[rstest]
-#[case::empty(b">>", reaction_from_sides("|", "|", "|"))]
-#[case::reactants_only(b"C>>", reaction_from_sides("C@0 |", "|", "|"))]
-#[case::products_only(b">>C", reaction_from_sides("|", "C@0 |", "|"))]
-#[case::simple(b"C>>C", reaction_from_sides("C@0 |", "C@0 |", "|"))]
-#[case::two_reactants(b"C.C>>C", reaction_from_sides("C@0 C@1 |", "C@0 |", "|"))]
-#[case::two_products(b"C>>C.C", reaction_from_sides("C@0 |", "C@0 C@1 |", "|"))]
-#[case::with_agent(b"C>CC>C", reaction_from_sides("C@0 |", "C@0 |", "C@0 C@1 | 0-1@2"))]
-#[case::agents_empty(b"C>>CC", reaction_from_sides("C@0 |", "C@0 C@1 | 0-1@2", "|"))]
-fn test_parse_reaction_smiles(#[case] input: &[u8], #[case] expected: Reaction) {
-    let res = parse_reaction_smiles_bytes(input);
-    assert!(
-        res.is_ok(),
-        "{:?} should succeed: {:?}",
-        input.to_str_lossy(),
-        res
-    );
-    let rxn = res.unwrap();
-    assert_eq!(rxn.reactants.atoms.len(), expected.reactants.atoms.len());
-    assert_eq!(rxn.products.atoms.len(), expected.products.atoms.len());
-    assert_eq!(rxn.agents.atoms.len(), expected.agents.atoms.len());
-}
-
-#[rstest]
-fn test_parse_reaction_smiles_bytes_wildcards() {
+#[case::empty(b">>", Molecule::empty(), Molecule::empty(), Molecule::empty())]
+#[case::reactants_only(
+    b"C>>",
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
+    Molecule::empty(),
+)]
+#[case::products_only(
+    b">>C",
+    Molecule::empty(),
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
+)]
+#[case::simple(
+    b"C>>C",
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
+)]
+#[case::wildcards(
+    b"*>*>*",
+    Molecule { atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+)]
+#[case::two_reactants(
+    b"C.C>>C",
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1)), Atom::aliphatic_atom_with_span(Element::C, Span::bytes(2, 3))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
+)]
+#[case::two_products(
+    b"C>>C.C",
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1)), Atom::aliphatic_atom_with_span(Element::C, Span::bytes(2, 3))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
+)]
+#[case::with_agent(
+    b"C>CC>C",
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1)), Atom::aliphatic_atom_with_span(Element::C, Span::bytes(1, 2))], bonds: vec![Bond { span: Some(Span::bytes(1, 2)), ..Bond::new(0, 1, BondOrder::Single) }], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+)]
+#[case::agents_empty(
+    b"C>>CC",
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1)), Atom::aliphatic_atom_with_span(Element::C, Span::bytes(1, 2))], bonds: vec![Bond { span: Some(Span::bytes(1, 2)), ..Bond::new(0, 1, BondOrder::Single) }], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
+)]
+fn test_parse_reaction_smiles_bytes(
+    #[case] input: &[u8],
+    #[case] reactants: Molecule,
+    #[case] products: Molecule,
+    #[case] agents: Molecule,
+) {
     assert_eq!(
-        parse_reaction_smiles_bytes(b"*>*>*"),
+        parse_reaction_smiles_bytes(input),
         Ok(Reaction {
-            reactants: Molecule {
-                atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))],
-                bonds: Vec::new(),
-                positions: None,
-                multicenter_bonds: Vec::new(),
-                configuration_scope: None,
-                chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
-                comments: Vec::new(),
-                properties: IndexMap::new(),
-                source_format: SourceFormat::SMILES,
-            },
-            products: Molecule {
-                atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))],
-                bonds: Vec::new(),
-                positions: None,
-                multicenter_bonds: Vec::new(),
-                configuration_scope: None,
-                chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
-                comments: Vec::new(),
-                properties: IndexMap::new(),
-                source_format: SourceFormat::SMILES,
-            },
-            agents: Molecule {
-                atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))],
-                bonds: Vec::new(),
-                positions: None,
-                multicenter_bonds: Vec::new(),
-                configuration_scope: None,
-                chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
-                comments: Vec::new(),
-                properties: IndexMap::new(),
-                source_format: SourceFormat::SMILES,
-            },
-            atom_mapping: BTreeMap::new(),
-            comments: Vec::new(),
-            properties: IndexMap::new(),
+            reactants,
+            products,
+            agents,
             source_format: SourceFormat::SMILES,
+            ..Reaction::empty()
         })
     );
 }
@@ -109,7 +85,7 @@ fn test_parse_reaction_smiles_bytes_wildcards() {
 #[case::leading_whitespace(b" C>>C", ParseError::LeadingWhitespace)]
 #[case::molecule_only_trailing_dot(b"C.", ParseError::TrailingDot { pos: 1 })]
 #[case::molecule_only_one_gt(b"C.>", ParseError::TrailingDot { pos: 1 })]
-#[case::no_products_trailing_dot(b"C>C.", ParseError::TrailingDot { pos: 3 })]
+#[case::agents_trailing_dot_without_products(b"C>C.", ParseError::TrailingDot { pos: 3 })]
 #[case::one_gt(b"C>", ParseError::MissingReactionArrow { pos: 2 })]
 #[case::one_lt(b"C<", ParseError::InvalidToken { pos: 1 })]
 #[case::two_lt(b"C<<C", ParseError::InvalidToken { pos: 1 })]
@@ -119,30 +95,54 @@ fn test_parse_reaction_smiles_bytes_wildcards() {
 #[case::consecutive_dots_products(b"C>>C..C", ParseError::ConsecutiveDots { pos: 4 })]
 #[case::consecutive_dots_agents(b"C>C..C>C", ParseError::ConsecutiveDots { pos: 3 })]
 #[case::leading_dot_reactants(b".C>>C", ParseError::LeadingDot { pos: 0 })]
-#[case::leading_dot_products(b".C>>C", ParseError::LeadingDot { pos: 0 })]
+#[case::leading_dot_products(b"C>>.C", ParseError::LeadingDot { pos: 3 })]
 #[case::trailing_dot_reactants(b"C.>>C", ParseError::TrailingDot { pos: 1 })]
 #[case::leading_dot_agents(b"C>.C>C", ParseError::LeadingDot { pos: 2 })]
 #[case::trailing_dot_products(b"C>>C.", ParseError::TrailingDot { pos: 4 })]
 #[case::trailing_dot_agents(b"C>C.>C", ParseError::TrailingDot { pos: 3 })]
-fn test_parse_reaction_smiles_error(#[case] input: &[u8], #[case] expected: ParseError) {
+fn test_parse_reaction_smiles_bytes_error(#[case] input: &[u8], #[case] expected: ParseError) {
     assert_eq!(parse_reaction_smiles_bytes(input), Err(expected));
 }
 
 #[rstest]
 #[case::dative_bond(
     b"N->B>>N.B",
-    reaction_from_sides("N@0 B@3 | 0-1->@1", "N@0 B@1 |", "|")
+    Reaction {
+        reactants: Molecule {
+            atoms: vec![
+                Atom::aliphatic_atom_with_span(Element::N, Span::bytes(0, 1)),
+                Atom::aliphatic_atom_with_span(Element::B, Span::bytes(3, 4)),
+            ],
+            bonds: vec![Bond {
+                span: Some(Span::bytes(1, 2)),
+                ..Bond::new_dative(0, 1, BondOrder::Single, BondDonation::Donating)
+            }],
+            source_format: SourceFormat::SMILES,
+            ..Molecule::empty()
+        },
+        products: Molecule {
+            atoms: vec![
+                Atom::aliphatic_atom_with_span(Element::N, Span::bytes(0, 1)),
+                Atom::aliphatic_atom_with_span(Element::B, Span::bytes(2, 3)),
+            ],
+            source_format: SourceFormat::SMILES,
+            ..Molecule::empty()
+        },
+        agents: Molecule::empty(),
+        source_format: SourceFormat::SMILES,
+        ..Reaction::empty()
+    }
 )]
-fn test_parse_reaction_smiles_bytes_lenient(#[case] input: &[u8], #[case] expected: Reaction) {
-    let res = parse_reaction_smiles_bytes_with(
-        input,
-        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT),
+fn test_parse_reaction_smiles_bytes_with(#[case] input: &[u8], #[case] expected: Reaction) {
+    assert_eq!(
+        parse_reaction_smiles_bytes_with(
+            input,
+            &SmilesIoConfig::with_parse_flags(
+                SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT,
+            ),
+        ),
+        Ok(expected)
     );
-    assert!(res.is_ok(), "{:?} should succeed", input.to_str_lossy());
-    let rxn = res.unwrap();
-    assert_eq!(rxn.reactants.atoms.len(), expected.reactants.atoms.len());
-    assert_eq!(rxn.products.atoms.len(), expected.products.atoms.len());
-    assert_eq!(rxn.agents.atoms.len(), expected.agents.atoms.len());
 }
 
 #[rstest]
@@ -152,44 +152,82 @@ fn test_parse_reaction_smiles_bytes_lenient(#[case] input: &[u8], #[case] expect
 #[case::partial_mapping(b"[C:1]C>>C[O:2]", btree_map!(1 => (vec![0], vec![]), 2 => (vec![], vec![1])))]
 #[case::duplicate_mapping(b"[C:1](=[O:2])[OH:2]>>[C:1](=[O:2])[O:2]C", btree_map!(1 => (vec![0], vec![0]),
     2 => (vec![1, 2], vec![1, 2])))]
-fn test_parse_reaction_smiles_atom_mapping(
+fn test_parse_reaction_smiles_bytes_atom_mapping(
     #[case] input: &[u8],
     #[case] expected: BTreeMap<u32, (Vec<u32>, Vec<u32>)>,
 ) {
-    let res = parse_reaction_smiles_bytes(input);
-    assert!(res.is_ok(), "{:?} should succeed", input.to_str_lossy());
-    let rxn = res.unwrap();
-    assert_eq!(rxn.atom_mapping, expected);
+    assert_eq!(
+        parse_reaction_smiles_bytes(input).map(|reaction| reaction.atom_mapping),
+        Ok(expected)
+    );
 }
 
 #[rstest]
-#[case::empty(b">>", extended_reaction_from_sides("|", "|", "|"))]
-#[case::reactants_only(b"C>>", extended_reaction_from_sides("C@0 |", "|", "|"))]
-#[case::products_only(b">>C", extended_reaction_from_sides("|", "C@0 |", "|"))]
-#[case::simple(b"C>>C", extended_reaction_from_sides("C@0 |", "C@0 |", "|"))]
-#[case::wildcard(b"*>>*", extended_reaction_from_sides("*@0 |", "*@0 |", "|"))]
-#[case::two_reactants(b"C.C>>C", extended_reaction_from_sides("C@0 C@1 |", "C@0 |", "|"))]
-#[case::two_products(b"C>>C.C", extended_reaction_from_sides("C@0 |", "C@0 C@1 |", "|"))]
+#[case::empty(b">>", Molecule::empty(), Molecule::empty(), Molecule::empty())]
+#[case::reactants_only(
+    b"C>>",
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
+    Molecule::empty(),
+)]
+#[case::products_only(
+    b">>C",
+    Molecule::empty(),
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
+)]
+#[case::simple(
+    b"C>>C",
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
+)]
+#[case::wildcard(
+    b"*>>*",
+    Molecule { atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
+)]
+#[case::two_reactants(
+    b"C.C>>C",
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1)), Atom::aliphatic_atom_with_span(Element::C, Span::bytes(2, 3))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
+)]
+#[case::two_products(
+    b"C>>C.C",
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1)), Atom::aliphatic_atom_with_span(Element::C, Span::bytes(2, 3))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
+)]
 #[case::with_agent(
     b"C>CC>C",
-    extended_reaction_from_sides("C@0 |", "C@0 |", "C@0 C@1 | 0-1@2")
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1)), Atom::aliphatic_atom_with_span(Element::C, Span::bytes(1, 2))], bonds: vec![Bond { span: Some(Span::bytes(1, 2)), ..Bond::new(0, 1, BondOrder::Single) }], source_format: SourceFormat::SMILES, ..Molecule::empty() },
 )]
 #[case::agents_empty(
     b"C>>CC",
-    extended_reaction_from_sides("C@0 |", "C@0 C@1 | 0-1@2", "|")
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1))], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1)), Atom::aliphatic_atom_with_span(Element::C, Span::bytes(1, 2))], bonds: vec![Bond { span: Some(Span::bytes(1, 2)), ..Bond::new(0, 1, BondOrder::Single) }], source_format: SourceFormat::SMILES, ..Molecule::empty() },
+    Molecule::empty(),
 )]
-fn test_parse_extended_reaction_smiles(#[case] input: &[u8], #[case] expected: ExtendedReaction) {
-    let res = parse_extended_reaction_smiles_bytes(input);
-    assert!(
-        res.is_ok(),
-        "{:?} should succeed: {:?}",
-        input.to_str_lossy(),
-        res
+fn test_parse_extended_reaction_smiles_bytes(
+    #[case] input: &[u8],
+    #[case] reactants: Molecule,
+    #[case] products: Molecule,
+    #[case] agents: Molecule,
+) {
+    assert_eq!(
+        parse_extended_reaction_smiles_bytes(input),
+        Ok(ExtendedReaction {
+            reactants: ExtendedMolecule::from(reactants),
+            products: ExtendedMolecule::from(products),
+            agents: ExtendedMolecule::from(agents),
+            source_format: SourceFormat::SMILES,
+            ..ExtendedReaction::empty()
+        })
     );
-    let rxn = res.unwrap();
-    assert_eq!(rxn.reactants.atoms.len(), expected.reactants.atoms.len());
-    assert_eq!(rxn.products.atoms.len(), expected.products.atoms.len());
-    assert_eq!(rxn.agents.atoms.len(), expected.agents.atoms.len());
 }
 
 #[rstest]
@@ -198,7 +236,7 @@ fn test_parse_extended_reaction_smiles(#[case] input: &[u8], #[case] expected: E
 #[case::leading_whitespace(b" C>>C", ParseError::LeadingWhitespace)]
 #[case::molecule_only_trailing_dot(b"C.", ParseError::TrailingDot { pos: 1 })]
 #[case::molecule_only_one_gt(b"C.>", ParseError::TrailingDot { pos: 1 })]
-#[case::no_products_trailing_dot(b"C>C.", ParseError::TrailingDot { pos: 3 })]
+#[case::agents_trailing_dot_without_products(b"C>C.", ParseError::TrailingDot { pos: 1 })]
 #[case::one_gt(b"C>", ParseError::MissingReactionArrow { pos: 2 })]
 #[case::one_lt(b"C<", ParseError::InvalidToken { pos: 1 })]
 #[case::two_lt(b"C<<C", ParseError::InvalidToken { pos: 1 })]
@@ -208,40 +246,60 @@ fn test_parse_extended_reaction_smiles(#[case] input: &[u8], #[case] expected: E
 #[case::consecutive_dots_products(b"C>>C..C", ParseError::ConsecutiveDots { pos: 4 })]
 #[case::consecutive_dots_agents(b"C>C..C>C", ParseError::ConsecutiveDots { pos: 3 })]
 #[case::leading_dot_reactants(b".C>>C", ParseError::LeadingDot { pos: 0 })]
-#[case::leading_dot_products(b".C>>C", ParseError::LeadingDot { pos: 0 })]
+#[case::leading_dot_products(b"C>>.C", ParseError::LeadingDot { pos: 0 })]
 #[case::trailing_dot_reactants(b"C.>>C", ParseError::TrailingDot { pos: 1 })]
-#[case::leading_dot_agents(b"C>.C>C", ParseError::LeadingDot { pos: 2 })]
-#[case::trailing_dot_products(b"C>>C.", ParseError::TrailingDot { pos: 4 })]
+#[case::leading_dot_agents(b"C>.C>C", ParseError::LeadingDot { pos: 0 })]
+#[case::trailing_dot_products(b"C>>C.", ParseError::TrailingDot { pos: 1 })]
 #[case::trailing_dot_agents(b"C>C.>C", ParseError::TrailingDot { pos: 3 })]
-fn test_parse_extended_reaction_smiles_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let res = parse_reaction_smiles_bytes(input);
-    assert!(
-        res.is_err(),
-        "{:?} should have failed, got: {:?}",
-        input.to_str_lossy(),
-        res.unwrap()
-    );
-    assert_eq!(res.unwrap_err(), expected);
+fn test_parse_extended_reaction_smiles_bytes_error(
+    #[case] input: &[u8],
+    #[case] expected: ParseError,
+) {
+    assert_eq!(parse_extended_reaction_smiles_bytes(input), Err(expected));
 }
 
 #[rstest]
 #[case::dative_bond(
     b"N->B>>N.B",
-    extended_reaction_from_sides("N@0 B@3 | 0-1->@1", "N@0 B@1 |", "|")
+    ExtendedReaction {
+        reactants: ExtendedMolecule::from(Molecule {
+            atoms: vec![
+                Atom::aliphatic_atom_with_span(Element::N, Span::bytes(0, 1)),
+                Atom::aliphatic_atom_with_span(Element::B, Span::bytes(3, 4)),
+            ],
+            bonds: vec![Bond {
+                span: Some(Span::bytes(1, 2)),
+                ..Bond::new_dative(0, 1, BondOrder::Single, BondDonation::Donating)
+            }],
+            source_format: SourceFormat::SMILES,
+            ..Molecule::empty()
+        }),
+        products: ExtendedMolecule::from(Molecule {
+            atoms: vec![
+                Atom::aliphatic_atom_with_span(Element::N, Span::bytes(0, 1)),
+                Atom::aliphatic_atom_with_span(Element::B, Span::bytes(2, 3)),
+            ],
+            source_format: SourceFormat::SMILES,
+            ..Molecule::empty()
+        }),
+        agents: ExtendedMolecule::empty(),
+        source_format: SourceFormat::SMILES,
+        ..ExtendedReaction::empty()
+    }
 )]
-fn test_parse_extended_reaction_smiles_bytes_lenient(
+fn test_parse_extended_reaction_smiles_bytes_with(
     #[case] input: &[u8],
     #[case] expected: ExtendedReaction,
 ) {
-    let res = parse_extended_reaction_smiles_bytes_with(
-        input,
-        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT),
+    assert_eq!(
+        parse_extended_reaction_smiles_bytes_with(
+            input,
+            &SmilesIoConfig::with_parse_flags(
+                SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT,
+            ),
+        ),
+        Ok(expected)
     );
-    assert!(res.is_ok(), "{:?} should succeed", input.to_str_lossy());
-    let rxn = res.unwrap();
-    assert_eq!(rxn.reactants.atoms.len(), expected.reactants.atoms.len());
-    assert_eq!(rxn.products.atoms.len(), expected.products.atoms.len());
-    assert_eq!(rxn.agents.atoms.len(), expected.agents.atoms.len());
 }
 
 #[rstest]
@@ -251,51 +309,72 @@ fn test_parse_extended_reaction_smiles_bytes_lenient(
 #[case::partial_mapping(b"[C:1]C>>C[O:2]", btree_map!(1 => (vec![0], vec![]), 2 => (vec![], vec![1])))]
 #[case::duplicate_mapping(b"[C:1](=[O:2])[OH:2]>>[C:1](=[O:2])[O:2]C", btree_map!(1 => (vec![0], vec![0]),
     2 => (vec![1, 2], vec![1, 2])))]
-fn test_parse_extended_reaction_smiles_atom_mapping(
+fn test_parse_extended_reaction_smiles_bytes_atom_mapping(
     #[case] input: &[u8],
     #[case] expected: BTreeMap<u32, (Vec<u32>, Vec<u32>)>,
 ) {
-    let res = parse_extended_reaction_smiles_bytes(input);
-    assert!(res.is_ok(), "{:?} should succeed", input.to_str_lossy());
-    let rxn = res.unwrap();
-    assert_eq!(rxn.atom_mapping, expected);
+    assert_eq!(
+        parse_extended_reaction_smiles_bytes(input).map(|reaction| reaction.atom_mapping),
+        Ok(expected)
+    );
 }
 
-#[test]
-fn test_parse_reaction_smiles_cx_indices() {
-    let rxn = parse_reaction_smiles_bytes_with(
-        b"C>CC>C |$r;a0;a1;p$|",
-        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX),
-    )
-    .unwrap();
-    assert_eq!(rxn.reactants.atoms[0].label.as_deref(), Some("r"));
-    assert_eq!(rxn.agents.atoms[0].label.as_deref(), Some("a0"));
-    assert_eq!(rxn.agents.atoms[1].label.as_deref(), Some("a1"));
-    assert_eq!(rxn.products.atoms[0].label.as_deref(), Some("p"));
+#[rstest]
+fn test_parse_reaction_smiles_bytes_with_cx() {
+    assert_eq!(
+        parse_reaction_smiles_bytes_with(
+            b"C>CC>C |$r;a0;a1;p$|",
+            &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX),
+        )
+        .map(|reaction| {
+            (
+                reaction
+                    .reactants
+                    .atoms
+                    .into_iter()
+                    .map(|atom| atom.label)
+                    .collect::<Vec<_>>(),
+                reaction
+                    .products
+                    .atoms
+                    .into_iter()
+                    .map(|atom| atom.label)
+                    .collect::<Vec<_>>(),
+                reaction
+                    .agents
+                    .atoms
+                    .into_iter()
+                    .map(|atom| atom.label)
+                    .collect::<Vec<_>>(),
+            )
+        }),
+        Ok((
+            vec![Some(String::from("r"))],
+            vec![Some(String::from("p"))],
+            vec![Some(String::from("a0")), Some(String::from("a1"))],
+        ))
+    );
 }
 
-#[test]
-fn test_parse_reaction_smiles_cx_invalid_index() {
-    let err = parse_reaction_smiles_bytes_with(
-        b"C>>C |$a;b;c$|",
-        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX),
-    )
-    .unwrap_err();
-    assert_eq!(err, ParseError::AtomIndexOutOfBounds { atom_idx: 2 });
+#[rstest]
+fn test_parse_reaction_smiles_bytes_with_cx_error() {
+    assert_eq!(
+        parse_reaction_smiles_bytes_with(
+            b"C>>C |$a;b;c$|",
+            &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX),
+        ),
+        Err(ParseError::AtomIndexOutOfBounds { atom_idx: 2 })
+    );
 }
 
-#[test]
-fn test_parse_extended_reaction_smiles_cx_fragment_groups() {
-    let rxn = parse_extended_reaction_smiles_bytes_with(
-        b"C.C>>C |f:0.1|",
-        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX),
-    )
-    .unwrap();
-    let components = rxn
-        .reactants
-        .cx_data
-        .as_ref()
-        .and_then(|d| d.components.clone())
-        .unwrap();
-    assert_eq!(components, vec![vec![0, 1]]);
+#[rstest]
+fn test_parse_extended_reaction_smiles_bytes_with_cx() {
+    assert_eq!(
+        parse_extended_reaction_smiles_bytes_with(
+            b"C.C>>C |f:0.1|",
+            &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX),
+        )
+        .map(|reaction| { reaction.reactants.cx_data.and_then(|data| data.components) }),
+        Ok(Some(vec![vec![0, 1]]))
+    );
 }
