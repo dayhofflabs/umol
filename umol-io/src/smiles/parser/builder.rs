@@ -27,12 +27,12 @@ struct OpenRing {
 /// Atom event data
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct AtomData {
-    pub element: Element,
+    pub element: Option<Element>,
     pub isotope: Option<u32>,
     pub charge: Option<i8>,
     pub implicit_hydrogens: Option<u8>,
     pub class: Option<u32>,
-    pub aromatic: bool,
+    pub aromatic: Option<bool>,
     pub chirality: Option<Chirality>,
     pub span: Option<Span>,
 }
@@ -80,7 +80,7 @@ impl MoleculeEditor {
     pub(crate) fn on_atom(&mut self, a: AtomData) -> usize {
         let span = a.span;
         let atom = Atom {
-            element: Some(a.element),
+            element: a.element,
             charge: a.charge,
             isotope_mass: a.isotope,
             implicit_hydrogens: a.implicit_hydrogens,
@@ -88,7 +88,7 @@ impl MoleculeEditor {
             lone_pairs: None,
             unpaired_electrons: None,
             multiplicity: None,
-            aromatic: Some(a.aromatic),
+            aromatic: a.aromatic,
             chirality: a.chirality,
             class: a.class,
             label: None,
@@ -96,6 +96,14 @@ impl MoleculeEditor {
             span,
         };
 
+        self.atoms.push(atom);
+        self.atoms.len() - 1
+    }
+
+    #[inline]
+    pub(crate) fn on_wildcard(&mut self, span_start: Option<u32>, span_end: Option<u32>) -> usize {
+        let mut atom = Atom::wildcard();
+        atom.span = Span::from_bytes_opt(span_start, span_end);
         self.atoms.push(atom);
         self.atoms.len() - 1
     }

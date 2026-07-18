@@ -417,6 +417,7 @@ fn parse_smiles_inner(
                 span: Span::from_bytes_opt(s, e),
             };
             let curr = builder.on_atom(atom);
+            let aromatic = aromatic.unwrap_or(false);
 
             attach_atom(
                 &mut builder,
@@ -587,8 +588,28 @@ fn parse_smiles_inner(
             return Err(ParseError::InvalidElement { pos: offset + i });
         }
         if b0 == b'*' {
-            // Wildcards not supported in basic SMILES parser
-            return Err(ParseError::InvalidElement { pos: offset + i });
+            let (s, e) = (Some(i as u32), Some((i + 1) as u32));
+            let curr = builder.on_wildcard(s, e);
+
+            attach_atom(
+                &mut builder,
+                last_atom_idx,
+                curr,
+                &mut pending_bond,
+                false,
+                i as u32,
+                (i + 1) as u32,
+            );
+            last_atom_idx = Some(curr);
+            if let Some(top) = branch_stack.last_mut() {
+                match top {
+                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
+                        *had_atom = true
+                    }
+                }
+            }
+            i += 1;
+            continue;
         }
         if b0 == b']' {
             return Err(ParseError::UnbalancedCloseBracket { pos: offset + i });

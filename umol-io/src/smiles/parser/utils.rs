@@ -450,8 +450,8 @@ pub(super) fn parse_bracket(
     flags: SmilesParseFlags,
 ) -> Result<
     (
-        Element,
-        bool,
+        Option<Element>,
+        Option<bool>,
         Option<u32>,
         Option<i8>,
         Option<u32>,
@@ -478,25 +478,25 @@ pub(super) fn parse_bracket(
     }
 
     // 2) Element symbol
-    let element: Element;
-    let aromatic: bool;
+    let element: Option<Element>;
+    let aromatic: Option<bool>;
     if i < n && input[i] == b'*' {
-        return Err(ParseError::InvalidBracket {
-            pos: pos_offset + 1 + i,
-        });
+        element = None;
+        aromatic = None;
+        i += 1;
     } else if i < n && input[i].is_ascii_alphabetic() {
         if let Some((e, consumed)) = parse_bracket_aliphatic_element(input, i) {
-            element = e;
+            element = Some(e);
             i += consumed;
-            aromatic = false;
+            aromatic = Some(false);
         } else if let Some((e, consumed)) = parse_bracket_aromatic_element(
             input,
             i,
             flags.contains(SmilesParseFlags::EXTENDED_AROMATICS),
         ) {
-            element = e;
+            element = Some(e);
             i += consumed;
-            aromatic = true;
+            aromatic = Some(true);
         } else {
             return Err(ParseError::InvalidBracket {
                 pos: pos_offset + 1 + i,
@@ -518,7 +518,7 @@ pub(super) fn parse_bracket(
         let b0 = input[i];
         match b0 {
             b'H' => {
-                if element == Element::H {
+                if element == Some(Element::H) {
                     return Err(ParseError::BracketHwithHcount {
                         pos: pos_offset + 1 + i,
                     });

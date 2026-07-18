@@ -8,7 +8,7 @@ use umol_chem::element::Element;
 use super::super::*;
 use super::utils::{build_from_graph, find_chiral_center, find_stereo_bond};
 use crate::table_ir::atom::Chirality;
-use crate::table_ir::{BondDirection, BondOrder};
+use crate::table_ir::{Atom, Bond, BondDirection, BondOrder, ChiralityFrame, SourceFormat, Span};
 
 #[rstest]
 #[case::organic_c(b"C", build_from_graph("C@0 |"))]
@@ -634,11 +634,7 @@ fn test_bracket(
 #[case::two_elements_2(b"[AsF]", ParseError::InvalidBracket { pos: 3 })]
 #[case::two_elements_3(b"[FAs]", ParseError::InvalidBracket { pos: 2 })]
 #[case::two_elements_4(b"[AsBr]", ParseError::InvalidBracket { pos: 3 })]
-#[case::wildcard_in_bracket(b"[*]", ParseError::InvalidBracket { pos: 1 })]
-#[case::wildcard_isotope(b"[13*]", ParseError::InvalidBracket { pos: 3 })]
-#[case::wildcard_hcount(b"[*H]", ParseError::InvalidBracket { pos: 1 })]
-#[case::wildcard_class(b"[*:5]", ParseError::InvalidBracket { pos: 1 })]
-#[case::double_wildcard(b"[**]", ParseError::InvalidBracket { pos: 1 })]
+#[case::double_wildcard(b"[**]", ParseError::InvalidBracket { pos: 2 })]
 #[case::zero_charge_no_sign(b"[C0]", ParseError::InvalidBracket { pos: 2 })]
 #[case::pos_charge_no_sign(b"[C1]", ParseError::InvalidBracket { pos: 2 })]
 #[case::charge_no_element_1(b"[+]", ParseError::InvalidBracket { pos: 1 })]
@@ -673,7 +669,7 @@ fn test_bracket(
 #[case::unbalanced_close_bracket_1(b"]", ParseError::UnbalancedCloseBracket { pos: 0 })]
 #[case::unbalanced_close_bracket_2(b"]C", ParseError::UnbalancedCloseBracket { pos: 0 })]
 #[case::unbalanced_close_bracket_3(b"C]", ParseError::UnbalancedCloseBracket { pos: 1 })]
-#[case::unbalanced_close_bracket_4(b"*]", ParseError::InvalidElement { pos: 0 })]
+#[case::unbalanced_close_bracket_4(b"*]", ParseError::UnbalancedCloseBracket { pos: 1 })]
 #[case::unbalanced_close_bracket_5(b"C.]", ParseError::UnbalancedCloseBracket { pos: 2 })]
 #[case::unbalanced_close_bracket_6(b"].", ParseError::UnbalancedCloseBracket { pos: 0 })]
 #[case::unbalanced_close_bracket_7(b"].C", ParseError::UnbalancedCloseBracket { pos: 0 })]
@@ -715,12 +711,11 @@ fn test_bracket(
 #[case::duplicate_class_2(b"[C:12:1]", ParseError::DuplicateBracketField { pos: 5 })]
 #[case::duplicate_class_3(b"[C:12:12]", ParseError::DuplicateBracketField { pos: 5 })]
 #[case::duplicate_class_4(b"[C:1:12]", ParseError::DuplicateBracketField { pos: 4 })]
-fn test_bracket_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let err = parse_smiles_bytes_to_table_ir(input);
-    let input_str = String::from_utf8_lossy(input);
-    assert!(err.is_err(), "{:?} should have failed", input_str);
-    let err = err.unwrap_err();
-    assert_eq!(err, expected);
+fn test_parse_smiles_bytes_to_table_ir_bracket_error(
+    #[case] input: &[u8],
+    #[case] expected: ParseError,
+) {
+    assert_eq!(parse_smiles_bytes_to_table_ir(input), Err(expected));
 }
 
 #[rstest]
@@ -990,22 +985,158 @@ fn test_stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecul
     assert_eq!(mol, expected);
 }
 
+#[rustfmt::skip]
 #[rstest]
-#[case::wildcard_bare(b"*", ParseError::InvalidElement { pos: 0 })]
-#[case::wildcard_bracket(b"[*]", ParseError::InvalidBracket { pos: 1 })]
+#[case::bare(
+    b"*",
+    Molecule {
+        atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))],
+        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+        source_format: SourceFormat::SMILES,
+        ..Molecule::empty()
+    }
+)]
+#[case::chain(
+    b"C*C",
+    Molecule {
+        atoms: vec![
+            Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1)),
+            Atom::wildcard_with_span(Span::bytes(1, 2)),
+            Atom::aliphatic_atom_with_span(Element::C, Span::bytes(2, 3)),
+        ],
+        bonds: vec![
+            Bond { span: Some(Span::bytes(1, 2)), ..Bond::new(0, 1, BondOrder::Single) },
+            Bond { span: Some(Span::bytes(2, 3)), ..Bond::new(1, 2, BondOrder::Single) },
+        ],
+        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+        source_format: SourceFormat::SMILES,
+        ..Molecule::empty()
+    }
+)]
+#[case::branch(
+    b"C(*)C",
+    Molecule {
+        atoms: vec![
+            Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1)),
+            Atom::wildcard_with_span(Span::bytes(2, 3)),
+            Atom::aliphatic_atom_with_span(Element::C, Span::bytes(4, 5)),
+        ],
+        bonds: vec![
+            Bond { span: Some(Span::bytes(2, 3)), ..Bond::new(0, 1, BondOrder::Single) },
+            Bond { span: Some(Span::bytes(4, 5)), ..Bond::new(0, 2, BondOrder::Single) },
+        ],
+        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+        source_format: SourceFormat::SMILES,
+        ..Molecule::empty()
+    }
+)]
+#[case::explicit_bond(
+    b"C-*",
+    Molecule {
+        atoms: vec![
+            Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1)),
+            Atom::wildcard_with_span(Span::bytes(2, 3)),
+        ],
+        bonds: vec![Bond { span: Some(Span::bytes(1, 2)), ..Bond::new(0, 1, BondOrder::Single) }],
+        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+        source_format: SourceFormat::SMILES,
+        ..Molecule::empty()
+    }
+)]
+#[case::components(
+    b"*.*",
+    Molecule {
+        atoms: vec![
+            Atom::wildcard_with_span(Span::bytes(0, 1)),
+            Atom::wildcard_with_span(Span::bytes(2, 3)),
+        ],
+        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+        source_format: SourceFormat::SMILES,
+        ..Molecule::empty()
+    }
+)]
+#[case::ring(
+    b"*1CC1",
+    Molecule {
+        atoms: vec![
+            Atom::wildcard_with_span(Span::bytes(0, 1)),
+            Atom::aliphatic_atom_with_span(Element::C, Span::bytes(2, 3)),
+            Atom::aliphatic_atom_with_span(Element::C, Span::bytes(3, 4)),
+        ],
+        bonds: vec![
+            Bond { span: Some(Span::bytes(1, 2)), ..Bond::new(0, 2, BondOrder::Single) },
+            Bond { span: Some(Span::bytes(2, 3)), ..Bond::new(0, 1, BondOrder::Single) },
+            Bond { span: Some(Span::bytes(3, 4)), ..Bond::new(1, 2, BondOrder::Single) },
+        ],
+        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+        source_format: SourceFormat::SMILES,
+        ..Molecule::empty()
+    }
+)]
+#[case::bracket(
+    b"[*]",
+    Molecule {
+        atoms: vec![Atom {
+            implicit_hydrogens: Some(0),
+            span: Some(Span::bytes(0, 3)),
+            ..Atom::wildcard()
+        }],
+        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+        source_format: SourceFormat::SMILES,
+        ..Molecule::empty()
+    }
+)]
+#[case::class(
+    b"[*:1]",
+    Molecule {
+        atoms: vec![Atom {
+            implicit_hydrogens: Some(0),
+            class: Some(1),
+            span: Some(Span::bytes(0, 5)),
+            ..Atom::wildcard()
+        }],
+        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+        source_format: SourceFormat::SMILES,
+        ..Molecule::empty()
+    }
+)]
+#[case::bracket_fields(
+    b"[13*H2-:7@]",
+    Molecule {
+        atoms: vec![Atom {
+            isotope_mass: Some(13),
+            charge: Some(-1),
+            implicit_hydrogens: Some(2),
+            chirality: Some(Chirality::CounterClockwise),
+            class: Some(7),
+            span: Some(Span::bytes(0, 11)),
+            ..Atom::wildcard()
+        }],
+        chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+        source_format: SourceFormat::SMILES,
+        ..Molecule::empty()
+    }
+)]
+fn test_parse_smiles_bytes_to_table_ir_wildcard(
+    #[case] input: &[u8],
+    #[case] expected: Molecule,
+) {
+    assert_eq!(parse_smiles_bytes_to_table_ir(input), Ok(expected));
+}
+
+#[rstest]
 #[case::wildcard_after_group(b"(C)*", ParseError::NonfinalGroup { pos: 2 })]
-#[case::wildcard_unclosed_ring(b"*1", ParseError::InvalidElement { pos: 0 })]
-#[case::wildcard_unclosed_branch(b"C(*", ParseError::InvalidElement { pos: 2 })]
-#[case::wildcard_unclosed_group(b"(C*", ParseError::InvalidElement { pos: 2 })]
+#[case::wildcard_unclosed_ring(b"*1", ParseError::UnbalancedRingIndex { open_pos: 1 })]
+#[case::wildcard_unclosed_branch(b"C(*", ParseError::UnbalancedOpenParen { pos: 1 })]
+#[case::wildcard_unclosed_group(b"(C*", ParseError::UnbalancedOpenParen { pos: 0 })]
 #[case::wildcard_unclosed_bracket(b"[*", ParseError::UnbalancedOpenBracket { pos: 0 })]
-#[case::wildcard_trailing_bond(b"*-", ParseError::InvalidElement { pos: 0 })]
-#[case::wildcard_trailing_dot(b"*.", ParseError::InvalidElement { pos: 0 })]
-fn test_wildcard_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let res = parse_smiles_bytes_to_table_ir(input);
-    let input_str = input.to_str_lossy();
-    assert!(res.is_err(), "{:?} should have failed", input_str);
-    let err = res.unwrap_err();
-    assert_eq!(err, expected);
+#[case::wildcard_trailing_bond(b"*-", ParseError::TrailingBond { pos: 1 })]
+#[case::wildcard_trailing_dot(b"*.", ParseError::TrailingDot { pos: 1 })]
+fn test_parse_smiles_bytes_to_table_ir_wildcard_error(
+    #[case] input: &[u8],
+    #[case] expected: ParseError,
+) {
+    assert_eq!(parse_smiles_bytes_to_table_ir(input), Err(expected));
 }
 
 #[rstest]

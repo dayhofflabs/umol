@@ -91,7 +91,7 @@ S0 ends with the `umol-io` unit suite green.
 
 ### S1 — Basic SMILES parsing
 
-- **S1a — bare and bracketed wildcard grammar**
+- **S1a — bare and bracketed wildcard grammar** **Done**
   (`umol-io/src/smiles/parser.rs`, `parser/utils.rs`, `parser/builder.rs`): add
   a basic-builder wildcard path that creates an atom with `element: None` and
   `aromatic: None`. Parse bare `*` through the ordinary attachment, branch,
@@ -104,6 +104,11 @@ S0 ends with the `umol-io` unit suite green.
   least `*`, `C*C`, `C(*)C`, `C-*`, `*.*`, `*1CC1`, `[*]`, `[*:1]`, and
   representative bracket fields accepted by the extended grammar. **Additive
   parser support (green).** `[dep: S0a]`
+
+  **Implemented verification:** nine exact TableIR rows cover bare, chain,
+  branch, explicit-bond, disconnected-component, ring, bracket, class, and
+  combined bracket-field forms. Wildcards carry `element: None` and
+  `aromatic: None`; all atom and bond spans are asserted structurally.
 
 - **S1b — format, reaction, and raise integration**
   (`umol-io/src/smiles.rs`, the SMILES reaction parser tests, and TableIR raise

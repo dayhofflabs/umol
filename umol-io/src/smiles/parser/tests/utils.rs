@@ -245,8 +245,8 @@ pub fn build_from_graph(spec: &str) -> Molecule {
             }
         }
         let id = b.on_atom(AtomData {
-            element: el,
-            aromatic: arom,
+            element: Some(el),
+            aromatic: Some(arom),
             isotope: None,
             charge: None,
             implicit_hydrogens: None,

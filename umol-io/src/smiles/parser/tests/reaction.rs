@@ -75,16 +75,8 @@ fn test_parse_reaction_smiles(#[case] input: &[u8], #[case] expected: Reaction) 
 #[case::leading_dot_agents(b"C>.C>C", ParseError::LeadingDot { pos: 2 })]
 #[case::trailing_dot_products(b"C>>C.", ParseError::TrailingDot { pos: 4 })]
 #[case::trailing_dot_agents(b"C>C.>C", ParseError::TrailingDot { pos: 3 })]
-#[case::wildcard(b"*>>*", ParseError::InvalidElement { pos: 0 })]
-fn test_parse_reaction_smiles_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let res = parse_reaction_smiles_bytes(input);
-    assert!(
-        res.is_err(),
-        "{:?} should have failed, got: {:?}",
-        input.to_str_lossy(),
-        res.unwrap()
-    );
-    assert_eq!(res.unwrap_err(), expected);
+fn test_parse_reaction_smiles_error(#[case] input: &[u8], #[case] expected: ParseError) {
+    assert_eq!(parse_reaction_smiles_bytes(input), Err(expected));
 }
 
 #[rstest]
