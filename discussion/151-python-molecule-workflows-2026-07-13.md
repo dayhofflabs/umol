@@ -182,7 +182,7 @@ operation:
 - `Ingest::ingest` interprets a borrowed format value under an explicit
   `ChemistryModel` and returns a determined `MoleculeAst`;
 - `umol_graph::ingest::smiles*` composes both boundaries for ordinary callers,
-  using `SmilesIoConfig::basic_opensmiles()` and `ChemistryModel::default()` in
+  using `SmilesIoConfig::opensmiles()` and `ChemistryModel::default()` in
   the unconfigured form.
 
 Python exposes the resolved operation:
@@ -198,12 +198,13 @@ Python.
 
 ### Configuration scope
 
-This round binds `SmilesIoConfig` with its named presets, including
-`basic_opensmiles`, `opensmiles`, `basic_max`, `strict`, `extended`, `lenient`,
-and the ChemAxon presets. It also binds `SmilesParseFlags` with bitwise OR so a
-caller can construct an arbitrary supported parser-capability combination and
-pass it through `SmilesIoConfig.with_parse_flags(...)`. Both values are owned and
-immutable on the Python side.
+This round binds `SmilesIoConfig` with the `opensmiles`, `lenient`, and
+`chemaxon` named configurations. It also binds the effective
+`SmilesParseFlags` capabilities and their bitwise OR so a caller can construct
+an arbitrary supported parser-acceptance policy and pass it through
+`SmilesIoConfig.with_parse_flags(...)`. Wildcards are part of OpenSMILES and do
+not have a capability flag. Both values are owned and immutable on the Python
+side.
 
 `SmilesLintFlags` and `SmilesLintConfig` are not part of this round. The Rust
 parsing workflow does not currently consume them, and lint behavior is not yet
@@ -1140,7 +1141,7 @@ clone-and-publish, `transact_validated`, validator combinators, or savepoints.
   `umol-graph/src/parse.rs`, and workspace callers): resolved workspace callers
   use either `Smiles::parse*` followed by `Ingest::ingest` or the compact
   `umol_graph::ingest::smiles*` convenience surface. The latter returns
-  `SmilesInputError`, retains `SmilesIoConfig::basic_opensmiles()` plus
+  `SmilesInputError`, uses `SmilesIoConfig::opensmiles()` plus
   `ChemistryModel::default()` as its unconfigured default, and provides explicit
   text/bytes configured paths. The public unresolved SMILES-to-AST helpers and
   public `parse_smiles*_to_table_ir*` functions are retired; the raw byte parser
@@ -1404,7 +1405,7 @@ boundary types and downstream ingestion belong to the next workflow pass.
   (`umol-py/src/smiles.rs`): bind every effective parser capability and named
   parse preset, with value equality, repr, and bitwise OR producing another
   immutable flag value. Round-trip tests cover individual bits, representative
-  combinations, zero/basic OpenSMILES, and rejection of unknown bits. Do not
+  combinations, zero/OpenSMILES, and rejection of unknown bits. Do not
   bind lint flags. **Additive (green).** `[dep: S4a]`
 - **S4d — `SmilesIoConfig`** (`umol-py/src/smiles.rs`): bind the owned immutable
   config, named presets, `with_parse_flags`, structural equality, and repr.

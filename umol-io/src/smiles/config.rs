@@ -8,9 +8,6 @@ bitflags! {
     /// Flags for parsing SMILES strings
     #[derive(Debug, Clone, Copy, PartialEq, Default)]
     pub struct SmilesParseFlags: u32 {
-        // Parser capabilities
-        const WILDCARDS = 1;               // *
-
         // Format extensions
         const EXTENDED_AROMATICS = 1 << 1; // se, te, as, si
         const EXTENDED_BONDS = 1 << 2;     // ->, <-, ~
@@ -20,72 +17,38 @@ bitflags! {
         const SKIP_UNKNOWN_CHEMAXON_TAGS = 1 << 10; // Skip unknown ChemAxon tags
 
         // Presets
-        const BASIC_OPENSMILES = 0;
-
-        // Maximum capabilities for basic parser
-        const BASIC_MAX =  Self::EXTENDED_AROMATICS.bits() | Self::EXTENDED_BONDS.bits() | Self::CHEMAXON_EXTENSIONS.bits() |
-            Self::SKIP_UNKNOWN_CHEMAXON_TAGS.bits();
-
-        // Maximum capabilities for extended parser (everything)
-        const EXTENDED_MAX = Self::BASIC_MAX.bits() | Self::WILDCARDS.bits();
-
-        // Strict parser: only additional capabilities of extended parser over basic parser according to OpenSMILES spec
-        // Basic strict: BASIC & STRICT = OPENSMILES_STRICT
-        const STRICT = Self::WILDCARDS.bits();
-
-        // Default for basic parser
-        const BASIC = Self::BASIC_OPENSMILES.bits();
-
-        // Default for extended parser
-        const EXTENDED = Self::BASIC.bits() | Self::STRICT.bits();
+        const OPENSMILES = 0;
 
         // Lenient parser
-        const LENIENT = Self::EXTENDED.bits() | Self::EXTENDED_AROMATICS.bits() | Self::EXTENDED_BONDS.bits() |
+        const LENIENT = Self::EXTENDED_AROMATICS.bits() | Self::EXTENDED_BONDS.bits() |
             Self::CHEMAXON_EXTENSIONS.bits() | Self::SKIP_UNKNOWN_CHEMAXON_TAGS.bits();
 
-        // OpenSMILES parser: BASIC_OPENSMILES | WILDCARDS
-        const OPENSMILES = Self::BASIC_OPENSMILES.bits() | Self::WILDCARDS.bits();
-
-        // ChemAxon-compatible basic parser
-        const BASIC_CHEMAXON = Self::BASIC_OPENSMILES.bits() | Self::CHEMAXON_EXTENSIONS.bits();
-
-        // ChemAxon-compatible extended parser
-        const CHEMAXON = Self::EXTENDED.bits() | Self::CHEMAXON_EXTENSIONS.bits();
+        // ChemAxon-compatible parser
+        const CHEMAXON = Self::CHEMAXON_EXTENSIONS.bits();
     }
 }
 
 impl fmt::Display for SmilesParseFlags {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut parts = Vec::new();
-        if *self == SmilesParseFlags::BASIC_OPENSMILES {
-            parts.push("BASIC_OPENSMILES");
-        } else if *self == SmilesParseFlags::OPENSMILES {
+        if *self == SmilesParseFlags::OPENSMILES {
             parts.push("OPENSMILES");
-        } else if *self == SmilesParseFlags::BASIC {
-            parts.push("BASIC");
-        } else if *self == SmilesParseFlags::BASIC_MAX {
-            parts.push("BASIC_MAX");
-        } else if *self == SmilesParseFlags::STRICT {
-            parts.push("STRICT");
-        } else if *self == SmilesParseFlags::EXTENDED {
-            parts.push("EXTENDED");
-        } else if *self == SmilesParseFlags::EXTENDED_MAX {
-            parts.push("EXTENDED_MAX");
         } else if *self == SmilesParseFlags::LENIENT {
             parts.push("LENIENT");
-        } else if *self == SmilesParseFlags::BASIC_CHEMAXON {
-            parts.push("BASIC_CHEMAXON");
         } else if *self == SmilesParseFlags::CHEMAXON {
             parts.push("CHEMAXON");
         } else {
-            if self.contains(SmilesParseFlags::WILDCARDS) {
-                parts.push("WILDCARDS");
-            }
             if self.contains(SmilesParseFlags::EXTENDED_AROMATICS) {
                 parts.push("EXTENDED_AROMATICS");
             }
+            if self.contains(SmilesParseFlags::EXTENDED_BONDS) {
+                parts.push("EXTENDED_BONDS");
+            }
             if self.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
                 parts.push("CHEMAXON_EXTENSIONS");
+            }
+            if self.contains(SmilesParseFlags::SKIP_UNKNOWN_CHEMAXON_TAGS) {
+                parts.push("SKIP_UNKNOWN_CHEMAXON_TAGS");
             }
         }
         write!(f, "{}", parts.join(" | "))
@@ -160,7 +123,7 @@ impl fmt::Display for SmilesLintConfig {
 }
 
 /// Configuration for SMILES parsing/writing
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SmilesIoConfig {
     pub parse_flags: SmilesParseFlags,
     pub lint_flags: SmilesLintFlags,
@@ -175,32 +138,11 @@ impl SmilesIoConfig {
             lint_config: SmilesLintConfig::default(),
         }
     }
-    pub fn basic_opensmiles() -> Self {
-        Self::with_parse_flags(SmilesParseFlags::BASIC_OPENSMILES)
-    }
     pub fn opensmiles() -> Self {
         Self::with_parse_flags(SmilesParseFlags::OPENSMILES)
     }
-    pub fn basic() -> Self {
-        Self::with_parse_flags(SmilesParseFlags::BASIC)
-    }
-    pub fn basic_max() -> Self {
-        Self::with_parse_flags(SmilesParseFlags::BASIC_MAX)
-    }
-    pub fn strict() -> Self {
-        Self::with_parse_flags(SmilesParseFlags::STRICT)
-    }
-    pub fn extended() -> Self {
-        Self::with_parse_flags(SmilesParseFlags::EXTENDED)
-    }
-    pub fn extended_max() -> Self {
-        Self::with_parse_flags(SmilesParseFlags::EXTENDED_MAX)
-    }
     pub fn lenient() -> Self {
         Self::with_parse_flags(SmilesParseFlags::LENIENT)
-    }
-    pub fn basic_chemaxon() -> Self {
-        Self::with_parse_flags(SmilesParseFlags::BASIC_CHEMAXON)
     }
     pub fn chemaxon() -> Self {
         Self::with_parse_flags(SmilesParseFlags::CHEMAXON)
@@ -221,6 +163,12 @@ impl SmilesIoConfig {
     }
 }
 
+impl Default for SmilesIoConfig {
+    fn default() -> Self {
+        Self::opensmiles()
+    }
+}
+
 impl fmt::Display for SmilesIoConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -228,5 +176,73 @@ impl fmt::Display for SmilesIoConfig {
             "SmilesIoConfig(parse: {}, lint: {}, lint_config: {})",
             self.parse_flags, self.lint_flags, self.lint_config
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case::retired_wildcard(1, None)]
+    #[case::extended_aromatics(1 << 1, Some(SmilesParseFlags::EXTENDED_AROMATICS))]
+    #[case::extended_bonds(1 << 2, Some(SmilesParseFlags::EXTENDED_BONDS))]
+    #[case::chemaxon_extensions(1 << 3, Some(SmilesParseFlags::CHEMAXON_EXTENSIONS))]
+    #[case::extended_syntax(
+        (1 << 1) | (1 << 2),
+        Some(SmilesParseFlags::EXTENDED_AROMATICS | SmilesParseFlags::EXTENDED_BONDS)
+    )]
+    fn test_smiles_parse_flags_from_bits(
+        #[case] bits: u32,
+        #[case] expected: Option<SmilesParseFlags>,
+    ) {
+        assert_eq!(SmilesParseFlags::from_bits(bits), expected);
+    }
+
+    #[rstest]
+    #[case::opensmiles(SmilesParseFlags::OPENSMILES, "OPENSMILES")]
+    #[case::extended_aromatics(SmilesParseFlags::EXTENDED_AROMATICS, "EXTENDED_AROMATICS")]
+    #[case::extended_bonds(SmilesParseFlags::EXTENDED_BONDS, "EXTENDED_BONDS")]
+    #[case::chemaxon(SmilesParseFlags::CHEMAXON, "CHEMAXON")]
+    #[case::skip_unknown_chemaxon_tags(
+        SmilesParseFlags::SKIP_UNKNOWN_CHEMAXON_TAGS,
+        "SKIP_UNKNOWN_CHEMAXON_TAGS"
+    )]
+    #[case::extended_syntax(
+        SmilesParseFlags::EXTENDED_AROMATICS | SmilesParseFlags::EXTENDED_BONDS,
+        "EXTENDED_AROMATICS | EXTENDED_BONDS"
+    )]
+    #[case::chemaxon_skip_unknown(
+        SmilesParseFlags::CHEMAXON | SmilesParseFlags::SKIP_UNKNOWN_CHEMAXON_TAGS,
+        "CHEMAXON_EXTENSIONS | SKIP_UNKNOWN_CHEMAXON_TAGS"
+    )]
+    #[case::lenient(SmilesParseFlags::LENIENT, "LENIENT")]
+    fn test_smiles_parse_flags_display(#[case] flags: SmilesParseFlags, #[case] expected: &str) {
+        assert_eq!(flags.to_string(), expected);
+    }
+
+    #[rstest]
+    #[case::opensmiles(SmilesIoConfig::opensmiles(), SmilesParseFlags::OPENSMILES)]
+    #[case::lenient(SmilesIoConfig::lenient(), SmilesParseFlags::LENIENT)]
+    #[case::chemaxon(SmilesIoConfig::chemaxon(), SmilesParseFlags::CHEMAXON)]
+    fn test_smiles_io_config(#[case] config: SmilesIoConfig, #[case] expected: SmilesParseFlags) {
+        assert_eq!(config.parse_flags, expected);
+        assert_eq!(config.lint_flags, SmilesLintFlags::ALL);
+        assert!(config.lint_config.enabled.is_empty());
+        assert!(config.lint_config.disabled.is_empty());
+        assert!(!config.lint_config.enable_gir);
+    }
+
+    #[rstest]
+    fn test_smiles_io_config_default() {
+        let config = SmilesIoConfig::default();
+
+        assert_eq!(config.parse_flags, SmilesParseFlags::OPENSMILES);
+        assert_eq!(config.lint_flags, SmilesLintFlags::ALL);
+        assert!(config.lint_config.enabled.is_empty());
+        assert!(config.lint_config.disabled.is_empty());
+        assert!(!config.lint_config.enable_gir);
     }
 }

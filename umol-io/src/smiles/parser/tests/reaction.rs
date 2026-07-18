@@ -135,12 +135,7 @@ fn test_parse_reaction_smiles_bytes_error(#[case] input: &[u8], #[case] expected
 )]
 fn test_parse_reaction_smiles_bytes_with(#[case] input: &[u8], #[case] expected: Reaction) {
     assert_eq!(
-        parse_reaction_smiles_bytes_with(
-            input,
-            &SmilesIoConfig::with_parse_flags(
-                SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT,
-            ),
-        ),
+        parse_reaction_smiles_bytes_with(input, &SmilesIoConfig::lenient()),
         Ok(expected)
     );
 }
@@ -292,12 +287,7 @@ fn test_parse_extended_reaction_smiles_bytes_with(
     #[case] expected: ExtendedReaction,
 ) {
     assert_eq!(
-        parse_extended_reaction_smiles_bytes_with(
-            input,
-            &SmilesIoConfig::with_parse_flags(
-                SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT,
-            ),
-        ),
+        parse_extended_reaction_smiles_bytes_with(input, &SmilesIoConfig::lenient()),
         Ok(expected)
     );
 }
@@ -322,32 +312,30 @@ fn test_parse_extended_reaction_smiles_bytes_atom_mapping(
 #[rstest]
 fn test_parse_reaction_smiles_bytes_with_cx() {
     assert_eq!(
-        parse_reaction_smiles_bytes_with(
-            b"C>CC>C |$r;a0;a1;p$|",
-            &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX),
-        )
-        .map(|reaction| {
-            (
-                reaction
-                    .reactants
-                    .atoms
-                    .into_iter()
-                    .map(|atom| atom.label)
-                    .collect::<Vec<_>>(),
-                reaction
-                    .products
-                    .atoms
-                    .into_iter()
-                    .map(|atom| atom.label)
-                    .collect::<Vec<_>>(),
-                reaction
-                    .agents
-                    .atoms
-                    .into_iter()
-                    .map(|atom| atom.label)
-                    .collect::<Vec<_>>(),
-            )
-        }),
+        parse_reaction_smiles_bytes_with(b"C>CC>C |$r;a0;a1;p$|", &SmilesIoConfig::lenient()).map(
+            |reaction| {
+                (
+                    reaction
+                        .reactants
+                        .atoms
+                        .into_iter()
+                        .map(|atom| atom.label)
+                        .collect::<Vec<_>>(),
+                    reaction
+                        .products
+                        .atoms
+                        .into_iter()
+                        .map(|atom| atom.label)
+                        .collect::<Vec<_>>(),
+                    reaction
+                        .agents
+                        .atoms
+                        .into_iter()
+                        .map(|atom| atom.label)
+                        .collect::<Vec<_>>(),
+                )
+            }
+        ),
         Ok((
             vec![Some(String::from("r"))],
             vec![Some(String::from("p"))],
@@ -359,10 +347,7 @@ fn test_parse_reaction_smiles_bytes_with_cx() {
 #[rstest]
 fn test_parse_reaction_smiles_bytes_with_cx_error() {
     assert_eq!(
-        parse_reaction_smiles_bytes_with(
-            b"C>>C |$a;b;c$|",
-            &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX),
-        ),
+        parse_reaction_smiles_bytes_with(b"C>>C |$a;b;c$|", &SmilesIoConfig::lenient()),
         Err(ParseError::AtomIndexOutOfBounds { atom_idx: 2 })
     );
 }
@@ -370,11 +355,8 @@ fn test_parse_reaction_smiles_bytes_with_cx_error() {
 #[rstest]
 fn test_parse_extended_reaction_smiles_bytes_with_cx() {
     assert_eq!(
-        parse_extended_reaction_smiles_bytes_with(
-            b"C.C>>C |f:0.1|",
-            &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX),
-        )
-        .map(|reaction| { reaction.reactants.cx_data.and_then(|data| data.components) }),
+        parse_extended_reaction_smiles_bytes_with(b"C.C>>C |f:0.1|", &SmilesIoConfig::lenient())
+            .map(|reaction| { reaction.reactants.cx_data.and_then(|data| data.components) }),
         Ok(Some(vec![vec![0, 1]]))
     );
 }

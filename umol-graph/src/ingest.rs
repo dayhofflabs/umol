@@ -95,7 +95,7 @@ pub fn smiles(input: &str) -> Result<MoleculeAst, SmilesInputError> {
 pub fn smiles_bytes(input: &[u8]) -> Result<MoleculeAst, SmilesInputError> {
     smiles_bytes_with(
         input,
-        &SmilesIoConfig::basic_opensmiles(),
+        &SmilesIoConfig::opensmiles(),
         &ChemistryModel::default(),
     )
 }
@@ -299,7 +299,7 @@ mod tests {
         ));
 
         assert_eq!(
-            smiles_with("[nH]1cccc1", &SmilesIoConfig::basic_opensmiles(), &model),
+            smiles_with("[nH]1cccc1", &SmilesIoConfig::opensmiles(), &model),
             Err(expected)
         );
     }
@@ -314,7 +314,7 @@ mod tests {
         };
 
         assert_eq!(
-            smiles_with("C", &SmilesIoConfig::basic_opensmiles(), &model),
+            smiles_with("C", &SmilesIoConfig::opensmiles(), &model),
             Err(SmilesInputError::Underdetermined(ResolveUnderdetermined))
         );
     }

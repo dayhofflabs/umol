@@ -375,7 +375,7 @@ fn test_bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 fn test_bonds_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles_bytes_to_table_ir_with(
         input,
-        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT),
+        &SmilesIoConfig::lenient(),
     );
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
@@ -395,10 +395,7 @@ fn test_bonds_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::dative_ring_bond_donation_conflict_1(b"C->1CC->1", ParseError::MismatchedRingBondDonations { pos: 8, open_pos: 3 })]
 #[case::dative_ring_bond_donation_conflict_2(b"C<-1CC<-1", ParseError::MismatchedRingBondDonations { pos: 8, open_pos: 3 })]
 fn test_bonds_lenient_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let res = parse_smiles_bytes_to_table_ir_with(
-        input,
-        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT),
-    );
+    let res = parse_smiles_bytes_to_table_ir_with(input, &SmilesIoConfig::lenient());
     let input_str = input.to_str_lossy();
     assert!(res.is_err(), "{:?} should have failed", input_str);
     let err = res.unwrap_err();
@@ -735,10 +732,7 @@ fn test_bracket_fields_invalid(#[case] input: &[u8], #[case] expected: ParseErro
 #[case::aromatic_te(b"[te]", Element::Te, true)]
 #[case::aromatic_si(b"[si]", Element::Si, true)]
 fn test_bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aromatic: bool) {
-    let res = parse_smiles_bytes_to_table_ir_with(
-        input,
-        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT),
-    );
+    let res = parse_smiles_bytes_to_table_ir_with(input, &SmilesIoConfig::lenient());
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol.atoms.len(), 1, "expected single atom");

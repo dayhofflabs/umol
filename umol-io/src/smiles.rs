@@ -26,14 +26,14 @@ pub struct Smiles {
 }
 
 impl Smiles {
-    /// Parse SMILES text with the basic OpenSMILES configuration.
+    /// Parse SMILES text with the OpenSMILES configuration.
     pub fn parse(input: &str) -> Result<Self, ParseError> {
         Self::parse_bytes(input.as_bytes())
     }
 
-    /// Parse SMILES bytes with the basic OpenSMILES configuration.
+    /// Parse SMILES bytes with the OpenSMILES configuration.
     pub fn parse_bytes(input: &[u8]) -> Result<Self, ParseError> {
-        Self::parse_bytes_with(input, &SmilesIoConfig::basic_opensmiles())
+        Self::parse_bytes_with(input, &SmilesIoConfig::opensmiles())
     }
 
     /// Parse SMILES text with an explicit IO configuration.

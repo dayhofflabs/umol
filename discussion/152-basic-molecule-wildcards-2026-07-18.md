@@ -160,7 +160,7 @@ S1 ends with the unit, integration, and property suites green.
 
 ### S2 — Remove the wildcard configuration and classification split
 
-- **S2a — consolidate SMILES configuration**
+- **S2a — consolidate SMILES configuration** **Done**
   (`umol-io/src/smiles/config.rs`, parser defaults, and `Smiles` defaults):
   remove `SmilesParseFlags::WILDCARDS`, because `*` is part of OpenSMILES.
   Remove `BASIC_OPENSMILES` and `SmilesIoConfig::basic_opensmiles()`. Remove or
@@ -172,6 +172,18 @@ S1 ends with the unit, integration, and property suites green.
   Rust table tests cover the remaining named configurations, flag composition,
   and display behavior. **Breaking public configuration change (red until
   callers migrate).** `[dep: S1b]`
+
+  **Implemented configuration:** `OPENSMILES` is the zero/default acceptance
+  policy, while extended aromatic syntax, extended bonds, CX annotations, and
+  skipping unknown CX tags remain independent bits. The retired wildcard bit
+  position is not reused. `LENIENT` and `CHEMAXON` remain named flag policies;
+  `SmilesIoConfig` exposes only the distinct `opensmiles`, `lenient`, and
+  `chemaxon` named configurations. Parser entry points and `Smiles` now default
+  to `opensmiles`. Table tests reject the retired wildcard bit, pin the
+  surviving bit positions, every remaining display component, representative
+  OR composition, all named configurations, and the default.
+  The `umol-io` library suite is green; the workspace remains intentionally red
+  at the S2b callers of the removed configuration names.
 
 - **S2b — classification and parsing-conformance migration**
   (`umol-graph/src/bin/classify_smiles_strings.rs`, related diagnostic tools,

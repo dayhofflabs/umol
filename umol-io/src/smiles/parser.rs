@@ -27,10 +27,10 @@ use crate::table_ir::{
     Molecule, Reaction, SourceFormat, Span, WildcardAtom,
 };
 
-/// Parse SMILES bytes to `table_ir::Molecule` with basic OpenSMILES rules.
+/// Parse SMILES bytes to `table_ir::Molecule` with OpenSMILES rules.
 #[cfg(test)]
 pub(crate) fn parse_smiles_bytes_to_table_ir(input: &[u8]) -> Result<Molecule, ParseError> {
-    parse_smiles_bytes_to_table_ir_with(input, &SmilesIoConfig::basic_opensmiles())
+    parse_smiles_bytes_to_table_ir_with(input, &SmilesIoConfig::opensmiles())
 }
 
 /// Parse SMILES bytes to `table_ir::Molecule` with configuration.
@@ -39,12 +39,6 @@ pub(crate) fn parse_smiles_bytes_to_table_ir_with(
     config: &SmilesIoConfig,
 ) -> Result<Molecule, ParseError> {
     let flags = config.parse_flags;
-    debug_assert!(
-        SmilesParseFlags::BASIC_MAX.contains(flags),
-        "flags must be a subset of BASIC_MAX, got: {}",
-        flags
-    );
-
     if input.is_empty() {
         return Ok(Molecule::empty());
     }
@@ -77,7 +71,7 @@ pub(crate) fn parse_smiles_bytes_to_table_ir_with(
     Ok(mol)
 }
 
-/// Parse reaction SMILES with basic OpenSMILES configuration
+/// Parse reaction SMILES with the OpenSMILES configuration.
 pub fn parse_reaction_smiles(input: &str) -> Result<Reaction, ParseError> {
     parse_reaction_smiles_bytes(input.as_bytes())
 }
@@ -90,9 +84,9 @@ pub fn parse_reaction_smiles_with(
     parse_reaction_smiles_bytes_with(input.as_bytes(), config)
 }
 
-/// Parse reaction SMILES bytes with basic OpenSMILES configuration
+/// Parse reaction SMILES bytes with the OpenSMILES configuration.
 pub fn parse_reaction_smiles_bytes(input: &[u8]) -> Result<Reaction, ParseError> {
-    parse_reaction_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles())
+    parse_reaction_smiles_bytes_with(input, &SmilesIoConfig::opensmiles())
 }
 
 /// Parse reaction SMILES bytes with configuration
@@ -101,11 +95,6 @@ pub fn parse_reaction_smiles_bytes_with(
     config: &SmilesIoConfig,
 ) -> Result<Reaction, ParseError> {
     let flags = config.parse_flags;
-    debug_assert!(
-        SmilesParseFlags::BASIC_MAX.contains(flags),
-        "flags must be a subset of BASIC_MAX"
-    );
-
     // Check if the input contains a CX block, record ring bonds if it is present.
     let has_cx_annotations =
         flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
@@ -653,7 +642,7 @@ fn parse_smiles_inner(
     Ok((&input[i..], (mol, ring_bonds, new_offset)))
 }
 
-/// Parse extended SMILES string with basic OpenSMILES configuration
+/// Parse extended SMILES text with the OpenSMILES configuration.
 pub fn parse_extended_smiles(input: &str) -> Result<ExtendedMolecule, ParseError> {
     parse_extended_smiles_bytes(input.as_bytes())
 }
@@ -666,9 +655,9 @@ pub fn parse_extended_smiles_with(
     parse_extended_smiles_bytes_with(input.as_bytes(), config)
 }
 
-/// Parse extended SMILES bytes with basic OpenSMILES configuration
+/// Parse extended SMILES bytes with the OpenSMILES configuration.
 pub fn parse_extended_smiles_bytes(input: &[u8]) -> Result<ExtendedMolecule, ParseError> {
-    parse_extended_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles())
+    parse_extended_smiles_bytes_with(input, &SmilesIoConfig::opensmiles())
 }
 
 /// Parse extended SMILES bytes with configuration
@@ -709,7 +698,7 @@ pub fn parse_extended_smiles_bytes_with(
     Ok(mol)
 }
 
-/// Parse extended reaction SMILES string with basic OpenSMILES configuration
+/// Parse extended reaction SMILES text with the OpenSMILES configuration.
 pub fn parse_extended_reaction_smiles(input: &str) -> Result<ExtendedReaction, ParseError> {
     parse_extended_reaction_smiles_bytes(input.as_bytes())
 }
@@ -722,9 +711,9 @@ pub fn parse_extended_reaction_smiles_with(
     parse_extended_reaction_smiles_bytes_with(input.as_bytes(), config)
 }
 
-/// Parse extended reaction SMILES bytes with basic OpenSMILES configuration
+/// Parse extended reaction SMILES bytes with the OpenSMILES configuration.
 pub fn parse_extended_reaction_smiles_bytes(input: &[u8]) -> Result<ExtendedReaction, ParseError> {
-    parse_extended_reaction_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles())
+    parse_extended_reaction_smiles_bytes_with(input, &SmilesIoConfig::opensmiles())
 }
 
 /// Parse extended reaction SMILES bytes with configuration
