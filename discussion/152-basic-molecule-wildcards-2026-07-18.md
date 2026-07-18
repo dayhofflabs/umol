@@ -46,7 +46,7 @@ representable by basic `Atom`.
 
 ### S0 — Basic TableIR representation
 
-- **S0a — compact wildcard atoms**
+- **S0a — compact wildcard atoms** **Done**
   (`umol-io/src/table_ir/atom.rs` and direct `Atom.element` consumers): change
   `Atom.element` from `Element` to `Option<Element>`. Existing element
   constructors continue to accept `Element` and store `Some(element)`; add
@@ -68,7 +68,7 @@ representable by basic `Atom`.
   conversion tests cover concrete elements, the `Any` wildcard, and rejection
   of every other wildcard category and extended atom-list symbol.
 
-- **S0b — molecule and AST semantics**
+- **S0b — molecule and AST semantics** **Done**
   (`umol-io/src/table_ir/molecule.rs`, `table_ir/raise.rs`): include basic
   wildcards in `Molecule::sum_formula`, using the existing extended convention
   (`*`, `*2`, and so on). Raise `Some(element)` to `ElementAst::Lit(element)`
@@ -80,6 +80,12 @@ representable by basic `Atom`.
   `AtomAst` values for bare and bracketed wildcards, and basic-to-extended-to-
   basic molecule roundtrips containing wildcards. **Additive behavioral
   completion (green).** `[dep: S0a]`
+
+  **Implemented verification:** basic formulas count one or multiple
+  wildcards; raising preserves independent isotope, charge, hydrogen,
+  lone-pair, and spin fields, including independent multiplicity; aromatic
+  wildcards retain undetermined implicit hydrogens. A molecule roundtrip also
+  preserves wildcard class, stereo, source span, label, and value fields.
 
 S0 ends with the `umol-io` unit suite green.
 

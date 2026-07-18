@@ -75,6 +75,7 @@ impl Molecule {
         let mut atom_counts: BTreeMap<[u8; 2], (Element, usize)> = BTreeMap::new();
         let mut c_count = 0usize;
         let mut h_count = 0usize;
+        let mut wildcard_count = 0usize;
         let mut charge = 0i32;
 
         for atom in &self.atoms {
@@ -87,13 +88,21 @@ impl Molecule {
                         atom_counts.entry(key).or_insert((e, 0)).1 += 1;
                     }
                 }
+            } else {
+                wildcard_count += 1;
             }
             if let Some(ch) = atom.charge {
                 charge += ch as i32;
             }
         }
 
-        format_sum_formula(c_count, h_count, atom_counts, charge)
+        let mut result = format_sum_formula(c_count, h_count, atom_counts, charge);
+        match wildcard_count {
+            0 => {}
+            1 => result.push('*'),
+            count => result.push_str(&format!("*{count}")),
+        }
+        result
     }
 }
 

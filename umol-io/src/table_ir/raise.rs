@@ -154,12 +154,15 @@ impl TryIntoAst<AtomAst> for &TableAtom {
                 Some(n) => ValueAst::Lit(n as i64),
                 None => ValueAst::Undetermined,
             },
-            spin: match self.unpaired_electrons {
-                Some(u) => SpinStateAst {
-                    unpaired: ValueAst::Lit(u as i64),
-                    multiplicity: ValueAst::Undetermined,
+            spin: SpinStateAst {
+                unpaired: match self.unpaired_electrons {
+                    Some(unpaired) => ValueAst::Lit(unpaired as i64),
+                    None => ValueAst::Undetermined,
                 },
-                None => SpinStateAst::default(),
+                multiplicity: match self.multiplicity {
+                    Some(multiplicity) => ValueAst::Lit(u8::from(multiplicity) as i64),
+                    None => ValueAst::Undetermined,
+                },
             },
             constraints: Default::default(),
         };
@@ -382,8 +385,9 @@ fn raise_cis_trans_stereo(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::BondId;
+    use umol_ast::ast::{AtomConstraintsAst, BondId};
     use umol_chem::element::Element;
+    use umol_chem::spin::SpinMultiplicity;
 
     use super::*;
     use crate::ctfile::parse_mol_to_ast;
@@ -463,6 +467,93 @@ mod tests {
         assert!(matches!(atom.charge, ValueAst::Lit(0)));
         assert!(matches!(atom.lone_pairs, ValueAst::Undetermined));
         assert!(matches!(atom.spin.unpaired, ValueAst::Lit(0)));
+    }
+
+    #[rstest]
+    #[case::bare(
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        AtomAst {
+            element: ElementAst::Undetermined,
+            isotope_mass: IsotopeMassAst::Natural,
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Undetermined,
+            lone_pairs: ValueAst::Undetermined,
+            spin: SpinStateAst {
+                unpaired: ValueAst::Lit(0),
+                multiplicity: ValueAst::Undetermined,
+            },
+            constraints: AtomConstraintsAst::new(),
+        }
+    )]
+    #[case::bracket_fields(
+        Some(13),
+        Some(-1),
+        Some(2),
+        Some(1),
+        Some(2),
+        Some(SpinMultiplicity::Singlet),
+        AtomAst {
+            element: ElementAst::Undetermined,
+            isotope_mass: IsotopeMassAst::Lit(13),
+            charge: ValueAst::Lit(-1),
+            implicit_hydrogens: ValueAst::Lit(2),
+            lone_pairs: ValueAst::Lit(1),
+            spin: SpinStateAst {
+                unpaired: ValueAst::Lit(2),
+                multiplicity: ValueAst::Lit(1),
+            },
+            constraints: AtomConstraintsAst::new(),
+        }
+    )]
+    fn test_table_atom_try_into_ast(
+        #[case] isotope_mass: Option<u32>,
+        #[case] charge: Option<i8>,
+        #[case] implicit_hydrogens: Option<u8>,
+        #[case] lone_pairs: Option<u8>,
+        #[case] unpaired_electrons: Option<u8>,
+        #[case] multiplicity: Option<SpinMultiplicity>,
+        #[case] expected: AtomAst,
+    ) {
+        let atom = TableAtom {
+            isotope_mass,
+            charge,
+            implicit_hydrogens,
+            lone_pairs,
+            unpaired_electrons,
+            multiplicity,
+            ..TableAtom::wildcard()
+        };
+        assert_eq!(atom.try_into_ast(&()), Ok(expected));
+    }
+
+    #[rstest]
+    fn test_table_atom_try_into_ast_aromatic_wildcard() {
+        let atom = TableAtom {
+            aromatic: Some(true),
+            ..TableAtom::wildcard()
+        };
+        assert_eq!(
+            atom.try_into_ast(&()),
+            Ok(AtomAst {
+                element: ElementAst::Undetermined,
+                isotope_mass: IsotopeMassAst::Natural,
+                charge: ValueAst::Lit(0),
+                implicit_hydrogens: ValueAst::Undetermined,
+                lone_pairs: ValueAst::Undetermined,
+                spin: SpinStateAst {
+                    unpaired: ValueAst::Lit(0),
+                    multiplicity: ValueAst::Undetermined,
+                },
+                constraints: AtomConstraintsAst::from(AtomConstraintAst::AromaticValence(
+                    AromaticValenceAst::Aromatic(ValueAst::Undetermined),
+                )),
+            })
+        );
     }
 
     #[rstest]
