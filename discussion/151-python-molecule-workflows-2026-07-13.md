@@ -888,13 +888,43 @@ covered by cross-family properties.
   contradiction discovered after an earlier atom was successfully planned.
   **Public planning API plus atomic resolver migration (green).** `[dep: S0k]`
 - **S1b — atom-typing edit planner**
-  (`umol-graph/src/ops/valence/atom_typing.rs`): compute topology-derived
-  constraints and registry candidates without enriching atoms in place; select
-  the current candidate according to existing policy; build its `AtomUpdate`;
-  and project the full resolver-owned edit batch only after all atoms succeed.
-  Tests cover derived constraints, selected field values, no-match rollback, and
-  exact preservation of unrelated constraints. **Additive internal refactor
-  (green).** `[dep: S0k]`
+  (`umol-graph/src/ops/valence/atom_typing.rs`): add the public read-only
+  `AtomTypingValence::plan(&MoleculeAst) -> Result<Vec<Edit>, AtomTypingError>`
+  with the same plan representation and application boundary as counts valence.
+  Plan construction first requires a concrete element for every atom, reporting
+  the offending `AtomId`. For each eligible atom, clone its current `AtomAst`
+  once, extend only that clone with topology-derived
+  `AtomView::derive_constraints(false)`, select the preferred compatible
+  registry entry according to `compare_valence_preference`, and narrow the clone
+  against the borrowed selected entry. Derive an `AtomUpdate` with
+  `current.difference_to(&selected)` and project it with
+  `Edit::for_atom_update`; the source molecule is never enriched in place.
+
+  The public resolver maps planning failure to `Solution::Contradictory`, applies
+  the complete edit vector through one checked transaction, and publishes only
+  after successful application:
+
+  ```rust
+  pub fn resolve(
+      &self,
+      ast: &mut MoleculeAst,
+  ) -> Result<Solution<(), AtomTypingError>, TransactionError>;
+  ```
+
+  Registry candidates remain borrowed and selection uses an iterator rather
+  than materializing a candidate vector. The temporary cost is therefore one
+  cloned `AtomAst` per eligible atom, not one clone per registry candidate.
+  Avoiding that clone would require a merged view over stored and derived
+  constraints; defer such an optimization to the constraint-container
+  restructuring instead of introducing a temporary matching abstraction here.
+  Classification remains distinct: `classify_molecule_atom` uses
+  `derive_constraints(true)`, where absent overlays are definite negatives,
+  while planning uses the pre-perception `false` form. Tests cover the exact
+  plan, derived constraints, selected field values, empty-plan identity,
+  concrete-element and no-match errors, successful transactional
+  materialization, unchanged input after a late contradiction, and exact
+  preservation of unrelated constraints. **Public planning API plus atomic
+  resolver migration (green).** `[dep: S0k]`
 - **S1c — valence resolver dispatch**
   (`umol-graph/src/ops/resolve/valence.rs`): dispatch both valence models through
   their planners and retain the present `Solution` classification while making

@@ -40,16 +40,13 @@ impl<'a> ValenceResolver<'a> {
         &self,
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), ValenceContradiction>, ValenceError> {
-        let outcome = match self {
-            Self::AtomTyping(r) => r.resolve(ast).map_err(ValenceContradiction::from),
-            Self::Counts(r) => match r.resolve(ast)? {
-                Solution::Determined(()) | Solution::Underdetermined(()) => Ok(()),
-                Solution::Contradictory(c) => Err(ValenceContradiction::from(c)),
-            },
-        };
-        match outcome {
-            Ok(()) => Ok(Solution::Determined(())),
-            Err(c) => Ok(Solution::Contradictory(c)),
-        }
+        Ok(match self {
+            Self::AtomTyping(r) => r
+                .resolve(ast)?
+                .map_contradiction(ValenceContradiction::from),
+            Self::Counts(r) => r
+                .resolve(ast)?
+                .map_contradiction(ValenceContradiction::from),
+        })
     }
 }

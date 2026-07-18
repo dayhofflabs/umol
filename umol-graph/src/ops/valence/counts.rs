@@ -169,7 +169,7 @@ impl<'a> CountsValence<'a> {
         Ok(())
     }
 
-    /// Classify molecule atom (including ground atoms) against valence table: 
+    /// Classify molecule atom (including ground atoms) against valence table:
     /// - `Determined` if some state admits it.
     /// - `Contradictory` if no consistent state exists.
     /// - `Underdetermined` if atom is not ground.
