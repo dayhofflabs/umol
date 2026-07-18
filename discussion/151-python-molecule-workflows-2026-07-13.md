@@ -174,7 +174,7 @@ public diagnostic report.
 
 ### Resolved boundary
 
-There are two relevant Rust paths:
+There are currently two relevant Rust paths:
 
 - `umol_io::smiles::parse_smiles_to_ast` parses and raises to AST but does not
   resolve the result;
@@ -217,14 +217,20 @@ made suitable for external callers: `SmilesLintConfig` currently stores
 `Vec<&'static str>`, which cannot directly own Python strings. Named IO presets do
 not have this problem.
 
-The unresolved `umol-io` AST parser remains an advanced, later surface. This
-round's constructor promises a determined molecule or a typed operation error.
+This round removes the unresolved `umol-io` AST shortcut from the public format
+API. Syntax parsing instead produces a `Smiles` format value backed by TableIR;
+graph-model construction is the separate, explicit ingestion step. The Python
+constructor composes both steps and promises a determined molecule or a typed
+operation error.
 
-### Resolved-SMILES error
+### SMILES input error
 
 The current Rust resolved parser returns `Box<dyn UmolError>` across a fixed
-parse → raise → resolve pipeline. Before binding it, the operation receives one
-compact concrete error that preserves the categories callers can act on:
+parse → raise → resolve pipeline. Before binding it, parsing is made strictly
+syntax-to-`Smiles`, while the graph-owned `Ingest` trait converts that parsed
+format value into a determined `MoleculeAst`. The combined convenience operation
+receives one compact `SmilesInputError` preserving the categories callers can
+act on:
 
 - SMILES syntax failure;
 - TableIR-to-model conversion failure;
@@ -693,9 +699,10 @@ work as follows:
    stages into read-only planning plus edit emission; apply each stage immediately
    so the next observes its materialized result; and roll the complete pipeline
    back on contradiction or execution failure.
-2. **Other operation contracts in Rust.** Introduce the concrete resolved-SMILES
-   error; make fingerprint precondition and dynamic-argument paths non-panicking;
-   classify reaction application outcomes without changing matching algorithms.
+2. **Other operation contracts in Rust.** Introduce the parsed `Smiles` format
+   value, graph-owned ingestion trait, and concrete `SmilesInputError`; make
+   fingerprint precondition and dynamic-argument paths non-panicking; classify
+   reaction application outcomes without changing matching algorithms.
 3. **Workflow configuration values.** Bind `SmilesIoConfig`; define fingerprint
    and reaction-application configs with high-level defaults and explicit
    algorithm selection internally.
@@ -1046,22 +1053,88 @@ covered by cross-family properties.
 S1 is the atomic-resolution milestone. The general resolver is correct without
 clone-and-publish, `transact_validated`, validator combinators, or savepoints.
 
-### S2 — Concrete resolved-SMILES contract
+### S2 — Explicit SMILES representation and concrete ingestion
 
-- **S2a — resolved-SMILES error value**
-  (`umol-graph/src/parse.rs`): add one concrete operation error preserving the
-  fixed parse → TableIR conversion → resolve categories: SMILES parse failure,
-  `RaiseError`, resolver contradiction, underdetermination, and resolver execution
-  failure. Implement source conversions and exact display/source behavior.
-  Table tests construct every category directly without depending on the parser
-  to manufacture unrelated failures. **Additive (green).** `[dep: S1h]`
-- **S2b — resolved parser migration**
-  (`umol-graph/src/parse.rs` and workspace callers): change the resolved SMILES
-  functions from `Box<dyn UmolError>` to the S2a error, preserving the default
-  `SmilesIoConfig::basic_opensmiles()` and explicit configured path. Migrate all
-  callers and tests in the same subitem. End-to-end cases distinguish syntax,
+- **S2a — parsed SMILES value and ingestion contract**
+  (`umol-io/src/smiles.rs`, `umol-io/src/smiles/parser.rs`, and
+  `umol-graph/src/ingest.rs`): make the boundary between parsing an external
+  format and constructing the graph model explicit.
+
+  `umol_io::smiles::Smiles`, with a private `table_ir::Molecule` field, is the
+  parsed semantic value of a molecular SMILES representation. It is not the
+  source string and does not preserve source spelling. The private wrapper
+  establishes that the contained TableIR originated from, or was checked for
+  representation by, SMILES; arbitrary TableIR cannot be wrapped unchecked.
+  `Smiles::parse`, `parse_bytes`, `parse_with`, and `parse_bytes_with` perform
+  syntax parsing only and return `Smiles`. `as_table_ir` and `into_table_ir`
+  expose the neutral boundary value read-only or by ownership; there is no
+  mutable escape that could invalidate the format invariant. This associated
+  API replaces public names such as `parse_smiles_bytes_to_table_ir_with`
+  without weakening the distinction between syntax parsing and model
+  construction.
+
+  The graph-owned public ingestion trait is:
+
+  ```rust
+  pub trait Ingest {
+      type Output;
+      type Error;
+
+      fn ingest(
+          &self,
+          model: &ChemistryModel,
+      ) -> Result<Self::Output, Self::Error>;
+  }
+  ```
+
+  `Ingest for Smiles` returns `MoleculeAst` and borrows the parsed value so the
+  same external representation can be interpreted under more than one
+  chemistry model. Its implementation performs TableIR-to-`MoleculeAst`
+  conversion and then resolution; those are ingestion details rather than
+  parsing semantics. `MoleculeIngestError` preserves the four post-parse
+  categories: model conversion (`RaiseError`), resolver contradiction,
+  underdetermination, and resolver execution failure.
+
+  One flat `SmilesInputError` covers the combined text-to-model convenience
+  operation. Its public variants are `Syntax(ParseError)`,
+  `ModelConversion(RaiseError)`, `Contradiction(ResolverContradiction)`,
+  `Underdetermined(ResolveUnderdetermined)`, and `Execution(ResolverError)`.
+  Unprefixed display preserves the underlying diagnostic, and each variant
+  exposes its wrapped error directly through `Error::source`; conversions from
+  `ParseError` and `MoleculeIngestError` remove dynamic error erasure without
+  exposing pipeline crate boundaries to Python. Both concrete errors implement
+  `UmolError`.
+
+  The reverse path follows the same structural boundary when SMILES output is
+  added: `MoleculeAst` is converted, with an explicit output configuration, to
+  a checked `Smiles` value, and `Smiles::render` serializes that value to text.
+  Rendering does not bypass the format value by returning a string directly
+  from `MoleculeAst`. Its configuration and errors remain separate from parse
+  configuration and errors. `ReactionSmiles`, `Mol`, and `Sdf` may later apply
+  the same private-wrapper pattern over their appropriate TableIR values; they
+  need no common `*Format` suffix or marker trait until an operation actually
+  requires format-polymorphic code.
+
+  Rust table tests construct every error category directly and assert exact
+  display/source behavior. Wrapper tests prove the syntax-only parse boundary,
+  private-format invariant, TableIR access, successful ingestion, and reuse
+  under distinct chemistry models. **Additive (green).** `[dep: S1h]`
+- **S2b — SMILES ingestion migration**
+  (`umol-io/src/smiles.rs`, `umol-graph/src/ingest.rs`, the former
+  `umol-graph/src/parse.rs`, and workspace callers): migrate resolved SMILES
+  callers to `Smiles::parse*` followed by `Ingest::ingest`, and expose a compact
+  `umol_graph::ingest::smiles*` convenience surface returning
+  `SmilesInputError` for callers that want the combined operation. Preserve the
+  default `SmilesIoConfig::basic_opensmiles()` and explicit configured path.
+  Retire the public SMILES-to-AST helpers in `umol-io` and the
+  `parse_smiles*_to_table_ir*` naming pileup after migrating all workspace
+  callers and tests; `parse` then means syntax-to-format-value rather than
+  syntax-to-graph-model. End-to-end cases distinguish syntax,
   TableIR-to-model conversion, contradiction, underdetermination, and successful
-  determined output. **Breaking return-type migration (red→green).** `[dep: S2a]`
+  determined output. Python's later `Molecule.from_smiles` composes the same two
+  boundaries without requiring a public Python `Smiles` wrapper; a future
+  `Molecule.to_smiles` likewise converts through the Rust `Smiles` value before
+  rendering. **Breaking API migration (red→green).** `[dep: S2a]`
 
 ### S3 — Safe and reproducible Rust fingerprint contracts
 
