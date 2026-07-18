@@ -17,7 +17,7 @@ pub use bonds::{BondsContradiction, BondsError, BondsResolver};
 pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
 };
-pub use stereo::{StereoContradiction, StereoError, StereoResolver};
+pub use stereo::{StereoContradiction, StereoError, StereoResolver, StereoResolverConfig};
 use thiserror::Error;
 use umol_ast::ast::MoleculeAst;
 use umol_utils::error::UmolError;

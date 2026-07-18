@@ -1,95 +1,204 @@
-//! Structural stereo resolver: adds a `:stereo-atom` / `:stereo-bond` element
-//! for each atom `#T` / bond `#C` that can be realized, using the canonical
-//! ligand frame and copying the coset verbatim (raise already stored it in that
-//! frame). Mirrors `AromaticityResolver`; computes no stereo symmetry; runs
-//! after aromaticity (so aromatic-system membership is known). Skips sites that
-//! already bear a stereo element, so re-runs are a no-op.
+//! Structural stereo resolver. Planning reads `#T` / `#C` assertions from the
+//! materialized aromaticity state and emits stereo-element additions plus
+//! optional source-constraint removals without mutating the molecule.
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AsLit, AtomId, BondId, CisTransStereoAst, MoleculeAst, StereoAtomAst, StereoBondAst,
-    StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoAst,
+    AsLit, AtomConstraintAst, AtomHandle, AtomId, AtomUpdate, BondConstraintAst, BondHandle,
+    BondId, BondUpdate, CisTransStereoAst, Edit, MoleculeAst, StereoAtomAst, StereoBondAst,
+    StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoAst,
+    TransactionError,
 };
 use umol_utils::solution::Solution;
 
-use crate::ops::model::StereoModel;
+use crate::ops::model::{InconsistencyPolicy, StereoModel};
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StereoResolverConfig {
+    pub reset_stereo_constraints: bool,
+}
 
 #[derive(Clone, Debug)]
 pub struct StereoResolver {
     model: StereoModel,
+    config: StereoResolverConfig,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum StereoContradiction {}
+pub enum StereoContradiction {
+    #[error("tetrahedral stereo assertion at atom {0:?} cannot be realized")]
+    UnrealizableAtom(AtomId),
+    #[error("cis-trans stereo assertion at bond {0:?} cannot be realized")]
+    UnrealizableBond(BondId),
+}
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum StereoError {}
+pub enum StereoError {
+    #[error(transparent)]
+    Transaction(#[from] TransactionError),
+}
 
 impl StereoResolver {
     pub fn new(model: &StereoModel) -> Self {
+        Self::with_config(model, StereoResolverConfig::default())
+    }
+
+    pub fn with_config(model: &StereoModel, config: StereoResolverConfig) -> Self {
         Self {
             model: model.clone(),
+            config,
         }
     }
 
-    /// Adds a stereo element for each realizable atom `#T` / bond `#C`. The
-    /// per-site decision is read first (immutable borrow), then applied through
-    /// a single builder pass. Returns `Determined`; the inconsistency policy for
-    /// non-realizable assertions is deferred.
+    /// Construct the complete stereo edit plan without mutating `ast`.
+    pub fn plan(
+        &self,
+        ast: &MoleculeAst,
+    ) -> Result<Solution<Vec<Edit>, StereoContradiction>, StereoError> {
+        let mut edits = Vec::new();
+        for id in ast.atoms().ids() {
+            if ast.stereo_atoms().is_at(id) {
+                continue;
+            }
+            let TetrahedralStereoAst::Stereo(coset) = ast
+                .atom(id)
+                .ast
+                .constraints
+                .tetrahedral_stereo()
+                .unwrap_or(&TetrahedralStereoAst::Undetermined)
+            else {
+                continue;
+            };
+            let Some((ligands, stereo)) = self.derive_stereo_atom(ast, id, coset.clone()) else {
+                match self.model.inconsistency {
+                    InconsistencyPolicy::Keep => {}
+                    InconsistencyPolicy::Strip => {
+                        let mut update = AtomUpdate::default();
+                        update.constraints.set(AtomConstraintAst::TetrahedralStereo(
+                            TetrahedralStereoAst::Undetermined,
+                        ));
+                        edits.extend(Edit::for_atom_update(
+                            AtomHandle::Id(id),
+                            ast.atom(id).ast,
+                            &update,
+                        ));
+                    }
+                    InconsistencyPolicy::Error => {
+                        return Ok(Solution::Contradictory(
+                            StereoContradiction::UnrealizableAtom(id),
+                        ));
+                    }
+                }
+                continue;
+            };
+            edits.push(Edit::AddStereoAtom {
+                site: AtomHandle::Id(id),
+                ligands: ligands
+                    .into_iter()
+                    .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                    .collect(),
+                ast: stereo,
+            });
+            if self.config.reset_stereo_constraints {
+                let mut update = AtomUpdate::default();
+                update.constraints.set(AtomConstraintAst::TetrahedralStereo(
+                    TetrahedralStereoAst::Undetermined,
+                ));
+                edits.extend(Edit::for_atom_update(
+                    AtomHandle::Id(id),
+                    ast.atom(id).ast,
+                    &update,
+                ));
+            }
+        }
+        for id in ast.bonds().ids() {
+            if ast.stereo_bonds().is_at(id) {
+                continue;
+            }
+            let CisTransStereoAst::Stereo(coset) = ast
+                .bond(id)
+                .ast
+                .constraints
+                .cis_trans_stereo()
+                .unwrap_or(&CisTransStereoAst::Undetermined)
+            else {
+                continue;
+            };
+            let Some((ligands, stereo)) = self.derive_stereo_bond(ast, id, coset.clone()) else {
+                match self.model.inconsistency {
+                    InconsistencyPolicy::Keep => {}
+                    InconsistencyPolicy::Strip => {
+                        let mut update = BondUpdate::default();
+                        update.constraints.set(BondConstraintAst::CisTransStereo(
+                            CisTransStereoAst::Undetermined,
+                        ));
+                        edits.extend(Edit::for_bond_update(
+                            BondHandle::Id(id),
+                            ast.bond(id).ast,
+                            &update,
+                        ));
+                    }
+                    InconsistencyPolicy::Error => {
+                        return Ok(Solution::Contradictory(
+                            StereoContradiction::UnrealizableBond(id),
+                        ));
+                    }
+                }
+                continue;
+            };
+            edits.push(Edit::AddStereoBond {
+                site: BondHandle::Id(id),
+                ligands: ligands
+                    .into_iter()
+                    .map(|ligand| (AtomHandle::Id(ligand.atom_id), ligand.kind))
+                    .collect(),
+                ast: stereo,
+            });
+            if self.config.reset_stereo_constraints {
+                let mut update = BondUpdate::default();
+                update.constraints.set(BondConstraintAst::CisTransStereo(
+                    CisTransStereoAst::Undetermined,
+                ));
+                edits.extend(Edit::for_bond_update(
+                    BondHandle::Id(id),
+                    ast.bond(id).ast,
+                    &update,
+                ));
+            }
+        }
+        Ok(Solution::Determined(edits))
+    }
+
+    /// Plan and atomically apply structural stereo resolution.
     pub fn resolve(
         &self,
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), StereoContradiction>, StereoError> {
-        let atom_adds: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> = ast
-            .atoms()
-            .ids()
-            .filter_map(|id| self.resolve_stereo_atom(ast, id))
-            .collect();
-        let bond_adds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)> = ast
-            .bonds()
-            .ids()
-            .filter_map(|id| self.resolve_stereo_bond(ast, id))
-            .collect();
-
-        if atom_adds.is_empty() && bond_adds.is_empty() {
-            return Ok(Solution::Determined(()));
-        }
-
-        let mut builder = ast.edit();
-        for (site, ligands, data) in atom_adds {
-            builder.add_stereo_atom(site, ligands, data);
-        }
-        for (site, ligands, data) in bond_adds {
-            builder.add_stereo_bond(site, ligands, data);
-        }
-        *ast = builder.build();
-
+        let edits = match self.plan(ast)? {
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(contradiction) => {
+                return Ok(Solution::Contradictory(contradiction));
+            }
+        };
+        let mut editor = ast.edit();
+        editor.transact(edits)?;
+        *ast = editor.build();
         Ok(Solution::Determined(()))
     }
 
-    fn resolve_stereo_atom(
+    fn derive_stereo_atom(
         &self,
         ast: &MoleculeAst,
         id: AtomId,
-    ) -> Option<(AtomId, Vec<StereoLigand>, StereoAtomAst)> {
-        if ast.stereo_atoms().is_at(id) {
-            return None;
-        }
+        coset: StereoCosetAst,
+    ) -> Option<(Vec<StereoLigand>, StereoAtomAst)> {
         let atom = ast.atom(id);
         if atom.is_in_aromatic_system() {
             return None;
         }
 
         let kind = StereoKind::Tetrahedral;
-        let TetrahedralStereoAst::Stereo(coset) = atom
-            .ast
-            .constraints
-            .tetrahedral_stereo()
-            .unwrap_or(&TetrahedralStereoAst::Undetermined)
-        else {
-            return None;
-        };
-        let coset = coset.clone();
         let model = self.model.kind_model(kind)?;
         if !model.scope.contains(atom.element().as_lit()?) {
             return None;
@@ -113,29 +222,18 @@ impl StereoResolver {
             return None;
         }
 
-        Some((id, ligands, StereoAtomAst::new(kind, coset)))
+        Some((ligands, StereoAtomAst::new(kind, coset)))
     }
 
-    fn resolve_stereo_bond(
+    fn derive_stereo_bond(
         &self,
         ast: &MoleculeAst,
         id: BondId,
-    ) -> Option<(BondId, Vec<StereoLigand>, StereoBondAst)> {
-        if ast.stereo_bonds().is_at(id) {
-            return None;
-        }
+        coset: StereoCosetAst,
+    ) -> Option<(Vec<StereoLigand>, StereoBondAst)> {
         let bond = ast.bond(id);
 
         let kind = StereoKind::CisTrans;
-        let CisTransStereoAst::Stereo(coset) = bond
-            .ast
-            .constraints
-            .cis_trans_stereo()
-            .unwrap_or(&CisTransStereoAst::Undetermined)
-        else {
-            return None;
-        };
-        let coset = coset.clone();
         let model = self.model.kind_model(kind)?;
         // Endpoints are canonical (min, max) = raise's (start, end), so side_a/side_b
         // match the coset frame raise stored.
@@ -150,7 +248,7 @@ impl StereoResolver {
         let side_b = self.bond_side_ligands(ast, b, a)?;
         let ligands = vec![side_a[0], side_a[1], side_b[0], side_b[1]];
 
-        Some((id, ligands, StereoBondAst::new(kind, coset)))
+        Some((ligands, StereoBondAst::new(kind, coset)))
     }
 
     /// The two ligands of one double-bond end, in `cis_trans_side` order: the
@@ -188,111 +286,173 @@ impl StereoResolver {
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
-    use umol_ast::ast::{
-        AtomId, BondId, StereoAtomId, StereoCosetAst, StereoKind, StereoLigandKind,
-    };
+    use rstest::{fixture, rstest};
+    use umol_ast::ast::{AtomId, BondId};
     use umol_ast::mol_dsl_ground;
-    use umol_chem::element::Element;
-    use umol_utils::solution::Solution;
 
-    use super::StereoResolver;
-    use crate::ops::model::{ElementScope, StereoKindModel, StereoModel};
+    use super::*;
 
-    type StereoAtomData = (
-        AtomId,
-        StereoKind,
-        StereoCosetAst,
-        Vec<(AtomId, StereoLigandKind)>,
-    );
-    type StereoBondData = (
-        BondId,
-        StereoKind,
-        StereoCosetAst,
-        Vec<(AtomId, StereoLigandKind)>,
-    );
+    #[fixture]
+    fn stereo_model() -> StereoModel {
+        StereoModel::default()
+    }
 
     #[rstest]
-    #[case::tetrahedral_atom(
-        r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"] :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#,
-        vec![(AtomId(1), StereoKind::Tetrahedral, StereoCosetAst::Lit(1),
-        vec![(AtomId(0), StereoLigandKind::Atom), (AtomId(2), StereoLigandKind::Atom),
-             (AtomId(3), StereoLigandKind::Atom), (AtomId(1), StereoLigandKind::ImplicitHydrogen)])], vec![])]
-    #[case::cis_trans_bond(
-        r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"] :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]}"#,
-        vec![], vec![(BondId(1), StereoKind::CisTrans, StereoCosetAst::Lit(1),
-        vec![(AtomId(0), StereoLigandKind::Atom), (AtomId(1), StereoLigandKind::ImplicitHydrogen),
-             (AtomId(3), StereoLigandKind::Atom), (AtomId(2), StereoLigandKind::ImplicitHydrogen)])])]
-    #[case::two_coordinate_skip(r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#, vec![], vec![])]
-    #[case::aromatic_skip(
-        r##"{:atoms ["C #h #T1" "C #h" "C #h" "C #h" "C #h" "C #h"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]}"##, vec![], vec![])]
-    #[case::no_stereo( r#"{:atoms ["C #h3" "C #h3"] :bonds [[0 1 "1"]]}"#, vec![], vec![])]
-    fn test_stereo_resolver_resolve(
-        #[case] input: &str,
-        #[case] expected_atoms: Vec<StereoAtomData>,
-        #[case] expected_bonds: Vec<StereoBondData>,
+    fn test_stereo_resolver_config_default() {
+        assert_eq!(
+            StereoResolverConfig::default(),
+            StereoResolverConfig {
+                reset_stereo_constraints: false,
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::tetrahedral(
+        mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
+                             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#),
+        vec![Edit::AddStereoAtom {
+            site: AtomHandle::Id(AtomId(1)),
+            ligands: vec![
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
+            ],
+            ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+        }]
+    )]
+    #[case::cis_trans(
+        mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
+                             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]}"#),
+        vec![Edit::AddStereoBond {
+            site: BondHandle::Id(BondId(1)),
+            ligands: vec![
+                (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
+                (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                (AtomHandle::Id(AtomId(2)), StereoLigandKind::ImplicitHydrogen),
+            ],
+            ast: StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+        }]
+    )]
+    fn test_stereo_resolver_plan(
+        stereo_model: StereoModel,
+        #[case] molecule: MoleculeAst,
+        #[case] expected: Vec<Edit>,
     ) {
-        let mut ast = mol_dsl_ground!(input);
-        let solution = StereoResolver::new(&StereoModel::default())
-            .resolve(&mut ast)
-            .unwrap();
-        assert!(matches!(solution, Solution::Determined(())));
-
-        let atoms: Vec<StereoAtomData> = ast
-            .stereo_atoms()
-            .iter()
-            .map(|s| {
-                (
-                    s.site().id,
-                    s.kind(),
-                    s.coset().clone(),
-                    s.ligands().map(|l| (l.atom_id(), l.kind())).collect(),
-                )
-            })
-            .collect();
-        let bonds: Vec<StereoBondData> = ast
-            .stereo_bonds()
-            .iter()
-            .map(|s| {
-                (
-                    s.site().id,
-                    s.kind(),
-                    s.coset().clone(),
-                    s.ligands().map(|l| (l.atom_id(), l.kind())).collect(),
-                )
-            })
-            .collect();
-        assert_eq!(atoms, expected_atoms);
-        assert_eq!(bonds, expected_bonds);
+        assert_eq!(
+            StereoResolver::new(&stereo_model).plan(&molecule),
+            Ok(Solution::Determined(expected))
+        );
     }
 
     #[rstest]
-    fn test_stereo_resolver_resolve_out_of_scope() {
-        let mut model = StereoModel::default();
-        model.kind_models[StereoKind::Tetrahedral as usize] = Some(StereoKindModel {
-            scope: ElementScope::AllowList(vec![Element::N]),
-            fluxionality: false,
-        });
-        let mut ast = mol_dsl_ground!(
-            r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"] :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
+    #[case::no_assertion(mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h3"] :bonds [[0 1 "1"]]}"#))]
+    #[case::existing_element(mol_dsl_ground!(r#"{
+        :atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
+        :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
+        :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :type "Th1"}]
+    }"#))]
+    fn test_stereo_resolver_plan_identity(
+        stereo_model: StereoModel,
+        #[case] molecule: MoleculeAst,
+    ) {
+        assert_eq!(
+            StereoResolver::new(&stereo_model).plan(&molecule),
+            Ok(Solution::Determined(Vec::new()))
         );
-        StereoResolver::new(&model).resolve(&mut ast).unwrap();
-        assert_eq!(ast.stereo_atoms().iter().count(), 0);
     }
 
     #[rstest]
-    fn test_stereo_resolver_resolve_idempotent() {
-        let resolver = StereoResolver::new(&StereoModel::default());
-        let mut ast = mol_dsl_ground!(
-            r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"] :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
+    #[case::keep(InconsistencyPolicy::Keep, Solution::Determined(Vec::new()))]
+    #[case::strip(
+        InconsistencyPolicy::Strip,
+        Solution::Determined(vec![Edit::ModifyAtomConstraint {
+            id: AtomHandle::Id(AtomId(1)),
+            old: Some(AtomConstraintAst::TetrahedralStereo(
+                TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1)),
+            )),
+            new: None,
+        }])
+    )]
+    #[case::error(
+        InconsistencyPolicy::Error,
+        Solution::Contradictory(StereoContradiction::UnrealizableAtom(AtomId(1)))
+    )]
+    fn test_stereo_resolver_plan_inconsistency(
+        mut stereo_model: StereoModel,
+        #[case] policy: InconsistencyPolicy,
+        #[case] expected: Solution<Vec<Edit>, StereoContradiction>,
+    ) {
+        stereo_model.inconsistency = policy;
+        let molecule = mol_dsl_ground!(
+            r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
         );
-        resolver.resolve(&mut ast).unwrap();
-        resolver.resolve(&mut ast).unwrap();
-        assert_eq!(ast.stereo_atoms().iter().count(), 1);
-        let s = ast.stereo_atom(StereoAtomId(0));
-        assert_eq!(s.kind(), StereoKind::Tetrahedral);
-        assert_eq!(*s.coset(), StereoCosetAst::Lit(1));
+        assert_eq!(
+            StereoResolver::new(&stereo_model).plan(&molecule),
+            Ok(expected)
+        );
+    }
+
+    #[rstest]
+    #[case::tetrahedral(
+        mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
+                             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#),
+        mol_dsl_ground!(r#"{
+            :atoms ["C #h3" "C #h1" "N #h2" "O #h1"]
+            :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
+            :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :type "Th1"}]
+        }"#)
+    )]
+    #[case::cis_trans(
+        mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
+                             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]}"#),
+        mol_dsl_ground!(r#"{
+            :atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :type "Ct1"}]
+        }"#)
+    )]
+    fn test_stereo_resolver_resolve(
+        stereo_model: StereoModel,
+        #[case] mut molecule: MoleculeAst,
+        #[case] expected: MoleculeAst,
+    ) {
+        let resolver = StereoResolver::with_config(
+            &stereo_model,
+            StereoResolverConfig {
+                reset_stereo_constraints: true,
+            },
+        );
+        assert_eq!(
+            resolver.resolve(&mut molecule),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    #[case::atom(
+        mol_dsl_ground!(r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"]
+                             :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        StereoContradiction::UnrealizableAtom(AtomId(1))
+    )]
+    #[case::bond(
+        mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h2" "C #h1"]
+                             :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#),
+        StereoContradiction::UnrealizableBond(BondId(1))
+    )]
+    fn test_stereo_resolver_resolve_error(
+        stereo_model: StereoModel,
+        #[case] mut molecule: MoleculeAst,
+        #[case] expected: StereoContradiction,
+    ) {
+        let original = molecule.clone();
+        assert_eq!(
+            StereoResolver::new(&stereo_model).resolve(&mut molecule),
+            Ok(Solution::Contradictory(expected))
+        );
+        assert_eq!(molecule, original);
     }
 }
