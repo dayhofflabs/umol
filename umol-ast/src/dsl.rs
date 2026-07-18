@@ -52,8 +52,8 @@ pub use dative::{
 pub use error::ParseError;
 pub use molecule::{MoleculeDsl, MoleculeMetadata};
 pub use multicenter::{
-    parse_multicenter_bond, MulticenterBondConstraintDsl, MulticenterBondDsl,
-    MulticenterBondPredicate,
+    parse_multicenter_bond, parse_multicenter_bond_update, MulticenterBondConstraintDsl,
+    MulticenterBondDsl, MulticenterBondPredicate, MulticenterBondUpdateDsl,
 };
 pub use namespace::{MoleculeNamespace, Namespace};
 pub use noncovalent::{parse_noncovalent_bond, NoncovalentBondConstraintDsl, NoncovalentBondDsl};

@@ -40,7 +40,7 @@ use super::molecule::{
     MulticenterBondEntryInput, NoncovalentBondEntryInput, StereoAtomEntryInput,
     StereoBondEntryInput,
 };
-use super::multicenter::{MulticenterBondDsl, PartialMulticenterBondDsl};
+use super::multicenter::{MulticenterBondDsl, MulticenterBondUpdateDsl};
 use super::namespace::{MoleculeNamespace, Namespace};
 use super::noncovalent::{NoncovalentBondDsl, PartialNoncovalentBondDsl};
 use super::refs::{
@@ -72,7 +72,7 @@ use crate::ast::reaction::ReactionAst;
 use crate::ast::stereo::{StereoConfigurationAst, StereoCosetAst};
 use crate::ast::traits::{FromAst, IntoAst, Lattice};
 use crate::ast::{
-    AromaticSystemUpdate, DativeBondUpdate, EntityPatch, MulticenterBondAst, NoncovalentBondAst,
+    AromaticSystemUpdate, DativeBondUpdate, EntityPatch, MulticenterBondUpdate, NoncovalentBondAst,
     StereoAtomAst, StereoBondAst, StereoKind, StereoLigand,
 };
 
@@ -742,7 +742,7 @@ pub(crate) enum DeltaInput {
     AromaticSystemModify(AromaticSystemRef, AromaticSystemUpdate),
     MulticenterBondAdd(MulticenterBondEntryInput),
     MulticenterBondRemove(MulticenterBondRef),
-    MulticenterBondModify(MulticenterBondRef, MulticenterBondAst),
+    MulticenterBondModify(MulticenterBondRef, MulticenterBondUpdate),
     NoncovalentBondAdd(NoncovalentBondEntryInput),
     NoncovalentBondRemove(NoncovalentBondRef),
     NoncovalentBondModify(NoncovalentBondRef, NoncovalentBondAst),
@@ -991,8 +991,9 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    let new = lhs.multicenter_bond(id).ast.update(&rhs);
-                    for d in MulticenterBondDelta::diff(id, lhs.multicenter_bond(id).ast, &new) {
+                    for d in
+                        MulticenterBondDelta::for_update(id, lhs.multicenter_bond(id).ast, &rhs)
+                    {
                         resolved.push(Delta::MulticenterBond(d));
                     }
                 }
@@ -1506,10 +1507,10 @@ fn read_delta_multicenter_bond_input(
             de.consume_byte(b'[')?;
             let r = read_multicenter_bond_ref(de)?;
             let s = de.read_string()?;
-            let dsl: PartialMulticenterBondDsl = s
+            let dsl: MulticenterBondUpdateDsl = s
                 .as_ref()
                 .parse()
-                .map_err(|e| DeError::subgrammar("partial-multicenter-bond", e))?;
+                .map_err(|e| DeError::subgrammar("multicenter-bond-update", e))?;
             if !de.try_consume_byte(b']')? {
                 return Err(
                     DeError::Custom("multicenter-bond :modify expects [ref dsl]".into()).into(),
@@ -1856,7 +1857,7 @@ fn parse_delta_multicenter_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeErr
             }
             Ok(DeltaInput::MulticenterBondModify(
                 MulticenterBondRef::from_edn(&v[0])?,
-                PartialMulticenterBondDsl::from_edn(&v[1])?.0,
+                MulticenterBondUpdateDsl::from_edn(&v[1])?.0,
             ))
         }
         o => Err(DeError::Custom(format!(
@@ -2409,30 +2410,31 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 | MulticenterBondDelta::ModifyConstraint { id, .. },
             ) => {
                 let id = *id;
-                let mut partial = MulticenterBondAst::default();
+                let mut update = MulticenterBondUpdate::default();
                 while let Some(Delta::MulticenterBond(delta)) = deltas.get(i) {
                     match delta {
                         MulticenterBondDelta::ModifyField { id: j, change } if *j == id => {
                             match change {
                                 MulticenterBondFieldChange::Electrons { new, .. } => {
-                                    partial.electrons = new.clone()
+                                    update.electrons = Some(new.clone())
                                 }
                                 MulticenterBondFieldChange::Charge { new, .. } => {
-                                    partial.charge = new.clone()
+                                    update.charge = Some(new.clone())
                                 }
                                 MulticenterBondFieldChange::Spin { new, .. } => {
-                                    partial.spin = new.clone()
+                                    update.spin.unpaired = Some(new.unpaired.clone());
+                                    update.spin.multiplicity = Some(new.multiplicity.clone());
                                 }
                             }
                         }
                         MulticenterBondDelta::ModifyConstraint { id: j, old, new } if *j == id => {
                             match new {
                                 Some(c) => {
-                                    partial.constraints.set(c.clone());
+                                    update.constraints.set(c.clone());
                                 }
                                 None => {
                                     if let Some(old) = old {
-                                        partial.constraints.set(old.as_undetermined());
+                                        update.constraints.set(old.as_undetermined());
                                     }
                                 }
                             }
@@ -2445,7 +2447,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let payload = Edn::Vector(
                     vec![
                         MulticenterBondRef::denote(id, combined).to_edn(),
-                        PartialMulticenterBondDsl(partial).to_edn(),
+                        MulticenterBondUpdateDsl(update).to_edn(),
                     ]
                     .into(),
                 );
@@ -2901,10 +2903,12 @@ mod tests {
     use crate::ast::constraint::{
         AromaticSystemConstraintAst, AromaticSystemConstraintsAst, AtomConstraintAst,
         BondConstraintAst, Constraint, DativeBondConstraintAst, DativeBondConstraintsAst,
-        MoleculeConstraint, RingScope,
+        MoleculeConstraint, MulticenterBondConstraintAst, MulticenterBondConstraintsAst, RingScope,
     };
     use crate::ast::delta::{ConstraintDelta, Deltas};
-    use crate::ast::edit::{AromaticSystemFieldChange, AtomFieldChange, BondFieldChange};
+    use crate::ast::edit::{
+        AromaticSystemFieldChange, AtomFieldChange, BondFieldChange, MulticenterBondFieldChange,
+    };
     use crate::ast::electrons::ElectronCountsAst;
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::spin::{SpinStateAst, SpinStateUpdate};
@@ -2912,7 +2916,9 @@ mod tests {
     use crate::dsl::bond::BondDsl;
     use crate::dsl::constraint::MoleculeConstraintDsl;
     use crate::dsl::molecule::AtomSpecInput;
-    use crate::dsl::refs::{AromaticSystemRef, AtomRef, BondRef, DativeBondRef};
+    use crate::dsl::refs::{
+        AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef,
+    };
     use crate::mol_dsl;
 
     #[rstest]
@@ -3180,6 +3186,34 @@ mod tests {
     #[case::spin_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Id("a1".into()), AromaticSystemUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
     #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Id("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_aromatic_system(
+        #[case] input: &str,
+        #[case] expected: DeltaInput,
+    ) {
+        assert_eq!(
+            read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::spin_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Id("m1".into()), MulticenterBondUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Id("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
+    fn test_parse_delta_input_multicenter_bond(
+        #[case] input: &str,
+        #[case] expected: DeltaInput,
+    ) {
+        assert_eq!(
+            parse_delta_input(&read_string(input).unwrap()).unwrap(),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::spin_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Id("m1".into()), MulticenterBondUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Id("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
+    fn test_read_delta_input_multicenter_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
     ) {
@@ -3678,6 +3712,35 @@ mod tests {
         assert_eq!(ast.deltas, Deltas::from_iter(expected));
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::electrons_undetermined(
+        r##"{:lhs {:atoms ["C" "C" "C"] :multicenter-bonds [{:id :m1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:multicenter-bond {:modify [:m1 "*"]}}]}"##,
+        vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Electrons { old: ElectronCountsAst::Lit(vec![1, 1, 1]), new: ElectronCountsAst::Undetermined } })],
+    )]
+    #[case::charge_undetermined(
+        r##"{:lhs {:atoms ["C" "C" "C"] :multicenter-bonds [{:id :m1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:multicenter-bond {:modify [:m1 "#c*"]}}]}"##,
+        vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined } })],
+    )]
+    #[case::spin_component(
+        r##"{:lhs {:atoms ["C" "C" "C"] :multicenter-bonds [{:id :m1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:multicenter-bond {:modify [:m1 "#s1"]}}]}"##,
+        vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) } })],
+    )]
+    #[case::constraint_removal(
+        r##"{:lhs {:atoms ["C" "C" "C"] :multicenter-bonds [{:id :m1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:multicenter-bond {:modify [:m1 "#e*"]}}]}"##,
+        vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { id: MulticenterBondId(0), old: Some(MulticenterBondConstraintAst::electron_count(6_i64)), new: None })],
+    )]
+    fn test_reaction_input_into_ast_multicenter_bond_modify(
+        #[case] input: &str,
+        #[case] expected: Vec<Delta>,
+    ) {
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(ast.deltas, Deltas::from_iter(expected));
+    }
+
     #[rstest]
     fn test_reaction_input_into_ast_constraint_add() {
         let input = r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}"##;
@@ -3816,7 +3879,8 @@ mod tests {
                 .with_bond_keyword(BondId(0), "b1")
                 .with_bond_keyword(BondId(1), "bx")
                 .with_dative_bond_keyword(DativeBondId(0), "d1")
-                .with_aromatic_system_keyword(AromaticSystemId(0), "a1"),
+                .with_aromatic_system_keyword(AromaticSystemId(0), "a1")
+                .with_multicenter_bond_keyword(MulticenterBondId(0), "m1"),
             ..Default::default()
         }
         .with_atom_keyword(AtomId(2), "n")
@@ -3887,6 +3951,23 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::electrons_undetermined(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Electrons { old: ElectronCountsAst::Lit(vec![1, 1, 1]), new: ElectronCountsAst::Undetermined } })], r##"{:multicenter-bond {:modify [:m1 "*"]}}"##)]
+    #[case::charge_undetermined(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined } })], r##"{:multicenter-bond {:modify [:m1 "#c*"]}}"##)]
+    #[case::spin(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyField { id: MulticenterBondId(0), change: MulticenterBondFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) } })], r##"{:multicenter-bond {:modify [:m1 "#u2#s"]}}"##)]
+    #[case::constraint_removal(vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { id: MulticenterBondId(0), old: Some(MulticenterBondConstraintAst::electron_count(6_i64)), new: None })], r##"{:multicenter-bond {:modify [:m1 "#e*"]}}"##)]
+    fn test_render_deltas_multicenter_bond(
+        meta: ReactionMetadata,
+        #[case] deltas: Vec<Delta>,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            render_deltas(&Deltas::from_iter(deltas), &meta),
+            vec![read_string(expected).unwrap()],
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::add_molecule(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:add {:connected {}}}}")]
     #[case::add_entity_leaf(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(AtomId(2), AtomConstraintAst::Valence(ValueAst::Lit(2)))))], "{:constraint {:add {:atom [:n {:valence 2}]}}}")]
     #[case::remove(vec![Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:remove {:connected {}}}}")]
@@ -3928,7 +4009,9 @@ mod tests {
     #[case::aromatic_modify_undetermined(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [0 "*"]}}]}"##)]
     #[case::aromatic_modify_spin_component(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [0 "#s1"]}}]}"##)]
     #[case::aromatic_constraint_removal(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]} :deltas [{:aromatic-system {:modify [0 "#e*"]}}]}"##)]
-    #[case::multicenter_constraint_removal(r##"{:lhs {:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "*#e2"}]} :deltas [{:multicenter-bond {:modify [0 "*#e*"]}}]}"##)]
+    #[case::multicenter_modify_undetermined(r##"{:lhs {:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "[1,1]#c0#u2#s3#e2"}]} :deltas [{:multicenter-bond {:modify [0 "*"]}}]}"##)]
+    #[case::multicenter_modify_spin_component(r##"{:lhs {:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "[1,1]#c0#u2#s3#e2"}]} :deltas [{:multicenter-bond {:modify [0 "#s1"]}}]}"##)]
+    #[case::multicenter_constraint_removal(r##"{:lhs {:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "*#e2"}]} :deltas [{:multicenter-bond {:modify [0 "#e*"]}}]}"##)]
     #[case::stereo_atom_topicity_removal(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#o(0,1)="}]} :deltas [{:stereo-atom {:modify [0 "Th#o(0,1)*"]}}]}"##)]
     #[case::stereo_atom_topicity_change(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#o(0,1)="}]} :deltas [{:stereo-atom {:modify [0 "Th#o(0,1)/"]}}]}"##)]
     #[case::stereo_atom_ligand_symmetry_removal(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#p(0,1)"}]} :deltas [{:stereo-atom {:modify [0 "Th#p(0,1)*"]}}]}"##)]

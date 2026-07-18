@@ -37,7 +37,7 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
-use super::multicenter::MulticenterBondAst;
+use super::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
 use super::noncovalent::NoncovalentBondAst;
 use super::remap::IdRemapping;
 use super::stereo::{CosetOp, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind};
@@ -474,6 +474,55 @@ impl MulticenterBondDelta {
                 new: old,
             },
         }
+    }
+
+    /// Project a multicenter-bond update into resolved deltas.
+    pub fn for_update(
+        id: MulticenterBondId,
+        current: &MulticenterBondAst,
+        update: &MulticenterBondUpdate,
+    ) -> Vec<Self> {
+        let mut deltas = Vec::new();
+        if let Some(new) = &update.electrons {
+            if !current.electrons.canonical_eq(new) {
+                deltas.push(Self::ModifyField {
+                    id,
+                    change: MulticenterBondFieldChange::Electrons {
+                        old: current.electrons.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        if let Some(new) = &update.charge {
+            if !current.charge.canonical_eq(new) {
+                deltas.push(Self::ModifyField {
+                    id,
+                    change: MulticenterBondFieldChange::Charge {
+                        old: current.charge.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        let new_spin = current.spin.update(&update.spin);
+        if !current.spin.canonical_eq(&new_spin) {
+            deltas.push(Self::ModifyField {
+                id,
+                change: MulticenterBondFieldChange::Spin {
+                    old: current.spin.clone(),
+                    new: new_spin,
+                },
+            });
+        }
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            if !options_canonical_eq(&old, &new) {
+                deltas.push(Self::ModifyConstraint { id, old, new });
+            }
+        }
+        deltas
     }
 }
 
@@ -1591,6 +1640,14 @@ impl EntityPatch for MulticenterBondDelta {
         new: Option<MulticenterBondConstraintAst>,
     ) -> Self {
         MulticenterBondDelta::ModifyConstraint { id, old, new }
+    }
+
+    fn diff(
+        id: MulticenterBondId,
+        lhs: &MulticenterBondAst,
+        rhs: &MulticenterBondAst,
+    ) -> Vec<Self> {
+        Self::for_update(id, lhs, &lhs.difference_to(rhs))
     }
 
     diff_field_ops!(
@@ -2934,9 +2991,9 @@ mod tests {
     use super::*;
     use crate::ast::{
         AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst, BooleanAst,
-        DativeBondConstraintsAst, ElectronCountsAst, ElementAst, IsotopeMassAst, RingScope,
-        SpinStateAst, SpinStateUpdate, StereoConfigurationAst, StereoCosetAst, StereoKind,
-        StereoLigandKind, StereogenicityAst,
+        DativeBondConstraintsAst, ElectronCountsAst, ElementAst, IsotopeMassAst,
+        MulticenterBondConstraintsAst, RingScope, SpinStateAst, SpinStateUpdate,
+        StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigandKind, StereogenicityAst,
     };
 
     #[rstest]
@@ -3283,6 +3340,62 @@ mod tests {
     ) {
         assert_eq!(
             AromaticSystemDelta::for_update(AromaticSystemId(0), &current, &update),
+            Vec::new(),
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fields_and_constraint(
+        MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_spin((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
+        MulticenterBondUpdate {
+            electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
+            charge: Some(ValueAst::Undetermined),
+            spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) },
+            constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)),
+        },
+        vec![
+            MulticenterBondDelta::ModifyField {
+                id: MulticenterBondId(7),
+                change: MulticenterBondFieldChange::Electrons { old: ElectronCountsAst::Lit(vec![1, 1, 1]), new: ElectronCountsAst::Lit(vec![2, 2, 2]) },
+            },
+            MulticenterBondDelta::ModifyField {
+                id: MulticenterBondId(7),
+                change: MulticenterBondFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined },
+            },
+            MulticenterBondDelta::ModifyField {
+                id: MulticenterBondId(7),
+                change: MulticenterBondFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) },
+            },
+            MulticenterBondDelta::ModifyConstraint {
+                id: MulticenterBondId(7),
+                old: Some(MulticenterBondConstraintAst::electron_count(6_i64)),
+                new: None,
+            },
+        ],
+    )]
+    fn test_multicenter_bond_delta_for_update(
+        #[case] current: MulticenterBondAst,
+        #[case] update: MulticenterBondUpdate,
+        #[case] expected: Vec<MulticenterBondDelta>,
+    ) {
+        assert_eq!(
+            MulticenterBondDelta::for_update(MulticenterBondId(7), &current, &update),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate::default())]
+    #[case::canonical_field(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() })]
+    fn test_multicenter_bond_delta_for_update_identity(
+        #[case] current: MulticenterBondAst,
+        #[case] update: MulticenterBondUpdate,
+    ) {
+        assert_eq!(
+            MulticenterBondDelta::for_update(MulticenterBondId(0), &current, &update),
             Vec::new(),
         );
     }

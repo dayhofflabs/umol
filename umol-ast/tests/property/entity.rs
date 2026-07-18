@@ -106,6 +106,29 @@ proptest! {
     }
 
     #[test]
+    fn test_multicenter_bond_update_dsl_display_from_str_roundtrip(
+        update in multicenter_bond_update_strategy(),
+    ) {
+        let dsl = MulticenterBondUpdateDsl(update);
+        let rendered = dsl.to_string();
+        let parsed: MulticenterBondUpdateDsl = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_multicenter_bond_update_dsl_to_edn_from_edn_roundtrip(
+        update in multicenter_bond_update_strategy(),
+    ) {
+        let dsl = MulticenterBondUpdateDsl(update);
+        let edn = dsl.to_edn();
+        let parsed = MulticenterBondUpdateDsl::from_edn(&edn)
+            .map_err(|e| TestCaseError::fail(format!("parse failed: {e}")))?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
     fn test_dative_bond_dsl_display_from_str_roundtrip(
         bond in dative_bond_strategy(),
     ) {

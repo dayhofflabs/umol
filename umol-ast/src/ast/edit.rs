@@ -23,7 +23,7 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::ligand::{StereoLigand, StereoLigandKind};
-use super::multicenter::MulticenterBondAst;
+use super::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
 use super::remap::{IdCompaction, UndoCompaction};
 use super::spin::SpinStateAst;
@@ -678,6 +678,64 @@ impl Edit {
         }
         edits
     }
+
+    /// Project a multicenter-bond update into checked host-relative edits.
+    pub fn for_multicenter_bond_update(
+        id: MulticenterBondHandle,
+        current: &MulticenterBondAst,
+        update: &MulticenterBondUpdate,
+    ) -> Vec<Self> {
+        let mut edits = Vec::new();
+        if let Some(new) = &update.electrons {
+            if !current.electrons.canonical_eq(new) {
+                edits.push(Self::ModifyMulticenterBondField {
+                    id: id.clone(),
+                    change: MulticenterBondFieldChange::Electrons {
+                        old: current.electrons.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        if let Some(new) = &update.charge {
+            if !current.charge.canonical_eq(new) {
+                edits.push(Self::ModifyMulticenterBondField {
+                    id: id.clone(),
+                    change: MulticenterBondFieldChange::Charge {
+                        old: current.charge.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        let new_spin = current.spin.update(&update.spin);
+        if !current.spin.canonical_eq(&new_spin) {
+            edits.push(Self::ModifyMulticenterBondField {
+                id: id.clone(),
+                change: MulticenterBondFieldChange::Spin {
+                    old: current.spin.clone(),
+                    new: new_spin,
+                },
+            });
+        }
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            let unchanged = match (&old, &new) {
+                (None, None) => true,
+                (Some(old), Some(new)) => old.canonical_eq(new),
+                _ => false,
+            };
+            if !unchanged {
+                edits.push(Self::ModifyMulticenterBondConstraint {
+                    id: id.clone(),
+                    old,
+                    new,
+                });
+            }
+        }
+        edits
+    }
 }
 
 // Handles for overlay relations (an existing id or the Nth created earlier in the batch).
@@ -988,7 +1046,7 @@ mod tests {
     use super::super::boolean::BooleanAst;
     use super::super::constraint::{
         AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst,
-        DativeBondConstraintsAst, RingScope,
+        DativeBondConstraintsAst, MulticenterBondConstraintsAst, RingScope,
     };
     use super::super::spin::SpinStateUpdate;
     use super::super::stereo::{StereoConfigurationAst, StereoCosetAst, StereoKind};
@@ -1417,6 +1475,70 @@ mod tests {
         assert_eq!(
             Edit::for_aromatic_system_update(
                 AromaticSystemHandle::Id(AromaticSystemId(0)),
+                &current,
+                &update,
+            ),
+            Vec::new(),
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fields_and_constraint(
+        MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_spin((2_u8, 3_u8)).with_constraint(MulticenterBondConstraintAst::electron_count(6_i64)),
+        MulticenterBondUpdate {
+            electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
+            charge: Some(ValueAst::Undetermined),
+            spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) },
+            constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)),
+        },
+        vec![
+            Edit::ModifyMulticenterBondField {
+                id: MulticenterBondHandle::Id(MulticenterBondId(7)),
+                change: MulticenterBondFieldChange::Electrons { old: ElectronCountsAst::Lit(vec![1, 1, 1]), new: ElectronCountsAst::Lit(vec![2, 2, 2]) },
+            },
+            Edit::ModifyMulticenterBondField {
+                id: MulticenterBondHandle::Id(MulticenterBondId(7)),
+                change: MulticenterBondFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined },
+            },
+            Edit::ModifyMulticenterBondField {
+                id: MulticenterBondHandle::Id(MulticenterBondId(7)),
+                change: MulticenterBondFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) },
+            },
+            Edit::ModifyMulticenterBondConstraint {
+                id: MulticenterBondHandle::Id(MulticenterBondId(7)),
+                old: Some(MulticenterBondConstraintAst::electron_count(6_i64)),
+                new: None,
+            },
+        ],
+    )]
+    fn test_edit_for_multicenter_bond_update(
+        #[case] current: MulticenterBondAst,
+        #[case] update: MulticenterBondUpdate,
+        #[case] expected: Vec<Edit>,
+    ) {
+        assert_eq!(
+            Edit::for_multicenter_bond_update(
+                MulticenterBondHandle::Id(MulticenterBondId(7)),
+                &current,
+                &update,
+            ),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate::default())]
+    #[case::canonical_field(MulticenterBondAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(MulticenterBondAst::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() })]
+    fn test_edit_for_multicenter_bond_update_identity(
+        #[case] current: MulticenterBondAst,
+        #[case] update: MulticenterBondUpdate,
+    ) {
+        assert_eq!(
+            Edit::for_multicenter_bond_update(
+                MulticenterBondHandle::Id(MulticenterBondId(0)),
                 &current,
                 &update,
             ),

@@ -2,7 +2,8 @@ use proptest::prelude::*;
 use umol_ast::ast::{
     AromaticSystemDelta, AromaticSystemId, AtomDelta, AtomFieldChange, AtomId, BondDelta,
     BondFieldChange, BondId, Canonicalize, Constraint, ConstraintDelta, DativeBondDelta,
-    DativeBondId, Delta, Deltas, EntityPatch, MoleculeConstraint, ValueAst,
+    DativeBondId, Delta, Deltas, EntityPatch, MoleculeConstraint, MulticenterBondDelta,
+    MulticenterBondId, ValueAst,
 };
 
 use crate::strategies::*;
@@ -65,6 +66,24 @@ fn apply_aromatic_system_diff(
             }
             AromaticSystemDelta::ModifyConstraint { old, new, .. } => {
                 AromaticSystemDelta::apply_constraint(&mut ast, old, new).unwrap()
+            }
+            other => unreachable!("diff yields only modify deltas, got {other:?}"),
+        }
+    }
+    ast
+}
+
+fn apply_multicenter_bond_diff(
+    mut ast: MulticenterBondAst,
+    diff: Vec<MulticenterBondDelta>,
+) -> MulticenterBondAst {
+    for delta in diff {
+        match delta {
+            MulticenterBondDelta::ModifyField { change, .. } => {
+                MulticenterBondDelta::apply_field(&mut ast, change).unwrap()
+            }
+            MulticenterBondDelta::ModifyConstraint { old, new, .. } => {
+                MulticenterBondDelta::apply_constraint(&mut ast, old, new).unwrap()
             }
             other => unreachable!("diff yields only modify deltas, got {other:?}"),
         }
@@ -249,6 +268,31 @@ proptest! {
     fn test_aromatic_system_ast_difference_to(
         lhs in aromatic_system_patch_ast_strategy(),
         rhs in aromatic_system_patch_ast_strategy(),
+    ) {
+        let update = lhs.difference_to(&rhs);
+        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+    }
+
+    #[test]
+    fn test_multicenter_bond_delta_diff_apply(
+        lhs in multicenter_bond_patch_ast_strategy(),
+        rhs in multicenter_bond_patch_ast_strategy(),
+    ) {
+        let diff = MulticenterBondDelta::diff(MulticenterBondId(0), &lhs, &rhs);
+        prop_assert_eq!(apply_multicenter_bond_diff(lhs, diff), rhs);
+    }
+
+    #[test]
+    fn test_multicenter_bond_delta_diff_identity(bond in multicenter_bond_patch_ast_strategy()) {
+        let diff = MulticenterBondDelta::diff(MulticenterBondId(0), &bond, &bond);
+        prop_assert!(diff.is_empty());
+        prop_assert_eq!(apply_multicenter_bond_diff(bond.clone(), diff), bond);
+    }
+
+    #[test]
+    fn test_multicenter_bond_ast_difference_to(
+        lhs in multicenter_bond_patch_ast_strategy(),
+        rhs in multicenter_bond_patch_ast_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).canonical_eq(&rhs));

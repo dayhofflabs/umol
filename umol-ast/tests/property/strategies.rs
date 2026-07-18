@@ -20,23 +20,24 @@ pub(crate) use umol_ast::ast::{
     DativeBondUpdate, Edit, ElectronCountsAst, ElementAst, FluxionalityAst, IsotopeMassAst,
     Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint,
     MoleculeParts, MulticenterBondAst, MulticenterBondConstraintAst, MulticenterBondConstraintKey,
-    MulticenterBondConstraintsAst, MulticenterBondHandle, MulticenterBondId, MulticenterValenceAst,
-    NoncovalentBondAst, NoncovalentBondConstraintAst, NoncovalentBondConstraintsAst,
-    NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst,
-    OrientedLigandPermutation, RelOp, RelationalConstraint, RingMembershipAst, RingScope,
-    SpinStateAst, SpinStateUpdate, StereoAtomAst, StereoAtomConstraintAst,
-    StereoAtomConstraintsAst, StereoAtomId, StereoBondAst, StereoBondConstraintAst,
-    StereoBondConstraintsAst, StereoBondId, StereoConfigurationAst, StereoCosetAst, StereoKind,
-    StereoLigand, StereoLigandKind, StereoLigandPair, StereoLigandPosition, Stereogenicity,
-    StereogenicityAst, SubPatternAnchor, TetrahedralStereoAst, Topicity, TopicityAst,
-    TopicityRelationAst, ValueAst, ValuePredicate, ValueTerm,
+    MulticenterBondConstraintsAst, MulticenterBondHandle, MulticenterBondId, MulticenterBondUpdate,
+    MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
+    NoncovalentBondConstraintsAst, NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind,
+    NoncovalentBondKindAst, OrientedLigandPermutation, RelOp, RelationalConstraint,
+    RingMembershipAst, RingScope, SpinStateAst, SpinStateUpdate, StereoAtomAst,
+    StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomId, StereoBondAst,
+    StereoBondConstraintAst, StereoBondConstraintsAst, StereoBondId, StereoConfigurationAst,
+    StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
+    StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
+    TetrahedralStereoAst, Topicity, TopicityAst, TopicityRelationAst, ValueAst, ValuePredicate,
+    ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AromaticSystemUpdateDsl, AtomDsl, AtomUpdateDsl, BondDsl,
     BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, MoleculeDsl,
-    MoleculeMetadata, MoleculeNamespace, MulticenterBondDsl, NoncovalentBondDsl, ParseError,
-    StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomParticipants, StereoBondConstraintDsl,
-    StereoBondDsl, StereoBondParticipants, StereoLigandRef, ValueDsl,
+    MoleculeMetadata, MoleculeNamespace, MulticenterBondDsl, MulticenterBondUpdateDsl,
+    NoncovalentBondDsl, ParseError, StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomParticipants,
+    StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants, StereoLigandRef, ValueDsl,
 };
 pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
@@ -686,6 +687,23 @@ pub(crate) fn optional_multicenter_electron_count(
     })
 }
 
+pub(crate) fn multicenter_bond_update_constraints_strategy(
+) -> impl Strategy<Value = MulticenterBondConstraintsAst> {
+    prop::option::weighted(
+        0.5,
+        prop_oneof![
+            electron_count_value_strategy(0..=8),
+            Just(ValueAst::Undetermined),
+        ],
+    )
+    .prop_map(|value| {
+        value
+            .map(MulticenterBondConstraintAst::ElectronCount)
+            .map(MulticenterBondConstraintsAst::from)
+            .unwrap_or_default()
+    })
+}
+
 pub(crate) fn electron_count_value_strategy(
     range: RangeInclusive<i64>,
 ) -> impl Strategy<Value = ValueAst> {
@@ -777,6 +795,35 @@ pub(crate) fn multicenter_bond_ast_strategy() -> impl Strategy<Value = Multicent
             constraints,
         },
     )
+}
+
+pub(crate) fn multicenter_bond_patch_ast_strategy() -> impl Strategy<Value = MulticenterBondAst> {
+    (
+        electron_counts_ast_strategy(),
+        value_basic(-2..=2),
+        spin_state_strategy(),
+        optional_multicenter_electron_count(),
+    )
+        .prop_map(
+            |(electrons, charge, spin, constraints)| MulticenterBondAst {
+                electrons,
+                charge,
+                spin,
+                constraints,
+            },
+        )
+}
+
+prop_compose! {
+    pub(crate) fn multicenter_bond_update_strategy()
+    (
+        electrons in prop::option::of(electron_counts_ast_strategy()),
+        charge in prop::option::of(value_basic(-2..=2)),
+        spin in spin_state_update_strategy(),
+        constraints in multicenter_bond_update_constraints_strategy(),
+    ) -> MulticenterBondUpdate {
+        MulticenterBondUpdate { electrons, charge, spin, constraints }
+    }
 }
 
 pub(crate) fn multicenter_bond_ast_for(
