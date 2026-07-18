@@ -13,14 +13,6 @@ pub struct SpinStateAst {
     pub multiplicity: ValueAst,
 }
 
-/// Leaf-wise update for a spin state. `None` leaves that component unchanged;
-/// `Some(value)` sets it exactly, including to `Undetermined`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SpinStateUpdate {
-    pub unpaired: Option<ValueAst>,
-    pub multiplicity: Option<ValueAst>,
-}
-
 impl SpinStateAst {
     pub fn closed_shell() -> Self {
         SpinState::closed_shell().into()
@@ -104,6 +96,14 @@ impl AsLit for SpinStateAst {
         let mult = SpinMultiplicity::try_from(*m as u8).ok()?;
         SpinState::try_new(*u as u8, mult).ok()
     }
+}
+
+/// Leaf-wise update for a spin state. `None` leaves that component unchanged;
+/// `Some(value)` sets it exactly, including to `Undetermined`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SpinStateUpdate {
+    pub unpaired: Option<ValueAst>,
+    pub multiplicity: Option<ValueAst>,
 }
 
 #[cfg(test)]

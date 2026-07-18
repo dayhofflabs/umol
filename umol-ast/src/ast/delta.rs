@@ -15,7 +15,7 @@ use umol_graph_core::{
 };
 use umol_perm::Permutation;
 
-use super::aromatic::AromaticSystemAst;
+use super::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
 use super::atom::{AtomAst, AtomUpdate};
 use super::bond::{BondAst, BondUpdate};
 use super::constraint::{
@@ -382,6 +382,55 @@ impl AromaticSystemDelta {
                 new: old,
             },
         }
+    }
+
+    /// Project an aromatic-system update into resolved deltas.
+    pub fn for_update(
+        id: AromaticSystemId,
+        current: &AromaticSystemAst,
+        update: &AromaticSystemUpdate,
+    ) -> Vec<Self> {
+        let mut deltas = Vec::new();
+        if let Some(new) = &update.electrons {
+            if !current.electrons.canonical_eq(new) {
+                deltas.push(Self::ModifyField {
+                    id,
+                    change: AromaticSystemFieldChange::Electrons {
+                        old: current.electrons.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        if let Some(new) = &update.charge {
+            if !current.charge.canonical_eq(new) {
+                deltas.push(Self::ModifyField {
+                    id,
+                    change: AromaticSystemFieldChange::Charge {
+                        old: current.charge.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        let new_spin = current.spin.update(&update.spin);
+        if !current.spin.canonical_eq(&new_spin) {
+            deltas.push(Self::ModifyField {
+                id,
+                change: AromaticSystemFieldChange::Spin {
+                    old: current.spin.clone(),
+                    new: new_spin,
+                },
+            });
+        }
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            if !options_canonical_eq(&old, &new) {
+                deltas.push(Self::ModifyConstraint { id, old, new });
+            }
+        }
+        deltas
     }
 }
 
@@ -1452,6 +1501,10 @@ impl EntityPatch for AromaticSystemDelta {
         new: Option<AromaticSystemConstraintAst>,
     ) -> Self {
         AromaticSystemDelta::ModifyConstraint { id, old, new }
+    }
+
+    fn diff(id: AromaticSystemId, lhs: &AromaticSystemAst, rhs: &AromaticSystemAst) -> Vec<Self> {
+        Self::for_update(id, lhs, &lhs.difference_to(rhs))
     }
 
     diff_field_ops!(
@@ -2880,9 +2933,10 @@ mod tests {
     use super::super::value::ValueAst;
     use super::*;
     use crate::ast::{
-        AtomConstraintsAst, BondConstraintsAst, BooleanAst, DativeBondConstraintsAst, ElementAst,
-        IsotopeMassAst, RingScope, SpinStateAst, SpinStateUpdate, StereoConfigurationAst,
-        StereoCosetAst, StereoKind, StereoLigandKind, StereogenicityAst,
+        AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst, BooleanAst,
+        DativeBondConstraintsAst, ElectronCountsAst, ElementAst, IsotopeMassAst, RingScope,
+        SpinStateAst, SpinStateUpdate, StereoConfigurationAst, StereoCosetAst, StereoKind,
+        StereoLigandKind, StereogenicityAst,
     };
 
     #[rstest]
@@ -3176,6 +3230,59 @@ mod tests {
     ) {
         assert_eq!(
             DativeBondDelta::for_update(DativeBondId(0), &current, &update),
+            Vec::new(),
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fields_and_constraint(
+        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_spin((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
+        AromaticSystemUpdate {
+            electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
+            charge: Some(ValueAst::Undetermined),
+            spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) },
+            constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)),
+        },
+        vec![
+            AromaticSystemDelta::ModifyField {
+                id: AromaticSystemId(7),
+                change: AromaticSystemFieldChange::Electrons { old: ElectronCountsAst::Lit(vec![1, 1, 1]), new: ElectronCountsAst::Lit(vec![2, 2, 2]) },
+            },
+            AromaticSystemDelta::ModifyField {
+                id: AromaticSystemId(7),
+                change: AromaticSystemFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined },
+            },
+            AromaticSystemDelta::ModifyField {
+                id: AromaticSystemId(7),
+                change: AromaticSystemFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) },
+            },
+            AromaticSystemDelta::ModifyConstraint {
+                id: AromaticSystemId(7),
+                old: Some(AromaticSystemConstraintAst::electron_count(6_i64)),
+                new: None,
+            },
+        ],
+    )]
+    fn test_aromatic_system_delta_for_update(
+        #[case] current: AromaticSystemAst,
+        #[case] update: AromaticSystemUpdate,
+        #[case] expected: Vec<AromaticSystemDelta>,
+    ) {
+        assert_eq!(AromaticSystemDelta::for_update(AromaticSystemId(7), &current, &update), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate::default())]
+    #[case::canonical_field(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() })]
+    fn test_aromatic_system_delta_for_update_identity(
+        #[case] current: AromaticSystemAst,
+        #[case] update: AromaticSystemUpdate,
+    ) {
+        assert_eq!(
+            AromaticSystemDelta::for_update(AromaticSystemId(0), &current, &update),
             Vec::new(),
         );
     }

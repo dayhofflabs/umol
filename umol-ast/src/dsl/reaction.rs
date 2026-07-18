@@ -15,7 +15,7 @@ use indexmap::IndexMap;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 use umol_perm::Permutation;
 
-use super::aromatic::{AromaticSystemDsl, PartialAromaticSystemDsl};
+use super::aromatic::{AromaticSystemDsl, AromaticSystemUpdateDsl};
 use super::atom::{lower_atom, raise_atom, AtomDsl, AtomUpdateDsl};
 use super::bond::{lower_bond, raise_bond, BondDsl, BondUpdateDsl};
 use super::config::{DeltaDefaults, ReactionDefaults};
@@ -72,7 +72,7 @@ use crate::ast::reaction::ReactionAst;
 use crate::ast::stereo::{StereoConfigurationAst, StereoCosetAst};
 use crate::ast::traits::{FromAst, IntoAst, Lattice};
 use crate::ast::{
-    AromaticSystemAst, DativeBondUpdate, EntityPatch, MulticenterBondAst, NoncovalentBondAst,
+    AromaticSystemUpdate, DativeBondUpdate, EntityPatch, MulticenterBondAst, NoncovalentBondAst,
     StereoAtomAst, StereoBondAst, StereoKind, StereoLigand,
 };
 
@@ -739,7 +739,7 @@ pub(crate) enum DeltaInput {
     DativeBondModify(DativeBondRef, DativeBondUpdate),
     AromaticSystemAdd(AromaticSystemEntryInput),
     AromaticSystemRemove(AromaticSystemRef),
-    AromaticSystemModify(AromaticSystemRef, AromaticSystemAst),
+    AromaticSystemModify(AromaticSystemRef, AromaticSystemUpdate),
     MulticenterBondAdd(MulticenterBondEntryInput),
     MulticenterBondRemove(MulticenterBondRef),
     MulticenterBondModify(MulticenterBondRef, MulticenterBondAst),
@@ -948,8 +948,8 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    let new = lhs.aromatic_system(id).ast.update(&rhs);
-                    for d in AromaticSystemDelta::diff(id, lhs.aromatic_system(id).ast, &new) {
+                    for d in AromaticSystemDelta::for_update(id, lhs.aromatic_system(id).ast, &rhs)
+                    {
                         resolved.push(Delta::AromaticSystem(d));
                     }
                 }
@@ -1478,10 +1478,10 @@ fn read_delta_aromatic_system_input(
             de.consume_byte(b'[')?;
             let r = read_aromatic_system_ref(de)?;
             let s = de.read_string()?;
-            let dsl: PartialAromaticSystemDsl = s
+            let dsl: AromaticSystemUpdateDsl = s
                 .as_ref()
                 .parse()
-                .map_err(|e| DeError::subgrammar("partial-aromatic-system", e))?;
+                .map_err(|e| DeError::subgrammar("aromatic-system-update", e))?;
             if !de.try_consume_byte(b']')? {
                 return Err(
                     DeError::Custom("aromatic-system :modify expects [ref dsl]".into()).into(),
@@ -1822,7 +1822,7 @@ fn parse_delta_aromatic_system_input(edn: &Edn<'_>) -> Result<DeltaInput, DeErro
             }
             Ok(DeltaInput::AromaticSystemModify(
                 AromaticSystemRef::from_edn(&v[0])?,
-                PartialAromaticSystemDsl::from_edn(&v[1])?.0,
+                AromaticSystemUpdateDsl::from_edn(&v[1])?.0,
             ))
         }
         o => Err(DeError::Custom(format!(
@@ -2334,30 +2334,31 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 | AromaticSystemDelta::ModifyConstraint { id, .. },
             ) => {
                 let id = *id;
-                let mut partial = AromaticSystemAst::default();
+                let mut update = AromaticSystemUpdate::default();
                 while let Some(Delta::AromaticSystem(delta)) = deltas.get(i) {
                     match delta {
                         AromaticSystemDelta::ModifyField { id: j, change } if *j == id => {
                             match change {
                                 AromaticSystemFieldChange::Electrons { new, .. } => {
-                                    partial.electrons = new.clone()
+                                    update.electrons = Some(new.clone())
                                 }
                                 AromaticSystemFieldChange::Charge { new, .. } => {
-                                    partial.charge = new.clone()
+                                    update.charge = Some(new.clone())
                                 }
                                 AromaticSystemFieldChange::Spin { new, .. } => {
-                                    partial.spin = new.clone()
+                                    update.spin.unpaired = Some(new.unpaired.clone());
+                                    update.spin.multiplicity = Some(new.multiplicity.clone());
                                 }
                             }
                         }
                         AromaticSystemDelta::ModifyConstraint { id: j, old, new } if *j == id => {
                             match new {
                                 Some(c) => {
-                                    partial.constraints.set(c.clone());
+                                    update.constraints.set(c.clone());
                                 }
                                 None => {
                                     if let Some(old) = old {
-                                        partial.constraints.set(old.as_undetermined());
+                                        update.constraints.set(old.as_undetermined());
                                     }
                                 }
                             }
@@ -2370,7 +2371,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let payload = Edn::Vector(
                     vec![
                         AromaticSystemRef::denote(id, combined).to_edn(),
-                        PartialAromaticSystemDsl(partial).to_edn(),
+                        AromaticSystemUpdateDsl(update).to_edn(),
                     ]
                     .into(),
                 );
@@ -2898,18 +2899,20 @@ mod tests {
     use crate::ast::atom::ElementAst;
     use crate::ast::boolean::BooleanAst;
     use crate::ast::constraint::{
-        AtomConstraintAst, BondConstraintAst, Constraint, DativeBondConstraintAst,
-        DativeBondConstraintsAst, MoleculeConstraint, RingScope,
+        AromaticSystemConstraintAst, AromaticSystemConstraintsAst, AtomConstraintAst,
+        BondConstraintAst, Constraint, DativeBondConstraintAst, DativeBondConstraintsAst,
+        MoleculeConstraint, RingScope,
     };
     use crate::ast::delta::{ConstraintDelta, Deltas};
-    use crate::ast::edit::{AtomFieldChange, BondFieldChange};
+    use crate::ast::edit::{AromaticSystemFieldChange, AtomFieldChange, BondFieldChange};
+    use crate::ast::electrons::ElectronCountsAst;
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::spin::{SpinStateAst, SpinStateUpdate};
     use crate::ast::value::ValueAst;
     use crate::dsl::bond::BondDsl;
     use crate::dsl::constraint::MoleculeConstraintDsl;
     use crate::dsl::molecule::AtomSpecInput;
-    use crate::dsl::refs::{AtomRef, BondRef, DativeBondRef};
+    use crate::dsl::refs::{AromaticSystemRef, AtomRef, BondRef, DativeBondRef};
     use crate::mol_dsl;
 
     #[rstest]
@@ -3149,6 +3152,34 @@ mod tests {
     #[case::order_undetermined(r##"{:dative-bond {:modify [:d1 "*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { order: Some(ValueAst::Undetermined), ..Default::default() }))]
     #[case::constraint_removal(r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_dative_bond(
+        #[case] input: &str,
+        #[case] expected: DeltaInput,
+    ) {
+        assert_eq!(
+            read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::spin_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Id("a1".into()), AromaticSystemUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Id("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
+    fn test_parse_delta_input_aromatic_system(
+        #[case] input: &str,
+        #[case] expected: DeltaInput,
+    ) {
+        assert_eq!(
+            parse_delta_input(&read_string(input).unwrap()).unwrap(),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::spin_component(r##"{:aromatic-system {:modify [:a1 "#s1"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Id("a1".into()), AromaticSystemUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::explicit_undetermined(r##"{:aromatic-system {:modify [:a1 "*#c*#e*"]}}"##, DeltaInput::AromaticSystemModify(AromaticSystemRef::Id("a1".into()), AromaticSystemUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
+    fn test_read_delta_input_aromatic_system(
         #[case] input: &str,
         #[case] expected: DeltaInput,
     ) {
@@ -3618,6 +3649,35 @@ mod tests {
         );
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::electrons_undetermined(
+        r##"{:lhs {:atoms ["C" "C" "C"] :aromatic-systems [{:id :a1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [:a1 "*"]}}]}"##,
+        vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Electrons { old: ElectronCountsAst::Lit(vec![1, 1, 1]), new: ElectronCountsAst::Undetermined } })],
+    )]
+    #[case::charge_undetermined(
+        r##"{:lhs {:atoms ["C" "C" "C"] :aromatic-systems [{:id :a1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [:a1 "#c*"]}}]}"##,
+        vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined } })],
+    )]
+    #[case::spin_component(
+        r##"{:lhs {:atoms ["C" "C" "C"] :aromatic-systems [{:id :a1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [:a1 "#s1"]}}]}"##,
+        vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) } })],
+    )]
+    #[case::constraint_removal(
+        r##"{:lhs {:atoms ["C" "C" "C"] :aromatic-systems [{:id :a1 :atoms [0 1 2] :type "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [:a1 "#e*"]}}]}"##,
+        vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { id: AromaticSystemId(0), old: Some(AromaticSystemConstraintAst::electron_count(6_i64)), new: None })],
+    )]
+    fn test_reaction_input_into_ast_aromatic_system_modify(
+        #[case] input: &str,
+        #[case] expected: Vec<Delta>,
+    ) {
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(ast.deltas, Deltas::from_iter(expected));
+    }
+
     #[rstest]
     fn test_reaction_input_into_ast_constraint_add() {
         let input = r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}"##;
@@ -3755,7 +3815,8 @@ mod tests {
                 .with_atom_keyword(AtomId(1), "c")
                 .with_bond_keyword(BondId(0), "b1")
                 .with_bond_keyword(BondId(1), "bx")
-                .with_dative_bond_keyword(DativeBondId(0), "d1"),
+                .with_dative_bond_keyword(DativeBondId(0), "d1")
+                .with_aromatic_system_keyword(AromaticSystemId(0), "a1"),
             ..Default::default()
         }
         .with_atom_keyword(AtomId(2), "n")
@@ -3809,6 +3870,23 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::electrons_undetermined(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Electrons { old: ElectronCountsAst::Lit(vec![1, 1, 1]), new: ElectronCountsAst::Undetermined } })], r##"{:aromatic-system {:modify [:a1 "*"]}}"##)]
+    #[case::charge_undetermined(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined } })], r##"{:aromatic-system {:modify [:a1 "#c*"]}}"##)]
+    #[case::spin(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyField { id: AromaticSystemId(0), change: AromaticSystemFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) } })], r##"{:aromatic-system {:modify [:a1 "#u2#s"]}}"##)]
+    #[case::constraint_removal(vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { id: AromaticSystemId(0), old: Some(AromaticSystemConstraintAst::electron_count(6_i64)), new: None })], r##"{:aromatic-system {:modify [:a1 "#e*"]}}"##)]
+    fn test_render_deltas_aromatic_system(
+        meta: ReactionMetadata,
+        #[case] deltas: Vec<Delta>,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            render_deltas(&Deltas::from_iter(deltas), &meta),
+            vec![read_string(expected).unwrap()],
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::add_molecule(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:add {:connected {}}}}")]
     #[case::add_entity_leaf(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(AtomId(2), AtomConstraintAst::Valence(ValueAst::Lit(2)))))], "{:constraint {:add {:atom [:n {:valence 2}]}}}")]
     #[case::remove(vec![Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:remove {:connected {}}}}")]
@@ -3847,7 +3925,9 @@ mod tests {
     #[case::stereo_bond_add(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 3] :type "Ct1"}}}]}"##)]
     #[case::stereo_bond_remove(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]} :deltas [{:stereo-bond {:remove 0}}]}"##)]
     #[case::dative_constraint_removal(r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#a"}]} :deltas [{:dative-bond {:modify [0 "#a*"]}}]}"##)]
-    #[case::aromatic_constraint_removal(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]} :deltas [{:aromatic-system {:modify [0 "*#e*"]}}]}"##)]
+    #[case::aromatic_modify_undetermined(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [0 "*"]}}]}"##)]
+    #[case::aromatic_modify_spin_component(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [0 "#s1"]}}]}"##)]
+    #[case::aromatic_constraint_removal(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]} :deltas [{:aromatic-system {:modify [0 "#e*"]}}]}"##)]
     #[case::multicenter_constraint_removal(r##"{:lhs {:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "*#e2"}]} :deltas [{:multicenter-bond {:modify [0 "*#e*"]}}]}"##)]
     #[case::stereo_atom_topicity_removal(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#o(0,1)="}]} :deltas [{:stereo-atom {:modify [0 "Th#o(0,1)*"]}}]}"##)]
     #[case::stereo_atom_topicity_change(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#o(0,1)="}]} :deltas [{:stereo-atom {:modify [0 "Th#o(0,1)/"]}}]}"##)]

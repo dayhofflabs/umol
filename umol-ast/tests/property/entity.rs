@@ -71,6 +71,29 @@ proptest! {
     }
 
     #[test]
+    fn test_aromatic_system_update_dsl_display_from_str_roundtrip(
+        update in aromatic_system_update_strategy(),
+    ) {
+        let dsl = AromaticSystemUpdateDsl(update);
+        let rendered = dsl.to_string();
+        let parsed: AromaticSystemUpdateDsl = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_aromatic_system_update_dsl_to_edn_from_edn_roundtrip(
+        update in aromatic_system_update_strategy(),
+    ) {
+        let dsl = AromaticSystemUpdateDsl(update);
+        let edn = dsl.to_edn();
+        let parsed = AromaticSystemUpdateDsl::from_edn(&edn)
+            .map_err(|e| TestCaseError::fail(format!("parse failed: {e}")))?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
     fn test_multicenter_bond_dsl_display_from_str_roundtrip(
         bond in multicenter_bond_ast_strategy(),
     ) {

@@ -8,7 +8,7 @@
 //! `Edit`. `Id(_)` references an existing entity; `New(N)` references the
 //! entity created by the Nth Edit earlier in the same batch.
 
-use super::aromatic::AromaticSystemAst;
+use super::aromatic::{AromaticSystemAst, AromaticSystemUpdate};
 use super::atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMassAst};
 use super::bond::{BondAst, BondUpdate};
 use super::constraint::{
@@ -620,6 +620,64 @@ impl Edit {
         }
         edits
     }
+
+    /// Project an aromatic-system update into checked host-relative edits.
+    pub fn for_aromatic_system_update(
+        id: AromaticSystemHandle,
+        current: &AromaticSystemAst,
+        update: &AromaticSystemUpdate,
+    ) -> Vec<Self> {
+        let mut edits = Vec::new();
+        if let Some(new) = &update.electrons {
+            if !current.electrons.canonical_eq(new) {
+                edits.push(Self::ModifyAromaticSystemField {
+                    id: id.clone(),
+                    change: AromaticSystemFieldChange::Electrons {
+                        old: current.electrons.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        if let Some(new) = &update.charge {
+            if !current.charge.canonical_eq(new) {
+                edits.push(Self::ModifyAromaticSystemField {
+                    id: id.clone(),
+                    change: AromaticSystemFieldChange::Charge {
+                        old: current.charge.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        let new_spin = current.spin.update(&update.spin);
+        if !current.spin.canonical_eq(&new_spin) {
+            edits.push(Self::ModifyAromaticSystemField {
+                id: id.clone(),
+                change: AromaticSystemFieldChange::Spin {
+                    old: current.spin.clone(),
+                    new: new_spin,
+                },
+            });
+        }
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            let unchanged = match (&old, &new) {
+                (None, None) => true,
+                (Some(old), Some(new)) => old.canonical_eq(new),
+                _ => false,
+            };
+            if !unchanged {
+                edits.push(Self::ModifyAromaticSystemConstraint {
+                    id: id.clone(),
+                    old,
+                    new,
+                });
+            }
+        }
+        edits
+    }
 }
 
 // Handles for overlay relations (an existing id or the Nth created earlier in the batch).
@@ -929,7 +987,8 @@ mod tests {
 
     use super::super::boolean::BooleanAst;
     use super::super::constraint::{
-        AtomConstraintsAst, BondConstraintsAst, DativeBondConstraintsAst, RingScope,
+        AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst,
+        DativeBondConstraintsAst, RingScope,
     };
     use super::super::spin::SpinStateUpdate;
     use super::super::stereo::{StereoConfigurationAst, StereoCosetAst, StereoKind};
@@ -1297,6 +1356,70 @@ mod tests {
     ) {
         assert_eq!(
             Edit::for_dative_bond_update(DativeBondHandle::Id(DativeBondId(0)), &current, &update),
+            Vec::new(),
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fields_and_constraint(
+        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_spin((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
+        AromaticSystemUpdate {
+            electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
+            charge: Some(ValueAst::Undetermined),
+            spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) },
+            constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)),
+        },
+        vec![
+            Edit::ModifyAromaticSystemField {
+                id: AromaticSystemHandle::Id(AromaticSystemId(7)),
+                change: AromaticSystemFieldChange::Electrons { old: ElectronCountsAst::Lit(vec![1, 1, 1]), new: ElectronCountsAst::Lit(vec![2, 2, 2]) },
+            },
+            Edit::ModifyAromaticSystemField {
+                id: AromaticSystemHandle::Id(AromaticSystemId(7)),
+                change: AromaticSystemFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined },
+            },
+            Edit::ModifyAromaticSystemField {
+                id: AromaticSystemHandle::Id(AromaticSystemId(7)),
+                change: AromaticSystemFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) },
+            },
+            Edit::ModifyAromaticSystemConstraint {
+                id: AromaticSystemHandle::Id(AromaticSystemId(7)),
+                old: Some(AromaticSystemConstraintAst::electron_count(6_i64)),
+                new: None,
+            },
+        ],
+    )]
+    fn test_edit_for_aromatic_system_update(
+        #[case] current: AromaticSystemAst,
+        #[case] update: AromaticSystemUpdate,
+        #[case] expected: Vec<Edit>,
+    ) {
+        assert_eq!(
+            Edit::for_aromatic_system_update(
+                AromaticSystemHandle::Id(AromaticSystemId(7)),
+                &current,
+                &update,
+            ),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate::default())]
+    #[case::canonical_field(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() })]
+    fn test_edit_for_aromatic_system_update_identity(
+        #[case] current: AromaticSystemAst,
+        #[case] update: AromaticSystemUpdate,
+    ) {
+        assert_eq!(
+            Edit::for_aromatic_system_update(
+                AromaticSystemHandle::Id(AromaticSystemId(0)),
+                &current,
+                &update,
+            ),
             Vec::new(),
         );
     }

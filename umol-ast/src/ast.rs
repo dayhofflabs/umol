@@ -36,7 +36,7 @@ pub(crate) mod validate;
 pub(crate) mod value;
 pub(crate) mod view;
 
-pub use aromatic::AromaticSystemAst;
+pub use aromatic::{AromaticSystemAst, AromaticSystemUpdate};
 pub use atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMassAst};
 pub use bond::{BondAst, BondUpdate};
 pub use boolean::BooleanAst;

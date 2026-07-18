@@ -24,7 +24,8 @@ pub(crate) mod stereo;
 pub(crate) mod value;
 
 pub use aromatic::{
-    parse_aromatic_system, AromaticSystemConstraintDsl, AromaticSystemDsl, AromaticSystemPredicate,
+    parse_aromatic_system, parse_aromatic_system_update, AromaticSystemConstraintDsl,
+    AromaticSystemDsl, AromaticSystemPredicate, AromaticSystemUpdateDsl,
 };
 pub use atom::{
     parse_atom, parse_atom_update, AromaticValenceDsl, AtomConstraintDsl, AtomDsl, AtomPredicate,

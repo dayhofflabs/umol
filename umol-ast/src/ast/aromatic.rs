@@ -5,8 +5,8 @@ use umol_graph_core::{ParticipantPosition, RelationData};
 
 use super::constraint::{AromaticSystemConstraintAst, AromaticSystemConstraintsAst};
 use super::electrons::ElectronCountsAst;
-use super::spin::SpinStateAst;
-use super::traits::Lattice;
+use super::spin::{SpinStateAst, SpinStateUpdate};
+use super::traits::{Canonicalize, Lattice};
 use super::value::ValueAst;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
@@ -14,6 +14,17 @@ pub struct AromaticSystemAst {
     pub electrons: ElectronCountsAst,
     pub charge: ValueAst,
     pub spin: SpinStateAst,
+    pub constraints: AromaticSystemConstraintsAst,
+}
+
+/// Attribute update for an aromatic system. Ordinary fields are optional,
+/// spin is updated independently by component, and undetermined constraints
+/// remove their key.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AromaticSystemUpdate {
+    pub electrons: Option<ElectronCountsAst>,
+    pub charge: Option<ValueAst>,
+    pub spin: SpinStateUpdate,
     pub constraints: AromaticSystemConstraintsAst,
 }
 
@@ -92,34 +103,43 @@ impl AromaticSystemAst {
         self
     }
 
-    /// Overwrite with `other`, keeping existing values and constraints. Spin merges
-    /// field-wise (unpaired / multiplicity independently).
-    pub fn update(&self, other: &AromaticSystemAst) -> AromaticSystemAst {
+    /// Apply an attribute update, leaving omitted leaves and constraint keys unchanged.
+    pub fn update(&self, update: &AromaticSystemUpdate) -> AromaticSystemAst {
         let mut constraints = self.constraints.clone();
-        constraints.update(&other.constraints);
+        constraints.update(&update.constraints);
         AromaticSystemAst {
-            electrons: if other.electrons.is_undetermined() {
-                self.electrons.clone()
-            } else {
-                other.electrons.clone()
-            },
-            charge: if other.charge.is_undetermined() {
-                self.charge.clone()
-            } else {
-                other.charge.clone()
-            },
-            spin: SpinStateAst {
-                unpaired: if other.spin.unpaired.is_undetermined() {
-                    self.spin.unpaired.clone()
-                } else {
-                    other.spin.unpaired.clone()
-                },
-                multiplicity: if other.spin.multiplicity.is_undetermined() {
-                    self.spin.multiplicity.clone()
-                } else {
-                    other.spin.multiplicity.clone()
-                },
-            },
+            electrons: update
+                .electrons
+                .clone()
+                .unwrap_or_else(|| self.electrons.clone()),
+            charge: update.charge.clone().unwrap_or_else(|| self.charge.clone()),
+            spin: self.spin.update(&update.spin),
+            constraints,
+        }
+    }
+
+    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    pub fn difference_to(&self, other: &Self) -> AromaticSystemUpdate {
+        let mut constraints = AromaticSystemConstraintsAst::new();
+        for new in other.constraints.iter() {
+            if self
+                .constraints
+                .get(new.key())
+                .is_none_or(|old| !old.canonical_eq(new))
+            {
+                constraints.set(new.clone());
+            }
+        }
+        for old in self.constraints.iter() {
+            if other.constraints.get(old.key()).is_none() {
+                constraints.set(old.as_undetermined());
+            }
+        }
+        AromaticSystemUpdate {
+            electrons: (!self.electrons.canonical_eq(&other.electrons))
+                .then(|| other.electrons.clone()),
+            charge: (!self.charge.canonical_eq(&other.charge)).then(|| other.charge.clone()),
+            spin: self.spin.difference_to(&other.spin),
             constraints,
         }
     }
@@ -142,15 +162,24 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::new(AromaticSystemAst::new(ElectronCountsAst::Lit(vec![1; 3])),
+    #[case::literal(AromaticSystemAst::new(ElectronCountsAst::Lit(vec![1; 3])),
         AromaticSystemAst { electrons: ElectronCountsAst::Lit(vec![1; 3]),
             charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
             constraints: AromaticSystemConstraintsAst::new() })]
-    #[case::from_electrons(AromaticSystemAst::from_electrons(vec![1, 1, 1]),
+    fn test_aromatic_system_ast_new(
+        #[case] actual: AromaticSystemAst,
+        #[case] expected: AromaticSystemAst,
+    ) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::literal(AromaticSystemAst::from_electrons(vec![1, 1, 1]),
         AromaticSystemAst { electrons: ElectronCountsAst::Lit(vec![1; 3]),
             charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
             constraints: AromaticSystemConstraintsAst::new() })]
-    fn test_aromatic_system_ast_constructors(
+    fn test_aromatic_system_ast_from_electrons(
         #[case] actual: AromaticSystemAst,
         #[case] expected: AromaticSystemAst,
     ) {
@@ -202,6 +231,85 @@ mod tests {
         #[case] expected: AromaticSystemAst,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::electrons(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])), ..Default::default() }, AromaticSystemAst::from_electrons(vec![2, 2, 2]))]
+    #[case::electrons_undetermined(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { electrons: Some(ElectronCountsAst::Undetermined), ..Default::default() }, AromaticSystemAst::default())]
+    #[case::charge(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64), AromaticSystemUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(-1_i64))]
+    #[case::charge_undetermined(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(-1_i64), AromaticSystemUpdate { charge: Some(ValueAst::Undetermined), ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]))]
+    #[case::spin_unpaired(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_spin((2_u8, 3_u8)), AromaticSystemUpdate { spin: SpinStateUpdate { unpaired: Some(ValueAst::Lit(0)), multiplicity: None }, ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_spin((0_u8, 3_u8)))]
+    #[case::spin_multiplicity(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_spin((2_u8, 3_u8)), AromaticSystemUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_spin((2_u8, 1_u8)))]
+    #[case::constraint_set(AromaticSystemAst::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(6_i64)), ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)))]
+    #[case::constraint_replace(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(4_i64)), ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(4_i64)))]
+    #[case::constraint_remove(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)), AromaticSystemUpdate { constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }, AromaticSystemAst::from_electrons(vec![1, 1, 1]))]
+    fn test_aromatic_system_ast_update(
+        #[case] system: AromaticSystemAst,
+        #[case] update: AromaticSystemUpdate,
+        #[case] expected: AromaticSystemAst,
+    ) {
+        assert_eq!(system.update(&update), expected);
+    }
+
+    #[rstest]
+    #[case::empty(AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(-1_i64).with_spin((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)))]
+    fn test_aromatic_system_ast_update_identity(#[case] system: AromaticSystemAst) {
+        assert_eq!(system.update(&AromaticSystemUpdate::default()), system);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fields_and_constraints(
+        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(0_i64).with_spin((2_u8, 3_u8)).with_constraint(AromaticSystemConstraintAst::electron_count(6_i64)),
+        AromaticSystemAst::from_electrons(vec![2, 2, 2]).with_spin((2_u8, 1_u8)),
+        AromaticSystemUpdate {
+            electrons: Some(ElectronCountsAst::Lit(vec![2, 2, 2])),
+            charge: Some(ValueAst::Undetermined),
+            spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) },
+            constraints: AromaticSystemConstraintsAst::from(AromaticSystemConstraintAst::electron_count(ValueAst::Undetermined)),
+        },
+    )]
+    fn test_aromatic_system_ast_difference_to(
+        #[case] system: AromaticSystemAst,
+        #[case] other: AromaticSystemAst,
+        #[case] expected: AromaticSystemUpdate,
+    ) {
+        assert_eq!(system.difference_to(&other), expected);
+    }
+
+    #[rstest]
+    #[case::canonical(
+        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(1_i64),
+        AromaticSystemAst::from_electrons(vec![1, 1, 1]).with_charge(ValueAst::lit_set([1])),
+    )]
+    fn test_aromatic_system_ast_difference_to_identity(
+        #[case] system: AromaticSystemAst,
+        #[case] other: AromaticSystemAst,
+    ) {
+        assert_eq!(
+            system.difference_to(&other),
+            AromaticSystemUpdate::default()
+        );
+    }
+
+    #[rstest]
+    #[case::three_members(
+        AromaticSystemAst::from_electrons(vec![10, 20, 30]).with_charge(-1),
+        vec![
+            ParticipantPosition(2),
+            ParticipantPosition(0),
+            ParticipantPosition(1),
+        ],
+        AromaticSystemAst::from_electrons(vec![30, 10, 20]).with_charge(-1),
+    )]
+    fn test_aromatic_system_ast_permute(
+        #[case] mut input: AromaticSystemAst,
+        #[case] order: Vec<ParticipantPosition>,
+        #[case] expected: AromaticSystemAst,
+    ) {
+        input.permute(&order);
+        assert_eq!(input, expected);
     }
 
     #[rustfmt::skip]
@@ -303,19 +411,5 @@ mod tests {
         #[case] expected: AromaticSystemAst,
     ) {
         assert_eq!(a.join(&b), Ok(expected));
-    }
-
-    #[rstest]
-    fn test_aromatic_system_ast_permute() {
-        let mut input = AromaticSystemAst::from_electrons(vec![10, 20, 30]).with_charge(-1);
-        input.permute(&[
-            ParticipantPosition(2),
-            ParticipantPosition(0),
-            ParticipantPosition(1),
-        ]);
-        assert_eq!(
-            input,
-            AromaticSystemAst::from_electrons(vec![30, 10, 20]).with_charge(-1)
-        );
     }
 }

@@ -1,8 +1,8 @@
 use proptest::prelude::*;
 use umol_ast::ast::{
-    AtomDelta, AtomFieldChange, AtomId, BondDelta, BondFieldChange, BondId, Canonicalize,
-    Constraint, ConstraintDelta, DativeBondDelta, DativeBondId, Delta, Deltas, EntityPatch,
-    MoleculeConstraint, ValueAst,
+    AromaticSystemDelta, AromaticSystemId, AtomDelta, AtomFieldChange, AtomId, BondDelta,
+    BondFieldChange, BondId, Canonicalize, Constraint, ConstraintDelta, DativeBondDelta,
+    DativeBondId, Delta, Deltas, EntityPatch, MoleculeConstraint, ValueAst,
 };
 
 use crate::strategies::*;
@@ -47,6 +47,24 @@ fn apply_dative_bond_diff(mut ast: DativeBondAst, diff: Vec<DativeBondDelta>) ->
             }
             DativeBondDelta::ModifyConstraint { old, new, .. } => {
                 DativeBondDelta::apply_constraint(&mut ast, old, new).unwrap()
+            }
+            other => unreachable!("diff yields only modify deltas, got {other:?}"),
+        }
+    }
+    ast
+}
+
+fn apply_aromatic_system_diff(
+    mut ast: AromaticSystemAst,
+    diff: Vec<AromaticSystemDelta>,
+) -> AromaticSystemAst {
+    for delta in diff {
+        match delta {
+            AromaticSystemDelta::ModifyField { change, .. } => {
+                AromaticSystemDelta::apply_field(&mut ast, change).unwrap()
+            }
+            AromaticSystemDelta::ModifyConstraint { old, new, .. } => {
+                AromaticSystemDelta::apply_constraint(&mut ast, old, new).unwrap()
             }
             other => unreachable!("diff yields only modify deltas, got {other:?}"),
         }
@@ -206,6 +224,31 @@ proptest! {
     fn test_dative_bond_ast_difference_to(
         lhs in dative_bond_strategy(),
         rhs in dative_bond_strategy(),
+    ) {
+        let update = lhs.difference_to(&rhs);
+        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+    }
+
+    #[test]
+    fn test_aromatic_system_delta_diff_apply(
+        lhs in aromatic_system_patch_ast_strategy(),
+        rhs in aromatic_system_patch_ast_strategy(),
+    ) {
+        let diff = AromaticSystemDelta::diff(AromaticSystemId(0), &lhs, &rhs);
+        prop_assert_eq!(apply_aromatic_system_diff(lhs, diff), rhs);
+    }
+
+    #[test]
+    fn test_aromatic_system_delta_diff_identity(system in aromatic_system_patch_ast_strategy()) {
+        let diff = AromaticSystemDelta::diff(AromaticSystemId(0), &system, &system);
+        prop_assert!(diff.is_empty());
+        prop_assert_eq!(apply_aromatic_system_diff(system.clone(), diff), system);
+    }
+
+    #[test]
+    fn test_aromatic_system_ast_difference_to(
+        lhs in aromatic_system_patch_ast_strategy(),
+        rhs in aromatic_system_patch_ast_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).canonical_eq(&rhs));
