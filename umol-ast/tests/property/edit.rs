@@ -1,4 +1,5 @@
 use proptest::prelude::*;
+use umol_ast::ast::Transaction;
 
 use crate::strategies::*;
 
@@ -61,6 +62,38 @@ proptest! {
             .map_err(|e| TestCaseError::fail(format!("rollback failed: {e}")))?;
 
         prop_assert_eq!(builder.build(), before);
+    }
+
+    #[test]
+    fn test_transaction_append_materialization(
+        (base, edits) in overlay_transaction_strategy(),
+    ) {
+        prop_assume!(!edits.is_empty());
+
+        let mut single = base.edit();
+        single
+            .transact(edits.clone())
+            .map_err(|e| TestCaseError::fail(format!("single transact failed: {e}")))?;
+        let expected = single.build();
+
+        let mut staged = base.edit();
+        let mut combined = Transaction::default();
+        for edit in edits {
+            let transaction = staged
+                .transact(vec![edit])
+                .map_err(|e| TestCaseError::fail(format!("staged transact failed: {e}")))?;
+            combined.append(transaction);
+            let state = staged.build();
+            staged = state.edit();
+        }
+        let materialized = staged.build();
+        prop_assert_eq!(&materialized, &expected);
+
+        let mut staged = materialized.edit();
+        combined
+            .rollback(&mut staged)
+            .map_err(|e| TestCaseError::fail(format!("combined rollback failed: {e}")))?;
+        prop_assert_eq!(staged.build(), base);
     }
 
     #[test]

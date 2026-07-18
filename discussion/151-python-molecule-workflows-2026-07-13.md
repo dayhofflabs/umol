@@ -1037,8 +1037,11 @@ covered by cross-family properties.
   prove valence-to-aromaticity and aromaticity-to-stereo observation, reverse
   rollback after later aromaticity/stereo contradictions, accepted
   underdetermined narrowing, identity, and both dual-cause diagnostic shapes.
-  **Composite transactional resolver and error-enum migration (green).** `[dep:
-  S0b, S1c, S1d, S1e, S1f, S1g]`
+  The `umol-ast` property suite additionally compares a generated multi-edit
+  overlay transaction with the same edits applied as individually materialized
+  batches, appends every returned journal, and proves that the combined rollback
+  reconstructs the original AST. **Composite transactional resolver and
+  error-enum migration (green).** `[dep: S0b, S1c, S1d, S1e, S1f, S1g]`
 
 S1 is the atomic-resolution milestone. The general resolver is correct without
 clone-and-publish, `transact_validated`, validator combinators, or savepoints.
