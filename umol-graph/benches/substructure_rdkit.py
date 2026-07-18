@@ -4,7 +4,7 @@ from rdkit import Chem, RDLogger
 
 RDLogger.logger().setLevel(RDLogger.ERROR)
 
-smiles_files = glob.glob(str(pathlib.Path(__file__).resolve().parent.parent / "tests/smiles_parsing/data/basic_opensmiles/**/*.smiles"), recursive=True)
+smiles_files = glob.glob(str(pathlib.Path(__file__).resolve().parents[2] / "umol-io/tests/smiles_parsing/data/opensmiles/**/*.smiles"), recursive=True)
 smiles_list = []
 for f in sorted(smiles_files):
     lines = open(f).readlines()

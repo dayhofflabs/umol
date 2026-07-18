@@ -1326,8 +1326,8 @@ The immediate path therefore follows the high-cost branch:
    configuration. Keep the extended parser and `ExtendedMolecule` inside
    `umol-io` for CXSMILES, MOL, and SDF while their boundary design is deferred
    to the next pass.
-4. Replace `basic_opensmiles` with one complete OpenSMILES default after `*` is
-   supported. The distinction between ordinary and extended aromatic/bond
+4. Use one complete OpenSMILES default, including `*`. The distinction between
+   ordinary and extended aromatic/bond
    syntax remains an acceptance-policy option within SMILES rather than a
    result-type choice.
 5. Schedule a representation-design spike for eventual TableIR unification.

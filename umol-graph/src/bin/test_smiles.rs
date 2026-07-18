@@ -3,26 +3,18 @@ use std::io::{self, BufRead, BufReader};
 use std::process;
 
 use clap::{Parser, ValueEnum};
-use umol_io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
+use umol_io::smiles::config::SmilesIoConfig;
 use umol_io::smiles::{parse_extended_smiles_bytes_with, Smiles};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum ParserType {
-    /// Basic OpenSMILES (strict, no extensions)
-    BasicOpensmiles,
-    /// OpenSMILES with wildcards (extended parser)
+    /// OpenSMILES
     Opensmiles,
-    /// Basic parser with default flags
-    Basic,
-    /// Basic lenient parser
-    BasicLenient,
-    /// Extended parser with default flags
-    Extended,
     /// Extended lenient parser
     Lenient,
-    /// Basic parser with CXSMILES support
+    /// CXSMILES whose annotations fit in Molecule
     BasicChemaxon,
-    /// Extended parser with CXSMILES support
+    /// CXSMILES whose annotations may require ExtendedMolecule
     Chemaxon,
 }
 
@@ -31,7 +23,7 @@ enum ParserType {
 #[command(about = "Test SMILES parsing on a file or stdin")]
 struct Args {
     /// Parser type to use
-    #[arg(short, long, default_value = "basic-opensmiles")]
+    #[arg(short, long, default_value = "opensmiles")]
     parser: ParserType,
 
     /// Path to .smi file (use "-" or omit for stdin)
@@ -65,19 +57,9 @@ fn main() {
     };
 
     let (use_extended, config, include_chemaxon) = match args.parser {
-        ParserType::BasicOpensmiles => (false, SmilesIoConfig::basic_opensmiles(), false),
-        ParserType::Opensmiles => (true, SmilesIoConfig::opensmiles(), false),
-        ParserType::Basic => (false, SmilesIoConfig::basic(), false),
-        ParserType::BasicLenient => (
-            false,
-            SmilesIoConfig::with_parse_flags(
-                SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT,
-            ),
-            false,
-        ),
-        ParserType::Extended => (true, SmilesIoConfig::extended(), false),
+        ParserType::Opensmiles => (false, SmilesIoConfig::opensmiles(), false),
         ParserType::Lenient => (true, SmilesIoConfig::lenient(), false),
-        ParserType::BasicChemaxon => (false, SmilesIoConfig::basic_chemaxon(), true),
+        ParserType::BasicChemaxon => (false, SmilesIoConfig::chemaxon(), true),
         ParserType::Chemaxon => (true, SmilesIoConfig::chemaxon(), true),
     };
 

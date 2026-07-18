@@ -1,5 +1,5 @@
-//! End-to-end substructure matching over the basic_opensmiles corpus
-//! (`umol-io/tests/smiles_parsing/data/basic_opensmiles`, ~9k molecules).
+//! End-to-end substructure matching over the OpenSMILES corpus
+//! (`umol-io/tests/smiles_parsing/data/opensmiles`, ~9k molecules).
 //!
 //! Sweeps both `MoleculeAst::substructure_matches` strategies against all six
 //! subgraph-isomorphism algorithms, over three patterns of increasing cost. The
@@ -56,7 +56,7 @@ fn strategy_name(strategy: SubstructureMatchAlgorithm) -> &'static str {
 fn load_corpus() -> Vec<MoleculeAst> {
     let dir = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../umol-io/tests/smiles_parsing/data/basic_opensmiles"
+        "/../umol-io/tests/smiles_parsing/data/opensmiles"
     );
     let mut molecules = Vec::new();
     for entry in WalkDir::new(dir)

@@ -4,11 +4,6 @@ expression: results
 ---
 expected_category: invalid
 category: invalid
-basic_opensmiles:
-  success: false
-  error:
-    error_type: InvalidToken
-    message: Invalid token at position 223
 opensmiles:
   success: false
   error:

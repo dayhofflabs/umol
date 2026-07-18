@@ -113,7 +113,7 @@ use walkdir::WalkDir;
 fn load_corpus(limit: usize) -> Vec<MoleculeAst> {
     let dir = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../umol-io/tests/smiles_parsing/data/basic_opensmiles"
+        "/../umol-io/tests/smiles_parsing/data/opensmiles"
     );
     let mut molecules = Vec::new();
     for entry in WalkDir::new(dir)

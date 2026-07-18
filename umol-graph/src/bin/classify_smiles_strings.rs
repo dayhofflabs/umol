@@ -1,10 +1,9 @@
 //! SMILES string classifier for conformance test organization.
 //!
 //! Classifies SMILES strings into categories based on parser success:
-//! - basic_opensmiles: passes strict OpenSMILES parser (no wildcards)
-//! - opensmiles: passes extended OpenSMILES parser (with wildcards)
-//! - basic_chemaxon: passes basic Chemaxon parser (no wildcards)
-//! - chemaxon: passes extended Chemaxon parser (with wildcards)
+//! - opensmiles: passes the OpenSMILES parser
+//! - basic_chemaxon: CX annotations fit in `Molecule`
+//! - chemaxon: CX annotations require `ExtendedMolecule`
 //! - chemaxon_invalid: SMILES part parses, but CX block is invalid/unhandled
 //! - invalid: fails all parsers
 //! - bug: unexpected parser outcome (indicates parser inconsistency)
@@ -232,7 +231,6 @@ fn read_smiles_file(path: &Path, probe_rows: usize) -> io::Result<Vec<SmilesEntr
 
 struct ParseResults {
     has_cx_annotations: bool,
-    basic_opensmiles: bool,
     opensmiles: bool,
     basic_chemaxon: bool,
     chemaxon: bool,
@@ -241,30 +239,21 @@ struct ParseResults {
 impl ParseResults {
     fn pattern(&self) -> String {
         format!(
-            "{}{}{}{}{}",
+            "{}{}{}{}",
             if self.has_cx_annotations { "+" } else { "-" },
-            if self.basic_opensmiles { "+" } else { "-" },
-            if self.basic_chemaxon { "+" } else { "-" },
             if self.opensmiles { "+" } else { "-" },
+            if self.basic_chemaxon { "+" } else { "-" },
             if self.chemaxon { "+" } else { "-" },
         )
     }
 
     fn has_hierarchy_violation(&self) -> bool {
-        // basic_opensmiles → opensmiles
-        if self.basic_opensmiles && !self.opensmiles {
+        // Without a CX block, the ChemAxon-enabled basic parser should behave
+        // like the OpenSMILES parser.
+        if !self.has_cx_annotations && self.basic_chemaxon && !self.opensmiles {
             println!(
-                "basic_opensmiles ({}) -> opensmiles ({})",
-                self.basic_opensmiles, self.opensmiles
-            );
-            return true;
-        }
-        // If there's no CX block, basic_chemaxon should behave like basic_opensmiles
-        // and chemaxon should behave like opensmiles.
-        if !self.has_cx_annotations && self.basic_chemaxon && !self.basic_opensmiles {
-            println!(
-                "basic_chemaxon ({}) -> basic_opensmiles ({})",
-                self.basic_chemaxon, self.chemaxon
+                "basic_chemaxon ({}) -> opensmiles ({})",
+                self.basic_chemaxon, self.opensmiles
             );
             return true;
         }
@@ -288,8 +277,9 @@ impl ParseResults {
 
     fn violation_description(&self) -> Option<String> {
         let mut violations = Vec::new();
-        if self.basic_opensmiles && !self.opensmiles {
-            violations.push("basic_opensmiles succeeded but opensmiles failed");
+        if !self.has_cx_annotations && self.basic_chemaxon && !self.opensmiles {
+            violations
+                .push("basic_chemaxon succeeded but opensmiles failed without CX annotations");
         }
         if !self.has_cx_annotations && self.opensmiles && !self.chemaxon {
             violations.push("opensmiles succeeded but chemaxon failed");
@@ -307,7 +297,6 @@ impl ParseResults {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Category {
-    BasicOpensmiles,
     Opensmiles,
     BasicChemaxon,
     Chemaxon,
@@ -322,18 +311,16 @@ impl Category {
             return Category::Bug;
         }
         match &results.pattern()[..] {
-            // Pattern: XABCD
+            // Pattern: XABC
             // X: has_cx
-            // A: basic_opensmiles
+            // A: opensmiles
             // B: basic_chemaxon
-            // C: opensmiles
-            // D: chemaxon
-            "-++++" => Category::BasicOpensmiles,
-            "---++" => Category::Opensmiles,
-            "+++++" => Category::BasicChemaxon,
-            "++-++" | "+--++" => Category::Chemaxon,
-            "++-+-" | "+--+-" => Category::ChemaxonInvalid,
-            "-----" | "+----" => Category::Invalid,
+            // C: chemaxon
+            "-+++" => Category::Opensmiles,
+            "++++" => Category::BasicChemaxon,
+            "++-+" | "+--+" => Category::Chemaxon,
+            "++--" => Category::ChemaxonInvalid,
+            "----" | "+---" => Category::Invalid,
             _ => {
                 println!("PATTERN {}", results.pattern());
                 Category::Bug
@@ -343,7 +330,6 @@ impl Category {
 
     fn dir_name(&self) -> &'static str {
         match self {
-            Category::BasicOpensmiles => "basic_opensmiles",
             Category::Opensmiles => "opensmiles",
             Category::BasicChemaxon => "basic_chemaxon",
             Category::Chemaxon => "chemaxon",
@@ -356,7 +342,6 @@ impl Category {
 
 #[derive(Debug, Default)]
 struct ClassificationStats {
-    basic_opensmiles: usize,
     opensmiles: usize,
     basic_chemaxon: usize,
     chemaxon: usize,
@@ -369,7 +354,6 @@ struct ClassificationStats {
 impl ClassificationStats {
     fn add(&mut self, category: Category) {
         match category {
-            Category::BasicOpensmiles => self.basic_opensmiles += 1,
             Category::Opensmiles => self.opensmiles += 1,
             Category::BasicChemaxon => self.basic_chemaxon += 1,
             Category::Chemaxon => self.chemaxon += 1,
@@ -384,8 +368,7 @@ impl ClassificationStats {
         if self.total == 0 {
             0.0
         } else {
-            let valid =
-                self.basic_opensmiles + self.opensmiles + self.basic_chemaxon + self.chemaxon;
+            let valid = self.opensmiles + self.basic_chemaxon + self.chemaxon;
             (valid as f64 / self.total as f64) * 100.0
         }
     }
@@ -399,16 +382,13 @@ fn has_cx_annotations(smiles: &str) -> bool {
 }
 
 fn classify_smiles(smiles: &str) -> Result<(Category, ParseResults), Box<dyn Error>> {
-    let basic_config = SmilesIoConfig::basic();
     let opensmiles_config = SmilesIoConfig::opensmiles();
-    let basic_chemaxon_config = SmilesIoConfig::basic_chemaxon();
     let chemaxon_config = SmilesIoConfig::chemaxon();
 
     let results = ParseResults {
         has_cx_annotations: has_cx_annotations(smiles),
-        basic_opensmiles: Smiles::parse_bytes_with(smiles.as_bytes(), &basic_config).is_ok(),
-        opensmiles: parse_extended_smiles_bytes_with(smiles.as_bytes(), &opensmiles_config).is_ok(),
-        basic_chemaxon: Smiles::parse_bytes_with(smiles.as_bytes(), &basic_chemaxon_config).is_ok(),
+        opensmiles: Smiles::parse_bytes_with(smiles.as_bytes(), &opensmiles_config).is_ok(),
+        basic_chemaxon: Smiles::parse_bytes_with(smiles.as_bytes(), &chemaxon_config).is_ok(),
         chemaxon: parse_extended_smiles_bytes_with(smiles.as_bytes(), &chemaxon_config).is_ok(),
     };
 
@@ -436,7 +416,6 @@ fn collect_smi_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
 
 fn clean_existing_files(data_path: &str) -> Result<(), Box<dyn Error>> {
     let categories = [
-        "basic_opensmiles",
         "opensmiles",
         "basic_chemaxon",
         "chemaxon",
@@ -473,6 +452,55 @@ fn sanitize_filename(s: &str) -> String {
             c => c,
         })
         .collect()
+}
+
+fn report_preamble() -> &'static str {
+    concat!(
+        "\n# SMILES Classification Results\n\n",
+        "Classification based on parser compatibility:\n",
+        "- **opensmiles**: Passes the OpenSMILES parser\n",
+        "- **basic_chemaxon**: CX annotations fit in Molecule\n",
+        "- **chemaxon**: CX annotations require ExtendedMolecule\n",
+        "- **invalid**: Fails all parsers\n\n",
+        "- **chemaxon_invalid**: SMILES parses but CX block is invalid/unhandled\n",
+    )
+}
+
+fn report_header() -> &'static str {
+    concat!(
+        "| Source | Total | opensmiles | basic_chemaxon | chemaxon | invalid | ",
+        "chemaxon_invalid | bug | Valid % |\n",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    )
+}
+
+fn report_row(source: &str, stats: &ClassificationStats) -> String {
+    format!(
+        "| {} | {} | {} | {} | {} | {} | {} | {} | {:.1}% |",
+        source,
+        stats.total,
+        stats.opensmiles,
+        stats.basic_chemaxon,
+        stats.chemaxon,
+        stats.invalid,
+        stats.chemaxon_invalid,
+        stats.bug,
+        stats.valid_percentage()
+    )
+}
+
+fn total_report_row(stats: &ClassificationStats) -> String {
+    format!(
+        "| **Total** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{:.1}%** |",
+        stats.total,
+        stats.opensmiles,
+        stats.basic_chemaxon,
+        stats.chemaxon,
+        stats.invalid,
+        stats.chemaxon_invalid,
+        stats.bug,
+        stats.valid_percentage()
+    )
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -606,14 +634,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Print markdown report
-    println!("\n# SMILES Classification Results\n");
-    println!("Classification based on parser compatibility:");
-    println!("- **basic_opensmiles**: Passes strict OpenSMILES parser (no wildcards)");
-    println!("- **opensmiles**: Passes extended OpenSMILES parser (with wildcards)");
-    println!("- **basic_chemaxon**: Requires CHEMAXON_EXTENSIONS (basic parser)");
-    println!("- **chemaxon**: Requires CHEMAXON_EXTENSIONS (extended parser)");
-    println!("- **invalid**: Fails all parsers\n");
-    println!("- **chemaxon_invalid**: SMILES parses but CX block is invalid/unhandled");
+    print!("{}", report_preamble());
 
     if args.max_samples > 0 {
         println!(
@@ -622,8 +643,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
 
-    println!("| Source | Total | basic_opensmiles | opensmiles | basic_chemaxon | chemaxon | invalid | chemaxon_invalid | bug | Valid % |");
-    println!("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+    println!("{}", report_header());
 
     let mut sources: Vec<_> = source_stats.iter().collect();
     sources.sort_by_key(|(name, _)| name.as_str());
@@ -631,21 +651,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut totals = ClassificationStats::default();
 
     for (source, stats) in &sources {
-        println!(
-            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {:.1}% |",
-            source,
-            stats.total,
-            stats.basic_opensmiles,
-            stats.opensmiles,
-            stats.basic_chemaxon,
-            stats.chemaxon,
-            stats.invalid,
-            stats.chemaxon_invalid,
-            stats.bug,
-            stats.valid_percentage()
-        );
+        println!("{}", report_row(source, stats));
 
-        totals.basic_opensmiles += stats.basic_opensmiles;
         totals.opensmiles += stats.opensmiles;
         totals.basic_chemaxon += stats.basic_chemaxon;
         totals.chemaxon += stats.chemaxon;
@@ -655,18 +662,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         totals.total += stats.total;
     }
 
-    println!(
-        "| **Total** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{:.1}%** |",
-        totals.total,
-        totals.basic_opensmiles,
-        totals.opensmiles,
-        totals.basic_chemaxon,
-        totals.chemaxon,
-        totals.chemaxon_invalid,
-        totals.invalid,
-        totals.bug,
-        totals.valid_percentage()
-    );
+    println!("{}", total_report_row(&totals));
 
     println!("\n\n**Summary:**");
     println!("- Processed: {} SMILES strings", processed_smiles);
@@ -707,4 +703,122 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case::opensmiles(
+        ParseResults { has_cx_annotations: false, opensmiles: true, basic_chemaxon: true, chemaxon: true },
+        Category::Opensmiles
+    )]
+    #[case::basic_chemaxon(
+        ParseResults { has_cx_annotations: true, opensmiles: true, basic_chemaxon: true, chemaxon: true },
+        Category::BasicChemaxon
+    )]
+    #[case::chemaxon(
+        ParseResults { has_cx_annotations: true, opensmiles: true, basic_chemaxon: false, chemaxon: true },
+        Category::Chemaxon
+    )]
+    #[case::chemaxon_extended_only(
+        ParseResults { has_cx_annotations: true, opensmiles: false, basic_chemaxon: false, chemaxon: true },
+        Category::Chemaxon
+    )]
+    #[case::chemaxon_invalid(
+        ParseResults { has_cx_annotations: true, opensmiles: true, basic_chemaxon: false, chemaxon: false },
+        Category::ChemaxonInvalid
+    )]
+    #[case::invalid(
+        ParseResults { has_cx_annotations: false, opensmiles: false, basic_chemaxon: false, chemaxon: false },
+        Category::Invalid
+    )]
+    #[case::invalid_with_cx(
+        ParseResults { has_cx_annotations: true, opensmiles: false, basic_chemaxon: false, chemaxon: false },
+        Category::Invalid
+    )]
+    #[case::bug(
+        ParseResults { has_cx_annotations: false, opensmiles: false, basic_chemaxon: false, chemaxon: true },
+        Category::Bug
+    )]
+    fn test_category_from_results(#[case] results: ParseResults, #[case] expected: Category) {
+        assert_eq!(Category::from_results(&results), expected);
+    }
+
+    #[rstest]
+    #[case::opensmiles(Category::Opensmiles, "opensmiles")]
+    #[case::basic_chemaxon(Category::BasicChemaxon, "basic_chemaxon")]
+    #[case::chemaxon(Category::Chemaxon, "chemaxon")]
+    #[case::chemaxon_invalid(Category::ChemaxonInvalid, "chemaxon_invalid")]
+    #[case::invalid(Category::Invalid, "invalid")]
+    #[case::bug(Category::Bug, "bug")]
+    fn test_category_dir_name(#[case] category: Category, #[case] expected: &str) {
+        assert_eq!(category.dir_name(), expected);
+    }
+
+    #[rstest]
+    fn test_report_preamble() {
+        assert_eq!(
+            report_preamble(),
+            concat!(
+                "\n# SMILES Classification Results\n\n",
+                "Classification based on parser compatibility:\n",
+                "- **opensmiles**: Passes the OpenSMILES parser\n",
+                "- **basic_chemaxon**: CX annotations fit in Molecule\n",
+                "- **chemaxon**: CX annotations require ExtendedMolecule\n",
+                "- **invalid**: Fails all parsers\n\n",
+                "- **chemaxon_invalid**: SMILES parses but CX block is invalid/unhandled\n",
+            )
+        );
+    }
+
+    #[rstest]
+    fn test_report_header() {
+        assert_eq!(
+            report_header(),
+            concat!(
+                "| Source | Total | opensmiles | basic_chemaxon | chemaxon | invalid | ",
+                "chemaxon_invalid | bug | Valid % |\n",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            )
+        );
+    }
+
+    #[rstest]
+    fn test_report_row() {
+        assert_eq!(
+            report_row(
+                "source",
+                &ClassificationStats {
+                    opensmiles: 1,
+                    basic_chemaxon: 2,
+                    chemaxon: 3,
+                    invalid: 4,
+                    chemaxon_invalid: 5,
+                    bug: 6,
+                    total: 21,
+                },
+            ),
+            "| source | 21 | 1 | 2 | 3 | 4 | 5 | 6 | 28.6% |"
+        );
+    }
+
+    #[rstest]
+    fn test_total_report_row() {
+        assert_eq!(
+            total_report_row(&ClassificationStats {
+                opensmiles: 1,
+                basic_chemaxon: 2,
+                chemaxon: 3,
+                invalid: 4,
+                chemaxon_invalid: 5,
+                bug: 6,
+                total: 21,
+            }),
+            "| **Total** | **21** | **1** | **2** | **3** | **4** | **5** | **6** | **28.6%** |"
+        );
+    }
 }

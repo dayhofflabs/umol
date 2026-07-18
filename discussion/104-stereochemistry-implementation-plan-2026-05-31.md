@@ -1532,7 +1532,7 @@ Phases A–E are in scope; F (3D) and G follow.
       (alternating synthetic edge labels; unlabeled regular graphs hide the label-aware algorithms'
       advantage), sweeping all six variants over the fixture matrix incl. C60.
     - `umol-graph/benches/substructure.rs` — end-to-end `MoleculeAst::substructure_matches`, 2 strategies ×
-      6 subiso, over the ~9k basic_opensmiles corpus × three patterns (branched / phenol / bicyclic). Replaces
+      6 subiso, over the ~9k OpenSMILES corpus × three patterns (branched / phenol / bicyclic). Replaces
       the stale legacy-API bench. Corpus, patterns, and semantics (element-only atoms, any-bonds, all
       embeddings) mirror the RDKit script for a fair comparison.
     - `scripts/rdkit_substructure_baseline.py` — non-permanent dev oracle (not a build dep), run in the

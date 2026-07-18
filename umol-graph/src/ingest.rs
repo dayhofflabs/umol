@@ -86,12 +86,12 @@ impl Ingest for Smiles {
     }
 }
 
-/// Ingest SMILES text with the basic OpenSMILES configuration and default model.
+/// Ingest SMILES text with the OpenSMILES configuration and default model.
 pub fn smiles(input: &str) -> Result<MoleculeAst, SmilesInputError> {
     smiles_bytes(input.as_bytes())
 }
 
-/// Ingest SMILES bytes with the basic OpenSMILES configuration and default model.
+/// Ingest SMILES bytes with the OpenSMILES configuration and default model.
 pub fn smiles_bytes(input: &[u8]) -> Result<MoleculeAst, SmilesInputError> {
     smiles_bytes_with(
         input,
@@ -263,7 +263,7 @@ mod tests {
         assert_eq!(
             smiles_bytes_with(
                 b"C",
-                &SmilesIoConfig::basic_max(),
+                &SmilesIoConfig::opensmiles(),
                 &ChemistryModel::default(),
             ),
             Ok(expected)

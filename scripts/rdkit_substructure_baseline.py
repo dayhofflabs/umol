@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Actual-RDKit substructure-matching baseline for the basic_opensmiles corpus.
+"""Actual-RDKit substructure-matching baseline for the OpenSMILES corpus.
 
 Non-permanent dev oracle (not a build dependency). Mirrors the Rust harness in
 `umol-graph/benches/substructure.rs`: same corpus, same three patterns, and the
@@ -27,7 +27,7 @@ RDLogger.DisableLog("rdApp.*")  # silence per-molecule sanitization warnings
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORPUS_DIR = os.path.join(
-    REPO_ROOT, "umol-io", "tests", "smiles_parsing", "data", "basic_opensmiles"
+    REPO_ROOT, "umol-io", "tests", "smiles_parsing", "data", "opensmiles"
 )
 
 # (name, SMARTS) — topology identical to the Rust patterns.

@@ -1,10 +1,10 @@
 ---
-source: umol-models-graph/tests/smiles_parsing/mod.rs
+source: umol-io/tests/smiles_parsing/mod.rs
 expression: results
 ---
-expected_category: basic_opensmiles
-category: basic_opensmiles
-basic_opensmiles:
+expected_category: opensmiles
+category: opensmiles
+opensmiles:
   success: true
   summary:
     sum_formula: C8Br2N2O2S+2

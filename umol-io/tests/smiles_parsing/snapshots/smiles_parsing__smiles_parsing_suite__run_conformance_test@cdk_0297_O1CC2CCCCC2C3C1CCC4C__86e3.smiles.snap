@@ -1,10 +1,10 @@
 ---
-source: umol-models-graph/tests/smiles_parsing/mod.rs
+source: umol-io/tests/smiles_parsing/mod.rs
 expression: results
 ---
 expected_category: basic_chemaxon
 category: basic_chemaxon
-basic_opensmiles:
+opensmiles:
   success: true
   summary:
     sum_formula: C15NO

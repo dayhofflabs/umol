@@ -185,7 +185,7 @@ S1 ends with the unit, integration, and property suites green.
   The `umol-io` library suite is green; the workspace remains intentionally red
   at the S2b callers of the removed configuration names.
 
-- **S2b — classification and parsing-conformance migration**
+- **S2b — classification and parsing-conformance migration** **Done**
   (`umol-graph/src/bin/classify_smiles_strings.rs`, related diagnostic tools,
   `umol-io/tests/smiles_parsing`, and their fixtures/snapshots): migrate both
   consumers of the old split. In the `umol-graph` classification tools, remove
@@ -202,6 +202,21 @@ S1 ends with the unit, integration, and property suites green.
   classification/report tests pin the revised category structure and prevent
   reintroduction of the result-type-driven parser distinction. **Breaking
   caller and conformance migration, restoring green.** `[dep: S2a]`
+
+  **Implemented migration:** classifiers and conformance records now contain
+  one `opensmiles` result produced by `Smiles`; the duplicate extended-parser
+  OpenSMILES result, `basic_opensmiles` category, counters, report columns, and
+  diagnostic modes are gone. The ChemAxon categories remain distinct because
+  they record whether CX annotations fit in `Molecule` or require
+  `ExtendedMolecule`, but both use the single `chemaxon` acceptance policy.
+  The 9,122 former basic fixtures and 29 wildcard fixtures form one 9,151-file
+  OpenSMILES corpus. A full reclassification moved 162 wildcard-containing CX
+  fixtures from `chemaxon` to `basic_chemaxon`; no other category changed.
+  Classifier and conformance table tests pin the six remaining categories and
+  exact report structure. All 10,017 conformance snapshots now contain exactly
+  one `opensmiles` result. Benchmark and profiling consumers use the renamed
+  corpus, and every Rust caller of the retired configuration surface has been
+  migrated.
 
 S2 ends with the workspace green and no wildcard capability switch or
 basic-versus-OpenSMILES conformance category.

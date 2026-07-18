@@ -1,5 +1,5 @@
 //! Throughput benchmark for the implemented fingerprint featurizers over the
-//! basic_opensmiles corpus (`umol-io/tests/smiles_parsing/data/basic_opensmiles`,
+//! OpenSMILES corpus (`umol-io/tests/smiles_parsing/data/opensmiles`,
 //! ~9k molecules), parsed and resolved to ground.
 //!
 //! Two groups. `fingerprint` runs the circular featurizers — WL, ECFP4, Morgan
@@ -41,7 +41,7 @@ const STRUCTURAL_SAMPLES: usize = 10;
 fn load_corpus() -> Vec<MoleculeAst> {
     let dir = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../umol-io/tests/smiles_parsing/data/basic_opensmiles"
+        "/../umol-io/tests/smiles_parsing/data/opensmiles"
     );
     let mut molecules = Vec::new();
     for entry in WalkDir::new(dir)
