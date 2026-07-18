@@ -56,7 +56,10 @@ pub use multicenter::{
     MulticenterBondDsl, MulticenterBondPredicate, MulticenterBondUpdateDsl,
 };
 pub use namespace::{MoleculeNamespace, Namespace};
-pub use noncovalent::{parse_noncovalent_bond, NoncovalentBondConstraintDsl, NoncovalentBondDsl};
+pub use noncovalent::{
+    parse_noncovalent_bond, parse_noncovalent_bond_update, NoncovalentBondConstraintDsl,
+    NoncovalentBondDsl, NoncovalentBondUpdateDsl,
+};
 pub use reaction::{ReactionDsl, ReactionMetadata, ReactionNamespace};
 pub use reaction_span::ReactionSpanDsl;
 pub use refs::{

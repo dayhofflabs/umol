@@ -42,7 +42,7 @@ use super::molecule::{
 };
 use super::multicenter::{MulticenterBondDsl, MulticenterBondUpdateDsl};
 use super::namespace::{MoleculeNamespace, Namespace};
-use super::noncovalent::{NoncovalentBondDsl, PartialNoncovalentBondDsl};
+use super::noncovalent::{NoncovalentBondDsl, NoncovalentBondUpdateDsl};
 use super::refs::{
     read_aromatic_system_ref, read_atom_ref, read_bond_ref, read_dative_bond_ref,
     read_multicenter_bond_ref, read_noncovalent_bond_ref, read_stereo_atom_ref,
@@ -72,8 +72,8 @@ use crate::ast::reaction::ReactionAst;
 use crate::ast::stereo::{StereoConfigurationAst, StereoCosetAst};
 use crate::ast::traits::{FromAst, IntoAst, Lattice};
 use crate::ast::{
-    AromaticSystemUpdate, DativeBondUpdate, EntityPatch, MulticenterBondUpdate, NoncovalentBondAst,
-    StereoAtomAst, StereoBondAst, StereoKind, StereoLigand,
+    AromaticSystemUpdate, DativeBondUpdate, EntityPatch, MulticenterBondUpdate,
+    NoncovalentBondUpdate, StereoAtomAst, StereoBondAst, StereoKind, StereoLigand,
 };
 
 /// Surface DSL for a reaction. Pairs `ReactionAst` with `ReactionMetadata`; fields are
@@ -745,7 +745,7 @@ pub(crate) enum DeltaInput {
     MulticenterBondModify(MulticenterBondRef, MulticenterBondUpdate),
     NoncovalentBondAdd(NoncovalentBondEntryInput),
     NoncovalentBondRemove(NoncovalentBondRef),
-    NoncovalentBondModify(NoncovalentBondRef, NoncovalentBondAst),
+    NoncovalentBondModify(NoncovalentBondRef, NoncovalentBondUpdate),
     StereoAtomAdd(StereoAtomEntryInput),
     StereoAtomRemove(StereoAtomRef),
     StereoAtomModify(StereoAtomRef, StereoAtomAst),
@@ -1031,8 +1031,9 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    let new = lhs.noncovalent_bond(id).ast.update(&rhs);
-                    for d in NoncovalentBondDelta::diff(id, lhs.noncovalent_bond(id).ast, &new) {
+                    for d in
+                        NoncovalentBondDelta::for_update(id, lhs.noncovalent_bond(id).ast, &rhs)
+                    {
                         resolved.push(Delta::NoncovalentBond(d));
                     }
                 }
@@ -1535,10 +1536,10 @@ fn read_delta_noncovalent_bond_input(
             de.consume_byte(b'[')?;
             let r = read_noncovalent_bond_ref(de)?;
             let s = de.read_string()?;
-            let dsl: PartialNoncovalentBondDsl = s
+            let dsl: NoncovalentBondUpdateDsl = s
                 .as_ref()
                 .parse()
-                .map_err(|e| DeError::subgrammar("partial-noncovalent-bond", e))?;
+                .map_err(|e| DeError::subgrammar("noncovalent-bond-update", e))?;
             if !de.try_consume_byte(b']')? {
                 return Err(
                     DeError::Custom("noncovalent-bond :modify expects [ref dsl]".into()).into(),
@@ -1891,7 +1892,7 @@ fn parse_delta_noncovalent_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeErr
             }
             Ok(DeltaInput::NoncovalentBondModify(
                 NoncovalentBondRef::from_edn(&v[0])?,
-                PartialNoncovalentBondDsl::from_edn(&v[1])?.0,
+                NoncovalentBondUpdateDsl::from_edn(&v[1])?.0,
             ))
         }
         o => Err(DeError::Custom(format!(
@@ -2485,24 +2486,24 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 | NoncovalentBondDelta::ModifyConstraint { id, .. },
             ) => {
                 let id = *id;
-                let mut partial = NoncovalentBondAst::default();
+                let mut update = NoncovalentBondUpdate::default();
                 while let Some(Delta::NoncovalentBond(delta)) = deltas.get(i) {
                     match delta {
                         NoncovalentBondDelta::ModifyField { id: j, change } if *j == id => {
                             match change {
                                 NoncovalentBondFieldChange::Kind { new, .. } => {
-                                    partial.kind = new.clone()
+                                    update.kind = Some(new.clone())
                                 }
                             }
                         }
                         NoncovalentBondDelta::ModifyConstraint { id: j, old, new } if *j == id => {
                             match new {
                                 Some(c) => {
-                                    partial.constraints.set(c.clone());
+                                    update.constraints.set(c.clone());
                                 }
                                 None => {
                                     if let Some(old) = old {
-                                        partial.constraints.set(old.as_undetermined());
+                                        update.constraints.set(old.as_undetermined());
                                     }
                                 }
                             }
@@ -2515,7 +2516,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let payload = Edn::Vector(
                     vec![
                         NoncovalentBondRef::denote(id, combined).to_edn(),
-                        PartialNoncovalentBondDsl(partial).to_edn(),
+                        NoncovalentBondUpdateDsl(update).to_edn(),
                     ]
                     .into(),
                 );
@@ -2903,21 +2904,24 @@ mod tests {
     use crate::ast::constraint::{
         AromaticSystemConstraintAst, AromaticSystemConstraintsAst, AtomConstraintAst,
         BondConstraintAst, Constraint, DativeBondConstraintAst, DativeBondConstraintsAst,
-        MoleculeConstraint, MulticenterBondConstraintAst, MulticenterBondConstraintsAst, RingScope,
+        MoleculeConstraint, MulticenterBondConstraintAst, MulticenterBondConstraintsAst,
+        NoncovalentBondConstraintAst, NoncovalentBondConstraintsAst, RingScope,
     };
     use crate::ast::delta::{ConstraintDelta, Deltas};
     use crate::ast::edit::{
         AromaticSystemFieldChange, AtomFieldChange, BondFieldChange, MulticenterBondFieldChange,
+        NoncovalentBondFieldChange,
     };
     use crate::ast::electrons::ElectronCountsAst;
     use crate::ast::molecule::MoleculeAst;
+    use crate::ast::noncovalent::{NoncovalentBondKind, NoncovalentBondKindAst};
     use crate::ast::spin::{SpinStateAst, SpinStateUpdate};
     use crate::ast::value::ValueAst;
     use crate::dsl::bond::BondDsl;
     use crate::dsl::constraint::MoleculeConstraintDsl;
     use crate::dsl::molecule::AtomSpecInput;
     use crate::dsl::refs::{
-        AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef,
+        AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
     };
     use crate::mol_dsl;
 
@@ -3214,6 +3218,34 @@ mod tests {
     #[case::spin_component(r##"{:multicenter-bond {:modify [:m1 "#s1"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Id("m1".into()), MulticenterBondUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
     #[case::explicit_undetermined(r##"{:multicenter-bond {:modify [:m1 "*#c*#e*"]}}"##, DeltaInput::MulticenterBondModify(MulticenterBondRef::Id("m1".into()), MulticenterBondUpdate { electrons: Some(ElectronCountsAst::Undetermined), charge: Some(ValueAst::Undetermined), constraints: MulticenterBondConstraintsAst::from(MulticenterBondConstraintAst::electron_count(ValueAst::Undetermined)), ..Default::default() }))]
     fn test_read_delta_input_multicenter_bond(
+        #[case] input: &str,
+        #[case] expected: DeltaInput,
+    ) {
+        assert_eq!(
+            read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::kind_undetermined(r##"{:noncovalent-bond {:modify [:n1 "*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Id("n1".into()), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Undetermined), ..Default::default() }))]
+    #[case::constraint_removal(r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Id("n1".into()), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanAst::Undetermined)), ..Default::default() }))]
+    fn test_parse_delta_input_noncovalent_bond(
+        #[case] input: &str,
+        #[case] expected: DeltaInput,
+    ) {
+        assert_eq!(
+            parse_delta_input(&read_string(input).unwrap()).unwrap(),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::kind_undetermined(r##"{:noncovalent-bond {:modify [:n1 "*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Id("n1".into()), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Undetermined), ..Default::default() }))]
+    #[case::constraint_removal(r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##, DeltaInput::NoncovalentBondModify(NoncovalentBondRef::Id("n1".into()), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanAst::Undetermined)), ..Default::default() }))]
+    fn test_read_delta_input_noncovalent_bond(
         #[case] input: &str,
         #[case] expected: DeltaInput,
     ) {
@@ -3741,6 +3773,27 @@ mod tests {
         assert_eq!(ast.deltas, Deltas::from_iter(expected));
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::kind_undetermined(
+        r##"{:lhs {:atoms ["N" "H"] :noncovalent-bonds [{:id :n1 :atoms [0 1] :type "Hbd"}]} :deltas [{:noncovalent-bond {:modify [:n1 "*"]}}]}"##,
+        vec![Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField { id: NoncovalentBondId(0), change: NoncovalentBondFieldChange::Kind { old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), new: NoncovalentBondKindAst::Undetermined } })],
+    )]
+    #[case::constraint_removal(
+        r##"{:lhs {:atoms ["N" "H"] :noncovalent-bonds [{:id :n1 :atoms [0 1] :type "Hbd#I"}]} :deltas [{:noncovalent-bond {:modify [:n1 "#I*"]}}]}"##,
+        vec![Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { id: NoncovalentBondId(0), old: Some(NoncovalentBondConstraintAst::intramolecular(true)), new: None })],
+    )]
+    fn test_reaction_input_into_ast_noncovalent_bond_modify(
+        #[case] input: &str,
+        #[case] expected: Vec<Delta>,
+    ) {
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(ast.deltas, Deltas::from_iter(expected));
+    }
+
     #[rstest]
     fn test_reaction_input_into_ast_constraint_add() {
         let input = r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}"##;
@@ -3880,7 +3933,8 @@ mod tests {
                 .with_bond_keyword(BondId(1), "bx")
                 .with_dative_bond_keyword(DativeBondId(0), "d1")
                 .with_aromatic_system_keyword(AromaticSystemId(0), "a1")
-                .with_multicenter_bond_keyword(MulticenterBondId(0), "m1"),
+                .with_multicenter_bond_keyword(MulticenterBondId(0), "m1")
+                .with_noncovalent_bond_keyword(NoncovalentBondId(0), "n1"),
             ..Default::default()
         }
         .with_atom_keyword(AtomId(2), "n")
@@ -3968,6 +4022,22 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::kind_undetermined(vec![Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField { id: NoncovalentBondId(0), change: NoncovalentBondFieldChange::Kind { old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), new: NoncovalentBondKindAst::Undetermined } })], r##"{:noncovalent-bond {:modify [:n1 "*"]}}"##)]
+    #[case::kind(vec![Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField { id: NoncovalentBondId(0), change: NoncovalentBondFieldChange::Kind { old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), new: NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic) } })], r##"{:noncovalent-bond {:modify [:n1 "Ion"]}}"##)]
+    #[case::constraint_removal(vec![Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { id: NoncovalentBondId(0), old: Some(NoncovalentBondConstraintAst::intramolecular(true)), new: None })], r##"{:noncovalent-bond {:modify [:n1 "#I*"]}}"##)]
+    fn test_render_deltas_noncovalent_bond(
+        meta: ReactionMetadata,
+        #[case] deltas: Vec<Delta>,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            render_deltas(&Deltas::from_iter(deltas), &meta),
+            vec![read_string(expected).unwrap()],
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::add_molecule(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:add {:connected {}}}}")]
     #[case::add_entity_leaf(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(AtomId(2), AtomConstraintAst::Valence(ValueAst::Lit(2)))))], "{:constraint {:add {:atom [:n {:valence 2}]}}}")]
     #[case::remove(vec![Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:remove {:connected {}}}}")]
@@ -3997,6 +4067,8 @@ mod tests {
     #[case::multicenter_remove(r##"{:lhs {:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "*#e2"}]} :deltas [{:multicenter-bond {:remove 0}}]}"##)]
     #[case::noncovalent_add(r##"{:lhs {:atoms ["N" "H"]} :deltas [{:noncovalent-bond {:add {:atoms [0 1] :type "Hbd"}}}]}"##)]
     #[case::noncovalent_remove(r##"{:lhs {:atoms ["N" "H"] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}]} :deltas [{:noncovalent-bond {:remove 0}}]}"##)]
+    #[case::noncovalent_modify_undetermined(r##"{:lhs {:atoms ["N" "H"] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}]} :deltas [{:noncovalent-bond {:modify [0 "*"]}}]}"##)]
+    #[case::noncovalent_constraint_removal(r##"{:lhs {:atoms ["N" "H"] :noncovalent-bonds [{:atoms [0 1] :type "Hbd#I"}]} :deltas [{:noncovalent-bond {:modify [0 "#I*"]}}]}"##)]
     #[case::stereo_atom_add(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]} :deltas [{:stereo-atom {:add {:site 0 :ligands [1 2 3 4] :type "Th1"}}}]}"##)]
     #[case::stereo_atom_remove(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:remove 0}}]}"##)]
     #[case::stereo_atom_modify(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:modify [0 "Th2"]}}]}"##)]

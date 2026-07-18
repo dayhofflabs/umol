@@ -90,7 +90,9 @@ pub use molecule::{
     MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
 };
 pub use multicenter::{MulticenterBondAst, MulticenterBondUpdate};
-pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
+pub use noncovalent::{
+    NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst, NoncovalentBondUpdate,
+};
 pub use operators::{MemOp, RelOp};
 pub use reaction::ReactionAst;
 pub use reaction_derivation::ReactionDerivation;

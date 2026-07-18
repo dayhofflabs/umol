@@ -38,7 +38,7 @@ use super::id::{
 };
 use super::ligand::StereoLigand;
 use super::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
-use super::noncovalent::NoncovalentBondAst;
+use super::noncovalent::{NoncovalentBondAst, NoncovalentBondUpdate};
 use super::remap::IdRemapping;
 use super::stereo::{CosetOp, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind};
 use super::traits::{Canonicalize, EntityPatch, Lattice};
@@ -566,6 +566,34 @@ impl NoncovalentBondDelta {
                 new: old,
             },
         }
+    }
+
+    /// Project a noncovalent-bond update into resolved deltas.
+    pub fn for_update(
+        id: NoncovalentBondId,
+        current: &NoncovalentBondAst,
+        update: &NoncovalentBondUpdate,
+    ) -> Vec<Self> {
+        let mut deltas = Vec::new();
+        if let Some(new) = &update.kind {
+            if !current.kind.canonical_eq(new) {
+                deltas.push(Self::ModifyField {
+                    id,
+                    change: NoncovalentBondFieldChange::Kind {
+                        old: current.kind.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            if !options_canonical_eq(&old, &new) {
+                deltas.push(Self::ModifyConstraint { id, old, new });
+            }
+        }
+        deltas
     }
 }
 
@@ -1734,6 +1762,14 @@ impl EntityPatch for NoncovalentBondDelta {
         new: Option<NoncovalentBondConstraintAst>,
     ) -> Self {
         NoncovalentBondDelta::ModifyConstraint { id, old, new }
+    }
+
+    fn diff(
+        id: NoncovalentBondId,
+        lhs: &NoncovalentBondAst,
+        rhs: &NoncovalentBondAst,
+    ) -> Vec<Self> {
+        Self::for_update(id, lhs, &lhs.difference_to(rhs))
     }
 
     diff_field_ops!(
@@ -2992,8 +3028,9 @@ mod tests {
     use crate::ast::{
         AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst, BooleanAst,
         DativeBondConstraintsAst, ElectronCountsAst, ElementAst, IsotopeMassAst,
-        MulticenterBondConstraintsAst, RingScope, SpinStateAst, SpinStateUpdate,
-        StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigandKind, StereogenicityAst,
+        MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst, NoncovalentBondKindAst,
+        RingScope, SpinStateAst, SpinStateUpdate, StereoConfigurationAst, StereoCosetAst,
+        StereoKind, StereoLigandKind, StereogenicityAst,
     };
 
     #[rstest]
@@ -3396,6 +3433,52 @@ mod tests {
     ) {
         assert_eq!(
             MulticenterBondDelta::for_update(MulticenterBondId(0), &current, &update),
+            Vec::new(),
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::kind_and_constraint(
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintAst::intramolecular(true)),
+        NoncovalentBondUpdate {
+            kind: Some(NoncovalentBondKindAst::Undetermined),
+            constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanAst::Undetermined)),
+        },
+        vec![
+            NoncovalentBondDelta::ModifyField {
+                id: NoncovalentBondId(7),
+                change: NoncovalentBondFieldChange::Kind { old: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), new: NoncovalentBondKindAst::Undetermined },
+            },
+            NoncovalentBondDelta::ModifyConstraint {
+                id: NoncovalentBondId(7),
+                old: Some(NoncovalentBondConstraintAst::intramolecular(true)),
+                new: None,
+            },
+        ],
+    )]
+    fn test_noncovalent_bond_delta_for_update(
+        #[case] current: NoncovalentBondAst,
+        #[case] update: NoncovalentBondUpdate,
+        #[case] expected: Vec<NoncovalentBondDelta>,
+    ) {
+        assert_eq!(
+            NoncovalentBondDelta::for_update(NoncovalentBondId(7), &current, &update),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate::default())]
+    #[case::same_kind(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { kind: Some(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)), ..Default::default() })]
+    #[case::absent_constraint_removal(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondUpdate { constraints: NoncovalentBondConstraintsAst::from(NoncovalentBondConstraintAst::intramolecular(BooleanAst::Undetermined)), ..Default::default() })]
+    fn test_noncovalent_bond_delta_for_update_identity(
+        #[case] current: NoncovalentBondAst,
+        #[case] update: NoncovalentBondUpdate,
+    ) {
+        assert_eq!(
+            NoncovalentBondDelta::for_update(NoncovalentBondId(0), &current, &update),
             Vec::new(),
         );
     }

@@ -23,9 +23,9 @@ pub(crate) use umol_ast::ast::{
     MulticenterBondConstraintsAst, MulticenterBondHandle, MulticenterBondId, MulticenterBondUpdate,
     MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
     NoncovalentBondConstraintsAst, NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind,
-    NoncovalentBondKindAst, OrientedLigandPermutation, RelOp, RelationalConstraint,
-    RingMembershipAst, RingScope, SpinStateAst, SpinStateUpdate, StereoAtomAst,
-    StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomId, StereoBondAst,
+    NoncovalentBondKindAst, NoncovalentBondUpdate, OrientedLigandPermutation, RelOp,
+    RelationalConstraint, RingMembershipAst, RingScope, SpinStateAst, SpinStateUpdate,
+    StereoAtomAst, StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomId, StereoBondAst,
     StereoBondConstraintAst, StereoBondConstraintsAst, StereoBondId, StereoConfigurationAst,
     StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
     StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
@@ -36,8 +36,9 @@ pub(crate) use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AromaticSystemUpdateDsl, AtomDsl, AtomUpdateDsl, BondDsl,
     BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, MoleculeDsl,
     MoleculeMetadata, MoleculeNamespace, MulticenterBondDsl, MulticenterBondUpdateDsl,
-    NoncovalentBondDsl, ParseError, StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomParticipants,
-    StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants, StereoLigandRef, ValueDsl,
+    NoncovalentBondDsl, NoncovalentBondUpdateDsl, ParseError, StereoAtomConstraintDsl,
+    StereoAtomDsl, StereoAtomParticipants, StereoBondConstraintDsl, StereoBondDsl,
+    StereoBondParticipants, StereoLigandRef, ValueDsl,
 };
 pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
@@ -868,6 +869,26 @@ pub(crate) fn noncovalent_bond_constraints_strategy(
     })
 }
 
+pub(crate) fn noncovalent_bond_update_constraints_strategy(
+) -> impl Strategy<Value = NoncovalentBondConstraintsAst> {
+    prop::option::weighted(
+        0.5,
+        prop_oneof![
+            any::<bool>().prop_map(|value| {
+                NoncovalentBondConstraintAst::Intramolecular(BooleanAst::Lit(value))
+            }),
+            Just(NoncovalentBondConstraintAst::Intramolecular(
+                BooleanAst::Undetermined,
+            )),
+        ],
+    )
+    .prop_map(|constraint| {
+        constraint
+            .map(NoncovalentBondConstraintsAst::from)
+            .unwrap_or_default()
+    })
+}
+
 pub(crate) fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = NoncovalentBondAst> {
     (
         prop::sample::select(NONCOVALENT_KINDS),
@@ -877,6 +898,22 @@ pub(crate) fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = Noncovale
             kind: NoncovalentBondKindAst::Lit(kind),
             constraints,
         })
+}
+
+pub(crate) fn noncovalent_bond_patch_ast_strategy() -> impl Strategy<Value = NoncovalentBondAst> {
+    (
+        noncovalent_bond_kind_ast_strategy(),
+        noncovalent_bond_constraints_strategy(),
+    )
+        .prop_map(|(kind, constraints)| NoncovalentBondAst { kind, constraints })
+}
+
+pub(crate) fn noncovalent_bond_update_strategy() -> impl Strategy<Value = NoncovalentBondUpdate> {
+    (
+        prop::option::of(noncovalent_bond_kind_ast_strategy()),
+        noncovalent_bond_update_constraints_strategy(),
+    )
+        .prop_map(|(kind, constraints)| NoncovalentBondUpdate { kind, constraints })
 }
 
 /// Coset forms that round-trip through both the entity `:type` string and the

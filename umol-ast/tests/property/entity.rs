@@ -175,6 +175,29 @@ proptest! {
         prop_assert_eq!(dsl, parsed);
     }
 
+    #[test]
+    fn test_noncovalent_bond_update_dsl_display_from_str_roundtrip(
+        update in noncovalent_bond_update_strategy(),
+    ) {
+        let dsl = NoncovalentBondUpdateDsl(update);
+        let rendered = dsl.to_string();
+        let parsed: NoncovalentBondUpdateDsl = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_noncovalent_bond_update_dsl_to_edn_from_edn_roundtrip(
+        update in noncovalent_bond_update_strategy(),
+    ) {
+        let dsl = NoncovalentBondUpdateDsl(update);
+        let edn = dsl.to_edn();
+        let parsed = NoncovalentBondUpdateDsl::from_edn(&edn)
+            .map_err(|e| TestCaseError::fail(format!("parse failed: {e}")))?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
     /// Atom-update DSL round-trips through its compact string form, including
     /// omitted and explicitly undetermined fields.
     #[test]
