@@ -242,7 +242,7 @@ basic-versus-OpenSMILES conformance category.
   all 13 fixed seeds replay cleanly, and a 15-second bounded run completed
   365,681 executions without producing an artifact.
 
-- **S3b — paired basic/extended benchmarks**
+- **S3b — paired basic/extended benchmarks** **Done**
   (`umol-io/benches/smiles_parsing.rs`): activate a representative wildcard
   corpus containing a single bare wildcard, a long bare-wildcard chain, a
   bracketed wildcard chain, a mixed element/wildcard chain, and wildcard
@@ -256,6 +256,24 @@ basic-versus-OpenSMILES conformance category.
   wildcard parsing should follow the basic-path cost profile rather than the
   current extended-path profile. **Additive benchmark gate (green).**
   `[dep: S1a, S2b]`
+
+  **Implemented verification:** the wildcard corpus now contains `star_1`,
+  `star_50`, `brkt_star_50`, `mixed_star_50`, `branch_star`, and `ring_star`.
+  Both `smiles_parsing/wildcards/*` and `extended_smiles_parsing/wildcards/*`
+  benchmark the same inputs. `cargo test -p umol-io --benches` executes every
+  active SMILES and MOL benchmark input successfully.
+
+  Short Criterion snapshot (`--sample-size 10 --warm-up-time 1
+  --measurement-time 1 --nresamples 1000 --discard-baseline --noplot`):
+  basic `Atom` remains 104 bytes from S0a. Basic wildcard parsing measured
+  `star_1` at 117.62 ns, `star_50` at 1.0446 us, `brkt_star_50` at 1.2542 us,
+  `mixed_star_50` at 1.0557 us, `branch_star` at 266.53 ns, and `ring_star` at
+  237.23 ns. Extended wildcard parsing measured the same inputs at 151.64 ns,
+  1.7800 us, 2.1273 us, 1.8044 us, 320.57 ns, and 324.37 ns respectively.
+  Representative ordinary basic controls measured `chain/c_10` at 403.48 ns
+  with change within Criterion's noise threshold, `rings/c6` at 368.90 ns with
+  no detected change, and `brackets/brkt_C_50` at 1.2946 us with no detected
+  change.
 
 S3 ends with the fuzz target compiling and replaying its seeds, the bounded fuzz
 run clean, and the benchmark comparison recorded.

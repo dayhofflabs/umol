@@ -195,14 +195,21 @@ fn whitespace_inputs() -> Vec<(&'static str, &'static [u8])> {
 // Wildcard corpus
 fn wildcard_inputs() -> Vec<(&'static str, &'static [u8])> {
     vec![
+        ("star_1", b"*"),
         (
             "star_50",
             b"**************************************************",
         ),
-        // ("star_200", b"********************************************************************************************************************************************************************************************************"),
-        // ("brkt_star_50", b"[*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*]"),
-        // ("star_in_chain_100", b"C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*"),
-        // ("star_in_chain_bonds_100", b"C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*C-*"),
+        (
+            "brkt_star_50",
+            b"[*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*]",
+        ),
+        (
+            "mixed_star_50",
+            b"C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*C*",
+        ),
+        ("branch_star", b"C([*:1])C"),
+        ("ring_star", b"*1CC1"),
     ]
 }
 
@@ -343,6 +350,18 @@ fn smiles_parsing(c: &mut Criterion) {
         });
     }
     group_whitespace.finish();
+
+    // Wildcards
+    let mut group_wild = c.benchmark_group("smiles_parsing/wildcards");
+    for (name, bytes) in wildcard_inputs().iter() {
+        group_wild.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
+            b.iter(|| {
+                let result = Smiles::parse_bytes(black_box(input));
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_wild.finish();
 }
 
 fn extended_smiles_parsing(c: &mut Criterion) {
