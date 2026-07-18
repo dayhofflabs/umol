@@ -133,7 +133,7 @@ S0 ends with the `umol-io` unit suite green.
   API report their exact `Underdetermined` variants without an ingestion-layer
   precheck.
 
-- **S1c — wildcard property tests**
+- **S1c — wildcard property tests** **Done**
   (`umol-io/tests/smiles_property.rs`): add `*` to the existing SMILES-biased
   arbitrary-input alphabet. Add generated valid `C`/`*` chains containing at
   least one wildcard and assert atom count, wildcard positions, bond endpoints,
@@ -147,6 +147,14 @@ S0 ends with the `umol-io` unit suite green.
   new implementation with the existing independent extended implementation
   rather than only restating aggregate expectations. **Additive property
   coverage (green).** `[dep: S0b, S1a]`
+
+  **Implemented verification:** the arbitrary-input alphabet now includes `*`.
+  A valid-chain generator produces one to 128 `C`/`*` atoms and forces at least
+  one wildcard. One thousand cases each assert exact wildcard positions, atom
+  and bond source spans, and bond endpoints; compare the basic molecule,
+  converted to `ExtendedMolecule`, with the extended parser result; and raise
+  every atom to the corresponding literal or undetermined `ElementAst`. The
+  existing three arbitrary-input properties continue to run 10,000 cases each.
 
 S1 ends with the unit, integration, and property suites green.
 
