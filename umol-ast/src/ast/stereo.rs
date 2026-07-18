@@ -86,17 +86,6 @@ macro_rules! stereo_element {
                 self
             }
 
-            /// Overwrite with `other`, keeping the existing configuration when `other`'s is
-            /// undetermined, and merging constraints by key.
-            pub fn update(&self, other: &Self) -> Self {
-                let mut constraints = self.constraints.clone();
-                constraints.update(&other.constraints);
-                Self {
-                    configuration: self.configuration.update(&other.configuration),
-                    constraints,
-                }
-            }
-
             /// Relabel the ligand positions (`^`); constraints are positionless and unchanged.
             pub fn apply(&self, permutation: Permutation) -> Self {
                 Self {
@@ -142,6 +131,165 @@ stereo_element! {
 stereo_element! {
     /// StereoBondAst with cis/trans configuration and per-site constraints.
     StereoBondAst, StereoBondConstraintsAst, StereoBondConstraintAst
+}
+
+/// Configuration portion of a stereo-element update.
+///
+/// `Unchanged` omits the field, `Undetermined` explicitly clears it, and
+/// `Kinded` carries either an absolute coset or a kind-only relative update.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum StereoConfigurationUpdate {
+    #[default]
+    Unchanged,
+    Undetermined,
+    Kinded {
+        kind: StereoKind,
+        coset: Option<StereoCosetAst>,
+    },
+}
+
+impl StereoConfigurationUpdate {
+    fn apply_to(&self, current: &StereoConfigurationAst) -> StereoConfigurationAst {
+        match self {
+            Self::Unchanged => current.clone(),
+            Self::Undetermined => StereoConfigurationAst::Undetermined,
+            Self::Kinded {
+                kind,
+                coset: Some(coset),
+            } => StereoConfigurationAst::kinded(*kind, coset.clone()),
+            Self::Kinded { kind, coset: None } => match current {
+                StereoConfigurationAst::Kinded(current_kind, current_coset)
+                    if current_kind == kind =>
+                {
+                    StereoConfigurationAst::kinded(*kind, current_coset.clone())
+                }
+                _ => StereoConfigurationAst::kinded(*kind, StereoCosetAst::Undetermined),
+            },
+        }
+    }
+
+    pub(crate) fn kind(&self) -> Option<StereoKind> {
+        match self {
+            Self::Kinded { kind, .. } => Some(*kind),
+            Self::Unchanged | Self::Undetermined => None,
+        }
+    }
+}
+
+/// Attribute update for a stereo atom.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StereoAtomUpdate {
+    pub configuration: StereoConfigurationUpdate,
+    pub constraints: StereoAtomConstraintsAst,
+}
+
+/// Attribute update for a stereo bond.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StereoBondUpdate {
+    pub configuration: StereoConfigurationUpdate,
+    pub constraints: StereoBondConstraintsAst,
+}
+
+impl StereoAtomAst {
+    /// Apply an attribute update.
+    pub fn update(&self, update: &StereoAtomUpdate) -> Self {
+        let mut constraints = self.constraints.clone();
+        constraints.update(&update.constraints);
+        Self {
+            configuration: update.configuration.apply_to(&self.configuration),
+            constraints,
+        }
+    }
+
+    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    pub fn difference_to(&self, other: &Self) -> StereoAtomUpdate {
+        let mut constraints = StereoAtomConstraintsAst::new();
+        for new in other.constraints.iter() {
+            if self
+                .constraints
+                .get(new.key())
+                .is_none_or(|old| !old.canonical_eq(new))
+            {
+                constraints.set(new.clone());
+            }
+        }
+        for old in self.constraints.iter() {
+            if other.constraints.get(old.key()).is_none() {
+                constraints.set(old.as_undetermined());
+            }
+        }
+        let configuration = if self.configuration.canonical_eq(&other.configuration) {
+            match self.configuration.kind() {
+                Some(kind) if !constraints.is_empty() => {
+                    StereoConfigurationUpdate::Kinded { kind, coset: None }
+                }
+                _ => StereoConfigurationUpdate::Unchanged,
+            }
+        } else {
+            match &other.configuration {
+                StereoConfigurationAst::Undetermined => StereoConfigurationUpdate::Undetermined,
+                StereoConfigurationAst::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+                    kind: *kind,
+                    coset: Some(coset.clone()),
+                },
+            }
+        };
+        StereoAtomUpdate {
+            configuration,
+            constraints,
+        }
+    }
+}
+
+impl StereoBondAst {
+    /// Apply an attribute update.
+    pub fn update(&self, update: &StereoBondUpdate) -> Self {
+        let mut constraints = self.constraints.clone();
+        constraints.update(&update.constraints);
+        Self {
+            configuration: update.configuration.apply_to(&self.configuration),
+            constraints,
+        }
+    }
+
+    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    pub fn difference_to(&self, other: &Self) -> StereoBondUpdate {
+        let mut constraints = StereoBondConstraintsAst::new();
+        for new in other.constraints.iter() {
+            if self
+                .constraints
+                .get(new.key())
+                .is_none_or(|old| !old.canonical_eq(new))
+            {
+                constraints.set(new.clone());
+            }
+        }
+        for old in self.constraints.iter() {
+            if other.constraints.get(old.key()).is_none() {
+                constraints.set(old.as_undetermined());
+            }
+        }
+        let configuration = if self.configuration.canonical_eq(&other.configuration) {
+            match self.configuration.kind() {
+                Some(kind) if !constraints.is_empty() => {
+                    StereoConfigurationUpdate::Kinded { kind, coset: None }
+                }
+                _ => StereoConfigurationUpdate::Unchanged,
+            }
+        } else {
+            match &other.configuration {
+                StereoConfigurationAst::Undetermined => StereoConfigurationUpdate::Undetermined,
+                StereoConfigurationAst::Kinded(kind, coset) => StereoConfigurationUpdate::Kinded {
+                    kind: *kind,
+                    coset: Some(coset.clone()),
+                },
+            }
+        };
+        StereoBondUpdate {
+            configuration,
+            constraints,
+        }
+    }
 }
 
 /// Stereo kind: the atom-centered coordination geometries and the bond-centered cis/trans kind.
@@ -857,6 +1005,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use super::super::constraint::StereogenicityAst;
     use super::super::id::AtomId;
     use super::super::ligand::StereoLigandKind;
     use super::*;
@@ -1220,6 +1369,150 @@ mod tests {
     #[case::ground(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
     fn test_stereo_atom_ast_into_ground(#[case] atom: StereoAtomAst) {
         assert_eq!(atom.clone().into_ground(), atom);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::absolute(
+        StereoAtomAst::new(StereoKind::Tetrahedral, 0_u32),
+        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCosetAst::Lit(1)) }, ..Default::default() },
+        StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
+    )]
+    #[case::relative(
+        StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
+        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() },
+        StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
+    )]
+    #[case::undetermined(
+        StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
+        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() },
+        StereoAtomAst::default(),
+    )]
+    #[case::explicit_open(
+        StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
+        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCosetAst::Undetermined) }, ..Default::default() },
+        StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined),
+    )]
+    #[case::constraint_set(
+        StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
+        StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
+        StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+    )]
+    #[case::constraint_remove(
+        StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() },
+        StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
+    )]
+    fn test_stereo_atom_ast_update(
+        #[case] atom: StereoAtomAst,
+        #[case] update: StereoAtomUpdate,
+        #[case] expected: StereoAtomAst,
+    ) {
+        assert_eq!(atom.update(&update), expected);
+    }
+
+    #[rstest]
+    #[case::empty(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32))]
+    fn test_stereo_atom_ast_update_identity(#[case] atom: StereoAtomAst) {
+        assert_eq!(atom.update(&StereoAtomUpdate::default()), atom);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::configuration_and_constraint(
+        StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomAst::default(),
+        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
+    )]
+    #[case::constraint_context(
+        StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32),
+        StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
+    )]
+    fn test_stereo_atom_ast_difference_to(
+        #[case] atom: StereoAtomAst,
+        #[case] other: StereoAtomAst,
+        #[case] expected: StereoAtomUpdate,
+    ) {
+        assert_eq!(atom.difference_to(&other), expected);
+    }
+
+    #[rstest]
+    #[case::same(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32))]
+    fn test_stereo_atom_ast_difference_to_identity(#[case] atom: StereoAtomAst) {
+        assert_eq!(atom.difference_to(&atom), StereoAtomUpdate::default());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::absolute(
+        StereoBondAst::new(StereoKind::CisTrans, 0_u32),
+        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCosetAst::Lit(1)) }, ..Default::default() },
+        StereoBondAst::new(StereoKind::CisTrans, 1_u32),
+    )]
+    #[case::relative(
+        StereoBondAst::new(StereoKind::CisTrans, 1_u32),
+        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() },
+        StereoBondAst::new(StereoKind::CisTrans, 1_u32),
+    )]
+    #[case::undetermined(
+        StereoBondAst::new(StereoKind::CisTrans, 1_u32),
+        StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() },
+        StereoBondAst::default(),
+    )]
+    #[case::explicit_open(
+        StereoBondAst::new(StereoKind::CisTrans, 1_u32),
+        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCosetAst::Undetermined) }, ..Default::default() },
+        StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined),
+    )]
+    #[case::constraint_set(
+        StereoBondAst::new(StereoKind::CisTrans, 1_u32),
+        StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))), ..Default::default() },
+        StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+    )]
+    #[case::constraint_remove(
+        StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() },
+        StereoBondAst::new(StereoKind::CisTrans, 1_u32),
+    )]
+    fn test_stereo_bond_ast_update(
+        #[case] bond: StereoBondAst,
+        #[case] update: StereoBondUpdate,
+        #[case] expected: StereoBondAst,
+    ) {
+        assert_eq!(bond.update(&update), expected);
+    }
+
+    #[rstest]
+    #[case::empty(StereoBondAst::new(StereoKind::CisTrans, 1_u32))]
+    fn test_stereo_bond_ast_update_identity(#[case] bond: StereoBondAst) {
+        assert_eq!(bond.update(&StereoBondUpdate::default()), bond);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::configuration_and_constraint(
+        StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondAst::default(),
+        StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
+    )]
+    #[case::constraint_context(
+        StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondAst::new(StereoKind::CisTrans, 1_u32),
+        StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) },
+    )]
+    fn test_stereo_bond_ast_difference_to(
+        #[case] bond: StereoBondAst,
+        #[case] other: StereoBondAst,
+        #[case] expected: StereoBondUpdate,
+    ) {
+        assert_eq!(bond.difference_to(&other), expected);
+    }
+
+    #[rstest]
+    #[case::same(StereoBondAst::new(StereoKind::CisTrans, 1_u32))]
+    fn test_stereo_bond_ast_difference_to_identity(#[case] bond: StereoBondAst) {
+        assert_eq!(bond.difference_to(&bond), StereoBondUpdate::default());
     }
 
     #[rustfmt::skip]

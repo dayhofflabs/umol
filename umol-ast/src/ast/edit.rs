@@ -27,7 +27,9 @@ use super::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst, NoncovalentBondUpdate};
 use super::remap::{IdCompaction, UndoCompaction};
 use super::spin::SpinStateAst;
-use super::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationAst};
+use super::stereo::{
+    StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate, StereoConfigurationAst,
+};
 use super::traits::{Canonicalize, Lattice};
 use super::value::ValueAst;
 
@@ -213,9 +215,7 @@ impl NoncovalentBondFieldChange {
     }
 }
 
-/// Per-field old/new payload for a stereo-atom mutation. Only `coset` is
-/// settable: `kind` fixes the coset's group, so changing it would desync the
-/// configuration — kind changes go through remove + add.
+/// Per-field old/new payload for an absolute stereo-atom configuration mutation.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StereoAtomFieldChange {
     Configuration {
@@ -773,6 +773,78 @@ impl Edit {
         }
         edits
     }
+
+    /// Project a stereo-atom update into checked host-relative edits.
+    pub fn for_stereo_atom_update(
+        id: StereoAtomHandle,
+        current: &StereoAtomAst,
+        update: &StereoAtomUpdate,
+    ) -> Vec<Self> {
+        let mut edits = Vec::new();
+        let updated = current.update(update);
+        if !current.configuration.canonical_eq(&updated.configuration) {
+            edits.push(Self::ModifyStereoAtomField {
+                id: id.clone(),
+                change: StereoAtomFieldChange::Configuration {
+                    old: current.configuration.clone(),
+                    new: updated.configuration,
+                },
+            });
+        }
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            let unchanged = match (&old, &new) {
+                (None, None) => true,
+                (Some(old), Some(new)) => old.canonical_eq(new),
+                _ => false,
+            };
+            if !unchanged {
+                edits.push(Self::ModifyStereoAtomConstraint {
+                    id: id.clone(),
+                    old,
+                    new,
+                });
+            }
+        }
+        edits
+    }
+
+    /// Project a stereo-bond update into checked host-relative edits.
+    pub fn for_stereo_bond_update(
+        id: StereoBondHandle,
+        current: &StereoBondAst,
+        update: &StereoBondUpdate,
+    ) -> Vec<Self> {
+        let mut edits = Vec::new();
+        let updated = current.update(update);
+        if !current.configuration.canonical_eq(&updated.configuration) {
+            edits.push(Self::ModifyStereoBondField {
+                id: id.clone(),
+                change: StereoBondFieldChange::Configuration {
+                    old: current.configuration.clone(),
+                    new: updated.configuration,
+                },
+            });
+        }
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            let unchanged = match (&old, &new) {
+                (None, None) => true,
+                (Some(old), Some(new)) => old.canonical_eq(new),
+                _ => false,
+            };
+            if !unchanged {
+                edits.push(Self::ModifyStereoBondConstraint {
+                    id: id.clone(),
+                    old,
+                    new,
+                });
+            }
+        }
+        edits
+    }
 }
 
 // Handles for overlay relations (an existing id or the Nth created earlier in the batch).
@@ -1084,11 +1156,14 @@ mod tests {
     use super::super::constraint::{
         AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst,
         DativeBondConstraintsAst, MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst,
-        RingScope,
+        RingScope, StereoAtomConstraintsAst, StereoBondConstraintsAst, StereogenicityAst,
     };
     use super::super::noncovalent::NoncovalentBondKind;
     use super::super::spin::SpinStateUpdate;
-    use super::super::stereo::{StereoConfigurationAst, StereoCosetAst, StereoKind};
+    use super::super::stereo::{
+        StereoConfigurationAst, StereoConfigurationUpdate, StereoCosetAst, StereoKind,
+        Stereogenicity,
+    };
     use super::*;
 
     #[fixture]
@@ -1632,6 +1707,114 @@ mod tests {
         assert_eq!(
             Edit::for_noncovalent_bond_update(
                 NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+                &current,
+                &update,
+            ),
+            Vec::new(),
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::configuration_and_constraint(
+        StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomUpdate {
+            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCosetAst::Lit(1)) },
+            constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
+        },
+        vec![
+            Edit::ModifyStereoAtomField {
+                id: StereoAtomHandle::Id(StereoAtomId(7)),
+                change: StereoAtomFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32), new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32) },
+            },
+            Edit::ModifyStereoAtomConstraint {
+                id: StereoAtomHandle::Id(StereoAtomId(7)),
+                old: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+                new: None,
+            },
+        ],
+    )]
+    fn test_edit_for_stereo_atom_update(
+        #[case] current: StereoAtomAst,
+        #[case] update: StereoAtomUpdate,
+        #[case] expected: Vec<Edit>,
+    ) {
+        assert_eq!(
+            Edit::for_stereo_atom_update(
+                StereoAtomHandle::Id(StereoAtomId(7)),
+                &current,
+                &update,
+            ),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate::default())]
+    #[case::relative(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() })]
+    #[case::absent_constraint_removal(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
+    fn test_edit_for_stereo_atom_update_identity(
+        #[case] current: StereoAtomAst,
+        #[case] update: StereoAtomUpdate,
+    ) {
+        assert_eq!(
+            Edit::for_stereo_atom_update(
+                StereoAtomHandle::Id(StereoAtomId(0)),
+                &current,
+                &update,
+            ),
+            Vec::new(),
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::configuration_and_constraint(
+        StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondUpdate {
+            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCosetAst::Lit(1)) },
+            constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
+        },
+        vec![
+            Edit::ModifyStereoBondField {
+                id: StereoBondHandle::Id(StereoBondId(7)),
+                change: StereoBondFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32), new: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32) },
+            },
+            Edit::ModifyStereoBondConstraint {
+                id: StereoBondHandle::Id(StereoBondId(7)),
+                old: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+                new: None,
+            },
+        ],
+    )]
+    fn test_edit_for_stereo_bond_update(
+        #[case] current: StereoBondAst,
+        #[case] update: StereoBondUpdate,
+        #[case] expected: Vec<Edit>,
+    ) {
+        assert_eq!(
+            Edit::for_stereo_bond_update(
+                StereoBondHandle::Id(StereoBondId(7)),
+                &current,
+                &update,
+            ),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(StereoBondAst::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate::default())]
+    #[case::relative(StereoBondAst::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() })]
+    #[case::absent_constraint_removal(StereoBondAst::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
+    fn test_edit_for_stereo_bond_update_identity(
+        #[case] current: StereoBondAst,
+        #[case] update: StereoBondUpdate,
+    ) {
+        assert_eq!(
+            Edit::for_stereo_bond_update(
+                StereoBondHandle::Id(StereoBondId(0)),
                 &current,
                 &update,
             ),

@@ -40,7 +40,10 @@ use super::ligand::StereoLigand;
 use super::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondUpdate};
 use super::remap::IdRemapping;
-use super::stereo::{CosetOp, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind};
+use super::stereo::{
+    CosetOp, StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate,
+    StereoConfigurationAst, StereoKind,
+};
 use super::traits::{Canonicalize, EntityPatch, Lattice};
 
 /// A resolved edit to a single atom.
@@ -703,6 +706,38 @@ impl StereoAtomDelta {
             Self::Mirror { id, kind } => Self::Mirror { id, kind },
         }
     }
+
+    /// Project a stereo-atom update into resolved deltas.
+    pub fn for_update(
+        id: StereoAtomId,
+        current: &StereoAtomAst,
+        update: &StereoAtomUpdate,
+    ) -> Vec<Self> {
+        let mut deltas = Vec::new();
+        let updated = current.update(update);
+        if !current.configuration.canonical_eq(&updated.configuration) {
+            deltas.push(Self::ModifyField {
+                id,
+                change: StereoAtomFieldChange::Configuration {
+                    old: current.configuration.clone(),
+                    new: updated.configuration.clone(),
+                },
+            });
+        }
+        let kind = update
+            .configuration
+            .kind()
+            .or_else(|| current.configuration.kind())
+            .or_else(|| updated.configuration.kind());
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            if !options_canonical_eq(&old, &new) {
+                deltas.push(Self::ModifyConstraint { id, kind, old, new });
+            }
+        }
+        deltas
+    }
 }
 
 /// A resolved edit to a single stereo bond. `site` (a bond) + `ligands` are the structural payload;
@@ -806,6 +841,38 @@ impl StereoBondDelta {
             Self::Swap { id, kind } => Self::Swap { id, kind },
             Self::Mirror { id, kind } => Self::Mirror { id, kind },
         }
+    }
+
+    /// Project a stereo-bond update into resolved deltas.
+    pub fn for_update(
+        id: StereoBondId,
+        current: &StereoBondAst,
+        update: &StereoBondUpdate,
+    ) -> Vec<Self> {
+        let mut deltas = Vec::new();
+        let updated = current.update(update);
+        if !current.configuration.canonical_eq(&updated.configuration) {
+            deltas.push(Self::ModifyField {
+                id,
+                change: StereoBondFieldChange::Configuration {
+                    old: current.configuration.clone(),
+                    new: updated.configuration.clone(),
+                },
+            });
+        }
+        let kind = update
+            .configuration
+            .kind()
+            .or_else(|| current.configuration.kind())
+            .or_else(|| updated.configuration.kind());
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            if !options_canonical_eq(&old, &new) {
+                deltas.push(Self::ModifyConstraint { id, kind, old, new });
+            }
+        }
+        deltas
     }
 }
 
@@ -1870,23 +1937,8 @@ impl EntityPatch for StereoAtomDelta {
         Configuration => configuration,
     });
 
-    /// Stamp each `ModifyConstraint` with the config's kind (the serialization context the
-    /// constraint needs) — the default `diff` routes through `modify_constraint`, which can't.
     fn diff(id: StereoAtomId, lhs: &StereoAtomAst, rhs: &StereoAtomAst) -> Vec<Self> {
-        let kind = lhs
-            .configuration
-            .kind()
-            .or_else(|| rhs.configuration.kind());
-        let mut out: Vec<Self> = Self::diff_field(lhs, rhs)
-            .into_iter()
-            .map(|change| StereoAtomDelta::ModifyField { id, change })
-            .collect();
-        out.extend(
-            Self::diff_constraints(lhs, rhs)
-                .into_iter()
-                .map(|(old, new)| StereoAtomDelta::ModifyConstraint { id, kind, old, new }),
-        );
-        out
+        Self::for_update(id, lhs, &lhs.difference_to(rhs))
     }
 
     fn apply_constraint(
@@ -1926,22 +1978,8 @@ impl EntityPatch for StereoBondDelta {
         Configuration => configuration,
     });
 
-    /// Stamp each `ModifyConstraint` with the config's kind — see `StereoAtomDelta::diff`.
     fn diff(id: StereoBondId, lhs: &StereoBondAst, rhs: &StereoBondAst) -> Vec<Self> {
-        let kind = lhs
-            .configuration
-            .kind()
-            .or_else(|| rhs.configuration.kind());
-        let mut out: Vec<Self> = Self::diff_field(lhs, rhs)
-            .into_iter()
-            .map(|change| StereoBondDelta::ModifyField { id, change })
-            .collect();
-        out.extend(
-            Self::diff_constraints(lhs, rhs)
-                .into_iter()
-                .map(|(old, new)| StereoBondDelta::ModifyConstraint { id, kind, old, new }),
-        );
-        out
+        Self::for_update(id, lhs, &lhs.difference_to(rhs))
     }
 
     fn apply_constraint(
@@ -3029,8 +3067,9 @@ mod tests {
         AromaticSystemConstraintsAst, AtomConstraintsAst, BondConstraintsAst, BooleanAst,
         DativeBondConstraintsAst, ElectronCountsAst, ElementAst, IsotopeMassAst,
         MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst, NoncovalentBondKindAst,
-        RingScope, SpinStateAst, SpinStateUpdate, StereoConfigurationAst, StereoCosetAst,
-        StereoKind, StereoLigandKind, StereogenicityAst,
+        RingScope, SpinStateAst, SpinStateUpdate, StereoAtomConstraintsAst,
+        StereoBondConstraintsAst, StereoConfigurationAst, StereoConfigurationUpdate,
+        StereoCosetAst, StereoKind, StereoLigandKind, Stereogenicity, StereogenicityAst,
     };
 
     #[rstest]
@@ -3548,6 +3587,53 @@ mod tests {
         assert_eq!(input.clone().inverse().inverse(), input);
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::configuration_and_constraint(
+        StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoAtomUpdate {
+            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCosetAst::Lit(1)) },
+            constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
+        },
+        vec![
+            StereoAtomDelta::ModifyField {
+                id: StereoAtomId(7),
+                change: StereoAtomFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32), new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32) },
+            },
+            StereoAtomDelta::ModifyConstraint {
+                id: StereoAtomId(7),
+                kind: Some(StereoKind::Tetrahedral),
+                old: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+                new: None,
+            },
+        ],
+    )]
+    fn test_stereo_atom_delta_for_update(
+        #[case] current: StereoAtomAst,
+        #[case] update: StereoAtomUpdate,
+        #[case] expected: Vec<StereoAtomDelta>,
+    ) {
+        assert_eq!(
+            StereoAtomDelta::for_update(StereoAtomId(7), &current, &update),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate::default())]
+    #[case::relative(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() })]
+    #[case::absent_constraint_removal(StereoAtomAst::new(StereoKind::Tetrahedral, 1_u32), StereoAtomUpdate { constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
+    fn test_stereo_atom_delta_for_update_identity(
+        #[case] current: StereoAtomAst,
+        #[case] update: StereoAtomUpdate,
+    ) {
+        assert_eq!(
+            StereoAtomDelta::for_update(StereoAtomId(0), &current, &update),
+            Vec::new(),
+        );
+    }
+
     #[rstest]
     #[case::add_remove(
         StereoBondDelta::Add {
@@ -3581,6 +3667,53 @@ mod tests {
     ) {
         assert_eq!(input.clone().inverse(), expected);
         assert_eq!(input.clone().inverse().inverse(), input);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::configuration_and_constraint(
+        StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
+        StereoBondUpdate {
+            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCosetAst::Lit(1)) },
+            constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
+        },
+        vec![
+            StereoBondDelta::ModifyField {
+                id: StereoBondId(7),
+                change: StereoBondFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32), new: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32) },
+            },
+            StereoBondDelta::ModifyConstraint {
+                id: StereoBondId(7),
+                kind: Some(StereoKind::CisTrans),
+                old: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
+                new: None,
+            },
+        ],
+    )]
+    fn test_stereo_bond_delta_for_update(
+        #[case] current: StereoBondAst,
+        #[case] update: StereoBondUpdate,
+        #[case] expected: Vec<StereoBondDelta>,
+    ) {
+        assert_eq!(
+            StereoBondDelta::for_update(StereoBondId(7), &current, &update),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(StereoBondAst::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate::default())]
+    #[case::relative(StereoBondAst::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() })]
+    #[case::absent_constraint_removal(StereoBondAst::new(StereoKind::CisTrans, 1_u32), StereoBondUpdate { constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)), ..Default::default() })]
+    fn test_stereo_bond_delta_for_update_identity(
+        #[case] current: StereoBondAst,
+        #[case] update: StereoBondUpdate,
+    ) {
+        assert_eq!(
+            StereoBondDelta::for_update(StereoBondId(0), &current, &update),
+            Vec::new(),
+        );
     }
 
     #[rstest]

@@ -50,8 +50,8 @@ use super::refs::{
     NoncovalentBondRef, StereoAtomRef, StereoBondRef,
 };
 use super::stereo::{
-    parse_permutation, render_edn_stereo_kind, stereo_kind_from_name, PartialStereoAtomDsl,
-    PartialStereoBondDsl, StereoAtomDsl, StereoBondDsl,
+    parse_permutation, render_edn_stereo_kind, stereo_kind_from_name, StereoAtomDsl,
+    StereoAtomUpdateDsl, StereoBondDsl, StereoBondUpdateDsl,
 };
 use crate::ast::atom::{AtomAst, AtomUpdate};
 use crate::ast::bond::{BondAst, BondUpdate};
@@ -69,11 +69,11 @@ use crate::ast::id::{
     StereoAtomId, StereoBondId,
 };
 use crate::ast::reaction::ReactionAst;
-use crate::ast::stereo::{StereoConfigurationAst, StereoCosetAst};
-use crate::ast::traits::{FromAst, IntoAst, Lattice};
+use crate::ast::stereo::{StereoConfigurationAst, StereoConfigurationUpdate};
+use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::{
-    AromaticSystemUpdate, DativeBondUpdate, EntityPatch, MulticenterBondUpdate,
-    NoncovalentBondUpdate, StereoAtomAst, StereoBondAst, StereoKind, StereoLigand,
+    AromaticSystemUpdate, DativeBondUpdate, MulticenterBondUpdate, NoncovalentBondUpdate,
+    StereoAtomUpdate, StereoBondUpdate, StereoKind, StereoLigand,
 };
 
 /// Surface DSL for a reaction. Pairs `ReactionAst` with `ReactionMetadata`; fields are
@@ -748,13 +748,13 @@ pub(crate) enum DeltaInput {
     NoncovalentBondModify(NoncovalentBondRef, NoncovalentBondUpdate),
     StereoAtomAdd(StereoAtomEntryInput),
     StereoAtomRemove(StereoAtomRef),
-    StereoAtomModify(StereoAtomRef, StereoAtomAst),
+    StereoAtomModify(StereoAtomRef, StereoAtomUpdate),
     StereoAtomSwap(StereoAtomRef, StereoKind),
     StereoAtomMirror(StereoAtomRef, StereoKind),
     StereoAtomApply(StereoAtomRef, StereoKind, Permutation),
     StereoBondAdd(StereoBondEntryInput),
     StereoBondRemove(StereoBondRef),
-    StereoBondModify(StereoBondRef, StereoBondAst),
+    StereoBondModify(StereoBondRef, StereoBondUpdate),
     StereoBondSwap(StereoBondRef, StereoKind),
     StereoBondMirror(StereoBondRef, StereoKind),
     StereoBondApply(StereoBondRef, StereoKind, Permutation),
@@ -1081,8 +1081,7 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    let new = lhs.stereo_atom(id).ast.update(&rhs);
-                    for d in StereoAtomDelta::diff(id, lhs.stereo_atom(id).ast, &new) {
+                    for d in StereoAtomDelta::for_update(id, lhs.stereo_atom(id).ast, &rhs) {
                         resolved.push(Delta::StereoAtom(d));
                     }
                 }
@@ -1167,8 +1166,7 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    let new = lhs.stereo_bond(id).ast.update(&rhs);
-                    for d in StereoBondDelta::diff(id, lhs.stereo_bond(id).ast, &new) {
+                    for d in StereoBondDelta::for_update(id, lhs.stereo_bond(id).ast, &rhs) {
                         resolved.push(Delta::StereoBond(d));
                     }
                 }
@@ -1564,10 +1562,10 @@ fn read_delta_stereo_atom_input(
             de.consume_byte(b'[')?;
             let r = read_stereo_atom_ref(de)?;
             let s = de.read_string()?;
-            let dsl: PartialStereoAtomDsl = s
+            let dsl: StereoAtomUpdateDsl = s
                 .as_ref()
                 .parse()
-                .map_err(|e| DeError::subgrammar("partial-stereo-atom", e))?;
+                .map_err(|e| DeError::subgrammar("stereo-atom-update", e))?;
             if !de.try_consume_byte(b']')? {
                 return Err(DeError::Custom("stereo-atom :modify expects [ref dsl]".into()).into());
             }
@@ -1624,10 +1622,10 @@ fn read_delta_stereo_bond_input(
             de.consume_byte(b'[')?;
             let r = read_stereo_bond_ref(de)?;
             let s = de.read_string()?;
-            let dsl: PartialStereoBondDsl = s
+            let dsl: StereoBondUpdateDsl = s
                 .as_ref()
                 .parse()
-                .map_err(|e| DeError::subgrammar("partial-stereo-bond", e))?;
+                .map_err(|e| DeError::subgrammar("stereo-bond-update", e))?;
             if !de.try_consume_byte(b']')? {
                 return Err(DeError::Custom("stereo-bond :modify expects [ref dsl]".into()).into());
             }
@@ -1924,7 +1922,7 @@ fn parse_delta_stereo_atom_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
             }
             Ok(DeltaInput::StereoAtomModify(
                 StereoAtomRef::from_edn(&v[0])?,
-                PartialStereoAtomDsl::from_edn(&v[1])?.0,
+                StereoAtomUpdateDsl::from_edn(&v[1])?.0,
             ))
         }
         "swap" => {
@@ -1978,7 +1976,7 @@ fn parse_delta_stereo_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
             }
             Ok(DeltaInput::StereoBondModify(
                 StereoBondRef::from_edn(&v[0])?,
-                PartialStereoBondDsl::from_edn(&v[1])?.0,
+                StereoBondUpdateDsl::from_edn(&v[1])?.0,
             ))
         }
         "swap" => {
@@ -2563,16 +2561,32 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 | StereoAtomDelta::ModifyConstraint { id, .. },
             ) => {
                 let id = *id;
-                let mut partial = StereoAtomAst::default();
+                let mut update = StereoAtomUpdate::default();
                 let mut modify_kind: Option<StereoKind> = None;
                 while let Some(Delta::StereoAtom(delta)) = deltas.get(i) {
                     match delta {
                         StereoAtomDelta::ModifyField { id: j, change } if *j == id => {
-                            match change {
+                            let clears_configuration = match change {
                                 StereoAtomFieldChange::Configuration { new, .. } => {
-                                    partial.configuration = new.clone()
+                                    update.configuration = match new {
+                                        StereoConfigurationAst::Undetermined => {
+                                            StereoConfigurationUpdate::Undetermined
+                                        }
+                                        StereoConfigurationAst::Kinded(kind, coset) => {
+                                            StereoConfigurationUpdate::Kinded {
+                                                kind: *kind,
+                                                coset: Some(coset.clone()),
+                                            }
+                                        }
+                                    };
+                                    matches!(new, StereoConfigurationAst::Undetermined)
                                 }
+                            };
+                            i += 1;
+                            if clears_configuration {
+                                break;
                             }
+                            continue;
                         }
                         StereoAtomDelta::ModifyConstraint {
                             id: j,
@@ -2583,11 +2597,11 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                             modify_kind = modify_kind.or(*kind);
                             match new {
                                 Some(c) => {
-                                    partial.constraints.set(c.clone());
+                                    update.constraints.set(c.clone());
                                 }
                                 None => {
                                     if let Some(old) = old {
-                                        partial.constraints.set(old.as_undetermined());
+                                        update.constraints.set(old.as_undetermined());
                                     }
                                 }
                             }
@@ -2596,20 +2610,17 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     }
                     i += 1;
                 }
-                // Constraints render against the config's kind. A constraint-only modify leaves the
-                // config undetermined, so take the kind carried on the `ModifyConstraint` delta
-                // (coset stays unchanged). `None` = a kind-free constraint on an open geometry.
-                if partial.configuration.is_undetermined() {
+                if matches!(update.configuration, StereoConfigurationUpdate::Unchanged) {
                     if let Some(kind) = modify_kind {
-                        partial.configuration =
-                            StereoConfigurationAst::kinded(kind, StereoCosetAst::Undetermined);
+                        update.configuration =
+                            StereoConfigurationUpdate::Kinded { kind, coset: None };
                     }
                 }
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
                         StereoAtomRef::denote(id, combined).to_edn(),
-                        PartialStereoAtomDsl(partial).to_edn(),
+                        StereoAtomUpdateDsl(update).to_edn(),
                     ]
                     .into(),
                 );
@@ -2706,16 +2717,32 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 | StereoBondDelta::ModifyConstraint { id, .. },
             ) => {
                 let id = *id;
-                let mut partial = StereoBondAst::default();
+                let mut update = StereoBondUpdate::default();
                 let mut modify_kind: Option<StereoKind> = None;
                 while let Some(Delta::StereoBond(delta)) = deltas.get(i) {
                     match delta {
                         StereoBondDelta::ModifyField { id: j, change } if *j == id => {
-                            match change {
+                            let clears_configuration = match change {
                                 StereoBondFieldChange::Configuration { new, .. } => {
-                                    partial.configuration = new.clone()
+                                    update.configuration = match new {
+                                        StereoConfigurationAst::Undetermined => {
+                                            StereoConfigurationUpdate::Undetermined
+                                        }
+                                        StereoConfigurationAst::Kinded(kind, coset) => {
+                                            StereoConfigurationUpdate::Kinded {
+                                                kind: *kind,
+                                                coset: Some(coset.clone()),
+                                            }
+                                        }
+                                    };
+                                    matches!(new, StereoConfigurationAst::Undetermined)
                                 }
+                            };
+                            i += 1;
+                            if clears_configuration {
+                                break;
                             }
+                            continue;
                         }
                         StereoBondDelta::ModifyConstraint {
                             id: j,
@@ -2726,11 +2753,11 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                             modify_kind = modify_kind.or(*kind);
                             match new {
                                 Some(c) => {
-                                    partial.constraints.set(c.clone());
+                                    update.constraints.set(c.clone());
                                 }
                                 None => {
                                     if let Some(old) = old {
-                                        partial.constraints.set(old.as_undetermined());
+                                        update.constraints.set(old.as_undetermined());
                                     }
                                 }
                             }
@@ -2739,17 +2766,17 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     }
                     i += 1;
                 }
-                if partial.configuration.is_undetermined() {
+                if matches!(update.configuration, StereoConfigurationUpdate::Unchanged) {
                     if let Some(kind) = modify_kind {
-                        partial.configuration =
-                            StereoConfigurationAst::kinded(kind, StereoCosetAst::Undetermined);
+                        update.configuration =
+                            StereoConfigurationUpdate::Kinded { kind, coset: None };
                     }
                 }
                 let combined = &*combined_metadata.get_or_insert_with(|| meta.combined_metadata());
                 let payload = Edn::Vector(
                     vec![
                         StereoBondRef::denote(id, combined).to_edn(),
-                        PartialStereoBondDsl(partial).to_edn(),
+                        StereoBondUpdateDsl(update).to_edn(),
                     ]
                     .into(),
                 );
@@ -2906,6 +2933,8 @@ mod tests {
         BondConstraintAst, Constraint, DativeBondConstraintAst, DativeBondConstraintsAst,
         MoleculeConstraint, MulticenterBondConstraintAst, MulticenterBondConstraintsAst,
         NoncovalentBondConstraintAst, NoncovalentBondConstraintsAst, RingScope,
+        StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoBondConstraintAst,
+        StereoBondConstraintsAst, StereogenicityAst,
     };
     use crate::ast::delta::{ConstraintDelta, Deltas};
     use crate::ast::edit::{
@@ -2916,6 +2945,7 @@ mod tests {
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::noncovalent::{NoncovalentBondKind, NoncovalentBondKindAst};
     use crate::ast::spin::{SpinStateAst, SpinStateUpdate};
+    use crate::ast::stereo::{StereoCosetAst, Stereogenicity};
     use crate::ast::value::ValueAst;
     use crate::dsl::bond::BondDsl;
     use crate::dsl::constraint::MoleculeConstraintDsl;
@@ -3249,6 +3279,56 @@ mod tests {
         #[case] input: &str,
         #[case] expected: DeltaInput,
     ) {
+        assert_eq!(
+            read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(r##"{:stereo-atom {:modify [:s1 ""]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate::default()))]
+    #[case::undetermined(r##"{:stereo-atom {:modify [:s1 "*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
+    #[case::absolute(r##"{:stereo-atom {:modify [:s1 "Th1"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCosetAst::Lit(1)) }, ..Default::default() }))]
+    #[case::relative(r##"{:stereo-atom {:modify [:s1 "Th"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() }))]
+    #[case::constraint_removal(r##"{:stereo-atom {:modify [:s1 "Th#g*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
+    fn test_parse_delta_input_stereo_atom(#[case] input: &str, #[case] expected: DeltaInput) {
+        assert_eq!(parse_delta_input(&read_string(input).unwrap()).unwrap(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(r##"{:stereo-atom {:modify [:s1 ""]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate::default()))]
+    #[case::undetermined(r##"{:stereo-atom {:modify [:s1 "*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
+    #[case::absolute(r##"{:stereo-atom {:modify [:s1 "Th1"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCosetAst::Lit(1)) }, ..Default::default() }))]
+    #[case::relative(r##"{:stereo-atom {:modify [:s1 "Th"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() }))]
+    #[case::constraint_removal(r##"{:stereo-atom {:modify [:s1 "Th#g*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
+    fn test_read_delta_input_stereo_atom(#[case] input: &str, #[case] expected: DeltaInput) {
+        assert_eq!(
+            read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(r##"{:stereo-bond {:modify [:t1 ""]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate::default()))]
+    #[case::undetermined(r##"{:stereo-bond {:modify [:t1 "*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
+    #[case::absolute(r##"{:stereo-bond {:modify [:t1 "Ct1"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCosetAst::Lit(1)) }, ..Default::default() }))]
+    #[case::relative(r##"{:stereo-bond {:modify [:t1 "Ct"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() }))]
+    #[case::constraint_removal(r##"{:stereo-bond {:modify [:t1 "Ct#g*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
+    fn test_parse_delta_input_stereo_bond(#[case] input: &str, #[case] expected: DeltaInput) {
+        assert_eq!(parse_delta_input(&read_string(input).unwrap()).unwrap(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(r##"{:stereo-bond {:modify [:t1 ""]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate::default()))]
+    #[case::undetermined(r##"{:stereo-bond {:modify [:t1 "*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
+    #[case::absolute(r##"{:stereo-bond {:modify [:t1 "Ct1"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCosetAst::Lit(1)) }, ..Default::default() }))]
+    #[case::relative(r##"{:stereo-bond {:modify [:t1 "Ct"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() }))]
+    #[case::constraint_removal(r##"{:stereo-bond {:modify [:t1 "Ct#g*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
+    fn test_read_delta_input_stereo_bond(#[case] input: &str, #[case] expected: DeltaInput) {
         assert_eq!(
             read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
             expected,
@@ -3794,6 +3874,56 @@ mod tests {
         assert_eq!(ast.deltas, Deltas::from_iter(expected));
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::absolute(
+        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 4] :type "Th0"}]} :deltas [{:stereo-atom {:modify [:s1 "Th1"]}}]}"##,
+        vec![Delta::StereoAtom(StereoAtomDelta::ModifyField { id: StereoAtomId(0), change: StereoAtomFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32), new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32) } })],
+    )]
+    #[case::undetermined(
+        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 4] :type "Th0"}]} :deltas [{:stereo-atom {:modify [:s1 "*"]}}]}"##,
+        vec![Delta::StereoAtom(StereoAtomDelta::ModifyField { id: StereoAtomId(0), change: StereoAtomFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32), new: StereoConfigurationAst::Undetermined } })],
+    )]
+    #[case::constraint_removal(
+        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 4] :type "Th0#g/"}]} :deltas [{:stereo-atom {:modify [:s1 "Th#g*"]}}]}"##,
+        vec![Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { id: StereoAtomId(0), kind: Some(StereoKind::Tetrahedral), old: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))), new: None })],
+    )]
+    fn test_reaction_input_into_ast_stereo_atom_modify(
+        #[case] input: &str,
+        #[case] expected: Vec<Delta>,
+    ) {
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(ast.deltas, Deltas::from_iter(expected));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::absolute(
+        r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :t1 :site 1 :ligands [0 3] :type "Ct0"}]} :deltas [{:stereo-bond {:modify [:t1 "Ct1"]}}]}"##,
+        vec![Delta::StereoBond(StereoBondDelta::ModifyField { id: StereoBondId(0), change: StereoBondFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32), new: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32) } })],
+    )]
+    #[case::undetermined(
+        r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :t1 :site 1 :ligands [0 3] :type "Ct0"}]} :deltas [{:stereo-bond {:modify [:t1 "*"]}}]}"##,
+        vec![Delta::StereoBond(StereoBondDelta::ModifyField { id: StereoBondId(0), change: StereoBondFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32), new: StereoConfigurationAst::Undetermined } })],
+    )]
+    #[case::constraint_removal(
+        r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :t1 :site 1 :ligands [0 3] :type "Ct0#g/"}]} :deltas [{:stereo-bond {:modify [:t1 "Ct#g*"]}}]}"##,
+        vec![Delta::StereoBond(StereoBondDelta::ModifyConstraint { id: StereoBondId(0), kind: Some(StereoKind::CisTrans), old: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))), new: None })],
+    )]
+    fn test_reaction_input_into_ast_stereo_bond_modify(
+        #[case] input: &str,
+        #[case] expected: Vec<Delta>,
+    ) {
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(ast.deltas, Deltas::from_iter(expected));
+    }
+
     #[rstest]
     fn test_reaction_input_into_ast_constraint_add() {
         let input = r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}"##;
@@ -3934,7 +4064,9 @@ mod tests {
                 .with_dative_bond_keyword(DativeBondId(0), "d1")
                 .with_aromatic_system_keyword(AromaticSystemId(0), "a1")
                 .with_multicenter_bond_keyword(MulticenterBondId(0), "m1")
-                .with_noncovalent_bond_keyword(NoncovalentBondId(0), "n1"),
+                .with_noncovalent_bond_keyword(NoncovalentBondId(0), "n1")
+                .with_stereo_atom_keyword(StereoAtomId(0), "s1")
+                .with_stereo_bond_keyword(StereoBondId(0), "t1"),
             ..Default::default()
         }
         .with_atom_keyword(AtomId(2), "n")
@@ -4038,6 +4170,68 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::absolute(vec![Delta::StereoAtom(StereoAtomDelta::ModifyField { id: StereoAtomId(0), change: StereoAtomFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32), new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1_u32) } })], r##"{:stereo-atom {:modify [:s1 "Th1"]}}"##)]
+    #[case::undetermined(vec![Delta::StereoAtom(StereoAtomDelta::ModifyField { id: StereoAtomId(0), change: StereoAtomFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32), new: StereoConfigurationAst::Undetermined } })], r##"{:stereo-atom {:modify [:s1 "*"]}}"##)]
+    #[case::constraint_removal(vec![Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { id: StereoAtomId(0), kind: Some(StereoKind::Tetrahedral), old: Some(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))), new: None })], r##"{:stereo-atom {:modify [:s1 "Th#g*"]}}"##)]
+    fn test_render_deltas_stereo_atom(
+        meta: ReactionMetadata,
+        #[case] deltas: Vec<Delta>,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            render_deltas(&Deltas::from_iter(deltas), &meta),
+            vec![read_string(expected).unwrap()],
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::absolute(vec![Delta::StereoBond(StereoBondDelta::ModifyField { id: StereoBondId(0), change: StereoBondFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32), new: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1_u32) } })], r##"{:stereo-bond {:modify [:t1 "Ct1"]}}"##)]
+    #[case::undetermined(vec![Delta::StereoBond(StereoBondDelta::ModifyField { id: StereoBondId(0), change: StereoBondFieldChange::Configuration { old: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32), new: StereoConfigurationAst::Undetermined } })], r##"{:stereo-bond {:modify [:t1 "*"]}}"##)]
+    #[case::constraint_removal(vec![Delta::StereoBond(StereoBondDelta::ModifyConstraint { id: StereoBondId(0), kind: Some(StereoKind::CisTrans), old: Some(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))), new: None })], r##"{:stereo-bond {:modify [:t1 "Ct#g*"]}}"##)]
+    fn test_render_deltas_stereo_bond(
+        meta: ReactionMetadata,
+        #[case] deltas: Vec<Delta>,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            render_deltas(&Deltas::from_iter(deltas), &meta),
+            vec![read_string(expected).unwrap()],
+        );
+    }
+
+    #[rstest]
+    fn test_render_deltas_stereo_bond_configuration_clear_with_constraint_removal(
+        meta: ReactionMetadata,
+    ) {
+        let deltas = Deltas::from_iter([
+            Delta::StereoBond(StereoBondDelta::ModifyField {
+                id: StereoBondId(0),
+                change: StereoBondFieldChange::Configuration {
+                    old: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32),
+                    new: StereoConfigurationAst::Undetermined,
+                },
+            }),
+            Delta::StereoBond(StereoBondDelta::ModifyConstraint {
+                id: StereoBondId(0),
+                kind: Some(StereoKind::CisTrans),
+                old: Some(StereoBondConstraintAst::Stereogenicity(
+                    StereogenicityAst::Lit(Stereogenicity::Stereogenic),
+                )),
+                new: None,
+            }),
+        ]);
+        assert_eq!(
+            render_deltas(&deltas, &meta),
+            vec![
+                read_string(r##"{:stereo-bond {:modify [:t1 "*"]}}"##).unwrap(),
+                read_string(r##"{:stereo-bond {:modify [:t1 "Ct#g*"]}}"##).unwrap(),
+            ],
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::add_molecule(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:add {:connected {}}}}")]
     #[case::add_entity_leaf(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(AtomId(2), AtomConstraintAst::Valence(ValueAst::Lit(2)))))], "{:constraint {:add {:atom [:n {:valence 2}]}}}")]
     #[case::remove(vec![Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:remove {:connected {}}}}")]
@@ -4072,11 +4266,15 @@ mod tests {
     #[case::stereo_atom_add(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]} :deltas [{:stereo-atom {:add {:site 0 :ligands [1 2 3 4] :type "Th1"}}}]}"##)]
     #[case::stereo_atom_remove(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:remove 0}}]}"##)]
     #[case::stereo_atom_modify(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:modify [0 "Th2"]}}]}"##)]
+    #[case::stereo_atom_modify_undetermined(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:modify [0 "*"]}}]}"##)]
     #[case::stereo_atom_swap(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:swap [0 :tetrahedral]}}]}"##)]
     #[case::stereo_atom_mirror(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}"##)]
     #[case::stereo_atom_apply(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:apply [0 :tetrahedral "(0,1)"]}}]}"##)]
     #[case::stereo_bond_add(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 3] :type "Ct1"}}}]}"##)]
     #[case::stereo_bond_remove(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]} :deltas [{:stereo-bond {:remove 0}}]}"##)]
+    #[case::stereo_bond_modify(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct0"}]} :deltas [{:stereo-bond {:modify [0 "Ct1"]}}]}"##)]
+    #[case::stereo_bond_modify_undetermined(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct0"}]} :deltas [{:stereo-bond {:modify [0 "*"]}}]}"##)]
+    #[case::stereo_bond_stereogenicity_removal(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct0#g/"}]} :deltas [{:stereo-bond {:modify [0 "Ct#g*"]}}]}"##)]
     #[case::dative_constraint_removal(r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#a"}]} :deltas [{:dative-bond {:modify [0 "#a*"]}}]}"##)]
     #[case::aromatic_modify_undetermined(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [0 "*"]}}]}"##)]
     #[case::aromatic_modify_spin_component(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [0 "#s1"]}}]}"##)]

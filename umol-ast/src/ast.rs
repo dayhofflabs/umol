@@ -101,8 +101,9 @@ pub use remap::{IdCompaction, UndoCompaction};
 pub use ring::{RingConnection, RingFamily, RingGraph, RingId, RingRelation, RingSet};
 pub use spin::{SpinStateAst, SpinStateUpdate};
 pub use stereo::{
-    CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfiguration, StereoConfigurationAst,
-    StereoCosetAst, StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoAst, Topicity,
+    CisTransStereoAst, StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate,
+    StereoConfiguration, StereoConfigurationAst, StereoConfigurationUpdate, StereoCosetAst,
+    StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoAst, Topicity,
 };
 pub use substructure::SubstructureMatchAlgorithm;
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};

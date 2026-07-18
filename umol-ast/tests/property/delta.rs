@@ -3,7 +3,8 @@ use umol_ast::ast::{
     AromaticSystemDelta, AromaticSystemId, AtomDelta, AtomFieldChange, AtomId, BondDelta,
     BondFieldChange, BondId, Canonicalize, Constraint, ConstraintDelta, DativeBondDelta,
     DativeBondId, Delta, Deltas, EntityPatch, MoleculeConstraint, MulticenterBondDelta,
-    MulticenterBondId, NoncovalentBondDelta, NoncovalentBondId, ValueAst,
+    MulticenterBondId, NoncovalentBondDelta, NoncovalentBondId, StereoAtomDelta, StereoAtomId,
+    StereoBondDelta, StereoBondId, ValueAst,
 };
 
 use crate::strategies::*;
@@ -102,6 +103,36 @@ fn apply_noncovalent_bond_diff(
             }
             NoncovalentBondDelta::ModifyConstraint { old, new, .. } => {
                 NoncovalentBondDelta::apply_constraint(&mut ast, old, new).unwrap()
+            }
+            other => unreachable!("diff yields only modify deltas, got {other:?}"),
+        }
+    }
+    ast
+}
+
+fn apply_stereo_atom_diff(mut ast: StereoAtomAst, diff: Vec<StereoAtomDelta>) -> StereoAtomAst {
+    for delta in diff {
+        match delta {
+            StereoAtomDelta::ModifyField { change, .. } => {
+                StereoAtomDelta::apply_field(&mut ast, change).unwrap()
+            }
+            StereoAtomDelta::ModifyConstraint { old, new, .. } => {
+                StereoAtomDelta::apply_constraint(&mut ast, old, new).unwrap()
+            }
+            other => unreachable!("diff yields only modify deltas, got {other:?}"),
+        }
+    }
+    ast
+}
+
+fn apply_stereo_bond_diff(mut ast: StereoBondAst, diff: Vec<StereoBondDelta>) -> StereoBondAst {
+    for delta in diff {
+        match delta {
+            StereoBondDelta::ModifyField { change, .. } => {
+                StereoBondDelta::apply_field(&mut ast, change).unwrap()
+            }
+            StereoBondDelta::ModifyConstraint { old, new, .. } => {
+                StereoBondDelta::apply_constraint(&mut ast, old, new).unwrap()
             }
             other => unreachable!("diff yields only modify deltas, got {other:?}"),
         }
@@ -336,6 +367,56 @@ proptest! {
     fn test_noncovalent_bond_ast_difference_to(
         lhs in noncovalent_bond_patch_ast_strategy(),
         rhs in noncovalent_bond_patch_ast_strategy(),
+    ) {
+        let update = lhs.difference_to(&rhs);
+        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+    }
+
+    #[test]
+    fn test_stereo_atom_delta_diff_apply(
+        lhs in stereo_atom_ast_strategy(),
+        rhs in stereo_atom_ast_strategy(),
+    ) {
+        let diff = StereoAtomDelta::diff(StereoAtomId(0), &lhs, &rhs);
+        prop_assert!(apply_stereo_atom_diff(lhs, diff).canonical_eq(&rhs));
+    }
+
+    #[test]
+    fn test_stereo_atom_delta_diff_identity(atom in stereo_atom_ast_strategy()) {
+        let diff = StereoAtomDelta::diff(StereoAtomId(0), &atom, &atom);
+        prop_assert!(diff.is_empty());
+        prop_assert_eq!(apply_stereo_atom_diff(atom.clone(), diff), atom);
+    }
+
+    #[test]
+    fn test_stereo_atom_ast_difference_to(
+        lhs in stereo_atom_ast_strategy(),
+        rhs in stereo_atom_ast_strategy(),
+    ) {
+        let update = lhs.difference_to(&rhs);
+        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+    }
+
+    #[test]
+    fn test_stereo_bond_delta_diff_apply(
+        lhs in stereo_bond_ast_strategy(),
+        rhs in stereo_bond_ast_strategy(),
+    ) {
+        let diff = StereoBondDelta::diff(StereoBondId(0), &lhs, &rhs);
+        prop_assert!(apply_stereo_bond_diff(lhs, diff).canonical_eq(&rhs));
+    }
+
+    #[test]
+    fn test_stereo_bond_delta_diff_identity(bond in stereo_bond_ast_strategy()) {
+        let diff = StereoBondDelta::diff(StereoBondId(0), &bond, &bond);
+        prop_assert!(diff.is_empty());
+        prop_assert_eq!(apply_stereo_bond_diff(bond.clone(), diff), bond);
+    }
+
+    #[test]
+    fn test_stereo_bond_ast_difference_to(
+        lhs in stereo_bond_ast_strategy(),
+        rhs in stereo_bond_ast_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).canonical_eq(&rhs));

@@ -25,8 +25,9 @@ pub(crate) use umol_ast::ast::{
     NoncovalentBondConstraintsAst, NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind,
     NoncovalentBondKindAst, NoncovalentBondUpdate, OrientedLigandPermutation, RelOp,
     RelationalConstraint, RingMembershipAst, RingScope, SpinStateAst, SpinStateUpdate,
-    StereoAtomAst, StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomId, StereoBondAst,
-    StereoBondConstraintAst, StereoBondConstraintsAst, StereoBondId, StereoConfigurationAst,
+    StereoAtomAst, StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomId,
+    StereoAtomUpdate, StereoBondAst, StereoBondConstraintAst, StereoBondConstraintsAst,
+    StereoBondId, StereoBondUpdate, StereoConfigurationAst, StereoConfigurationUpdate,
     StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
     StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
     TetrahedralStereoAst, Topicity, TopicityAst, TopicityRelationAst, ValueAst, ValuePredicate,
@@ -37,8 +38,8 @@ pub(crate) use umol_ast::dsl::{
     BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, MoleculeDsl,
     MoleculeMetadata, MoleculeNamespace, MulticenterBondDsl, MulticenterBondUpdateDsl,
     NoncovalentBondDsl, NoncovalentBondUpdateDsl, ParseError, StereoAtomConstraintDsl,
-    StereoAtomDsl, StereoAtomParticipants, StereoBondConstraintDsl, StereoBondDsl,
-    StereoBondParticipants, StereoLigandRef, ValueDsl,
+    StereoAtomDsl, StereoAtomParticipants, StereoAtomUpdateDsl, StereoBondConstraintDsl,
+    StereoBondDsl, StereoBondParticipants, StereoBondUpdateDsl, StereoLigandRef, ValueDsl,
 };
 pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
@@ -1247,12 +1248,86 @@ pub(crate) fn stereo_atom_ast_strategy() -> impl Strategy<Value = StereoAtomAst>
     })
 }
 
+pub(crate) fn stereo_atom_update_constraints_strategy(
+    kind: StereoKind,
+) -> impl Strategy<Value = StereoAtomConstraintsAst> {
+    prop::collection::vec(
+        prop_oneof![
+            stereo_atom_constraint_strategy(kind),
+            stereo_atom_constraint_strategy(kind)
+                .prop_map(|constraint| constraint.as_undetermined()),
+        ],
+        0..=3,
+    )
+    .prop_map(StereoAtomConstraintsAst::from_iter)
+}
+
+pub(crate) fn stereo_atom_update_strategy() -> impl Strategy<Value = StereoAtomUpdate> {
+    prop_oneof![
+        Just(StereoAtomUpdate::default()),
+        Just(StereoAtomUpdate {
+            configuration: StereoConfigurationUpdate::Undetermined,
+            ..Default::default()
+        }),
+        (
+            stereo_atom_kind_strategy(),
+            prop::option::of(stereo_coset_strategy())
+        )
+            .prop_flat_map(|(kind, coset)| {
+                stereo_atom_update_constraints_strategy(kind).prop_map(move |constraints| {
+                    StereoAtomUpdate {
+                        configuration: StereoConfigurationUpdate::Kinded {
+                            kind,
+                            coset: coset.clone(),
+                        },
+                        constraints,
+                    }
+                })
+            },),
+    ]
+}
+
 pub(crate) fn stereo_bond_ast_strategy() -> impl Strategy<Value = StereoBondAst> {
     stereo_coset_strategy().prop_flat_map(|coset| {
         stereo_bond_constraints_strategy(StereoKind::CisTrans).prop_map(move |cs| {
             StereoBondAst::new(StereoKind::CisTrans, coset.clone()).with_constraints(cs)
         })
     })
+}
+
+pub(crate) fn stereo_bond_update_constraints_strategy(
+    kind: StereoKind,
+) -> impl Strategy<Value = StereoBondConstraintsAst> {
+    prop::collection::vec(
+        prop_oneof![
+            stereo_bond_constraint_strategy(kind),
+            stereo_bond_constraint_strategy(kind)
+                .prop_map(|constraint| constraint.as_undetermined()),
+        ],
+        0..=3,
+    )
+    .prop_map(StereoBondConstraintsAst::from_iter)
+}
+
+pub(crate) fn stereo_bond_update_strategy() -> impl Strategy<Value = StereoBondUpdate> {
+    prop_oneof![
+        Just(StereoBondUpdate::default()),
+        Just(StereoBondUpdate {
+            configuration: StereoConfigurationUpdate::Undetermined,
+            ..Default::default()
+        }),
+        prop::option::of(stereo_coset_strategy()).prop_flat_map(|coset| {
+            stereo_bond_update_constraints_strategy(StereoKind::CisTrans).prop_map(
+                move |constraints| StereoBondUpdate {
+                    configuration: StereoConfigurationUpdate::Kinded {
+                        kind: StereoKind::CisTrans,
+                        coset: coset.clone(),
+                    },
+                    constraints,
+                },
+            )
+        }),
+    ]
 }
 
 /// Stereo-atom entries for a molecule of `atom_count` atoms. Sites are the

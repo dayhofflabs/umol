@@ -29,8 +29,9 @@ use crate::ast::constraint::{
 };
 use crate::ast::id::StereoLigandPosition;
 use crate::ast::stereo::{
-    CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst,
-    StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoAst, Topicity,
+    CisTransStereoAst, StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate,
+    StereoConfigurationAst, StereoConfigurationUpdate, StereoCosetAst, StereoKind, StereoTerm,
+    Stereogenicity, TetrahedralStereoAst, Topicity,
 };
 use crate::ast::traits::{FromAst, IntoAst, Lattice};
 
@@ -187,29 +188,13 @@ fn stereo_configuration(i: &mut &str) -> PResult<StereoConfigurationAst> {
 /// Partial-modify variant of `stereo_configuration`: the coset is optional (omitted =
 /// `Undetermined`, "coset unchanged"). So `*` alone, `<kind>`, or `<kind><coset>`; the kind is
 /// mandatory once anything past `*` appears.
-fn partial_stereo_configuration(i: &mut &str) -> PResult<StereoConfigurationAst> {
-    multispace0.parse_next(i)?;
-    if opt('*').parse_next(i)?.is_some() {
-        multispace0.parse_next(i)?;
-        return Ok(StereoConfigurationAst::Undetermined);
-    }
-    let kind = delimited(multispace0, stereo_kind, multispace0).parse_next(i)?;
-    let coset = opt(terminated(
-        move |i: &mut &str| stereo_coset(i, kind.degree()),
-        multispace0,
-    ))
-    .parse_next(i)?
-    .unwrap_or(StereoCosetAst::Undetermined);
-    Ok(StereoConfigurationAst::kinded(kind, coset))
-}
-
 pub(crate) fn stereo_atom(i: &mut &str) -> PResult<StereoAtomDsl> {
     let configuration = stereo_configuration(i)?;
     stereo_atom_tail(i, configuration)
 }
 
 /// Parse the kind-scoped constraint predicates and trailing-input check given an already-parsed
-/// configuration. Shared by the full `stereo_atom` and the partial-modify parser.
+/// configuration.
 fn stereo_atom_tail(i: &mut &str, configuration: StereoConfigurationAst) -> PResult<StereoAtomDsl> {
     let mut constraints = StereoAtomConstraintsAst::new();
     if let StereoConfigurationAst::Kinded(kind, _) = &configuration {
@@ -241,11 +226,6 @@ fn stereo_atom_tail(i: &mut &str, configuration: StereoConfigurationAst) -> PRes
         configuration,
         constraints,
     }))
-}
-
-fn partial_stereo_atom(i: &mut &str) -> PResult<StereoAtomDsl> {
-    let configuration = partial_stereo_configuration(i)?;
-    stereo_atom_tail(i, configuration)
 }
 
 /// Surface DSL wrapper for `StereoBondAst`
@@ -382,7 +362,7 @@ pub(crate) fn stereo_bond(i: &mut &str) -> PResult<StereoBondDsl> {
 }
 
 /// Parse the kind-scoped constraint predicates and trailing-input check given an already-parsed
-/// configuration. Shared by the full `stereo_bond` and the partial-modify parser.
+/// configuration.
 fn stereo_bond_tail(i: &mut &str, configuration: StereoConfigurationAst) -> PResult<StereoBondDsl> {
     let mut constraints = StereoBondConstraintsAst::new();
     if let StereoConfigurationAst::Kinded(kind, _) = &configuration {
@@ -414,11 +394,6 @@ fn stereo_bond_tail(i: &mut &str, configuration: StereoConfigurationAst) -> PRes
         configuration,
         constraints,
     }))
-}
-
-fn partial_stereo_bond(i: &mut &str) -> PResult<StereoBondDsl> {
-    let configuration = partial_stereo_configuration(i)?;
-    stereo_bond_tail(i, configuration)
 }
 
 /// `Th` / `Ct` / `Sp` / `Tb` / `Oh` symbol → `StereoKind`.
@@ -873,87 +848,60 @@ pub(crate) fn fmt_stereo_bond(f: &mut fmt::Formatter<'_>, bond: &StereoBondAst) 
     Ok(())
 }
 
-pub(crate) fn parse_partial_stereo_atom(input: &str) -> Result<StereoAtomAst, ParseError> {
-    partial_stereo_atom
-        .parse(input)
-        .map_err(|e| e.into_inner())
-        .map(|dsl| dsl.0)
+pub fn parse_stereo_atom_update(input: &str) -> Result<StereoAtomUpdateDsl, ParseError> {
+    stereo_atom_update.parse(input).map_err(|e| e.into_inner())
 }
 
-pub(crate) fn parse_partial_stereo_bond(input: &str) -> Result<StereoBondAst, ParseError> {
-    partial_stereo_bond
-        .parse(input)
-        .map_err(|e| e.into_inner())
-        .map(|dsl| dsl.0)
+pub fn parse_stereo_bond_update(input: &str) -> Result<StereoBondUpdateDsl, ParseError> {
+    stereo_bond_update.parse(input).map_err(|e| e.into_inner())
 }
 
-/// Render the configuration head for a partial-modify payload: `*` for undetermined, else the kind
-/// with the coset *omitted* when undetermined ("coset unchanged") — the inverse of
-/// `partial_stereo_configuration`.
-fn fmt_partial_stereo_configuration(
-    f: &mut fmt::Formatter<'_>,
-    configuration: &StereoConfigurationAst,
-) -> fmt::Result {
-    match configuration {
-        StereoConfigurationAst::Undetermined => write!(f, "*"),
-        StereoConfigurationAst::Kinded(kind, coset) => {
-            fmt_stereo_kind(f, *kind)?;
-            if !matches!(coset, StereoCosetAst::Undetermined) {
-                fmt_stereo_coset(f, coset)?;
+/// Surface DSL wrapper around a [`StereoAtomUpdate`].
+#[repr(transparent)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StereoAtomUpdateDsl(pub StereoAtomUpdate);
+
+impl FromStr for StereoAtomUpdateDsl {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_stereo_atom_update(s)
+    }
+}
+
+impl Display for StereoAtomUpdateDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let kind = match &self.0.configuration {
+            StereoConfigurationUpdate::Unchanged => None,
+            StereoConfigurationUpdate::Undetermined => {
+                f.write_str("*")?;
+                None
             }
-            Ok(())
+            StereoConfigurationUpdate::Kinded { kind, coset } => {
+                fmt_stereo_kind(f, *kind)?;
+                if let Some(coset) = coset {
+                    fmt_stereo_coset(f, coset)?;
+                }
+                Some(*kind)
+            }
+        };
+        if let Some(kind) = kind {
+            for constraint in self.0.constraints.iter() {
+                fmt_stereo_atom_constraint(f, constraint, kind)?;
+            }
+        } else if !self.0.constraints.is_empty() {
+            return Err(fmt::Error);
         }
+        Ok(())
     }
 }
 
-/// Render a partial-modify stereo atom: config (coset omitted when unchanged) plus *all*
-/// constraints, including undetermined ones (`#o(0,1)*`) so their removal round-trips.
-fn fmt_partial_stereo_atom(f: &mut fmt::Formatter<'_>, atom: &StereoAtomAst) -> fmt::Result {
-    fmt_partial_stereo_configuration(f, &atom.configuration)?;
-    if let StereoConfigurationAst::Kinded(kind, _) = &atom.configuration {
-        for c in atom.constraints.iter() {
-            fmt_stereo_atom_constraint(f, c, *kind)?;
-        }
-    }
-    Ok(())
-}
-
-/// Render a partial-modify stereo bond — the `fmt_partial_stereo_atom` twin.
-fn fmt_partial_stereo_bond(f: &mut fmt::Formatter<'_>, bond: &StereoBondAst) -> fmt::Result {
-    fmt_partial_stereo_configuration(f, &bond.configuration)?;
-    if let StereoConfigurationAst::Kinded(kind, _) = &bond.configuration {
-        for c in bond.constraints.iter() {
-            fmt_stereo_bond_constraint(f, c, *kind)?;
-        }
-    }
-    Ok(())
-}
-
-/// Partial stereo atom for a reaction `:modify` payload: `*` (undetermined), or `<kind>` with an
-/// optional coset (omitted = unchanged) followed by constraints. Renders *all* constraints
-/// (including undetermined `*` forms) so constraint removal round-trips; the kind is mandatory once
-/// a coset or constraint appears (`*#o…` is rejected).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PartialStereoAtomDsl(pub StereoAtomAst);
-
-impl FromStr for PartialStereoAtomDsl {
-    type Err = ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_partial_stereo_atom(s)?))
-    }
-}
-
-impl Display for PartialStereoAtomDsl {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_partial_stereo_atom(f, &self.0)
-    }
-}
-
-impl<'de> FromEdn<'de> for PartialStereoAtomDsl {
+impl<'de> FromEdn<'de> for StereoAtomUpdateDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
-            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("stereo atom", e)),
+            Edn::Str(s) => s
+                .parse()
+                .map_err(|e| DeError::subgrammar("stereo-atom-update", e)),
             other => Err(DeError::TypeMismatch {
                 expected: "string",
                 got: other.kind(),
@@ -963,34 +911,103 @@ impl<'de> FromEdn<'de> for PartialStereoAtomDsl {
     }
 }
 
-impl ToEdn for PartialStereoAtomDsl {
+impl ToEdn for StereoAtomUpdateDsl {
     fn to_edn(&self) -> Edn<'static> {
         Edn::Str(Cow::Owned(self.to_string()))
     }
 }
 
-/// Partial stereo bond for a reaction `:modify` payload — the `PartialStereoAtomDsl` twin.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PartialStereoBondDsl(pub StereoBondAst);
+fn stereo_atom_update(i: &mut &str) -> PResult<StereoAtomUpdateDsl> {
+    multispace0.parse_next(i)?;
+    if i.is_empty() {
+        return Ok(StereoAtomUpdateDsl::default());
+    }
+    let configuration = if opt('*').parse_next(i)?.is_some() {
+        StereoConfigurationUpdate::Undetermined
+    } else {
+        let kind = stereo_kind(i)?;
+        let coset = opt(move |i: &mut &str| stereo_coset(i, kind.degree())).parse_next(i)?;
+        StereoConfigurationUpdate::Kinded { kind, coset }
+    };
+    multispace0.parse_next(i)?;
+    let mut constraints = StereoAtomConstraintsAst::new();
+    if let StereoConfigurationUpdate::Kinded { kind, .. } = &configuration {
+        let kind = *kind;
+        loop {
+            let before = *i;
+            match stereo_atom_predicate(i, kind) {
+                Ok(constraint) => {
+                    if constraints.contains(constraint.key()) {
+                        return Err(ErrMode::Cut(ParseError::DuplicateStereoPredicate(
+                            before[..2].to_string(),
+                        )));
+                    }
+                    constraints.set(constraint);
+                }
+                Err(ErrMode::Backtrack(_)) => {
+                    *i = before;
+                    break;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+    multispace0.parse_next(i)?;
+    if !i.is_empty() {
+        return Err(ErrMode::Cut(ParseError::TrailingInput((*i).to_string())));
+    }
+    Ok(StereoAtomUpdateDsl(StereoAtomUpdate {
+        configuration,
+        constraints,
+    }))
+}
 
-impl FromStr for PartialStereoBondDsl {
+/// Surface DSL wrapper around a [`StereoBondUpdate`].
+#[repr(transparent)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StereoBondUpdateDsl(pub StereoBondUpdate);
+
+impl FromStr for StereoBondUpdateDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_partial_stereo_bond(s)?))
+        parse_stereo_bond_update(s)
     }
 }
 
-impl Display for PartialStereoBondDsl {
+impl Display for StereoBondUpdateDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_partial_stereo_bond(f, &self.0)
+        let kind = match &self.0.configuration {
+            StereoConfigurationUpdate::Unchanged => None,
+            StereoConfigurationUpdate::Undetermined => {
+                f.write_str("*")?;
+                None
+            }
+            StereoConfigurationUpdate::Kinded { kind, coset } => {
+                fmt_stereo_kind(f, *kind)?;
+                if let Some(coset) = coset {
+                    fmt_stereo_coset(f, coset)?;
+                }
+                Some(*kind)
+            }
+        };
+        if let Some(kind) = kind {
+            for constraint in self.0.constraints.iter() {
+                fmt_stereo_bond_constraint(f, constraint, kind)?;
+            }
+        } else if !self.0.constraints.is_empty() {
+            return Err(fmt::Error);
+        }
+        Ok(())
     }
 }
 
-impl<'de> FromEdn<'de> for PartialStereoBondDsl {
+impl<'de> FromEdn<'de> for StereoBondUpdateDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
-            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("stereo bond", e)),
+            Edn::Str(s) => s
+                .parse()
+                .map_err(|e| DeError::subgrammar("stereo-bond-update", e)),
             other => Err(DeError::TypeMismatch {
                 expected: "string",
                 got: other.kind(),
@@ -1000,10 +1017,55 @@ impl<'de> FromEdn<'de> for PartialStereoBondDsl {
     }
 }
 
-impl ToEdn for PartialStereoBondDsl {
+impl ToEdn for StereoBondUpdateDsl {
     fn to_edn(&self) -> Edn<'static> {
         Edn::Str(Cow::Owned(self.to_string()))
     }
+}
+
+fn stereo_bond_update(i: &mut &str) -> PResult<StereoBondUpdateDsl> {
+    multispace0.parse_next(i)?;
+    if i.is_empty() {
+        return Ok(StereoBondUpdateDsl::default());
+    }
+    let configuration = if opt('*').parse_next(i)?.is_some() {
+        StereoConfigurationUpdate::Undetermined
+    } else {
+        let kind = stereo_kind(i)?;
+        let coset = opt(move |i: &mut &str| stereo_coset(i, kind.degree())).parse_next(i)?;
+        StereoConfigurationUpdate::Kinded { kind, coset }
+    };
+    multispace0.parse_next(i)?;
+    let mut constraints = StereoBondConstraintsAst::new();
+    if let StereoConfigurationUpdate::Kinded { kind, .. } = &configuration {
+        let kind = *kind;
+        loop {
+            let before = *i;
+            match stereo_bond_predicate(i, kind) {
+                Ok(constraint) => {
+                    if constraints.contains(constraint.key()) {
+                        return Err(ErrMode::Cut(ParseError::DuplicateStereoPredicate(
+                            before[..2].to_string(),
+                        )));
+                    }
+                    constraints.set(constraint);
+                }
+                Err(ErrMode::Backtrack(_)) => {
+                    *i = before;
+                    break;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+    multispace0.parse_next(i)?;
+    if !i.is_empty() {
+        return Err(ErrMode::Cut(ParseError::TrailingInput((*i).to_string())));
+    }
+    Ok(StereoBondUpdateDsl(StereoBondUpdate {
+        configuration,
+        constraints,
+    }))
 }
 
 /// Write the stereo kind for `kind`.
@@ -1911,41 +1973,66 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined("*", StereoAtomAst::default())]
-    #[case::kind_and_coset("Th1", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
-    #[case::kind_only_coset_omitted("Th", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))]
-    fn test_parse_partial_stereo_atom(#[case] input: &str, #[case] expected: StereoAtomAst) {
-        assert_eq!(parse_partial_stereo_atom(input).unwrap(), expected);
+    #[case::empty("", StereoAtomUpdateDsl::default())]
+    #[case::undetermined("*", StereoAtomUpdateDsl(StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
+    #[case::absolute("Th1", StereoAtomUpdateDsl(StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCosetAst::Lit(1)) }, ..Default::default() }))]
+    #[case::relative("Th", StereoAtomUpdateDsl(StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() }))]
+    #[case::explicit_open("Th*", StereoAtomUpdateDsl(StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCosetAst::Undetermined) }, ..Default::default() }))]
+    fn test_parse_stereo_atom_update(#[case] input: &str, #[case] expected: StereoAtomUpdateDsl) {
+        assert_eq!(parse_stereo_atom_update(input).unwrap(), expected);
     }
 
     #[rstest]
     #[case::undetermined_kind_with_constraint("*#o(0,1)=", ParseError::TrailingInput("#o(0,1)=".to_string()))]
-    fn test_parse_partial_stereo_atom_error(#[case] input: &str, #[case] expected: ParseError) {
-        assert_eq!(parse_partial_stereo_atom(input).unwrap_err(), expected);
+    fn test_parse_stereo_atom_update_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(parse_stereo_atom_update(input).unwrap_err(), expected);
     }
 
     #[rstest]
+    #[case::empty("")]
     #[case::undetermined("*")]
-    #[case::kind_and_coset("Th1")]
-    #[case::kind_only("Th")]
+    #[case::absolute("Th1")]
+    #[case::relative("Th")]
+    #[case::explicit_open("Th*")]
     #[case::topicity_removal("Th#o(0,1)*")]
     #[case::topicity_change("Th#o(0,1)/")]
     #[case::ligand_symmetry_removal("Th#p(0,1)*")]
     #[case::ligand_symmetry("Th#p(0,1)")]
-    fn test_partial_stereo_atom_dsl_roundtrip(#[case] s: &str) {
-        let dsl = PartialStereoAtomDsl(parse_partial_stereo_atom(s).unwrap());
-        assert_eq!(dsl.to_string(), s);
-        assert_eq!(parse_partial_stereo_atom(&dsl.to_string()).unwrap(), dsl.0);
+    fn test_stereo_atom_update_dsl_display_roundtrip(#[case] input: &str) {
+        let dsl = parse_stereo_atom_update(input).unwrap();
+        assert_eq!(dsl.to_string(), input);
+        assert_eq!(parse_stereo_atom_update(&dsl.to_string()).unwrap(), dsl);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty("", StereoBondUpdateDsl::default())]
+    #[case::undetermined("*", StereoBondUpdateDsl(StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
+    #[case::absolute("Ct1", StereoBondUpdateDsl(StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCosetAst::Lit(1)) }, ..Default::default() }))]
+    #[case::relative("Ct", StereoBondUpdateDsl(StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() }))]
+    #[case::explicit_open("Ct*", StereoBondUpdateDsl(StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCosetAst::Undetermined) }, ..Default::default() }))]
+    fn test_parse_stereo_bond_update(#[case] input: &str, #[case] expected: StereoBondUpdateDsl) {
+        assert_eq!(parse_stereo_bond_update(input).unwrap(), expected);
     }
 
     #[rstest]
+    #[case::undetermined_kind_with_constraint("*#g/", ParseError::TrailingInput("#g/".to_string()))]
+    fn test_parse_stereo_bond_update_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(parse_stereo_bond_update(input).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case::empty("")]
     #[case::undetermined("*")]
-    #[case::kind_only("Ct")]
+    #[case::absolute("Ct1")]
+    #[case::relative("Ct")]
+    #[case::explicit_open("Ct*")]
     #[case::topicity_removal("Ct#o(0,1)*")]
-    fn test_partial_stereo_bond_dsl_roundtrip(#[case] s: &str) {
-        let dsl = PartialStereoBondDsl(parse_partial_stereo_bond(s).unwrap());
-        assert_eq!(dsl.to_string(), s);
-        assert_eq!(parse_partial_stereo_bond(&dsl.to_string()).unwrap(), dsl.0);
+    #[case::stereogenicity_change("Ct#g/")]
+    fn test_stereo_bond_update_dsl_display_roundtrip(#[case] input: &str) {
+        let dsl = parse_stereo_bond_update(input).unwrap();
+        assert_eq!(dsl.to_string(), input);
+        assert_eq!(parse_stereo_bond_update(&dsl.to_string()).unwrap(), dsl);
     }
 
     #[rustfmt::skip]

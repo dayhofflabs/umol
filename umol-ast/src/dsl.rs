@@ -69,7 +69,8 @@ pub use refs::{
 };
 pub use relational::RelationalConstraintDsl;
 pub use stereo::{
-    parse_stereo_atom, parse_stereo_bond, StereoAtomConstraintDsl, StereoAtomDsl,
-    StereoBondConstraintDsl, StereoBondDsl,
+    parse_stereo_atom, parse_stereo_atom_update, parse_stereo_bond, parse_stereo_bond_update,
+    StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomUpdateDsl, StereoBondConstraintDsl,
+    StereoBondDsl, StereoBondUpdateDsl,
 };
 pub use value::{parse_value, ValueDsl};
