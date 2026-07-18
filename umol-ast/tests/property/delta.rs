@@ -162,4 +162,11 @@ proptest! {
         prop_assert!(diff.is_empty());
         prop_assert_eq!(apply_bond_diff(bond.clone(), diff), bond);
     }
+
+    /// Applying the directed bond update recovers the target up to canonical equality.
+    #[test]
+    fn test_bond_ast_difference_to(lhs in bond_ast_strategy(), rhs in bond_ast_strategy()) {
+        let update = lhs.difference_to(&rhs);
+        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+    }
 }

@@ -88,11 +88,11 @@ macro_rules! bond_dsl_ground {
     }};
 }
 
-/// Parse partial bond DSL into `BondAst`.
+/// Parse a compact bond-update string into `BondUpdate`.
 #[macro_export]
-macro_rules! partial_bond_dsl {
+macro_rules! bond_update_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::dsl::PartialBondDsl as ::core::str::FromStr>::from_str($s)
+        <$crate::dsl::BondUpdateDsl as ::core::str::FromStr>::from_str($s)
             .unwrap()
             .0
     }};
@@ -236,10 +236,10 @@ mod tests {
     use crate::ast::constraint::RingScope;
     use crate::ast::{
         AromaticSystemAst, AromaticSystemConstraintAst, AtomAst, AtomConstraintAst,
-        AtomConstraintsAst, AtomId, AtomUpdate, BondAst, BondConstraintAst, BooleanAst,
-        DativeBondAst, DativeBondConstraintAst, ElementAst, MoleculeAst, MoleculeParts,
-        MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst, StereoBondAst,
-        StereoCosetAst, StereoKind, ValueAst,
+        AtomConstraintsAst, AtomId, AtomUpdate, BondAst, BondConstraintAst, BondConstraintsAst,
+        BondUpdate, BooleanAst, DativeBondAst, DativeBondConstraintAst, ElementAst, MoleculeAst,
+        MoleculeParts, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst,
+        StereoBondAst, StereoCosetAst, StereoKind, ValueAst,
     };
     use crate::dsl::molecule::MoleculeMetadata;
     use crate::dsl::{AtomDsl, MoleculeDsl};
@@ -368,12 +368,12 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty("", BondAst::new(ValueAst::Undetermined))]
-    #[case::order("1", BondAst::from_order(1))]
-    #[case::field_only("#c+", BondAst::new(ValueAst::Undetermined).with_charge(1_i64))]
-    #[case::constraint_only("#a", BondAst::new(ValueAst::Undetermined).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
-    fn test_partial_bond_macro(#[case] input: &str, #[case] expected: BondAst) {
-        assert_eq!(partial_bond_dsl!(input), expected);
+    #[case::empty("", BondUpdate::default())]
+    #[case::order("1", BondUpdate { order: Some(ValueAst::Lit(1)), ..Default::default() })]
+    #[case::field_only("#c+", BondUpdate { charge: Some(ValueAst::Lit(1)), ..Default::default() })]
+    #[case::constraint_only("#a", BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))), ..Default::default() })]
+    fn test_bond_update_macro(#[case] input: &str, #[case] expected: BondUpdate) {
+        assert_eq!(bond_update_dsl!(input), expected);
     }
 
     #[rustfmt::skip]

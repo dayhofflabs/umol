@@ -10,7 +10,7 @@
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMassAst};
-use super::bond::BondAst;
+use super::bond::{BondAst, BondUpdate};
 use super::constraint::{
     AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint, Constraints,
     DativeBondConstraintAst, MulticenterBondConstraintAst, NoncovalentBondConstraintAst,
@@ -529,6 +529,60 @@ impl Edit {
         }
         edits
     }
+
+    /// Project a localized-bond update into checked host-relative edits.
+    pub fn for_bond_update(id: BondHandle, current: &BondAst, update: &BondUpdate) -> Vec<Self> {
+        let mut edits = Vec::new();
+        if let Some(new) = &update.order {
+            if !current.order.canonical_eq(new) {
+                edits.push(Self::ModifyBondField {
+                    id: id.clone(),
+                    change: BondFieldChange::Order {
+                        old: current.order.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        if let Some(new) = &update.charge {
+            if !current.charge.canonical_eq(new) {
+                edits.push(Self::ModifyBondField {
+                    id: id.clone(),
+                    change: BondFieldChange::Charge {
+                        old: current.charge.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        let new_spin = current.spin.update(&update.spin);
+        if !current.spin.canonical_eq(&new_spin) {
+            edits.push(Self::ModifyBondField {
+                id: id.clone(),
+                change: BondFieldChange::Spin {
+                    old: current.spin.clone(),
+                    new: new_spin,
+                },
+            });
+        }
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            let unchanged = match (&old, &new) {
+                (None, None) => true,
+                (Some(old), Some(new)) => old.canonical_eq(new),
+                _ => false,
+            };
+            if !unchanged {
+                edits.push(Self::ModifyBondConstraint {
+                    id: id.clone(),
+                    old,
+                    new,
+                });
+            }
+        }
+        edits
+    }
 }
 
 // Handles for overlay relations (an existing id or the Nth created earlier in the batch).
@@ -836,7 +890,8 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
-    use super::super::constraint::AtomConstraintsAst;
+    use super::super::boolean::BooleanAst;
+    use super::super::constraint::{AtomConstraintsAst, BondConstraintsAst, RingScope};
     use super::super::spin::SpinStateUpdate;
     use super::super::stereo::{StereoConfigurationAst, StereoCosetAst, StereoKind};
     use super::*;
@@ -1075,6 +1130,80 @@ mod tests {
     fn test_edit_for_atom_update_identity(#[case] current: AtomAst, #[case] update: AtomUpdate) {
         assert_eq!(
             Edit::for_atom_update(AtomHandle::Id(AtomId(0)), &current, &update),
+            Vec::new()
+        );
+    }
+
+    #[rstest]
+    fn test_edit_for_bond_update() {
+        let current = BondAst::from_order(1)
+            .with_charge(0_i64)
+            .with_spin((2_u8, 3_u8))
+            .with_constraint(BondConstraintAst::ring_membership(
+                RingScope::Size(6),
+                1_i64,
+            ));
+        let update = BondUpdate {
+            order: Some(ValueAst::Lit(2)),
+            charge: Some(ValueAst::Undetermined),
+            spin: SpinStateUpdate {
+                unpaired: None,
+                multiplicity: Some(ValueAst::Lit(1)),
+            },
+            constraints: BondConstraintsAst::from_iter([
+                BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined),
+                BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            ]),
+        };
+        assert_eq!(
+            Edit::for_bond_update(BondHandle::Id(BondId(7)), &current, &update),
+            vec![
+                Edit::ModifyBondField {
+                    id: BondHandle::Id(BondId(7)),
+                    change: BondFieldChange::Order {
+                        old: ValueAst::Lit(1),
+                        new: ValueAst::Lit(2),
+                    },
+                },
+                Edit::ModifyBondField {
+                    id: BondHandle::Id(BondId(7)),
+                    change: BondFieldChange::Charge {
+                        old: ValueAst::Lit(0),
+                        new: ValueAst::Undetermined,
+                    },
+                },
+                Edit::ModifyBondField {
+                    id: BondHandle::Id(BondId(7)),
+                    change: BondFieldChange::Spin {
+                        old: SpinStateAst::from((2_u8, 3_u8)),
+                        new: SpinStateAst::from((2_u8, 1_u8)),
+                    },
+                },
+                Edit::ModifyBondConstraint {
+                    id: BondHandle::Id(BondId(7)),
+                    old: None,
+                    new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                },
+                Edit::ModifyBondConstraint {
+                    id: BondHandle::Id(BondId(7)),
+                    old: Some(BondConstraintAst::ring_membership(
+                        RingScope::Size(6),
+                        1_i64,
+                    )),
+                    new: None,
+                },
+            ]
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(BondAst::from_order(1), BondUpdate::default())]
+    #[case::canonical_field(BondAst::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(BondAst::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() })]
+    fn test_edit_for_bond_update_identity(#[case] current: BondAst, #[case] update: BondUpdate) {
+        assert_eq!(
+            Edit::for_bond_update(BondHandle::Id(BondId(0)), &current, &update),
             Vec::new()
         );
     }

@@ -14,8 +14,8 @@ pub(crate) use umol_ast::ast::{
     AromaticSystemConstraintsAst, AromaticSystemHandle, AromaticSystemId, AromaticValenceAst,
     AtomAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst, AtomFieldChange, AtomHandle,
     AtomId, AtomUpdate, BondAst, BondConstraintAst, BondConstraintKey, BondConstraintsAst,
-    BondFieldChange, BondHandle, BondId, BooleanAst, Canonicalize, CisTransStereoAst, Constraint,
-    Constraints, DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey,
+    BondFieldChange, BondHandle, BondId, BondUpdate, BooleanAst, Canonicalize, CisTransStereoAst,
+    Constraint, Constraints, DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey,
     DativeBondConstraintsAst, DativeBondHandle, DativeBondId, Edit, ElectronCountsAst, ElementAst,
     FluxionalityAst, IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp,
     MoleculeAst, MoleculeConstraint, MoleculeParts, MulticenterBondAst,
@@ -32,11 +32,10 @@ pub(crate) use umol_ast::ast::{
     ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
-    parse_value, AromaticSystemDsl, AtomDsl, AtomUpdateDsl, BondDsl, DativeBondDsl,
+    parse_value, AromaticSystemDsl, AtomDsl, AtomUpdateDsl, BondDsl, BondUpdateDsl, DativeBondDsl,
     DativeBondParticipants, MoleculeDsl, MoleculeMetadata, MoleculeNamespace, MulticenterBondDsl,
-    NoncovalentBondDsl, ParseError, PartialBondDsl, StereoAtomConstraintDsl, StereoAtomDsl,
-    StereoAtomParticipants, StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants,
-    StereoLigandRef, ValueDsl,
+    NoncovalentBondDsl, ParseError, StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomParticipants,
+    StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants, StereoLigandRef, ValueDsl,
 };
 pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
@@ -450,6 +449,17 @@ pub(crate) fn bond_constraints_strategy() -> impl Strategy<Value = BondConstrain
     })
 }
 
+pub(crate) fn bond_update_constraints_strategy() -> impl Strategy<Value = BondConstraintsAst> {
+    prop::collection::vec(
+        prop_oneof![
+            bond_constraint_strategy(),
+            bond_constraint_strategy().prop_map(|constraint| constraint.as_undetermined()),
+        ],
+        0..=2,
+    )
+    .prop_map(BondConstraintsAst::from_iter)
+}
+
 pub(crate) fn dative_bond_constraint_strategy() -> BoxedStrategy<DativeBondConstraintAst> {
     prop_oneof![
         any::<bool>().prop_map(|b| DativeBondConstraintAst::Aromatic(BooleanAst::Lit(b))),
@@ -524,12 +534,30 @@ prop_compose! {
     (
         order in value_basic(1..=4),
         charge in value_basic(-1..=1),
+        spin in spin_state_strategy(),
         constraints in bond_constraints_strategy(),
     ) -> BondAst {
         BondAst {
             order,
             charge,
-            spin: SpinStateAst::default(),
+            spin,
+            constraints,
+        }
+    }
+}
+
+prop_compose! {
+    pub(crate) fn bond_update_strategy()
+    (
+        order in prop::option::of(value_basic(1..=4)),
+        charge in prop::option::of(value_basic(-1..=1)),
+        spin in spin_state_update_strategy(),
+        constraints in bond_update_constraints_strategy(),
+    ) -> BondUpdate {
+        BondUpdate {
+            order,
+            charge,
+            spin,
             constraints,
         }
     }

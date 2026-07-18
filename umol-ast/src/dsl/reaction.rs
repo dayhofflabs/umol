@@ -17,7 +17,7 @@ use umol_perm::Permutation;
 
 use super::aromatic::{AromaticSystemDsl, PartialAromaticSystemDsl};
 use super::atom::{lower_atom, raise_atom, AtomDsl, AtomUpdateDsl};
-use super::bond::{lower_bond, raise_bond, BondDsl, PartialBondDsl};
+use super::bond::{lower_bond, raise_bond, BondDsl, BondUpdateDsl};
 use super::config::{DeltaDefaults, ReactionDefaults};
 use super::constraint::{read_constraint_dsl, ConstraintDsl};
 use super::dative::{DativeBondDsl, PartialDativeBondDsl};
@@ -54,7 +54,7 @@ use super::stereo::{
     PartialStereoBondDsl, StereoAtomDsl, StereoBondDsl,
 };
 use crate::ast::atom::{AtomAst, AtomUpdate};
-use crate::ast::bond::BondAst;
+use crate::ast::bond::{BondAst, BondUpdate};
 use crate::ast::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
@@ -733,7 +733,7 @@ pub(crate) enum DeltaInput {
     AtomModify(AtomRef, AtomUpdate),
     BondAdd(BondEntryInput),
     BondRemove(BondRef),
-    BondModify(BondRef, BondAst),
+    BondModify(BondRef, BondUpdate),
     DativeBondAdd(DativeBondEntryInput),
     DativeBondRemove(DativeBondRef),
     DativeBondModify(DativeBondRef, DativeBondAst),
@@ -852,7 +852,7 @@ impl ReactionInput {
                         ast: lhs.bond(id).ast.clone(),
                     }));
                 }
-                DeltaInput::BondModify(r, rhs) => {
+                DeltaInput::BondModify(r, update) => {
                     let id = r.resolve(&ns)?;
                     if ns.bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
@@ -861,8 +861,7 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    let new = lhs.bond(id).ast.update(&rhs);
-                    for d in BondDelta::diff(id, lhs.bond(id).ast, &new) {
+                    for d in BondDelta::for_update(id, lhs.bond(id).ast, &update) {
                         resolved.push(Delta::Bond(d));
                     }
                 }
@@ -1423,10 +1422,10 @@ fn read_delta_bond_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInpu
             de.consume_byte(b'[')?;
             let r = read_bond_ref(de)?;
             let s = de.read_string()?;
-            let dsl: PartialBondDsl = s
+            let dsl: BondUpdateDsl = s
                 .as_ref()
                 .parse()
-                .map_err(|e| DeError::subgrammar("partial-bond", e))?;
+                .map_err(|e| DeError::subgrammar("bond-update", e))?;
             if !de.try_consume_byte(b']')? {
                 return Err(DeError::Custom("bond :modify expects [ref dsl]".into()).into());
             }
@@ -1749,7 +1748,7 @@ fn parse_delta_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
             }
             Ok(DeltaInput::BondModify(
                 BondRef::from_edn(&v[0])?,
-                PartialBondDsl::from_edn(&v[1])?.0,
+                BondUpdateDsl::from_edn(&v[1])?.0,
             ))
         }
         o => Err(DeError::Custom(format!("unknown bond delta op :{o}"))),
@@ -2187,21 +2186,26 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 BondDelta::ModifyField { id, .. } | BondDelta::ModifyConstraint { id, .. },
             ) => {
                 let id = *id;
-                let mut partial = BondAst::default();
+                let mut update = BondUpdate::default();
                 while let Some(Delta::Bond(delta)) = deltas.get(i) {
                     match delta {
                         BondDelta::ModifyField { id: j, change } if *j == id => match change {
-                            BondFieldChange::Order { new, .. } => partial.order = new.clone(),
-                            BondFieldChange::Charge { new, .. } => partial.charge = new.clone(),
-                            BondFieldChange::Spin { new, .. } => partial.spin = new.clone(),
+                            BondFieldChange::Order { new, .. } => update.order = Some(new.clone()),
+                            BondFieldChange::Charge { new, .. } => {
+                                update.charge = Some(new.clone())
+                            }
+                            BondFieldChange::Spin { new, .. } => {
+                                update.spin.unpaired = Some(new.unpaired.clone());
+                                update.spin.multiplicity = Some(new.multiplicity.clone());
+                            }
                         },
                         BondDelta::ModifyConstraint { id: j, old, new } if *j == id => match new {
                             Some(c) => {
-                                partial.constraints.set(c.clone());
+                                update.constraints.set(c.clone());
                             }
                             None => {
                                 if let Some(old) = old {
-                                    partial.constraints.set(old.as_undetermined());
+                                    update.constraints.set(old.as_undetermined());
                                 }
                             }
                         },
@@ -2210,7 +2214,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     i += 1;
                 }
                 let payload = Edn::Vector(
-                    vec![render_bond_ref(id, meta), PartialBondDsl(partial).to_edn()].into(),
+                    vec![render_bond_ref(id, meta), BondUpdateDsl(update).to_edn()].into(),
                 );
                 out.push(single_key_map("bond", single_key_map("modify", payload)));
             }
@@ -2895,12 +2899,12 @@ mod tests {
     use crate::ast::atom::ElementAst;
     use crate::ast::boolean::BooleanAst;
     use crate::ast::constraint::{
-        AtomConstraintAst, BondConstraintAst, Constraint, MoleculeConstraint,
+        AtomConstraintAst, BondConstraintAst, Constraint, MoleculeConstraint, RingScope,
     };
     use crate::ast::delta::{ConstraintDelta, Deltas};
     use crate::ast::edit::{AtomFieldChange, BondFieldChange};
     use crate::ast::molecule::MoleculeAst;
-    use crate::ast::spin::SpinStateAst;
+    use crate::ast::spin::{SpinStateAst, SpinStateUpdate};
     use crate::ast::value::ValueAst;
     use crate::dsl::bond::BondDsl;
     use crate::dsl::constraint::MoleculeConstraintDsl;
@@ -3047,7 +3051,25 @@ mod tests {
     #[case::remove_index("{:bond {:remove 0}}", DeltaInput::BondRemove(BondRef::Index(0)))]
     #[case::modify(
         r##"{:bond {:modify [:b1 "2"]}}"##,
-        DeltaInput::BondModify(BondRef::Id("b1".into()), BondAst::from_order(2))
+        DeltaInput::BondModify(
+            BondRef::Id("b1".into()),
+            BondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() },
+        )
+    )]
+    #[case::modify_undetermined(
+        r##"{:bond {:modify [:b1 "*#c*#u*#s*"]}}"##,
+        DeltaInput::BondModify(
+            BondRef::Id("b1".into()),
+            BondUpdate {
+                order: Some(ValueAst::Undetermined),
+                charge: Some(ValueAst::Undetermined),
+                spin: SpinStateUpdate {
+                    unpaired: Some(ValueAst::Undetermined),
+                    multiplicity: Some(ValueAst::Undetermined),
+                },
+                ..Default::default()
+            },
+        )
     )]
     fn test_parse_delta_input_bond(#[case] input: &str, #[case] expected: DeltaInput) {
         assert_eq!(
@@ -3079,7 +3101,25 @@ mod tests {
     #[case::remove_index("{:bond {:remove 0}}", DeltaInput::BondRemove(BondRef::Index(0)))]
     #[case::modify(
         r##"{:bond {:modify [:b1 "2"]}}"##,
-        DeltaInput::BondModify(BondRef::Id("b1".into()), BondAst::from_order(2))
+        DeltaInput::BondModify(
+            BondRef::Id("b1".into()),
+            BondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() },
+        )
+    )]
+    #[case::modify_undetermined(
+        r##"{:bond {:modify [:b1 "*#c*#u*#s*"]}}"##,
+        DeltaInput::BondModify(
+            BondRef::Id("b1".into()),
+            BondUpdate {
+                order: Some(ValueAst::Undetermined),
+                charge: Some(ValueAst::Undetermined),
+                spin: SpinStateUpdate {
+                    unpaired: Some(ValueAst::Undetermined),
+                    multiplicity: Some(ValueAst::Undetermined),
+                },
+                ..Default::default()
+            },
+        )
     )]
     fn test_read_delta_input_bond(#[case] input: &str, #[case] expected: DeltaInput) {
         assert_eq!(
@@ -3435,9 +3475,15 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_bond_modify() {
-        // lhs :b1 is order 1; modify to order 2 → one ModifyField (old recovered from lhs).
-        let input = r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]} :deltas [{:bond {:modify [:b1 "2"]}}]}"##;
+    #[case::determined(
+        r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]} :deltas [{:bond {:modify [:b1 "2"]}}]}"##,
+        ValueAst::Lit(2),
+    )]
+    #[case::undetermined(
+        r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]} :deltas [{:bond {:modify [:b1 "*"]}}]}"##,
+        ValueAst::Undetermined,
+    )]
+    fn test_reaction_input_into_ast_bond_modify(#[case] input: &str, #[case] new: ValueAst) {
         let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ast()
@@ -3448,8 +3494,47 @@ mod tests {
                 id: BondId(0),
                 change: BondFieldChange::Order {
                     old: ValueAst::Lit(1),
-                    new: ValueAst::Lit(2),
+                    new,
                 },
+            })]),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_bond_modify_spin() {
+        let input = r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :type "1#u2#s3"}]} :deltas [{:bond {:modify [:b1 "#s1"]}}]}"##;
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Spin {
+                    old: SpinStateAst::from((2_u8, 3_u8)),
+                    new: SpinStateAst::from((2_u8, 1_u8)),
+                },
+            })]),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_input_into_ast_bond_modify_constraint() {
+        let input = r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :type "1#R(6)"}]} :deltas [{:bond {:modify [:b1 "#R(6)*"]}}]}"##;
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyConstraint {
+                id: BondId(0),
+                old: Some(BondConstraintAst::ring_membership(
+                    RingScope::Size(6),
+                    ValueAst::Lit(1),
+                )),
+                new: None,
             })]),
         );
     }
@@ -3616,7 +3701,11 @@ mod tests {
     #[case::add(vec![Delta::Bond(BondDelta::Add { id: BondId(2), atoms: [AtomId(1), AtomId(2)], ast: BondAst::from_order(1) })], "{:bond {:add {:id :b2 :atoms [:c :n] :type :single}}}")]
     #[case::remove(vec![Delta::Bond(BondDelta::Remove { id: BondId(1), atoms: [AtomId(0), AtomId(1)], ast: BondAst::from_order(1) })], "{:bond {:remove :bx}}")]
     #[case::modify_field(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) } })], r##"{:bond {:modify [:b1 "2"]}}"##)]
+    #[case::modify_field_undetermined(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Undetermined } })], r##"{:bond {:modify [:b1 "*"]}}"##)]
+    #[case::modify_charge_undetermined(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined } })], r##"{:bond {:modify [:b1 "#c*"]}}"##)]
+    #[case::modify_spin(vec![Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Spin { old: SpinStateAst::from((2_u8, 3_u8)), new: SpinStateAst::from((2_u8, 1_u8)) } })], r##"{:bond {:modify [:b1 "#u2#s"]}}"##)]
     #[case::modify_constraint(vec![Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: None, new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))) })], r##"{:bond {:modify [:b1 "#a"]}}"##)]
+    #[case::modify_remove_constraint(vec![Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: Some(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Lit(1))), new: None })], r##"{:bond {:modify [:b1 "#R(6)*"]}}"##)]
     fn test_render_deltas_bond(meta: ReactionMetadata, #[case] deltas: Vec<Delta>, #[case] expected: &str) {
         assert_eq!(render_deltas(&Deltas::from_iter(deltas), &meta), vec![read_string(expected).unwrap()]);
     }
@@ -3635,6 +3724,9 @@ mod tests {
     #[case::modify(r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##)]
     #[case::modify_undetermined(r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c*"]}}]}"##)]
     #[case::modify_spin_component(r##"{:lhs {:atoms [[:c "C#u2#s3"]]} :deltas [{:atom {:modify [:c "#s1"]}}]}"##)]
+    #[case::bond_modify_undetermined(r##"{:lhs {:atoms ["C" "N"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]} :deltas [{:bond {:modify [:b1 "*"]}}]}"##)]
+    #[case::bond_modify_spin_component(r##"{:lhs {:atoms ["C" "N"] :bonds [{:id :b1 :atoms [0 1] :type "1#u2#s3"}]} :deltas [{:bond {:modify [:b1 "#s1"]}}]}"##)]
+    #[case::bond_modify_constraint_removal(r##"{:lhs {:atoms ["C" "N"] :bonds [{:id :b1 :atoms [0 1] :type "1#R(6)"}]} :deltas [{:bond {:modify [:b1 "#R(6)*"]}}]}"##)]
     #[case::reaction_alias(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add :nu}}] :atom-aliases [:nu "O#h1#c-1"] }"##)]
     #[case::molecule_constraint(r##"{:lhs {:atoms ["C" "N"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]} :deltas [{:bond {:modify [:b1 "2"]}} {:constraint {:add {:connected {}}}}]}"##)]
     #[case::entity_leaf_constraint(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:constraint {:add {:atom [:o {:valence 2}]}}}]}"##)]

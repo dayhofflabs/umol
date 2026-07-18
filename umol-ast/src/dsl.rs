@@ -31,7 +31,7 @@ pub use atom::{
     AtomUpdateDsl, MulticenterValenceDsl,
 };
 pub use bond::{
-    parse_bond, parse_partial_bond, BondConstraintDsl, BondDsl, BondPredicate, PartialBondDsl,
+    parse_bond, parse_bond_update, BondConstraintDsl, BondDsl, BondPredicate, BondUpdateDsl,
 };
 pub use boolean::{parse_boolean, BooleanDsl};
 pub use config::{

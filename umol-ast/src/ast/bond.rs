@@ -3,8 +3,8 @@
 use umol_ast_macros::{Canonicalize, Lattice};
 
 use super::constraint::{BondConstraintAst, BondConstraintsAst};
-use super::spin::SpinStateAst;
-use super::traits::Lattice;
+use super::spin::{SpinStateAst, SpinStateUpdate};
+use super::traits::{Canonicalize, Lattice};
 use super::value::ValueAst;
 
 /// Bond AST: structural representation of a bond plus bond-level constraints
@@ -14,6 +14,17 @@ pub struct BondAst {
     pub order: ValueAst,
     pub charge: ValueAst,
     pub spin: SpinStateAst,
+    pub constraints: BondConstraintsAst,
+}
+
+/// Attribute update for a localized bond. Scalar fields are optional, spin is
+/// updated independently by component, and undetermined constraints remove
+/// their key.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BondUpdate {
+    pub order: Option<ValueAst>,
+    pub charge: Option<ValueAst>,
+    pub spin: SpinStateUpdate,
     pub constraints: BondConstraintsAst,
 }
 
@@ -67,26 +78,39 @@ impl BondAst {
         self
     }
 
-    /// Overwrite with `other`, keeping existing values and constraints.
-    pub fn update(&self, other: &BondAst) -> BondAst {
+    /// Apply an attribute update, leaving omitted leaves and constraint keys unchanged.
+    pub fn update(&self, update: &BondUpdate) -> BondAst {
         let mut constraints = self.constraints.clone();
-        constraints.update(&other.constraints);
+        constraints.update(&update.constraints);
         BondAst {
-            order: if other.order.is_undetermined() {
-                self.order.clone()
-            } else {
-                other.order.clone()
-            },
-            charge: if other.charge.is_undetermined() {
-                self.charge.clone()
-            } else {
-                other.charge.clone()
-            },
-            spin: if other.spin.is_undetermined() {
-                self.spin.clone()
-            } else {
-                other.spin.clone()
-            },
+            order: update.order.clone().unwrap_or_else(|| self.order.clone()),
+            charge: update.charge.clone().unwrap_or_else(|| self.charge.clone()),
+            spin: self.spin.update(&update.spin),
+            constraints,
+        }
+    }
+
+    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    pub fn difference_to(&self, other: &Self) -> BondUpdate {
+        let mut constraints = BondConstraintsAst::new();
+        for new in other.constraints.iter() {
+            if self
+                .constraints
+                .get(new.key())
+                .is_none_or(|old| !old.canonical_eq(new))
+            {
+                constraints.set(new.clone());
+            }
+        }
+        for old in self.constraints.iter() {
+            if other.constraints.get(old.key()).is_none() {
+                constraints.set(old.as_undetermined());
+            }
+        }
+        BondUpdate {
+            order: (!self.order.canonical_eq(&other.order)).then(|| other.order.clone()),
+            charge: (!self.charge.canonical_eq(&other.charge)).then(|| other.charge.clone()),
+            spin: self.spin.difference_to(&other.spin),
             constraints,
         }
     }
@@ -121,7 +145,7 @@ mod tests {
     use crate::ast::constraint::RingScope;
     use crate::ast::error::Contradiction;
     use crate::ast::traits::{Canonicalize, Lattice};
-    use crate::ast::BooleanAst;
+    use crate::ast::{BooleanAst, CisTransStereoAst};
 
     #[rustfmt::skip]
     #[rstest]
@@ -178,16 +202,64 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::overwrite(
-        BondAst::from_order(1).with_charge(0_i64).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
-        BondAst::new(ValueAst::Undetermined).with_charge(-1_i64).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)),
-        BondAst::from_order(1).with_charge(-1_i64).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)))]
-    #[case::remove_constraint(
-        BondAst::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
-        BondAst::new(ValueAst::Undetermined).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)),
-        BondAst::from_order(1))]
-    fn test_bond_ast_update(#[case] lhs: BondAst, #[case] rhs: BondAst, #[case] expected: BondAst) {
-        assert_eq!(lhs.update(&rhs), expected);
+    #[case::order(BondAst::from_order(1), BondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() }, BondAst::from_order(2))]
+    #[case::order_undetermined(BondAst::from_order(1), BondUpdate { order: Some(ValueAst::Undetermined), ..Default::default() }, BondAst::default())]
+    #[case::charge(BondAst::from_order(1).with_charge(0_i64), BondUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() }, BondAst::from_order(1).with_charge(-1_i64))]
+    #[case::charge_undetermined(BondAst::from_order(1).with_charge(-1_i64), BondUpdate { charge: Some(ValueAst::Undetermined), ..Default::default() }, BondAst::from_order(1))]
+    #[case::spin_unpaired(BondAst::from_order(1).with_spin((2_u8, 3_u8)), BondUpdate { spin: SpinStateUpdate { unpaired: Some(ValueAst::Lit(0)), multiplicity: None }, ..Default::default() }, BondAst::from_order(1).with_spin((0_u8, 3_u8)))]
+    #[case::spin_multiplicity(BondAst::from_order(1).with_spin((2_u8, 3_u8)), BondUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }, BondAst::from_order(1).with_spin((2_u8, 1_u8)))]
+    #[case::spin_unpaired_undetermined(BondAst::from_order(1).with_spin((2_u8, 3_u8)), BondUpdate { spin: SpinStateUpdate { unpaired: Some(ValueAst::Undetermined), multiplicity: None }, ..Default::default() }, BondAst::from_order(1).with_spin(SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }))]
+    #[case::spin_multiplicity_undetermined(BondAst::from_order(1).with_spin((2_u8, 3_u8)), BondUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Undetermined) }, ..Default::default() }, BondAst::from_order(1).with_spin(SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }))]
+    #[case::constraint_set(BondAst::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))), ..Default::default() }, BondAst::from_order(1).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
+    #[case::constraint_replace(BondAst::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)), ..Default::default() }, BondAst::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)))]
+    #[case::constraint_remove(BondAst::from_order(1).with_constraint(BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() }, BondAst::from_order(1))]
+    fn test_bond_ast_update(#[case] bond: BondAst, #[case] update: BondUpdate, #[case] expected: BondAst) {
+        assert_eq!(bond.update(&update), expected);
+    }
+
+    #[rstest]
+    #[case::empty(BondAst::from_order(1).with_charge(-1_i64).with_spin((2_u8, 3_u8)).with_constraint(BondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
+    fn test_bond_ast_update_identity(#[case] bond: BondAst) {
+        assert_eq!(bond.update(&BondUpdate::default()), bond);
+    }
+
+    #[rstest]
+    fn test_bond_ast_difference_to() {
+        let bond = BondAst::from_order(1)
+            .with_charge(0_i64)
+            .with_spin((2_u8, 3_u8))
+            .with_constraints([
+                BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+                BondConstraintAst::ring_membership(RingScope::Size(6), 1_i64),
+            ]);
+        let other = BondAst::from_order(2)
+            .with_spin((2_u8, 1_u8))
+            .with_constraints([
+                BondConstraintAst::Aromatic(BooleanAst::Lit(false)),
+                BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo),
+            ]);
+        assert_eq!(
+            bond.difference_to(&other),
+            BondUpdate {
+                order: Some(ValueAst::Lit(2)),
+                charge: Some(ValueAst::Undetermined),
+                spin: SpinStateUpdate {
+                    unpaired: None,
+                    multiplicity: Some(ValueAst::Lit(1)),
+                },
+                constraints: BondConstraintsAst::from_iter([
+                    BondConstraintAst::Aromatic(BooleanAst::Lit(false)),
+                    BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo),
+                    BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined,),
+                ]),
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::canonical(BondAst::from_order(1).with_charge(1_i64), BondAst::from_order(1).with_charge(ValueAst::lit_set([1])))]
+    fn test_bond_ast_difference_to_identity(#[case] bond: BondAst, #[case] other: BondAst) {
+        assert_eq!(bond.difference_to(&other), BondUpdate::default());
     }
 
     #[rustfmt::skip]

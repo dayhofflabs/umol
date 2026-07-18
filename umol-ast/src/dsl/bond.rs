@@ -22,9 +22,9 @@ use super::predicate::{
 };
 use super::stereo::{cis_trans_stereo_config, fmt_cis_trans_stereo_config, CisTransStereoDsl};
 use super::value::{fmt_value, value};
-use crate::ast::bond::BondAst;
+use crate::ast::bond::{BondAst, BondUpdate};
 use crate::ast::boolean::BooleanAst;
-use crate::ast::constraint::{BondConstraintAst, BondConstraintKey, BondConstraintsAst};
+use crate::ast::constraint::{BondConstraintAst, BondConstraintKey, BondConstraintsAst, RingScope};
 use crate::ast::spin::SpinStateAst;
 use crate::ast::stereo::CisTransStereoAst;
 use crate::ast::traits::{FromAst, IntoAst, Lattice};
@@ -209,33 +209,45 @@ fn bond(i: &mut &str) -> PResult<BondDsl> {
     Ok(form)
 }
 
-/// Partial bond with all predicates, including order, optional.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PartialBondDsl(pub BondAst);
+/// Surface DSL wrapper around a [`BondUpdate`].
+#[repr(transparent)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BondUpdateDsl(pub BondUpdate);
 
-impl FromStr for PartialBondDsl {
+impl FromStr for BondUpdateDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse_partial_bond(s)
+        parse_bond_update(s)
     }
 }
 
-impl Display for PartialBondDsl {
+impl Display for BondUpdateDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ast = &self.0;
-        match &ast.order {
-            ValueAst::Undetermined => {}
-            ValueAst::Lit(n) => write!(f, "{}", n)?,
-            v => fmt_value(f, v)?,
+        let update = &self.0;
+        if let Some(order) = &update.order {
+            match order {
+                ValueAst::Undetermined => write!(f, "*")?,
+                ValueAst::Lit(n) => write!(f, "{}", n)?,
+                value => fmt_value(f, value)?,
+            }
         }
-        fmt_charge(f, &ast.charge)?;
-        fmt_spin_pair(f, &ast.spin)?;
-        for c in ast.constraints.iter() {
-            // The partial bond is the one place an undetermined constraint is not vacuous: it
-            // renders explicitly as `#<tag>*`, the reaction `:modify` constraint-removal marker.
+        if let Some(charge) = &update.charge {
+            if charge.is_undetermined() {
+                write!(f, "#c*")?;
+            } else {
+                fmt_charge(f, charge)?;
+            }
+        }
+        if let Some(unpaired) = &update.spin.unpaired {
+            fmt_update_value_field(f, "#u", unpaired)?;
+        }
+        if let Some(multiplicity) = &update.spin.multiplicity {
+            fmt_update_value_field(f, "#s", multiplicity)?;
+        }
+        for c in update.constraints.iter() {
             if c.is_undetermined() {
-                write!(f, "{}*", constraint_tag(c))?;
+                fmt_undetermined_constraint(f, c)?;
             } else {
                 fmt_constraint(f, c)?;
             }
@@ -244,10 +256,10 @@ impl Display for PartialBondDsl {
     }
 }
 
-impl<'de> FromEdn<'de> for PartialBondDsl {
+impl<'de> FromEdn<'de> for BondUpdateDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
-            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("bond", e)),
+            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("bond-update", e)),
             other => Err(DeError::TypeMismatch {
                 expected: "string",
                 got: other.kind(),
@@ -257,26 +269,85 @@ impl<'de> FromEdn<'de> for PartialBondDsl {
     }
 }
 
-impl ToEdn for PartialBondDsl {
+impl ToEdn for BondUpdateDsl {
     fn to_edn(&self) -> Edn<'static> {
         Edn::Str(Cow::Owned(self.to_string()))
     }
 }
 
-/// Parse a partial bond-string: order and all fields optional, unspecified `Undetermined`.
-pub fn parse_partial_bond(input: &str) -> Result<PartialBondDsl, ParseError> {
-    partial_bond.parse(input).map_err(|e| e.into_inner())
+pub fn parse_bond_update(input: &str) -> Result<BondUpdateDsl, ParseError> {
+    bond_update.parse(input).map_err(|e| e.into_inner())
 }
 
-fn partial_bond(i: &mut &str) -> PResult<PartialBondDsl> {
-    let order = delimited(multispace0, opt(value), multispace0)
-        .parse_next(i)?
-        .unwrap_or(ValueAst::Undetermined);
+fn bond_update(i: &mut &str) -> PResult<BondUpdateDsl> {
+    let order = delimited(multispace0, opt(value), multispace0).parse_next(i)?;
     let preds: Vec<BondPredicate> =
         repeat(0.., terminated(bond_predicate, multispace0)).parse_next(i)?;
-    let mut form = BondDsl(BondAst::new(order));
-    apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
-    Ok(PartialBondDsl(form.0))
+    let mut update = BondUpdate {
+        order,
+        ..Default::default()
+    };
+    apply_update_predicates(&mut update, preds).map_err(ErrMode::Cut)?;
+    Ok(BondUpdateDsl(update))
+}
+
+fn apply_update_predicates(
+    update: &mut BondUpdate,
+    preds: Vec<BondPredicate>,
+) -> Result<(), ParseError> {
+    for pred in preds {
+        match pred {
+            BondPredicate::Charge(value) => {
+                if update.charge.replace(value).is_some() {
+                    return Err(ParseError::DuplicateBondPredicate("#c".to_string()));
+                }
+            }
+            BondPredicate::Spin(SpinPredicate::Unpaired(value)) => {
+                if update.spin.unpaired.replace(value).is_some() {
+                    return Err(ParseError::DuplicateBondPredicate("#u".to_string()));
+                }
+            }
+            BondPredicate::Spin(SpinPredicate::Multiplicity(value)) => {
+                if update.spin.multiplicity.replace(value).is_some() {
+                    return Err(ParseError::DuplicateBondPredicate("#s".to_string()));
+                }
+            }
+            BondPredicate::Constraint(constraint) => {
+                if update.constraints.contains(constraint.key()) {
+                    return Err(ParseError::DuplicateBondPredicate(
+                        constraint_tag(&constraint).to_string(),
+                    ));
+                }
+                update.constraints.set(constraint);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn fmt_undetermined_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraintAst) -> fmt::Result {
+    match c {
+        BondConstraintAst::RingMembership(membership) => match membership.scope {
+            RingScope::All => write!(f, "#R*"),
+            RingScope::Size(size) => write!(f, "#R({})*", size),
+        },
+        _ => write!(f, "{}*", constraint_tag(c)),
+    }
+}
+
+fn fmt_update_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &ValueAst) -> fmt::Result {
+    if v.is_undetermined() {
+        write!(f, "{}*", prefix)
+    } else {
+        match v {
+            ValueAst::Lit(1) => write!(f, "{}", prefix),
+            ValueAst::Lit(n) => write!(f, "{}{}", prefix, n),
+            value => {
+                write!(f, "{}", prefix)?;
+                fmt_value(f, value)
+            }
+        }
+    }
 }
 
 fn constraint_tag(c: &BondConstraintAst) -> &'static str {
@@ -523,7 +594,7 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::{BondConstraintsAst, RingScope};
-    use crate::ast::spin::SpinStateAst;
+    use crate::ast::spin::{SpinStateAst, SpinStateUpdate};
     use crate::ast::stereo::StereoCosetAst;
     use crate::bond_dsl;
 
@@ -594,37 +665,43 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty("", PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::order_only("2", PartialBondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::charge_only("#c-1", PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
-    #[case::order_and_pred("1#a", PartialBondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]) }))]
-    #[case::order_aromatic_undetermined("1#a*", PartialBondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Undetermined)]) }))]
-    fn test_parse_partial_bond(#[case] input: &str, #[case] expected: PartialBondDsl) {
-        assert_eq!(parse_partial_bond(input).unwrap(), expected);
+    #[case::empty("", BondUpdateDsl(BondUpdate::default()))]
+    #[case::order_only("2", BondUpdateDsl(BondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() }))]
+    #[case::order_undetermined("*", BondUpdateDsl(BondUpdate { order: Some(ValueAst::Undetermined), ..Default::default() }))]
+    #[case::charge_only("#c-1", BondUpdateDsl(BondUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() }))]
+    #[case::spin_unpaired("#u2", BondUpdateDsl(BondUpdate { spin: SpinStateUpdate { unpaired: Some(ValueAst::Lit(2)), multiplicity: None }, ..Default::default() }))]
+    #[case::spin_multiplicity("#s1", BondUpdateDsl(BondUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::explicit_undetermined("*#c*#u*#s*", BondUpdateDsl(BondUpdate { order: Some(ValueAst::Undetermined), charge: Some(ValueAst::Undetermined), spin: SpinStateUpdate { unpaired: Some(ValueAst::Undetermined), multiplicity: Some(ValueAst::Undetermined) }, constraints: Default::default() }))]
+    #[case::order_and_pred("1#a", BondUpdateDsl(BondUpdate { order: Some(ValueAst::Lit(1)), constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))), ..Default::default() }))]
+    #[case::constraint_removal("#R(6)*", BondUpdateDsl(BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() }))]
+    fn test_parse_bond_update(#[case] input: &str, #[case] expected: BondUpdateDsl) {
+        assert_eq!(parse_bond_update(input).unwrap(), expected);
     }
 
     #[rstest]
     #[case::dup_charge("#c+#c-", ParseError::DuplicateBondPredicate("#c".to_string()))]
+    #[case::dup_undetermined_charge("#c*#c-", ParseError::DuplicateBondPredicate("#c".to_string()))]
+    #[case::dup_undetermined_unpaired("#u*#u2", ParseError::DuplicateBondPredicate("#u".to_string()))]
     #[case::unknown_pred("1#x", ParseError::UnknownBondPredicate("#x".to_string()))]
-    fn test_parse_partial_bond_error(#[case] input: &str, #[case] expected: ParseError) {
-        assert_eq!(parse_partial_bond(input).unwrap_err(), expected);
+    fn test_parse_bond_update_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(parse_bond_update(input).unwrap_err(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::charge_only(r##""#c-1""##, PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }))]
-    fn test_partial_bond_dsl_from_edn(#[case] input: &str, #[case] expected: PartialBondDsl) {
+    #[case::charge_only(r##""#c-1""##, BondUpdateDsl(BondUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() }))]
+    fn test_bond_update_dsl_from_edn(#[case] input: &str, #[case] expected: BondUpdateDsl) {
         assert_eq!(
-            PartialBondDsl::from_edn(&read_string(input).unwrap()).unwrap(),
+            BondUpdateDsl::from_edn(&read_string(input).unwrap()).unwrap(),
             expected
         );
     }
 
     #[rstest]
     #[case::non_string("1")]
-    fn test_partial_bond_dsl_from_edn_error(#[case] input: &str) {
+    fn test_bond_update_dsl_from_edn_error(#[case] input: &str) {
         assert!(matches!(
-            PartialBondDsl::from_edn(&read_string(input).unwrap()),
+            BondUpdateDsl::from_edn(&read_string(input).unwrap()),
             Err(DeError::TypeMismatch {
                 expected: "string",
                 ..
@@ -634,11 +711,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::order(PartialBondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }), r##""1""##)]
-    #[case::charge_only(PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraintsAst::new() }), r##""#c-""##)]
-    #[case::aromatic(PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))]) }), r##""#a""##)]
-    #[case::aromatic_undetermined(PartialBondDsl(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Undetermined)]) }), r##""#a*""##)]
-    fn test_partial_bond_dsl_to_edn(#[case] input: PartialBondDsl, #[case] expected: &str) {
+    #[case::order(BondUpdateDsl(BondUpdate { order: Some(ValueAst::Lit(1)), ..Default::default() }), r##""1""##)]
+    #[case::order_undetermined(BondUpdateDsl(BondUpdate { order: Some(ValueAst::Undetermined), ..Default::default() }), r##""*""##)]
+    #[case::charge_only(BondUpdateDsl(BondUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() }), r##""#c-""##)]
+    #[case::spin_multiplicity(BondUpdateDsl(BondUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }), r##""#s""##)]
+    #[case::explicit_undetermined(BondUpdateDsl(BondUpdate { order: Some(ValueAst::Undetermined), charge: Some(ValueAst::Undetermined), spin: SpinStateUpdate { unpaired: Some(ValueAst::Undetermined), multiplicity: Some(ValueAst::Undetermined) }, constraints: Default::default() }), r##""*#c*#u*#s*""##)]
+    #[case::aromatic(BondUpdateDsl(BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Lit(true))), ..Default::default() }), r##""#a""##)]
+    #[case::aromatic_undetermined(BondUpdateDsl(BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::Aromatic(BooleanAst::Undetermined)), ..Default::default() }), r##""#a*""##)]
+    #[case::ring_size_removal(BondUpdateDsl(BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() }), r##""#R(6)*""##)]
+    fn test_bond_update_dsl_to_edn(#[case] input: BondUpdateDsl, #[case] expected: &str) {
         assert_eq!(input.to_edn(), read_string(expected).unwrap());
     }
 

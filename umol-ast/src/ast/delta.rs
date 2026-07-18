@@ -17,7 +17,7 @@ use umol_perm::Permutation;
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::{AtomAst, AtomUpdate};
-use super::bond::BondAst;
+use super::bond::{BondAst, BondUpdate};
 use super::constraint::{
     AromaticSystemConstraintAst, AromaticSystemConstraintKey, AtomConstraintAst, AtomConstraintKey,
     BondConstraintAst, BondConstraintKey, Constraint, DativeBondConstraintAst,
@@ -201,6 +201,51 @@ impl BondDelta {
                 new: old,
             },
         }
+    }
+
+    /// Project a localized-bond update into resolved deltas.
+    pub fn for_update(id: BondId, current: &BondAst, update: &BondUpdate) -> Vec<Self> {
+        let mut deltas = Vec::new();
+        if let Some(new) = &update.order {
+            if !current.order.canonical_eq(new) {
+                deltas.push(Self::ModifyField {
+                    id,
+                    change: BondFieldChange::Order {
+                        old: current.order.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        if let Some(new) = &update.charge {
+            if !current.charge.canonical_eq(new) {
+                deltas.push(Self::ModifyField {
+                    id,
+                    change: BondFieldChange::Charge {
+                        old: current.charge.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        let new_spin = current.spin.update(&update.spin);
+        if !current.spin.canonical_eq(&new_spin) {
+            deltas.push(Self::ModifyField {
+                id,
+                change: BondFieldChange::Spin {
+                    old: current.spin.clone(),
+                    new: new_spin,
+                },
+            });
+        }
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            if !options_canonical_eq(&old, &new) {
+                deltas.push(Self::ModifyConstraint { id, old, new });
+            }
+        }
+        deltas
     }
 }
 
@@ -1177,6 +1222,10 @@ impl EntityPatch for BondDelta {
         new: Option<BondConstraintAst>,
     ) -> Self {
         BondDelta::ModifyConstraint { id, old, new }
+    }
+
+    fn diff(id: BondId, lhs: &BondAst, rhs: &BondAst) -> Vec<Self> {
+        Self::for_update(id, lhs, &lhs.difference_to(rhs))
     }
 
     diff_field_ops!(BondFieldChange, BondAst, BondConstraintAst, {
@@ -2799,8 +2848,9 @@ mod tests {
     use super::super::value::ValueAst;
     use super::*;
     use crate::ast::{
-        AtomConstraintsAst, BooleanAst, ElementAst, IsotopeMassAst, SpinStateAst, SpinStateUpdate,
-        StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigandKind, StereogenicityAst,
+        AtomConstraintsAst, BondConstraintsAst, BooleanAst, ElementAst, IsotopeMassAst, RingScope,
+        SpinStateAst, SpinStateUpdate, StereoConfigurationAst, StereoCosetAst, StereoKind,
+        StereoLigandKind, StereogenicityAst,
     };
 
     #[rstest]
@@ -2974,6 +3024,77 @@ mod tests {
     fn test_bond_delta_inverse(#[case] input: BondDelta, #[case] expected: BondDelta) {
         assert_eq!(input.clone().inverse(), expected);
         assert_eq!(input.clone().inverse().inverse(), input);
+    }
+
+    #[rstest]
+    fn test_bond_delta_for_update() {
+        let current = BondAst::from_order(1)
+            .with_charge(0_i64)
+            .with_spin((2_u8, 3_u8))
+            .with_constraint(BondConstraintAst::ring_membership(
+                RingScope::Size(6),
+                1_i64,
+            ));
+        let update = BondUpdate {
+            order: Some(ValueAst::Lit(2)),
+            charge: Some(ValueAst::Undetermined),
+            spin: SpinStateUpdate {
+                unpaired: None,
+                multiplicity: Some(ValueAst::Lit(1)),
+            },
+            constraints: BondConstraintsAst::from_iter([
+                BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined),
+                BondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            ]),
+        };
+        assert_eq!(
+            BondDelta::for_update(BondId(7), &current, &update),
+            vec![
+                BondDelta::ModifyField {
+                    id: BondId(7),
+                    change: BondFieldChange::Order {
+                        old: ValueAst::Lit(1),
+                        new: ValueAst::Lit(2),
+                    },
+                },
+                BondDelta::ModifyField {
+                    id: BondId(7),
+                    change: BondFieldChange::Charge {
+                        old: ValueAst::Lit(0),
+                        new: ValueAst::Undetermined,
+                    },
+                },
+                BondDelta::ModifyField {
+                    id: BondId(7),
+                    change: BondFieldChange::Spin {
+                        old: SpinStateAst::from((2_u8, 3_u8)),
+                        new: SpinStateAst::from((2_u8, 1_u8)),
+                    },
+                },
+                BondDelta::ModifyConstraint {
+                    id: BondId(7),
+                    old: None,
+                    new: Some(BondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+                },
+                BondDelta::ModifyConstraint {
+                    id: BondId(7),
+                    old: Some(BondConstraintAst::ring_membership(
+                        RingScope::Size(6),
+                        1_i64,
+                    )),
+                    new: None,
+                },
+            ]
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(BondAst::from_order(1), BondUpdate::default())]
+    #[case::canonical_field(BondAst::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(BondAst::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() })]
+    fn test_bond_delta_for_update_identity(#[case] current: BondAst, #[case] update: BondUpdate) {
+        assert_eq!(BondDelta::for_update(BondId(0), &current, &update), Vec::new());
     }
 
     #[rstest]

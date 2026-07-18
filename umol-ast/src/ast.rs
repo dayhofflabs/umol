@@ -38,7 +38,7 @@ pub(crate) mod view;
 
 pub use aromatic::AromaticSystemAst;
 pub use atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMassAst};
-pub use bond::BondAst;
+pub use bond::{BondAst, BondUpdate};
 pub use boolean::BooleanAst;
 pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};
 pub use compose::CompositionScope;

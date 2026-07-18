@@ -119,10 +119,10 @@ proptest! {
     }
 
     #[test]
-    fn test_partial_bond_dsl_display_from_str_roundtrip(bond in bond_ast_strategy()) {
-        let dsl = PartialBondDsl(bond);
+    fn test_bond_update_dsl_display_from_str_roundtrip(update in bond_update_strategy()) {
+        let dsl = BondUpdateDsl(update);
         let rendered = dsl.to_string();
-        let parsed: PartialBondDsl = rendered.parse().map_err(|e| {
+        let parsed: BondUpdateDsl = rendered.parse().map_err(|e| {
             TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
         })?;
         prop_assert_eq!(dsl, parsed);
@@ -140,10 +140,10 @@ proptest! {
     }
 
     #[test]
-    fn test_partial_bond_dsl_to_edn_from_edn_roundtrip(bond in bond_ast_strategy()) {
-        let dsl = PartialBondDsl(bond);
+    fn test_bond_update_dsl_to_edn_from_edn_roundtrip(update in bond_update_strategy()) {
+        let dsl = BondUpdateDsl(update);
         let edn = dsl.to_edn();
-        let parsed = PartialBondDsl::from_edn(&edn).map_err(|e| {
+        let parsed = BondUpdateDsl::from_edn(&edn).map_err(|e| {
             TestCaseError::fail(format!("parse failed: {e}"))
         })?;
         prop_assert_eq!(dsl, parsed);
