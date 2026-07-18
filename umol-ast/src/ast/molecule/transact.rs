@@ -90,6 +90,11 @@ impl Transaction {
         &self.undo
     }
 
+    /// Append the rollback journal for a transaction applied after this one.
+    pub fn append(&mut self, later: Self) {
+        self.undo.extend(later.undo);
+    }
+
     pub fn rollback(self, editor: &mut MoleculeEditor) -> Result<(), TransactionError> {
         rollback_journal(editor, self.undo)
     }
@@ -3169,6 +3174,91 @@ mod tests {
             NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
         );
         b
+    }
+
+    #[rstest]
+    fn test_transaction_append(mut diatomic: MoleculeEditor) {
+        let before = diatomic.clone().build();
+        let first = diatomic
+            .transact(vec![Edit::ModifyAtomField {
+                id: AtomHandle::Id(AtomId(0)),
+                change: AtomFieldChange::Charge {
+                    old: ValueAst::default(),
+                    new: ValueAst::Lit(1),
+                },
+            }])
+            .unwrap();
+        let second = diatomic
+            .transact(vec![Edit::ModifyAtomField {
+                id: AtomHandle::Id(AtomId(0)),
+                change: AtomFieldChange::Charge {
+                    old: ValueAst::Lit(1),
+                    new: ValueAst::Lit(2),
+                },
+            }])
+            .unwrap();
+        let expected_undos = [first.undos(), second.undos()].concat();
+
+        let mut combined = Transaction::default();
+        combined.append(first);
+        combined.append(second);
+
+        assert_eq!(combined.undos(), expected_undos);
+        combined.rollback(&mut diatomic).unwrap();
+        assert_eq!(diatomic.build(), before);
+    }
+
+    #[rstest]
+    fn test_transaction_append_error(mut diatomic: MoleculeEditor) {
+        let before = diatomic.clone().build();
+        let first = diatomic
+            .transact(vec![Edit::ModifyAtomField {
+                id: AtomHandle::Id(AtomId(0)),
+                change: AtomFieldChange::Charge {
+                    old: ValueAst::default(),
+                    new: ValueAst::Lit(1),
+                },
+            }])
+            .unwrap();
+        let second = diatomic
+            .transact(vec![Edit::ModifyAtomConstraint {
+                id: AtomHandle::Id(AtomId(0)),
+                old: None,
+                new: Some(AtomConstraintAst::degree(1)),
+            }])
+            .unwrap();
+        let third = diatomic
+            .transact(vec![Edit::AddDativeBond {
+                atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+                ast: DativeBondAst::from_order(1),
+            }])
+            .unwrap();
+        let expected_undos = [first.undos(), second.undos(), third.undos()].concat();
+
+        let mut combined = Transaction::default();
+        combined.append(first);
+        combined.append(second);
+        combined.append(third);
+
+        let materialized = diatomic.clone().build();
+        let error = diatomic
+            .transact(vec![
+                Edit::ModifyAtomField {
+                    id: AtomHandle::Id(AtomId(0)),
+                    change: AtomFieldChange::Charge {
+                        old: ValueAst::Lit(1),
+                        new: ValueAst::Lit(2),
+                    },
+                },
+                Edit::remove_atom(AtomHandle::Id(AtomId(99))),
+            ])
+            .unwrap_err();
+        assert_eq!(error, TransactionError::IdOutOfRange("atom"));
+        assert_eq!(diatomic.clone().build(), materialized);
+        assert_eq!(combined.undos(), expected_undos);
+
+        combined.rollback(&mut diatomic).unwrap();
+        assert_eq!(diatomic.build(), before);
     }
 
     enum RollbackCase {
