@@ -3,7 +3,7 @@
 use umol_ast_macros::{Canonicalize, Lattice};
 use umol_chem::spin::{SpinMultiplicity, SpinState};
 
-use super::traits::AsLit;
+use super::traits::{AsLit, Canonicalize};
 use super::value::ValueAst;
 
 /// Spin state: unpaired-electron count and multiplicity as independent `ValueAst` fields.
@@ -13,9 +13,41 @@ pub struct SpinStateAst {
     pub multiplicity: ValueAst,
 }
 
+/// Leaf-wise update for a spin state. `None` leaves that component unchanged;
+/// `Some(value)` sets it exactly, including to `Undetermined`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SpinStateUpdate {
+    pub unpaired: Option<ValueAst>,
+    pub multiplicity: Option<ValueAst>,
+}
+
 impl SpinStateAst {
     pub fn closed_shell() -> Self {
         SpinState::closed_shell().into()
+    }
+
+    /// Apply an update independently to the unpaired-electron and multiplicity components.
+    pub fn update(&self, update: &SpinStateUpdate) -> Self {
+        Self {
+            unpaired: update
+                .unpaired
+                .clone()
+                .unwrap_or_else(|| self.unpaired.clone()),
+            multiplicity: update
+                .multiplicity
+                .clone()
+                .unwrap_or_else(|| self.multiplicity.clone()),
+        }
+    }
+
+    /// Derive the minimal canonical component update carrying `self` to `other`.
+    pub fn difference_to(&self, other: &Self) -> SpinStateUpdate {
+        SpinStateUpdate {
+            unpaired: (!self.unpaired.canonical_eq(&other.unpaired))
+                .then(|| other.unpaired.clone()),
+            multiplicity: (!self.multiplicity.canonical_eq(&other.multiplicity))
+                .then(|| other.multiplicity.clone()),
+        }
     }
 
     pub fn high_spin_complete(&mut self) {
@@ -86,6 +118,52 @@ mod tests {
     use crate::ast::error::Contradiction;
     use crate::ast::traits::{Canonicalize, Lattice};
     use crate::ast::value::ValueTerm;
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::unpaired((2_u8, 3_u8).into(), SpinStateUpdate { unpaired: Some(ValueAst::Lit(0)), multiplicity: None }, (0_u8, 3_u8).into())]
+    #[case::multiplicity((2_u8, 3_u8).into(), SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, (2_u8, 1_u8).into())]
+    #[case::unpaired_undetermined((2_u8, 3_u8).into(), SpinStateUpdate { unpaired: Some(ValueAst::Undetermined), multiplicity: None }, SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) })]
+    #[case::multiplicity_undetermined((2_u8, 3_u8).into(), SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Undetermined) }, SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined })]
+    #[case::both((2_u8, 3_u8).into(), SpinStateUpdate { unpaired: Some(ValueAst::Lit(0)), multiplicity: Some(ValueAst::Lit(1)) }, (0_u8, 1_u8).into())]
+    fn test_spin_state_ast_update(
+        #[case] spin: SpinStateAst,
+        #[case] update: SpinStateUpdate,
+        #[case] expected: SpinStateAst,
+    ) {
+        assert_eq!(spin.update(&update), expected);
+    }
+
+    #[rstest]
+    #[case::empty((2_u8, 3_u8).into())]
+    fn test_spin_state_ast_update_identity(#[case] spin: SpinStateAst) {
+        assert_eq!(spin.update(&SpinStateUpdate::default()), spin);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::multiplicity((2_u8, 3_u8).into(), (2_u8, 1_u8).into(), SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) })]
+    #[case::unpaired_undetermined((2_u8, 3_u8).into(), SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, SpinStateUpdate { unpaired: Some(ValueAst::Undetermined), multiplicity: None })]
+    #[case::both((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), SpinStateUpdate { unpaired: Some(ValueAst::Lit(0)), multiplicity: Some(ValueAst::Lit(1)) })]
+    fn test_spin_state_ast_difference_to(
+        #[case] spin: SpinStateAst,
+        #[case] other: SpinStateAst,
+        #[case] expected: SpinStateUpdate,
+    ) {
+        assert_eq!(spin.difference_to(&other), expected);
+    }
+
+    #[rstest]
+    #[case::canonical(
+        SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(1) },
+        SpinStateAst { unpaired: ValueAst::lit_set([2]), multiplicity: ValueAst::lit_set([1]) },
+    )]
+    fn test_spin_state_ast_difference_to_identity(
+        #[case] spin: SpinStateAst,
+        #[case] other: SpinStateAst,
+    ) {
+        assert_eq!(spin.difference_to(&other), SpinStateUpdate::default());
+    }
 
     #[rstest]
     #[case::unpaired_undetermined(SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) })]

@@ -34,7 +34,6 @@ use crate::ast::constraint::{
     MulticenterValenceAst, RingScope,
 };
 use crate::ast::operators::MemOp;
-use crate::ast::spin::SpinStateAst;
 use crate::ast::stereo::TetrahedralStereoAst;
 use crate::ast::traits::{FromAst, IntoAst, Lattice};
 use crate::ast::value::ValueAst;
@@ -223,9 +222,11 @@ impl Display for AtomUpdateDsl {
         if let Some(lone_pairs) = &update.lone_pairs {
             fmt_update_value_field(f, "#n", lone_pairs)?;
         }
-        if let Some(spin) = &update.spin {
-            fmt_update_value_field(f, "#u", &spin.unpaired)?;
-            fmt_update_value_field(f, "#s", &spin.multiplicity)?;
+        if let Some(unpaired) = &update.spin.unpaired {
+            fmt_update_value_field(f, "#u", unpaired)?;
+        }
+        if let Some(multiplicity) = &update.spin.multiplicity {
+            fmt_update_value_field(f, "#s", multiplicity)?;
         }
         for c in update.constraints.iter() {
             if c.is_undetermined() {
@@ -277,9 +278,6 @@ fn apply_update_predicates(
     update: &mut AtomUpdate,
     preds: Vec<AtomPredicate>,
 ) -> Result<(), ParseError> {
-    let mut spin: Option<SpinStateAst> = None;
-    let mut unpaired_seen = false;
-    let mut multiplicity_seen = false;
     for pred in preds {
         match pred {
             AtomPredicate::IsotopeMass(value) => {
@@ -303,18 +301,14 @@ fn apply_update_predicates(
                 }
             }
             AtomPredicate::Spin(SpinPredicate::Unpaired(value)) => {
-                if unpaired_seen {
+                if update.spin.unpaired.replace(value).is_some() {
                     return Err(ParseError::DuplicateAtomPredicate("#u".to_string()));
                 }
-                unpaired_seen = true;
-                spin.get_or_insert_with(Default::default).unpaired = value;
             }
             AtomPredicate::Spin(SpinPredicate::Multiplicity(value)) => {
-                if multiplicity_seen {
+                if update.spin.multiplicity.replace(value).is_some() {
                     return Err(ParseError::DuplicateAtomPredicate("#s".to_string()));
                 }
-                multiplicity_seen = true;
-                spin.get_or_insert_with(Default::default).multiplicity = value;
             }
             AtomPredicate::Constraint(constraint) => {
                 if update.constraints.contains(constraint.key()) {
@@ -326,7 +320,6 @@ fn apply_update_predicates(
             }
         }
     }
-    update.spin = spin;
     Ok(())
 }
 
@@ -1267,7 +1260,7 @@ mod tests {
     use super::*;
     use crate::ast::constraint::RingScope;
     use crate::ast::operators::{MemOp, RelOp};
-    use crate::ast::spin::SpinStateAst;
+    use crate::ast::spin::{SpinStateAst, SpinStateUpdate};
     use crate::ast::stereo::{StereoCosetAst, StereoTerm};
     use crate::ast::value::{ValuePredicate, ValueTerm};
 
@@ -1404,7 +1397,9 @@ mod tests {
     #[case::element_only("O", AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Lit(Element::O)), ..Default::default() }))]
     #[case::charge_only("#c-1", AtomUpdateDsl(AtomUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() }))]
     #[case::element_and_pred("O#h1", AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Lit(Element::O)), implicit_hydrogens: Some(ValueAst::Lit(1)), ..Default::default() }))]
-    #[case::explicit_undetermined("*#i*#c*#h*#n*#u*#s*", AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Undetermined), isotope_mass: Some(IsotopeMassAst::Undetermined), charge: Some(ValueAst::Undetermined), implicit_hydrogens: Some(ValueAst::Undetermined), lone_pairs: Some(ValueAst::Undetermined), spin: Some(Default::default()), constraints: Default::default() }))]
+    #[case::spin_unpaired("#u2", AtomUpdateDsl(AtomUpdate { spin: SpinStateUpdate { unpaired: Some(ValueAst::Lit(2)), multiplicity: None }, ..Default::default() }))]
+    #[case::spin_multiplicity("#s1", AtomUpdateDsl(AtomUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }))]
+    #[case::explicit_undetermined("*#i*#c*#h*#n*#u*#s*", AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Undetermined), isotope_mass: Some(IsotopeMassAst::Undetermined), charge: Some(ValueAst::Undetermined), implicit_hydrogens: Some(ValueAst::Undetermined), lone_pairs: Some(ValueAst::Undetermined), spin: SpinStateUpdate { unpaired: Some(ValueAst::Undetermined), multiplicity: Some(ValueAst::Undetermined) }, constraints: Default::default() }))]
     #[case::constraint_removal("#v*", AtomUpdateDsl(AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(ValueAst::Undetermined)), ..Default::default() }))]
     fn test_parse_atom_update(#[case] input: &str, #[case] expected: AtomUpdateDsl) {
         assert_eq!(parse_atom_update(input).unwrap(), expected);
@@ -1441,7 +1436,8 @@ mod tests {
 
     #[rstest]
     #[case::charge_only(AtomUpdateDsl(AtomUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() }), r##""#c-""##)]
-    #[case::explicit_undetermined(AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Undetermined), isotope_mass: Some(IsotopeMassAst::Undetermined), charge: Some(ValueAst::Undetermined), implicit_hydrogens: Some(ValueAst::Undetermined), lone_pairs: Some(ValueAst::Undetermined), spin: Some(Default::default()), constraints: Default::default() }), r##""*#i*#c*#h*#n*#u*#s*""##)]
+    #[case::spin_multiplicity(AtomUpdateDsl(AtomUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }), r##""#s""##)]
+    #[case::explicit_undetermined(AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Undetermined), isotope_mass: Some(IsotopeMassAst::Undetermined), charge: Some(ValueAst::Undetermined), implicit_hydrogens: Some(ValueAst::Undetermined), lone_pairs: Some(ValueAst::Undetermined), spin: SpinStateUpdate { unpaired: Some(ValueAst::Undetermined), multiplicity: Some(ValueAst::Undetermined) }, constraints: Default::default() }), r##""*#i*#c*#h*#n*#u*#s*""##)]
     #[case::ring_size_removal(AtomUpdateDsl(AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::ring_membership(RingScope::Size(3), ValueAst::Undetermined)), ..Default::default() }), r##""#R(3)*""##)]
     fn test_atom_update_dsl_to_edn(#[case] input: AtomUpdateDsl, #[case] expected: &str) {
         assert_eq!(input.to_edn(), read_string(expected).unwrap());

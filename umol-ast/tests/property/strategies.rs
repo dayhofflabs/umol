@@ -23,8 +23,8 @@ pub(crate) use umol_ast::ast::{
     MulticenterBondHandle, MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst,
     NoncovalentBondConstraintAst, NoncovalentBondConstraintsAst, NoncovalentBondHandle,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, OrientedLigandPermutation,
-    RelOp, RelationalConstraint, RingMembershipAst, RingScope, SpinStateAst, StereoAtomAst,
-    StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomId, StereoBondAst,
+    RelOp, RelationalConstraint, RingMembershipAst, RingScope, SpinStateAst, SpinStateUpdate,
+    StereoAtomAst, StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomId, StereoBondAst,
     StereoBondConstraintAst, StereoBondConstraintsAst, StereoBondId, StereoConfigurationAst,
     StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
     StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
@@ -299,6 +299,17 @@ pub(crate) fn spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
     })
 }
 
+pub(crate) fn spin_state_update_strategy() -> impl Strategy<Value = SpinStateUpdate> {
+    (
+        prop::option::of(value_basic(0..=6)),
+        prop::option::of(value_basic(1..=7)),
+    )
+        .prop_map(|(unpaired, multiplicity)| SpinStateUpdate {
+            unpaired,
+            multiplicity,
+        })
+}
+
 /// `SpinStateAst` with at least one of `unpaired` / `multiplicity` not
 /// `Undetermined`. Used inside `MoleculeConstraint::SpinSum` and similar
 /// where a fully-vacuous spin state would elide on render.
@@ -493,7 +504,7 @@ prop_compose! {
         charge in prop::option::of(value_basic(-2..=2)),
         implicit_hydrogens in prop::option::of(value_basic(0..=4)),
         lone_pairs in prop::option::of(value_basic(0..=4)),
-        spin in prop::option::of(spin_state_strategy()),
+        spin in spin_state_update_strategy(),
         constraints in atom_update_constraints_strategy(),
     ) -> AtomUpdate {
         AtomUpdate {

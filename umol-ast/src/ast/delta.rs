@@ -141,16 +141,15 @@ impl AtomDelta {
                 });
             }
         }
-        if let Some(new) = &update.spin {
-            if !current.spin.canonical_eq(new) {
-                deltas.push(Self::ModifyField {
-                    id,
-                    change: AtomFieldChange::Spin {
-                        old: current.spin.clone(),
-                        new: new.clone(),
-                    },
-                });
-            }
+        let new_spin = current.spin.update(&update.spin);
+        if !current.spin.canonical_eq(&new_spin) {
+            deltas.push(Self::ModifyField {
+                id,
+                change: AtomFieldChange::Spin {
+                    old: current.spin.clone(),
+                    new: new_spin,
+                },
+            });
         }
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
@@ -2800,7 +2799,7 @@ mod tests {
     use super::super::value::ValueAst;
     use super::*;
     use crate::ast::{
-        AtomConstraintsAst, BooleanAst, ElementAst, IsotopeMassAst, SpinStateAst,
+        AtomConstraintsAst, BooleanAst, ElementAst, IsotopeMassAst, SpinStateAst, SpinStateUpdate,
         StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigandKind, StereogenicityAst,
     };
 
@@ -2843,7 +2842,7 @@ mod tests {
             .with_charge(0_i64)
             .with_implicit_hydrogens(4_i64)
             .with_lone_pairs(0_i64)
-            .with_spin((0_u8, 1_u8))
+            .with_spin((2_u8, 3_u8))
             .with_constraint(AtomConstraintAst::valence(4_i64));
         let update = AtomUpdate {
             element: Some(ElementAst::Lit(Element::N)),
@@ -2851,7 +2850,10 @@ mod tests {
             charge: Some(ValueAst::Lit(1)),
             implicit_hydrogens: Some(ValueAst::Lit(3)),
             lone_pairs: Some(ValueAst::Lit(1)),
-            spin: Some(SpinStateAst::from((1_u8, 2_u8))),
+            spin: SpinStateUpdate {
+                unpaired: None,
+                multiplicity: Some(ValueAst::Lit(1)),
+            },
             constraints: AtomConstraintsAst::from_iter([
                 AtomConstraintAst::valence(ValueAst::Undetermined),
                 AtomConstraintAst::degree(2_i64),
@@ -2898,8 +2900,8 @@ mod tests {
                 AtomDelta::ModifyField {
                     id: AtomId(7),
                     change: AtomFieldChange::Spin {
-                        old: SpinStateAst::from((0_u8, 1_u8)),
-                        new: SpinStateAst::from((1_u8, 2_u8)),
+                        old: SpinStateAst::from((2_u8, 3_u8)),
+                        new: SpinStateAst::from((2_u8, 1_u8)),
                     },
                 },
                 AtomDelta::ModifyConstraint {

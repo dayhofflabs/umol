@@ -9,7 +9,7 @@ use umol_chem::element::{Element, MAX_ATOMIC_NUMBER};
 use super::constraint::{AtomConstraintAst, AtomConstraintsAst};
 use super::error::{Contradiction, NoJoin};
 use super::operators::MemOp;
-use super::spin::SpinStateAst;
+use super::spin::{SpinStateAst, SpinStateUpdate};
 use super::traits::{AsLit, Canonicalize, Lattice};
 use super::value::ValueAst;
 
@@ -27,9 +27,10 @@ pub struct AtomAst {
     pub constraints: AtomConstraintsAst,
 }
 
-/// Attribute update for an atom. `None` leaves an ordinary field unchanged;
-/// `Some(value)` sets it exactly, including to an undetermined value.
-/// Constraints are keyed updates, with undetermined entries removing their key.
+/// Attribute update for an atom. `None` leaves an ordinary scalar field unchanged;
+/// `Some(value)` sets it exactly, including to an undetermined value. Spin is
+/// updated independently by component. Constraints are keyed updates, with
+/// undetermined entries removing their key.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AtomUpdate {
     pub element: Option<ElementAst>,
@@ -37,7 +38,7 @@ pub struct AtomUpdate {
     pub charge: Option<ValueAst>,
     pub implicit_hydrogens: Option<ValueAst>,
     pub lone_pairs: Option<ValueAst>,
-    pub spin: Option<SpinStateAst>,
+    pub spin: SpinStateUpdate,
     pub constraints: AtomConstraintsAst,
 }
 
@@ -126,7 +127,7 @@ impl AtomAst {
                 .lone_pairs
                 .clone()
                 .unwrap_or_else(|| self.lone_pairs.clone()),
-            spin: update.spin.clone().unwrap_or_else(|| self.spin.clone()),
+            spin: self.spin.update(&update.spin),
             constraints,
         }
     }
@@ -159,7 +160,7 @@ impl AtomAst {
             .then(|| other.implicit_hydrogens.clone()),
             lone_pairs: (!self.lone_pairs.canonical_eq(&other.lone_pairs))
                 .then(|| other.lone_pairs.clone()),
-            spin: (!self.spin.canonical_eq(&other.spin)).then(|| other.spin.clone()),
+            spin: self.spin.difference_to(&other.spin),
             constraints,
         }
     }
@@ -762,8 +763,11 @@ mod tests {
     #[case::implicit_hydrogens_undetermined(AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64), AtomUpdate { implicit_hydrogens: Some(ValueAst::Undetermined), ..Default::default() }, AtomAst::from_element(Element::C))]
     #[case::lone_pairs(AtomAst::from_element(Element::N).with_lone_pairs(1_i64), AtomUpdate { lone_pairs: Some(ValueAst::Lit(2)), ..Default::default() }, AtomAst::from_element(Element::N).with_lone_pairs(2_i64))]
     #[case::lone_pairs_undetermined(AtomAst::from_element(Element::N).with_lone_pairs(1_i64), AtomUpdate { lone_pairs: Some(ValueAst::Undetermined), ..Default::default() }, AtomAst::from_element(Element::N))]
-    #[case::spin(AtomAst::from_element(Element::C).with_spin((0_u8, 1_u8)), AtomUpdate { spin: Some(SpinStateAst::from((1_u8, 2_u8))), ..Default::default() }, AtomAst::from_element(Element::C).with_spin((1_u8, 2_u8)))]
-    #[case::spin_undetermined(AtomAst::from_element(Element::C).with_spin((0_u8, 1_u8)), AtomUpdate { spin: Some(SpinStateAst::default()), ..Default::default() }, AtomAst::from_element(Element::C))]
+    #[case::spin(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomUpdate { spin: SpinStateUpdate { unpaired: Some(ValueAst::Lit(0)), multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }, AtomAst::from_element(Element::C).with_spin((0_u8, 1_u8)))]
+    #[case::spin_unpaired(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomUpdate { spin: SpinStateUpdate { unpaired: Some(ValueAst::Lit(0)), multiplicity: None }, ..Default::default() }, AtomAst::from_element(Element::C).with_spin((0_u8, 3_u8)))]
+    #[case::spin_multiplicity(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }, ..Default::default() }, AtomAst::from_element(Element::C).with_spin((2_u8, 1_u8)))]
+    #[case::spin_unpaired_undetermined(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomUpdate { spin: SpinStateUpdate { unpaired: Some(ValueAst::Undetermined), multiplicity: None }, ..Default::default() }, AtomAst::from_element(Element::C).with_spin(SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }))]
+    #[case::spin_multiplicity_undetermined(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomUpdate { spin: SpinStateUpdate { unpaired: None, multiplicity: Some(ValueAst::Undetermined) }, ..Default::default() }, AtomAst::from_element(Element::C).with_spin(SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }))]
     #[case::constraint_set(AtomAst::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
     #[case::constraint_replace(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(3_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
     #[case::constraint_remove(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(ValueAst::Undetermined)), ..Default::default() }, AtomAst::from_element(Element::C))]
@@ -805,7 +809,10 @@ mod tests {
                 charge: Some(ValueAst::Undetermined),
                 implicit_hydrogens: Some(ValueAst::Lit(3)),
                 lone_pairs: Some(ValueAst::Lit(1)),
-                spin: Some(SpinStateAst::default()),
+                spin: SpinStateUpdate {
+                    unpaired: Some(ValueAst::Undetermined),
+                    multiplicity: Some(ValueAst::Undetermined),
+                },
                 constraints: AtomConstraintsAst::from_iter([
                     AtomConstraintAst::valence(3_i64),
                     AtomConstraintAst::donated_pairs(ValueAst::Undetermined),

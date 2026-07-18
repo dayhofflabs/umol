@@ -290,11 +290,34 @@ eight entity families: `AtomUpdate`, `BondUpdate`, `DativeBondUpdate`,
 and DAMNSS relation family in full; the migration must not leave some entity
 update DSL types on the old representation.
 
-An update uses one `Option` per ordinary field. `None` means "leave unchanged";
-`Some(value)`, including `Some(Undetermined)`, means "set this field to exactly
-this value." The fixed-field representation is preferable to a `Vec` of field
-variants because it excludes duplicate updates and gives deterministic field
-order without another keyed container.
+An update uses one `Option` per independently parsed ordinary leaf. `None` means
+"leave unchanged"; `Some(value)`, including `Some(Undetermined)`, means "set
+this leaf to exactly this value." Flat entity fields carry that `Option`
+directly. Composite fields preserve their independently addressable AST leaves
+rather than replacing the complete composite value. The fixed-field
+representation is preferable to a `Vec` of field variants because it excludes
+duplicate updates and gives deterministic field order without another keyed
+container.
+
+Spin is the shared composite case. `SpinStateAst` contains independently parsed
+unpaired-electron and multiplicity `ValueAst` leaves, so atom, localized-bond,
+aromatic-system, and multicenter-bond updates reuse:
+
+```rust
+pub struct SpinStateUpdate {
+    pub unpaired: Option<ValueAst>,
+    pub multiplicity: Option<ValueAst>,
+}
+```
+
+An omitted `#u` or `#s` preserves that component; an explicit `#u*` or `#s*`
+sets only that component to `Undetermined`. Thus applying the update `#s1` to
+`#u2#s3` produces `#u2#s1`, not `#u*#s1`. Complete-entity parsing still starts
+from a fresh `SpinStateAst` and may subsequently apply configured defaults, but
+update parsing does not default a missing component before merging it with the
+current entity. Edit and delta projection materialize the resulting complete
+`SpinStateAst` and continue to emit one whole-spin field change with exact
+`old` and `new` values.
 
 Each update reuses its entity's existing constraint container. An empty
 container means that no constraint key changes. A determined constraint sets or
@@ -726,18 +749,22 @@ callers before their stage ends.
   later batch. Do not add borrowing scopes, implicit drop rollback, arbitrary
   snapshots, or savepoints. **Additive (green).** `[dep: —]`
 - **S0c — `AtomUpdate` migration**
-  (`umol-ast/src/ast/atom.rs`, `dsl/atom.rs`, `dsl/reaction.rs`, delta/edit
-  projection): add optional ordinary fields plus `AtomConstraintsAst`; implement
-  `AtomAst::{update, difference_to}`, `Edit::for_atom_update`, and
+  (`umol-ast/src/ast/spin.rs`, `ast/atom.rs`, `dsl/atom.rs`, `dsl/reaction.rs`,
+  delta/edit projection): add shared leaf-wise `SpinStateUpdate`, optional
+  ordinary leaves, and `AtomConstraintsAst`; implement
+  `SpinStateAst::{update, difference_to}`, `AtomAst::{update, difference_to}`,
+  `Edit::for_atom_update`, and
   `AtomDelta::for_update`; route full-state `AtomDelta::diff` through the update;
   rename `PartialAtomDsl` to `AtomUpdateDsl`; and migrate atom reaction modify
   parsing/rendering. Tests cover omitted, determined, and explicit undetermined
-  fields; empty/set/replace/remove constraints; deterministic edit and delta
-  projection; the update-difference law; and DSL round trips.
+  leaves, including independent `#u`/`#s` preservation; empty/set/replace/remove
+  constraints; deterministic edit and delta projection; the update-difference
+  law; and DSL round trips.
   **Breaking Rust/DSL representation migration (red→green).** `[dep: —]`
 - **S0d — `BondUpdate` migration**
   (`umol-ast/src/ast/bond.rs`, `dsl/bond.rs`, `dsl/reaction.rs`, delta/edit
-  projection): repeat the S0c contract for order, charge, spin, and
+  projection): repeat the S0c contract for order, charge, shared leaf-wise spin,
+  and
   `BondConstraintsAst`; add `BondAst::{update, difference_to}`,
   `Edit::for_bond_update`, and `BondDelta::for_update`; route full-state bond
   diffing through the update; rename `PartialBondDsl` to `BondUpdateDsl`; and
@@ -757,8 +784,10 @@ callers before their stage ends.
   trips. **Breaking Rust/DSL representation migration (red→green).** `[dep: S0c]`
 - **S0f — `AromaticSystemUpdate` migration**
   (`umol-ast/src/ast/aromatic.rs`, `dsl/aromatic.rs`, `dsl/reaction.rs`,
-  delta/edit projection): repeat the update contract for aromatic-system fields
-  and constraints; add `AromaticSystemAst::{update, difference_to}`,
+  delta/edit projection): repeat the update contract for aromatic-system fields,
+  shared leaf-wise spin, and constraints; replace the current overloaded
+  partial-spin representation with the common `SpinStateUpdate` semantics; add
+  `AromaticSystemAst::{update, difference_to}`,
   `Edit::for_aromatic_system_update`, and `AromaticSystemDelta::for_update`;
   route full-state diffing through the update; then rename
   `PartialAromaticSystemDsl` to `AromaticSystemUpdateDsl` and migrate reaction
@@ -767,8 +796,10 @@ callers before their stage ends.
   (red→green).** `[dep: S0c]`
 - **S0g — `MulticenterBondUpdate` migration**
   (`umol-ast/src/ast/multicenter.rs`, `dsl/multicenter.rs`, `dsl/reaction.rs`,
-  delta/edit projection): repeat the update contract for multicenter-bond fields
-  and constraints; add `MulticenterBondAst::{update, difference_to}`,
+  delta/edit projection): repeat the update contract for multicenter-bond fields,
+  shared leaf-wise spin, and constraints; replace the current overloaded
+  partial-spin representation with the common `SpinStateUpdate` semantics; add
+  `MulticenterBondAst::{update, difference_to}`,
   `Edit::for_multicenter_bond_update`, and `MulticenterBondDelta::for_update`;
   route full-state diffing through the update; then rename
   `PartialMulticenterBondDsl` to `MulticenterBondUpdateDsl` and migrate reaction
@@ -808,8 +839,9 @@ callers before their stage ends.
 - **S0k — entity-update property suite**
   (`umol-ast/tests/property/update.rs`, `tests/property/strategies.rs`): add
   strategies for all eight `*Update` and `*UpdateDsl` families, including
-  omitted fields, explicit undetermined fields, determined constraints, and
-  undetermined constraint removals. For each family, prove the string and EDN
+  omitted leaves, explicit undetermined leaves, independent spin components,
+  determined constraints, and undetermined constraint removals. For each family,
+  prove the string and EDN
   parse/render round trips over the representable update grammar, and prove
   `lhs.update(&lhs.difference_to(&rhs)).canonical_eq(&rhs)` over generated entity
   AST pairs. Preserve minimized regression cases in the normal proptest
