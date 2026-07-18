@@ -926,12 +926,21 @@ covered by cross-family properties.
   preservation of unrelated constraints. **Public planning API plus atomic
   resolver migration (green).** `[dep: S0k]`
 - **S1c — valence resolver dispatch**
-  (`umol-graph/src/ops/resolve/valence.rs`): dispatch both valence models through
-  their planners and retain the present `Solution` classification while making
-  the public stage one atomic edit batch. Shared tests run successful and
-  contradictory inputs through both model variants and assert that errors never
-  expose a partially resolved atom prefix. **Additive internal refactor
-  (green).** `[dep: S1a, S1b]`
+  (`umol-graph/src/ops/resolve/valence.rs`): add the public dispatcher
+  `ValenceResolver::plan(&MoleculeAst) -> Result<Vec<Edit>,
+  ValenceContradiction>`, mapping the selected counts or atom-typing planner's
+  chemistry error into the existing shared contradiction type. The public
+  `resolve` method dispatches through `plan` rather than through the engines'
+  plan-and-apply convenience methods, applies that edit vector with one checked
+  `MoleculeEditor::transact`, and publishes only after success. Planning
+  contradiction remains `Solution::Contradictory`; transaction failure remains
+  `ValenceError::Transaction`. This makes the valence stage itself the single
+  atomic application boundary while retaining the engine-specific public
+  convenience APIs. Shared exact-plan, successful-resolution, contradiction,
+  and unchanged-input tests cover both model variants and ensure that a failure
+  after an earlier plannable atom never exposes a partially resolved prefix.
+  **Public dispatch planner plus atomic stage application (green).** `[dep: S1a,
+  S1b]`
 - **S1d — aromaticity edit planner**
   (`umol-graph/src/ops/aromaticity.rs`, `ops/resolve/aromaticity.rs`, resolver
   policy configuration): identify systems from the materialized valence state,
