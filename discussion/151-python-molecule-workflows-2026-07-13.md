@@ -943,17 +943,37 @@ covered by cross-family properties.
   S1b]`
 - **S1d — aromaticity edit planner**
   (`umol-graph/src/ops/aromaticity.rs`, `ops/resolve/aromaticity.rs`, resolver
-  policy configuration): identify systems from the materialized valence state,
-  compute each final `AromaticSystemAst`, and emit `AddAromaticSystem`, atom
-  charge and aromatic-valence changes through `AtomUpdate`, and localized-bond
-  aromatic constraint changes through `BondUpdate`.
-  Wire the settled charge-delocalization and opt-in source-constraint reset
-  policy through the resolver configuration. A reset is
-  `old: Some(constraint), new: None`; never emit a vacuous undetermined
-  constraint. Tests cover homogeneous and heterogeneous systems, policy on/off,
-  exact bond marking, canonical removal, and unchanged input on perception
-  contradiction/error. **Additive internal refactor (green).** `[dep: S0k,
-  S1c]`
+  policy configuration): add public `AromaticityResolverConfig {
+  delocalize_charge, reset_aromatic_valence }`, defaulting to the existing
+  behavior (`true`, `false`), and construct either with `new(model)` or
+  `with_config(model, config)`. Expose the read-only planner as
+
+  ```rust
+  pub fn plan(
+      &self,
+      ast: &MoleculeAst,
+  ) -> Result<Solution<Vec<Edit>, AromaticityContradiction>, AromaticityError>;
+  ```
+
+  Perception identifies systems from the materialized valence state. For each
+  determined system, derive the final `AromaticSystemAst` before emitting
+  `AddAromaticSystem`; homogeneous charge delocalization is a pure calculation
+  returning atom updates and the final system charge/electron counts, while
+  heterogeneous systems retain localized charges. Merge charge changes and an
+  opt-in aromatic-valence reset into one `AtomUpdate` per atom, then project
+  them with `Edit::for_atom_update`. A reset uses
+  `AromaticValenceAst::Undetermined` in the update and therefore projects to
+  `old: Some(constraint), new: None`, never to a stored vacuous constraint.
+  Mark every localized bond induced by the system atom set through `BondUpdate`
+  and `Edit::for_bond_update`.
+
+  `resolve` dispatches through `plan`, applies a determined edit vector with a
+  single checked `MoleculeEditor::transact`, and publishes only after success;
+  underdetermination and contradiction do not apply a partial plan. Tests cover
+  the exact plan, empty-plan identity, homogeneous delocalization on/off,
+  heterogeneous localization, exact bond marking, canonical source-constraint
+  removal, and unchanged input on perception contradiction/planning error.
+  **Public planner plus atomic resolver migration (green).** `[dep: S0k, S1c]`
 - **S1e — stereo edit planner**
   (`umol-graph/src/ops/resolve/stereo.rs`): compute atom/bond sites, canonical
   ligand frames, and final stereo ASTs from the materialized aromaticity state;

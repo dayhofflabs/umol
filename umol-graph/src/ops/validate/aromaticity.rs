@@ -129,6 +129,8 @@ mod tests {
             .map(|_| {
                 let mut atom = AtomAst::from_element(Element::C);
                 atom.charge = ValueAst::Lit(0);
+                atom.implicit_hydrogens = ValueAst::Lit(1);
+                atom.lone_pairs = ValueAst::Lit(0);
                 atom.spin = SpinStateAst::closed_shell();
                 atom.constraints.set(AtomConstraintAst::AromaticValence(
                     AromaticValenceAst::Aromatic(ValueAst::Lit(1)),

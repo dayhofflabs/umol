@@ -12,7 +12,7 @@ pub mod valence;
 
 use std::any::Any;
 
-pub use aromaticity::AromaticityResolver;
+pub use aromaticity::{AromaticityResolver, AromaticityResolverConfig};
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
 pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,

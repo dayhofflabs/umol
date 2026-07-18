@@ -22,8 +22,8 @@ pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AsLit, AtomConstraintAst, AtomId,
-    AtomView, BondConstraintAst, BondId, BooleanAst, ElectronCountsAst, ElementAst, MoleculeAst,
-    RingFamily, ValueAst,
+    AtomUpdate, AtomView, BondConstraintAst, BondId, BooleanAst, ElectronCountsAst, ElementAst,
+    MoleculeAst, RingFamily, TransactionError, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_utils::solution::Solution;
@@ -49,6 +49,8 @@ pub enum AromaticityError {
     HmoMissingParameters(String),
     #[error("atom {0:?} is not ground")]
     NonGroundAtom(AtomId),
+    #[error(transparent)]
+    Transaction(#[from] TransactionError),
 }
 
 #[derive(Clone, Debug)]
@@ -199,13 +201,29 @@ fn equalize_charges(
     system_idx: AromaticSystemId,
 ) -> Result<(), AromaticityError> {
     let atoms: Vec<AtomId> = ast.aromatic_system(system_idx).atom_ids().collect();
-    let Some(element) = monoelement(ast, &atoms) else {
-        return Ok(());
+    let system = ast.aromatic_system(system_idx).ast.clone();
+    let (system, updates) = derive_charge_equalization(ast, &atoms, &system)?;
+    for (atom_id, update) in updates {
+        let selected = ast.atom(atom_id).ast.update(&update);
+        *ast.atom_mut(atom_id).ast = selected;
+    }
+    *ast.aromatic_system_mut(system_idx).ast = system;
+    Ok(())
+}
+
+/// Derive the final aromatic-system state and atom updates for homogeneous
+/// charge delocalization without mutating the molecule.
+pub(crate) fn derive_charge_equalization(
+    ast: &MoleculeAst,
+    atoms: &[AtomId],
+    system: &AromaticSystemAst,
+) -> Result<(AromaticSystemAst, Vec<(AtomId, AtomUpdate)>), AromaticityError> {
+    let Some(element) = monoelement(ast, atoms) else {
+        return Ok((system.clone(), Vec::new()));
     };
     let v: ValueAst = (element.valence_electrons() as i64).into();
 
-    // Phase 1: validate + compute. No mutations until every atom is ground.
-    let old_electrons = ast.aromatic_system(system_idx).ast.electrons.clone();
+    let old_electrons = system.electrons.clone();
     let mut atom_updates = Vec::with_capacity(atoms.len());
     for (i, atom_idx) in atoms.iter().copied().enumerate() {
         let atom = ast.atom(atom_idx);
@@ -223,25 +241,28 @@ fn equalize_charges(
         ));
     }
 
-    // Phase 2: apply. All atoms are ground; the system charge fallback to 0
-    // covers the case where it's still Undetermined on a fresh system entry.
-    let mut accumulated = ast.aromatic_system(system_idx).charge().as_lit_or(0);
+    let mut accumulated = system.charge.as_lit_or(0);
     let mut new_counts = Vec::with_capacity(atom_updates.len());
+    let mut updates = Vec::new();
     for (atom_idx, c, e, k) in atom_updates {
         new_counts.push(k);
         if e == k {
             continue;
         }
         accumulated += c;
-        let atom_mut = ast.atom_mut(atom_idx).ast;
-        atom_mut.charge = ValueAst::Lit(0);
-        atom_mut.constraints.set(AtomConstraintAst::AromaticValence(
+        let mut update = AtomUpdate {
+            charge: Some(ValueAst::Lit(0)),
+            ..Default::default()
+        };
+        update.constraints.set(AtomConstraintAst::AromaticValence(
             AromaticValenceAst::Aromatic(ValueAst::Lit(k)),
         ));
+        updates.push((atom_idx, update));
     }
-    ast.aromatic_system_mut(system_idx).ast.electrons = ElectronCountsAst::Lit(new_counts);
-    ast.aromatic_system_mut(system_idx).ast.charge = ValueAst::Lit(accumulated);
-    Ok(())
+    let mut selected = system.clone();
+    selected.electrons = ElectronCountsAst::Lit(new_counts);
+    selected.charge = ValueAst::Lit(accumulated);
+    Ok((selected, updates))
 }
 
 /// Returns the shared element if every atom in `atoms` has a literal,
