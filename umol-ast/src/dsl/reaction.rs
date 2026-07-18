@@ -20,7 +20,7 @@ use super::atom::{lower_atom, raise_atom, AtomDsl, AtomUpdateDsl};
 use super::bond::{lower_bond, raise_bond, BondDsl, BondUpdateDsl};
 use super::config::{DeltaDefaults, ReactionDefaults};
 use super::constraint::{read_constraint_dsl, ConstraintDsl};
-use super::dative::{DativeBondDsl, PartialDativeBondDsl};
+use super::dative::{DativeBondDsl, DativeBondUpdateDsl};
 use super::edn_utils::{
     consume_single_key_map_close, missing, parse_single_key_map, parse_vec,
     read_single_key_map_header, read_vec, single_key_map,
@@ -72,7 +72,7 @@ use crate::ast::reaction::ReactionAst;
 use crate::ast::stereo::{StereoConfigurationAst, StereoCosetAst};
 use crate::ast::traits::{FromAst, IntoAst, Lattice};
 use crate::ast::{
-    AromaticSystemAst, DativeBondAst, EntityPatch, MulticenterBondAst, NoncovalentBondAst,
+    AromaticSystemAst, DativeBondUpdate, EntityPatch, MulticenterBondAst, NoncovalentBondAst,
     StereoAtomAst, StereoBondAst, StereoKind, StereoLigand,
 };
 
@@ -736,7 +736,7 @@ pub(crate) enum DeltaInput {
     BondModify(BondRef, BondUpdate),
     DativeBondAdd(DativeBondEntryInput),
     DativeBondRemove(DativeBondRef),
-    DativeBondModify(DativeBondRef, DativeBondAst),
+    DativeBondModify(DativeBondRef, DativeBondUpdate),
     AromaticSystemAdd(AromaticSystemEntryInput),
     AromaticSystemRemove(AromaticSystemRef),
     AromaticSystemModify(AromaticSystemRef, AromaticSystemAst),
@@ -897,7 +897,7 @@ impl ReactionInput {
                         ast: lhs.dative_bond(id).ast.clone(),
                     }));
                 }
-                DeltaInput::DativeBondModify(r, rhs) => {
+                DeltaInput::DativeBondModify(r, update) => {
                     let id = r.resolve(&ns)?;
                     if ns.dative_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
@@ -906,8 +906,7 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    let new = lhs.dative_bond(id).ast.update(&rhs);
-                    for d in DativeBondDelta::diff(id, lhs.dative_bond(id).ast, &new) {
+                    for d in DativeBondDelta::for_update(id, lhs.dative_bond(id).ast, &update) {
                         resolved.push(Delta::DativeBond(d));
                     }
                 }
@@ -1453,10 +1452,10 @@ fn read_delta_dative_bond_input(
             de.consume_byte(b'[')?;
             let r = read_dative_bond_ref(de)?;
             let s = de.read_string()?;
-            let dsl: PartialDativeBondDsl = s
+            let dsl: DativeBondUpdateDsl = s
                 .as_ref()
                 .parse()
-                .map_err(|e| DeError::subgrammar("partial-dative-bond", e))?;
+                .map_err(|e| DeError::subgrammar("dative-bond-update", e))?;
             if !de.try_consume_byte(b']')? {
                 return Err(DeError::Custom("dative-bond :modify expects [ref dsl]".into()).into());
             }
@@ -1789,7 +1788,7 @@ fn parse_delta_dative_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
             }
             Ok(DeltaInput::DativeBondModify(
                 DativeBondRef::from_edn(&v[0])?,
-                PartialDativeBondDsl::from_edn(&v[1])?.0,
+                DativeBondUpdateDsl::from_edn(&v[1])?.0,
             ))
         }
         o => Err(DeError::Custom(format!(
@@ -2267,24 +2266,24 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 | DativeBondDelta::ModifyConstraint { id, .. },
             ) => {
                 let id = *id;
-                let mut partial = DativeBondAst::default();
+                let mut update = DativeBondUpdate::default();
                 while let Some(Delta::DativeBond(delta)) = deltas.get(i) {
                     match delta {
                         DativeBondDelta::ModifyField { id: j, change } if *j == id => {
                             match change {
                                 DativeBondFieldChange::Order { new, .. } => {
-                                    partial.order = new.clone()
+                                    update.order = Some(new.clone())
                                 }
                             }
                         }
                         DativeBondDelta::ModifyConstraint { id: j, old, new } if *j == id => {
                             match new {
                                 Some(c) => {
-                                    partial.constraints.set(c.clone());
+                                    update.constraints.set(c.clone());
                                 }
                                 None => {
                                     if let Some(old) = old {
-                                        partial.constraints.set(old.as_undetermined());
+                                        update.constraints.set(old.as_undetermined());
                                     }
                                 }
                             }
@@ -2297,7 +2296,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 let payload = Edn::Vector(
                     vec![
                         DativeBondRef::denote(id, combined).to_edn(),
-                        PartialDativeBondDsl(partial).to_edn(),
+                        DativeBondUpdateDsl(update).to_edn(),
                     ]
                     .into(),
                 );
@@ -2899,7 +2898,8 @@ mod tests {
     use crate::ast::atom::ElementAst;
     use crate::ast::boolean::BooleanAst;
     use crate::ast::constraint::{
-        AtomConstraintAst, BondConstraintAst, Constraint, MoleculeConstraint, RingScope,
+        AtomConstraintAst, BondConstraintAst, Constraint, DativeBondConstraintAst,
+        DativeBondConstraintsAst, MoleculeConstraint, RingScope,
     };
     use crate::ast::delta::{ConstraintDelta, Deltas};
     use crate::ast::edit::{AtomFieldChange, BondFieldChange};
@@ -2909,7 +2909,7 @@ mod tests {
     use crate::dsl::bond::BondDsl;
     use crate::dsl::constraint::MoleculeConstraintDsl;
     use crate::dsl::molecule::AtomSpecInput;
-    use crate::dsl::refs::{AtomRef, BondRef};
+    use crate::dsl::refs::{AtomRef, BondRef, DativeBondRef};
     use crate::mol_dsl;
 
     #[rstest]
@@ -3125,6 +3125,36 @@ mod tests {
         assert_eq!(
             read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
             expected
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::order(r##"{:dative-bond {:modify [:d1 "2"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() }))]
+    #[case::order_undetermined(r##"{:dative-bond {:modify [:d1 "*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { order: Some(ValueAst::Undetermined), ..Default::default() }))]
+    #[case::constraint_removal(r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() }))]
+    fn test_parse_delta_input_dative_bond(
+        #[case] input: &str,
+        #[case] expected: DeltaInput,
+    ) {
+        assert_eq!(
+            parse_delta_input(&read_string(input).unwrap()).unwrap(),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::order(r##"{:dative-bond {:modify [:d1 "2"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() }))]
+    #[case::order_undetermined(r##"{:dative-bond {:modify [:d1 "*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { order: Some(ValueAst::Undetermined), ..Default::default() }))]
+    #[case::constraint_removal(r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##, DeltaInput::DativeBondModify(DativeBondRef::Id("d1".into()), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() }))]
+    fn test_read_delta_input_dative_bond(
+        #[case] input: &str,
+        #[case] expected: DeltaInput,
+    ) {
+        assert_eq!(
+            read_delta_input(&mut EdnStreamDeserializer::new(input)).unwrap(),
+            expected,
         );
     }
 
@@ -3540,6 +3570,55 @@ mod tests {
     }
 
     #[rstest]
+    #[case::determined(
+        r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :type "1"}]} :deltas [{:dative-bond {:modify [:d1 "2"]}}]}"##,
+        ValueAst::Lit(2),
+    )]
+    #[case::undetermined(
+        r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :type "1"}]} :deltas [{:dative-bond {:modify [:d1 "*"]}}]}"##,
+        ValueAst::Undetermined,
+    )]
+    fn test_reaction_input_into_ast_dative_bond_modify(#[case] input: &str, #[case] new: ValueAst) {
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([Delta::DativeBond(DativeBondDelta::ModifyField {
+                id: DativeBondId(0),
+                change: DativeBondFieldChange::Order {
+                    old: ValueAst::Lit(1),
+                    new,
+                },
+            })]),
+        );
+    }
+
+    #[rstest]
+    #[case::ring_size(
+        r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :type "1#R(6)"}]} :deltas [{:dative-bond {:modify [:d1 "#R(6)*"]}}]}"##,
+        DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Lit(1)),
+    )]
+    fn test_reaction_input_into_ast_dative_bond_modify_constraint(
+        #[case] input: &str,
+        #[case] old: DativeBondConstraintAst,
+    ) {
+        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+            .unwrap()
+            .into_ast()
+            .unwrap();
+        assert_eq!(
+            ast.deltas,
+            Deltas::from_iter([Delta::DativeBond(DativeBondDelta::ModifyConstraint {
+                id: DativeBondId(0),
+                old: Some(old),
+                new: None,
+            },)]),
+        );
+    }
+
+    #[rstest]
     fn test_reaction_input_into_ast_constraint_add() {
         let input = r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}"##;
         let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
@@ -3667,7 +3746,7 @@ mod tests {
         assert_eq!(dsl, ReactionDsl::from_edn_str(input).unwrap());
     }
 
-    /// Shared render metadata: lhs atoms br(0) c(1), bonds b1(0) bx(1); created atom n(2), bond b2(2).
+    /// Shared render metadata for existing and created test entities.
     #[fixture]
     fn meta() -> ReactionMetadata {
         ReactionMetadata {
@@ -3675,7 +3754,8 @@ mod tests {
                 .with_atom_keyword(AtomId(0), "br")
                 .with_atom_keyword(AtomId(1), "c")
                 .with_bond_keyword(BondId(0), "b1")
-                .with_bond_keyword(BondId(1), "bx"),
+                .with_bond_keyword(BondId(1), "bx")
+                .with_dative_bond_keyword(DativeBondId(0), "d1"),
             ..Default::default()
         }
         .with_atom_keyword(AtomId(2), "n")
@@ -3712,6 +3792,23 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::order(vec![Delta::DativeBond(DativeBondDelta::ModifyField { id: DativeBondId(0), change: DativeBondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) } })], r##"{:dative-bond {:modify [:d1 "2"]}}"##)]
+    #[case::order_undetermined(vec![Delta::DativeBond(DativeBondDelta::ModifyField { id: DativeBondId(0), change: DativeBondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Undetermined } })], r##"{:dative-bond {:modify [:d1 "*"]}}"##)]
+    #[case::constraint(vec![Delta::DativeBond(DativeBondDelta::ModifyConstraint { id: DativeBondId(0), old: None, new: Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))) })], r##"{:dative-bond {:modify [:d1 "#a"]}}"##)]
+    #[case::constraint_removal(vec![Delta::DativeBond(DativeBondDelta::ModifyConstraint { id: DativeBondId(0), old: Some(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Lit(1))), new: None })], r##"{:dative-bond {:modify [:d1 "#R(6)*"]}}"##)]
+    fn test_render_deltas_dative_bond(
+        meta: ReactionMetadata,
+        #[case] deltas: Vec<Delta>,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            render_deltas(&Deltas::from_iter(deltas), &meta),
+            vec![read_string(expected).unwrap()],
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::add_molecule(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:add {:connected {}}}}")]
     #[case::add_entity_leaf(vec![Delta::Constraint(ConstraintDelta::Add(Constraint::Atom(AtomId(2), AtomConstraintAst::Valence(ValueAst::Lit(2)))))], "{:constraint {:add {:atom [:n {:valence 2}]}}}")]
     #[case::remove(vec![Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })))], "{:constraint {:remove {:connected {}}}}")]
@@ -3733,6 +3830,8 @@ mod tests {
     #[case::dative_add(r##"{:lhs {:atoms ["C" "N"]} :deltas [{:dative-bond {:add {:donors [0] :acceptor 1 :type "1#R"}}}]}"##)]
     #[case::dative_remove(r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}]} :deltas [{:dative-bond {:remove 0}}]}"##)]
     #[case::dative_modify(r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}]} :deltas [{:dative-bond {:modify [0 "2"]}}]}"##)]
+    #[case::dative_modify_undetermined(r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]} :deltas [{:dative-bond {:modify [0 "*"]}}]}"##)]
+    #[case::dative_ring_constraint_removal(r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R(6)"}]} :deltas [{:dative-bond {:modify [0 "#R(6)*"]}}]}"##)]
     #[case::aromatic_add(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"]} :deltas [{:aromatic-system {:add {:atoms [0 1 2 3 4 5] :type "*#e6"}}}]}"##)]
     #[case::aromatic_remove(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]} :deltas [{:aromatic-system {:remove 0}}]}"##)]
     #[case::multicenter_add(r##"{:lhs {:atoms ["C" "C"]} :deltas [{:multicenter-bond {:add {:atoms [0 1] :type "*#e2"}}}]}"##)]
@@ -3747,7 +3846,7 @@ mod tests {
     #[case::stereo_atom_apply(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:apply [0 :tetrahedral "(0,1)"]}}]}"##)]
     #[case::stereo_bond_add(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 3] :type "Ct1"}}}]}"##)]
     #[case::stereo_bond_remove(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]} :deltas [{:stereo-bond {:remove 0}}]}"##)]
-    #[case::dative_constraint_removal(r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#a"}]} :deltas [{:dative-bond {:modify [0 "1#a*"]}}]}"##)]
+    #[case::dative_constraint_removal(r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#a"}]} :deltas [{:dative-bond {:modify [0 "#a*"]}}]}"##)]
     #[case::aromatic_constraint_removal(r##"{:lhs {:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]} :deltas [{:aromatic-system {:modify [0 "*#e*"]}}]}"##)]
     #[case::multicenter_constraint_removal(r##"{:lhs {:atoms ["C" "C"] :multicenter-bonds [{:atoms [0 1] :type "*#e2"}]} :deltas [{:multicenter-bond {:modify [0 "*#e*"]}}]}"##)]
     #[case::stereo_atom_topicity_removal(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#o(0,1)="}]} :deltas [{:stereo-atom {:modify [0 "Th#o(0,1)*"]}}]}"##)]

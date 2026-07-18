@@ -4,7 +4,7 @@ use umol_ast_macros::{Canonicalize, Lattice};
 use umol_graph_core::{BiRelationData, ParticipantPosition};
 
 use super::constraint::{DativeBondConstraintAst, DativeBondConstraintsAst};
-use super::traits::Lattice;
+use super::traits::Canonicalize;
 use super::value::ValueAst;
 
 /// Dative bond data: bond order (number of electron pairs donated) and
@@ -14,6 +14,14 @@ use super::value::ValueAst;
 pub struct DativeBondAst {
     /// Bond order — number of electron pairs donated.
     pub order: ValueAst,
+    pub constraints: DativeBondConstraintsAst,
+}
+
+/// Attribute update for a dative bond. The order is optional, and
+/// undetermined constraints remove their key.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DativeBondUpdate {
+    pub order: Option<ValueAst>,
     pub constraints: DativeBondConstraintsAst,
 }
 
@@ -61,16 +69,35 @@ impl DativeBondAst {
         self
     }
 
-    /// Overwrite with `other`, keeping existing values and constraints.
-    pub fn update(&self, other: &DativeBondAst) -> DativeBondAst {
+    /// Apply an attribute update, leaving omitted leaves and constraint keys unchanged.
+    pub fn update(&self, update: &DativeBondUpdate) -> DativeBondAst {
         let mut constraints = self.constraints.clone();
-        constraints.update(&other.constraints);
+        constraints.update(&update.constraints);
         DativeBondAst {
-            order: if other.order.is_undetermined() {
-                self.order.clone()
-            } else {
-                other.order.clone()
-            },
+            order: update.order.clone().unwrap_or_else(|| self.order.clone()),
+            constraints,
+        }
+    }
+
+    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    pub fn difference_to(&self, other: &Self) -> DativeBondUpdate {
+        let mut constraints = DativeBondConstraintsAst::new();
+        for new in other.constraints.iter() {
+            if self
+                .constraints
+                .get(new.key())
+                .is_none_or(|old| !old.canonical_eq(new))
+            {
+                constraints.set(new.clone());
+            }
+        }
+        for old in self.constraints.iter() {
+            if other.constraints.get(old.key()).is_none() {
+                constraints.set(old.as_undetermined());
+            }
+        }
+        DativeBondUpdate {
+            order: (!self.order.canonical_eq(&other.order)).then(|| other.order.clone()),
             constraints,
         }
     }
@@ -152,6 +179,67 @@ mod tests {
     #[case::with_constraint(DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
     fn test_dative_bond_ast_into_ground(#[case] bond: DativeBondAst) {
         assert_eq!(bond.clone().into_ground(), bond);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::order(DativeBondAst::from_order(1), DativeBondUpdate { order: Some(ValueAst::Lit(2)), ..Default::default() }, DativeBondAst::from_order(2))]
+    #[case::order_undetermined(DativeBondAst::from_order(1), DativeBondUpdate { order: Some(ValueAst::Undetermined), ..Default::default() }, DativeBondAst::default())]
+    #[case::constraint_set(DativeBondAst::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))), ..Default::default() }, DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
+    #[case::constraint_replace(DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)), ..Default::default() }, DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 2_i64)))]
+    #[case::constraint_remove(DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() }, DativeBondAst::from_order(1))]
+    fn test_dative_bond_ast_update(
+        #[case] bond: DativeBondAst,
+        #[case] update: DativeBondUpdate,
+        #[case] expected: DativeBondAst,
+    ) {
+        assert_eq!(bond.update(&update), expected);
+    }
+
+    #[rstest]
+    #[case::empty(DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))))]
+    fn test_dative_bond_ast_update_identity(#[case] bond: DativeBondAst) {
+        assert_eq!(bond.update(&DativeBondUpdate::default()), bond);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fields_and_constraints(
+        DativeBondAst::from_order(1).with_constraints([
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64),
+        ]),
+        DativeBondAst::from_order(2).with_constraints([
+            DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false)),
+            DativeBondConstraintAst::ring_membership(RingScope::All, 2_i64),
+        ]),
+        DativeBondUpdate {
+            order: Some(ValueAst::Lit(2)),
+            constraints: DativeBondConstraintsAst::from_iter([
+                DativeBondConstraintAst::Aromatic(BooleanAst::Lit(false)),
+                DativeBondConstraintAst::ring_membership(RingScope::All, 2_i64),
+                DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined),
+            ]),
+        },
+    )]
+    fn test_dative_bond_ast_difference_to(
+        #[case] bond: DativeBondAst,
+        #[case] other: DativeBondAst,
+        #[case] expected: DativeBondUpdate,
+    ) {
+        assert_eq!(bond.difference_to(&other), expected);
+    }
+
+    #[rstest]
+    #[case::canonical(
+        DativeBondAst::from_order(1),
+        DativeBondAst::new(ValueAst::lit_set([1])),
+    )]
+    fn test_dative_bond_ast_difference_to_identity(
+        #[case] bond: DativeBondAst,
+        #[case] other: DativeBondAst,
+    ) {
+        assert_eq!(bond.difference_to(&other), DativeBondUpdate::default());
     }
 
     #[rustfmt::skip]

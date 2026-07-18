@@ -16,9 +16,9 @@ pub(crate) use umol_ast::ast::{
     AtomId, AtomUpdate, BondAst, BondConstraintAst, BondConstraintKey, BondConstraintsAst,
     BondFieldChange, BondHandle, BondId, BondUpdate, BooleanAst, Canonicalize, CisTransStereoAst,
     Constraint, Constraints, DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey,
-    DativeBondConstraintsAst, DativeBondHandle, DativeBondId, Edit, ElectronCountsAst, ElementAst,
-    FluxionalityAst, IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp,
-    MoleculeAst, MoleculeConstraint, MoleculeParts, MulticenterBondAst,
+    DativeBondConstraintsAst, DativeBondHandle, DativeBondId, DativeBondUpdate, Edit,
+    ElectronCountsAst, ElementAst, FluxionalityAst, IsotopeMassAst, Lattice, LigandPermutation,
+    LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint, MoleculeParts, MulticenterBondAst,
     MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsAst,
     MulticenterBondHandle, MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst,
     NoncovalentBondConstraintAst, NoncovalentBondConstraintsAst, NoncovalentBondHandle,
@@ -33,9 +33,10 @@ pub(crate) use umol_ast::ast::{
 };
 pub(crate) use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, AtomUpdateDsl, BondDsl, BondUpdateDsl, DativeBondDsl,
-    DativeBondParticipants, MoleculeDsl, MoleculeMetadata, MoleculeNamespace, MulticenterBondDsl,
-    NoncovalentBondDsl, ParseError, StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomParticipants,
-    StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants, StereoLigandRef, ValueDsl,
+    DativeBondParticipants, DativeBondUpdateDsl, MoleculeDsl, MoleculeMetadata, MoleculeNamespace,
+    MulticenterBondDsl, NoncovalentBondDsl, ParseError, StereoAtomConstraintDsl, StereoAtomDsl,
+    StereoAtomParticipants, StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants,
+    StereoLigandRef, ValueDsl,
 };
 pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
@@ -483,6 +484,18 @@ pub(crate) fn dative_bond_constraints_strategy() -> impl Strategy<Value = Dative
     })
 }
 
+pub(crate) fn dative_bond_update_constraints_strategy(
+) -> impl Strategy<Value = DativeBondConstraintsAst> {
+    prop::collection::vec(
+        prop_oneof![
+            dative_bond_constraint_strategy(),
+            dative_bond_constraint_strategy().prop_map(|constraint| constraint.as_undetermined()),
+        ],
+        0..=2,
+    )
+    .prop_map(DativeBondConstraintsAst::from_iter)
+}
+
 prop_compose! {
     pub(crate) fn atom_ast_strategy()
     (
@@ -616,6 +629,16 @@ pub(crate) fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
     ];
     (order_strategy, dative_bond_constraints_strategy())
         .prop_map(|(order, constraints)| DativeBondAst { order, constraints })
+}
+
+prop_compose! {
+    pub(crate) fn dative_bond_update_strategy()
+    (
+        order in prop::option::of(value_basic(1..=4)),
+        constraints in dative_bond_update_constraints_strategy(),
+    ) -> DativeBondUpdate {
+        DativeBondUpdate { order, constraints }
+    }
 }
 
 /// Optional `ElectronCount` constraint (the asserted total). The strategy

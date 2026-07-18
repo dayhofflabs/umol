@@ -95,6 +95,29 @@ proptest! {
     }
 
     #[test]
+    fn test_dative_bond_update_dsl_display_from_str_roundtrip(
+        update in dative_bond_update_strategy(),
+    ) {
+        let dsl = DativeBondUpdateDsl(update);
+        let rendered = dsl.to_string();
+        let parsed: DativeBondUpdateDsl = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_dative_bond_update_dsl_to_edn_from_edn_roundtrip(
+        update in dative_bond_update_strategy(),
+    ) {
+        let dsl = DativeBondUpdateDsl(update);
+        let edn = dsl.to_edn();
+        let parsed = DativeBondUpdateDsl::from_edn(&edn)
+            .map_err(|e| TestCaseError::fail(format!("parse failed: {e}")))?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
     fn test_noncovalent_bond_dsl_display_from_str_roundtrip(
         bond in noncovalent_bond_ast_strategy(),
     ) {

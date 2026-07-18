@@ -1,7 +1,8 @@
 use proptest::prelude::*;
 use umol_ast::ast::{
     AtomDelta, AtomFieldChange, AtomId, BondDelta, BondFieldChange, BondId, Canonicalize,
-    Constraint, ConstraintDelta, Delta, Deltas, EntityPatch, MoleculeConstraint, ValueAst,
+    Constraint, ConstraintDelta, DativeBondDelta, DativeBondId, Delta, Deltas, EntityPatch,
+    MoleculeConstraint, ValueAst,
 };
 
 use crate::strategies::*;
@@ -31,6 +32,21 @@ fn apply_bond_diff(mut ast: BondAst, diff: Vec<BondDelta>) -> BondAst {
             }
             BondDelta::ModifyConstraint { old, new, .. } => {
                 BondDelta::apply_constraint(&mut ast, old, new).unwrap()
+            }
+            other => unreachable!("diff yields only modify deltas, got {other:?}"),
+        }
+    }
+    ast
+}
+
+fn apply_dative_bond_diff(mut ast: DativeBondAst, diff: Vec<DativeBondDelta>) -> DativeBondAst {
+    for delta in diff {
+        match delta {
+            DativeBondDelta::ModifyField { change, .. } => {
+                DativeBondDelta::apply_field(&mut ast, change).unwrap()
+            }
+            DativeBondDelta::ModifyConstraint { old, new, .. } => {
+                DativeBondDelta::apply_constraint(&mut ast, old, new).unwrap()
             }
             other => unreachable!("diff yields only modify deltas, got {other:?}"),
         }
@@ -166,6 +182,31 @@ proptest! {
     /// Applying the directed bond update recovers the target up to canonical equality.
     #[test]
     fn test_bond_ast_difference_to(lhs in bond_ast_strategy(), rhs in bond_ast_strategy()) {
+        let update = lhs.difference_to(&rhs);
+        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+    }
+
+    #[test]
+    fn test_dative_bond_delta_diff_apply(
+        lhs in dative_bond_strategy(),
+        rhs in dative_bond_strategy(),
+    ) {
+        let diff = DativeBondDelta::diff(DativeBondId(0), &lhs, &rhs);
+        prop_assert_eq!(apply_dative_bond_diff(lhs, diff), rhs);
+    }
+
+    #[test]
+    fn test_dative_bond_delta_diff_identity(bond in dative_bond_strategy()) {
+        let diff = DativeBondDelta::diff(DativeBondId(0), &bond, &bond);
+        prop_assert!(diff.is_empty());
+        prop_assert_eq!(apply_dative_bond_diff(bond.clone(), diff), bond);
+    }
+
+    #[test]
+    fn test_dative_bond_ast_difference_to(
+        lhs in dative_bond_strategy(),
+        rhs in dative_bond_strategy(),
+    ) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).canonical_eq(&rhs));
     }

@@ -44,7 +44,10 @@ pub use config::{
     StereoBondOverrides, StereoDefault, UnpairedElectronsDefault,
 };
 pub use constraint::{ConstraintDsl, ConstraintsDsl, MoleculeConstraintDsl, SubPatternAnchorDsl};
-pub use dative::{parse_dative_bond, DativeBondConstraintDsl, DativeBondDsl, DativeBondPredicate};
+pub use dative::{
+    parse_dative_bond, parse_dative_bond_update, DativeBondConstraintDsl, DativeBondDsl,
+    DativeBondPredicate, DativeBondUpdateDsl,
+};
 pub use error::ParseError;
 pub use molecule::{MoleculeDsl, MoleculeMetadata};
 pub use multicenter::{

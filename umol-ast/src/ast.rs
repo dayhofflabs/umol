@@ -57,7 +57,7 @@ pub use constraint::{
     TopicityRelationAst,
 };
 pub use correspondence::MoleculeCorrespondence;
-pub use dative::DativeBondAst;
+pub use dative::{DativeBondAst, DativeBondUpdate};
 pub use delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, ConstraintSpan, DativeBondDelta,
     Delta, Deltas, EntitySpan, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,

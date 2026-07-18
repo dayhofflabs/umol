@@ -25,7 +25,7 @@ use super::constraint::{
     NoncovalentBondConstraintAst, NoncovalentBondConstraintKey, StereoAtomConstraintAst,
     StereoAtomConstraintKey, StereoBondConstraintAst, StereoBondConstraintKey,
 };
-use super::dative::DativeBondAst;
+use super::dative::{DativeBondAst, DativeBondUpdate};
 use super::edit::{
     AromaticSystemFieldChange, AtomFieldChange, BondFieldChange, DativeBondFieldChange,
     MulticenterBondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
@@ -311,6 +311,34 @@ impl DativeBondDelta {
                 new: old,
             },
         }
+    }
+
+    /// Project a dative-bond update into resolved deltas.
+    pub fn for_update(
+        id: DativeBondId,
+        current: &DativeBondAst,
+        update: &DativeBondUpdate,
+    ) -> Vec<Self> {
+        let mut deltas = Vec::new();
+        if let Some(new) = &update.order {
+            if !current.order.canonical_eq(new) {
+                deltas.push(Self::ModifyField {
+                    id,
+                    change: DativeBondFieldChange::Order {
+                        old: current.order.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            if !options_canonical_eq(&old, &new) {
+                deltas.push(Self::ModifyConstraint { id, old, new });
+            }
+        }
+        deltas
     }
 }
 
@@ -1309,6 +1337,10 @@ impl EntityPatch for DativeBondDelta {
         new: Option<DativeBondConstraintAst>,
     ) -> Self {
         DativeBondDelta::ModifyConstraint { id, old, new }
+    }
+
+    fn diff(id: DativeBondId, lhs: &DativeBondAst, rhs: &DativeBondAst) -> Vec<Self> {
+        Self::for_update(id, lhs, &lhs.difference_to(rhs))
     }
 
     diff_field_ops!(DativeBondFieldChange, DativeBondAst, DativeBondConstraintAst, {
@@ -2848,9 +2880,9 @@ mod tests {
     use super::super::value::ValueAst;
     use super::*;
     use crate::ast::{
-        AtomConstraintsAst, BondConstraintsAst, BooleanAst, ElementAst, IsotopeMassAst, RingScope,
-        SpinStateAst, SpinStateUpdate, StereoConfigurationAst, StereoCosetAst, StereoKind,
-        StereoLigandKind, StereogenicityAst,
+        AtomConstraintsAst, BondConstraintsAst, BooleanAst, DativeBondConstraintsAst, ElementAst,
+        IsotopeMassAst, RingScope, SpinStateAst, SpinStateUpdate, StereoConfigurationAst,
+        StereoCosetAst, StereoKind, StereoLigandKind, StereogenicityAst,
     };
 
     #[rstest]
@@ -3095,6 +3127,57 @@ mod tests {
     #[case::absent_constraint_removal(BondAst::from_order(1), BondUpdate { constraints: BondConstraintsAst::from(BondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() })]
     fn test_bond_delta_for_update_identity(#[case] current: BondAst, #[case] update: BondUpdate) {
         assert_eq!(BondDelta::for_update(BondId(0), &current, &update), Vec::new());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fields_and_constraints(
+        DativeBondAst::from_order(1).with_constraint(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
+        DativeBondUpdate {
+            order: Some(ValueAst::Lit(2)),
+            constraints: DativeBondConstraintsAst::from_iter([
+                DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined),
+                DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true)),
+            ]),
+        },
+        vec![
+            DativeBondDelta::ModifyField {
+                id: DativeBondId(7),
+                change: DativeBondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+            },
+            DativeBondDelta::ModifyConstraint {
+                id: DativeBondId(7),
+                old: None,
+                new: Some(DativeBondConstraintAst::Aromatic(BooleanAst::Lit(true))),
+            },
+            DativeBondDelta::ModifyConstraint {
+                id: DativeBondId(7),
+                old: Some(DativeBondConstraintAst::ring_membership(RingScope::Size(6), 1_i64)),
+                new: None,
+            },
+        ],
+    )]
+    fn test_dative_bond_delta_for_update(
+        #[case] current: DativeBondAst,
+        #[case] update: DativeBondUpdate,
+        #[case] expected: Vec<DativeBondDelta>,
+    ) {
+        assert_eq!(DativeBondDelta::for_update(DativeBondId(7), &current, &update), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(DativeBondAst::from_order(1), DativeBondUpdate::default())]
+    #[case::canonical_field(DativeBondAst::from_order(1), DativeBondUpdate { order: Some(ValueAst::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(DativeBondAst::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsAst::from(DativeBondConstraintAst::ring_membership(RingScope::Size(6), ValueAst::Undetermined)), ..Default::default() })]
+    fn test_dative_bond_delta_for_update_identity(
+        #[case] current: DativeBondAst,
+        #[case] update: DativeBondUpdate,
+    ) {
+        assert_eq!(
+            DativeBondDelta::for_update(DativeBondId(0), &current, &update),
+            Vec::new(),
+        );
     }
 
     #[rstest]
