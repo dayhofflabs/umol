@@ -156,7 +156,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::parse::parse_smiles;
+    use crate::ingest::smiles as ingest_smiles;
 
     // RDKit 2026.03.3 `PatternFingerprint` on-bits (width 2048). CCO is acyclic, so
     // its bits come solely from the non-ring templates.
@@ -186,7 +186,7 @@ mod tests {
         &[173,217,389,394,410,429,434,465,469,523,527,550,617,622,663,702,778,797,898,923,963,967,972,1003,1007,1022,1033,1061,1155,1164,1165,1177,1182,1236,1295,1414,1416,1417,1449,1465,1531,1607,1764,1812,1982,2019]
     )]
     fn test_pattern_fingerprinter_fingerprint(#[case] smiles: &str, #[case] expected: &[usize]) {
-        let mol = parse_smiles(smiles).expect("parse");
+        let mol = ingest_smiles(smiles).expect("ingest");
         let fingerprint = PatternFingerprinter::new().fingerprint(&mol).unwrap();
         let on_bits: Vec<usize> = (0..fingerprint.width())
             .filter(|&bit| fingerprint.get(bit))

@@ -29,8 +29,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use regex::Regex;
 use umol_io::smiles::config::SmilesIoConfig;
-use umol_io::smiles::parse_extended_smiles_bytes_with;
-use umol_io::smiles::parser::parse_smiles_bytes_to_table_ir_with;
+use umol_io::smiles::{parse_extended_smiles_bytes_with, Smiles};
 
 #[derive(Parser)]
 #[command(name = "classify_smiles_strings")]
@@ -407,14 +406,9 @@ fn classify_smiles(smiles: &str) -> Result<(Category, ParseResults), Box<dyn Err
 
     let results = ParseResults {
         has_cx_annotations: has_cx_annotations(smiles),
-        basic_opensmiles: parse_smiles_bytes_to_table_ir_with(smiles.as_bytes(), &basic_config)
-            .is_ok(),
+        basic_opensmiles: Smiles::parse_bytes_with(smiles.as_bytes(), &basic_config).is_ok(),
         opensmiles: parse_extended_smiles_bytes_with(smiles.as_bytes(), &opensmiles_config).is_ok(),
-        basic_chemaxon: parse_smiles_bytes_to_table_ir_with(
-            smiles.as_bytes(),
-            &basic_chemaxon_config,
-        )
-        .is_ok(),
+        basic_chemaxon: Smiles::parse_bytes_with(smiles.as_bytes(), &basic_chemaxon_config).is_ok(),
         chemaxon: parse_extended_smiles_bytes_with(smiles.as_bytes(), &chemaxon_config).is_ok(),
     };
 

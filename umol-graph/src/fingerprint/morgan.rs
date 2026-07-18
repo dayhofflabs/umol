@@ -97,7 +97,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::parse::parse_smiles;
+    use crate::ingest::smiles as ingest_smiles;
 
     // RDKit 2026.03.3 `GetMorganFingerprint` sparse identifiers (sorted) per
     // (SMILES, radius). Bit-exact target for the replica.
@@ -123,7 +123,7 @@ mod tests {
         #[case] radius: u32,
         #[case] expected: &[u64],
     ) {
-        let mol = parse_smiles(smiles).expect("parse");
+        let mol = ingest_smiles(smiles).expect("ingest");
         let fingerprint = MorganFeaturizer::new(radius).featurize(&mol);
         assert_eq!(fingerprint.ids(), expected);
     }
@@ -139,7 +139,7 @@ mod tests {
         #[case] radius: u32,
         #[case] expected: &[(u64, u32)],
     ) {
-        let mol = parse_smiles(smiles).expect("parse");
+        let mol = ingest_smiles(smiles).expect("ingest");
         let fingerprint = MorganFeaturizer::new(radius).featurize_counted(&mol);
         assert_eq!(fingerprint.entries(), expected);
     }

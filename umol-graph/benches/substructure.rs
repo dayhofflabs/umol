@@ -16,7 +16,7 @@ use umol_ast::ast::{
     AtomAst, AtomId, BondAst, MoleculeAst, MoleculeParts, SubstructureMatchAlgorithm, ValueAst,
 };
 use umol_chem::element::Element;
-use umol_graph::parse::parse_smiles;
+use umol_graph::ingest::smiles as ingest_smiles;
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
@@ -69,7 +69,7 @@ fn load_corpus() -> Vec<MoleculeAst> {
         };
         if let Some(smiles) = content.lines().nth(1) {
             if !smiles.is_empty() {
-                if let Ok(molecule) = parse_smiles(smiles) {
+                if let Ok(molecule) = ingest_smiles(smiles) {
                     molecules.push(molecule);
                 }
             }

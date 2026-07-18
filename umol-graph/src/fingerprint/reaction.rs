@@ -68,7 +68,7 @@ mod tests {
 
     use super::*;
     use crate::fingerprint::{Featurizer, MorganFeaturizer};
-    use crate::parse::parse_smiles;
+    use crate::ingest::smiles;
 
     /// Morgan radius-0 oxygen invariant of ethanol — present in `CCO`, absent in `CC`.
     const ETHANOL_OXYGEN: u64 = 864662311;
@@ -76,7 +76,7 @@ mod tests {
     // Identity reaction (no deltas): every feature count cancels, so the difference is empty.
     #[rstest]
     fn test_featurize_reaction_difference_identity() {
-        let reaction = ReactionAst::new(parse_smiles("CCO").unwrap(), Deltas::new());
+        let reaction = ReactionAst::new(smiles("CCO").unwrap(), Deltas::new());
         let featurizer = Featurizer::Morgan(MorganFeaturizer::new(1));
         let fingerprint =
             featurize_reaction(&reaction, &featurizer, ReactionCombinator::Difference).unwrap();
@@ -90,7 +90,7 @@ mod tests {
     // products(0) − reactants(1) = −1.
     #[rstest]
     fn test_featurize_reaction_difference() {
-        let lhs = parse_smiles("CCO").unwrap();
+        let lhs = smiles("CCO").unwrap();
         let oxygen = lhs.atom(AtomId(2)).ast.clone();
         let bond = lhs.bond(BondId(1)).ast.clone();
         let reaction = ReactionAst::new(
@@ -122,9 +122,9 @@ mod tests {
     // exactly the molecule's features once as Reactant and once as Product.
     #[rstest]
     fn test_featurize_reaction_disjoint_union() {
-        let reaction = ReactionAst::new(parse_smiles("CCO").unwrap(), Deltas::new());
+        let reaction = ReactionAst::new(smiles("CCO").unwrap(), Deltas::new());
         let featurizer = Featurizer::Morgan(MorganFeaturizer::new(1));
-        let single = featurizer.featurize(&parse_smiles("CCO").unwrap()).unwrap();
+        let single = featurizer.featurize(&smiles("CCO").unwrap()).unwrap();
         let fingerprint =
             featurize_reaction(&reaction, &featurizer, ReactionCombinator::DisjointUnion).unwrap();
         match fingerprint {

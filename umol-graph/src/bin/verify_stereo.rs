@@ -18,10 +18,10 @@ use std::io::{stdin, Read};
 use std::path::Path;
 use std::{env, fs, process};
 
-use umol_ast::ast::{FromAst, MoleculeAst};
+use umol_ast::ast::{FromAst, MoleculeAst, TryIntoAst};
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_io::ctfile::parse_mol_bytes_to_ast;
-use umol_io::smiles::parse_smiles_to_ast;
+use umol_io::smiles::Smiles;
 
 /// `(category, name, smiles)` — the stereo conformance corpus. `category` is the
 /// `data/<category>/` directory; `name` is the `<name>.edn` stem.
@@ -165,7 +165,11 @@ fn lower(ast: &MoleculeAst) -> String {
 
 /// Parse the SMILES to an AST, then lower the AST to DSL.
 fn parse_and_lower(smiles: &str) -> Result<String, String> {
-    let ast = parse_smiles_to_ast(smiles.trim()).map_err(|e| e.to_string())?;
+    let smiles = Smiles::parse(smiles.trim()).map_err(|error| error.to_string())?;
+    let ast: MoleculeAst = smiles
+        .as_table_ir()
+        .try_into_ast(&())
+        .map_err(|error| error.to_string())?;
     Ok(lower(&ast))
 }
 

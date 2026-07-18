@@ -21,8 +21,7 @@ use rstest::*;
 use serde::Serialize;
 use umol_io::smiles::config::SmilesIoConfig;
 use umol_io::smiles::error::ParseError;
-use umol_io::smiles::parse_extended_smiles_bytes_with;
-use umol_io::smiles::parser::{parse_smiles_bytes_to_table_ir_with, parse_smiles_to_table_ir};
+use umol_io::smiles::{parse_extended_smiles_bytes_with, Smiles};
 use umol_io::table_ir::{ExtendedMolecule, Molecule};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -181,10 +180,10 @@ fn has_cx_extensions(smiles: &str) -> bool {
 }
 
 fn parse_with_strict(smiles: &str) -> ParseResult {
-    match parse_smiles_to_table_ir(smiles) {
-        Ok(mol) => ParseResult {
+    match Smiles::parse(smiles) {
+        Ok(smiles) => ParseResult {
             success: true,
-            summary: Some(MoleculeSummary::from(&mol)),
+            summary: Some(MoleculeSummary::from(smiles.as_table_ir())),
             error: None,
         },
         Err(e) => ParseResult {
@@ -219,10 +218,10 @@ fn parse_with_opensmiles(smiles: &str) -> ParseResult {
 
 fn parse_with_basic_chemaxon(smiles: &str) -> ParseResult {
     let config = SmilesIoConfig::basic_chemaxon();
-    match parse_smiles_bytes_to_table_ir_with(smiles.as_bytes(), &config) {
-        Ok(mol) => ParseResult {
+    match Smiles::parse_bytes_with(smiles.as_bytes(), &config) {
+        Ok(smiles) => ParseResult {
             success: true,
-            summary: Some(MoleculeSummary::from(&mol)),
+            summary: Some(MoleculeSummary::from(smiles.as_table_ir())),
             error: None,
         },
         Err(e) => ParseResult {

@@ -22,7 +22,7 @@ use umol_graph::fingerprint::{
     ReactionCombinator, SubstructureFeaturizer, WlFeaturizer,
 };
 use umol_graph::hash::RefinementXxh3Scheme;
-use umol_graph::parse::parse_smiles;
+use umol_graph::ingest::smiles as ingest_smiles;
 use umol_graph_core::RefinementRounds;
 use walkdir::WalkDir;
 
@@ -54,7 +54,7 @@ fn load_corpus() -> Vec<MoleculeAst> {
         };
         if let Some(smiles) = content.lines().nth(1) {
             if !smiles.is_empty() {
-                if let Ok(molecule) = parse_smiles(smiles) {
+                if let Ok(molecule) = ingest_smiles(smiles) {
                     molecules.push(molecule);
                 }
             }
@@ -81,7 +81,7 @@ fn ethanol_deoxygenation(molecule: &MoleculeAst) -> ReactionAst {
 }
 
 fn fixture_benchmark(c: &mut Criterion) {
-    let molecule = parse_smiles("CCO").unwrap();
+    let molecule = ingest_smiles("CCO").unwrap();
     let reaction = ethanol_deoxygenation(&molecule);
     let wl = WlFeaturizer {
         rounds: RefinementRounds::Fixed(WL_ROUNDS),
