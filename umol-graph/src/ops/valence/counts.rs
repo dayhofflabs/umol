@@ -25,8 +25,6 @@ pub enum CountsError {
     InvalidElement,
     #[error("aromatic valence unspecified (#a+): no valence table entry")]
     UndeterminedAromaticValence,
-    #[error("undetermined element")]
-    UndeterminedElement,
 }
 
 /// Atom that no valence-table state admits.
@@ -92,23 +90,28 @@ impl<'a> CountsValence<'a> {
     }
 
     /// Construct the complete edit plan without mutating `ast`.
-    pub fn plan(&self, ast: &MoleculeAst) -> Result<Vec<Edit>, CountsError> {
+    ///
+    /// A non-literal element makes the whole plan underdetermined and yields
+    /// no edits.
+    pub fn plan(&self, ast: &MoleculeAst) -> Solution<Vec<Edit>, CountsError> {
         for atom in ast.atoms().iter() {
             if atom.element().as_lit().is_none() {
-                return Err(CountsError::UndeterminedElement);
+                return Solution::Underdetermined(Vec::new());
             }
         }
 
         let mut edits = Vec::new();
         for id in ast.atoms().ids() {
-            let Some(selected) = self.resolve_molecule_atom(ast, id)? else {
-                continue;
+            let selected = match self.resolve_molecule_atom(ast, id) {
+                Ok(Some(selected)) => selected,
+                Ok(None) => continue,
+                Err(contradiction) => return Solution::Contradictory(contradiction),
             };
             let current = ast.atom(id).ast;
             let update = current.difference_to(&selected);
             edits.extend(Edit::for_atom_update(AtomHandle::Id(id), current, &update));
         }
-        Ok(edits)
+        Solution::Determined(edits)
     }
 
     /// Plan and atomically apply counts-valence resolution.
@@ -117,8 +120,11 @@ impl<'a> CountsValence<'a> {
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), CountsError>, TransactionError> {
         let edits = match self.plan(ast) {
-            Ok(edits) => edits,
-            Err(contradiction) => return Ok(Solution::Contradictory(contradiction)),
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(contradiction) => {
+                return Ok(Solution::Contradictory(contradiction));
+            }
         };
         let mut editor = ast.edit();
         editor.transact(edits)?;
@@ -432,7 +438,7 @@ mod tests {
         let molecule = mol_dsl!(r#"{:atoms ["C#c0"]}"#);
         assert_eq!(
             resolver.plan(&molecule),
-            Ok(vec![
+            Solution::Determined(vec![
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(0)),
                     change: AtomFieldChange::IsotopeMass {
@@ -484,11 +490,22 @@ mod tests {
         };
         let resolver = CountsValence::new(&model);
         let molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#a!"]}"#);
-        assert_eq!(resolver.plan(&molecule), Ok(Vec::new()));
+        assert_eq!(resolver.plan(&molecule), Solution::Determined(Vec::new()));
     }
 
     #[rstest]
-    #[case::undetermined_element(mol_dsl!(r#"{:atoms ["{C,N}#c0"]}"#), CountsError::UndeterminedElement)]
+    #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
+    fn test_counts_valence_plan_partial(#[case] molecule: MoleculeAst) {
+        let model = CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        assert_eq!(
+            CountsValence::new(&model).plan(&molecule),
+            Solution::Underdetermined(Vec::new())
+        );
+    }
+
+    #[rstest]
     #[case::later_atom_contradiction(mol_dsl!(r#"{:atoms ["C#c0" "Fe#c0#h0#a+"]}"#), CountsError::UndeterminedAromaticValence)]
     fn test_counts_valence_plan_error(
         #[case] molecule: MoleculeAst,
@@ -498,7 +515,7 @@ mod tests {
             table: Cow::Borrowed(ValenceTable::default_table()),
         };
         let resolver = CountsValence::new(&model);
-        assert_eq!(resolver.plan(&molecule), Err(expected));
+        assert_eq!(resolver.plan(&molecule), Solution::Contradictory(expected));
     }
 
     #[rstest]
@@ -519,6 +536,20 @@ mod tests {
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule.atom(AtomId(atom_id)).ast.to_string(), expected);
+    }
+
+    #[rstest]
+    #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
+    fn test_counts_valence_resolve_partial(#[case] mut molecule: MoleculeAst) {
+        let model = CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        let original = molecule.clone();
+        assert_eq!(
+            CountsValence::new(&model).resolve(&mut molecule),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]

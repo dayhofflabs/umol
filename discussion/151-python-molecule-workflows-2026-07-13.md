@@ -393,6 +393,11 @@ conversion.
 The current resolver edits are direct projections of their computed candidates:
 
 - The counts and atom-typing valence planners inspect all atoms before mutation.
+  If any element is non-literal, planning returns
+  `Solution::Underdetermined(Vec::new())`: the baseline is molecule-wide and
+  emits no edits. No later resolver stage runs. Resolving independently
+  plannable atoms may be added later as an edit-carrying underdetermined outcome
+  without changing the planner return type.
   For every selected candidate they emit `ModifyAtomField` changes for each
   resolver-owned field that changes, including implicit hydrogens, lone pairs,
   and spin, and keyed `ModifyAtomConstraint` changes for valence,
@@ -869,21 +874,25 @@ covered by cross-family properties.
 - **S1a — counts-valence edit planner**
   (`umol-graph/src/ops/valence/counts.rs`): separate read-only candidate
   calculation from application. Add the public read-only
-  `CountsValence::plan(&MoleculeAst) -> Result<Vec<Edit>, CountsError>`; the edit
-  vector is the plan, with no plan wrapper or planner trait. Planning inspects
-  every atom before mutation. For each applicable atom it first computes the
-  complete selected `AtomAst`, derives an `AtomUpdate` with
+  `CountsValence::plan(&MoleculeAst) -> Solution<Vec<Edit>, CountsError>`; the
+  edit vector is the plan, with no plan wrapper or planner trait. Planning
+  inspects every atom before candidate selection. A non-literal element returns
+  `Underdetermined(Vec::new())`; a chemistry contradiction returns
+  `Contradictory`, and neither outcome mutates the molecule. For each applicable
+  atom in a determined plan it first computes the complete selected `AtomAst`,
+  derives an `AtomUpdate` with
   `current.difference_to(&selected)`, and projects that update through
   `Edit::for_atom_update`, thereby recording exact current `old` payloads and
   omitting canonical no-ops. The existing single-atom resolver remains a local
   calculate-then-assign operation.
 
   The public molecule resolver is the plan-and-apply convenience API. It maps a
-  planning contradiction to `Solution::Contradictory`, otherwise creates a
-  `MoleculeEditor` from the unchanged source, applies the complete edit vector
-  with the existing checked `MoleculeEditor::transact`, and publishes
-  `editor.build()` only after that batch succeeds. Its application error remains
-  separate from `CountsError`:
+  planning outcome directly: underdetermination returns without constructing an
+  editor, contradiction remains `Solution::Contradictory`, and only a determined
+  plan creates a `MoleculeEditor`, applies the complete edit vector with the
+  existing checked `MoleculeEditor::transact`, and publishes `editor.build()`
+  after that batch succeeds. Its application error remains separate from
+  `CountsError`:
 
   ```rust
   pub fn resolve(
@@ -900,20 +909,21 @@ covered by cross-family properties.
   **Public planning API plus atomic resolver migration (green).** `[dep: S0k]`
 - **S1b — atom-typing edit planner**
   (`umol-graph/src/ops/valence/atom_typing.rs`): add the public read-only
-  `AtomTypingValence::plan(&MoleculeAst) -> Result<Vec<Edit>, AtomTypingError>`
-  with the same plan representation and application boundary as counts valence.
-  Plan construction first requires a concrete element for every atom, reporting
-  the offending `AtomId`. For each eligible atom, clone its current `AtomAst`
-  once, extend only that clone with topology-derived
+  `AtomTypingValence::plan(&MoleculeAst) -> Solution<Vec<Edit>,
+  AtomTypingError>` with the same plan representation and application boundary
+  as counts valence. Plan construction first requires a concrete element for
+  every atom; a non-literal element returns `Underdetermined(Vec::new())`
+  without selecting any candidates. For each eligible atom in a determined
+  plan, clone its current `AtomAst` once, extend only that clone with topology-derived
   `AtomView::derive_constraints(false)`, select the preferred compatible
   registry entry according to `compare_valence_preference`, and narrow the clone
   against the borrowed selected entry. Derive an `AtomUpdate` with
   `current.difference_to(&selected)` and project it with
   `Edit::for_atom_update`; the source molecule is never enriched in place.
 
-  The public resolver maps planning failure to `Solution::Contradictory`, applies
-  the complete edit vector through one checked transaction, and publishes only
-  after successful application:
+  The public resolver returns an underdetermined or contradictory planning
+  outcome without mutation. It applies only a determined edit vector through
+  one checked transaction and publishes after successful application:
 
   ```rust
   pub fn resolve(
@@ -932,24 +942,26 @@ covered by cross-family properties.
   `derive_constraints(true)`, where absent overlays are definite negatives,
   while planning uses the pre-perception `false` form. Tests cover the exact
   plan, derived constraints, selected field values, empty-plan identity,
-  concrete-element and no-match errors, successful transactional
+  non-literal-element underdetermination, no-match errors, successful transactional
   materialization, unchanged input after a late contradiction, and exact
   preservation of unrelated constraints. **Public planning API plus atomic
   resolver migration (green).** `[dep: S0k]`
 - **S1c — valence resolver dispatch**
   (`umol-graph/src/ops/resolve/valence.rs`): add the public dispatcher
-  `ValenceResolver::plan(&MoleculeAst) -> Result<Vec<Edit>,
+  `ValenceResolver::plan(&MoleculeAst) -> Solution<Vec<Edit>,
   ValenceContradiction>`, mapping the selected counts or atom-typing planner's
-  chemistry error into the existing shared contradiction type. The public
-  `resolve` method dispatches through `plan` rather than through the engines'
-  plan-and-apply convenience methods, applies that edit vector with one checked
-  `MoleculeEditor::transact`, and publishes only after success. Planning
-  contradiction remains `Solution::Contradictory`; transaction failure remains
-  `ValenceError::Transaction`. This makes the valence stage itself the single
-  atomic application boundary while retaining the engine-specific public
-  convenience APIs. Shared exact-plan, successful-resolution, contradiction,
-  and unchanged-input tests cover both model variants and ensure that a failure
-  after an earlier plannable atom never exposes a partially resolved prefix.
+  contradiction into the existing shared type while preserving determined and
+  underdetermined outcomes. The public `resolve` method dispatches through
+  `plan` rather than through the engines' plan-and-apply convenience methods.
+  It returns immediately on underdetermination, applies only a determined edit
+  vector with one checked `MoleculeEditor::transact`, and publishes only after
+  success. Planning contradiction remains `Solution::Contradictory`;
+  transaction failure remains `ValenceError::Transaction`. The composite
+  resolver likewise stops the chain at valence underdetermination, before
+  aromaticity and stereo. Shared exact-plan, partial, successful-resolution,
+  contradiction, and unchanged-input tests cover both model variants and ensure
+  that neither a later open element nor a later contradiction exposes a
+  partially resolved prefix.
   **Public dispatch planner plus atomic stage application (green).** `[dep: S1a,
   S1b]`
 - **S1d — aromaticity edit planner**

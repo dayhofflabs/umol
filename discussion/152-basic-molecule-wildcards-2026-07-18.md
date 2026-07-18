@@ -110,7 +110,7 @@ S0 ends with the `umol-io` unit suite green.
   combined bracket-field forms. Wildcards carry `element: None` and
   `aromatic: None`; all atom and bond spans are asserted structurally.
 
-- **S1b — format, reaction, and raise integration**
+- **S1b — format, reaction, and raise integration** **Done**
   (`umol-io/src/smiles.rs`, the SMILES reaction parser tests, and TableIR raise
   tests): verify that the ordinary `Smiles` wrapper accepts wildcard input,
   that reaction SMILES accepts wildcards on reactant, agent, and product sides,
@@ -121,6 +121,17 @@ S0 ends with the `umol-io` unit suite green.
 
   Rust table tests cover each boundary and exact error/result variants.
   **Additive integration coverage (green).** `[dep: S0b, S1a]`
+
+  **Implemented verification:** the ordinary `Smiles` wrapper returns exact
+  wildcard TableIR; a single exact `*>*>*` reaction assertion covers reactant,
+  agent, and product molecules, including side-local spans and format
+  metadata; and the wrapper-to-TableIR-to-AST path yields an undetermined
+  element with the expected IO ground defaults. Both valence planners classify
+  a non-literal element as `Underdetermined` with an empty edit plan; direct
+  valence resolution and the composite resolver return without mutation or
+  running later stages. Consequently, `Smiles::ingest` and the text convenience
+  API report their exact `Underdetermined` variants without an ingestion-layer
+  precheck.
 
 - **S1c — wildcard property tests**
   (`umol-io/tests/smiles_property.rs`): add `*` to the existing SMILES-biased

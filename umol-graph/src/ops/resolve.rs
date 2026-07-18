@@ -120,8 +120,9 @@ impl<'a> Resolver<'a> {
         let mut journal = Transaction::default();
 
         let edits = match self.valence.plan(ast) {
-            Ok(edits) => edits,
-            Err(contradiction) => {
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(contradiction) => {
                 let contradiction = ResolverContradiction::Valence(contradiction);
                 if let Err(rollback) = journal.rollback(&mut editor) {
                     return Err(ResolverError::RollbackFailed {
@@ -419,6 +420,28 @@ mod tests {
             Ok(Solution::Underdetermined(()))
         );
         assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    #[case::counts(ValenceModel::Counts(CountsModel {
+        table: Cow::Borrowed(ValenceTable::default_table()),
+    }))]
+    #[case::atom_typing(ValenceModel::AtomTyping(AtomTypingModel {
+        registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
+    }))]
+    fn test_resolver_resolve_partial(#[case] valence: ValenceModel) {
+        let model = ChemistryModel {
+            valence,
+            ..ChemistryModel::default()
+        };
+        let mut molecule = mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#);
+        let original = molecule.clone();
+
+        assert_eq!(
+            Resolver::new(&model).resolve(&mut molecule),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]

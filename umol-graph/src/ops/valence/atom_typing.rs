@@ -18,8 +18,6 @@ pub struct AtomTypingValence<'a> {
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AtomTypingError {
-    #[error("undetermined element at {atom_id:?}")]
-    UndeterminedElement { atom_id: AtomId },
     #[error("no atom-typing match for {atom_id:?} (element {element}, charge {charge:?})")]
     NoMatch {
         atom_id: AtomId,
@@ -42,23 +40,28 @@ impl<'a> AtomTypingValence<'a> {
     }
 
     /// Construct the complete edit plan without mutating `ast`.
-    pub fn plan(&self, ast: &MoleculeAst) -> Result<Vec<Edit>, AtomTypingError> {
+    ///
+    /// A non-literal element makes the whole plan underdetermined and yields
+    /// no edits.
+    pub fn plan(&self, ast: &MoleculeAst) -> Solution<Vec<Edit>, AtomTypingError> {
         for atom in ast.atoms().iter() {
             if atom.element().as_lit().is_none() {
-                return Err(AtomTypingError::UndeterminedElement { atom_id: atom.id });
+                return Solution::Underdetermined(Vec::new());
             }
         }
 
         let mut edits = Vec::new();
         for id in ast.atoms().ids() {
-            let Some(selected) = self.resolve_molecule_atom(ast, id)? else {
-                continue;
+            let selected = match self.resolve_molecule_atom(ast, id) {
+                Ok(Some(selected)) => selected,
+                Ok(None) => continue,
+                Err(contradiction) => return Solution::Contradictory(contradiction),
             };
             let current = ast.atom(id).ast;
             let update = current.difference_to(&selected);
             edits.extend(Edit::for_atom_update(AtomHandle::Id(id), current, &update));
         }
-        Ok(edits)
+        Solution::Determined(edits)
     }
 
     /// Plan and atomically apply atom-typing valence resolution.
@@ -67,8 +70,11 @@ impl<'a> AtomTypingValence<'a> {
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), AtomTypingError>, TransactionError> {
         let edits = match self.plan(ast) {
-            Ok(edits) => edits,
-            Err(contradiction) => return Ok(Solution::Contradictory(contradiction)),
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(contradiction) => {
+                return Ok(Solution::Contradictory(contradiction));
+            }
         };
         let mut editor = ast.edit();
         editor.transact(edits)?;
@@ -87,7 +93,7 @@ impl<'a> AtomTypingValence<'a> {
             return Ok(None);
         }
         let Some(element) = atom.element().as_lit() else {
-            return Err(AtomTypingError::UndeterminedElement { atom_id: id });
+            return Ok(None);
         };
         let charge = atom.charge().as_lit().map(|n| n as i8);
         let mut selected = atom.ast.clone();
@@ -168,7 +174,7 @@ mod tests {
         let molecule = mol_dsl!(r#"{:atoms ["C#c0#D1"]}"#);
         assert_eq!(
             resolver.plan(&molecule),
-            Ok(vec![
+            Solution::Determined(vec![
                 Edit::ModifyAtomField {
                     id: AtomHandle::Id(AtomId(0)),
                     change: AtomFieldChange::ImplicitHydrogens {
@@ -193,15 +199,23 @@ mod tests {
         let model = AtomTypingModel { registry };
         assert_eq!(
             AtomTypingValence::new(&model).plan(&molecule),
-            Ok(Vec::new())
+            Solution::Determined(Vec::new())
         );
     }
 
     #[rstest]
-    #[case::undetermined_element(
-        mol_dsl!(r#"{:atoms ["{C,N}#c0"]}"#),
-        AtomTypingError::UndeterminedElement { atom_id: AtomId(0) }
-    )]
+    #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
+    fn test_atom_typing_valence_plan_partial(
+        atom_typing_model: AtomTypingModel,
+        #[case] molecule: MoleculeAst,
+    ) {
+        assert_eq!(
+            AtomTypingValence::new(&atom_typing_model).plan(&molecule),
+            Solution::Underdetermined(Vec::new())
+        );
+    }
+
+    #[rstest]
     #[case::no_match(
         mol_dsl!(r#"{:atoms ["C#c0#h3"]}"#),
         AtomTypingError::NoMatch {
@@ -217,7 +231,7 @@ mod tests {
     ) {
         assert_eq!(
             AtomTypingValence::new(&atom_typing_model).plan(&molecule),
-            Err(expected)
+            Solution::Contradictory(expected)
         );
     }
 
@@ -230,6 +244,20 @@ mod tests {
             Ok(Solution::Determined(()))
         );
         assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#c0#h4#v0#D1"]}"#));
+    }
+
+    #[rstest]
+    #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
+    fn test_atom_typing_valence_resolve_partial(
+        atom_typing_model: AtomTypingModel,
+        #[case] mut molecule: MoleculeAst,
+    ) {
+        let original = molecule.clone();
+        assert_eq!(
+            AtomTypingValence::new(&atom_typing_model).resolve(&mut molecule),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]

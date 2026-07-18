@@ -37,10 +37,17 @@ impl<'a> ValenceResolver<'a> {
     }
 
     /// Construct the selected valence model's complete edit plan.
-    pub fn plan(&self, ast: &MoleculeAst) -> Result<Vec<Edit>, ValenceContradiction> {
+    ///
+    /// A non-literal element makes the whole plan underdetermined and yields
+    /// no edits.
+    pub fn plan(&self, ast: &MoleculeAst) -> Solution<Vec<Edit>, ValenceContradiction> {
         match self {
-            Self::AtomTyping(resolver) => resolver.plan(ast).map_err(ValenceContradiction::from),
-            Self::Counts(resolver) => resolver.plan(ast).map_err(ValenceContradiction::from),
+            Self::AtomTyping(resolver) => resolver
+                .plan(ast)
+                .map_contradiction(ValenceContradiction::from),
+            Self::Counts(resolver) => resolver
+                .plan(ast)
+                .map_contradiction(ValenceContradiction::from),
         }
     }
 
@@ -50,8 +57,11 @@ impl<'a> ValenceResolver<'a> {
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), ValenceContradiction>, ValenceError> {
         let edits = match self.plan(ast) {
-            Ok(edits) => edits,
-            Err(contradiction) => return Ok(Solution::Contradictory(contradiction)),
+            Solution::Determined(edits) => edits,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(contradiction) => {
+                return Ok(Solution::Contradictory(contradiction));
+            }
         };
         let mut editor = ast.edit();
         editor.transact(edits)?;
@@ -86,13 +96,28 @@ mod tests {
         let molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s#v0#a!"]}"#);
         assert_eq!(
             ValenceResolver::new(&model).plan(&molecule),
-            Ok(vec![Edit::ModifyAtomField {
+            Solution::Determined(vec![Edit::ModifyAtomField {
                 id: AtomHandle::Id(AtomId(0)),
                 change: AtomFieldChange::IsotopeMass {
                     old: IsotopeMassAst::Undetermined,
                     new: IsotopeMassAst::Natural,
                 },
             }])
+        );
+    }
+
+    #[rstest]
+    #[case::counts(ValenceModel::Counts(CountsModel {
+        table: Cow::Borrowed(ValenceTable::default_table()),
+    }))]
+    #[case::atom_typing(ValenceModel::AtomTyping(AtomTypingModel {
+        registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
+    }))]
+    fn test_valence_resolver_plan_partial(#[case] model: ValenceModel) {
+        let molecule = mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#);
+        assert_eq!(
+            ValenceResolver::new(&model).plan(&molecule),
+            Solution::Underdetermined(Vec::new())
         );
     }
 
@@ -120,7 +145,10 @@ mod tests {
         #[case] molecule: MoleculeAst,
         #[case] expected: ValenceContradiction,
     ) {
-        assert_eq!(ValenceResolver::new(&model).plan(&molecule), Err(expected));
+        assert_eq!(
+            ValenceResolver::new(&model).plan(&molecule),
+            Solution::Contradictory(expected)
+        );
     }
 
     #[rstest]
@@ -142,6 +170,23 @@ mod tests {
             molecule,
             mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#a!"]}"#)
         );
+    }
+
+    #[rstest]
+    #[case::counts(ValenceModel::Counts(CountsModel {
+        table: Cow::Borrowed(ValenceTable::default_table()),
+    }))]
+    #[case::atom_typing(ValenceModel::AtomTyping(AtomTypingModel {
+        registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
+    }))]
+    fn test_valence_resolver_resolve_partial(#[case] model: ValenceModel) {
+        let mut molecule = mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#);
+        let original = molecule.clone();
+        assert_eq!(
+            ValenceResolver::new(&model).resolve(&mut molecule),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(molecule, original);
     }
 
     #[rstest]

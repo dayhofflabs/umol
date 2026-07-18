@@ -243,6 +243,20 @@ mod tests {
     }
 
     #[rstest]
+    fn test_smiles_ingest_wildcard_underdetermined() {
+        let parsed = Smiles::parse("*").unwrap();
+
+        assert_eq!(
+            parsed.ingest(&ChemistryModel::default()),
+            Err(MoleculeIngestError::Underdetermined(ResolveUnderdetermined))
+        );
+        assert_eq!(
+            smiles("*"),
+            Err(SmilesInputError::Underdetermined(ResolveUnderdetermined))
+        );
+    }
+
+    #[rstest]
     fn test_smiles_bytes_with() {
         let expected = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]}"#);
 

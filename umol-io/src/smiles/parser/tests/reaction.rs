@@ -1,13 +1,16 @@
 use std::collections::BTreeMap;
 
 use bstr::ByteSlice;
+use indexmap::IndexMap;
 use map_macro::btree_map;
 use pretty_assertions::assert_eq;
 use rstest::*;
 
 use super::super::*;
 use super::utils::{build_extended_from_graph, build_from_graph};
-use crate::table_ir::{ExtendedReaction, Reaction};
+use crate::table_ir::{
+    Atom, ChiralityFrame, ExtendedReaction, Molecule, Reaction, SourceFormat, Span,
+};
 
 fn reaction_from_sides(
     reactants: &'static str,
@@ -52,6 +55,52 @@ fn test_parse_reaction_smiles(#[case] input: &[u8], #[case] expected: Reaction) 
     assert_eq!(rxn.reactants.atoms.len(), expected.reactants.atoms.len());
     assert_eq!(rxn.products.atoms.len(), expected.products.atoms.len());
     assert_eq!(rxn.agents.atoms.len(), expected.agents.atoms.len());
+}
+
+#[rstest]
+fn test_parse_reaction_smiles_bytes_wildcards() {
+    assert_eq!(
+        parse_reaction_smiles_bytes(b"*>*>*"),
+        Ok(Reaction {
+            reactants: Molecule {
+                atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))],
+                bonds: Vec::new(),
+                positions: None,
+                multicenter_bonds: Vec::new(),
+                configuration_scope: None,
+                chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+                comments: Vec::new(),
+                properties: IndexMap::new(),
+                source_format: SourceFormat::SMILES,
+            },
+            products: Molecule {
+                atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))],
+                bonds: Vec::new(),
+                positions: None,
+                multicenter_bonds: Vec::new(),
+                configuration_scope: None,
+                chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+                comments: Vec::new(),
+                properties: IndexMap::new(),
+                source_format: SourceFormat::SMILES,
+            },
+            agents: Molecule {
+                atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))],
+                bonds: Vec::new(),
+                positions: None,
+                multicenter_bonds: Vec::new(),
+                configuration_scope: None,
+                chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+                comments: Vec::new(),
+                properties: IndexMap::new(),
+                source_format: SourceFormat::SMILES,
+            },
+            atom_mapping: BTreeMap::new(),
+            comments: Vec::new(),
+            properties: IndexMap::new(),
+            source_format: SourceFormat::SMILES,
+        })
+    );
 }
 
 #[rstest]

@@ -94,6 +94,20 @@ mod tests {
             source_format: SourceFormat::SMILES,
         }
     )]
+    #[case::wildcard(
+        "*",
+        Molecule {
+            atoms: vec![Atom::wildcard_with_span(Span::bytes(0, 1))],
+            bonds: Vec::new(),
+            positions: None,
+            multicenter_bonds: Vec::new(),
+            configuration_scope: None,
+            chirality_frame: Some(ChiralityFrame::FirstNeighborToward),
+            comments: Vec::new(),
+            properties: IndexMap::new(),
+            source_format: SourceFormat::SMILES,
+        }
+    )]
     #[case::empty(
         "",
         Molecule {

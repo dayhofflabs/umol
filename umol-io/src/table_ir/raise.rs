@@ -657,6 +657,28 @@ mod tests {
     }
 
     #[rstest]
+    fn test_table_molecule_try_into_ast_smiles_wildcard() {
+        let smiles = Smiles::parse("*").unwrap();
+        let ast: MoleculeAst = smiles.as_table_ir().try_into_ast(&()).unwrap();
+
+        assert_eq!(
+            ast.atom(AtomId(0)).ast,
+            &AtomAst {
+                element: ElementAst::Undetermined,
+                isotope_mass: IsotopeMassAst::Natural,
+                charge: ValueAst::Lit(0),
+                implicit_hydrogens: ValueAst::Undetermined,
+                lone_pairs: ValueAst::Undetermined,
+                spin: SpinStateAst {
+                    unpaired: ValueAst::Lit(0),
+                    multiplicity: ValueAst::Undetermined,
+                },
+                constraints: AtomConstraintsAst::new(),
+            }
+        );
+    }
+
+    #[rstest]
     #[case::cfclbri_clockwise(parse_smiles_bytes_to_table_ir(b"Br[C@@](F)(Cl)I").unwrap(), 1, Some(StereoCosetAst::Lit(1)))]
     #[case::cfclbri_counterclockwise(parse_smiles_bytes_to_table_ir(b"Br[C@](F)(Cl)I").unwrap(), 1, Some(StereoCosetAst::Lit(0)))]
     #[case::cfclbri_fluorine_first(parse_smiles_bytes_to_table_ir(b"F[C@](Cl)(Br)I").unwrap(), 1, Some(StereoCosetAst::Lit(0)))]
