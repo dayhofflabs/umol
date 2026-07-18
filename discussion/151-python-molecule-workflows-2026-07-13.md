@@ -857,13 +857,36 @@ covered by cross-family properties.
 
 - **S1a — counts-valence edit planner**
   (`umol-graph/src/ops/valence/counts.rs`): separate read-only candidate
-  calculation from application. Inspect every atom before mutation, return the
-  complete selected candidate outcome, express it as an `AtomUpdate`, and use
-  `Edit::for_atom_update` to emit exact field and keyed-constraint edits with
-  current `old` payloads. The public counts resolver applies one transaction
-  batch. Tests assert the complete edit sequence, successful materialization,
-  no-op omission, and unchanged input on contradiction. **Additive internal
-  refactor (green).** `[dep: S0k]`
+  calculation from application. Add the public read-only
+  `CountsValence::plan(&MoleculeAst) -> Result<Vec<Edit>, CountsError>`; the edit
+  vector is the plan, with no plan wrapper or planner trait. Planning inspects
+  every atom before mutation. For each applicable atom it first computes the
+  complete selected `AtomAst`, derives an `AtomUpdate` with
+  `current.difference_to(&selected)`, and projects that update through
+  `Edit::for_atom_update`, thereby recording exact current `old` payloads and
+  omitting canonical no-ops. The existing single-atom resolver remains a local
+  calculate-then-assign operation.
+
+  The public molecule resolver is the plan-and-apply convenience API. It maps a
+  planning contradiction to `Solution::Contradictory`, otherwise creates a
+  `MoleculeEditor` from the unchanged source, applies the complete edit vector
+  with the existing checked `MoleculeEditor::transact`, and publishes
+  `editor.build()` only after that batch succeeds. Its application error remains
+  separate from `CountsError`:
+
+  ```rust
+  pub fn resolve(
+      &self,
+      ast: &mut MoleculeAst,
+  ) -> Result<Solution<(), CountsError>, TransactionError>;
+  ```
+
+  There is no additional `apply`, `rollback`, or "successful plan" helper:
+  transaction application and rollback use the existing `MoleculeEditor` and
+  `Transaction` APIs directly. Tests assert the complete public plan, successful
+  materialization, empty-plan no-op omission, and unchanged input on a
+  contradiction discovered after an earlier atom was successfully planned.
+  **Public planning API plus atomic resolver migration (green).** `[dep: S0k]`
 - **S1b — atom-typing edit planner**
   (`umol-graph/src/ops/valence/atom_typing.rs`): compute topology-derived
   constraints and registry candidates without enriching atoms in place; select

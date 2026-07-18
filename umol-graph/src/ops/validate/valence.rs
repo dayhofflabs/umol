@@ -1,6 +1,6 @@
 //! Tier-3 valence conformance validator: the read-only twin of `ValenceResolver`.
-//! Dispatches on `ValenceModel` and folds each engine's `conforms_atom` over the
-//! atoms, surfacing the first non-conforming atom as `Contradictory`.
+//! Dispatches on `ValenceModel` and folds each engine's per-atom classification
+//! over the atoms, surfacing the first mismatch as `Contradictory`.
 
 use thiserror::Error;
 use umol_ast::ast::MoleculeAst;
@@ -43,10 +43,10 @@ impl<'a> ValenceConformanceValidator<'a> {
         for id in ast.atoms().ids() {
             let outcome = match self {
                 Self::AtomTyping(engine) => engine
-                    .conforms_molecule_atom(ast, id)
+                    .classify_molecule_atom(ast, id)
                     .map_contradiction(ValenceConformanceContradiction::from),
                 Self::Counts(engine) => engine
-                    .conforms_molecule_atom(ast, id)
+                    .classify_molecule_atom(ast, id)
                     .map_contradiction(ValenceConformanceContradiction::from),
             };
             match outcome {

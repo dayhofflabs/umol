@@ -2,7 +2,7 @@
 //! defined in [`crate::ops::valence`].
 
 use thiserror::Error;
-use umol_ast::ast::MoleculeAst;
+use umol_ast::ast::{MoleculeAst, TransactionError};
 use umol_utils::solution::Solution;
 
 use crate::ops::model::ValenceModel;
@@ -23,7 +23,10 @@ pub enum ValenceContradiction {
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum ValenceError {}
+pub enum ValenceError {
+    #[error(transparent)]
+    Transaction(#[from] TransactionError),
+}
 
 impl<'a> ValenceResolver<'a> {
     pub fn new(model: &'a ValenceModel) -> Self {
@@ -39,7 +42,10 @@ impl<'a> ValenceResolver<'a> {
     ) -> Result<Solution<(), ValenceContradiction>, ValenceError> {
         let outcome = match self {
             Self::AtomTyping(r) => r.resolve(ast).map_err(ValenceContradiction::from),
-            Self::Counts(r) => r.resolve(ast).map_err(ValenceContradiction::from),
+            Self::Counts(r) => match r.resolve(ast)? {
+                Solution::Determined(()) | Solution::Underdetermined(()) => Ok(()),
+                Solution::Contradictory(c) => Err(ValenceContradiction::from(c)),
+            },
         };
         match outcome {
             Ok(()) => Ok(Solution::Determined(())),

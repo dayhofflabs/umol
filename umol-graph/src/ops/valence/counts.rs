@@ -1,26 +1,21 @@
-//! Counts valence resolver: per-atom electron conservation. `derive_fields`
-//! picks the first table covalence ≥ `v` (targets sorted smallest to largest),
-//! splits `covalence − v` between
-//! implicit H and aromatic increment, then assigns lone pairs and spin from
-//! the nonbonding budget. Literals constrain each step.
+//! Counts valence resolver: candidate selection picks the first table
+//! covalence ≥ `v` (targets sorted smallest to largest), splits `covalence − v`
+//! between implicit H and aromatic increment, then assigns lone pairs and unpaired
+//! electrons from the nonbonding budget. Literals constrain each step.
 
 use thiserror::Error;
 #[cfg(test)]
 use umol_ast::ast::MoleculeParts;
 use umol_ast::ast::{
     aromatic_increment, AromaticValenceAst, AsLit, AtomAst, AtomConstraintAst, AtomConstraintsAst,
-    AtomId, BooleanAst, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
+    AtomHandle, AtomId, AtomView, BooleanAst, Edit, IsotopeMassAst, Lattice, MoleculeAst,
+    SpinStateAst, TransactionError, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_chem::spin::{SpinMultiplicity, SpinState};
 use umol_utils::solution::Solution;
 
 use crate::ops::model::CountsModel;
-
-#[derive(Clone, Debug)]
-pub struct CountsValence<'a> {
-    model: &'a CountsModel,
-}
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum CountsError {
@@ -34,7 +29,7 @@ pub enum CountsError {
     UndeterminedElement,
 }
 
-/// A ground atom that no valence-table state admits.
+/// Atom that no valence-table state admits.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 #[error("no valence-table state: element {element}, charge {charge}, valence {valence}")]
 pub struct CountsMismatch {
@@ -43,60 +38,119 @@ pub struct CountsMismatch {
     pub valence: i64,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct CountsInput {
+    valence: i64,
+    accepted_pairs: i64,
+    is_aromatic: bool,
+}
+
+impl CountsInput {
+    fn for_atom(atom: &AtomAst) -> Self {
+        Self {
+            valence: atom
+                .constraints
+                .valence()
+                .unwrap_or(&ValueAst::Undetermined)
+                .as_lit_or(0),
+            accepted_pairs: atom
+                .constraints
+                .accepted_pairs()
+                .unwrap_or(&ValueAst::Undetermined)
+                .as_lit_or(0),
+            is_aromatic: atom
+                .constraints
+                .aromatic_valence()
+                .is_some_and(|a| a.is_aromatic()),
+        }
+    }
+
+    fn for_molecule_atom(atom: AtomView<'_>) -> Self {
+        Self {
+            valence: atom.valence().as_lit_or(0),
+            accepted_pairs: atom.accepted_pairs().as_lit_or(0),
+            is_aromatic: atom.is_in_aromatic_system()
+                || atom
+                    .neighbors()
+                    .any(|n| matches!(n.bond().constraints().aromatic(), BooleanAst::Lit(true)))
+                || atom
+                    .constraints()
+                    .aromatic_valence()
+                    .is_some_and(|a| a.is_aromatic()),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CountsValence<'a> {
+    model: &'a CountsModel,
+}
+
 impl<'a> CountsValence<'a> {
     pub fn new(model: &'a CountsModel) -> Self {
         Self { model }
     }
 
-    pub fn resolve(&self, ast: &mut MoleculeAst) -> Result<(), CountsError> {
+    /// Construct the complete edit plan without mutating `ast`.
+    pub fn plan(&self, ast: &MoleculeAst) -> Result<Vec<Edit>, CountsError> {
         for atom in ast.atoms().iter() {
             if atom.element().as_lit().is_none() {
                 return Err(CountsError::UndeterminedElement);
             }
         }
 
+        let mut edits = Vec::new();
         for id in ast.atoms().ids() {
-            self.resolve_molecule_atom(ast, id)?;
+            let Some(selected) = self.resolve_molecule_atom(ast, id)? else {
+                continue;
+            };
+            let current = ast.atom(id).ast;
+            let update = current.difference_to(&selected);
+            edits.extend(Edit::for_atom_update(AtomHandle::Id(id), current, &update));
         }
-        Ok(())
+        Ok(edits)
+    }
+
+    /// Plan and atomically apply counts-valence resolution.
+    pub fn resolve(
+        &self,
+        ast: &mut MoleculeAst,
+    ) -> Result<Solution<(), CountsError>, TransactionError> {
+        let edits = match self.plan(ast) {
+            Ok(edits) => edits,
+            Err(contradiction) => return Ok(Solution::Contradictory(contradiction)),
+        };
+        let mut editor = ast.edit();
+        editor.transact(edits)?;
+        *ast = editor.build();
+        Ok(Solution::Determined(()))
     }
 
     fn resolve_molecule_atom(
         &self,
-        ast: &mut MoleculeAst,
+        ast: &MoleculeAst,
         atom_id: AtomId,
-    ) -> Result<(), CountsError> {
+    ) -> Result<Option<AtomAst>, CountsError> {
         let atom = ast.atom(atom_id);
         if atom.is_ground() {
-            return Ok(());
+            return Ok(None);
         }
         if atom.element().is_undetermined() {
-            return Ok(());
+            return Ok(None);
         };
         if atom.charge().is_undetermined() {
-            return Ok(());
+            return Ok(None);
         };
 
-        let Some(valence) = atom.valence().as_lit() else {
-            return Ok(());
-        };
-        let accepted_pairs = atom.accepted_pairs().as_lit_or(0);
-        let is_aromatic = atom.is_in_aromatic_system()
-            || atom
-                .neighbors()
-                .any(|n| matches!(n.bond().constraints().aromatic(), BooleanAst::Lit(true)))
-            || atom
-                .constraints()
-                .aromatic_valence()
-                .is_some_and(|a| a.is_aromatic());
-
-        let derived = self.derive_fields(atom.ast, valence, accepted_pairs, is_aromatic)?;
-        let mut resolved = atom.ast.meet(&derived).ok_or(CountsError::NoMatch)?;
-        if resolved.isotope_mass.is_undetermined() {
-            resolved.isotope_mass = IsotopeMassAst::Natural;
+        if atom.valence().as_lit().is_none() {
+            return Ok(None);
         }
-        *ast.atom_mut(atom_id).ast = resolved;
-        Ok(())
+        let input = CountsInput::for_molecule_atom(atom);
+        let mut selected = self.select_candidate(atom.ast, input)?;
+        if selected.isotope_mass.is_undetermined() {
+            selected.isotope_mass = IsotopeMassAst::Natural;
+        }
+        Ok(Some(selected))
     }
 
     pub fn resolve_atom(&self, ast: &mut AtomAst) -> Result<(), CountsError> {
@@ -109,32 +163,17 @@ impl<'a> CountsValence<'a> {
         if ast.charge.is_undetermined() {
             return Ok(());
         };
-        let valence = ast
-            .constraints
-            .valence()
-            .unwrap_or(&ValueAst::Undetermined)
-            .as_lit_or(0);
-        let accepted_pairs = ast
-            .constraints
-            .accepted_pairs()
-            .unwrap_or(&ValueAst::Undetermined)
-            .as_lit_or(0);
-        let is_aromatic = ast
-            .constraints
-            .aromatic_valence()
-            .is_some_and(|a| a.is_aromatic());
 
-        let derived = self.derive_fields(ast, valence, accepted_pairs, is_aromatic)?;
-        *ast = ast.meet(&derived).ok_or(CountsError::NoMatch)?;
+        let input = CountsInput::for_atom(ast);
+        *ast = self.select_candidate(ast, input)?;
         Ok(())
     }
 
-    /// Read-only conformance check for a resolved atom: `Determined` if some
-    /// valence-table state admits it, `Contradictory` if none does,
-    /// `Underdetermined` if the atom is not ground. Reuses `derive_fields`.
-    /// Unlike `resolve_atom` it does not skip ground atoms — that skip is why a
-    /// table-violating ground atom otherwise passes resolution unchecked.
-    pub fn conforms_molecule_atom(
+    /// Classify molecule atom (including ground atoms) against valence table: 
+    /// - `Determined` if some state admits it.
+    /// - `Contradictory` if no consistent state exists.
+    /// - `Underdetermined` if atom is not ground.
+    pub fn classify_molecule_atom(
         &self,
         ast: &MoleculeAst,
         atom_id: AtomId,
@@ -147,33 +186,23 @@ impl<'a> CountsValence<'a> {
             return Solution::Underdetermined(());
         };
         let charge = atom.charge().as_lit_or(0);
-        let valence = atom.valence().as_lit_or(0);
-        let accepted_pairs = atom.accepted_pairs().as_lit_or(0);
-        let is_aromatic = atom.is_in_aromatic_system()
-            || atom
-                .neighbors()
-                .any(|n| matches!(n.bond().constraints().aromatic(), BooleanAst::Lit(true)))
-            || atom
-                .constraints()
-                .aromatic_valence()
-                .is_some_and(|a| a.is_aromatic());
-        match self.derive_fields(atom.ast, valence, accepted_pairs, is_aromatic) {
+        let input = CountsInput::for_molecule_atom(atom);
+        match self.select_candidate(atom.ast, input) {
             Ok(_) => Solution::Determined(()),
             Err(_) => Solution::Contradictory(CountsMismatch {
                 element,
                 charge,
-                valence,
+                valence: input.valence,
             }),
         }
     }
 
-    fn derive_fields(
-        &self,
-        atom: &AtomAst,
-        valence: i64,
-        accepted_pairs: i64,
-        is_aromatic: bool,
-    ) -> Result<AtomAst, CountsError> {
+    fn select_candidate(&self, atom: &AtomAst, input: CountsInput) -> Result<AtomAst, CountsError> {
+        let CountsInput {
+            valence,
+            accepted_pairs,
+            is_aromatic,
+        } = input;
         let element = atom.element.as_lit().unwrap();
         let charge = atom.charge.as_lit().unwrap();
 
@@ -207,7 +236,7 @@ impl<'a> CountsValence<'a> {
             _ => None,
         };
 
-        let aromatic_values = aromatic_valence_values(
+        let aromatic_values = candidate_aromatic_valences(
             aromatic_constraint,
             is_aromatic,
             entry.map(|e| e.aromatic_valences.as_slice()),
@@ -215,7 +244,7 @@ impl<'a> CountsValence<'a> {
 
         let mut candidates = Vec::new();
         for implicit_hydrogens in
-            implicit_hydrogen_values(&atom.implicit_hydrogens, bonding_budget, entry.is_none())?
+            candidate_implicit_hydrogens(&atom.implicit_hydrogens, bonding_budget, entry.is_none())?
         {
             if !atom
                 .implicit_hydrogens
@@ -238,14 +267,14 @@ impl<'a> CountsValence<'a> {
                     continue;
                 }
                 let Some((lone_pairs, unpaired)) =
-                    derive_lone_pairs_unpaired(atom, element, nonbonding)
+                    derive_lone_pairs_and_unpaired(atom, element, nonbonding)
                 else {
                     continue;
                 };
                 let Some(multiplicity) = derive_multiplicity(&atom.spin, unpaired) else {
                     continue;
                 };
-                let updates = make_updates(
+                let derived = derive_atom(
                     implicit_hydrogens,
                     unpaired,
                     multiplicity,
@@ -254,7 +283,7 @@ impl<'a> CountsValence<'a> {
                     is_aromatic,
                     aromatic_valence,
                 );
-                if let Some(candidate) = atom.meet(&updates) {
+                if let Some(candidate) = atom.meet(&derived) {
                     candidates.push(candidate);
                 }
             }
@@ -268,7 +297,7 @@ impl<'a> CountsValence<'a> {
     }
 }
 
-fn implicit_hydrogen_values(
+fn candidate_implicit_hydrogens(
     implicit_hydrogens: &ValueAst,
     bonding_budget: Option<i64>,
     no_entry: bool,
@@ -286,7 +315,7 @@ fn implicit_hydrogen_values(
     Ok((0..=b).collect())
 }
 
-fn aromatic_valence_values(
+fn candidate_aromatic_valences(
     aromatic: &AromaticValenceAst,
     is_aromatic: bool,
     table: Option<&[u8]>,
@@ -300,7 +329,7 @@ fn aromatic_valence_values(
     }
 }
 
-fn derive_lone_pairs_unpaired(
+fn derive_lone_pairs_and_unpaired(
     atom: &AtomAst,
     element: Element,
     nonbonding: i64,
@@ -343,7 +372,7 @@ fn derive_lone_pairs_unpaired(
     }
 }
 
-fn make_updates(
+fn derive_atom(
     implicit_hydrogens: i64,
     unpaired: i64,
     multiplicity: i64,
@@ -388,10 +417,127 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::rstest;
+    use umol_ast::ast::AtomFieldChange;
     use umol_ast::{atom_dsl, mol_dsl};
 
     use super::*;
     use crate::ops::valence::ValenceTable;
+
+    #[rstest]
+    fn test_counts_valence_plan() {
+        let model = CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        let resolver = CountsValence::new(&model);
+        let molecule = mol_dsl!(r#"{:atoms ["C#c0"]}"#);
+        assert_eq!(
+            resolver.plan(&molecule),
+            Ok(vec![
+                Edit::ModifyAtomField {
+                    id: AtomHandle::Id(AtomId(0)),
+                    change: AtomFieldChange::IsotopeMass {
+                        old: IsotopeMassAst::Undetermined,
+                        new: IsotopeMassAst::Natural,
+                    },
+                },
+                Edit::ModifyAtomField {
+                    id: AtomHandle::Id(AtomId(0)),
+                    change: AtomFieldChange::ImplicitHydrogens {
+                        old: ValueAst::Undetermined,
+                        new: ValueAst::Lit(4),
+                    },
+                },
+                Edit::ModifyAtomField {
+                    id: AtomHandle::Id(AtomId(0)),
+                    change: AtomFieldChange::LonePairs {
+                        old: ValueAst::Undetermined,
+                        new: ValueAst::Lit(0),
+                    },
+                },
+                Edit::ModifyAtomField {
+                    id: AtomHandle::Id(AtomId(0)),
+                    change: AtomFieldChange::Spin {
+                        old: SpinStateAst::default(),
+                        new: SpinStateAst::from((0_u8, 1_u8)),
+                    },
+                },
+                Edit::ModifyAtomConstraint {
+                    id: AtomHandle::Id(AtomId(0)),
+                    old: None,
+                    new: Some(AtomConstraintAst::valence(0_i64)),
+                },
+                Edit::ModifyAtomConstraint {
+                    id: AtomHandle::Id(AtomId(0)),
+                    old: None,
+                    new: Some(AtomConstraintAst::aromatic_valence(
+                        AromaticValenceAst::NotAromatic,
+                    )),
+                },
+            ])
+        );
+    }
+
+    #[rstest]
+    fn test_counts_valence_plan_identity() {
+        let model = CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        let resolver = CountsValence::new(&model);
+        let molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#a!"]}"#);
+        assert_eq!(resolver.plan(&molecule), Ok(Vec::new()));
+    }
+
+    #[rstest]
+    #[case::undetermined_element(mol_dsl!(r#"{:atoms ["{C,N}#c0"]}"#), CountsError::UndeterminedElement)]
+    #[case::later_atom_contradiction(mol_dsl!(r#"{:atoms ["C#c0" "Fe#c0#h0#a+"]}"#), CountsError::UndeterminedAromaticValence)]
+    fn test_counts_valence_plan_error(
+        #[case] molecule: MoleculeAst,
+        #[case] expected: CountsError,
+    ) {
+        let model = CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        let resolver = CountsValence::new(&model);
+        assert_eq!(resolver.plan(&molecule), Err(expected));
+    }
+
+    #[rstest]
+    #[case::ethane_carbon(mol_dsl!(r#"{:atoms ["C #c0" "C #c0"] :bonds [[0 1 "1"]]}"#), 0, "C#i=#c0#h3#n0#u0#s#v#a!")]
+    #[case::water_oxygen(mol_dsl!(r#"{:atoms ["O #c0" "H #c0" "H #c0"] :bonds [[0 1 "1"] [0 2 "1"]]}"#), 0, "O#i=#c0#h0#n2#u0#s#v2#a!")]
+    #[case::benzene_ring(mol_dsl!( r#"{:atoms ["C #c0" "C #c0" "C #c0" "C #c0" "C #c0" "C #c0"] :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}"#), 0, "C#i=#c0#h#n0#u0#s#v2#a")]
+    fn test_counts_valence_resolve(
+        #[case] mut molecule: MoleculeAst,
+        #[case] atom_id: u32,
+        #[case] expected: &str,
+    ) {
+        let model = CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        let resolver = CountsValence::new(&model);
+        assert_eq!(
+            resolver.resolve(&mut molecule),
+            Ok(Solution::Determined(()))
+        );
+        assert_eq!(molecule.atom(AtomId(atom_id)).ast.to_string(), expected);
+    }
+
+    #[rstest]
+    #[case::later_atom_contradiction(mol_dsl!(r#"{:atoms ["C#c0" "Fe#c0#h0#a+"]}"#), CountsError::UndeterminedAromaticValence)]
+    fn test_counts_valence_resolve_error(
+        #[case] mut molecule: MoleculeAst,
+        #[case] expected: CountsError,
+    ) {
+        let model = CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        let resolver = CountsValence::new(&model);
+        let original = molecule.clone();
+        assert_eq!(
+            resolver.resolve(&mut molecule),
+            Ok(Solution::Contradictory(expected))
+        );
+        assert_eq!(molecule, original);
+    }
 
     #[rstest]
     #[case::methane_h("C#c0#h4", "C#c0#h4#n0#u0#s#v0#a!")]
@@ -433,23 +579,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ethane_carbon(mol_dsl!(r#"{:atoms ["C #c0" "C #c0"] :bonds [[0 1 "1"]]}"#), 0, "C#i=#c0#h3#n0#u0#s#v#a!")]
-    #[case::water_oxygen(mol_dsl!(r#"{:atoms ["O #c0" "H #c0" "H #c0"] :bonds [[0 1 "1"] [0 2 "1"]]}"#), 0, "O#i=#c0#h0#n2#u0#s#v2#a!")]
-    #[case::benzene_ring(mol_dsl!( r#"{:atoms ["C #c0" "C #c0" "C #c0" "C #c0" "C #c0" "C #c0"] :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}"#), 0, "C#i=#c0#h#n0#u0#s#v2#a")]
-    fn test_counts_valence_resolve_molecule_atom(
-        #[case] mut molecule: MoleculeAst,
-        #[case] atom_id: u32,
-        #[case] expected: &str,
-    ) {
-        let model = CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        };
-        let resolver = CountsValence::new(&model);
-        resolver.resolve(&mut molecule).unwrap();
-        assert_eq!(molecule.atom(AtomId(atom_id)).ast.to_string(), expected);
-    }
-
-    #[rstest]
     #[case::undetermined_aromatic_out_of_table(atom_dsl!("Fe#c0#h0#a+"), Err(CountsError::UndeterminedAromaticValence))]
     fn test_counts_valence_resolve_atom_error(
         #[case] mut atom: AtomAst,
@@ -466,7 +595,7 @@ mod tests {
     #[case::methane_conforms("C#i=#c0#h4#n0#u0#s#v0#a!", Solution::Determined(()))]
     #[case::excess_lone_pairs("C#i=#c0#h4#n2#u0#s#v0#a!", Solution::Contradictory(CountsMismatch { element: Element::C, charge: 0, valence: 0, }))]
     #[case::not_ground("C", Solution::Underdetermined(()))]
-    fn test_counts_valence_conforms_atom(
+    fn test_counts_valence_classify_molecule_atom(
         #[case] input: &str,
         #[case] expected: Solution<(), CountsMismatch>,
     ) {
@@ -479,7 +608,7 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(
-            resolver.conforms_molecule_atom(&molecule, AtomId(0)),
+            resolver.classify_molecule_atom(&molecule, AtomId(0)),
             expected
         );
     }

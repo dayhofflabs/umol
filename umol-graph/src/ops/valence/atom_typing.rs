@@ -96,10 +96,10 @@ impl<'a> AtomTypingValence<'a> {
         Ok(())
     }
 
-    /// Read-only conformance check for a resolved atom: `Determined` if some
-    /// registry pattern admits it, `Contradictory` if none does,
-    /// `Underdetermined` if the atom is not ground.
-    pub fn conforms_molecule_atom(
+    /// Classify a molecule atom against the registry: `Determined` if some
+    /// pattern admits it, `Contradictory` if none does, and `Underdetermined`
+    /// if the atom is not ground.
+    pub fn classify_molecule_atom(
         &self,
         ast: &MoleculeAst,
         atom_id: AtomId,
@@ -114,13 +114,13 @@ impl<'a> AtomTypingValence<'a> {
         let constraints = atom.derive_constraints(true);
         let pattern = atom.ast.clone().with_constraints(constraints);
         let charge = pattern.charge.as_lit().map(|n| n as i8);
-        let conforms = self
+        let admitted = self
             .model
             .registry
             .lookup(element, charge)
             .iter()
             .any(|entry| pattern.is_compatible(entry));
-        if conforms {
+        if admitted {
             Solution::Determined(())
         } else {
             Solution::Contradictory(AtomTypingMismatch { element, charge })
@@ -182,7 +182,7 @@ mod tests {
         })
     )]
     #[case::not_ground("C", Solution::Underdetermined(()))]
-    fn test_atom_typing_valence_conforms_atom(
+    fn test_atom_typing_valence_classify_molecule_atom(
         #[case] input: &str,
         #[case] expected: Solution<(), AtomTypingMismatch>,
     ) {
@@ -195,7 +195,7 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(
-            resolver.conforms_molecule_atom(&molecule, AtomId(0)),
+            resolver.classify_molecule_atom(&molecule, AtomId(0)),
             expected
         );
     }
