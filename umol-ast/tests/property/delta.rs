@@ -141,6 +141,13 @@ proptest! {
         prop_assert_eq!(apply_atom_diff(atom.clone(), diff), atom);
     }
 
+    /// Applying the directed atom update recovers the target up to canonical equality.
+    #[test]
+    fn test_atom_ast_difference_to(lhs in atom_ast_strategy(), rhs in atom_ast_strategy()) {
+        let update = lhs.difference_to(&rhs);
+        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+    }
+
     /// `apply(lhs, diff(lhs, rhs)) == rhs` for bonds.
     #[test]
     fn test_bond_delta_diff_apply(lhs in bond_ast_strategy(), rhs in bond_ast_strategy()) {

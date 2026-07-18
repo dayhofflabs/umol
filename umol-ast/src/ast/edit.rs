@@ -9,7 +9,7 @@
 //! entity created by the Nth Edit earlier in the same batch.
 
 use super::aromatic::AromaticSystemAst;
-use super::atom::{AtomAst, ElementAst, IsotopeMassAst};
+use super::atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMassAst};
 use super::bond::BondAst;
 use super::constraint::{
     AromaticSystemConstraintAst, AtomConstraintAst, BondConstraintAst, Constraint, Constraints,
@@ -28,6 +28,7 @@ use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
 use super::remap::{IdCompaction, UndoCompaction};
 use super::spin::SpinStateAst;
 use super::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationAst};
+use super::traits::{Canonicalize, Lattice};
 use super::value::ValueAst;
 
 /// One stereo-atom removal in a batched `RemoveStereoAtoms`: id, site, ligand frame, recorded ast.
@@ -441,6 +442,94 @@ impl Edit {
             bonds: vec![id],
         }
     }
+
+    /// Project an atom update into checked host-relative edits.
+    pub fn for_atom_update(id: AtomHandle, current: &AtomAst, update: &AtomUpdate) -> Vec<Self> {
+        let mut edits = Vec::new();
+        if let Some(new) = &update.element {
+            if !current.element.canonical_eq(new) {
+                edits.push(Self::ModifyAtomField {
+                    id: id.clone(),
+                    change: AtomFieldChange::Element {
+                        old: current.element.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        if let Some(new) = &update.isotope_mass {
+            if !current.isotope_mass.canonical_eq(new) {
+                edits.push(Self::ModifyAtomField {
+                    id: id.clone(),
+                    change: AtomFieldChange::IsotopeMass {
+                        old: current.isotope_mass.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        if let Some(new) = &update.charge {
+            if !current.charge.canonical_eq(new) {
+                edits.push(Self::ModifyAtomField {
+                    id: id.clone(),
+                    change: AtomFieldChange::Charge {
+                        old: current.charge.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        if let Some(new) = &update.implicit_hydrogens {
+            if !current.implicit_hydrogens.canonical_eq(new) {
+                edits.push(Self::ModifyAtomField {
+                    id: id.clone(),
+                    change: AtomFieldChange::ImplicitHydrogens {
+                        old: current.implicit_hydrogens.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        if let Some(new) = &update.lone_pairs {
+            if !current.lone_pairs.canonical_eq(new) {
+                edits.push(Self::ModifyAtomField {
+                    id: id.clone(),
+                    change: AtomFieldChange::LonePairs {
+                        old: current.lone_pairs.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        if let Some(new) = &update.spin {
+            if !current.spin.canonical_eq(new) {
+                edits.push(Self::ModifyAtomField {
+                    id: id.clone(),
+                    change: AtomFieldChange::Spin {
+                        old: current.spin.clone(),
+                        new: new.clone(),
+                    },
+                });
+            }
+        }
+        for constraint in update.constraints.iter() {
+            let old = current.constraints.get(constraint.key()).cloned();
+            let new = (!constraint.is_undetermined()).then(|| constraint.clone());
+            let unchanged = match (&old, &new) {
+                (None, None) => true,
+                (Some(old), Some(new)) => old.canonical_eq(new),
+                _ => false,
+            };
+            if !unchanged {
+                edits.push(Self::ModifyAtomConstraint {
+                    id: id.clone(),
+                    old,
+                    new,
+                });
+            }
+        }
+        edits
+    }
 }
 
 // Handles for overlay relations (an existing id or the Nth created earlier in the batch).
@@ -748,6 +837,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
 
+    use super::super::constraint::AtomConstraintsAst;
     use super::super::stereo::{StereoConfigurationAst, StereoCosetAst, StereoKind};
     use super::*;
 
@@ -891,6 +981,98 @@ mod tests {
                 atoms: Vec::new(),
                 bonds: vec![BondHandle::Id(BondId(4))],
             },
+        );
+    }
+
+    #[rstest]
+    fn test_edit_for_atom_update() {
+        let current = AtomAst::from_element(Element::C)
+            .with_isotope_mass(12_u32)
+            .with_charge(0_i64)
+            .with_implicit_hydrogens(4_i64)
+            .with_lone_pairs(0_i64)
+            .with_spin((0_u8, 1_u8))
+            .with_constraint(AtomConstraintAst::valence(4_i64));
+        let update = AtomUpdate {
+            element: Some(ElementAst::Lit(Element::N)),
+            isotope_mass: Some(IsotopeMassAst::Lit(13)),
+            charge: Some(ValueAst::Lit(1)),
+            implicit_hydrogens: Some(ValueAst::Lit(3)),
+            lone_pairs: Some(ValueAst::Lit(1)),
+            spin: Some(SpinStateAst::from((1_u8, 2_u8))),
+            constraints: AtomConstraintsAst::from_iter([
+                AtomConstraintAst::valence(ValueAst::Undetermined),
+                AtomConstraintAst::degree(2_i64),
+            ]),
+        };
+        assert_eq!(
+            Edit::for_atom_update(AtomHandle::Id(AtomId(7)), &current, &update),
+            vec![
+                Edit::ModifyAtomField {
+                    id: AtomHandle::Id(AtomId(7)),
+                    change: AtomFieldChange::Element {
+                        old: ElementAst::Lit(Element::C),
+                        new: ElementAst::Lit(Element::N),
+                    },
+                },
+                Edit::ModifyAtomField {
+                    id: AtomHandle::Id(AtomId(7)),
+                    change: AtomFieldChange::IsotopeMass {
+                        old: IsotopeMassAst::Lit(12),
+                        new: IsotopeMassAst::Lit(13),
+                    },
+                },
+                Edit::ModifyAtomField {
+                    id: AtomHandle::Id(AtomId(7)),
+                    change: AtomFieldChange::Charge {
+                        old: ValueAst::Lit(0),
+                        new: ValueAst::Lit(1),
+                    },
+                },
+                Edit::ModifyAtomField {
+                    id: AtomHandle::Id(AtomId(7)),
+                    change: AtomFieldChange::ImplicitHydrogens {
+                        old: ValueAst::Lit(4),
+                        new: ValueAst::Lit(3),
+                    },
+                },
+                Edit::ModifyAtomField {
+                    id: AtomHandle::Id(AtomId(7)),
+                    change: AtomFieldChange::LonePairs {
+                        old: ValueAst::Lit(0),
+                        new: ValueAst::Lit(1),
+                    },
+                },
+                Edit::ModifyAtomField {
+                    id: AtomHandle::Id(AtomId(7)),
+                    change: AtomFieldChange::Spin {
+                        old: SpinStateAst::from((0_u8, 1_u8)),
+                        new: SpinStateAst::from((1_u8, 2_u8)),
+                    },
+                },
+                Edit::ModifyAtomConstraint {
+                    id: AtomHandle::Id(AtomId(7)),
+                    old: Some(AtomConstraintAst::valence(4_i64)),
+                    new: None,
+                },
+                Edit::ModifyAtomConstraint {
+                    id: AtomHandle::Id(AtomId(7)),
+                    old: None,
+                    new: Some(AtomConstraintAst::degree(2_i64)),
+                },
+            ]
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(AtomAst::from_element(Element::C), AtomUpdate::default())]
+    #[case::canonical_field(AtomAst::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(ValueAst::lit_set([1])), ..Default::default() })]
+    #[case::absent_constraint_removal(AtomAst::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(ValueAst::Undetermined)), ..Default::default() })]
+    fn test_edit_for_atom_update_identity(#[case] current: AtomAst, #[case] update: AtomUpdate) {
+        assert_eq!(
+            Edit::for_atom_update(AtomHandle::Id(AtomId(0)), &current, &update),
+            Vec::new()
         );
     }
 

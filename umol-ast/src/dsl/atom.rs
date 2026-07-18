@@ -28,12 +28,13 @@ use super::stereo::{
     fmt_tetrahedral_stereo_config, tetrahedral_stereo_config, TetrahedralStereoDsl,
 };
 use super::value::{fmt_set, fmt_value, id, terminator, value, ValueDsl};
-use crate::ast::atom::{AtomAst, ElementAst, IsotopeMassAst};
+use crate::ast::atom::{AtomAst, AtomUpdate, ElementAst, IsotopeMassAst};
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst,
-    MulticenterValenceAst,
+    MulticenterValenceAst, RingScope,
 };
 use crate::ast::operators::MemOp;
+use crate::ast::spin::SpinStateAst;
 use crate::ast::stereo::TetrahedralStereoAst;
 use crate::ast::traits::{FromAst, IntoAst, Lattice};
 use crate::ast::value::ValueAst;
@@ -183,35 +184,52 @@ pub(crate) fn atom(i: &mut &str) -> PResult<AtomDsl> {
     Ok(form)
 }
 
-/// Partial atom with all fields, including element, optional.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PartialAtomDsl(pub AtomAst);
+/// Surface DSL wrapper around an [`AtomUpdate`].
+#[repr(transparent)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AtomUpdateDsl(pub AtomUpdate);
 
-impl FromStr for PartialAtomDsl {
+impl FromStr for AtomUpdateDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse_partial_atom(s)
+        parse_atom_update(s)
     }
 }
 
-/// Render a partial atom-string (omits the element when `Undetermined`).
-/// Undetermined constraints are rendered explicitly as `#<tag>*`, unlike
-/// AtomDsl which elides them.
-impl Display for PartialAtomDsl {
+impl Display for AtomUpdateDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ast = &self.0;
-        if !matches!(ast.element, ElementAst::Undetermined) {
-            fmt_element(f, &ast.element)?;
+        let update = &self.0;
+        if let Some(element) = &update.element {
+            fmt_element(f, element)?;
         }
-        fmt_isotope_mass(f, &ast.isotope_mass)?;
-        fmt_charge(f, &ast.charge)?;
-        fmt_value_field(f, "#h", &ast.implicit_hydrogens)?;
-        fmt_value_field(f, "#n", &ast.lone_pairs)?;
-        fmt_spin_pair(f, &ast.spin)?;
-        for c in ast.constraints.iter() {
+        if let Some(isotope_mass) = &update.isotope_mass {
+            if isotope_mass.is_undetermined() {
+                write!(f, "#i*")?;
+            } else {
+                fmt_isotope_mass(f, isotope_mass)?;
+            }
+        }
+        if let Some(charge) = &update.charge {
+            if charge.is_undetermined() {
+                write!(f, "#c*")?;
+            } else {
+                fmt_charge(f, charge)?;
+            }
+        }
+        if let Some(implicit_hydrogens) = &update.implicit_hydrogens {
+            fmt_update_value_field(f, "#h", implicit_hydrogens)?;
+        }
+        if let Some(lone_pairs) = &update.lone_pairs {
+            fmt_update_value_field(f, "#n", lone_pairs)?;
+        }
+        if let Some(spin) = &update.spin {
+            fmt_update_value_field(f, "#u", &spin.unpaired)?;
+            fmt_update_value_field(f, "#s", &spin.multiplicity)?;
+        }
+        for c in update.constraints.iter() {
             if c.is_undetermined() {
-                write!(f, "{}*", constraint_tag(c.key()))?;
+                fmt_undetermined_constraint(f, c)?;
             } else {
                 fmt_constraint(f, c)?;
             }
@@ -220,10 +238,10 @@ impl Display for PartialAtomDsl {
     }
 }
 
-impl<'de> FromEdn<'de> for PartialAtomDsl {
+impl<'de> FromEdn<'de> for AtomUpdateDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
-            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("atom", e)),
+            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("atom-update", e)),
             other => Err(DeError::TypeMismatch {
                 expected: "string",
                 got: other.kind(),
@@ -233,25 +251,83 @@ impl<'de> FromEdn<'de> for PartialAtomDsl {
     }
 }
 
-impl ToEdn for PartialAtomDsl {
+impl ToEdn for AtomUpdateDsl {
     fn to_edn(&self) -> Edn<'static> {
         Edn::Str(Cow::Owned(self.to_string()))
     }
 }
 
-pub fn parse_partial_atom(input: &str) -> Result<PartialAtomDsl, ParseError> {
-    partial_atom.parse(input).map_err(|e| e.into_inner())
+pub fn parse_atom_update(input: &str) -> Result<AtomUpdateDsl, ParseError> {
+    atom_update.parse(input).map_err(|e| e.into_inner())
 }
 
-pub(crate) fn partial_atom(i: &mut &str) -> PResult<PartialAtomDsl> {
-    let el = delimited(multispace0, opt(element), multispace0)
-        .parse_next(i)?
-        .unwrap_or(ElementAst::Undetermined);
+pub(crate) fn atom_update(i: &mut &str) -> PResult<AtomUpdateDsl> {
+    let element = delimited(multispace0, opt(element), multispace0).parse_next(i)?;
     let preds: Vec<AtomPredicate> =
         repeat(0.., terminated(atom_predicate, multispace0)).parse_next(i)?;
-    let mut form = AtomDsl(AtomAst::new(el));
-    apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
-    Ok(PartialAtomDsl(form.0))
+    let mut update = AtomUpdate {
+        element,
+        ..Default::default()
+    };
+    apply_update_predicates(&mut update, preds).map_err(ErrMode::Cut)?;
+    Ok(AtomUpdateDsl(update))
+}
+
+fn apply_update_predicates(
+    update: &mut AtomUpdate,
+    preds: Vec<AtomPredicate>,
+) -> Result<(), ParseError> {
+    let mut spin: Option<SpinStateAst> = None;
+    let mut unpaired_seen = false;
+    let mut multiplicity_seen = false;
+    for pred in preds {
+        match pred {
+            AtomPredicate::IsotopeMass(value) => {
+                if update.isotope_mass.replace(value).is_some() {
+                    return Err(ParseError::DuplicateAtomPredicate("#i".to_string()));
+                }
+            }
+            AtomPredicate::Charge(value) => {
+                if update.charge.replace(value).is_some() {
+                    return Err(ParseError::DuplicateAtomPredicate("#c".to_string()));
+                }
+            }
+            AtomPredicate::ImplicitHydrogens(value) => {
+                if update.implicit_hydrogens.replace(value).is_some() {
+                    return Err(ParseError::DuplicateAtomPredicate("#h".to_string()));
+                }
+            }
+            AtomPredicate::LonePairs(value) => {
+                if update.lone_pairs.replace(value).is_some() {
+                    return Err(ParseError::DuplicateAtomPredicate("#n".to_string()));
+                }
+            }
+            AtomPredicate::Spin(SpinPredicate::Unpaired(value)) => {
+                if unpaired_seen {
+                    return Err(ParseError::DuplicateAtomPredicate("#u".to_string()));
+                }
+                unpaired_seen = true;
+                spin.get_or_insert_with(Default::default).unpaired = value;
+            }
+            AtomPredicate::Spin(SpinPredicate::Multiplicity(value)) => {
+                if multiplicity_seen {
+                    return Err(ParseError::DuplicateAtomPredicate("#s".to_string()));
+                }
+                multiplicity_seen = true;
+                spin.get_or_insert_with(Default::default).multiplicity = value;
+            }
+            AtomPredicate::Constraint(constraint) => {
+                if update.constraints.contains(constraint.key()) {
+                    return Err(ParseError::DuplicateAtomPredicate(
+                        constraint_tag(constraint.key()).to_string(),
+                    ));
+                }
+                update.constraints.set(constraint);
+            }
+        }
+    }
+    update.spin = spin;
+    Ok(())
 }
 
 fn constraint_tag(key: AtomConstraintKey) -> &'static str {
@@ -269,6 +345,16 @@ fn constraint_tag(key: AtomConstraintKey) -> &'static str {
         AtomConstraintKey::RingValence => "#y",
         AtomConstraintKey::TotalHydrogens => "#H",
         AtomConstraintKey::RingMembership(_) => "#R",
+    }
+}
+
+fn fmt_undetermined_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraintAst) -> fmt::Result {
+    match c {
+        AtomConstraintAst::RingMembership(membership) => match membership.scope {
+            RingScope::All => write!(f, "#R*"),
+            RingScope::Size(size) => write!(f, "#R({})*", size),
+        },
+        _ => write!(f, "{}*", constraint_tag(c.key())),
     }
 }
 
@@ -634,6 +720,14 @@ fn fmt_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &ValueAst) -> fm
             write!(f, "{}", prefix)?;
             fmt_value(f, v)
         }
+    }
+}
+
+fn fmt_update_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &ValueAst) -> fmt::Result {
+    if v.is_undetermined() {
+        write!(f, "{}*", prefix)
+    } else {
+        fmt_value_field(f, prefix, v)
     }
 }
 
@@ -1304,35 +1398,40 @@ mod tests {
         );
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::empty("", PartialAtomDsl(AtomAst::new(ElementAst::Undetermined)))]
-    #[case::element_only("O", PartialAtomDsl(AtomAst::new(ElementAst::Lit(Element::O))))]
-    #[case::charge_only("#c-1", PartialAtomDsl(AtomAst::new(ElementAst::Undetermined).with_charge(ValueAst::Lit(-1))))]
-    #[case::element_and_pred("O#h1", PartialAtomDsl(AtomAst::new(ElementAst::Lit(Element::O)).with_implicit_hydrogens(ValueAst::Lit(1))))]
-    fn test_parse_partial_atom(#[case] input: &str, #[case] expected: PartialAtomDsl) {
-        assert_eq!(parse_partial_atom(input).unwrap(), expected);
+    #[case::empty("", AtomUpdateDsl(AtomUpdate::default()))]
+    #[case::element_only("O", AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Lit(Element::O)), ..Default::default() }))]
+    #[case::charge_only("#c-1", AtomUpdateDsl(AtomUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() }))]
+    #[case::element_and_pred("O#h1", AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Lit(Element::O)), implicit_hydrogens: Some(ValueAst::Lit(1)), ..Default::default() }))]
+    #[case::explicit_undetermined("*#i*#c*#h*#n*#u*#s*", AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Undetermined), isotope_mass: Some(IsotopeMassAst::Undetermined), charge: Some(ValueAst::Undetermined), implicit_hydrogens: Some(ValueAst::Undetermined), lone_pairs: Some(ValueAst::Undetermined), spin: Some(Default::default()), constraints: Default::default() }))]
+    #[case::constraint_removal("#v*", AtomUpdateDsl(AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(ValueAst::Undetermined)), ..Default::default() }))]
+    fn test_parse_atom_update(#[case] input: &str, #[case] expected: AtomUpdateDsl) {
+        assert_eq!(parse_atom_update(input).unwrap(), expected);
     }
 
     #[rstest]
     #[case::dup_hydrogens("#h1#h2", ParseError::DuplicateAtomPredicate("#h".to_string()))]
-    fn test_parse_partial_atom_error(#[case] input: &str, #[case] expected: ParseError) {
-        assert_eq!(parse_partial_atom(input).unwrap_err(), expected);
+    #[case::dup_undetermined_charge("#c*#c1", ParseError::DuplicateAtomPredicate("#c".to_string()))]
+    #[case::dup_undetermined_spin("#u*#u1", ParseError::DuplicateAtomPredicate("#u".to_string()))]
+    fn test_parse_atom_update_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(parse_atom_update(input).unwrap_err(), expected);
     }
 
     #[rstest]
-    #[case::charge_only(r##""#c-1""##, PartialAtomDsl(AtomAst::new(ElementAst::Undetermined).with_charge(ValueAst::Lit(-1))))]
-    fn test_partial_atom_dsl_from_edn(#[case] input: &str, #[case] expected: PartialAtomDsl) {
+    #[case::charge_only(r##""#c-1""##, AtomUpdateDsl(AtomUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() }))]
+    fn test_atom_update_dsl_from_edn(#[case] input: &str, #[case] expected: AtomUpdateDsl) {
         assert_eq!(
-            PartialAtomDsl::from_edn(&read_string(input).unwrap()).unwrap(),
+            AtomUpdateDsl::from_edn(&read_string(input).unwrap()).unwrap(),
             expected
         );
     }
 
     #[rstest]
     #[case::non_string("1")]
-    fn test_partial_atom_dsl_from_edn_error(#[case] input: &str) {
+    fn test_atom_update_dsl_from_edn_error(#[case] input: &str) {
         assert!(matches!(
-            PartialAtomDsl::from_edn(&read_string(input).unwrap()),
+            AtomUpdateDsl::from_edn(&read_string(input).unwrap()),
             Err(DeError::TypeMismatch {
                 expected: "string",
                 ..
@@ -1341,8 +1440,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::charge_only(PartialAtomDsl(AtomAst::new(ElementAst::Undetermined).with_charge(ValueAst::Lit(-1))), r##""#c-""##)]
-    fn test_partial_atom_dsl_to_edn(#[case] input: PartialAtomDsl, #[case] expected: &str) {
+    #[case::charge_only(AtomUpdateDsl(AtomUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() }), r##""#c-""##)]
+    #[case::explicit_undetermined(AtomUpdateDsl(AtomUpdate { element: Some(ElementAst::Undetermined), isotope_mass: Some(IsotopeMassAst::Undetermined), charge: Some(ValueAst::Undetermined), implicit_hydrogens: Some(ValueAst::Undetermined), lone_pairs: Some(ValueAst::Undetermined), spin: Some(Default::default()), constraints: Default::default() }), r##""*#i*#c*#h*#n*#u*#s*""##)]
+    #[case::ring_size_removal(AtomUpdateDsl(AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::ring_membership(RingScope::Size(3), ValueAst::Undetermined)), ..Default::default() }), r##""#R(3)*""##)]
+    fn test_atom_update_dsl_to_edn(#[case] input: AtomUpdateDsl, #[case] expected: &str) {
         assert_eq!(input.to_edn(), read_string(expected).unwrap());
     }
 

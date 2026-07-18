@@ -16,7 +16,7 @@ use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer
 use umol_perm::Permutation;
 
 use super::aromatic::{AromaticSystemDsl, PartialAromaticSystemDsl};
-use super::atom::{lower_atom, raise_atom, AtomDsl, PartialAtomDsl};
+use super::atom::{lower_atom, raise_atom, AtomDsl, AtomUpdateDsl};
 use super::bond::{lower_bond, raise_bond, BondDsl, PartialBondDsl};
 use super::config::{DeltaDefaults, ReactionDefaults};
 use super::constraint::{read_constraint_dsl, ConstraintDsl};
@@ -53,7 +53,7 @@ use super::stereo::{
     parse_permutation, render_edn_stereo_kind, stereo_kind_from_name, PartialStereoAtomDsl,
     PartialStereoBondDsl, StereoAtomDsl, StereoBondDsl,
 };
-use crate::ast::atom::{AtomAst, ElementAst};
+use crate::ast::atom::{AtomAst, AtomUpdate};
 use crate::ast::bond::BondAst;
 use crate::ast::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
@@ -725,12 +725,12 @@ impl From<&ReactionNamespace> for ReactionMetadata {
 /// One unresolved delta parsed from a `:deltas` entry. Refs stay symbolic
 /// (`AtomRef`/`BondRef`) and an `:add` carries the molecule entry verbatim
 /// (bare atom / alias / created-id resolved in R7); a `:modify` RHS is a
-/// partial entity AST (unspecified fields `Undetermined`).
+/// entity update value.
 #[derive(Debug, PartialEq)]
 pub(crate) enum DeltaInput {
     AtomAdd(AtomEntryInput),
     AtomRemove(AtomRef),
-    AtomModify(AtomRef, AtomAst),
+    AtomModify(AtomRef, AtomUpdate),
     BondAdd(BondEntryInput),
     BondRemove(BondRef),
     BondModify(BondRef, BondAst),
@@ -814,7 +814,7 @@ impl ReactionInput {
                         ast: lhs.atom(id).ast.clone(),
                     }));
                 }
-                DeltaInput::AtomModify(r, rhs) => {
+                DeltaInput::AtomModify(r, update) => {
                     let id = r.resolve(&ns)?;
                     if ns.atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
@@ -823,8 +823,7 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    let new = lhs.atom(id).ast.update(&rhs);
-                    for d in AtomDelta::diff(id, lhs.atom(id).ast, &new) {
+                    for d in AtomDelta::for_update(id, lhs.atom(id).ast, &update) {
                         resolved.push(Delta::Atom(d));
                     }
                 }
@@ -1400,10 +1399,10 @@ fn read_delta_atom_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInpu
             de.consume_byte(b'[')?;
             let r = read_atom_ref(de)?;
             let s = de.read_string()?;
-            let dsl: PartialAtomDsl = s
+            let dsl: AtomUpdateDsl = s
                 .as_ref()
                 .parse()
-                .map_err(|e| DeError::subgrammar("partial-atom", e))?;
+                .map_err(|e| DeError::subgrammar("atom-update", e))?;
             if !de.try_consume_byte(b']')? {
                 return Err(DeError::Custom("atom :modify expects [ref dsl]".into()).into());
             }
@@ -1722,7 +1721,7 @@ fn parse_delta_atom_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
             }
             Ok(DeltaInput::AtomModify(
                 AtomRef::from_edn(&v[0])?,
-                PartialAtomDsl::from_edn(&v[1])?.0,
+                AtomUpdateDsl::from_edn(&v[1])?.0,
             ))
         }
         o => Err(DeError::Custom(format!("unknown atom delta op :{o}"))),
@@ -2127,30 +2126,34 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                 AtomDelta::ModifyField { id, .. } | AtomDelta::ModifyConstraint { id, .. },
             ) => {
                 let id = *id;
-                let mut partial = AtomAst::new(ElementAst::Undetermined);
+                let mut update = AtomUpdate::default();
                 while let Some(Delta::Atom(delta)) = deltas.get(i) {
                     match delta {
                         AtomDelta::ModifyField { id: j, change } if *j == id => match change {
-                            AtomFieldChange::Element { new, .. } => partial.element = new.clone(),
-                            AtomFieldChange::IsotopeMass { new, .. } => {
-                                partial.isotope_mass = new.clone()
+                            AtomFieldChange::Element { new, .. } => {
+                                update.element = Some(new.clone())
                             }
-                            AtomFieldChange::Charge { new, .. } => partial.charge = new.clone(),
+                            AtomFieldChange::IsotopeMass { new, .. } => {
+                                update.isotope_mass = Some(new.clone())
+                            }
+                            AtomFieldChange::Charge { new, .. } => {
+                                update.charge = Some(new.clone())
+                            }
                             AtomFieldChange::ImplicitHydrogens { new, .. } => {
-                                partial.implicit_hydrogens = new.clone()
+                                update.implicit_hydrogens = Some(new.clone())
                             }
                             AtomFieldChange::LonePairs { new, .. } => {
-                                partial.lone_pairs = new.clone()
+                                update.lone_pairs = Some(new.clone())
                             }
-                            AtomFieldChange::Spin { new, .. } => partial.spin = new.clone(),
+                            AtomFieldChange::Spin { new, .. } => update.spin = Some(new.clone()),
                         },
                         AtomDelta::ModifyConstraint { id: j, old, new } if *j == id => match new {
                             Some(c) => {
-                                partial.constraints.set(c.clone());
+                                update.constraints.set(c.clone());
                             }
                             None => {
                                 if let Some(old) = old {
-                                    partial.constraints.set(old.as_undetermined());
+                                    update.constraints.set(old.as_undetermined());
                                 }
                             }
                         },
@@ -2159,7 +2162,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     i += 1;
                 }
                 let payload = Edn::Vector(
-                    vec![render_atom_ref(id, meta), PartialAtomDsl(partial).to_edn()].into(),
+                    vec![render_atom_ref(id, meta), AtomUpdateDsl(update).to_edn()].into(),
                 );
                 out.push(single_key_map("atom", single_key_map("modify", payload)));
             }
@@ -2959,11 +2962,10 @@ mod tests {
     #[case::remove_index("{:atom {:remove 1}}", DeltaInput::AtomRemove(AtomRef::Index(1)))]
     #[case::modify(
         r##"{:atom {:modify [:br "#c-1"]}}"##,
-        DeltaInput::AtomModify(AtomRef::Id("br".into()), {
-            let mut a = AtomAst::new(ElementAst::Undetermined);
-            a.charge = ValueAst::Lit(-1);
-            a
-        })
+        DeltaInput::AtomModify(
+            AtomRef::Id("br".into()),
+            AtomUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() },
+        )
     )]
     fn test_parse_delta_input_atom(#[case] input: &str, #[case] expected: DeltaInput) {
         assert_eq!(
@@ -3006,11 +3008,10 @@ mod tests {
     #[case::remove_index("{:atom {:remove 1}}", DeltaInput::AtomRemove(AtomRef::Index(1)))]
     #[case::modify(
         r##"{:atom {:modify [:br "#c-1"]}}"##,
-        DeltaInput::AtomModify(AtomRef::Id("br".into()), {
-            let mut a = AtomAst::new(ElementAst::Undetermined);
-            a.charge = ValueAst::Lit(-1);
-            a
-        })
+        DeltaInput::AtomModify(
+            AtomRef::Id("br".into()),
+            AtomUpdate { charge: Some(ValueAst::Lit(-1)), ..Default::default() },
+        )
     )]
     fn test_read_delta_input_atom(#[case] input: &str, #[case] expected: DeltaInput) {
         assert_eq!(
@@ -3301,9 +3302,15 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_atom_modify() {
-        // lhs :br is Br#c0; modify charge to -1 → one ModifyField (old recovered from lhs).
-        let input = r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##;
+    #[case::determined(
+        r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##,
+        ValueAst::Lit(-1),
+    )]
+    #[case::undetermined(
+        r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c*"]}}]}"##,
+        ValueAst::Undetermined
+    )]
+    fn test_reaction_input_into_ast_atom_modify(#[case] input: &str, #[case] new: ValueAst) {
         let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ast()
@@ -3314,7 +3321,7 @@ mod tests {
                 id: AtomId(0),
                 change: AtomFieldChange::Charge {
                     old: ValueAst::Lit(0),
-                    new: ValueAst::Lit(-1),
+                    new,
                 },
             })]),
         );
@@ -3322,9 +3329,7 @@ mod tests {
 
     #[rstest]
     fn test_reaction_input_into_ast_atom_modify_remove_constraint() {
-        // lhs :me is C#v4; modify to #v* (vacuous valence) drops the constraint → one
-        // ModifyConstraint with new: None. Exercises the parse→delta path through
-        // `update`'s vacuous-removal (a bare `set` would emit a modify-to-Undetermined instead).
+        // An undetermined constraint in an AtomUpdate removes that keyed constraint.
         let input = r##"{:lhs {:atoms [[:me "C#v4"]]} :deltas [{:atom {:modify [:me "#v*"]}}]}"##;
         let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
@@ -3568,6 +3573,7 @@ mod tests {
     #[case::add(vec![Delta::Atom(AtomDelta::Add { id: AtomId(2), ast: AtomAst::from_element(Element::N) })], r##"{:atom {:add [:n "N"]}}"##)]
     #[case::remove(vec![Delta::Atom(AtomDelta::Remove { id: AtomId(1), ast: AtomAst::from_element(Element::C) })], "{:atom {:remove :c}}")]
     #[case::modify_field(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Lit(-1) } })], r##"{:atom {:modify [:br "#c-"]}}"##)]
+    #[case::modify_field_undetermined(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Undetermined } })], r##"{:atom {:modify [:br "#c*"]}}"##)]
     #[case::modify_set_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: None, new: Some(AtomConstraintAst::valence(4_i64)) })], r##"{:atom {:modify [:br "#v4"]}}"##)]
     #[case::modify_remove_constraint(vec![Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraintAst::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#v*"]}}"##)]
     #[case::modify_coalesced(vec![Delta::Atom(AtomDelta::ModifyField { id: AtomId(0), change: AtomFieldChange::Charge { old: ValueAst::Lit(0), new: ValueAst::Lit(-1) } }), Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: Some(AtomConstraintAst::valence(4_i64)), new: None })], r##"{:atom {:modify [:br "#c-#v*"]}}"##)]
@@ -3597,6 +3603,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::modify(r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##)]
+    #[case::modify_undetermined(r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c*"]}}]}"##)]
     #[case::reaction_alias(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add :nu}}] :atom-aliases [:nu "O#h1#c-1"] }"##)]
     #[case::molecule_constraint(r##"{:lhs {:atoms ["C" "N"] :bonds [{:id :b1 :atoms [0 1] :type "1"}]} :deltas [{:bond {:modify [:b1 "2"]}} {:constraint {:add {:connected {}}}}]}"##)]
     #[case::entity_leaf_constraint(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:constraint {:add {:atom [:o {:valence 2}]}}}]}"##)]

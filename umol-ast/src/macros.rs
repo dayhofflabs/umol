@@ -53,11 +53,11 @@ macro_rules! atom_dsl_ground {
     }};
 }
 
-/// Parse partial atom DSL into `AtomAst`.
+/// Parse a compact atom-update string into `AtomUpdate`.
 #[macro_export]
-macro_rules! partial_atom_dsl {
+macro_rules! atom_update_dsl {
     ($s:expr $(,)?) => {{
-        <$crate::dsl::PartialAtomDsl as ::core::str::FromStr>::from_str($s)
+        <$crate::dsl::AtomUpdateDsl as ::core::str::FromStr>::from_str($s)
             .unwrap()
             .0
     }};
@@ -235,10 +235,11 @@ mod tests {
 
     use crate::ast::constraint::RingScope;
     use crate::ast::{
-        AromaticSystemAst, AromaticSystemConstraintAst, AtomAst, AtomConstraintAst, AtomId,
-        BondAst, BondConstraintAst, BooleanAst, DativeBondAst, DativeBondConstraintAst, ElementAst,
-        MoleculeAst, MoleculeParts, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind,
-        StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind, ValueAst,
+        AromaticSystemAst, AromaticSystemConstraintAst, AtomAst, AtomConstraintAst,
+        AtomConstraintsAst, AtomId, AtomUpdate, BondAst, BondConstraintAst, BooleanAst,
+        DativeBondAst, DativeBondConstraintAst, ElementAst, MoleculeAst, MoleculeParts,
+        MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst, StereoBondAst,
+        StereoCosetAst, StereoKind, ValueAst,
     };
     use crate::dsl::molecule::MoleculeMetadata;
     use crate::dsl::{AtomDsl, MoleculeDsl};
@@ -336,12 +337,12 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty("", AtomAst::new(ElementAst::Undetermined))]
-    #[case::element("C#h4", AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64))]
-    #[case::field_only("#h4", AtomAst::new(ElementAst::Undetermined).with_implicit_hydrogens(4_i64))]
-    #[case::constraint_only("#v4", AtomAst::new(ElementAst::Undetermined).with_constraint(AtomConstraintAst::valence(4_i64)))]
-    fn test_partial_atom_macro(#[case] input: &str, #[case] expected: AtomAst) {
-        assert_eq!(partial_atom_dsl!(input), expected);
+    #[case::empty("", AtomUpdate::default())]
+    #[case::element("C#h4", AtomUpdate { element: Some(ElementAst::Lit(Element::C)), implicit_hydrogens: Some(ValueAst::Lit(4)), ..Default::default() })]
+    #[case::field_only("#h4", AtomUpdate { implicit_hydrogens: Some(ValueAst::Lit(4)), ..Default::default() })]
+    #[case::constraint_only("#v4", AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() })]
+    fn test_atom_update_macro(#[case] input: &str, #[case] expected: AtomUpdate) {
+        assert_eq!(atom_update_dsl!(input), expected);
     }
 
     #[rustfmt::skip]

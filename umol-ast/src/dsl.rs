@@ -27,8 +27,8 @@ pub use aromatic::{
     parse_aromatic_system, AromaticSystemConstraintDsl, AromaticSystemDsl, AromaticSystemPredicate,
 };
 pub use atom::{
-    parse_atom, parse_partial_atom, AromaticValenceDsl, AtomConstraintDsl, AtomDsl, AtomPredicate,
-    MulticenterValenceDsl, PartialAtomDsl,
+    parse_atom, parse_atom_update, AromaticValenceDsl, AtomConstraintDsl, AtomDsl, AtomPredicate,
+    AtomUpdateDsl, MulticenterValenceDsl,
 };
 pub use bond::{
     parse_bond, parse_partial_bond, BondConstraintDsl, BondDsl, BondPredicate, PartialBondDsl,

@@ -13,27 +13,28 @@ pub(crate) use umol_ast::ast::{
     AddBond, AromaticSystemAst, AromaticSystemConstraintAst, AromaticSystemConstraintKey,
     AromaticSystemConstraintsAst, AromaticSystemHandle, AromaticSystemId, AromaticValenceAst,
     AtomAst, AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst, AtomFieldChange, AtomHandle,
-    AtomId, BondAst, BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondFieldChange,
-    BondHandle, BondId, BooleanAst, Canonicalize, CisTransStereoAst, Constraint, Constraints,
-    DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst,
-    DativeBondHandle, DativeBondId, Edit, ElectronCountsAst, ElementAst, FluxionalityAst,
-    IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp, MoleculeAst,
-    MoleculeConstraint, MoleculeParts, MulticenterBondAst, MulticenterBondConstraintAst,
-    MulticenterBondConstraintKey, MulticenterBondConstraintsAst, MulticenterBondHandle,
-    MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondConstraintAst,
-    NoncovalentBondConstraintsAst, NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind,
-    NoncovalentBondKindAst, OrientedLigandPermutation, RelOp, RelationalConstraint,
-    RingMembershipAst, RingScope, SpinStateAst, StereoAtomAst, StereoAtomConstraintAst,
-    StereoAtomConstraintsAst, StereoAtomId, StereoBondAst, StereoBondConstraintAst,
-    StereoBondConstraintsAst, StereoBondId, StereoConfigurationAst, StereoCosetAst, StereoKind,
-    StereoLigand, StereoLigandKind, StereoLigandPair, StereoLigandPosition, Stereogenicity,
-    StereogenicityAst, SubPatternAnchor, TetrahedralStereoAst, Topicity, TopicityAst,
-    TopicityRelationAst, ValueAst, ValuePredicate, ValueTerm,
+    AtomId, AtomUpdate, BondAst, BondConstraintAst, BondConstraintKey, BondConstraintsAst,
+    BondFieldChange, BondHandle, BondId, BooleanAst, Canonicalize, CisTransStereoAst, Constraint,
+    Constraints, DativeBondAst, DativeBondConstraintAst, DativeBondConstraintKey,
+    DativeBondConstraintsAst, DativeBondHandle, DativeBondId, Edit, ElectronCountsAst, ElementAst,
+    FluxionalityAst, IsotopeMassAst, Lattice, LigandPermutation, LigandSymmetryAst, MemOp,
+    MoleculeAst, MoleculeConstraint, MoleculeParts, MulticenterBondAst,
+    MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsAst,
+    MulticenterBondHandle, MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst,
+    NoncovalentBondConstraintAst, NoncovalentBondConstraintsAst, NoncovalentBondHandle,
+    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, OrientedLigandPermutation,
+    RelOp, RelationalConstraint, RingMembershipAst, RingScope, SpinStateAst, StereoAtomAst,
+    StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoAtomId, StereoBondAst,
+    StereoBondConstraintAst, StereoBondConstraintsAst, StereoBondId, StereoConfigurationAst,
+    StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
+    StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
+    TetrahedralStereoAst, Topicity, TopicityAst, TopicityRelationAst, ValueAst, ValuePredicate,
+    ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
-    parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, DativeBondParticipants,
-    MoleculeDsl, MoleculeMetadata, MoleculeNamespace, MulticenterBondDsl, NoncovalentBondDsl,
-    ParseError, PartialAtomDsl, PartialBondDsl, StereoAtomConstraintDsl, StereoAtomDsl,
+    parse_value, AromaticSystemDsl, AtomDsl, AtomUpdateDsl, BondDsl, DativeBondDsl,
+    DativeBondParticipants, MoleculeDsl, MoleculeMetadata, MoleculeNamespace, MulticenterBondDsl,
+    NoncovalentBondDsl, ParseError, PartialBondDsl, StereoAtomConstraintDsl, StereoAtomDsl,
     StereoAtomParticipants, StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants,
     StereoLigandRef, ValueDsl,
 };
@@ -405,6 +406,17 @@ pub(crate) fn atom_constraints_strategy() -> impl Strategy<Value = AtomConstrain
     })
 }
 
+pub(crate) fn atom_update_constraints_strategy() -> impl Strategy<Value = AtomConstraintsAst> {
+    prop::collection::vec(
+        prop_oneof![
+            atom_constraint_strategy(),
+            atom_constraint_strategy().prop_map(|constraint| constraint.as_undetermined()),
+        ],
+        0..=3,
+    )
+    .prop_map(AtomConstraintsAst::from_iter)
+}
+
 pub(crate) fn bond_constraint_strategy() -> BoxedStrategy<BondConstraintAst> {
     prop_oneof![
         any::<bool>().prop_map(|b| BondConstraintAst::Aromatic(BooleanAst::Lit(b))),
@@ -464,6 +476,29 @@ prop_compose! {
         AtomAst {
             element,
             isotope_mass: isotope,
+            charge,
+            implicit_hydrogens,
+            lone_pairs,
+            spin,
+            constraints,
+        }
+    }
+}
+
+prop_compose! {
+    pub(crate) fn atom_update_strategy()
+    (
+        element in prop::option::of(element_ast_strategy()),
+        isotope_mass in prop::option::of(isotope_strategy()),
+        charge in prop::option::of(value_basic(-2..=2)),
+        implicit_hydrogens in prop::option::of(value_basic(0..=4)),
+        lone_pairs in prop::option::of(value_basic(0..=4)),
+        spin in prop::option::of(spin_state_strategy()),
+        constraints in atom_update_constraints_strategy(),
+    ) -> AtomUpdate {
+        AtomUpdate {
+            element,
+            isotope_mass,
             charge,
             implicit_hydrogens,
             lone_pairs,

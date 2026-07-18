@@ -27,6 +27,20 @@ pub struct AtomAst {
     pub constraints: AtomConstraintsAst,
 }
 
+/// Attribute update for an atom. `None` leaves an ordinary field unchanged;
+/// `Some(value)` sets it exactly, including to an undetermined value.
+/// Constraints are keyed updates, with undetermined entries removing their key.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AtomUpdate {
+    pub element: Option<ElementAst>,
+    pub isotope_mass: Option<IsotopeMassAst>,
+    pub charge: Option<ValueAst>,
+    pub implicit_hydrogens: Option<ValueAst>,
+    pub lone_pairs: Option<ValueAst>,
+    pub spin: Option<SpinStateAst>,
+    pub constraints: AtomConstraintsAst,
+}
+
 impl AtomAst {
     pub fn new(element: ElementAst) -> Self {
         Self {
@@ -90,41 +104,62 @@ impl AtomAst {
         self
     }
 
-    /// Overwrite with `other`, keeping existing values and constraints.
-    pub fn update(&self, other: &AtomAst) -> AtomAst {
+    /// Apply an attribute update, leaving omitted fields and constraint keys unchanged.
+    pub fn update(&self, update: &AtomUpdate) -> AtomAst {
         let mut constraints = self.constraints.clone();
-        constraints.update(&other.constraints);
+        constraints.update(&update.constraints);
         AtomAst {
-            element: if other.element.is_undetermined() {
-                self.element.clone()
-            } else {
-                other.element.clone()
-            },
-            isotope_mass: if other.isotope_mass.is_undetermined() {
-                self.isotope_mass.clone()
-            } else {
-                other.isotope_mass.clone()
-            },
-            charge: if other.charge.is_undetermined() {
-                self.charge.clone()
-            } else {
-                other.charge.clone()
-            },
-            implicit_hydrogens: if other.implicit_hydrogens.is_undetermined() {
-                self.implicit_hydrogens.clone()
-            } else {
-                other.implicit_hydrogens.clone()
-            },
-            lone_pairs: if other.lone_pairs.is_undetermined() {
-                self.lone_pairs.clone()
-            } else {
-                other.lone_pairs.clone()
-            },
-            spin: if other.spin.is_undetermined() {
-                self.spin.clone()
-            } else {
-                other.spin.clone()
-            },
+            element: update
+                .element
+                .clone()
+                .unwrap_or_else(|| self.element.clone()),
+            isotope_mass: update
+                .isotope_mass
+                .clone()
+                .unwrap_or_else(|| self.isotope_mass.clone()),
+            charge: update.charge.clone().unwrap_or_else(|| self.charge.clone()),
+            implicit_hydrogens: update
+                .implicit_hydrogens
+                .clone()
+                .unwrap_or_else(|| self.implicit_hydrogens.clone()),
+            lone_pairs: update
+                .lone_pairs
+                .clone()
+                .unwrap_or_else(|| self.lone_pairs.clone()),
+            spin: update.spin.clone().unwrap_or_else(|| self.spin.clone()),
+            constraints,
+        }
+    }
+
+    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    pub fn difference_to(&self, other: &Self) -> AtomUpdate {
+        let mut constraints = AtomConstraintsAst::new();
+        for new in other.constraints.iter() {
+            if self
+                .constraints
+                .get(new.key())
+                .is_none_or(|old| !old.canonical_eq(new))
+            {
+                constraints.set(new.clone());
+            }
+        }
+        for old in self.constraints.iter() {
+            if other.constraints.get(old.key()).is_none() {
+                constraints.set(old.as_undetermined());
+            }
+        }
+        AtomUpdate {
+            element: (!self.element.canonical_eq(&other.element)).then(|| other.element.clone()),
+            isotope_mass: (!self.isotope_mass.canonical_eq(&other.isotope_mass))
+                .then(|| other.isotope_mass.clone()),
+            charge: (!self.charge.canonical_eq(&other.charge)).then(|| other.charge.clone()),
+            implicit_hydrogens: (!self
+                .implicit_hydrogens
+                .canonical_eq(&other.implicit_hydrogens))
+            .then(|| other.implicit_hydrogens.clone()),
+            lone_pairs: (!self.lone_pairs.canonical_eq(&other.lone_pairs))
+                .then(|| other.lone_pairs.clone()),
+            spin: (!self.spin.canonical_eq(&other.spin)).then(|| other.spin.clone()),
             constraints,
         }
     }
@@ -715,15 +750,75 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::overwrite(AtomAst::from_element(Element::C).with_charge(0_i64) .with_constraint(AtomConstraintAst::valence(4_i64)),
-        AtomAst::new(ElementAst::Undetermined).with_charge(-1_i64).with_constraint(AtomConstraintAst::valence(6_i64)),
-        AtomAst::from_element(Element::C).with_charge(-1_i64).with_constraint(AtomConstraintAst::valence(6_i64)))]
-    #[case::remove_constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)),
-        AtomAst::new(ElementAst::Undetermined).with_constraint(AtomConstraintAst::valence(ValueAst::Undetermined)),
-        AtomAst::from_element(Element::C))]
-    fn test_atom_ast_update(#[case] lhs: AtomAst, #[case] rhs: AtomAst, #[case] expected: AtomAst) {
-        assert_eq!(lhs.update(&rhs), expected);
+    #[case::element(AtomAst::from_element(Element::C), AtomUpdate { element: Some(ElementAst::Lit(Element::N)), ..Default::default() }, AtomAst::from_element(Element::N))]
+    #[case::element_undetermined(AtomAst::from_element(Element::C), AtomUpdate { element: Some(ElementAst::Undetermined), ..Default::default() }, AtomAst::default())]
+    #[case::isotope_mass(AtomAst::from_element(Element::C).with_isotope_mass(12_u32), AtomUpdate { isotope_mass: Some(IsotopeMassAst::Lit(13)), ..Default::default() }, AtomAst::from_element(Element::C).with_isotope_mass(13_u32))]
+    #[case::isotope_mass_undetermined(AtomAst::from_element(Element::C).with_isotope_mass(12_u32), AtomUpdate { isotope_mass: Some(IsotopeMassAst::Undetermined), ..Default::default() }, AtomAst::from_element(Element::C))]
+    #[case::charge(AtomAst::from_element(Element::C).with_charge(0_i64), AtomUpdate { charge: Some(ValueAst::Lit(1)), ..Default::default() }, AtomAst::from_element(Element::C).with_charge(1_i64))]
+    #[case::charge_undetermined(AtomAst::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(ValueAst::Undetermined), ..Default::default() }, AtomAst::from_element(Element::C))]
+    #[case::implicit_hydrogens(AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64), AtomUpdate { implicit_hydrogens: Some(ValueAst::Lit(3)), ..Default::default() }, AtomAst::from_element(Element::C).with_implicit_hydrogens(3_i64))]
+    #[case::implicit_hydrogens_undetermined(AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64), AtomUpdate { implicit_hydrogens: Some(ValueAst::Undetermined), ..Default::default() }, AtomAst::from_element(Element::C))]
+    #[case::lone_pairs(AtomAst::from_element(Element::N).with_lone_pairs(1_i64), AtomUpdate { lone_pairs: Some(ValueAst::Lit(2)), ..Default::default() }, AtomAst::from_element(Element::N).with_lone_pairs(2_i64))]
+    #[case::lone_pairs_undetermined(AtomAst::from_element(Element::N).with_lone_pairs(1_i64), AtomUpdate { lone_pairs: Some(ValueAst::Undetermined), ..Default::default() }, AtomAst::from_element(Element::N))]
+    #[case::spin(AtomAst::from_element(Element::C).with_spin((0_u8, 1_u8)), AtomUpdate { spin: Some(SpinStateAst::from((1_u8, 2_u8))), ..Default::default() }, AtomAst::from_element(Element::C).with_spin((1_u8, 2_u8)))]
+    #[case::spin_undetermined(AtomAst::from_element(Element::C).with_spin((0_u8, 1_u8)), AtomUpdate { spin: Some(SpinStateAst::default()), ..Default::default() }, AtomAst::from_element(Element::C))]
+    #[case::constraint_set(AtomAst::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
+    #[case::constraint_replace(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(3_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(4_i64)), ..Default::default() }, AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)))]
+    #[case::constraint_remove(AtomAst::from_element(Element::C).with_constraint(AtomConstraintAst::valence(4_i64)), AtomUpdate { constraints: AtomConstraintsAst::from(AtomConstraintAst::valence(ValueAst::Undetermined)), ..Default::default() }, AtomAst::from_element(Element::C))]
+    fn test_atom_ast_update(#[case] atom: AtomAst, #[case] update: AtomUpdate, #[case] expected: AtomAst) {
+        assert_eq!(atom.update(&update), expected);
+    }
+
+    #[rstest]
+    #[case::empty(AtomAst::from_element(Element::C).with_charge(1_i64).with_constraint(AtomConstraintAst::valence(4_i64)))]
+    fn test_atom_ast_update_identity(#[case] atom: AtomAst) {
+        assert_eq!(atom.update(&AtomUpdate::default()), atom);
+    }
+
+    #[rstest]
+    fn test_atom_ast_difference_to() {
+        let atom = AtomAst::from_element(Element::C)
+            .with_isotope_mass(12_u32)
+            .with_charge(0_i64)
+            .with_implicit_hydrogens(4_i64)
+            .with_lone_pairs(0_i64)
+            .with_spin((0_u8, 1_u8))
+            .with_constraints([
+                AtomConstraintAst::valence(4_i64),
+                AtomConstraintAst::donated_pairs(1_i64),
+            ]);
+        let other = AtomAst::from_element(Element::N)
+            .with_isotope_mass(13_u32)
+            .with_implicit_hydrogens(3_i64)
+            .with_lone_pairs(1_i64)
+            .with_constraints([
+                AtomConstraintAst::valence(3_i64),
+                AtomConstraintAst::degree(2_i64),
+            ]);
+        assert_eq!(
+            atom.difference_to(&other),
+            AtomUpdate {
+                element: Some(ElementAst::Lit(Element::N)),
+                isotope_mass: Some(IsotopeMassAst::Lit(13)),
+                charge: Some(ValueAst::Undetermined),
+                implicit_hydrogens: Some(ValueAst::Lit(3)),
+                lone_pairs: Some(ValueAst::Lit(1)),
+                spin: Some(SpinStateAst::default()),
+                constraints: AtomConstraintsAst::from_iter([
+                    AtomConstraintAst::valence(3_i64),
+                    AtomConstraintAst::donated_pairs(ValueAst::Undetermined),
+                    AtomConstraintAst::degree(2_i64),
+                ]),
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::canonical(AtomAst::from_element(Element::C).with_charge(1_i64), AtomAst::from_element(Element::C).with_charge(ValueAst::lit_set([1])))]
+    fn test_atom_ast_difference_to_identity(#[case] atom: AtomAst, #[case] other: AtomAst) {
+        assert_eq!(atom.difference_to(&other), AtomUpdate::default());
     }
 
     #[rustfmt::skip]
