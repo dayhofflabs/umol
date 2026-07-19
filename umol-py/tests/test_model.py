@@ -6,6 +6,7 @@ from umol import (
     AromaticityModel,
     AtomAst,
     AtomTypeRegistry,
+    ChemistryModel,
     Element,
     ElementScope,
     InconsistencyPolicy,
@@ -1095,6 +1096,158 @@ def test_stereo_model_repr(model, expected):
 )
 def test_stereo_model_mutation(field, value):
     model = StereoModel.default()
+
+    with pytest.raises(AttributeError):
+        setattr(model, field, value)
+
+
+def test_chemistry_model_default():
+    model = ChemistryModel.default()
+
+    assert model.valence == ValenceModel.AtomTyping(
+        registry=AtomTypeRegistry.default()
+    )
+    assert model.aromaticity == AromaticityModel.daylight()
+    assert model.stereo == StereoModel.default()
+    assert model == ChemistryModel.default()
+
+
+def test_chemistry_model_new():
+    valence = ValenceModel.Counts(
+        table=ValenceTable(
+            entries={
+                Element("C"): ValenceEntry(target_covalences=[4]),
+                Element("O"): ValenceEntry(target_covalences=[2]),
+            }
+        )
+    )
+    aromaticity = AromaticityModel.Clar(
+        scope=ElementScope.AllowList([Element("C")]),
+        ring_limits=RingLimits(min_ring_size=6),
+    )
+    stereo = StereoModel(
+        kind_models=StereoModel.default().kind_models,
+        para_stereo=True,
+        max_iterations=8,
+        inconsistency=InconsistencyPolicy.Strip,
+    )
+    model = ChemistryModel(
+        valence=valence,
+        aromaticity=aromaticity,
+        stereo=stereo,
+    )
+
+    assert model.valence == valence
+    assert model.valence is not valence
+    assert model.aromaticity == aromaticity
+    assert model.aromaticity is not aromaticity
+    assert model.stereo == stereo
+    assert model.stereo is not stereo
+
+
+def test_chemistry_model_new_error():
+    with pytest.raises(TypeError):
+        ChemistryModel(
+            ValenceModel.AtomTyping(registry=AtomTypeRegistry.default()),
+            AromaticityModel.daylight(),
+            StereoModel.default(),
+        )
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        ChemistryModel(
+            valence=ValenceModel.Counts(table=ValenceTable(entries={})),
+            aromaticity=AromaticityModel.daylight(),
+            stereo=StereoModel.default(),
+        ),
+        ChemistryModel(
+            valence=ValenceModel.AtomTyping(
+                registry=AtomTypeRegistry.default()
+            ),
+            aromaticity=AromaticityModel.permissive(),
+            stereo=StereoModel.default(),
+        ),
+        ChemistryModel(
+            valence=ValenceModel.AtomTyping(
+                registry=AtomTypeRegistry.default()
+            ),
+            aromaticity=AromaticityModel.daylight(),
+            stereo=StereoModel(
+                kind_models={},
+                para_stereo=False,
+                max_iterations=16,
+                inconsistency=InconsistencyPolicy.Error,
+            ),
+        ),
+    ],
+)
+def test_chemistry_model_equality(other):
+    assert ChemistryModel.default() != other
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        (ChemistryModel.default(), "ChemistryModel.default()"),
+        (
+            ChemistryModel(
+                valence=ValenceModel.Counts(
+                    table=ValenceTable(
+                        entries={
+                            Element("C"): ValenceEntry(target_covalences=[4])
+                        }
+                    )
+                ),
+                aromaticity=AromaticityModel.Hmo(
+                    scope=ElementScope.Any(),
+                    stabilization_threshold=0.375,
+                ),
+                stereo=StereoModel(
+                    kind_models=StereoModel.default().kind_models,
+                    para_stereo=True,
+                    max_iterations=8,
+                    inconsistency=InconsistencyPolicy.Keep,
+                ),
+            ),
+            "ChemistryModel(valence=ValenceModel.Counts(table="
+            "ValenceTable(entries={Element('C'): ValenceEntry("
+            "target_covalences=[4], aromatic_valences=[])})), aromaticity="
+            "AromaticityModel.Hmo(scope=ElementScope.Any(), "
+            "stabilization_threshold=0.375), stereo=StereoModel(kind_models={"
+            "StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), "
+            "fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope="
+            "ElementScope.Any(), fluxionality=False)}, para_stereo=True, "
+            "max_iterations=8, inconsistency=InconsistencyPolicy.Keep))",
+        ),
+    ],
+)
+def test_chemistry_model_repr(model, expected):
+    assert repr(model) == expected
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        (
+            "valence",
+            ValenceModel.Counts(table=ValenceTable(entries={})),
+        ),
+        ("aromaticity", AromaticityModel.permissive()),
+        (
+            "stereo",
+            StereoModel(
+                kind_models={},
+                para_stereo=False,
+                max_iterations=16,
+                inconsistency=InconsistencyPolicy.Error,
+            ),
+        ),
+    ],
+)
+def test_chemistry_model_mutation(field, value):
+    model = ChemistryModel.default()
 
     with pytest.raises(AttributeError):
         setattr(model, field, value)

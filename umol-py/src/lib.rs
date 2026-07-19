@@ -65,7 +65,7 @@ use crate::{
         aromaticity::{AromaticityModel, RingLimits},
         stereo::{InconsistencyPolicy, StereoKindModel, StereoModel},
         valence::{AtomTypeRegistry, ValenceEntry, ValenceModel, ValenceTable},
-        ElementScope,
+        ChemistryModel, ElementScope,
     },
     molecule::MoleculeAst,
     multicenter::{MulticenterBondAst, MulticenterBondView, MulticenterBondViews},
@@ -167,6 +167,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<InconsistencyPolicy>()?;
         module.add_class::<StereoKindModel>()?;
         module.add_class::<StereoModel>()?;
+        module.add_class::<ChemistryModel>()?;
         module.add_class::<AromaticSystemDelta>()?;
         module.add_class::<AtomDelta>()?;
         module.add_class::<AtomFieldChange>()?;

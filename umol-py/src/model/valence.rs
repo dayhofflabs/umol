@@ -275,7 +275,7 @@ pub enum ValenceModel {
 
 #[pymethods]
 impl ValenceModel {
-    fn __repr__(&self) -> String {
+    pub(crate) fn __repr__(&self) -> String {
         match self {
             Self::AtomTyping { registry } => {
                 format!("ValenceModel.AtomTyping(registry={})", registry.__repr__())
@@ -288,10 +288,6 @@ impl ValenceModel {
 }
 
 impl ValenceModel {
-    #[allow(
-        dead_code,
-        reason = "Rust-to-Python conversion API for ChemistryModel configuration"
-    )]
     pub(crate) fn from_rust(model: &GraphValenceModel) -> Self {
         match model {
             GraphValenceModel::AtomTyping { registry } => Self::AtomTyping {

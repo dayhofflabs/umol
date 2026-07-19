@@ -431,8 +431,8 @@ exported from `umol` in its own subitem.
   exports): bind `valence`, `aromaticity`, and `stereo` as an immutable config
   with keyword-only construction, `default()`, detached getters, structural
   equality, repr, and owned Rust round trips. Tests pin the full default and
-  independently replace every branch. **Additive (green).** `[dep: S2c, S4d,
-  S5c, S5f]`
+  independently replace every branch. **Additive (green). Done.** `[dep: S2c,
+  S4d, S5c, S5f]`
 - **S6b — `AromaticityResolveConfig`** (`umol-py/src/resolve.rs`): bind
   `delocalize_charge` and `reset_aromatic_valence` with a keyword-only
   constructor carrying Rust defaults, immutable getters, equality, repr, and

@@ -83,3 +83,9 @@ def test_stereo_model_import():
     from umol import StereoModel
 
     assert umol.StereoModel is StereoModel
+
+
+def test_chemistry_model_import():
+    from umol import ChemistryModel
+
+    assert umol.ChemistryModel is ChemistryModel

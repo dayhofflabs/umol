@@ -6,9 +6,90 @@ pub(crate) mod valence;
 
 use pyo3::prelude::*;
 use umol_chem::element::Element as ChemElement;
-use umol_graph::ops::model::ElementScope as GraphElementScope;
+use umol_graph::ops::model::{
+    ChemistryModel as GraphChemistryModel, ElementScope as GraphElementScope,
+};
 
+use self::aromaticity::AromaticityModel;
+use self::stereo::StereoModel;
+use self::valence::ValenceModel;
 use crate::element::Element;
+
+/// Semantic configuration for valence, aromaticity, and stereo perception.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChemistryModel {
+    valence: ValenceModel,
+    aromaticity: AromaticityModel,
+    stereo: StereoModel,
+}
+
+#[pymethods]
+impl ChemistryModel {
+    #[new]
+    #[pyo3(signature = (*, valence, aromaticity, stereo))]
+    fn new(valence: ValenceModel, aromaticity: AromaticityModel, stereo: StereoModel) -> Self {
+        Self {
+            valence,
+            aromaticity,
+            stereo,
+        }
+    }
+
+    #[staticmethod]
+    fn default() -> Self {
+        Self::from_rust(&GraphChemistryModel::default())
+    }
+
+    #[getter]
+    fn valence(&self) -> ValenceModel {
+        self.valence.clone()
+    }
+
+    #[getter]
+    fn aromaticity(&self) -> AromaticityModel {
+        self.aromaticity.clone()
+    }
+
+    #[getter]
+    fn stereo(&self) -> StereoModel {
+        self.stereo.clone()
+    }
+
+    fn __repr__(&self) -> String {
+        if self == &Self::from_rust(&GraphChemistryModel::default()) {
+            return "ChemistryModel.default()".to_owned();
+        }
+        format!(
+            "ChemistryModel(valence={}, aromaticity={}, stereo={})",
+            self.valence.__repr__(),
+            self.aromaticity.__repr__(),
+            self.stereo.__repr__(),
+        )
+    }
+}
+
+impl ChemistryModel {
+    pub(crate) fn from_rust(model: &GraphChemistryModel) -> Self {
+        Self {
+            valence: ValenceModel::from_rust(&model.valence),
+            aromaticity: AromaticityModel::from_rust(&model.aromaticity),
+            stereo: StereoModel::from_rust(&model.stereo),
+        }
+    }
+
+    #[allow(
+        dead_code,
+        reason = "Python-to-Rust conversion API for configured molecule ingestion"
+    )]
+    pub(crate) fn to_rust(&self) -> GraphChemistryModel {
+        GraphChemistryModel {
+            valence: self.valence.to_rust(),
+            aromaticity: self.aromaticity.to_rust(),
+            stereo: self.stereo.to_rust(),
+        }
+    }
+}
 
 /// Elements eligible for a chemistry-model operation.
 #[pyclass(eq, frozen, from_py_object)]
@@ -64,9 +145,115 @@ impl ElementScope {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use rstest::rstest;
+    use umol_graph::ops::model::{
+        AromaticityModel as GraphAromaticityModel, InconsistencyPolicy as GraphInconsistencyPolicy,
+        RingLimits as GraphRingLimits, StereoModel as GraphStereoModel,
+        ValenceModel as GraphValenceModel,
+    };
+    use umol_graph::valence_table;
 
     use super::*;
+
+    #[rstest]
+    fn test_chemistry_model_default() {
+        let model = GraphChemistryModel::default();
+
+        assert_eq!(
+            ChemistryModel::default(),
+            ChemistryModel {
+                valence: ValenceModel::from_rust(&model.valence),
+                aromaticity: AromaticityModel::from_rust(&model.aromaticity),
+                stereo: StereoModel::from_rust(&model.stereo),
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::default(ChemistryModel::default(), "ChemistryModel.default()")]
+    #[case::configured(
+        ChemistryModel::new(
+            ValenceModel::from_rust(&GraphValenceModel::Counts {
+                table: Cow::Owned(valence_table![C => [4]]),
+            }),
+            AromaticityModel::from_rust(&GraphAromaticityModel::Hmo {
+                scope: GraphElementScope::Any,
+                stabilization_threshold: 0.375,
+            }),
+            StereoModel::from_rust(&GraphStereoModel {
+                para_stereo: true,
+                max_iterations: 8,
+                inconsistency: GraphInconsistencyPolicy::Keep,
+                ..GraphStereoModel::default()
+            }),
+        ),
+        "ChemistryModel(valence=ValenceModel.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[4], aromatic_valences=[])})), aromaticity=AromaticityModel.Hmo(scope=ElementScope.Any(), stabilization_threshold=0.375), stereo=StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope=ElementScope.Any(), fluxionality=False)}, para_stereo=True, max_iterations=8, inconsistency=InconsistencyPolicy.Keep))"
+    )]
+    fn test_chemistry_model_repr(#[case] model: ChemistryModel, #[case] expected: &str) {
+        assert_eq!(model.__repr__(), expected);
+    }
+
+    #[rstest]
+    fn test_chemistry_model_from_rust() {
+        let model = GraphChemistryModel {
+            valence: GraphValenceModel::Counts {
+                table: Cow::Owned(valence_table![C => [4], O => [2]]),
+            },
+            aromaticity: GraphAromaticityModel::Clar {
+                scope: GraphElementScope::AllowList(vec![ChemElement::C]),
+                ring_limits: GraphRingLimits {
+                    min_ring_size: 6,
+                    ..GraphRingLimits::default()
+                },
+            },
+            stereo: GraphStereoModel {
+                para_stereo: true,
+                max_iterations: 8,
+                inconsistency: GraphInconsistencyPolicy::Strip,
+                ..GraphStereoModel::default()
+            },
+        };
+
+        assert_eq!(
+            ChemistryModel::from_rust(&model),
+            ChemistryModel {
+                valence: ValenceModel::from_rust(&model.valence),
+                aromaticity: AromaticityModel::from_rust(&model.aromaticity),
+                stereo: StereoModel::from_rust(&model.stereo),
+            }
+        );
+    }
+
+    #[rstest]
+    fn test_chemistry_model_to_rust() {
+        let expected = GraphChemistryModel {
+            valence: GraphValenceModel::Counts {
+                table: Cow::Owned(valence_table![C => [4], O => [2]]),
+            },
+            aromaticity: GraphAromaticityModel::Clar {
+                scope: GraphElementScope::AllowList(vec![ChemElement::C]),
+                ring_limits: GraphRingLimits {
+                    min_ring_size: 6,
+                    ..GraphRingLimits::default()
+                },
+            },
+            stereo: GraphStereoModel {
+                para_stereo: true,
+                max_iterations: 8,
+                inconsistency: GraphInconsistencyPolicy::Strip,
+                ..GraphStereoModel::default()
+            },
+        };
+        let model = ChemistryModel {
+            valence: ValenceModel::from_rust(&expected.valence),
+            aromaticity: AromaticityModel::from_rust(&expected.aromaticity),
+            stereo: StereoModel::from_rust(&expected.stereo),
+        };
+
+        assert_eq!(model.to_rust(), expected);
+    }
 
     #[rstest]
     #[case::any(ElementScope::Any {}, "ElementScope.Any()")]

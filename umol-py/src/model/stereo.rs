@@ -164,7 +164,7 @@ impl StereoModel {
         self.inconsistency
     }
 
-    fn __repr__(&self) -> String {
+    pub(crate) fn __repr__(&self) -> String {
         if self == &Self::from_rust(&GraphStereoModel::default()) {
             return "StereoModel.default()".to_owned();
         }

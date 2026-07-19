@@ -124,7 +124,7 @@ impl AromaticityModel {
         Self::from_rust(&GraphAromaticityModel::permissive())
     }
 
-    fn __repr__(&self) -> String {
+    pub(crate) fn __repr__(&self) -> String {
         match self {
             Self::HueckelRule { scope, ring_limits } => format!(
                 "AromaticityModel.HueckelRule(scope={}, ring_limits={})",
