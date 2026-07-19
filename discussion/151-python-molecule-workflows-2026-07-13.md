@@ -1450,11 +1450,13 @@ boundary types and downstream ingestion belong to the next workflow pass.
   and retired bits raise `ValueError`. Rust/Python conversion tests cover every
   capability, representative combinations, zero/OpenSMILES, and unknown bits.
   No lint flags are bound. **Implemented (green).** `[dep: S4a]`
-- **S4d — `SmilesIoConfig`** (`umol-py/src/smiles.rs`): bind the owned immutable
-  config, named presets, `with_parse_flags`, structural equality, and repr.
+- **S4d — `SmilesIoConfig`** (`umol-py/src/smiles.rs`): the owned immutable
+  config exposes `opensmiles()`, `lenient()`, `chemaxon()`,
+  `with_parse_flags(...)`, a detached read-only `parse_flags` value, structural
+  equality, and repr. Lowering reconstructs the `umol-io` config with internal
+  lint defaults; lint and chemistry-model fields are absent from Python.
   Conversion tests cover every public preset and an arbitrary OR-composed flag
-  set; no lint or chemistry-model fields appear. **Additive (green).**
-  `[dep: S4c]`
+  set. **Implemented (green).** `[dep: S4c]`
 - **S4e — resolved `MoleculeAst.from_smiles`**
   (`umol-py/src/molecule.rs`, `src/error.rs`): add
   `from_smiles(source, config=None)` over the explicit configured Rust path;

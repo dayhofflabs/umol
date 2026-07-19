@@ -68,7 +68,7 @@ use crate::{
         NoncovalentBondViews,
     },
     reaction::{CompositionScope, ReactionAst, ReactionDerivation},
-    smiles::SmilesParseFlags,
+    smiles::{SmilesIoConfig, SmilesParseFlags},
     spin::SpinStateAst,
     stereo::{
         CisTransStereo, CisTransStereoAst, LigandPermutation, Orientation,
@@ -171,6 +171,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<CompositionScope>()?;
         module.add_class::<ReactionAst>()?;
         module.add_class::<ReactionDerivation>()?;
+        module.add_class::<SmilesIoConfig>()?;
         module.add_class::<SmilesParseFlags>()?;
         module.add_class::<Correspondence>()?;
         module.add_class::<MoleculeCorrespondence>()?;

@@ -33,6 +33,7 @@ def test_error_imports():
 
 
 def test_smiles_parse_flags_import():
-    from umol import SmilesParseFlags
+    from umol import SmilesIoConfig, SmilesParseFlags
 
+    assert umol.SmilesIoConfig is SmilesIoConfig
     assert umol.SmilesParseFlags is SmilesParseFlags

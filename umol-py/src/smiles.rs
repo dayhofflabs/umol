@@ -2,7 +2,9 @@
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use umol_io::smiles::config::SmilesParseFlags as IoSmilesParseFlags;
+use umol_io::smiles::config::{
+    SmilesIoConfig as IoSmilesIoConfig, SmilesParseFlags as IoSmilesParseFlags,
+};
 
 /// Parser capabilities and named SMILES acceptance-policy presets.
 #[pyclass(eq, frozen, from_py_object)]
@@ -86,18 +88,81 @@ impl SmilesParseFlags {
         Self { flags }
     }
 
-    #[allow(
-        dead_code,
-        reason = "Python-to-Rust conversion API for SMILES configuration values"
-    )]
     pub(crate) fn to_rust(self) -> IoSmilesParseFlags {
         self.flags
+    }
+}
+
+/// Owned configuration for SMILES parser acceptance policy.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SmilesIoConfig {
+    parse_flags: SmilesParseFlags,
+}
+
+#[pymethods]
+impl SmilesIoConfig {
+    #[staticmethod]
+    fn opensmiles() -> Self {
+        Self::from_rust(&IoSmilesIoConfig::opensmiles())
+    }
+
+    #[staticmethod]
+    fn lenient() -> Self {
+        Self::from_rust(&IoSmilesIoConfig::lenient())
+    }
+
+    #[staticmethod]
+    fn chemaxon() -> Self {
+        Self::from_rust(&IoSmilesIoConfig::chemaxon())
+    }
+
+    #[staticmethod]
+    fn with_parse_flags(parse_flags: SmilesParseFlags) -> Self {
+        Self { parse_flags }
+    }
+
+    #[getter]
+    fn parse_flags(&self) -> SmilesParseFlags {
+        self.parse_flags
+    }
+
+    fn __repr__(&self) -> String {
+        if self.parse_flags == SmilesParseFlags::opensmiles() {
+            "SmilesIoConfig.opensmiles()".to_owned()
+        } else if self.parse_flags == SmilesParseFlags::lenient() {
+            "SmilesIoConfig.lenient()".to_owned()
+        } else if self.parse_flags == SmilesParseFlags::chemaxon() {
+            "SmilesIoConfig.chemaxon()".to_owned()
+        } else {
+            format!(
+                "SmilesIoConfig.with_parse_flags({})",
+                self.parse_flags.__repr__()
+            )
+        }
+    }
+}
+
+impl SmilesIoConfig {
+    pub(crate) fn from_rust(config: &IoSmilesIoConfig) -> Self {
+        Self {
+            parse_flags: SmilesParseFlags::from_rust(config.parse_flags),
+        }
+    }
+
+    #[allow(
+        dead_code,
+        reason = "Python-to-Rust conversion API for configured SMILES ingestion"
+    )]
+    pub(crate) fn to_rust(self) -> IoSmilesIoConfig {
+        IoSmilesIoConfig::with_parse_flags(self.parse_flags.to_rust())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use umol_io::smiles::config::SmilesLintFlags as IoSmilesLintFlags;
 
     use super::*;
 
@@ -220,5 +285,117 @@ mod tests {
     #[case::lenient(IoSmilesParseFlags::LENIENT)]
     fn test_smiles_parse_flags_to_rust(#[case] expected: IoSmilesParseFlags) {
         assert_eq!(SmilesParseFlags::from_rust(expected).to_rust(), expected);
+    }
+
+    #[rstest]
+    fn test_smiles_io_config_opensmiles() {
+        assert_eq!(
+            SmilesIoConfig::opensmiles(),
+            SmilesIoConfig {
+                parse_flags: SmilesParseFlags::from_rust(IoSmilesParseFlags::OPENSMILES),
+            }
+        );
+    }
+
+    #[rstest]
+    fn test_smiles_io_config_lenient() {
+        assert_eq!(
+            SmilesIoConfig::lenient(),
+            SmilesIoConfig {
+                parse_flags: SmilesParseFlags::from_rust(IoSmilesParseFlags::LENIENT),
+            }
+        );
+    }
+
+    #[rstest]
+    fn test_smiles_io_config_chemaxon() {
+        assert_eq!(
+            SmilesIoConfig::chemaxon(),
+            SmilesIoConfig {
+                parse_flags: SmilesParseFlags::from_rust(IoSmilesParseFlags::CHEMAXON),
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::opensmiles(SmilesParseFlags::opensmiles())]
+    #[case::extended_syntax(
+        SmilesParseFlags::extended_aromatics().__or__(&SmilesParseFlags::extended_bonds())
+    )]
+    fn test_smiles_io_config_with_parse_flags(#[case] parse_flags: SmilesParseFlags) {
+        assert_eq!(
+            SmilesIoConfig::with_parse_flags(parse_flags),
+            SmilesIoConfig { parse_flags }
+        );
+    }
+
+    #[rstest]
+    #[case::opensmiles(SmilesIoConfig::opensmiles(), SmilesParseFlags::opensmiles())]
+    #[case::lenient(SmilesIoConfig::lenient(), SmilesParseFlags::lenient())]
+    #[case::chemaxon(SmilesIoConfig::chemaxon(), SmilesParseFlags::chemaxon())]
+    fn test_smiles_io_config_parse_flags(
+        #[case] config: SmilesIoConfig,
+        #[case] expected: SmilesParseFlags,
+    ) {
+        assert_eq!(config.parse_flags(), expected);
+    }
+
+    #[rstest]
+    #[case::opensmiles(SmilesIoConfig::opensmiles(), "SmilesIoConfig.opensmiles()")]
+    #[case::lenient(SmilesIoConfig::lenient(), "SmilesIoConfig.lenient()")]
+    #[case::chemaxon(SmilesIoConfig::chemaxon(), "SmilesIoConfig.chemaxon()")]
+    #[case::extended_syntax(
+        SmilesIoConfig::with_parse_flags(
+            SmilesParseFlags::extended_aromatics().__or__(&SmilesParseFlags::extended_bonds())
+        ),
+        concat!(
+            "SmilesIoConfig.with_parse_flags(",
+            "SmilesParseFlags(EXTENDED_AROMATICS | EXTENDED_BONDS))"
+        )
+    )]
+    fn test_smiles_io_config_repr(#[case] config: SmilesIoConfig, #[case] expected: &str) {
+        assert_eq!(config.__repr__(), expected);
+    }
+
+    #[rstest]
+    #[case::opensmiles(IoSmilesIoConfig::opensmiles(), IoSmilesParseFlags::OPENSMILES)]
+    #[case::lenient(IoSmilesIoConfig::lenient(), IoSmilesParseFlags::LENIENT)]
+    #[case::chemaxon(IoSmilesIoConfig::chemaxon(), IoSmilesParseFlags::CHEMAXON)]
+    #[case::extended_syntax(
+        IoSmilesIoConfig::with_parse_flags(
+            IoSmilesParseFlags::EXTENDED_AROMATICS | IoSmilesParseFlags::EXTENDED_BONDS
+        ),
+        IoSmilesParseFlags::EXTENDED_AROMATICS | IoSmilesParseFlags::EXTENDED_BONDS
+    )]
+    fn test_smiles_io_config_from_rust(
+        #[case] config: IoSmilesIoConfig,
+        #[case] expected: IoSmilesParseFlags,
+    ) {
+        assert_eq!(
+            SmilesIoConfig::from_rust(&config).parse_flags.to_rust(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::opensmiles(SmilesIoConfig::opensmiles(), IoSmilesParseFlags::OPENSMILES)]
+    #[case::lenient(SmilesIoConfig::lenient(), IoSmilesParseFlags::LENIENT)]
+    #[case::chemaxon(SmilesIoConfig::chemaxon(), IoSmilesParseFlags::CHEMAXON)]
+    #[case::extended_syntax(
+        SmilesIoConfig::with_parse_flags(
+            SmilesParseFlags::extended_aromatics().__or__(&SmilesParseFlags::extended_bonds())
+        ),
+        IoSmilesParseFlags::EXTENDED_AROMATICS | IoSmilesParseFlags::EXTENDED_BONDS
+    )]
+    fn test_smiles_io_config_to_rust(
+        #[case] config: SmilesIoConfig,
+        #[case] expected: IoSmilesParseFlags,
+    ) {
+        let config = config.to_rust();
+        assert_eq!(config.parse_flags, expected);
+        assert_eq!(config.lint_flags, IoSmilesLintFlags::ALL);
+        assert!(config.lint_config.enabled.is_empty());
+        assert!(config.lint_config.disabled.is_empty());
+        assert!(!config.lint_config.enable_gir);
     }
 }
