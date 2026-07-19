@@ -6,7 +6,6 @@ use umol_graph::fingerprint::{
     featurize_reaction, EcfpFeaturizer, Featurizer, MorganFeaturizer, PatternFingerprinter,
     ReactionCombinator, ReactionFingerprint, Side, SubstructureFeaturizer, WlFeaturizer,
 };
-use umol_graph::hash::RefinementXxh3Scheme;
 use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::RefinementRounds;
 
@@ -37,11 +36,7 @@ fn ethanol_deoxygenation(ethanol: MoleculeAst) -> ReactionAst {
 
 #[rstest]
 fn test_wl_featurizer_featurize(ethanol: MoleculeAst) {
-    let fingerprint = WlFeaturizer {
-        rounds: RefinementRounds::Fixed(3),
-        scheme: RefinementXxh3Scheme::albatross(),
-    }
-    .featurize(&ethanol);
+    let fingerprint = WlFeaturizer::new(RefinementRounds::Fixed(3)).featurize(&ethanol);
     assert_eq!(
         fingerprint.ids(),
         &[

@@ -21,7 +21,6 @@ use umol_graph::fingerprint::{
     featurize_reaction, EcfpFeaturizer, Featurizer, MorganFeaturizer, PatternFingerprinter,
     ReactionCombinator, SubstructureFeaturizer, WlFeaturizer,
 };
-use umol_graph::hash::RefinementXxh3Scheme;
 use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::RefinementRounds;
 use walkdir::WalkDir;
@@ -83,10 +82,7 @@ fn ethanol_deoxygenation(molecule: &MoleculeAst) -> ReactionAst {
 fn fixture_benchmark(c: &mut Criterion) {
     let molecule = ingest_smiles("CCO").unwrap();
     let reaction = ethanol_deoxygenation(&molecule);
-    let wl = WlFeaturizer {
-        rounds: RefinementRounds::Fixed(WL_ROUNDS),
-        scheme: RefinementXxh3Scheme::albatross(),
-    };
+    let wl = WlFeaturizer::new(RefinementRounds::Fixed(WL_ROUNDS));
     let ecfp = EcfpFeaturizer::new(CIRCULAR_RADIUS);
     let morgan = MorganFeaturizer::new(CIRCULAR_RADIUS);
     let pattern = PatternFingerprinter::new();
@@ -142,10 +138,7 @@ fn circular_benchmark(c: &mut Criterion) {
     let size = corpus.len();
     let mut group = c.benchmark_group("fingerprint");
 
-    let wl = WlFeaturizer {
-        rounds: RefinementRounds::Fixed(WL_ROUNDS),
-        scheme: RefinementXxh3Scheme::albatross(),
-    };
+    let wl = WlFeaturizer::new(RefinementRounds::Fixed(WL_ROUNDS));
     group.bench_function(BenchmarkId::new("wl", size), |b| {
         b.iter(|| {
             for molecule in &corpus {

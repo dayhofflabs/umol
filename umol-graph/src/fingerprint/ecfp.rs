@@ -3,27 +3,27 @@
 //!
 //! The molecule must be ground; the caller ([`super::Featurizer::featurize`])
 //! guarantees it, so the seed reads concrete literals directly. The hash is
-//! `xxh3_64` with [`ECFP_SEED`]; the paper leaves the hash unspecified, so this is
-//! a frozen choice (placeholder identity, like the WL schemes).
+//! [`EcfpHashScheme::Xxh3Width64V1`]; the paper leaves the hash unspecified, so
+//! this is the frozen umol ECFP identity.
 
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst, RingSet};
 use umol_graph_core::CircularRefinementAlgorithm;
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
-use crate::hash::{RogersHahn, ECFP_SEED};
+use crate::hash::EcfpHashScheme;
 
 /// ECFP fingerprint of `radius` iterations (diameter `2 * radius`, i.e. ECFP_{2r}).
 #[derive(Clone, Copy, Debug)]
 pub struct EcfpFeaturizer {
     pub radius: u32,
-    pub seed: u64,
+    pub scheme: EcfpHashScheme,
 }
 
 impl EcfpFeaturizer {
     pub fn new(radius: u32) -> Self {
         Self {
             radius,
-            seed: ECFP_SEED,
+            scheme: EcfpHashScheme::default(),
         }
     }
 
@@ -45,7 +45,7 @@ impl EcfpFeaturizer {
             |edge| bond_label(mol, BondId::from(edge)),
             CircularRefinementAlgorithm::Ec {
                 radius: self.radius,
-                scheme: RogersHahn { seed: self.seed },
+                scheme: self.scheme.recipe(),
             },
         )
     }

@@ -477,8 +477,8 @@ outweighs the loss of a named reproducibility contract.
 The initial public scheme identities are:
 
 ```python
-WlHashScheme.Xxh3Sorted64V1()
-EcfpHashScheme.Xxh3_64V1()
+WlHashScheme.Xxh3SortedWidth64V1()
+EcfpHashScheme.Xxh3Width64V1()
 ```
 
 These names identify the frozen recipe and version used by the initial binding.
@@ -1377,13 +1377,14 @@ boundary types and downstream ingestion belong to the next workflow pass.
 
 ### S3 — Safe and reproducible Rust fingerprint contracts
 
-- **S3a — stable named hash schemes**
+- **S3a — stable named hash schemes** **Done**
   (`umol-graph/src/hash.rs`, `fingerprint/wl.rs`, `fingerprint/ecfp.rs`): add the
-  frozen WL `Xxh3Sorted64V1` and ECFP `Xxh3_64V1` recipe identities and route the
-  ordinary featurizers through them. Exact-ID fixtures pin seed, aggregation,
-  width, and version. Placeholder bird constructors may remain internal during
-  migration but are not exposed as Python compatibility identities. **Additive
-  (green).** `[dep: S0a]`
+  frozen WL `Xxh3SortedWidth64V1` and ECFP `Xxh3Width64V1` recipe identities and
+  route the ordinary featurizers through them. Exact-ID fixtures pin seed,
+  aggregation, width, and version. `WlFeaturizer` and `EcfpFeaturizer` store
+  those named schemes; raw `RefinementXxh3Scheme::new` remains the low-level
+  refinement recipe constructor for Rust-side experiments and hash tests.
+  **Implemented (green).** `[dep: S0a]`
 - **S3b — uniform ground-input contract**
   (`umol-graph/src/fingerprint/{featurizer,wl,ecfp,morgan,pattern,substructure}.rs`):
   make every public concrete and enum-dispatched fingerprint entry point reject
@@ -1455,12 +1456,12 @@ parser configuration and typed failures.
   sentinel representation. **Additive (green).** `[dep: S4a]`
 - **S5b — `WlHashScheme`**
   (`umol-py/src/fingerprint/config.rs`): bind the WL-specific scheme type and
-  only its initial `Xxh3Sorted64V1()` identity. Conversion tests pin recipe and
-  64-bit metadata; no seed or aggregation constructor is public. **Additive
+  only its initial `Xxh3SortedWidth64V1()` identity. Conversion tests pin recipe
+  and 64-bit metadata; no seed or aggregation constructor is public. **Additive
   (green).** `[dep: S3a, S4a]`
 - **S5c — `EcfpHashScheme`**
   (`umol-py/src/fingerprint/config.rs`): bind the ECFP-specific scheme type and
-  only its initial `Xxh3_64V1()` identity. Conversion tests pin recipe and
+  only its initial `Xxh3Width64V1()` identity. Conversion tests pin recipe and
   64-bit metadata; no seed constructor is public. **Additive (green).**
   `[dep: S3a, S4a]`
 - **S5d — `HashedFingerprintConfig`**

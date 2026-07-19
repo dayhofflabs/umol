@@ -24,13 +24,10 @@ pub(crate) fn gboost_hash(values: &[u32]) -> u32 {
     seed
 }
 
-/// Frozen ECFP hash seed (Rogers & Hahn 2010 leaves the hash unspecified).
-/// Placeholder identity, not yet formalized.
-pub const ECFP_SEED: u64 = 0xECF0_5EED_0000_0001;
-
-// Placeholder family seeds for the plain-refinement scheme — not stable identities yet.
-const ALBATROSS_SEED: u64 = 0xA1BA_7305_5EED_0001;
-const BULLFINCH_SEED: u64 = 0xB011_F114_5EED_0002;
+const WL_XXH3_SORTED_V1_SEED: u64 = 0xA1BA_7305_5EED_0001;
+const ECFP_XXH3_64_V1_SEED: u64 = 0xECF0_5EED_0000_0001;
+const XXH3_SCHEME_VERSION_1: u16 = 1;
+const HASH_WIDTH_64: u16 = 64;
 
 /// Circular-refinement recipe: RDKit Morgan via the 32-bit boost hash with
 /// incremental combine. Bit-exact to RDKit 2026.03.x.
@@ -135,6 +132,75 @@ pub enum RefinementAggregation {
     SumSketch,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WlHashScheme {
+    #[default]
+    Xxh3SortedWidth64V1,
+}
+
+impl WlHashScheme {
+    pub const fn version(self) -> u16 {
+        match self {
+            Self::Xxh3SortedWidth64V1 => XXH3_SCHEME_VERSION_1,
+        }
+    }
+
+    pub const fn identifier_width(self) -> u16 {
+        match self {
+            Self::Xxh3SortedWidth64V1 => HASH_WIDTH_64,
+        }
+    }
+
+    pub(crate) const fn seed(self) -> u64 {
+        match self {
+            Self::Xxh3SortedWidth64V1 => WL_XXH3_SORTED_V1_SEED,
+        }
+    }
+
+    pub(crate) const fn aggregation(self) -> RefinementAggregation {
+        match self {
+            Self::Xxh3SortedWidth64V1 => RefinementAggregation::Sorted,
+        }
+    }
+
+    pub(crate) fn refinement_scheme(self) -> RefinementXxh3Scheme<RefinementWidth64> {
+        RefinementXxh3Scheme::new(self.seed(), self.aggregation())
+    }
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EcfpHashScheme {
+    #[default]
+    Xxh3Width64V1,
+}
+
+impl EcfpHashScheme {
+    pub const fn version(self) -> u16 {
+        match self {
+            Self::Xxh3Width64V1 => XXH3_SCHEME_VERSION_1,
+        }
+    }
+
+    pub const fn identifier_width(self) -> u16 {
+        match self {
+            Self::Xxh3Width64V1 => HASH_WIDTH_64,
+        }
+    }
+
+    pub(crate) const fn seed(self) -> u64 {
+        match self {
+            Self::Xxh3Width64V1 => ECFP_XXH3_64_V1_SEED,
+        }
+    }
+
+    pub(crate) const fn recipe(self) -> RogersHahn {
+        match self {
+            Self::Xxh3Width64V1 => RogersHahn { seed: self.seed() },
+        }
+    }
+}
+
 /// Plain-refinement recipe over xxh3: `seed` is the family selector, `W` the width,
 /// `aggregation` the multiset combine.
 #[derive(Clone, Copy, Debug)]
@@ -151,21 +217,6 @@ impl<W: RefinementWidth> RefinementXxh3Scheme<W> {
             aggregation,
             _width: PhantomData,
         }
-    }
-
-    /// Default family: `Sorted` aggregation. Placeholder identity.
-    pub fn default_scheme() -> Self {
-        Self::new(ALBATROSS_SEED, RefinementAggregation::Sorted)
-    }
-
-    /// Placeholder family name — not a stable scheme identity yet.
-    pub fn albatross() -> Self {
-        Self::new(ALBATROSS_SEED, RefinementAggregation::Sorted)
-    }
-
-    /// Placeholder family name — not a stable scheme identity yet.
-    pub fn bullfinch() -> Self {
-        Self::new(BULLFINCH_SEED, RefinementAggregation::Sorted)
     }
 }
 
@@ -246,7 +297,10 @@ mod tests {
     ) -> RefinementAlgorithm<RefinementXxh3Scheme<RefinementWidth128>> {
         RefinementAlgorithm::WeisfeilerLehman {
             rounds,
-            scheme: RefinementXxh3Scheme::default_scheme(),
+            scheme: RefinementXxh3Scheme::new(
+                WL_XXH3_SORTED_V1_SEED,
+                RefinementAggregation::Sorted,
+            ),
         }
     }
 
@@ -307,6 +361,53 @@ mod tests {
     }
 
     #[rstest]
+    #[case::xxh3_sorted_width64_v1(
+        WlHashScheme::Xxh3SortedWidth64V1,
+        XXH3_SCHEME_VERSION_1,
+        HASH_WIDTH_64,
+        WL_XXH3_SORTED_V1_SEED,
+        RefinementAggregation::Sorted
+    )]
+    fn test_wl_hash_scheme(
+        #[case] scheme: WlHashScheme,
+        #[case] expected_version: u16,
+        #[case] expected_width: u16,
+        #[case] expected_seed: u64,
+        #[case] expected_aggregation: RefinementAggregation,
+    ) {
+        assert_eq!(scheme.version(), expected_version);
+        assert_eq!(scheme.identifier_width(), expected_width);
+        assert_eq!(scheme.seed(), expected_seed);
+        assert_eq!(scheme.aggregation(), expected_aggregation);
+        assert_eq!(scheme.refinement_scheme().seed, expected_seed);
+        assert_eq!(scheme.refinement_scheme().aggregation, expected_aggregation);
+    }
+
+    #[rstest]
+    #[case::xxh3_width64_v1(
+        EcfpHashScheme::Xxh3Width64V1,
+        XXH3_SCHEME_VERSION_1,
+        HASH_WIDTH_64,
+        ECFP_XXH3_64_V1_SEED
+    )]
+    fn test_ecfp_hash_scheme(
+        #[case] scheme: EcfpHashScheme,
+        #[case] expected_version: u16,
+        #[case] expected_width: u16,
+        #[case] expected_seed: u64,
+    ) {
+        assert_eq!(scheme.version(), expected_version);
+        assert_eq!(scheme.identifier_width(), expected_width);
+        assert_eq!(scheme.seed(), expected_seed);
+        assert_eq!(
+            scheme.recipe(),
+            RogersHahn {
+                seed: expected_seed
+            }
+        );
+    }
+
+    #[rstest]
     fn test_refinement_counts() {
         // path 0-1-2, radius 1: round 0 all-same (3); round 1 splits ends (2) from middle (1).
         let g = Graph::new(3, &[[0, 1], [1, 2]]);
@@ -323,7 +424,7 @@ mod tests {
         let algorithm = RefinementAlgorithm::WeisfeilerLehman {
             rounds: RefinementRounds::ToFixpoint,
             scheme: RefinementXxh3Scheme::<RefinementWidth128>::new(
-                ALBATROSS_SEED,
+                WL_XXH3_SORTED_V1_SEED,
                 RefinementAggregation::SumSketch,
             ),
         };
@@ -335,7 +436,10 @@ mod tests {
     fn distinguishes<W: RefinementWidth>() {
         let algorithm = || RefinementAlgorithm::WeisfeilerLehman {
             rounds: RefinementRounds::ToFixpoint,
-            scheme: RefinementXxh3Scheme::<W>::default_scheme(),
+            scheme: RefinementXxh3Scheme::<W>::new(
+                WL_XXH3_SORTED_V1_SEED,
+                RefinementAggregation::Sorted,
+            ),
         };
         let path = Graph::new(3, &[[0, 1], [1, 2]]);
         let triangle = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
@@ -358,13 +462,15 @@ mod tests {
         distinguishes::<RefinementWidth128>();
     }
 
-    // Freeze guard: the albatross-128 digest of a fixed graph must not drift.
     #[rstest]
-    fn test_refinement_frozen_albatross_128() {
+    fn test_refinement_xxh3_scheme_graph_hash() {
         let g = Graph::new(3, &[[0, 1], [1, 2]]);
         let algorithm = RefinementAlgorithm::WeisfeilerLehman {
             rounds: RefinementRounds::ToFixpoint,
-            scheme: RefinementXxh3Scheme::<RefinementWidth128>::albatross(),
+            scheme: RefinementXxh3Scheme::<RefinementWidth128>::new(
+                WL_XXH3_SORTED_V1_SEED,
+                RefinementAggregation::Sorted,
+            ),
         };
         let h = g.refine(uniform, no_edge_color, algorithm).graph_hash();
         assert_eq!(h, 313131582038434349855774725390837831516);

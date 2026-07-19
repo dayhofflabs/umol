@@ -4,17 +4,24 @@ use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
 use umol_graph_core::{EdgeId, NodeId, Refinement, RefinementAlgorithm, RefinementRounds};
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
-use crate::hash::{RefinementWidth64, RefinementXxh3Scheme};
+use crate::hash::WlHashScheme;
 
 /// Weisfeiler–Lehman color-refinement fingerprint over the atom graph, hashed
 /// through a frozen `scheme` for `rounds` rounds.
 #[derive(Clone, Copy, Debug)]
 pub struct WlFeaturizer {
     pub rounds: RefinementRounds,
-    pub scheme: RefinementXxh3Scheme<RefinementWidth64>,
+    pub scheme: WlHashScheme,
 }
 
 impl WlFeaturizer {
+    pub fn new(rounds: RefinementRounds) -> Self {
+        Self {
+            rounds,
+            scheme: WlHashScheme::default(),
+        }
+    }
+
     /// `mol` must be ground; the caller ([`super::Featurizer::featurize`])
     /// guarantees it, so the seeds read concrete literals directly.
     pub fn featurize(&self, mol: &MoleculeAst) -> FeatureSet<u64> {
@@ -41,7 +48,7 @@ impl WlFeaturizer {
             |edge: EdgeId| bond_seeds[edge.index()],
             RefinementAlgorithm::WeisfeilerLehman {
                 rounds: self.rounds,
-                scheme: self.scheme,
+                scheme: self.scheme.refinement_scheme(),
             },
         )
     }
@@ -80,10 +87,7 @@ mod tests {
 
     #[fixture]
     fn featurizer() -> WlFeaturizer {
-        WlFeaturizer {
-            rounds: RefinementRounds::Fixed(3),
-            scheme: RefinementXxh3Scheme::albatross(),
-        }
+        WlFeaturizer::new(RefinementRounds::Fixed(3))
     }
 
     #[rstest]
