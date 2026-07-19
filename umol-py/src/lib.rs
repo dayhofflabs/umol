@@ -101,6 +101,8 @@ mod element;
 #[cfg(feature = "graph")]
 mod error;
 #[cfg(feature = "graph")]
+mod fingerprint;
+#[cfg(feature = "graph")]
 mod molecule;
 #[cfg(feature = "graph")]
 mod multicenter;
@@ -108,6 +110,8 @@ mod multicenter;
 mod noncovalent;
 #[cfg(feature = "graph")]
 mod reaction;
+#[cfg(feature = "graph")]
+mod smiles;
 #[cfg(feature = "graph")]
 mod spin;
 #[cfg(feature = "graph")]

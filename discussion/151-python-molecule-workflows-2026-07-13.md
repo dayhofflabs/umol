@@ -1426,9 +1426,10 @@ boundary types and downstream ingestion belong to the next workflow pass.
 
 - **S4a — binding dependencies and module skeletons**
   (`umol-py/Cargo.toml`, `src/lib.rs`, `src/smiles.rs`,
-  `src/fingerprint.rs`): add optional `umol-graph` and `umol-io` dependencies to
-  the existing `graph` feature and create the binding modules without public
-  classes. `cargo check` covers default and no-default feature builds. **Additive
+  `src/fingerprint.rs`): optional direct `umol-graph` and `umol-io` dependencies
+  are enabled by the existing `graph` feature. Private `smiles` and `fingerprint`
+  binding modules provide the workflow implementation locations without adding
+  Python classes. Default and no-default feature builds are green. **Implemented
   (green).** `[dep: S2b, S3d]`
 - **S4b — semantic exception classes**
   (`umol-py/src/error.rs`, `src/lib.rs`, `python/umol/__init__.py`): retain
