@@ -1,6 +1,6 @@
 # OpenSMILES wildcards in basic TableIR
 
-Status: **Active implementation plan**
+Status: **Completed**
 
 Date: 2026-07-18
 

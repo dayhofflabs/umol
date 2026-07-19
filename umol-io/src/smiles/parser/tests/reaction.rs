@@ -61,14 +61,14 @@ use crate::table_ir::{
     Molecule { atoms: vec![Atom::aliphatic_atom_with_span(Element::C, Span::bytes(0, 1)), Atom::aliphatic_atom_with_span(Element::C, Span::bytes(1, 2))], bonds: vec![Bond { span: Some(Span::bytes(1, 2)), ..Bond::new(0, 1, BondOrder::Single) }], source_format: SourceFormat::SMILES, ..Molecule::empty() },
     Molecule::empty(),
 )]
-fn test_parse_reaction_smiles_bytes(
+fn test_parse_reaction(
     #[case] input: &[u8],
     #[case] reactants: Molecule,
     #[case] products: Molecule,
     #[case] agents: Molecule,
 ) {
     assert_eq!(
-        parse_reaction_smiles_bytes(input),
+        parse_reaction(input, &SmilesIoConfig::opensmiles()),
         Ok(Reaction {
             reactants,
             products,
@@ -100,8 +100,11 @@ fn test_parse_reaction_smiles_bytes(
 #[case::leading_dot_agents(b"C>.C>C", ParseError::LeadingDot { pos: 2 })]
 #[case::trailing_dot_products(b"C>>C.", ParseError::TrailingDot { pos: 4 })]
 #[case::trailing_dot_agents(b"C>C.>C", ParseError::TrailingDot { pos: 3 })]
-fn test_parse_reaction_smiles_bytes_error(#[case] input: &[u8], #[case] expected: ParseError) {
-    assert_eq!(parse_reaction_smiles_bytes(input), Err(expected));
+fn test_parse_reaction_error(#[case] input: &[u8], #[case] expected: ParseError) {
+    assert_eq!(
+        parse_reaction(input, &SmilesIoConfig::opensmiles()),
+        Err(expected)
+    );
 }
 
 #[rstest]
@@ -133,9 +136,9 @@ fn test_parse_reaction_smiles_bytes_error(#[case] input: &[u8], #[case] expected
         ..Reaction::empty()
     }
 )]
-fn test_parse_reaction_smiles_bytes_with(#[case] input: &[u8], #[case] expected: Reaction) {
+fn test_parse_reaction_lenient(#[case] input: &[u8], #[case] expected: Reaction) {
     assert_eq!(
-        parse_reaction_smiles_bytes_with(input, &SmilesIoConfig::lenient()),
+        parse_reaction(input, &SmilesIoConfig::lenient()),
         Ok(expected)
     );
 }
@@ -147,12 +150,12 @@ fn test_parse_reaction_smiles_bytes_with(#[case] input: &[u8], #[case] expected:
 #[case::partial_mapping(b"[C:1]C>>C[O:2]", btree_map!(1 => (vec![0], vec![]), 2 => (vec![], vec![1])))]
 #[case::duplicate_mapping(b"[C:1](=[O:2])[OH:2]>>[C:1](=[O:2])[O:2]C", btree_map!(1 => (vec![0], vec![0]),
     2 => (vec![1, 2], vec![1, 2])))]
-fn test_parse_reaction_smiles_bytes_atom_mapping(
+fn test_parse_reaction_atom_mapping(
     #[case] input: &[u8],
     #[case] expected: BTreeMap<u32, (Vec<u32>, Vec<u32>)>,
 ) {
     assert_eq!(
-        parse_reaction_smiles_bytes(input).map(|reaction| reaction.atom_mapping),
+        parse_reaction(input, &SmilesIoConfig::opensmiles()).map(|reaction| reaction.atom_mapping),
         Ok(expected)
     );
 }
@@ -310,32 +313,30 @@ fn test_parse_extended_reaction_smiles_bytes_atom_mapping(
 }
 
 #[rstest]
-fn test_parse_reaction_smiles_bytes_with_cx() {
+fn test_parse_reaction_cx() {
     assert_eq!(
-        parse_reaction_smiles_bytes_with(b"C>CC>C |$r;a0;a1;p$|", &SmilesIoConfig::lenient()).map(
-            |reaction| {
-                (
-                    reaction
-                        .reactants
-                        .atoms
-                        .into_iter()
-                        .map(|atom| atom.label)
-                        .collect::<Vec<_>>(),
-                    reaction
-                        .products
-                        .atoms
-                        .into_iter()
-                        .map(|atom| atom.label)
-                        .collect::<Vec<_>>(),
-                    reaction
-                        .agents
-                        .atoms
-                        .into_iter()
-                        .map(|atom| atom.label)
-                        .collect::<Vec<_>>(),
-                )
-            }
-        ),
+        parse_reaction(b"C>CC>C |$r;a0;a1;p$|", &SmilesIoConfig::lenient()).map(|reaction| {
+            (
+                reaction
+                    .reactants
+                    .atoms
+                    .into_iter()
+                    .map(|atom| atom.label)
+                    .collect::<Vec<_>>(),
+                reaction
+                    .products
+                    .atoms
+                    .into_iter()
+                    .map(|atom| atom.label)
+                    .collect::<Vec<_>>(),
+                reaction
+                    .agents
+                    .atoms
+                    .into_iter()
+                    .map(|atom| atom.label)
+                    .collect::<Vec<_>>(),
+            )
+        }),
         Ok((
             vec![Some(String::from("r"))],
             vec![Some(String::from("p"))],
@@ -345,9 +346,9 @@ fn test_parse_reaction_smiles_bytes_with_cx() {
 }
 
 #[rstest]
-fn test_parse_reaction_smiles_bytes_with_cx_error() {
+fn test_parse_reaction_cx_error() {
     assert_eq!(
-        parse_reaction_smiles_bytes_with(b"C>>C |$a;b;c$|", &SmilesIoConfig::lenient()),
+        parse_reaction(b"C>>C |$a;b;c$|", &SmilesIoConfig::lenient()),
         Err(ParseError::AtomIndexOutOfBounds { atom_idx: 2 })
     );
 }

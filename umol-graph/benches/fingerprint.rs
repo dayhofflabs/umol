@@ -22,7 +22,7 @@ use umol_graph::fingerprint::{
     ReactionCombinator, SubstructureFeaturizer, WlFeaturizer,
 };
 use umol_graph::hash::RefinementXxh3Scheme;
-use umol_graph::ingest::smiles as ingest_smiles;
+use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::RefinementRounds;
 use walkdir::WalkDir;
 

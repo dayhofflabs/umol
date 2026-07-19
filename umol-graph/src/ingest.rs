@@ -87,13 +87,13 @@ impl Ingest for Smiles {
 }
 
 /// Ingest SMILES text with the OpenSMILES configuration and default model.
-pub fn smiles(input: &str) -> Result<MoleculeAst, SmilesInputError> {
-    smiles_bytes(input.as_bytes())
+pub fn ingest_smiles(input: &str) -> Result<MoleculeAst, SmilesInputError> {
+    ingest_smiles_bytes(input.as_bytes())
 }
 
 /// Ingest SMILES bytes with the OpenSMILES configuration and default model.
-pub fn smiles_bytes(input: &[u8]) -> Result<MoleculeAst, SmilesInputError> {
-    smiles_bytes_with(
+pub fn ingest_smiles_bytes(input: &[u8]) -> Result<MoleculeAst, SmilesInputError> {
+    ingest_smiles_bytes_with(
         input,
         &SmilesIoConfig::opensmiles(),
         &ChemistryModel::default(),
@@ -101,16 +101,16 @@ pub fn smiles_bytes(input: &[u8]) -> Result<MoleculeAst, SmilesInputError> {
 }
 
 /// Ingest SMILES text with explicit IO configuration and chemistry model.
-pub fn smiles_with(
+pub fn ingest_smiles_with(
     input: &str,
     io_config: &SmilesIoConfig,
     model: &ChemistryModel,
 ) -> Result<MoleculeAst, SmilesInputError> {
-    smiles_bytes_with(input.as_bytes(), io_config, model)
+    ingest_smiles_bytes_with(input.as_bytes(), io_config, model)
 }
 
 /// Ingest SMILES bytes with explicit IO configuration and chemistry model.
-pub fn smiles_bytes_with(
+pub fn ingest_smiles_bytes_with(
     input: &[u8],
     io_config: &SmilesIoConfig,
     model: &ChemistryModel,
@@ -251,17 +251,17 @@ mod tests {
             Err(MoleculeIngestError::Underdetermined(ResolveUnderdetermined))
         );
         assert_eq!(
-            smiles("*"),
+            ingest_smiles("*"),
             Err(SmilesInputError::Underdetermined(ResolveUnderdetermined))
         );
     }
 
     #[rstest]
-    fn test_smiles_bytes_with() {
+    fn test_ingest_smiles_bytes_with() {
         let expected = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]}"#);
 
         assert_eq!(
-            smiles_bytes_with(
+            ingest_smiles_bytes_with(
                 b"C",
                 &SmilesIoConfig::opensmiles(),
                 &ChemistryModel::default(),
@@ -279,12 +279,12 @@ mod tests {
             count: 2,
         })
     )]
-    fn test_smiles_error(#[case] input: &str, #[case] expected: SmilesInputError) {
-        assert_eq!(smiles(input), Err(expected));
+    fn test_ingest_smiles_error(#[case] input: &str, #[case] expected: SmilesInputError) {
+        assert_eq!(ingest_smiles(input), Err(expected));
     }
 
     #[rstest]
-    fn test_smiles_with_contradiction() {
+    fn test_ingest_smiles_with_contradiction() {
         let model = ChemistryModel {
             aromaticity: AromaticityModel::Clar {
                 scope: ElementScope::Any,
@@ -299,13 +299,13 @@ mod tests {
         ));
 
         assert_eq!(
-            smiles_with("[nH]1cccc1", &SmilesIoConfig::opensmiles(), &model),
+            ingest_smiles_with("[nH]1cccc1", &SmilesIoConfig::opensmiles(), &model),
             Err(expected)
         );
     }
 
     #[rstest]
-    fn test_smiles_with_underdetermination() {
+    fn test_ingest_smiles_with_underdetermination() {
         let model = ChemistryModel {
             valence: ValenceModel::AtomTyping(AtomTypingModel {
                 registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0")])),
@@ -314,7 +314,7 @@ mod tests {
         };
 
         assert_eq!(
-            smiles_with("C", &SmilesIoConfig::opensmiles(), &model),
+            ingest_smiles_with("C", &SmilesIoConfig::opensmiles(), &model),
             Err(SmilesInputError::Underdetermined(ResolveUnderdetermined))
         );
     }

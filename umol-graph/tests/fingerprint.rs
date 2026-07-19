@@ -7,12 +7,12 @@ use umol_graph::fingerprint::{
     ReactionCombinator, ReactionFingerprint, Side, SubstructureFeaturizer, WlFeaturizer,
 };
 use umol_graph::hash::RefinementXxh3Scheme;
-use umol_graph::ingest::smiles;
+use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::RefinementRounds;
 
 #[fixture]
 fn ethanol() -> MoleculeAst {
-    smiles("CCO").unwrap()
+    ingest_smiles("CCO").unwrap()
 }
 
 #[fixture]

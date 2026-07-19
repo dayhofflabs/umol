@@ -181,7 +181,7 @@ operation:
   value backed by TableIR;
 - `Ingest::ingest` interprets a borrowed format value under an explicit
   `ChemistryModel` and returns a determined `MoleculeAst`;
-- `umol_graph::ingest::smiles*` composes both boundaries for ordinary callers,
+- `umol_graph::ingest::ingest_smiles*` composes both boundaries for ordinary callers,
   using `SmilesIoConfig::opensmiles()` and `ChemistryModel::default()` in
   the unconfigured form.
 
@@ -1127,10 +1127,10 @@ clone-and-publish, `transact_validated`, validator combinators, or savepoints.
   a checked `Smiles` value, and `Smiles::render` serializes that value to text.
   Rendering does not bypass the format value by returning a string directly
   from `MoleculeAst`. Its configuration and errors remain separate from parse
-  configuration and errors. `ReactionSmiles`, `Mol`, and `Sdf` may later apply
-  the same private-wrapper pattern over their appropriate TableIR values; they
-  need no common `*Format` suffix or marker trait until an operation actually
-  requires format-polymorphic code.
+  configuration and errors. `ReactionSmiles` applies the same private-wrapper
+  pattern over reaction TableIR. `Mol` and `Sdf` may later do the same over
+  their appropriate TableIR values; they need no common `*Format` suffix or
+  marker trait until an operation actually requires format-polymorphic code.
 
   Rust table tests construct every error category directly and assert exact
   display/source behavior. Wrapper tests prove the syntax-only parse boundary,
@@ -1140,7 +1140,7 @@ clone-and-publish, `transact_validated`, validator combinators, or savepoints.
   (`umol-io/src/smiles.rs`, `umol-graph/src/ingest.rs`, the former
   `umol-graph/src/parse.rs`, and workspace callers): resolved workspace callers
   use either `Smiles::parse*` followed by `Ingest::ingest` or the compact
-  `umol_graph::ingest::smiles*` convenience surface. The latter returns
+  `umol_graph::ingest::ingest_smiles*` convenience surface. The latter returns
   `SmilesInputError`, uses `SmilesIoConfig::opensmiles()` plus
   `ChemistryModel::default()` as its unconfigured default, and provides explicit
   text/bytes configured paths. The public unresolved SMILES-to-AST helpers and
@@ -1348,6 +1348,28 @@ It includes the compact basic-atom representation migration, basic parser and
 raise changes, removal of the wildcard configuration split, migration of both
 the `umol-graph` classification tools and the `umol-io` parsing-conformance
 suite, and the required unit, property, fuzz, and benchmark gates.
+
+##### Follow-up status after 152
+
+The focused wildcard/OpenSMILES work is complete. `Molecule` accepts `*`,
+raises it to `ElementAst::Undetermined`, and uses one default OpenSMILES
+configuration without `SmilesParseFlags::WILDCARDS`, `BASIC_OPENSMILES`, or
+`SmilesIoConfig::basic_opensmiles()`. The former basic/OpenSMILES
+classification split has also been removed; the only remaining
+`basic_opensmiles` Rust reference is a conformance-table test that asserts the
+retired category name is unknown. `EXTENDED_AROMATICS` and `EXTENDED_BONDS`
+remain ordinary SMILES acceptance-policy flags because their retained values
+fit the basic `Atom`/`Bond` TableIR structures.
+
+The broader S2b follow-up is not closed. `CHEMAXON_EXTENSIONS`,
+`SKIP_UNKNOWN_CHEMAXON_TAGS`, `SmilesParseFlags::CHEMAXON`, and
+`SmilesIoConfig::chemaxon()` still live on the ordinary `SmilesIoConfig`
+surface, and the diagnostic/conformance tools still distinguish
+`basic_chemaxon` from `chemaxon` inside the deferred CXSMILES boundary. The
+compact TableIR semantic-superset spike has not been executed, and
+`ChiralityFrame` remains a molecule-level TableIR field assigned by the SMILES
+and CTFile parsers. These items belong to the next CXSMILES/MOL/SDF boundary
+and representation pass, not to the completed wildcard task.
 
 CXSMILES, MOL, and SDF do not propagate into `umol-graph` or `umol-py` in this
 round. Their current Rust support remains available inside `umol-io`; unified

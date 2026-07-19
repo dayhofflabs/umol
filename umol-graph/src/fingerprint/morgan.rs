@@ -97,7 +97,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::ingest::smiles as ingest_smiles;
+    use crate::ingest::ingest_smiles;
 
     // RDKit 2026.03.3 `GetMorganFingerprint` sparse identifiers (sorted) per
     // (SMILES, radius). Bit-exact target for the replica.

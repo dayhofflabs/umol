@@ -27,14 +27,8 @@ use crate::table_ir::{
     Molecule, Reaction, SourceFormat, Span, WildcardAtom,
 };
 
-/// Parse SMILES bytes to `table_ir::Molecule` with OpenSMILES rules.
-#[cfg(test)]
-pub(crate) fn parse_smiles_bytes_to_table_ir(input: &[u8]) -> Result<Molecule, ParseError> {
-    parse_smiles_bytes_to_table_ir_with(input, &SmilesIoConfig::opensmiles())
-}
-
-/// Parse SMILES bytes to `table_ir::Molecule` with configuration.
-pub(crate) fn parse_smiles_bytes_to_table_ir_with(
+/// Parse a molecular SMILES byte slice into `table_ir::Molecule`.
+pub(crate) fn parse_molecule(
     input: &[u8],
     config: &SmilesIoConfig,
 ) -> Result<Molecule, ParseError> {
@@ -71,26 +65,8 @@ pub(crate) fn parse_smiles_bytes_to_table_ir_with(
     Ok(mol)
 }
 
-/// Parse reaction SMILES with the OpenSMILES configuration.
-pub fn parse_reaction_smiles(input: &str) -> Result<Reaction, ParseError> {
-    parse_reaction_smiles_bytes(input.as_bytes())
-}
-
-/// Parse reaction SMILES string with configuration
-pub fn parse_reaction_smiles_with(
-    input: &str,
-    config: &SmilesIoConfig,
-) -> Result<Reaction, ParseError> {
-    parse_reaction_smiles_bytes_with(input.as_bytes(), config)
-}
-
-/// Parse reaction SMILES bytes with the OpenSMILES configuration.
-pub fn parse_reaction_smiles_bytes(input: &[u8]) -> Result<Reaction, ParseError> {
-    parse_reaction_smiles_bytes_with(input, &SmilesIoConfig::opensmiles())
-}
-
-/// Parse reaction SMILES bytes with configuration
-pub fn parse_reaction_smiles_bytes_with(
+/// Parse a reaction SMILES byte slice into `table_ir::Reaction`.
+pub(crate) fn parse_reaction(
     input: &[u8],
     config: &SmilesIoConfig,
 ) -> Result<Reaction, ParseError> {

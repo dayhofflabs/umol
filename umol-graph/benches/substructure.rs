@@ -16,7 +16,7 @@ use umol_ast::ast::{
     AtomAst, AtomId, BondAst, MoleculeAst, MoleculeParts, SubstructureMatchAlgorithm, ValueAst,
 };
 use umol_chem::element::Element;
-use umol_graph::ingest::smiles as ingest_smiles;
+use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
