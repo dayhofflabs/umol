@@ -436,7 +436,7 @@ exported from `umol` in its own subitem.
 - **S6b — `AromaticityResolveConfig`** (`umol-py/src/resolve.rs`): bind
   `delocalize_charge` and `reset_aromatic_valence` with a keyword-only
   constructor carrying Rust defaults, immutable getters, equality, repr, and
-  Rust round trips. **Additive (green).** `[dep: S0b]`
+  Rust round trips. **Additive (green). Done.** `[dep: S0b]`
 - **S6c — `StereoResolveConfig`** (`umol-py/src/resolve.rs`): bind
   `reset_stereo_constraints` with a keyword-only constructor carrying the Rust
   default, immutable getter, equality, repr, and Rust round trips. **Additive

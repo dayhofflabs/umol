@@ -89,3 +89,9 @@ def test_chemistry_model_import():
     from umol import ChemistryModel
 
     assert umol.ChemistryModel is ChemistryModel
+
+
+def test_aromaticity_resolve_config_import():
+    from umol import AromaticityResolveConfig
+
+    assert umol.AromaticityResolveConfig is AromaticityResolveConfig

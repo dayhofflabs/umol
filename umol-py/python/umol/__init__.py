@@ -4,6 +4,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from ._native import (
     AromaticityModel,
+    AromaticityResolveConfig,
     AromaticSystemAst,
     AromaticSystemConstraintAst,
     AromaticSystemConstraintKey,
@@ -161,6 +162,7 @@ except PackageNotFoundError:
 
 __all__ = [
     "AromaticityModel",
+    "AromaticityResolveConfig",
     "AromaticSystemAst",
     "AromaticSystemConstraintAst",
     "AromaticSystemConstraintKey",
