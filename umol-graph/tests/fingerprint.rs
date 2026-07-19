@@ -161,6 +161,23 @@ fn test_featurizer_featurize_error(#[case] featurizer: Featurizer) {
 #[case::wl(Featurizer::Wl(WlFeaturizer::new(RefinementRounds::Fixed(3))))]
 #[case::ecfp(Featurizer::Ecfp(EcfpFeaturizer::new(2)))]
 #[case::morgan(Featurizer::Morgan(MorganFeaturizer::new(2)))]
+fn test_featurizer_featurize_counted(ethanol: MoleculeAst, #[case] featurizer: Featurizer) {
+    let binary = featurizer.featurize(&ethanol).unwrap();
+    let counted = featurizer.featurize_counted(&ethanol).unwrap();
+    assert_eq!(
+        counted
+            .entries()
+            .iter()
+            .map(|(identifier, _)| *identifier)
+            .collect::<Vec<_>>(),
+        binary.ids()
+    );
+}
+
+#[rstest]
+#[case::wl(Featurizer::Wl(WlFeaturizer::new(RefinementRounds::Fixed(3))))]
+#[case::ecfp(Featurizer::Ecfp(EcfpFeaturizer::new(2)))]
+#[case::morgan(Featurizer::Morgan(MorganFeaturizer::new(2)))]
 fn test_featurizer_featurize_counted_error(#[case] featurizer: Featurizer) {
     assert_eq!(
         featurizer

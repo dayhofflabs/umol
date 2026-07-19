@@ -1377,7 +1377,7 @@ boundary types and downstream ingestion belong to the next workflow pass.
 
 ### S3 — Safe and reproducible Rust fingerprint contracts
 
-- **S3a — stable named hash schemes** **Done**
+- **S3a — stable named hash schemes**
   (`umol-graph/src/hash.rs`, `fingerprint/wl.rs`, `fingerprint/ecfp.rs`): add the
   frozen WL `Xxh3SortedWidth64V1` and ECFP `Xxh3Width64V1` recipe identities and
   route the ordinary featurizers through them. Exact-ID fixtures pin seed,
@@ -1412,11 +1412,15 @@ boundary types and downstream ingestion belong to the next workflow pass.
   empty values, collisions, and unchanged valid similarity and subset results.
   **Implemented (green).** `[dep: S0a]`
 - **S3d — fingerprint parity gate**
-  (`umol-graph` fingerprint tests and benchmark): rerun S0a identities through
-  the checked APIs; pin counted/binary agreement, structural byte keys, pattern
-  bits, and both reaction combinators; and record any cost change caused by
-  checks. No wrapper work begins until this gate is green. **Additive (green).**
-  `[dep: S3b, S3c]`
+  (`umol-graph` fingerprint tests and benchmark): the S0a WL, ECFP, Morgan,
+  pattern, structural, Difference, and DisjointUnion identities remain exact
+  through the checked APIs. The counted and binary WL, ECFP, and Morgan paths
+  produce the same sorted identifier sets. Relative to the saved S0a Criterion
+  fixture baseline, ECFP is the only reported regression: +2.78% with a
+  95%-confidence interval of +2.25% to +3.28%. Criterion reports WL, structural,
+  Difference, and DisjointUnion within its noise threshold and no detectable
+  change for Morgan or pattern. The gate has no timing pass/fail threshold.
+  **Implemented (green).** `[dep: S3b, S3c]`
 
 ### S4 — Python errors and resolved SMILES
 
