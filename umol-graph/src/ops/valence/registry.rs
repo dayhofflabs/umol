@@ -28,6 +28,14 @@ pub struct AtomTypeRegistry {
     content_hash: u64,
 }
 
+impl PartialEq for AtomTypeRegistry {
+    fn eq(&self, other: &Self) -> bool {
+        self.atom_types == other.atom_types
+    }
+}
+
+impl Eq for AtomTypeRegistry {}
+
 type AtomTypeRegistryToml = BTreeMap<String, BTreeMap<String, Vec<String>>>;
 
 impl Default for AtomTypeRegistry {
@@ -241,11 +249,47 @@ static DEFAULT_ATOM_TYPE_REGISTRY: LazyLock<AtomTypeRegistry> = LazyLock::new(||
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_chem::element::Element;
 
     use super::*;
 
-    #[test]
+    #[rstest]
+    fn test_atom_type_registry_eq() {
+        assert_eq!(
+            registry!["C#c0#v4", "O#c0#v2"],
+            registry!["C#c0#v4", "O#c0#v2"],
+        );
+    }
+
+    #[rstest]
+    #[case::pattern(registry!["C#c0#v4"], registry!["C#c0#v3"])]
+    #[case::element_bucket(registry!["C#c0#v4"], registry!["N#c0#v4"])]
+    #[case::charge_bucket(registry!["C#c0#v4"], registry!["C#c+#v4"])]
+    fn test_atom_type_registry_eq_difference(
+        #[case] left: AtomTypeRegistry,
+        #[case] right: AtomTypeRegistry,
+    ) {
+        assert_ne!(left, right);
+    }
+
+    #[rstest]
+    fn test_atom_type_registry_eq_metadata() {
+        let registry = registry!["C#c0#v4"];
+        let mut different_hash = registry.clone();
+        different_hash.content_hash = registry.content_hash().wrapping_add(1);
+
+        assert_eq!(registry, different_hash);
+    }
+
+    #[rstest]
+    fn test_atom_type_registry_default_registry() {
+        let expected =
+            AtomTypeRegistry::from_toml_str(include_str!("../../../config/default-registry.toml"))
+                .unwrap();
+
+        assert_eq!(AtomTypeRegistry::default_registry(), &expected);
+    }
+
+    #[rstest]
     fn test_atom_type_registry_from_toml() {
         let input = r#"
 [C]
@@ -254,39 +298,47 @@ mod tests {
 [O]
 -1 = ["O#c-#n3#v#a0"]
 "#;
-        let registry = AtomTypeRegistry::from_toml_str(input).unwrap();
-        assert_eq!(
-            registry
-                .patterns_for_element_and_charge(Element::C, 0)
-                .len(),
-            1
+        let defaults = AtomDefaults {
+            valence: NumericDefault::Zero,
+            donated_pairs: NumericDefault::Zero,
+            accepted_pairs: NumericDefault::Zero,
+            aromatic_valence: AromaticValenceDefault::NotAromatic,
+            multicenter_valence: MulticenterValenceDefault::NotMulticenter,
+            ..AtomDefaults::ground()
+        };
+        let expected = AtomTypeRegistry::from_atoms(
+            ["C#c0#v4#a0", "O#c-#n3#v#a0"]
+                .map(|source| source.parse::<AtomDsl>().unwrap().into_ast(&defaults)),
         );
-        assert_eq!(
-            registry
-                .patterns_for_element_and_charge(Element::O, -1)
-                .len(),
-            1
-        );
-        assert!(!registry.content_hash_hex().is_empty());
-    }
 
-    #[test]
-    fn test_atom_type_registry_default_registry() {
-        let reg = AtomTypeRegistry::default_registry();
-        assert!(!reg.patterns_for_element(Element::C).is_empty());
-    }
-
-    #[test]
-    fn test_registry_macro() {
-        let reg = registry!["C#c0#v4", "C#c+#h3"];
-        assert_eq!(reg.patterns_for_element(Element::C).len(), 2);
+        assert_eq!(AtomTypeRegistry::from_toml_str(input), Ok(expected));
     }
 
     #[rstest]
-    #[case::wrong_element("[C]\n0 = [\"O#c0\"]")]
-    #[case::wrong_charge("[C]\n0 = [\"C#c+\"]")]
-    fn test_atom_type_registry_from_toml_error(#[case] input: &str) {
-        let err = AtomTypeRegistry::from_toml_str(input).unwrap_err();
-        assert!(matches!(err, ConfigError::InvalidAtomTypeRegistry(_)));
+    #[case::wrong_element(
+        "[C]\n0 = [\"O#c0\"]",
+        ConfigError::InvalidAtomTypeRegistry(
+            "atom 'O#c0' element O does not match section element C".to_owned(),
+        ),
+    )]
+    #[case::wrong_charge(
+        "[C]\n0 = [\"C#c+\"]",
+        ConfigError::InvalidAtomTypeRegistry(
+            "atom 'C#c+' charge 1 does not match section charge 0".to_owned(),
+        ),
+    )]
+    fn test_atom_type_registry_from_toml_error(#[case] input: &str, #[case] expected: ConfigError) {
+        assert_eq!(AtomTypeRegistry::from_toml_str(input), Err(expected));
+    }
+
+    #[rstest]
+    fn test_registry_macro() {
+        let defaults = AtomDefaults::zeroed();
+        let expected = AtomTypeRegistry::from_atoms(
+            ["C#c0#v4", "C#c+#h3"]
+                .map(|source| source.parse::<AtomDsl>().unwrap().into_ast(&defaults)),
+        );
+
+        assert_eq!(registry!["C#c0#v4", "C#c+#h3"], expected);
     }
 }

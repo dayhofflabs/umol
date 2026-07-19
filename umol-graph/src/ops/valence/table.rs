@@ -12,7 +12,7 @@ use xxhash_rust::const_xxh3::xxh3_64;
 
 use crate::ops::model::ConfigError;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValenceEntry {
     /// Lewis/Langmuir saturation targets, sorted smallest to largest. Counts
     /// uses the first entry ≥ localized valence when `#h` is free. Literal `#h`
@@ -28,6 +28,14 @@ pub struct ValenceTable {
     entries: BTreeMap<Element, ValenceEntry>,
     content_hash: u64,
 }
+
+impl PartialEq for ValenceTable {
+    fn eq(&self, other: &Self) -> bool {
+        self.entries == other.entries
+    }
+}
+
+impl Eq for ValenceTable {}
 
 #[derive(Deserialize)]
 struct ValenceEntryToml {
@@ -138,36 +146,172 @@ static DEFAULT_VALENCE_TABLE: LazyLock<ValenceTable> = LazyLock::new(|| {
 
 #[cfg(test)]
 mod tests {
-    use rstest::*;
+    use rstest::rstest;
     use umol_chem::element::Element;
 
     use super::*;
 
-    #[fixture]
-    fn table() -> ValenceTable {
-        ValenceTable::from_toml_str(
-            r#"
-        [H]
-        target_covalences = [1]
-        [S]
-        target_covalences = [6, 2, 4]
-        aromatic_valences = [2]
-        "#,
-        )
-        .unwrap()
+    #[rstest]
+    fn test_valence_entry_eq() {
+        assert_eq!(
+            ValenceEntry {
+                target_covalences: vec![2, 4, 6],
+                aromatic_valences: vec![2],
+            },
+            ValenceEntry {
+                target_covalences: vec![2, 4, 6],
+                aromatic_valences: vec![2],
+            },
+        );
     }
 
     #[rstest]
-    #[case::h(Element::H, vec![1], vec![])]
-    #[case::s(Element::S, vec![2, 4, 6], vec![2])]
-    fn test_valence_table_from_toml(
-        #[case] element: Element,
-        #[case] expected_targets: Vec<u8>,
-        #[case] expected_aromatic: Vec<u8>,
-    ) {
-        let t = table();
-        let entry = t.entry(element).unwrap();
-        assert_eq!(entry.target_covalences, expected_targets);
-        assert_eq!(entry.aromatic_valences, expected_aromatic);
+    #[case::target_covalences(
+        ValenceEntry {
+            target_covalences: vec![2, 4],
+            aromatic_valences: vec![2],
+        },
+        ValenceEntry {
+            target_covalences: vec![2, 4, 6],
+            aromatic_valences: vec![2],
+        },
+    )]
+    #[case::aromatic_valences(
+        ValenceEntry {
+            target_covalences: vec![2, 4, 6],
+            aromatic_valences: vec![2],
+        },
+        ValenceEntry {
+            target_covalences: vec![2, 4, 6],
+            aromatic_valences: vec![2, 4],
+        },
+    )]
+    fn test_valence_entry_eq_difference(#[case] left: ValenceEntry, #[case] right: ValenceEntry) {
+        assert_ne!(left, right);
+    }
+
+    #[rstest]
+    fn test_valence_table_eq() {
+        let mut left = ValenceTable::empty();
+        left.insert(
+            Element::C,
+            ValenceEntry {
+                target_covalences: vec![4, 2],
+                aromatic_valences: vec![3, 2],
+            },
+        );
+        left.insert(
+            Element::O,
+            ValenceEntry {
+                target_covalences: vec![2],
+                aromatic_valences: vec![2],
+            },
+        );
+        let mut right = ValenceTable::empty();
+        right.insert(
+            Element::O,
+            ValenceEntry {
+                target_covalences: vec![2],
+                aromatic_valences: vec![2],
+            },
+        );
+        right.insert(
+            Element::C,
+            ValenceEntry {
+                target_covalences: vec![2, 4],
+                aromatic_valences: vec![2, 3],
+            },
+        );
+
+        assert_eq!(left, right);
+    }
+
+    #[rstest]
+    #[case::missing_element(None)]
+    #[case::target_covalences(Some(ValenceEntry {
+        target_covalences: vec![2, 4],
+        aromatic_valences: vec![2],
+    }))]
+    #[case::aromatic_valences(Some(ValenceEntry {
+        target_covalences: vec![2],
+        aromatic_valences: vec![2, 4],
+    }))]
+    fn test_valence_table_eq_difference(#[case] right_oxygen: Option<ValenceEntry>) {
+        let mut left = ValenceTable::empty();
+        left.insert(
+            Element::C,
+            ValenceEntry {
+                target_covalences: vec![4],
+                aromatic_valences: vec![3],
+            },
+        );
+        left.insert(
+            Element::O,
+            ValenceEntry {
+                target_covalences: vec![2],
+                aromatic_valences: vec![2],
+            },
+        );
+        let mut right = ValenceTable::empty();
+        right.insert(
+            Element::C,
+            ValenceEntry {
+                target_covalences: vec![4],
+                aromatic_valences: vec![3],
+            },
+        );
+        if let Some(entry) = right_oxygen {
+            right.insert(Element::O, entry);
+        }
+
+        assert_ne!(left, right);
+    }
+
+    #[rstest]
+    fn test_valence_table_eq_metadata() {
+        let mut table = ValenceTable::empty();
+        table.insert(
+            Element::C,
+            ValenceEntry {
+                target_covalences: vec![4],
+                aromatic_valences: vec![3],
+            },
+        );
+        let mut different_hash = table.clone();
+        different_hash.content_hash = table.content_hash().wrapping_add(1);
+
+        assert_eq!(table, different_hash);
+    }
+
+    #[rstest]
+    fn test_valence_table_from_toml() {
+        let mut expected = ValenceTable::empty();
+        expected.insert(
+            Element::H,
+            ValenceEntry {
+                target_covalences: vec![1],
+                aromatic_valences: vec![],
+            },
+        );
+        expected.insert(
+            Element::S,
+            ValenceEntry {
+                target_covalences: vec![2, 4, 6],
+                aromatic_valences: vec![2],
+            },
+        );
+
+        assert_eq!(
+            ValenceTable::from_toml_str(
+                r#"
+                [H]
+                target_covalences = [1]
+                [S]
+                target_covalences = [6, 2, 4]
+                aromatic_valences = [2]
+                "#,
+            ),
+            Ok(expected),
+        );
     }
 }

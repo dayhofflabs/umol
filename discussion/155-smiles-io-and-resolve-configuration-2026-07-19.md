@@ -325,19 +325,19 @@ operation while retaining the paired `SmilesIoConfig` direction.
   (`umol-graph/src/ops/valence/registry.rs`): add exact structural equality over
   registry entries; the content hash remains metadata and is not used as an
   equality substitute. Tests distinguish equal reconstruction, differing
-  patterns, and differing element/charge buckets. **Additive (green).**
+  patterns, and differing element/charge buckets. **Additive (green). Done.**
   `[dep: —]`
 - **S2b — `ValenceEntry` / `ValenceTable` structural equality**
   (`umol-graph/src/ops/valence/table.rs`): add exact value equality for entries
   and tables, including target covalences and aromatic valences. Tests
   distinguish equal reconstruction, missing elements, and changed entry
-  values. **Additive (green).** `[dep: —]`
+  values. **Additive (green). Done.** `[dep: —]`
 - **S2c — chemistry-model structural equality**
   (`umol-graph/src/ops/model.rs`): add structural `PartialEq` throughout
   `ValenceModel`, `AromaticityModel`, `StereoModel`, and `ChemistryModel`, using
   the exact registry/table equality from S2a/S2b and ordinary floating-point
   equality for HMO thresholds. Tests vary every branch and aggregate field.
-  **Additive (green).** `[dep: S0a, S2a, S2b]`
+  **Additive (green). Done.** `[dep: S0a, S2a, S2b]`
 
 ### S3 — corrected Python SMILES IO values
 

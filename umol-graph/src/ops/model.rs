@@ -17,7 +17,7 @@ use umol_chem::element::Element;
 
 use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ChemistryModel {
     pub valence: ValenceModel,
     pub aromaticity: AromaticityModel,
@@ -36,7 +36,7 @@ impl Default for ChemistryModel {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValenceModel {
     /// Atom-typing valence model: the registry of `AtomAst` patterns.
     AtomTyping {
@@ -46,7 +46,7 @@ pub enum ValenceModel {
     Counts { table: Cow<'static, ValenceTable> },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AromaticityModel {
     HueckelRule {
         scope: ElementScope,
@@ -141,7 +141,7 @@ impl Default for RingLimits {
 /// `para_stereo` enables the graph-symmetry fixpoint iteration that resolves
 /// para-stereocenters; `inconsistency` governs how the resolver handles a
 /// `#T`/`#C` assertion it cannot realize.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StereoModel {
     pub kind_models: [Option<StereoKindModel>; StereoKind::COUNT],
     pub para_stereo: bool,
@@ -222,27 +222,270 @@ pub enum ConfigError {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
-    use std::ptr;
+    use std::{array, ptr};
 
     use rstest::rstest;
     use umol_chem::element::Element;
 
     use super::*;
+    use crate::{registry, valence_table};
 
     #[rstest]
     fn test_chemistry_model_default() {
         let model = ChemistryModel::default();
+        assert_eq!(
+            model,
+            ChemistryModel {
+                valence: ValenceModel::AtomTyping {
+                    registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
+                },
+                aromaticity: AromaticityModel::daylight(),
+                stereo: StereoModel::default(),
+            },
+        );
         match model.valence {
             ValenceModel::AtomTyping {
                 registry: Cow::Borrowed(registry),
             } => assert!(ptr::eq(registry, AtomTypeRegistry::default_registry())),
             other => panic!("expected borrowed default atom-typing registry, got {other:?}"),
         }
-        assert!(matches!(
-            model.aromaticity,
-            AromaticityModel::HueckelRule { .. }
-        ));
-        assert!(!model.stereo.para_stereo);
+    }
+
+    #[rstest]
+    #[case::valence(ChemistryModel {
+        valence: ValenceModel::Counts {
+            table: Cow::Owned(valence_table![C => [4]]),
+        },
+        ..ChemistryModel::default()
+    })]
+    #[case::aromaticity(ChemistryModel {
+        aromaticity: AromaticityModel::Hmo {
+            scope: ElementScope::Any,
+            stabilization_threshold: 0.5,
+        },
+        ..ChemistryModel::default()
+    })]
+    #[case::stereo(ChemistryModel {
+        stereo: StereoModel {
+            para_stereo: true,
+            ..StereoModel::default()
+        },
+        ..ChemistryModel::default()
+    })]
+    fn test_chemistry_model_eq_difference(#[case] other: ChemistryModel) {
+        assert_ne!(ChemistryModel::default(), other);
+    }
+
+    #[rstest]
+    #[case::atom_typing(
+        ValenceModel::AtomTyping {
+            registry: Cow::Owned(registry!["C#c0#v4"]),
+        },
+        ValenceModel::AtomTyping {
+            registry: Cow::Owned(registry!["C#c0#v4"]),
+        },
+    )]
+    #[case::counts(
+        ValenceModel::Counts {
+            table: Cow::Owned(valence_table![C => [4], O => [2]]),
+        },
+        ValenceModel::Counts {
+            table: Cow::Owned(valence_table![O => [2], C => [4]]),
+        },
+    )]
+    fn test_valence_model_eq(#[case] left: ValenceModel, #[case] right: ValenceModel) {
+        assert_eq!(left, right);
+    }
+
+    #[rstest]
+    #[case::variant(
+        ValenceModel::AtomTyping {
+            registry: Cow::Owned(registry!["C#c0#v4"]),
+        },
+        ValenceModel::Counts {
+            table: Cow::Owned(valence_table![C => [4]]),
+        },
+    )]
+    #[case::atom_typing(
+        ValenceModel::AtomTyping {
+            registry: Cow::Owned(registry!["C#c0#v4"]),
+        },
+        ValenceModel::AtomTyping {
+            registry: Cow::Owned(registry!["C#c0#v3"]),
+        },
+    )]
+    #[case::counts(
+        ValenceModel::Counts {
+            table: Cow::Owned(valence_table![C => [4]]),
+        },
+        ValenceModel::Counts {
+            table: Cow::Owned(valence_table![C => [3]]),
+        },
+    )]
+    fn test_valence_model_eq_difference(#[case] left: ValenceModel, #[case] right: ValenceModel) {
+        assert_ne!(left, right);
+    }
+
+    #[rstest]
+    #[case::hueckel_rule(
+        AromaticityModel::HueckelRule {
+            scope: ElementScope::AllowList(vec![Element::C, Element::N]),
+            ring_limits: RingLimits::default(),
+        },
+        AromaticityModel::HueckelRule {
+            scope: ElementScope::AllowList(vec![Element::C, Element::N]),
+            ring_limits: RingLimits::default(),
+        },
+    )]
+    #[case::hmo(
+        AromaticityModel::Hmo {
+            scope: ElementScope::Any,
+            stabilization_threshold: 0.5,
+        },
+        AromaticityModel::Hmo {
+            scope: ElementScope::Any,
+            stabilization_threshold: 0.5,
+        },
+    )]
+    #[case::clar(
+        AromaticityModel::Clar {
+            scope: ElementScope::AllowList(vec![Element::C]),
+            ring_limits: RingLimits::default(),
+        },
+        AromaticityModel::Clar {
+            scope: ElementScope::AllowList(vec![Element::C]),
+            ring_limits: RingLimits::default(),
+        },
+    )]
+    fn test_aromaticity_model_eq(#[case] left: AromaticityModel, #[case] right: AromaticityModel) {
+        assert_eq!(left, right);
+    }
+
+    #[rstest]
+    #[case::variant(
+        AromaticityModel::HueckelRule {
+            scope: ElementScope::Any,
+            ring_limits: RingLimits::default(),
+        },
+        AromaticityModel::Clar {
+            scope: ElementScope::Any,
+            ring_limits: RingLimits::default(),
+        },
+    )]
+    #[case::hueckel_scope(
+        AromaticityModel::HueckelRule {
+            scope: ElementScope::Any,
+            ring_limits: RingLimits::default(),
+        },
+        AromaticityModel::HueckelRule {
+            scope: ElementScope::AllowList(vec![Element::C]),
+            ring_limits: RingLimits::default(),
+        },
+    )]
+    #[case::hueckel_ring_limits(
+        AromaticityModel::HueckelRule {
+            scope: ElementScope::Any,
+            ring_limits: RingLimits::default(),
+        },
+        AromaticityModel::HueckelRule {
+            scope: ElementScope::Any,
+            ring_limits: RingLimits {
+                min_ring_size: 4,
+                ..RingLimits::default()
+            },
+        },
+    )]
+    #[case::hmo_scope(
+        AromaticityModel::Hmo {
+            scope: ElementScope::Any,
+            stabilization_threshold: 0.5,
+        },
+        AromaticityModel::Hmo {
+            scope: ElementScope::AllowList(vec![Element::C]),
+            stabilization_threshold: 0.5,
+        },
+    )]
+    #[case::hmo_threshold(
+        AromaticityModel::Hmo {
+            scope: ElementScope::Any,
+            stabilization_threshold: 0.5,
+        },
+        AromaticityModel::Hmo {
+            scope: ElementScope::Any,
+            stabilization_threshold: 0.6,
+        },
+    )]
+    #[case::clar_scope(
+        AromaticityModel::Clar {
+            scope: ElementScope::Any,
+            ring_limits: RingLimits::default(),
+        },
+        AromaticityModel::Clar {
+            scope: ElementScope::AllowList(vec![Element::C]),
+            ring_limits: RingLimits::default(),
+        },
+    )]
+    #[case::clar_ring_limits(
+        AromaticityModel::Clar {
+            scope: ElementScope::Any,
+            ring_limits: RingLimits::default(),
+        },
+        AromaticityModel::Clar {
+            scope: ElementScope::Any,
+            ring_limits: RingLimits {
+                include_fused: false,
+                ..RingLimits::default()
+            },
+        },
+    )]
+    fn test_aromaticity_model_eq_difference(
+        #[case] left: AromaticityModel,
+        #[case] right: AromaticityModel,
+    ) {
+        assert_ne!(left, right);
+    }
+
+    #[rstest]
+    fn test_aromaticity_model_daylight() {
+        assert_eq!(
+            AromaticityModel::daylight(),
+            AromaticityModel::HueckelRule {
+                scope: ElementScope::AllowList(vec![
+                    Element::C,
+                    Element::N,
+                    Element::O,
+                    Element::S,
+                    Element::Se,
+                    Element::As,
+                ]),
+                ring_limits: RingLimits::default(),
+            },
+        );
+    }
+
+    #[rstest]
+    fn test_aromaticity_model_mdl() {
+        assert_eq!(
+            AromaticityModel::mdl(),
+            AromaticityModel::HueckelRule {
+                scope: ElementScope::AllowList(vec![Element::C, Element::N]),
+                ring_limits: RingLimits {
+                    min_ring_size: 6,
+                    ..RingLimits::default()
+                },
+            },
+        );
+    }
+
+    #[rstest]
+    fn test_aromaticity_model_permissive() {
+        assert_eq!(
+            AromaticityModel::permissive(),
+            AromaticityModel::HueckelRule {
+                scope: ElementScope::Any,
+                ring_limits: RingLimits::default(),
+            },
+        );
     }
 
     #[rstest]
@@ -257,48 +500,62 @@ mod tests {
         assert_eq!(scope.contains(element), expected);
     }
 
-    #[test]
-    fn test_aromaticity_model_daylight_scope() {
-        match AromaticityModel::daylight() {
-            AromaticityModel::HueckelRule { scope, .. } => {
-                assert!(scope.contains(Element::C));
-                assert!(scope.contains(Element::N));
-                assert!(!scope.contains(Element::B));
-            }
-            other => panic!("expected HueckelRule, got {:?}", other),
-        }
+    #[rstest]
+    fn test_ring_limits_default() {
+        assert_eq!(
+            RingLimits::default(),
+            RingLimits {
+                min_ring_size: 3,
+                max_ring_size: 22,
+                include_fused: true,
+                max_fused_combination: 6,
+                max_fused_search: 10_000,
+            },
+        );
     }
 
-    #[test]
-    fn test_aromaticity_model_mdl_min_ring_size() {
-        match AromaticityModel::mdl() {
-            AromaticityModel::HueckelRule {
-                ring_limits, scope, ..
-            } => {
-                assert_eq!(ring_limits.min_ring_size, 6);
-                assert!(scope.contains(Element::N));
-                assert!(!scope.contains(Element::O));
-            }
-            other => panic!("expected HueckelRule, got {:?}", other),
-        }
+    #[rstest]
+    #[case::kind_models(StereoModel {
+        kind_models: array::from_fn(|_| None),
+        ..StereoModel::default()
+    })]
+    #[case::para_stereo(StereoModel {
+        para_stereo: true,
+        ..StereoModel::default()
+    })]
+    #[case::max_iterations(StereoModel {
+        max_iterations: 8,
+        ..StereoModel::default()
+    })]
+    #[case::inconsistency(StereoModel {
+        inconsistency: InconsistencyPolicy::Keep,
+        ..StereoModel::default()
+    })]
+    fn test_stereo_model_eq_difference(#[case] other: StereoModel) {
+        assert_ne!(StereoModel::default(), other);
     }
 
-    #[test]
-    fn test_aromaticity_model_permissive_scope() {
-        match AromaticityModel::permissive() {
-            AromaticityModel::HueckelRule { scope, .. } => {
-                assert!(matches!(scope, ElementScope::Any));
-            }
-            other => panic!("expected HueckelRule, got {:?}", other),
-        }
-    }
-
-    #[test]
+    #[rstest]
     fn test_stereo_model_default() {
-        let model = StereoModel::default();
-        assert!(!model.para_stereo);
-        assert_eq!(model.max_iterations, 16);
-        assert_eq!(model.inconsistency, InconsistencyPolicy::Error);
+        let mut kind_models = array::from_fn(|_| None);
+        kind_models[StereoKind::Tetrahedral as usize] = Some(StereoKindModel {
+            scope: ElementScope::Any,
+            fluxionality: false,
+        });
+        kind_models[StereoKind::CisTrans as usize] = Some(StereoKindModel {
+            scope: ElementScope::Any,
+            fluxionality: false,
+        });
+
+        assert_eq!(
+            StereoModel::default(),
+            StereoModel {
+                kind_models,
+                para_stereo: false,
+                max_iterations: 16,
+                inconsistency: InconsistencyPolicy::Error,
+            },
+        );
     }
 
     #[rustfmt::skip]
