@@ -6,20 +6,23 @@ use umol_io::smiles::config::{
     SmilesIoConfig as IoSmilesIoConfig, SmilesSyntaxFlags as IoSmilesSyntaxFlags,
 };
 
-/// Parser capabilities and named SMILES acceptance-policy presets.
+/// Ordinary SMILES syntax capabilities and named presets.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SmilesParseFlags {
+pub struct SmilesSyntaxFlags {
     flags: IoSmilesSyntaxFlags,
 }
 
 #[pymethods]
-impl SmilesParseFlags {
+impl SmilesSyntaxFlags {
     #[new]
     fn new(bits: u32) -> PyResult<Self> {
         IoSmilesSyntaxFlags::from_bits(bits)
+            .filter(|flags| flags.bits() & !IoSmilesSyntaxFlags::LENIENT.bits() == 0)
             .map(Self::from_rust)
-            .ok_or_else(|| PyValueError::new_err(format!("unknown SMILES parse flag bits: {bits}")))
+            .ok_or_else(|| {
+                PyValueError::new_err(format!("unknown SMILES syntax flag bits: {bits}"))
+            })
     }
 
     #[classattr]
@@ -35,18 +38,6 @@ impl SmilesParseFlags {
     }
 
     #[classattr]
-    #[pyo3(name = "CHEMAXON_EXTENSIONS")]
-    fn chemaxon_extensions() -> Self {
-        Self::from_rust(IoSmilesSyntaxFlags::CHEMAXON_EXTENSIONS)
-    }
-
-    #[classattr]
-    #[pyo3(name = "SKIP_UNKNOWN_CHEMAXON_TAGS")]
-    fn skip_unknown_chemaxon_tags() -> Self {
-        Self::from_rust(IoSmilesSyntaxFlags::SKIP_UNKNOWN_CHEMAXON_TAGS)
-    }
-
-    #[classattr]
     #[pyo3(name = "OPENSMILES")]
     fn opensmiles() -> Self {
         Self::from_rust(IoSmilesSyntaxFlags::OPENSMILES)
@@ -56,12 +47,6 @@ impl SmilesParseFlags {
     #[pyo3(name = "LENIENT")]
     fn lenient() -> Self {
         Self::from_rust(IoSmilesSyntaxFlags::LENIENT)
-    }
-
-    #[classattr]
-    #[pyo3(name = "CHEMAXON")]
-    fn chemaxon() -> Self {
-        Self::from_rust(IoSmilesSyntaxFlags::CHEMAXON)
     }
 
     #[getter]
@@ -76,14 +61,14 @@ impl SmilesParseFlags {
     fn __repr__(&self) -> String {
         let name = self.flags.to_string();
         if self.flags == IoSmilesSyntaxFlags::LENIENT || self.flags.bits().count_ones() <= 1 {
-            format!("SmilesParseFlags.{name}")
+            format!("SmilesSyntaxFlags.{name}")
         } else {
-            format!("SmilesParseFlags({name})")
+            format!("SmilesSyntaxFlags({name})")
         }
     }
 }
 
-impl SmilesParseFlags {
+impl SmilesSyntaxFlags {
     pub(crate) fn from_rust(flags: IoSmilesSyntaxFlags) -> Self {
         Self { flags }
     }
@@ -97,7 +82,7 @@ impl SmilesParseFlags {
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SmilesIoConfig {
-    parse_flags: SmilesParseFlags,
+    parse_flags: SmilesSyntaxFlags,
 }
 
 #[pymethods]
@@ -118,21 +103,21 @@ impl SmilesIoConfig {
     }
 
     #[staticmethod]
-    fn with_parse_flags(parse_flags: SmilesParseFlags) -> Self {
+    fn with_parse_flags(parse_flags: SmilesSyntaxFlags) -> Self {
         Self { parse_flags }
     }
 
     #[getter]
-    fn parse_flags(&self) -> SmilesParseFlags {
+    fn parse_flags(&self) -> SmilesSyntaxFlags {
         self.parse_flags
     }
 
     fn __repr__(&self) -> String {
-        if self.parse_flags == SmilesParseFlags::opensmiles() {
+        if self.parse_flags == SmilesSyntaxFlags::opensmiles() {
             "SmilesIoConfig.opensmiles()".to_owned()
-        } else if self.parse_flags == SmilesParseFlags::lenient() {
+        } else if self.parse_flags == SmilesSyntaxFlags::lenient() {
             "SmilesIoConfig.lenient()".to_owned()
-        } else if self.parse_flags == SmilesParseFlags::chemaxon() {
+        } else if self.parse_flags.to_rust() == IoSmilesSyntaxFlags::CHEMAXON {
             "SmilesIoConfig.chemaxon()".to_owned()
         } else {
             format!(
@@ -146,7 +131,7 @@ impl SmilesIoConfig {
 impl SmilesIoConfig {
     pub(crate) fn from_rust(config: &IoSmilesIoConfig) -> Self {
         Self {
-            parse_flags: SmilesParseFlags::from_rust(config.syntax_flags),
+            parse_flags: SmilesSyntaxFlags::from_rust(config.syntax_flags),
         }
     }
 
@@ -170,22 +155,19 @@ mod tests {
     #[case::opensmiles(0, IoSmilesSyntaxFlags::OPENSMILES)]
     #[case::extended_aromatics(1 << 1, IoSmilesSyntaxFlags::EXTENDED_AROMATICS)]
     #[case::extended_bonds(1 << 2, IoSmilesSyntaxFlags::EXTENDED_BONDS)]
-    #[case::chemaxon_extensions(1 << 3, IoSmilesSyntaxFlags::CHEMAXON_EXTENSIONS)]
-    #[case::skip_unknown_chemaxon_tags(
-        1 << 10,
-        IoSmilesSyntaxFlags::SKIP_UNKNOWN_CHEMAXON_TAGS
-    )]
     #[case::lenient(6, IoSmilesSyntaxFlags::LENIENT)]
-    fn test_smiles_parse_flags_new(#[case] bits: u32, #[case] expected: IoSmilesSyntaxFlags) {
-        assert_eq!(SmilesParseFlags::new(bits).unwrap().to_rust(), expected);
+    fn test_smiles_syntax_flags_new(#[case] bits: u32, #[case] expected: IoSmilesSyntaxFlags) {
+        assert_eq!(SmilesSyntaxFlags::new(bits).unwrap().to_rust(), expected);
     }
 
     #[rstest]
-    #[case::retired_wildcard(1, "unknown SMILES parse flag bits: 1")]
-    #[case::unknown_high_bit(1 << 31, "unknown SMILES parse flag bits: 2147483648")]
-    fn test_smiles_parse_flags_new_error(#[case] bits: u32, #[case] expected: &str) {
+    #[case::retired_wildcard(1, "unknown SMILES syntax flag bits: 1")]
+    #[case::chemaxon_extensions(1 << 3, "unknown SMILES syntax flag bits: 8")]
+    #[case::skip_unknown_chemaxon_tags(1 << 10, "unknown SMILES syntax flag bits: 1024")]
+    #[case::unknown_high_bit(1 << 31, "unknown SMILES syntax flag bits: 2147483648")]
+    fn test_smiles_syntax_flags_new_error(#[case] bits: u32, #[case] expected: &str) {
         Python::attach(|py| {
-            let error = SmilesParseFlags::new(bits).unwrap_err();
+            let error = SmilesSyntaxFlags::new(bits).unwrap_err();
             assert!(error.is_instance_of::<PyValueError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
@@ -196,67 +178,57 @@ mod tests {
 
     #[rstest]
     #[case::extended_aromatics(
-        SmilesParseFlags::extended_aromatics(),
+        SmilesSyntaxFlags::extended_aromatics(),
         IoSmilesSyntaxFlags::EXTENDED_AROMATICS
     )]
     #[case::extended_bonds(
-        SmilesParseFlags::extended_bonds(),
+        SmilesSyntaxFlags::extended_bonds(),
         IoSmilesSyntaxFlags::EXTENDED_BONDS
     )]
-    #[case::chemaxon_extensions(
-        SmilesParseFlags::chemaxon_extensions(),
-        IoSmilesSyntaxFlags::CHEMAXON_EXTENSIONS
-    )]
-    #[case::skip_unknown_chemaxon_tags(
-        SmilesParseFlags::skip_unknown_chemaxon_tags(),
-        IoSmilesSyntaxFlags::SKIP_UNKNOWN_CHEMAXON_TAGS
-    )]
-    #[case::opensmiles(SmilesParseFlags::opensmiles(), IoSmilesSyntaxFlags::OPENSMILES)]
-    #[case::lenient(SmilesParseFlags::lenient(), IoSmilesSyntaxFlags::LENIENT)]
-    #[case::chemaxon(SmilesParseFlags::chemaxon(), IoSmilesSyntaxFlags::CHEMAXON)]
-    fn test_smiles_parse_flags_classattrs(
-        #[case] flags: SmilesParseFlags,
+    #[case::opensmiles(SmilesSyntaxFlags::opensmiles(), IoSmilesSyntaxFlags::OPENSMILES)]
+    #[case::lenient(SmilesSyntaxFlags::lenient(), IoSmilesSyntaxFlags::LENIENT)]
+    fn test_smiles_syntax_flags_classattrs(
+        #[case] flags: SmilesSyntaxFlags,
         #[case] expected: IoSmilesSyntaxFlags,
     ) {
         assert_eq!(flags.to_rust(), expected);
     }
 
     #[rstest]
-    #[case::opensmiles(SmilesParseFlags::opensmiles(), 0)]
-    #[case::extended_bonds(SmilesParseFlags::extended_bonds(), 1 << 2)]
-    #[case::lenient(SmilesParseFlags::lenient(), 6)]
-    fn test_smiles_parse_flags_bits(#[case] flags: SmilesParseFlags, #[case] expected: u32) {
+    #[case::opensmiles(SmilesSyntaxFlags::opensmiles(), 0)]
+    #[case::extended_aromatics(SmilesSyntaxFlags::extended_aromatics(), 1 << 1)]
+    #[case::extended_bonds(SmilesSyntaxFlags::extended_bonds(), 1 << 2)]
+    #[case::lenient(SmilesSyntaxFlags::lenient(), 6)]
+    fn test_smiles_syntax_flags_bits(#[case] flags: SmilesSyntaxFlags, #[case] expected: u32) {
         assert_eq!(flags.bits(), expected);
     }
 
     #[rstest]
     #[case::extended_syntax(
-        SmilesParseFlags::extended_aromatics(),
-        SmilesParseFlags::extended_bonds(),
+        SmilesSyntaxFlags::extended_aromatics(),
+        SmilesSyntaxFlags::extended_bonds(),
         IoSmilesSyntaxFlags::EXTENDED_AROMATICS | IoSmilesSyntaxFlags::EXTENDED_BONDS
     )]
-    #[case::chemaxon_lenient_tags(
-        SmilesParseFlags::chemaxon(),
-        SmilesParseFlags::skip_unknown_chemaxon_tags(),
-        IoSmilesSyntaxFlags::CHEMAXON | IoSmilesSyntaxFlags::SKIP_UNKNOWN_CHEMAXON_TAGS
-    )]
-    fn test_smiles_parse_flags_or(
-        #[case] left: SmilesParseFlags,
-        #[case] right: SmilesParseFlags,
+    fn test_smiles_syntax_flags_or(
+        #[case] left: SmilesSyntaxFlags,
+        #[case] right: SmilesSyntaxFlags,
         #[case] expected: IoSmilesSyntaxFlags,
     ) {
         assert_eq!(left.__or__(&right).to_rust(), expected);
     }
 
     #[rstest]
-    #[case::opensmiles(SmilesParseFlags::opensmiles(), "SmilesParseFlags.OPENSMILES")]
+    #[case::opensmiles(SmilesSyntaxFlags::opensmiles(), "SmilesSyntaxFlags.OPENSMILES")]
     #[case::extended_aromatics(
-        SmilesParseFlags::extended_aromatics(),
-        "SmilesParseFlags.EXTENDED_AROMATICS"
+        SmilesSyntaxFlags::extended_aromatics(),
+        "SmilesSyntaxFlags.EXTENDED_AROMATICS"
     )]
-    #[case::chemaxon_alias(SmilesParseFlags::chemaxon_extensions(), "SmilesParseFlags.CHEMAXON")]
-    #[case::lenient(SmilesParseFlags::lenient(), "SmilesParseFlags.LENIENT")]
-    fn test_smiles_parse_flags_repr(#[case] flags: SmilesParseFlags, #[case] expected: &str) {
+    #[case::extended_bonds(
+        SmilesSyntaxFlags::extended_bonds(),
+        "SmilesSyntaxFlags.EXTENDED_BONDS"
+    )]
+    #[case::lenient(SmilesSyntaxFlags::lenient(), "SmilesSyntaxFlags.LENIENT")]
+    fn test_smiles_syntax_flags_repr(#[case] flags: SmilesSyntaxFlags, #[case] expected: &str) {
         assert_eq!(flags.__repr__(), expected);
     }
 
@@ -264,22 +236,18 @@ mod tests {
     #[case::opensmiles(IoSmilesSyntaxFlags::OPENSMILES)]
     #[case::extended_aromatics(IoSmilesSyntaxFlags::EXTENDED_AROMATICS)]
     #[case::extended_bonds(IoSmilesSyntaxFlags::EXTENDED_BONDS)]
-    #[case::chemaxon_extensions(IoSmilesSyntaxFlags::CHEMAXON_EXTENSIONS)]
-    #[case::skip_unknown_chemaxon_tags(IoSmilesSyntaxFlags::SKIP_UNKNOWN_CHEMAXON_TAGS)]
     #[case::lenient(IoSmilesSyntaxFlags::LENIENT)]
-    fn test_smiles_parse_flags_from_rust(#[case] flags: IoSmilesSyntaxFlags) {
-        assert_eq!(SmilesParseFlags::from_rust(flags).flags, flags);
+    fn test_smiles_syntax_flags_from_rust(#[case] flags: IoSmilesSyntaxFlags) {
+        assert_eq!(SmilesSyntaxFlags::from_rust(flags).flags, flags);
     }
 
     #[rstest]
     #[case::opensmiles(IoSmilesSyntaxFlags::OPENSMILES)]
     #[case::extended_aromatics(IoSmilesSyntaxFlags::EXTENDED_AROMATICS)]
     #[case::extended_bonds(IoSmilesSyntaxFlags::EXTENDED_BONDS)]
-    #[case::chemaxon_extensions(IoSmilesSyntaxFlags::CHEMAXON_EXTENSIONS)]
-    #[case::skip_unknown_chemaxon_tags(IoSmilesSyntaxFlags::SKIP_UNKNOWN_CHEMAXON_TAGS)]
     #[case::lenient(IoSmilesSyntaxFlags::LENIENT)]
-    fn test_smiles_parse_flags_to_rust(#[case] expected: IoSmilesSyntaxFlags) {
-        assert_eq!(SmilesParseFlags::from_rust(expected).to_rust(), expected);
+    fn test_smiles_syntax_flags_to_rust(#[case] expected: IoSmilesSyntaxFlags) {
+        assert_eq!(SmilesSyntaxFlags::from_rust(expected).to_rust(), expected);
     }
 
     #[rstest]
@@ -287,7 +255,7 @@ mod tests {
         assert_eq!(
             SmilesIoConfig::opensmiles(),
             SmilesIoConfig {
-                parse_flags: SmilesParseFlags::from_rust(IoSmilesSyntaxFlags::OPENSMILES),
+                parse_flags: SmilesSyntaxFlags::from_rust(IoSmilesSyntaxFlags::OPENSMILES),
             }
         );
     }
@@ -297,7 +265,7 @@ mod tests {
         assert_eq!(
             SmilesIoConfig::lenient(),
             SmilesIoConfig {
-                parse_flags: SmilesParseFlags::from_rust(IoSmilesSyntaxFlags::LENIENT),
+                parse_flags: SmilesSyntaxFlags::from_rust(IoSmilesSyntaxFlags::LENIENT),
             }
         );
     }
@@ -307,17 +275,17 @@ mod tests {
         assert_eq!(
             SmilesIoConfig::chemaxon(),
             SmilesIoConfig {
-                parse_flags: SmilesParseFlags::from_rust(IoSmilesSyntaxFlags::CHEMAXON),
+                parse_flags: SmilesSyntaxFlags::from_rust(IoSmilesSyntaxFlags::CHEMAXON),
             }
         );
     }
 
     #[rstest]
-    #[case::opensmiles(SmilesParseFlags::opensmiles())]
+    #[case::opensmiles(SmilesSyntaxFlags::opensmiles())]
     #[case::extended_syntax(
-        SmilesParseFlags::extended_aromatics().__or__(&SmilesParseFlags::extended_bonds())
+        SmilesSyntaxFlags::extended_aromatics().__or__(&SmilesSyntaxFlags::extended_bonds())
     )]
-    fn test_smiles_io_config_with_parse_flags(#[case] parse_flags: SmilesParseFlags) {
+    fn test_smiles_io_config_with_parse_flags(#[case] parse_flags: SmilesSyntaxFlags) {
         assert_eq!(
             SmilesIoConfig::with_parse_flags(parse_flags),
             SmilesIoConfig { parse_flags }
@@ -325,12 +293,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case::opensmiles(SmilesIoConfig::opensmiles(), SmilesParseFlags::opensmiles())]
-    #[case::lenient(SmilesIoConfig::lenient(), SmilesParseFlags::lenient())]
-    #[case::chemaxon(SmilesIoConfig::chemaxon(), SmilesParseFlags::chemaxon())]
+    #[case::opensmiles(SmilesIoConfig::opensmiles(), SmilesSyntaxFlags::opensmiles())]
+    #[case::lenient(SmilesIoConfig::lenient(), SmilesSyntaxFlags::lenient())]
+    #[case::chemaxon(
+        SmilesIoConfig::chemaxon(),
+        SmilesSyntaxFlags::from_rust(IoSmilesSyntaxFlags::CHEMAXON)
+    )]
     fn test_smiles_io_config_parse_flags(
         #[case] config: SmilesIoConfig,
-        #[case] expected: SmilesParseFlags,
+        #[case] expected: SmilesSyntaxFlags,
     ) {
         assert_eq!(config.parse_flags(), expected);
     }
@@ -369,7 +340,7 @@ mod tests {
     #[case::chemaxon(SmilesIoConfig::chemaxon(), IoSmilesSyntaxFlags::CHEMAXON)]
     #[case::extended_syntax(
         SmilesIoConfig::with_parse_flags(
-            SmilesParseFlags::extended_aromatics().__or__(&SmilesParseFlags::extended_bonds())
+            SmilesSyntaxFlags::extended_aromatics().__or__(&SmilesSyntaxFlags::extended_bonds())
         ),
         IoSmilesSyntaxFlags::EXTENDED_AROMATICS | IoSmilesSyntaxFlags::EXTENDED_BONDS
     )]

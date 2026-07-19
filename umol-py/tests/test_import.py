@@ -32,8 +32,9 @@ def test_error_imports():
         assert str(error) == "diagnostic"
 
 
-def test_smiles_parse_flags_import():
-    from umol import SmilesIoConfig, SmilesParseFlags
+def test_smiles_syntax_flags_import():
+    from umol import SmilesIoConfig, SmilesSyntaxFlags
 
     assert umol.SmilesIoConfig is SmilesIoConfig
-    assert umol.SmilesParseFlags is SmilesParseFlags
+    assert umol.SmilesSyntaxFlags is SmilesSyntaxFlags
+    assert not hasattr(umol, "SmilesParseFlags")

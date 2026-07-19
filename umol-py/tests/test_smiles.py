@@ -1,43 +1,77 @@
 import pytest
 
-from umol import SmilesIoConfig, SmilesParseFlags
+from umol import SmilesIoConfig, SmilesSyntaxFlags
 
 
-def test_smiles_parse_flags():
-    extended_syntax = (
-        SmilesParseFlags.EXTENDED_AROMATICS | SmilesParseFlags.EXTENDED_BONDS
-    )
-
-    assert SmilesParseFlags(0) == SmilesParseFlags.OPENSMILES
-    assert SmilesParseFlags(2) == SmilesParseFlags.EXTENDED_AROMATICS
-    assert SmilesParseFlags.CHEMAXON == SmilesParseFlags.CHEMAXON_EXTENSIONS
-    assert extended_syntax.bits == 6
-    assert repr(extended_syntax) == "SmilesParseFlags.LENIENT"
-    assert extended_syntax == SmilesParseFlags.LENIENT
-
-
-def test_smiles_parse_flags_error():
-    with pytest.raises(ValueError, match="^unknown SMILES parse flag bits: 1$"):
-        SmilesParseFlags(1)
+@pytest.mark.parametrize(
+    ("bits", "expected"),
+    [
+        (0, SmilesSyntaxFlags.OPENSMILES),
+        (2, SmilesSyntaxFlags.EXTENDED_AROMATICS),
+        (4, SmilesSyntaxFlags.EXTENDED_BONDS),
+        (6, SmilesSyntaxFlags.LENIENT),
+    ],
+)
+def test_smiles_syntax_flags(bits, expected):
+    assert SmilesSyntaxFlags(bits) == expected
+    assert SmilesSyntaxFlags(bits).bits == bits
 
 
-def test_smiles_parse_flags_immutable():
+def test_smiles_syntax_flags_or():
+    assert (
+        SmilesSyntaxFlags.EXTENDED_AROMATICS | SmilesSyntaxFlags.EXTENDED_BONDS
+    ) == SmilesSyntaxFlags.LENIENT
+
+
+@pytest.mark.parametrize("bits", [1, 8, 1024, 1032, 1 << 31])
+def test_smiles_syntax_flags_error(bits):
+    with pytest.raises(
+        ValueError,
+        match=rf"^unknown SMILES syntax flag bits: {bits}$",
+    ):
+        SmilesSyntaxFlags(bits)
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["CHEMAXON_EXTENSIONS", "SKIP_UNKNOWN_CHEMAXON_TAGS", "CHEMAXON"],
+)
+def test_smiles_syntax_flags_cx(name):
+    assert not hasattr(SmilesSyntaxFlags, name)
+
+
+@pytest.mark.parametrize(
+    ("flags", "expected"),
+    [
+        (SmilesSyntaxFlags.OPENSMILES, "SmilesSyntaxFlags.OPENSMILES"),
+        (
+            SmilesSyntaxFlags.EXTENDED_AROMATICS,
+            "SmilesSyntaxFlags.EXTENDED_AROMATICS",
+        ),
+        (SmilesSyntaxFlags.EXTENDED_BONDS, "SmilesSyntaxFlags.EXTENDED_BONDS"),
+        (SmilesSyntaxFlags.LENIENT, "SmilesSyntaxFlags.LENIENT"),
+    ],
+)
+def test_smiles_syntax_flags_repr(flags, expected):
+    assert repr(flags) == expected
+
+
+def test_smiles_syntax_flags_immutable():
     with pytest.raises(AttributeError):
-        SmilesParseFlags.OPENSMILES.bits = 2
+        SmilesSyntaxFlags.OPENSMILES.bits = 2
 
 
 def test_smiles_io_config():
     extended_syntax = (
-        SmilesParseFlags.EXTENDED_AROMATICS | SmilesParseFlags.EXTENDED_BONDS
+        SmilesSyntaxFlags.EXTENDED_AROMATICS | SmilesSyntaxFlags.EXTENDED_BONDS
     )
     config = SmilesIoConfig.with_parse_flags(extended_syntax)
 
-    assert SmilesIoConfig.opensmiles().parse_flags == SmilesParseFlags.OPENSMILES
-    assert SmilesIoConfig.lenient().parse_flags == SmilesParseFlags.LENIENT
-    assert SmilesIoConfig.chemaxon().parse_flags == SmilesParseFlags.CHEMAXON
+    assert SmilesIoConfig.opensmiles().parse_flags == SmilesSyntaxFlags.OPENSMILES
+    assert SmilesIoConfig.lenient().parse_flags == SmilesSyntaxFlags.LENIENT
     assert config.parse_flags == extended_syntax
     assert repr(config) == "SmilesIoConfig.lenient()"
-    assert config == SmilesIoConfig.with_parse_flags(SmilesParseFlags(6))
+    assert config == SmilesIoConfig.with_parse_flags(SmilesSyntaxFlags(6))
     assert config == SmilesIoConfig.lenient()
     assert config != SmilesIoConfig.opensmiles()
     assert not hasattr(config, "lint_flags")
@@ -47,4 +81,4 @@ def test_smiles_io_config():
 
 def test_smiles_io_config_immutable():
     with pytest.raises(AttributeError):
-        SmilesIoConfig.opensmiles().parse_flags = SmilesParseFlags.LENIENT
+        SmilesIoConfig.opensmiles().parse_flags = SmilesSyntaxFlags.LENIENT

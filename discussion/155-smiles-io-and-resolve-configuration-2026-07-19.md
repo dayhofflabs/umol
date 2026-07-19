@@ -348,7 +348,8 @@ operation while retaining the paired `SmilesIoConfig` direction.
   OR, validated bit construction, equality, and repr. CX bits and presets are
   rejected by the Python constructor and are neither registered nor exported.
   Conversion tests cover every exposed bit and preset without implying that the
-  Rust CX members were removed. **Breaking Python API correction (red → green).**
+  Rust CX members were removed.
+  **Breaking Python API correction (red → green). Done.**
   `[dep: S1a]`
 - **S3b — corrected `SmilesIoConfig` binding**
   (`umol-py/src/smiles.rs`, registration, exports, and installed tests): expose
