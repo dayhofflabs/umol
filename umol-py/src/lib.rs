@@ -61,6 +61,7 @@ use crate::{
         ContradictionError, InvalidStructureError, ModelConversionError, ParseError,
         UnderdeterminedError,
     },
+    model::valence::AtomTypeRegistry,
     molecule::MoleculeAst,
     multicenter::{MulticenterBondAst, MulticenterBondView, MulticenterBondViews},
     noncovalent::{
@@ -107,6 +108,8 @@ mod error;
 #[cfg(feature = "graph")]
 mod fingerprint;
 #[cfg(feature = "graph")]
+mod model;
+#[cfg(feature = "graph")]
 mod molecule;
 #[cfg(feature = "graph")]
 mod multicenter;
@@ -149,6 +152,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
             module.py().get_type::<UnderdeterminedError>(),
         )?;
         module.add_class::<MoleculeAst>()?;
+        module.add_class::<AtomTypeRegistry>()?;
         module.add_class::<AromaticSystemDelta>()?;
         module.add_class::<AtomDelta>()?;
         module.add_class::<AtomFieldChange>()?;

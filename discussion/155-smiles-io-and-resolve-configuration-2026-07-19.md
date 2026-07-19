@@ -372,7 +372,7 @@ exported from `umol` in its own subitem.
   equality, content-hash inspection, read-only pattern lookup, and
   stable repr. Invalid TOML raises `ValueError`; returned atoms are
   detached Python values. Conversion tests cover borrowed-default and owned
-  custom registries. **Additive (green).** `[dep: S2a]`
+  custom registries. **Additive (green). Done.** `[dep: S2a]`
 - **S4b — `ValenceEntry`** (`umol-py/src/model/valence.rs`): bind immutable
   target-covalence and aromatic-valence sequences with a keyword-only
   constructor, detached getters, normalization matching Rust table insertion,

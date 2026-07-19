@@ -38,3 +38,9 @@ def test_smiles_syntax_flags_import():
     assert umol.SmilesIoConfig is SmilesIoConfig
     assert umol.SmilesSyntaxFlags is SmilesSyntaxFlags
     assert not hasattr(umol, "SmilesParseFlags")
+
+
+def test_atom_type_registry_import():
+    from umol import AtomTypeRegistry
+
+    assert umol.AtomTypeRegistry is AtomTypeRegistry
