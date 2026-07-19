@@ -359,7 +359,7 @@ operation while retaining the paired `SmilesIoConfig` direction.
   `chemaxon()`, `parse_flags`, and `with_parse_flags`; do not expose lint or
   future render-policy internals before their contracts are settled. Rust/Python
   conversions cover all ordinary configs and an arbitrary OR composition.
-  **Breaking Python API correction (red → green).** `[dep: S3a]`
+  **Breaking Python API correction (red → green). Done.** `[dep: S3a]`
 
 ### S4 — Python valence-model data
 
