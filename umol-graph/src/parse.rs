@@ -9,7 +9,7 @@ use umol_utils::error::UmolError;
 use umol_utils::solution::Solution;
 
 use crate::ops::model::ChemistryModel;
-use crate::ops::resolve::{ResolveUnderdetermined, Resolver};
+use crate::ops::resolve::{ResolveConfig, ResolveUnderdetermined, Resolver};
 
 /// Parse MOL to a resolved [`MoleculeAst`] using default IO config and model.
 pub fn parse_mol(input: &str) -> Result<MoleculeAst, Box<dyn UmolError>> {
@@ -18,27 +18,34 @@ pub fn parse_mol(input: &str) -> Result<MoleculeAst, Box<dyn UmolError>> {
 
 /// Parse MOL bytes to a resolved [`MoleculeAst`] using default IO config and model.
 pub fn parse_mol_bytes(input: &[u8]) -> Result<MoleculeAst, Box<dyn UmolError>> {
-    parse_mol_bytes_with(input, &CtfileIoConfig::basic(), &ChemistryModel::default())
+    parse_mol_bytes_with(
+        input,
+        &CtfileIoConfig::basic(),
+        &ChemistryModel::default(),
+        &ResolveConfig::default(),
+    )
 }
 
-/// Parse MOL to a resolved [`MoleculeAst`] with explicit IO config and model.
+/// Parse MOL to a resolved [`MoleculeAst`] with explicit IO, model, and resolve config.
 pub fn parse_mol_with(
     input: &str,
     io_config: &CtfileIoConfig,
     model: &ChemistryModel,
+    resolve_config: &ResolveConfig,
 ) -> Result<MoleculeAst, Box<dyn UmolError>> {
-    parse_mol_bytes_with(input.as_bytes(), io_config, model)
+    parse_mol_bytes_with(input.as_bytes(), io_config, model, resolve_config)
 }
 
-/// Parse MOL bytes to a resolved [`MoleculeAst`] with explicit IO config and model.
+/// Parse MOL bytes to a resolved [`MoleculeAst`] with explicit IO, model, and resolve config.
 pub fn parse_mol_bytes_with(
     input: &[u8],
     io_config: &CtfileIoConfig,
     model: &ChemistryModel,
+    resolve_config: &ResolveConfig,
 ) -> Result<MoleculeAst, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
     let mut ast: MoleculeAst = (&table_mol).try_into_ast(&())?;
-    match Resolver::new(model).resolve(&mut ast)? {
+    match Resolver::with_config(model, *resolve_config).resolve(&mut ast)? {
         Solution::Determined(()) => Ok(ast),
         Solution::Underdetermined(()) => Err(Box::new(ResolveUnderdetermined)),
         Solution::Contradictory(c) => Err(Box::new(c)),
@@ -50,15 +57,16 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::*;
-    use umol_ast::ast::AtomId;
+    use umol_ast::ast::{AromaticValenceAst, AtomId, ValueAst};
     use umol_chem::element::Element;
     use umol_io::ctfile::config::CtfileIoConfig;
     use umol_io::ctfile::parse_mol_to_ast;
 
-    use super::parse_mol_bytes_with;
+    use super::{parse_mol_bytes, parse_mol_bytes_with};
     use crate::ops::model::{
         AromaticityModel, ChemistryModel, ElementScope, RingLimits, StereoModel, ValenceModel,
     };
+    use crate::ops::resolve::{AromaticityResolveConfig, ResolveConfig, StereoResolveConfig};
     use crate::ops::valence::{CountsValence, ValenceTable};
 
     const METHANE_MOL: &str = "Methane\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0\nM  END\n";
@@ -88,22 +96,86 @@ mod tests {
     }
 
     #[rstest]
-    fn test_parse_mol_bytes_with_resolver_methane_determined(valence_table: &'static ValenceTable) {
-        let model = ChemistryModel {
+    #[case::methane(METHANE_MOL)]
+    fn test_parse_mol_bytes(#[case] input: &str) {
+        assert_eq!(
+            parse_mol_bytes(input.as_bytes()).unwrap(),
+            parse_mol_bytes_with(
+                input.as_bytes(),
+                &CtfileIoConfig::basic(),
+                &ChemistryModel::default(),
+                &ResolveConfig::default(),
+            )
+            .unwrap()
+        );
+    }
+
+    #[rstest]
+    #[case::counts(
+        CtfileIoConfig::basic(),
+        ChemistryModel {
             valence: ValenceModel::Counts {
-                table: Cow::Borrowed(valence_table),
+                table: Cow::Borrowed(ValenceTable::default_table()),
             },
             aromaticity: AromaticityModel::HueckelRule {
                 scope: ElementScope::AllowList(vec![Element::C]),
                 ring_limits: RingLimits::default(),
             },
             stereo: StereoModel::default(),
-        };
-        let ast =
-            parse_mol_bytes_with(METHANE_MOL.as_bytes(), &CtfileIoConfig::basic(), &model).unwrap();
+        },
+        ResolveConfig::default(),
+        "C#i=#c0#h4#n0#u0#s#v0#a!"
+    )]
+    fn test_parse_mol_bytes_with(
+        #[case] io_config: CtfileIoConfig,
+        #[case] model: ChemistryModel,
+        #[case] resolve_config: ResolveConfig,
+        #[case] expected: &str,
+    ) {
+        let ast = parse_mol_bytes_with(METHANE_MOL.as_bytes(), &io_config, &model, &resolve_config)
+            .unwrap();
+        assert_eq!(ast.atom(AtomId(0)).ast.to_string(), expected);
+    }
+
+    #[rstest]
+    #[case::retained(
+        CtfileIoConfig::basic(),
+        ChemistryModel::default(),
+        ResolveConfig::default(),
+        vec![Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))); 6]
+    )]
+    #[case::reset(
+        CtfileIoConfig::basic(),
+        ChemistryModel::default(),
+        ResolveConfig {
+            aromaticity: AromaticityResolveConfig {
+                delocalize_charge: true,
+                reset_aromatic_valence: true,
+            },
+            stereo: StereoResolveConfig::default(),
+        },
+        vec![None; 6]
+    )]
+    fn test_parse_mol_bytes_with_aromatic_valence(
+        #[case] io_config: CtfileIoConfig,
+        #[case] model: ChemistryModel,
+        #[case] resolve_config: ResolveConfig,
+        #[case] expected: Vec<Option<AromaticValenceAst>>,
+    ) {
+        let ast = parse_mol_bytes_with(
+            BENZENE_AROMATIC_MOL.as_bytes(),
+            &io_config,
+            &model,
+            &resolve_config,
+        )
+        .unwrap();
+
         assert_eq!(
-            ast.atom(AtomId(0)).ast.to_string(),
-            "C#i=#c0#h4#n0#u0#s#v0#a!"
+            ast.atoms()
+                .iter()
+                .map(|atom| atom.ast.constraints.aromatic_valence().cloned())
+                .collect::<Vec<_>>(),
+            expected
         );
     }
 }

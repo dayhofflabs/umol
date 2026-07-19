@@ -304,7 +304,7 @@ config for the composite resolve operation.
   here. Tests pin bit positions, ordinary presets, OR composition, display, and
   explicit CX opt-in. **Breaking Rust API and preset migration (red → green).**
   `[dep: —]`
-- **S1b — explicit resolve policy at interpretation and ingestion boundaries**
+- **S1b — explicit resolve policy at interpretation and ingestion boundaries** **Done**
   (`umol-graph/src/ingest.rs`, current resolved MOL helpers, and callers): make
   `Interpret::interpret` accept both `&ChemistryModel` and `&ResolveConfig`;
   rename `MoleculeIngestError` to `MoleculeInterpretationError`; extend
