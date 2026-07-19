@@ -17,12 +17,12 @@ use crate::ops::aromaticity::{
 use crate::ops::model::AromaticityModel;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct AromaticityResolverConfig {
+pub struct AromaticityResolveConfig {
     pub delocalize_charge: bool,
     pub reset_aromatic_valence: bool,
 }
 
-impl Default for AromaticityResolverConfig {
+impl Default for AromaticityResolveConfig {
     fn default() -> Self {
         Self {
             delocalize_charge: true,
@@ -34,15 +34,15 @@ impl Default for AromaticityResolverConfig {
 #[derive(Clone, Debug)]
 pub struct AromaticityResolver {
     perception: AromaticityPerception,
-    config: AromaticityResolverConfig,
+    config: AromaticityResolveConfig,
 }
 
 impl AromaticityResolver {
     pub fn new(model: &AromaticityModel) -> Self {
-        Self::with_config(model, AromaticityResolverConfig::default())
+        Self::with_config(model, AromaticityResolveConfig::default())
     }
 
-    pub fn with_config(model: &AromaticityModel, config: AromaticityResolverConfig) -> Self {
+    pub fn with_config(model: &AromaticityModel, config: AromaticityResolveConfig) -> Self {
         Self {
             perception: AromaticityPerception::new(model),
             config,
@@ -186,10 +186,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_config_default() {
+    fn test_aromaticity_resolve_config_default() {
         assert_eq!(
-            AromaticityResolverConfig::default(),
-            AromaticityResolverConfig {
+            AromaticityResolveConfig::default(),
+            AromaticityResolveConfig {
                 delocalize_charge: true,
                 reset_aromatic_valence: false,
             }
@@ -259,7 +259,7 @@ mod tests {
 
     #[rstest]
     #[case::homogeneous_delocalized(
-        AromaticityResolverConfig::default(),
+        AromaticityResolveConfig::default(),
         mol_dsl_ground!(r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#),
         ValueAst::Lit(1),
@@ -267,7 +267,7 @@ mod tests {
         vec![Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))); 3]
     )]
     #[case::homogeneous_localized(
-        AromaticityResolverConfig {
+        AromaticityResolveConfig {
             delocalize_charge: false,
             reset_aromatic_valence: false,
         },
@@ -282,7 +282,7 @@ mod tests {
         ]
     )]
     #[case::heterogeneous_localized(
-        AromaticityResolverConfig::default(),
+        AromaticityResolveConfig::default(),
         mol_dsl_ground!(r#"{:atoms ["N #c+ #h #a" "C #h #a" "C #h #a"
                                       "C #h #a" "C #h #a" "C #h #a"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]
@@ -295,7 +295,7 @@ mod tests {
         vec![Some(AromaticValenceAst::Aromatic(ValueAst::Lit(1))); 6]
     )]
     #[case::reset_source_constraints(
-        AromaticityResolverConfig {
+        AromaticityResolveConfig {
             delocalize_charge: true,
             reset_aromatic_valence: true,
         },
@@ -306,7 +306,7 @@ mod tests {
     )]
     fn test_aromaticity_resolver_resolve(
         aromaticity_model: AromaticityModel,
-        #[case] config: AromaticityResolverConfig,
+        #[case] config: AromaticityResolveConfig,
         #[case] mut molecule: MoleculeAst,
         #[case] expected_system_charge: ValueAst,
         #[case] expected_atom_charges: Vec<ValueAst>,

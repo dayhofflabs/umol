@@ -267,19 +267,19 @@ a stage boundary red.
   and every constructor without compatibility aliases. Exact dispatch and
   default-model tests cover borrowed defaults and owned custom data. **Breaking
   Rust API migration (red → green).** `[dep: —]`
-- **S0b — operation-name the aromaticity config**
+- **S0b — operation-name the aromaticity config** **Done**
   (`umol-graph/src/ops/resolve/aromaticity.rs` and callers): rename
   `AromaticityResolverConfig` to `AromaticityResolveConfig`, preserving
   `delocalize_charge`, `reset_aromatic_valence`, defaults, and behavior. Migrate
   every constructor, import, and test. **Breaking Rust API migration (red →
   green).** `[dep: —]`
-- **S0c — operation-name the stereo config**
+- **S0c — operation-name the stereo config** **Done**
   (`umol-graph/src/ops/resolve/stereo.rs` and callers): rename
   `StereoResolverConfig` to `StereoResolveConfig`, preserving
   `reset_stereo_constraints`, its default, and behavior. Migrate every
   constructor, import, and test. **Breaking Rust API migration (red → green).**
   `[dep: —]`
-- **S0d — composite `ResolveConfig`**
+- **S0d — composite `ResolveConfig`** **Done**
   (`umol-graph/src/ops/resolve.rs`): add `ResolveConfig { aromaticity:
   AromaticityResolveConfig, stereo: StereoResolveConfig }`, `Default`, and
   structural equality. `Resolver::new(model)` delegates to default operational

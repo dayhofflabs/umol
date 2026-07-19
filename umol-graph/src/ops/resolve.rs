@@ -12,12 +12,12 @@ pub mod valence;
 
 use std::any::Any;
 
-pub use aromaticity::{AromaticityResolver, AromaticityResolverConfig};
+pub use aromaticity::{AromaticityResolveConfig, AromaticityResolver};
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
 pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
 };
-pub use stereo::{StereoContradiction, StereoError, StereoResolver, StereoResolverConfig};
+pub use stereo::{StereoContradiction, StereoError, StereoResolveConfig, StereoResolver};
 use thiserror::Error;
 use umol_ast::ast::{MoleculeAst, Transaction, TransactionError};
 use umol_utils::error::UmolError;
@@ -26,6 +26,12 @@ pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
 use crate::ops::model::ChemistryModel;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ResolveConfig {
+    pub aromaticity: AromaticityResolveConfig,
+    pub stereo: StereoResolveConfig,
+}
 
 #[derive(Clone, Debug)]
 pub struct Resolver<'a> {
@@ -103,10 +109,14 @@ impl UmolError for ResolveUnderdetermined {
 
 impl<'a> Resolver<'a> {
     pub fn new(model: &'a ChemistryModel) -> Self {
+        Self::with_config(model, ResolveConfig::default())
+    }
+
+    pub fn with_config(model: &'a ChemistryModel, config: ResolveConfig) -> Self {
         Self {
             valence: ValenceResolver::new(&model.valence),
-            aromaticity: AromaticityResolver::new(&model.aromaticity),
-            stereo: StereoResolver::new(&model.stereo),
+            aromaticity: AromaticityResolver::with_config(&model.aromaticity, config.aromaticity),
+            stereo: StereoResolver::with_config(&model.stereo, config.stereo),
             bonds: BondsResolver::new(),
             multicenter_bonds: MulticenterBondsResolver::new(),
         }
@@ -317,6 +327,38 @@ mod tests {
         }
     }
 
+    #[fixture]
+    fn aromatic_molecule() -> MoleculeAst {
+        mol_dsl_ground!(
+            r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#
+        )
+    }
+
+    #[fixture]
+    fn stereo_molecule() -> MoleculeAst {
+        mol_dsl_ground!(
+            r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
+                :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
+        )
+    }
+
+    #[rstest]
+    fn test_resolve_config_default() {
+        assert_eq!(
+            ResolveConfig::default(),
+            ResolveConfig {
+                aromaticity: AromaticityResolveConfig {
+                    delocalize_charge: true,
+                    reset_aromatic_valence: false,
+                },
+                stereo: StereoResolveConfig {
+                    reset_stereo_constraints: false,
+                },
+            }
+        );
+    }
+
     #[rstest]
     #[case::contradiction(
         ResolverError::RollbackFailed {
@@ -338,6 +380,78 @@ mod tests {
     )]
     fn test_resolver_error(#[case] error: ResolverError, #[case] expected: &str) {
         assert_eq!(error.to_string(), expected);
+    }
+
+    #[rstest]
+    fn test_resolver_new(
+        chemistry_model: ChemistryModel,
+        aromatic_molecule: MoleculeAst,
+        stereo_molecule: MoleculeAst,
+    ) {
+        let resolver = Resolver::new(&chemistry_model);
+        let explicit = Resolver::with_config(&chemistry_model, ResolveConfig::default());
+
+        assert_eq!(
+            resolver.aromaticity.plan(&aromatic_molecule),
+            explicit.aromaticity.plan(&aromatic_molecule)
+        );
+        assert_eq!(
+            resolver.stereo.plan(&stereo_molecule),
+            explicit.stereo.plan(&stereo_molecule)
+        );
+    }
+
+    #[rstest]
+    #[case::delocalize_charge(ResolveConfig {
+        aromaticity: AromaticityResolveConfig {
+            delocalize_charge: false,
+            reset_aromatic_valence: false,
+        },
+        stereo: StereoResolveConfig::default(),
+    })]
+    #[case::reset_aromatic_valence(ResolveConfig {
+        aromaticity: AromaticityResolveConfig {
+            delocalize_charge: true,
+            reset_aromatic_valence: true,
+        },
+        stereo: StereoResolveConfig::default(),
+    })]
+    #[case::reset_stereo_constraints(ResolveConfig {
+        aromaticity: AromaticityResolveConfig::default(),
+        stereo: StereoResolveConfig {
+            reset_stereo_constraints: true,
+        },
+    })]
+    fn test_resolver_with_config(
+        chemistry_model: ChemistryModel,
+        aromatic_molecule: MoleculeAst,
+        stereo_molecule: MoleculeAst,
+        #[case] config: ResolveConfig,
+    ) {
+        let resolver = Resolver::with_config(&chemistry_model, config);
+        let expected_aromaticity =
+            AromaticityResolver::with_config(&chemistry_model.aromaticity, config.aromaticity)
+                .plan(&aromatic_molecule);
+        let expected_stereo = StereoResolver::with_config(&chemistry_model.stereo, config.stereo)
+            .plan(&stereo_molecule);
+
+        assert_eq!(
+            resolver.aromaticity.plan(&aromatic_molecule),
+            expected_aromaticity
+        );
+        assert_eq!(resolver.stereo.plan(&stereo_molecule), expected_stereo);
+        if config.aromaticity != AromaticityResolveConfig::default() {
+            assert_ne!(
+                expected_aromaticity,
+                AromaticityResolver::new(&chemistry_model.aromaticity).plan(&aromatic_molecule)
+            );
+        }
+        if config.stereo != StereoResolveConfig::default() {
+            assert_ne!(
+                expected_stereo,
+                StereoResolver::new(&chemistry_model.stereo).plan(&stereo_molecule)
+            );
+        }
     }
 
     #[rstest]

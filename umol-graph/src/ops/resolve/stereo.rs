@@ -14,14 +14,14 @@ use umol_utils::solution::Solution;
 use crate::ops::model::{InconsistencyPolicy, StereoModel};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct StereoResolverConfig {
+pub struct StereoResolveConfig {
     pub reset_stereo_constraints: bool,
 }
 
 #[derive(Clone, Debug)]
 pub struct StereoResolver {
     model: StereoModel,
-    config: StereoResolverConfig,
+    config: StereoResolveConfig,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -40,10 +40,10 @@ pub enum StereoError {
 
 impl StereoResolver {
     pub fn new(model: &StereoModel) -> Self {
-        Self::with_config(model, StereoResolverConfig::default())
+        Self::with_config(model, StereoResolveConfig::default())
     }
 
-    pub fn with_config(model: &StereoModel, config: StereoResolverConfig) -> Self {
+    pub fn with_config(model: &StereoModel, config: StereoResolveConfig) -> Self {
         Self {
             model: model.clone(),
             config,
@@ -298,10 +298,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_resolver_config_default() {
+    fn test_stereo_resolve_config_default() {
         assert_eq!(
-            StereoResolverConfig::default(),
-            StereoResolverConfig {
+            StereoResolveConfig::default(),
+            StereoResolveConfig {
                 reset_stereo_constraints: false,
             }
         );
@@ -421,7 +421,7 @@ mod tests {
     ) {
         let resolver = StereoResolver::with_config(
             &stereo_model,
-            StereoResolverConfig {
+            StereoResolveConfig {
                 reset_stereo_constraints: true,
             },
         );

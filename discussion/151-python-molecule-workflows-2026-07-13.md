@@ -967,7 +967,7 @@ covered by cross-family properties.
   S1b]`
 - **S1d — aromaticity edit planner**
   (`umol-graph/src/ops/aromaticity.rs`, `ops/resolve/aromaticity.rs`, resolver
-  policy configuration): add public `AromaticityResolverConfig {
+  policy configuration): add public `AromaticityResolveConfig {
   delocalize_charge, reset_aromatic_valence }`, defaulting to the existing
   behavior (`true`, `false`), and construct either with `new(model)` or
   `with_config(model, config)`. Expose the read-only planner as
@@ -1000,7 +1000,7 @@ covered by cross-family properties.
   **Public planner plus atomic resolver migration (green).** `[dep: S0k, S1c]`
 - **S1e — stereo edit planner**
   (`umol-graph/src/ops/resolve/stereo.rs`): add public
-  `StereoResolverConfig { reset_stereo_constraints }`, defaulting to `false`,
+  `StereoResolveConfig { reset_stereo_constraints }`, defaulting to `false`,
   and expose
 
   ```rust
