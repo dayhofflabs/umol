@@ -3,16 +3,18 @@
 //! 2026.03.x. The invariant, bond typing, iteration, and 32-bit boost hash all
 //! follow RDKit; the dedup is the shared circular refinement in `umol-graph-core`.
 //!
-//! The molecule must be ground. `deltaMass` follows RDKit: natural isotope → 0;
-//! a labelled isotope → `int(exact isotope mass − standard atomic weight)`. That
-//! integer truncation is table-sensitive, so isotope bit-exactness depends on our
-//! mass tables agreeing with RDKit's; natural atoms are always 0.
+//! Public entry points reject non-ground molecules before invariant extraction.
+//! `deltaMass` follows RDKit: natural isotope → 0; a labelled isotope →
+//! `int(exact isotope mass − standard atomic weight)`. That integer truncation
+//! is table-sensitive, so isotope bit-exactness depends on our mass tables
+//! agreeing with RDKit's; natural atoms are always 0.
 
 use umol_ast::ast::{AsLit, AtomId, BondId, IsotopeMassAst, MoleculeAst, RingSet};
 use umol_chem::isotope::Isotope;
 use umol_graph_core::CircularRefinementAlgorithm;
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
+use super::featurizer::FingerprintError;
 use crate::hash::Morgan;
 
 /// RDKit Morgan fingerprint of `radius` iterations (ECFP_{2·radius} equivalent).
@@ -27,13 +29,22 @@ impl MorganFeaturizer {
     }
 
     /// Returns the deduplicated set of identifiers.
-    pub fn featurize(&self, mol: &MoleculeAst) -> FeatureSet<u64> {
-        FeatureSet::from_features(self.identifiers(mol))
+    pub fn featurize(&self, mol: &MoleculeAst) -> Result<FeatureSet<u64>, FingerprintError> {
+        if !mol.is_ground() {
+            return Err(FingerprintError::NotGround);
+        }
+        Ok(FeatureSet::from_features(self.identifiers(mol)))
     }
 
-    /// Compute per-identifier occurrences
-    pub fn featurize_counted(&self, mol: &MoleculeAst) -> CountedFeatureSet<u64> {
-        CountedFeatureSet::from_features(self.identifiers(mol))
+    /// Compute per-identifier occurrences.
+    pub fn featurize_counted(
+        &self,
+        mol: &MoleculeAst,
+    ) -> Result<CountedFeatureSet<u64>, FingerprintError> {
+        if !mol.is_ground() {
+            return Err(FingerprintError::NotGround);
+        }
+        Ok(CountedFeatureSet::from_features(self.identifiers(mol)))
     }
 
     /// The circular-refinement identifier multiset (one per surviving environment);
@@ -124,7 +135,7 @@ mod tests {
         #[case] expected: &[u64],
     ) {
         let mol = ingest_smiles(smiles).expect("ingest");
-        let fingerprint = MorganFeaturizer::new(radius).featurize(&mol);
+        let fingerprint = MorganFeaturizer::new(radius).featurize(&mol).unwrap();
         assert_eq!(fingerprint.ids(), expected);
     }
 
@@ -140,7 +151,9 @@ mod tests {
         #[case] expected: &[(u64, u32)],
     ) {
         let mol = ingest_smiles(smiles).expect("ingest");
-        let fingerprint = MorganFeaturizer::new(radius).featurize_counted(&mol);
+        let fingerprint = MorganFeaturizer::new(radius)
+            .featurize_counted(&mol)
+            .unwrap();
         assert_eq!(fingerprint.entries(), expected);
     }
 }

@@ -1,10 +1,13 @@
 use rstest::{fixture, rstest};
 use umol_ast::ast::{
-    AtomDelta, AtomId, BondDelta, BondId, Delta, Deltas, MoleculeAst, ReactionAst,
+    AtomDelta, AtomFieldChange, AtomId, BondDelta, BondId, Delta, Deltas, MoleculeAst, ReactionAst,
+    ValueAst,
 };
+use umol_ast::{mol_dsl, mol_dsl_ground};
 use umol_graph::fingerprint::{
-    featurize_reaction, EcfpFeaturizer, Featurizer, MorganFeaturizer, PatternFingerprinter,
-    ReactionCombinator, ReactionFingerprint, Side, SubstructureFeaturizer, WlFeaturizer,
+    featurize_reaction, EcfpFeaturizer, Featurizer, FingerprintError, MorganFeaturizer,
+    PatternFingerprinter, ReactionCombinator, ReactionFingerprint, Side, SubstructureFeaturizer,
+    WlFeaturizer,
 };
 use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::RefinementRounds;
@@ -36,7 +39,9 @@ fn ethanol_deoxygenation(ethanol: MoleculeAst) -> ReactionAst {
 
 #[rstest]
 fn test_wl_featurizer_featurize(ethanol: MoleculeAst) {
-    let fingerprint = WlFeaturizer::new(RefinementRounds::Fixed(3)).featurize(&ethanol);
+    let fingerprint = WlFeaturizer::new(RefinementRounds::Fixed(3))
+        .featurize(&ethanol)
+        .unwrap();
     assert_eq!(
         fingerprint.ids(),
         &[
@@ -57,9 +62,29 @@ fn test_wl_featurizer_featurize(ethanol: MoleculeAst) {
 }
 
 #[rstest]
+fn test_wl_featurizer_featurize_error() {
+    assert_eq!(
+        WlFeaturizer::new(RefinementRounds::Fixed(3))
+            .featurize(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
+            .unwrap_err(),
+        FingerprintError::NotGround
+    );
+}
+
+#[rstest]
+fn test_wl_featurizer_featurize_counted_error() {
+    assert_eq!(
+        WlFeaturizer::new(RefinementRounds::Fixed(3))
+            .featurize_counted(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
+            .unwrap_err(),
+        FingerprintError::NotGround
+    );
+}
+
+#[rstest]
 fn test_ecfp_featurizer_featurize(ethanol: MoleculeAst) {
     assert_eq!(
-        EcfpFeaturizer::new(2).featurize(&ethanol).ids(),
+        EcfpFeaturizer::new(2).featurize(&ethanol).unwrap().ids(),
         &[
             63839236075656913,
             1189585227353469813,
@@ -72,10 +97,76 @@ fn test_ecfp_featurizer_featurize(ethanol: MoleculeAst) {
 }
 
 #[rstest]
+fn test_ecfp_featurizer_featurize_error() {
+    assert_eq!(
+        EcfpFeaturizer::new(2)
+            .featurize(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
+            .unwrap_err(),
+        FingerprintError::NotGround
+    );
+}
+
+#[rstest]
+fn test_ecfp_featurizer_featurize_counted_error() {
+    assert_eq!(
+        EcfpFeaturizer::new(2)
+            .featurize_counted(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
+            .unwrap_err(),
+        FingerprintError::NotGround
+    );
+}
+
+#[rstest]
 fn test_morgan_featurizer_featurize(ethanol: MoleculeAst) {
     assert_eq!(
-        MorganFeaturizer::new(2).featurize(&ethanol).ids(),
-        &[864662311, 1535166686, 2245384272, 2246728737, 3542456614, 4018048386]
+        MorganFeaturizer::new(2).featurize(&ethanol).unwrap().ids(),
+        &[864662311, 1535166686, 2245384272, 2246728737, 3542456614, 4018048386,]
+    );
+}
+
+#[rstest]
+fn test_morgan_featurizer_featurize_error() {
+    assert_eq!(
+        MorganFeaturizer::new(2)
+            .featurize(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
+            .unwrap_err(),
+        FingerprintError::NotGround
+    );
+}
+
+#[rstest]
+fn test_morgan_featurizer_featurize_counted_error() {
+    assert_eq!(
+        MorganFeaturizer::new(2)
+            .featurize_counted(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
+            .unwrap_err(),
+        FingerprintError::NotGround
+    );
+}
+
+#[rstest]
+#[case::wl(Featurizer::Wl(WlFeaturizer::new(RefinementRounds::Fixed(3))))]
+#[case::ecfp(Featurizer::Ecfp(EcfpFeaturizer::new(2)))]
+#[case::morgan(Featurizer::Morgan(MorganFeaturizer::new(2)))]
+fn test_featurizer_featurize_error(#[case] featurizer: Featurizer) {
+    assert_eq!(
+        featurizer
+            .featurize(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
+            .unwrap_err(),
+        FingerprintError::NotGround
+    );
+}
+
+#[rstest]
+#[case::wl(Featurizer::Wl(WlFeaturizer::new(RefinementRounds::Fixed(3))))]
+#[case::ecfp(Featurizer::Ecfp(EcfpFeaturizer::new(2)))]
+#[case::morgan(Featurizer::Morgan(MorganFeaturizer::new(2)))]
+fn test_featurizer_featurize_counted_error(#[case] featurizer: Featurizer) {
+    assert_eq!(
+        featurizer
+            .featurize_counted(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
+            .unwrap_err(),
+        FingerprintError::NotGround
     );
 }
 
@@ -84,9 +175,19 @@ fn test_pattern_fingerprinter_fingerprint(ethanol: MoleculeAst) {
     let fingerprint = PatternFingerprinter::new().fingerprint(&ethanol).unwrap();
     assert_eq!(
         (0..fingerprint.width())
-            .filter(|&bit| fingerprint.get(bit))
+            .filter(|&bit| fingerprint.get(bit) == Some(true))
             .collect::<Vec<_>>(),
         vec![54, 173, 217, 429, 622, 759, 778, 874, 946, 967, 1022, 1033, 1061, 1236, 1289, 1295]
+    );
+}
+
+#[rstest]
+fn test_pattern_fingerprinter_fingerprint_error() {
+    assert_eq!(
+        PatternFingerprinter::new()
+            .fingerprint(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
+            .unwrap_err(),
+        FingerprintError::NotGround
     );
 }
 
@@ -118,6 +219,16 @@ fn test_substructure_featurizer_featurize(ethanol: MoleculeAst) {
 }
 
 #[rstest]
+fn test_substructure_featurizer_featurize_error() {
+    assert_eq!(
+        SubstructureFeaturizer::new(2)
+            .featurize(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
+            .unwrap_err(),
+        FingerprintError::NotGround
+    );
+}
+
+#[rstest]
 fn test_featurize_reaction_difference(ethanol_deoxygenation: ReactionAst) {
     let fingerprint = featurize_reaction(
         &ethanol_deoxygenation,
@@ -140,6 +251,39 @@ fn test_featurize_reaction_difference(ethanol_deoxygenation: ReactionAst) {
         ),
         other => panic!("expected Difference, got {other:?}"),
     }
+}
+
+#[rstest]
+#[case::non_ground(
+    ReactionAst::new(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#), Deltas::new()),
+    FingerprintError::NotGround
+)]
+#[case::inconsistent(
+    ReactionAst::new(
+        mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
+        Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+            id: AtomId(0),
+            change: AtomFieldChange::Charge {
+                old: ValueAst::Lit(1),
+                new: ValueAst::Lit(0),
+            },
+        })]),
+    ),
+    FingerprintError::Inconsistent
+)]
+fn test_featurize_reaction_error(
+    #[case] reaction: ReactionAst,
+    #[case] expected: FingerprintError,
+) {
+    assert_eq!(
+        featurize_reaction(
+            &reaction,
+            &Featurizer::Morgan(MorganFeaturizer::new(1)),
+            ReactionCombinator::Difference,
+        )
+        .unwrap_err(),
+        expected
+    );
 }
 
 #[rstest]

@@ -4,6 +4,7 @@ use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst};
 use umol_graph_core::{EdgeId, NodeId, Refinement, RefinementAlgorithm, RefinementRounds};
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
+use super::featurizer::FingerprintError;
 use crate::hash::WlHashScheme;
 
 /// Weisfeiler–Lehman color-refinement fingerprint over the atom graph, hashed
@@ -22,16 +23,27 @@ impl WlFeaturizer {
         }
     }
 
-    /// `mol` must be ground; the caller ([`super::Featurizer::featurize`])
-    /// guarantees it, so the seeds read concrete literals directly.
-    pub fn featurize(&self, mol: &MoleculeAst) -> FeatureSet<u64> {
-        FeatureSet::from_sorted_unique(self.refinement(mol).features())
+    /// Returns the deduplicated set of feature identifiers.
+    pub fn featurize(&self, mol: &MoleculeAst) -> Result<FeatureSet<u64>, FingerprintError> {
+        if !mol.is_ground() {
+            return Err(FingerprintError::NotGround);
+        }
+        Ok(FeatureSet::from_sorted_unique(
+            self.refinement(mol).features(),
+        ))
     }
 
-    /// `mol` must be ground. Like [`Self::featurize`] but keeps per-identifier
-    /// counts (node occurrences of each color over all rounds).
-    pub fn featurize_counted(&self, mol: &MoleculeAst) -> CountedFeatureSet<u64> {
-        CountedFeatureSet::from_counts(self.refinement(mol).counts())
+    /// Like [`Self::featurize`] but keeps per-identifier counts.
+    pub fn featurize_counted(
+        &self,
+        mol: &MoleculeAst,
+    ) -> Result<CountedFeatureSet<u64>, FingerprintError> {
+        if !mol.is_ground() {
+            return Err(FingerprintError::NotGround);
+        }
+        Ok(CountedFeatureSet::from_counts(
+            self.refinement(mol).counts(),
+        ))
     }
 
     fn refinement(&self, mol: &MoleculeAst) -> Refinement<u64> {
@@ -106,7 +118,7 @@ mod tests {
         #[case] expected: Vec<u64>,
     ) {
         assert_eq!(
-            featurizer.featurize(&mol_dsl_ground!(edn)).ids(),
+            featurizer.featurize(&mol_dsl_ground!(edn)).unwrap().ids(),
             expected.as_slice()
         );
     }
@@ -133,8 +145,8 @@ mod tests {
         #[case] b: &str,
         #[case] equal: bool,
     ) {
-        let same =
-            featurizer.featurize(&mol_dsl_ground!(a)) == featurizer.featurize(&mol_dsl_ground!(b));
+        let same = featurizer.featurize(&mol_dsl_ground!(a)).unwrap()
+            == featurizer.featurize(&mol_dsl_ground!(b)).unwrap();
         assert_eq!(same, equal);
     }
 }

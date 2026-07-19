@@ -1,15 +1,15 @@
 //! ECFP featurizer (Rogers & Hahn 2010): circular refinement over Daylight atom
 //! invariants, with structural (bond-set) duplicate removal.
 //!
-//! The molecule must be ground; the caller ([`super::Featurizer::featurize`])
-//! guarantees it, so the seed reads concrete literals directly. The hash is
-//! [`EcfpHashScheme::Xxh3Width64V1`]; the paper leaves the hash unspecified, so
-//! this is the frozen umol ECFP identity.
+//! Public entry points reject non-ground molecules before seed extraction. The
+//! hash is [`EcfpHashScheme::Xxh3Width64V1`]; the paper leaves the hash
+//! unspecified, so this is the frozen umol ECFP identity.
 
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst, RingSet};
 use umol_graph_core::CircularRefinementAlgorithm;
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
+use super::featurizer::FingerprintError;
 use crate::hash::EcfpHashScheme;
 
 /// ECFP fingerprint of `radius` iterations (diameter `2 * radius`, i.e. ECFP_{2r}).
@@ -27,14 +27,23 @@ impl EcfpFeaturizer {
         }
     }
 
-    /// `mol` must be ground. Returns the deduplicated set of feature identifiers.
-    pub fn featurize(&self, mol: &MoleculeAst) -> FeatureSet<u64> {
-        FeatureSet::from_features(self.identifiers(mol))
+    /// Returns the deduplicated set of feature identifiers.
+    pub fn featurize(&self, mol: &MoleculeAst) -> Result<FeatureSet<u64>, FingerprintError> {
+        if !mol.is_ground() {
+            return Err(FingerprintError::NotGround);
+        }
+        Ok(FeatureSet::from_features(self.identifiers(mol)))
     }
 
-    /// `mol` must be ground. Like [`Self::featurize`] but keeps per-identifier counts.
-    pub fn featurize_counted(&self, mol: &MoleculeAst) -> CountedFeatureSet<u64> {
-        CountedFeatureSet::from_features(self.identifiers(mol))
+    /// Like [`Self::featurize`] but keeps per-identifier counts.
+    pub fn featurize_counted(
+        &self,
+        mol: &MoleculeAst,
+    ) -> Result<CountedFeatureSet<u64>, FingerprintError> {
+        if !mol.is_ground() {
+            return Err(FingerprintError::NotGround);
+        }
+        Ok(CountedFeatureSet::from_features(self.identifiers(mol)))
     }
 
     /// The circular-refinement identifier multiset (one per surviving environment).
@@ -87,15 +96,78 @@ mod tests {
         :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "2"] [3 5 "1"]]
     }"#;
 
-    // Rogers & Hahn 2010, Figure 8: butyramide feature counts per diameter.
+    // Rogers & Hahn 2010, Figure 8 fixes the count per diameter; the exact ids
+    // pin the frozen umol hash recipe for those same environments.
     #[rstest]
-    #[case::diameter_0(0, 5)]
-    #[case::diameter_2(1, 11)]
-    #[case::diameter_4(2, 14)]
-    #[case::diameter_6(3, 14)]
-    fn test_ecfp_featurizer_featurize_butyramide(#[case] radius: u32, #[case] expected: usize) {
-        let fingerprint = EcfpFeaturizer::new(radius).featurize(&mol_dsl_ground!(BUTYRAMIDE));
-        assert_eq!(fingerprint.len(), expected);
+    #[case::diameter_0(
+        0,
+        &[
+            1189585227353469813,
+            1343896606611716210,
+            6816650886737406922,
+            9398025501618298006,
+            16149328945726899460,
+        ]
+    )]
+    #[case::diameter_2(
+        1,
+        &[
+            686136971914186761,
+            1189585227353469813,
+            1343896606611716210,
+            1674899844642375346,
+            5686907935783274670,
+            6158447595325937241,
+            6816650886737406922,
+            9398025501618298006,
+            13652293261850732425,
+            14550739996647717087,
+            16149328945726899460,
+        ]
+    )]
+    #[case::diameter_4(
+        2,
+        &[
+            686136971914186761,
+            1189585227353469813,
+            1343896606611716210,
+            1674899844642375346,
+            5686907935783274670,
+            6158447595325937241,
+            6816650886737406922,
+            9129806645566723864,
+            9398025501618298006,
+            13652293261850732425,
+            14550739996647717087,
+            16149328945726899460,
+            16204012715323123438,
+            16670450973526877804,
+        ]
+    )]
+    #[case::diameter_6(
+        3,
+        &[
+            686136971914186761,
+            1189585227353469813,
+            1343896606611716210,
+            1674899844642375346,
+            5686907935783274670,
+            6158447595325937241,
+            6816650886737406922,
+            9129806645566723864,
+            9398025501618298006,
+            13652293261850732425,
+            14550739996647717087,
+            16149328945726899460,
+            16204012715323123438,
+            16670450973526877804,
+        ]
+    )]
+    fn test_ecfp_featurizer_featurize_butyramide(#[case] radius: u32, #[case] expected: &[u64]) {
+        let fingerprint = EcfpFeaturizer::new(radius)
+            .featurize(&mol_dsl_ground!(BUTYRAMIDE))
+            .unwrap();
+        assert_eq!(fingerprint.ids(), expected);
     }
 
     #[rstest]
@@ -106,8 +178,8 @@ mod tests {
     fn test_ecfp_featurizer_featurize_order_independent(#[case] a: &str, #[case] b: &str) {
         let featurizer = EcfpFeaturizer::new(2);
         assert_eq!(
-            featurizer.featurize(&mol_dsl_ground!(a)),
-            featurizer.featurize(&mol_dsl_ground!(b))
+            featurizer.featurize(&mol_dsl_ground!(a)).unwrap(),
+            featurizer.featurize(&mol_dsl_ground!(b)).unwrap()
         );
     }
 }

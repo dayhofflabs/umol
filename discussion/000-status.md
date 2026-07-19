@@ -155,3 +155,4 @@
 | [151-python-molecule-workflows-2026-07-13.md](151-python-molecule-workflows-2026-07-13.md)                       | Active        | 2026-07-18   |
 | [152-basic-molecule-wildcards-2026-07-18.md](152-basic-molecule-wildcards-2026-07-18.md)                         | Completed     | 2026-07-18   |
 | [153-format-parsing-outstanding-tasks-2026-07-18.md](153-format-parsing-outstanding-tasks-2026-07-18.md)          | Active        | 2026-07-18   |
+| [154-lattice-aware-probabilistic-fingerprints-2026-07-18.md](154-lattice-aware-probabilistic-fingerprints-2026-07-18.md) | Informational | 2026-07-18   |

@@ -99,7 +99,7 @@ impl PatternFingerprinter {
                 ids.push(u64::from(bit_id));
             }
         }
-        Ok(FeatureSet::from_features(ids).fold(self.width))
+        FeatureSet::from_features(ids).fold(self.width)
     }
 }
 
@@ -189,8 +189,20 @@ mod tests {
         let mol = ingest_smiles(smiles).expect("ingest");
         let fingerprint = PatternFingerprinter::new().fingerprint(&mol).unwrap();
         let on_bits: Vec<usize> = (0..fingerprint.width())
-            .filter(|&bit| fingerprint.get(bit))
+            .filter(|&bit| fingerprint.get(bit) == Some(true))
             .collect();
         assert_eq!(on_bits, expected);
+    }
+
+    #[rstest]
+    #[case::zero_width(0, FingerprintError::ZeroWidth)]
+    fn test_pattern_fingerprinter_fingerprint_error(
+        #[case] width: usize,
+        #[case] expected: FingerprintError,
+    ) {
+        assert_eq!(
+            PatternFingerprinter { width }.fingerprint(&ingest_smiles("CCO").expect("ingest")),
+            Err(expected)
+        );
     }
 }

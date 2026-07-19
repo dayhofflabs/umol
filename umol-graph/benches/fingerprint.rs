@@ -91,13 +91,13 @@ fn fixture_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("fingerprint_fixture");
 
     group.bench_function("wl", |b| {
-        b.iter(|| black_box(wl.featurize(black_box(&molecule))))
+        b.iter(|| black_box(wl.featurize(black_box(&molecule)).unwrap()))
     });
     group.bench_function("ecfp", |b| {
-        b.iter(|| black_box(ecfp.featurize(black_box(&molecule))))
+        b.iter(|| black_box(ecfp.featurize(black_box(&molecule)).unwrap()))
     });
     group.bench_function("morgan", |b| {
-        b.iter(|| black_box(morgan.featurize(black_box(&molecule))))
+        b.iter(|| black_box(morgan.featurize(black_box(&molecule)).unwrap()))
     });
     group.bench_function("pattern", |b| {
         b.iter(|| black_box(pattern.fingerprint(black_box(&molecule)).unwrap()))
@@ -142,7 +142,7 @@ fn circular_benchmark(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("wl", size), |b| {
         b.iter(|| {
             for molecule in &corpus {
-                black_box(wl.featurize(molecule));
+                black_box(wl.featurize(molecule).unwrap());
             }
         });
     });
@@ -151,7 +151,7 @@ fn circular_benchmark(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("ecfp", size), |b| {
         b.iter(|| {
             for molecule in &corpus {
-                black_box(ecfp.featurize(molecule));
+                black_box(ecfp.featurize(molecule).unwrap());
             }
         });
     });
@@ -160,7 +160,7 @@ fn circular_benchmark(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("morgan", size), |b| {
         b.iter(|| {
             for molecule in &corpus {
-                black_box(morgan.featurize(molecule));
+                black_box(morgan.featurize(molecule).unwrap());
             }
         });
     });

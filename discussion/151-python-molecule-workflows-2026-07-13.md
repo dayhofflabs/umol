@@ -1387,21 +1387,30 @@ boundary types and downstream ingestion belong to the next workflow pass.
   **Implemented (green).** `[dep: S0a]`
 - **S3b — uniform ground-input contract**
   (`umol-graph/src/fingerprint/{featurizer,wl,ecfp,morgan,pattern,substructure}.rs`):
-  make every public concrete and enum-dispatched fingerprint entry point reject
-  non-ground molecules before literal extraction. Convert concrete WL, ECFP, and
-  Morgan methods to checked results and migrate reaction fingerprinting,
-  benchmarks, and workspace callers within the stage. Tests run the same ground,
-  non-ground, and contradictory inputs through every concrete and enum path and
-  assert `FingerprintError` variants rather than panics. **Breaking signature
-  migration (red→green).** `[dep: S3a]`
+  every public concrete and enum-dispatched molecule fingerprint entry point
+  rejects non-ground molecules before literal extraction. Concrete WL, ECFP, and
+  Morgan methods now return checked results; enum dispatch delegates to those
+  concrete checks; pattern and substructure keep their existing checked shape.
+  Reaction fingerprinting propagates molecule-side `NotGround` and maps
+  inconsistent deltas to `Inconsistent`. Tests pin exact ground output,
+  non-ground errors for concrete and enum paths, and reaction inconsistency.
+  **Implemented (green).** `[dep: S3a]`
+
+  Wildcard-aware circular fingerprints are a separate research direction rather
+  than an exception to this contract. Doc
+  [154](154-lattice-aware-probabilistic-fingerprints-2026-07-18.md) centers that
+  work on wildcard-bearing reaction representations for enzyme–reaction
+  contrastive learning, with exact lattice encodings, frequency-weighted
+  containment, and probabilistic refinement as supporting constructions.
 - **S3c — checked `BitFp` and folding arguments**
-  (`umol-graph/src/fingerprint/{bit_fp,feature_set}.rs`): replace panicking bit
-  lookup, zero-width folding, and unequal-width similarity/subset paths with
-  checked Rust contracts (`Option` for lookup and typed/nonzero or `Result`
-  contracts for width-bearing operations). Migrate pattern fingerprinting,
-  benches, and tests in the same subitem. Cases cover zero width, last valid and
-  first invalid index, equal/unequal widths, empty values, and unchanged valid
-  similarity results. **Breaking signature migration (red→green).** `[dep: S0a]`
+  (`umol-graph/src/fingerprint/{bit_fp,featurizer,pattern}.rs`): `BitFp::get`
+  returns `Option<bool>`; `FeatureSet<u64>::fold` rejects zero width with
+  `FingerprintError::ZeroWidth`; and `BitFp::{tanimoto,dice,is_subset}` reject
+  unequal widths with `FingerprintError::WidthMismatch { left, right }`.
+  Pattern fingerprinting propagates the checked fold result. Tests cover zero
+  width, the last valid and first invalid indices, equal and unequal widths,
+  empty values, collisions, and unchanged valid similarity and subset results.
+  **Implemented (green).** `[dep: S0a]`
 - **S3d — fingerprint parity gate**
   (`umol-graph` fingerprint tests and benchmark): rerun S0a identities through
   the checked APIs; pin counted/binary agreement, structural byte keys, pattern
