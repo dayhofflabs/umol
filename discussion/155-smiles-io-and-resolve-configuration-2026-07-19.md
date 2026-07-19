@@ -409,7 +409,7 @@ exported from `umol` in its own subitem.
   `HueckelRule`, `Hmo`, and `Clar` with keyword-only variant fields, plus
   `daylight()`, `mdl()`, and `permissive()` presets. Implement structural
   equality, variant repr, and separate conversions; tests cover every variant,
-  preset, scope, ring-limit, and HMO threshold path. **Additive (green).**
+  preset, scope, ring-limit, and HMO threshold path. **Additive (green). Done.**
   `[dep: S2c, S5a, S5b]`
 - **S5d — `InconsistencyPolicy`** (`umol-py/src/model/stereo.rs`): bind `Keep`,
   `Strip`, and `Error` as a fieldless immutable enum with equality, hashing,

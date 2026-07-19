@@ -59,3 +59,9 @@ def test_ring_limits_import():
     from umol import RingLimits
 
     assert umol.RingLimits is RingLimits
+
+
+def test_aromaticity_model_import():
+    from umol import AromaticityModel
+
+    assert umol.AromaticityModel is AromaticityModel

@@ -3,6 +3,7 @@ import re
 import pytest
 
 from umol import (
+    AromaticityModel,
     AtomAst,
     AtomTypeRegistry,
     Element,
@@ -521,3 +522,268 @@ def test_ring_limits_mutation():
 
     with pytest.raises(AttributeError):
         limits.min_ring_size = 5
+
+
+@pytest.mark.parametrize(
+    ("variant", "scope", "ring_limits"),
+    [
+        (
+            AromaticityModel.HueckelRule,
+            ElementScope.Any(),
+            RingLimits(
+                min_ring_size=4,
+                max_ring_size=18,
+                include_fused=False,
+                max_fused_combination=3,
+                max_fused_search=2_000,
+            ),
+        ),
+        (
+            AromaticityModel.Clar,
+            ElementScope.AllowList([Element("C")]),
+            RingLimits(
+                min_ring_size=6,
+                max_ring_size=14,
+                include_fused=True,
+                max_fused_combination=4,
+                max_fused_search=1_500,
+            ),
+        ),
+    ],
+)
+def test_aromaticity_model_ring_variant(variant, scope, ring_limits):
+    model = variant(scope=scope, ring_limits=ring_limits)
+
+    assert isinstance(model, AromaticityModel)
+    assert isinstance(model, variant)
+    assert model.scope == scope
+    assert model.scope is not scope
+    assert model.ring_limits == ring_limits
+    assert model.ring_limits is not ring_limits
+    assert model == variant(scope=scope, ring_limits=ring_limits)
+
+
+def test_aromaticity_model_hmo():
+    scope = ElementScope.AllowList([Element("C"), Element("N")])
+    model = AromaticityModel.Hmo(
+        scope=scope,
+        stabilization_threshold=0.375,
+    )
+
+    assert isinstance(model, AromaticityModel)
+    assert isinstance(model, AromaticityModel.Hmo)
+    assert model.scope == scope
+    assert model.scope is not scope
+    assert model.stabilization_threshold == 0.375
+    assert model == AromaticityModel.Hmo(
+        scope=scope,
+        stabilization_threshold=0.375,
+    )
+
+
+@pytest.mark.parametrize(
+    ("variant", "args"),
+    [
+        (AromaticityModel.HueckelRule, (ElementScope.Any(), RingLimits())),
+        (AromaticityModel.Hmo, (ElementScope.Any(), 0.375)),
+        (AromaticityModel.Clar, (ElementScope.Any(), RingLimits())),
+    ],
+)
+def test_aromaticity_model_new_error(variant, args):
+    with pytest.raises(TypeError):
+        variant(*args)
+
+
+@pytest.mark.parametrize(
+    ("preset", "expected"),
+    [
+        (
+            AromaticityModel.daylight,
+            AromaticityModel.HueckelRule(
+                scope=ElementScope.AllowList(
+                    [
+                        Element("C"),
+                        Element("N"),
+                        Element("O"),
+                        Element("S"),
+                        Element("Se"),
+                        Element("As"),
+                    ]
+                ),
+                ring_limits=RingLimits(),
+            ),
+        ),
+        (
+            AromaticityModel.mdl,
+            AromaticityModel.HueckelRule(
+                scope=ElementScope.AllowList([Element("C"), Element("N")]),
+                ring_limits=RingLimits(min_ring_size=6),
+            ),
+        ),
+        (
+            AromaticityModel.permissive,
+            AromaticityModel.HueckelRule(
+                scope=ElementScope.Any(),
+                ring_limits=RingLimits(),
+            ),
+        ),
+    ],
+)
+def test_aromaticity_model_preset(preset, expected):
+    assert preset() == expected
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        (
+            AromaticityModel.HueckelRule(
+                scope=ElementScope.Any(), ring_limits=RingLimits()
+            ),
+            AromaticityModel.Clar(
+                scope=ElementScope.Any(), ring_limits=RingLimits()
+            ),
+        ),
+        (
+            AromaticityModel.HueckelRule(
+                scope=ElementScope.Any(), ring_limits=RingLimits()
+            ),
+            AromaticityModel.HueckelRule(
+                scope=ElementScope.AllowList([Element("C")]),
+                ring_limits=RingLimits(),
+            ),
+        ),
+        (
+            AromaticityModel.HueckelRule(
+                scope=ElementScope.Any(), ring_limits=RingLimits()
+            ),
+            AromaticityModel.HueckelRule(
+                scope=ElementScope.Any(),
+                ring_limits=RingLimits(min_ring_size=4),
+            ),
+        ),
+        (
+            AromaticityModel.Hmo(
+                scope=ElementScope.Any(), stabilization_threshold=0.375
+            ),
+            AromaticityModel.Hmo(
+                scope=ElementScope.AllowList([Element("C")]),
+                stabilization_threshold=0.375,
+            ),
+        ),
+        (
+            AromaticityModel.Hmo(
+                scope=ElementScope.Any(), stabilization_threshold=0.375
+            ),
+            AromaticityModel.Hmo(
+                scope=ElementScope.Any(), stabilization_threshold=0.5
+            ),
+        ),
+        (
+            AromaticityModel.Clar(
+                scope=ElementScope.Any(), ring_limits=RingLimits()
+            ),
+            AromaticityModel.Clar(
+                scope=ElementScope.AllowList([Element("C")]),
+                ring_limits=RingLimits(),
+            ),
+        ),
+        (
+            AromaticityModel.Clar(
+                scope=ElementScope.Any(), ring_limits=RingLimits()
+            ),
+            AromaticityModel.Clar(
+                scope=ElementScope.Any(),
+                ring_limits=RingLimits(min_ring_size=6),
+            ),
+        ),
+    ],
+)
+def test_aromaticity_model_equality(left, right):
+    assert left != right
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        (
+            AromaticityModel.HueckelRule(
+                scope=ElementScope.Any(),
+                ring_limits=RingLimits(
+                    min_ring_size=4,
+                    max_ring_size=18,
+                    include_fused=False,
+                    max_fused_combination=3,
+                    max_fused_search=2_000,
+                ),
+            ),
+            "AromaticityModel.HueckelRule(scope=ElementScope.Any(), "
+            "ring_limits=RingLimits(min_ring_size=4, max_ring_size=18, "
+            "include_fused=False, max_fused_combination=3, "
+            "max_fused_search=2000))",
+        ),
+        (
+            AromaticityModel.Hmo(
+                scope=ElementScope.AllowList([Element("C"), Element("N")]),
+                stabilization_threshold=0.375,
+            ),
+            "AromaticityModel.Hmo(scope=ElementScope.AllowList([Element('C'), "
+            "Element('N')]), stabilization_threshold=0.375)",
+        ),
+        (
+            AromaticityModel.Clar(
+                scope=ElementScope.AllowList([Element("C")]),
+                ring_limits=RingLimits(
+                    min_ring_size=6,
+                    max_ring_size=14,
+                    max_fused_combination=4,
+                    max_fused_search=1_500,
+                ),
+            ),
+            "AromaticityModel.Clar(scope=ElementScope.AllowList([Element('C')]), "
+            "ring_limits=RingLimits(min_ring_size=6, max_ring_size=14, "
+            "include_fused=True, max_fused_combination=4, "
+            "max_fused_search=1500))",
+        ),
+    ],
+)
+def test_aromaticity_model_repr(model, expected):
+    assert repr(model) == expected
+
+
+@pytest.mark.parametrize(
+    ("model", "field", "value"),
+    [
+        (
+            AromaticityModel.HueckelRule(
+                scope=ElementScope.Any(), ring_limits=RingLimits()
+            ),
+            "scope",
+            ElementScope.AllowList([Element("C")]),
+        ),
+        (
+            AromaticityModel.HueckelRule(
+                scope=ElementScope.Any(), ring_limits=RingLimits()
+            ),
+            "ring_limits",
+            RingLimits(min_ring_size=4),
+        ),
+        (
+            AromaticityModel.Hmo(
+                scope=ElementScope.Any(), stabilization_threshold=0.375
+            ),
+            "stabilization_threshold",
+            0.5,
+        ),
+        (
+            AromaticityModel.Clar(
+                scope=ElementScope.Any(), ring_limits=RingLimits()
+            ),
+            "ring_limits",
+            RingLimits(min_ring_size=6),
+        ),
+    ],
+)
+def test_aromaticity_model_mutation(model, field, value):
+    with pytest.raises(AttributeError):
+        setattr(model, field, value)

@@ -38,10 +38,6 @@ impl ElementScope {
 }
 
 impl ElementScope {
-    #[allow(
-        dead_code,
-        reason = "Rust-to-Python conversion API for aromaticity and stereo model configuration"
-    )]
     pub(crate) fn from_rust(scope: &GraphElementScope) -> Self {
         match scope {
             GraphElementScope::Any => Self::Any {},
@@ -53,7 +49,7 @@ impl ElementScope {
 
     #[allow(
         dead_code,
-        reason = "Python-to-Rust conversion API for aromaticity and stereo model configuration"
+        reason = "Python-to-Rust conversion API for aggregate model configuration"
     )]
     pub(crate) fn to_rust(&self) -> GraphElementScope {
         match self {

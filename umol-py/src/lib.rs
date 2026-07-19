@@ -62,7 +62,7 @@ use crate::{
         UnderdeterminedError,
     },
     model::{
-        aromaticity::RingLimits,
+        aromaticity::{AromaticityModel, RingLimits},
         valence::{AtomTypeRegistry, ValenceEntry, ValenceModel, ValenceTable},
         ElementScope,
     },
@@ -162,6 +162,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ValenceTable>()?;
         module.add_class::<ElementScope>()?;
         module.add_class::<RingLimits>()?;
+        module.add_class::<AromaticityModel>()?;
         module.add_class::<AromaticSystemDelta>()?;
         module.add_class::<AtomDelta>()?;
         module.add_class::<AtomFieldChange>()?;
