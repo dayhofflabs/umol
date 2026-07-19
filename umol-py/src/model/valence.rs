@@ -1,5 +1,6 @@
 //! Python binding for atom-type registries used by valence resolution.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use pyo3::exceptions::PyValueError;
@@ -7,6 +8,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyList;
 use umol_ast::ast::{ElementAst as AstElementAst, ValueAst as AstValueAst};
 use umol_chem::element::{Element as ChemElement, MAX_ATOMIC_NUMBER};
+use umol_graph::ops::model::ValenceModel as GraphValenceModel;
 use umol_graph::ops::valence::{
     AtomTypeRegistry as GraphAtomTypeRegistry, ValenceEntry as GraphValenceEntry,
     ValenceTable as GraphValenceTable,
@@ -117,7 +119,7 @@ impl AtomTypeRegistry {
 
     #[allow(
         dead_code,
-        reason = "Python-to-Rust conversion API for valence resolution configuration"
+        reason = "Python-to-Rust conversion API for ChemistryModel configuration"
     )]
     pub(crate) fn to_rust(&self) -> GraphAtomTypeRegistry {
         self.0.clone()
@@ -252,10 +254,68 @@ impl ValenceTable {
 
     #[allow(
         dead_code,
-        reason = "Python-to-Rust conversion API for valence resolution configuration"
+        reason = "Python-to-Rust conversion API for ChemistryModel configuration"
     )]
     pub(crate) fn to_rust(&self) -> GraphValenceTable {
         self.0.clone()
+    }
+}
+
+/// Valence perception model and its owned model data.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ValenceModel {
+    /// Atom-typing valence model.
+    #[pyo3(constructor = (*, registry))]
+    AtomTyping { registry: AtomTypeRegistry },
+    /// Counts-based valence model.
+    #[pyo3(constructor = (*, table))]
+    Counts { table: ValenceTable },
+}
+
+#[pymethods]
+impl ValenceModel {
+    fn __repr__(&self) -> String {
+        match self {
+            Self::AtomTyping { registry } => {
+                format!("ValenceModel.AtomTyping(registry={})", registry.__repr__())
+            }
+            Self::Counts { table } => {
+                format!("ValenceModel.Counts(table={})", table.__repr__())
+            }
+        }
+    }
+}
+
+impl ValenceModel {
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion API for ChemistryModel configuration"
+    )]
+    pub(crate) fn from_rust(model: &GraphValenceModel) -> Self {
+        match model {
+            GraphValenceModel::AtomTyping { registry } => Self::AtomTyping {
+                registry: AtomTypeRegistry::from_rust(registry.as_ref()),
+            },
+            GraphValenceModel::Counts { table } => Self::Counts {
+                table: ValenceTable::from_rust(table.as_ref()),
+            },
+        }
+    }
+
+    #[allow(
+        dead_code,
+        reason = "Python-to-Rust conversion API for ChemistryModel configuration"
+    )]
+    pub(crate) fn to_rust(&self) -> GraphValenceModel {
+        match self {
+            Self::AtomTyping { registry } => GraphValenceModel::AtomTyping {
+                registry: Cow::Owned(registry.to_rust()),
+            },
+            Self::Counts { table } => GraphValenceModel::Counts {
+                table: Cow::Owned(table.to_rust()),
+            },
+        }
     }
 }
 
@@ -623,5 +683,80 @@ mod tests {
     #[case::custom(ValenceTable(valence_table![C => [4, 2], O => [2]]))]
     fn test_valence_table_to_rust(#[case] table: ValenceTable) {
         assert_eq!(table.to_rust(), table.0);
+    }
+
+    #[rstest]
+    #[case::atom_typing(
+        GraphValenceModel::AtomTyping {
+            registry: Cow::Owned(registry!["C#c0#v4", "O#c0#v2"]),
+        },
+        ValenceModel::AtomTyping {
+            registry: AtomTypeRegistry(registry!["C#c0#v4", "O#c0#v2"]),
+        }
+    )]
+    #[case::counts(
+        GraphValenceModel::Counts {
+            table: Cow::Owned(valence_table![C => [4, 2], O => [2]]),
+        },
+        ValenceModel::Counts {
+            table: ValenceTable(valence_table![C => [4, 2], O => [2]]),
+        }
+    )]
+    fn test_valence_model_from_rust(
+        #[case] model: GraphValenceModel,
+        #[case] expected: ValenceModel,
+    ) {
+        assert_eq!(ValenceModel::from_rust(&model), expected);
+    }
+
+    #[rstest]
+    #[case::atom_typing(
+        ValenceModel::AtomTyping {
+            registry: AtomTypeRegistry(registry!["C#c0#v4", "O#c0#v2"]),
+        },
+        GraphValenceModel::AtomTyping {
+            registry: Cow::Owned(registry!["C#c0#v4", "O#c0#v2"]),
+        }
+    )]
+    #[case::counts(
+        ValenceModel::Counts {
+            table: ValenceTable(valence_table![C => [4, 2], O => [2]]),
+        },
+        GraphValenceModel::Counts {
+            table: Cow::Owned(valence_table![C => [4, 2], O => [2]]),
+        }
+    )]
+    fn test_valence_model_to_rust(
+        #[case] model: ValenceModel,
+        #[case] expected: GraphValenceModel,
+    ) {
+        let rust = model.to_rust();
+        assert_eq!(rust, expected);
+        match rust {
+            GraphValenceModel::AtomTyping {
+                registry: Cow::Owned(_),
+            }
+            | GraphValenceModel::Counts {
+                table: Cow::Owned(_),
+            } => {}
+            other => panic!("expected owned valence model data, got {other:?}"),
+        }
+    }
+
+    #[rstest]
+    #[case::atom_typing(
+        ValenceModel::AtomTyping {
+            registry: AtomTypeRegistry(registry!["C#c0#v4"]),
+        },
+        "ValenceModel.AtomTyping(registry=AtomTypeRegistry.from_atoms([AtomAst.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!#T!\")]))"
+    )]
+    #[case::counts(
+        ValenceModel::Counts {
+            table: ValenceTable(valence_table![C => [4, 2]]),
+        },
+        "ValenceModel.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[2, 4], aromatic_valences=[])}))"
+    )]
+    fn test_valence_model_repr(#[case] model: ValenceModel, #[case] expected: &str) {
+        assert_eq!(model.__repr__(), expected);
     }
 }

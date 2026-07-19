@@ -61,7 +61,7 @@ use crate::{
         ContradictionError, InvalidStructureError, ModelConversionError, ParseError,
         UnderdeterminedError,
     },
-    model::valence::{AtomTypeRegistry, ValenceEntry, ValenceTable},
+    model::valence::{AtomTypeRegistry, ValenceEntry, ValenceModel, ValenceTable},
     molecule::MoleculeAst,
     multicenter::{MulticenterBondAst, MulticenterBondView, MulticenterBondViews},
     noncovalent::{
@@ -154,6 +154,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<MoleculeAst>()?;
         module.add_class::<AtomTypeRegistry>()?;
         module.add_class::<ValenceEntry>()?;
+        module.add_class::<ValenceModel>()?;
         module.add_class::<ValenceTable>()?;
         module.add_class::<AromaticSystemDelta>()?;
         module.add_class::<AtomDelta>()?;

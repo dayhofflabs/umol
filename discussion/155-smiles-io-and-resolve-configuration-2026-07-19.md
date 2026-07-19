@@ -390,7 +390,7 @@ exported from `umol` in its own subitem.
   keyword-only payloads, structural equality, variant repr, and separate
   `from_rust` / `to_rust` implementations. No Python or Rust intermediate model
   wrappers are reintroduced. Tests cover owned round trips for both variants.
-  **Additive (green).** `[dep: S0a, S2c, S4a, S4c]`
+  **Additive (green). Done.** `[dep: S0a, S2c, S4a, S4c]`
 
 ### S5 — Python aromaticity and stereo models
 

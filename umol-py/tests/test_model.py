@@ -2,7 +2,14 @@ import re
 
 import pytest
 
-from umol import AtomAst, AtomTypeRegistry, Element, ValenceEntry, ValenceTable
+from umol import (
+    AtomAst,
+    AtomTypeRegistry,
+    Element,
+    ValenceEntry,
+    ValenceModel,
+    ValenceTable,
+)
 
 
 def test_atom_type_registry_default():
@@ -260,3 +267,90 @@ def test_valence_table_mutation():
     with pytest.raises(AttributeError):
         table.content_hash = 0
     assert not hasattr(table, "insert")
+
+
+def test_valence_model_atom_typing():
+    registry = AtomTypeRegistry.from_atoms(
+        [AtomAst.parse("C#c0#v4"), AtomAst.parse("O#c0#v2")]
+    )
+    model = ValenceModel.AtomTyping(registry=registry)
+
+    assert isinstance(model, ValenceModel)
+    assert isinstance(model, ValenceModel.AtomTyping)
+    assert model.registry == registry
+    assert model == ValenceModel.AtomTyping(registry=registry)
+    assert model != ValenceModel.Counts(table=ValenceTable(entries={}))
+
+
+def test_valence_model_counts():
+    table = ValenceTable(
+        entries={Element("C"): ValenceEntry(target_covalences=[4, 2])}
+    )
+    model = ValenceModel.Counts(table=table)
+
+    assert isinstance(model, ValenceModel)
+    assert isinstance(model, ValenceModel.Counts)
+    assert model.table == table
+    assert model == ValenceModel.Counts(table=table)
+    assert model != ValenceModel.AtomTyping(
+        registry=AtomTypeRegistry.from_atoms([])
+    )
+
+
+@pytest.mark.parametrize(
+    ("variant", "payload"),
+    [
+        (ValenceModel.AtomTyping, AtomTypeRegistry.from_atoms([])),
+        (ValenceModel.Counts, ValenceTable(entries={})),
+    ],
+)
+def test_valence_model_new_error(variant, payload):
+    with pytest.raises(TypeError):
+        variant(payload)
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        (
+            ValenceModel.AtomTyping(
+                registry=AtomTypeRegistry.from_atoms([AtomAst.parse("C#c0#v4")])
+            ),
+            'ValenceModel.AtomTyping(registry=AtomTypeRegistry.from_atoms(['
+            'AtomAst.parse("C#c0#v4")]))',
+        ),
+        (
+            ValenceModel.Counts(
+                table=ValenceTable(
+                    entries={
+                        Element("C"): ValenceEntry(target_covalences=[4, 2])
+                    }
+                )
+            ),
+            "ValenceModel.Counts(table=ValenceTable(entries={Element('C'): "
+            "ValenceEntry(target_covalences=[2, 4], aromatic_valences=[])}))",
+        ),
+    ],
+)
+def test_valence_model_repr(model, expected):
+    assert repr(model) == expected
+
+
+@pytest.mark.parametrize(
+    ("model", "field", "value"),
+    [
+        (
+            ValenceModel.AtomTyping(registry=AtomTypeRegistry.from_atoms([])),
+            "registry",
+            AtomTypeRegistry.default(),
+        ),
+        (
+            ValenceModel.Counts(table=ValenceTable(entries={})),
+            "table",
+            ValenceTable.default(),
+        ),
+    ],
+)
+def test_valence_model_mutation(model, field, value):
+    with pytest.raises(AttributeError):
+        setattr(model, field, value)
