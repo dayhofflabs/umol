@@ -57,8 +57,7 @@ mod tests {
 
     use super::parse_mol_bytes_with;
     use crate::ops::model::{
-        AromaticityModel, ChemistryModel, CountsModel, ElementScope, RingLimits, StereoModel,
-        ValenceModel,
+        AromaticityModel, ChemistryModel, ElementScope, RingLimits, StereoModel, ValenceModel,
     };
     use crate::ops::valence::{CountsValence, ValenceTable};
 
@@ -67,23 +66,21 @@ mod tests {
     const BENZENE_AROMATIC_MOL: &str = "benzene\n\n\n  6  6  0  0  0  0  0  0  0  0999 V2000\n    0.0000    1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.8660    0.5000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.8660   -0.5000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.8660   -0.5000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.8660    0.5000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  4  0  0  0  0\n  2  3  4  0  0  0  0\n  3  4  4  0  0  0  0\n  4  5  4  0  0  0  0\n  5  6  4  0  0  0  0\n  6  1  4  0  0  0  0\nM  END\n";
 
     #[fixture]
-    fn counts_model() -> CountsModel {
-        CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        }
+    fn valence_table() -> &'static ValenceTable {
+        ValenceTable::default_table()
     }
 
     #[rstest]
     #[case::methane(METHANE_MOL, 1, "C#i=#c0#h4#n0#u0#s#v0#a!")]
     #[case::benzene(BENZENE_AROMATIC_MOL, 6, "C#i=#c0#h#n0#u0#s#v2#a")]
     fn test_parse_mol_to_ast_counts_resolve(
-        counts_model: CountsModel,
+        valence_table: &'static ValenceTable,
         #[case] input: &str,
         #[case] atom_count: u32,
         #[case] expected_atom: &str,
     ) {
         let mut ast = parse_mol_to_ast(input).unwrap();
-        CountsValence::new(&counts_model).resolve(&mut ast).unwrap();
+        CountsValence::new(valence_table).resolve(&mut ast).unwrap();
         assert_eq!(ast.atoms().count(), atom_count as usize);
         for i in 0..atom_count {
             assert_eq!(ast.atom(AtomId(i)).ast.to_string(), expected_atom);
@@ -91,9 +88,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_parse_mol_bytes_with_resolver_methane_determined(counts_model: CountsModel) {
+    fn test_parse_mol_bytes_with_resolver_methane_determined(valence_table: &'static ValenceTable) {
         let model = ChemistryModel {
-            valence: ValenceModel::Counts(counts_model),
+            valence: ValenceModel::Counts {
+                table: Cow::Borrowed(valence_table),
+            },
             aromaticity: AromaticityModel::HueckelRule {
                 scope: ElementScope::AllowList(vec![Element::C]),
                 ring_limits: RingLimits::default(),

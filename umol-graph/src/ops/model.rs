@@ -27,9 +27,9 @@ pub struct ChemistryModel {
 impl Default for ChemistryModel {
     fn default() -> Self {
         Self {
-            valence: ValenceModel::AtomTyping(AtomTypingModel {
+            valence: ValenceModel::AtomTyping {
                 registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
-            }),
+            },
             aromaticity: AromaticityModel::daylight(),
             stereo: StereoModel::default(),
         }
@@ -38,20 +38,12 @@ impl Default for ChemistryModel {
 
 #[derive(Debug, Clone)]
 pub enum ValenceModel {
-    AtomTyping(AtomTypingModel),
-    Counts(CountsModel),
-}
-
-/// Atom-typing valence model: the registry of `AtomAst` patterns.
-#[derive(Debug, Clone)]
-pub struct AtomTypingModel {
-    pub registry: Cow<'static, AtomTypeRegistry>,
-}
-
-/// Counts valence model: the per-element covalence table.
-#[derive(Debug, Clone)]
-pub struct CountsModel {
-    pub table: Cow<'static, ValenceTable>,
+    /// Atom-typing valence model: the registry of `AtomAst` patterns.
+    AtomTyping {
+        registry: Cow<'static, AtomTypeRegistry>,
+    },
+    /// Counts valence model: the per-element covalence table.
+    Counts { table: Cow<'static, ValenceTable> },
 }
 
 #[derive(Debug, Clone)]
@@ -229,15 +221,23 @@ pub enum ConfigError {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+    use std::ptr;
+
     use rstest::rstest;
     use umol_chem::element::Element;
 
     use super::*;
 
-    #[test]
+    #[rstest]
     fn test_chemistry_model_default() {
         let model = ChemistryModel::default();
-        assert!(matches!(model.valence, ValenceModel::AtomTyping(_)));
+        match model.valence {
+            ValenceModel::AtomTyping {
+                registry: Cow::Borrowed(registry),
+            } => assert!(ptr::eq(registry, AtomTypeRegistry::default_registry())),
+            other => panic!("expected borrowed default atom-typing registry, got {other:?}"),
+        }
         assert!(matches!(
             model.aromaticity,
             AromaticityModel::HueckelRule { .. }

@@ -29,8 +29,10 @@ pub enum ValenceConformanceError {}
 impl<'a> ValenceConformanceValidator<'a> {
     pub fn new(model: &'a ValenceModel) -> Self {
         match model {
-            ValenceModel::AtomTyping(m) => Self::AtomTyping(AtomTypingValence::new(m)),
-            ValenceModel::Counts(m) => Self::Counts(CountsValence::new(m)),
+            ValenceModel::AtomTyping { registry } => {
+                Self::AtomTyping(AtomTypingValence::new(registry.as_ref()))
+            }
+            ValenceModel::Counts { table } => Self::Counts(CountsValence::new(table.as_ref())),
         }
     }
 
@@ -68,19 +70,37 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::rstest;
-    use umol_ast::mol_dsl_ground;
+    use umol_ast::{atom_dsl, mol_dsl_ground};
 
     use super::*;
-    use crate::ops::model::{AtomTypingModel, CountsModel};
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
     #[rstest]
-    #[case::counts(ValenceModel::Counts(CountsModel {
+    fn test_valence_conformance_validator_new() {
+        let counts = ValenceModel::Counts {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        let atom_typing = ValenceModel::AtomTyping {
+            registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h4")])),
+        };
+
+        assert!(matches!(
+            ValenceConformanceValidator::new(&counts),
+            ValenceConformanceValidator::Counts(_)
+        ));
+        assert!(matches!(
+            ValenceConformanceValidator::new(&atom_typing),
+            ValenceConformanceValidator::AtomTyping(_)
+        ));
+    }
+
+    #[rstest]
+    #[case::counts(ValenceModel::Counts {
         table: Cow::Borrowed(ValenceTable::default_table()),
-    }))]
-    #[case::atom_typing(ValenceModel::AtomTyping(AtomTypingModel {
+    })]
+    #[case::atom_typing(ValenceModel::AtomTyping {
         registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
-    }))]
+    })]
     fn test_valence_conformance_validator_validate(#[case] model: ValenceModel) {
         let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         let result = ValenceConformanceValidator::new(&model)

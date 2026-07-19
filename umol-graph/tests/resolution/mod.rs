@@ -12,9 +12,7 @@ use rstest::*;
 use umol_ast::ast::{FromAst, IntoAst, MoleculeAst};
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
 use umol_edn::{FormatConfig, FromEdn, ToEdn};
-use umol_graph::ops::model::{
-    AromaticityModel, ChemistryModel, CountsModel, StereoModel, ValenceModel,
-};
+use umol_graph::ops::model::{AromaticityModel, ChemistryModel, StereoModel, ValenceModel};
 use umol_graph::ops::resolve::Resolver;
 use umol_graph::ops::valence::ValenceTable;
 use umol_utils::solution::Solution;
@@ -84,9 +82,9 @@ fn atom_typing_chemistry() -> ChemistryModel {
 
 fn counts_chemistry() -> ChemistryModel {
     ChemistryModel {
-        valence: ValenceModel::Counts(CountsModel {
+        valence: ValenceModel::Counts {
             table: Cow::Borrowed(ValenceTable::default_table()),
-        }),
+        },
         aromaticity: AromaticityModel::daylight(),
         stereo: StereoModel::default(),
     }

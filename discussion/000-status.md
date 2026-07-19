@@ -154,5 +154,6 @@
 | [150-python-reaction-bindings-plan-2026-07-13.md](150-python-reaction-bindings-plan-2026-07-13.md)               | Completed     | 2026-07-14   |
 | [151-python-molecule-workflows-2026-07-13.md](151-python-molecule-workflows-2026-07-13.md)                       | Active        | 2026-07-18   |
 | [152-basic-molecule-wildcards-2026-07-18.md](152-basic-molecule-wildcards-2026-07-18.md)                         | Completed     | 2026-07-18   |
-| [153-format-parsing-outstanding-tasks-2026-07-18.md](153-format-parsing-outstanding-tasks-2026-07-18.md)          | Active        | 2026-07-18   |
-| [154-lattice-aware-probabilistic-fingerprints-2026-07-18.md](154-lattice-aware-probabilistic-fingerprints-2026-07-18.md) | Informational | 2026-07-18   |
+| [153-format-parsing-outstanding-tasks-2026-07-18.md](153-format-parsing-outstanding-tasks-2026-07-18.md)         | Active        | 2026-07-18   |
+| [154-lattice-probabilistic-fingerprints-2026-07-18.md](154-lattice-probabilistic-fingerprints-2026-07-18.md)     | Informational | 2026-07-18   |
+| [155-smiles-io-and-resolve-configuration-2026-07-19.md](155-smiles-io-and-resolve-configuration-2026-07-19.md)   | Active        | 2026-07-19   |

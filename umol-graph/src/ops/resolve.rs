@@ -299,17 +299,16 @@ mod tests {
 
     use super::*;
     use crate::ops::model::{
-        AromaticityModel, AtomTypingModel, ChemistryModel, CountsModel, ElementScope, RingLimits,
-        StereoModel, ValenceModel,
+        AromaticityModel, ChemistryModel, ElementScope, RingLimits, StereoModel, ValenceModel,
     };
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
     #[fixture]
     fn chemistry_model() -> ChemistryModel {
         ChemistryModel {
-            valence: ValenceModel::Counts(CountsModel {
+            valence: ValenceModel::Counts {
                 table: Cow::Borrowed(ValenceTable::default_table()),
-            }),
+            },
             aromaticity: AromaticityModel::HueckelRule {
                 scope: ElementScope::AllowList(vec![Element::C]),
                 ring_limits: RingLimits::default(),
@@ -342,14 +341,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::counts(ValenceModel::Counts(CountsModel {
+    #[case::counts(ValenceModel::Counts {
         table: Cow::Borrowed(ValenceTable::default_table()),
-    }))]
-    #[case::atom_typing(ValenceModel::AtomTyping(AtomTypingModel {
+    })]
+    #[case::atom_typing(ValenceModel::AtomTyping {
         registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
             "C#i=#c0#h4#n0#u0#s#v0#a!"
         )])),
-    }))]
+    })]
     fn test_resolver_resolve(#[case] valence: ValenceModel) {
         let model = ChemistryModel {
             valence,
@@ -423,12 +422,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::counts(ValenceModel::Counts(CountsModel {
+    #[case::counts(ValenceModel::Counts {
         table: Cow::Borrowed(ValenceTable::default_table()),
-    }))]
-    #[case::atom_typing(ValenceModel::AtomTyping(AtomTypingModel {
+    })]
+    #[case::atom_typing(ValenceModel::AtomTyping {
         registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
-    }))]
+    })]
     fn test_resolver_resolve_partial(#[case] valence: ValenceModel) {
         let model = ChemistryModel {
             valence,

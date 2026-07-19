@@ -15,7 +15,7 @@ use umol_chem::element::Element;
 use umol_chem::spin::{SpinMultiplicity, SpinState};
 use umol_utils::solution::Solution;
 
-use crate::ops::model::CountsModel;
+use super::ValenceTable;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum CountsError {
@@ -81,12 +81,12 @@ impl CountsInput {
 
 #[derive(Clone, Debug)]
 pub struct CountsValence<'a> {
-    model: &'a CountsModel,
+    table: &'a ValenceTable,
 }
 
 impl<'a> CountsValence<'a> {
-    pub fn new(model: &'a CountsModel) -> Self {
-        Self { model }
+    pub fn new(table: &'a ValenceTable) -> Self {
+        Self { table }
     }
 
     /// Construct the complete edit plan without mutating `ast`.
@@ -214,7 +214,7 @@ impl<'a> CountsValence<'a> {
 
         let entry = element
             .shift((2 * accepted_pairs - charge) as i8)
-            .and_then(|shifted| self.model.table.entry(shifted));
+            .and_then(|shifted| self.table.entry(shifted));
 
         let aromatic_constraint = atom
             .constraints
@@ -420,8 +420,6 @@ fn derive_multiplicity(spin: &SpinStateAst, unpaired: i64) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
-
     use rstest::rstest;
     use umol_ast::ast::AtomFieldChange;
     use umol_ast::{atom_dsl, mol_dsl};
@@ -431,10 +429,7 @@ mod tests {
 
     #[rstest]
     fn test_counts_valence_plan() {
-        let model = CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        };
-        let resolver = CountsValence::new(&model);
+        let resolver = CountsValence::new(ValenceTable::default_table());
         let molecule = mol_dsl!(r#"{:atoms ["C#c0"]}"#);
         assert_eq!(
             resolver.plan(&molecule),
@@ -485,10 +480,7 @@ mod tests {
 
     #[rstest]
     fn test_counts_valence_plan_identity() {
-        let model = CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        };
-        let resolver = CountsValence::new(&model);
+        let resolver = CountsValence::new(ValenceTable::default_table());
         let molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#a!"]}"#);
         assert_eq!(resolver.plan(&molecule), Solution::Determined(Vec::new()));
     }
@@ -496,11 +488,8 @@ mod tests {
     #[rstest]
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
     fn test_counts_valence_plan_partial(#[case] molecule: MoleculeAst) {
-        let model = CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        };
         assert_eq!(
-            CountsValence::new(&model).plan(&molecule),
+            CountsValence::new(ValenceTable::default_table()).plan(&molecule),
             Solution::Underdetermined(Vec::new())
         );
     }
@@ -511,10 +500,7 @@ mod tests {
         #[case] molecule: MoleculeAst,
         #[case] expected: CountsError,
     ) {
-        let model = CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        };
-        let resolver = CountsValence::new(&model);
+        let resolver = CountsValence::new(ValenceTable::default_table());
         assert_eq!(resolver.plan(&molecule), Solution::Contradictory(expected));
     }
 
@@ -527,10 +513,7 @@ mod tests {
         #[case] atom_id: u32,
         #[case] expected: &str,
     ) {
-        let model = CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        };
-        let resolver = CountsValence::new(&model);
+        let resolver = CountsValence::new(ValenceTable::default_table());
         assert_eq!(
             resolver.resolve(&mut molecule),
             Ok(Solution::Determined(()))
@@ -541,12 +524,9 @@ mod tests {
     #[rstest]
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
     fn test_counts_valence_resolve_partial(#[case] mut molecule: MoleculeAst) {
-        let model = CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        };
         let original = molecule.clone();
         assert_eq!(
-            CountsValence::new(&model).resolve(&mut molecule),
+            CountsValence::new(ValenceTable::default_table()).resolve(&mut molecule),
             Ok(Solution::Underdetermined(()))
         );
         assert_eq!(molecule, original);
@@ -558,10 +538,7 @@ mod tests {
         #[case] mut molecule: MoleculeAst,
         #[case] expected: CountsError,
     ) {
-        let model = CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        };
-        let resolver = CountsValence::new(&model);
+        let resolver = CountsValence::new(ValenceTable::default_table());
         let original = molecule.clone();
         assert_eq!(
             resolver.resolve(&mut molecule),
@@ -600,10 +577,7 @@ mod tests {
     #[case::tropylium_carbocation("C#c1#v2#h1#a+", "C#c+#h#n0#u0#s#v2#a0")]
     #[case::iron_out_of_table("Fe#c0#h0", "Fe#c0#h0#n4#u0#s#v0#a!")]
     fn test_counts_valence_resolve_atom(#[case] input: &str, #[case] expected: &str) {
-        let model = CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        };
-        let resolver = CountsValence::new(&model);
+        let resolver = CountsValence::new(ValenceTable::default_table());
         let mut atom = atom_dsl!(input);
         resolver.resolve_atom(&mut atom).unwrap();
         assert_eq!(atom.to_string(), expected);
@@ -615,10 +589,7 @@ mod tests {
         #[case] mut atom: AtomAst,
         #[case] expected: Result<(), CountsError>,
     ) {
-        let model = CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        };
-        let resolver = CountsValence::new(&model);
+        let resolver = CountsValence::new(ValenceTable::default_table());
         assert_eq!(resolver.resolve_atom(&mut atom), expected);
     }
 
@@ -630,10 +601,7 @@ mod tests {
         #[case] input: &str,
         #[case] expected: Solution<(), CountsMismatch>,
     ) {
-        let model = CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        };
-        let resolver = CountsValence::new(&model);
+        let resolver = CountsValence::new(ValenceTable::default_table());
         let molecule = MoleculeAst::from_parts(MoleculeParts {
             atoms: vec![atom_dsl!(input)],
             ..Default::default()

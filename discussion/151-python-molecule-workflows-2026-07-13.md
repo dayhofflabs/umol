@@ -179,48 +179,48 @@ operation:
 
 - `Smiles::parse*` performs syntax parsing and returns the checked SMILES format
   value backed by TableIR;
-- `Ingest::ingest` interprets a borrowed format value under an explicit
-  `ChemistryModel` and returns a determined `MoleculeAst`;
+- `Interpret::interpret` interprets a borrowed format value under an explicit
+  `ChemistryModel` and `ResolveConfig` and returns a determined `MoleculeAst`;
 - `umol_graph::ingest::ingest_smiles*` composes both boundaries for ordinary callers,
-  using `SmilesIoConfig::opensmiles()` and `ChemistryModel::default()` in
-  the unconfigured form.
+  using `SmilesIoConfig::opensmiles()`, `ChemistryModel::default()`, and
+  `ResolveConfig::default()` in the unconfigured form.
 
 Python exposes the resolved operation:
 
 ```python
 mol = MoleculeAst.from_smiles("c1ccccc1")
-mol = MoleculeAst.from_smiles(source, config=SmilesIoConfig.opensmiles())
+mol = MoleculeAst.from_smiles(
+    source,
+    io_config=SmilesIoConfig.opensmiles(),
+    chemistry_model=ChemistryModel.default(),
+    resolve_config=ResolveConfig.default(),
+)
 ```
 
-Omitting `config` uses the higher-level default. The binding calls the explicit
-Rust configured path internally; it does not reproduce parsing or resolution in
-Python.
+The three configs are keyword-only; omitting any of them uses its higher-level
+default. The binding calls the explicit Rust configured path internally; it does
+not reproduce parsing or resolution in Python.
 
 ### Configuration scope
 
-This round binds `SmilesIoConfig` with the `opensmiles`, `lenient`, and
-`chemaxon` named configurations. It also binds the effective
-`SmilesParseFlags` capabilities and their bitwise OR so a caller can construct
-an arbitrary supported parser-acceptance policy and pass it through
-`SmilesIoConfig.with_parse_flags(...)`. Wildcards are part of OpenSMILES and do
-not have a capability flag. Both values are owned and immutable on the Python
-side.
+The accepted configuration design and its staged implementation are maintained
+in [doc 155](155-smiles-io-and-resolve-configuration-2026-07-19.md).
+`SmilesIoConfig` is a paired parse/render configuration whose shared
+`SmilesSyntaxFlags` are composable. The Python ordinary-SMILES surface hides CX
+members without pulling the full CX boundary split into this round. Wildcards
+are part of OpenSMILES and do not have a capability flag.
 
-`SmilesLintFlags` and `SmilesLintConfig` are not part of this round. The Rust
-parsing workflow does not currently consume them, and lint behavior is not yet
-sufficiently specified to expose as an effective Python control. They should be
-bound only after the Rust workflow applies a settled lint configuration.
+`SmilesLintFlags` and `SmilesLintConfig` are not part of this round because the
+lint acceptance, diagnostic, and ownership contracts are not yet sufficiently
+specified for an effective Python control. They should be bound after those
+contracts are settled.
 
-`ChemistryModel` is not part of this round. Binding it would also require public
-configuration for valence registries/tables, aromaticity models and scopes, ring
-limits, and stereo perception policy. Parser/format configuration and chemistry
-resolution policy remain separate axes; adding a model argument later does not
-change the ordinary `from_smiles(source, config=None)` path.
+The same plan binds the complete `ChemistryModel` vocabulary and the separate
+operational `ResolveConfig`; neither is reduced to a default-only Python value.
 
-Arbitrary lint-name configuration is also deferred unless its ownership is first
-made suitable for external callers: `SmilesLintConfig` currently stores
-`Vec<&'static str>`, which cannot directly own Python strings. Named IO presets do
-not have this problem.
+Arbitrary lint-name configuration requires owned strings rather than
+`Vec<&'static str>` before it can accept Python-provided names. Named IO presets
+do not have this problem.
 
 This round removes the unresolved `umol-io` AST shortcut from the public format
 API. Syntax parsing instead produces a `Smiles` format value backed by TableIR;
@@ -232,7 +232,7 @@ operation error.
 
 The current Rust resolved parser returns `Box<dyn UmolError>` across a fixed
 parse → raise → resolve pipeline. Before binding it, parsing is made strictly
-syntax-to-`Smiles`, while the graph-owned `Ingest` trait converts that parsed
+syntax-to-`Smiles`, while the graph-owned `Interpret` trait converts that parsed
 format value into a determined `MoleculeAst`. The combined convenience operation
 receives one compact `SmilesInputError` preserving the categories callers can
 act on:
@@ -1090,25 +1090,26 @@ clone-and-publish, `transact_validated`, validator combinators, or savepoints.
   without weakening the distinction between syntax parsing and model
   construction.
 
-  The graph-owned public ingestion trait is:
+  The graph-owned public interpretation trait is:
 
   ```rust
-  pub trait Ingest {
+  pub trait Interpret {
       type Output;
       type Error;
 
-      fn ingest(
+      fn interpret(
           &self,
           model: &ChemistryModel,
+          resolve_config: &ResolveConfig,
       ) -> Result<Self::Output, Self::Error>;
   }
   ```
 
-  `Ingest for Smiles` returns `MoleculeAst` and borrows the parsed value so the
+  `Interpret for Smiles` returns `MoleculeAst` and borrows the parsed value so the
   same external representation can be interpreted under more than one
   chemistry model. Its implementation performs TableIR-to-`MoleculeAst`
-  conversion and then resolution; those are ingestion details rather than
-  parsing semantics. `MoleculeIngestError` preserves the four post-parse
+  conversion and then resolution; those are interpretation details rather than
+  parsing semantics. `MoleculeInterpretationError` preserves the four post-parse
   categories: model conversion (`RaiseError`), resolver contradiction,
   underdetermination, and resolver execution failure.
 
@@ -1118,9 +1119,9 @@ clone-and-publish, `transact_validated`, validator combinators, or savepoints.
   `Underdetermined(ResolveUnderdetermined)`, and `Execution(ResolverError)`.
   Unprefixed display preserves the underlying diagnostic, and each variant
   exposes its wrapped error directly through `Error::source`; conversions from
-  `ParseError` and `MoleculeIngestError` remove dynamic error erasure without
-  exposing pipeline crate boundaries to Python. Both concrete errors implement
-  `UmolError`.
+  `ParseError` and `MoleculeInterpretationError` remove dynamic error erasure
+  without exposing pipeline crate boundaries to Python. Both concrete errors
+  implement `UmolError`.
 
   The reverse path follows the same structural boundary when SMILES output is
   added: `MoleculeAst` is converted, with an explicit output configuration, to
@@ -1139,7 +1140,7 @@ clone-and-publish, `transact_validated`, validator combinators, or savepoints.
 - **S2b — SMILES ingestion migration**
   (`umol-io/src/smiles.rs`, `umol-graph/src/ingest.rs`, the former
   `umol-graph/src/parse.rs`, and workspace callers): resolved workspace callers
-  use either `Smiles::parse*` followed by `Ingest::ingest` or the compact
+  use either `Smiles::parse*` followed by `Interpret::interpret` or the compact
   `umol_graph::ingest::ingest_smiles*` convenience surface. The latter returns
   `SmilesInputError`, uses `SmilesIoConfig::opensmiles()` plus
   `ChemistryModel::default()` as its unconfigured default, and provides explicit
@@ -1457,17 +1458,20 @@ boundary types and downstream ingestion belong to the next workflow pass.
   lint defaults; lint and chemistry-model fields are absent from Python.
   Conversion tests cover every public preset and an arbitrary OR-composed flag
   set. **Implemented (green).** `[dep: S4c]`
-- **S4e — resolved `MoleculeAst.from_smiles`**
-  (`umol-py/src/molecule.rs`, `src/error.rs`): add
-  `from_smiles(source, config=None)` over the explicit configured Rust path;
-  omission selects the higher-level default. Map syntax, model conversion,
-  contradiction, underdetermination, and unexpected resolver execution to the
-  settled Python classes. Installed tests assert exact determined structures,
-  preset/custom-flag behavior, each reachable error category, and detached
-  ownership. **Additive (green).** `[dep: S2b, S4b, S4d]`
 
-S4 is the first complete Python deliverable: resolved SMILES with effective
-parser configuration and typed failures.
+  The accepted replacement for the S4c/S4d baseline, the complete chemistry-
+  model and resolve-operation configuration bindings, the required Rust
+  migrations, and the final configured ingestion method are staged in
+  [doc 155](155-smiles-io-and-resolve-configuration-2026-07-19.md). The final
+  ingestion method resumes as doc 155 S7a after that plan's prerequisites are
+  green.
+- **S4e — resolved `MoleculeAst.from_smiles`**
+  (`umol-py/src/molecule.rs`, `src/error.rs`): superseded by doc 155 S7a, which
+  adds the complete keyword-only IO, chemistry-model, and resolve-operation
+  configuration surface before implementing the method. **Moved to doc 155.**
+
+S4 establishes the binding and error baseline; doc 155 S7 is the complete
+resolved-SMILES Python deliverable.
 
 ### S5 — Python fingerprint configuration values
 
@@ -1700,7 +1704,8 @@ The update foundation begins with `S0c`, then fans out through
 `{S0d, S0e, S0f, S0g, S0h, S0i, S0j}` and joins at the S0k property gate.
 For resolution, `S0k → {S1a, S1b} → S1c → S1d → S1e`; `S1f`, `S1g`, and `S0b`
 proceed alongside those planners and join at
-`S1h → S2a → S2b → S4a → S4b → {S4c → S4d} → S4e`.
+`S1h → S2a → S2b → S4a → S4b → {S4c → S4d}`, then continues through doc 155
+S0–S7 to the configured `from_smiles` operation.
 
 The fingerprint path is:
 

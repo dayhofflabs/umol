@@ -9,11 +9,11 @@ use umol_chem::element::Element;
 use umol_utils::solution::Solution;
 
 use super::compare::compare_valence_preference;
-use crate::ops::model::AtomTypingModel;
+use super::AtomTypeRegistry;
 
 #[derive(Clone, Debug)]
 pub struct AtomTypingValence<'a> {
-    model: &'a AtomTypingModel,
+    registry: &'a AtomTypeRegistry,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -35,8 +35,8 @@ pub struct AtomTypingMismatch {
 }
 
 impl<'a> AtomTypingValence<'a> {
-    pub fn new(model: &'a AtomTypingModel) -> Self {
-        Self { model }
+    pub fn new(registry: &'a AtomTypeRegistry) -> Self {
+        Self { registry }
     }
 
     /// Construct the complete edit plan without mutating `ast`.
@@ -141,8 +141,7 @@ impl<'a> AtomTypingValence<'a> {
         element: Element,
         charge: Option<i8>,
     ) -> Option<&AtomAst> {
-        self.model
-            .registry
+        self.registry
             .lookup(element, charge)
             .iter()
             .filter(|entry| pattern.is_compatible(entry))
@@ -162,15 +161,13 @@ mod tests {
     use crate::ops::valence::AtomTypeRegistry;
 
     #[fixture]
-    fn atom_typing_model() -> AtomTypingModel {
-        AtomTypingModel {
-            registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h4")])),
-        }
+    fn atom_type_registry() -> AtomTypeRegistry {
+        AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h4")])
     }
 
     #[rstest]
-    fn test_atom_typing_valence_plan(atom_typing_model: AtomTypingModel) {
-        let resolver = AtomTypingValence::new(&atom_typing_model);
+    fn test_atom_typing_valence_plan(atom_type_registry: AtomTypeRegistry) {
+        let resolver = AtomTypingValence::new(&atom_type_registry);
         let molecule = mol_dsl!(r#"{:atoms ["C#c0#D1"]}"#);
         assert_eq!(
             resolver.plan(&molecule),
@@ -196,9 +193,8 @@ mod tests {
     #[case::empty_registry(Cow::Owned(AtomTypeRegistry::new()))]
     fn test_atom_typing_valence_plan_identity(#[case] registry: Cow<'static, AtomTypeRegistry>) {
         let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
-        let model = AtomTypingModel { registry };
         assert_eq!(
-            AtomTypingValence::new(&model).plan(&molecule),
+            AtomTypingValence::new(registry.as_ref()).plan(&molecule),
             Solution::Determined(Vec::new())
         );
     }
@@ -206,11 +202,11 @@ mod tests {
     #[rstest]
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
     fn test_atom_typing_valence_plan_partial(
-        atom_typing_model: AtomTypingModel,
+        atom_type_registry: AtomTypeRegistry,
         #[case] molecule: MoleculeAst,
     ) {
         assert_eq!(
-            AtomTypingValence::new(&atom_typing_model).plan(&molecule),
+            AtomTypingValence::new(&atom_type_registry).plan(&molecule),
             Solution::Underdetermined(Vec::new())
         );
     }
@@ -225,19 +221,19 @@ mod tests {
         }
     )]
     fn test_atom_typing_valence_plan_error(
-        atom_typing_model: AtomTypingModel,
+        atom_type_registry: AtomTypeRegistry,
         #[case] molecule: MoleculeAst,
         #[case] expected: AtomTypingError,
     ) {
         assert_eq!(
-            AtomTypingValence::new(&atom_typing_model).plan(&molecule),
+            AtomTypingValence::new(&atom_type_registry).plan(&molecule),
             Solution::Contradictory(expected)
         );
     }
 
     #[rstest]
-    fn test_atom_typing_valence_resolve(atom_typing_model: AtomTypingModel) {
-        let resolver = AtomTypingValence::new(&atom_typing_model);
+    fn test_atom_typing_valence_resolve(atom_type_registry: AtomTypeRegistry) {
+        let resolver = AtomTypingValence::new(&atom_type_registry);
         let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#D1"]}"#);
         assert_eq!(
             resolver.resolve(&mut molecule),
@@ -249,12 +245,12 @@ mod tests {
     #[rstest]
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
     fn test_atom_typing_valence_resolve_partial(
-        atom_typing_model: AtomTypingModel,
+        atom_type_registry: AtomTypeRegistry,
         #[case] mut molecule: MoleculeAst,
     ) {
         let original = molecule.clone();
         assert_eq!(
-            AtomTypingValence::new(&atom_typing_model).resolve(&mut molecule),
+            AtomTypingValence::new(&atom_type_registry).resolve(&mut molecule),
             Ok(Solution::Underdetermined(()))
         );
         assert_eq!(molecule, original);
@@ -270,13 +266,13 @@ mod tests {
         }
     )]
     fn test_atom_typing_valence_resolve_error(
-        atom_typing_model: AtomTypingModel,
+        atom_type_registry: AtomTypeRegistry,
         #[case] mut molecule: MoleculeAst,
         #[case] expected: AtomTypingError,
     ) {
         let original = molecule.clone();
         assert_eq!(
-            AtomTypingValence::new(&atom_typing_model).resolve(&mut molecule),
+            AtomTypingValence::new(&atom_type_registry).resolve(&mut molecule),
             Ok(Solution::Contradictory(expected))
         );
         assert_eq!(molecule, original);
@@ -293,11 +289,11 @@ mod tests {
     )]
     #[case::not_ground("C", Solution::Underdetermined(()))]
     fn test_atom_typing_valence_classify_molecule_atom(
-        atom_typing_model: AtomTypingModel,
+        atom_type_registry: AtomTypeRegistry,
         #[case] input: &str,
         #[case] expected: Solution<(), AtomTypingMismatch>,
     ) {
-        let resolver = AtomTypingValence::new(&atom_typing_model);
+        let resolver = AtomTypingValence::new(&atom_type_registry);
         let molecule = MoleculeAst::from_parts(MoleculeParts {
             atoms: vec![atom_dsl!(input)],
             ..Default::default()

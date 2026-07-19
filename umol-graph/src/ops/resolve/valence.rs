@@ -31,8 +31,10 @@ pub enum ValenceError {
 impl<'a> ValenceResolver<'a> {
     pub fn new(model: &'a ValenceModel) -> Self {
         match model {
-            ValenceModel::AtomTyping(m) => Self::AtomTyping(AtomTypingValence::new(m)),
-            ValenceModel::Counts(m) => Self::Counts(CountsValence::new(m)),
+            ValenceModel::AtomTyping { registry } => {
+                Self::AtomTyping(AtomTypingValence::new(registry.as_ref()))
+            }
+            ValenceModel::Counts { table } => Self::Counts(CountsValence::new(table.as_ref())),
         }
     }
 
@@ -80,18 +82,36 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ops::model::{AtomTypingModel, CountsModel};
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
     #[rstest]
-    #[case::counts(ValenceModel::Counts(CountsModel {
+    fn test_valence_resolver_new() {
+        let counts = ValenceModel::Counts {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        let atom_typing = ValenceModel::AtomTyping {
+            registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h4")])),
+        };
+
+        assert!(matches!(
+            ValenceResolver::new(&counts),
+            ValenceResolver::Counts(_)
+        ));
+        assert!(matches!(
+            ValenceResolver::new(&atom_typing),
+            ValenceResolver::AtomTyping(_)
+        ));
+    }
+
+    #[rstest]
+    #[case::counts(ValenceModel::Counts {
         table: Cow::Borrowed(ValenceTable::default_table()),
-    }))]
-    #[case::atom_typing(ValenceModel::AtomTyping(AtomTypingModel {
+    })]
+    #[case::atom_typing(ValenceModel::AtomTyping {
         registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
             "C#i=#c0#h4#n0#u0#s#v0#a!"
         )])),
-    }))]
+    })]
     fn test_valence_resolver_plan(#[case] model: ValenceModel) {
         let molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s#v0#a!"]}"#);
         assert_eq!(
@@ -107,12 +127,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::counts(ValenceModel::Counts(CountsModel {
+    #[case::counts(ValenceModel::Counts {
         table: Cow::Borrowed(ValenceTable::default_table()),
-    }))]
-    #[case::atom_typing(ValenceModel::AtomTyping(AtomTypingModel {
+    })]
+    #[case::atom_typing(ValenceModel::AtomTyping {
         registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
-    }))]
+    })]
     fn test_valence_resolver_plan_partial(#[case] model: ValenceModel) {
         let molecule = mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#);
         assert_eq!(
@@ -123,16 +143,16 @@ mod tests {
 
     #[rstest]
     #[case::counts(
-        ValenceModel::Counts(CountsModel {
+        ValenceModel::Counts {
             table: Cow::Borrowed(ValenceTable::default_table()),
-        }),
+        },
         mol_dsl!(r#"{:atoms ["C#c0" "Fe#c0#h0#a+"]}"#),
         ValenceContradiction::Counts(CountsError::UndeterminedAromaticValence)
     )]
     #[case::atom_typing(
-        ValenceModel::AtomTyping(AtomTypingModel {
+        ValenceModel::AtomTyping {
             registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h4")])),
-        }),
+        },
         mol_dsl!(r#"{:atoms ["C#c0" "C#c0#h3"]}"#),
         ValenceContradiction::AtomTyping(AtomTypingError::NoMatch {
             atom_id: AtomId(1),
@@ -152,14 +172,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::counts(ValenceModel::Counts(CountsModel {
+    #[case::counts(ValenceModel::Counts {
         table: Cow::Borrowed(ValenceTable::default_table()),
-    }))]
-    #[case::atom_typing(ValenceModel::AtomTyping(AtomTypingModel {
+    })]
+    #[case::atom_typing(ValenceModel::AtomTyping {
         registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
             "C#i=#c0#h4#n0#u0#s#v0#a!"
         )])),
-    }))]
+    })]
     fn test_valence_resolver_resolve(#[case] model: ValenceModel) {
         let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s#v0#a!"]}"#);
         assert_eq!(
@@ -173,12 +193,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::counts(ValenceModel::Counts(CountsModel {
+    #[case::counts(ValenceModel::Counts {
         table: Cow::Borrowed(ValenceTable::default_table()),
-    }))]
-    #[case::atom_typing(ValenceModel::AtomTyping(AtomTypingModel {
+    })]
+    #[case::atom_typing(ValenceModel::AtomTyping {
         registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
-    }))]
+    })]
     fn test_valence_resolver_resolve_partial(#[case] model: ValenceModel) {
         let mut molecule = mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#);
         let original = molecule.clone();
@@ -191,16 +211,16 @@ mod tests {
 
     #[rstest]
     #[case::counts(
-        ValenceModel::Counts(CountsModel {
+        ValenceModel::Counts {
             table: Cow::Borrowed(ValenceTable::default_table()),
-        }),
+        },
         mol_dsl!(r#"{:atoms ["C#c0" "Fe#c0#h0#a+"]}"#),
         ValenceContradiction::Counts(CountsError::UndeterminedAromaticValence)
     )]
     #[case::atom_typing(
-        ValenceModel::AtomTyping(AtomTypingModel {
+        ValenceModel::AtomTyping {
             registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h4")])),
-        }),
+        },
         mol_dsl!(r#"{:atoms ["C#c0" "C#c0#h3"]}"#),
         ValenceContradiction::AtomTyping(AtomTypingError::NoMatch {
             atom_id: AtomId(1),

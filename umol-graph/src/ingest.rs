@@ -129,9 +129,7 @@ mod tests {
 
     use super::*;
     use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
-    use crate::ops::model::{
-        AromaticityModel, AtomTypingModel, ElementScope, RingLimits, ValenceModel,
-    };
+    use crate::ops::model::{AromaticityModel, ElementScope, RingLimits, ValenceModel};
     use crate::ops::valence::AtomTypeRegistry;
 
     #[rstest]
@@ -307,9 +305,9 @@ mod tests {
     #[rstest]
     fn test_ingest_smiles_with_underdetermination() {
         let model = ChemistryModel {
-            valence: ValenceModel::AtomTyping(AtomTypingModel {
+            valence: ValenceModel::AtomTyping {
                 registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0")])),
-            }),
+            },
             ..ChemistryModel::default()
         };
 
