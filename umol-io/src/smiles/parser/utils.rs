@@ -5,7 +5,7 @@ use std::str::from_utf8;
 
 use umol_chem::element::Element;
 
-use super::super::config::SmilesParseFlags;
+use super::super::config::SmilesSyntaxFlags;
 use super::super::error::ParseError;
 use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeEditor};
 use crate::table_ir::atom::Chirality;
@@ -447,7 +447,7 @@ pub(super) fn parse_extended_bond(
 pub(super) fn parse_bracket(
     input: &[u8],
     pos_offset: usize,
-    flags: SmilesParseFlags,
+    flags: SmilesSyntaxFlags,
 ) -> Result<
     (
         Option<Element>,
@@ -492,7 +492,7 @@ pub(super) fn parse_bracket(
         } else if let Some((e, consumed)) = parse_bracket_aromatic_element(
             input,
             i,
-            flags.contains(SmilesParseFlags::EXTENDED_AROMATICS),
+            flags.contains(SmilesSyntaxFlags::EXTENDED_AROMATICS),
         ) {
             element = Some(e);
             i += consumed;
@@ -634,7 +634,7 @@ pub(super) fn attach_extended_atom(
 pub(super) fn parse_extended_bracket(
     input: &[u8],
     pos_offset: usize,
-    flags: SmilesParseFlags,
+    flags: SmilesSyntaxFlags,
 ) -> Result<
     (
         AtomSymbol,
@@ -677,7 +677,7 @@ pub(super) fn parse_extended_bracket(
         } else if let Some((e, consumed)) = parse_bracket_aromatic_element(
             input,
             i,
-            flags.contains(SmilesParseFlags::EXTENDED_AROMATICS),
+            flags.contains(SmilesSyntaxFlags::EXTENDED_AROMATICS),
         ) {
             symbol = AtomSymbol::Element(e);
             i += consumed;

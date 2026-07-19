@@ -65,12 +65,12 @@ struct FileFormat {
     smiles_column: usize,
 }
 
-/// Check if a string looks like valid SMILES using lenient parser
+/// Check if a string looks like valid SMILES or CXSMILES.
 fn is_likely_smiles(s: &str) -> bool {
     if s.is_empty() {
         return false;
     }
-    let config = SmilesIoConfig::lenient();
+    let config = SmilesIoConfig::chemaxon();
     parse_extended_smiles_bytes_with(s.as_bytes(), &config).is_ok()
 }
 
@@ -710,6 +710,14 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+
+    #[rstest]
+    #[case::opensmiles("CCO", true)]
+    #[case::cxsmiles("CCO |$C1;C2;O3$|", true)]
+    #[case::invalid("not smiles", false)]
+    fn test_is_likely_smiles(#[case] input: &str, #[case] expected: bool) {
+        assert_eq!(is_likely_smiles(input), expected);
+    }
 
     #[rstest]
     #[case::opensmiles(

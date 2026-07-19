@@ -293,7 +293,7 @@ config for the composite resolve operation.
 
 ### S1 — Rust SMILES IO and ingestion migration
 
-- **S1a — shared SMILES syntax configuration**
+- **S1a — shared SMILES syntax configuration** **Done**
   (`umol-io/src/smiles/config.rs`, parser entry points, conformance tools,
   fuzz/benchmark callers, and workspace consumers): rename `SmilesParseFlags`
   to `SmilesSyntaxFlags`, `parse_flags` to `syntax_flags`, and

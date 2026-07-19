@@ -20,7 +20,7 @@ use self::utils::{
     parse_extended_bond, parse_extended_bracket, parse_organic_aliphatic_element,
     parse_organic_aromatic_element, parse_ring_index, Frame,
 };
-use super::config::{SmilesIoConfig, SmilesParseFlags};
+use super::config::{SmilesIoConfig, SmilesSyntaxFlags};
 use super::error::ParseError;
 use crate::table_ir::{
     BondDirection, BondDonation, BondOrder, ChiralityFrame, ExtendedMolecule, ExtendedReaction,
@@ -32,7 +32,7 @@ pub(crate) fn parse_molecule(
     input: &[u8],
     config: &SmilesIoConfig,
 ) -> Result<Molecule, ParseError> {
-    let flags = config.parse_flags;
+    let flags = config.syntax_flags;
     if input.is_empty() {
         return Ok(Molecule::empty());
     }
@@ -44,7 +44,7 @@ pub(crate) fn parse_molecule(
 
     // Check if the input contains a CX block, record ring bonds if it is present.
     let has_cx_annotations =
-        flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
+        flags.contains(SmilesSyntaxFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
     let (remaining, (mut mol, ring_bonds, _)) =
         parse_smiles_inner(input, 0, false, has_cx_annotations, flags)?;
 
@@ -70,10 +70,10 @@ pub(crate) fn parse_reaction(
     input: &[u8],
     config: &SmilesIoConfig,
 ) -> Result<Reaction, ParseError> {
-    let flags = config.parse_flags;
+    let flags = config.syntax_flags;
     // Check if the input contains a CX block, record ring bonds if it is present.
     let has_cx_annotations =
-        flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
+        flags.contains(SmilesSyntaxFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
     let mut remaining = input;
     let mut offset = 0usize;
 
@@ -170,9 +170,9 @@ fn parse_smiles_inner(
     offset: usize,
     as_reaction: bool,
     store_rings: bool,
-    flags: SmilesParseFlags,
+    flags: SmilesSyntaxFlags,
 ) -> Result<(&[u8], (Molecule, Vec<(usize, usize)>, usize)), ParseError> {
-    let extended_bonds = flags.contains(SmilesParseFlags::EXTENDED_BONDS);
+    let extended_bonds = flags.contains(SmilesSyntaxFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
     let mut builder =
@@ -641,7 +641,7 @@ pub fn parse_extended_smiles_bytes_with(
     input: &[u8],
     config: &SmilesIoConfig,
 ) -> Result<ExtendedMolecule, ParseError> {
-    let flags = config.parse_flags;
+    let flags = config.syntax_flags;
 
     if input.is_empty() {
         return Ok(ExtendedMolecule::empty());
@@ -649,7 +649,7 @@ pub fn parse_extended_smiles_bytes_with(
 
     // Check if the input contains a CX block, record ring bonds if it is present.
     let has_cx_annotations =
-        flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
+        flags.contains(SmilesSyntaxFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
     let (remaining, (mut mol, ring_bonds, _)) =
         parse_extended_smiles_inner(input, 0, false, has_cx_annotations, flags)?;
 
@@ -697,11 +697,11 @@ pub fn parse_extended_reaction_smiles_bytes_with(
     input: &[u8],
     config: &SmilesIoConfig,
 ) -> Result<ExtendedReaction, ParseError> {
-    let flags = config.parse_flags;
+    let flags = config.syntax_flags;
 
     // Check if the input contains a CX block, record ring bonds if it is present.
     let has_cx_annotations =
-        flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
+        flags.contains(SmilesSyntaxFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
     let mut remaining = input;
     let mut offset = 0usize;
 
@@ -794,9 +794,9 @@ fn parse_extended_smiles_inner(
     offset: usize,
     as_reaction: bool,
     store_rings: bool,
-    flags: SmilesParseFlags,
+    flags: SmilesSyntaxFlags,
 ) -> Result<(&[u8], (ExtendedMolecule, Vec<(usize, usize)>, usize)), ParseError> {
-    let extended_bonds = flags.contains(SmilesParseFlags::EXTENDED_BONDS);
+    let extended_bonds = flags.contains(SmilesSyntaxFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
     let mut builder =

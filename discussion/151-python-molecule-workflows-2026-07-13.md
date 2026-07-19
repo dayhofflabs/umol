@@ -1354,7 +1354,7 @@ suite, and the required unit, property, fuzz, and benchmark gates.
 
 The focused wildcard/OpenSMILES work is complete. `Molecule` accepts `*`,
 raises it to `ElementAst::Undetermined`, and uses one default OpenSMILES
-configuration without `SmilesParseFlags::WILDCARDS`, `BASIC_OPENSMILES`, or
+configuration without `SmilesSyntaxFlags::WILDCARDS`, `BASIC_OPENSMILES`, or
 `SmilesIoConfig::basic_opensmiles()`. The former basic/OpenSMILES
 classification split has also been removed; the only remaining
 `basic_opensmiles` Rust reference is a conformance-table test that asserts the
@@ -1363,7 +1363,7 @@ remain ordinary SMILES acceptance-policy flags because their retained values
 fit the basic `Atom`/`Bond` TableIR structures.
 
 The broader S2b follow-up is not closed. `CHEMAXON_EXTENSIONS`,
-`SKIP_UNKNOWN_CHEMAXON_TAGS`, `SmilesParseFlags::CHEMAXON`, and
+`SKIP_UNKNOWN_CHEMAXON_TAGS`, `SmilesSyntaxFlags::CHEMAXON`, and
 `SmilesIoConfig::chemaxon()` still live on the ordinary `SmilesIoConfig`
 surface, and the diagnostic/conformance tools still distinguish
 `basic_chemaxon` from `chemaxon` inside the deferred CXSMILES boundary. The

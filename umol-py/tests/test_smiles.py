@@ -12,10 +12,8 @@ def test_smiles_parse_flags():
     assert SmilesParseFlags(2) == SmilesParseFlags.EXTENDED_AROMATICS
     assert SmilesParseFlags.CHEMAXON == SmilesParseFlags.CHEMAXON_EXTENSIONS
     assert extended_syntax.bits == 6
-    assert repr(extended_syntax) == (
-        "SmilesParseFlags(EXTENDED_AROMATICS | EXTENDED_BONDS)"
-    )
-    assert extended_syntax != SmilesParseFlags.LENIENT
+    assert repr(extended_syntax) == "SmilesParseFlags.LENIENT"
+    assert extended_syntax == SmilesParseFlags.LENIENT
 
 
 def test_smiles_parse_flags_error():
@@ -38,11 +36,9 @@ def test_smiles_io_config():
     assert SmilesIoConfig.lenient().parse_flags == SmilesParseFlags.LENIENT
     assert SmilesIoConfig.chemaxon().parse_flags == SmilesParseFlags.CHEMAXON
     assert config.parse_flags == extended_syntax
-    assert repr(config) == (
-        "SmilesIoConfig.with_parse_flags("
-        "SmilesParseFlags(EXTENDED_AROMATICS | EXTENDED_BONDS))"
-    )
+    assert repr(config) == "SmilesIoConfig.lenient()"
     assert config == SmilesIoConfig.with_parse_flags(SmilesParseFlags(6))
+    assert config == SmilesIoConfig.lenient()
     assert config != SmilesIoConfig.opensmiles()
     assert not hasattr(config, "lint_flags")
     assert not hasattr(config, "lint_config")

@@ -315,7 +315,7 @@ fn test_parse_extended_reaction_smiles_bytes_atom_mapping(
 #[rstest]
 fn test_parse_reaction_cx() {
     assert_eq!(
-        parse_reaction(b"C>CC>C |$r;a0;a1;p$|", &SmilesIoConfig::lenient()).map(|reaction| {
+        parse_reaction(b"C>CC>C |$r;a0;a1;p$|", &SmilesIoConfig::chemaxon()).map(|reaction| {
             (
                 reaction
                     .reactants
@@ -348,7 +348,7 @@ fn test_parse_reaction_cx() {
 #[rstest]
 fn test_parse_reaction_cx_error() {
     assert_eq!(
-        parse_reaction(b"C>>C |$a;b;c$|", &SmilesIoConfig::lenient()),
+        parse_reaction(b"C>>C |$a;b;c$|", &SmilesIoConfig::chemaxon()),
         Err(ParseError::AtomIndexOutOfBounds { atom_idx: 2 })
     );
 }
@@ -356,7 +356,7 @@ fn test_parse_reaction_cx_error() {
 #[rstest]
 fn test_parse_extended_reaction_smiles_bytes_with_cx() {
     assert_eq!(
-        parse_extended_reaction_smiles_bytes_with(b"C.C>>C |f:0.1|", &SmilesIoConfig::lenient())
+        parse_extended_reaction_smiles_bytes_with(b"C.C>>C |f:0.1|", &SmilesIoConfig::chemaxon())
             .map(|reaction| { reaction.reactants.cx_data.and_then(|data| data.components) }),
         Ok(Some(vec![vec![0, 1]]))
     );

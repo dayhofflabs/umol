@@ -20,7 +20,7 @@ use nom::{Err, IResult, Parser};
 use umol_chem::spin::SpinMultiplicity;
 use umol_geometric_core::Point3D;
 
-use super::super::config::SmilesParseFlags;
+use super::super::config::SmilesSyntaxFlags;
 use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::table_ir::bond::BondNoncovalent;
@@ -108,18 +108,18 @@ pub enum CxEntry {
 /// Parse basic CX annotations (for Molecule)
 pub fn parse_cx_annotations(
     input: &[u8],
-    flags: SmilesParseFlags,
+    flags: SmilesSyntaxFlags,
 ) -> Result<Vec<CxEntry>, ParseError> {
-    let skip_unknown_cx_tags = flags.contains(SmilesParseFlags::SKIP_UNKNOWN_CHEMAXON_TAGS);
+    let skip_unknown_cx_tags = flags.contains(SmilesSyntaxFlags::SKIP_UNKNOWN_CHEMAXON_TAGS);
     parse_cx_block(input, |i| parse_basic_entry(i, skip_unknown_cx_tags))
 }
 
 /// Parse extended CX annotations (for ExtendedMolecule)
 pub fn parse_extended_cx_annotations(
     input: &[u8],
-    flags: SmilesParseFlags,
+    flags: SmilesSyntaxFlags,
 ) -> Result<Vec<CxEntry>, ParseError> {
-    let skip_unknown_cx_tags = flags.contains(SmilesParseFlags::SKIP_UNKNOWN_CHEMAXON_TAGS);
+    let skip_unknown_cx_tags = flags.contains(SmilesSyntaxFlags::SKIP_UNKNOWN_CHEMAXON_TAGS);
     parse_cx_block(input, |i| parse_extended_entry(i, skip_unknown_cx_tags))
 }
 
@@ -2501,7 +2501,7 @@ mod tests {
     #[case::combined_entries(b"|^1:0,1,(1.0,2.0;3.0,4.0),C:2.3|", vec![CxEntry::Radicals(vec![(0, (1, None)),
         (1, (1, None))]), CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 0.0), Point3D::new(3.0, 4.0, 0.0)]), CxEntry::CoordinateBonds(vec![(2, 3)])])]
     fn test_parse_cx_annotations(#[case] input: &[u8], #[case] expected: Vec<CxEntry>) {
-        let result = parse_cx_annotations(input, SmilesParseFlags::default());
+        let result = parse_cx_annotations(input, SmilesSyntaxFlags::default());
         let input_str = input.to_str_lossy();
         assert!(result.is_ok(), "{:?} should have succeeded: {:?}", input_str, result);
         let entries = result.unwrap();
@@ -2518,7 +2518,7 @@ mod tests {
     #[case::extended_feature_r(b"|r|", ParseError::InvalidCxTag { pos: 0 })]
     #[case::extended_feature_atomprop(b"|atomProp:0.key.value|", ParseError::InvalidCxTag { pos: 0 })]
     fn test_parse_cx_annotations_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-        let result = parse_cx_annotations(input, SmilesParseFlags::default());
+        let result = parse_cx_annotations(input, SmilesSyntaxFlags::default());
         let input_str = input.to_str_lossy();
         assert!(
             result.is_err(),
@@ -2537,8 +2537,11 @@ mod tests {
     #[rstest]
     #[case::unknown_and_known_tag(b"|xyz:123,C:0.1|", vec![CxEntry::CoordinateBonds(vec![(0, 1)])])]
     #[case::unknown_tag(b"|unknown|", vec![])]
-    fn test_parse_cx_annotations_lenient(#[case] input: &[u8], #[case] expected: Vec<CxEntry>) {
-        let flags = SmilesParseFlags::LENIENT;
+    fn test_parse_cx_annotations_unknown_tags(
+        #[case] input: &[u8],
+        #[case] expected: Vec<CxEntry>,
+    ) {
+        let flags = SmilesSyntaxFlags::SKIP_UNKNOWN_CHEMAXON_TAGS;
         let result = parse_cx_annotations(input, flags);
         let input_str = input.to_str_lossy();
         assert!(
@@ -2579,7 +2582,7 @@ mod tests {
     #[case::bicyclo_tlb(b"|TLB:13:11:2.4.3:7.10.8|", vec![CxEntry::BicycloStereo(vec![BicycloStereo::TowardsLowerBridge(BicycloStereoData {ligand_atom: 13, connection_atom: 11,
         lower_bridge_atoms: vec![2, 4, 3], higher_bridge_atoms: vec![7, 10, 8]})])])]
     fn test_parse_extended_cx_annotations(#[case] input: &[u8], #[case] expected: Vec<CxEntry>) {
-        let result = parse_extended_cx_annotations(input, SmilesParseFlags::default());
+        let result = parse_extended_cx_annotations(input, SmilesSyntaxFlags::default());
         let input_str = input.to_str_lossy();
         assert!(
             result.is_ok(),
@@ -2603,7 +2606,7 @@ mod tests {
         #[case] input: &[u8],
         #[case] expected: ParseError,
     ) {
-        let result = parse_extended_cx_annotations(input, SmilesParseFlags::default());
+        let result = parse_extended_cx_annotations(input, SmilesSyntaxFlags::default());
         let input_str = input.to_str_lossy();
         assert!(
             result.is_err(),
@@ -2622,11 +2625,11 @@ mod tests {
     #[rstest]
     #[case::unknown_and_known_tag(b"|xyz:123,C:0.1|", vec![CxEntry::CoordinateBonds(vec![(0, 1)])])]
     #[case::unknown_tag(b"|unknown|", vec![])]
-    fn test_parse_extended_cx_annotations_lenient(
+    fn test_parse_extended_cx_annotations_unknown_tags(
         #[case] input: &[u8],
         #[case] expected: Vec<CxEntry>,
     ) {
-        let flags = SmilesParseFlags::LENIENT;
+        let flags = SmilesSyntaxFlags::SKIP_UNKNOWN_CHEMAXON_TAGS;
         let result = parse_extended_cx_annotations(input, flags);
         let input_str = input.to_str_lossy();
         assert!(
@@ -2644,10 +2647,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::relative_stereo_with_fragment_list(b"|r:0|", SmilesParseFlags::LENIENT)]
-    fn test_parse_extended_cx_annotations_lenient_invalid(
+    #[case::relative_stereo_with_fragment_list(
+        b"|r:0|",
+        SmilesSyntaxFlags::SKIP_UNKNOWN_CHEMAXON_TAGS
+    )]
+    fn test_parse_extended_cx_annotations_unknown_tags_error(
         #[case] input: &[u8],
-        #[case] flags: SmilesParseFlags,
+        #[case] flags: SmilesSyntaxFlags,
     ) {
         let result = parse_extended_cx_annotations(input, flags);
         let input_str = input.to_str_lossy();
