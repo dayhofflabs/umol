@@ -52,7 +52,6 @@ pub(crate) fn contradiction_error(error: AstContradiction) -> PyErr {
 }
 
 /// Map the resolved SMILES operation error onto the public Python taxonomy.
-#[allow(dead_code)]
 pub(crate) fn smiles_input_error(error: GraphSmilesInputError) -> PyErr {
     match error {
         GraphSmilesInputError::Syntax(error) => ParseError::new_err(error.to_string()),

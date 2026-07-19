@@ -78,10 +78,6 @@ impl ChemistryModel {
         }
     }
 
-    #[allow(
-        dead_code,
-        reason = "Python-to-Rust conversion API for configured molecule ingestion"
-    )]
     pub(crate) fn to_rust(&self) -> GraphChemistryModel {
         GraphChemistryModel {
             valence: self.valence.to_rust(),

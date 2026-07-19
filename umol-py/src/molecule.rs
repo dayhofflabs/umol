@@ -6,14 +6,22 @@ use umol_ast::ast::{
     AtomId as AstAtomId, BondId as AstBondId, MoleculeAst as AstMoleculeAst,
     MoleculeParts as AstMoleculeParts,
 };
+use umol_graph::ingest::ingest_smiles_with;
+use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
+use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
+use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
 
 use crate::aromatic::{AromaticSystemAst, AromaticSystemViews};
 use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
 use crate::constraint::molecule::{Constraint, ConstraintsArg, ConstraintsView};
 use crate::dative::{DativeBondAst, DativeBondViews};
+use crate::error::smiles_input_error;
+use crate::model::ChemistryModel;
 use crate::multicenter::{MulticenterBondAst, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondViews};
+use crate::resolve::ResolveConfig;
+use crate::smiles::SmilesIoConfig;
 use crate::stereo::{StereoAtomAst, StereoAtomViews, StereoBondAst, StereoBondViews, StereoLigand};
 
 /// A molecule: the owned graph-AST root.
@@ -143,6 +151,28 @@ impl MoleculeAst {
         }))
     }
 
+    /// Ingest a determined molecule from SMILES under explicit IO, chemistry,
+    /// and resolution policies.
+    #[staticmethod]
+    #[pyo3(signature = (source, *, io_config=None, chemistry_model=None, resolve_config=None))]
+    fn from_smiles(
+        source: &str,
+        io_config: Option<SmilesIoConfig>,
+        chemistry_model: Option<ChemistryModel>,
+        resolve_config: Option<ResolveConfig>,
+    ) -> PyResult<Self> {
+        let io_config =
+            io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
+        let chemistry_model =
+            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let resolve_config =
+            resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
+
+        ingest_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
+            .map(Self::from_inner)
+            .map_err(smiles_input_error)
+    }
+
     /// The atoms, indexed by integer position.
     #[getter]
     fn atoms(slf: Py<Self>) -> AtomViews {
@@ -260,6 +290,7 @@ mod tests {
         NoncovalentBondAst as AstNoncovalentBondAst, NoncovalentBondId as AstNoncovalentBondId,
         NoncovalentBondKind as AstNoncovalentBondKind,
     };
+    use umol_ast::mol_dsl;
     use umol_chem::element::Element as ChemElement;
 
     use super::*;
@@ -386,6 +417,49 @@ mod tests {
     }
 
     #[rstest]
+    #[case::defaults(None, None, None)]
+    #[case::explicit(
+        Some(SmilesIoConfig::from_rust(&IoSmilesIoConfig::opensmiles())),
+        Some(ChemistryModel::from_rust(&GraphChemistryModel::default())),
+        Some(ResolveConfig::from_rust(GraphResolveConfig::default())),
+    )]
+    fn test_molecule_ast_from_smiles(
+        #[case] io_config: Option<SmilesIoConfig>,
+        #[case] chemistry_model: Option<ChemistryModel>,
+        #[case] resolve_config: Option<ResolveConfig>,
+    ) {
+        assert_eq!(
+            MoleculeAst::from_smiles("C", io_config, chemistry_model, resolve_config).unwrap(),
+            MoleculeAst::from_inner(mol_dsl!(
+                r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]}"#
+            ))
+        );
+    }
+
+    #[rstest]
+    #[case::syntax(" C", "ParseError", "Leading whitespace")]
+    #[case::model_conversion(
+        "C[S@]C",
+        "ModelConversionError",
+        "tetrahedral stereo at atom 1 with 2 ligands, expected 3 or 4 ligands"
+    )]
+    #[case::underdetermined("*", "UnderdeterminedError", "resolution underdetermined")]
+    fn test_molecule_ast_from_smiles_error(
+        #[case] source: &str,
+        #[case] expected_type: &str,
+        #[case] expected_message: &str,
+    ) {
+        Python::attach(|py| {
+            let error = MoleculeAst::from_smiles(source, None, None, None).unwrap_err();
+            assert_eq!(error.get_type(py).name().unwrap(), expected_type);
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                expected_message
+            );
+        });
+    }
+
+    #[rstest]
     #[case(vec![], 0)]
     #[case(vec![ChemElement::C], 1)]
     #[case(vec![ChemElement::C, ChemElement::O], 2)]
@@ -481,17 +555,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_ast_repr() {
-        assert_eq!(
-            MoleculeAst::new().__repr__(),
-            "MoleculeAst(atoms=0, bonds=0)"
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_ast_repr_includes_entities() {
-        // atoms + bonds always; other families only when present
-        let molecule = MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
+    #[case::empty(MoleculeAst::new(), "MoleculeAst(atoms=0, bonds=0)")]
+    #[case::noncovalent(
+        MoleculeAst(AstMoleculeAst::from_parts(AstMoleculeParts {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::O),
                 AstAtomAst::from_element(ChemElement::O),
@@ -502,10 +568,10 @@ mod tests {
                 AstNoncovalentBondAst::from_kind(AstNoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
-        }));
-        assert_eq!(
-            molecule.__repr__(),
-            "MoleculeAst(atoms=2, bonds=0, noncovalent_bonds=1)"
-        );
+        })),
+        "MoleculeAst(atoms=2, bonds=0, noncovalent_bonds=1)"
+    )]
+    fn test_molecule_ast_repr(#[case] molecule: MoleculeAst, #[case] expected: &str) {
+        assert_eq!(molecule.__repr__(), expected);
     }
 }

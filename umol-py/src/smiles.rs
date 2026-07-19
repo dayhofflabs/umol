@@ -129,10 +129,6 @@ impl SmilesIoConfig {
         }
     }
 
-    #[allow(
-        dead_code,
-        reason = "Python-to-Rust conversion API for configured SMILES ingestion"
-    )]
     pub(crate) fn to_rust(self) -> IoSmilesIoConfig {
         IoSmilesIoConfig::with_syntax_flags(self.syntax_flags.to_rust())
     }

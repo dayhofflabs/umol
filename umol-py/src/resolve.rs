@@ -169,10 +169,6 @@ impl ResolveConfig {
         Self(config)
     }
 
-    #[allow(
-        dead_code,
-        reason = "Python-to-Rust conversion API for configured molecule ingestion"
-    )]
     pub(crate) fn to_rust(self) -> GraphResolveConfig {
         self.0
     }

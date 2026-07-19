@@ -1,6 +1,6 @@
 # SMILES IO and molecular resolution configuration
 
-Status: **Active implementation plan**
+Status: **Completed**
 Date: 2026-07-19
 Relates: [094](094-dsl-ast-io-ergonomics-2026-05-07.md),
 [100](100-table-ir-raise-ast-2026-05-27.md),
@@ -461,7 +461,7 @@ exported from `umol` in its own subitem.
   aromaticity/stereo model changes, every operational resolve field, every
   reachable error category, keyword-only rejection, and detached ownership.
   This consumes the already-complete semantic exception mapping from doc 151
-  S4b. **Additive (green).** `[dep: S1b, S3b, S6a, S6d]`
+  S4b. **Additive (green). Done.** `[dep: S1b, S3b, S6a, S6d]`
 
 S7 is the completed resolved-SMILES Python deliverable.
 
