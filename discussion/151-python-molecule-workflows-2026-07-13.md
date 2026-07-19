@@ -1432,18 +1432,24 @@ boundary types and downstream ingestion belong to the next workflow pass.
   Python classes. Default and no-default feature builds are green. **Implemented
   (green).** `[dep: S2b, S3d]`
 - **S4b — semantic exception classes**
-  (`umol-py/src/error.rs`, `src/lib.rs`, `python/umol/__init__.py`): retain
-  `ParseError` and `ContradictionError`; add and export `ModelConversionError`,
-  `InvalidStructureError`, and `UnderdeterminedError`; and add mapping helpers
-  while reserving built-in `RuntimeError`, `ValueError`, and `IndexError` for the
-  settled categories. Rust/PyO3 tests assert exact class mapping and messages;
-  installed tests assert imports. **Additive (green).** `[dep: S4a]`
+  (`umol-py/src/error.rs`, `src/lib.rs`, `python/umol/__init__.py`): `ParseError`
+  and `ContradictionError` remain public; `ModelConversionError`,
+  `InvalidStructureError`, and `UnderdeterminedError` are exported alongside
+  them. The concrete `SmilesInputError` returned by
+  `umol_graph::ingest::ingest_smiles` maps syntax, model conversion,
+  contradiction, and underdetermination to those semantic classes, and maps
+  resolver execution failure to built-in `RuntimeError`. Rust/PyO3 tests assert
+  exact classes and messages; installed tests assert import identity.
+  **Implemented (green).** `[dep: S4a]`
 - **S4c — composable `SmilesParseFlags`**
-  (`umol-py/src/smiles.rs`): bind every effective parser capability and named
-  parse preset, with value equality, repr, and bitwise OR producing another
-  immutable flag value. Round-trip tests cover individual bits, representative
-  combinations, zero/OpenSMILES, and rejection of unknown bits. Do not
-  bind lint flags. **Additive (green).** `[dep: S4a]`
+  (`umol-py/src/smiles.rs`): the immutable value binds
+  `EXTENDED_AROMATICS`, `EXTENDED_BONDS`, `CHEMAXON_EXTENSIONS`, and
+  `SKIP_UNKNOWN_CHEMAXON_TAGS`, plus the `OPENSMILES`, `LENIENT`, and `CHEMAXON`
+  presets. Validated bit construction, the read-only `bits` property, value
+  equality, repr, and bitwise OR preserve the `umol-io` flag semantics; unknown
+  and retired bits raise `ValueError`. Rust/Python conversion tests cover every
+  capability, representative combinations, zero/OpenSMILES, and unknown bits.
+  No lint flags are bound. **Implemented (green).** `[dep: S4a]`
 - **S4d — `SmilesIoConfig`** (`umol-py/src/smiles.rs`): bind the owned immutable
   config, named presets, `with_parse_flags`, structural equality, and repr.
   Conversion tests cover every public preset and an arbitrary OR-composed flag

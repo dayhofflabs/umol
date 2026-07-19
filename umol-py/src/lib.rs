@@ -57,7 +57,10 @@ use crate::{
     },
     electrons::ElectronCountsAst,
     element::Element,
-    error::{ContradictionError, ParseError},
+    error::{
+        ContradictionError, InvalidStructureError, ModelConversionError, ParseError,
+        UnderdeterminedError,
+    },
     molecule::MoleculeAst,
     multicenter::{MulticenterBondAst, MulticenterBondView, MulticenterBondViews},
     noncovalent::{
@@ -65,6 +68,7 @@ use crate::{
         NoncovalentBondViews,
     },
     reaction::{CompositionScope, ReactionAst, ReactionDerivation},
+    smiles::SmilesParseFlags,
     spin::SpinStateAst,
     stereo::{
         CisTransStereo, CisTransStereoAst, LigandPermutation, Orientation,
@@ -131,7 +135,19 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "ContradictionError",
             module.py().get_type::<ContradictionError>(),
         )?;
+        module.add(
+            "InvalidStructureError",
+            module.py().get_type::<InvalidStructureError>(),
+        )?;
+        module.add(
+            "ModelConversionError",
+            module.py().get_type::<ModelConversionError>(),
+        )?;
         module.add("ParseError", module.py().get_type::<ParseError>())?;
+        module.add(
+            "UnderdeterminedError",
+            module.py().get_type::<UnderdeterminedError>(),
+        )?;
         module.add_class::<MoleculeAst>()?;
         module.add_class::<AromaticSystemDelta>()?;
         module.add_class::<AtomDelta>()?;
@@ -155,6 +171,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<CompositionScope>()?;
         module.add_class::<ReactionAst>()?;
         module.add_class::<ReactionDerivation>()?;
+        module.add_class::<SmilesParseFlags>()?;
         module.add_class::<Correspondence>()?;
         module.add_class::<MoleculeCorrespondence>()?;
         module.add_class::<SubgraphIsomorphismAlgorithm>()?;
