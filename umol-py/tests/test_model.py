@@ -8,6 +8,7 @@ from umol import (
     AtomTypeRegistry,
     Element,
     ElementScope,
+    InconsistencyPolicy,
     RingLimits,
     ValenceEntry,
     ValenceModel,
@@ -787,3 +788,55 @@ def test_aromaticity_model_repr(model, expected):
 def test_aromaticity_model_mutation(model, field, value):
     with pytest.raises(AttributeError):
         setattr(model, field, value)
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "expected"),
+    [
+        (InconsistencyPolicy.Keep, InconsistencyPolicy.Keep, True),
+        (InconsistencyPolicy.Strip, InconsistencyPolicy.Strip, True),
+        (InconsistencyPolicy.Error, InconsistencyPolicy.Error, True),
+        (InconsistencyPolicy.Keep, InconsistencyPolicy.Strip, False),
+        (InconsistencyPolicy.Strip, InconsistencyPolicy.Error, False),
+        (InconsistencyPolicy.Error, InconsistencyPolicy.Keep, False),
+    ],
+)
+def test_inconsistency_policy_equality(left, right, expected):
+    assert (left == right) is expected
+
+
+def test_inconsistency_policy_hash():
+    policies = {
+        InconsistencyPolicy.Keep: "keep",
+        InconsistencyPolicy.Strip: "strip",
+        InconsistencyPolicy.Error: "error",
+    }
+
+    assert policies[InconsistencyPolicy.Keep] == "keep"
+    assert policies[InconsistencyPolicy.Strip] == "strip"
+    assert policies[InconsistencyPolicy.Error] == "error"
+
+
+@pytest.mark.parametrize(
+    ("policy", "expected"),
+    [
+        (InconsistencyPolicy.Keep, "InconsistencyPolicy.Keep"),
+        (InconsistencyPolicy.Strip, "InconsistencyPolicy.Strip"),
+        (InconsistencyPolicy.Error, "InconsistencyPolicy.Error"),
+    ],
+)
+def test_inconsistency_policy_repr(policy, expected):
+    assert repr(policy) == expected
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [
+        InconsistencyPolicy.Keep,
+        InconsistencyPolicy.Strip,
+        InconsistencyPolicy.Error,
+    ],
+)
+def test_inconsistency_policy_mutation(policy):
+    with pytest.raises(AttributeError):
+        policy.value = "changed"

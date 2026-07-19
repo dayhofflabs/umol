@@ -1,6 +1,7 @@
 //! Python bindings for chemistry-model values.
 
 pub(crate) mod aromaticity;
+pub(crate) mod stereo;
 pub(crate) mod valence;
 
 use pyo3::prelude::*;

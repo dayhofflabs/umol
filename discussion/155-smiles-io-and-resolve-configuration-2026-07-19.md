@@ -413,7 +413,7 @@ exported from `umol` in its own subitem.
   `[dep: S2c, S5a, S5b]`
 - **S5d — `InconsistencyPolicy`** (`umol-py/src/model/stereo.rs`): bind `Keep`,
   `Strip`, and `Error` as a fieldless immutable enum with equality, hashing,
-  repr, and Rust round trips. **Additive (green).** `[dep: —]`
+  repr, and Rust round trips. **Additive (green). Done.** `[dep: —]`
 - **S5e — `StereoKindModel`** (`umol-py/src/model/stereo.rs`): bind `scope` and
   `fluxionality` with a keyword-only constructor, detached ownership, equality,
   repr, and Rust round trips. **Additive (green).** `[dep: S5a]`

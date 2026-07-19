@@ -65,3 +65,9 @@ def test_aromaticity_model_import():
     from umol import AromaticityModel
 
     assert umol.AromaticityModel is AromaticityModel
+
+
+def test_inconsistency_policy_import():
+    from umol import InconsistencyPolicy
+
+    assert umol.InconsistencyPolicy is InconsistencyPolicy
