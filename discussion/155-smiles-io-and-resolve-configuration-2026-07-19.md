@@ -440,7 +440,7 @@ exported from `umol` in its own subitem.
 - **S6c — `StereoResolveConfig`** (`umol-py/src/resolve.rs`): bind
   `reset_stereo_constraints` with a keyword-only constructor carrying the Rust
   default, immutable getter, equality, repr, and Rust round trips. **Additive
-  (green).** `[dep: S0c]`
+  (green). Done.** `[dep: S0c]`
 - **S6d — `ResolveConfig`** (`umol-py/src/resolve.rs`, registration, and
   exports): bind the aromaticity and stereo branches with keyword-only
   construction, `default()`, detached getters, structural equality, repr, and

@@ -74,7 +74,7 @@ use crate::{
         NoncovalentBondViews,
     },
     reaction::{CompositionScope, ReactionAst, ReactionDerivation},
-    resolve::AromaticityResolveConfig,
+    resolve::{AromaticityResolveConfig, StereoResolveConfig},
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
     spin::SpinStateAst,
     stereo::{
@@ -172,6 +172,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<StereoModel>()?;
         module.add_class::<ChemistryModel>()?;
         module.add_class::<AromaticityResolveConfig>()?;
+        module.add_class::<StereoResolveConfig>()?;
         module.add_class::<AromaticSystemDelta>()?;
         module.add_class::<AtomDelta>()?;
         module.add_class::<AtomFieldChange>()?;

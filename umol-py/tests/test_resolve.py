@@ -1,6 +1,6 @@
 import pytest
 
-from umol import AromaticityResolveConfig
+from umol import AromaticityResolveConfig, StereoResolveConfig
 
 
 def test_aromaticity_resolve_config_default():
@@ -71,3 +71,48 @@ def test_aromaticity_resolve_config_mutation(field, value):
 
     with pytest.raises(AttributeError):
         setattr(config, field, value)
+
+
+def test_stereo_resolve_config_default():
+    config = StereoResolveConfig()
+
+    assert config.reset_stereo_constraints is False
+    assert config == StereoResolveConfig()
+
+
+@pytest.mark.parametrize("reset_stereo_constraints", [False, True])
+def test_stereo_resolve_config_new(reset_stereo_constraints):
+    config = StereoResolveConfig(
+        reset_stereo_constraints=reset_stereo_constraints
+    )
+
+    assert config.reset_stereo_constraints is reset_stereo_constraints
+
+
+def test_stereo_resolve_config_new_error():
+    with pytest.raises(TypeError):
+        StereoResolveConfig(True)
+
+
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        (
+            StereoResolveConfig(),
+            "StereoResolveConfig(reset_stereo_constraints=False)",
+        ),
+        (
+            StereoResolveConfig(reset_stereo_constraints=True),
+            "StereoResolveConfig(reset_stereo_constraints=True)",
+        ),
+    ],
+)
+def test_stereo_resolve_config_repr(config, expected):
+    assert repr(config) == expected
+
+
+def test_stereo_resolve_config_mutation():
+    config = StereoResolveConfig()
+
+    with pytest.raises(AttributeError):
+        config.reset_stereo_constraints = True

@@ -95,3 +95,9 @@ def test_aromaticity_resolve_config_import():
     from umol import AromaticityResolveConfig
 
     assert umol.AromaticityResolveConfig is AromaticityResolveConfig
+
+
+def test_stereo_resolve_config_import():
+    from umol import StereoResolveConfig
+
+    assert umol.StereoResolveConfig is StereoResolveConfig
