@@ -377,14 +377,14 @@ exported from `umol` in its own subitem.
   target-covalence and aromatic-valence sequences with a keyword-only
   constructor, detached getters, normalization matching Rust table insertion,
   equality, and repr. Tests cover empty and multi-state entries. **Additive
-  (green).** `[dep: S2b]`
+  (green). Done.** `[dep: S2b]`
 - **S4c — `ValenceTable`**
   (`umol-py/src/model/valence.rs`, registration, and exports): bind an immutable
   owned table with `default()`, keyword-only construction from an element-to-
   entry mapping, `from_toml(...)`, exact equality, content-hash inspection,
   read-only lookup, and repr. Invalid TOML raises `ValueError`; returned entries
   are detached. Conversion tests cover borrowed-default and owned custom tables.
-  **Additive (green).** `[dep: S2b, S4b]`
+  **Additive (green). Done.** `[dep: S2b, S4b]`
 - **S4d — `ValenceModel`** (`umol-py/src/model/valence.rs`): bind only the
   direct `AtomTyping { registry }` and `Counts { table }` variants, with
   keyword-only payloads, structural equality, variant repr, and separate

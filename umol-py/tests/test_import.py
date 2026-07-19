@@ -41,6 +41,8 @@ def test_smiles_syntax_flags_import():
 
 
 def test_atom_type_registry_import():
-    from umol import AtomTypeRegistry
+    from umol import AtomTypeRegistry, ValenceEntry, ValenceTable
 
     assert umol.AtomTypeRegistry is AtomTypeRegistry
+    assert umol.ValenceEntry is ValenceEntry
+    assert umol.ValenceTable is ValenceTable
