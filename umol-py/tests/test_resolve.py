@@ -1,6 +1,6 @@
 import pytest
 
-from umol import AromaticityResolveConfig, StereoResolveConfig
+from umol import AromaticityResolveConfig, ResolveConfig, StereoResolveConfig
 
 
 def test_aromaticity_resolve_config_default():
@@ -116,3 +116,97 @@ def test_stereo_resolve_config_mutation():
 
     with pytest.raises(AttributeError):
         config.reset_stereo_constraints = True
+
+
+def test_resolve_config_default():
+    config = ResolveConfig.default()
+
+    assert config.aromaticity == AromaticityResolveConfig()
+    assert config.stereo == StereoResolveConfig()
+    assert config == ResolveConfig.default()
+
+
+@pytest.mark.parametrize(
+    ("aromaticity", "stereo"),
+    [
+        (
+            AromaticityResolveConfig(
+                delocalize_charge=False,
+                reset_aromatic_valence=True,
+            ),
+            StereoResolveConfig(),
+        ),
+        (
+            AromaticityResolveConfig(),
+            StereoResolveConfig(reset_stereo_constraints=True),
+        ),
+    ],
+)
+def test_resolve_config_new(aromaticity, stereo):
+    config = ResolveConfig(aromaticity=aromaticity, stereo=stereo)
+
+    assert config.aromaticity == aromaticity
+    assert config.aromaticity is not aromaticity
+    assert config.stereo == stereo
+    assert config.stereo is not stereo
+
+
+def test_resolve_config_new_error():
+    with pytest.raises(TypeError):
+        ResolveConfig(AromaticityResolveConfig(), StereoResolveConfig())
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        ResolveConfig(
+            aromaticity=AromaticityResolveConfig(
+                delocalize_charge=False,
+                reset_aromatic_valence=False,
+            ),
+            stereo=StereoResolveConfig(),
+        ),
+        ResolveConfig(
+            aromaticity=AromaticityResolveConfig(),
+            stereo=StereoResolveConfig(reset_stereo_constraints=True),
+        ),
+    ],
+)
+def test_resolve_config_equality(other):
+    assert ResolveConfig.default() != other
+
+
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        (ResolveConfig.default(), "ResolveConfig.default()"),
+        (
+            ResolveConfig(
+                aromaticity=AromaticityResolveConfig(
+                    delocalize_charge=False,
+                    reset_aromatic_valence=True,
+                ),
+                stereo=StereoResolveConfig(reset_stereo_constraints=True),
+            ),
+            "ResolveConfig(aromaticity=AromaticityResolveConfig("
+            "delocalize_charge=False, reset_aromatic_valence=True), "
+            "stereo=StereoResolveConfig(reset_stereo_constraints=True))",
+        ),
+    ],
+)
+def test_resolve_config_repr(config, expected):
+    assert repr(config) == expected
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("aromaticity", AromaticityResolveConfig()),
+        ("stereo", StereoResolveConfig()),
+    ],
+)
+def test_resolve_config_mutation(field, value):
+    config = ResolveConfig.default()
+
+    with pytest.raises(AttributeError):
+        setattr(config, field, value)

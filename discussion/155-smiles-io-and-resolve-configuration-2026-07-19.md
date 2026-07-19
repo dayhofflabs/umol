@@ -445,7 +445,7 @@ exported from `umol` in its own subitem.
   exports): bind the aromaticity and stereo branches with keyword-only
   construction, `default()`, detached getters, structural equality, repr, and
   Rust round trips. Tests pin default composition and independent replacement of
-  both branches. **Additive (green).** `[dep: S0d, S6b, S6c]`
+  both branches. **Additive (green). Done.** `[dep: S0d, S6b, S6c]`
 
 ### S7 — fully configured Python SMILES ingestion
 

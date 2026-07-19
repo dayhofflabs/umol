@@ -2,7 +2,7 @@
 
 use pyo3::prelude::*;
 use umol_graph::ops::resolve::{
-    AromaticityResolveConfig as GraphAromaticityResolveConfig,
+    AromaticityResolveConfig as GraphAromaticityResolveConfig, ResolveConfig as GraphResolveConfig,
     StereoResolveConfig as GraphStereoResolveConfig,
 };
 
@@ -117,6 +117,67 @@ impl StereoResolveConfig {
     }
 }
 
+/// Operational policy for molecule resolution.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ResolveConfig(GraphResolveConfig);
+
+#[pymethods]
+impl ResolveConfig {
+    #[new]
+    #[pyo3(signature = (*, aromaticity, stereo))]
+    fn new(aromaticity: AromaticityResolveConfig, stereo: StereoResolveConfig) -> Self {
+        Self(GraphResolveConfig {
+            aromaticity: aromaticity.to_rust(),
+            stereo: stereo.to_rust(),
+        })
+    }
+
+    #[staticmethod]
+    fn default() -> Self {
+        Self::from_rust(GraphResolveConfig::default())
+    }
+
+    #[getter]
+    fn aromaticity(&self) -> AromaticityResolveConfig {
+        AromaticityResolveConfig::from_rust(self.0.aromaticity)
+    }
+
+    #[getter]
+    fn stereo(&self) -> StereoResolveConfig {
+        StereoResolveConfig::from_rust(self.0.stereo)
+    }
+
+    fn __repr__(&self) -> String {
+        if self.0 == GraphResolveConfig::default() {
+            return "ResolveConfig.default()".to_owned();
+        }
+        format!(
+            "ResolveConfig(aromaticity={}, stereo={})",
+            self.aromaticity().__repr__(),
+            self.stereo().__repr__(),
+        )
+    }
+}
+
+impl ResolveConfig {
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion API for configured molecule ingestion"
+    )]
+    pub(crate) fn from_rust(config: GraphResolveConfig) -> Self {
+        Self(config)
+    }
+
+    #[allow(
+        dead_code,
+        reason = "Python-to-Rust conversion API for configured molecule ingestion"
+    )]
+    pub(crate) fn to_rust(self) -> GraphResolveConfig {
+        self.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -225,6 +286,90 @@ mod tests {
     #[case::default(StereoResolveConfig::new(false))]
     #[case::reset(StereoResolveConfig::new(true))]
     fn test_stereo_resolve_config_to_rust(#[case] config: StereoResolveConfig) {
+        assert_eq!(config.to_rust(), config.0);
+    }
+
+    #[rstest]
+    #[case::default(
+        AromaticityResolveConfig::new(true, false),
+        StereoResolveConfig::new(false),
+        GraphResolveConfig::default()
+    )]
+    #[case::aromaticity(
+        AromaticityResolveConfig::new(false, true),
+        StereoResolveConfig::new(false),
+        GraphResolveConfig {
+            aromaticity: GraphAromaticityResolveConfig {
+                delocalize_charge: false,
+                reset_aromatic_valence: true,
+            },
+            stereo: GraphStereoResolveConfig::default(),
+        },
+    )]
+    #[case::stereo(
+        AromaticityResolveConfig::new(true, false),
+        StereoResolveConfig::new(true),
+        GraphResolveConfig {
+            aromaticity: GraphAromaticityResolveConfig::default(),
+            stereo: GraphStereoResolveConfig {
+                reset_stereo_constraints: true,
+            },
+        },
+    )]
+    fn test_resolve_config_new(
+        #[case] aromaticity: AromaticityResolveConfig,
+        #[case] stereo: StereoResolveConfig,
+        #[case] expected: GraphResolveConfig,
+    ) {
+        assert_eq!(ResolveConfig::new(aromaticity, stereo).0, expected);
+    }
+
+    #[rstest]
+    fn test_resolve_config_default() {
+        assert_eq!(
+            ResolveConfig::default(),
+            ResolveConfig(GraphResolveConfig {
+                aromaticity: GraphAromaticityResolveConfig::default(),
+                stereo: GraphStereoResolveConfig::default(),
+            })
+        );
+    }
+
+    #[rstest]
+    #[case::default(ResolveConfig::default(), "ResolveConfig.default()")]
+    #[case::configured(
+        ResolveConfig::new(
+            AromaticityResolveConfig::new(false, true),
+            StereoResolveConfig::new(true),
+        ),
+        "ResolveConfig(aromaticity=AromaticityResolveConfig(delocalize_charge=False, reset_aromatic_valence=True), stereo=StereoResolveConfig(reset_stereo_constraints=True))",
+    )]
+    fn test_resolve_config_repr(#[case] config: ResolveConfig, #[case] expected: &str) {
+        assert_eq!(config.__repr__(), expected);
+    }
+
+    #[rstest]
+    #[case::default(GraphResolveConfig::default())]
+    #[case::configured(GraphResolveConfig {
+        aromaticity: GraphAromaticityResolveConfig {
+            delocalize_charge: false,
+            reset_aromatic_valence: true,
+        },
+        stereo: GraphStereoResolveConfig {
+            reset_stereo_constraints: true,
+        },
+    })]
+    fn test_resolve_config_from_rust(#[case] config: GraphResolveConfig) {
+        assert_eq!(ResolveConfig::from_rust(config).0, config);
+    }
+
+    #[rstest]
+    #[case::default(ResolveConfig::default())]
+    #[case::configured(ResolveConfig::new(
+        AromaticityResolveConfig::new(false, true),
+        StereoResolveConfig::new(true),
+    ))]
+    fn test_resolve_config_to_rust(#[case] config: ResolveConfig) {
         assert_eq!(config.to_rust(), config.0);
     }
 }

@@ -101,3 +101,9 @@ def test_stereo_resolve_config_import():
     from umol import StereoResolveConfig
 
     assert umol.StereoResolveConfig is StereoResolveConfig
+
+
+def test_resolve_config_import():
+    from umol import ResolveConfig
+
+    assert umol.ResolveConfig is ResolveConfig
