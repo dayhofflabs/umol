@@ -10,6 +10,9 @@ from umol import (
     ElementScope,
     InconsistencyPolicy,
     RingLimits,
+    StereoKind,
+    StereoKindModel,
+    StereoModel,
     ValenceEntry,
     ValenceModel,
     ValenceTable,
@@ -840,3 +843,258 @@ def test_inconsistency_policy_repr(policy, expected):
 def test_inconsistency_policy_mutation(policy):
     with pytest.raises(AttributeError):
         policy.value = "changed"
+
+
+@pytest.mark.parametrize(
+    ("scope", "fluxionality"),
+    [
+        (ElementScope.Any(), False),
+        (ElementScope.AllowList([Element("C"), Element("N")]), True),
+    ],
+)
+def test_stereo_kind_model_new(scope, fluxionality):
+    model = StereoKindModel(scope=scope, fluxionality=fluxionality)
+
+    assert model.scope == scope
+    assert model.scope is not scope
+    assert model.fluxionality is fluxionality
+    assert model == StereoKindModel(scope=scope, fluxionality=fluxionality)
+
+
+def test_stereo_kind_model_new_error():
+    with pytest.raises(TypeError):
+        StereoKindModel(ElementScope.Any(), False)
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        (
+            StereoKindModel(scope=ElementScope.Any(), fluxionality=False),
+            "StereoKindModel(scope=ElementScope.Any(), fluxionality=False)",
+        ),
+        (
+            StereoKindModel(
+                scope=ElementScope.AllowList([Element("C"), Element("N")]),
+                fluxionality=True,
+            ),
+            "StereoKindModel(scope=ElementScope.AllowList([Element('C'), "
+            "Element('N')]), fluxionality=True)",
+        ),
+    ],
+)
+def test_stereo_kind_model_repr(model, expected):
+    assert repr(model) == expected
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("scope", ElementScope.AllowList([Element("C")])),
+        ("fluxionality", True),
+    ],
+)
+def test_stereo_kind_model_mutation(field, value):
+    model = StereoKindModel(scope=ElementScope.Any(), fluxionality=False)
+
+    with pytest.raises(AttributeError):
+        setattr(model, field, value)
+
+
+def test_stereo_model_default():
+    model = StereoModel.default()
+
+    assert model.kind_models == {
+        StereoKind.Tetrahedral: StereoKindModel(
+            scope=ElementScope.Any(), fluxionality=False
+        ),
+        StereoKind.CisTrans: StereoKindModel(
+            scope=ElementScope.Any(), fluxionality=False
+        ),
+    }
+    assert model.para_stereo is False
+    assert model.max_iterations == 16
+    assert model.inconsistency == InconsistencyPolicy.Error
+    assert model == StereoModel.default()
+
+
+def test_stereo_model_new():
+    kind_models = {
+        StereoKind.Tetrahedral: StereoKindModel(
+            scope=ElementScope.Any(), fluxionality=False
+        ),
+        StereoKind.CisTrans: StereoKindModel(
+            scope=ElementScope.AllowList([Element("C")]), fluxionality=True
+        ),
+        StereoKind.Axial: StereoKindModel(
+            scope=ElementScope.AllowList([Element("N")]), fluxionality=False
+        ),
+        StereoKind.SquarePlanar: StereoKindModel(
+            scope=ElementScope.AllowList([Element("O")]), fluxionality=True
+        ),
+        StereoKind.TrigonalBipyramidal: StereoKindModel(
+            scope=ElementScope.AllowList([Element("S")]), fluxionality=False
+        ),
+        StereoKind.Octahedral: StereoKindModel(
+            scope=ElementScope.AllowList([Element("Fe")]), fluxionality=True
+        ),
+    }
+    expected = kind_models.copy()
+    model = StereoModel(
+        kind_models=kind_models,
+        para_stereo=True,
+        max_iterations=8,
+        inconsistency=InconsistencyPolicy.Strip,
+    )
+    kind_models.clear()
+
+    assert model.kind_models == expected
+    assert model.para_stereo is True
+    assert model.max_iterations == 8
+    assert model.inconsistency == InconsistencyPolicy.Strip
+    for kind, kind_model in expected.items():
+        assert model.kind_models[kind] is not kind_model
+
+
+def test_stereo_model_kind_models():
+    model = StereoModel.default()
+    kind_models = model.kind_models
+    kind_models.clear()
+
+    assert model.kind_models == {
+        StereoKind.Tetrahedral: StereoKindModel(
+            scope=ElementScope.Any(), fluxionality=False
+        ),
+        StereoKind.CisTrans: StereoKindModel(
+            scope=ElementScope.Any(), fluxionality=False
+        ),
+    }
+
+
+def test_stereo_model_new_error():
+    with pytest.raises(TypeError):
+        StereoModel({}, False, 16, InconsistencyPolicy.Error)
+
+
+@pytest.mark.parametrize("max_iterations", [-1, 1 << 64])
+def test_stereo_model_new_integer_error(max_iterations):
+    with pytest.raises(OverflowError):
+        StereoModel(
+            kind_models={},
+            para_stereo=False,
+            max_iterations=max_iterations,
+            inconsistency=InconsistencyPolicy.Error,
+        )
+
+
+def test_stereo_model_max_iterations():
+    model = StereoModel(
+        kind_models={},
+        para_stereo=False,
+        max_iterations=0,
+        inconsistency=InconsistencyPolicy.Error,
+    )
+
+    assert model.max_iterations == 0
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        StereoModel(
+            kind_models={},
+            para_stereo=False,
+            max_iterations=16,
+            inconsistency=InconsistencyPolicy.Error,
+        ),
+        StereoModel(
+            kind_models={
+                StereoKind.Tetrahedral: StereoKindModel(
+                    scope=ElementScope.Any(), fluxionality=False
+                ),
+                StereoKind.CisTrans: StereoKindModel(
+                    scope=ElementScope.Any(), fluxionality=False
+                ),
+            },
+            para_stereo=True,
+            max_iterations=16,
+            inconsistency=InconsistencyPolicy.Error,
+        ),
+        StereoModel(
+            kind_models={
+                StereoKind.Tetrahedral: StereoKindModel(
+                    scope=ElementScope.Any(), fluxionality=False
+                ),
+                StereoKind.CisTrans: StereoKindModel(
+                    scope=ElementScope.Any(), fluxionality=False
+                ),
+            },
+            para_stereo=False,
+            max_iterations=8,
+            inconsistency=InconsistencyPolicy.Error,
+        ),
+        StereoModel(
+            kind_models={
+                StereoKind.Tetrahedral: StereoKindModel(
+                    scope=ElementScope.Any(), fluxionality=False
+                ),
+                StereoKind.CisTrans: StereoKindModel(
+                    scope=ElementScope.Any(), fluxionality=False
+                ),
+            },
+            para_stereo=False,
+            max_iterations=16,
+            inconsistency=InconsistencyPolicy.Keep,
+        ),
+    ],
+)
+def test_stereo_model_equality(other):
+    assert StereoModel.default() != other
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        (StereoModel.default(), "StereoModel.default()"),
+        (
+            StereoModel(
+                kind_models={
+                    StereoKind.Octahedral: StereoKindModel(
+                        scope=ElementScope.AllowList([Element("Fe")]),
+                        fluxionality=True,
+                    ),
+                    StereoKind.Tetrahedral: StereoKindModel(
+                        scope=ElementScope.Any(), fluxionality=False
+                    ),
+                },
+                para_stereo=True,
+                max_iterations=8,
+                inconsistency=InconsistencyPolicy.Keep,
+            ),
+            "StereoModel(kind_models={StereoKind.Tetrahedral: "
+            "StereoKindModel(scope=ElementScope.Any(), fluxionality=False), "
+            "StereoKind.Octahedral: StereoKindModel(scope="
+            "ElementScope.AllowList([Element('Fe')]), fluxionality=True)}, "
+            "para_stereo=True, max_iterations=8, "
+            "inconsistency=InconsistencyPolicy.Keep)",
+        ),
+    ],
+)
+def test_stereo_model_repr(model, expected):
+    assert repr(model) == expected
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("kind_models", {}),
+        ("para_stereo", True),
+        ("max_iterations", 8),
+        ("inconsistency", InconsistencyPolicy.Keep),
+    ],
+)
+def test_stereo_model_mutation(field, value):
+    model = StereoModel.default()
+
+    with pytest.raises(AttributeError):
+        setattr(model, field, value)

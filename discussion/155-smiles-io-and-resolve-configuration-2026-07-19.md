@@ -416,14 +416,14 @@ exported from `umol` in its own subitem.
   repr, and Rust round trips. **Additive (green). Done.** `[dep: —]`
 - **S5e — `StereoKindModel`** (`umol-py/src/model/stereo.rs`): bind `scope` and
   `fluxionality` with a keyword-only constructor, detached ownership, equality,
-  repr, and Rust round trips. **Additive (green).** `[dep: S5a]`
+  repr, and Rust round trips. **Additive (green). Done.** `[dep: S5a]`
 - **S5f — `StereoModel`** (`umol-py/src/model/stereo.rs`): bind the per-kind
   model mapping, `para_stereo`, `max_iterations`, and inconsistency policy with
   keyword-only construction and `default()`. Missing stereo kinds map to Rust
   `None`; getters return detached mappings. Tests cover the exact default kind
   set, every supported `StereoKind`, disabled kinds, all scalar fields,
-  equality, repr, and Rust round trips. **Additive (green).** `[dep: S2c, S5d,
-  S5e]`
+  equality, repr, and Rust round trips. **Additive (green). Done.** `[dep: S2c,
+  S5d, S5e]`
 
 ### S6 — Python aggregate semantic and operational configs
 

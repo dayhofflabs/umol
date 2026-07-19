@@ -71,3 +71,15 @@ def test_inconsistency_policy_import():
     from umol import InconsistencyPolicy
 
     assert umol.InconsistencyPolicy is InconsistencyPolicy
+
+
+def test_stereo_kind_model_import():
+    from umol import StereoKindModel
+
+    assert umol.StereoKindModel is StereoKindModel
+
+
+def test_stereo_model_import():
+    from umol import StereoModel
+
+    assert umol.StereoModel is StereoModel

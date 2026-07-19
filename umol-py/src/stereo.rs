@@ -383,7 +383,7 @@ impl CisTransStereoArg {
 /// The coordination geometry of a stereo site. A fieldless, hashable value enum whose
 /// members correspond exactly to the Rust `StereoKind`.
 #[pyclass(eq, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum StereoKind {
     Tetrahedral,
     CisTrans,

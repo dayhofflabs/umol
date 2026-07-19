@@ -63,7 +63,7 @@ use crate::{
     },
     model::{
         aromaticity::{AromaticityModel, RingLimits},
-        stereo::InconsistencyPolicy,
+        stereo::{InconsistencyPolicy, StereoKindModel, StereoModel},
         valence::{AtomTypeRegistry, ValenceEntry, ValenceModel, ValenceTable},
         ElementScope,
     },
@@ -165,6 +165,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<RingLimits>()?;
         module.add_class::<AromaticityModel>()?;
         module.add_class::<InconsistencyPolicy>()?;
+        module.add_class::<StereoKindModel>()?;
+        module.add_class::<StereoModel>()?;
         module.add_class::<AromaticSystemDelta>()?;
         module.add_class::<AtomDelta>()?;
         module.add_class::<AtomFieldChange>()?;
