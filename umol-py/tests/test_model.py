@@ -6,6 +6,8 @@ from umol import (
     AtomAst,
     AtomTypeRegistry,
     Element,
+    ElementScope,
+    RingLimits,
     ValenceEntry,
     ValenceModel,
     ValenceTable,
@@ -354,3 +356,168 @@ def test_valence_model_repr(model, expected):
 def test_valence_model_mutation(model, field, value):
     with pytest.raises(AttributeError):
         setattr(model, field, value)
+
+
+def test_element_scope_any():
+    scope = ElementScope.Any()
+
+    assert isinstance(scope, ElementScope)
+    assert isinstance(scope, ElementScope.Any)
+    assert scope == ElementScope.Any()
+    assert scope != ElementScope.AllowList([])
+    assert repr(scope) == "ElementScope.Any()"
+
+
+@pytest.mark.parametrize(
+    ("elements", "expected"),
+    [
+        ([], []),
+        (
+            [Element("C"), Element("N"), Element("C")],
+            [Element("C"), Element("N"), Element("C")],
+        ),
+    ],
+)
+def test_element_scope_allow_list(elements, expected):
+    scope = ElementScope.AllowList(elements)
+
+    elements.clear()
+
+    assert isinstance(scope, ElementScope)
+    assert isinstance(scope, ElementScope.AllowList)
+    assert scope.elements == expected
+    assert scope == ElementScope.AllowList(expected)
+
+
+def test_element_scope_elements():
+    scope = ElementScope.AllowList([Element("C"), Element("N")])
+    elements = scope.elements
+
+    elements.append(Element("O"))
+
+    assert scope.elements == [Element("C"), Element("N")]
+
+
+@pytest.mark.parametrize(
+    ("scope", "expected"),
+    [
+        (ElementScope.AllowList([]), "ElementScope.AllowList([])"),
+        (
+            ElementScope.AllowList([Element("C"), Element("N")]),
+            "ElementScope.AllowList([Element('C'), Element('N')])",
+        ),
+    ],
+)
+def test_element_scope_repr(scope, expected):
+    assert repr(scope) == expected
+
+
+def test_element_scope_mutation():
+    scope = ElementScope.AllowList([Element("C")])
+
+    with pytest.raises(AttributeError):
+        scope.elements = [Element("N")]
+
+
+def test_ring_limits_default():
+    limits = RingLimits()
+
+    assert limits.min_ring_size == 3
+    assert limits.max_ring_size == 22
+    assert limits.include_fused is True
+    assert limits.max_fused_combination == 6
+    assert limits.max_fused_search == 10_000
+
+
+def test_ring_limits_new():
+    limits = RingLimits(
+        min_ring_size=5,
+        max_ring_size=18,
+        include_fused=False,
+        max_fused_combination=4,
+        max_fused_search=2_500,
+    )
+
+    assert limits.min_ring_size == 5
+    assert limits.max_ring_size == 18
+    assert limits.include_fused is False
+    assert limits.max_fused_combination == 4
+    assert limits.max_fused_search == 2_500
+    assert limits == RingLimits(
+        min_ring_size=5,
+        max_ring_size=18,
+        include_fused=False,
+        max_fused_combination=4,
+        max_fused_search=2_500,
+    )
+    assert limits != RingLimits()
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "min_ring_size",
+        "max_ring_size",
+        "max_fused_combination",
+        "max_fused_search",
+    ],
+)
+def test_ring_limits_zero(field):
+    limits = RingLimits(**{field: 0})
+
+    assert getattr(limits, field) == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("min_ring_size", -1),
+        ("min_ring_size", 1 << 64),
+        ("max_ring_size", -1),
+        ("max_ring_size", 1 << 64),
+        ("max_fused_combination", -1),
+        ("max_fused_combination", 1 << 64),
+        ("max_fused_search", -1),
+        ("max_fused_search", 1 << 64),
+    ],
+)
+def test_ring_limits_new_integer_error(field, value):
+    with pytest.raises(OverflowError):
+        RingLimits(**{field: value})
+
+
+def test_ring_limits_new_positional_error():
+    with pytest.raises(TypeError):
+        RingLimits(3)
+
+
+@pytest.mark.parametrize(
+    ("limits", "expected"),
+    [
+        (
+            RingLimits(),
+            "RingLimits(min_ring_size=3, max_ring_size=22, include_fused=True, "
+            "max_fused_combination=6, max_fused_search=10000)",
+        ),
+        (
+            RingLimits(
+                min_ring_size=5,
+                max_ring_size=18,
+                include_fused=False,
+                max_fused_combination=4,
+                max_fused_search=2_500,
+            ),
+            "RingLimits(min_ring_size=5, max_ring_size=18, include_fused=False, "
+            "max_fused_combination=4, max_fused_search=2500)",
+        ),
+    ],
+)
+def test_ring_limits_repr(limits, expected):
+    assert repr(limits) == expected
+
+
+def test_ring_limits_mutation():
+    limits = RingLimits()
+
+    with pytest.raises(AttributeError):
+        limits.min_ring_size = 5

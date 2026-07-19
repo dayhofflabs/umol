@@ -9,7 +9,7 @@ use umol_chem::element::Element as ChemElement;
 
 /// A chemical element (periodic-table entry).
 #[pyclass(eq, hash, frozen, from_py_object)]
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Element(ChemElement);
 
 impl From<ChemElement> for Element {

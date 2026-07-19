@@ -47,3 +47,15 @@ def test_atom_type_registry_import():
     assert umol.ValenceEntry is ValenceEntry
     assert umol.ValenceModel is ValenceModel
     assert umol.ValenceTable is ValenceTable
+
+
+def test_element_scope_import():
+    from umol import ElementScope
+
+    assert umol.ElementScope is ElementScope
+
+
+def test_ring_limits_import():
+    from umol import RingLimits
+
+    assert umol.RingLimits is RingLimits

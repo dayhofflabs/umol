@@ -399,12 +399,12 @@ exported from `umol` in its own subitem.
 
 - **S5a — `ElementScope`** (`umol-py/src/model.rs`): bind `Any()` and
   `AllowList(elements)` as immutable values with detached element sequences,
-  equality, repr, and Rust round trips. **Additive (green).** `[dep: —]`
+  equality, repr, and Rust round trips. **Additive (green). Done.** `[dep: —]`
 - **S5b — `RingLimits`** (`umol-py/src/model/aromaticity.rs`): bind every field
   with a keyword-only constructor carrying the Rust defaults, immutable getters,
   equality, repr, and Rust round trips. Boundary tests cover zero/invalid Python
-  integer conversion and nondefault fused-ring limits. **Additive (green).**
-  `[dep: —]`
+  integer conversion and nondefault fused-ring limits. **Additive (green).
+  Done.** `[dep: —]`
 - **S5c — `AromaticityModel`** (`umol-py/src/model/aromaticity.rs`): bind
   `HueckelRule`, `Hmo`, and `Clar` with keyword-only variant fields, plus
   `daylight()`, `mdl()`, and `permissive()` presets. Implement structural
