@@ -1442,36 +1442,39 @@ boundary types and downstream ingestion belong to the next workflow pass.
   resolver execution failure to built-in `RuntimeError`. Rust/PyO3 tests assert
   exact classes and messages; installed tests assert import identity.
   **Implemented (green).** `[dep: S4a]`
-- **S4c — composable `SmilesParseFlags`**
-  (`umol-py/src/smiles.rs`): the immutable value binds
-  `EXTENDED_AROMATICS`, `EXTENDED_BONDS`, `CHEMAXON_EXTENSIONS`, and
-  `SKIP_UNKNOWN_CHEMAXON_TAGS`, plus the `OPENSMILES`, `LENIENT`, and `CHEMAXON`
+- **S4c — composable `SmilesSyntaxFlags`**
+  (`umol-py/src/smiles.rs`): the immutable value binds ordinary-SMILES
+  `EXTENDED_AROMATICS` and `EXTENDED_BONDS`, plus the `OPENSMILES` and `LENIENT`
   presets. Validated bit construction, the read-only `bits` property, value
-  equality, repr, and bitwise OR preserve the `umol-io` flag semantics; unknown
-  and retired bits raise `ValueError`. Rust/Python conversion tests cover every
-  capability, representative combinations, zero/OpenSMILES, and unknown bits.
-  No lint flags are bound. **Implemented (green).** `[dep: S4a]`
+  equality, repr, and bitwise OR preserve the `umol-io` flag semantics; unknown,
+  retired, and CX-only bits raise `ValueError`. Rust/Python conversion tests
+  cover every public capability, representative combinations, OpenSMILES, and
+  unknown bits. CX and lint flags are not exposed. **Implemented (green).**
+  `[dep: S4a]`
 - **S4d — `SmilesIoConfig`** (`umol-py/src/smiles.rs`): the owned immutable
-  config exposes `opensmiles()`, `lenient()`, `chemaxon()`,
-  `with_parse_flags(...)`, a detached read-only `parse_flags` value, structural
-  equality, and repr. Lowering reconstructs the `umol-io` config with internal
-  lint defaults; lint and chemistry-model fields are absent from Python.
-  Conversion tests cover every public preset and an arbitrary OR-composed flag
-  set. **Implemented (green).** `[dep: S4c]`
+  config exposes `opensmiles()`, `lenient()`, `with_syntax_flags(...)`, a
+  detached read-only `syntax_flags` value, structural equality, and repr.
+  Lowering reconstructs the `umol-io` config with internal lint defaults; CX,
+  lint, and chemistry-model fields are absent from Python. Conversion tests
+  cover every public preset and arbitrary OR-composed flags. **Implemented
+  (green).** `[dep: S4c]`
 
-  The accepted replacement for the S4c/S4d baseline, the complete chemistry-
-  model and resolve-operation configuration bindings, the required Rust
-  migrations, and the final configured ingestion method are staged in
-  [doc 155](155-smiles-io-and-resolve-configuration-2026-07-19.md). The final
-  ingestion method resumes as doc 155 S7a after that plan's prerequisites are
-  green.
+  The complete chemistry-model and resolve-operation configuration bindings and
+  their supporting Rust migrations are implemented in
+  [doc 155](155-smiles-io-and-resolve-configuration-2026-07-19.md).
 - **S4e — resolved `MoleculeAst.from_smiles`**
-  (`umol-py/src/molecule.rs`, `src/error.rs`): superseded by doc 155 S7a, which
-  adds the complete keyword-only IO, chemistry-model, and resolve-operation
-  configuration surface before implementing the method. **Moved to doc 155.**
+  (`umol-py/src/molecule.rs`, `src/error.rs`):
+  `from_smiles(source, *, io_config=None, chemistry_model=None,
+  resolve_config=None)` lowers owned configuration values into the fully
+  configured Rust ingestion path, with omission selecting the three high-level
+  defaults. It returns an exact determined `MoleculeAst` and preserves the
+  syntax, model-conversion, contradiction, underdetermination, and execution
+  error taxonomy. Tests cover ordinary syntax configurations, both valence
+  models, representative aromaticity and stereo models, every resolve-policy
+  field, keyword-only rejection, and detached ownership. **Implemented
+  (green).** `[dep: S4b, doc 155 S7a]`
 
-S4 establishes the binding and error baseline; doc 155 S7 is the complete
-resolved-SMILES Python deliverable.
+S4 completes the configured resolved-SMILES Python deliverable.
 
 ### S5 — Python fingerprint configuration values
 
