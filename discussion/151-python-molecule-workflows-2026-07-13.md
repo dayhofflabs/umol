@@ -1598,7 +1598,7 @@ and ordinary snapshots are the compatibility seam for a later optional layer.
   `pattern_fingerprint(config=None) -> BitFp`, using the 2048-bit baseline when
   omitted and explicit configured width otherwise. Tests compare exact S0a bits,
   cover optional/default equivalence and custom width, and map non-ground input
-  without panics. **Additive (green).** `[dep: S5e, S6c]`
+  without panics. **Implemented (green).** `[dep: S5e, S6c]`
 - **S7c — structural fingerprint method**
   (`umol-py/src/molecule.rs`): add required-config
   `structural_fingerprint(config) -> StructuralFeatureSet`. Tests compare exact

@@ -6,6 +6,7 @@ use umol_ast::ast::{
     AtomId as AstAtomId, BondId as AstBondId, MoleculeAst as AstMoleculeAst,
     MoleculeParts as AstMoleculeParts,
 };
+use umol_graph::fingerprint::PatternFingerprinter as GraphPatternFingerprinter;
 use umol_graph::ingest::ingest_smiles_with;
 use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
 use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
@@ -17,8 +18,8 @@ use crate::bond::{BondAst, BondViews};
 use crate::constraint::molecule::{Constraint, ConstraintsArg, ConstraintsView};
 use crate::dative::{DativeBondAst, DativeBondViews};
 use crate::error::{fingerprint_error, smiles_input_error};
-use crate::fingerprint::config::HashedFingerprintConfig;
-use crate::fingerprint::value::{CountedHashedFeatureSet, HashedFeatureSet};
+use crate::fingerprint::config::{HashedFingerprintConfig, PatternFingerprintConfig};
+use crate::fingerprint::value::{BitFp, CountedHashedFeatureSet, HashedFeatureSet};
 use crate::model::ChemistryModel;
 use crate::multicenter::{MulticenterBondAst, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondViews};
@@ -198,6 +199,19 @@ impl MoleculeAst {
             .map_err(fingerprint_error)
     }
 
+    /// Generate a fixed-width pattern fingerprint.
+    #[pyo3(signature = (*, config=None))]
+    fn pattern_fingerprint(&self, config: Option<PatternFingerprintConfig>) -> PyResult<BitFp> {
+        config
+            .map_or_else(
+                GraphPatternFingerprinter::new,
+                PatternFingerprintConfig::to_rust,
+            )
+            .fingerprint(&self.0)
+            .map(BitFp::from_rust)
+            .map_err(fingerprint_error)
+    }
+
     /// The atoms, indexed by integer position.
     #[getter]
     fn atoms(slf: Py<Self>) -> AtomViews {
@@ -328,7 +342,9 @@ mod tests {
     use crate::constraint::molecule::Constraints;
     use crate::convert::into_py_variant;
     use crate::error::UnderdeterminedError;
-    use crate::fingerprint::config::{EcfpHashScheme, RefinementRounds, WlHashScheme};
+    use crate::fingerprint::config::{
+        EcfpHashScheme, PatternFingerprintConfig, RefinementRounds, WlHashScheme,
+    };
 
     #[fixture]
     fn ethanol() -> MoleculeAst {
@@ -704,6 +720,53 @@ mod tests {
         Python::attach(|py| {
             let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
             let error = molecule.counted_hashed_fingerprint(config).unwrap_err();
+            assert!(error.is_instance_of::<UnderdeterminedError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "fingerprint requires a determined molecule"
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::omitted(
+        None,
+        2048,
+        &[54, 173, 217, 429, 622, 759, 778, 874, 946, 967, 1022, 1033, 1061, 1236, 1289, 1295]
+    )]
+    #[case::default(
+        Some(PatternFingerprintConfig::from_rust(GraphPatternFingerprinter { width: 2048 })),
+        2048,
+        &[54, 173, 217, 429, 622, 759, 778, 874, 946, 967, 1022, 1033, 1061, 1236, 1289, 1295]
+    )]
+    #[case::custom(
+        Some(PatternFingerprintConfig::from_rust(GraphPatternFingerprinter { width: 64 })),
+        64,
+        &[7, 9, 10, 15, 20, 25, 37, 42, 45, 46, 50, 54, 55, 62]
+    )]
+    fn test_molecule_ast_pattern_fingerprint(
+        ethanol: MoleculeAst,
+        #[case] config: Option<PatternFingerprintConfig>,
+        #[case] width: usize,
+        #[case] expected_bits: &[u64],
+    ) {
+        let fingerprint = ethanol.pattern_fingerprint(config).unwrap();
+        let expected = GraphFeatureSet::from_features(expected_bits.iter().copied())
+            .fold(width)
+            .unwrap();
+        assert_eq!(fingerprint, BitFp::from_rust(expected));
+    }
+
+    #[rstest]
+    #[case::omitted(None)]
+    #[case::default(Some(PatternFingerprintConfig::from_rust(GraphPatternFingerprinter { width: 2048 })))]
+    #[case::custom(Some(PatternFingerprintConfig::from_rust(GraphPatternFingerprinter { width: 64 })))]
+    fn test_molecule_ast_pattern_fingerprint_error(
+        #[case] config: Option<PatternFingerprintConfig>,
+    ) {
+        Python::attach(|py| {
+            let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
+            let error = molecule.pattern_fingerprint(config).unwrap_err();
             assert!(error.is_instance_of::<UnderdeterminedError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
