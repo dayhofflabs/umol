@@ -508,7 +508,7 @@ mol.pattern_fingerprint(
     config=PatternFingerprintConfig(width=2048),
 ) -> BitFp
 mol.structural_fingerprint(
-    StructuralFingerprintConfig(max_bonds),
+    config=StructuralFingerprintConfig(max_bonds=max_bonds),
 ) -> StructuralFeatureSet
 ```
 
@@ -1603,7 +1603,7 @@ and ordinary snapshots are the compatibility seam for a later optional layer.
   (`umol-py/src/molecule.rs`): add required-config
   `structural_fingerprint(config) -> StructuralFeatureSet`. Tests compare exact
   byte keys, cover `max_bonds=0` atom-only output and a bounded connected case,
-  map non-ground input, and prove byte snapshots are detached. **Additive
+  map non-ground input, and prove byte snapshots are detached. **Implemented
   (green).** `[dep: S5f, S6d]`
 - **S7d — molecular fingerprint workflow gate**
   (`umol-py/tests/test_fingerprint.py`, benchmark harness): exercise all five

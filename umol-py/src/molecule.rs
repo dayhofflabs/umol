@@ -18,8 +18,12 @@ use crate::bond::{BondAst, BondViews};
 use crate::constraint::molecule::{Constraint, ConstraintsArg, ConstraintsView};
 use crate::dative::{DativeBondAst, DativeBondViews};
 use crate::error::{fingerprint_error, smiles_input_error};
-use crate::fingerprint::config::{HashedFingerprintConfig, PatternFingerprintConfig};
-use crate::fingerprint::value::{BitFp, CountedHashedFeatureSet, HashedFeatureSet};
+use crate::fingerprint::config::{
+    HashedFingerprintConfig, PatternFingerprintConfig, StructuralFingerprintConfig,
+};
+use crate::fingerprint::value::{
+    BitFp, CountedHashedFeatureSet, HashedFeatureSet, StructuralFeatureSet,
+};
 use crate::model::ChemistryModel;
 use crate::multicenter::{MulticenterBondAst, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondViews};
@@ -212,6 +216,19 @@ impl MoleculeAst {
             .map_err(fingerprint_error)
     }
 
+    /// Generate exact canonical structural features.
+    #[pyo3(signature = (*, config))]
+    fn structural_fingerprint(
+        &self,
+        config: StructuralFingerprintConfig,
+    ) -> PyResult<StructuralFeatureSet> {
+        config
+            .to_rust()
+            .featurize(&self.0)
+            .map(StructuralFeatureSet::from_rust)
+            .map_err(fingerprint_error)
+    }
+
     /// The atoms, indexed by integer position.
     #[getter]
     fn atoms(slf: Py<Self>) -> AtomViews {
@@ -319,7 +336,7 @@ impl MoleculeAst {
 
 #[cfg(test)]
 mod tests {
-    use pyo3::types::PyList;
+    use pyo3::types::{PyBytes, PyList};
     use rstest::{fixture, rstest};
     use umol_ast::ast::{
         AromaticSystemAst as AstAromaticSystemAst, AromaticSystemId as AstAromaticSystemId,
@@ -334,6 +351,7 @@ mod tests {
     use umol_chem::element::Element as ChemElement;
     use umol_graph::fingerprint::{
         CountedFeatureSet as GraphCountedFeatureSet, FeatureSet as GraphFeatureSet,
+        SubstructureFeaturizer as GraphSubstructureFeaturizer,
     };
     use umol_graph::ingest::ingest_smiles;
 
@@ -343,7 +361,8 @@ mod tests {
     use crate::convert::into_py_variant;
     use crate::error::UnderdeterminedError;
     use crate::fingerprint::config::{
-        EcfpHashScheme, PatternFingerprintConfig, RefinementRounds, WlHashScheme,
+        EcfpHashScheme, PatternFingerprintConfig, RefinementRounds, StructuralFingerprintConfig,
+        WlHashScheme,
     };
 
     #[fixture]
@@ -767,6 +786,82 @@ mod tests {
         Python::attach(|py| {
             let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
             let error = molecule.pattern_fingerprint(config).unwrap_err();
+            assert!(error.is_instance_of::<UnderdeterminedError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "fingerprint requires a determined molecule"
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::atoms(
+        StructuralFingerprintConfig::from_rust(GraphSubstructureFeaturizer::new(0)),
+        vec![
+            vec![1, 0, 0, 0, 5, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0],
+            vec![1, 0, 0, 0, 5, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0],
+        ]
+    )]
+    #[case::bounded(
+        StructuralFingerprintConfig::from_rust(GraphSubstructureFeaturizer::new(2)),
+        vec![
+            vec![1, 0, 0, 0, 5, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0],
+            vec![1, 0, 0, 0, 5, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0],
+            vec![
+                3, 0, 0, 0, 5, 0, 0, 0, 0, 6, 0, 0, 0, 5, 0, 0, 0, 0, 6, 0, 0, 0, 3, 0, 0, 0, 1, 1,
+                0, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0,
+            ],
+            vec![
+                3, 0, 0, 0, 5, 0, 0, 0, 0, 6, 0, 0, 0, 5, 0, 0, 0, 0, 8, 0, 0, 0, 3, 0, 0, 0, 1, 1,
+                0, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0,
+            ],
+            vec![
+                5, 0, 0, 0, 5, 0, 0, 0, 0, 6, 0, 0, 0, 5, 0, 0, 0, 0, 6, 0, 0, 0, 5, 0, 0, 0, 0, 8,
+                0, 0, 0, 3, 0, 0, 0, 1, 1, 0, 3, 0, 0, 0, 1, 1, 0, 4, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0,
+                0, 1, 0, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0, 4, 0, 0, 0, 2, 0, 0, 0, 4, 0, 0, 0,
+            ],
+        ]
+    )]
+    fn test_molecule_ast_structural_fingerprint(
+        ethanol: MoleculeAst,
+        #[case] config: StructuralFingerprintConfig,
+        #[case] expected_keys: Vec<Vec<u8>>,
+    ) {
+        let fingerprint = ethanol.structural_fingerprint(config).unwrap();
+        assert_eq!(
+            fingerprint,
+            StructuralFeatureSet::from_rust(GraphFeatureSet::from_features(
+                expected_keys.iter().cloned()
+            ))
+        );
+
+        Python::attach(|py| {
+            let fingerprint = Py::new(py, fingerprint).unwrap();
+            let fingerprint = fingerprint.bind(py).as_any();
+            fingerprint
+                .getattr("keys")
+                .unwrap()
+                .cast::<PyList>()
+                .unwrap()
+                .append(PyBytes::new(py, b"detached"))
+                .unwrap();
+            assert_eq!(
+                fingerprint
+                    .getattr("keys")
+                    .unwrap()
+                    .extract::<Vec<Vec<u8>>>()
+                    .unwrap(),
+                expected_keys
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::bounded(StructuralFingerprintConfig::from_rust(GraphSubstructureFeaturizer::new(2)))]
+    fn test_molecule_ast_structural_fingerprint_error(#[case] config: StructuralFingerprintConfig) {
+        Python::attach(|py| {
+            let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
+            let error = molecule.structural_fingerprint(config).unwrap_err();
             assert!(error.is_instance_of::<UnderdeterminedError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),

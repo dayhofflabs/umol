@@ -428,13 +428,6 @@ impl StructuralFeatureSet {
 }
 
 impl StructuralFeatureSet {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Rust-to-Python conversion is used by structural fingerprint operations"
-        )
-    )]
     pub(crate) fn from_rust(inner: GraphFeatureSet<Vec<u8>>) -> Self {
         Self { inner }
     }
