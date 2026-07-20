@@ -19,6 +19,7 @@ from umol import (
     InconsistencyPolicy,
     ModelConversionError,
     MoleculeAst,
+    MoleculeDefaults,
     NoncovalentBondAst,
     NoncovalentBondKind,
     ParseError,
@@ -43,6 +44,61 @@ def test_molecule_ast_new():
     assert len(MoleculeAst().bonds) == 0
 
 
+@pytest.mark.parametrize(
+    ("value", "expected", "expected_repr"),
+    [
+        (MoleculeDefaults(), MoleculeDefaults(), "MoleculeDefaults()"),
+        (
+            MoleculeDefaults.ground(),
+            MoleculeDefaults.ground(),
+            "MoleculeDefaults.ground()",
+        ),
+    ],
+)
+def test_molecule_defaults(value, expected, expected_repr):
+    assert value == expected
+    assert repr(value) == expected_repr
+
+
+@pytest.mark.parametrize(
+    ("source", "defaults", "expected"),
+    [
+        (
+            '{:atoms ["C"]}',
+            MoleculeDefaults(),
+            MoleculeAst.from_parts([AtomAst.parse("C")]),
+        ),
+        (
+            '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
+            MoleculeDefaults.ground(),
+            MoleculeAst.from_parts(
+                [AtomAst.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")]
+            ),
+        ),
+    ],
+)
+def test_molecule_ast_parse(source, defaults, expected):
+    assert MoleculeAst.parse(source, defaults=defaults) == expected
+
+
+def test_molecule_ast_parse_error():
+    with pytest.raises(
+        ParseError,
+        match="^EDN parse: unexpected token 'n' at byte 0$",
+    ):
+        MoleculeAst.parse("not edn")
+
+
+def test_molecule_ast_parse_keyword_error():
+    with pytest.raises(
+        TypeError,
+        match=(
+            "^MoleculeAst.parse\\(\\) takes 1 positional arguments but 2 were given$"
+        ),
+    ):
+        MoleculeAst.parse('{:atoms ["C"]}', MoleculeDefaults.ground())
+
+
 def test_molecule_ast_from_parts():
     mol = MoleculeAst.from_parts(
         [AtomAst(Element("C")), AtomAst(Element("C"))],
@@ -60,8 +116,9 @@ def test_molecule_ast_from_parts_default():
 
 
 def test_molecule_ast_from_smiles():
-    assert MoleculeAst.from_smiles("C") == MoleculeAst.from_parts(
-        [AtomAst.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")]
+    assert MoleculeAst.from_smiles("C") == MoleculeAst.parse(
+        '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
+        defaults=MoleculeDefaults.ground(),
     )
 
 
@@ -81,9 +138,7 @@ def test_molecule_ast_from_smiles_io_config(io_config):
         ElementAst.Lit(Element("Se")),
         *[ElementAst.Lit(Element("C")) for _ in range(4)],
     ]
-    assert [
-        (bond.atom_ids, bond.order) for bond in molecule.bonds
-    ] == [
+    assert [(bond.atom_ids, bond.order) for bond in molecule.bonds] == [
         ((0, 4), ValueAst.Lit(1)),
         ((0, 1), ValueAst.Lit(1)),
         ((1, 2), ValueAst.Lit(1)),
@@ -119,11 +174,7 @@ def test_molecule_ast_from_smiles_io_config_error():
         (
             ValenceModel.AtomTyping(
                 registry=AtomTypeRegistry.from_atoms(
-                    [
-                        AtomAst.parse(
-                            "C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"
-                        )
-                    ]
+                    [AtomAst.parse("C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")]
                 )
             ),
             AtomAst.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"),
@@ -134,9 +185,7 @@ def test_molecule_ast_from_smiles_io_config_error():
         ),
     ],
 )
-def test_molecule_ast_from_smiles_chemistry_model_valence(
-    valence_model, expected
-):
+def test_molecule_ast_from_smiles_chemistry_model_valence(valence_model, expected):
     default = ChemistryModel.default()
     chemistry_model = ChemistryModel(
         valence=valence_model,
@@ -159,16 +208,12 @@ def test_molecule_ast_from_smiles_chemistry_model_aromaticity():
         stereo=default.stereo,
     )
 
-    molecule = MoleculeAst.from_smiles(
-        "c1ccccc1", chemistry_model=chemistry_model
-    )
+    molecule = MoleculeAst.from_smiles("c1ccccc1", chemistry_model=chemistry_model)
 
-    assert [atom.implicit_hydrogens for atom in molecule.atoms] == [
-        ValueAst.Lit(1)
+    assert [atom.implicit_hydrogens for atom in molecule.atoms] == [ValueAst.Lit(1)] * 6
+    assert [atom.constraints.aromatic_valence for atom in molecule.atoms] == [
+        AromaticValenceAst.Aromatic(ValueAst.Lit(1))
     ] * 6
-    assert [
-        atom.constraints.aromatic_valence for atom in molecule.atoms
-    ] == [AromaticValenceAst.Aromatic(ValueAst.Lit(1))] * 6
     assert list(molecule.aromatic_systems) == []
 
 
@@ -185,9 +230,7 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
         ),
     )
 
-    molecule = MoleculeAst.from_smiles(
-        "C[C@H](N)O", chemistry_model=chemistry_model
-    )
+    molecule = MoleculeAst.from_smiles("C[C@H](N)O", chemistry_model=chemistry_model)
 
     assert [atom.implicit_hydrogens for atom in molecule.atoms] == [
         ValueAst.Lit(3),
@@ -195,9 +238,9 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
         ValueAst.Lit(2),
         ValueAst.Lit(1),
     ]
-    assert [
-        atom.constraints.tetrahedral_stereo for atom in molecule.atoms
-    ] == [None] * 4
+    assert [atom.constraints.tetrahedral_stereo for atom in molecule.atoms] == [
+        None
+    ] * 4
     assert list(molecule.stereo_atoms) == []
 
 
@@ -258,19 +301,14 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
         ),
     ],
 )
-def test_molecule_ast_from_smiles_resolve_config(
-    source, resolve_config, expected
-):
+def test_molecule_ast_from_smiles_resolve_config(source, resolve_config, expected):
     molecule = MoleculeAst.from_smiles(source, resolve_config=resolve_config)
 
     assert (
         [atom.charge for atom in molecule.atoms],
         [atom.constraints.aromatic_valence for atom in molecule.atoms],
         [atom.constraints.tetrahedral_stereo for atom in molecule.atoms],
-        [
-            (system.atom_ids, system.charge)
-            for system in molecule.aromatic_systems
-        ],
+        [(system.atom_ids, system.charge) for system in molecule.aromatic_systems],
         [
             (stereo.site_id, stereo.kind, stereo.coset)
             for stereo in molecule.stereo_atoms
@@ -331,9 +369,7 @@ def test_molecule_ast_from_smiles_resolve_config(
         ),
     ],
 )
-def test_molecule_ast_from_smiles_error(
-    source, kwargs, error_type, message
-):
+def test_molecule_ast_from_smiles_error(source, kwargs, error_type, message):
     with pytest.raises(error_type, match=f"^{re.escape(message)}$"):
         MoleculeAst.from_smiles(source, **kwargs)
 
@@ -362,8 +398,9 @@ def test_molecule_ast_from_smiles_ownership():
     )
     first.atoms[0].charge = 1
 
-    assert second == MoleculeAst.from_parts(
-        [AtomAst.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")]
+    assert second == MoleculeAst.parse(
+        '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
+        defaults=MoleculeDefaults.ground(),
     )
     assert first != second
     assert io_config == SmilesIoConfig.opensmiles()
@@ -392,20 +429,15 @@ def test_molecule_ast_eq():
                     AtomAst(Element("O")),
                 ],
                 bonds=[(0, 1, BondAst(1))],
-                aromatic_systems=[
-                    ([0, 1, 2], AromaticSystemAst([1, 1, 1]))
-                ],
+                aromatic_systems=[([0, 1, 2], AromaticSystemAst([1, 1, 1]))],
                 noncovalent_bonds=[
                     (
                         [0, 2],
-                        NoncovalentBondAst(
-                            NoncovalentBondKind.HydrogenBond
-                        ),
+                        NoncovalentBondAst(NoncovalentBondKind.HydrogenBond),
                     )
                 ],
             ),
-            "MoleculeAst(atoms=3, bonds=1, aromatic_systems=1, "
-            "noncovalent_bonds=1)",
+            "MoleculeAst(atoms=3, bonds=1, aromatic_systems=1, noncovalent_bonds=1)",
         ),
     ],
 )

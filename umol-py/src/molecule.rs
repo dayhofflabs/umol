@@ -1,11 +1,14 @@
 //! `MoleculeAst` — a molecule (owned graph-AST root), wrapping
 //! `umol_ast::ast::MoleculeAst`.
 
+use std::str::FromStr;
+
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    AtomId as AstAtomId, BondId as AstBondId, MoleculeAst as AstMoleculeAst,
+    AtomId as AstAtomId, BondId as AstBondId, IntoAst, MoleculeAst as AstMoleculeAst,
     MoleculeParts as AstMoleculeParts,
 };
+use umol_ast::dsl::MoleculeDsl as AstMoleculeDsl;
 use umol_graph::fingerprint::PatternFingerprinter as GraphPatternFingerprinter;
 use umol_graph::ingest::ingest_smiles_with;
 use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
@@ -17,7 +20,8 @@ use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
 use crate::constraint::molecule::{Constraint, ConstraintsArg, ConstraintsView};
 use crate::dative::{DativeBondAst, DativeBondViews};
-use crate::error::{fingerprint_error, smiles_input_error};
+use crate::defaults::MoleculeDefaults;
+use crate::error::{fingerprint_error, parse_error, smiles_input_error};
 use crate::fingerprint::config::{
     HashedFingerprintConfig, PatternFingerprintConfig, StructuralFingerprintConfig,
 };
@@ -42,6 +46,17 @@ impl MoleculeAst {
     #[new]
     fn new() -> Self {
         Self(AstMoleculeAst::new())
+    }
+
+    /// Parse a molecule from its EDN representation under explicit construction defaults.
+    #[staticmethod]
+    #[pyo3(signature = (text, *, defaults=None))]
+    fn parse(text: &str, defaults: Option<MoleculeDefaults>) -> PyResult<Self> {
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        let molecule = AstMoleculeDsl::from_str(text)
+            .map_err(parse_error)?
+            .into_ast(&defaults);
+        Ok(Self::from_inner(molecule))
     }
 
     /// A molecule from its parts. Each bond is a `(first, second, bond)` triple:
@@ -359,7 +374,7 @@ mod tests {
     use crate::atom::AtomAst as PyAtomAst;
     use crate::constraint::molecule::Constraints;
     use crate::convert::into_py_variant;
-    use crate::error::UnderdeterminedError;
+    use crate::error::{ParseError, UnderdeterminedError};
     use crate::fingerprint::config::{
         EcfpHashScheme, PatternFingerprintConfig, RefinementRounds, StructuralFingerprintConfig,
         WlHashScheme,
@@ -378,6 +393,41 @@ mod tests {
     #[rstest]
     fn test_molecule_ast_new() {
         assert_eq!(MoleculeAst::new().inner().atoms().count(), 0);
+    }
+
+    #[rstest]
+    #[case::required(
+        r#"{:atoms ["C"]}"#,
+        None,
+        mol_dsl!(r#"{:atoms ["C"]}"#)
+    )]
+    #[case::ground(
+        r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#,
+        Some(MoleculeDefaults::ground()),
+        mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]}"#)
+    )]
+    fn test_molecule_ast_parse(
+        #[case] text: &str,
+        #[case] defaults: Option<MoleculeDefaults>,
+        #[case] expected: AstMoleculeAst,
+    ) {
+        assert_eq!(
+            MoleculeAst::parse(text, defaults).unwrap().inner(),
+            &expected
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_ast_parse_error() {
+        Python::attach(|py| {
+            let error = MoleculeAst::parse("not edn", None).unwrap_err();
+
+            assert!(error.is_instance_of::<ParseError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "EDN parse: unexpected token 'n' at byte 0"
+            );
+        });
     }
 
     #[rstest]

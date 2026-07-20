@@ -8,10 +8,11 @@ use std::vec::IntoIter;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    Canonicalize, CompositionScope as AstCompositionScope, MoleculeAst as AstMoleculeAst,
+    Canonicalize, CompositionScope as AstCompositionScope, IntoAst, MoleculeAst as AstMoleculeAst,
     MoleculeCorrespondence as AstMoleculeCorrespondence, ReactionAst as AstReactionAst,
     ReactionDerivation as AstReactionDerivation, SubstructureMatchAlgorithm,
 };
+use umol_ast::dsl::ReactionDsl as AstReactionDsl;
 use umol_graph::fingerprint::featurize_reaction;
 use umol_graph_core::{Correspondence, NodeId};
 
@@ -19,6 +20,7 @@ use crate::correspondence::{
     Correspondence as PyCorrespondence, MoleculeCorrespondence as PyMoleculeCorrespondence,
     SubgraphIsomorphismAlgorithm,
 };
+use crate::defaults::ReactionDefaults;
 use crate::delta::Deltas;
 use crate::error::{contradiction_error, fingerprint_error, parse_error};
 use crate::fingerprint::config::ReactionCombinedFingerprintConfig;
@@ -121,8 +123,12 @@ impl ReactionAst {
 
     /// Parse a reaction from its EDN representation.
     #[staticmethod]
-    fn parse(py: Python<'_>, text: &str) -> PyResult<Self> {
-        let reaction = AstReactionAst::from_str(text).map_err(parse_error)?;
+    #[pyo3(signature = (text, *, defaults=None))]
+    fn parse(py: Python<'_>, text: &str, defaults: Option<ReactionDefaults>) -> PyResult<Self> {
+        let defaults = defaults.unwrap_or_else(ReactionDefaults::new).to_rust();
+        let reaction = AstReactionDsl::from_str(text)
+            .map_err(parse_error)?
+            .into_ast(&defaults);
         Self::from_rust(py, reaction)
     }
 
@@ -700,7 +706,7 @@ mod tests {
         #[case] expected_deltas: Vec<AstDelta>,
     ) {
         Python::attach(|py| {
-            let reaction = ReactionAst::parse(py, text).unwrap().to_rust(py);
+            let reaction = ReactionAst::parse(py, text, None).unwrap().to_rust(py);
 
             assert_eq!(reaction.lhs.atoms().count(), atom_count);
             assert_eq!(reaction.deltas.as_slice(), expected_deltas.as_slice());
@@ -710,12 +716,36 @@ mod tests {
     #[rstest]
     fn test_reaction_ast_parse_error() {
         Python::attach(|py| {
-            let error = ReactionAst::parse(py, "not edn").err().unwrap();
+            let error = ReactionAst::parse(py, "not edn", None).err().unwrap();
 
             assert!(error.is_instance_of::<ParseError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 "EDN parse: unexpected token 'n' at byte 0"
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::required(
+        r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}}]}"##,
+        None,
+        r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}}]}"##
+    )]
+    #[case::ground(
+        r##"{:lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"]} :deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}]}"##,
+        Some(ReactionDefaults::ground()),
+        r##"{:lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]} :deltas [{:atom {:add "O#i=#c0#h0#n2#u0#s#v0#d0#t0#a!#m!"}}]}"##
+    )]
+    fn test_reaction_ast_parse_defaults(
+        #[case] text: &str,
+        #[case] defaults: Option<ReactionDefaults>,
+        #[case] expected: &str,
+    ) {
+        Python::attach(|py| {
+            assert_eq!(
+                ReactionAst::parse(py, text, defaults).unwrap().to_rust(py),
+                expected.parse::<AstReactionAst>().unwrap()
             );
         });
     }
@@ -1258,6 +1288,7 @@ mod tests {
             let source = ReactionAst::parse(
                 py,
                 r##"{:lhs {:atoms ["C" "O"]} :deltas [{:atom {:add "N"}} {:atom {:remove 1}}]}"##,
+                None,
             )
             .unwrap();
             let before = source.to_rust(py);
@@ -1306,8 +1337,8 @@ mod tests {
         #[case] expected: Vec<&str>,
     ) {
         Python::attach(|py| {
-            let first = ReactionAst::parse(py, first).unwrap();
-            let second = ReactionAst::parse(py, second).unwrap();
+            let first = ReactionAst::parse(py, first, None).unwrap();
+            let second = ReactionAst::parse(py, second, None).unwrap();
             let expected: Vec<AstReactionAst> = expected
                 .into_iter()
                 .map(|reaction| AstReactionAst::from_str(reaction).unwrap())
@@ -1330,11 +1361,13 @@ mod tests {
             let first = ReactionAst::parse(
                 py,
                 r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
+                None,
             )
             .unwrap();
             let second = ReactionAst::parse(
                 py,
                 r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
+                None,
             )
             .unwrap();
             let fused = AstReactionAst::from_str(
@@ -1372,6 +1405,7 @@ mod tests {
                 ReactionAst::parse(
                     py,
                     r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
+                    None,
                 )
                 .unwrap(),
             )
@@ -1381,6 +1415,7 @@ mod tests {
                 ReactionAst::parse(
                     py,
                     r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
+                    None,
                 )
                 .unwrap(),
             )
@@ -1425,11 +1460,13 @@ mod tests {
             let first = ReactionAst::parse(
                 py,
                 r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
+                None,
             )
             .unwrap();
             let second = ReactionAst::parse(
                 py,
                 r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
+                None,
             )
             .unwrap();
             let first_before = first.to_rust(py);
@@ -2147,10 +2184,10 @@ mod tests {
     )]
     fn test_reaction_ast_str_roundtrip(#[case] text: &str) {
         Python::attach(|py| {
-            let first = ReactionAst::parse(py, text).unwrap();
+            let first = ReactionAst::parse(py, text, None).unwrap();
 
             let canonical = first.__str__(py);
-            let second = ReactionAst::parse(py, &canonical).unwrap();
+            let second = ReactionAst::parse(py, &canonical, None).unwrap();
 
             assert!(first.__eq__(&second, py));
             assert_eq!(second.__str__(py), canonical);

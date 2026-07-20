@@ -4,7 +4,7 @@ use umol_edn::{FromEdn, ToEdn};
 
 /// Aggregated lowering/raising defaults for molecule DSL <-> AST interconversion. per-entity-kind
 /// defaults bundle; consumed by the molecule-level `FromAst` / `IntoAst` implementations.
-#[derive(Debug, Clone, FromEdn, ToEdn)]
+#[derive(Debug, Clone, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct MoleculeDefaults {
     pub atom: AtomDefaults,
     pub bond: BondDefaults,
@@ -105,12 +105,17 @@ pub struct MoleculeOverrides {
     pub stereo_bond: StereoBondOverrides,
 }
 
-/// Defaults for reaction DSL <-> AST interconversion. Atom/bond only — the
-/// entities the reaction surface handles (parallels `ReactionInput`).
-#[derive(Debug, Clone, FromEdn, ToEdn)]
+/// Defaults for reaction DSL <-> AST interconversion.
+#[derive(Debug, Clone, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct ReactionDefaults {
     pub atom: AtomDefaults,
     pub bond: BondDefaults,
+    pub dative_bond: DativeBondDefaults,
+    pub aromatic_system: AromaticSystemDefaults,
+    pub multicenter_bond: MulticenterBondDefaults,
+    pub noncovalent_bond: NoncovalentBondDefaults,
+    pub stereo_atom: StereoAtomDefaults,
+    pub stereo_bond: StereoBondDefaults,
 }
 
 impl ReactionDefaults {
@@ -119,6 +124,12 @@ impl ReactionDefaults {
         Self {
             atom: AtomDefaults::new(),
             bond: BondDefaults::new(),
+            dative_bond: DativeBondDefaults::new(),
+            aromatic_system: AromaticSystemDefaults::new(),
+            multicenter_bond: MulticenterBondDefaults::new(),
+            noncovalent_bond: NoncovalentBondDefaults::new(),
+            stereo_atom: StereoAtomDefaults::new(),
+            stereo_bond: StereoBondDefaults::new(),
         }
     }
 
@@ -127,6 +138,12 @@ impl ReactionDefaults {
         Self {
             atom: AtomDefaults::ground(),
             bond: BondDefaults::ground(),
+            dative_bond: DativeBondDefaults::ground(),
+            aromatic_system: AromaticSystemDefaults::ground(),
+            multicenter_bond: MulticenterBondDefaults::ground(),
+            noncovalent_bond: NoncovalentBondDefaults::ground(),
+            stereo_atom: StereoAtomDefaults::ground(),
+            stereo_bond: StereoBondDefaults::ground(),
         }
     }
 
@@ -135,24 +152,40 @@ impl ReactionDefaults {
         Self {
             atom: self.atom.with_overrides(ov.atom),
             bond: self.bond.with_overrides(ov.bond),
+            dative_bond: self.dative_bond.with_overrides(ov.dative_bond),
+            aromatic_system: self.aromatic_system.with_overrides(ov.aromatic_system),
+            multicenter_bond: self.multicenter_bond.with_overrides(ov.multicenter_bond),
+            noncovalent_bond: self.noncovalent_bond.with_overrides(ov.noncovalent_bond),
+            stereo_atom: self.stereo_atom.with_overrides(ov.stereo_atom),
+            stereo_bond: self.stereo_bond.with_overrides(ov.stereo_bond),
         }
     }
 
-    /// Molecule-level defaults for converting the `lhs`: this reaction's atom/bond
-    /// policy, no-op for entity kinds the reaction surface does not yet cover.
+    /// Molecule-level defaults for converting the `lhs`.
     pub fn molecule_defaults(&self) -> MoleculeDefaults {
         MoleculeDefaults {
             atom: self.atom.clone(),
             bond: self.bond.clone(),
-            ..MoleculeDefaults::new()
+            dative_bond: self.dative_bond.clone(),
+            aromatic_system: self.aromatic_system.clone(),
+            multicenter_bond: self.multicenter_bond.clone(),
+            noncovalent_bond: self.noncovalent_bond.clone(),
+            stereo_atom: self.stereo_atom.clone(),
+            stereo_bond: self.stereo_bond.clone(),
         }
     }
 
-    /// Defaults for converting deltas (atom/bond).
+    /// Defaults for converting delta entity snapshots.
     pub fn delta_defaults(&self) -> DeltaDefaults {
         DeltaDefaults {
             atom: self.atom.clone(),
             bond: self.bond.clone(),
+            dative_bond: self.dative_bond.clone(),
+            aromatic_system: self.aromatic_system.clone(),
+            multicenter_bond: self.multicenter_bond.clone(),
+            noncovalent_bond: self.noncovalent_bond.clone(),
+            stereo_atom: self.stereo_atom.clone(),
+            stereo_bond: self.stereo_bond.clone(),
         }
     }
 }
@@ -171,19 +204,36 @@ pub struct ReactionOverrides {
     pub atom: AtomOverrides,
     #[edn(default)]
     pub bond: BondOverrides,
+    #[edn(default)]
+    pub dative_bond: DativeBondOverrides,
+    #[edn(default)]
+    pub aromatic_system: AromaticSystemOverrides,
+    #[edn(default)]
+    pub multicenter_bond: MulticenterBondOverrides,
+    #[edn(default)]
+    pub noncovalent_bond: NoncovalentBondOverrides,
+    #[edn(default)]
+    pub stereo_atom: StereoAtomOverrides,
+    #[edn(default)]
+    pub stereo_bond: StereoBondOverrides,
 }
 
-/// Defaults for converting reaction deltas (atom/bond) — the `delta_defaults()`
-/// projection of `ReactionDefaults`.
-#[derive(Clone, Debug)]
+/// Defaults for converting reaction delta entity snapshots.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeltaDefaults {
     pub atom: AtomDefaults,
     pub bond: BondDefaults,
+    pub dative_bond: DativeBondDefaults,
+    pub aromatic_system: AromaticSystemDefaults,
+    pub multicenter_bond: MulticenterBondDefaults,
+    pub noncovalent_bond: NoncovalentBondDefaults,
+    pub stereo_atom: StereoAtomDefaults,
+    pub stereo_bond: StereoBondDefaults,
 }
 
 /// Lowering/raising defaults for atoms: describe how `AtomAst`
 /// struct fields and constraintsa are treated when converting between DSL and AST.
-#[derive(Clone, Debug, FromEdn, ToEdn)]
+#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct AtomDefaults {
     pub isotope: IsotopeDefault,
     pub charge: NumericDefault,
@@ -325,7 +375,7 @@ pub struct AtomOverrides {
 
 /// Lowering/raising defaults for localized bonds.
 /// See `AtomDefaults` for semantics.
-#[derive(Clone, Debug, FromEdn, ToEdn)]
+#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct BondDefaults {
     pub charge: NumericDefault,
     pub unpaired_electrons: UnpairedElectronsDefault,
@@ -395,7 +445,7 @@ pub struct BondOverrides {
 }
 
 /// Lowering/raising defaults for dative bonds. Currently empty (no defaultable fields).
-#[derive(Clone, Debug, Default, FromEdn, ToEdn)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct DativeBondDefaults {}
 
 impl DativeBondDefaults {
@@ -421,7 +471,7 @@ impl DativeBondDefaults {
 pub struct DativeBondOverrides {}
 
 /// Lowering/raising defaults for aromatic systems.
-#[derive(Clone, Debug, FromEdn, ToEdn)]
+#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct AromaticSystemDefaults {
     pub charge: NumericDefault,
     pub unpaired_electrons: UnpairedElectronsDefault,
@@ -482,7 +532,7 @@ pub struct AromaticSystemOverrides {
 }
 
 /// Lowering/raising defaults for multicenter bonds.
-#[derive(Clone, Debug, FromEdn, ToEdn)]
+#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct MulticenterBondDefaults {
     pub charge: NumericDefault,
     pub unpaired_electrons: UnpairedElectronsDefault,
@@ -544,7 +594,7 @@ pub struct MulticenterBondOverrides {
 
 /// Lowering/raising defaults for noncovalent bonds. Currently empty
 /// (no defaultable fields); exists for API uniformity.
-#[derive(Clone, Debug, Default, FromEdn, ToEdn)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct NoncovalentBondDefaults {}
 
 impl NoncovalentBondDefaults {
@@ -570,7 +620,7 @@ impl NoncovalentBondDefaults {
 pub struct NoncovalentBondOverrides {}
 
 /// Lowering/raising default for stereo atoms. Currently empty (no defaultable fields).
-#[derive(Clone, Debug, Default, FromEdn, ToEdn)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct StereoAtomDefaults {}
 
 impl StereoAtomDefaults {
@@ -596,7 +646,7 @@ impl StereoAtomDefaults {
 pub struct StereoAtomOverrides {}
 
 /// Lowering/raising default for stereo bonds. Currently empty (no defaultable fields).
-#[derive(Clone, Debug, Default, FromEdn, ToEdn)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct StereoBondDefaults {}
 
 impl StereoBondDefaults {
@@ -722,6 +772,60 @@ mod tests {
         assert_eq!(cfg.bond.multiplicity, MultiplicityDefault::Required);
         assert_eq!(cfg.aromatic_system.charge, NumericDefault::Required);
         assert_eq!(cfg.multicenter_bond.charge, NumericDefault::Required);
+    }
+
+    #[rstest]
+    #[case::required(ReactionDefaults::new())]
+    #[case::ground(ReactionDefaults::ground())]
+    fn test_reaction_defaults_roundtrip(#[case] defaults: ReactionDefaults) {
+        assert_eq!(
+            ReactionDefaults::from_edn(&defaults.to_edn()).unwrap(),
+            defaults
+        );
+    }
+
+    #[rstest]
+    #[case::required(ReactionDefaults::new(), MoleculeDefaults::new())]
+    #[case::ground(ReactionDefaults::ground(), MoleculeDefaults::ground())]
+    fn test_reaction_defaults_molecule_defaults(
+        #[case] defaults: ReactionDefaults,
+        #[case] expected: MoleculeDefaults,
+    ) {
+        assert_eq!(defaults.molecule_defaults(), expected);
+    }
+
+    #[rstest]
+    #[case::required(
+        ReactionDefaults::new(),
+        DeltaDefaults {
+            atom: AtomDefaults::new(),
+            bond: BondDefaults::new(),
+            dative_bond: DativeBondDefaults::new(),
+            aromatic_system: AromaticSystemDefaults::new(),
+            multicenter_bond: MulticenterBondDefaults::new(),
+            noncovalent_bond: NoncovalentBondDefaults::new(),
+            stereo_atom: StereoAtomDefaults::new(),
+            stereo_bond: StereoBondDefaults::new(),
+        }
+    )]
+    #[case::ground(
+        ReactionDefaults::ground(),
+        DeltaDefaults {
+            atom: AtomDefaults::ground(),
+            bond: BondDefaults::ground(),
+            dative_bond: DativeBondDefaults::ground(),
+            aromatic_system: AromaticSystemDefaults::ground(),
+            multicenter_bond: MulticenterBondDefaults::ground(),
+            noncovalent_bond: NoncovalentBondDefaults::ground(),
+            stereo_atom: StereoAtomDefaults::ground(),
+            stereo_bond: StereoBondDefaults::ground(),
+        }
+    )]
+    fn test_reaction_defaults_delta_defaults(
+        #[case] defaults: ReactionDefaults,
+        #[case] expected: DeltaDefaults,
+    ) {
+        assert_eq!(defaults.delta_defaults(), expected);
     }
 
     #[rstest]

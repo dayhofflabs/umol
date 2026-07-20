@@ -64,8 +64,8 @@ fn bench_bond_dsl(c: &mut Criterion) {
 
 fn bench_dative_dsl(c: &mut Criterion) {
     let mut g = c.benchmark_group("dative_dsl");
-    bench_pair::<DativeBondDsl>(&mut g, "empty", r##""""##);
-    bench_pair::<DativeBondDsl>(&mut g, "ring", r##""#R#r6""##);
+    bench_pair::<DativeBondDsl>(&mut g, "undetermined", r##""*""##);
+    bench_pair::<DativeBondDsl>(&mut g, "ring", r##""1#R(6)""##);
     g.finish();
 }
 

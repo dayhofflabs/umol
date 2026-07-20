@@ -145,6 +145,24 @@ fn lower_delta(delta: &mut Delta, cfg: &DeltaDefaults) {
         Delta::Bond(BondDelta::Add { ast, .. } | BondDelta::Remove { ast, .. }) => {
             lower_bond(ast, &cfg.bond)
         }
+        Delta::DativeBond(
+            DativeBondDelta::Add { ast, .. } | DativeBondDelta::Remove { ast, .. },
+        ) => *ast = DativeBondDsl::from_ast(ast, &cfg.dative_bond).0,
+        Delta::AromaticSystem(
+            AromaticSystemDelta::Add { ast, .. } | AromaticSystemDelta::Remove { ast, .. },
+        ) => *ast = AromaticSystemDsl::from_ast(ast, &cfg.aromatic_system).0,
+        Delta::MulticenterBond(
+            MulticenterBondDelta::Add { ast, .. } | MulticenterBondDelta::Remove { ast, .. },
+        ) => *ast = MulticenterBondDsl::from_ast(ast, &cfg.multicenter_bond).0,
+        Delta::NoncovalentBond(
+            NoncovalentBondDelta::Add { ast, .. } | NoncovalentBondDelta::Remove { ast, .. },
+        ) => *ast = NoncovalentBondDsl::from_ast(ast, &cfg.noncovalent_bond).0,
+        Delta::StereoAtom(
+            StereoAtomDelta::Add { ast, .. } | StereoAtomDelta::Remove { ast, .. },
+        ) => *ast = StereoAtomDsl::from_ast(ast, &cfg.stereo_atom).0,
+        Delta::StereoBond(
+            StereoBondDelta::Add { ast, .. } | StereoBondDelta::Remove { ast, .. },
+        ) => *ast = StereoBondDsl::from_ast(ast, &cfg.stereo_bond).0,
         _ => {}
     }
 }
@@ -158,6 +176,24 @@ fn raise_delta(delta: &mut Delta, cfg: &DeltaDefaults) {
         Delta::Bond(BondDelta::Add { ast, .. } | BondDelta::Remove { ast, .. }) => {
             raise_bond(ast, &cfg.bond)
         }
+        Delta::DativeBond(
+            DativeBondDelta::Add { ast, .. } | DativeBondDelta::Remove { ast, .. },
+        ) => *ast = DativeBondDsl(ast.clone()).into_ast(&cfg.dative_bond),
+        Delta::AromaticSystem(
+            AromaticSystemDelta::Add { ast, .. } | AromaticSystemDelta::Remove { ast, .. },
+        ) => *ast = AromaticSystemDsl(ast.clone()).into_ast(&cfg.aromatic_system),
+        Delta::MulticenterBond(
+            MulticenterBondDelta::Add { ast, .. } | MulticenterBondDelta::Remove { ast, .. },
+        ) => *ast = MulticenterBondDsl(ast.clone()).into_ast(&cfg.multicenter_bond),
+        Delta::NoncovalentBond(
+            NoncovalentBondDelta::Add { ast, .. } | NoncovalentBondDelta::Remove { ast, .. },
+        ) => *ast = NoncovalentBondDsl(ast.clone()).into_ast(&cfg.noncovalent_bond),
+        Delta::StereoAtom(
+            StereoAtomDelta::Add { ast, .. } | StereoAtomDelta::Remove { ast, .. },
+        ) => *ast = StereoAtomDsl(ast.clone()).into_ast(&cfg.stereo_atom),
+        Delta::StereoBond(
+            StereoBondDelta::Add { ast, .. } | StereoBondDelta::Remove { ast, .. },
+        ) => *ast = StereoBondDsl(ast.clone()).into_ast(&cfg.stereo_bond),
         _ => {}
     }
 }
@@ -2972,6 +3008,12 @@ mod tests {
             Delta::Constraint(ConstraintDelta::Add(Constraint::And(vec![]))),
         ]),
     ))]
+    #[case::dative(r##"{:lhs {:atoms ["C" "N"]} :deltas [{:dative-bond {:add {:donors [0] :acceptor 1 :type "1#R"}}}]}"##.parse().unwrap())]
+    #[case::aromatic(r##"{:lhs {:atoms ["C" "C"]} :deltas [{:aromatic-system {:add {:atoms [0 1] :type "*#e2"}}}]}"##.parse().unwrap())]
+    #[case::multicenter(r##"{:lhs {:atoms ["B" "H" "B"]} :deltas [{:multicenter-bond {:add {:atoms [0 1 2] :type "[1,0,1]#e2"}}}]}"##.parse().unwrap())]
+    #[case::noncovalent(r##"{:lhs {:atoms ["N" "H"]} :deltas [{:noncovalent-bond {:add {:atoms [0 1] :type "Hbd"}}}]}"##.parse().unwrap())]
+    #[case::stereo_atom(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]} :deltas [{:stereo-atom {:add {:site 0 :ligands [1 2 3 4] :type "Th1"}}}]}"##.parse().unwrap())]
+    #[case::stereo_bond(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 3] :type "Ct1"}}}]}"##.parse().unwrap())]
     fn test_reaction_dsl_from_ast_roundtrip(#[case] reaction: ReactionAst) {
         let cfg = ReactionDefaults::ground();
         let dsl = ReactionDsl::from_parts(reaction, ReactionMetadata::default());

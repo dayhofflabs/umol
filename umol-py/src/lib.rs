@@ -48,6 +48,7 @@ use crate::{
     },
     correspondence::{Correspondence, MoleculeCorrespondence, SubgraphIsomorphismAlgorithm},
     dative::{DativeBondAst, DativeBondView, DativeBondViews},
+    defaults::{MoleculeDefaults, ReactionDefaults},
     delta::{
         AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, AtomFieldChange, BondDelta,
         BondFieldChange, ConstraintDelta, DativeBondDelta, DativeBondFieldChange, Delta, Deltas,
@@ -114,6 +115,8 @@ mod correspondence;
 #[cfg(feature = "graph")]
 mod dative;
 #[cfg(feature = "graph")]
+mod defaults;
+#[cfg(feature = "graph")]
 mod delta;
 #[cfg(feature = "graph")]
 mod electrons;
@@ -170,6 +173,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
             module.py().get_type::<UnderdeterminedError>(),
         )?;
         module.add_class::<MoleculeAst>()?;
+        module.add_class::<MoleculeDefaults>()?;
+        module.add_class::<ReactionDefaults>()?;
         module.add_class::<AtomTypeRegistry>()?;
         module.add_class::<ValenceEntry>()?;
         module.add_class::<ValenceModel>()?;

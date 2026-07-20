@@ -126,6 +126,17 @@ their molecule owner and route mutations back through it. New public classes are
 registered in `umol-py/src/lib.rs`, re-exported from `python/umol/__init__.py`, and
 listed in `__all__`.
 
+Configured DSL construction is available through `MoleculeDefaults` and
+`ReactionDefaults`. Their ordinary constructors preserve omitted values as
+undetermined; `ground()` fills ordinary entity fields while leaving omitted
+constraints required. `MoleculeAst.parse(text, *, defaults=None)` and
+`ReactionAst.parse(text, *, defaults=None)` apply the selected policy during
+DSL-to-AST conversion; `None` selects the ordinary no-substitution defaults.
+Reaction defaults cover the LHS and
+add/remove snapshots for all eight entity families. Partial update payloads are
+not defaulted. `zeroed()` is deliberately not exposed on the Python side and is
+not used by these construction paths.
+
 ## Current reaction deliverable
 
 The reaction half of the workflow is implemented through doc 150:
@@ -1638,8 +1649,8 @@ and ordinary snapshots are the compatibility seam for a later optional layer.
 - **S8b — reaction fingerprint workflow gate**
   (`umol-py/tests/test_fingerprint.py`): exercise both combined variants from an
   installed package, assert exact S0a results and payload types, and verify that
-  molecular and reaction feature-set classes are not interchangeable. **Additive
-  (green).** `[dep: S8a]`
+  molecular and reaction feature-set classes are not interchangeable.
+  **Implemented (green).** `[dep: S8a]`
 
 DRFP and BRIDGIT remain separate future operation/config families; they do not
 extend `ReactionCombinedFingerprintConfig` in S8.

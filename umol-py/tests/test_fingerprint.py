@@ -9,8 +9,11 @@ from umol import (
     HashedFeatureSet,
     MoleculeAst,
     PatternFingerprintConfig,
+    ReactionAst,
     ReactionCombinedFingerprint,
     ReactionCombinedFingerprintConfig,
+    ReactionDefaults,
+    ReactionSide,
     RefinementRounds,
     RoleTaggedHashedFeatureSet,
     SignedHashedFeatureSet,
@@ -29,6 +32,17 @@ def ethanol():
 @pytest.fixture
 def undetermined_molecule():
     return MoleculeAst.from_parts([AtomAst.parse("C")])
+
+
+@pytest.fixture
+def ethanol_deoxygenation():
+    return ReactionAst.parse(
+        "{:deltas [{:atom {:remove 2}} {:bond {:remove 1}}] "
+        ':lhs {:atoms ["C#h3#v#d0#t0#a!#m!" '
+        '"C#h2#v2#d0#t0#a!#m!" "O#h#n2#v#d0#t0#a!#m!"] '
+        ':bonds [[0 1 "1"] [1 2 "1"]]}}',
+        defaults=ReactionDefaults.ground(),
+    )
 
 
 @pytest.mark.parametrize("rounds", [0, 3])
@@ -604,3 +618,116 @@ def test_molecule_ast_fingerprint_error(undetermined_molecule, method_name, kwar
         match="fingerprint requires a determined molecule",
     ):
         getattr(undetermined_molecule, method_name)(**kwargs)
+
+
+def test_reaction_ast_combined_fingerprint_difference(ethanol_deoxygenation):
+    expected = [
+        (864662311, -1),
+        (1535166686, -1),
+        (2245384272, -1),
+        (2246997334, 1),
+        (3542456614, -1),
+        (3548082732, 1),
+        (4018048386, -1),
+    ]
+
+    result = ethanol_deoxygenation.combined_fingerprint(
+        config=ReactionCombinedFingerprintConfig.Difference(
+            molecule=HashedFingerprintConfig.Morgan()
+        )
+    )
+    features = result.features
+
+    assert type(result) is ReactionCombinedFingerprint
+    assert type(features) is SignedHashedFeatureSet
+    assert features.id_width == 64
+    assert features.entries == expected
+    assert list(features) == expected
+    assert all(type(identifier) is int for identifier, _ in features)
+    assert all(type(count) is int for _, count in features)
+
+
+def test_reaction_ast_combined_fingerprint_disjoint_union(ethanol_deoxygenation):
+    expected = [
+        (ReactionSide.Reactant, 864662311),
+        (ReactionSide.Reactant, 1535166686),
+        (ReactionSide.Reactant, 2245384272),
+        (ReactionSide.Reactant, 2246728737),
+        (ReactionSide.Reactant, 3542456614),
+        (ReactionSide.Reactant, 4018048386),
+        (ReactionSide.Product, 2246728737),
+        (ReactionSide.Product, 2246997334),
+        (ReactionSide.Product, 3548082732),
+    ]
+
+    result = ethanol_deoxygenation.combined_fingerprint(
+        config=ReactionCombinedFingerprintConfig.DisjointUnion(
+            molecule=HashedFingerprintConfig.Morgan()
+        )
+    )
+    features = result.features
+
+    assert type(result) is ReactionCombinedFingerprint
+    assert type(features) is RoleTaggedHashedFeatureSet
+    assert features.id_width == 64
+    assert features.ids == expected
+    assert list(features) == expected
+    assert all(type(side) is ReactionSide for side, _ in features)
+    assert all(type(identifier) is int for _, identifier in features)
+
+
+def test_reaction_ast_combined_fingerprint_feature_types(ethanol_deoxygenation):
+    molecule_config = HashedFingerprintConfig.Morgan()
+    molecular_binary = ethanol_deoxygenation.lhs.hashed_fingerprint(
+        config=molecule_config
+    )
+    molecular_counted = ethanol_deoxygenation.lhs.counted_hashed_fingerprint(
+        config=molecule_config
+    )
+    reaction_signed = ethanol_deoxygenation.combined_fingerprint(
+        config=ReactionCombinedFingerprintConfig.Difference(molecule=molecule_config)
+    ).features
+    reaction_tagged = ethanol_deoxygenation.combined_fingerprint(
+        config=ReactionCombinedFingerprintConfig.DisjointUnion(molecule=molecule_config)
+    ).features
+
+    assert type(molecular_binary) is HashedFeatureSet
+    assert type(molecular_counted) is CountedHashedFeatureSet
+    assert type(reaction_signed) is SignedHashedFeatureSet
+    assert type(reaction_tagged) is RoleTaggedHashedFeatureSet
+    assert molecular_binary != reaction_tagged
+    assert molecular_counted != reaction_signed
+    with pytest.raises(
+        TypeError,
+        match=(
+            "^'RoleTaggedHashedFeatureSet' object is not an instance of "
+            "'HashedFeatureSet'\\nwhile processing 'other'$"
+        ),
+    ):
+        molecular_binary.is_subset(reaction_tagged)
+
+
+def test_reaction_ast_combined_fingerprint_required_error(ethanol_deoxygenation):
+    with pytest.raises(
+        TypeError,
+        match=(
+            "^ReactionAst.combined_fingerprint\\(\\) missing 1 required keyword "
+            "argument: 'config'$"
+        ),
+    ):
+        ethanol_deoxygenation.combined_fingerprint()
+
+
+def test_reaction_ast_combined_fingerprint_keyword_error(ethanol_deoxygenation):
+    config = ReactionCombinedFingerprintConfig.Difference(
+        molecule=HashedFingerprintConfig.Morgan()
+    )
+
+    with pytest.raises(
+        TypeError,
+        match=(
+            "^ReactionAst.combined_fingerprint\\(\\) takes 0 positional arguments "
+            "but 1 was given$"
+        ),
+    ):
+        ethanol_deoxygenation.combined_fingerprint(config)
