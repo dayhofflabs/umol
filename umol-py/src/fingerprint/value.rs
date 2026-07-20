@@ -129,13 +129,6 @@ impl HashedFeatureSet {
 }
 
 impl HashedFeatureSet {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Rust-to-Python conversion is used by molecular fingerprint operations"
-        )
-    )]
     pub(crate) fn from_rust<Id>(features: GraphFeatureSet<Id>) -> Self
     where
         Self: From<GraphFeatureSet<Id>>,
@@ -273,13 +266,6 @@ impl CountedHashedFeatureSet {
 }
 
 impl CountedHashedFeatureSet {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Rust-to-Python conversion is used by molecular fingerprint operations"
-        )
-    )]
     pub(crate) fn from_rust<Id>(features: GraphCountedFeatureSet<Id>) -> Self
     where
         Self: From<GraphCountedFeatureSet<Id>>,

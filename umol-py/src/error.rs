@@ -1,9 +1,10 @@
 //! Binding exceptions.
 
-use pyo3::exceptions::{PyException, PyRuntimeError};
+use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};
 use pyo3::{create_exception, PyErr};
 use umol_ast::ast::Contradiction as AstContradiction;
 use umol_ast::dsl::ParseError as AstParseError;
+use umol_graph::fingerprint::FingerprintError as GraphFingerprintError;
 use umol_graph::ingest::SmilesInputError as GraphSmilesInputError;
 
 create_exception!(
@@ -65,6 +66,22 @@ pub(crate) fn smiles_input_error(error: GraphSmilesInputError) -> PyErr {
             UnderdeterminedError::new_err(error.to_string())
         }
         GraphSmilesInputError::Execution(error) => PyRuntimeError::new_err(error.to_string()),
+    }
+}
+
+/// Map a fingerprint operation error onto the public Python taxonomy.
+pub(crate) fn fingerprint_error(error: GraphFingerprintError) -> PyErr {
+    match error {
+        GraphFingerprintError::NotGround => {
+            UnderdeterminedError::new_err("fingerprint requires a determined molecule")
+        }
+        GraphFingerprintError::Inconsistent => {
+            ContradictionError::new_err("reaction fingerprint input is inconsistent")
+        }
+        GraphFingerprintError::ZeroWidth => PyValueError::new_err("width must be positive"),
+        GraphFingerprintError::WidthMismatch { left, right } => {
+            PyValueError::new_err(format!("fingerprint width mismatch: {left} != {right}"))
+        }
     }
 }
 
@@ -144,6 +161,42 @@ mod tests {
     ) {
         Python::attach(|py| {
             let error = smiles_input_error(input);
+            assert_eq!(error.get_type(py).name().unwrap(), expected_type);
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                expected_message
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::not_ground(
+        GraphFingerprintError::NotGround,
+        "UnderdeterminedError",
+        "fingerprint requires a determined molecule"
+    )]
+    #[case::inconsistent(
+        GraphFingerprintError::Inconsistent,
+        "ContradictionError",
+        "reaction fingerprint input is inconsistent"
+    )]
+    #[case::zero_width(
+        GraphFingerprintError::ZeroWidth,
+        "ValueError",
+        "width must be positive"
+    )]
+    #[case::width_mismatch(
+        GraphFingerprintError::WidthMismatch { left: 64, right: 32 },
+        "ValueError",
+        "fingerprint width mismatch: 64 != 32"
+    )]
+    fn test_fingerprint_error(
+        #[case] input: GraphFingerprintError,
+        #[case] expected_type: &str,
+        #[case] expected_message: &str,
+    ) {
+        Python::attach(|py| {
+            let error = fingerprint_error(input);
             assert_eq!(error.get_type(py).name().unwrap(), expected_type);
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),

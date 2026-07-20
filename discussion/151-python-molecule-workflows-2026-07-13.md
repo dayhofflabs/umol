@@ -1591,8 +1591,8 @@ and ordinary snapshots are the compatibility seam for a later optional layer.
   required `HashedFingerprintConfig`. Dispatch explicitly to WL, ECFP, or Morgan
   and map non-ground input to `UnderdeterminedError`. Tests compare every result
   to S0a exact Rust identities, cover defaults/explicit parameters, and prove
-  returned values are detached. **Additive (green).** `[dep: S3d, S4b, S5d,
-  S6a, S6b]`
+  returned values are detached. **Implemented (green).** `[dep: S3d, S4b,
+  S5d, S6a, S6b]`
 - **S7b — pattern fingerprint method**
   (`umol-py/src/molecule.rs`): add
   `pattern_fingerprint(config=None) -> BitFp`, using the 2048-bit baseline when

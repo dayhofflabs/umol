@@ -16,7 +16,9 @@ use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
 use crate::constraint::molecule::{Constraint, ConstraintsArg, ConstraintsView};
 use crate::dative::{DativeBondAst, DativeBondViews};
-use crate::error::smiles_input_error;
+use crate::error::{fingerprint_error, smiles_input_error};
+use crate::fingerprint::config::HashedFingerprintConfig;
+use crate::fingerprint::value::{CountedHashedFeatureSet, HashedFeatureSet};
 use crate::model::ChemistryModel;
 use crate::multicenter::{MulticenterBondAst, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondViews};
@@ -173,6 +175,29 @@ impl MoleculeAst {
             .map_err(smiles_input_error)
     }
 
+    /// Generate an unfolded binary hashed fingerprint.
+    #[pyo3(signature = (*, config))]
+    fn hashed_fingerprint(&self, config: HashedFingerprintConfig) -> PyResult<HashedFeatureSet> {
+        config
+            .to_rust()
+            .featurize(&self.0)
+            .map(HashedFeatureSet::from_rust)
+            .map_err(fingerprint_error)
+    }
+
+    /// Generate an unfolded counted hashed fingerprint.
+    #[pyo3(signature = (*, config))]
+    fn counted_hashed_fingerprint(
+        &self,
+        config: HashedFingerprintConfig,
+    ) -> PyResult<CountedHashedFeatureSet> {
+        config
+            .to_rust()
+            .featurize_counted(&self.0)
+            .map(CountedHashedFeatureSet::from_rust)
+            .map_err(fingerprint_error)
+    }
+
     /// The atoms, indexed by integer position.
     #[getter]
     fn atoms(slf: Py<Self>) -> AtomViews {
@@ -280,7 +305,8 @@ impl MoleculeAst {
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
+    use pyo3::types::PyList;
+    use rstest::{fixture, rstest};
     use umol_ast::ast::{
         AromaticSystemAst as AstAromaticSystemAst, AromaticSystemId as AstAromaticSystemId,
         AtomAst as AstAtomAst, BondAst as AstBondAst, Constraint as AstConstraint,
@@ -292,11 +318,27 @@ mod tests {
     };
     use umol_ast::mol_dsl;
     use umol_chem::element::Element as ChemElement;
+    use umol_graph::fingerprint::{
+        CountedFeatureSet as GraphCountedFeatureSet, FeatureSet as GraphFeatureSet,
+    };
+    use umol_graph::ingest::ingest_smiles;
 
     use super::*;
     use crate::atom::AtomAst as PyAtomAst;
     use crate::constraint::molecule::Constraints;
     use crate::convert::into_py_variant;
+    use crate::error::UnderdeterminedError;
+    use crate::fingerprint::config::{EcfpHashScheme, RefinementRounds, WlHashScheme};
+
+    #[fixture]
+    fn ethanol() -> MoleculeAst {
+        MoleculeAst::from_inner(ingest_smiles("CCO").unwrap())
+    }
+
+    #[fixture]
+    fn ethane() -> MoleculeAst {
+        MoleculeAst::from_inner(ingest_smiles("CC").unwrap())
+    }
 
     #[rstest]
     fn test_molecule_ast_new() {
@@ -455,6 +497,217 @@ mod tests {
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 expected_message
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::morgan_default(
+        HashedFingerprintConfig::Morgan { radius: 2 },
+        &[
+            864662311,
+            1535166686,
+            2245384272,
+            2246728737,
+            3542456614,
+            4018048386,
+        ]
+    )]
+    #[case::morgan_explicit(
+        HashedFingerprintConfig::Morgan { radius: 0 },
+        &[864662311, 2245384272, 2246728737]
+    )]
+    #[case::ecfp_default(
+        HashedFingerprintConfig::Ecfp {
+            radius: 2,
+            scheme: EcfpHashScheme::Xxh3Width64V1(),
+        },
+        &[
+            63839236075656913,
+            1189585227353469813,
+            3822471596818936039,
+            13652293261850732425,
+            15001976065402722634,
+            16149328945726899460,
+        ]
+    )]
+    #[case::ecfp_explicit(
+        HashedFingerprintConfig::Ecfp {
+            radius: 0,
+            scheme: EcfpHashScheme::Xxh3Width64V1(),
+        },
+        &[
+            1189585227353469813,
+            3822471596818936039,
+            16149328945726899460,
+        ]
+    )]
+    #[case::wl_default_scheme(
+        HashedFingerprintConfig::Wl {
+            rounds: RefinementRounds::Fixed { rounds: 3 },
+            scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+        },
+        &[
+            2520347590860685079,
+            3352603313223549703,
+            4152249898001161146,
+            5715207763479934940,
+            5807737097854608645,
+            7542810387455301591,
+            11457795998246593156,
+            11986000156817227245,
+            12895020514073294021,
+            13932567567828606490,
+            17305796300852423160,
+            17417400371411086222,
+        ]
+    )]
+    #[case::wl_explicit_rounds(
+        HashedFingerprintConfig::Wl {
+            rounds: RefinementRounds::Fixed { rounds: 1 },
+            scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+        },
+        &[
+            5715207763479934940,
+            5807737097854608645,
+            7542810387455301591,
+            11457795998246593156,
+            12895020514073294021,
+            17417400371411086222,
+        ]
+    )]
+    fn test_molecule_ast_hashed_fingerprint(
+        ethanol: MoleculeAst,
+        #[case] config: HashedFingerprintConfig,
+        #[case] expected_ids: &[u64],
+    ) {
+        let fingerprint = ethanol.hashed_fingerprint(config).unwrap();
+        assert_eq!(
+            fingerprint,
+            HashedFeatureSet::from_rust(GraphFeatureSet::from_features(
+                expected_ids.iter().copied()
+            ))
+        );
+
+        Python::attach(|py| {
+            let fingerprint = Py::new(py, fingerprint).unwrap();
+            let fingerprint = fingerprint.bind(py).as_any();
+            fingerprint
+                .getattr("ids")
+                .unwrap()
+                .cast::<PyList>()
+                .unwrap()
+                .append(9u64)
+                .unwrap();
+            assert_eq!(
+                fingerprint
+                    .getattr("ids")
+                    .unwrap()
+                    .extract::<Vec<u64>>()
+                    .unwrap(),
+                expected_ids
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::morgan(HashedFingerprintConfig::Morgan { radius: 2 })]
+    #[case::ecfp(HashedFingerprintConfig::Ecfp {
+        radius: 2,
+        scheme: EcfpHashScheme::Xxh3Width64V1(),
+    })]
+    #[case::wl(HashedFingerprintConfig::Wl {
+        rounds: RefinementRounds::Fixed { rounds: 3 },
+        scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+    })]
+    fn test_molecule_ast_hashed_fingerprint_error(#[case] config: HashedFingerprintConfig) {
+        Python::attach(|py| {
+            let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
+            let error = molecule.hashed_fingerprint(config).unwrap_err();
+            assert!(error.is_instance_of::<UnderdeterminedError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "fingerprint requires a determined molecule"
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::morgan(
+        HashedFingerprintConfig::Morgan { radius: 2 },
+        &[(2246728737, 2), (3545175291, 1)]
+    )]
+    #[case::ecfp(
+        HashedFingerprintConfig::Ecfp {
+            radius: 2,
+            scheme: EcfpHashScheme::Xxh3Width64V1(),
+        },
+        &[(5513743581508886362, 1), (16149328945726899460, 2)]
+    )]
+    #[case::wl(
+        HashedFingerprintConfig::Wl {
+            rounds: RefinementRounds::Fixed { rounds: 3 },
+            scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+        },
+        &[
+            (2659163409134283895, 2),
+            (7542810387455301591, 2),
+            (9541344068636876323, 2),
+            (12512207080905326651, 2),
+        ]
+    )]
+    fn test_molecule_ast_counted_hashed_fingerprint(
+        ethane: MoleculeAst,
+        #[case] config: HashedFingerprintConfig,
+        #[case] expected_entries: &[(u64, u32)],
+    ) {
+        let fingerprint = ethane.counted_hashed_fingerprint(config).unwrap();
+        assert_eq!(
+            fingerprint,
+            CountedHashedFeatureSet::from_rust(GraphCountedFeatureSet::from_counts(
+                expected_entries.iter().copied()
+            ))
+        );
+
+        Python::attach(|py| {
+            let fingerprint = Py::new(py, fingerprint).unwrap();
+            let fingerprint = fingerprint.bind(py).as_any();
+            fingerprint
+                .getattr("entries")
+                .unwrap()
+                .cast::<PyList>()
+                .unwrap()
+                .append((9u64, 3u32))
+                .unwrap();
+            assert_eq!(
+                fingerprint
+                    .getattr("entries")
+                    .unwrap()
+                    .extract::<Vec<(u64, u32)>>()
+                    .unwrap(),
+                expected_entries
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::morgan(HashedFingerprintConfig::Morgan { radius: 2 })]
+    #[case::ecfp(HashedFingerprintConfig::Ecfp {
+        radius: 2,
+        scheme: EcfpHashScheme::Xxh3Width64V1(),
+    })]
+    #[case::wl(HashedFingerprintConfig::Wl {
+        rounds: RefinementRounds::Fixed { rounds: 3 },
+        scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+    })]
+    fn test_molecule_ast_counted_hashed_fingerprint_error(#[case] config: HashedFingerprintConfig) {
+        Python::attach(|py| {
+            let molecule = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
+            let error = molecule.counted_hashed_fingerprint(config).unwrap_err();
+            assert!(error.is_instance_of::<UnderdeterminedError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "fingerprint requires a determined molecule"
             );
         });
     }
