@@ -2,10 +2,10 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use umol_graph::fingerprint::{
-    CountedFeatureSet as GraphCountedFeatureSet, FeatureSet as GraphFeatureSet,
+    BitFp as GraphBitFp, CountedFeatureSet as GraphCountedFeatureSet, FeatureSet as GraphFeatureSet,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -91,6 +91,17 @@ impl HashedFeatureSet {
             }
             _ => Err(self.width_mismatch(other)),
         }
+    }
+
+    fn fold(&self, width: usize) -> PyResult<BitFp> {
+        let folded = match &self.data {
+            HashedFeatureSetData::U32(features) => features.fold(width),
+            HashedFeatureSetData::U64(features) => features.fold(width),
+            HashedFeatureSetData::U128(features) => features.fold(width),
+        };
+        folded
+            .map(BitFp::from_rust)
+            .map_err(|_| PyValueError::new_err("width must be positive"))
     }
 
     fn __len__(&self) -> usize {
@@ -316,6 +327,78 @@ impl CountedHashedFeatureSetIter {
     }
 }
 
+/// Immutable fixed-width bit fingerprint.
+#[pyclass(eq, frozen, skip_from_py_object)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BitFp {
+    inner: GraphBitFp,
+}
+
+#[pymethods]
+impl BitFp {
+    /// Number of bits in the fingerprint.
+    #[getter]
+    fn width(&self) -> usize {
+        self.inner.width()
+    }
+
+    /// Number of set bits.
+    fn count_ones(&self) -> usize {
+        self.inner.count_ones()
+    }
+
+    fn tanimoto(&self, other: &Self) -> PyResult<f64> {
+        self.inner
+            .tanimoto(&other.inner)
+            .map_err(|_| self.width_mismatch(other))
+    }
+
+    fn dice(&self, other: &Self) -> PyResult<f64> {
+        self.inner
+            .dice(&other.inner)
+            .map_err(|_| self.width_mismatch(other))
+    }
+
+    fn is_subset(&self, other: &Self) -> PyResult<bool> {
+        self.inner
+            .is_subset(&other.inner)
+            .map_err(|_| self.width_mismatch(other))
+    }
+
+    fn __getitem__(&self, index: isize) -> PyResult<bool> {
+        let index = if index < 0 {
+            self.inner.width().checked_add_signed(index)
+        } else {
+            usize::try_from(index).ok()
+        };
+        index
+            .and_then(|index| self.inner.get(index))
+            .ok_or_else(|| PyIndexError::new_err("bit index out of range"))
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "BitFp(width={}, count_ones={})",
+            self.width(),
+            self.count_ones()
+        )
+    }
+}
+
+impl BitFp {
+    pub(crate) fn from_rust(inner: GraphBitFp) -> Self {
+        Self { inner }
+    }
+
+    fn width_mismatch(&self, other: &Self) -> PyErr {
+        PyValueError::new_err(format!(
+            "fingerprint width mismatch: {} != {}",
+            self.width(),
+            other.width()
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pyo3::types::PyList;
@@ -441,6 +524,55 @@ mod tests {
                     "identifier width mismatch: 32 != 64"
                 );
             }
+        });
+    }
+
+    #[rstest]
+    #[case::width32(
+        HashedFeatureSet::from_rust(GraphFeatureSet::from_features([1u32, 2, 5, 9])),
+        vec![false, true, true, false, false, true, false, false]
+    )]
+    #[case::width64(
+        HashedFeatureSet::from_rust(GraphFeatureSet::from_features([1u64, 2, 5, 9])),
+        vec![false, true, true, false, false, true, false, false]
+    )]
+    #[case::width128(
+        HashedFeatureSet::from_rust(GraphFeatureSet::from_features([
+            (u64::MAX as u128) + 2,
+        ])),
+        vec![false, true, false, false, false, false, false, false]
+    )]
+    fn test_hashed_feature_set_fold(
+        #[case] features: HashedFeatureSet,
+        #[case] expected: Vec<bool>,
+    ) {
+        Python::attach(|py| {
+            let features = into_py_variant(py, features).unwrap();
+            let folded = features.bind(py).call_method1("fold", (8,)).unwrap();
+
+            assert_eq!(
+                (0..8)
+                    .map(|index| folded.get_item(index).unwrap().extract::<bool>().unwrap())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::zero_width(HashedFeatureSet::from_rust(GraphFeatureSet::from_features([
+        1u64, 2,
+    ])))]
+    fn test_hashed_feature_set_fold_error(#[case] features: HashedFeatureSet) {
+        Python::attach(|py| {
+            let features = into_py_variant(py, features).unwrap();
+            let error = features.bind(py).call_method1("fold", (0,)).unwrap_err();
+
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "width must be positive"
+            );
         });
     }
 
@@ -664,6 +796,146 @@ mod tests {
         #[case] right: CountedHashedFeatureSet,
         #[case] expected: bool,
     ) {
+        assert_eq!(left == right, expected);
+    }
+
+    #[rstest]
+    #[case::nonempty(
+        BitFp::from_rust(GraphFeatureSet::from_features([1u64, 2, 5, 9]).fold(8).unwrap()),
+        8,
+        3,
+        "BitFp(width=8, count_ones=3)"
+    )]
+    #[case::empty(
+        BitFp::from_rust(GraphFeatureSet::from_features(Vec::<u64>::new()).fold(4).unwrap()),
+        4,
+        0,
+        "BitFp(width=4, count_ones=0)"
+    )]
+    fn test_bit_fp_value(
+        #[case] fingerprint: BitFp,
+        #[case] expected_width: usize,
+        #[case] expected_count: usize,
+        #[case] expected_repr: &str,
+    ) {
+        Python::attach(|py| {
+            let expected = into_py_variant(py, fingerprint.clone()).unwrap();
+            let fingerprint = into_py_variant(py, fingerprint).unwrap();
+            let expected = expected.bind(py).as_any();
+            let fingerprint = fingerprint.bind(py).as_any();
+
+            assert!(fingerprint.eq(expected).unwrap());
+            assert_eq!(
+                fingerprint
+                    .getattr("width")
+                    .unwrap()
+                    .extract::<usize>()
+                    .unwrap(),
+                expected_width
+            );
+            assert_eq!(
+                fingerprint
+                    .call_method0("count_ones")
+                    .unwrap()
+                    .extract::<usize>()
+                    .unwrap(),
+                expected_count
+            );
+            assert_eq!(
+                fingerprint.repr().unwrap().extract::<String>().unwrap(),
+                expected_repr
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::first(BitFp::from_rust(
+        GraphFeatureSet::from_features([1u64, 7]).fold(8).unwrap()
+    ), 0, false)]
+    #[case::last(BitFp::from_rust(
+        GraphFeatureSet::from_features([1u64, 7]).fold(8).unwrap()
+    ), 7, true)]
+    #[case::negative_last(BitFp::from_rust(
+        GraphFeatureSet::from_features([1u64, 7]).fold(8).unwrap()
+    ), -1, true)]
+    fn test_bit_fp_getitem(
+        #[case] fingerprint: BitFp,
+        #[case] index: isize,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(fingerprint.__getitem__(index).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::first_invalid(BitFp::from_rust(
+        GraphFeatureSet::from_features([1u64, 7]).fold(8).unwrap()
+    ), 8)]
+    #[case::negative_invalid(BitFp::from_rust(
+        GraphFeatureSet::from_features([1u64, 7]).fold(8).unwrap()
+    ), -9)]
+    fn test_bit_fp_getitem_error(#[case] fingerprint: BitFp, #[case] index: isize) {
+        Python::attach(|py| {
+            let error = fingerprint.__getitem__(index).unwrap_err();
+
+            assert!(error.is_instance_of::<PyIndexError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "bit index out of range"
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::width8(
+        BitFp::from_rust(GraphFeatureSet::from_features([1u64, 2, 3]).fold(8).unwrap()),
+        BitFp::from_rust(GraphFeatureSet::from_features([2u64, 3, 4]).fold(8).unwrap()),
+        BitFp::from_rust(GraphFeatureSet::from_features([2u64, 3]).fold(8).unwrap())
+    )]
+    fn test_bit_fp_operations(#[case] left: BitFp, #[case] right: BitFp, #[case] subset: BitFp) {
+        assert_eq!(left.tanimoto(&right).unwrap(), 0.5);
+        assert_eq!(left.dice(&right).unwrap(), 4.0 / 6.0);
+        assert!(!left.is_subset(&right).unwrap());
+        assert!(subset.is_subset(&right).unwrap());
+    }
+
+    #[rstest]
+    #[case::unequal_widths(
+        BitFp::from_rust(GraphFeatureSet::from_features([1u64]).fold(8).unwrap()),
+        BitFp::from_rust(GraphFeatureSet::from_features([1u64]).fold(4).unwrap())
+    )]
+    fn test_bit_fp_operations_error(#[case] left: BitFp, #[case] right: BitFp) {
+        Python::attach(|py| {
+            for error in [
+                left.tanimoto(&right).unwrap_err(),
+                left.dice(&right).unwrap_err(),
+                left.is_subset(&right).unwrap_err(),
+            ] {
+                assert!(error.is_instance_of::<PyValueError>(py));
+                assert_eq!(
+                    error.value(py).str().unwrap().extract::<String>().unwrap(),
+                    "fingerprint width mismatch: 8 != 4"
+                );
+            }
+        });
+    }
+
+    #[rstest]
+    #[case::same_bits(
+        BitFp::from_rust(GraphFeatureSet::from_features([1u64, 2]).fold(8).unwrap()),
+        BitFp::from_rust(GraphFeatureSet::from_features([1u64, 2]).fold(8).unwrap()),
+        true
+    )]
+    #[case::different_bits(
+        BitFp::from_rust(GraphFeatureSet::from_features([1u64, 2]).fold(8).unwrap()),
+        BitFp::from_rust(GraphFeatureSet::from_features([1u64, 3]).fold(8).unwrap()),
+        false
+    )]
+    #[case::different_widths(
+        BitFp::from_rust(GraphFeatureSet::from_features([1u64, 2]).fold(8).unwrap()),
+        BitFp::from_rust(GraphFeatureSet::from_features([1u64, 2]).fold(4).unwrap()),
+        false
+    )]
+    fn test_bit_fp_eq(#[case] left: BitFp, #[case] right: BitFp, #[case] expected: bool) {
         assert_eq!(left == right, expected);
     }
 }

@@ -1405,9 +1405,10 @@ boundary types and downstream ingestion belong to the next workflow pass.
   containment, and probabilistic refinement as supporting constructions.
 - **S3c — checked `BitFp` and folding arguments**
   (`umol-graph/src/fingerprint/{bit_fp,featurizer,pattern}.rs`): `BitFp::get`
-  returns `Option<bool>`; `FeatureSet<u64>::fold` rejects zero width with
-  `FingerprintError::ZeroWidth`; and `BitFp::{tanimoto,dice,is_subset}` reject
-  unequal widths with `FingerprintError::WidthMismatch { left, right }`.
+  returns `Option<bool>`; folding over `FeatureSet<u32/u64/u128>` rejects zero
+  width with `FingerprintError::ZeroWidth`; and
+  `BitFp::{tanimoto,dice,is_subset}` reject unequal widths with
+  `FingerprintError::WidthMismatch { left, right }`.
   Pattern fingerprinting propagates the checked fold result. Tests cover zero
   width, the last valid and first invalid indices, equal and unequal widths,
   empty values, collisions, and unchanged valid similarity and subset results.
@@ -1543,7 +1544,7 @@ S4 completes the configured resolved-SMILES Python deliverable.
   expose `HashedFeatureSet.fold(width) -> BitFp` here.
   Map invalid indices to `IndexError` and unequal widths to `ValueError`. Tests
   cover empty/nonempty values, boundary indices, width mismatches, exact
-  similarities, equality, and repr. **Additive (green).** `[dep: S3c, S4b]`
+  similarities, equality, and repr. **Implemented (green).** `[dep: S3c, S4b]`
 - **S6d — `StructuralFeatureSet`**
   (`umol-py/src/fingerprint/value.rs`): wrap `FeatureSet<Vec<u8>>` as an immutable
   return-only value exposing detached Python `bytes` keys, length/iteration, and

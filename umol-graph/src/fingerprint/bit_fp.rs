@@ -91,7 +91,11 @@ impl BitFp {
     }
 }
 
-impl FeatureSet<u64> {
+impl<Id> FeatureSet<Id>
+where
+    Id: Clone + Copy + Ord,
+    u128: From<Id>,
+{
     /// Fold to a fixed-width [`BitFp`]: bit `id % width` set for each identifier.
     ///
     /// Returns [`FingerprintError::ZeroWidth`] when `width` is zero.
@@ -101,7 +105,7 @@ impl FeatureSet<u64> {
         }
         let mut bits = BitFp::zeros(width);
         for &id in self.ids() {
-            bits.set((id % width as u64) as usize);
+            bits.set((u128::from(id) % width as u128) as usize);
         }
         Ok(bits)
     }
@@ -254,31 +258,36 @@ mod tests {
     }
 
     #[rstest]
-    #[case::collision(
-        vec![1u64, 2, 5, 9],
-        8,
+    #[case::width32_collision(
+        FeatureSet::from_features([1u32, 2, 5, 9]).fold(8),
         BitFp {
             bits: bitvec![u64, Lsb0; 0, 1, 1, 0, 0, 1, 0, 0],
         }
     )]
-    #[case::empty(
-        vec![],
-        4,
+    #[case::width64_empty(
+        FeatureSet::from_features(Vec::<u64>::new()).fold(4),
         BitFp {
             bits: bitvec![u64, Lsb0; 0; 4],
         }
     )]
-    fn test_feature_set_fold(#[case] ids: Vec<u64>, #[case] width: usize, #[case] expected: BitFp) {
-        assert_eq!(FeatureSet::from_features(ids).fold(width), Ok(expected));
+    #[case::width128_high_identifier(
+        FeatureSet::from_features([(u64::MAX as u128) + 2]).fold(8),
+        BitFp {
+            bits: bitvec![u64, Lsb0; 0, 1, 0, 0, 0, 0, 0, 0],
+        }
+    )]
+    fn test_feature_set_fold(
+        #[case] actual: Result<BitFp, FingerprintError>,
+        #[case] expected: BitFp,
+    ) {
+        assert_eq!(actual, Ok(expected));
     }
 
     #[rstest]
-    #[case::zero_width(vec![1u64, 2], 0, FingerprintError::ZeroWidth)]
-    fn test_feature_set_fold_error(
-        #[case] ids: Vec<u64>,
-        #[case] width: usize,
-        #[case] expected: FingerprintError,
-    ) {
-        assert_eq!(FeatureSet::from_features(ids).fold(width), Err(expected));
+    #[case::width32(FeatureSet::from_features([1u32, 2]).fold(0))]
+    #[case::width64(FeatureSet::from_features([1u64, 2]).fold(0))]
+    #[case::width128(FeatureSet::from_features([1u128, 2]).fold(0))]
+    fn test_feature_set_fold_error(#[case] actual: Result<BitFp, FingerprintError>) {
+        assert_eq!(actual, Err(FingerprintError::ZeroWidth));
     }
 }

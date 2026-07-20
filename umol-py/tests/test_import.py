@@ -161,3 +161,9 @@ def test_counted_hashed_feature_set_import():
     from umol import CountedHashedFeatureSet
 
     assert umol.CountedHashedFeatureSet is CountedHashedFeatureSet
+
+
+def test_bit_fp_import():
+    from umol import BitFp
+
+    assert umol.BitFp is BitFp

@@ -542,9 +542,9 @@ The width-bearing output: fold a `FeatureSet` to a fixed-width bit fingerprint b
 (fixed-width ML features) and fixed-width prescreening.
 
 - Built: `BitFp` (runtime width, backed by `bitvec::BitVec<u64, Lsb0>`) in
-  `fingerprint/bit_fp.rs`; `FeatureSet::<u64>::fold(width) -> BitFp` (a method, not
-  an `Encoder` enum); `width`/`get`/`count_ones`/`tanimoto`/`dice`/`is_subset` over
-  `BitFp`. Similarity ops run on `as_raw_slice()` (word-level popcount); `repeat`
+  `fingerprint/bit_fp.rs`; `FeatureSet::<u32/u64/u128>::fold(width) -> BitFp` (a
+  method, not an `Encoder` enum); `width`/`get`/`count_ones`/`tanimoto`/`dice`/`is_subset`
+  over `BitFp`. Similarity ops run on `as_raw_slice()` (word-level popcount); `repeat`
   zeros the buffer and `set` only touches live bits, so padding stays zero and the
   raw-word ops are exact. Equal width asserted.
 - Storage: chose `bitvec` (already a direct dep via umol-shared) over a hand-rolled
