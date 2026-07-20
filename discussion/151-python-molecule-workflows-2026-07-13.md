@@ -1499,22 +1499,22 @@ S4 completes the configured resolved-SMILES Python deliverable.
   `Wl(rounds, scheme=<default>)`. The config is required by computation methods;
   conversion lowers each variant to an explicit Rust featurizer. Tests cover
   defaults, explicit parameters, every lowering path, equality, and repr.
-  **Additive (green).** `[dep: S5a, S5b, S5c]`
+  **Implemented (green).** `[dep: S5a, S5b, S5c]`
 - **S5e — `PatternFingerprintConfig`**
   (`umol-py/src/fingerprint/config.rs`): bind the optional-method config with
   `width=2048`, positive-width validation, conversion, equality, and repr. Tests
-  cover default, custom positive width, and zero/negative rejection. **Additive
-  (green).** `[dep: S3c, S4a]`
+  cover default, custom positive width, and zero/negative rejection.
+  **Implemented (green).** `[dep: S3c, S4a]`
 - **S5f — `StructuralFingerprintConfig`**
   (`umol-py/src/fingerprint/config.rs`): bind the required-method config with
   `max_bonds`, accepting zero. Tests cover zero and positive bounds, conversion,
-  equality, and repr. **Additive (green).** `[dep: S4a]`
+  equality, and repr. **Implemented (green).** `[dep: S4a]`
 - **S5g — `ReactionCombinedFingerprintConfig`**
   (`umol-py/src/fingerprint/config.rs`): bind required `Difference(molecule=...)`
   and `DisjointUnion(molecule=...)` variants. Lower both the molecular
   featurizer and explicit Rust `ReactionCombinator`; do not export the combinator
   as a separate workflow argument. Tests cover both variants with every hashed
-  config family, equality, and repr. **Additive (green).** `[dep: S5d]`
+  config family, equality, and repr. **Implemented (green).** `[dep: S5d]`
 - **S5h — configuration registration and exports**
   (`umol-py/src/lib.rs`, `python/umol/__init__.py`): register/export every S5
   value and list it in `__all__`. Installed tests construct all variants through

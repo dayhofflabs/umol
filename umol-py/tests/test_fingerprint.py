@@ -1,6 +1,14 @@
 import pytest
 
-from umol import EcfpHashScheme, RefinementRounds, WlHashScheme
+from umol import (
+    EcfpHashScheme,
+    HashedFingerprintConfig,
+    PatternFingerprintConfig,
+    ReactionCombinedFingerprintConfig,
+    RefinementRounds,
+    StructuralFingerprintConfig,
+    WlHashScheme,
+)
 
 
 @pytest.mark.parametrize("rounds", [0, 3])
@@ -34,3 +42,144 @@ def test_ecfp_hash_scheme():
 
     assert value == EcfpHashScheme.Xxh3Width64V1()
     assert repr(value) == "EcfpHashScheme.Xxh3Width64V1()"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected", "expected_repr"),
+    [
+        (
+            HashedFingerprintConfig.Morgan(),
+            HashedFingerprintConfig.Morgan(radius=2),
+            "HashedFingerprintConfig.Morgan(radius=2)",
+        ),
+        (
+            HashedFingerprintConfig.Ecfp(),
+            HashedFingerprintConfig.Ecfp(
+                radius=2,
+                scheme=EcfpHashScheme.Xxh3Width64V1(),
+            ),
+            "HashedFingerprintConfig.Ecfp(radius=2, "
+            "scheme=EcfpHashScheme.Xxh3Width64V1())",
+        ),
+        (
+            HashedFingerprintConfig.Wl(rounds=RefinementRounds.ToFixpoint()),
+            HashedFingerprintConfig.Wl(
+                rounds=RefinementRounds.ToFixpoint(),
+                scheme=WlHashScheme.Xxh3SortedWidth64V1(),
+            ),
+            "HashedFingerprintConfig.Wl(rounds=RefinementRounds.ToFixpoint(), "
+            "scheme=WlHashScheme.Xxh3SortedWidth64V1())",
+        ),
+    ],
+)
+def test_hashed_fingerprint_config_defaults(value, expected, expected_repr):
+    assert value == expected
+    assert repr(value) == expected_repr
+
+
+@pytest.mark.parametrize(
+    ("value", "expected", "expected_repr"),
+    [
+        (
+            HashedFingerprintConfig.Morgan(radius=3),
+            HashedFingerprintConfig.Morgan(radius=3),
+            "HashedFingerprintConfig.Morgan(radius=3)",
+        ),
+        (
+            HashedFingerprintConfig.Ecfp(
+                radius=3,
+                scheme=EcfpHashScheme.Xxh3Width64V1(),
+            ),
+            HashedFingerprintConfig.Ecfp(
+                radius=3,
+                scheme=EcfpHashScheme.Xxh3Width64V1(),
+            ),
+            "HashedFingerprintConfig.Ecfp(radius=3, "
+            "scheme=EcfpHashScheme.Xxh3Width64V1())",
+        ),
+        (
+            HashedFingerprintConfig.Wl(
+                rounds=RefinementRounds.Fixed(rounds=3),
+                scheme=WlHashScheme.Xxh3SortedWidth64V1(),
+            ),
+            HashedFingerprintConfig.Wl(
+                rounds=RefinementRounds.Fixed(rounds=3),
+                scheme=WlHashScheme.Xxh3SortedWidth64V1(),
+            ),
+            "HashedFingerprintConfig.Wl(rounds=RefinementRounds.Fixed(rounds=3), "
+            "scheme=WlHashScheme.Xxh3SortedWidth64V1())",
+        ),
+    ],
+)
+def test_hashed_fingerprint_config(value, expected, expected_repr):
+    assert value == expected
+    assert repr(value) == expected_repr
+
+
+@pytest.mark.parametrize(
+    ("value", "expected", "expected_repr"),
+    [
+        (
+            PatternFingerprintConfig(),
+            PatternFingerprintConfig(width=2048),
+            "PatternFingerprintConfig(width=2048)",
+        ),
+        (
+            PatternFingerprintConfig(width=512),
+            PatternFingerprintConfig(width=512),
+            "PatternFingerprintConfig(width=512)",
+        ),
+    ],
+)
+def test_pattern_fingerprint_config(value, expected, expected_repr):
+    assert value.width == expected.width
+    assert value == expected
+    assert repr(value) == expected_repr
+
+
+@pytest.mark.parametrize("width", [0, -1])
+def test_pattern_fingerprint_config_error(width):
+    with pytest.raises(ValueError, match="width must be positive"):
+        PatternFingerprintConfig(width=width)
+
+
+@pytest.mark.parametrize("max_bonds", [0, 3])
+def test_structural_fingerprint_config(max_bonds):
+    value = StructuralFingerprintConfig(max_bonds=max_bonds)
+
+    assert value.max_bonds == max_bonds
+    assert value == StructuralFingerprintConfig(max_bonds=max_bonds)
+    assert repr(value) == f"StructuralFingerprintConfig(max_bonds={max_bonds})"
+
+
+@pytest.mark.parametrize(
+    ("variant", "variant_name"),
+    [
+        (
+            ReactionCombinedFingerprintConfig.Difference,
+            "Difference",
+        ),
+        (
+            ReactionCombinedFingerprintConfig.DisjointUnion,
+            "DisjointUnion",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "molecule",
+    [
+        HashedFingerprintConfig.Morgan(),
+        HashedFingerprintConfig.Ecfp(),
+        HashedFingerprintConfig.Wl(
+            rounds=RefinementRounds.Fixed(rounds=3),
+        ),
+    ],
+)
+def test_reaction_combined_fingerprint_config(variant, variant_name, molecule):
+    value = variant(molecule=molecule)
+
+    assert value.molecule == molecule
+    assert value == variant(molecule=molecule)
+    assert repr(value) == (
+        f"ReactionCombinedFingerprintConfig.{variant_name}(molecule={molecule!r})"
+    )

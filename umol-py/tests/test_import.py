@@ -125,3 +125,27 @@ def test_ecfp_hash_scheme_import():
     from umol import EcfpHashScheme
 
     assert umol.EcfpHashScheme is EcfpHashScheme
+
+
+def test_hashed_fingerprint_config_import():
+    from umol import HashedFingerprintConfig
+
+    assert umol.HashedFingerprintConfig is HashedFingerprintConfig
+
+
+def test_pattern_fingerprint_config_import():
+    from umol import PatternFingerprintConfig
+
+    assert umol.PatternFingerprintConfig is PatternFingerprintConfig
+
+
+def test_structural_fingerprint_config_import():
+    from umol import StructuralFingerprintConfig
+
+    assert umol.StructuralFingerprintConfig is StructuralFingerprintConfig
+
+
+def test_reaction_combined_fingerprint_config_import():
+    from umol import ReactionCombinedFingerprintConfig
+
+    assert umol.ReactionCombinedFingerprintConfig is ReactionCombinedFingerprintConfig

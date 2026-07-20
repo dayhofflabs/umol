@@ -61,7 +61,11 @@ use crate::{
         ContradictionError, InvalidStructureError, ModelConversionError, ParseError,
         UnderdeterminedError,
     },
-    fingerprint::config::{EcfpHashScheme, RefinementRounds, WlHashScheme},
+    fingerprint::config::{
+        EcfpHashScheme, HashedFingerprintConfig, PatternFingerprintConfig,
+        ReactionCombinedFingerprintConfig, RefinementRounds, StructuralFingerprintConfig,
+        WlHashScheme,
+    },
     model::{
         aromaticity::{AromaticityModel, RingLimits},
         stereo::{InconsistencyPolicy, StereoKindModel, StereoModel},
@@ -202,6 +206,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<RefinementRounds>()?;
         module.add_class::<WlHashScheme>()?;
         module.add_class::<EcfpHashScheme>()?;
+        module.add_class::<HashedFingerprintConfig>()?;
+        module.add_class::<PatternFingerprintConfig>()?;
+        module.add_class::<StructuralFingerprintConfig>()?;
+        module.add_class::<ReactionCombinedFingerprintConfig>()?;
         module.add_class::<Correspondence>()?;
         module.add_class::<MoleculeCorrespondence>()?;
         module.add_class::<SubgraphIsomorphismAlgorithm>()?;
