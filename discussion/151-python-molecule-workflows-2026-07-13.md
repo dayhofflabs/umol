@@ -1518,7 +1518,7 @@ S4 completes the configured resolved-SMILES Python deliverable.
 - **S5h — configuration registration and exports**
   (`umol-py/src/lib.rs`, `python/umol/__init__.py`): register/export every S5
   value and list it in `__all__`. Installed tests construct all variants through
-  the public package and assert required versus optional arguments. **Additive
+  the public package and assert required versus optional arguments. **Implemented
   (green).** `[dep: S5d, S5e, S5f, S5g]`
 
 ### S6 — Python fingerprint result values

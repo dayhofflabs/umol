@@ -183,3 +183,45 @@ def test_reaction_combined_fingerprint_config(variant, variant_name, molecule):
     assert repr(value) == (
         f"ReactionCombinedFingerprintConfig.{variant_name}(molecule={molecule!r})"
     )
+
+
+@pytest.mark.parametrize(
+    "constructor",
+    [
+        RefinementRounds.Fixed,
+        HashedFingerprintConfig.Wl,
+        StructuralFingerprintConfig,
+        ReactionCombinedFingerprintConfig.Difference,
+        ReactionCombinedFingerprintConfig.DisjointUnion,
+    ],
+)
+def test_fingerprint_config_required_error(constructor):
+    with pytest.raises(TypeError):
+        constructor()
+
+
+@pytest.mark.parametrize(
+    ("constructor", "argument"),
+    [
+        (RefinementRounds.Fixed, 3),
+        (HashedFingerprintConfig.Morgan, 3),
+        (HashedFingerprintConfig.Ecfp, 3),
+        (
+            HashedFingerprintConfig.Wl,
+            RefinementRounds.Fixed(rounds=3),
+        ),
+        (PatternFingerprintConfig, 512),
+        (StructuralFingerprintConfig, 3),
+        (
+            ReactionCombinedFingerprintConfig.Difference,
+            HashedFingerprintConfig.Morgan(),
+        ),
+        (
+            ReactionCombinedFingerprintConfig.DisjointUnion,
+            HashedFingerprintConfig.Morgan(),
+        ),
+    ],
+)
+def test_fingerprint_config_keyword_error(constructor, argument):
+    with pytest.raises(TypeError):
+        constructor(argument)

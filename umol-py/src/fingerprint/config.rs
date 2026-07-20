@@ -15,7 +15,10 @@ use umol_graph_core::RefinementRounds as GraphCoreRefinementRounds;
 #[pyclass(from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RefinementRounds {
-    Fixed { rounds: u32 },
+    #[pyo3(constructor = (*, rounds))]
+    Fixed {
+        rounds: u32,
+    },
     ToFixpoint(),
 }
 
