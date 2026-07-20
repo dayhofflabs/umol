@@ -107,3 +107,21 @@ def test_resolve_config_import():
     from umol import ResolveConfig
 
     assert umol.ResolveConfig is ResolveConfig
+
+
+def test_refinement_rounds_import():
+    from umol import RefinementRounds
+
+    assert umol.RefinementRounds is RefinementRounds
+
+
+def test_wl_hash_scheme_import():
+    from umol import WlHashScheme
+
+    assert umol.WlHashScheme is WlHashScheme
+
+
+def test_ecfp_hash_scheme_import():
+    from umol import EcfpHashScheme
+
+    assert umol.EcfpHashScheme is EcfpHashScheme

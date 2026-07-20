@@ -1482,16 +1482,16 @@ S4 completes the configured resolved-SMILES Python deliverable.
   (`umol-py/src/fingerprint/config.rs`): bind `Fixed(rounds)` and `ToFixpoint()`
   directly, with inherent `from_rust`/`to_rust`, equality, payload access, and
   constructor-shaped repr. Cases cover zero/fixed rounds and fixpoint without a
-  sentinel representation. **Additive (green).** `[dep: S4a]`
+  sentinel representation. **Implemented (green).** `[dep: S4a]`
 - **S5b — `WlHashScheme`**
   (`umol-py/src/fingerprint/config.rs`): bind the WL-specific scheme type and
   only its initial `Xxh3SortedWidth64V1()` identity. Conversion tests pin recipe
-  and 64-bit metadata; no seed or aggregation constructor is public. **Additive
-  (green).** `[dep: S3a, S4a]`
+  and 64-bit metadata; no seed or aggregation constructor is public.
+  **Implemented (green).** `[dep: S3a, S4a]`
 - **S5c — `EcfpHashScheme`**
   (`umol-py/src/fingerprint/config.rs`): bind the ECFP-specific scheme type and
   only its initial `Xxh3Width64V1()` identity. Conversion tests pin recipe and
-  64-bit metadata; no seed constructor is public. **Additive (green).**
+  64-bit metadata; no seed constructor is public. **Implemented (green).**
   `[dep: S3a, S4a]`
 - **S5d — `HashedFingerprintConfig`**
   (`umol-py/src/fingerprint/config.rs`): bind `Morgan(radius=2)`,

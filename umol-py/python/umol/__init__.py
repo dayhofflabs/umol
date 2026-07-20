@@ -59,6 +59,7 @@ from ._native import (
     DativeBondViews,
     Delta,
     Deltas,
+    EcfpHashScheme,
     ElectronCountsAst,
     Element,
     ElementAst,
@@ -101,6 +102,7 @@ from ._native import (
     Permutation,
     ReactionAst,
     ReactionDerivation,
+    RefinementRounds,
     RelOp,
     RelationalConstraint,
     ResolveConfig,
@@ -154,6 +156,7 @@ from ._native import (
     ValueAst,
     ValuePredicate,
     ValueTerm,
+    WlHashScheme,
 )
 from .elements import E
 
@@ -219,6 +222,7 @@ __all__ = [
     "Delta",
     "Deltas",
     "E",
+    "EcfpHashScheme",
     "ElectronCountsAst",
     "Element",
     "ElementAst",
@@ -261,6 +265,7 @@ __all__ = [
     "Permutation",
     "ReactionAst",
     "ReactionDerivation",
+    "RefinementRounds",
     "RelOp",
     "RelationalConstraint",
     "ResolveConfig",
@@ -314,5 +319,6 @@ __all__ = [
     "ValueAst",
     "ValuePredicate",
     "ValueTerm",
+    "WlHashScheme",
     "__version__",
 ]
