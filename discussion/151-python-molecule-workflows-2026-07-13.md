@@ -1570,7 +1570,7 @@ S4 completes the configured resolved-SMILES Python deliverable.
   `Difference(features=...)` and `DisjointUnion(features=...)` sum type with
   inherent Rust conversion, equality, payload access, and repr. Tests cover both
   Rust variants and ensure their payload classes cannot be interchanged.
-  **Additive (green).** `[dep: S6f, S6g]`
+  **Implemented (green).** `[dep: S6f, S6g]`
 - **S6i — result registration and exports**
   (`umol-py/src/lib.rs`, `python/umol/__init__.py`): register/export every public
   S6 value while keeping result constructors return-only where specified.

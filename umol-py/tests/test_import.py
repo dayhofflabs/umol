@@ -191,3 +191,9 @@ def test_role_tagged_hashed_feature_set_import():
     from umol import RoleTaggedHashedFeatureSet
 
     assert umol.RoleTaggedHashedFeatureSet is RoleTaggedHashedFeatureSet
+
+
+def test_reaction_combined_fingerprint_import():
+    from umol import ReactionCombinedFingerprint
+
+    assert umol.ReactionCombinedFingerprint is ReactionCombinedFingerprint

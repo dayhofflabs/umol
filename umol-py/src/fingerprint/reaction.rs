@@ -6,8 +6,8 @@ use std::vec::IntoIter;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use umol_graph::fingerprint::{
-    FeatureSet as GraphFeatureSet, ReactionSide as GraphReactionSide,
-    SignedFeatureSet as GraphSignedFeatureSet,
+    FeatureSet as GraphFeatureSet, ReactionFingerprint as GraphReactionFingerprint,
+    ReactionSide as GraphReactionSide, SignedFeatureSet as GraphSignedFeatureSet,
 };
 
 /// Side of a reaction from which a fingerprint feature originates.
@@ -122,13 +122,6 @@ impl SignedHashedFeatureSet {
 }
 
 impl SignedHashedFeatureSet {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Rust-to-Python conversion is used by reaction fingerprint operations"
-        )
-    )]
     pub(crate) fn from_rust<Id>(features: GraphSignedFeatureSet<Id>) -> Self
     where
         Self: From<GraphSignedFeatureSet<Id>>,
@@ -249,13 +242,6 @@ impl RoleTaggedHashedFeatureSet {
 }
 
 impl RoleTaggedHashedFeatureSet {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Rust-to-Python conversion is used by reaction fingerprint operations"
-        )
-    )]
     pub(crate) fn from_rust<Id>(features: GraphFeatureSet<(GraphReactionSide, Id)>) -> Self
     where
         Self: From<GraphFeatureSet<(GraphReactionSide, Id)>>,
@@ -301,6 +287,71 @@ impl RoleTaggedHashedFeatureSetIter {
 
     fn __next__(&mut self) -> Option<(ReactionSide, u128)> {
         self.ids.next()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ReactionCombinedFingerprintData {
+    Difference(SignedHashedFeatureSet),
+    DisjointUnion(RoleTaggedHashedFeatureSet),
+}
+
+/// Immutable result of combining molecular fingerprints across reaction sides.
+#[pyclass(eq, frozen, skip_from_py_object)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReactionCombinedFingerprint {
+    data: ReactionCombinedFingerprintData,
+}
+
+#[pymethods]
+impl ReactionCombinedFingerprint {
+    /// Variant-specific feature payload.
+    #[getter]
+    fn features(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        match &self.data {
+            ReactionCombinedFingerprintData::Difference(features) => {
+                Ok(Py::new(py, features.clone())?.into_any())
+            }
+            ReactionCombinedFingerprintData::DisjointUnion(features) => {
+                Ok(Py::new(py, features.clone())?.into_any())
+            }
+        }
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let features = self.features(py)?.bind(py).repr()?.extract::<String>()?;
+        let variant = match self.data {
+            ReactionCombinedFingerprintData::Difference(_) => "Difference",
+            ReactionCombinedFingerprintData::DisjointUnion(_) => "DisjointUnion",
+        };
+        Ok(format!(
+            "ReactionCombinedFingerprint.{variant}(features={features})"
+        ))
+    }
+}
+
+impl ReactionCombinedFingerprint {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Rust-to-Python conversion is used by reaction fingerprint operations"
+        )
+    )]
+    pub(crate) fn from_rust(fingerprint: GraphReactionFingerprint) -> Self {
+        let data = match fingerprint {
+            GraphReactionFingerprint::Difference(features) => {
+                ReactionCombinedFingerprintData::Difference(SignedHashedFeatureSet::from_rust(
+                    features,
+                ))
+            }
+            GraphReactionFingerprint::DisjointUnion(features) => {
+                ReactionCombinedFingerprintData::DisjointUnion(
+                    RoleTaggedHashedFeatureSet::from_rust(features),
+                )
+            }
+        };
+        Self { data }
     }
 }
 
@@ -762,5 +813,80 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(left == right, expected);
+    }
+
+    #[rstest]
+    fn test_reaction_combined_fingerprint_from_rust_difference() {
+        let fingerprint = ReactionCombinedFingerprint::from_rust(
+            GraphReactionFingerprint::Difference(GraphSignedFeatureSet::difference(
+                &GraphCountedFeatureSet::from_counts([(1u64, 3), (3, 1)]),
+                &GraphCountedFeatureSet::from_counts([(1u64, 1), (2, 4)]),
+            )),
+        );
+
+        Python::attach(|py| {
+            let expected = Py::new(py, fingerprint.clone()).unwrap();
+            let fingerprint = Py::new(py, fingerprint).unwrap();
+            let expected = expected.bind(py).as_any();
+            let fingerprint = fingerprint.bind(py).as_any();
+            let features = fingerprint.getattr("features").unwrap();
+
+            assert!(fingerprint.eq(expected).unwrap());
+            assert!(features.is_instance_of::<SignedHashedFeatureSet>());
+            assert!(!features.is_instance_of::<RoleTaggedHashedFeatureSet>());
+            assert_eq!(
+                features
+                    .getattr("entries")
+                    .unwrap()
+                    .extract::<Vec<(u128, i32)>>()
+                    .unwrap(),
+                vec![(1, 2), (2, -4), (3, 1)]
+            );
+            assert_eq!(
+                fingerprint.repr().unwrap().extract::<String>().unwrap(),
+                "ReactionCombinedFingerprint.Difference(features=SignedHashedFeatureSet(entries=[(1, 2), (2, -4), (3, 1)], id_width=64))"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_combined_fingerprint_from_rust_disjoint_union() {
+        let fingerprint = ReactionCombinedFingerprint::from_rust(
+            GraphReactionFingerprint::DisjointUnion(GraphFeatureSet::from_features([
+                (GraphReactionSide::Product, 2u64),
+                (GraphReactionSide::Reactant, 3),
+                (GraphReactionSide::Reactant, 1),
+                (GraphReactionSide::Product, 1),
+            ])),
+        );
+
+        Python::attach(|py| {
+            let expected = Py::new(py, fingerprint.clone()).unwrap();
+            let fingerprint = Py::new(py, fingerprint).unwrap();
+            let expected = expected.bind(py).as_any();
+            let fingerprint = fingerprint.bind(py).as_any();
+            let features = fingerprint.getattr("features").unwrap();
+
+            assert!(fingerprint.eq(expected).unwrap());
+            assert!(features.is_instance_of::<RoleTaggedHashedFeatureSet>());
+            assert!(!features.is_instance_of::<SignedHashedFeatureSet>());
+            assert_eq!(
+                features
+                    .getattr("ids")
+                    .unwrap()
+                    .extract::<Vec<(ReactionSide, u128)>>()
+                    .unwrap(),
+                vec![
+                    (ReactionSide::Reactant, 1),
+                    (ReactionSide::Reactant, 3),
+                    (ReactionSide::Product, 1),
+                    (ReactionSide::Product, 2),
+                ]
+            );
+            assert_eq!(
+                fingerprint.repr().unwrap().extract::<String>().unwrap(),
+                "ReactionCombinedFingerprint.DisjointUnion(features=RoleTaggedHashedFeatureSet(ids=[(ReactionSide.Reactant, 1), (ReactionSide.Reactant, 3), (ReactionSide.Product, 1), (ReactionSide.Product, 2)], id_width=64))"
+            );
+        });
     }
 }
