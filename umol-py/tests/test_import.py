@@ -155,3 +155,9 @@ def test_hashed_feature_set_import():
     from umol import HashedFeatureSet
 
     assert umol.HashedFeatureSet is HashedFeatureSet
+
+
+def test_counted_hashed_feature_set_import():
+    from umol import CountedHashedFeatureSet
+
+    assert umol.CountedHashedFeatureSet is CountedHashedFeatureSet

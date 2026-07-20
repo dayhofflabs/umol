@@ -1535,8 +1535,8 @@ S4 completes the configured resolved-SMILES Python deliverable.
   (`umol-py/src/fingerprint/value.rs`): add the parallel three-width return-only
   value with detached `(identifier, count)` entries, `id_width`, length/iteration,
   and count lookup. Tests cover sorting assumptions at the Rust boundary,
-  absent/present counts, all widths, detachment, equality, and repr. **Additive
-  (green).** `[dep: S6a]`
+  absent/present counts, all widths, detachment, equality, and repr.
+  **Implemented (green).** `[dep: S6a]`
 - **S6c — `BitFp`** (`umol-py/src/fingerprint/value.rs`): wrap the checked Rust
   value with width, indexed access, population count, Tanimoto, Dice, and subset.
   Generalize checked Rust folding across the supported identifier widths and
