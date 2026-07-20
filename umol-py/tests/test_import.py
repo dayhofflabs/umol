@@ -149,3 +149,9 @@ def test_reaction_combined_fingerprint_config_import():
     from umol import ReactionCombinedFingerprintConfig
 
     assert umol.ReactionCombinedFingerprintConfig is ReactionCombinedFingerprintConfig
+
+
+def test_hashed_feature_set_import():
+    from umol import HashedFeatureSet
+
+    assert umol.HashedFeatureSet is HashedFeatureSet

@@ -1526,10 +1526,11 @@ S4 completes the configured resolved-SMILES Python deliverable.
 - **S6a — `HashedFeatureSet`**
   (`umol-py/src/fingerprint/value.rs`): add an immutable return-only value with
   internal `u32`/`u64`/`u128` specializations, ordinary Python-int identifier
-  snapshots, `id_width`, length/iteration, Tanimoto, Dice, subset, and fold.
+  snapshots, `id_width`, length/iteration, Tanimoto, Dice, and subset. Fold is
+  wired in S6c alongside its `BitFp` result type.
   Operations reject incompatible widths. Rust/PyO3 tests cover all three widths,
   detached exports, exact operations, incompatible widths, equality, and repr.
-  **Additive (green).** `[dep: S3c, S4b]`
+  **Implemented (green).** `[dep: S3c, S4b]`
 - **S6b — `CountedHashedFeatureSet`**
   (`umol-py/src/fingerprint/value.rs`): add the parallel three-width return-only
   value with detached `(identifier, count)` entries, `id_width`, length/iteration,
@@ -1538,6 +1539,8 @@ S4 completes the configured resolved-SMILES Python deliverable.
   (green).** `[dep: S6a]`
 - **S6c — `BitFp`** (`umol-py/src/fingerprint/value.rs`): wrap the checked Rust
   value with width, indexed access, population count, Tanimoto, Dice, and subset.
+  Generalize checked Rust folding across the supported identifier widths and
+  expose `HashedFeatureSet.fold(width) -> BitFp` here.
   Map invalid indices to `IndexError` and unequal widths to `ValueError`. Tests
   cover empty/nonempty values, boundary indices, width mismatches, exact
   similarities, equality, and repr. **Additive (green).** `[dep: S3c, S4b]`
