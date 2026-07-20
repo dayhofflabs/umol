@@ -1553,7 +1553,7 @@ S4 completes the configured resolved-SMILES Python deliverable.
 - **S6e — `ReactionSide`**
   (`umol-py/src/fingerprint/reaction.rs`): bind the Reactant/Product value used
   in role-tagged identifiers, with Rust conversion, equality, and repr. Table
-  tests cover both sides. **Additive (green).** `[dep: S4a]`
+  tests cover both sides. **Implemented (green).** `[dep: S4a]`
 - **S6f — `SignedHashedFeatureSet`**
   (`umol-py/src/fingerprint/reaction.rs`): bind the three-width return-only value
   over `(identifier, signed_count)`, with `id_width`, entries, length/iteration,

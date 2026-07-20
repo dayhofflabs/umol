@@ -173,3 +173,9 @@ def test_structural_feature_set_import():
     from umol import StructuralFeatureSet
 
     assert umol.StructuralFeatureSet is StructuralFeatureSet
+
+
+def test_reaction_side_import():
+    from umol import ReactionSide
+
+    assert umol.ReactionSide is ReactionSide
