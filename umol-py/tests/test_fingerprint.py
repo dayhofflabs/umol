@@ -1,11 +1,18 @@
 import pytest
 
 from umol import (
+    BitFp,
+    CountedHashedFeatureSet,
     EcfpHashScheme,
     HashedFingerprintConfig,
+    HashedFeatureSet,
     PatternFingerprintConfig,
+    ReactionCombinedFingerprint,
     ReactionCombinedFingerprintConfig,
     RefinementRounds,
+    RoleTaggedHashedFeatureSet,
+    SignedHashedFeatureSet,
+    StructuralFeatureSet,
     StructuralFingerprintConfig,
     WlHashScheme,
 )
@@ -225,3 +232,20 @@ def test_fingerprint_config_required_error(constructor):
 def test_fingerprint_config_keyword_error(constructor, argument):
     with pytest.raises(TypeError):
         constructor(argument)
+
+
+@pytest.mark.parametrize(
+    "result_type",
+    [
+        HashedFeatureSet,
+        CountedHashedFeatureSet,
+        BitFp,
+        StructuralFeatureSet,
+        SignedHashedFeatureSet,
+        RoleTaggedHashedFeatureSet,
+        ReactionCombinedFingerprint,
+    ],
+)
+def test_fingerprint_result_constructor_error(result_type):
+    with pytest.raises(TypeError):
+        result_type()

@@ -1574,9 +1574,10 @@ S4 completes the configured resolved-SMILES Python deliverable.
 - **S6i — result registration and exports**
   (`umol-py/src/lib.rs`, `python/umol/__init__.py`): register/export every public
   S6 value while keeping result constructors return-only where specified.
-  Installed tests assert imports, non-constructibility, iteration, and native
-  snapshot types (`int`, `bytes`, tuples). **Additive (green).** `[dep: S6a,
-  S6b, S6c, S6d, S6e, S6h]`
+  Installed tests assert imports and non-constructibility. PyO3 tests assert
+  iteration and native snapshot types (`int`, `bytes`, tuples); the installed
+  workflow checks repeat those assertions once S7 and S8 provide public result
+  producers. **Implemented (green).** `[dep: S6a, S6b, S6c, S6d, S6e, S6h]`
 
 Native NumPy integration is deliberately absent from S6; retained width metadata
 and ordinary snapshots are the compatibility seam for a later optional layer.

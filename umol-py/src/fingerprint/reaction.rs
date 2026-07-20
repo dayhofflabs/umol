@@ -357,6 +357,7 @@ impl ReactionCombinedFingerprint {
 
 #[cfg(test)]
 mod tests {
+    use pyo3::types::{PyInt, PyTuple};
     use rstest::rstest;
     use umol_graph::fingerprint::CountedFeatureSet as GraphCountedFeatureSet;
 
@@ -467,16 +468,17 @@ mod tests {
             let features = Py::new(py, features).unwrap();
             let expected = expected.bind(py).as_any();
             let features = features.bind(py).as_any();
+            let entries = features.getattr("entries").unwrap();
 
             assert!(features.eq(expected).unwrap());
             assert_eq!(
-                features
-                    .getattr("entries")
-                    .unwrap()
-                    .extract::<Vec<(u128, i32)>>()
-                    .unwrap(),
+                entries.extract::<Vec<(u128, i32)>>().unwrap(),
                 expected_entries
             );
+            assert!(entries.cast::<PyList>().unwrap().iter().all(|entry| {
+                let entry = entry.cast::<PyTuple>().unwrap();
+                entry.iter().all(|item| item.is_instance_of::<PyInt>())
+            }));
             assert_eq!(
                 features
                     .getattr("id_width")
@@ -492,7 +494,12 @@ mod tests {
                     .unwrap()
                     .try_iter()
                     .unwrap()
-                    .map(|item| item.unwrap().extract::<(u128, i32)>().unwrap())
+                    .map(|item| {
+                        let item = item.unwrap();
+                        let tuple = item.cast::<PyTuple>().unwrap();
+                        assert!(tuple.iter().all(|value| value.is_instance_of::<PyInt>()));
+                        item.extract::<(u128, i32)>().unwrap()
+                    })
                     .collect::<Vec<_>>(),
                 expected_entries
             );
@@ -710,16 +717,18 @@ mod tests {
             let features = Py::new(py, features).unwrap();
             let expected = expected.bind(py).as_any();
             let features = features.bind(py).as_any();
+            let ids = features.getattr("ids").unwrap();
 
             assert!(features.eq(expected).unwrap());
             assert_eq!(
-                features
-                    .getattr("ids")
-                    .unwrap()
-                    .extract::<Vec<(ReactionSide, u128)>>()
-                    .unwrap(),
+                ids.extract::<Vec<(ReactionSide, u128)>>().unwrap(),
                 expected_ids
             );
+            assert!(ids.cast::<PyList>().unwrap().iter().all(|id| {
+                let id = id.cast::<PyTuple>().unwrap();
+                id.get_item(0).unwrap().is_instance_of::<ReactionSide>()
+                    && id.get_item(1).unwrap().is_instance_of::<PyInt>()
+            }));
             assert_eq!(
                 features
                     .getattr("id_width")
@@ -735,7 +744,13 @@ mod tests {
                     .unwrap()
                     .try_iter()
                     .unwrap()
-                    .map(|item| item.unwrap().extract::<(ReactionSide, u128)>().unwrap())
+                    .map(|item| {
+                        let item = item.unwrap();
+                        let tuple = item.cast::<PyTuple>().unwrap();
+                        assert!(tuple.get_item(0).unwrap().is_instance_of::<ReactionSide>());
+                        assert!(tuple.get_item(1).unwrap().is_instance_of::<PyInt>());
+                        item.extract::<(ReactionSide, u128)>().unwrap()
+                    })
                     .collect::<Vec<_>>(),
                 expected_ids
             );
