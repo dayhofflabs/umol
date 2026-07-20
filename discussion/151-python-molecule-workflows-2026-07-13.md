@@ -1606,11 +1606,22 @@ and ordinary snapshots are the compatibility seam for a later optional layer.
   map non-ground input, and prove byte snapshots are detached. **Implemented
   (green).** `[dep: S5f, S6d]`
 - **S7d — molecular fingerprint workflow gate**
-  (`umol-py/tests/test_fingerprint.py`, benchmark harness): exercise all five
-  public molecule methods from installed Python, exact configs/results,
-  similarities, subsets, folding, invalid arguments, and typed non-ground
-  failures. Compare binding overhead with S0a without imposing a timing
-  threshold. **Additive (green).** `[dep: S7a, S7b, S7c]`
+  (`umol-py/tests/test_fingerprint.py`, benchmark harness): exercise all four
+  public molecule methods across the five WL, ECFP, Morgan, pattern, and
+  structural definitions from installed Python, including the counted path and
+  exact configs/results, similarities, subsets, folding, invalid arguments, and
+  typed non-ground failures. Compare binding overhead with S0a without imposing
+  a timing threshold. **Implemented (green).** `[dep: S7a, S7b, S7c]`
+
+  The release binding harness on macOS 15.7.3 arm64 with CPython 3.13.14 records
+  the best of five repeats: 24 ns for an empty Python call, 28 ns for the trivial
+  PyO3 call, 2.462 µs for WL, 1.939 µs for ECFP, 1.753 µs for Morgan, 1.788 µs
+  for counted Morgan, 4.549 µs for pattern, and 9.343 µs for structural. The
+  same-machine 100-sample Criterion fixture intervals are 2.235–2.241 µs,
+  1.760–1.767 µs, 1.540–1.546 µs, 4.363–4.383 µs, and 8.986–9.015 µs
+  respectively for the five binary definitions. The directional Python
+  increment is therefore about 0.17–0.36 µs per fixture call, including result
+  wrapping; these measurements are recorded without a pass/fail threshold.
 
 ### S8 — Reaction fingerprints
 

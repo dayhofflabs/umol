@@ -1,11 +1,13 @@
 import pytest
 
 from umol import (
+    AtomAst,
     BitFp,
     CountedHashedFeatureSet,
     EcfpHashScheme,
     HashedFingerprintConfig,
     HashedFeatureSet,
+    MoleculeAst,
     PatternFingerprintConfig,
     ReactionCombinedFingerprint,
     ReactionCombinedFingerprintConfig,
@@ -14,8 +16,19 @@ from umol import (
     SignedHashedFeatureSet,
     StructuralFeatureSet,
     StructuralFingerprintConfig,
+    UnderdeterminedError,
     WlHashScheme,
 )
+
+
+@pytest.fixture
+def ethanol():
+    return MoleculeAst.from_smiles("CCO")
+
+
+@pytest.fixture
+def undetermined_molecule():
+    return MoleculeAst.from_parts([AtomAst.parse("C")])
 
 
 @pytest.mark.parametrize("rounds", [0, 3])
@@ -249,3 +262,345 @@ def test_fingerprint_config_keyword_error(constructor, argument):
 def test_fingerprint_result_constructor_error(result_type):
     with pytest.raises(TypeError):
         result_type()
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_ids"),
+    [
+        (
+            HashedFingerprintConfig.Morgan(),
+            [
+                864662311,
+                1535166686,
+                2245384272,
+                2246728737,
+                3542456614,
+                4018048386,
+            ],
+        ),
+        (
+            HashedFingerprintConfig.Ecfp(),
+            [
+                63839236075656913,
+                1189585227353469813,
+                3822471596818936039,
+                13652293261850732425,
+                15001976065402722634,
+                16149328945726899460,
+            ],
+        ),
+        (
+            HashedFingerprintConfig.Wl(
+                rounds=RefinementRounds.Fixed(rounds=3),
+            ),
+            [
+                2520347590860685079,
+                3352603313223549703,
+                4152249898001161146,
+                5715207763479934940,
+                5807737097854608645,
+                7542810387455301591,
+                11457795998246593156,
+                11986000156817227245,
+                12895020514073294021,
+                13932567567828606490,
+                17305796300852423160,
+                17417400371411086222,
+            ],
+        ),
+    ],
+)
+def test_molecule_ast_hashed_fingerprint(ethanol, config, expected_ids):
+    fingerprint = ethanol.hashed_fingerprint(config=config)
+    ids = fingerprint.ids
+
+    assert ids == expected_ids
+    assert list(fingerprint) == expected_ids
+    assert fingerprint.id_width == 64
+    assert all(type(identifier) is int for identifier in fingerprint)
+    ids.append(9)
+    assert fingerprint.ids == expected_ids
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_entries"),
+    [
+        (
+            HashedFingerprintConfig.Morgan(),
+            [(2246728737, 2), (3545175291, 1)],
+        ),
+        (
+            HashedFingerprintConfig.Ecfp(),
+            [(5513743581508886362, 1), (16149328945726899460, 2)],
+        ),
+        (
+            HashedFingerprintConfig.Wl(
+                rounds=RefinementRounds.Fixed(rounds=3),
+            ),
+            [
+                (2659163409134283895, 2),
+                (7542810387455301591, 2),
+                (9541344068636876323, 2),
+                (12512207080905326651, 2),
+            ],
+        ),
+    ],
+)
+def test_molecule_ast_counted_hashed_fingerprint(config, expected_entries):
+    fingerprint = MoleculeAst.from_smiles("CC").counted_hashed_fingerprint(
+        config=config
+    )
+    entries = fingerprint.entries
+
+    assert entries == expected_entries
+    assert list(fingerprint) == expected_entries
+    assert fingerprint.id_width == 64
+    assert fingerprint.count(expected_entries[0][0]) == expected_entries[0][1]
+    assert fingerprint.count(0) == 0
+    assert all(
+        type(identifier) is int and type(count) is int
+        for identifier, count in fingerprint
+    )
+    entries.append((9, 3))
+    assert fingerprint.entries == expected_entries
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_width", "expected_bits"),
+    [
+        (
+            None,
+            2048,
+            [
+                54,
+                173,
+                217,
+                429,
+                622,
+                759,
+                778,
+                874,
+                946,
+                967,
+                1022,
+                1033,
+                1061,
+                1236,
+                1289,
+                1295,
+            ],
+        ),
+        (
+            PatternFingerprintConfig(),
+            2048,
+            [
+                54,
+                173,
+                217,
+                429,
+                622,
+                759,
+                778,
+                874,
+                946,
+                967,
+                1022,
+                1033,
+                1061,
+                1236,
+                1289,
+                1295,
+            ],
+        ),
+        (
+            PatternFingerprintConfig(width=64),
+            64,
+            [7, 9, 10, 15, 20, 25, 37, 42, 45, 46, 50, 54, 55, 62],
+        ),
+    ],
+)
+def test_molecule_ast_pattern_fingerprint(
+    ethanol, config, expected_width, expected_bits
+):
+    if config is None:
+        fingerprint = ethanol.pattern_fingerprint()
+    else:
+        fingerprint = ethanol.pattern_fingerprint(config=config)
+
+    assert fingerprint.width == expected_width
+    assert fingerprint.count_ones() == len(expected_bits)
+    assert [bit for bit in range(expected_width) if fingerprint[bit]] == expected_bits
+    assert type(fingerprint[0]) is bool
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_keys"),
+    [
+        (
+            StructuralFingerprintConfig(max_bonds=0),
+            [
+                bytes.fromhex("01 00 00 00 05 00 00 00 00 06 00 00 00 00 00 00 00"),
+                bytes.fromhex("01 00 00 00 05 00 00 00 00 08 00 00 00 00 00 00 00"),
+            ],
+        ),
+        (
+            StructuralFingerprintConfig(max_bonds=2),
+            [
+                bytes.fromhex("01 00 00 00 05 00 00 00 00 06 00 00 00 00 00 00 00"),
+                bytes.fromhex("01 00 00 00 05 00 00 00 00 08 00 00 00 00 00 00 00"),
+                bytes.fromhex(
+                    "03 00 00 00 05 00 00 00 00 06 00 00 00 05 00 00 00 00 "
+                    "06 00 00 00 03 00 00 00 01 01 00 02 00 00 00 00 00 00 "
+                    "00 02 00 00 00 01 00 00 00 02 00 00 00"
+                ),
+                bytes.fromhex(
+                    "03 00 00 00 05 00 00 00 00 06 00 00 00 05 00 00 00 00 "
+                    "08 00 00 00 03 00 00 00 01 01 00 02 00 00 00 00 00 00 "
+                    "00 02 00 00 00 01 00 00 00 02 00 00 00"
+                ),
+                bytes.fromhex(
+                    "05 00 00 00 05 00 00 00 00 06 00 00 00 05 00 00 00 00 "
+                    "06 00 00 00 05 00 00 00 00 08 00 00 00 03 00 00 00 01 "
+                    "01 00 03 00 00 00 01 01 00 04 00 00 00 00 00 00 00 03 "
+                    "00 00 00 01 00 00 00 03 00 00 00 01 00 00 00 04 00 00 "
+                    "00 02 00 00 00 04 00 00 00"
+                ),
+            ],
+        ),
+    ],
+)
+def test_molecule_ast_structural_fingerprint(ethanol, config, expected_keys):
+    fingerprint = ethanol.structural_fingerprint(config=config)
+    keys = fingerprint.keys
+
+    assert keys == expected_keys
+    assert list(fingerprint) == expected_keys
+    assert all(type(key) is bytes for key in fingerprint)
+    keys.append(b"detached")
+    assert fingerprint.keys == expected_keys
+
+
+def test_hashed_feature_set_operations():
+    config = HashedFingerprintConfig.Morgan()
+    ethane = MoleculeAst.from_smiles("CC").hashed_fingerprint(config=config)
+    propane = MoleculeAst.from_smiles("CCC").hashed_fingerprint(config=config)
+    folded = ethane.fold(64)
+
+    assert ethane.tanimoto(propane) == pytest.approx(0.2)
+    assert ethane.dice(propane) == pytest.approx(1 / 3)
+    assert ethane.is_subset(propane) is False
+    assert propane.is_subset(ethane) is False
+    assert folded.width == 64
+    assert [bit for bit in range(64) if folded[bit]] == [33, 59]
+
+
+def test_hashed_feature_set_fold_error():
+    fingerprint = MoleculeAst.from_smiles("CC").hashed_fingerprint(
+        config=HashedFingerprintConfig.Morgan()
+    )
+
+    with pytest.raises(ValueError, match="width must be positive"):
+        fingerprint.fold(0)
+
+
+def test_bit_fp_operations():
+    config = PatternFingerprintConfig(width=64)
+    ethane = MoleculeAst.from_smiles("CC").pattern_fingerprint(config=config)
+    propane = MoleculeAst.from_smiles("CCC").pattern_fingerprint(config=config)
+
+    assert [bit for bit in range(64) if ethane[bit]] == [10, 15, 20, 37, 45, 62]
+    assert [bit for bit in range(64) if propane[bit]] == [
+        7,
+        9,
+        10,
+        15,
+        20,
+        25,
+        37,
+        45,
+        46,
+        62,
+    ]
+    assert ethane.tanimoto(propane) == pytest.approx(0.6)
+    assert ethane.dice(propane) == pytest.approx(0.75)
+    assert ethane.is_subset(propane) is True
+    assert propane.is_subset(ethane) is False
+
+
+@pytest.mark.parametrize("index", [64, -65])
+def test_bit_fp_getitem_error(index):
+    fingerprint = MoleculeAst.from_smiles("CC").pattern_fingerprint(
+        config=PatternFingerprintConfig(width=64)
+    )
+
+    with pytest.raises(IndexError, match="bit index out of range"):
+        fingerprint[index]
+
+
+@pytest.mark.parametrize("operation", ["tanimoto", "dice", "is_subset"])
+def test_bit_fp_operations_error(operation):
+    molecule = MoleculeAst.from_smiles("CC")
+    narrow = molecule.pattern_fingerprint(config=PatternFingerprintConfig(width=64))
+    wide = molecule.pattern_fingerprint(config=PatternFingerprintConfig(width=128))
+
+    with pytest.raises(ValueError, match="fingerprint width mismatch: 64 != 128"):
+        getattr(narrow, operation)(wide)
+
+
+def test_structural_feature_set_is_subset():
+    config = StructuralFingerprintConfig(max_bonds=2)
+    ethane = MoleculeAst.from_smiles("CC").structural_fingerprint(config=config)
+    propane = MoleculeAst.from_smiles("CCC").structural_fingerprint(config=config)
+
+    assert ethane.is_subset(propane) is True
+    assert propane.is_subset(ethane) is False
+
+
+@pytest.mark.parametrize(
+    ("method_name", "config"),
+    [
+        ("hashed_fingerprint", HashedFingerprintConfig.Morgan()),
+        ("counted_hashed_fingerprint", HashedFingerprintConfig.Morgan()),
+        ("pattern_fingerprint", PatternFingerprintConfig()),
+        ("structural_fingerprint", StructuralFingerprintConfig(max_bonds=2)),
+    ],
+)
+def test_molecule_ast_fingerprint_keyword_error(ethanol, method_name, config):
+    with pytest.raises(TypeError):
+        getattr(ethanol, method_name)(config)
+
+
+@pytest.mark.parametrize(
+    "method_name",
+    [
+        "hashed_fingerprint",
+        "counted_hashed_fingerprint",
+        "structural_fingerprint",
+    ],
+)
+def test_molecule_ast_fingerprint_required_error(ethanol, method_name):
+    with pytest.raises(TypeError):
+        getattr(ethanol, method_name)()
+
+
+@pytest.mark.parametrize(
+    ("method_name", "kwargs"),
+    [
+        ("hashed_fingerprint", {"config": HashedFingerprintConfig.Morgan()}),
+        (
+            "counted_hashed_fingerprint",
+            {"config": HashedFingerprintConfig.Morgan()},
+        ),
+        ("pattern_fingerprint", {}),
+        (
+            "structural_fingerprint",
+            {"config": StructuralFingerprintConfig(max_bonds=2)},
+        ),
+    ],
+)
+def test_molecule_ast_fingerprint_error(undetermined_molecule, method_name, kwargs):
+    with pytest.raises(
+        UnderdeterminedError,
+        match="fingerprint requires a determined molecule",
+    ):
+        getattr(undetermined_molecule, method_name)(**kwargs)
