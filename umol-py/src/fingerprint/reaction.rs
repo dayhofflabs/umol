@@ -4,8 +4,10 @@
 use std::vec::IntoIter;
 
 use pyo3::prelude::*;
+use pyo3::types::PyList;
 use umol_graph::fingerprint::{
-    ReactionSide as GraphReactionSide, SignedFeatureSet as GraphSignedFeatureSet,
+    FeatureSet as GraphFeatureSet, ReactionSide as GraphReactionSide,
+    SignedFeatureSet as GraphSignedFeatureSet,
 };
 
 /// Side of a reaction from which a fingerprint feature originates.
@@ -17,13 +19,6 @@ pub enum ReactionSide {
 }
 
 impl ReactionSide {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Rust-to-Python conversion is used by reaction fingerprint operations"
-        )
-    )]
     pub(crate) fn from_rust(side: GraphReactionSide) -> Self {
         match side {
             GraphReactionSide::Reactant => Self::Reactant,
@@ -182,9 +177,135 @@ impl SignedHashedFeatureSetIter {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum RoleTaggedHashedFeatureSetData {
+    U32(GraphFeatureSet<(GraphReactionSide, u32)>),
+    U64(GraphFeatureSet<(GraphReactionSide, u64)>),
+    U128(GraphFeatureSet<(GraphReactionSide, u128)>),
+}
+
+/// Immutable sparse set of reaction-side-tagged hashed identifiers.
+#[pyclass(eq, frozen, skip_from_py_object)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RoleTaggedHashedFeatureSet {
+    data: RoleTaggedHashedFeatureSetData,
+}
+
+#[pymethods]
+impl RoleTaggedHashedFeatureSet {
+    /// Hash-identifier width in bits.
+    #[getter]
+    fn id_width(&self) -> u16 {
+        match self.data {
+            RoleTaggedHashedFeatureSetData::U32(_) => 32,
+            RoleTaggedHashedFeatureSetData::U64(_) => 64,
+            RoleTaggedHashedFeatureSetData::U128(_) => 128,
+        }
+    }
+
+    /// Sorted `(reaction_side, identifier)` snapshot using ordinary Python integers.
+    #[getter]
+    fn ids(&self) -> Vec<(ReactionSide, u128)> {
+        match &self.data {
+            RoleTaggedHashedFeatureSetData::U32(features) => features
+                .ids()
+                .iter()
+                .map(|(side, id)| (ReactionSide::from_rust(*side), u128::from(*id)))
+                .collect(),
+            RoleTaggedHashedFeatureSetData::U64(features) => features
+                .ids()
+                .iter()
+                .map(|(side, id)| (ReactionSide::from_rust(*side), u128::from(*id)))
+                .collect(),
+            RoleTaggedHashedFeatureSetData::U128(features) => features
+                .ids()
+                .iter()
+                .map(|(side, id)| (ReactionSide::from_rust(*side), *id))
+                .collect(),
+        }
+    }
+
+    fn __len__(&self) -> usize {
+        match &self.data {
+            RoleTaggedHashedFeatureSetData::U32(features) => features.len(),
+            RoleTaggedHashedFeatureSetData::U64(features) => features.len(),
+            RoleTaggedHashedFeatureSetData::U128(features) => features.len(),
+        }
+    }
+
+    fn __iter__(&self) -> RoleTaggedHashedFeatureSetIter {
+        RoleTaggedHashedFeatureSetIter {
+            ids: self.ids().into_iter(),
+        }
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let ids = PyList::new(py, self.ids())?.repr()?.extract::<String>()?;
+        Ok(format!(
+            "RoleTaggedHashedFeatureSet(ids={ids}, id_width={})",
+            self.id_width()
+        ))
+    }
+}
+
+impl RoleTaggedHashedFeatureSet {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Rust-to-Python conversion is used by reaction fingerprint operations"
+        )
+    )]
+    pub(crate) fn from_rust<Id>(features: GraphFeatureSet<(GraphReactionSide, Id)>) -> Self
+    where
+        Self: From<GraphFeatureSet<(GraphReactionSide, Id)>>,
+    {
+        Self::from(features)
+    }
+}
+
+impl From<GraphFeatureSet<(GraphReactionSide, u32)>> for RoleTaggedHashedFeatureSet {
+    fn from(features: GraphFeatureSet<(GraphReactionSide, u32)>) -> Self {
+        Self {
+            data: RoleTaggedHashedFeatureSetData::U32(features),
+        }
+    }
+}
+
+impl From<GraphFeatureSet<(GraphReactionSide, u64)>> for RoleTaggedHashedFeatureSet {
+    fn from(features: GraphFeatureSet<(GraphReactionSide, u64)>) -> Self {
+        Self {
+            data: RoleTaggedHashedFeatureSetData::U64(features),
+        }
+    }
+}
+
+impl From<GraphFeatureSet<(GraphReactionSide, u128)>> for RoleTaggedHashedFeatureSet {
+    fn from(features: GraphFeatureSet<(GraphReactionSide, u128)>) -> Self {
+        Self {
+            data: RoleTaggedHashedFeatureSetData::U128(features),
+        }
+    }
+}
+
+#[pyclass]
+struct RoleTaggedHashedFeatureSetIter {
+    ids: IntoIter<(ReactionSide, u128)>,
+}
+
+#[pymethods]
+impl RoleTaggedHashedFeatureSetIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> Option<(ReactionSide, u128)> {
+        self.ids.next()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use pyo3::types::PyList;
     use rstest::rstest;
     use umol_graph::fingerprint::CountedFeatureSet as GraphCountedFeatureSet;
 
@@ -477,6 +598,167 @@ mod tests {
     fn test_signed_hashed_feature_set_eq(
         #[case] left: SignedHashedFeatureSet,
         #[case] right: SignedHashedFeatureSet,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(left == right, expected);
+    }
+
+    #[rstest]
+    #[case::width32(
+        RoleTaggedHashedFeatureSet::from_rust(GraphFeatureSet::from_features([
+            (GraphReactionSide::Product, 2u32),
+            (GraphReactionSide::Reactant, 3),
+            (GraphReactionSide::Reactant, 1),
+            (GraphReactionSide::Product, 1),
+        ])),
+        vec![
+            (ReactionSide::Reactant, 1),
+            (ReactionSide::Reactant, 3),
+            (ReactionSide::Product, 1),
+            (ReactionSide::Product, 2),
+        ],
+        32,
+        "RoleTaggedHashedFeatureSet(ids=[(ReactionSide.Reactant, 1), (ReactionSide.Reactant, 3), (ReactionSide.Product, 1), (ReactionSide.Product, 2)], id_width=32)"
+    )]
+    #[case::width64(
+        RoleTaggedHashedFeatureSet::from_rust(GraphFeatureSet::from_features([
+            (GraphReactionSide::Product, 2u64),
+            (GraphReactionSide::Reactant, 3),
+            (GraphReactionSide::Reactant, 1),
+            (GraphReactionSide::Product, 1),
+        ])),
+        vec![
+            (ReactionSide::Reactant, 1),
+            (ReactionSide::Reactant, 3),
+            (ReactionSide::Product, 1),
+            (ReactionSide::Product, 2),
+        ],
+        64,
+        "RoleTaggedHashedFeatureSet(ids=[(ReactionSide.Reactant, 1), (ReactionSide.Reactant, 3), (ReactionSide.Product, 1), (ReactionSide.Product, 2)], id_width=64)"
+    )]
+    #[case::width128(
+        RoleTaggedHashedFeatureSet::from_rust(GraphFeatureSet::from_features([
+            (GraphReactionSide::Product, (u64::MAX as u128) + 1),
+            (GraphReactionSide::Reactant, 1),
+        ])),
+        vec![
+            (ReactionSide::Reactant, 1),
+            (ReactionSide::Product, (u64::MAX as u128) + 1),
+        ],
+        128,
+        "RoleTaggedHashedFeatureSet(ids=[(ReactionSide.Reactant, 1), (ReactionSide.Product, 18446744073709551616)], id_width=128)"
+    )]
+    fn test_role_tagged_hashed_feature_set_value(
+        #[case] features: RoleTaggedHashedFeatureSet,
+        #[case] expected_ids: Vec<(ReactionSide, u128)>,
+        #[case] expected_width: u16,
+        #[case] expected_repr: &str,
+    ) {
+        Python::attach(|py| {
+            let expected = Py::new(py, features.clone()).unwrap();
+            let features = Py::new(py, features).unwrap();
+            let expected = expected.bind(py).as_any();
+            let features = features.bind(py).as_any();
+
+            assert!(features.eq(expected).unwrap());
+            assert_eq!(
+                features
+                    .getattr("ids")
+                    .unwrap()
+                    .extract::<Vec<(ReactionSide, u128)>>()
+                    .unwrap(),
+                expected_ids
+            );
+            assert_eq!(
+                features
+                    .getattr("id_width")
+                    .unwrap()
+                    .extract::<u16>()
+                    .unwrap(),
+                expected_width
+            );
+            assert_eq!(features.len().unwrap(), expected_ids.len());
+            assert_eq!(
+                features
+                    .call_method0("__iter__")
+                    .unwrap()
+                    .try_iter()
+                    .unwrap()
+                    .map(|item| item.unwrap().extract::<(ReactionSide, u128)>().unwrap())
+                    .collect::<Vec<_>>(),
+                expected_ids
+            );
+            assert_eq!(
+                features.repr().unwrap().extract::<String>().unwrap(),
+                expected_repr
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::snapshot(RoleTaggedHashedFeatureSet::from_rust(
+        GraphFeatureSet::from_features([
+            (GraphReactionSide::Reactant, 1u64),
+            (GraphReactionSide::Product, 2),
+        ])
+    ))]
+    fn test_role_tagged_hashed_feature_set_ids_snapshot(
+        #[case] features: RoleTaggedHashedFeatureSet,
+    ) {
+        Python::attach(|py| {
+            let features = Py::new(py, features).unwrap();
+            let features = features.bind(py).as_any();
+            let ids = features.getattr("ids").unwrap();
+
+            ids.cast::<PyList>()
+                .unwrap()
+                .append((ReactionSide::Product, 9u128))
+                .unwrap();
+
+            assert_eq!(
+                features
+                    .getattr("ids")
+                    .unwrap()
+                    .extract::<Vec<(ReactionSide, u128)>>()
+                    .unwrap(),
+                vec![(ReactionSide::Reactant, 1), (ReactionSide::Product, 2),]
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::same_width(
+        RoleTaggedHashedFeatureSet::from_rust(GraphFeatureSet::from_features([
+            (GraphReactionSide::Reactant, 1u64),
+            (GraphReactionSide::Product, 2),
+        ])),
+        RoleTaggedHashedFeatureSet::from_rust(GraphFeatureSet::from_features([
+            (GraphReactionSide::Reactant, 1u64),
+            (GraphReactionSide::Product, 2),
+        ])),
+        true
+    )]
+    #[case::different_roles(
+        RoleTaggedHashedFeatureSet::from_rust(GraphFeatureSet::from_features([
+            (GraphReactionSide::Reactant, 1u64),
+        ])),
+        RoleTaggedHashedFeatureSet::from_rust(GraphFeatureSet::from_features([
+            (GraphReactionSide::Product, 1u64),
+        ])),
+        false
+    )]
+    #[case::different_widths(
+        RoleTaggedHashedFeatureSet::from_rust(GraphFeatureSet::from_features([
+            (GraphReactionSide::Reactant, 1u32),
+        ])),
+        RoleTaggedHashedFeatureSet::from_rust(GraphFeatureSet::from_features([
+            (GraphReactionSide::Reactant, 1u64),
+        ])),
+        false
+    )]
+    fn test_role_tagged_hashed_feature_set_eq(
+        #[case] left: RoleTaggedHashedFeatureSet,
+        #[case] right: RoleTaggedHashedFeatureSet,
         #[case] expected: bool,
     ) {
         assert_eq!(left == right, expected);

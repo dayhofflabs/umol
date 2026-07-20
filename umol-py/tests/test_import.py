@@ -185,3 +185,9 @@ def test_signed_hashed_feature_set_import():
     from umol import SignedHashedFeatureSet
 
     assert umol.SignedHashedFeatureSet is SignedHashedFeatureSet
+
+
+def test_role_tagged_hashed_feature_set_import():
+    from umol import RoleTaggedHashedFeatureSet
+
+    assert umol.RoleTaggedHashedFeatureSet is RoleTaggedHashedFeatureSet

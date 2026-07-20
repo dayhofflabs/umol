@@ -1564,7 +1564,7 @@ S4 completes the configured resolved-SMILES Python deliverable.
   (`umol-py/src/fingerprint/reaction.rs`): bind the three-width return-only value
   over `(reaction_side, identifier)`, with `id_width`, ids, length/iteration,
   equality, and repr. Tests cover both sides, ordering, widths, and detached
-  exports. **Additive (green).** `[dep: S6a, S6e]`
+  exports. **Implemented (green).** `[dep: S6a, S6e]`
 - **S6h — `ReactionCombinedFingerprint`**
   (`umol-py/src/fingerprint/reaction.rs`): bind the return-only
   `Difference(features=...)` and `DisjointUnion(features=...)` sum type with
