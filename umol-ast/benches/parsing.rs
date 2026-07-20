@@ -71,23 +71,23 @@ fn bench_dative_dsl(c: &mut Criterion) {
 
 fn bench_aromatic_dsl(c: &mut Criterion) {
     let mut g = c.benchmark_group("aromatic_dsl");
-    bench_pair::<AromaticSystemDsl>(&mut g, "empty", r##""""##);
-    bench_pair::<AromaticSystemDsl>(&mut g, "full", r##""#c0#u0#s1#e6""##);
+    bench_pair::<AromaticSystemDsl>(&mut g, "undetermined", r##""*""##);
+    bench_pair::<AromaticSystemDsl>(&mut g, "full", r##""[1,1,1]#c0#u0#s1#e6""##);
     g.finish();
 }
 
 fn bench_multicenter_dsl(c: &mut Criterion) {
     let mut g = c.benchmark_group("multicenter_dsl");
-    bench_pair::<MulticenterBondDsl>(&mut g, "empty", r##""""##);
-    bench_pair::<MulticenterBondDsl>(&mut g, "full", r##""#c0#u0#s1#e2""##);
+    bench_pair::<MulticenterBondDsl>(&mut g, "undetermined", r##""*""##);
+    bench_pair::<MulticenterBondDsl>(&mut g, "full", r##""[1,1,1]#c0#u0#s1#e2""##);
     g.finish();
 }
 
 fn bench_noncovalent_dsl(c: &mut Criterion) {
     let mut g = c.benchmark_group("noncovalent_dsl");
     bench_pair::<NoncovalentBondDsl>(&mut g, "literal", r##""Hbd""##);
-    bench_pair::<NoncovalentBondDsl>(&mut g, "set", r##""{Hbd,Ion}""##);
-    bench_pair::<NoncovalentBondDsl>(&mut g, "bind", r##""(?k :: {Hbd,Xbd})""##);
+    bench_pair::<NoncovalentBondDsl>(&mut g, "undetermined", r##""*""##);
+    bench_pair::<NoncovalentBondDsl>(&mut g, "intramolecular", r##""Hbd#I""##);
     g.finish();
 }
 
@@ -101,7 +101,11 @@ fn bench_noncovalent_dsl(c: &mut Criterion) {
 fn bench_constraint_dsl(c: &mut Criterion) {
     let mut g = c.benchmark_group("constraint_dsl");
     bench_pair::<ConstraintDsl>(&mut g, "atom_leaf", r##"{:atom [0 {:valence 4}]}"##);
-    bench_pair::<ConstraintDsl>(&mut g, "bond_leaf_flag", r##"{:bond [0 :aromatic]}"##);
+    bench_pair::<ConstraintDsl>(
+        &mut g,
+        "bond_leaf_flag",
+        r##"{:bond [0 {:aromatic true}]}"##,
+    );
     bench_pair::<ConstraintDsl>(
         &mut g,
         "molecule_connected",
@@ -126,7 +130,7 @@ fn bench_constraints_dsl(c: &mut Criterion) {
     bench_pair::<ConstraintsDsl>(
         &mut g,
         "mixed_small",
-        r##"[{:atom [0 {:valence 4}]} {:connected {:atoms [0 1]}} {:not {:bond [0 :aromatic]}}]"##,
+        r##"[{:atom [0 {:valence 4}]} {:connected {:atoms [0 1]}} {:not {:bond [0 {:aromatic true}]}}]"##,
     );
     g.finish();
 }
