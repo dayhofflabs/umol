@@ -4,6 +4,7 @@ use std::vec::IntoIter;
 
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::{PyBytes, PyList};
 use umol_graph::fingerprint::{
     BitFp as GraphBitFp, CountedFeatureSet as GraphCountedFeatureSet, FeatureSet as GraphFeatureSet,
 };
@@ -399,9 +400,78 @@ impl BitFp {
     }
 }
 
+/// Immutable set of exact canonical structural feature keys.
+#[pyclass(eq, frozen, skip_from_py_object)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StructuralFeatureSet {
+    inner: GraphFeatureSet<Vec<u8>>,
+}
+
+#[pymethods]
+impl StructuralFeatureSet {
+    /// Sorted key snapshot as Python bytes.
+    #[getter]
+    fn keys(&self, py: Python<'_>) -> Vec<Py<PyBytes>> {
+        self.inner
+            .ids()
+            .iter()
+            .map(|key| PyBytes::new(py, key).unbind())
+            .collect()
+    }
+
+    fn is_subset(&self, other: &Self) -> bool {
+        self.inner.is_subset(&other.inner)
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn __iter__(&self) -> StructuralFeatureSetIter {
+        StructuralFeatureSetIter {
+            keys: self.inner.ids().to_vec().into_iter(),
+        }
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let keys = PyList::new(py, self.keys(py))?
+            .repr()?
+            .extract::<String>()?;
+        Ok(format!("StructuralFeatureSet(keys={keys})"))
+    }
+}
+
+impl StructuralFeatureSet {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Rust-to-Python conversion is used by structural fingerprint operations"
+        )
+    )]
+    pub(crate) fn from_rust(inner: GraphFeatureSet<Vec<u8>>) -> Self {
+        Self { inner }
+    }
+}
+
+#[pyclass]
+struct StructuralFeatureSetIter {
+    keys: IntoIter<Vec<u8>>,
+}
+
+#[pymethods]
+impl StructuralFeatureSetIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self, py: Python<'_>) -> Option<Py<PyBytes>> {
+        self.keys.next().map(|key| PyBytes::new(py, &key).unbind())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use pyo3::types::PyList;
     use rstest::rstest;
 
     use super::*;
@@ -936,6 +1006,153 @@ mod tests {
         false
     )]
     fn test_bit_fp_eq(#[case] left: BitFp, #[case] right: BitFp, #[case] expected: bool) {
+        assert_eq!(left == right, expected);
+    }
+
+    #[rstest]
+    #[case::keys(
+        StructuralFeatureSet::from_rust(GraphFeatureSet::from_features([
+            b"b".to_vec(),
+            b"a\0b".to_vec(),
+            b"a".to_vec(),
+            b"a".to_vec(),
+        ])),
+        vec![b"a".to_vec(), b"a\0b".to_vec(), b"b".to_vec()],
+        "StructuralFeatureSet(keys=[b'a', b'a\\x00b', b'b'])"
+    )]
+    fn test_structural_feature_set_value(
+        #[case] features: StructuralFeatureSet,
+        #[case] expected_keys: Vec<Vec<u8>>,
+        #[case] expected_repr: &str,
+    ) {
+        Python::attach(|py| {
+            let expected = into_py_variant(py, features.clone()).unwrap();
+            let features = into_py_variant(py, features).unwrap();
+            let expected = expected.bind(py).as_any();
+            let features = features.bind(py).as_any();
+            let keys = features.getattr("keys").unwrap();
+
+            assert!(features.eq(expected).unwrap());
+            assert_eq!(keys.extract::<Vec<Vec<u8>>>().unwrap(), expected_keys);
+            assert!(keys
+                .cast::<PyList>()
+                .unwrap()
+                .iter()
+                .all(|key| key.is_instance_of::<PyBytes>()));
+            assert_eq!(features.len().unwrap(), expected_keys.len());
+            assert_eq!(
+                features
+                    .call_method0("__iter__")
+                    .unwrap()
+                    .try_iter()
+                    .unwrap()
+                    .map(|item| {
+                        let item = item.unwrap();
+                        assert!(item.is_instance_of::<PyBytes>());
+                        item.extract::<Vec<u8>>().unwrap()
+                    })
+                    .collect::<Vec<_>>(),
+                expected_keys
+            );
+            assert_eq!(
+                features.repr().unwrap().extract::<String>().unwrap(),
+                expected_repr
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::proper_subset(
+        StructuralFeatureSet::from_rust(GraphFeatureSet::from_features([
+            b"a".to_vec(),
+            b"b".to_vec(),
+        ])),
+        StructuralFeatureSet::from_rust(GraphFeatureSet::from_features([
+            b"a".to_vec(),
+            b"b".to_vec(),
+            b"c".to_vec(),
+        ])),
+        true
+    )]
+    #[case::missing_key(
+        StructuralFeatureSet::from_rust(GraphFeatureSet::from_features([
+            b"a".to_vec(),
+            b"d".to_vec(),
+        ])),
+        StructuralFeatureSet::from_rust(GraphFeatureSet::from_features([
+            b"a".to_vec(),
+            b"b".to_vec(),
+            b"c".to_vec(),
+        ])),
+        false
+    )]
+    #[case::empty(
+        StructuralFeatureSet::from_rust(GraphFeatureSet::from_features(Vec::<Vec<u8>>::new())),
+        StructuralFeatureSet::from_rust(GraphFeatureSet::from_features([b"a".to_vec()])),
+        true
+    )]
+    fn test_structural_feature_set_is_subset(
+        #[case] query: StructuralFeatureSet,
+        #[case] target: StructuralFeatureSet,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(query.is_subset(&target), expected);
+    }
+
+    #[rstest]
+    #[case::snapshot(StructuralFeatureSet::from_rust(
+        GraphFeatureSet::from_features([b"a".to_vec(), b"b".to_vec()])
+    ))]
+    fn test_structural_feature_set_keys_snapshot(#[case] features: StructuralFeatureSet) {
+        Python::attach(|py| {
+            let features = into_py_variant(py, features).unwrap();
+            let features = features.bind(py).as_any();
+            let keys = features.getattr("keys").unwrap();
+
+            keys.cast::<PyList>()
+                .unwrap()
+                .append(PyBytes::new(py, b"c"))
+                .unwrap();
+
+            assert_eq!(
+                features
+                    .getattr("keys")
+                    .unwrap()
+                    .extract::<Vec<Vec<u8>>>()
+                    .unwrap(),
+                vec![b"a".to_vec(), b"b".to_vec()]
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::same_keys(
+        StructuralFeatureSet::from_rust(GraphFeatureSet::from_features([
+            b"a".to_vec(),
+            b"b".to_vec(),
+        ])),
+        StructuralFeatureSet::from_rust(GraphFeatureSet::from_features([
+            b"a".to_vec(),
+            b"b".to_vec(),
+        ])),
+        true
+    )]
+    #[case::different_keys(
+        StructuralFeatureSet::from_rust(GraphFeatureSet::from_features([
+            b"a".to_vec(),
+            b"b".to_vec(),
+        ])),
+        StructuralFeatureSet::from_rust(GraphFeatureSet::from_features([
+            b"a".to_vec(),
+            b"c".to_vec(),
+        ])),
+        false
+    )]
+    fn test_structural_feature_set_eq(
+        #[case] left: StructuralFeatureSet,
+        #[case] right: StructuralFeatureSet,
+        #[case] expected: bool,
+    ) {
         assert_eq!(left == right, expected);
     }
 }

@@ -167,3 +167,9 @@ def test_bit_fp_import():
     from umol import BitFp
 
     assert umol.BitFp is BitFp
+
+
+def test_structural_feature_set_import():
+    from umol import StructuralFeatureSet
+
+    assert umol.StructuralFeatureSet is StructuralFeatureSet

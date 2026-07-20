@@ -1549,7 +1549,7 @@ S4 completes the configured resolved-SMILES Python deliverable.
   (`umol-py/src/fingerprint/value.rs`): wrap `FeatureSet<Vec<u8>>` as an immutable
   return-only value exposing detached Python `bytes` keys, length/iteration, and
   subset. Tests cover embedded zero bytes, variable lengths, ordering,
-  detachment, subset, equality, and repr. **Additive (green).** `[dep: S4a]`
+  detachment, subset, equality, and repr. **Implemented (green).** `[dep: S4a]`
 - **S6e — `ReactionSide`**
   (`umol-py/src/fingerprint/reaction.rs`): bind the Reactant/Product value used
   in role-tagged identifiers, with Rust conversion, equality, and repr. Table
