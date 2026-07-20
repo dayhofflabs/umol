@@ -1633,7 +1633,7 @@ and ordinary snapshots are the compatibility seam for a later optional layer.
   Lower the config to the explicit Rust combinator and map inconsistent or
   non-ground reaction sides through the settled semantic exceptions. Tests cover
   identity and changing reactions, every molecular featurizer family, both
-  variants, exact width metadata, and detached results. **Additive (green).**
+  variants, exact width metadata, and detached results. **Implemented (green).**
   `[dep: S5g, S6h, S7a]`
 - **S8b — reaction fingerprint workflow gate**
   (`umol-py/tests/test_fingerprint.py`): exercise both combined variants from an

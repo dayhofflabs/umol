@@ -331,13 +331,6 @@ impl ReactionCombinedFingerprint {
 }
 
 impl ReactionCombinedFingerprint {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Rust-to-Python conversion is used by reaction fingerprint operations"
-        )
-    )]
     pub(crate) fn from_rust(fingerprint: GraphReactionFingerprint) -> Self {
         let data = match fingerprint {
             GraphReactionFingerprint::Difference(features) => {

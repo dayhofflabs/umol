@@ -12,6 +12,7 @@ use umol_ast::ast::{
     MoleculeCorrespondence as AstMoleculeCorrespondence, ReactionAst as AstReactionAst,
     ReactionDerivation as AstReactionDerivation, SubstructureMatchAlgorithm,
 };
+use umol_graph::fingerprint::featurize_reaction;
 use umol_graph_core::{Correspondence, NodeId};
 
 use crate::correspondence::{
@@ -19,7 +20,9 @@ use crate::correspondence::{
     SubgraphIsomorphismAlgorithm,
 };
 use crate::delta::Deltas;
-use crate::error::{contradiction_error, parse_error};
+use crate::error::{contradiction_error, fingerprint_error, parse_error};
+use crate::fingerprint::config::ReactionCombinedFingerprintConfig;
+use crate::fingerprint::reaction::ReactionCombinedFingerprint;
 use crate::molecule::MoleculeAst;
 
 /// Which overlaps sequential reaction composition retains.
@@ -227,6 +230,19 @@ impl ReactionAst {
         )
     }
 
+    /// Generate a combined fingerprint over the reactant and product sides.
+    #[pyo3(signature = (*, config))]
+    fn combined_fingerprint(
+        &self,
+        py: Python<'_>,
+        config: ReactionCombinedFingerprintConfig,
+    ) -> PyResult<ReactionCombinedFingerprint> {
+        let (featurizer, combinator) = config.to_rust();
+        featurize_reaction(&self.to_rust(py), &featurizer, combinator)
+            .map(ReactionCombinedFingerprint::from_rust)
+            .map_err(fingerprint_error)
+    }
+
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -395,12 +411,20 @@ mod tests {
         StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
         StereoLigandKind as AstStereoLigandKind, ValueAst as AstValueAst,
     };
+    use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_chem::element::Element as ChemElement;
+    use umol_graph::ingest::ingest_smiles;
 
     use super::*;
     use crate::convert::into_py_variant;
     use crate::delta::Delta;
     use crate::error::{ContradictionError, ParseError};
+    use crate::fingerprint::config::{
+        EcfpHashScheme, HashedFingerprintConfig, RefinementRounds, WlHashScheme,
+    };
+    use crate::fingerprint::reaction::{
+        ReactionSide, RoleTaggedHashedFeatureSet, SignedHashedFeatureSet,
+    };
 
     #[rstest]
     #[case::rc_anchored(AstCompositionScope::RcAnchored, CompositionScope::RcAnchored)]
@@ -1619,6 +1643,394 @@ mod tests {
                         ..Default::default()
                     }),
                 ]
+            );
+        });
+    }
+
+    #[fixture]
+    fn ethanol_deoxygenation() -> AstReactionAst {
+        let ethanol = ingest_smiles("CCO").unwrap();
+        let oxygen = ethanol.atom(AstAtomId(2)).ast.clone();
+        let bond = ethanol.bond(AstBondId(1)).ast.clone();
+        AstReactionAst::new(
+            ethanol,
+            AstDeltas::from_iter([
+                AstDelta::Atom(AstAtomDelta::Remove {
+                    id: AstAtomId(2),
+                    ast: oxygen,
+                }),
+                AstDelta::Bond(AstBondDelta::Remove {
+                    id: AstBondId(1),
+                    atoms: [AstAtomId(1), AstAtomId(2)],
+                    ast: bond,
+                }),
+            ]),
+        )
+    }
+
+    #[fixture]
+    fn ethanol_identity() -> AstReactionAst {
+        AstReactionAst::new(ingest_smiles("CCO").unwrap(), AstDeltas::new())
+    }
+
+    #[rstest]
+    #[case::morgan(
+        ReactionCombinedFingerprintConfig::Difference {
+            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+        },
+        vec![
+            (864662311, -1),
+            (1535166686, -1),
+            (2245384272, -1),
+            (2246997334, 1),
+            (3542456614, -1),
+            (3548082732, 1),
+            (4018048386, -1),
+        ]
+    )]
+    #[case::ecfp(
+        ReactionCombinedFingerprintConfig::Difference {
+            molecule: HashedFingerprintConfig::Ecfp {
+                radius: 2,
+                scheme: EcfpHashScheme::Xxh3Width64V1(),
+            },
+        },
+        vec![
+            (63839236075656913, -1),
+            (896060437578512973, 1),
+            (1189585227353469813, -1),
+            (3822471596818936039, -1),
+            (13327007941213506523, 1),
+            (13652293261850732425, -1),
+            (15001976065402722634, -1),
+        ]
+    )]
+    #[case::wl(
+        ReactionCombinedFingerprintConfig::Difference {
+            molecule: HashedFingerprintConfig::Wl {
+                rounds: RefinementRounds::Fixed { rounds: 3 },
+                scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+            },
+        },
+        vec![
+            (2520347590860685079, -1),
+            (3352603313223549703, -1),
+            (4152249898001161146, -1),
+            (5807737097854608645, -1),
+            (6786829771653353480, 1),
+            (7404535559284410087, 1),
+            (8754482138526219790, 1),
+            (11986000156817227245, -1),
+            (12849090138728295812, 1),
+            (12895020514073294021, -1),
+            (13932567567828606490, -1),
+            (16456488943967932267, 1),
+            (17305796300852423160, -1),
+            (17417400371411086222, -1),
+        ]
+    )]
+    fn test_reaction_ast_combined_fingerprint_difference(
+        ethanol_deoxygenation: AstReactionAst,
+        #[case] config: ReactionCombinedFingerprintConfig,
+        #[case] expected_entries: Vec<(u128, i32)>,
+    ) {
+        Python::attach(|py| {
+            let reaction = ReactionAst::from_rust(py, ethanol_deoxygenation).unwrap();
+            let fingerprint = reaction.combined_fingerprint(py, config).unwrap();
+            let fingerprint = Py::new(py, fingerprint).unwrap();
+            let fingerprint = fingerprint.bind(py).as_any();
+            let features = fingerprint.getattr("features").unwrap();
+            let entries = features.getattr("entries").unwrap();
+
+            assert!(features.is_instance_of::<SignedHashedFeatureSet>());
+            assert!(!features.is_instance_of::<RoleTaggedHashedFeatureSet>());
+            assert_eq!(
+                features
+                    .getattr("id_width")
+                    .unwrap()
+                    .extract::<u16>()
+                    .unwrap(),
+                64
+            );
+            assert_eq!(
+                entries.extract::<Vec<(u128, i32)>>().unwrap(),
+                expected_entries
+            );
+            entries
+                .cast::<PyList>()
+                .unwrap()
+                .append((9u128, 3i32))
+                .unwrap();
+            assert_eq!(
+                fingerprint
+                    .getattr("features")
+                    .unwrap()
+                    .getattr("entries")
+                    .unwrap()
+                    .extract::<Vec<(u128, i32)>>()
+                    .unwrap(),
+                expected_entries
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::morgan(
+        ReactionCombinedFingerprintConfig::DisjointUnion {
+            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+        },
+        vec![
+            (ReactionSide::Reactant, 864662311),
+            (ReactionSide::Reactant, 1535166686),
+            (ReactionSide::Reactant, 2245384272),
+            (ReactionSide::Reactant, 2246728737),
+            (ReactionSide::Reactant, 3542456614),
+            (ReactionSide::Reactant, 4018048386),
+            (ReactionSide::Product, 2246728737),
+            (ReactionSide::Product, 2246997334),
+            (ReactionSide::Product, 3548082732),
+        ]
+    )]
+    #[case::ecfp(
+        ReactionCombinedFingerprintConfig::DisjointUnion {
+            molecule: HashedFingerprintConfig::Ecfp {
+                radius: 2,
+                scheme: EcfpHashScheme::Xxh3Width64V1(),
+            },
+        },
+        vec![
+            (ReactionSide::Reactant, 63839236075656913),
+            (ReactionSide::Reactant, 1189585227353469813),
+            (ReactionSide::Reactant, 3822471596818936039),
+            (ReactionSide::Reactant, 13652293261850732425),
+            (ReactionSide::Reactant, 15001976065402722634),
+            (ReactionSide::Reactant, 16149328945726899460),
+            (ReactionSide::Product, 896060437578512973),
+            (ReactionSide::Product, 13327007941213506523),
+            (ReactionSide::Product, 16149328945726899460),
+        ]
+    )]
+    #[case::wl(
+        ReactionCombinedFingerprintConfig::DisjointUnion {
+            molecule: HashedFingerprintConfig::Wl {
+                rounds: RefinementRounds::Fixed { rounds: 3 },
+                scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+            },
+        },
+        vec![
+            (ReactionSide::Reactant, 2520347590860685079),
+            (ReactionSide::Reactant, 3352603313223549703),
+            (ReactionSide::Reactant, 4152249898001161146),
+            (ReactionSide::Reactant, 5715207763479934940),
+            (ReactionSide::Reactant, 5807737097854608645),
+            (ReactionSide::Reactant, 7542810387455301591),
+            (ReactionSide::Reactant, 11457795998246593156),
+            (ReactionSide::Reactant, 11986000156817227245),
+            (ReactionSide::Reactant, 12895020514073294021),
+            (ReactionSide::Reactant, 13932567567828606490),
+            (ReactionSide::Reactant, 17305796300852423160),
+            (ReactionSide::Reactant, 17417400371411086222),
+            (ReactionSide::Product, 5715207763479934940),
+            (ReactionSide::Product, 6786829771653353480),
+            (ReactionSide::Product, 7404535559284410087),
+            (ReactionSide::Product, 7542810387455301591),
+            (ReactionSide::Product, 8754482138526219790),
+            (ReactionSide::Product, 11457795998246593156),
+            (ReactionSide::Product, 12849090138728295812),
+            (ReactionSide::Product, 16456488943967932267),
+        ]
+    )]
+    fn test_reaction_ast_combined_fingerprint_disjoint_union(
+        ethanol_deoxygenation: AstReactionAst,
+        #[case] config: ReactionCombinedFingerprintConfig,
+        #[case] expected_ids: Vec<(ReactionSide, u128)>,
+    ) {
+        Python::attach(|py| {
+            let reaction = ReactionAst::from_rust(py, ethanol_deoxygenation).unwrap();
+            let fingerprint = reaction.combined_fingerprint(py, config).unwrap();
+            let fingerprint = Py::new(py, fingerprint).unwrap();
+            let fingerprint = fingerprint.bind(py).as_any();
+            let features = fingerprint.getattr("features").unwrap();
+            let ids = features.getattr("ids").unwrap();
+
+            assert!(features.is_instance_of::<RoleTaggedHashedFeatureSet>());
+            assert!(!features.is_instance_of::<SignedHashedFeatureSet>());
+            assert_eq!(
+                features
+                    .getattr("id_width")
+                    .unwrap()
+                    .extract::<u16>()
+                    .unwrap(),
+                64
+            );
+            assert_eq!(
+                ids.extract::<Vec<(ReactionSide, u128)>>().unwrap(),
+                expected_ids
+            );
+            ids.cast::<PyList>()
+                .unwrap()
+                .append((ReactionSide::Product, 9u128))
+                .unwrap();
+            assert_eq!(
+                fingerprint
+                    .getattr("features")
+                    .unwrap()
+                    .getattr("ids")
+                    .unwrap()
+                    .extract::<Vec<(ReactionSide, u128)>>()
+                    .unwrap(),
+                expected_ids
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::difference(
+        ReactionCombinedFingerprintConfig::Difference {
+            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+        }
+    )]
+    fn test_reaction_ast_combined_fingerprint_difference_identity(
+        ethanol_identity: AstReactionAst,
+        #[case] config: ReactionCombinedFingerprintConfig,
+    ) {
+        Python::attach(|py| {
+            let reaction = ReactionAst::from_rust(py, ethanol_identity).unwrap();
+            let fingerprint = reaction.combined_fingerprint(py, config).unwrap();
+            let fingerprint = Py::new(py, fingerprint).unwrap();
+            let features = fingerprint.bind(py).getattr("features").unwrap();
+
+            assert!(features.is_instance_of::<SignedHashedFeatureSet>());
+            assert_eq!(
+                features
+                    .getattr("entries")
+                    .unwrap()
+                    .extract::<Vec<(u128, i32)>>()
+                    .unwrap(),
+                Vec::new()
+            );
+            assert_eq!(
+                features
+                    .getattr("id_width")
+                    .unwrap()
+                    .extract::<u16>()
+                    .unwrap(),
+                64
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::disjoint_union(
+        ReactionCombinedFingerprintConfig::DisjointUnion {
+            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+        },
+        vec![
+            (ReactionSide::Reactant, 864662311),
+            (ReactionSide::Reactant, 1535166686),
+            (ReactionSide::Reactant, 2245384272),
+            (ReactionSide::Reactant, 2246728737),
+            (ReactionSide::Reactant, 3542456614),
+            (ReactionSide::Reactant, 4018048386),
+            (ReactionSide::Product, 864662311),
+            (ReactionSide::Product, 1535166686),
+            (ReactionSide::Product, 2245384272),
+            (ReactionSide::Product, 2246728737),
+            (ReactionSide::Product, 3542456614),
+            (ReactionSide::Product, 4018048386),
+        ]
+    )]
+    fn test_reaction_ast_combined_fingerprint_disjoint_union_identity(
+        ethanol_identity: AstReactionAst,
+        #[case] config: ReactionCombinedFingerprintConfig,
+        #[case] expected_ids: Vec<(ReactionSide, u128)>,
+    ) {
+        Python::attach(|py| {
+            let reaction = ReactionAst::from_rust(py, ethanol_identity).unwrap();
+            let fingerprint = reaction.combined_fingerprint(py, config).unwrap();
+            let fingerprint = Py::new(py, fingerprint).unwrap();
+            let features = fingerprint.bind(py).getattr("features").unwrap();
+
+            assert!(features.is_instance_of::<RoleTaggedHashedFeatureSet>());
+            assert_eq!(
+                features
+                    .getattr("ids")
+                    .unwrap()
+                    .extract::<Vec<(ReactionSide, u128)>>()
+                    .unwrap(),
+                expected_ids
+            );
+            assert_eq!(
+                features
+                    .getattr("id_width")
+                    .unwrap()
+                    .extract::<u16>()
+                    .unwrap(),
+                64
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::reactant_not_ground(
+        AstReactionAst::new(
+            mol_dsl!(r#"{:atoms ["C"] :bonds []}"#),
+            AstDeltas::new(),
+        ),
+        ReactionCombinedFingerprintConfig::Difference {
+            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+        },
+        "UnderdeterminedError",
+        "fingerprint requires a determined molecule",
+    )]
+    #[case::product_not_ground(
+        AstReactionAst::new(
+            mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
+            AstDeltas::from_iter([AstDelta::Atom(AstAtomDelta::ModifyField {
+                id: AstAtomId(0),
+                change: AstAtomFieldChange::Charge {
+                    old: AstValueAst::Lit(0),
+                    new: AstValueAst::Undetermined,
+                },
+            })]),
+        ),
+        ReactionCombinedFingerprintConfig::DisjointUnion {
+            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+        },
+        "UnderdeterminedError",
+        "fingerprint requires a determined molecule",
+    )]
+    #[case::inconsistent(
+        AstReactionAst::new(
+            mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
+            AstDeltas::from_iter([AstDelta::Atom(AstAtomDelta::ModifyField {
+                id: AstAtomId(0),
+                change: AstAtomFieldChange::Charge {
+                    old: AstValueAst::Lit(1),
+                    new: AstValueAst::Lit(0),
+                },
+            })]),
+        ),
+        ReactionCombinedFingerprintConfig::Difference {
+            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+        },
+        "ContradictionError",
+        "reaction fingerprint input is inconsistent",
+    )]
+    fn test_reaction_ast_combined_fingerprint_error(
+        #[case] input: AstReactionAst,
+        #[case] config: ReactionCombinedFingerprintConfig,
+        #[case] expected_type: &str,
+        #[case] expected_message: &str,
+    ) {
+        Python::attach(|py| {
+            let reaction = ReactionAst::from_rust(py, input).unwrap();
+            let error = reaction.combined_fingerprint(py, config).unwrap_err();
+
+            assert_eq!(error.get_type(py).name().unwrap(), expected_type);
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                expected_message
             );
         });
     }

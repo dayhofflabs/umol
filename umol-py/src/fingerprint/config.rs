@@ -319,13 +319,6 @@ impl ReactionCombinedFingerprintConfig {
 }
 
 impl ReactionCombinedFingerprintConfig {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "boundary conversion is part of the binding contract without a production caller"
-        )
-    )]
     pub(crate) fn to_rust(self) -> (GraphFeaturizer, GraphReactionCombinator) {
         match self {
             Self::Difference { molecule } => {
