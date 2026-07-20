@@ -1559,7 +1559,7 @@ S4 completes the configured resolved-SMILES Python deliverable.
   over `(identifier, signed_count)`, with `id_width`, entries, length/iteration,
   count lookup, equality, and repr. Tests cover cancellation-free nonzero
   entries, positive/negative counts, ordering, widths, and detached exports.
-  **Additive (green).** `[dep: S6b]`
+  **Implemented (green).** `[dep: S6b]`
 - **S6g — `RoleTaggedHashedFeatureSet`**
   (`umol-py/src/fingerprint/reaction.rs`): bind the three-width return-only value
   over `(reaction_side, identifier)`, with `id_width`, ids, length/iteration,

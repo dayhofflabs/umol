@@ -11,7 +11,7 @@ use super::featurizer::{Featurizer, FingerprintError};
 
 /// Which side of a reaction a feature came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Side {
+pub enum ReactionSide {
     Reactant,
     Product,
 }
@@ -27,7 +27,7 @@ pub enum ReactionCombinator {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ReactionFingerprint {
     Difference(SignedFeatureSet<u64>),
-    DisjointUnion(FeatureSet<(Side, u64)>),
+    DisjointUnion(FeatureSet<(ReactionSide, u64)>),
 }
 
 /// Featurize `reaction` by applying `featurizer` to the reactant (`lhs`) and the derived
@@ -54,8 +54,8 @@ pub fn featurize_reaction(
             let tagged = reactants
                 .ids()
                 .iter()
-                .map(|&id| (Side::Reactant, id))
-                .chain(products.ids().iter().map(|&id| (Side::Product, id)));
+                .map(|&id| (ReactionSide::Reactant, id))
+                .chain(products.ids().iter().map(|&id| (ReactionSide::Product, id)));
             ReactionFingerprint::DisjointUnion(FeatureSet::from_features(tagged))
         }
     })
@@ -132,8 +132,12 @@ mod tests {
         match fingerprint {
             ReactionFingerprint::DisjointUnion(union) => {
                 assert_eq!(union.len(), 2 * single.len());
-                assert!(union.ids().contains(&(Side::Reactant, ETHANOL_OXYGEN)));
-                assert!(union.ids().contains(&(Side::Product, ETHANOL_OXYGEN)));
+                assert!(union
+                    .ids()
+                    .contains(&(ReactionSide::Reactant, ETHANOL_OXYGEN)));
+                assert!(union
+                    .ids()
+                    .contains(&(ReactionSide::Product, ETHANOL_OXYGEN)));
             }
             other => panic!("expected DisjointUnion, got {other:?}"),
         }

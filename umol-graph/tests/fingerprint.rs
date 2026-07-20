@@ -6,8 +6,8 @@ use umol_ast::ast::{
 use umol_ast::{mol_dsl, mol_dsl_ground};
 use umol_graph::fingerprint::{
     featurize_reaction, EcfpFeaturizer, Featurizer, FingerprintError, MorganFeaturizer,
-    PatternFingerprinter, ReactionCombinator, ReactionFingerprint, Side, SubstructureFeaturizer,
-    WlFeaturizer,
+    PatternFingerprinter, ReactionCombinator, ReactionFingerprint, ReactionSide,
+    SubstructureFeaturizer, WlFeaturizer,
 };
 use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::RefinementRounds;
@@ -315,15 +315,15 @@ fn test_featurize_reaction_disjoint_union(ethanol_deoxygenation: ReactionAst) {
         ReactionFingerprint::DisjointUnion(features) => assert_eq!(
             features.ids(),
             &[
-                (Side::Reactant, 864662311),
-                (Side::Reactant, 1535166686),
-                (Side::Reactant, 2245384272),
-                (Side::Reactant, 2246728737),
-                (Side::Reactant, 3542456614),
-                (Side::Reactant, 4018048386),
-                (Side::Product, 2246728737),
-                (Side::Product, 2246997334),
-                (Side::Product, 3548082732),
+                (ReactionSide::Reactant, 864662311),
+                (ReactionSide::Reactant, 1535166686),
+                (ReactionSide::Reactant, 2245384272),
+                (ReactionSide::Reactant, 2246728737),
+                (ReactionSide::Reactant, 3542456614),
+                (ReactionSide::Reactant, 4018048386),
+                (ReactionSide::Product, 2246728737),
+                (ReactionSide::Product, 2246997334),
+                (ReactionSide::Product, 3548082732),
             ]
         ),
         other => panic!("expected DisjointUnion, got {other:?}"),

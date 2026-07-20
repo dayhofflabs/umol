@@ -66,7 +66,7 @@ use crate::{
         ReactionCombinedFingerprintConfig, RefinementRounds, StructuralFingerprintConfig,
         WlHashScheme,
     },
-    fingerprint::reaction::ReactionSide,
+    fingerprint::reaction::{ReactionSide, SignedHashedFeatureSet},
     fingerprint::value::{BitFp, CountedHashedFeatureSet, HashedFeatureSet, StructuralFeatureSet},
     model::{
         aromaticity::{AromaticityModel, RingLimits},
@@ -217,6 +217,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<BitFp>()?;
         module.add_class::<StructuralFeatureSet>()?;
         module.add_class::<ReactionSide>()?;
+        module.add_class::<SignedHashedFeatureSet>()?;
         module.add_class::<Correspondence>()?;
         module.add_class::<MoleculeCorrespondence>()?;
         module.add_class::<SubgraphIsomorphismAlgorithm>()?;

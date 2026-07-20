@@ -179,3 +179,9 @@ def test_reaction_side_import():
     from umol import ReactionSide
 
     assert umol.ReactionSide is ReactionSide
+
+
+def test_signed_hashed_feature_set_import():
+    from umol import SignedHashedFeatureSet
+
+    assert umol.SignedHashedFeatureSet is SignedHashedFeatureSet

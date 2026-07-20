@@ -16,6 +16,6 @@ pub use feature_set::{CountedFeatureSet, FeatureSet, SignedFeatureSet};
 pub use featurizer::{Featurizer, FingerprintError};
 pub use morgan::MorganFeaturizer;
 pub use pattern::{PatternFingerprinter, PATTERN_FP_WIDTH};
-pub use reaction::{featurize_reaction, ReactionCombinator, ReactionFingerprint, Side};
+pub use reaction::{featurize_reaction, ReactionCombinator, ReactionFingerprint, ReactionSide};
 pub use substructure::SubstructureFeaturizer;
 pub use wl::WlFeaturizer;
