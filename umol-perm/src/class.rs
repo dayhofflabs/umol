@@ -1,6 +1,6 @@
 //! Stereo class keys and the interned coset-space registry.
 //!
-//! `space(key)` builds each `CosetSpace` once and leaks it for `'static`,
+//! `ClassKey::space` builds each `CosetSpace` once and leaks it for `'static`,
 //! mirroring umol-msym's point-group registry. The geometry classes pin the
 //! proper-rotation group as a permutation group acting on the ligand positions.
 
@@ -10,6 +10,7 @@ use std::sync::{LazyLock, Mutex};
 use std::{fmt, ptr};
 
 use crate::coset::{CosetSpace, Decomposition};
+use crate::error::ParseClassKeyError;
 use crate::group::PermutationGroup;
 use crate::permutation::{Permutation, MAX_DEGREE};
 
@@ -133,6 +134,18 @@ impl ClassKey {
         };
         CosetSpace::new(parent, group, decomposition, improper)
     }
+
+    /// The interned coset space for this class, built once and leaked for
+    /// `'static`.
+    pub fn space(self) -> &'static CosetSpace {
+        let mut registry = REGISTRY.lock().expect("coset-space registry poisoned");
+        if let Some(&interned) = registry.get(&self) {
+            return interned;
+        }
+        let interned: &'static CosetSpace = Box::leak(Box::new(self.build()));
+        registry.insert(self, interned);
+        interned
+    }
 }
 
 impl fmt::Display for ClassKey {
@@ -153,7 +166,7 @@ impl fmt::Display for ClassKey {
 }
 
 impl FromStr for ClassKey {
-    type Err = String;
+    type Err = ParseClassKeyError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -165,38 +178,51 @@ impl FromStr for ClassKey {
             "OH" => return Ok(ClassKey::Octahedral),
             _ => {}
         }
-        let split = s
-            .find(|c: char| c.is_ascii_digit())
-            .ok_or_else(|| format!("unknown class key: {s}"))?;
-        let (prefix, degree) = s.split_at(split);
-        let n: u8 = degree
-            .parse()
-            .map_err(|_| format!("bad degree in class key: {s}"))?;
-        if n as usize > MAX_DEGREE {
-            return Err(format!("degree {n} exceeds MAX_DEGREE ({MAX_DEGREE}): {s}"));
+        enum Family {
+            Symmetric,
+            Alternating,
+            Cyclic,
+            Dihedral,
         }
-        match prefix {
-            "Sym" => Ok(ClassKey::Symmetric(n)),
-            "Alt" => Ok(ClassKey::Alternating(n)),
-            "Cyc" => Ok(ClassKey::Cyclic(n)),
-            "Dih" => Ok(ClassKey::Dihedral(n)),
-            _ => Err(format!("unknown class family: {prefix}")),
+        let (degree, family) = if let Some(degree) = s.strip_prefix("Sym") {
+            (degree, Family::Symmetric)
+        } else if let Some(degree) = s.strip_prefix("Alt") {
+            (degree, Family::Alternating)
+        } else if let Some(degree) = s.strip_prefix("Cyc") {
+            (degree, Family::Cyclic)
+        } else if let Some(degree) = s.strip_prefix("Dih") {
+            (degree, Family::Dihedral)
+        } else {
+            return Err(ParseClassKeyError::UnknownClassKey {
+                input: s.to_string(),
+            });
+        };
+        let degree = degree
+            .parse::<usize>()
+            .map_err(|_| ParseClassKeyError::InvalidDegree {
+                input: s.to_string(),
+            })?;
+        if degree > MAX_DEGREE {
+            return Err(ParseClassKeyError::DegreeTooLarge {
+                degree,
+                maximum: MAX_DEGREE,
+            });
         }
+        Ok(match family {
+            Family::Symmetric => ClassKey::Symmetric(degree as u8),
+            Family::Alternating => ClassKey::Alternating(degree as u8),
+            Family::Cyclic => ClassKey::Cyclic(degree as u8),
+            Family::Dihedral => ClassKey::Dihedral(degree as u8),
+        })
     }
 }
 
 static REGISTRY: LazyLock<Mutex<HashMap<ClassKey, &'static CosetSpace>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-/// The interned coset space for `key`, built once and leaked for `'static`.
+/// The interned coset space for `key`.
 pub fn space(key: ClassKey) -> &'static CosetSpace {
-    let mut registry = REGISTRY.lock().expect("coset-space registry poisoned");
-    if let Some(&interned) = registry.get(&key) {
-        return interned;
-    }
-    let leaked: &'static CosetSpace = Box::leak(Box::new(key.build()));
-    registry.insert(key, leaked);
-    leaked
+    key.space()
 }
 
 /// A configuration: an index into the cosets of an interned space. Identity is
@@ -259,8 +285,8 @@ mod tests {
     #[case::square_planar(ClassKey::SquarePlanar, 3)]
     #[case::trigonal_bipyramidal(ClassKey::TrigonalBipyramidal, 20)]
     #[case::octahedral(ClassKey::Octahedral, 30)]
-    fn test_space_count(#[case] key: ClassKey, #[case] count: usize) {
-        assert_eq!(space(key).count(), count);
+    fn test_class_key_space(#[case] key: ClassKey, #[case] count: usize) {
+        assert_eq!(key.space().count(), count);
     }
 
     #[rstest]
@@ -270,19 +296,19 @@ mod tests {
     #[case::square_planar(ClassKey::SquarePlanar, false)]
     #[case::trigonal_bipyramidal(ClassKey::TrigonalBipyramidal, true)]
     #[case::octahedral(ClassKey::Octahedral, true)]
-    fn test_space_is_chiral(#[case] key: ClassKey, #[case] expected: bool) {
-        assert_eq!(space(key).is_chiral(), expected);
+    fn test_class_key_space_chirality(#[case] key: ClassKey, #[case] expected: bool) {
+        assert_eq!(key.space().is_chiral(), expected);
     }
 
     #[rstest]
     #[case::trigonal_bipyramidal(ClassKey::TrigonalBipyramidal, 5, 6)]
     #[case::octahedral(ClassKey::Octahedral, 6, 24)]
-    fn test_geometry_group_order(
+    fn test_class_key_space_group(
         #[case] key: ClassKey,
         #[case] degree: usize,
         #[case] order: usize,
     ) {
-        let group = space(key).group();
+        let group = key.space().group();
         assert_eq!(group.degree(), degree);
         assert_eq!(group.order(), order);
     }
@@ -293,8 +319,8 @@ mod tests {
     #[case::square_planar(ClassKey::SquarePlanar)]
     #[case::trigonal_bipyramidal(ClassKey::TrigonalBipyramidal)]
     #[case::octahedral(ClassKey::Octahedral)]
-    fn test_space_index_unindex(#[case] key: ClassKey) {
-        let space = space(key);
+    fn test_class_key_space_index_roundtrip(#[case] key: ClassKey) {
+        let space = key.space();
         for n in 0..space.count() as u32 {
             assert_eq!(space.index(space.unindex(n).unwrap()), Some(n));
         }
@@ -311,7 +337,7 @@ mod tests {
     #[case::oh5_oh9(ClassKey::Octahedral, 4, vec!["S", "F", "I", "Cl", "C", "Br"], vec!["Br", "C", "S", "Cl", "F", "I"], 8)]
     #[case::oh12_oh15(ClassKey::Octahedral, 11, vec!["Br", "Cl", "I", "F", "S", "C"], vec!["Cl", "C", "Br", "F", "I", "S"], 14)]
     #[case::oh19_oh27(ClassKey::Octahedral, 18, vec!["Cl", "C", "I", "F", "S", "Br"], vec!["I", "Cl", "Br", "F", "S", "C"], 26)]
-    fn test_space_reindex(
+    fn test_class_key_space_reindex(
         #[case] key: ClassKey,
         #[case] from_index: u32,
         #[case] order: Vec<&str>,
@@ -319,32 +345,61 @@ mod tests {
         #[case] to_index: u32,
     ) {
         let relabeling = Permutation::between(&order, &relabeled);
-        assert_eq!(space(key).reindex(from_index, relabeling), Some(to_index));
+        assert_eq!(key.space().reindex(from_index, relabeling), Some(to_index));
     }
 
     #[rstest]
-    fn test_space_interned() {
+    fn test_class_key_space_interning() {
         assert!(ptr::eq(
-            space(ClassKey::Octahedral),
-            space(ClassKey::Octahedral)
+            ClassKey::Octahedral.space(),
+            ClassKey::Octahedral.space()
         ));
     }
 
     #[rstest]
     #[case::symmetric(ClassKey::Symmetric(4), "Sym4")]
+    #[case::alternating(ClassKey::Alternating(4), "Alt4")]
+    #[case::cyclic(ClassKey::Cyclic(5), "Cyc5")]
     #[case::dihedral(ClassKey::Dihedral(5), "Dih5")]
     #[case::tetrahedral(ClassKey::Tetrahedral, "TH")]
     #[case::axial(ClassKey::Axial, "AX")]
     #[case::octahedral(ClassKey::Octahedral, "OH")]
-    fn test_class_key_display(#[case] key: ClassKey, #[case] text: &str) {
+    fn test_class_key_display_roundtrip(#[case] key: ClassKey, #[case] text: &str) {
         assert_eq!(key.to_string(), text);
         assert_eq!(ClassKey::from_str(text), Ok(key));
     }
 
     #[rstest]
-    #[case::unknown("Xyz3")]
-    #[case::no_degree("Sym")]
-    fn test_class_key_from_str_error(#[case] text: &str) {
-        assert!(ClassKey::from_str(text).is_err());
+    #[case::unknown(
+        "Xyz3",
+        ParseClassKeyError::UnknownClassKey { input: "Xyz3".to_string() },
+    )]
+    #[case::no_degree(
+        "Sym",
+        ParseClassKeyError::InvalidDegree { input: "Sym".to_string() },
+    )]
+    #[case::malformed_degree(
+        "Altfour",
+        ParseClassKeyError::InvalidDegree { input: "Altfour".to_string() },
+    )]
+    #[case::degree_too_large(
+        "Cyc7",
+        ParseClassKeyError::DegreeTooLarge { degree: 7, maximum: MAX_DEGREE },
+    )]
+    #[case::degree_exceeds_u8(
+        "Sym256",
+        ParseClassKeyError::DegreeTooLarge { degree: 256, maximum: MAX_DEGREE },
+    )]
+    fn test_class_key_from_str_error(#[case] text: &str, #[case] expected: ParseClassKeyError) {
+        assert_eq!(ClassKey::from_str(text), Err(expected));
+    }
+
+    #[rstest]
+    #[case::tetrahedral(ClassKey::Tetrahedral, 0)]
+    #[case::square_planar(ClassKey::SquarePlanar, 2)]
+    fn test_coset_new(#[case] key: ClassKey, #[case] index: u32) {
+        let coset = Coset::new(key, index);
+        assert_eq!(coset.index(), index);
+        assert!(ptr::eq(coset.space(), key.space()));
     }
 }

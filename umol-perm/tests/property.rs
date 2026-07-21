@@ -72,6 +72,12 @@ proptest! {
     }
 
     #[test]
+    fn test_permutation_image_round_trip(p in permutation()) {
+        let image: Vec<usize> = (0..p.degree()).map(|i| p.apply(i)).collect();
+        prop_assert_eq!(Permutation::try_from(image.as_slice()), Ok(p));
+    }
+
+    #[test]
     fn test_permutation_inverse_involution(p in permutation()) {
         prop_assert_eq!(p.inverse().inverse(), p);
     }
@@ -145,8 +151,21 @@ proptest! {
     }
 
     #[test]
-    fn test_coset_space_merge_under_empty(key in class_key()) {
+    fn test_coset_space_orbit_reps_identity(key in class_key()) {
         let s = space(key);
-        prop_assert_eq!(s.merge_under(&[]), (0..s.count() as u32).collect::<Vec<u32>>());
+        let expected = (0..s.count() as u32).collect::<Vec<u32>>();
+        prop_assert_eq!(s.orbit_reps(&[]), Some(expected.clone()));
+        prop_assert_eq!(s.orbit_reps(&[Permutation::identity(s.degree())]), Some(expected));
+    }
+
+    #[test]
+    fn test_coset_space_orbit_reps_closure((key, i) in coset_index()) {
+        let s = space(key);
+        let generator = s.unindex(i).unwrap();
+        let reps = s.orbit_reps(&[generator]).unwrap();
+        for index in 0..s.count() as u32 {
+            let moved = s.reindex(index, generator).unwrap();
+            prop_assert_eq!(reps[index as usize], reps[moved as usize]);
+        }
     }
 }

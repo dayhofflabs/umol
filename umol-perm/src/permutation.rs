@@ -10,6 +10,8 @@
 
 use std::fmt;
 
+use crate::error::PermutationError;
+
 /// Largest supported permutation degree (and the backing array width). The current
 /// ceiling is the octahedral coordination (6); raising it to support 7/8-coordinate
 /// geometries is a one-line change here.
@@ -213,6 +215,46 @@ impl Permutation {
     }
 }
 
+impl TryFrom<&[usize]> for Permutation {
+    type Error = PermutationError;
+
+    fn try_from(image: &[usize]) -> Result<Self, Self::Error> {
+        let degree = image.len();
+        if degree > MAX_DEGREE {
+            return Err(PermutationError::ImageTooLong {
+                length: degree,
+                maximum: MAX_DEGREE,
+            });
+        }
+        let mut seen = [false; MAX_DEGREE];
+        for (position, &value) in image.iter().enumerate() {
+            if value >= degree {
+                return Err(PermutationError::ImageValueOutOfRange {
+                    position,
+                    value,
+                    degree,
+                });
+            }
+            if seen[value] {
+                return Err(PermutationError::DuplicateImageValue { value });
+            }
+            seen[value] = true;
+        }
+        let mut full = [0u32; MAX_DEGREE];
+        for (position, target) in full.iter_mut().enumerate() {
+            *target = if position < degree {
+                image[position] as u32
+            } else {
+                position as u32
+            };
+        }
+        Ok(Self {
+            image: full,
+            degree: degree as u32,
+        })
+    }
+}
+
 impl fmt::Display for Permutation {
     /// Product of disjoint cycles, 0-indexed and comma-separated; identity → `()`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -263,6 +305,34 @@ mod tests {
     #[should_panic]
     fn test_permutation_from_image_error(#[case] image: Vec<u32>) {
         Permutation::from_image(image.len(), &image);
+    }
+
+    #[rstest]
+    #[case::valid(
+        &[2, 0, 1],
+        Ok(Permutation { image: [2, 0, 1, 3, 4, 5], degree: 3 }),
+    )]
+    #[case::identity(
+        &[],
+        Ok(Permutation { image: [0, 1, 2, 3, 4, 5], degree: 0 }),
+    )]
+    #[case::too_long(
+        &[0, 1, 2, 3, 4, 5, 6],
+        Err(PermutationError::ImageTooLong { length: 7, maximum: MAX_DEGREE }),
+    )]
+    #[case::out_of_range(
+        &[0, 1, 3],
+        Err(PermutationError::ImageValueOutOfRange { position: 2, value: 3, degree: 3 }),
+    )]
+    #[case::duplicate(
+        &[0, 1, 1],
+        Err(PermutationError::DuplicateImageValue { value: 1 }),
+    )]
+    fn test_permutation_try_from(
+        #[case] image: &[usize],
+        #[case] expected: Result<Permutation, PermutationError>,
+    ) {
+        assert_eq!(Permutation::try_from(image), expected);
     }
 
     #[rstest]

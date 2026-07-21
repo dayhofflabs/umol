@@ -5,12 +5,14 @@
 
 mod class;
 mod coset;
+mod error;
 mod group;
 mod oriented;
 mod permutation;
 
 pub use class::{space, ClassKey, Coset};
 pub use coset::CosetSpace;
+pub use error::{ParseClassKeyError, PermutationError};
 pub use group::PermutationGroup;
 pub use oriented::{Orientation, OrientedPermutation, OrientedPermutationGroup};
 pub use permutation::Permutation;
