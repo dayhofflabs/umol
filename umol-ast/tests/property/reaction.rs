@@ -2,6 +2,20 @@
 //! deltas consistent with `lhs` (`ModifyField` with the lhs value as `old`), appended atoms, and
 //! DPO-valid deletions (a removed atom takes all its incident bonds), so `apply` stays
 //! dangling-free. Reactions drive the public surface only.
+//!
+//! ## Comparison contract
+//!
+//! | Operation | Property-test use |
+//! | --- | --- |
+//! | `==` | Exact stored representation in one fixed ID and participant frame. |
+//! | entity `canonical_eq` | Semantic equality of one entity AST; no topology or incidence. |
+//! | relation `equiv` / `equiv_under` | Canonical entity-data equality in the same or a supplied participant frame. |
+//! | molecule `equiv` / `equiv_under` | Complete semantic equality of topology, incidence, entity data, and constraints in the same or a supplied ID/participant frame. |
+//!
+//! Application results below are complete molecules in the host's existing frame, so they use
+//! `MoleculeAst::equiv`. Properties comparing a derived molecule through a non-identity match use
+//! `MoleculeAst::equiv_under`; exact `==` remains appropriate only when representation identity is
+//! itself the invariant.
 
 use proptest::bool::weighted;
 use proptest::prelude::*;
@@ -850,7 +864,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].atom(AtomId(0)).ast.canonical_eq(expected.atom(AtomId(0)).ast));
+        prop_assert!(products[0].equiv(&expected));
     }
 
     /// A pattern-relative localized-bond update lowers against the matched host bond.
@@ -889,8 +903,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert_eq!(products[0].raw_graph(), expected.raw_graph());
-        prop_assert!(products[0].bond(BondId(0)).ast.canonical_eq(expected.bond(BondId(0)).ast));
+        prop_assert!(products[0].equiv(&expected));
     }
 
     /// A pattern-relative dative-bond update lowers against the matched host relation.
@@ -933,7 +946,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].dative_bond(DativeBondId(0)).ast.canonical_eq(expected.dative_bond(DativeBondId(0)).ast));
+        prop_assert!(products[0].equiv(&expected));
     }
 
     /// A pattern-relative aromatic-system update lowers against the matched host relation.
@@ -989,7 +1002,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].aromatic_system(AromaticSystemId(0)).ast.canonical_eq(expected.aromatic_system(AromaticSystemId(0)).ast));
+        prop_assert!(products[0].equiv(&expected));
     }
 }
 
@@ -1047,7 +1060,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].multicenter_bond(MulticenterBondId(0)).ast.canonical_eq(expected.multicenter_bond(MulticenterBondId(0)).ast));
+        prop_assert!(products[0].equiv(&expected));
     }
 
     /// A pattern-relative noncovalent-bond update lowers against the matched host relation.
@@ -1090,7 +1103,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].noncovalent_bond(NoncovalentBondId(0)).ast.canonical_eq(expected.noncovalent_bond(NoncovalentBondId(0)).ast));
+        prop_assert!(products[0].equiv(&expected));
     }
 
     /// A pattern-relative stereo-atom update lowers against the matched host configuration and
@@ -1149,7 +1162,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].stereo_atom(StereoAtomId(0)).ast.canonical_eq(expected.stereo_atom(StereoAtomId(0)).ast));
+        prop_assert!(products[0].equiv(&expected));
     }
 
     /// A pattern-relative stereo-bond update lowers against the matched host configuration and
@@ -1212,7 +1225,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].stereo_bond(StereoBondId(0)).ast.canonical_eq(expected.stereo_bond(StereoBondId(0)).ast));
+        prop_assert!(products[0].equiv(&expected));
     }
 }
 

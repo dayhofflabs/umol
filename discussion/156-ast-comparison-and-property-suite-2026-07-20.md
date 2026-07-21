@@ -73,7 +73,7 @@ the existing relation-data vocabulary: `equiv` compares in the current frame;
   result inspection in the eight focused host-refinement application properties
   with `MoleculeAst::equiv`. Run the focused properties and the 4,096-case
   reaction-application soak.
-  **Additive (green).** `[dep: S0c]`
+  **Implemented (green).** `[dep: S0c]`
 
 ### S1 — Replace application-path panics with typed outcomes
 
