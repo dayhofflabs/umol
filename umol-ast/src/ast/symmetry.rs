@@ -124,9 +124,7 @@ impl MoleculeAst {
             return None;
         };
         let coset_space = kind.class_key().space();
-        // An out-of-range coset yields no observable descriptor (it would index
-        // the coset algebra out of bounds).
-        if ligands.len() != coset_space.degree() || raw as usize >= coset_space.count() {
+        if ligands.len() != coset_space.degree() {
             return None;
         }
         let classes: Vec<(StereoLigandKind, NodeId)> = ligands
@@ -402,8 +400,12 @@ impl StereoSymmetry {
             .iter()
             .map(|op| op.permutation())
             .collect();
-        let classes = self.kind.class_key().space().merge_under(&perms);
-        let class = classes[coset as usize];
+        let Some(classes) = self.kind.class_key().space().orbit_reps(&perms) else {
+            return false;
+        };
+        let Some(&class) = classes.get(coset as usize) else {
+            return false;
+        };
         classes.iter().filter(|&&c| c == class).count() == 1
     }
 
@@ -781,6 +783,52 @@ mod tests {
             stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(1)),
             Topicity::Diastereotopic
         ); // F vs Cl on C0
+    }
+
+    #[rstest]
+    #[case::singleton(
+        OrientedPermutationGroup::generate(4, &[]),
+        StereoKind::Tetrahedral,
+        StereoCosetAst::Lit(0),
+        true,
+    )]
+    #[case::merged(
+        OrientedPermutationGroup::generate(
+            4,
+            &[OrientedPermutation::proper(Permutation::from_image(&[1, 0, 2, 3]))],
+        ),
+        StereoKind::Tetrahedral,
+        StereoCosetAst::Lit(0),
+        false,
+    )]
+    #[case::invalid_generator(
+        OrientedPermutationGroup::generate(3, &[]),
+        StereoKind::Tetrahedral,
+        StereoCosetAst::Lit(0),
+        false,
+    )]
+    #[case::invalid_coset(
+        OrientedPermutationGroup::generate(4, &[]),
+        StereoKind::Tetrahedral,
+        StereoCosetAst::Lit(2),
+        false,
+    )]
+    #[case::undetermined(
+        OrientedPermutationGroup::generate(4, &[]),
+        StereoKind::Tetrahedral,
+        StereoCosetAst::Undetermined,
+        false,
+    )]
+    fn test_stereo_symmetry_is_stereogenic(
+        #[case] group: OrientedPermutationGroup,
+        #[case] kind: StereoKind,
+        #[case] coset: StereoCosetAst,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            StereoSymmetry { group, kind, coset }.is_stereogenic(),
+            expected,
+        );
     }
 
     #[rstest]

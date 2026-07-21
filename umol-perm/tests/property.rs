@@ -62,6 +62,13 @@ fn coset_index() -> impl Strategy<Value = (ClassKey, u32)> {
     class_key().prop_flat_map(|key| (Just(key), 0..key.space().count() as u32))
 }
 
+fn coset_indices() -> impl Strategy<Value = (ClassKey, u32, u32)> {
+    class_key().prop_flat_map(|key| {
+        let count = key.space().count() as u32;
+        (Just(key), 0..count, 0..count)
+    })
+}
+
 proptest! {
     #[test]
     fn test_permutation_cycle_round_trip(p in permutation()) {
@@ -147,9 +154,24 @@ proptest! {
     }
 
     #[test]
-    fn test_coset_space_observable_coset_no_fluxional((key, i) in coset_index()) {
+    fn test_coset_space_observable_coset((key, index, generator_index) in coset_indices()) {
         let s = key.space();
-        prop_assert_eq!(s.observable_coset(i, &[]), Some(i));
+        let generator = s.unindex(generator_index).unwrap();
+        let expected = s.orbit_reps(&[generator]).unwrap()[index as usize];
+        prop_assert_eq!(s.observable_coset(index, &[generator]), Some(expected));
+    }
+
+    #[test]
+    fn test_coset_space_observable_coset_index(key in class_key()) {
+        let s = key.space();
+        prop_assert_eq!(s.observable_coset(s.count() as u32, &[]), None);
+    }
+
+    #[test]
+    fn test_coset_space_observable_coset_generator((key, index) in coset_index()) {
+        let s = key.space();
+        let generator = Permutation::identity(s.degree() - 1);
+        prop_assert_eq!(s.observable_coset(index, &[generator]), None);
     }
 
     #[test]

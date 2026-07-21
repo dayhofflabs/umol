@@ -163,17 +163,10 @@ impl CosetSpace {
         Some((0..count).map(|i| root(&mut parent, i)).collect())
     }
 
-    /// Quotient the coset space by extra proper generators. Every generator
-    /// must lie in the parent group.
-    pub fn merge_under(&self, generators: &[Permutation]) -> Vec<u32> {
-        self.orbit_reps(generators)
-            .expect("generator stays in the parent group")
-    }
-
     /// The observable coset under a fluxional supergroup (the merged class id), or
-    /// `None` if `index >= count`.
+    /// `None` if `index >= count` or a generator does not lie in the parent group.
     pub fn observable_coset(&self, index: u32, fluxional: &[Permutation]) -> Option<u32> {
-        self.merge_under(fluxional).get(index as usize).copied()
+        self.orbit_reps(fluxional)?.get(index as usize).copied()
     }
 }
 
@@ -492,37 +485,32 @@ mod tests {
     }
 
     #[rstest]
-    #[case::odd_swap(
+    #[case::no_fluxion(ClassKey::Tetrahedral, 1, vec![], Some(1))]
+    #[case::fluxion_merges(
+        ClassKey::Tetrahedral,
+        1,
         vec![Permutation::from_image(&[1, 0, 2, 3])],
-        vec![0, 0],
+        Some(0),
     )]
-    fn test_coset_space_merge_under(
-        #[case] generators: Vec<Permutation>,
-        #[case] expected: Vec<u32>,
-    ) {
-        let space = CosetSpace::new(
-            PermutationGroup::symmetric(4),
-            PermutationGroup::alternating(4),
-            Decomposition::CanonicalRank,
-            Permutation::identity(4),
-        );
-        assert_eq!(space.merge_under(&generators), expected);
-    }
-
-    #[rstest]
-    #[case::no_fluxion(1, vec![], 1)]
-    #[case::fluxion_merges(1, vec![Permutation::from_image(&[1, 0, 2, 3])], 0)]
+    #[case::index_out_of_range(ClassKey::Tetrahedral, 2, vec![], None)]
+    #[case::outside_parent(
+        ClassKey::CisTrans,
+        0,
+        vec![Permutation::from_image(&[1, 2, 0, 3])],
+        None,
+    )]
+    #[case::wrong_degree(
+        ClassKey::Tetrahedral,
+        0,
+        vec![Permutation::identity(3)],
+        None,
+    )]
     fn test_coset_space_observable_coset(
+        #[case] key: ClassKey,
         #[case] index: u32,
         #[case] fluxional: Vec<Permutation>,
-        #[case] expected: u32,
+        #[case] expected: Option<u32>,
     ) {
-        let space = CosetSpace::new(
-            PermutationGroup::symmetric(4),
-            PermutationGroup::alternating(4),
-            Decomposition::CanonicalRank,
-            Permutation::identity(4),
-        );
-        assert_eq!(space.observable_coset(index, &fluxional), Some(expected));
+        assert_eq!(key.space().observable_coset(index, &fluxional), expected);
     }
 }

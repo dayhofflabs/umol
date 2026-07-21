@@ -436,19 +436,26 @@ check and Clippy pass with all features and warnings denied.
   propagate `None` before the bounded index lookup. Replace valid merge
   expectations by `Some(expected)` and add wrong-parent generators as exact
   `None` cases.
-  **Behavioral correction (green).** [dep: S0f]
+  Property tests cover generated valid-generator delegation and distinguish
+  invalid indices from wrong-degree generators.
+  **Implemented (green).** [dep: S0f]
 - **S5b — symmetry consumers** (`umol-ast/src/ast/symmetry.rs`): replace
   `merge_under` with `orbit_reps`; remove the stored-coset precheck now covered
   by `observable_coset`; make `StereoSymmetry::is_stereogenic` return `false`
   when the orbit representatives or stored index are invalid. Unit and property
   tests distinguish valid singleton orbits, merged orbits, invalid generators,
   and invalid coset indices.
-  **Behavioral correction (green).** [dep: S5a]
+  **Implemented (green).** [dep: S5a]
 - **S5c — retire `merge_under`** (`umol-perm/src/coset.rs`): remove the
   compatibility method after all callers use `orbit_reps`; rerun the complete
   coset unit/property suite against the retained `coset_rep` and
   `improper_rep` names.
-  **Breaking (red→green).** [dep: S5b]
+  **Implemented (green).** [dep: S5b]
+
+S5 verification: all 152 `umol-perm` unit tests and 21 property tests pass, as
+do all 5,112 `umol-ast` unit tests and its complete 161-test property suite. The
+workspace library check and Clippy pass across all targets and features with
+warnings denied.
 
 ### S6 — frame relabeling and application
 
