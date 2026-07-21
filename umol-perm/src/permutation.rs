@@ -55,13 +55,15 @@ impl Permutation {
     }
 
     /// Reorder `items` by σ: `act(items)[i] = items[σ(i)]`. Panics unless
-    /// `items.len() >= degree`.
-    pub fn act<T: Copy>(self, items: &[T]) -> Vec<T> {
+    /// `items.len() == degree`.
+    pub fn act<T: Clone>(self, items: &[T]) -> Vec<T> {
         assert!(
-            items.len() >= self.degree(),
-            "act slice shorter than degree"
+            items.len() == self.degree(),
+            "act slice length must equal degree"
         );
-        (0..self.degree()).map(|i| items[self.apply(i)]).collect()
+        (0..self.degree())
+            .map(|i| items[self.apply(i)].clone())
+            .collect()
     }
 
     /// Function composition σ ∘ τ: `compose(τ).apply(i) == σ(τ(i))`. Panics on a
@@ -276,14 +278,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_permutation_apply() {
-        let p = Permutation::from_image(&[2, 0, 3, 1]);
-        assert_eq!(p.apply(0), 2);
-        assert_eq!(p.apply(1), 0);
-        assert_eq!(p.apply(3), 1);
-    }
-
-    #[rstest]
     #[case::duplicate(vec![0, 1, 1])]
     #[case::out_of_range(vec![0, 1, 3])]
     #[should_panic]
@@ -292,37 +286,36 @@ mod tests {
     }
 
     #[rstest]
-    #[case::valid(
-        &[2, 0, 1],
-        Ok(Permutation { image: [2, 0, 1, 3, 4, 5], degree: 3 }),
-    )]
-    #[case::identity(
-        &[],
-        Ok(Permutation { image: [0, 1, 2, 3, 4, 5], degree: 0 }),
-    )]
-    #[case::too_long(
-        &[0, 1, 2, 3, 4, 5, 6],
-        Err(PermutationError::ImageTooLong { length: 7, maximum: MAX_DEGREE }),
-    )]
-    #[case::out_of_range(
-        &[0, 1, 3],
-        Err(PermutationError::ImageValueOutOfRange { position: 2, value: 3, degree: 3 }),
-    )]
-    #[case::duplicate(
-        &[0, 1, 1],
-        Err(PermutationError::DuplicateImageValue { value: 1 }),
-    )]
-    fn test_permutation_try_from(
-        #[case] image: &[usize],
-        #[case] expected: Result<Permutation, PermutationError>,
-    ) {
-        assert_eq!(Permutation::try_from(image), expected);
+    fn test_permutation_apply() {
+        let p = Permutation::from_image(&[2, 0, 3, 1]);
+        assert_eq!(p.apply(0), 2);
+        assert_eq!(p.apply(1), 0);
+        assert_eq!(p.apply(3), 1);
     }
 
     #[rstest]
     fn test_permutation_act() {
         let p = Permutation::from_image(&[2, 0, 1]);
-        assert_eq!(p.act(&['a', 'b', 'c']), vec!['c', 'a', 'b']);
+        assert_eq!(
+            p.act(&[
+                String::from("alpha"),
+                String::from("beta"),
+                String::from("gamma"),
+            ]),
+            vec![
+                String::from("gamma"),
+                String::from("alpha"),
+                String::from("beta"),
+            ],
+        );
+    }
+
+    #[rstest]
+    #[case::short(&[10, 11])]
+    #[case::long(&[10, 11, 12, 13])]
+    #[should_panic(expected = "act slice length must equal degree")]
+    fn test_permutation_act_error(#[case] items: &[u32]) {
+        Permutation::from_image(&[2, 0, 1]).act(items);
     }
 
     #[rstest]
@@ -394,6 +387,34 @@ mod tests {
     #[case::interleaved(Permutation::from_image(&[2, 3, 0, 1]), vec![vec![0, 2], vec![1, 3]])]
     fn test_permutation_cycles(#[case] p: Permutation, #[case] expected: Vec<Vec<usize>>) {
         assert_eq!(p.cycles(), expected);
+    }
+
+    #[rstest]
+    #[case::valid(
+        &[2, 0, 1],
+        Ok(Permutation { image: [2, 0, 1, 3, 4, 5], degree: 3 }),
+    )]
+    #[case::identity(
+        &[],
+        Ok(Permutation { image: [0, 1, 2, 3, 4, 5], degree: 0 }),
+    )]
+    #[case::too_long(
+        &[0, 1, 2, 3, 4, 5, 6],
+        Err(PermutationError::ImageTooLong { length: 7, maximum: MAX_DEGREE }),
+    )]
+    #[case::out_of_range(
+        &[0, 1, 3],
+        Err(PermutationError::ImageValueOutOfRange { position: 2, value: 3, degree: 3 }),
+    )]
+    #[case::duplicate(
+        &[0, 1, 1],
+        Err(PermutationError::DuplicateImageValue { value: 1 }),
+    )]
+    fn test_permutation_try_from(
+        #[case] image: &[usize],
+        #[case] expected: Result<Permutation, PermutationError>,
+    ) {
+        assert_eq!(Permutation::try_from(image), expected);
     }
 
     #[rstest]

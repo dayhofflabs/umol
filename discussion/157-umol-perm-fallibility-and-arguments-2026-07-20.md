@@ -350,20 +350,25 @@ Python 3.13 virtual environment, all 900 Python tests pass. The complete
   `T: Clone`, require `items.len() == degree`, and clone selected items. Test a
   non-`Copy` element type, ordinary action, and both short and long contract
   violations.
-  **Breaking behavior (red→green).** [dep: S1a]
+  **Implemented (green).** [dep: S1a]
 - **S2b — permutation-group contracts** (`umol-perm/src/group.rs`): make
   `generate` assert generator-degree agreement before closure, make
   wrong-degree `contains` explicitly return `false`, and give `cyclic` and
   `dihedral` an explicit nonzero-degree assertion instead of allowing modulo by
   zero to fail incidentally. Add exact membership and contract tables; preserve
   order tests for valid named groups.
-  **Behavioral correction (green).** [dep: S1a]
+  **Implemented (green).** [dep: S1a]
 - **S2c — oriented-group contracts** (`umol-perm/src/oriented.rs`): assert
   generator degree agreement in `generate`, return `false` from `contains` for
   either orientation at the wrong degree, and assert the point domain directly
   in `proper_orbit_of` and `star_orbit_of`. Test the proper and improper
   membership branches and both orbit families.
-  **Behavioral correction (green).** [dep: S2b]
+  **Implemented (green).** [dep: S2b]
+
+S2 verification: the complete `umol-perm` unit/property suite and all 5,085
+`umol-ast` unit tests pass. Clippy passes for every `umol-perm` target with the
+property feature and for all workspace libraries with all features, with
+warnings denied.
 
 ### S3 — cycle construction and readers
 
