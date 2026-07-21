@@ -1645,4 +1645,268 @@ proptest! {
             );
         }
     }
+
+    #[test]
+    fn test_reaction_ast_apply_reframes_stereo_atom_modification(
+        old in 0..StereoKind::Tetrahedral.count() as u32,
+        permutation in stereo_frame_permutation_strategy(StereoKind::Tetrahedral),
+    ) {
+        let new = 1 - old;
+        let atoms = vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::F),
+            AtomAst::from_element(Element::Cl),
+            AtomAst::from_element(Element::Br),
+            AtomAst::from_element(Element::I),
+        ];
+        let bonds: Vec<(AtomId, AtomId, BondAst)> = (1..=4)
+            .map(|ligand| (AtomId(0), AtomId(ligand), BondAst::from_order(1)))
+            .collect();
+        let rule_frame: Vec<StereoLigand> = (1..=4)
+            .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+            .collect();
+        let old_ast = StereoAtomAst::new(StereoKind::Tetrahedral, old);
+        let new_ast = StereoAtomAst::new(StereoKind::Tetrahedral, new);
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_atoms: vec![(AtomId(0), rule_frame.clone(), old_ast.clone())],
+            ..Default::default()
+        });
+        let reaction = ReactionAst::new(
+            lhs,
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                id: StereoAtomId(0),
+                change: StereoAtomFieldChange::Configuration {
+                    old: old_ast.configuration,
+                    new: new_ast.configuration,
+                },
+            })]),
+        );
+        let host_frame = permutation.act(&rule_frame);
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                host_frame.clone(),
+                StereoAtomAst::new(StereoKind::Tetrahedral, old).apply(permutation),
+            )],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            stereo_atoms: vec![(
+                AtomId(0),
+                host_frame,
+                StereoAtomAst::new(StereoKind::Tetrahedral, new).apply(permutation),
+            )],
+            ..Default::default()
+        });
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, ALG)
+            .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
+            .map(|result| result.map(|derivation| derivation.rhs().clone()))
+            .collect::<Result<_, _>>()
+            .map_err(|error| TestCaseError::fail(format!("application failed: {error:?}")))?;
+
+        prop_assert_eq!(products, vec![expected]);
+    }
+
+    #[test]
+    fn test_reaction_ast_apply_reframes_stereo_atom_removal(
+        coset in 0..StereoKind::Tetrahedral.count() as u32,
+        permutation in stereo_frame_permutation_strategy(StereoKind::Tetrahedral),
+    ) {
+        let atoms = vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::F),
+            AtomAst::from_element(Element::Cl),
+            AtomAst::from_element(Element::Br),
+            AtomAst::from_element(Element::I),
+        ];
+        let bonds: Vec<(AtomId, AtomId, BondAst)> = (1..=4)
+            .map(|ligand| (AtomId(0), AtomId(ligand), BondAst::from_order(1)))
+            .collect();
+        let rule_frame: Vec<StereoLigand> = (1..=4)
+            .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+            .collect();
+        let rule_ast = StereoAtomAst::new(StereoKind::Tetrahedral, coset);
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_atoms: vec![(AtomId(0), rule_frame.clone(), rule_ast.clone())],
+            ..Default::default()
+        });
+        let reaction = ReactionAst::new(
+            lhs,
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
+                id: StereoAtomId(0),
+                site: AtomId(0),
+                ligands: rule_frame.clone(),
+                ast: rule_ast,
+            })]),
+        );
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                permutation.act(&rule_frame),
+                StereoAtomAst::new(StereoKind::Tetrahedral, coset).apply(permutation),
+            )],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            ..Default::default()
+        });
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, ALG)
+            .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
+            .map(|result| result.map(|derivation| derivation.rhs().clone()))
+            .collect::<Result<_, _>>()
+            .map_err(|error| TestCaseError::fail(format!("application failed: {error:?}")))?;
+
+        prop_assert_eq!(products, vec![expected]);
+    }
+
+    #[test]
+    fn test_reaction_ast_apply_reframes_stereo_bond_modification(
+        old in 0..StereoKind::CisTrans.count() as u32,
+        permutation in stereo_frame_permutation_strategy(StereoKind::CisTrans),
+    ) {
+        let new = 1 - old;
+        let atoms = vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::F),
+            AtomAst::from_element(Element::Cl),
+            AtomAst::from_element(Element::Br),
+            AtomAst::from_element(Element::I),
+        ];
+        let bonds = vec![
+            (AtomId(0), AtomId(1), BondAst::from_order(2)),
+            (AtomId(0), AtomId(2), BondAst::from_order(1)),
+            (AtomId(0), AtomId(3), BondAst::from_order(1)),
+            (AtomId(1), AtomId(4), BondAst::from_order(1)),
+            (AtomId(1), AtomId(5), BondAst::from_order(1)),
+        ];
+        let rule_frame: Vec<StereoLigand> = (2..=5)
+            .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+            .collect();
+        let old_ast = StereoBondAst::new(StereoKind::CisTrans, old);
+        let new_ast = StereoBondAst::new(StereoKind::CisTrans, new);
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_bonds: vec![(BondId(0), rule_frame.clone(), old_ast.clone())],
+            ..Default::default()
+        });
+        let reaction = ReactionAst::new(
+            lhs,
+            Deltas::from_iter([Delta::StereoBond(StereoBondDelta::ModifyField {
+                id: StereoBondId(0),
+                change: StereoBondFieldChange::Configuration {
+                    old: old_ast.configuration,
+                    new: new_ast.configuration,
+                },
+            })]),
+        );
+        let host_frame = permutation.act(&rule_frame);
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_bonds: vec![(
+                BondId(0),
+                host_frame.clone(),
+                StereoBondAst::new(StereoKind::CisTrans, old).apply(permutation),
+            )],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            stereo_bonds: vec![(
+                BondId(0),
+                host_frame,
+                StereoBondAst::new(StereoKind::CisTrans, new).apply(permutation),
+            )],
+            ..Default::default()
+        });
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, ALG)
+            .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
+            .map(|result| result.map(|derivation| derivation.rhs().clone()))
+            .collect::<Result<_, _>>()
+            .map_err(|error| TestCaseError::fail(format!("application failed: {error:?}")))?;
+
+        prop_assert_eq!(products, vec![expected]);
+    }
+
+    #[test]
+    fn test_reaction_ast_apply_reframes_stereo_bond_removal(
+        coset in 0..StereoKind::CisTrans.count() as u32,
+        permutation in stereo_frame_permutation_strategy(StereoKind::CisTrans),
+    ) {
+        let atoms = vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::F),
+            AtomAst::from_element(Element::Cl),
+            AtomAst::from_element(Element::Br),
+            AtomAst::from_element(Element::I),
+        ];
+        let bonds = vec![
+            (AtomId(0), AtomId(1), BondAst::from_order(2)),
+            (AtomId(0), AtomId(2), BondAst::from_order(1)),
+            (AtomId(0), AtomId(3), BondAst::from_order(1)),
+            (AtomId(1), AtomId(4), BondAst::from_order(1)),
+            (AtomId(1), AtomId(5), BondAst::from_order(1)),
+        ];
+        let rule_frame: Vec<StereoLigand> = (2..=5)
+            .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+            .collect();
+        let rule_ast = StereoBondAst::new(StereoKind::CisTrans, coset);
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_bonds: vec![(BondId(0), rule_frame.clone(), rule_ast.clone())],
+            ..Default::default()
+        });
+        let reaction = ReactionAst::new(
+            lhs,
+            Deltas::from_iter([Delta::StereoBond(StereoBondDelta::Remove {
+                id: StereoBondId(0),
+                site: BondId(0),
+                ligands: rule_frame.clone(),
+                ast: rule_ast,
+            })]),
+        );
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_bonds: vec![(
+                BondId(0),
+                permutation.act(&rule_frame),
+                StereoBondAst::new(StereoKind::CisTrans, coset).apply(permutation),
+            )],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            ..Default::default()
+        });
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, ALG)
+            .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?
+            .map(|result| result.map(|derivation| derivation.rhs().clone()))
+            .collect::<Result<_, _>>()
+            .map_err(|error| TestCaseError::fail(format!("application failed: {error:?}")))?;
+
+        prop_assert_eq!(products, vec![expected]);
+    }
 }

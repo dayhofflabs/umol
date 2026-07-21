@@ -1005,6 +1005,22 @@ pub(crate) fn permutation_strategy(degree: usize) -> impl Strategy<Value = Permu
         .prop_map(|image| Permutation::from_image(&image))
 }
 
+/// A permutation realizable by the stereo kind's parent group. This differs
+/// from an arbitrary degree-matched permutation for partitioned kinds such as
+/// cis/trans, whose parent preserves the two ligand sides.
+pub(crate) fn stereo_frame_permutation_strategy(
+    kind: StereoKind,
+) -> impl Strategy<Value = Permutation> {
+    let space = kind.class_key().space();
+    (0..space.group().order(), 0..space.count()).prop_map(move |(group, coset)| {
+        space.group().elements()[group].compose(
+            space
+                .unindex(coset as u32)
+                .expect("generated coset index is in range"),
+        )
+    })
+}
+
 pub(crate) fn orientation_strategy() -> impl Strategy<Value = Orientation> {
     prop_oneof![Just(Orientation::Proper), Just(Orientation::Improper)]
 }

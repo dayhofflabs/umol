@@ -508,39 +508,39 @@ features with warnings denied.
   degree of the symmetric, alternating, cyclic, and dihedral families. Assert
   `ClassKey::from_str(key.to_string()) == Ok(key)` for the full generated
   domain; retain the exact malformed-input tables as unit tests.
-  **Additive (green).** [dep: S0c]
+  **Implemented (green).** [dep: S0c]
 - **S7b — independent image round trips** (`umol-perm/tests/property.rs`):
   generate shuffled images directly for every supported degree, construct with
   `Permutation::try_from`, and assert both the inferred degree and the complete
   recovered image. Replace the rank-derived image property rather than keeping
   two tests of the same invariant; retain the separate Lehmer-rank round trip.
-  **Additive (green).** [dep: S0d, S1a]
+  **Implemented (green).** [dep: S0d, S1a]
 - **S7c — canonical coset orbits** (`umol-perm/tests/property.rs`): generate
   arbitrary valid multi-generator sets for each fixed class space and compare
   every `orbit_reps` entry with the minimum index reached by an independent
   traversal under those generators. This covers multi-generator closure,
   representative membership, and the canonical-minimum contract; retain the
   exact invalid-generator unit tables.
-  **Additive (green).** [dep: S0f]
+  **Implemented (green).** [dep: S0f]
 - **S7d — sequence-action composition** (`umol-perm/tests/property.rs`): for
   equal-degree permutations and generated sequences, assert
   `a.compose(b).act(items) == b.act(&a.act(items))`, matching the documented
   composition and right-action conventions. Keep the non-`Copy` and slice-size
   contracts in the unit tests; do not add a redundant inverse-action property.
-  **Additive (green).** [dep: S2a]
+  **Implemented (green).** [dep: S2a]
 - **S7e — generated permutation groups** (`umol-perm/tests/property.rs`): retain
   arbitrary valid generator lists alongside each generated `PermutationGroup`.
   Assert that the identity and every supplied generator are members and that
   the returned elements are closed under inverse and composition. Keep
   wrong-degree inputs and named-group orders in the exact unit tables.
-  **Additive (green).** [dep: S2b]
+  **Implemented (green).** [dep: S2b]
 - **S7f — generated oriented groups** (`umol-perm/tests/property.rs`): retain
   the input generators in the existing oriented-group strategy and assert that
   every supplied proper or improper generator belongs to the result. Preserve
   the existing identity, inverse, and composition closure properties without
   duplicating them; keep wrong-degree membership and orbit-domain contracts in
   the unit tests.
-  **Additive (green).** [dep: S2c]
+  **Implemented (green).** [dep: S2c]
 - **S7g — generated stereogenicity** (`umol-ast/tests/property/stereo.rs`):
   generate tetrahedral molecules across repeated and distinct concrete ligand
   elements and both valid stored cosets. Obtain `StereoSymmetry` through
@@ -549,7 +549,7 @@ features with warnings denied.
   local group to fix the stored coset under `CosetSpace::reindex`. This covers
   singleton and merged coset orbits without deriving the expected result from
   `orbit_reps` itself.
-  **Additive (green).** [dep: S5b]
+  **Implemented (green).** [dep: S5b]
 - **S7h — malformed observable cosets** (`umol-ast/tests/property/stereo.rs`):
   generate tetrahedral molecules with out-of-range stored cosets and exercise
   the complete public path through graph-symmetry construction and stereo
@@ -557,7 +557,7 @@ features with warnings denied.
   `StereoSymmetry::is_stereogenic() == false`; successful construction then
   also establishes that malformed indices are contained by
   `observable_coset` rather than reaching an unchecked index operation.
-  **Additive (green).** [dep: S5b]
+  **Implemented (green).** [dep: S5b]
 - **S7i — generated frame transformations**
   (`umol-ast/tests/property/stereo.rs`): generate valid distinct ligand frames,
   frame permutations, and in-range atom- and bond-stereo configurations. For
@@ -566,7 +566,7 @@ features with warnings denied.
   reverse frame and recover the original AST exactly. Keep incompatible frame
   shapes in the exact unit tables rather than generating another absence-only
   property.
-  **Additive (green).** [dep: S6b]
+  **Implemented (green).** [dep: S6b]
 - **S7j — generated stereo pushouts**
   (`umol-ast/tests/property/molecule.rs`): generate full-overlap tetrahedral
   atom and cis/trans bond molecules whose right-hand ligand frame is a
@@ -575,7 +575,7 @@ features with warnings denied.
   its object is exactly the left molecule. In separate generated changed-ligand
   cases, assert the exact `None` pushout result. This isolates the S6c law from
   the broader reaction-composition properties that also traverse pushout.
-  **Additive (green).** [dep: S6c]
+  **Implemented (green).** [dep: S6c]
 - **S7k — generated reaction reframing**
   (`umol-ast/tests/property/reaction.rs`): generate tetrahedral atom and
   cis/trans bond rules with absolute configuration modifications and removals,
@@ -585,7 +585,10 @@ features with warnings denied.
   Keep incompatible manually supplied correspondences in the entity-bearing
   unit error tables; matcher enumeration rejects those frames before
   application, so they are not iterator cases.
-  **Additive (green).** [dep: S6d]
+  **Implemented (green).** [dep: S6d]
+
+S7 verification: all 25 `umol-perm` property tests and all 173 `umol-ast`
+property tests pass with the `proptest` feature enabled.
 
 The critical consumer path joins **S0d → S1** and **S0e → S4** before
 **S6a → S6b → S6d**; S6 is the prerequisite for document 156 S1c. The cycle

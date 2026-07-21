@@ -6,6 +6,7 @@ use std::ptr;
 use proptest::prelude::*;
 use umol_perm::{
     ClassKey, Coset, Orientation, OrientedPermutation, OrientedPermutationGroup, Permutation,
+    PermutationGroup,
 };
 
 fn factorial(n: usize) -> usize {
@@ -21,12 +22,35 @@ fn permutation() -> impl Strategy<Value = Permutation> {
     (2usize..=6).prop_flat_map(perm_of)
 }
 
+fn permutation_image() -> impl Strategy<Value = Vec<usize>> {
+    (0usize..=6).prop_flat_map(|degree| Just((0..degree).collect::<Vec<_>>()).prop_shuffle())
+}
+
 fn perm_pair() -> impl Strategy<Value = (Permutation, Permutation)> {
     (2usize..=6).prop_flat_map(|d| (perm_of(d), perm_of(d)))
 }
 
 fn perm_triple() -> impl Strategy<Value = (Permutation, Permutation, Permutation)> {
     (2usize..=6).prop_flat_map(|d| (perm_of(d), perm_of(d), perm_of(d)))
+}
+
+fn perm_pair_with_items() -> impl Strategy<Value = (Permutation, Permutation, Vec<u16>)> {
+    (2usize..=6).prop_flat_map(|degree| {
+        (
+            perm_of(degree),
+            perm_of(degree),
+            prop::collection::vec(any::<u16>(), degree),
+        )
+    })
+}
+
+fn permutation_group() -> impl Strategy<Value = (usize, Vec<Permutation>, PermutationGroup)> {
+    (2usize..=4).prop_flat_map(|degree| {
+        prop::collection::vec(perm_of(degree), 0..=3).prop_map(move |generators| {
+            let group = PermutationGroup::generate(degree, &generators);
+            (degree, generators, group)
+        })
+    })
 }
 
 fn oriented_of(degree: usize) -> impl Strategy<Value = OrientedPermutation> {
@@ -39,11 +63,29 @@ fn oriented_of(degree: usize) -> impl Strategy<Value = OrientedPermutation> {
 
 /// A generated oriented group, paired with its degree. Degree is held low so the
 /// closure check (over all element pairs) stays cheap.
-fn oriented_group() -> impl Strategy<Value = (usize, OrientedPermutationGroup)> {
+fn oriented_group(
+) -> impl Strategy<Value = (usize, Vec<OrientedPermutation>, OrientedPermutationGroup)> {
     (2usize..=4).prop_flat_map(|degree| {
-        prop::collection::vec(oriented_of(degree), 0..=3)
-            .prop_map(move |gens| (degree, OrientedPermutationGroup::generate(degree, &gens)))
+        prop::collection::vec(oriented_of(degree), 0..=3).prop_map(move |generators| {
+            let group = OrientedPermutationGroup::generate(degree, &generators);
+            (degree, generators, group)
+        })
     })
+}
+
+fn class_key_text() -> impl Strategy<Value = ClassKey> {
+    prop_oneof![
+        (0u8..=6).prop_map(ClassKey::Symmetric),
+        (0u8..=6).prop_map(ClassKey::Alternating),
+        (0u8..=6).prop_map(ClassKey::Cyclic),
+        (0u8..=6).prop_map(ClassKey::Dihedral),
+        Just(ClassKey::Tetrahedral),
+        Just(ClassKey::CisTrans),
+        Just(ClassKey::Axial),
+        Just(ClassKey::SquarePlanar),
+        Just(ClassKey::TrigonalBipyramidal),
+        Just(ClassKey::Octahedral),
+    ]
 }
 
 fn class_key() -> impl Strategy<Value = ClassKey> {
@@ -69,6 +111,27 @@ fn coset_indices() -> impl Strategy<Value = (ClassKey, u32, u32)> {
     })
 }
 
+fn coset_generators() -> impl Strategy<Value = (ClassKey, Vec<Permutation>)> {
+    class_key().prop_flat_map(|key| {
+        let space = key.space();
+        let group_order = space.group().order();
+        let parent_order = space.count() * group_order;
+        prop::collection::vec(0..parent_order, 0..=4).prop_map(move |indices| {
+            let generators = indices
+                .into_iter()
+                .map(|index| {
+                    let group_element = space.group().elements()[index % group_order];
+                    let coset = space
+                        .unindex((index / group_order) as u32)
+                        .expect("generated coset index is in range");
+                    group_element.compose(coset)
+                })
+                .collect();
+            (key, generators)
+        })
+    })
+}
+
 proptest! {
     #[test]
     fn test_permutation_cycle_round_trip(p in permutation()) {
@@ -81,9 +144,13 @@ proptest! {
     }
 
     #[test]
-    fn test_permutation_image_round_trip(p in permutation()) {
-        let image: Vec<usize> = (0..p.degree()).map(|i| p.apply(i)).collect();
-        prop_assert_eq!(Permutation::try_from(image.as_slice()), Ok(p));
+    fn test_permutation_image_round_trip(image in permutation_image()) {
+        let permutation = Permutation::try_from(image.as_slice()).unwrap();
+        let recovered = (0..permutation.degree())
+            .map(|point| permutation.apply(point))
+            .collect::<Vec<_>>();
+        prop_assert_eq!(permutation.degree(), image.len());
+        prop_assert_eq!(recovered, image);
     }
 
     #[test]
@@ -127,12 +194,34 @@ proptest! {
     }
 
     #[test]
-    fn test_oriented_permutation_group_contains_identity((degree, group) in oriented_group()) {
-        prop_assert!(group.contains(OrientedPermutation::identity(degree)));
+    fn test_permutation_act_composition((a, b, items) in perm_pair_with_items()) {
+        prop_assert_eq!(a.compose(b).act(&items), b.act(&a.act(&items)));
     }
 
     #[test]
-    fn test_oriented_permutation_group_closed((_degree, group) in oriented_group()) {
+    fn test_permutation_group_generate((degree, generators, group) in permutation_group()) {
+        prop_assert!(group.contains(&Permutation::identity(degree)));
+        for generator in generators {
+            prop_assert!(group.contains(&generator));
+        }
+        for &a in group.elements() {
+            prop_assert!(group.contains(&a.inverse()));
+            for &b in group.elements() {
+                prop_assert!(group.contains(&a.compose(b)));
+            }
+        }
+    }
+
+    #[test]
+    fn test_oriented_permutation_group_generate((degree, generators, group) in oriented_group()) {
+        prop_assert!(group.contains(OrientedPermutation::identity(degree)));
+        for generator in generators {
+            prop_assert!(group.contains(generator));
+        }
+    }
+
+    #[test]
+    fn test_oriented_permutation_group_closed((_degree, _generators, group) in oriented_group()) {
         let elements = group.elements();
         prop_assert_eq!(group.order(), elements.len());
         for &a in &elements {
@@ -191,14 +280,29 @@ proptest! {
     }
 
     #[test]
-    fn test_coset_space_orbit_reps_closure((key, i) in coset_index()) {
-        let s = key.space();
-        let generator = s.unindex(i).unwrap();
-        let reps = s.orbit_reps(&[generator]).unwrap();
-        for index in 0..s.count() as u32 {
-            let moved = s.reindex(index, generator).unwrap();
-            prop_assert_eq!(reps[index as usize], reps[moved as usize]);
+    fn test_coset_space_orbit_reps((key, generators) in coset_generators()) {
+        let space = key.space();
+        let mut expected = Vec::with_capacity(space.count());
+        for start in 0..space.count() as u32 {
+            let mut reached = vec![start];
+            let mut frontier = vec![start];
+            while let Some(index) = frontier.pop() {
+                for &generator in &generators {
+                    let moved = space.reindex(index, generator).unwrap();
+                    if !reached.contains(&moved) {
+                        reached.push(moved);
+                        frontier.push(moved);
+                    }
+                }
+            }
+            expected.push(*reached.iter().min().unwrap());
         }
+        prop_assert_eq!(space.orbit_reps(&generators), Some(expected));
+    }
+
+    #[test]
+    fn test_class_key_display_from_str_roundtrip(key in class_key_text()) {
+        prop_assert_eq!(key.to_string().parse::<ClassKey>(), Ok(key));
     }
 
     #[test]
