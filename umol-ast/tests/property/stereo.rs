@@ -1,3 +1,5 @@
+use std::iter;
+
 use proptest::prelude::*;
 use umol_ast::ast::{ConstitutionColoring, GraphSymmetryConfig};
 
@@ -177,7 +179,7 @@ proptest! {
         coset in 0u32..2,
     ) {
         let molecule = MoleculeAst::from_parts(MoleculeParts {
-            atoms: std::iter::once(AtomAst::from_element(Element::C))
+            atoms: iter::once(AtomAst::from_element(Element::C))
                 .chain(elements.into_iter().map(AtomAst::from_element))
                 .collect(),
             bonds: (1..=4)
@@ -216,7 +218,7 @@ proptest! {
         coset in 2u32..=32,
     ) {
         let molecule = MoleculeAst::from_parts(MoleculeParts {
-            atoms: std::iter::once(AtomAst::from_element(Element::C))
+            atoms: iter::once(AtomAst::from_element(Element::C))
                 .chain(elements.into_iter().map(AtomAst::from_element))
                 .collect(),
             bonds: (1..=4)
