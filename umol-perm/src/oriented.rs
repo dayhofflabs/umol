@@ -228,27 +228,27 @@ mod tests {
 
     #[rstest]
     fn test_oriented_permutation_compose() {
-        let a = OrientedPermutation::proper(Permutation::from_image(3, &[1, 2, 0]));
-        let b = OrientedPermutation::improper(Permutation::from_image(3, &[1, 0, 2]));
+        let a = OrientedPermutation::proper(Permutation::from_image(&[1, 2, 0]));
+        let b = OrientedPermutation::improper(Permutation::from_image(&[1, 0, 2]));
         assert_eq!(
             a.compose(b),
-            OrientedPermutation::improper(Permutation::from_image(3, &[2, 1, 0]))
+            OrientedPermutation::improper(Permutation::from_image(&[2, 1, 0]))
         );
     }
 
     #[rstest]
     fn test_oriented_permutation_inverse() {
-        let a = OrientedPermutation::improper(Permutation::from_image(3, &[1, 2, 0]));
+        let a = OrientedPermutation::improper(Permutation::from_image(&[1, 2, 0]));
         assert_eq!(
             a.inverse(),
-            OrientedPermutation::improper(Permutation::from_image(3, &[2, 0, 1]))
+            OrientedPermutation::improper(Permutation::from_image(&[2, 0, 1]))
         );
     }
 
     #[rstest]
     #[case::proper_identity(OrientedPermutation::identity(4), 0)]
     #[case::improper_transposition(
-        OrientedPermutation::improper(Permutation::from_image(4, &[1, 0, 2, 3])),
+        OrientedPermutation::improper(Permutation::from_image(&[1, 0, 2, 3])),
         1
     )]
     fn test_oriented_permutation_apply(#[case] op: OrientedPermutation, #[case] image_of_0: usize) {
@@ -260,40 +260,39 @@ mod tests {
         let group = OrientedPermutationGroup::generate(
             4,
             &[
-                OrientedPermutation::proper(Permutation::from_image(4, &[1, 0, 3, 2])),
-                OrientedPermutation::improper(Permutation::from_image(4, &[2, 3, 0, 1])),
+                OrientedPermutation::proper(Permutation::from_image(&[1, 0, 3, 2])),
+                OrientedPermutation::improper(Permutation::from_image(&[2, 3, 0, 1])),
             ],
         );
         assert_eq!(group.order(), 4);
         assert_eq!(group.proper().order(), 2);
         assert_eq!(
             group.improper_rep(),
-            Some(OrientedPermutation::improper(Permutation::from_image(
-                4,
-                &[2, 3, 0, 1]
-            )))
+            Some(OrientedPermutation::improper(Permutation::from_image(&[
+                2, 3, 0, 1
+            ])))
         );
     }
 
     #[rstest]
     #[case::proper_member(
-        OrientedPermutation::proper(Permutation::from_image(4, &[1, 0, 3, 2])),
+        OrientedPermutation::proper(Permutation::from_image(&[1, 0, 3, 2])),
         true
     )]
     #[case::improper_rep(
-        OrientedPermutation::improper(Permutation::from_image(4, &[2, 3, 0, 1])),
+        OrientedPermutation::improper(Permutation::from_image(&[2, 3, 0, 1])),
         true
     )]
     #[case::improper_coset_member(
-        OrientedPermutation::improper(Permutation::from_image(4, &[3, 2, 1, 0])),
+        OrientedPermutation::improper(Permutation::from_image(&[3, 2, 1, 0])),
         true
     )]
     #[case::proper_non_member(
-        OrientedPermutation::proper(Permutation::from_image(4, &[2, 3, 0, 1])),
+        OrientedPermutation::proper(Permutation::from_image(&[2, 3, 0, 1])),
         false
     )]
     #[case::improper_non_member(
-        OrientedPermutation::improper(Permutation::from_image(4, &[1, 0, 2, 3])),
+        OrientedPermutation::improper(Permutation::from_image(&[1, 0, 2, 3])),
         false
     )]
     fn test_oriented_permutation_group_contains(
@@ -303,8 +302,8 @@ mod tests {
         let group = OrientedPermutationGroup::generate(
             4,
             &[
-                OrientedPermutation::proper(Permutation::from_image(4, &[1, 0, 3, 2])),
-                OrientedPermutation::improper(Permutation::from_image(4, &[2, 3, 0, 1])),
+                OrientedPermutation::proper(Permutation::from_image(&[1, 0, 3, 2])),
+                OrientedPermutation::improper(Permutation::from_image(&[2, 3, 0, 1])),
             ],
         );
         assert_eq!(group.contains(op), expected);
@@ -314,16 +313,15 @@ mod tests {
     fn test_oriented_permutation_group_elements() {
         let group = OrientedPermutationGroup::generate(
             2,
-            &[OrientedPermutation::improper(Permutation::from_image(
-                2,
-                &[1, 0],
-            ))],
+            &[OrientedPermutation::improper(Permutation::from_image(&[
+                1, 0,
+            ]))],
         );
         assert_eq!(
             group.elements(),
             vec![
                 OrientedPermutation::proper(Permutation::identity(2)),
-                OrientedPermutation::improper(Permutation::from_image(2, &[1, 0])),
+                OrientedPermutation::improper(Permutation::from_image(&[1, 0])),
             ]
         );
     }
@@ -333,8 +331,8 @@ mod tests {
         let group = OrientedPermutationGroup::generate(
             4,
             &[
-                OrientedPermutation::proper(Permutation::from_image(4, &[1, 0, 3, 2])),
-                OrientedPermutation::improper(Permutation::from_image(4, &[2, 3, 0, 1])),
+                OrientedPermutation::proper(Permutation::from_image(&[1, 0, 3, 2])),
+                OrientedPermutation::improper(Permutation::from_image(&[2, 3, 0, 1])),
             ],
         );
         assert_eq!(group.proper_orbit_of(0), vec![0, 1]);
@@ -345,8 +343,8 @@ mod tests {
         let group = OrientedPermutationGroup::generate(
             4,
             &[
-                OrientedPermutation::proper(Permutation::from_image(4, &[1, 0, 3, 2])),
-                OrientedPermutation::improper(Permutation::from_image(4, &[2, 3, 0, 1])),
+                OrientedPermutation::proper(Permutation::from_image(&[1, 0, 3, 2])),
+                OrientedPermutation::improper(Permutation::from_image(&[2, 3, 0, 1])),
             ],
         );
         assert_eq!(group.star_orbit_of(0), vec![0, 1, 2, 3]);

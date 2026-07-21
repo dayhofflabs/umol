@@ -4118,7 +4118,7 @@ mod tests {
     #[case::apply(AstStereoAtomDelta::Apply {
         id: AstStereoAtomId(5),
         kind: AstStereoKind::Tetrahedral,
-        permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+        permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
     })]
     #[case::swap(AstStereoAtomDelta::Swap {
         id: AstStereoAtomId(5),
@@ -4142,12 +4142,12 @@ mod tests {
         AstStereoAtomDelta::Apply {
             id: AstStereoAtomId(5),
             kind: AstStereoKind::Tetrahedral,
-            permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
         AstStereoAtomDelta::Apply {
             id: AstStereoAtomId(5),
             kind: AstStereoKind::Tetrahedral,
-            permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
         true,
     )]
@@ -4182,12 +4182,12 @@ mod tests {
         AstStereoAtomDelta::Apply {
             id: AstStereoAtomId(5),
             kind: AstStereoKind::Tetrahedral,
-            permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
         AstStereoAtomDelta::Apply {
             id: AstStereoAtomId(5),
             kind: AstStereoKind::Tetrahedral,
-            permutation: PermPermutation::from_image(4, &[2, 0, 1, 3]),
+            permutation: PermPermutation::from_image(&[2, 0, 1, 3]),
         },
         false,
     )]
@@ -4262,7 +4262,7 @@ mod tests {
         AstStereoAtomDelta::Apply {
             id: AstStereoAtomId(5),
             kind: AstStereoKind::Tetrahedral,
-            permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
         "StereoAtomDelta.Apply(id=5, kind=StereoKind.Tetrahedral, permutation=Permutation([1, 2, 0, 3]))",
     )]
@@ -4355,7 +4355,7 @@ mod tests {
     #[case::apply(AstStereoAtomDelta::Apply {
         id: AstStereoAtomId(5),
         kind: AstStereoKind::Tetrahedral,
-        permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+        permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
     })]
     #[case::swap(AstStereoAtomDelta::Swap {
         id: AstStereoAtomId(5),
@@ -4437,7 +4437,7 @@ mod tests {
     #[case::apply(AstStereoBondDelta::Apply {
         id: AstStereoBondId(5),
         kind: AstStereoKind::CisTrans,
-        permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+        permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
     })]
     #[case::swap(AstStereoBondDelta::Swap {
         id: AstStereoBondId(5),
@@ -4461,12 +4461,12 @@ mod tests {
         AstStereoBondDelta::Apply {
             id: AstStereoBondId(5),
             kind: AstStereoKind::CisTrans,
-            permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
         AstStereoBondDelta::Apply {
             id: AstStereoBondId(5),
             kind: AstStereoKind::CisTrans,
-            permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
         true,
     )]
@@ -4501,12 +4501,12 @@ mod tests {
         AstStereoBondDelta::Apply {
             id: AstStereoBondId(5),
             kind: AstStereoKind::CisTrans,
-            permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
         AstStereoBondDelta::Apply {
             id: AstStereoBondId(5),
             kind: AstStereoKind::CisTrans,
-            permutation: PermPermutation::from_image(4, &[2, 0, 1, 3]),
+            permutation: PermPermutation::from_image(&[2, 0, 1, 3]),
         },
         false,
     )]
@@ -4581,7 +4581,7 @@ mod tests {
         AstStereoBondDelta::Apply {
             id: AstStereoBondId(5),
             kind: AstStereoKind::CisTrans,
-            permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
         },
         "StereoBondDelta.Apply(id=5, kind=StereoKind.CisTrans, permutation=Permutation([1, 2, 0, 3]))",
     )]
@@ -4674,7 +4674,7 @@ mod tests {
     #[case::apply(AstStereoBondDelta::Apply {
         id: AstStereoBondId(5),
         kind: AstStereoKind::CisTrans,
-        permutation: PermPermutation::from_image(4, &[1, 2, 0, 3]),
+        permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
     })]
     #[case::swap(AstStereoBondDelta::Swap {
         id: AstStereoBondId(5),

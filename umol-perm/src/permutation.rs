@@ -39,25 +39,9 @@ impl Permutation {
     }
 
     /// Build from a one-line image; panics unless `image` is a bijection of
-    /// `0..degree`.
-    pub fn from_image(degree: usize, image: &[u32]) -> Self {
-        assert!(degree <= MAX_DEGREE);
-        assert_eq!(image.len(), degree);
-        let mut seen = [false; MAX_DEGREE];
-        for &x in image {
-            let x = x as usize;
-            assert!(x < degree, "image entry out of range");
-            assert!(!seen[x], "image is not a bijection");
-            seen[x] = true;
-        }
-        let mut full = [0u32; MAX_DEGREE];
-        for (i, target) in full.iter_mut().enumerate() {
-            *target = if i < degree { image[i] } else { i as u32 };
-        }
-        Self {
-            image: full,
-            degree: degree as u32,
-        }
+    /// `0..image.len()`.
+    pub fn from_image(image: &[usize]) -> Self {
+        Self::try_from(image).expect("invalid permutation image")
     }
 
     pub fn degree(self) -> usize {
@@ -129,15 +113,15 @@ impl Permutation {
     pub fn between<T: Eq>(from: &[T], to: &[T]) -> Self {
         assert_eq!(from.len(), to.len());
         let degree = from.len();
-        let mut image = vec![0u32; degree];
+        let mut image = vec![0usize; degree];
         for (i, target) in to.iter().enumerate() {
             let pos = from
                 .iter()
                 .position(|source| source == target)
                 .expect("between: slices are not orderings of the same set");
-            image[i] = pos as u32;
+            image[i] = pos;
         }
-        Self::from_image(degree, &image)
+        Self::from_image(&image)
     }
 
     /// Lehmer rank in `0..degree!` — the internal canonical numbering.
@@ -164,15 +148,15 @@ impl Permutation {
         assert!(degree <= MAX_DEGREE);
         let mut factorial: usize = (1..=degree).product();
         assert!(rank < factorial, "rank out of range");
-        let mut available: Vec<u32> = (0..degree as u32).collect();
-        let mut image = vec![0u32; degree];
+        let mut available: Vec<usize> = (0..degree).collect();
+        let mut image = vec![0usize; degree];
         for target in image.iter_mut() {
             factorial /= available.len();
             let idx = rank / factorial;
             rank %= factorial;
             *target = available.remove(idx);
         }
-        Self::from_image(degree, &image)
+        Self::from_image(&image)
     }
 
     /// Build from disjoint cycles: each `[c0,…,ck]` sets `σ(c0)=c1, …, σ(ck)=c0`;
@@ -180,15 +164,15 @@ impl Permutation {
     /// form a bijection of `0..degree`.
     pub fn from_cycles(degree: usize, cycles: &[Vec<usize>]) -> Self {
         assert!(degree <= MAX_DEGREE);
-        let mut image: Vec<u32> = (0..degree as u32).collect();
+        let mut image: Vec<usize> = (0..degree).collect();
         for cycle in cycles {
             let len = cycle.len();
             for (w, &point) in cycle.iter().enumerate() {
                 assert!(point < degree, "cycle point out of range");
-                image[point] = cycle[(w + 1) % len] as u32;
+                image[point] = cycle[(w + 1) % len];
             }
         }
-        Self::from_image(degree, &image)
+        Self::from_image(&image)
     }
 
     /// Disjoint-cycle decomposition, fixed points dropped. Canonical: each cycle
@@ -293,7 +277,7 @@ mod tests {
 
     #[rstest]
     fn test_permutation_apply() {
-        let p = Permutation::from_image(4, &[2, 0, 3, 1]);
+        let p = Permutation::from_image(&[2, 0, 3, 1]);
         assert_eq!(p.apply(0), 2);
         assert_eq!(p.apply(1), 0);
         assert_eq!(p.apply(3), 1);
@@ -303,8 +287,8 @@ mod tests {
     #[case::duplicate(vec![0, 1, 1])]
     #[case::out_of_range(vec![0, 1, 3])]
     #[should_panic]
-    fn test_permutation_from_image_error(#[case] image: Vec<u32>) {
-        Permutation::from_image(image.len(), &image);
+    fn test_permutation_from_image_error(#[case] image: Vec<usize>) {
+        Permutation::from_image(&image);
     }
 
     #[rstest]
@@ -337,28 +321,28 @@ mod tests {
 
     #[rstest]
     fn test_permutation_act() {
-        let p = Permutation::from_image(3, &[2, 0, 1]);
+        let p = Permutation::from_image(&[2, 0, 1]);
         assert_eq!(p.act(&['a', 'b', 'c']), vec!['c', 'a', 'b']);
     }
 
     #[rstest]
     fn test_permutation_compose() {
-        let sigma = Permutation::from_image(3, &[1, 2, 0]);
-        let tau = Permutation::from_image(3, &[2, 1, 0]);
-        assert_eq!(sigma.compose(tau), Permutation::from_image(3, &[0, 2, 1]));
+        let sigma = Permutation::from_image(&[1, 2, 0]);
+        let tau = Permutation::from_image(&[2, 1, 0]);
+        assert_eq!(sigma.compose(tau), Permutation::from_image(&[0, 2, 1]));
     }
 
     #[rstest]
     fn test_permutation_inverse() {
-        let p = Permutation::from_image(3, &[1, 2, 0]);
-        assert_eq!(p.inverse(), Permutation::from_image(3, &[2, 0, 1]));
+        let p = Permutation::from_image(&[1, 2, 0]);
+        assert_eq!(p.inverse(), Permutation::from_image(&[2, 0, 1]));
         assert_eq!(p.compose(p.inverse()), Permutation::identity(3));
     }
 
     #[rstest]
     #[case::identity(Permutation::identity(3), 1)]
-    #[case::transposition(Permutation::from_image(3, &[1, 0, 2]), -1)]
-    #[case::three_cycle(Permutation::from_image(3, &[1, 2, 0]), 1)]
+    #[case::transposition(Permutation::from_image(&[1, 0, 2]), -1)]
+    #[case::three_cycle(Permutation::from_image(&[1, 2, 0]), 1)]
     fn test_permutation_sign(#[case] p: Permutation, #[case] expected: i8) {
         assert_eq!(p.sign(), expected);
     }
@@ -366,7 +350,7 @@ mod tests {
     #[rstest]
     fn test_permutation_between() {
         let tau = Permutation::between(&['a', 'b', 'c'], &['c', 'a', 'b']);
-        assert_eq!(tau, Permutation::from_image(3, &[2, 0, 1]));
+        assert_eq!(tau, Permutation::from_image(&[2, 0, 1]));
         assert_eq!(tau.act(&['a', 'b', 'c']), vec!['c', 'a', 'b']);
     }
 
@@ -383,9 +367,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::single_cycle(3, vec![vec![0, 1, 2]], Permutation::from_image(3, &[1, 2, 0]))]
-    #[case::double_transposition(4, vec![vec![0, 1], vec![2, 3]], Permutation::from_image(4, &[1, 0, 3, 2]))]
-    #[case::partial(4, vec![vec![0, 1, 2]], Permutation::from_image(4, &[1, 2, 0, 3]))]
+    #[case::single_cycle(3, vec![vec![0, 1, 2]], Permutation::from_image(&[1, 2, 0]))]
+    #[case::double_transposition(4, vec![vec![0, 1], vec![2, 3]], Permutation::from_image(&[1, 0, 3, 2]))]
+    #[case::partial(4, vec![vec![0, 1, 2]], Permutation::from_image(&[1, 2, 0, 3]))]
     #[case::empty(4, vec![], Permutation::identity(4))]
     fn test_permutation_from_cycles(
         #[case] degree: usize,
@@ -405,17 +389,17 @@ mod tests {
 
     #[rstest]
     #[case::identity(Permutation::identity(4), vec![])]
-    #[case::single_cycle(Permutation::from_image(4, &[1, 2, 0, 3]), vec![vec![0, 1, 2]])]
-    #[case::double_transposition(Permutation::from_image(4, &[1, 0, 3, 2]), vec![vec![0, 1], vec![2, 3]])]
-    #[case::interleaved(Permutation::from_image(4, &[2, 3, 0, 1]), vec![vec![0, 2], vec![1, 3]])]
+    #[case::single_cycle(Permutation::from_image(&[1, 2, 0, 3]), vec![vec![0, 1, 2]])]
+    #[case::double_transposition(Permutation::from_image(&[1, 0, 3, 2]), vec![vec![0, 1], vec![2, 3]])]
+    #[case::interleaved(Permutation::from_image(&[2, 3, 0, 1]), vec![vec![0, 2], vec![1, 3]])]
     fn test_permutation_cycles(#[case] p: Permutation, #[case] expected: Vec<Vec<usize>>) {
         assert_eq!(p.cycles(), expected);
     }
 
     #[rstest]
     #[case::identity(Permutation::identity(3), "()")]
-    #[case::three_cycle(Permutation::from_image(3, &[1, 2, 0]), "(0,1,2)")]
-    #[case::double_transposition(Permutation::from_image(4, &[1, 0, 3, 2]), "(0,1)(2,3)")]
+    #[case::three_cycle(Permutation::from_image(&[1, 2, 0]), "(0,1,2)")]
+    #[case::double_transposition(Permutation::from_image(&[1, 0, 3, 2]), "(0,1)(2,3)")]
     fn test_permutation_display(#[case] p: Permutation, #[case] expected: &str) {
         assert_eq!(p.to_string(), expected);
     }

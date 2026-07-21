@@ -1000,9 +1000,9 @@ pub(crate) fn stereo_atom_kind_strategy() -> impl Strategy<Value = StereoKind> {
 
 /// A permutation of the kind's `degree` positions, as a shuffled one-line image.
 pub(crate) fn permutation_strategy(degree: usize) -> impl Strategy<Value = Permutation> {
-    Just((0..degree as u32).collect::<Vec<u32>>())
+    Just((0..degree).collect::<Vec<usize>>())
         .prop_shuffle()
-        .prop_map(move |image| Permutation::from_image(degree, &image))
+        .prop_map(|image| Permutation::from_image(&image))
 }
 
 pub(crate) fn orientation_strategy() -> impl Strategy<Value = Orientation> {

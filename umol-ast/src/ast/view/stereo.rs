@@ -1320,7 +1320,7 @@ mod tests {
         let reordered = vec![ligands[1], ligands[0], ligands[2], ligands[3]];
         assert_eq!(
             view.permutation_for(reordered),
-            Some(Permutation::from_image(4, &[1, 0, 2, 3])),
+            Some(Permutation::from_image(&[1, 0, 2, 3])),
         );
     }
 
@@ -1692,7 +1692,7 @@ mod tests {
         let reordered = vec![ligands[1], ligands[0], ligands[2], ligands[3]];
         assert_eq!(
             view.permutation_for(reordered),
-            Some(Permutation::from_image(4, &[1, 0, 2, 3])),
+            Some(Permutation::from_image(&[1, 0, 2, 3])),
         );
     }
 

@@ -321,20 +321,28 @@ that failure is outside the S0 changes.
   while preserving an asserted contract. Migrate all `umol-perm` formulas,
   fixed class tables, examples, unit tests, and property generators; retain an
   exact panic-contract test independently of the fallible-conversion tests.
-  **Breaking (red).** [dep: S0d]
+  **Implemented (green).** [dep: S0d]
 - **S1b — Rust consumer migration** (`umol-ast`, `umol-graph`, `umol-io`):
   remove degree arguments and packed-width casts from fixed images and property
   strategies. Change `project_onto_ligands` to `Permutation::try_from`, remove
   its separate injectivity tracking, and propagate `None`; add exact projection
   cases for a valid image and a collision.
-  **Breaking caller migration (red).** [dep: S1a]
+  **Implemented (green).** [dep: S1a]
 - **S1c — Python boundary migration** (`umol-py/src/stereo.rs`, `delta.rs`,
   Python tests): accept Python image values as `usize`, construct through
   `TryFrom<&[usize]>`, and map every `PermutationError` to `ValueError`.
   Migrate Rust-side Python fixtures to the new infallible signature and test
   exact valid images plus each invalid Python input class. This restores the
   whole workspace to green.
-  **Breaking caller migration (red→green).** [dep: S1a, S1b]
+  **Implemented (green).** [dep: S1a, S1b]
+
+S1 verification: `cargo test -p umol-perm --features proptest`, the focused
+`umol-ast` projection tests, Rust test compilation for `umol-ast`, `umol-graph`,
+`umol-io`, and `umol-py` pass. Clippy also passes for all workspace libraries
+with all features and warnings denied. After rebuilding the extension in the
+Python 3.13 virtual environment, all 900 Python tests pass. The complete
+`umol-ast` property target remains blocked by the unrelated pre-existing
+`DpoValidator::validate_reaction` call noted after S0.
 
 ### S2 — algebraic contracts
 

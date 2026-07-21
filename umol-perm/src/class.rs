@@ -70,16 +70,16 @@ impl ClassKey {
                 PermutationGroup::generate(
                     4,
                     &[
-                        Permutation::from_image(4, &[1, 0, 2, 3]),
-                        Permutation::from_image(4, &[0, 1, 3, 2]),
-                        Permutation::from_image(4, &[2, 3, 0, 1]),
+                        Permutation::from_image(&[1, 0, 2, 3]),
+                        Permutation::from_image(&[0, 1, 3, 2]),
+                        Permutation::from_image(&[2, 3, 0, 1]),
                     ],
                 ),
                 PermutationGroup::generate(
                     4,
                     &[
-                        Permutation::from_image(4, &[1, 0, 3, 2]),
-                        Permutation::from_image(4, &[2, 3, 0, 1]),
+                        Permutation::from_image(&[1, 0, 3, 2]),
+                        Permutation::from_image(&[2, 3, 0, 1]),
                     ],
                 ),
                 Decomposition::CanonicalRank,
@@ -96,8 +96,8 @@ impl ClassKey {
                 PermutationGroup::generate(
                     5,
                     &[
-                        Permutation::from_image(5, &[0, 2, 3, 1, 4]),
-                        Permutation::from_image(5, &[4, 3, 2, 1, 0]),
+                        Permutation::from_image(&[0, 2, 3, 1, 4]),
+                        Permutation::from_image(&[4, 3, 2, 1, 0]),
                     ],
                 ),
                 Decomposition::TrigonalBipyramidal,
@@ -109,8 +109,8 @@ impl ClassKey {
                 PermutationGroup::generate(
                     6,
                     &[
-                        Permutation::from_image(6, &[0, 2, 3, 4, 1, 5]),
-                        Permutation::from_image(6, &[1, 2, 0, 4, 5, 3]),
+                        Permutation::from_image(&[0, 2, 3, 4, 1, 5]),
+                        Permutation::from_image(&[1, 2, 0, 4, 5, 3]),
                     ],
                 ),
                 Decomposition::Octahedral,
@@ -123,9 +123,9 @@ impl ClassKey {
         // NOTE: σ_h gives the correct `is_chiral` for TB/OH; the exact enantiomer *pairing* is
         // class-geometry data still to be verified against the OpenSMILES @↔@@ numbering.
         let improper = match self {
-            ClassKey::Tetrahedral | ClassKey::Axial => Permutation::from_image(4, &[1, 0, 2, 3]),
-            ClassKey::TrigonalBipyramidal => Permutation::from_image(5, &[4, 1, 2, 3, 0]),
-            ClassKey::Octahedral => Permutation::from_image(6, &[5, 1, 2, 3, 4, 0]),
+            ClassKey::Tetrahedral | ClassKey::Axial => Permutation::from_image(&[1, 0, 2, 3]),
+            ClassKey::TrigonalBipyramidal => Permutation::from_image(&[4, 1, 2, 3, 0]),
+            ClassKey::Octahedral => Permutation::from_image(&[5, 1, 2, 3, 4, 0]),
             ClassKey::CisTrans | ClassKey::SquarePlanar => Permutation::identity(4),
             ClassKey::Symmetric(n)
             | ClassKey::Alternating(n)

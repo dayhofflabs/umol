@@ -40,8 +40,10 @@ pub struct Permutation(PermPermutation);
 impl Permutation {
     /// Construct from the image (one-line notation); the degree is the image length.
     #[new]
-    fn new(image: Vec<u32>) -> Self {
-        Permutation(PermPermutation::from_image(image.len(), &image))
+    fn new(image: Vec<usize>) -> PyResult<Self> {
+        PermPermutation::try_from(image.as_slice())
+            .map(Permutation)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// The identity permutation on `0..degree`.
@@ -56,10 +58,8 @@ impl Permutation {
     }
 
     /// The image in one-line notation.
-    fn image(&self) -> Vec<u32> {
-        (0..self.0.degree())
-            .map(|i| self.0.apply(i) as u32)
-            .collect()
+    fn image(&self) -> Vec<usize> {
+        (0..self.0.degree()).map(|i| self.0.apply(i)).collect()
     }
 
     fn __repr__(&self) -> String {
@@ -1273,8 +1273,8 @@ mod tests {
     #[case(vec![0, 1, 2, 3])]
     #[case(vec![1, 0, 2, 3])]
     #[case(vec![2, 0, 1])]
-    fn test_permutation_image(#[case] image: Vec<u32>) {
-        let permutation = Permutation::new(image.clone());
+    fn test_permutation_image(#[case] image: Vec<usize>) {
+        let permutation = Permutation::new(image.clone()).unwrap();
         assert_eq!(permutation.image(), image);
         assert_eq!(permutation.degree(), image.len());
     }
@@ -1291,7 +1291,7 @@ mod tests {
     #[case(AstStereoTerm::Var(Box::new(("y".to_string(), Some(BTreeSet::from([0, 1]))))))]
     #[case(AstStereoTerm::Swap(Box::new(AstStereoTerm::Lit(0))))]
     #[case(AstStereoTerm::Mirror(Box::new(AstStereoTerm::Lit(0))))]
-    #[case(AstStereoTerm::Apply(Box::new(AstStereoTerm::Lit(0)), PermPermutation::from_image(4, &[1, 0, 2, 3])))]
+    #[case(AstStereoTerm::Apply(Box::new(AstStereoTerm::Lit(0)), PermPermutation::from_image(&[1, 0, 2, 3])))]
     fn test_stereo_term_roundtrip(#[case] ast: AstStereoTerm) {
         Python::attach(|py| {
             assert_eq!(StereoTerm::from_rust(py, &ast).unwrap().to_rust(py), ast);
@@ -1494,7 +1494,8 @@ mod tests {
 
     #[rstest]
     fn test_ligand_permutation_new() {
-        let ligand_permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]));
+        let ligand_permutation =
+            LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]).unwrap());
         assert_eq!(ligand_permutation.permutation.image(), vec![1, 0, 2, 3]);
         assert_eq!(
             ligand_permutation.__repr__(),
@@ -1504,7 +1505,7 @@ mod tests {
 
     #[rstest]
     #[case(AstLigandPermutation(PermPermutation::identity(4)))]
-    #[case(AstLigandPermutation(PermPermutation::from_image(4, &[1, 0, 2, 3])))]
+    #[case(AstLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])))]
     fn test_ligand_permutation_roundtrip(#[case] ast: AstLigandPermutation) {
         assert_eq!(LigandPermutation::from_rust(ast).to_rust(), ast);
     }
@@ -1513,12 +1514,12 @@ mod tests {
     #[case::equal(vec![1, 0, 2, 3], vec![1, 0, 2, 3], true)]
     #[case::different(vec![1, 0, 2, 3], vec![0, 1, 2, 3], false)]
     fn test_ligand_permutation_matches(
-        #[case] a: Vec<u32>,
-        #[case] b: Vec<u32>,
+        #[case] a: Vec<usize>,
+        #[case] b: Vec<usize>,
         #[case] expected: bool,
     ) {
-        let a = LigandPermutation::new(Permutation::new(a));
-        let b = LigandPermutation::new(Permutation::new(b));
+        let a = LigandPermutation::new(Permutation::new(a).unwrap());
+        let b = LigandPermutation::new(Permutation::new(b).unwrap());
         assert_eq!(a.matches(&b), expected);
     }
 
@@ -1527,18 +1528,18 @@ mod tests {
     #[case::different_orientation(vec![1, 0, 2, 3], Orientation::Proper, vec![1, 0, 2, 3], Orientation::Improper, false)]
     #[case::different_permutation(vec![1, 0, 2, 3], Orientation::Proper, vec![0, 1, 2, 3], Orientation::Proper, false)]
     fn test_oriented_ligand_permutation_matches(
-        #[case] a_permutation: Vec<u32>,
+        #[case] a_permutation: Vec<usize>,
         #[case] a_orientation: Orientation,
-        #[case] b_permutation: Vec<u32>,
+        #[case] b_permutation: Vec<usize>,
         #[case] b_orientation: Orientation,
         #[case] expected: bool,
     ) {
         let a = OrientedLigandPermutation::new(
-            LigandPermutation::new(Permutation::new(a_permutation)),
+            LigandPermutation::new(Permutation::new(a_permutation).unwrap()),
             a_orientation,
         );
         let b = OrientedLigandPermutation::new(
-            LigandPermutation::new(Permutation::new(b_permutation)),
+            LigandPermutation::new(Permutation::new(b_permutation).unwrap()),
             b_orientation,
         );
         assert_eq!(a.matches(&b), expected);
@@ -1546,7 +1547,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case(AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::from_image(4, &[1, 0, 2, 3])), orientation: PermOrientation::Proper })]
+    #[case(AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])), orientation: PermOrientation::Proper })]
     #[case(AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::identity(4)), orientation: PermOrientation::Improper })]
     fn test_oriented_ligand_permutation_roundtrip(#[case] ast: AstOrientedLigandPermutation) {
         assert_eq!(OrientedLigandPermutation::from_rust(ast).to_rust(), ast);
@@ -1636,7 +1637,7 @@ mod tests {
     fn test_ligand_symmetry_ast_new() {
         Python::attach(|py| {
             let permutation = OrientedLigandPermutation::new(
-                LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3])),
+                LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]).unwrap()),
                 Orientation::Proper,
             );
             let value = LigandSymmetryAst::new(py, permutation, BooleanArg::Lit(true)).unwrap();
@@ -1656,11 +1657,11 @@ mod tests {
     fn test_ligand_symmetry_ast_matches() {
         Python::attach(|py| {
             let permutation = OrientedLigandPermutation::new(
-                LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3])),
+                LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]).unwrap()),
                 Orientation::Proper,
             );
             let other_permutation = OrientedLigandPermutation::new(
-                LigandPermutation::new(Permutation::new(vec![0, 1, 2, 3])),
+                LigandPermutation::new(Permutation::new(vec![0, 1, 2, 3]).unwrap()),
                 Orientation::Proper,
             );
             let wildcard = LigandSymmetryAst {
@@ -1691,10 +1692,9 @@ mod tests {
             for ast in [
                 AstLigandSymmetryAst {
                     permutation: AstOrientedLigandPermutation {
-                        permutation: AstLigandPermutation(PermPermutation::from_image(
-                            4,
-                            &[1, 0, 2, 3],
-                        )),
+                        permutation: AstLigandPermutation(PermPermutation::from_image(&[
+                            1, 0, 2, 3,
+                        ])),
                         orientation: PermOrientation::Proper,
                     },
                     invariant: AstBooleanAst::Lit(true),
@@ -1718,7 +1718,7 @@ mod tests {
     #[rstest]
     fn test_fluxionality_ast_new() {
         Python::attach(|py| {
-            let permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]));
+            let permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]).unwrap());
             let value = FluxionalityAst::new(py, permutation, BooleanArg::Lit(false)).unwrap();
             assert!(value.permutation() == permutation);
             assert_eq!(
@@ -1735,8 +1735,9 @@ mod tests {
     #[rstest]
     fn test_fluxionality_ast_matches() {
         Python::attach(|py| {
-            let permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]));
-            let other_permutation = LigandPermutation::new(Permutation::new(vec![0, 1, 2, 3]));
+            let permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]).unwrap());
+            let other_permutation =
+                LigandPermutation::new(Permutation::new(vec![0, 1, 2, 3]).unwrap());
             let wildcard = FluxionalityAst {
                 permutation,
                 active: into_py_variant(py, BooleanAst::Undetermined()).unwrap(),
@@ -1764,10 +1765,7 @@ mod tests {
         Python::attach(|py| {
             for ast in [
                 AstFluxionalityAst {
-                    permutation: AstLigandPermutation(PermPermutation::from_image(
-                        4,
-                        &[1, 0, 2, 3],
-                    )),
+                    permutation: AstLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])),
                     active: AstBooleanAst::Lit(false),
                 },
                 AstFluxionalityAst {
@@ -1857,7 +1855,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case(AstStereoAtomConstraintAst::LigandSymmetry(AstLigandSymmetryAst { permutation: AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::from_image(4, &[1, 0, 2, 3])), orientation: PermOrientation::Proper }, invariant: AstBooleanAst::Lit(true) }))]
+    #[case(AstStereoAtomConstraintAst::LigandSymmetry(AstLigandSymmetryAst { permutation: AstOrientedLigandPermutation { permutation: AstLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])), orientation: PermOrientation::Proper }, invariant: AstBooleanAst::Lit(true) }))]
     #[case(AstStereoAtomConstraintAst::Fluxionality(AstFluxionalityAst { permutation: AstLigandPermutation(PermPermutation::identity(4)), active: AstBooleanAst::Lit(false) }))]
     #[case(AstStereoAtomConstraintAst::Topicity(AstTopicityAst { pair: AstStereoLigandPair::new(AstStereoLigandPosition(0), AstStereoLigandPosition(1)), relation: AstTopicityRelationAst::Lit(AstTopicity::Homotopic) }))]
     #[case(AstStereoAtomConstraintAst::Stereogenicity(AstStereogenicityAst::Lit(AstStereogenicity::Stereogenic)))]
@@ -1965,10 +1963,9 @@ mod tests {
             ast_cs.extend([
                 AstStereoAtomConstraintAst::LigandSymmetry(AstLigandSymmetryAst {
                     permutation: AstOrientedLigandPermutation {
-                        permutation: AstLigandPermutation(PermPermutation::from_image(
-                            4,
-                            &[1, 0, 2, 3],
-                        )),
+                        permutation: AstLigandPermutation(PermPermutation::from_image(&[
+                            1, 0, 2, 3,
+                        ])),
                         orientation: PermOrientation::Proper,
                     },
                     invariant: AstBooleanAst::Lit(true),

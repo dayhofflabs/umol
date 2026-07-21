@@ -456,27 +456,20 @@ fn oriented_permutation(orientation: Orientation, permutation: Permutation) -> O
 /// isn't a ligand atom of the carrier.
 fn project_onto_ligands(ligands: &[StereoLigand], generator: &[NodeId]) -> Option<Permutation> {
     let degree = ligands.len();
-    let mut image = vec![0u32; degree];
-    let mut used = vec![false; degree];
+    let mut image = vec![0usize; degree];
     for (i, ligand) in ligands.iter().enumerate() {
         let target = match ligand.kind {
             StereoLigandKind::Atom => {
                 let atom = generator[ligand.atom_id.index()].index();
                 (0..degree).find(|&j| {
-                    !used[j]
-                        && ligands[j].kind == StereoLigandKind::Atom
-                        && ligands[j].atom_id.index() == atom
+                    ligands[j].kind == StereoLigandKind::Atom && ligands[j].atom_id.index() == atom
                 })?
             }
             _ => i,
         };
-        if used[target] {
-            return None;
-        }
-        image[i] = target as u32;
-        used[target] = true;
+        image[i] = target;
     }
-    Some(Permutation::from_image(degree, &image))
+    Permutation::try_from(image.as_slice()).ok()
 }
 
 /// Adjacent transpositions within each same-kind virtual-ligand block (generating
@@ -771,5 +764,27 @@ mod tests {
             stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(1)),
             Topicity::Diastereotopic
         ); // F vs Cl on C0
+    }
+
+    #[rstest]
+    #[case::valid(
+        &[NodeId(1), NodeId(0)],
+        Some(Permutation::from_image(&[1, 0])),
+    )]
+    #[case::collision(&[NodeId(0), NodeId(0)], None)]
+    fn test_project_onto_ligands(
+        #[case] generator: &[NodeId],
+        #[case] expected: Option<Permutation>,
+    ) {
+        assert_eq!(
+            project_onto_ligands(
+                &[
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                ],
+                generator,
+            ),
+            expected,
+        );
     }
 }

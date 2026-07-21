@@ -342,8 +342,8 @@ impl StereoKind {
             coset_space.improper()
         } else {
             match self {
-                StereoKind::CisTrans => Permutation::from_image(4, &[1, 0, 2, 3]),
-                StereoKind::SquarePlanar => Permutation::from_image(4, &[2, 1, 0, 3]),
+                StereoKind::CisTrans => Permutation::from_image(&[1, 0, 2, 3]),
+                StereoKind::SquarePlanar => Permutation::from_image(&[2, 1, 0, 3]),
                 _ => unreachable!("only achiral kinds reach the chosen-swap branch"),
             }
         }
@@ -1287,7 +1287,7 @@ mod tests {
     #[case::swap_lit_odd(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1))), StereoKind::Tetrahedral, StereoCosetAst::Lit(0))]
     #[case::mirror_chiral(StereoCosetAst::term(StereoTerm::mirror(StereoTerm::Lit(0))), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
     #[case::mirror_achiral_noop(StereoCosetAst::term(StereoTerm::mirror(StereoTerm::Lit(0))), StereoKind::CisTrans, StereoCosetAst::Lit(0))]
-    #[case::apply_lit(StereoCosetAst::term(StereoTerm::apply(StereoTerm::Lit(0), Permutation::from_image(4, &[1, 0, 2, 3]))), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
+    #[case::apply_lit(StereoCosetAst::term(StereoTerm::apply(StereoTerm::Lit(0), Permutation::from_image(&[1, 0, 2, 3]))), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
     #[case::sp_swap_four(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1))), StereoKind::SquarePlanar, StereoCosetAst::Lit(2))]
     #[case::swap_var_chiral_to_mirror(StereoCosetAst::term(StereoTerm::swap(StereoTerm::var("o"))), StereoKind::Tetrahedral, StereoCosetAst::term(StereoTerm::mirror(StereoTerm::var("o"))))]
     #[case::swap_var_achiral_stays(StereoCosetAst::term(StereoTerm::swap(StereoTerm::var("o"))), StereoKind::CisTrans, StereoCosetAst::term(StereoTerm::swap(StereoTerm::var("o"))))]
@@ -1339,8 +1339,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(StereoCosetAst::Lit(0), Permutation::from_image(4, &[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
-    #[case::undetermined(StereoCosetAst::Undetermined, Permutation::from_image(4, &[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCosetAst::Undetermined)]
+    #[case::lit(StereoCosetAst::Lit(0), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
+    #[case::undetermined(StereoCosetAst::Undetermined, Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCosetAst::Undetermined)]
     fn test_coset_apply_permutation(#[case] coset: StereoCosetAst, #[case] permutation: Permutation, #[case] kind: StereoKind, #[case] expected: StereoCosetAst) {
         assert_eq!(coset_apply_permutation(&coset, permutation, kind), Some(expected));
     }

@@ -2284,22 +2284,22 @@ mod tests {
     #[rstest]
     #[case::fluxionality(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(true) })),
+            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(true) })),
         "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]]}}]]}")]
     #[case::fluxionality_absent(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(false) })),
+            StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(false) })),
         "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]] :active false}}]]}")]
     #[case::ligand_symmetry(
         Constraint::StereoAtom(StereoAtomId(1), StereoKind::Tetrahedral,
             StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
-                permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Improper },
+                permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Improper },
                 invariant: BooleanAst::Lit(false) })),
         "{:stereo-atom [1 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :invariant false}}]]}")]
     #[case::ligand_symmetry_defaults(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
             StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
-                permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper },
+                permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper },
                 invariant: BooleanAst::Lit(true) })),
         "{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]]}}]]}")]
     #[case::topicity(

@@ -79,15 +79,13 @@ impl PermutationGroup {
     }
 
     fn rotation(degree: usize) -> Permutation {
-        let image: Vec<u32> = (0..degree).map(|i| ((i + 1) % degree) as u32).collect();
-        Permutation::from_image(degree, &image)
+        let image: Vec<usize> = (0..degree).map(|i| (i + 1) % degree).collect();
+        Permutation::from_image(&image)
     }
 
     fn reflection(degree: usize) -> Permutation {
-        let image: Vec<u32> = (0..degree)
-            .map(|i| ((degree - i) % degree) as u32)
-            .collect();
-        Permutation::from_image(degree, &image)
+        let image: Vec<usize> = (0..degree).map(|i| (degree - i) % degree).collect();
+        Permutation::from_image(&image)
     }
 }
 
@@ -132,7 +130,7 @@ mod tests {
 
     #[rstest]
     fn test_permutation_group_generate() {
-        let transposition = Permutation::from_image(3, &[1, 0, 2]);
+        let transposition = Permutation::from_image(&[1, 0, 2]);
         let group = PermutationGroup::generate(3, &[transposition]);
         assert_eq!(group.order(), 2);
         assert!(group.contains(&Permutation::identity(3)));
@@ -142,7 +140,7 @@ mod tests {
     #[rstest]
     fn test_permutation_group_contains() {
         let group = PermutationGroup::alternating(3);
-        assert!(group.contains(&Permutation::from_image(3, &[1, 2, 0])));
-        assert!(!group.contains(&Permutation::from_image(3, &[1, 0, 2])));
+        assert!(group.contains(&Permutation::from_image(&[1, 2, 0])));
+        assert!(!group.contains(&Permutation::from_image(&[1, 0, 2])));
     }
 }

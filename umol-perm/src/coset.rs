@@ -216,9 +216,9 @@ impl Decomposition {
 /// 4 = 2413 with two diagonal steps, Z = 2314 with one).
 fn square_planar_reps() -> Vec<Permutation> {
     vec![
-        Permutation::from_image(4, &[0, 1, 2, 3]),
-        Permutation::from_image(4, &[1, 3, 0, 2]),
-        Permutation::from_image(4, &[1, 2, 0, 3]),
+        Permutation::from_image(&[0, 1, 2, 3]),
+        Permutation::from_image(&[1, 3, 0, 2]),
+        Permutation::from_image(&[1, 2, 0, 3]),
     ]
 }
 
@@ -250,15 +250,15 @@ fn trigonal_bipyramidal_reps() -> Vec<Permutation> {
     ];
     AXES.iter()
         .map(|&(from, towards, anticlockwise)| {
-            let mut image = [0u32; 5];
+            let mut image = [0usize; 5];
             image[from as usize] = 0;
             image[towards as usize] = 4;
             let plane: Vec<u8> = (0..5u8).filter(|&l| l != from && l != towards).collect();
             let vertices: [u8; 3] = if anticlockwise { [1, 2, 3] } else { [3, 2, 1] };
             for (&label, &vertex) in plane.iter().zip(vertices.iter()) {
-                image[label as usize] = u32::from(vertex);
+                image[label as usize] = usize::from(vertex);
             }
-            Permutation::from_image(5, &image)
+            Permutation::from_image(&image)
         })
         .collect()
 }
@@ -312,13 +312,13 @@ fn octahedral_reps() -> Vec<Permutation> {
     ARRANGEMENTS
         .iter()
         .map(|&(towards, equatorial)| {
-            let mut image = [0u32; 6];
+            let mut image = [0usize; 6];
             image[towards as usize] = 5;
             let plane: Vec<u8> = (0..6u8).filter(|&l| l != 0 && l != towards).collect();
             for (&label, &vertex) in plane.iter().zip(equatorial.iter()) {
-                image[label as usize] = u32::from(vertex);
+                image[label as usize] = usize::from(vertex);
             }
-            Permutation::from_image(6, &image)
+            Permutation::from_image(&image)
         })
         .collect()
 }
@@ -355,8 +355,8 @@ mod tests {
             Decomposition::CanonicalRank,
             Permutation::identity(4),
         );
-        let even = Permutation::from_image(4, &[1, 2, 0, 3]);
-        let odd = Permutation::from_image(4, &[1, 0, 2, 3]);
+        let even = Permutation::from_image(&[1, 2, 0, 3]);
+        let odd = Permutation::from_image(&[1, 0, 2, 3]);
         assert_eq!(
             space.coset_rep(Permutation::identity(4)),
             space.coset_rep(even)
@@ -386,17 +386,14 @@ mod tests {
     #[case::u_shape([0, 1, 2, 3], 0)]
     #[case::four_shape([1, 3, 0, 2], 1)]
     #[case::z_shape([1, 2, 0, 3], 2)]
-    fn test_coset_space_index_square_planar(#[case] image: [u32; 4], #[case] expected: u32) {
+    fn test_coset_space_index_square_planar(#[case] image: [usize; 4], #[case] expected: u32) {
         let space = CosetSpace::new(
             PermutationGroup::symmetric(4),
             PermutationGroup::dihedral(4),
             Decomposition::SquarePlanar,
             Permutation::identity(4),
         );
-        assert_eq!(
-            space.index(Permutation::from_image(4, &image)),
-            Some(expected)
-        );
+        assert_eq!(space.index(Permutation::from_image(&image)), Some(expected));
     }
 
     #[rstest]
@@ -405,16 +402,16 @@ mod tests {
         let parent = PermutationGroup::generate(
             4,
             &[
-                Permutation::from_image(4, &[1, 0, 2, 3]),
-                Permutation::from_image(4, &[0, 1, 3, 2]),
-                Permutation::from_image(4, &[2, 3, 0, 1]),
+                Permutation::from_image(&[1, 0, 2, 3]),
+                Permutation::from_image(&[0, 1, 3, 2]),
+                Permutation::from_image(&[2, 3, 0, 1]),
             ],
         );
         let group = PermutationGroup::generate(
             4,
             &[
-                Permutation::from_image(4, &[1, 0, 3, 2]),
-                Permutation::from_image(4, &[2, 3, 0, 1]),
+                Permutation::from_image(&[1, 0, 3, 2]),
+                Permutation::from_image(&[2, 3, 0, 1]),
             ],
         );
         let space = CosetSpace::new(
@@ -425,13 +422,13 @@ mod tests {
         );
         assert_eq!(space.count(), 2);
         // The within-side swap (0 1) is the cis↔trans flip: a different coset from identity.
-        let within_side_swap = Permutation::from_image(4, &[1, 0, 2, 3]);
+        let within_side_swap = Permutation::from_image(&[1, 0, 2, 3]);
         assert_ne!(
             space.coset_rep(Permutation::identity(4)),
             space.coset_rep(within_side_swap)
         );
         // The carbon swap (0 2)(1 3) ∈ R: same coset (writing the bond with either carbon first).
-        let carbon_swap = Permutation::from_image(4, &[2, 3, 0, 1]);
+        let carbon_swap = Permutation::from_image(&[2, 3, 0, 1]);
         assert_eq!(
             space.coset_rep(Permutation::identity(4)),
             space.coset_rep(carbon_swap)
@@ -446,13 +443,13 @@ mod tests {
             PermutationGroup::symmetric(4),
             PermutationGroup::alternating(4),
             Decomposition::CanonicalRank,
-            Permutation::from_image(4, &[1, 0, 2, 3]),
+            Permutation::from_image(&[1, 0, 2, 3]),
         );
         assert_eq!(space.enantiomer(index), Some(expected));
     }
 
     #[rstest]
-    #[case::improper_swap(Permutation::from_image(4, &[1, 0, 2, 3]), true)]
+    #[case::improper_swap(Permutation::from_image(&[1, 0, 2, 3]), true)]
     #[case::identity(Permutation::identity(4), false)]
     fn test_coset_space_is_chiral(#[case] improper: Permutation, #[case] expected: bool) {
         let space = CosetSpace::new(
@@ -468,17 +465,17 @@ mod tests {
     #[case::no_generators(ClassKey::Tetrahedral, vec![], Some(vec![0, 1]))]
     #[case::odd_swap(
         ClassKey::Tetrahedral,
-        vec![Permutation::from_image(4, &[1, 0, 2, 3])],
+        vec![Permutation::from_image(&[1, 0, 2, 3])],
         Some(vec![0, 0]),
     )]
     #[case::even_keeps(
         ClassKey::Tetrahedral,
-        vec![Permutation::from_image(4, &[1, 2, 0, 3])],
+        vec![Permutation::from_image(&[1, 2, 0, 3])],
         Some(vec![0, 1]),
     )]
     #[case::outside_parent(
         ClassKey::CisTrans,
-        vec![Permutation::from_image(4, &[1, 2, 0, 3])],
+        vec![Permutation::from_image(&[1, 2, 0, 3])],
         None,
     )]
     #[case::wrong_degree(
@@ -496,7 +493,7 @@ mod tests {
 
     #[rstest]
     #[case::odd_swap(
-        vec![Permutation::from_image(4, &[1, 0, 2, 3])],
+        vec![Permutation::from_image(&[1, 0, 2, 3])],
         vec![0, 0],
     )]
     fn test_coset_space_merge_under(
@@ -514,7 +511,7 @@ mod tests {
 
     #[rstest]
     #[case::no_fluxion(1, vec![], 1)]
-    #[case::fluxion_merges(1, vec![Permutation::from_image(4, &[1, 0, 2, 3])], 0)]
+    #[case::fluxion_merges(1, vec![Permutation::from_image(&[1, 0, 2, 3])], 0)]
     fn test_coset_space_observable_coset(
         #[case] index: u32,
         #[case] fluxional: Vec<Permutation>,

@@ -30,6 +30,20 @@ def test_permutation_image_degree():
     assert p.degree == 4
 
 
+@pytest.mark.parametrize(
+    ("image", "message"),
+    [
+        ([0, 1, 2, 3, 4, 5, 6], "permutation image length 7 exceeds maximum 6"),
+        ([0, 1, 3], "permutation image value 3 at position 2 is outside 0..3"),
+        ([0, 1, 1], "permutation image value 1 occurs more than once"),
+    ],
+)
+def test_permutation_error(image, message):
+    with pytest.raises(ValueError) as error:
+        Permutation(image)
+    assert str(error.value) == message
+
+
 def test_permutation_identity():
     assert Permutation.identity(4).image() == [0, 1, 2, 3]
 

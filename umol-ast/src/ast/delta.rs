@@ -3568,8 +3568,8 @@ mod tests {
         }
     )]
     #[case::apply(
-        StereoAtomDelta::Apply { id: StereoAtomId(3), kind: StereoKind::Tetrahedral, permutation: Permutation::from_image(4, &[1, 2, 0, 3]) },
-        StereoAtomDelta::Apply { id: StereoAtomId(3), kind: StereoKind::Tetrahedral, permutation: Permutation::from_image(4, &[2, 0, 1, 3]) }
+        StereoAtomDelta::Apply { id: StereoAtomId(3), kind: StereoKind::Tetrahedral, permutation: Permutation::from_image(&[1, 2, 0, 3]) },
+        StereoAtomDelta::Apply { id: StereoAtomId(3), kind: StereoKind::Tetrahedral, permutation: Permutation::from_image(&[2, 0, 1, 3]) }
     )]
     #[case::swap(
         StereoAtomDelta::Swap { id: StereoAtomId(4), kind: StereoKind::Tetrahedral },
@@ -3650,8 +3650,8 @@ mod tests {
         }
     )]
     #[case::apply(
-        StereoBondDelta::Apply { id: StereoBondId(1), kind: StereoKind::CisTrans, permutation: Permutation::from_image(4, &[1, 2, 0, 3]) },
-        StereoBondDelta::Apply { id: StereoBondId(1), kind: StereoKind::CisTrans, permutation: Permutation::from_image(4, &[2, 0, 1, 3]) }
+        StereoBondDelta::Apply { id: StereoBondId(1), kind: StereoKind::CisTrans, permutation: Permutation::from_image(&[1, 2, 0, 3]) },
+        StereoBondDelta::Apply { id: StereoBondId(1), kind: StereoKind::CisTrans, permutation: Permutation::from_image(&[2, 0, 1, 3]) }
     )]
     #[case::swap(
         StereoBondDelta::Swap { id: StereoBondId(2), kind: StereoKind::CisTrans },
@@ -3800,8 +3800,8 @@ mod tests {
     // iii: apply composes by permutation — a transposition twice is the identity.
     #[case::apply_apply_identity(
         vec![
-            StereoAtomDelta::Apply { id: StereoAtomId(0), kind: StereoKind::Tetrahedral, permutation: Permutation::from_image(4, &[1, 0, 2, 3]) },
-            StereoAtomDelta::Apply { id: StereoAtomId(0), kind: StereoKind::Tetrahedral, permutation: Permutation::from_image(4, &[1, 0, 2, 3]) },
+            StereoAtomDelta::Apply { id: StereoAtomId(0), kind: StereoKind::Tetrahedral, permutation: Permutation::from_image(&[1, 0, 2, 3]) },
+            StereoAtomDelta::Apply { id: StereoAtomId(0), kind: StereoKind::Tetrahedral, permutation: Permutation::from_image(&[1, 0, 2, 3]) },
         ],
         vec![],
     )]

@@ -362,7 +362,7 @@ mod tests {
                 .constraints
                 .set(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
                     permutation: OrientedLigandPermutation {
-                        permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
+                        permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
                         orientation: Orientation::Proper,
                     },
                     invariant: BooleanAst::Lit(true),
@@ -371,7 +371,7 @@ mod tests {
         StereoValidatorContradiction::LigandSymmetryViolation {
             asserted: LigandSymmetryAst {
                 permutation: OrientedLigandPermutation {
-                    permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
+                    permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
                     orientation: Orientation::Proper,
                 },
                 invariant: BooleanAst::Lit(true),

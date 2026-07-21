@@ -884,12 +884,12 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
-        LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
+        LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+        LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
         true
     )]
     #[case::different(
-        LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
+        LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
         LigandPermutation(Permutation::identity(4)),
         false
     )]
@@ -904,15 +904,15 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::equal(
-        OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper },
-        OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper },
+        OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper },
+        OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper },
         true)]
     #[case::different_orientation(
-        OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper },
-        OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Improper },
+        OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper },
+        OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Improper },
         false)]
     #[case::different_permutation(
-        OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper },
+        OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper },
         OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper },
         false)]
     fn test_oriented_ligand_permutation_matches(
@@ -1082,15 +1082,15 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::same(
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
         true)]
     #[case::different_presence(
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(false) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(false) },
         false)]
     #[case::different_permutation(
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
         LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
         false)]
     fn test_ligand_symmetry_ast_matches(
@@ -1104,16 +1104,16 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::same(
-        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
-        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
         true)]
     #[case::different_permutation(
-        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
         FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanAst::Lit(true) },
         false)]
     #[case::different_presence(
-        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
-        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(false) },
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(false) },
         false)]
     fn test_fluxionality_ast_matches(
         #[case] pattern: FluxionalityAst,
@@ -1152,15 +1152,15 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::same_permutation_narrows(
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Undetermined },
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
-        Some(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }))]
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Undetermined },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
+        Some(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }))]
     #[case::same_permutation_conflict(
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(false) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(false) },
         None)]
     #[case::different_permutation(
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
         LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
         None)]
     fn test_ligand_symmetry_ast_meet(
@@ -1174,11 +1174,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::same_permutation(
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
-        Ok(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }))]
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
+        Ok(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }))]
     #[case::different_permutation(
-        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
+        LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
         LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) },
         Err(NoJoin))]
     fn test_ligand_symmetry_ast_join(
@@ -1192,11 +1192,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::same_permutation_narrows(
-        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Undetermined },
-        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
-        Some(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(true) }))]
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Undetermined },
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
+        Some(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(true) }))]
     #[case::different_permutation(
-        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
         FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanAst::Lit(true) },
         None)]
     fn test_fluxionality_ast_meet(
@@ -1214,7 +1214,7 @@ mod tests {
         FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanAst::Lit(true) },
         Ok(FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanAst::Lit(true) }))]
     #[case::different_permutation(
-        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
+        FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(true) },
         FluxionalityAst { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanAst::Lit(true) },
         Err(NoJoin))]
     fn test_fluxionality_ast_join(
@@ -1268,11 +1268,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::ligand_symmetry(
-        StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
-        StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }))]
+        StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
+        StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }))]
     #[case::fluxionality(
-        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), active: BooleanAst::Lit(true) }),
-        StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3]))))]
+        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanAst::Lit(true) }),
+        StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::from_image(&[1, 0, 2, 3]))))]
     #[case::topicity(
         StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) }),
         StereoAtomConstraintKey::Topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))))]
@@ -1603,7 +1603,7 @@ mod tests {
     #[rstest]
     #[case::empty(StereoAtomConstraintsAst::new(), true)]
     #[case::ligand_symmetry_present(
-        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
         false)]
     #[case::topicity_open(
         StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined })),
@@ -1622,7 +1622,7 @@ mod tests {
     #[rstest]
     #[case::empty(StereoAtomConstraintsAst::new(), true)]
     #[case::ligand_symmetry_present(
-        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
         true)]
     #[case::topicity_open(
         StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Undetermined })),
@@ -1651,14 +1651,14 @@ mod tests {
         StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic])) })),
         Some(StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }))))]
     #[case::ligand_symmetry_union(
-        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
         StereoAtomConstraintsAst::from_iter([
-            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
-            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[0, 1, 3, 2])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
         ]),
         Some(StereoAtomConstraintsAst::from_iter([
-            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
-            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[0, 1, 3, 2])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
         ])))]
     #[case::stereogenicity_carried_through(
         StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
@@ -1690,11 +1690,11 @@ mod tests {
         Ok(StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }))))]
     #[case::ligand_symmetry_intersection(
         StereoAtomConstraintsAst::from_iter([
-            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
-            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[0, 1, 3, 2])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
         ]),
-        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
-        Ok(StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }))))]
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
+        Ok(StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }))))]
     #[case::disjoint_keys_drop_to_empty(
         StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
         StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Homotopic) })),
@@ -1711,7 +1711,7 @@ mod tests {
     #[rstest]
     #[case::empty_pattern_matches_any(
         StereoAtomConstraintsAst::new(),
-        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
         true)]
     #[case::specific_pattern_absent_in_target(
         StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
@@ -1719,17 +1719,17 @@ mod tests {
         false)]
     #[case::same_ligand_symmetry_and_topicity(
         StereoAtomConstraintsAst::from_iter([
-            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
             StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
         ]),
         StereoAtomConstraintsAst::from_iter([
-            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
+            StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) }),
             StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
         ]),
         true)]
     #[case::ligand_symmetry_missing_in_target(
-        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
-        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
+        StereoAtomConstraintsAst::from(StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[0, 1, 3, 2])), orientation: Orientation::Proper }, invariant: BooleanAst::Lit(true) })),
         false)]
     #[case::topicity_subset(
         StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })),
@@ -1809,7 +1809,7 @@ mod tests {
     fn test_stereo_bond_constraints_ast_set() {
         let mut cs = StereoBondConstraintsAst::new();
         let f = FluxionalityAst {
-            permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
+            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
             active: BooleanAst::Lit(true),
         };
         cs.set(StereoBondConstraintAst::Fluxionality(f));
