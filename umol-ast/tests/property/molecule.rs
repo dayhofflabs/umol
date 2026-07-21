@@ -10,6 +10,27 @@ use crate::strategies::*;
 
 proptest! {
     #[test]
+    fn test_molecule_ast_equiv_reflexive(ast in molecule_ast_with_constraints_strategy()) {
+        prop_assert!(ast.equiv(&ast));
+    }
+
+    #[test]
+    fn test_molecule_ast_equiv_symmetric(
+        left in molecule_ast_with_constraints_strategy(),
+        right in molecule_ast_with_constraints_strategy(),
+    ) {
+        prop_assert_eq!(left.equiv(&right), right.equiv(&left));
+    }
+
+    #[test]
+    fn test_molecule_ast_equiv_agrees_with_equality_for_canonical_asts(
+        left in molecule_ast_strategy(),
+        right in molecule_ast_strategy(),
+    ) {
+        prop_assert_eq!(left.equiv(&right), left == right);
+    }
+
+    #[test]
     fn test_molecule_dsl_to_edn_from_edn_tree_roundtrip(dsl in molecule_dsl_strategy()) {
         let edn = dsl.to_edn();
         let parsed = MoleculeDsl::from_edn(&edn)

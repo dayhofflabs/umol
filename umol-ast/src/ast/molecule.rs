@@ -31,7 +31,7 @@ use super::noncovalent::NoncovalentBondAst;
 use super::remap::IdRemapping;
 use super::ring::{RingFamily, RingSet};
 use super::stereo::{StereoAtomAst, StereoBondAst};
-use super::traits::Lattice;
+use super::traits::{BiEquiv, Canonicalize, Equiv, Lattice};
 use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
@@ -230,6 +230,102 @@ impl MoleculeAst {
     /// for AtomId/BondId-typed access.
     pub fn raw_graph(&self) -> &Graph {
         &self.graph
+    }
+
+    /// Complete semantic equality in the current id and participant frame.
+    ///
+    /// Topology, relation participants, and stereo sites/ligands must have the same stored ids;
+    /// entity ASTs and molecule constraints compare by canonical form.
+    pub fn equiv(&self, other: &Self) -> bool {
+        if self.graph != other.graph
+            || self.atoms.len() != other.atoms.len()
+            || self.bonds.len() != other.bonds.len()
+            || self.dative_bonds.relation_count() != other.dative_bonds.relation_count()
+            || self.aromatic_systems.relation_count() != other.aromatic_systems.relation_count()
+            || self.multicenter_bonds.relation_count() != other.multicenter_bonds.relation_count()
+            || self.noncovalent_bonds.relation_count() != other.noncovalent_bonds.relation_count()
+            || self.stereo_atoms.relation_count() != other.stereo_atoms.relation_count()
+            || self.stereo_bonds.relation_count() != other.stereo_bonds.relation_count()
+        {
+            return false;
+        }
+        if !self
+            .atoms
+            .iter()
+            .zip(other.atoms.iter())
+            .all(|(left, right)| left.canonical_eq(right))
+            || !self
+                .bonds
+                .iter()
+                .zip(other.bonds.iter())
+                .all(|(left, right)| left.canonical_eq(right))
+        {
+            return false;
+        }
+        for id in self.dative_bonds.relation_ids() {
+            if self.dative_bonds.participants_1(id) != other.dative_bonds.participants_1(id)
+                || self.dative_bonds.participants_2(id) != other.dative_bonds.participants_2(id)
+                || !self
+                    .dative_bonds
+                    .data(id)
+                    .equiv(other.dative_bonds.data(id))
+            {
+                return false;
+            }
+        }
+        for id in self.aromatic_systems.relation_ids() {
+            if self.aromatic_systems.participants(id) != other.aromatic_systems.participants(id)
+                || !self
+                    .aromatic_systems
+                    .data(id)
+                    .equiv(other.aromatic_systems.data(id))
+            {
+                return false;
+            }
+        }
+        for id in self.multicenter_bonds.relation_ids() {
+            if self.multicenter_bonds.participants(id) != other.multicenter_bonds.participants(id)
+                || !self
+                    .multicenter_bonds
+                    .data(id)
+                    .equiv(other.multicenter_bonds.data(id))
+            {
+                return false;
+            }
+        }
+        for id in self.noncovalent_bonds.relation_ids() {
+            if self.noncovalent_bonds.participants(id) != other.noncovalent_bonds.participants(id)
+                || !self
+                    .noncovalent_bonds
+                    .data(id)
+                    .equiv(other.noncovalent_bonds.data(id))
+            {
+                return false;
+            }
+        }
+        for id in self.stereo_atoms.relation_ids() {
+            if self.stereo_atoms.participants_1(id) != other.stereo_atoms.participants_1(id)
+                || self.stereo_atoms.participants_2(id) != other.stereo_atoms.participants_2(id)
+                || !self
+                    .stereo_atoms
+                    .data(id)
+                    .equiv(other.stereo_atoms.data(id))
+            {
+                return false;
+            }
+        }
+        for id in self.stereo_bonds.relation_ids() {
+            if self.stereo_bonds.participants_1(id) != other.stereo_bonds.participants_1(id)
+                || self.stereo_bonds.participants_2(id) != other.stereo_bonds.participants_2(id)
+                || !self
+                    .stereo_bonds
+                    .data(id)
+                    .equiv(other.stereo_bonds.data(id))
+            {
+                return false;
+            }
+        }
+        self.constraints.canonical_eq(&other.constraints)
     }
 
     /// Neighbors of `atom`, ordered by ascending neighbor atom id.

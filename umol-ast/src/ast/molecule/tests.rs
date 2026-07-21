@@ -28,7 +28,7 @@ use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 use super::super::ring::RingFamily;
 use super::super::spin::SpinStateAst;
-use super::super::stereo::{StereoAtomAst, StereoCosetAst, StereoKind};
+use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
 use super::super::value::ValueAst;
 use super::{MoleculeAst, MoleculeParts};
 use crate::{mol_dsl, mol_dsl_ground};
@@ -224,6 +224,224 @@ fn rich_molecule() -> MoleculeAst {
         )],
         ..Default::default()
     })
+}
+
+#[fixture]
+fn equiv_molecule_parts() -> MoleculeParts {
+    let mut carbon = AtomAst::from_element(Element::C);
+    carbon.charge = ValueAst::Lit(1);
+
+    MoleculeParts {
+        atoms: vec![
+            carbon,
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::N),
+            AtomAst::from_element(Element::O),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondAst::from_order(1)),
+            (AtomId(1), AtomId(2), BondAst::from_order(2)),
+            (AtomId(2), AtomId(3), BondAst::from_order(1)),
+        ],
+        dative: vec![(
+            vec![AtomId(1), AtomId(2)],
+            AtomId(3),
+            DativeBondAst::from_order(1),
+        )],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        )],
+        multicenter: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            MulticenterBondAst::from_electrons(vec![1, 1, 0]),
+        )],
+        noncovalent: vec![(
+            AtomId(0),
+            AtomId(3),
+            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        )],
+        stereo_atoms: vec![(
+            AtomId(1),
+            vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ],
+            StereoAtomAst::new(StereoKind::Tetrahedral, 1u32),
+        )],
+        stereo_bonds: vec![(
+            BondId(1),
+            vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ],
+            StereoBondAst::new(StereoKind::CisTrans, 1u32),
+        )],
+        constraints: constraints_with_molecule(Constraint::Molecule(
+            MoleculeConstraint::Connected { atoms: None },
+        )),
+    }
+}
+
+#[rstest]
+fn test_molecule_ast_equiv_entity_data(#[from(equiv_molecule_parts)] parts: MoleculeParts) {
+    let base = MoleculeAst::from_parts(parts.clone());
+
+    let mut canonical_encoding = parts.clone();
+    canonical_encoding.atoms[0].charge = ValueAst::lit_set([1]);
+    let canonical_encoding = MoleculeAst::from_parts(canonical_encoding);
+    assert_ne!(base, canonical_encoding);
+    assert!(base.equiv(&canonical_encoding));
+
+    let mut differences = Vec::new();
+
+    let mut atom = parts.clone();
+    atom.atoms[0].charge = ValueAst::Lit(2);
+    differences.push(MoleculeAst::from_parts(atom));
+
+    let mut bond = parts.clone();
+    bond.bonds[0].2.order = ValueAst::Lit(2);
+    differences.push(MoleculeAst::from_parts(bond));
+
+    let mut dative = parts.clone();
+    dative.dative[0].2.order = ValueAst::Lit(2);
+    differences.push(MoleculeAst::from_parts(dative));
+
+    let mut aromatic = parts.clone();
+    aromatic.aromatic[0].1.electrons = ElectronCountsAst::Lit(vec![2, 0, 1]);
+    differences.push(MoleculeAst::from_parts(aromatic));
+
+    let mut multicenter = parts.clone();
+    multicenter.multicenter[0].1.electrons = ElectronCountsAst::Lit(vec![2, 0, 0]);
+    differences.push(MoleculeAst::from_parts(multicenter));
+
+    let mut noncovalent = parts.clone();
+    noncovalent.noncovalent[0].2.kind = NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic);
+    differences.push(MoleculeAst::from_parts(noncovalent));
+
+    let mut stereo_atom = parts.clone();
+    stereo_atom.stereo_atoms[0].2 = StereoAtomAst::new(StereoKind::Tetrahedral, 0u32);
+    differences.push(MoleculeAst::from_parts(stereo_atom));
+
+    let mut stereo_bond = parts.clone();
+    stereo_bond.stereo_bonds[0].2 = StereoBondAst::new(StereoKind::CisTrans, 0u32);
+    differences.push(MoleculeAst::from_parts(stereo_bond));
+
+    let mut constraint = parts;
+    constraint.constraints =
+        constraints_with_molecule(Constraint::Molecule(MoleculeConstraint::Connected {
+            atoms: Some(vec![AtomId(0), AtomId(1), AtomId(2)]),
+        }));
+    differences.push(MoleculeAst::from_parts(constraint));
+
+    assert_eq!(
+        differences
+            .iter()
+            .map(|other| base.equiv(other))
+            .collect::<Vec<_>>(),
+        vec![false; 9],
+    );
+}
+
+#[rstest]
+fn test_molecule_ast_equiv_relation_frames(#[from(equiv_molecule_parts)] parts: MoleculeParts) {
+    let base = MoleculeAst::from_parts(parts.clone());
+    let mut differences = Vec::new();
+
+    let mut dative = parts.clone();
+    dative.dative[0].0 = vec![AtomId(0), AtomId(2)];
+    differences.push(MoleculeAst::from_parts(dative));
+
+    let mut aromatic = parts.clone();
+    aromatic.aromatic[0].0 = vec![AtomId(0), AtomId(1), AtomId(3)];
+    differences.push(MoleculeAst::from_parts(aromatic));
+
+    let mut multicenter = parts.clone();
+    multicenter.multicenter[0].0 = vec![AtomId(0), AtomId(1), AtomId(3)];
+    differences.push(MoleculeAst::from_parts(multicenter));
+
+    let mut noncovalent = parts.clone();
+    noncovalent.noncovalent[0].1 = AtomId(2);
+    differences.push(MoleculeAst::from_parts(noncovalent));
+
+    let mut stereo_atom_site = parts.clone();
+    stereo_atom_site.stereo_atoms[0].0 = AtomId(2);
+    differences.push(MoleculeAst::from_parts(stereo_atom_site));
+
+    let mut stereo_atom_ligand = parts.clone();
+    stereo_atom_ligand.stereo_atoms[0].1[2] = StereoLigand::new(AtomId(1), StereoLigandKind::Atom);
+    differences.push(MoleculeAst::from_parts(stereo_atom_ligand));
+
+    let mut stereo_bond_site = parts.clone();
+    stereo_bond_site.stereo_bonds[0].0 = BondId(2);
+    differences.push(MoleculeAst::from_parts(stereo_bond_site));
+
+    let mut stereo_bond_ligand = parts;
+    stereo_bond_ligand.stereo_bonds[0].1[1] = StereoLigand::new(AtomId(2), StereoLigandKind::Atom);
+    differences.push(MoleculeAst::from_parts(stereo_bond_ligand));
+
+    assert_eq!(
+        differences
+            .iter()
+            .map(|other| base.equiv(other))
+            .collect::<Vec<_>>(),
+        vec![false; 8],
+    );
+}
+
+#[rstest]
+fn test_molecule_ast_equiv_structure_and_counts(
+    #[from(equiv_molecule_parts)] parts: MoleculeParts,
+) {
+    let base = MoleculeAst::from_parts(parts.clone());
+    let mut differences = Vec::new();
+
+    let mut topology = parts.clone();
+    topology.bonds[2].1 = AtomId(1);
+    differences.push(MoleculeAst::from_parts(topology));
+
+    let mut atoms = parts.clone();
+    atoms.atoms.push(AtomAst::from_element(Element::F));
+    differences.push(MoleculeAst::from_parts(atoms));
+
+    let mut bonds = parts.clone();
+    bonds
+        .bonds
+        .push((AtomId(0), AtomId(3), BondAst::from_order(1)));
+    differences.push(MoleculeAst::from_parts(bonds));
+
+    let mut dative = parts.clone();
+    dative.dative.pop();
+    differences.push(MoleculeAst::from_parts(dative));
+
+    let mut aromatic = parts.clone();
+    aromatic.aromatic.pop();
+    differences.push(MoleculeAst::from_parts(aromatic));
+
+    let mut multicenter = parts.clone();
+    multicenter.multicenter.pop();
+    differences.push(MoleculeAst::from_parts(multicenter));
+
+    let mut noncovalent = parts.clone();
+    noncovalent.noncovalent.pop();
+    differences.push(MoleculeAst::from_parts(noncovalent));
+
+    let mut stereo_atom = parts.clone();
+    stereo_atom.stereo_atoms.pop();
+    differences.push(MoleculeAst::from_parts(stereo_atom));
+
+    let mut stereo_bond = parts;
+    stereo_bond.stereo_bonds.pop();
+    differences.push(MoleculeAst::from_parts(stereo_bond));
+
+    assert_eq!(
+        differences
+            .iter()
+            .map(|other| base.equiv(other))
+            .collect::<Vec<_>>(),
+        vec![false; 9],
+    );
 }
 
 #[rstest]

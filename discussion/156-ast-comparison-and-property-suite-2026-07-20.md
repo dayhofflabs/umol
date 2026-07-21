@@ -50,7 +50,8 @@ the existing relation-data vocabulary: `equiv` compares in the current frame;
   participant, site, entity-AST, or constraint difference. Do not construct a
   correspondence or derive deltas. Table tests vary one dimension at a time
   across all entity families; property tests cover reflexivity, symmetry, and
-  agreement with `==` for already-canonical molecules. **Additive (green).**
+  agreement with `==` for already-canonical molecules.
+  **Implemented (green).**
   `[dep: —]`
 - **S0c — correspondence-aware `MoleculeAst::equiv_under`**
   (`umol-ast/src/ast/molecule.rs`, `correspondence.rs`): require S0a's total
