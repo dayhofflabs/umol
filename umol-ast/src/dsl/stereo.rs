@@ -516,20 +516,11 @@ fn cycle(i: &mut &str) -> PResult<Vec<usize>> {
 }
 
 /// A permutation in disjoint-cycle notation → `Permutation` of `degree`
-/// (0-indexed); validated as in-range and disjoint, since `from_cycles` panics
-/// on a non-bijection.
+/// (0-indexed).
 fn perm_cycles(i: &mut &str, degree: usize) -> PResult<Permutation> {
     let cycles: Vec<Vec<usize>> = repeat(1.., cycle).parse_next(i)?;
-    let mut seen = vec![false; degree];
-    for cycle in &cycles {
-        for &p in cycle {
-            if p >= degree || seen[p] {
-                return Err(ErrMode::Cut(ParseError::Syntax));
-            }
-            seen[p] = true;
-        }
-    }
-    Ok(Permutation::from_cycles(degree, &cycles))
+    Permutation::from_cycles(degree, &cycles)
+        .map_err(|error| ErrMode::Cut(ParseError::InvalidValue(error.to_string())))
 }
 
 /// `~` (the kind involution, eager) or an explicit permutation in cycle notation.
@@ -1157,7 +1148,6 @@ fn read_edn_permutation(edn: &Edn, degree: usize) -> Result<Permutation, DeError
             path: Vec::new(),
         });
     };
-    let mut seen = vec![false; degree];
     let mut cycles: Vec<Vec<usize>> = Vec::with_capacity(cycles_edn.len());
     for cycle_edn in cycles_edn.iter() {
         let Edn::Vector(points) = cycle_edn else {
@@ -1176,20 +1166,16 @@ fn read_edn_permutation(edn: &Edn, degree: usize) -> Result<Permutation, DeError
                     path: Vec::new(),
                 });
             };
-            let point = usize::try_from(*n)
-                .ok()
-                .filter(|&x| x < degree && !seen[x])
-                .ok_or_else(|| DeError::OutOfRange {
-                    value: n.to_string(),
-                    target: "ligand position",
-                    path: Vec::new(),
-                })?;
-            seen[point] = true;
+            let point = usize::try_from(*n).map_err(|_| DeError::OutOfRange {
+                value: n.to_string(),
+                target: "ligand position",
+                path: Vec::new(),
+            })?;
             cycle.push(point);
         }
         cycles.push(cycle);
     }
-    Ok(Permutation::from_cycles(degree, &cycles))
+    Permutation::from_cycles(degree, &cycles).map_err(|error| DeError::Custom(error.to_string()))
 }
 
 /// Streaming-read intermediate for a `:relation` value (`:undetermined`, a single
@@ -2022,6 +2008,33 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty_cycle("()", Permutation::identity(4))]
+    #[case::single_cycle("(0,1,2)", Permutation::from_image(&[1, 2, 0, 3]))]
+    #[case::disjoint_cycles("(0,1)(2,3)", Permutation::from_image(&[1, 0, 3, 2]))]
+    fn test_parse_permutation(#[case] input: &str, #[case] expected: Permutation) {
+        assert_eq!(parse_permutation(input, 4), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::overlap(
+        "(0,1)(1,2)",
+        ParseError::InvalidValue("cycle point 1 occurs more than once".to_string()),
+    )]
+    #[case::repeated(
+        "(0,1,0)",
+        ParseError::InvalidValue("cycle point 0 occurs more than once".to_string()),
+    )]
+    #[case::out_of_range(
+        "(0,4)",
+        ParseError::InvalidValue(
+            "cycle point 4 at cycle 0, position 1 is outside 0..4".to_string(),
+        ),
+    )]
+    fn test_parse_permutation_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(parse_permutation(input, 4), Err(expected));
+    }
+
+    #[rstest]
     #[case::empty("")]
     #[case::undetermined("*")]
     #[case::absolute("Ct1")]
@@ -2073,17 +2086,17 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::fluxionality("Th1#f(0,1,2)",
-        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_cycles(4, &[vec![0, 1, 2]])), active: BooleanAst::Lit(true) }))]
+        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), active: BooleanAst::Lit(true) }))]
     #[case::ligand_symmetry("Th1#p(0,1,2)",
         StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
-            permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_cycles(4, &[vec![0, 1, 2]])), orientation: Orientation::Proper },
+            permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), orientation: Orientation::Proper },
             invariant: BooleanAst::Lit(true) }))]
     #[case::ligand_symmetry_absent("Th1#p(0,1,2)!",
         StereoAtomConstraintAst::LigandSymmetry(LigandSymmetryAst {
-            permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_cycles(4, &[vec![0, 1, 2]])), orientation: Orientation::Proper },
+            permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), orientation: Orientation::Proper },
             invariant: BooleanAst::Lit(false) }))]
     #[case::fluxionality_absent("Th1#f(0,1,2)!",
-        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_cycles(4, &[vec![0, 1, 2]])), active: BooleanAst::Lit(false) }))]
+        StereoAtomConstraintAst::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), active: BooleanAst::Lit(false) }))]
     #[case::topicity_negated("Th1#o(0,1)!'",
         StereoAtomConstraintAst::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Enantiotopic])) }))]
     #[case::topicity_lit_set("Th1#o(0,1){=,'}",
@@ -2112,6 +2125,47 @@ mod tests {
         assert_eq!(
             dsl.0.constraints.iter().cloned().collect::<Vec<_>>(),
             vec![expected],
+        );
+    }
+
+    #[rstest]
+    #[case::empty_cycle("[[]]", Permutation::identity(4))]
+    #[case::single_cycle("[[0 1 2]]", Permutation::from_image(&[1, 2, 0, 3]))]
+    #[case::disjoint_cycles("[[0 1] [2 3]]", Permutation::from_image(&[1, 0, 3, 2]))]
+    fn test_read_edn_permutation(#[case] input: &str, #[case] expected: Permutation) {
+        assert_eq!(
+            read_edn_permutation(&read_string(input).unwrap(), 4),
+            Ok(expected),
+        );
+    }
+
+    #[rstest]
+    #[case::overlap(
+        "[[0 1] [1 2]]",
+        DeError::Custom("cycle point 1 occurs more than once".to_string()),
+    )]
+    #[case::repeated(
+        "[[0 1 0]]",
+        DeError::Custom("cycle point 0 occurs more than once".to_string()),
+    )]
+    #[case::out_of_range(
+        "[[0 4]]",
+        DeError::Custom(
+            "cycle point 4 at cycle 0, position 1 is outside 0..4".to_string(),
+        ),
+    )]
+    #[case::negative(
+        "[[0 -1]]",
+        DeError::OutOfRange {
+            value: "-1".to_string(),
+            target: "ligand position",
+            path: Vec::new(),
+        },
+    )]
+    fn test_read_edn_permutation_error(#[case] input: &str, #[case] expected: DeError) {
+        assert_eq!(
+            read_edn_permutation(&read_string(input).unwrap(), 4),
+            Err(expected),
         );
     }
 
@@ -2259,9 +2313,9 @@ mod tests {
     #[case::var_domain("?o :: {1,2}", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::var_in("o", [1, 2]))))]
     #[case::swap("~1", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1)))))]
     #[case::mirror("'1", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::mirror(StereoTerm::Lit(1)))))]
-    #[case::apply("1^(0,1)", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_cycles(4, &[vec![0, 1]])))))]
-    #[case::swap_binds_tighter_than_apply("~1^(0,1)", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::swap(StereoTerm::Lit(1)), Permutation::from_cycles(4, &[vec![0, 1]])))))]
-    #[case::mirror_binds_tighter_than_apply("'1^(0,1)", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::mirror(StereoTerm::Lit(1)), Permutation::from_cycles(4, &[vec![0, 1]])))))]
+    #[case::apply("1^(0,1)", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_image(&[1, 0, 2, 3])))))]
+    #[case::swap_binds_tighter_than_apply("~1^(0,1)", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::swap(StereoTerm::Lit(1)), Permutation::from_image(&[1, 0, 2, 3])))))]
+    #[case::mirror_binds_tighter_than_apply("'1^(0,1)", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::mirror(StereoTerm::Lit(1)), Permutation::from_image(&[1, 0, 2, 3])))))]
     #[case::whitespace_ignored("  ?o :: { 1 , 2 }", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::var_in("o", [1, 2]))))]
     #[case::no_canonicalization("{1}", TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([1])))]
     fn test_tetrahedral_stereo_config(#[case] input: &str, #[case] expected: TetrahedralStereoAst) {
@@ -2296,7 +2350,7 @@ mod tests {
     #[case::var_domain(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::var_in("o", [1, 2]))), "?o :: {1,2}")]
     #[case::swap(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1)))), "~1")]
     #[case::mirror(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::mirror(StereoTerm::Lit(1)))), "'1")]
-    #[case::apply(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_cycles(4, &[vec![0, 1]])))), "1^(0,1)")]
+    #[case::apply(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_image(&[1, 0, 2, 3])))), "1^(0,1)")]
     fn test_fmt_tetrahedral_stereo_config(#[case] c: TetrahedralStereoAst, #[case] expected: &str) {
         struct W(TetrahedralStereoAst);
         impl fmt::Display for W {

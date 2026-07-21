@@ -137,10 +137,10 @@ impl MoleculeAst {
         for i in 0..classes.len() {
             for j in (i + 1)..classes.len() {
                 if classes[i] == classes[j] {
-                    generators.push(Permutation::from_cycles(
-                        coset_space.degree(),
-                        &[vec![i, j]],
-                    ));
+                    generators.push(
+                        Permutation::from_cycles(coset_space.degree(), &[vec![i, j]])
+                            .expect("class-pair transposition is in range and disjoint"),
+                    );
                 }
             }
         }
@@ -483,7 +483,10 @@ fn virtual_block_swaps(ligands: &[StereoLigand]) -> Vec<Permutation> {
     ] {
         let positions: Vec<usize> = (0..degree).filter(|&i| ligands[i].kind == kind).collect();
         for pair in positions.windows(2) {
-            swaps.push(Permutation::from_cycles(degree, &[vec![pair[0], pair[1]]]));
+            swaps.push(
+                Permutation::from_cycles(degree, &[vec![pair[0], pair[1]]])
+                    .expect("virtual-ligand transposition is in range and disjoint"),
+            );
         }
     }
     swaps
@@ -710,6 +713,20 @@ mod tests {
     }
 
     #[rstest]
+    fn test_molecule_ast_observable_descriptor() {
+        let mut mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
+        mol.stereo_atom_mut(StereoAtomId(0)).ast.configuration =
+            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1);
+        assert_eq!(
+            mol.observable_descriptor(
+                Entity::StereoAtom(StereoAtomId(0)),
+                &[NodeId(0), NodeId(1), NodeId(1), NodeId(3), NodeId(4)],
+            ),
+            Some(0),
+        );
+    }
+
+    #[rstest]
     fn test_molecule_ast_stereo_atom_symmetry_prochiral() {
         let mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
         let gs = mol.graph_symmetry(&config());
@@ -785,6 +802,24 @@ mod tests {
                 generator,
             ),
             expected,
+        );
+    }
+
+    #[rstest]
+    fn test_virtual_block_swaps() {
+        assert_eq!(
+            virtual_block_swaps(&[
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+            ]),
+            vec![
+                Permutation::from_image(&[1, 0, 2, 3, 4]),
+                Permutation::from_image(&[0, 2, 1, 3, 4]),
+                Permutation::from_image(&[0, 1, 2, 4, 3]),
+            ],
         );
     }
 }

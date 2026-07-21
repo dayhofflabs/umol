@@ -63,7 +63,7 @@ fn coset_index() -> impl Strategy<Value = (ClassKey, u32)> {
 proptest! {
     #[test]
     fn test_permutation_cycle_round_trip(p in permutation()) {
-        prop_assert_eq!(Permutation::from_cycles(p.degree(), &p.cycles()), p);
+        prop_assert_eq!(Permutation::from_cycles(p.degree(), &p.cycles()), Ok(p));
     }
 
     #[test]

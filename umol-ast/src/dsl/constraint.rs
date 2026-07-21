@@ -518,12 +518,11 @@ pub(super) fn read_noncovalent_bond_constraint_dsl(
 
 /// Membership polarity `:in` / `:not-in`. Shared by `#p` and the `#o`/`#g` relations.
 /// A permutation as a vector of disjoint cycles `[[0 1 2] [3 4]]`; degree from the
-/// stereo kind. Manual loops so the disjoint-cycle `seen` check borrows linearly.
+/// stereo kind.
 fn read_permutation(
     de: &mut EdnStreamDeserializer<'_>,
     degree: usize,
 ) -> Result<Permutation, EdnError> {
-    let mut seen = vec![false; degree];
     let mut cycles: Vec<Vec<usize>> = Vec::new();
     de.consume_byte(b'[')?;
     while !de.try_consume_byte(b']')? {
@@ -531,20 +530,17 @@ fn read_permutation(
         let mut cycle = Vec::new();
         while !de.try_consume_byte(b']')? {
             let n = de.read_i64()?;
-            let point = usize::try_from(n)
-                .ok()
-                .filter(|&x| x < degree && !seen[x])
-                .ok_or_else(|| DeError::OutOfRange {
-                    value: n.to_string(),
-                    target: "ligand position",
-                    path: Vec::new(),
-                })?;
-            seen[point] = true;
+            let point = usize::try_from(n).map_err(|_| DeError::OutOfRange {
+                value: n.to_string(),
+                target: "ligand position",
+                path: Vec::new(),
+            })?;
             cycle.push(point);
         }
         cycles.push(cycle);
     }
-    Ok(Permutation::from_cycles(degree, &cycles))
+    Permutation::from_cycles(degree, &cycles)
+        .map_err(|error| DeError::Custom(error.to_string()).into())
 }
 
 /// The `:relation` value: `:undetermined`, one keyword, a keyword vector (`LitSet`),
@@ -2219,6 +2215,46 @@ mod tests {
             failures.is_empty(),
             "invalid seeds:\n{}",
             failures.join("\n")
+        );
+    }
+
+    #[rstest]
+    #[case::empty_cycle("[[]]", Permutation::identity(4))]
+    #[case::single_cycle("[[0 1 2]]", Permutation::from_image(&[1, 2, 0, 3]))]
+    #[case::disjoint_cycles("[[0 1] [2 3]]", Permutation::from_image(&[1, 0, 3, 2]))]
+    fn test_read_permutation(#[case] input: &str, #[case] expected: Permutation) {
+        let mut de = EdnStreamDeserializer::new(input);
+        assert_eq!(read_permutation(&mut de, 4), Ok(expected));
+        assert_eq!(de.expect_eof(), Ok(()));
+    }
+
+    #[rstest]
+    #[case::overlap(
+        "[[0 1] [1 2]]",
+        EdnError::De(DeError::Custom("cycle point 1 occurs more than once".to_string())),
+    )]
+    #[case::repeated(
+        "[[0 1 0]]",
+        EdnError::De(DeError::Custom("cycle point 0 occurs more than once".to_string())),
+    )]
+    #[case::out_of_range(
+        "[[0 4]]",
+        EdnError::De(DeError::Custom(
+            "cycle point 4 at cycle 0, position 1 is outside 0..4".to_string(),
+        )),
+    )]
+    #[case::negative(
+        "[[0 -1]]",
+        EdnError::De(DeError::OutOfRange {
+            value: "-1".to_string(),
+            target: "ligand position",
+            path: Vec::new(),
+        }),
+    )]
+    fn test_read_permutation_error(#[case] input: &str, #[case] expected: EdnError) {
+        assert_eq!(
+            read_permutation(&mut EdnStreamDeserializer::new(input), 4),
+            Err(expected),
         );
     }
 

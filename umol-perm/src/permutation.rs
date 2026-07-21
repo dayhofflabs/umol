@@ -162,19 +162,36 @@ impl Permutation {
     }
 
     /// Build from disjoint cycles: each `[c0,…,ck]` sets `σ(c0)=c1, …, σ(ck)=c0`;
-    /// unlisted points are fixed; `[]` is the identity. Panics unless the cycles
-    /// form a bijection of `0..degree`.
-    pub fn from_cycles(degree: usize, cycles: &[Vec<usize>]) -> Self {
+    /// unlisted points are fixed; `[]` is the identity. Returns an error when a
+    /// point is out of range or occurs more than once. Panics if `degree` exceeds
+    /// the fixed representation maximum.
+    pub fn from_cycles(degree: usize, cycles: &[Vec<usize>]) -> Result<Self, PermutationError> {
         assert!(degree <= MAX_DEGREE);
+        let mut seen = [false; MAX_DEGREE];
+        for (cycle_index, cycle) in cycles.iter().enumerate() {
+            for (position, &point) in cycle.iter().enumerate() {
+                if point >= degree {
+                    return Err(PermutationError::CyclePointOutOfRange {
+                        cycle: cycle_index,
+                        position,
+                        point,
+                        degree,
+                    });
+                }
+                if seen[point] {
+                    return Err(PermutationError::DuplicateCyclePoint { point });
+                }
+                seen[point] = true;
+            }
+        }
         let mut image: Vec<usize> = (0..degree).collect();
         for cycle in cycles {
             let len = cycle.len();
             for (w, &point) in cycle.iter().enumerate() {
-                assert!(point < degree, "cycle point out of range");
                 image[point] = cycle[(w + 1) % len];
             }
         }
-        Self::from_image(&image)
+        Ok(Self::from_image(&image))
     }
 
     /// Disjoint-cycle decomposition, fixed points dropped. Canonical: each cycle
@@ -364,20 +381,42 @@ mod tests {
     #[case::double_transposition(4, vec![vec![0, 1], vec![2, 3]], Permutation::from_image(&[1, 0, 3, 2]))]
     #[case::partial(4, vec![vec![0, 1, 2]], Permutation::from_image(&[1, 2, 0, 3]))]
     #[case::empty(4, vec![], Permutation::identity(4))]
+    #[case::empty_cycle(4, vec![vec![]], Permutation::identity(4))]
     fn test_permutation_from_cycles(
         #[case] degree: usize,
         #[case] cycles: Vec<Vec<usize>>,
         #[case] expected: Permutation,
     ) {
-        assert_eq!(Permutation::from_cycles(degree, &cycles), expected);
+        assert_eq!(Permutation::from_cycles(degree, &cycles), Ok(expected));
     }
 
     #[rstest]
-    #[case::overlap(3, vec![vec![0, 1], vec![1, 2]])]
-    #[case::out_of_range(3, vec![vec![0, 3]])]
-    #[should_panic]
-    fn test_permutation_from_cycles_error(#[case] degree: usize, #[case] cycles: Vec<Vec<usize>>) {
-        Permutation::from_cycles(degree, &cycles);
+    #[case::overlap(
+        3,
+        vec![vec![0, 1], vec![1, 2]],
+        PermutationError::DuplicateCyclePoint { point: 1 },
+    )]
+    #[case::repeated(
+        3,
+        vec![vec![0, 1, 0]],
+        PermutationError::DuplicateCyclePoint { point: 0 },
+    )]
+    #[case::out_of_range(
+        3,
+        vec![vec![0, 3]],
+        PermutationError::CyclePointOutOfRange {
+            cycle: 0,
+            position: 1,
+            point: 3,
+            degree: 3,
+        },
+    )]
+    fn test_permutation_from_cycles_error(
+        #[case] degree: usize,
+        #[case] cycles: Vec<Vec<usize>>,
+        #[case] expected: PermutationError,
+    ) {
+        assert_eq!(Permutation::from_cycles(degree, &cycles), Err(expected));
     }
 
     #[rstest]

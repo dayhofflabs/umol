@@ -378,28 +378,36 @@ warnings denied.
   asserted fixed-maximum contract. Construct expected values with
   `from_image`, replace the old panic test with exact error tables, and preserve
   cycle-decomposition round-trip properties.
-  **Breaking (red).** [dep: S0a, S1a]
+  **Implemented (green).** [dep: S0a, S1a]
 - **S3b — text DSL cycles** (`umol-ast/src/dsl/stereo.rs`): propagate
   `PermutationError` through the existing `ParseError::InvalidValue` boundary,
   remove the duplicate range/disjointness validation, and replace parser
   expected values built with `from_cycles` by fixed images. Parsing tables cover
   valid, overlapping, repeated, and out-of-range cycle notation with exact
   errors.
-  **Breaking caller migration (red).** [dep: S3a]
+  **Implemented (green).** [dep: S3a]
 - **S3c — EDN cycle readers** (`umol-ast/src/dsl/stereo.rs`,
   `dsl/constraint.rs`): make both tree and streaming readers delegate structural
   validation to `from_cycles`, retaining only EDN type and negative-integer
   checks, and map construction errors through `DeError::Custom`. Add matching
   exact malformed-cycle tables to both reader paths and use fixed images as
   successful expected values.
-  **Breaking caller migration (red).** [dep: S3a]
+  **Implemented (green).** [dep: S3a]
 - **S3d — generated internal cycles** (`umol-ast/src/ast/symmetry.rs`): make
   the loop-derived transpositions in `observable_descriptor` and
   `virtual_block_swaps` use explicit invariant assertions on the fallible
-  result. Tests cover the generated images directly, and the property suite
-  continues to exercise observable descriptors and virtual ligand blocks. This
+  result. Tests cover the generated virtual-block images directly and the
+  observable effect of a class-pair transposition. The property suite retains
+  its coverage of observable descriptors and virtual ligand blocks. This
   restores the workspace to green.
-  **Breaking caller migration (red→green).** [dep: S3a, S3b, S3c]
+  **Implemented (green).** [dep: S3a, S3b, S3c]
+
+S3 verification: all 150 `umol-perm` unit tests, its 17 property tests, and all
+5,107 `umol-ast` unit tests pass. The workspace library check and Clippy for all
+`umol-perm` targets and the `umol-ast` library pass with all features and
+warnings denied. Compiling the complete `umol-ast` property target still stops
+at the unrelated stale `DpoValidator::validate_reaction` call recorded after
+S0; no S3 failure precedes it.
 
 ### S4 — class-space API migration
 
