@@ -405,9 +405,8 @@ warnings denied.
 S3 verification: all 150 `umol-perm` unit tests, its 17 property tests, and all
 5,107 `umol-ast` unit tests pass. The workspace library check and Clippy for all
 `umol-perm` targets and the `umol-ast` library pass with all features and
-warnings denied. Compiling the complete `umol-ast` property target still stops
-at the unrelated stale `DpoValidator::validate_reaction` call recorded after
-S0; no S3 failure precedes it.
+warnings denied. The complete `umol-ast` property target compiles, and the
+composition dangling-invariant property passes.
 
 ### S4 — class-space API migration
 

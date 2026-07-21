@@ -1499,7 +1499,9 @@ proptest! {
     ) {
         for composite in a.compose(&b, CompositionScope::Full) {
             prop_assert_eq!(
-                DpoValidator.validate_reaction(&composite).unwrap(),
+                DpoValidator
+                    .validate_reaction(&composite.lhs, &composite.deltas)
+                    .unwrap(),
                 Solution::Determined(())
             );
         }
