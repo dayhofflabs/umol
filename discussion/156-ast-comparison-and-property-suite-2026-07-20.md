@@ -65,7 +65,7 @@ the existing relation-data vocabulary: `equiv` compares in the current frame;
   ordered dative/stereo frames, constraint references, partial
   correspondences, and deliberately inconsistent correspondences. Property
   tests cover symmetry under `correspondence.reverse()` and reduction to S0b
-  under the identity frame. **Additive (green).** `[dep: S0a, S0b]`
+  under the identity frame. **Implemented (green).** `[dep: S0a, S0b]`
 - **S0d — comparison contract and application-property migration**
   (`umol-ast/tests/property/reaction.rs`): record the comparison matrix for
   `==`, entity `canonical_eq`, relation

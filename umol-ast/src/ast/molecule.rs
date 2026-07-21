@@ -328,6 +328,334 @@ impl MoleculeAst {
         self.constraints.canonical_eq(&other.constraints)
     }
 
+    /// Complete semantic equality under a total correspondence from `self` to `other`.
+    ///
+    /// The correspondence supplies the target id and participant frame. It must cover the actual
+    /// id spaces of both molecules, and every mapped topology edge, relation participant, stereo
+    /// site, and stereo ligand must agree with its mated entity.
+    pub fn equiv_under(&self, other: &Self, correspondence: &MoleculeCorrespondence) -> bool {
+        let counts_match = [
+            (
+                correspondence.atoms().left_count(),
+                self.atoms.len(),
+                correspondence.atoms().right_count(),
+                other.atoms.len(),
+            ),
+            (
+                correspondence.bonds().left_count(),
+                self.bonds.len(),
+                correspondence.bonds().right_count(),
+                other.bonds.len(),
+            ),
+            (
+                correspondence.dative_bonds().left_count(),
+                self.dative_bonds.relation_count(),
+                correspondence.dative_bonds().right_count(),
+                other.dative_bonds.relation_count(),
+            ),
+            (
+                correspondence.aromatic_systems().left_count(),
+                self.aromatic_systems.relation_count(),
+                correspondence.aromatic_systems().right_count(),
+                other.aromatic_systems.relation_count(),
+            ),
+            (
+                correspondence.multicenter_bonds().left_count(),
+                self.multicenter_bonds.relation_count(),
+                correspondence.multicenter_bonds().right_count(),
+                other.multicenter_bonds.relation_count(),
+            ),
+            (
+                correspondence.noncovalent_bonds().left_count(),
+                self.noncovalent_bonds.relation_count(),
+                correspondence.noncovalent_bonds().right_count(),
+                other.noncovalent_bonds.relation_count(),
+            ),
+            (
+                correspondence.stereo_atoms().left_count(),
+                self.stereo_atoms.relation_count(),
+                correspondence.stereo_atoms().right_count(),
+                other.stereo_atoms.relation_count(),
+            ),
+            (
+                correspondence.stereo_bonds().left_count(),
+                self.stereo_bonds.relation_count(),
+                correspondence.stereo_bonds().right_count(),
+                other.stereo_bonds.relation_count(),
+            ),
+        ]
+        .into_iter()
+        .all(|(mapped_left, actual_left, mapped_right, actual_right)| {
+            mapped_left == actual_left && mapped_right == actual_right
+        });
+        if !correspondence.is_total() || !counts_match {
+            return false;
+        }
+
+        for &(left, right) in correspondence.atoms().mates() {
+            let (Some(left_ast), Some(right_ast)) =
+                (self.atoms.get(left.index()), other.atoms.get(right.index()))
+            else {
+                return false;
+            };
+            if !left_ast.canonical_eq(right_ast) {
+                return false;
+            }
+        }
+
+        for &(left, right) in correspondence.bonds().mates() {
+            let (Some(left_ast), Some(right_ast)) =
+                (self.bonds.get(left.index()), other.bonds.get(right.index()))
+            else {
+                return false;
+            };
+            let [first, second] = self.graph.edge_endpoints(EdgeId::from(left));
+            let (Some(mapped_first), Some(mapped_second)) = (
+                correspondence.atoms().right_of(first),
+                correspondence.atoms().right_of(second),
+            ) else {
+                return false;
+            };
+            if other.graph.find_edge(mapped_first, mapped_second) != Some(EdgeId::from(right))
+                || !left_ast.canonical_eq(right_ast)
+            {
+                return false;
+            }
+        }
+
+        for &(left, right) in correspondence.dative_bonds().mates() {
+            if left.index() >= self.dative_bonds.relation_count()
+                || right.index() >= other.dative_bonds.relation_count()
+            {
+                return false;
+            }
+            let left_id = RelationId::from(left);
+            let right_id = RelationId::from(right);
+            let mapped_acceptor: Option<Vec<NodeId>> = self
+                .dative_bonds
+                .participants_1(left_id)
+                .iter()
+                .map(|&atom| correspondence.atoms().right_of(atom))
+                .collect();
+            let mapped_donors: Option<Vec<NodeId>> = self
+                .dative_bonds
+                .participants_2(left_id)
+                .iter()
+                .map(|&atom| correspondence.atoms().right_of(atom))
+                .collect();
+            let (Some(mapped_acceptor), Some(mapped_donors)) = (mapped_acceptor, mapped_donors)
+            else {
+                return false;
+            };
+            let Some((acceptor_order, donor_order)) = other.dative_bonds.participant_permutation(
+                right_id,
+                &mapped_acceptor,
+                &mapped_donors,
+            ) else {
+                return false;
+            };
+            if !self.dative_bonds.data(left_id).equiv_under(
+                other.dative_bonds.data(right_id),
+                &acceptor_order,
+                &donor_order,
+            ) {
+                return false;
+            }
+        }
+
+        for &(left, right) in correspondence.aromatic_systems().mates() {
+            if left.index() >= self.aromatic_systems.relation_count()
+                || right.index() >= other.aromatic_systems.relation_count()
+            {
+                return false;
+            }
+            let left_id = RelationId::from(left);
+            let right_id = RelationId::from(right);
+            let mapped: Option<Vec<NodeId>> = self
+                .aromatic_systems
+                .participants(left_id)
+                .iter()
+                .map(|&atom| correspondence.atoms().right_of(atom))
+                .collect();
+            let Some(order) = mapped.and_then(|participants| {
+                other
+                    .aromatic_systems
+                    .participant_permutation(right_id, &participants)
+            }) else {
+                return false;
+            };
+            if !self
+                .aromatic_systems
+                .data(left_id)
+                .equiv_under(other.aromatic_systems.data(right_id), &order)
+            {
+                return false;
+            }
+        }
+
+        for &(left, right) in correspondence.multicenter_bonds().mates() {
+            if left.index() >= self.multicenter_bonds.relation_count()
+                || right.index() >= other.multicenter_bonds.relation_count()
+            {
+                return false;
+            }
+            let left_id = RelationId::from(left);
+            let right_id = RelationId::from(right);
+            let mapped: Option<Vec<NodeId>> = self
+                .multicenter_bonds
+                .participants(left_id)
+                .iter()
+                .map(|&atom| correspondence.atoms().right_of(atom))
+                .collect();
+            let Some(order) = mapped.and_then(|participants| {
+                other
+                    .multicenter_bonds
+                    .participant_permutation(right_id, &participants)
+            }) else {
+                return false;
+            };
+            if !self
+                .multicenter_bonds
+                .data(left_id)
+                .equiv_under(other.multicenter_bonds.data(right_id), &order)
+            {
+                return false;
+            }
+        }
+
+        for &(left, right) in correspondence.noncovalent_bonds().mates() {
+            if left.index() >= self.noncovalent_bonds.relation_count()
+                || right.index() >= other.noncovalent_bonds.relation_count()
+            {
+                return false;
+            }
+            let left_id = RelationId::from(left);
+            let right_id = RelationId::from(right);
+            let mapped: Option<Vec<NodeId>> = self
+                .noncovalent_bonds
+                .participants(left_id)
+                .iter()
+                .map(|&atom| correspondence.atoms().right_of(atom))
+                .collect();
+            let Some(order) = mapped.and_then(|participants| {
+                other
+                    .noncovalent_bonds
+                    .participant_permutation(right_id, &participants)
+            }) else {
+                return false;
+            };
+            if !self
+                .noncovalent_bonds
+                .data(left_id)
+                .equiv_under(other.noncovalent_bonds.data(right_id), &order)
+            {
+                return false;
+            }
+        }
+
+        for &(left, right) in correspondence.stereo_atoms().mates() {
+            if left.index() >= self.stereo_atoms.relation_count()
+                || right.index() >= other.stereo_atoms.relation_count()
+            {
+                return false;
+            }
+            let left_id = RelationId::from(left);
+            let right_id = RelationId::from(right);
+            let mapped_site: Option<Vec<NodeId>> = self
+                .stereo_atoms
+                .participants_1(left_id)
+                .iter()
+                .map(|&atom| correspondence.atoms().right_of(atom))
+                .collect();
+            let mapped_ligands: Option<Vec<StereoLigand>> = self
+                .stereo_atoms
+                .participants_2(left_id)
+                .iter()
+                .map(|ligand| {
+                    correspondence
+                        .atoms()
+                        .right_of(NodeId::from(ligand.atom_id))
+                        .map(|atom| StereoLigand::new(AtomId::from(atom), ligand.kind))
+                })
+                .collect();
+            let (Some(mapped_site), Some(mapped_ligands)) = (mapped_site, mapped_ligands) else {
+                return false;
+            };
+            let Some((site_order, ligand_order)) =
+                other
+                    .stereo_atoms
+                    .participant_permutation(right_id, &mapped_site, &mapped_ligands)
+            else {
+                return false;
+            };
+            if !self.stereo_atoms.data(left_id).equiv_under(
+                other.stereo_atoms.data(right_id),
+                &site_order,
+                &ligand_order,
+            ) {
+                return false;
+            }
+        }
+
+        for &(left, right) in correspondence.stereo_bonds().mates() {
+            if left.index() >= self.stereo_bonds.relation_count()
+                || right.index() >= other.stereo_bonds.relation_count()
+            {
+                return false;
+            }
+            let left_id = RelationId::from(left);
+            let right_id = RelationId::from(right);
+            let mapped_site: Option<Vec<EdgeId>> = self
+                .stereo_bonds
+                .participants_1(left_id)
+                .iter()
+                .map(|&bond| {
+                    correspondence
+                        .bonds()
+                        .right_of(BondId::from(bond))
+                        .map(EdgeId::from)
+                })
+                .collect();
+            let mapped_ligands: Option<Vec<StereoLigand>> = self
+                .stereo_bonds
+                .participants_2(left_id)
+                .iter()
+                .map(|ligand| {
+                    correspondence
+                        .atoms()
+                        .right_of(NodeId::from(ligand.atom_id))
+                        .map(|atom| StereoLigand::new(AtomId::from(atom), ligand.kind))
+                })
+                .collect();
+            let (Some(mapped_site), Some(mapped_ligands)) = (mapped_site, mapped_ligands) else {
+                return false;
+            };
+            let Some((site_order, ligand_order)) =
+                other
+                    .stereo_bonds
+                    .participant_permutation(right_id, &mapped_site, &mapped_ligands)
+            else {
+                return false;
+            };
+            if !self.stereo_bonds.data(left_id).equiv_under(
+                other.stereo_bonds.data(right_id),
+                &site_order,
+                &ligand_order,
+            ) {
+                return false;
+            }
+        }
+
+        let remapping = correspondence.to_remapping();
+        let mapped_constraints: Constraints = self
+            .constraints
+            .clone()
+            .into_iter()
+            .map(|constraint| constraint.remap(&remapping))
+            .collect();
+        mapped_constraints.canonical_eq(&other.constraints)
+    }
+
     /// Neighbors of `atom`, ordered by ascending neighbor atom id.
     pub fn neighbors(&self, atom: AtomId) -> impl Iterator<Item = NeighborView<'_>> {
         self.graph

@@ -5,8 +5,9 @@ use rstest::*;
 use umol_chem::element::Element;
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
-    CycleEnumerationAlgorithm, EdgeId, MatchingEnumerationAlgorithm, MaxIndependentSetAlgorithm,
-    MaxMatchingAlgorithm, NodeId, ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
+    Correspondence, CycleEnumerationAlgorithm, EdgeId, MatchingEnumerationAlgorithm,
+    MaxIndependentSetAlgorithm, MaxMatchingAlgorithm, NodeId, ShortestCycleAlgorithm,
+    SubgraphIsomorphismAlgorithm,
 };
 
 use super::super::aromatic::AromaticSystemAst;
@@ -18,6 +19,7 @@ use super::super::constraint::{
     Constraints, DativeBondConstraintAst, DativeBondConstraintsAst, MoleculeConstraint,
     RelationalConstraint, RingScope,
 };
+use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::DativeBondAst;
 use super::super::electrons::ElectronCountsAst;
 use super::super::id::{
@@ -250,11 +252,11 @@ fn equiv_molecule_parts() -> MoleculeParts {
         )],
         aromatic: vec![(
             vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemAst::from_electrons(vec![1, 1, 1]),
+            AromaticSystemAst::from_electrons(vec![1, 2, 0]),
         )],
         multicenter: vec![(
             vec![AtomId(0), AtomId(1), AtomId(2)],
-            MulticenterBondAst::from_electrons(vec![1, 1, 0]),
+            MulticenterBondAst::from_electrons(vec![2, 1, 0]),
         )],
         noncovalent: vec![(
             AtomId(0),
@@ -279,9 +281,112 @@ fn equiv_molecule_parts() -> MoleculeParts {
             StereoBondAst::new(StereoKind::CisTrans, 1u32),
         )],
         constraints: constraints_with_molecule(Constraint::Molecule(
-            MoleculeConstraint::Connected { atoms: None },
+            MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(0), AtomId(2)]),
+            },
         )),
     }
+}
+
+#[fixture]
+fn equiv_under_molecules(
+    #[from(equiv_molecule_parts)] parts: MoleculeParts,
+) -> (MoleculeAst, MoleculeAst, MoleculeCorrespondence) {
+    let atom_images = [AtomId(2), AtomId(3), AtomId(0), AtomId(1)];
+    let map_atom = |id: AtomId| atom_images[id.index()];
+
+    let mut right_atoms = vec![AtomAst::default(); parts.atoms.len()];
+    for (index, atom) in parts.atoms.iter().cloned().enumerate() {
+        right_atoms[map_atom(AtomId(index as u32)).index()] = atom;
+    }
+    let right_bonds = parts
+        .bonds
+        .iter()
+        .cloned()
+        .map(|(first, second, ast)| (map_atom(first), map_atom(second), ast))
+        .collect();
+    let right_dative = parts
+        .dative
+        .iter()
+        .cloned()
+        .map(|(donors, acceptor, ast)| {
+            (
+                donors.into_iter().map(map_atom).collect(),
+                map_atom(acceptor),
+                ast,
+            )
+        })
+        .collect();
+    let right_aromatic = parts
+        .aromatic
+        .iter()
+        .cloned()
+        .map(|(atoms, ast)| (atoms.into_iter().map(map_atom).collect(), ast))
+        .collect();
+    let right_multicenter = parts
+        .multicenter
+        .iter()
+        .cloned()
+        .map(|(atoms, ast)| (atoms.into_iter().map(map_atom).collect(), ast))
+        .collect();
+    let right_noncovalent = parts
+        .noncovalent
+        .iter()
+        .cloned()
+        .map(|(first, second, ast)| (map_atom(first), map_atom(second), ast))
+        .collect();
+    let right_stereo_atoms = parts
+        .stereo_atoms
+        .iter()
+        .cloned()
+        .map(|(site, ligands, ast)| {
+            (
+                map_atom(site),
+                ligands
+                    .into_iter()
+                    .map(|ligand| StereoLigand::new(map_atom(ligand.atom_id), ligand.kind))
+                    .collect(),
+                ast,
+            )
+        })
+        .collect();
+    let right_stereo_bonds = parts
+        .stereo_bonds
+        .iter()
+        .cloned()
+        .map(|(site, ligands, ast)| {
+            (
+                site,
+                ligands
+                    .into_iter()
+                    .map(|ligand| StereoLigand::new(map_atom(ligand.atom_id), ligand.kind))
+                    .collect(),
+                ast,
+            )
+        })
+        .collect();
+
+    let left = MoleculeAst::from_parts(parts);
+    let right = MoleculeAst::from_parts(MoleculeParts {
+        atoms: right_atoms,
+        bonds: right_bonds,
+        dative: right_dative,
+        aromatic: right_aromatic,
+        multicenter: right_multicenter,
+        noncovalent: right_noncovalent,
+        stereo_atoms: right_stereo_atoms,
+        stereo_bonds: right_stereo_bonds,
+        constraints: constraints_with_molecule(Constraint::Molecule(
+            MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(2), AtomId(0)]),
+            },
+        )),
+    });
+    let atom_correspondence =
+        Correspondence::from_images(&atom_images.map(NodeId::from), atom_images.len());
+    let correspondence = MoleculeCorrespondence::induce(&left, &right, atom_correspondence);
+
+    (left, right, correspondence)
 }
 
 #[rstest]
@@ -442,6 +547,65 @@ fn test_molecule_ast_equiv_structure_and_counts(
             .collect::<Vec<_>>(),
         vec![false; 9],
     );
+}
+
+#[rstest]
+fn test_molecule_ast_equiv_under_non_identity(
+    #[from(equiv_under_molecules)] case: (MoleculeAst, MoleculeAst, MoleculeCorrespondence),
+) {
+    let (left, right, correspondence) = case;
+
+    assert!(correspondence.is_total());
+    assert!(!left.equiv(&right));
+    assert!(left.equiv_under(&right, &correspondence));
+    assert!(right.equiv_under(&left, &correspondence.reverse()));
+}
+
+#[rstest]
+fn test_molecule_ast_equiv_under_rejects_partial_correspondence(
+    #[from(equiv_under_molecules)] case: (MoleculeAst, MoleculeAst, MoleculeCorrespondence),
+) {
+    let (left, right, correspondence) = case;
+    let partial = MoleculeCorrespondence::new(
+        Correspondence::new(
+            vec![
+                (NodeId(0), NodeId(2)),
+                (NodeId(1), NodeId(3)),
+                (NodeId(2), NodeId(0)),
+            ],
+            4,
+            4,
+        ),
+        correspondence.bonds().clone(),
+        correspondence.dative_bonds().clone(),
+        correspondence.aromatic_systems().clone(),
+        correspondence.multicenter_bonds().clone(),
+        correspondence.noncovalent_bonds().clone(),
+        correspondence.stereo_atoms().clone(),
+        correspondence.stereo_bonds().clone(),
+    );
+
+    assert!(!left.equiv_under(&right, &partial));
+}
+
+#[rstest]
+fn test_molecule_ast_equiv_under_rejects_inconsistent_correspondence(
+    #[from(equiv_under_molecules)] case: (MoleculeAst, MoleculeAst, MoleculeCorrespondence),
+) {
+    let (left, right, correspondence) = case;
+    let inconsistent = MoleculeCorrespondence::new(
+        correspondence.atoms().clone(),
+        Correspondence::from_images(&[BondId(1), BondId(0), BondId(2)], 3),
+        correspondence.dative_bonds().clone(),
+        correspondence.aromatic_systems().clone(),
+        correspondence.multicenter_bonds().clone(),
+        correspondence.noncovalent_bonds().clone(),
+        correspondence.stereo_atoms().clone(),
+        correspondence.stereo_bonds().clone(),
+    );
+
+    assert!(inconsistent.is_total());
+    assert!(!left.equiv_under(&right, &inconsistent));
 }
 
 #[rstest]

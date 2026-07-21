@@ -1,12 +1,35 @@
 use proptest::prelude::*;
 use rstest::rstest;
 // The DSL ref family (`Structural` + `resolve`), distinct from the `ast::edit` handles.
+use umol_ast::ast::MoleculeCorrespondence;
 use umol_ast::dsl::{
     AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
     StereoAtomRef, StereoBondRef,
 };
+use umol_graph_core::{Correspondence, NodeId};
 
 use crate::strategies::*;
+
+fn identity_correspondence(ast: &MoleculeAst) -> MoleculeCorrespondence {
+    fn identity<Id>(count: usize) -> Correspondence<Id>
+    where
+        Id: Copy + Ord + From<usize>,
+    {
+        let images: Vec<Id> = (0..count).map(Id::from).collect();
+        Correspondence::from_images(&images, count)
+    }
+
+    MoleculeCorrespondence::new(
+        identity::<NodeId>(ast.atoms().count()),
+        identity::<BondId>(ast.bonds().count()),
+        identity::<DativeBondId>(ast.dative_bonds().count()),
+        identity::<AromaticSystemId>(ast.aromatic_systems().count()),
+        identity::<MulticenterBondId>(ast.multicenter_bonds().count()),
+        identity::<NoncovalentBondId>(ast.noncovalent_bonds().count()),
+        identity::<StereoAtomId>(ast.stereo_atoms().count()),
+        identity::<StereoBondId>(ast.stereo_bonds().count()),
+    )
+}
 
 proptest! {
     #[test]
@@ -28,6 +51,57 @@ proptest! {
         right in molecule_ast_strategy(),
     ) {
         prop_assert_eq!(left.equiv(&right), left == right);
+    }
+
+    #[test]
+    fn test_molecule_ast_equiv_under_identity_reduces_to_equiv(
+        ast in molecule_ast_with_constraints_strategy(),
+    ) {
+        let correspondence = identity_correspondence(&ast);
+        let mut other = ast.clone();
+        if other.atoms().count() > 0 {
+            other.atom_mut(AtomId(0)).ast.charge = ValueAst::Lit(99);
+        }
+
+        prop_assert_eq!(
+            ast.equiv_under(&other, &correspondence),
+            ast.equiv(&other),
+        );
+    }
+
+    #[test]
+    fn test_molecule_ast_equiv_under_symmetric_under_reverse(
+        atoms in prop::collection::vec(atom_ast_strategy(), 0..=5),
+        change_mapped_atom in any::<bool>(),
+    ) {
+        let count = atoms.len();
+        let left = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.clone(),
+            ..Default::default()
+        });
+        let mut right = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.into_iter().rev().collect(),
+            ..Default::default()
+        });
+        if change_mapped_atom && count > 0 {
+            right.atom_mut(AtomId((count - 1) as u32)).ast.charge = ValueAst::Lit(99);
+        }
+        let images: Vec<NodeId> = (0..count).rev().map(NodeId::from).collect();
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::from_images(&images, count),
+            Correspondence::from_images(&[], 0),
+            Correspondence::from_images(&[], 0),
+            Correspondence::from_images(&[], 0),
+            Correspondence::from_images(&[], 0),
+            Correspondence::from_images(&[], 0),
+            Correspondence::from_images(&[], 0),
+            Correspondence::from_images(&[], 0),
+        );
+
+        let forward = left.equiv_under(&right, &correspondence);
+        let reverse = right.equiv_under(&left, &correspondence.reverse());
+        prop_assert_eq!(forward, reverse);
+        prop_assert_eq!(forward, !change_mapped_atom || count == 0);
     }
 
     #[test]
