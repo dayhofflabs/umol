@@ -390,6 +390,54 @@ The stereo path is exactly such a bridge: take a potentially huge molecule-scale
 map its generators through the carrier-action homomorphism into a tiny ligand-position action, and
 enumerate the image.
 
+## `MoleculeAst::canonical_eq` as a generated-group consumer
+
+Full semantic equality for independently numbered `MoleculeAst` values is a concrete consumer of the
+scalable generated-group and canonical-image work. The nearer-term comparison API is deliberately
+narrower: [doc 156](156-ast-comparison-and-property-suite-2026-07-20.md) defines `MoleculeAst::equiv`
+for the current ID frame and `MoleculeAst::equiv_under` for a supplied total
+`MoleculeCorrespondence`. Neither operation searches for a correspondence or requires canonical
+labeling.
+
+Future `MoleculeAst::canonical_eq` should compare full semantic canonical forms independently of atom,
+bond, and overlay IDs. For a graph-plus-overlays implementation, the operation decomposes as follows:
+
+1. canonicalize every entity AST and constraint without changing the molecule ID frame;
+2. obtain a canonical labeling and automorphism generators for the ordinary atom-bond topology;
+3. compute the canonical image of the complete molecule under that automorphism action, including
+   bond ASTs, all overlay/stereo families, participant frames, and molecule constraints;
+4. derive the complete `MoleculeCorrespondence` and `IdRemapping` selected by the canonical image;
+5. rebuild the molecule in that canonical ID frame.
+
+Step 3 is the generated-group dependency. Topology-only canonical labeling does not determine a
+unique complete molecule when bond ASTs, overlays, stereo, or constraints break a graph
+automorphism. Canonical-image search selects one complete molecule image without enumerating the
+automorphism group. A faithful full-Levi canonical labeling avoids this separate search by encoding
+ordinary bonds as vertices, but pays the cost of splitting every bond. The graph-plus-overlays and
+full-Levi paths therefore need comparative prototypes and benchmarks before selecting the production
+implementation.
+
+This consumer requires the scalable `umol-perm` roadmap through more than BSGS construction:
+
+- `DynPermutation` and `GeneratedGroup`;
+- exact stabilizer-chain construction and sifting;
+- a canonical-image action and transporter contract;
+- symmetry-pruned canonical-image search;
+- differential validation against enumerated small groups and GAP/SymPy;
+- benchmarks for asymmetric molecules, overlay-broken symmetry, highly symmetric cages, and repeated
+  disconnected components.
+
+The exact generated-group representation, canonical-image API, search algorithm, and greenfield versus
+external implementation decision remain open. They must be settled in the scalable `umol-perm` design
+before this path becomes an implementation plan. `MoleculeAst::canonical_eq` must not make these
+choices implicitly.
+
+Once that dependency is available, the AST-side work consists of a molecule-wide remapping operation,
+`Canonicalize for MoleculeAst`, canonicalization laws (idempotence and numbering invariance), and
+comparison tests distinguishing `==`, `equiv`, `equiv_under`, and `canonical_eq`. No internal
+canonical-state flag or cache is part of this design; callers that need a proof-bearing canonical value
+use the existing `Canonical<MoleculeAst>` wrapper.
+
 ## Placement and materialization decision
 
 The top-level facility is an **analysis service over `MoleculeAst`**, not initially a mandatory stored

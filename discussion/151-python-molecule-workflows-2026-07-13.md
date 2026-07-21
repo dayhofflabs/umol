@@ -1666,7 +1666,17 @@ extend `ReactionCombinedFingerprintConfig` in S8.
   enumeration. Tests assert preflight-before-enumeration, filtered local
   rejection, and visible internal failure with the original diagnostic.
   Migrate the Rust application return contract and all workspace callers in the
-  same subitem. **Breaking Rust application migration (red→green).**
+  same subitem. `ReactionAst::apply` now returns preflight failure separately
+  from its result-bearing lazy application iterator; the iterator filters only
+  classified match-local rejection and terminates after yielding one internal
+  failure. Attribute deltas are re-projected through the corresponding
+  `*Update` against each matched host entity, so pattern-side undetermined
+  values do not become incorrect edit preconditions and independently omitted
+  spin leaves remain unchanged. **Implemented (green).**
+  The application property suite now covers all eight entity-update families
+  with effective pattern differences, host refinement, partial spin, keyed
+  constraints, and canonical-equivalence assertions; the reaction properties
+  pass a 4,096-case soak.
   `[dep: —]`
 - **S9b — `SubstructureMatchAlgorithm` binding**
   (`umol-py/src/correspondence.rs`): bind `GraphAndOverlays()` and `Incidence()`
@@ -1703,6 +1713,9 @@ extend `ReactionCombinedFingerprintConfig` in S8.
 
 S9 preserves the existing direct `apply` happy path while correcting error
 classification. It adds no `apply_at`, report object, or prepared-reaction type.
+
+The follow-up comparison vocabulary, panic-removal plan, and property-suite
+reorganization are specified in [doc 156](156-ast-comparison-and-property-suite-2026-07-20.md).
 
 ### S10 — Public integration and release gate
 

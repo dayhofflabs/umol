@@ -76,7 +76,7 @@ pub use edit::{
 };
 pub use electrons::ElectronCountsAst;
 pub use entity::{Entity, EntityKind};
-pub use error::{ApplyError, Contradiction, NoJoin};
+pub use error::{ApplyError, ApplyPreconditionError, Contradiction, NoJoin};
 pub use id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId, StereoLigandPosition,
@@ -97,7 +97,7 @@ pub use operators::{MemOp, RelOp};
 pub use reaction::ReactionAst;
 pub use reaction_derivation::ReactionDerivation;
 pub use reaction_span::ReactionSpanAst;
-pub use remap::{IdCompaction, UndoCompaction};
+pub use remap::{IdCompaction, IdRemapping, UndoCompaction};
 pub use ring::{RingConnection, RingFamily, RingGraph, RingId, RingRelation, RingSet};
 pub use spin::{SpinStateAst, SpinStateUpdate};
 pub use stereo::{

@@ -897,14 +897,22 @@ mod tests {
         let composed: Vec<MoleculeAst> = a
             .compose(&b, CompositionScope::Full)
             .iter()
-            .flat_map(|c| c.apply(&host, SubgraphIsomorphismAlgorithm::Vf2))
+            .flat_map(|c| {
+                c.apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
+                    .unwrap()
+                    .map(Result::unwrap)
+            })
             .map(|derivation| derivation.rhs().clone())
             .collect();
         let sequential: Vec<MoleculeAst> = a
             .apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
+            .unwrap()
+            .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
             .flat_map(|intermediate| {
                 b.apply(&intermediate, SubgraphIsomorphismAlgorithm::Vf2)
+                    .unwrap()
+                    .map(Result::unwrap)
                     .map(|derivation| derivation.rhs().clone())
                     .collect::<Vec<_>>()
             })
@@ -970,9 +978,30 @@ mod tests {
 
         let alg = SubgraphIsomorphismAlgorithm::Vf2;
         let host = a.lhs.clone();
-        let intermediate = a.apply(&host, alg).next().unwrap().rhs().clone();
-        let sequential = b.apply(&intermediate, alg).next().unwrap().rhs().clone();
-        let composed = composite.apply(&host, alg).next().unwrap().rhs().clone();
+        let intermediate = a
+            .apply(&host, alg)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .rhs()
+            .clone();
+        let sequential = b
+            .apply(&intermediate, alg)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .rhs()
+            .clone();
+        let composed = composite
+            .apply(&host, alg)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .rhs()
+            .clone();
         assert_eq!(composed, sequential);
     }
 

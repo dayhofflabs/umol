@@ -157,3 +157,4 @@
 | [153-format-parsing-outstanding-tasks-2026-07-18.md](153-format-parsing-outstanding-tasks-2026-07-18.md)         | Active        | 2026-07-18   |
 | [154-lattice-probabilistic-fingerprints-2026-07-18.md](154-lattice-probabilistic-fingerprints-2026-07-18.md)     | Informational | 2026-07-18   |
 | [155-smiles-io-and-resolve-configuration-2026-07-19.md](155-smiles-io-and-resolve-configuration-2026-07-19.md)   | Completed     | 2026-07-19   |
+| [156-ast-comparison-and-property-suite-2026-07-20.md](156-ast-comparison-and-property-suite-2026-07-20.md)       | Active        | 2026-07-20   |

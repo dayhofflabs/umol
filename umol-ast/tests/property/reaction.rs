@@ -6,13 +6,13 @@
 use proptest::bool::weighted;
 use proptest::prelude::*;
 use umol_ast::ast::{
-    AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, BondDelta, CompositionScope,
-    DativeBondConstraintAst, DativeBondDelta, DativeBondFieldChange, Delta, Deltas, DpoValidator,
-    MoleculeParts, MulticenterBondDelta, MulticenterBondFieldChange, NoncovalentBondAst,
-    NoncovalentBondDelta, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst,
-    ReactionAst, ReactionSpanAst, StereoAtomAst, StereoAtomDelta, StereoAtomFieldChange,
-    StereoBondAst, StereoBondDelta, StereoBondFieldChange, StereoConfigurationAst, StereoKind,
-    StereoLigand,
+    AromaticSystemDelta, AromaticSystemFieldChange, AtomDelta, BondDelta, Canonicalize,
+    CompositionScope, DativeBondConstraintAst, DativeBondDelta, DativeBondFieldChange, Delta,
+    Deltas, DpoValidator, MoleculeParts, MulticenterBondDelta, MulticenterBondFieldChange,
+    NoncovalentBondAst, NoncovalentBondDelta, NoncovalentBondId, NoncovalentBondKind,
+    NoncovalentBondKindAst, ReactionAst, ReactionSpanAst, StereoAtomAst, StereoAtomDelta,
+    StereoAtomFieldChange, StereoBondAst, StereoBondDelta, StereoBondFieldChange,
+    StereoConfigurationAst, StereoKind, StereoLigand,
 };
 use umol_graph_core::{EdgeId, SubgraphIsomorphismAlgorithm};
 use umol_perm::Permutation;
@@ -193,6 +193,86 @@ fn stereo_coset_for_kind(kind: StereoKind) -> impl Strategy<Value = StereoCosetA
         Just(StereoCosetAst::Undetermined),
         (0..count).prop_map(StereoCosetAst::Lit),
     ]
+}
+
+fn aromatic_system_update_for(atom_count: usize) -> impl Strategy<Value = AromaticSystemUpdate> {
+    (
+        prop::option::of(prop_oneof![
+            Just(ElectronCountsAst::Undetermined),
+            prop::collection::vec(0i64..=2, atom_count).prop_map(ElectronCountsAst::Lit),
+        ]),
+        prop::option::of(value_basic(-2..=2)),
+        spin_state_update_strategy(),
+        aromatic_system_update_constraints_strategy(),
+    )
+        .prop_map(
+            |(electrons, charge, spin, constraints)| AromaticSystemUpdate {
+                electrons,
+                charge,
+                spin,
+                constraints,
+            },
+        )
+}
+
+fn multicenter_bond_update_for(atom_count: usize) -> impl Strategy<Value = MulticenterBondUpdate> {
+    (
+        prop::option::of(prop_oneof![
+            Just(ElectronCountsAst::Undetermined),
+            prop::collection::vec(0i64..=2, atom_count).prop_map(ElectronCountsAst::Lit),
+        ]),
+        prop::option::of(value_basic(-2..=2)),
+        spin_state_update_strategy(),
+        multicenter_bond_update_constraints_strategy(),
+    )
+        .prop_map(
+            |(electrons, charge, spin, constraints)| MulticenterBondUpdate {
+                electrons,
+                charge,
+                spin,
+                constraints,
+            },
+        )
+}
+
+fn stereo_atom_application_update_strategy() -> impl Strategy<Value = StereoAtomUpdate> {
+    (
+        prop_oneof![
+            Just(StereoConfigurationUpdate::Unchanged),
+            Just(StereoConfigurationUpdate::Undetermined),
+            prop::option::of(stereo_coset_for_kind(StereoKind::Tetrahedral)).prop_map(|coset| {
+                StereoConfigurationUpdate::Kinded {
+                    kind: StereoKind::Tetrahedral,
+                    coset,
+                }
+            }),
+        ],
+        stereo_atom_update_constraints_strategy(StereoKind::Tetrahedral),
+    )
+        .prop_map(|(configuration, constraints)| StereoAtomUpdate {
+            configuration,
+            constraints,
+        })
+}
+
+fn stereo_bond_application_update_strategy() -> impl Strategy<Value = StereoBondUpdate> {
+    (
+        prop_oneof![
+            Just(StereoConfigurationUpdate::Unchanged),
+            Just(StereoConfigurationUpdate::Undetermined),
+            prop::option::of(stereo_coset_for_kind(StereoKind::CisTrans)).prop_map(|coset| {
+                StereoConfigurationUpdate::Kinded {
+                    kind: StereoKind::CisTrans,
+                    coset,
+                }
+            }),
+        ],
+        stereo_bond_update_constraints_strategy(StereoKind::CisTrans),
+    )
+        .prop_map(|(configuration, constraints)| StereoBondUpdate {
+            configuration,
+            constraints,
+        })
 }
 
 /// A `degree`-length ligand frame of *distinct* `StereoLigand`s over `atom_count` atoms. The overlay
@@ -736,13 +816,417 @@ fn build_reaction(
 }
 
 proptest! {
+    /// A pattern-relative atom update lowers against the matched host atom, including independent
+    /// spin leaves and keyed constraint set / replace / remove operations.
+    #[test]
+    fn test_reaction_ast_apply_atom_update(
+        host_atom in atom_ast_strategy(),
+        update in atom_update_strategy(),
+    ) {
+        let pattern_atom = AtomAst::default();
+        let effective_update = pattern_atom.difference_to(&pattern_atom.update(&update));
+        let expected_atom = host_atom.update(&effective_update).canonicalize().unwrap();
+        let atom_deltas = AtomDelta::for_update(AtomId(0), &pattern_atom, &effective_update);
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::default()],
+                ..Default::default()
+            }),
+            Deltas::from_iter(atom_deltas.into_iter().map(Delta::Atom)),
+        );
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![host_atom],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![expected_atom],
+            ..Default::default()
+        });
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, ALG)
+            .unwrap()
+            .map(Result::unwrap)
+            .map(|derivation| derivation.rhs().clone())
+            .collect();
+
+        prop_assert_eq!(products.len(), 1);
+        prop_assert!(products[0].atom(AtomId(0)).ast.canonical_eq(expected.atom(AtomId(0)).ast));
+    }
+
+    /// A pattern-relative localized-bond update lowers against the matched host bond.
+    #[test]
+    fn test_reaction_ast_apply_bond_update(
+        host_bond in bond_ast_strategy(),
+        update in bond_update_strategy(),
+    ) {
+        let pattern_bond = BondAst::default();
+        let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
+        let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
+        let bond_deltas = BondDelta::for_update(BondId(0), &pattern_bond, &effective_update);
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::default())],
+                ..Default::default()
+            }),
+            Deltas::from_iter(bond_deltas.into_iter().map(Delta::Bond)),
+        );
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            bonds: vec![(AtomId(0), AtomId(1), host_bond)],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            bonds: vec![(AtomId(0), AtomId(1), expected_bond)],
+            ..Default::default()
+        });
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, ALG)
+            .unwrap()
+            .map(Result::unwrap)
+            .map(|derivation| derivation.rhs().clone())
+            .collect();
+
+        prop_assert_eq!(products.len(), 1);
+        prop_assert_eq!(products[0].raw_graph(), expected.raw_graph());
+        prop_assert!(products[0].bond(BondId(0)).ast.canonical_eq(expected.bond(BondId(0)).ast));
+    }
+
+    /// A pattern-relative dative-bond update lowers against the matched host relation.
+    #[test]
+    fn test_reaction_ast_apply_dative_bond_update(
+        host_bond in dative_bond_strategy(),
+        update in dative_bond_update_strategy(),
+    ) {
+        let pattern_bond = DativeBondAst::default();
+        let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
+        let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
+        let dative_deltas = DativeBondDelta::for_update(
+            DativeBondId(0),
+            &pattern_bond,
+            &effective_update,
+        );
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::default())],
+                ..Default::default()
+            }),
+            Deltas::from_iter(dative_deltas.into_iter().map(Delta::DativeBond)),
+        );
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            dative: vec![(vec![AtomId(0)], AtomId(1), host_bond)],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            dative: vec![(vec![AtomId(0)], AtomId(1), expected_bond)],
+            ..Default::default()
+        });
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, ALG)
+            .unwrap()
+            .map(Result::unwrap)
+            .map(|derivation| derivation.rhs().clone())
+            .collect();
+
+        prop_assert_eq!(products.len(), 1);
+        prop_assert!(products[0].dative_bond(DativeBondId(0)).ast.canonical_eq(expected.dative_bond(DativeBondId(0)).ast));
+    }
+
+    /// A pattern-relative aromatic-system update lowers against the matched host relation.
+    #[test]
+    fn test_reaction_ast_apply_aromatic_system_update(
+        mut host_system in aromatic_system_ast_for(3),
+        update in aromatic_system_update_for(3),
+    ) {
+        host_system.spin = SpinStateAst::from((2_u8, 3_u8));
+        let pattern_system = AromaticSystemAst::default();
+        let effective_update = pattern_system.difference_to(&pattern_system.update(&update));
+        let expected_system = host_system.update(&effective_update).canonicalize().unwrap();
+        let aromatic_deltas = AromaticSystemDelta::for_update(
+            AromaticSystemId(0),
+            &pattern_system,
+            &effective_update,
+        );
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::N),
+                    AtomAst::from_element(Element::O),
+                ],
+                aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], AromaticSystemAst::default())],
+                ..Default::default()
+            }),
+            Deltas::from_iter(aromatic_deltas.into_iter().map(Delta::AromaticSystem)),
+        );
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+            ],
+            aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], host_system)],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+            ],
+            aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], expected_system)],
+            ..Default::default()
+        });
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, ALG)
+            .unwrap()
+            .map(Result::unwrap)
+            .map(|derivation| derivation.rhs().clone())
+            .collect();
+
+        prop_assert_eq!(products.len(), 1);
+        prop_assert!(products[0].aromatic_system(AromaticSystemId(0)).ast.canonical_eq(expected.aromatic_system(AromaticSystemId(0)).ast));
+    }
+}
+
+proptest! {
+    /// A pattern-relative multicenter-bond update lowers against the matched host relation.
+    #[test]
+    fn test_reaction_ast_apply_multicenter_bond_update(
+        mut host_bond in multicenter_bond_ast_for(3),
+        update in multicenter_bond_update_for(3),
+    ) {
+        host_bond.spin = SpinStateAst::from((2_u8, 3_u8));
+        let pattern_bond = MulticenterBondAst::default();
+        let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
+        let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
+        let multicenter_deltas = MulticenterBondDelta::for_update(
+            MulticenterBondId(0),
+            &pattern_bond,
+            &effective_update,
+        );
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
+                    AtomAst::from_element(Element::C),
+                    AtomAst::from_element(Element::N),
+                    AtomAst::from_element(Element::O),
+                ],
+                multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], MulticenterBondAst::default())],
+                ..Default::default()
+            }),
+            Deltas::from_iter(multicenter_deltas.into_iter().map(Delta::MulticenterBond)),
+        );
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+            ],
+            multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], host_bond)],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+            ],
+            multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], expected_bond)],
+            ..Default::default()
+        });
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, ALG)
+            .unwrap()
+            .map(Result::unwrap)
+            .map(|derivation| derivation.rhs().clone())
+            .collect();
+
+        prop_assert_eq!(products.len(), 1);
+        prop_assert!(products[0].multicenter_bond(MulticenterBondId(0)).ast.canonical_eq(expected.multicenter_bond(MulticenterBondId(0)).ast));
+    }
+
+    /// A pattern-relative noncovalent-bond update lowers against the matched host relation.
+    #[test]
+    fn test_reaction_ast_apply_noncovalent_bond_update(
+        host_bond in noncovalent_bond_ast_strategy(),
+        update in noncovalent_bond_update_strategy(),
+    ) {
+        let pattern_bond = NoncovalentBondAst::default();
+        let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
+        let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
+        let noncovalent_deltas = NoncovalentBondDelta::for_update(
+            NoncovalentBondId(0),
+            &pattern_bond,
+            &effective_update,
+        );
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::default())],
+                ..Default::default()
+            }),
+            Deltas::from_iter(noncovalent_deltas.into_iter().map(Delta::NoncovalentBond)),
+        );
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            noncovalent: vec![(AtomId(0), AtomId(1), host_bond)],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            noncovalent: vec![(AtomId(0), AtomId(1), expected_bond)],
+            ..Default::default()
+        });
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, ALG)
+            .unwrap()
+            .map(Result::unwrap)
+            .map(|derivation| derivation.rhs().clone())
+            .collect();
+
+        prop_assert_eq!(products.len(), 1);
+        prop_assert!(products[0].noncovalent_bond(NoncovalentBondId(0)).ast.canonical_eq(expected.noncovalent_bond(NoncovalentBondId(0)).ast));
+    }
+
+    /// A pattern-relative stereo-atom update lowers against the matched host configuration and
+    /// keyed constraints.
+    #[test]
+    fn test_reaction_ast_apply_stereo_atom_update(
+        host_coset in stereo_coset_for_kind(StereoKind::Tetrahedral),
+        host_constraints in stereo_atom_constraints_strategy(StereoKind::Tetrahedral),
+        update in stereo_atom_application_update_strategy(),
+    ) {
+        let ligands = vec![
+            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        ];
+        let pattern_atom = StereoAtomAst::new(
+            StereoKind::Tetrahedral,
+            StereoCosetAst::Undetermined,
+        );
+        let host_atom = StereoAtomAst::new(StereoKind::Tetrahedral, host_coset)
+            .with_constraints(host_constraints);
+        let effective_update = pattern_atom.difference_to(&pattern_atom.update(&update));
+        let expected_atom = host_atom.update(&effective_update).canonicalize().unwrap();
+        let stereo_atom_deltas =
+            StereoAtomDelta::for_update(StereoAtomId(0), &pattern_atom, &effective_update);
+        let atoms = vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::N),
+            AtomAst::from_element(Element::O),
+            AtomAst::from_element(Element::F),
+        ];
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: atoms.clone(),
+                stereo_atoms: vec![(AtomId(0), ligands.clone(), pattern_atom.clone())],
+                ..Default::default()
+            }),
+            Deltas::from_iter(stereo_atom_deltas.into_iter().map(Delta::StereoAtom)),
+        );
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.clone(),
+            stereo_atoms: vec![(AtomId(0), ligands.clone(), host_atom)],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            stereo_atoms: vec![(AtomId(0), ligands, expected_atom)],
+            ..Default::default()
+        });
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, ALG)
+            .unwrap()
+            .map(Result::unwrap)
+            .map(|derivation| derivation.rhs().clone())
+            .collect();
+
+        prop_assert_eq!(products.len(), 1);
+        prop_assert!(products[0].stereo_atom(StereoAtomId(0)).ast.canonical_eq(expected.stereo_atom(StereoAtomId(0)).ast));
+    }
+
+    /// A pattern-relative stereo-bond update lowers against the matched host configuration and
+    /// keyed constraints.
+    #[test]
+    fn test_reaction_ast_apply_stereo_bond_update(
+        host_coset in stereo_coset_for_kind(StereoKind::CisTrans),
+        host_constraints in stereo_bond_constraints_strategy(StereoKind::CisTrans),
+        update in stereo_bond_application_update_strategy(),
+    ) {
+        let ligands = vec![
+            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        ];
+        let pattern_bond = StereoBondAst::new(
+            StereoKind::CisTrans,
+            StereoCosetAst::Undetermined,
+        );
+        let host_bond = StereoBondAst::new(StereoKind::CisTrans, host_coset)
+            .with_constraints(host_constraints);
+        let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
+        let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
+        let stereo_bond_deltas =
+            StereoBondDelta::for_update(StereoBondId(0), &pattern_bond, &effective_update);
+        let atoms = vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::N),
+            AtomAst::from_element(Element::O),
+            AtomAst::from_element(Element::F),
+        ];
+        let bonds = vec![(AtomId(0), AtomId(1), BondAst::from_order(2))];
+        let reaction = ReactionAst::new(
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: atoms.clone(),
+                bonds: bonds.clone(),
+                stereo_bonds: vec![(BondId(0), ligands.clone(), pattern_bond.clone())],
+                ..Default::default()
+            }),
+            Deltas::from_iter(stereo_bond_deltas.into_iter().map(Delta::StereoBond)),
+        );
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_bonds: vec![(BondId(0), ligands.clone(), host_bond)],
+            ..Default::default()
+        });
+        let expected = MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            stereo_bonds: vec![(BondId(0), ligands, expected_bond)],
+            ..Default::default()
+        });
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, ALG)
+            .unwrap()
+            .map(Result::unwrap)
+            .map(|derivation| derivation.rhs().clone())
+            .collect();
+
+        prop_assert_eq!(products.len(), 1);
+        prop_assert!(products[0].stereo_bond(StereoBondId(0)).ast.canonical_eq(expected.stereo_bond(StereoBondId(0)).ast));
+    }
+}
+
+proptest! {
     /// Applying a reaction at the identity occurrence of its own `lhs` reproduces the span's
     /// `right()` — the `transact`-apply path agrees with the span projection.
     #[test]
     fn test_reaction_ast_apply_reproduces_right(reaction in reaction_strategy()) {
         if let Ok(span) = reaction.to_reaction_span() {
             let right = span.rhs();
-            prop_assert!(reaction.apply(&reaction.lhs, ALG).any(|derivation| derivation.rhs() == &right));
+            prop_assert!(reaction
+                .apply(&reaction.lhs, ALG)
+                .unwrap()
+                .any(|derivation| derivation.unwrap().rhs() == &right));
         }
     }
 
@@ -791,7 +1275,10 @@ proptest! {
         for composite in a.compose(&b, CompositionScope::Full) {
             if let Ok(span) = composite.to_reaction_span() {
                 let right = span.rhs();
-                prop_assert!(composite.apply(&composite.lhs, ALG).any(|derivation| derivation.rhs() == &right));
+                prop_assert!(composite
+                    .apply(&composite.lhs, ALG)
+                    .unwrap()
+                    .any(|derivation| derivation.unwrap().rhs() == &right));
             }
         }
     }
@@ -807,18 +1294,28 @@ proptest! {
         let composites = a.compose(&b, CompositionScope::Full);
         let composed: Vec<MoleculeAst> = composites
             .iter()
-            .flat_map(|composite| composite.apply(&host, ALG))
+            .flat_map(|composite| {
+                composite
+                    .apply(&host, ALG)
+                    .unwrap()
+                    .map(Result::unwrap)
+                    .collect::<Vec<_>>()
+            })
             .map(|derivation| derivation.rhs().clone())
             .collect();
 
         let intermediates: Vec<MoleculeAst> = a
             .apply(&host, ALG)
+            .unwrap()
+            .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
             .collect();
         let mut sequential: Vec<MoleculeAst> = Vec::new();
         for intermediate in &intermediates {
             sequential.extend(
                 b.apply(intermediate, ALG)
+                    .unwrap()
+                    .map(Result::unwrap)
                     .map(|derivation| derivation.rhs().clone()),
             );
         }
@@ -851,7 +1348,10 @@ proptest! {
     fn test_reaction_ast_apply_reproduces_right_overlay(reaction in overlay_reaction_strategy()) {
         if let Ok(span) = reaction.to_reaction_span() {
             let right = span.rhs();
-            prop_assert!(reaction.apply(&reaction.lhs, ALG).any(|derivation| derivation.rhs() == &right));
+            prop_assert!(reaction
+                .apply(&reaction.lhs, ALG)
+                .unwrap()
+                .any(|derivation| derivation.unwrap().rhs() == &right));
         }
     }
 
@@ -880,7 +1380,10 @@ proptest! {
         for composite in a.compose(&b, CompositionScope::Full) {
             if let Ok(span) = composite.to_reaction_span() {
                 let right = span.rhs();
-                prop_assert!(composite.apply(&composite.lhs, ALG).any(|derivation| derivation.rhs() == &right));
+                prop_assert!(composite
+                    .apply(&composite.lhs, ALG)
+                    .unwrap()
+                    .any(|derivation| derivation.unwrap().rhs() == &right));
             }
         }
     }
@@ -896,18 +1399,28 @@ proptest! {
         let composed: Vec<MoleculeAst> = a
             .compose(&b, CompositionScope::Full)
             .iter()
-            .flat_map(|composite| composite.apply(&host, ALG))
+            .flat_map(|composite| {
+                composite
+                    .apply(&host, ALG)
+                    .unwrap()
+                    .map(Result::unwrap)
+                    .collect::<Vec<_>>()
+            })
             .map(|derivation| derivation.rhs().clone())
             .collect();
 
         let intermediates: Vec<MoleculeAst> = a
             .apply(&host, ALG)
+            .unwrap()
+            .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
             .collect();
         let mut sequential: Vec<MoleculeAst> = Vec::new();
         for intermediate in &intermediates {
             sequential.extend(
                 b.apply(intermediate, ALG)
+                    .unwrap()
+                    .map(Result::unwrap)
                     .map(|derivation| derivation.rhs().clone()),
             );
         }
@@ -930,18 +1443,28 @@ proptest! {
         let composed: Vec<MoleculeAst> = a
             .compose(&b, CompositionScope::Full)
             .iter()
-            .flat_map(|composite| composite.apply(&host, ALG))
+            .flat_map(|composite| {
+                composite
+                    .apply(&host, ALG)
+                    .unwrap()
+                    .map(Result::unwrap)
+                    .collect::<Vec<_>>()
+            })
             .map(|derivation| derivation.rhs().clone())
             .collect();
 
         let intermediates: Vec<MoleculeAst> = a
             .apply(&host, ALG)
+            .unwrap()
+            .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
             .collect();
         let mut sequential: Vec<MoleculeAst> = Vec::new();
         for intermediate in &intermediates {
             sequential.extend(
                 b.apply(intermediate, ALG)
+                    .unwrap()
+                    .map(Result::unwrap)
                     .map(|derivation| derivation.rhs().clone()),
             );
         }

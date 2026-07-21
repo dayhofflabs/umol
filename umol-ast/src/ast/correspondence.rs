@@ -15,6 +15,7 @@ use super::ligand::StereoLigand;
 use super::molecule::MoleculeAst;
 #[cfg(test)]
 use super::molecule::MoleculeParts;
+use super::remap::IdRemapping;
 
 /// A per-entity partial bijection between two molecules: atoms + bonds + the six overlay families.
 /// The mated/exposed reads of each family are those of its `Correspondence`.
@@ -140,6 +141,48 @@ impl MoleculeCorrespondence {
             self.noncovalent_bonds.reverse(),
             self.stereo_atoms.reverse(),
             self.stereo_bonds.reverse(),
+        )
+    }
+
+    /// Whether every id in all eight entity families is mated on both sides.
+    pub fn is_total(&self) -> bool {
+        self.atoms.is_total()
+            && self.bonds.is_total()
+            && self.dative_bonds.is_total()
+            && self.aromatic_systems.is_total()
+            && self.multicenter_bonds.is_total()
+            && self.noncovalent_bonds.is_total()
+            && self.stereo_atoms.is_total()
+            && self.stereo_bonds.is_total()
+    }
+
+    /// This correspondence as an [`IdRemapping`]. Requires every entity family to be total on the
+    /// left: each left id maps to its mated right id.
+    pub fn to_remapping(&self) -> IdRemapping {
+        debug_assert!(
+            self.atoms.mate_count() == self.atoms.left_count()
+                && self.bonds.mate_count() == self.bonds.left_count()
+                && self.dative_bonds.mate_count() == self.dative_bonds.left_count()
+                && self.aromatic_systems.mate_count() == self.aromatic_systems.left_count()
+                && self.multicenter_bonds.mate_count() == self.multicenter_bonds.left_count()
+                && self.noncovalent_bonds.mate_count() == self.noncovalent_bonds.left_count()
+                && self.stereo_atoms.mate_count() == self.stereo_atoms.left_count()
+                && self.stereo_bonds.mate_count() == self.stereo_bonds.left_count(),
+            "to_remapping requires every entity family to be total on the left",
+        );
+        IdRemapping::new(
+            self.atoms
+                .mates()
+                .iter()
+                .map(|&(left, right)| (AtomId::from(left), AtomId::from(right)))
+                .collect(),
+            self.bonds.mates().iter().copied().collect(),
+            self.dative_bonds.mates().iter().copied().collect(),
+            self.aromatic_systems.mates().iter().copied().collect(),
+            self.multicenter_bonds.mates().iter().copied().collect(),
+            self.noncovalent_bonds.mates().iter().copied().collect(),
+            self.stereo_atoms.mates().iter().copied().collect(),
+            self.stereo_bonds.mates().iter().copied().collect(),
         )
     }
 
@@ -325,6 +368,8 @@ pub(crate) fn map_ligands(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
@@ -517,5 +562,94 @@ mod tests {
         );
         // counts swap too: atoms went lhs_count 1 / rhs_count 2, so the new lhs id 0 is exposed.
         assert_eq!(reversed.atoms().left_exposed(), vec![NodeId(0)]);
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_is_total() {
+        let complete = MoleculeCorrespondence::new(
+            Correspondence::from_images(&[NodeId(0)], 1),
+            Correspondence::from_images(&[BondId(0)], 1),
+            Correspondence::from_images(&[DativeBondId(0)], 1),
+            Correspondence::from_images(&[AromaticSystemId(0)], 1),
+            Correspondence::from_images(&[MulticenterBondId(0)], 1),
+            Correspondence::from_images(&[NoncovalentBondId(0)], 1),
+            Correspondence::from_images(&[StereoAtomId(0)], 1),
+            Correspondence::from_images(&[StereoBondId(0)], 1),
+        );
+        let mut atom_exposed = complete.clone();
+        atom_exposed.atoms = Correspondence::new(Vec::new(), 1, 1);
+        let mut bond_exposed = complete.clone();
+        bond_exposed.bonds = Correspondence::new(Vec::new(), 1, 1);
+        let mut dative_exposed = complete.clone();
+        dative_exposed.dative_bonds = Correspondence::new(Vec::new(), 1, 1);
+        let mut aromatic_exposed = complete.clone();
+        aromatic_exposed.aromatic_systems = Correspondence::new(Vec::new(), 1, 1);
+        let mut multicenter_exposed = complete.clone();
+        multicenter_exposed.multicenter_bonds = Correspondence::new(Vec::new(), 1, 1);
+        let mut noncovalent_exposed = complete.clone();
+        noncovalent_exposed.noncovalent_bonds = Correspondence::new(Vec::new(), 1, 1);
+        let mut stereo_atom_exposed = complete.clone();
+        stereo_atom_exposed.stereo_atoms = Correspondence::new(Vec::new(), 1, 1);
+        let mut stereo_bond_exposed = complete.clone();
+        stereo_bond_exposed.stereo_bonds = Correspondence::new(Vec::new(), 1, 1);
+
+        assert!(complete.is_total());
+        assert_eq!(
+            [
+                atom_exposed.is_total(),
+                bond_exposed.is_total(),
+                dative_exposed.is_total(),
+                aromatic_exposed.is_total(),
+                multicenter_exposed.is_total(),
+                noncovalent_exposed.is_total(),
+                stereo_atom_exposed.is_total(),
+                stereo_bond_exposed.is_total(),
+            ],
+            [false; 8],
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_correspondence_to_remapping() {
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::from_images(&[NodeId(1), NodeId(0)], 2),
+            Correspondence::from_images(&[BondId(1), BondId(0)], 2),
+            Correspondence::from_images(&[DativeBondId(1), DativeBondId(0)], 2),
+            Correspondence::from_images(&[AromaticSystemId(1), AromaticSystemId(0)], 2),
+            Correspondence::from_images(&[MulticenterBondId(1), MulticenterBondId(0)], 2),
+            Correspondence::from_images(&[NoncovalentBondId(1), NoncovalentBondId(0)], 2),
+            Correspondence::from_images(&[StereoAtomId(1), StereoAtomId(0)], 2),
+            Correspondence::from_images(&[StereoBondId(1), StereoBondId(0)], 2),
+        );
+        let expected = IdRemapping::new(
+            HashMap::from([(AtomId(0), AtomId(1)), (AtomId(1), AtomId(0))]),
+            HashMap::from([(BondId(0), BondId(1)), (BondId(1), BondId(0))]),
+            HashMap::from([
+                (DativeBondId(0), DativeBondId(1)),
+                (DativeBondId(1), DativeBondId(0)),
+            ]),
+            HashMap::from([
+                (AromaticSystemId(0), AromaticSystemId(1)),
+                (AromaticSystemId(1), AromaticSystemId(0)),
+            ]),
+            HashMap::from([
+                (MulticenterBondId(0), MulticenterBondId(1)),
+                (MulticenterBondId(1), MulticenterBondId(0)),
+            ]),
+            HashMap::from([
+                (NoncovalentBondId(0), NoncovalentBondId(1)),
+                (NoncovalentBondId(1), NoncovalentBondId(0)),
+            ]),
+            HashMap::from([
+                (StereoAtomId(0), StereoAtomId(1)),
+                (StereoAtomId(1), StereoAtomId(0)),
+            ]),
+            HashMap::from([
+                (StereoBondId(0), StereoBondId(1)),
+                (StereoBondId(1), StereoBondId(0)),
+            ]),
+        );
+
+        assert_eq!(correspondence.to_remapping(), expected);
     }
 }
