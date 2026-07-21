@@ -82,7 +82,25 @@ the existing relation-data vocabulary: `equiv` compares in the current frame;
   preflight, matching, lowering, and derivation construction; classify each as
   invalid input/precondition or internal failure and assign a stable
   `ApplyPreconditionError`/`ApplyError` variant. Add one regression test per
-  classification. **Additive (green).**
+  classification.
+
+  The inventory is:
+
+  | Location | Failed condition | Classification and typed outcome |
+  | --- | --- | --- |
+  | Delta canonicalization | A delta sequence is contradictory. The two stereo-fold `expect`s are internal consequences of entering the relative branch, not an additional input class. | Existing `ApplyPreconditionError::InconsistentReaction`; direct `apply_at` retains `ApplyError::Inconsistent`. |
+  | DPO validation, lowering lookups, add/remove participants, and constraint remapping | A delta or constraint names an entity that is neither available on the LHS nor created by the reaction. This covers the panicking molecule accessors and total-remapping indexing. | `ApplyPreconditionError::InvalidReactionReference { entity }`. |
+  | Removal payloads | A delta names an existing entity but supplies endpoints, participants, a stereo site, or ligands inconsistent with that entity on the LHS. | `ApplyPreconditionError::ReactionIncidenceMismatch { entity }`. |
+  | Pattern/overlay matching and host-id lowering | A supplied correspondence omits a required mate, maps it out of range, or disagrees with the mapped topology/incidence. Matcher-produced correspondences must already satisfy this condition. | `ApplyError::CorrespondenceMismatch { entity }`, fatal rather than match-local. |
+  | Stereo reframing | The mapped rule ligands and stored host ligands are not orderings of the same frame; this is the fallible condition currently hidden by `Permutation::between`. | `ApplyError::StereoFrameMismatch { entity }`, fatal rather than match-local. |
+  | Matcher completeness/type assertions, overlay permutation witnesses, validator conflict witnesses, and post-preflight lowering assumptions | An invariant established by validated construction, matching, or preflight fails. These are library defects rather than malformed-input outcomes. Generic subisomorphism implementation assertions remain owned by `umol-graph-core`; no reaction-specific duplicate is introduced. | `ApplyError::InternalInvariant`, the single fatal internal outcome. |
+  | Checked transaction and product construction | Edit application fails, or the generated product violates an entity uniqueness/overlap rule. Neither path panics. | Existing `ApplyError::Transaction` and `ApplyError::StructuralConflict`. |
+  | Derivation construction | `ReactionDerivation::new` stores already-built sides and an induced correspondence and contains no fallible operation. | No additional error. |
+
+  The new application errors are not match rejections, so `apply` will emit one
+  error and terminate once S1c wires them into lowering. Display and
+  match-rejection table tests pin one representative of each classification.
+  **Implemented (green).**
 - **S1b — reference and incidence preflight** (`reaction.rs`, application
   validators): validate all
   delta IDs, entity references, endpoints, overlay participants, stereo sites,
