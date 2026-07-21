@@ -1,6 +1,6 @@
 # umol-perm fallibility and argument design
 
-Status: **Active**
+Status: **Completed**
 Date: 2026-07-20
 Relates: [109](109-permutation-infrastructure-2026-06-09.md),
 [119](119-umol-perm-review-2026-06-21.md),
@@ -600,7 +600,8 @@ dependency of S3–S6. No stage is deferrable within this API migration; each
 stage ends green, although the explicitly breaking subitems may be red until
 their remaining subitems restore all callers.
 
-Final verification runs formatting and `git diff --check`, the complete
+Final verification is complete: formatting and `git diff --check`, the complete
 `umol-perm` unit/property suites, affected `umol-ast`, `umol-graph`, and
 `umol-io` suites with all relevant features, Python tests from the activated
-`umol-py/.venv`, and workspace Clippy across all targets.
+`umol-py/.venv`, and workspace Clippy across all targets passed at their staged
+verification gates.
