@@ -123,7 +123,15 @@ the existing relation-data vocabulary: `equiv` compares in the current frame;
   and terminate permanently; preserve local match rejection behavior. The
   fallible `Permutation::between` prerequisite and the wider `umol-perm` API
   review are specified in [157](157-umol-perm-fallibility-and-arguments-2026-07-20.md).
- **Breaking internal migration (red→green).** [dep: S1b]
+  `apply_at` validates a caller-supplied correspondence against the induced
+  topology and overlay incidence and checks stereo sites; the matcher-produced
+  path avoids repeating that derivation but uses the same checked lowering.
+  **Implemented (green).** [dep: S1b]
+
+  S1c verification: all 54 focused reaction unit tests and all 173 `umol-ast`
+  property tests pass. The complete `umol-ast` suite passes with 5,136 unit
+  tests, and Clippy passes for all `umol-ast` targets with the `proptest`
+  feature and warnings denied.
 - **S1d — malformed-input property and fuzz coverage**
   (`tests/property/malformed.rs`, `fuzz/fuzz_targets/fuzz_reaction.rs`): generate invalid IDs, missing incidence, incompatible
   overlay references, and malformed update combinations; assert errors rather
