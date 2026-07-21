@@ -39,7 +39,8 @@ pub enum ApplyError {
     /// A matched stereo entity's rule and host ligand frames are not orderings of the same set.
     #[error("matched stereo frame differs for {entity:?}")]
     StereoFrameMismatch { entity: Entity },
-    /// A condition established by application preflight or matching did not hold during lowering.
+    /// A condition established by reaction integrity validation or matching did not hold during
+    /// lowering.
     #[error("application reached an internal invariant failure")]
     InternalInvariant,
 }

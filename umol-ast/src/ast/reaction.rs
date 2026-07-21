@@ -43,7 +43,10 @@ use super::remap::IdRemapping;
 use super::stereo::StereoConfigurationAst;
 use super::substructure::SubstructureMatchAlgorithm;
 use super::traits::Canonicalize;
-use super::validate::{DpoValidator, EntityStructureValidator};
+use super::validate::{
+    DpoValidator, EntityStructureValidator, ReactionIntegrityContradiction,
+    ReactionIntegrityValidator,
+};
 
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -973,6 +976,21 @@ impl ReactionAst {
             .canonicalize()
             .map_err(|_| ApplyPreconditionError::InconsistentReaction)?;
 
+        let reaction_integrity = match ReactionIntegrityValidator.validate(&self.lhs, &deltas) {
+            Ok(outcome) => outcome,
+            Err(error) => match error {},
+        };
+        reaction_integrity
+            .into_observation()
+            .map_err(|contradiction| match contradiction {
+                ReactionIntegrityContradiction::InvalidReference { entity } => {
+                    ApplyPreconditionError::InvalidReactionReference { entity }
+                }
+                ReactionIntegrityContradiction::IncidenceMismatch { entity } => {
+                    ApplyPreconditionError::ReactionIncidenceMismatch { entity }
+                }
+            })?;
+
         let lhs_structure = match EntityStructureValidator.validate(&self.lhs) {
             Ok(outcome) => outcome,
             Err(error) => match error {},
@@ -981,7 +999,7 @@ impl ReactionAst {
             .into_observation()
             .map_err(ApplyPreconditionError::ReactionStructure)?;
 
-        let dpo = match DpoValidator.validate_reaction(self) {
+        let dpo = match DpoValidator.validate_reaction(&self.lhs, &deltas) {
             Ok(outcome) => outcome,
             Err(error) => match error {},
         };
@@ -1151,6 +1169,7 @@ mod tests {
 
     use super::super::constraint::{Constraint, Constraints, MoleculeConstraint};
     use super::super::edit::{AtomFieldChange, BondFieldChange};
+    use super::super::entity::Entity;
     use super::super::ligand::StereoLigandKind;
     use super::super::molecule::transact::TransactionError;
     use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
@@ -1381,6 +1400,35 @@ mod tests {
         ),
         MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C)], ..Default::default() }),
     )]
+    #[case::canonical_add_remove_cancellation(
+        ReactionAst::new(
+            MoleculeAst::default(),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add { id: AtomId(0), ast: AtomAst::from_element(Element::C) }),
+                Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomAst::from_element(Element::C) }),
+            ]),
+        ),
+        MoleculeAst::default(),
+    )]
+    #[case::unordered_bond_incidence(
+        ReactionAst::new(
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+                bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::Bond(BondDelta::Remove {
+                id: BondId(0),
+                atoms: [AtomId(1), AtomId(0)],
+                ast: BondAst::from_order(1),
+            })]),
+        ),
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        }),
+    )]
     fn test_reaction_ast_validate_application(
         #[case] reaction: ReactionAst,
         #[case] host: MoleculeAst,
@@ -1445,6 +1493,269 @@ mod tests {
         #[case] expected: ApplyPreconditionError,
     ) {
         assert_eq!(reaction.validate_application(&host).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case::atom(
+        Delta::Atom(AtomDelta::Remove { id: AtomId(0), ast: AtomAst::default() }),
+        Entity::Atom(AtomId(0)),
+    )]
+    #[case::bond(
+        Delta::Bond(BondDelta::Remove { id: BondId(0), atoms: [AtomId(0), AtomId(1)], ast: BondAst::default() }),
+        Entity::Bond(BondId(0)),
+    )]
+    #[case::dative_bond(
+        Delta::DativeBond(DativeBondDelta::Remove { id: DativeBondId(0), donors: vec![AtomId(0)], acceptor: AtomId(1), ast: DativeBondAst::default() }),
+        Entity::DativeBond(DativeBondId(0)),
+    )]
+    #[case::aromatic_system(
+        Delta::AromaticSystem(AromaticSystemDelta::Remove { id: AromaticSystemId(0), atoms: vec![AtomId(0)], ast: AromaticSystemAst::default() }),
+        Entity::AromaticSystem(AromaticSystemId(0)),
+    )]
+    #[case::multicenter_bond(
+        Delta::MulticenterBond(MulticenterBondDelta::Remove { id: MulticenterBondId(0), atoms: vec![AtomId(0)], ast: MulticenterBondAst::default() }),
+        Entity::MulticenterBond(MulticenterBondId(0)),
+    )]
+    #[case::noncovalent_bond(
+        Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(1)], ast: NoncovalentBondAst::default() }),
+        Entity::NoncovalentBond(NoncovalentBondId(0)),
+    )]
+    #[case::stereo_atom(
+        Delta::StereoAtom(StereoAtomDelta::Remove { id: StereoAtomId(0), site: AtomId(0), ligands: vec![], ast: StereoAtomAst::default() }),
+        Entity::StereoAtom(StereoAtomId(0)),
+    )]
+    #[case::stereo_bond(
+        Delta::StereoBond(StereoBondDelta::Remove { id: StereoBondId(0), site: BondId(0), ligands: vec![], ast: StereoBondAst::default() }),
+        Entity::StereoBond(StereoBondId(0)),
+    )]
+    fn test_reaction_ast_validate_application_rejects_missing_delta_target(
+        #[case] delta: Delta,
+        #[case] entity: Entity,
+    ) {
+        let reaction = ReactionAst::new(MoleculeAst::default(), Deltas::from_iter([delta]));
+        assert_eq!(
+            reaction.validate_application(&MoleculeAst::default()),
+            Err(ApplyPreconditionError::InvalidReactionReference { entity }),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_ast_validate_application_rejects_created_id_collision() {
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        });
+        let reaction = ReactionAst::new(
+            lhs.clone(),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Add {
+                id: AtomId(0),
+                ast: AtomAst::from_element(Element::O),
+            })]),
+        );
+        assert_eq!(
+            reaction.validate_application(&lhs),
+            Err(ApplyPreconditionError::InvalidReactionReference {
+                entity: Entity::Atom(AtomId(0)),
+            }),
+        );
+    }
+
+    #[rstest]
+    #[case::bond_endpoint(Delta::Bond(BondDelta::Add {
+        id: BondId(0),
+        atoms: [AtomId(0), AtomId(1)],
+        ast: BondAst::default(),
+    }))]
+    #[case::dative_participant(Delta::DativeBond(DativeBondDelta::Add {
+        id: DativeBondId(0),
+        donors: vec![AtomId(1)],
+        acceptor: AtomId(0),
+        ast: DativeBondAst::default(),
+    }))]
+    #[case::aromatic_participant(Delta::AromaticSystem(AromaticSystemDelta::Add {
+        id: AromaticSystemId(0),
+        atoms: vec![AtomId(0), AtomId(1)],
+        ast: AromaticSystemAst::default(),
+    }))]
+    #[case::multicenter_participant(Delta::MulticenterBond(MulticenterBondDelta::Add {
+        id: MulticenterBondId(0),
+        atoms: vec![AtomId(0), AtomId(1)],
+        ast: MulticenterBondAst::default(),
+    }))]
+    #[case::noncovalent_endpoint(Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+        id: NoncovalentBondId(0),
+        atoms: [AtomId(0), AtomId(1)],
+        ast: NoncovalentBondAst::default(),
+    }))]
+    #[case::stereo_atom_site(Delta::StereoAtom(StereoAtomDelta::Add {
+        id: StereoAtomId(0),
+        site: AtomId(1),
+        ligands: vec![],
+        ast: StereoAtomAst::default(),
+    }))]
+    #[case::stereo_atom_ligand(Delta::StereoAtom(StereoAtomDelta::Add {
+        id: StereoAtomId(0),
+        site: AtomId(0),
+        ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+        ast: StereoAtomAst::default(),
+    }))]
+    fn test_reaction_ast_validate_application_rejects_missing_structural_reference(
+        #[case] delta: Delta,
+    ) {
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        });
+        let reaction = ReactionAst::new(lhs.clone(), Deltas::from_iter([delta]));
+        assert_eq!(
+            reaction.validate_application(&lhs),
+            Err(ApplyPreconditionError::InvalidReactionReference {
+                entity: Entity::Atom(AtomId(1)),
+            }),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_ast_validate_application_rejects_missing_stereo_bond_site() {
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        });
+        let reaction = ReactionAst::new(
+            lhs.clone(),
+            Deltas::from_iter([Delta::StereoBond(StereoBondDelta::Add {
+                id: StereoBondId(0),
+                site: BondId(0),
+                ligands: vec![],
+                ast: StereoBondAst::default(),
+            })]),
+        );
+        assert_eq!(
+            reaction.validate_application(&lhs),
+            Err(ApplyPreconditionError::InvalidReactionReference {
+                entity: Entity::Bond(BondId(0)),
+            }),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_ast_validate_application_rejects_bond_incidence_mismatch() {
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+            ..Default::default()
+        });
+        let reaction = ReactionAst::new(
+            lhs.clone(),
+            Deltas::from_iter([Delta::Bond(BondDelta::Remove {
+                id: BondId(0),
+                atoms: [AtomId(0), AtomId(2)],
+                ast: BondAst::from_order(1),
+            })]),
+        );
+        assert_eq!(
+            reaction.validate_application(&lhs),
+            Err(ApplyPreconditionError::ReactionIncidenceMismatch {
+                entity: Entity::Bond(BondId(0)),
+            }),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_ast_validate_application_rejects_dative_incidence_mismatch() {
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::B),
+                AtomAst::from_element(Element::O),
+            ],
+            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::default())],
+            ..Default::default()
+        });
+        let reaction = ReactionAst::new(
+            lhs.clone(),
+            Deltas::from_iter([Delta::DativeBond(DativeBondDelta::Remove {
+                id: DativeBondId(0),
+                donors: vec![AtomId(2)],
+                acceptor: AtomId(1),
+                ast: DativeBondAst::default(),
+            })]),
+        );
+        assert_eq!(
+            reaction.validate_application(&lhs),
+            Err(ApplyPreconditionError::ReactionIncidenceMismatch {
+                entity: Entity::DativeBond(DativeBondId(0)),
+            }),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_ast_validate_application_rejects_stereo_frame_incidence_mismatch() {
+        let stored_ligands = vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        ];
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::F),
+                AtomAst::from_element(Element::Cl),
+                AtomAst::from_element(Element::Br),
+                AtomAst::from_element(Element::I),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                stored_ligands.clone(),
+                StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+            )],
+            ..Default::default()
+        });
+        let mut removed_ligands = stored_ligands;
+        removed_ligands.swap(0, 1);
+        let reaction = ReactionAst::new(
+            lhs.clone(),
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
+                id: StereoAtomId(0),
+                site: AtomId(0),
+                ligands: removed_ligands,
+                ast: StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+            })]),
+        );
+        assert_eq!(
+            reaction.validate_application(&lhs),
+            Err(ApplyPreconditionError::ReactionIncidenceMismatch {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+            }),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_ast_validate_application_rejects_recursive_constraint_reference() {
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        });
+        let constraint = Constraint::Not(Box::new(Constraint::And(vec![Constraint::Molecule(
+            MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(0), AtomId(1)]),
+            },
+        )])));
+        let reaction = ReactionAst::new(
+            lhs.clone(),
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(constraint))]),
+        );
+        assert_eq!(
+            reaction.validate_application(&lhs),
+            Err(ApplyPreconditionError::InvalidReactionReference {
+                entity: Entity::Atom(AtomId(1)),
+            }),
+        );
     }
 
     #[rustfmt::skip]
@@ -1545,7 +1856,7 @@ mod tests {
     ) {
         match reaction.apply(&host, SubgraphIsomorphismAlgorithm::Vf2) {
             Err(error) => assert_eq!(error, expected),
-            Ok(_) => panic!("invalid input passed application preflight"),
+            Ok(_) => panic!("invalid input passed application integrity validation"),
         }
     }
 

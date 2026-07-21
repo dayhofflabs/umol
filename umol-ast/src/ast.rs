@@ -115,6 +115,7 @@ pub use validate::{
     ConnectivityContradiction, ConnectivityError, ConnectivityModel, ConnectivityValidator,
     ConstraintContradiction, ConstraintError, ConstraintValidator, DpoContradiction, DpoError,
     DpoValidator, EntityStructureContradiction, EntityStructureError, EntityStructureValidator,
+    ReactionIntegrityContradiction, ReactionIntegrityError, ReactionIntegrityValidator,
 };
 pub use value::{ValueAst, ValuePredicate, ValueTerm};
 pub use view::{

@@ -17,7 +17,7 @@ use super::super::delta::{
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
-use super::super::reaction::ReactionAst;
+use super::super::molecule::MoleculeAst;
 use super::super::reaction_span::ReactionSpanAst;
 
 /// Checks the DPO dangling invariant: a deleted atom leaves no incident bond or overlay.
@@ -52,37 +52,40 @@ pub enum DpoError {}
 
 impl DpoValidator {
     /// Over a `ReactionAst`: every lhs bond/overlay incident to a deleted atom must also be deleted.
+    /// Over a reaction's LHS and deltas: every LHS bond or overlay incident to a deleted atom must
+    /// also be deleted.
     pub fn validate_reaction(
         &self,
-        reaction: &ReactionAst,
+        lhs: &MoleculeAst,
+        deltas: &Deltas,
     ) -> Result<Solution<(), DpoContradiction>, DpoError> {
-        let removed_atoms = removed(&reaction.deltas, |d| match d {
+        let removed_atoms = removed(deltas, |d| match d {
             Delta::Atom(AtomDelta::Remove { id, .. }) => Some(*id),
             _ => None,
         });
-        let removed_bonds = removed(&reaction.deltas, |d| match d {
+        let removed_bonds = removed(deltas, |d| match d {
             Delta::Bond(BondDelta::Remove { id, .. }) => Some(*id),
             _ => None,
         });
-        let removed_dative = removed(&reaction.deltas, |d| match d {
+        let removed_dative = removed(deltas, |d| match d {
             Delta::DativeBond(DativeBondDelta::Remove { id, .. }) => Some(*id),
             _ => None,
         });
-        let removed_aromatic = removed(&reaction.deltas, |d| match d {
+        let removed_aromatic = removed(deltas, |d| match d {
             Delta::AromaticSystem(AromaticSystemDelta::Remove { id, .. }) => Some(*id),
             _ => None,
         });
-        let removed_multicenter = removed(&reaction.deltas, |d| match d {
+        let removed_multicenter = removed(deltas, |d| match d {
             Delta::MulticenterBond(MulticenterBondDelta::Remove { id, .. }) => Some(*id),
             _ => None,
         });
-        let removed_noncovalent = removed(&reaction.deltas, |d| match d {
+        let removed_noncovalent = removed(deltas, |d| match d {
             Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, .. }) => Some(*id),
             _ => None,
         });
 
         for &atom in &removed_atoms {
-            let view = reaction.lhs.atom(atom);
+            let view = lhs.atom(atom);
             for bond in view.bond_ids() {
                 if !removed_bonds.contains(&bond) {
                     return contradiction(DpoContradiction::DanglingBond { atom, bond });
@@ -231,6 +234,7 @@ mod tests {
     use super::super::super::molecule::{MoleculeAst, MoleculeParts};
     use super::super::super::multicenter::MulticenterBondAst;
     use super::super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use super::super::super::reaction::ReactionAst;
     use super::*;
 
     #[rstest]
@@ -270,7 +274,9 @@ mod tests {
     ))]
     fn test_dpo_validator_validate_reaction(#[case] reaction: ReactionAst) {
         assert_eq!(
-            DpoValidator.validate_reaction(&reaction).unwrap(),
+            DpoValidator
+                .validate_reaction(&reaction.lhs, &reaction.deltas)
+                .unwrap(),
             Solution::Determined(())
         );
     }
@@ -359,7 +365,9 @@ mod tests {
         #[case] expected: DpoContradiction,
     ) {
         assert_eq!(
-            DpoValidator.validate_reaction(&reaction).unwrap(),
+            DpoValidator
+                .validate_reaction(&reaction.lhs, &reaction.deltas)
+                .unwrap(),
             Solution::Contradictory(expected)
         );
     }

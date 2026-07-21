@@ -8,6 +8,7 @@ pub mod connectivity;
 pub mod constraint;
 pub mod dpo;
 pub mod entity;
+pub mod reaction;
 
 pub use connectivity::{
     ConnectivityContradiction, ConnectivityError, ConnectivityModel, ConnectivityValidator,
@@ -15,3 +16,6 @@ pub use connectivity::{
 pub use constraint::{ConstraintContradiction, ConstraintError, ConstraintValidator};
 pub use dpo::{DpoContradiction, DpoError, DpoValidator};
 pub use entity::{EntityStructureContradiction, EntityStructureError, EntityStructureValidator};
+pub use reaction::{
+    ReactionIntegrityContradiction, ReactionIntegrityError, ReactionIntegrityValidator,
+};
