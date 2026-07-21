@@ -10,7 +10,7 @@ mod group;
 mod oriented;
 mod permutation;
 
-pub use class::{space, ClassKey, Coset};
+pub use class::{ClassKey, Coset};
 pub use coset::CosetSpace;
 pub use error::{ParseClassKeyError, PermutationError};
 pub use group::PermutationGroup;

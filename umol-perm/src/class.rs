@@ -220,11 +220,6 @@ impl FromStr for ClassKey {
 static REGISTRY: LazyLock<Mutex<HashMap<ClassKey, &'static CosetSpace>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-/// The interned coset space for `key`.
-pub fn space(key: ClassKey) -> &'static CosetSpace {
-    key.space()
-}
-
 /// A configuration: an index into the cosets of an interned space. Identity is
 /// the interned space pointer plus the index.
 #[derive(Clone, Copy, Debug)]
@@ -237,7 +232,7 @@ impl Coset {
     /// A configuration index into `key`'s coset space. Panics if `index >= count`;
     /// use [`new_unchecked`](Self::new_unchecked) to skip the check.
     pub fn new(key: ClassKey, index: u32) -> Self {
-        let space = space(key);
+        let space = key.space();
         assert!(
             (index as usize) < space.count(),
             "coset index out of range for the class"
@@ -249,7 +244,7 @@ impl Coset {
     /// `index < count`.
     pub fn new_unchecked(key: ClassKey, index: u32) -> Self {
         Self {
-            space: space(key),
+            space: key.space(),
             index,
         }
     }

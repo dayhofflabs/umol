@@ -15,7 +15,7 @@ use umol_ast::ast::{
     StereoCosetAst, TetrahedralStereoAst, TryIntoAst, ValueAst,
 };
 use umol_chem::element::Element;
-use umol_perm::{space, ClassKey, Permutation};
+use umol_perm::{ClassKey, Permutation};
 use umol_utils::error::UmolError;
 
 use crate::table_ir::atom::Atom as TableAtom;
@@ -328,7 +328,8 @@ fn raise_tetrahedral_stereo(
             (Permutation::identity(4), source_coset)
         }
     };
-    let coset = space(ClassKey::Tetrahedral)
+    let coset = ClassKey::Tetrahedral
+        .space()
         .reindex(source_coset as u32, relabeling)
         .expect("tetrahedral coset reindex");
     Ok(Some(AtomConstraintAst::TetrahedralStereo(
@@ -374,7 +375,8 @@ fn raise_cis_trans_stereo(
         side_2.first_ligand,
         side_2.second_ligand,
     ];
-    let coset = space(ClassKey::CisTrans)
+    let coset = ClassKey::CisTrans
+        .space()
         .index(Permutation::between(&source, &target))
         .expect("cis/trans coset index");
     Ok(Some(BondConstraintAst::CisTransStereo(

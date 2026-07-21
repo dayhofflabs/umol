@@ -415,13 +415,19 @@ composition dangling-invariant property passes.
   replace every `space(key)` call with `key.space()` while both entry points
   still exist. Update affected tests to acquire the same interned space through
   the receiver API.
-  **Caller refactor (green).** [dep: S0e]
+  **Implemented (green).** [dep: S0e]
 - **S4b — retire free `space`** (`umol-perm/src/class.rs`, `src/lib.rs`): remove
   the free function and its re-export after the workspace has no callers;
   retain the registry and its poisoning assertion behind `ClassKey::space`.
   Run the class/coset unit and property suites to pin counts, interning, and
   `Coset` identity.
-  **Breaking (red→green).** [dep: S4a]
+  The property audit added generated checks for repeated `ClassKey::space`
+  pointer identity and for `Coset::space` returning that same interned value.
+  **Implemented (green).** [dep: S4a]
+
+S4 verification: all 150 `umol-perm` unit tests and 19 property tests pass, as
+do all 5,107 `umol-ast` and 3,288 `umol-io` unit tests. The workspace library
+check and Clippy pass with all features and warnings denied.
 
 ### S5 — coset-orbit API migration
 
@@ -480,12 +486,55 @@ composition dangling-invariant property passes.
   workspace to green.
   **Breaking caller migration (red→green).** [dep: S6a]
 
+### S7 — property tests
+
+- **S7a — class-key text round trips** (`umol-perm/tests/property.rs`): extend
+  the class-key strategies across every fixed class and every representable
+  degree of the symmetric, alternating, cyclic, and dihedral families. Assert
+  `ClassKey::from_str(key.to_string()) == Ok(key)` for the full generated
+  domain; retain the exact malformed-input tables as unit tests.
+  **Additive (green).** [dep: S0c]
+- **S7b — independent image round trips** (`umol-perm/tests/property.rs`):
+  generate shuffled images directly for every supported degree, construct with
+  `Permutation::try_from`, and assert both the inferred degree and the complete
+  recovered image. Replace the rank-derived image property rather than keeping
+  two tests of the same invariant; retain the separate Lehmer-rank round trip.
+  **Additive (green).** [dep: S0d, S1a]
+- **S7c — canonical coset orbits** (`umol-perm/tests/property.rs`): generate
+  arbitrary valid multi-generator sets for each fixed class space and compare
+  every `orbit_reps` entry with the minimum index reached by an independent
+  traversal under those generators. This covers multi-generator closure,
+  representative membership, and the canonical-minimum contract; retain the
+  exact invalid-generator unit tables.
+  **Additive (green).** [dep: S0f]
+- **S7d — sequence-action composition** (`umol-perm/tests/property.rs`): for
+  equal-degree permutations and generated sequences, assert
+  `a.compose(b).act(items) == b.act(&a.act(items))`, matching the documented
+  composition and right-action conventions. Keep the non-`Copy` and slice-size
+  contracts in the unit tests; do not add a redundant inverse-action property.
+  **Additive (green).** [dep: S2a]
+- **S7e — generated permutation groups** (`umol-perm/tests/property.rs`): retain
+  arbitrary valid generator lists alongside each generated `PermutationGroup`.
+  Assert that the identity and every supplied generator are members and that
+  the returned elements are closed under inverse and composition. Keep
+  wrong-degree inputs and named-group orders in the exact unit tables.
+  **Additive (green).** [dep: S2b]
+- **S7f — generated oriented groups** (`umol-perm/tests/property.rs`): retain
+  the input generators in the existing oriented-group strategy and assert that
+  every supplied proper or improper generator belongs to the result. Preserve
+  the existing identity, inverse, and composition closure properties without
+  duplicating them; keep wrong-degree membership and orbit-domain contracts in
+  the unit tests.
+  **Additive (green).** [dep: S2c]
+
 The critical consumer path joins **S0d → S1** and **S0e → S4** before
 **S6a → S6b → S6d**; S6 is the prerequisite for document 156 S1c. The cycle
 path joins **S0a** and **S1a** at S3, and the coset path is **S0f → S5**. S2 is
-independent once S1 lands. No stage is deferrable within this API migration;
-each stage ends green, although the explicitly breaking subitems may be red
-until their remaining subitems restore all callers.
+independent once S1 lands. S7 is additive and may run at any point after S2;
+it is part of the migration's completion rather than a dependency of S3–S6.
+No stage is deferrable within this API migration; each stage ends green,
+although the explicitly breaking subitems may be red until their remaining
+subitems restore all callers.
 
 Final verification runs formatting and `git diff --check`, the complete
 `umol-perm` unit/property suites, affected `umol-ast`, `umol-graph`, and

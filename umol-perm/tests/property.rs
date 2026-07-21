@@ -1,9 +1,11 @@
 //! Property tests for the permutation / coset algebra: structural round-trips
 //! and group / coset-space laws.
 
+use std::ptr;
+
 use proptest::prelude::*;
 use umol_perm::{
-    space, ClassKey, Orientation, OrientedPermutation, OrientedPermutationGroup, Permutation,
+    ClassKey, Coset, Orientation, OrientedPermutation, OrientedPermutationGroup, Permutation,
 };
 
 fn factorial(n: usize) -> usize {
@@ -57,7 +59,7 @@ fn class_key() -> impl Strategy<Value = ClassKey> {
 
 /// A class key paired with a valid coset index in its space.
 fn coset_index() -> impl Strategy<Value = (ClassKey, u32)> {
-    class_key().prop_flat_map(|key| (Just(key), 0..space(key).count() as u32))
+    class_key().prop_flat_map(|key| (Just(key), 0..key.space().count() as u32))
 }
 
 proptest! {
@@ -128,31 +130,31 @@ proptest! {
 
     #[test]
     fn test_coset_space_index_round_trip((key, i) in coset_index()) {
-        let s = space(key);
+        let s = key.space();
         prop_assert_eq!(s.index(s.unindex(i).unwrap()), Some(i));
     }
 
     #[test]
     fn test_coset_space_enantiomer_involution((key, i) in coset_index()) {
-        let s = space(key);
+        let s = key.space();
         prop_assert_eq!(s.enantiomer(s.enantiomer(i).unwrap()), Some(i));
     }
 
     #[test]
     fn test_coset_space_reindex_identity((key, i) in coset_index()) {
-        let s = space(key);
+        let s = key.space();
         prop_assert_eq!(s.reindex(i, Permutation::identity(s.degree())), Some(i));
     }
 
     #[test]
     fn test_coset_space_observable_coset_no_fluxional((key, i) in coset_index()) {
-        let s = space(key);
+        let s = key.space();
         prop_assert_eq!(s.observable_coset(i, &[]), Some(i));
     }
 
     #[test]
     fn test_coset_space_orbit_reps_identity(key in class_key()) {
-        let s = space(key);
+        let s = key.space();
         let expected = (0..s.count() as u32).collect::<Vec<u32>>();
         prop_assert_eq!(s.orbit_reps(&[]), Some(expected.clone()));
         prop_assert_eq!(s.orbit_reps(&[Permutation::identity(s.degree())]), Some(expected));
@@ -160,12 +162,23 @@ proptest! {
 
     #[test]
     fn test_coset_space_orbit_reps_closure((key, i) in coset_index()) {
-        let s = space(key);
+        let s = key.space();
         let generator = s.unindex(i).unwrap();
         let reps = s.orbit_reps(&[generator]).unwrap();
         for index in 0..s.count() as u32 {
             let moved = s.reindex(index, generator).unwrap();
             prop_assert_eq!(reps[index as usize], reps[moved as usize]);
         }
+    }
+
+    #[test]
+    fn test_class_key_space_interning(key in class_key()) {
+        prop_assert!(ptr::eq(key.space(), key.space()));
+    }
+
+    #[test]
+    fn test_coset_space((key, index) in coset_index()) {
+        let coset = Coset::new(key, index);
+        prop_assert!(ptr::eq(coset.space(), key.space()));
     }
 }

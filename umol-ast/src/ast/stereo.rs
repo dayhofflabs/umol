@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 use strum::VariantArray;
 use umol_ast_macros::{Canonicalize, Lattice};
 use umol_graph_core::{BiRelationData, ParticipantPosition};
-use umol_perm::{space, ClassKey, Permutation};
+use umol_perm::{ClassKey, Permutation};
 
 use super::constraint::{
     StereoAtomConstraintAst, StereoAtomConstraintsAst, StereoBondConstraintAst,
@@ -318,17 +318,17 @@ impl StereoKind {
 
     /// Number of ligand positions in this stereo kind.
     pub fn degree(self) -> usize {
-        space(self.class_key()).degree()
+        self.class_key().space().degree()
     }
 
     /// Number of cosets/configurations in this stereo kind.
     pub fn count(self) -> usize {
-        space(self.class_key()).count()
+        self.class_key().space().count()
     }
 
     /// Whether this stereo kind can encode local handedness.
     pub fn is_chiral_class(self) -> bool {
-        space(self.class_key()).is_chiral()
+        self.class_key().space().is_chiral()
     }
 
     /// Kind-specific `~` involution. Chiral kinds borrow the orientation-reversing
@@ -337,7 +337,7 @@ impl StereoKind {
     /// - cis/trans: swap the two configurations
     /// - square-planar: swap the diagonal ligand pair
     pub fn involution(self) -> Permutation {
-        let coset_space = space(self.class_key());
+        let coset_space = self.class_key().space();
         if coset_space.is_chiral() {
             coset_space.improper()
         } else {
@@ -351,7 +351,8 @@ impl StereoKind {
 
     /// Act on coset index `index` by `permutation`, through the class's coset algebra.
     pub fn act(self, index: u32, permutation: Permutation) -> u32 {
-        space(self.class_key())
+        self.class_key()
+            .space()
             .reindex(index, permutation)
             .expect("act: valid coset index and permutation")
     }
@@ -360,7 +361,7 @@ impl StereoKind {
     /// orientation-reversing generator; achiral kinds act trivially on cosets.
     pub fn mirror_permutation(self) -> Permutation {
         if self.is_chiral_class() {
-            space(self.class_key()).improper()
+            self.class_key().space().improper()
         } else {
             Permutation::identity(self.degree())
         }
@@ -368,7 +369,7 @@ impl StereoKind {
 
     /// Whether `g` and `h` induce the same coset permutation for this kind.
     fn coset_action_eq(self, g: Permutation, h: Permutation) -> bool {
-        let s = space(self.class_key());
+        let s = self.class_key().space();
         (0..s.count() as u32).all(|i| s.reindex(i, g) == s.reindex(i, h))
     }
 
@@ -861,7 +862,7 @@ pub(crate) fn canon_coset(
     coset: StereoCosetAst,
     kind: StereoKind,
 ) -> Result<StereoCosetAst, Contradiction> {
-    let s = space(kind.class_key());
+    let s = kind.class_key().space();
     let set: BTreeSet<u32> = match &coset {
         StereoCosetAst::Undetermined => return Ok(StereoCosetAst::Undetermined),
         StereoCosetAst::Lit(i) => BTreeSet::from([*i]),
@@ -979,7 +980,7 @@ pub(crate) fn coset_apply_permutation(
     permutation: Permutation,
     kind: StereoKind,
 ) -> Option<StereoCosetAst> {
-    let s = space(kind.class_key());
+    let s = kind.class_key().space();
     match coset {
         StereoCosetAst::Undetermined => Some(StereoCosetAst::Undetermined),
         StereoCosetAst::Lit(i) => Some(StereoCosetAst::Lit(s.reindex(*i, permutation)?)),

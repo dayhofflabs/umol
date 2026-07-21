@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use umol_graph_core::{AutomorphismAlgorithm, AutomorphismOutput, NodeId};
-use umol_perm::{space, Orientation, OrientedPermutation, OrientedPermutationGroup, Permutation};
+use umol_perm::{Orientation, OrientedPermutation, OrientedPermutationGroup, Permutation};
 
 use super::coloring::MoleculeColoring;
 use super::entity::{Entity, EntityKind};
@@ -123,7 +123,7 @@ impl MoleculeAst {
         let &StereoCosetAst::Lit(raw) = coset else {
             return None;
         };
-        let coset_space = space(kind.class_key());
+        let coset_space = kind.class_key().space();
         // An out-of-range coset yields no observable descriptor (it would index
         // the coset algebra out of bounds).
         if ligands.len() != coset_space.degree() || raw as usize >= coset_space.count() {
@@ -187,7 +187,7 @@ impl MoleculeAst {
         let &StereoCosetAst::Lit(source) = coset else {
             return Ok(None);
         };
-        let coset_space = space(kind.class_key());
+        let coset_space = kind.class_key().space();
         if ligands.len() != coset_space.degree() || !all_distinct(&ligands) {
             return Ok(None);
         }
@@ -226,7 +226,7 @@ impl MoleculeAst {
             .flat_map(|kind| (0..incidence.entity_count(kind)).map(move |i| kind.with_id(i as u32)))
             .any(|entity| match self.stereo_center(entity) {
                 Some((kind, StereoCosetAst::Lit(_), ligands)) => {
-                    ligands.len() == space(kind.class_key()).degree() && all_distinct(&ligands)
+                    ligands.len() == kind.class_key().space().degree() && all_distinct(&ligands)
                 }
                 _ => false,
             })
@@ -402,7 +402,7 @@ impl StereoSymmetry {
             .iter()
             .map(|op| op.permutation())
             .collect();
-        let classes = space(self.kind.class_key()).merge_under(&perms);
+        let classes = self.kind.class_key().space().merge_under(&perms);
         let class = classes[coset as usize];
         classes.iter().filter(|&&c| c == class).count() == 1
     }
@@ -500,7 +500,7 @@ fn grade_local(
     permutation: Permutation,
 ) -> Option<Orientation> {
     let index = coset.as_lit()?;
-    let coset_space = space(kind.class_key());
+    let coset_space = kind.class_key().space();
     let Some(StereoCosetAst::Lit(transported)) =
         coset_apply_permutation(&StereoCosetAst::Lit(index), permutation, kind)
     else {
@@ -565,7 +565,7 @@ fn reexpress(
     // An out-of-range coset has no re-expression (applying a permutation would
     // index the coset algebra out of bounds).
     if let StereoCosetAst::Lit(n) = coset {
-        if *n as usize >= space(kind.class_key()).count() {
+        if *n as usize >= kind.class_key().space().count() {
             return None;
         }
     }
