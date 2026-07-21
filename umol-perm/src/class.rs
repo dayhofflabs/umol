@@ -339,7 +339,8 @@ mod tests {
         #[case] relabeled: Vec<&str>,
         #[case] to_index: u32,
     ) {
-        let relabeling = Permutation::between(&order, &relabeled);
+        let relabeling = Permutation::between(&order, &relabeled)
+            .expect("fixed frames are orderings of the same ligands");
         assert_eq!(key.space().reindex(from_index, relabeling), Some(to_index));
     }
 

@@ -79,7 +79,7 @@ the existing relation-data vocabulary: `equiv` compares in the current frame;
 
 - **S1a — panic inventory and error taxonomy** (`umol-ast/src/ast/reaction.rs`,
   `error.rs`, application validators): enumerate every `expect`/panic reachable from reaction
-  preflight, matching, lowering, and derivation construction; classify each as
+  integrity validation, matching, lowering, and derivation construction; classify each as
   invalid input/precondition or internal failure and assign a stable
   `ApplyPreconditionError`/`ApplyError` variant. Add one regression test per
   classification.
@@ -92,8 +92,8 @@ the existing relation-data vocabulary: `equiv` compares in the current frame;
   | DPO validation, lowering lookups, add/remove participants, and constraint remapping | A delta or constraint names an entity that is neither available on the LHS nor created by the reaction. This covers the panicking molecule accessors and total-remapping indexing. | `ApplyPreconditionError::InvalidReactionReference { entity }`. |
   | Removal payloads | A delta names an existing entity but supplies endpoints, participants, a stereo site, or ligands inconsistent with that entity on the LHS. | `ApplyPreconditionError::ReactionIncidenceMismatch { entity }`. |
   | Pattern/overlay matching and host-id lowering | A supplied correspondence omits a required mate, maps it out of range, or disagrees with the mapped topology/incidence. Matcher-produced correspondences must already satisfy this condition. | `ApplyError::CorrespondenceMismatch { entity }`, fatal rather than match-local. |
-  | Stereo reframing | The mapped rule ligands and stored host ligands are not orderings of the same frame; this is the fallible condition currently hidden by `Permutation::between`. | `ApplyError::StereoFrameMismatch { entity }`, fatal rather than match-local. |
-  | Matcher completeness/type assertions, overlay permutation witnesses, validator conflict witnesses, and post-preflight lowering assumptions | An invariant established by validated construction, matching, or preflight fails. These are library defects rather than malformed-input outcomes. Generic subisomorphism implementation assertions remain owned by `umol-graph-core`; no reaction-specific duplicate is introduced. | `ApplyError::InternalInvariant`, the single fatal internal outcome. |
+  | Stereo reframing | The mapped rule ligands and stored host ligands are not orderings of the same frame. The application path currently passes them unchecked to `Permutation::between`, whose current contract enforces compatibility by panic. | `ApplyError::StereoFrameMismatch { entity }`, fatal rather than match-local. |
+  | Matcher completeness/type assertions, overlay permutation witnesses, validator conflict witnesses, and post-validation lowering assumptions | An invariant established by validated construction, matching, or reaction integrity validation fails. These are library defects rather than malformed-input outcomes. Generic subisomorphism implementation assertions remain owned by `umol-graph-core`; no reaction-specific duplicate is introduced. | `ApplyError::InternalInvariant`, the single fatal internal outcome. |
   | Checked transaction and product construction | Edit application fails, or the generated product violates an entity uniqueness/overlap rule. Neither path panics. | Existing `ApplyError::Transaction` and `ApplyError::StructuralConflict`. |
   | Derivation construction | `ReactionDerivation::new` stores already-built sides and an induced correspondence and contains no fallible operation. | No additional error. |
 
@@ -101,17 +101,29 @@ the existing relation-data vocabulary: `equiv` compares in the current frame;
   error and terminate once S1c wires them into lowering. Display and
   match-rejection table tests pin one representative of each classification.
   **Implemented (green).**
-- **S1b — reference and incidence preflight** (`reaction.rs`, application
+- **S1b — reaction integrity validation** (`reaction.rs`, application
   validators): validate all
   delta IDs, entity references, endpoints, overlay participants, stereo sites,
   and constraint references before entering the iterator. Return the typed
   precondition error; never use a lookup `expect` for caller-controlled data.
-  **Additive (green).** [dep: S1a]
+  `ReactionIntegrityValidator` operates on canonical deltas, rejects created IDs that collide
+  with LHS IDs, admits references to explicitly created entities, compares
+  unordered bond/overlay incidence as sets and stereo ligand frames in stored
+  order, and recursively checks logical, relational, molecule-scope, and
+  subpattern-anchor constraints. DPO validation now accepts explicit
+  `(lhs, deltas)` parts so application validates the same checked canonical
+  form that it later lowers; canceled raw operations cannot reach a lookup.
+  Regression tests cover all eight delta target families, created-ID
+  collisions, structural references, unordered and ordered incidence,
+  recursive constraints, and canonical add/remove cancellation.
+  **Implemented (green).** [dep: S1a]
 - **S1c — checked lowering and iterator termination** (`reaction.rs`): replace
   remaining lowering/reframing assumptions with checked lookups. Convert
-  impossible-after-preflight failures into one fatal `ApplyError`, emit it once,
-  and terminate permanently; preserve local match rejection behavior.
-  **Breaking internal migration (red→green).** [dep: S1b]
+  impossible-after-validation failures into one fatal `ApplyError`, emit it once,
+  and terminate permanently; preserve local match rejection behavior. The
+  fallible `Permutation::between` prerequisite and the wider `umol-perm` API
+  review are specified in [157](157-umol-perm-fallibility-and-arguments-2026-07-20.md).
+ **Breaking internal migration (red→green).** [dep: S1b]
 - **S1d — malformed-input property and fuzz coverage**
   (`tests/property/malformed.rs`, `fuzz/fuzz_targets/fuzz_reaction.rs`): generate invalid IDs, missing incidence, incompatible
   overlay references, and malformed update combinations; assert errors rather

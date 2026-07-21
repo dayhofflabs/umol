@@ -27,6 +27,7 @@ use super::edit::{
     NoncovalentBondHandle, StereoAtomFieldChange, StereoAtomHandle, StereoAtomRemoval,
     StereoBondFieldChange, StereoBondHandle, StereoBondRemoval,
 };
+use super::entity::Entity;
 use super::error::{ApplyError, ApplyPreconditionError, Contradiction};
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -94,7 +95,7 @@ impl ReactionAst {
         // A stereo coset is stated relative to a ligand ordering; the rule writes its cosets in the
         // rule's frame, the host stores the matched center in its own. Restate the rule's absolute
         // stereo deltas into the host frame before lowering (identity when the frames agree).
-        reframe_stereo(&mut deltas, &self.lhs, host, correspondence);
+        reframe_stereo(&mut deltas, &self.lhs, host, correspondence)?;
         // Host id of a matched pattern entity (total-on-pattern, so always `Some`).
         let host_atom = |id: AtomId| {
             AtomId::from(
@@ -1065,7 +1066,7 @@ fn reframe_stereo(
     lhs: &MoleculeAst,
     host: &MoleculeAst,
     correspondence: &MoleculeCorrespondence,
-) {
+) -> Result<(), ApplyError> {
     let into_host = |l: &StereoLigand| {
         StereoLigand::new(
             AtomId::from(
@@ -1094,6 +1095,7 @@ fn reframe_stereo(
                 let Some(host_id) = correspondence.stereo_atoms().right_of(s.id()) else {
                     continue;
                 };
+                let entity = Entity::StereoAtom(s.id());
                 let before: Vec<StereoLigand> = lhs
                     .stereo_atom(s.id())
                     .ligand_frame()
@@ -1106,12 +1108,15 @@ fn reframe_stereo(
                         change: StereoAtomFieldChange::Configuration { old, new },
                         ..
                     } => {
-                        let sigma = Permutation::between(&before, &after);
+                        let sigma = Permutation::between(&before, &after)
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *old = old.apply(sigma);
                         *new = new.apply(sigma);
                     }
                     StereoAtomDelta::Remove { ligands, ast, .. } => {
-                        *ast = ast.transform_frame(&before, &after);
+                        *ast = ast
+                            .transform_frame(&before, &after)
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *ligands = after.iter().map(from_host).collect();
                     }
                     _ => {}
@@ -1121,6 +1126,7 @@ fn reframe_stereo(
                 let Some(host_id) = correspondence.stereo_bonds().right_of(s.id()) else {
                     continue;
                 };
+                let entity = Entity::StereoBond(s.id());
                 let before: Vec<StereoLigand> = lhs
                     .stereo_bond(s.id())
                     .ligand_frame()
@@ -1133,12 +1139,15 @@ fn reframe_stereo(
                         change: StereoBondFieldChange::Configuration { old, new },
                         ..
                     } => {
-                        let sigma = Permutation::between(&before, &after);
+                        let sigma = Permutation::between(&before, &after)
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *old = old.apply(sigma);
                         *new = new.apply(sigma);
                     }
                     StereoBondDelta::Remove { ligands, ast, .. } => {
-                        *ast = ast.transform_frame(&before, &after);
+                        *ast = ast
+                            .transform_frame(&before, &after)
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *ligands = after.iter().map(from_host).collect();
                     }
                     _ => {}
@@ -1147,6 +1156,7 @@ fn reframe_stereo(
             _ => {}
         }
     }
+    Ok(())
 }
 
 impl Canonicalize for ReactionAst {
@@ -1342,6 +1352,144 @@ mod tests {
         assert_eq!(
             reaction.apply_at(&host, &correspondence).unwrap_err(),
             expected
+        );
+    }
+
+    #[rstest]
+    #[case::field(Delta::StereoAtom(StereoAtomDelta::ModifyField {
+        id: StereoAtomId(0),
+        change: StereoAtomFieldChange::Configuration {
+            old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0u32),
+            new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 1u32),
+        },
+    }))]
+    #[case::removal(Delta::StereoAtom(StereoAtomDelta::Remove {
+        id: StereoAtomId(0),
+        site: AtomId(0),
+        ligands: vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        ],
+        ast: StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+    }))]
+    fn test_reaction_ast_apply_at_stereo_atom_error(#[case] delta: Delta) {
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 6],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+            )],
+            ..Default::default()
+        });
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 6],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, 0u32),
+            )],
+            ..Default::default()
+        });
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::new((0..6u32).map(|id| (NodeId(id), NodeId(id))).collect(), 6, 6),
+            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(0))], 1, 1),
+            Correspondence::new(vec![], 0, 0),
+        );
+        let reaction = ReactionAst::new(lhs, Deltas::from_iter([delta]));
+
+        assert_eq!(
+            reaction.apply_at(&host, &correspondence).unwrap_err(),
+            ApplyError::StereoFrameMismatch {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+            },
+        );
+    }
+
+    #[rstest]
+    #[case::field(Delta::StereoBond(StereoBondDelta::ModifyField {
+        id: StereoBondId(0),
+        change: StereoBondFieldChange::Configuration {
+            old: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0u32),
+            new: StereoConfigurationAst::kinded(StereoKind::CisTrans, 1u32),
+        },
+    }))]
+    #[case::removal(Delta::StereoBond(StereoBondDelta::Remove {
+        id: StereoBondId(0),
+        site: BondId(0),
+        ligands: vec![
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+        ],
+        ast: StereoBondAst::new(StereoKind::CisTrans, 0u32),
+    }))]
+    fn test_reaction_ast_apply_at_stereo_bond_error(#[case] delta: Delta) {
+        let lhs = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 7],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                ],
+                StereoBondAst::new(StereoKind::CisTrans, 0u32),
+            )],
+            ..Default::default()
+        });
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 7],
+            bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(2))],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(6), StereoLigandKind::Atom),
+                ],
+                StereoBondAst::new(StereoKind::CisTrans, 0u32),
+            )],
+            ..Default::default()
+        });
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::new((0..7u32).map(|id| (NodeId(id), NodeId(id))).collect(), 7, 7),
+            Correspondence::new(vec![(BondId(0), BondId(0))], 1, 1),
+            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![(StereoBondId(0), StereoBondId(0))], 1, 1),
+        );
+        let reaction = ReactionAst::new(lhs, Deltas::from_iter([delta]));
+
+        assert_eq!(
+            reaction.apply_at(&host, &correspondence).unwrap_err(),
+            ApplyError::StereoFrameMismatch {
+                entity: Entity::StereoBond(StereoBondId(0)),
+            },
         );
     }
 

@@ -786,25 +786,12 @@ macro_rules! stereo_view_queries {
 stereo_view_queries!(StereoAtomView);
 stereo_view_queries!(StereoBondView);
 
-fn has_unique_ligands(ligands: &[StereoLigand]) -> bool {
-    ligands.iter().copied().collect::<HashSet<_>>().len() == ligands.len()
-}
-
 fn permutation_for_ligands(
     current: &[StereoLigand],
     ligands: impl IntoIterator<Item = StereoLigand>,
 ) -> Option<Permutation> {
-    let current: Vec<StereoLigand> = current.to_vec();
     let requested: Vec<StereoLigand> = ligands.into_iter().collect();
-    if current.len() != requested.len()
-        || !has_unique_ligands(&current)
-        || !has_unique_ligands(&requested)
-    {
-        return None;
-    }
-    let current_set: HashSet<StereoLigand> = current.iter().copied().collect();
-    let requested_set: HashSet<StereoLigand> = requested.iter().copied().collect();
-    (current_set == requested_set).then(|| Permutation::between(&current, &requested))
+    Permutation::between(current, &requested)
 }
 
 /// Mutable borrowed view of a stereo atom: its id, site atom + ligand frame

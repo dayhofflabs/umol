@@ -465,33 +465,41 @@ warnings denied.
   panicking, and retain the fixed-maximum assertion. Exact unit tables cover
   every incompatibility; properties assert that successful relabeling acts the
   source frame into the target and round-trips through the reverse frame.
-  **Breaking (red).** [dep: S1a]
+  **Implemented (green).** [dep: S1a]
 - **S6b — stereo AST and view relabeling** (`umol-ast/src/ast/stereo.rs`,
   `ast/view/stereo.rs`, `ast/symmetry.rs`): return `Option<Self>` from both
   `transform_frame` implementations; let `permutation_for_ligands` delegate
   compatibility to `between`; inline the one-use `reexpress` helper and retain
   only its independent coset lookup. Tests compare successful values with
   `Some(expected)` and incompatible frames with exact `None`.
-  **Breaking caller migration (red).** [dep: S6a, S4b]
+  **Implemented (green).** [dep: S6a, S4b]
 - **S6c — molecule pushout** (`umol-ast/src/ast/molecule/pushout.rs`): make
   stereo glue-entry construction fallible and propagate incompatible frames
   through the existing optional pushout result. Add atom- and bond-stereo
   pushout tables for reordered compatible frames and changed ligand sets.
-  **Breaking caller migration (red).** [dep: S6b]
+  **Implemented (green).** [dep: S6b]
 - **S6d — reaction reframing** (`umol-ast/src/ast/reaction.rs`, `ast/error.rs`):
   make `reframe_stereo` return `Result<(), ApplyError>`, map failed `between` or
-  `transform_frame` to `StereoFrameMismatch` for the affected entity, and
-  propagate the fatal error once through the application iterator. Regression
-  tables cover atom and bond field changes/removals and assert both the exact
-  entity-bearing error and permanent iterator termination.
-  **Breaking caller migration (red).** [dep: S6b]
+  `transform_frame` to `StereoFrameMismatch` for the affected entity. Regression
+  tables cover atom and bond field changes/removals through `apply_at` and assert
+  the exact entity-bearing error. Matcher enumeration rejects incompatible
+  stereo frames before application, so these are not iterator cases; the
+  existing fatal-application regression separately asserts one error followed
+  by permanent iterator termination.
+  **Implemented (green).** [dep: S6b]
 - **S6e — TableIR invariant callers** (`umol-io/src/table_ir/raise.rs`): keep
   tetrahedral and cis/trans geometry validation, then explicitly assert that
   `between` succeeds because both frames were derived from that validated
   ligand set. Conformance tests retain fixed successful references and add no
   user-facing resolution error for an internal invariant. This restores the
   workspace to green.
-  **Breaking caller migration (red→green).** [dep: S6a]
+  **Implemented (green).** [dep: S6a]
+
+S6 verification: all 157 `umol-perm` unit tests and 22 property tests pass, as
+do all 5,132 `umol-ast` unit tests, its complete 161-test property suite, and
+all 3,288 `umol-io` unit tests. The 10,032-case SMILES conformance suite also
+passes. The workspace library check and Clippy pass across all targets and
+features with warnings denied.
 
 ### S7 — property tests
 
@@ -533,15 +541,61 @@ warnings denied.
   duplicating them; keep wrong-degree membership and orbit-domain contracts in
   the unit tests.
   **Additive (green).** [dep: S2c]
+- **S7g — generated stereogenicity** (`umol-ast/tests/property/stereo.rs`):
+  generate tetrahedral molecules across repeated and distinct concrete ligand
+  elements and both valid stored cosets. Obtain `StereoSymmetry` through
+  `MoleculeAst::graph_symmetry` and `stereo_atom_symmetry`, then independently
+  characterize `is_stereogenic` by requiring every element of the projected
+  local group to fix the stored coset under `CosetSpace::reindex`. This covers
+  singleton and merged coset orbits without deriving the expected result from
+  `orbit_reps` itself.
+  **Additive (green).** [dep: S5b]
+- **S7h — malformed observable cosets** (`umol-ast/tests/property/stereo.rs`):
+  generate tetrahedral molecules with out-of-range stored cosets and exercise
+  the complete public path through graph-symmetry construction and stereo
+  projection. Assert the exact resulting classification,
+  `StereoSymmetry::is_stereogenic() == false`; successful construction then
+  also establishes that malformed indices are contained by
+  `observable_coset` rather than reaching an unchecked index operation.
+  **Additive (green).** [dep: S5b]
+- **S7i — generated frame transformations**
+  (`umol-ast/tests/property/stereo.rs`): generate valid distinct ligand frames,
+  frame permutations, and in-range atom- and bond-stereo configurations. For
+  `after = permutation.act(before)`, assert that `transform_frame(before,
+  after)` equals `Some(ast.apply(permutation))`, then transform through the
+  reverse frame and recover the original AST exactly. Keep incompatible frame
+  shapes in the exact unit tables rather than generating another absence-only
+  property.
+  **Additive (green).** [dep: S6b]
+- **S7j — generated stereo pushouts**
+  (`umol-ast/tests/property/molecule.rs`): generate full-overlap tetrahedral
+  atom and cis/trans bond molecules whose right-hand ligand frame is a
+  permutation of the left frame and whose right-hand coset is independently
+  carried into that frame with `apply`. Assert that `meet_pushout` succeeds and
+  its object is exactly the left molecule. In separate generated changed-ligand
+  cases, assert the exact `None` pushout result. This isolates the S6c law from
+  the broader reaction-composition properties that also traverse pushout.
+  **Additive (green).** [dep: S6c]
+- **S7k — generated reaction reframing**
+  (`umol-ast/tests/property/reaction.rs`): generate tetrahedral atom and
+  cis/trans bond rules with absolute configuration modifications and removals,
+  then restate the matched host carrier in a generated compatible ligand frame.
+  Assert that application produces the exact configuration carried into the
+  host frame for modifications and the exact overlay-free product for removals.
+  Keep incompatible manually supplied correspondences in the entity-bearing
+  unit error tables; matcher enumeration rejects those frames before
+  application, so they are not iterator cases.
+  **Additive (green).** [dep: S6d]
 
 The critical consumer path joins **S0d → S1** and **S0e → S4** before
 **S6a → S6b → S6d**; S6 is the prerequisite for document 156 S1c. The cycle
 path joins **S0a** and **S1a** at S3, and the coset path is **S0f → S5**. S2 is
-independent once S1 lands. S7 is additive and may run at any point after S2;
-it is part of the migration's completion rather than a dependency of S3–S6.
-No stage is deferrable within this API migration; each stage ends green,
-although the explicitly breaking subitems may be red until their remaining
-subitems restore all callers.
+independent once S1 lands. S7 is additive: S7a–f may run as soon as their S0–S2
+dependencies land, S7g–h follow S5b, and S7i–k follow the corresponding S6
+consumer migrations. It is part of the migration's completion rather than a
+dependency of S3–S6. No stage is deferrable within this API migration; each
+stage ends green, although the explicitly breaking subitems may be red until
+their remaining subitems restore all callers.
 
 Final verification runs formatting and `git diff --check`, the complete
 `umol-perm` unit/property suites, affected `umol-ast`, `umol-graph`, and

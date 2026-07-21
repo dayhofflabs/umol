@@ -184,7 +184,7 @@ impl MoleculeAst {
             map_node,
             map_ligand_atom,
             |d, before, after| d.transform_frame(before, after),
-        ));
+        )?);
         let stereo_atom_merged = self
             .stereo_atoms
             .pushout(&stereo_atom_right, |a, b| a.meet(b))?;
@@ -206,7 +206,7 @@ impl MoleculeAst {
             map_edge,
             map_ligand_atom,
             |d, before, after| d.transform_frame(before, after),
-        ));
+        )?);
         let stereo_bond_merged = self
             .stereo_bonds
             .pushout(&stereo_bond_right, |a, b| a.meet(b))?;
@@ -341,13 +341,14 @@ fn glue_var_overlays<D: Lattice + RelationData>(
 /// `self`'s frame and coincident cosets `meet` in it. A `right` spec whose site collides with a `left`
 /// site under a *different* ligand set is left as a second overlay on that site; `meet_pushout` rejects
 /// the resulting over-coordination via the `has_conflict` emit-compliance gate.
+#[allow(clippy::type_complexity)]
 fn stereo_glue_entries<S, D>(
     left: &FixedVarBirelationSet<S, Ordered, 1, StereoLigand, Ordered, D>,
     right: &FixedVarBirelationSet<S, Ordered, 1, StereoLigand, Ordered, D>,
     map_site: impl Fn(S) -> S,
     map_atom: impl Fn(AtomId) -> AtomId,
-    transform: impl Fn(&D, &[StereoLigand], &[StereoLigand]) -> D,
-) -> Vec<([S; 1], Vec<StereoLigand>, D)>
+    transform: impl Fn(&D, &[StereoLigand], &[StereoLigand]) -> Option<D>,
+) -> Option<Vec<([S; 1], Vec<StereoLigand>, D)>>
 where
     S: RelationParticipant,
     D: Clone,
@@ -364,10 +365,10 @@ where
             match left.find_by_participants(&[site], &relabeled) {
                 Some(hit) => {
                     let target = left.participants_2(hit).to_vec();
-                    let data = transform(right.data(id), &relabeled, &target);
-                    ([site], target, data)
+                    let data = transform(right.data(id), &relabeled, &target)?;
+                    Some(([site], target, data))
                 }
-                None => ([site], relabeled, right.data(id).clone()),
+                None => Some(([site], relabeled, right.data(id).clone())),
             }
         })
         .collect()
@@ -626,15 +627,21 @@ mod tests {
     // = same physical configuration) folds to `self`, while `contradict` (same coset = opposite
     // configuration) is `⊥`.
     #[rstest]
-    #[case::agree(1, true)]
-    #[case::contradict(0, false)]
-    fn test_molecule_ast_meet_pushout_stereo(#[case] other_coset: u32, #[case] admissible: bool) {
+    #[case::agree([2, 1, 3, 4], 1, true)]
+    #[case::contradict([2, 1, 3, 4], 0, false)]
+    #[case::ligand_set([2, 1, 3, 5], 1, false)]
+    fn test_molecule_ast_meet_pushout_stereo_atom(
+        #[case] other_ligands: [u32; 4],
+        #[case] other_coset: u32,
+        #[case] admissible: bool,
+    ) {
         let atoms = vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::F),
             AtomAst::from_element(Element::Cl),
             AtomAst::from_element(Element::Br),
             AtomAst::from_element(Element::I),
+            AtomAst::from_element(Element::N),
         ];
         let self_mol = MoleculeAst::from_parts(MoleculeParts {
             atoms: atoms.clone(),
@@ -655,20 +662,101 @@ mod tests {
             atoms,
             stereo_atoms: vec![(
                 AtomId(0),
-                vec![
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                ],
+                other_ligands
+                    .into_iter()
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
                 StereoAtomAst::new(StereoKind::Tetrahedral, other_coset),
             )],
             constraints: Constraints::new(),
             ..Default::default()
         });
         let overlap = GraphCorrespondence::new(
-            Correspondence::new((0..5u32).map(|i| (NodeId(i), NodeId(i))).collect(), 5, 5),
+            Correspondence::new((0..6u32).map(|i| (NodeId(i), NodeId(i))).collect(), 6, 6),
             Correspondence::new(vec![], 0, 0),
+        );
+        let expected = admissible.then(|| self_mol.clone());
+        assert_eq!(
+            self_mol
+                .meet_pushout(&other_mol, &overlap)
+                .map(|po| po.object),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::agree(
+        [
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        ],
+        1,
+        true,
+    )]
+    #[case::contradict(
+        [
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        ],
+        0,
+        false,
+    )]
+    #[case::ligand_set(
+        [
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+        ],
+        1,
+        false,
+    )]
+    fn test_molecule_ast_meet_pushout_stereo_bond(
+        #[case] other_ligands: [StereoLigand; 4],
+        #[case] other_coset: u32,
+        #[case] admissible: bool,
+    ) {
+        let atoms = vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::F),
+            AtomAst::from_element(Element::Cl),
+        ];
+        let bonds = vec![(AtomId(0), AtomId(1), BondAst::from_order(2))];
+        let self_mol = MoleculeAst::from_parts(MoleculeParts {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoBondAst::new(StereoKind::CisTrans, 0u32),
+            )],
+            constraints: Constraints::new(),
+            ..Default::default()
+        });
+        let other_mol = MoleculeAst::from_parts(MoleculeParts {
+            atoms,
+            bonds,
+            stereo_bonds: vec![(
+                BondId(0),
+                other_ligands.to_vec(),
+                StereoBondAst::new(StereoKind::CisTrans, other_coset),
+            )],
+            constraints: Constraints::new(),
+            ..Default::default()
+        });
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new((0..4u32).map(|i| (NodeId(i), NodeId(i))).collect(), 4, 4),
+            Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 1),
         );
         let expected = admissible.then(|| self_mol.clone());
         assert_eq!(

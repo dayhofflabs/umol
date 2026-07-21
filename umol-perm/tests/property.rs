@@ -119,6 +119,14 @@ proptest! {
     }
 
     #[test]
+    fn test_permutation_between(p in permutation()) {
+        let source = (0..p.degree()).collect::<Vec<_>>();
+        let target = p.act(&source);
+        prop_assert_eq!(Permutation::between(&source, &target), Some(p));
+        prop_assert_eq!(Permutation::between(&target, &source), Some(p.inverse()));
+    }
+
+    #[test]
     fn test_oriented_permutation_group_contains_identity((degree, group) in oriented_group()) {
         prop_assert!(group.contains(OrientedPermutation::identity(degree)));
     }

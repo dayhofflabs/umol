@@ -1493,6 +1493,16 @@ mod tests {
         );
     }
 
+    #[rstest]
+    #[case::charge_before_h("C#h3#c+", "C#c+#h3")]
+    #[case::aromatic_before_ring("C#R2#a2", "C#a2#R2")]
+    #[case::multicenter_before_stereo("C#T1#m2", "C#m2#T1")]
+    #[case::stereo_before_ring("C#R2#T1", "C#T1#R2")]
+    fn test_atom_render_canonical_order(#[case] input: &str, #[case] expected_canonical: &str) {
+        let parsed: AtomDsl = atom.parse(input).unwrap();
+        assert_eq!(parsed.to_string(), expected_canonical);
+    }
+
     #[rustfmt::skip]
     #[rstest]
     #[case::carbon("C", ElementAst::Lit(Element::C))]

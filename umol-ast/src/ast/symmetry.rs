@@ -556,22 +556,8 @@ fn reexpress(
     stored: &[StereoLigand],
     requested: &[StereoLigand],
 ) -> Option<u32> {
-    if stored.len() != requested.len() || !all_distinct(stored) {
-        return None;
-    }
-    let stored_set: HashSet<StereoLigand> = stored.iter().copied().collect();
-    let requested_set: HashSet<StereoLigand> = requested.iter().copied().collect();
-    if stored_set != requested_set {
-        return None;
-    }
-    // An out-of-range coset has no re-expression (applying a permutation would
-    // index the coset algebra out of bounds).
-    if let StereoCosetAst::Lit(n) = coset {
-        if *n as usize >= kind.class_key().space().count() {
-            return None;
-        }
-    }
-    match coset_apply_permutation(coset, Permutation::between(stored, requested), kind) {
+    let permutation = Permutation::between(stored, requested)?;
+    match coset_apply_permutation(coset, permutation, kind) {
         Some(StereoCosetAst::Lit(index)) => Some(index),
         _ => None,
     }

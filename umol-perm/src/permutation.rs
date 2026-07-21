@@ -110,20 +110,26 @@ impl Permutation {
         }
     }
 
-    /// The τ that relabels `from` into `to`: `act(τ, from) == to`. Panics if the
-    /// two slices are not orderings of the same set.
-    pub fn between<T: Eq>(from: &[T], to: &[T]) -> Self {
-        assert_eq!(from.len(), to.len());
+    /// The τ that relabels `from` into `to`: `act(τ, from) == to`.
+    /// Returns `None` unless both slices are orderings of the same set. Panics
+    /// when their common length exceeds the fixed representation maximum.
+    pub fn between<T: Eq>(from: &[T], to: &[T]) -> Option<Self> {
+        if from.len() != to.len() {
+            return None;
+        }
         let degree = from.len();
+        assert!(degree <= MAX_DEGREE);
         let mut image = vec![0usize; degree];
+        let mut used = [false; MAX_DEGREE];
         for (i, target) in to.iter().enumerate() {
-            let pos = from
-                .iter()
-                .position(|source| source == target)
-                .expect("between: slices are not orderings of the same set");
+            let pos = from.iter().position(|source| source == target)?;
+            if used[pos] {
+                return None;
+            }
+            used[pos] = true;
             image[i] = pos;
         }
-        Self::from_image(&image)
+        Some(Self::from_image(&image))
     }
 
     /// Lehmer rank in `0..degree!` — the internal canonical numbering.
@@ -360,8 +366,22 @@ mod tests {
     #[rstest]
     fn test_permutation_between() {
         let tau = Permutation::between(&['a', 'b', 'c'], &['c', 'a', 'b']);
-        assert_eq!(tau, Permutation::from_image(&[2, 0, 1]));
-        assert_eq!(tau.act(&['a', 'b', 'c']), vec!['c', 'a', 'b']);
+        assert_eq!(tau, Some(Permutation::from_image(&[2, 0, 1])));
+    }
+
+    #[rstest]
+    #[case::length(&['a', 'b'], &['a'])]
+    #[case::source_repetition(&['a', 'a'], &['a', 'b'])]
+    #[case::target_repetition(&['a', 'b'], &['a', 'a'])]
+    #[case::membership(&['a', 'b'], &['a', 'c'])]
+    fn test_permutation_between_error(#[case] from: &[char], #[case] to: &[char]) {
+        assert_eq!(Permutation::between(from, to), None);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_permutation_between_degree_error() {
+        Permutation::between(&[0, 1, 2, 3, 4, 5, 6], &[0, 1, 2, 3, 4, 5, 6]);
     }
 
     #[rstest]

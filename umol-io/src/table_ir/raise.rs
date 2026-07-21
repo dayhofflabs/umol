@@ -289,7 +289,8 @@ fn raise_tetrahedral_stereo(
             let permutation = Permutation::between(
                 &source_ordering,
                 &tetrahedral_ligand_ordering(mol, atom_idx),
-            );
+            )
+            .expect("validated tetrahedral frames contain the same ligands");
             (permutation, source_coset)
         }
         None => {
@@ -377,7 +378,10 @@ fn raise_cis_trans_stereo(
     ];
     let coset = ClassKey::CisTrans
         .space()
-        .index(Permutation::between(&source, &target))
+        .index(
+            Permutation::between(&source, &target)
+                .expect("validated cis/trans frames contain the same ligands"),
+        )
         .expect("cis/trans coset index");
     Ok(Some(BondConstraintAst::CisTransStereo(
         CisTransStereoAst::stereo(StereoCosetAst::Lit(coset)),

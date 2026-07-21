@@ -876,6 +876,15 @@ mod tests {
     }
 
     #[rstest]
+    #[case::charge_before_spin("2#s3#c+", "2#c+#s3")]
+    #[case::aromatic_before_ring("2#R2#a", "2#a#R2")]
+    #[case::stereo_before_ring("1#R2#C1", "1#C1#R2")]
+    fn test_bond_render_canonical_order(#[case] input: &str, #[case] expected_canonical: &str) {
+        let parsed: BondDsl = bond.parse(input).unwrap();
+        assert_eq!(parsed.to_string(), expected_canonical);
+    }
+
+    #[rstest]
     #[case::wrong_shape(Edn::Int(3), DeError::TypeMismatch { expected: "{:aromatic …} / {:ring-membership …} / {:cis-trans-stereo …}", got: "int", path: vec![] })]
     #[case::unknown_key("{:bogus 1}", DeError::UnknownField { key: "bogus".to_string(), path: vec!["bond-constraint".into()] })]
     fn test_bond_constraint_dsl_error(#[case] input: Edn<'static>, #[case] expected: DeError) {
