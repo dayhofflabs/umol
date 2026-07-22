@@ -11,6 +11,7 @@ from umol import (
     Delta,
     Deltas,
     Element,
+    InvalidStructureError,
     MoleculeAst,
     MoleculeCorrespondence,
     ParseError,
@@ -747,7 +748,7 @@ def test_reactionast_apply():
     first_product = ReactionAst.parse('{:lhs {:atoms ["C#c+" "C#c0"]} :deltas []}').lhs
     second_product = ReactionAst.parse('{:lhs {:atoms ["C#c0" "C#c+"]} :deltas []}').lhs
 
-    application = reaction.apply(host, SubgraphIsomorphismAlgorithm.Vf2())
+    application = reaction.apply(host)
 
     assert iter(application) is application
     assert reaction == reaction_snapshot
@@ -818,7 +819,11 @@ def test_reactionast_apply():
     second_step = ReactionAst.parse(
         '{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}'
     )
-    following = next(second_step.apply(first.rhs, SubgraphIsomorphismAlgorithm.Vf2()))
+    config = ReactionApplicationConfig(
+        match_algorithm=SubstructureMatchAlgorithm.Incidence(),
+        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2(),
+    )
+    following = next(second_step.apply(first.rhs, config=config))
     chained = first.chain(following)
     chained_product = ReactionAst.parse(
         '{:lhs {:atoms ["C#c+2" "C#c0"]} :deltas []}'
@@ -847,14 +852,31 @@ def test_reactionast_apply():
     assert chained.lhs == host_snapshot
     assert chained.rhs == chained_product
 
-    zero = ReactionAst.parse('{:lhs {:atoms ["N"]} :deltas []}').apply(
-        host_snapshot, SubgraphIsomorphismAlgorithm.Vf2()
-    )
+    zero = ReactionAst.parse('{:lhs {:atoms ["N"]} :deltas []}').apply(host_snapshot)
 
     assert iter(zero) is zero
     assert list(zero) == []
     with pytest.raises(StopIteration):
         next(zero)
+
+
+def test_reactionast_apply_error():
+    reaction = ReactionAst()
+    host = ReactionAst.parse(
+        '{:lhs {:atoms ["C" "O"] :bonds [[0 1 "1"] [0 1 "2"]]} :deltas []}'
+    ).lhs
+
+    with pytest.raises(
+        InvalidStructureError,
+        match=(
+            r"^invalid host: bond: parallel bonds on atoms "
+            r"\[AtomId\(0\), AtomId\(1\)\]$"
+        ),
+    ):
+        reaction.apply(host)
+
+    with pytest.raises(TypeError):
+        reaction.apply(host, ReactionApplicationConfig())
 
 
 def test_reactionast_workflow():

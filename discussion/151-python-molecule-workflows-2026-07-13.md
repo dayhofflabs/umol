@@ -1783,8 +1783,12 @@ default rather than introducing a one-field composition config.
   preflight at iterator creation, eagerly enumerate using both configured
   strategy and backend, and return S9d. Map preflight failure to
   `InvalidStructureError`; preserve lazy derivation construction. Migrate all
-  installed examples/tests in the same subitem. **Breaking Python signature
-  migration (red→green).** `[dep: S4b, S9c, S9d]`
+  installed examples/tests in the same subitem. **Implemented (green).**
+  `ReactionAst.apply(host, *, config=None)` snapshots reaction and host,
+  validates both before matching, eagerly captures correspondences using the
+  configured selectors, and returns the lazy S9d iterator. Precondition errors
+  map to `InvalidStructureError`; installed callers use the default or explicit
+  keyword-only config. `[dep: S4b, S9c, S9d]`
 - **S9f — application workflow gate**
   (`umol-py/tests/test_reaction.py`): update the complete installed reaction
   workflow for default and explicit configs, both match strategies, representative

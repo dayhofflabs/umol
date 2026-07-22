@@ -25,7 +25,7 @@ use crate::correspondence::{
 };
 use crate::defaults::ReactionDefaults;
 use crate::delta::Deltas;
-use crate::error::{contradiction_error, fingerprint_error, parse_error};
+use crate::error::{contradiction_error, fingerprint_error, parse_error, InvalidStructureError};
 use crate::fingerprint::config::ReactionCombinedFingerprintConfig;
 use crate::fingerprint::reaction::ReactionCombinedFingerprint;
 use crate::molecule::MoleculeAst;
@@ -134,10 +134,6 @@ impl ReactionApplicationConfig {
         }
     }
 
-    #[allow(
-        dead_code,
-        reason = "Python-to-Rust conversion API for configured reaction application"
-    )]
     pub(crate) fn to_rust(
         self,
     ) -> (
@@ -312,18 +308,24 @@ impl ReactionAst {
     }
 
     /// Return one-shot application results with eager matching and lazy derivation construction.
+    #[pyo3(signature = (host, *, config=None))]
     fn apply(
         &self,
         py: Python<'_>,
         host: Py<MoleculeAst>,
-        algorithm: SubgraphIsomorphismAlgorithm,
+        config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionApplicationIter>> {
         let reaction = self.to_rust(py);
         let host = host.bind(py).borrow().inner().clone();
+        reaction
+            .validate_application(&host)
+            .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
+        let (match_algorithm, subgraph_isomorphism_algorithm) =
+            config.unwrap_or_default().to_rust();
         let correspondences = reaction.lhs.substructure_matches(
             &host,
-            AstSubstructureMatchAlgorithm::GraphAndOverlays,
-            algorithm.to_rust(),
+            match_algorithm,
+            subgraph_isomorphism_algorithm,
         );
 
         Py::new(
@@ -1750,9 +1752,7 @@ mod tests {
         Python::attach(|py| {
             let reaction = ReactionAst::from_rust(py, expected_reaction.clone()).unwrap();
             let host = Py::new(py, MoleculeAst::from_inner(expected_host.clone())).unwrap();
-            let application = reaction
-                .apply(py, host.clone_ref(py), SubgraphIsomorphismAlgorithm::Vf2())
-                .unwrap();
+            let application = reaction.apply(py, host.clone_ref(py), None).unwrap();
 
             assert_eq!(application.borrow(py).correspondences.len(), 2);
             assert_eq!(reaction.to_rust(py), expected_reaction);
@@ -1797,9 +1797,7 @@ mod tests {
         Python::attach(|py| {
             let mut reaction = ReactionAst::from_rust(py, expected_reaction).unwrap();
             let host = Py::new(py, MoleculeAst::from_inner(expected_host)).unwrap();
-            let application = reaction
-                .apply(py, host.clone_ref(py), SubgraphIsomorphismAlgorithm::Vf2())
-                .unwrap();
+            let application = reaction.apply(py, host.clone_ref(py), None).unwrap();
 
             *reaction.lhs.bind(py).borrow_mut().inner_mut() =
                 AstMoleculeAst::from_parts(AstMoleculeParts {
@@ -1844,25 +1842,47 @@ mod tests {
     }
 
     #[rstest]
-    #[case::vf2(SubgraphIsomorphismAlgorithm::Vf2())]
-    #[case::ullmann(SubgraphIsomorphismAlgorithm::Ullmann())]
-    #[case::ri(SubgraphIsomorphismAlgorithm::Ri())]
-    #[case::arc_match(SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 })]
-    #[case::vf2_rdkit(SubgraphIsomorphismAlgorithm::Vf2Rdkit())]
-    #[case::ray_kirsch(SubgraphIsomorphismAlgorithm::RayKirsch())]
-    fn test_reaction_ast_apply_algorithm(
+    #[case::vf2(ReactionApplicationConfig::new(
+        SubstructureMatchAlgorithm::GraphAndOverlays(),
+        SubgraphIsomorphismAlgorithm::Vf2(),
+    ))]
+    #[case::ullmann(ReactionApplicationConfig::new(
+        SubstructureMatchAlgorithm::GraphAndOverlays(),
+        SubgraphIsomorphismAlgorithm::Ullmann(),
+    ))]
+    #[case::ri(ReactionApplicationConfig::new(
+        SubstructureMatchAlgorithm::GraphAndOverlays(),
+        SubgraphIsomorphismAlgorithm::Ri(),
+    ))]
+    #[case::arc_match(ReactionApplicationConfig::new(
+        SubstructureMatchAlgorithm::GraphAndOverlays(),
+        SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+    ))]
+    #[case::vf2_rdkit(ReactionApplicationConfig::new(
+        SubstructureMatchAlgorithm::GraphAndOverlays(),
+        SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+    ))]
+    #[case::ray_kirsch(ReactionApplicationConfig::new(
+        SubstructureMatchAlgorithm::GraphAndOverlays(),
+        SubgraphIsomorphismAlgorithm::RayKirsch(),
+    ))]
+    #[case::incidence(ReactionApplicationConfig::new(
+        SubstructureMatchAlgorithm::Incidence(),
+        SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+    ))]
+    fn test_reaction_ast_apply_config(
         reaction_application: (
             AstReactionAst,
             AstMoleculeAst,
             Vec<AstMoleculeCorrespondence>,
         ),
-        #[case] algorithm: SubgraphIsomorphismAlgorithm,
+        #[case] config: ReactionApplicationConfig,
     ) {
         let (reaction, host, _) = reaction_application;
         Python::attach(|py| {
             let reaction = ReactionAst::from_rust(py, reaction).unwrap();
             let host = Py::new(py, MoleculeAst::from_inner(host)).unwrap();
-            let application = reaction.apply(py, host, algorithm).unwrap();
+            let application = reaction.apply(py, host, Some(config)).unwrap();
 
             let products: Vec<AstMoleculeAst> = std::iter::from_fn(|| {
                 application
@@ -1890,6 +1910,36 @@ mod tests {
                         ..Default::default()
                     }),
                 ]
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_ast_apply_error() {
+        Python::attach(|py| {
+            let reaction = ReactionAst::new(py, None, None).unwrap();
+            let host = Py::new(
+                py,
+                MoleculeAst::from_inner(AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![
+                        AstAtomAst::from_element(ChemElement::C),
+                        AstAtomAst::from_element(ChemElement::O),
+                    ],
+                    bonds: vec![
+                        (AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1)),
+                        (AstAtomId(0), AstAtomId(1), AstBondAst::from_order(2)),
+                    ],
+                    ..Default::default()
+                })),
+            )
+            .unwrap();
+
+            let error = reaction.apply(py, host, None).err().unwrap();
+
+            assert!(error.is_instance_of::<InvalidStructureError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "invalid host: bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
             );
         });
     }
