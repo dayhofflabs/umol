@@ -860,7 +860,68 @@ def test_reactionast_apply():
         next(zero)
 
 
-def test_reactionast_apply_error():
+@pytest.mark.parametrize(
+    "config",
+    [
+        pytest.param(None, id="default"),
+        pytest.param(
+            ReactionApplicationConfig(
+                match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(),
+                subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
+            ),
+            id="graph-and-overlays-ullmann",
+        ),
+        pytest.param(
+            ReactionApplicationConfig(
+                match_algorithm=SubstructureMatchAlgorithm.Incidence(),
+                subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2(),
+            ),
+            id="incidence-vf2",
+        ),
+    ],
+)
+def test_reaction_ast_apply_config(config):
+    reaction = ReactionAst.parse(
+        '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
+    )
+    host = ReactionAst.parse('{:lhs {:atoms ["C#c0" "C#c0"]} :deltas []}').lhs
+    expected = [
+        ReactionAst.parse('{:lhs {:atoms ["C#c+" "C#c0"]} :deltas []}').lhs,
+        ReactionAst.parse('{:lhs {:atoms ["C#c0" "C#c+"]} :deltas []}').lhs,
+    ]
+
+    application = (
+        reaction.apply(host) if config is None else reaction.apply(host, config=config)
+    )
+
+    assert [derivation.rhs for derivation in application] == expected
+
+
+def test_reaction_ast_apply_config_error():
+    with pytest.raises(TypeError):
+        ReactionAst().apply(MoleculeAst(), ReactionApplicationConfig())
+
+
+def test_reaction_ast_apply_rejection():
+    reaction = ReactionAst.parse(
+        '{:lhs {:atoms ["C"]} :deltas [{:atom {:remove 0}}]}'
+    )
+    host = ReactionAst.parse(
+        '{:lhs {:atoms ["C" "C" "C" "O"] :bonds [[1 3 "1"]]} :deltas []}'
+    ).lhs
+    expected = [
+        ReactionAst.parse(
+            '{:lhs {:atoms ["C" "C" "O"] :bonds [[0 2 "1"]]} :deltas []}'
+        ).lhs,
+        ReactionAst.parse(
+            '{:lhs {:atoms ["C" "C" "O"] :bonds [[1 2 "1"]]} :deltas []}'
+        ).lhs,
+    ]
+
+    assert [derivation.rhs for derivation in reaction.apply(host)] == expected
+
+
+def test_reaction_ast_apply_precondition_error():
     reaction = ReactionAst()
     host = ReactionAst.parse(
         '{:lhs {:atoms ["C" "O"] :bonds [[0 1 "1"] [0 1 "2"]]} :deltas []}'
@@ -875,8 +936,26 @@ def test_reactionast_apply_error():
     ):
         reaction.apply(host)
 
-    with pytest.raises(TypeError):
-        reaction.apply(host, ReactionApplicationConfig())
+
+def test_reaction_ast_apply_iteration_error():
+    reaction = ReactionAst.parse(
+        "{:lhs {:atoms [\"C\"] "
+        ":constraints [{:charge-sum {:atoms [0] :sum 0}}]} "
+        ":deltas [{:constraint {:remove {:charge-sum {:atoms [0] :sum 0}}}}]}"
+    )
+    host = ReactionAst.parse('{:lhs {:atoms ["C"]} :deltas []}').lhs
+
+    application = reaction.apply(host)
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"^apply transaction failed: missing constraint entry on remove$",
+    ):
+        next(application)
+    with pytest.raises(StopIteration):
+        next(application)
+    with pytest.raises(StopIteration):
+        next(application)
 
 
 def test_reactionast_workflow():

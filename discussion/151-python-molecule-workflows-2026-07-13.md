@@ -1794,7 +1794,11 @@ default rather than introducing a one-field composition config.
   workflow for default and explicit configs, both match strategies, representative
   backends, eager correspondence snapshotting, lazy owned results, local
   rejection, invalid-structure creation failure, and fatal iterator error.
-  **Additive (green).** `[dep: S9e]`
+  **Implemented (green).** The installed workflow covers the default
+  `GraphAndOverlays`/`Vf2Rdkit` pair, explicit `GraphAndOverlays`/`Ullmann` and
+  `Incidence`/`Vf2` pairs, snapshot and detachment behavior, a rejected match
+  between successful derivations, precondition failure at iterator creation,
+  and a fatal error raised lazily with permanent exhaustion. `[dep: S9e]`
 - **S9g — graph-core terminology and matching-count module**
   (`umol-graph-core/src/algorithms/{matching,mis,matching_count}.rs`,
   `algorithms.rs`, `lib.rs`, all workspace callers): rename
