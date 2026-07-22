@@ -1773,8 +1773,10 @@ default rather than introducing a one-field composition config.
   `RuntimeError`, permanently terminates after a fatal failure, and continues to
   emit owned derivations lazily from the eager correspondence vector. Tests
   cover zero/multiple successes, rejection between successes, fatal termination,
-  repeated exhaustion, stable order, and detached results. **Breaking private
-  iterator migration (red→green).** `[dep: S9a]`
+  repeated exhaustion, stable order, and detached results. **Implemented
+  (green).** The iterator now filters only `ApplyError::is_match_rejection()`;
+  the first other application error becomes a `RuntimeError` and marks the
+  iterator terminal before it is returned. `[dep: S9a]`
 - **S9e — configured `ReactionAst.apply` migration**
   (`umol-py/src/reaction.rs`, package callers): replace the required algorithm
   argument with `apply(host, config=None)`. Snapshot reaction and host, run S9a

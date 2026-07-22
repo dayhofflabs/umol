@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use umol_ast::ast::{
     Canonicalize, CompositionScope as AstCompositionScope, IntoAst, MoleculeAst as AstMoleculeAst,
@@ -477,13 +477,20 @@ impl ReactionApplicationIter {
         slf
     }
 
-    fn __next__(&mut self) -> Option<ReactionDerivation> {
-        self.correspondences.by_ref().find_map(|correspondence| {
-            self.reaction
-                .apply_at(&self.host, &correspondence)
-                .ok()
-                .map(ReactionDerivation::from_rust)
-        })
+    fn __next__(&mut self) -> PyResult<Option<ReactionDerivation>> {
+        loop {
+            let Some(correspondence) = self.correspondences.next() else {
+                return Ok(None);
+            };
+            match self.reaction.apply_at(&self.host, &correspondence) {
+                Ok(derivation) => return Ok(Some(ReactionDerivation::from_rust(derivation))),
+                Err(error) if error.is_match_rejection() => {}
+                Err(error) => {
+                    self.correspondences = Vec::new().into_iter();
+                    return Err(PyRuntimeError::new_err(error.to_string()));
+                }
+            }
+        }
     }
 }
 
@@ -1751,11 +1758,11 @@ mod tests {
             assert_eq!(reaction.to_rust(py), expected_reaction);
             assert_eq!(host.bind(py).borrow().inner(), &expected_host);
 
-            let first = application.borrow_mut(py).__next__().unwrap();
+            let first = application.borrow_mut(py).__next__().unwrap().unwrap();
             assert_eq!(application.borrow(py).correspondences.len(), 1);
-            let second = application.borrow_mut(py).__next__().unwrap();
+            let second = application.borrow_mut(py).__next__().unwrap().unwrap();
             assert_eq!(application.borrow(py).correspondences.len(), 0);
-            assert_eq!(application.borrow_mut(py).__next__(), None);
+            assert_eq!(application.borrow_mut(py).__next__().unwrap(), None);
             assert_eq!(
                 [first.rhs().inner().clone(), second.rhs().inner().clone()],
                 [
@@ -1810,6 +1817,7 @@ mod tests {
                 application
                     .borrow_mut(py)
                     .__next__()
+                    .unwrap()
                     .map(|derivation| derivation.rhs().inner().clone())
             })
             .collect();
@@ -1860,6 +1868,7 @@ mod tests {
                 application
                     .borrow_mut(py)
                     .__next__()
+                    .unwrap()
                     .map(|derivation| derivation.rhs().inner().clone())
             })
             .collect();
@@ -2769,60 +2778,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_application_iter(
-        reaction_application: (
-            AstReactionAst,
-            AstMoleculeAst,
-            Vec<AstMoleculeCorrespondence>,
-        ),
-    ) {
-        let (reaction, host, correspondences) = reaction_application;
-        let mut application = ReactionApplicationIter::new(reaction, host, correspondences);
-
-        let first = application.__next__().unwrap();
-        let second = application.__next__().unwrap();
-        assert_eq!(
-            [first.rhs().inner().clone(), second.rhs().inner().clone()],
-            [
-                AstMoleculeAst::from_parts(AstMoleculeParts {
-                    atoms: vec![
-                        AstAtomAst::from_element(ChemElement::C).with_charge(1),
-                        AstAtomAst::from_element(ChemElement::C),
-                    ],
-                    ..Default::default()
-                }),
-                AstMoleculeAst::from_parts(AstMoleculeParts {
-                    atoms: vec![
-                        AstAtomAst::from_element(ChemElement::C),
-                        AstAtomAst::from_element(ChemElement::C).with_charge(1),
-                    ],
-                    ..Default::default()
-                }),
-            ]
-        );
-        assert_eq!(application.__next__(), None);
-        assert_eq!(application.__next__(), None);
-
-        let expected_first = first.to_rust();
-        let expected_second = second.to_rust();
-        let mut detached = first.rhs();
-        *detached.inner_mut().atom_mut(AstAtomId(0)).ast = AstAtomAst::from_element(ChemElement::F);
-        assert_eq!(first.to_rust(), expected_first);
-        assert_eq!(second.to_rust(), expected_second);
-    }
-
-    #[rstest]
-    fn test_reaction_application_iter_empty() {
-        let mut application = ReactionApplicationIter::new(
-            AstReactionAst::default(),
-            AstMoleculeAst::default(),
-            Vec::new(),
-        );
-
-        assert_eq!(application.__next__(), None);
-    }
-
-    #[rstest]
     fn test_reaction_application_iter_identity(
         reaction_application: (
             AstReactionAst,
@@ -2844,6 +2799,61 @@ mod tests {
     }
 
     #[rstest]
+    fn test_reaction_application_iter(
+        reaction_application: (
+            AstReactionAst,
+            AstMoleculeAst,
+            Vec<AstMoleculeCorrespondence>,
+        ),
+    ) {
+        let (reaction, host, correspondences) = reaction_application;
+        let mut application = ReactionApplicationIter::new(reaction, host, correspondences);
+
+        let first = application.__next__().unwrap().unwrap();
+        let second = application.__next__().unwrap().unwrap();
+        assert_eq!(
+            [first.rhs().inner().clone(), second.rhs().inner().clone()],
+            [
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![
+                        AstAtomAst::from_element(ChemElement::C).with_charge(1),
+                        AstAtomAst::from_element(ChemElement::C),
+                    ],
+                    ..Default::default()
+                }),
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![
+                        AstAtomAst::from_element(ChemElement::C),
+                        AstAtomAst::from_element(ChemElement::C).with_charge(1),
+                    ],
+                    ..Default::default()
+                }),
+            ]
+        );
+        assert_eq!(application.__next__().unwrap(), None);
+        assert_eq!(application.__next__().unwrap(), None);
+
+        let expected_first = first.to_rust();
+        let expected_second = second.to_rust();
+        let mut detached = first.rhs();
+        *detached.inner_mut().atom_mut(AstAtomId(0)).ast = AstAtomAst::from_element(ChemElement::F);
+        assert_eq!(first.to_rust(), expected_first);
+        assert_eq!(second.to_rust(), expected_second);
+    }
+
+    #[rstest]
+    fn test_reaction_application_iter_empty() {
+        let mut application = ReactionApplicationIter::new(
+            AstReactionAst::default(),
+            AstMoleculeAst::default(),
+            Vec::new(),
+        );
+
+        assert_eq!(application.__next__().unwrap(), None);
+        assert_eq!(application.__next__().unwrap(), None);
+    }
+
+    #[rstest]
     fn test_reaction_application_iter_rejection() {
         let reaction = AstReactionAst::new(
             AstMoleculeAst::from_parts(AstMoleculeParts {
@@ -2859,12 +2869,13 @@ mod tests {
             atoms: vec![
                 AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::C),
+                AstAtomAst::from_element(ChemElement::C),
                 AstAtomAst::from_element(ChemElement::O),
             ],
-            bonds: vec![(AstAtomId(0), AstAtomId(2), AstBondAst::from_order(1))],
+            bonds: vec![(AstAtomId(1), AstAtomId(3), AstBondAst::from_order(1))],
             ..Default::default()
         });
-        let correspondences = [NodeId(0), NodeId(1)]
+        let correspondences = [NodeId(0), NodeId(1), NodeId(2)]
             .into_iter()
             .map(|host_atom| {
                 AstMoleculeCorrespondence::induce(
@@ -2876,17 +2887,75 @@ mod tests {
             .collect();
         let mut application = ReactionApplicationIter::new(reaction, host, correspondences);
 
+        let first = application.__next__().unwrap().unwrap();
+        let second = application.__next__().unwrap().unwrap();
+
         assert_eq!(
-            application.__next__().unwrap().rhs().inner(),
-            &AstMoleculeAst::from_parts(AstMoleculeParts {
-                atoms: vec![
-                    AstAtomAst::from_element(ChemElement::C),
-                    AstAtomAst::from_element(ChemElement::O),
-                ],
-                bonds: vec![(AstAtomId(0), AstAtomId(1), AstBondAst::from_order(1))],
-                ..Default::default()
-            })
+            [first.rhs().inner().clone(), second.rhs().inner().clone()],
+            [
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![
+                        AstAtomAst::from_element(ChemElement::C),
+                        AstAtomAst::from_element(ChemElement::C),
+                        AstAtomAst::from_element(ChemElement::O),
+                    ],
+                    bonds: vec![(AstAtomId(0), AstAtomId(2), AstBondAst::from_order(1))],
+                    ..Default::default()
+                }),
+                AstMoleculeAst::from_parts(AstMoleculeParts {
+                    atoms: vec![
+                        AstAtomAst::from_element(ChemElement::C),
+                        AstAtomAst::from_element(ChemElement::C),
+                        AstAtomAst::from_element(ChemElement::O),
+                    ],
+                    bonds: vec![(AstAtomId(1), AstAtomId(2), AstBondAst::from_order(1))],
+                    ..Default::default()
+                }),
+            ]
         );
-        assert_eq!(application.__next__(), None);
+        assert_eq!(application.__next__().unwrap(), None);
+    }
+
+    #[rstest]
+    fn test_reaction_application_iter_error() {
+        let constraint = AstConstraint::Molecule(AstMoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AstAtomId(0)]),
+            sum: AstValueAst::Lit(0),
+        });
+        let reaction = AstReactionAst::new(
+            AstMoleculeAst::from_parts(AstMoleculeParts {
+                atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+                constraints: constraint.clone().into(),
+                ..Default::default()
+            }),
+            AstDeltas::from_iter([AstDelta::Constraint(AstConstraintDelta::Remove(constraint))]),
+        );
+        let host = AstMoleculeAst::from_parts(AstMoleculeParts {
+            atoms: vec![AstAtomAst::from_element(ChemElement::C)],
+            ..Default::default()
+        });
+        let correspondence = AstMoleculeCorrespondence::induce(
+            &reaction.lhs,
+            &host,
+            Correspondence::from_images(&[NodeId(0)], 1),
+        );
+        let mut application = ReactionApplicationIter::new(
+            reaction,
+            host,
+            vec![correspondence.clone(), correspondence],
+        );
+
+        let error = application.__next__().unwrap_err();
+
+        Python::attach(|py| {
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "apply transaction failed: missing constraint entry on remove"
+            );
+        });
+        assert_eq!(application.correspondences.len(), 0);
+        assert_eq!(application.__next__().unwrap(), None);
+        assert_eq!(application.__next__().unwrap(), None);
     }
 }
