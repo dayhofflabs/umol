@@ -6,8 +6,9 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm::{
 };
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
-    CycleEnumerationAlgorithm, EdgeId, Graph, MaxIndependentSetAlgorithm, MaxMatchingAlgorithm,
-    NodeId, ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+    CycleEnumerationAlgorithm, EdgeId, Graph, MaximumIndependentSetAlgorithm,
+    MaximumMatchingAlgorithm, NodeId, ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
+    ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 mod matching_graphs {
@@ -331,7 +332,7 @@ fn maximum_matching(c: &mut Criterion) {
     for (name, g) in &graphs {
         let node_order: Vec<_> = g.node_ids().collect();
         group.bench_function(*name, |b| {
-            b.iter(|| g.maximum_matching(&node_order, MaxMatchingAlgorithm::Edmonds));
+            b.iter(|| g.maximum_matching(&node_order, MaximumMatchingAlgorithm::Edmonds));
         });
     }
     group.finish();
@@ -349,7 +350,7 @@ fn maximum_independent_set(c: &mut Criterion) {
     let mut group = c.benchmark_group("maximum_independent_set");
     for (name, g) in &graphs {
         group.bench_function(*name, |b| {
-            b.iter(|| g.maximum_independent_set(MaxIndependentSetAlgorithm::BranchAndBound));
+            b.iter(|| g.maximum_independent_set(MaximumIndependentSetAlgorithm::BranchAndBound));
         });
     }
     group.finish();

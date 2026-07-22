@@ -24,12 +24,12 @@ pub use algorithms::connected::ConnectedComponentsAlgorithm;
 pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
 pub use algorithms::enumeration::{PathEnumerationAlgorithm, SubgraphEnumerationAlgorithm};
 pub use algorithms::matching::{
-    Matching, MatchingEnumerationAlgorithm, MaxMatchingAlgorithm, PerfectMatchingAlgorithm,
+    Matching, MatchingEnumerationAlgorithm, MaximumMatchingAlgorithm, PerfectMatchingAlgorithm,
 };
-pub use algorithms::mis::MaxIndependentSetAlgorithm;
-pub use algorithms::planar_matching_count::{
+pub use algorithms::matching_count::{
     FaceBoundary, PlanarEmbedding, PlanarEmbeddingError, PlanarMatchingCountError,
 };
+pub use algorithms::mis::MaximumIndependentSetAlgorithm;
 pub use algorithms::refine::{
     CircularRefinementAlgorithm, CircularRefinementHash, Refinement, RefinementAlgorithm,
     RefinementHash, RefinementRounds,

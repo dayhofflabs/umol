@@ -141,7 +141,7 @@ SSSR/MCB not implemented — relevant cycles subsume them without the non-unique
 | Edmonds' blossom (Gabow simplification) | Maximum matching | O(V³) | Kekulization (single), radical detection (unmatched = radical) |
 | Branch-and-bound with Edmonds oracle | All perfect/maximum matchings | Exponential worst-case | Kekulization (all representations), tautomer enumeration |
 
-Implemented: `Graph::maximum_matching(alg: MaxMatchingAlgorithm)`,
+Implemented: `Graph::maximum_matching(alg: MaximumMatchingAlgorithm)`,
 `Graph::enumerate_perfect_matchings(alg: MatchingEnumerationAlgorithm)`,
 `Graph::enumerate_maximum_matchings(alg: MatchingEnumerationAlgorithm)`.
 
@@ -153,7 +153,7 @@ References: Edmonds 1965, Gabow 1976 simplification. Ref impl: cp-algorithms.com
 |---|---|---|
 | Branch-and-bound with greedy upper bound | Exponential worst-case | Clar's rule (maximum number of disjoint aromatic sextets) |
 
-Implemented: `Graph::maximum_independent_set(alg: MaxIndependentSetAlgorithm)`.
+Implemented: `Graph::maximum_independent_set(alg: MaximumIndependentSetAlgorithm)`.
 
 ### Subgraph isomorphism
 
@@ -203,4 +203,3 @@ Tracked here for completeness, not yet needed:
 - KD-tree, ball tree, octree for nearest-neighbor queries. Crate: `kiddo`,
   `kdtree`. Already needed for non-bonded interaction lists, equivalence set
   detection at scale.
-

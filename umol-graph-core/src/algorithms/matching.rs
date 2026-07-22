@@ -8,7 +8,7 @@ use crate::correspondence::{Correspondence, GraphCorrespondence};
 use crate::graph::{EdgeId, Graph, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MaxMatchingAlgorithm {
+pub enum MaximumMatchingAlgorithm {
     Edmonds,
     /// Bipartite-only. Caller must ensure the graph is bipartite; verified via
     /// `debug_assert!` inside the implementation.
@@ -81,7 +81,11 @@ impl Graph {
     /// Returns a maximum matching, using `node_order` as the deterministic vertex traversal
     /// priority. `node_order` must contain every graph node exactly once. Neighbor ties retain the
     /// graph's stable adjacency order.
-    pub fn maximum_matching(&self, node_order: &[NodeId], alg: MaxMatchingAlgorithm) -> Matching {
+    pub fn maximum_matching(
+        &self,
+        node_order: &[NodeId],
+        alg: MaximumMatchingAlgorithm,
+    ) -> Matching {
         debug_assert_eq!(
             node_order.len(),
             self.node_count(),
@@ -93,8 +97,10 @@ impl Graph {
             "maximum-matching node order must contain every graph node exactly once",
         );
         match alg {
-            MaxMatchingAlgorithm::Edmonds => self.maximum_matching_edmonds(node_order),
-            MaxMatchingAlgorithm::HopcroftKarp => self.maximum_matching_hopcroft_karp(node_order),
+            MaximumMatchingAlgorithm::Edmonds => self.maximum_matching_edmonds(node_order),
+            MaximumMatchingAlgorithm::HopcroftKarp => {
+                self.maximum_matching_hopcroft_karp(node_order)
+            }
         }
     }
 
@@ -178,7 +184,7 @@ impl Graph {
         let bipartition = self.bipartition(BipartitionAlgorithm::Bfs);
         debug_assert!(
             bipartition.is_some(),
-            "MaxMatchingAlgorithm::HopcroftKarp requires a bipartite graph",
+            "MaximumMatchingAlgorithm::HopcroftKarp requires a bipartite graph",
         );
         let colors = bipartition.unwrap_or_else(|| vec![false; n]);
 
@@ -678,9 +684,9 @@ mod tests {
     use rstest::*;
 
     use super::MatchingEnumerationAlgorithm::BranchAndBound;
-    use super::MaxMatchingAlgorithm::{Edmonds, HopcroftKarp};
+    use super::MaximumMatchingAlgorithm::{Edmonds, HopcroftKarp};
     use super::PerfectMatchingAlgorithm::BacktrackingDfs;
-    use super::{Matching, MatchingSearchState, MaxMatchingAlgorithm};
+    use super::{Matching, MatchingSearchState, MaximumMatchingAlgorithm};
     use crate::graph::{EdgeId, Graph, NodeId};
 
     #[rstest]
@@ -773,7 +779,7 @@ mod tests {
     #[rstest]
     #[case::edmonds(Edmonds)]
     #[case::hopcroft_karp(HopcroftKarp)]
-    fn test_graph_maximum_matching_node_order(#[case] algorithm: MaxMatchingAlgorithm) {
+    fn test_graph_maximum_matching_node_order(#[case] algorithm: MaximumMatchingAlgorithm) {
         let graph = Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]);
         let first_order = [NodeId(0), NodeId(1), NodeId(2), NodeId(3)];
         let second_order = [NodeId(2), NodeId(0), NodeId(1), NodeId(3)];

@@ -21,7 +21,7 @@ use umol_ast::ast::{
     ElectronCountsAst, EntityStructureContradiction, EntityStructureError,
     EntityStructureValidator, MoleculeAst, ValueAst,
 };
-use umol_graph_core::{MaxMatchingAlgorithm, NodeId};
+use umol_graph_core::{MaximumMatchingAlgorithm, NodeId};
 use umol_utils::solution::Solution;
 
 use crate::ops::invariant::ValenceMismatch;
@@ -210,18 +210,18 @@ impl MatchingInput {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KekulizationModel {
-    pub algorithm: MaxMatchingAlgorithm,
+    pub algorithm: MaximumMatchingAlgorithm,
 }
 
 impl KekulizationModel {
-    pub fn new(algorithm: MaxMatchingAlgorithm) -> Self {
+    pub fn new(algorithm: MaximumMatchingAlgorithm) -> Self {
         Self { algorithm }
     }
 }
 
 impl Default for KekulizationModel {
     fn default() -> Self {
-        Self::new(MaxMatchingAlgorithm::Edmonds)
+        Self::new(MaximumMatchingAlgorithm::Edmonds)
     }
 }
 
@@ -442,7 +442,7 @@ impl Kekulizer {
                 .collect();
             let algorithm = match matching_input.mode {
                 MatchingInputMode::Prescribed => self.model.algorithm,
-                MatchingInputMode::OneMobileExposure => MaxMatchingAlgorithm::Edmonds,
+                MatchingInputMode::OneMobileExposure => MaximumMatchingAlgorithm::Edmonds,
             };
             let matching = extracted.graph().maximum_matching(&sub_order, algorithm);
             let deficiency = extracted.atoms().count() - 2 * matching.size();

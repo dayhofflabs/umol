@@ -1809,7 +1809,11 @@ default rather than introducing a one-field composition config.
   `PlanarEmbedding`, `PlanarEmbeddingError`, `PlanarMatchingCountError`, and
   `count_perfect_matchings_planar`. Migrate imports, type annotations, tests,
   benchmarks, and documentation in the same subitem. **Breaking public renames
-  and module move (red→green).** `[dep: —]`
+  and module move (red→green).** **Implemented (green).** Graph-core and every
+  workspace caller now use `MaximumMatchingAlgorithm` and
+  `MaximumIndependentSetAlgorithm`; matching-count implementation and exports
+  live under `algorithms::matching_count`, while its planar-specific public
+  types and operation retain their existing names. `[dep: —]`
 - **S9h — fallible maximum matching and genuine Hopcroft-Karp**
   (`umol-graph-core/src/algorithms/matching.rs`,
   `umol-ast/src/ast/{matching,view/graph}.rs`, all callers): add

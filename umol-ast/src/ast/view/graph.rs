@@ -3,8 +3,9 @@
 use umol_graph_core::{
     AutomorphismAlgorithm, AutomorphismGroupOrder, AutomorphismOutput,
     BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm, CycleEnumerationAlgorithm,
-    EdgeId, Graph, MatchingEnumerationAlgorithm, MaxIndependentSetAlgorithm, MaxMatchingAlgorithm,
-    NodeId, PerfectMatchingAlgorithm, ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
+    EdgeId, Graph, MatchingEnumerationAlgorithm, MaximumIndependentSetAlgorithm,
+    MaximumMatchingAlgorithm, NodeId, PerfectMatchingAlgorithm, ShortestCycleAlgorithm,
+    SubgraphIsomorphismAlgorithm,
 };
 
 use super::super::id::{AtomId, BondId};
@@ -74,7 +75,7 @@ impl<'a> GraphView<'a> {
             .collect()
     }
 
-    pub fn maximum_independent_set(&self, alg: MaxIndependentSetAlgorithm) -> Vec<AtomId> {
+    pub fn maximum_independent_set(&self, alg: MaximumIndependentSetAlgorithm) -> Vec<AtomId> {
         self.graph
             .maximum_independent_set(alg)
             .into_iter()
@@ -85,7 +86,7 @@ impl<'a> GraphView<'a> {
     pub fn maximum_matching(
         &self,
         node_order: &[AtomId],
-        alg: MaxMatchingAlgorithm,
+        alg: MaximumMatchingAlgorithm,
     ) -> BondMatching {
         let nodes: Vec<NodeId> = node_order.iter().copied().map(NodeId::from).collect();
         BondMatching(self.graph.maximum_matching(&nodes, alg))

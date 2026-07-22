@@ -260,7 +260,7 @@ under relabeling, and validated for fixed/mobile one-hole graph formulations.
 
 ### S4a — Add and validate an explicit planar embedding carrier
 
-**Module:** new `umol-graph-core/src/algorithms/planar_matching_count.rs`, algorithms module exports,
+**Module:** new `umol-graph-core/src/algorithms/matching_count.rs`, algorithms module exports,
 and shared planar fixtures
 
 **Kind:** additive API foundation (green)
@@ -281,7 +281,7 @@ shape. Keep embedding tests independent of matching enumeration.
 
 ### S4b — Implement exact Kasteleyn signing and Pfaffian arithmetic
 
-**Module:** `umol-graph-core/src/algorithms/planar_matching_count.rs` and
+**Module:** `umol-graph-core/src/algorithms/matching_count.rs` and
 `umol-graph-core/Cargo.toml`
 
 **Kind:** additive algorithm (green)

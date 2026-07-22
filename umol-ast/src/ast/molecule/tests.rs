@@ -6,7 +6,7 @@ use umol_chem::element::Element;
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
     Correspondence, CycleEnumerationAlgorithm, EdgeId, MatchingEnumerationAlgorithm,
-    MaxIndependentSetAlgorithm, MaxMatchingAlgorithm, NodeId, ShortestCycleAlgorithm,
+    MaximumIndependentSetAlgorithm, MaximumMatchingAlgorithm, NodeId, ShortestCycleAlgorithm,
     SubgraphIsomorphismAlgorithm,
 };
 
@@ -1347,7 +1347,7 @@ fn test_molecule_ast_enumerate_cycles(
 fn test_molecule_ast_maximum_independent_set(#[case] ast: MoleculeAst, #[case] expected: usize) {
     let mis = ast
         .graph()
-        .maximum_independent_set(MaxIndependentSetAlgorithm::BranchAndBound);
+        .maximum_independent_set(MaximumIndependentSetAlgorithm::BranchAndBound);
     assert_eq!(mis.len(), expected);
 }
 
@@ -1359,7 +1359,7 @@ fn test_molecule_ast_maximum_matching(#[case] ast: MoleculeAst, #[case] expected
     let node_order: Vec<AtomId> = ast.atoms().iter().map(|atom| atom.id).collect();
     let m = ast
         .graph()
-        .maximum_matching(&node_order, MaxMatchingAlgorithm::Edmonds);
+        .maximum_matching(&node_order, MaximumMatchingAlgorithm::Edmonds);
     assert_eq!(m.size(), expected_size);
 }
 
@@ -1368,7 +1368,7 @@ fn test_bond_matching_mate() {
     let ast = chain(4);
     let m = ast.graph().maximum_matching(
         &[AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
-        MaxMatchingAlgorithm::Edmonds,
+        MaximumMatchingAlgorithm::Edmonds,
     );
     assert!(m.is_matched(AtomId(0)));
     let mate = m.mate(AtomId(0));

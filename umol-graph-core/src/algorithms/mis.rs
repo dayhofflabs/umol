@@ -3,14 +3,14 @@
 use crate::graph::{Graph, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MaxIndependentSetAlgorithm {
+pub enum MaximumIndependentSetAlgorithm {
     BranchAndBound,
 }
 
 impl Graph {
-    pub fn maximum_independent_set(&self, alg: MaxIndependentSetAlgorithm) -> Vec<NodeId> {
+    pub fn maximum_independent_set(&self, alg: MaximumIndependentSetAlgorithm) -> Vec<NodeId> {
         match alg {
-            MaxIndependentSetAlgorithm::BranchAndBound => {
+            MaximumIndependentSetAlgorithm::BranchAndBound => {
                 self.maximum_independent_set_branch_and_bound()
             }
         }
@@ -86,7 +86,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::MaxIndependentSetAlgorithm::BranchAndBound;
+    use super::MaximumIndependentSetAlgorithm::BranchAndBound;
     use crate::graph::{Graph, NodeId};
 
     fn n(i: u32) -> NodeId {

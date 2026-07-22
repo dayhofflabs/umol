@@ -36,7 +36,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::MaxMatchingAlgorithm;
+    use umol_graph_core::MaximumMatchingAlgorithm;
 
     use super::*;
     use crate::ast::atom::AtomAst;
@@ -83,7 +83,7 @@ mod tests {
     fn chain_4_matching() -> BondMatching {
         chain(4).graph().maximum_matching(
             &[AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
-            MaxMatchingAlgorithm::Edmonds,
+            MaximumMatchingAlgorithm::Edmonds,
         )
     }
 
@@ -98,7 +98,7 @@ mod tests {
                 AtomId(4),
                 AtomId(5),
             ],
-            MaxMatchingAlgorithm::Edmonds,
+            MaximumMatchingAlgorithm::Edmonds,
         )
     }
 
@@ -149,7 +149,7 @@ mod tests {
         let ast = chain(1);
         let m = ast
             .graph()
-            .maximum_matching(&[AtomId(0)], MaxMatchingAlgorithm::Edmonds);
+            .maximum_matching(&[AtomId(0)], MaximumMatchingAlgorithm::Edmonds);
         assert!(!m.is_matched(AtomId(0)));
         assert_eq!(m.mate(AtomId(0)), None);
     }

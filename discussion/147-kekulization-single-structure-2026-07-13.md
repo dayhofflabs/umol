@@ -160,7 +160,7 @@ non-identity host/subgraph atom and bond ID mappings.
 **Dependencies:** [dep: S1a]
 
 Change `KekulizationModel::algorithm` from `PerfectMatchingAlgorithm` to
-`MaxMatchingAlgorithm`, with `Edmonds` as the default. Migrate the constructor, exports, tests,
+`MaximumMatchingAlgorithm`, with `Edmonds` as the default. Migrate the constructor, exports, tests,
 and all workspace callers in the same subitem.
 
 Make maximum-matching traversal order an explicit, required graph-core input, parallel to the
