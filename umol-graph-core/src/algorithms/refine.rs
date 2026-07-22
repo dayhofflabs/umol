@@ -261,6 +261,9 @@ impl Graph {
         if radius >= 1 {
             for atom in 0..self.node_count() {
                 let source = NodeId(atom as u32);
+                // EC duplicate removal is defined over shortest-path radius
+                // shells, so BFS is fixed by the operation rather than exposed
+                // as an independent refinement choice.
                 let neighborhood = self.neighborhood(source, radius - 1, TraversalAlgorithm::Bfs);
                 let mut bond_set: BTreeSet<u32> = BTreeSet::new();
                 let mut shell = 0;

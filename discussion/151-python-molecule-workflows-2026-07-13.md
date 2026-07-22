@@ -1842,7 +1842,10 @@ default rather than introducing a one-field composition config.
   why the subsidiary choice is fixed by the named parent algorithm. Do not
   expose private implementation methods or widen them to `pub(crate)`. Focused
   algorithm tests and strict graph-core Clippy remain green. **Additive
-  documentation (green).** `[dep: S9h]`
+  documentation (green).** **Implemented (green).** All three implementations
+  already called the public selector-bearing APIs; their call sites now state
+  why the subsidiary algorithm is fixed by the parent operation. No private
+  visibility was widened and no behavior changed. `[dep: S9h]`
 - **S9j — Python graph-core selector values**
   (`umol-py/src/algorithm.rs`, `lib.rs`, `python/umol/__init__.py`): establish
   the singular binding module for algorithm selectors, moving the existing

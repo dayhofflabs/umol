@@ -87,6 +87,9 @@ impl Graph {
         let mut seen: HashSet<Vec<NodeId>> = HashSet::new();
         let mut result = Vec::new();
 
+        // Vismara enumerates relevant cycles independently within each
+        // biconnected component. Tarjan supplies the O(V+E) decomposition
+        // fixed by this implementation.
         for component in self.biconnected_components(BiconnectedComponentsAlgorithm::Tarjan) {
             let subgraph = self.induced_subgraph(&component);
             let sub_graph = self.extract(&subgraph);

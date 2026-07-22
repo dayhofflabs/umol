@@ -198,6 +198,9 @@ impl Graph {
         node_order: &[NodeId],
     ) -> Result<Matching, MaximumMatchingError> {
         let n = self.node_count();
+        // Hopcroft-Karp needs a two-coloring before it can build alternating
+        // layers. BFS supplies that coloring in O(V+E) as fixed preprocessing
+        // for this implementation, not as a separate matching choice.
         let colors = self
             .bipartition(BipartitionAlgorithm::Bfs)
             .ok_or(MaximumMatchingError::NonBipartite)?;
