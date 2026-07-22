@@ -1856,6 +1856,10 @@ default rather than introducing a one-field composition config.
   `ConnectedComponentsAlgorithm` with inherent `from_rust`/`to_rust`, equality,
   and repr. Table tests cover every variant and installed tests cover all
   exports. **Additive public values plus internal module move (green).**
+  **Implemented (green).** The singular binding module owns all eight selector
+  wrappers; reaction application imports the moved selectors from it without a
+  Python API change, and the six new graph-core selectors are registered and
+  exported with variant-complete Rust and installed-Python coverage.
   `[dep: S9b, S9g]`
 - **S9k — explicit ring-enumeration selection**
   (`umol-ast/src/ast/{molecule,ring}.rs`, all Rust callers): require a

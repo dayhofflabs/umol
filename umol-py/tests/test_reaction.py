@@ -48,79 +48,11 @@ def test_application_exports():
         "MoleculeCorrespondence",
         "ReactionApplicationConfig",
         "ReactionDerivation",
-        "SubgraphIsomorphismAlgorithm",
-        "SubstructureMatchAlgorithm",
     } <= set(umol.__all__)
     assert umol.Correspondence is Correspondence
     assert umol.MoleculeCorrespondence is MoleculeCorrespondence
     assert umol.ReactionApplicationConfig is ReactionApplicationConfig
     assert umol.ReactionDerivation is ReactionDerivation
-    assert umol.SubgraphIsomorphismAlgorithm is SubgraphIsomorphismAlgorithm
-    assert umol.SubstructureMatchAlgorithm is SubstructureMatchAlgorithm
-
-
-@pytest.mark.parametrize(
-    "algorithm,equal,unequal,expected_repr",
-    [
-        pytest.param(
-            SubstructureMatchAlgorithm.GraphAndOverlays(),
-            SubstructureMatchAlgorithm.GraphAndOverlays(),
-            SubstructureMatchAlgorithm.Incidence(),
-            "SubstructureMatchAlgorithm.GraphAndOverlays()",
-            id="graph-and-overlays",
-        ),
-        pytest.param(
-            SubstructureMatchAlgorithm.Incidence(),
-            SubstructureMatchAlgorithm.Incidence(),
-            SubstructureMatchAlgorithm.GraphAndOverlays(),
-            "SubstructureMatchAlgorithm.Incidence()",
-            id="incidence",
-        ),
-    ],
-)
-def test_substructure_match_algorithm_value(algorithm, equal, unequal, expected_repr):
-    assert algorithm == equal
-    assert algorithm != unequal
-    assert repr(algorithm) == expected_repr
-
-
-@pytest.mark.parametrize(
-    "algorithm,expected",
-    [
-        pytest.param(
-            SubgraphIsomorphismAlgorithm.Vf2(),
-            "SubgraphIsomorphismAlgorithm.Vf2()",
-            id="vf2",
-        ),
-        pytest.param(
-            SubgraphIsomorphismAlgorithm.Ullmann(),
-            "SubgraphIsomorphismAlgorithm.Ullmann()",
-            id="ullmann",
-        ),
-        pytest.param(
-            SubgraphIsomorphismAlgorithm.Ri(),
-            "SubgraphIsomorphismAlgorithm.Ri()",
-            id="ri",
-        ),
-        pytest.param(
-            SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6),
-            "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6)",
-            id="arc-match",
-        ),
-        pytest.param(
-            SubgraphIsomorphismAlgorithm.Vf2Rdkit(),
-            "SubgraphIsomorphismAlgorithm.Vf2Rdkit()",
-            id="vf2-rdkit",
-        ),
-        pytest.param(
-            SubgraphIsomorphismAlgorithm.RayKirsch(),
-            "SubgraphIsomorphismAlgorithm.RayKirsch()",
-            id="ray-kirsch",
-        ),
-    ],
-)
-def test_subgraphisomorphismalgorithm_value(algorithm, expected):
-    assert repr(algorithm) == expected
 
 
 def test_reactionapplicationconfig_default():

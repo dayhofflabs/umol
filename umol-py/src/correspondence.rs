@@ -1,4 +1,4 @@
-//! Read-only Python values for reaction correspondences and matching algorithms.
+//! Read-only Python values for reaction correspondences.
 
 use std::collections::HashSet;
 
@@ -6,12 +6,8 @@ use pyo3::prelude::*;
 use umol_ast::ast::{
     AromaticSystemId, BondId, DativeBondId, MoleculeCorrespondence as AstMoleculeCorrespondence,
     MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId,
-    SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm,
 };
-use umol_graph_core::{
-    Correspondence as RustCorrespondence, NodeId,
-    SubgraphIsomorphismAlgorithm as RustSubgraphIsomorphismAlgorithm,
-};
+use umol_graph_core::{Correspondence as GraphCoreCorrespondence, NodeId};
 
 /// An id that can cross the Python boundary as an integer index.
 pub(crate) trait CorrespondenceId: Copy + Ord + From<usize> {
@@ -88,7 +84,9 @@ impl Correspondence {
 }
 
 impl Correspondence {
-    pub(crate) fn from_rust<Id: CorrespondenceId>(correspondence: &RustCorrespondence<Id>) -> Self {
+    pub(crate) fn from_rust<Id: CorrespondenceId>(
+        correspondence: &GraphCoreCorrespondence<Id>,
+    ) -> Self {
         Self {
             mates: correspondence
                 .mates()
@@ -193,120 +191,6 @@ impl MoleculeCorrespondence {
     }
 }
 
-/// Strategy used to match molecule structure and overlays.
-#[pyclass(from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SubstructureMatchAlgorithm {
-    GraphAndOverlays(),
-    Incidence(),
-}
-
-#[pymethods]
-impl SubstructureMatchAlgorithm {
-    fn __eq__(&self, other: &Self) -> bool {
-        self.to_rust() == other.to_rust()
-    }
-
-    fn __repr__(&self) -> &'static str {
-        self.repr()
-    }
-}
-
-impl SubstructureMatchAlgorithm {
-    pub(crate) fn repr(self) -> &'static str {
-        match self {
-            Self::GraphAndOverlays() => "SubstructureMatchAlgorithm.GraphAndOverlays()",
-            Self::Incidence() => "SubstructureMatchAlgorithm.Incidence()",
-        }
-    }
-
-    #[allow(
-        dead_code,
-        reason = "Rust-to-Python conversion API for substructure match algorithms"
-    )]
-    pub(crate) fn from_rust(algorithm: AstSubstructureMatchAlgorithm) -> Self {
-        match algorithm {
-            AstSubstructureMatchAlgorithm::GraphAndOverlays => Self::GraphAndOverlays(),
-            AstSubstructureMatchAlgorithm::Incidence => Self::Incidence(),
-        }
-    }
-
-    pub(crate) fn to_rust(self) -> AstSubstructureMatchAlgorithm {
-        match self {
-            Self::GraphAndOverlays() => AstSubstructureMatchAlgorithm::GraphAndOverlays,
-            Self::Incidence() => AstSubstructureMatchAlgorithm::Incidence,
-        }
-    }
-}
-
-/// Algorithm used to enumerate subgraph-isomorphism matches for reaction application.
-#[pyclass(from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SubgraphIsomorphismAlgorithm {
-    Vf2(),
-    Ullmann(),
-    Ri(),
-    ArcMatch { path_length: usize },
-    Vf2Rdkit(),
-    RayKirsch(),
-}
-
-#[pymethods]
-impl SubgraphIsomorphismAlgorithm {
-    fn __eq__(&self, other: &Self) -> bool {
-        self.to_rust() == other.to_rust()
-    }
-
-    fn __repr__(&self) -> String {
-        self.repr()
-    }
-}
-
-impl SubgraphIsomorphismAlgorithm {
-    pub(crate) fn repr(self) -> String {
-        match self {
-            Self::Vf2() => "SubgraphIsomorphismAlgorithm.Vf2()".to_owned(),
-            Self::Ullmann() => "SubgraphIsomorphismAlgorithm.Ullmann()".to_owned(),
-            Self::Ri() => "SubgraphIsomorphismAlgorithm.Ri()".to_owned(),
-            Self::ArcMatch { path_length } => {
-                format!("SubgraphIsomorphismAlgorithm.ArcMatch(path_length={path_length})")
-            }
-            Self::Vf2Rdkit() => "SubgraphIsomorphismAlgorithm.Vf2Rdkit()".to_owned(),
-            Self::RayKirsch() => "SubgraphIsomorphismAlgorithm.RayKirsch()".to_owned(),
-        }
-    }
-
-    #[allow(
-        dead_code,
-        reason = "Rust-to-Python conversion API for subgraph algorithms"
-    )]
-    pub(crate) fn from_rust(algorithm: RustSubgraphIsomorphismAlgorithm) -> Self {
-        match algorithm {
-            RustSubgraphIsomorphismAlgorithm::Vf2 => Self::Vf2(),
-            RustSubgraphIsomorphismAlgorithm::Ullmann => Self::Ullmann(),
-            RustSubgraphIsomorphismAlgorithm::Ri => Self::Ri(),
-            RustSubgraphIsomorphismAlgorithm::ArcMatch { path_length } => {
-                Self::ArcMatch { path_length }
-            }
-            RustSubgraphIsomorphismAlgorithm::Vf2Rdkit => Self::Vf2Rdkit(),
-            RustSubgraphIsomorphismAlgorithm::RayKirsch => Self::RayKirsch(),
-        }
-    }
-
-    pub(crate) fn to_rust(self) -> RustSubgraphIsomorphismAlgorithm {
-        match self {
-            Self::Vf2() => RustSubgraphIsomorphismAlgorithm::Vf2,
-            Self::Ullmann() => RustSubgraphIsomorphismAlgorithm::Ullmann,
-            Self::Ri() => RustSubgraphIsomorphismAlgorithm::Ri,
-            Self::ArcMatch { path_length } => {
-                RustSubgraphIsomorphismAlgorithm::ArcMatch { path_length }
-            }
-            Self::Vf2Rdkit() => RustSubgraphIsomorphismAlgorithm::Vf2Rdkit,
-            Self::RayKirsch() => RustSubgraphIsomorphismAlgorithm::RayKirsch,
-        }
-    }
-}
-
 fn exposed_ids(count: usize, mated: impl Iterator<Item = usize>) -> Vec<usize> {
     let present: HashSet<_> = mated.collect();
     (0..count).filter(|id| !present.contains(id)).collect()
@@ -318,18 +202,17 @@ mod tests {
     use rstest::{fixture, rstest};
 
     use super::*;
-    use crate::convert::into_py_variant;
 
     #[fixture]
     fn molecule_correspondence() -> AstMoleculeCorrespondence {
         AstMoleculeCorrespondence::new(
-            RustCorrespondence::new(vec![(NodeId(0), NodeId(1))], 2, 3),
-            RustCorrespondence::new(vec![(BondId(0), BondId(2))], 1, 3),
-            RustCorrespondence::new(vec![(DativeBondId(1), DativeBondId(0))], 2, 1),
-            RustCorrespondence::new(vec![], 1, 2),
-            RustCorrespondence::new(vec![(MulticenterBondId(0), MulticenterBondId(0))], 1, 1),
-            RustCorrespondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(1))], 2, 2),
-            RustCorrespondence::new(
+            GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(1))], 2, 3),
+            GraphCoreCorrespondence::new(vec![(BondId(0), BondId(2))], 1, 3),
+            GraphCoreCorrespondence::new(vec![(DativeBondId(1), DativeBondId(0))], 2, 1),
+            GraphCoreCorrespondence::new(vec![], 1, 2),
+            GraphCoreCorrespondence::new(vec![(MulticenterBondId(0), MulticenterBondId(0))], 1, 1),
+            GraphCoreCorrespondence::new(vec![(NoncovalentBondId(0), NoncovalentBondId(1))], 2, 2),
+            GraphCoreCorrespondence::new(
                 vec![
                     (StereoAtomId(0), StereoAtomId(0)),
                     (StereoAtomId(1), StereoAtomId(1)),
@@ -337,21 +220,21 @@ mod tests {
                 2,
                 2,
             ),
-            RustCorrespondence::new(vec![(StereoBondId(0), StereoBondId(1))], 1, 2),
+            GraphCoreCorrespondence::new(vec![(StereoBondId(0), StereoBondId(1))], 1, 2),
         )
     }
 
     #[rstest]
     #[case::empty(
-        RustCorrespondence::new(vec![], 2, 3),
+        GraphCoreCorrespondence::new(vec![], 2, 3),
         Correspondence { mates: vec![], left_count: 2, right_count: 3 },
     )]
     #[case::partial(
-        RustCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 3),
+        GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 3),
         Correspondence { mates: vec![(0, 2)], left_count: 2, right_count: 3 },
     )]
     #[case::total(
-        RustCorrespondence::new(
+        GraphCoreCorrespondence::new(
             vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
             2,
             2,
@@ -363,7 +246,7 @@ mod tests {
         },
     )]
     #[case::unsorted(
-        RustCorrespondence::new(
+        GraphCoreCorrespondence::new(
             vec![(NodeId(2), NodeId(0)), (NodeId(0), NodeId(2))],
             3,
             3,
@@ -375,7 +258,7 @@ mod tests {
         },
     )]
     fn test_correspondence_from_rust(
-        #[case] correspondence: RustCorrespondence<NodeId>,
+        #[case] correspondence: GraphCoreCorrespondence<NodeId>,
         #[case] expected: Correspondence,
     ) {
         assert_eq!(Correspondence::from_rust(&correspondence), expected);
@@ -383,7 +266,7 @@ mod tests {
 
     #[rstest]
     #[case::empty(
-        RustCorrespondence::new(vec![], 2, 3),
+        GraphCoreCorrespondence::new(vec![], 2, 3),
         vec![],
         2,
         3,
@@ -391,7 +274,7 @@ mod tests {
         vec![0, 1, 2],
     )]
     #[case::partial(
-        RustCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 3),
+        GraphCoreCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 3),
         vec![(0, 2)],
         2,
         3,
@@ -399,7 +282,7 @@ mod tests {
         vec![0, 1],
     )]
     #[case::total(
-        RustCorrespondence::new(
+        GraphCoreCorrespondence::new(
             vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
             2,
             2,
@@ -411,7 +294,7 @@ mod tests {
         vec![],
     )]
     fn test_correspondence_accessors(
-        #[case] correspondence: RustCorrespondence<NodeId>,
+        #[case] correspondence: GraphCoreCorrespondence<NodeId>,
         #[case] mates: Vec<(usize, usize)>,
         #[case] left_count: usize,
         #[case] right_count: usize,
@@ -428,8 +311,11 @@ mod tests {
 
     #[rstest]
     fn test_correspondence_value() {
-        let correspondence =
-            Correspondence::from_rust(&RustCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 3));
+        let correspondence = Correspondence::from_rust(&GraphCoreCorrespondence::new(
+            vec![(NodeId(0), NodeId(2))],
+            2,
+            3,
+        ));
         let mut mates = correspondence.mates();
         let mut left_exposed = correspondence.left_exposed();
         let mut right_exposed = correspondence.right_exposed();
@@ -447,15 +333,19 @@ mod tests {
         );
         assert_eq!(
             correspondence,
-            Correspondence::from_rust(
-                &RustCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 3,)
-            )
+            Correspondence::from_rust(&GraphCoreCorrespondence::new(
+                vec![(NodeId(0), NodeId(2))],
+                2,
+                3,
+            ))
         );
         assert_ne!(
             correspondence,
-            Correspondence::from_rust(
-                &RustCorrespondence::new(vec![(NodeId(0), NodeId(2))], 2, 4,)
-            )
+            Correspondence::from_rust(&GraphCoreCorrespondence::new(
+                vec![(NodeId(0), NodeId(2))],
+                2,
+                4,
+            ))
         );
     }
 
@@ -576,197 +466,5 @@ mod tests {
                 "stereo_bonds=Correspondence(mates=[(0, 1)], left_count=1, right_count=2))"
             )
         );
-    }
-
-    #[rstest]
-    #[case::graph_and_overlays(
-        AstSubstructureMatchAlgorithm::GraphAndOverlays,
-        SubstructureMatchAlgorithm::GraphAndOverlays()
-    )]
-    #[case::incidence(
-        AstSubstructureMatchAlgorithm::Incidence,
-        SubstructureMatchAlgorithm::Incidence()
-    )]
-    fn test_substructure_match_algorithm_from_rust(
-        #[case] algorithm: AstSubstructureMatchAlgorithm,
-        #[case] expected: SubstructureMatchAlgorithm,
-    ) {
-        assert_eq!(SubstructureMatchAlgorithm::from_rust(algorithm), expected);
-    }
-
-    #[rstest]
-    #[case::graph_and_overlays(
-        SubstructureMatchAlgorithm::GraphAndOverlays(),
-        AstSubstructureMatchAlgorithm::GraphAndOverlays
-    )]
-    #[case::incidence(
-        SubstructureMatchAlgorithm::Incidence(),
-        AstSubstructureMatchAlgorithm::Incidence
-    )]
-    fn test_substructure_match_algorithm_to_rust(
-        #[case] algorithm: SubstructureMatchAlgorithm,
-        #[case] expected: AstSubstructureMatchAlgorithm,
-    ) {
-        assert_eq!(algorithm.to_rust(), expected);
-    }
-
-    #[rstest]
-    #[case::graph_and_overlays(
-        SubstructureMatchAlgorithm::GraphAndOverlays(),
-        "SubstructureMatchAlgorithm.GraphAndOverlays()"
-    )]
-    #[case::incidence(
-        SubstructureMatchAlgorithm::Incidence(),
-        "SubstructureMatchAlgorithm.Incidence()"
-    )]
-    fn test_substructure_match_algorithm_value(
-        #[case] algorithm: SubstructureMatchAlgorithm,
-        #[case] expected_repr: &str,
-    ) {
-        Python::attach(|py| {
-            let expected = into_py_variant(
-                py,
-                SubstructureMatchAlgorithm::from_rust(algorithm.to_rust()),
-            )
-            .unwrap();
-            let algorithm = into_py_variant(py, algorithm).unwrap();
-            let expected = expected.bind(py).as_any();
-            let algorithm = algorithm.bind(py).as_any();
-
-            assert_eq!(
-                algorithm.repr().unwrap().extract::<String>().unwrap(),
-                expected_repr
-            );
-            assert!(algorithm.eq(expected).unwrap());
-        });
-    }
-
-    #[rstest]
-    #[case::vf2(
-        RustSubgraphIsomorphismAlgorithm::Vf2,
-        SubgraphIsomorphismAlgorithm::Vf2()
-    )]
-    #[case::ullmann(
-        RustSubgraphIsomorphismAlgorithm::Ullmann,
-        SubgraphIsomorphismAlgorithm::Ullmann()
-    )]
-    #[case::ri(
-        RustSubgraphIsomorphismAlgorithm::Ri,
-        SubgraphIsomorphismAlgorithm::Ri()
-    )]
-    #[case::arc_match(
-        RustSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-        SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-    )]
-    #[case::vf2_rdkit(
-        RustSubgraphIsomorphismAlgorithm::Vf2Rdkit,
-        SubgraphIsomorphismAlgorithm::Vf2Rdkit()
-    )]
-    #[case::ray_kirsch(
-        RustSubgraphIsomorphismAlgorithm::RayKirsch,
-        SubgraphIsomorphismAlgorithm::RayKirsch()
-    )]
-    fn test_subgraph_isomorphism_algorithm_from_rust(
-        #[case] algorithm: RustSubgraphIsomorphismAlgorithm,
-        #[case] expected: SubgraphIsomorphismAlgorithm,
-    ) {
-        assert_eq!(SubgraphIsomorphismAlgorithm::from_rust(algorithm), expected);
-    }
-
-    #[rstest]
-    #[case::vf2(
-        SubgraphIsomorphismAlgorithm::Vf2(),
-        RustSubgraphIsomorphismAlgorithm::Vf2
-    )]
-    #[case::ullmann(
-        SubgraphIsomorphismAlgorithm::Ullmann(),
-        RustSubgraphIsomorphismAlgorithm::Ullmann
-    )]
-    #[case::ri(
-        SubgraphIsomorphismAlgorithm::Ri(),
-        RustSubgraphIsomorphismAlgorithm::Ri
-    )]
-    #[case::arc_match(
-        SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-        RustSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-    )]
-    #[case::vf2_rdkit(
-        SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
-        RustSubgraphIsomorphismAlgorithm::Vf2Rdkit
-    )]
-    #[case::ray_kirsch(
-        SubgraphIsomorphismAlgorithm::RayKirsch(),
-        RustSubgraphIsomorphismAlgorithm::RayKirsch
-    )]
-    fn test_subgraph_isomorphism_algorithm_to_rust(
-        #[case] algorithm: SubgraphIsomorphismAlgorithm,
-        #[case] expected: RustSubgraphIsomorphismAlgorithm,
-    ) {
-        assert_eq!(algorithm.to_rust(), expected);
-    }
-
-    #[rstest]
-    #[case::vf2(
-        SubgraphIsomorphismAlgorithm::Vf2(),
-        "SubgraphIsomorphismAlgorithm.Vf2()",
-        None
-    )]
-    #[case::ullmann(
-        SubgraphIsomorphismAlgorithm::Ullmann(),
-        "SubgraphIsomorphismAlgorithm.Ullmann()",
-        None
-    )]
-    #[case::ri(
-        SubgraphIsomorphismAlgorithm::Ri(),
-        "SubgraphIsomorphismAlgorithm.Ri()",
-        None
-    )]
-    #[case::arc_match(
-        SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-        "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6)",
-        Some(6),
-    )]
-    #[case::vf2_rdkit(
-        SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
-        "SubgraphIsomorphismAlgorithm.Vf2Rdkit()",
-        None
-    )]
-    #[case::ray_kirsch(
-        SubgraphIsomorphismAlgorithm::RayKirsch(),
-        "SubgraphIsomorphismAlgorithm.RayKirsch()",
-        None
-    )]
-    fn test_subgraph_isomorphism_algorithm_value(
-        #[case] algorithm: SubgraphIsomorphismAlgorithm,
-        #[case] expected_repr: &str,
-        #[case] expected_path_length: Option<usize>,
-    ) {
-        Python::attach(|py| {
-            let expected = into_py_variant(
-                py,
-                SubgraphIsomorphismAlgorithm::from_rust(algorithm.to_rust()),
-            )
-            .unwrap();
-            let algorithm = into_py_variant(py, algorithm).unwrap();
-            let expected = expected.bind(py).as_any();
-            let algorithm = algorithm.bind(py).as_any();
-
-            assert_eq!(
-                algorithm.repr().unwrap().extract::<String>().unwrap(),
-                expected_repr
-            );
-            assert!(algorithm.eq(expected).unwrap());
-            match expected_path_length {
-                Some(path_length) => assert_eq!(
-                    algorithm
-                        .getattr("path_length")
-                        .unwrap()
-                        .extract::<usize>()
-                        .unwrap(),
-                    path_length
-                ),
-                None => assert!(algorithm.getattr("path_length").is_err()),
-            }
-        });
     }
 }

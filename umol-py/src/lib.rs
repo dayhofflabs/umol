@@ -5,6 +5,11 @@ use pyo3::prelude::*;
 
 #[cfg(feature = "graph")]
 use crate::{
+    algorithm::{
+        AutomorphismAlgorithm, CommonSubgraphEnumerationAlgorithm, ConnectedComponentsAlgorithm,
+        CycleEnumerationAlgorithm, MaximumIndependentSetAlgorithm, SubgraphEnumerationAlgorithm,
+        SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
+    },
     aromatic::{AromaticSystemAst, AromaticSystemView, AromaticSystemViews},
     atom::{AtomAst, AtomView, AtomViews, ElementAst, IsotopeMassAst},
     bond::{BondAst, BondView, BondViews},
@@ -46,10 +51,7 @@ use crate::{
             StereogenicityAst, TopicityAst, TopicityRelationAst,
         },
     },
-    correspondence::{
-        Correspondence, MoleculeCorrespondence, SubgraphIsomorphismAlgorithm,
-        SubstructureMatchAlgorithm,
-    },
+    correspondence::{Correspondence, MoleculeCorrespondence},
     dative::{DativeBondAst, DativeBondView, DativeBondViews},
     defaults::{MoleculeDefaults, ReactionDefaults},
     delta::{
@@ -101,6 +103,8 @@ use crate::{
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
 };
 
+#[cfg(feature = "graph")]
+mod algorithm;
 #[cfg(feature = "graph")]
 mod aromatic;
 #[cfg(feature = "graph")]
@@ -157,6 +161,14 @@ mod value;
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "graph")]
     {
+        module.add_class::<AutomorphismAlgorithm>()?;
+        module.add_class::<CommonSubgraphEnumerationAlgorithm>()?;
+        module.add_class::<ConnectedComponentsAlgorithm>()?;
+        module.add_class::<CycleEnumerationAlgorithm>()?;
+        module.add_class::<MaximumIndependentSetAlgorithm>()?;
+        module.add_class::<SubgraphEnumerationAlgorithm>()?;
+        module.add_class::<SubgraphIsomorphismAlgorithm>()?;
+        module.add_class::<SubstructureMatchAlgorithm>()?;
         module.add_class::<Element>()?;
         module.add(
             "ContradictionError",
@@ -234,8 +246,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ReactionCombinedFingerprint>()?;
         module.add_class::<Correspondence>()?;
         module.add_class::<MoleculeCorrespondence>()?;
-        module.add_class::<SubgraphIsomorphismAlgorithm>()?;
-        module.add_class::<SubstructureMatchAlgorithm>()?;
         module.add_class::<SubPatternAnchor>()?;
         module.add_class::<RelationalConstraint>()?;
         module.add_class::<MoleculeConstraint>()?;

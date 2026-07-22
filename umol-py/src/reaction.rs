@@ -16,12 +16,12 @@ use umol_ast::ast::{
 use umol_ast::dsl::ReactionDsl as AstReactionDsl;
 use umol_graph::fingerprint::featurize_reaction;
 use umol_graph_core::{
-    Correspondence, NodeId, SubgraphIsomorphismAlgorithm as RustSubgraphIsomorphismAlgorithm,
+    Correspondence, NodeId, SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
 };
 
+use crate::algorithm::{SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm};
 use crate::correspondence::{
     Correspondence as PyCorrespondence, MoleculeCorrespondence as PyMoleculeCorrespondence,
-    SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
 };
 use crate::defaults::ReactionDefaults;
 use crate::delta::Deltas;
@@ -124,7 +124,7 @@ impl ReactionApplicationConfig {
     )]
     pub(crate) fn from_rust(
         match_algorithm: AstSubstructureMatchAlgorithm,
-        subgraph_isomorphism_algorithm: RustSubgraphIsomorphismAlgorithm,
+        subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm,
     ) -> Self {
         Self {
             match_algorithm: SubstructureMatchAlgorithm::from_rust(match_algorithm),
@@ -138,7 +138,7 @@ impl ReactionApplicationConfig {
         self,
     ) -> (
         AstSubstructureMatchAlgorithm,
-        RustSubgraphIsomorphismAlgorithm,
+        GraphCoreSubgraphIsomorphismAlgorithm,
     ) {
         (
             self.match_algorithm.to_rust(),
@@ -644,12 +644,12 @@ mod tests {
     #[rstest]
     #[case::default(
         AstSubstructureMatchAlgorithm::GraphAndOverlays,
-        RustSubgraphIsomorphismAlgorithm::Vf2Rdkit,
+        GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit,
         ReactionApplicationConfig::default()
     )]
     #[case::incidence_arc_match(
         AstSubstructureMatchAlgorithm::Incidence,
-        RustSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+        GraphCoreSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
         ReactionApplicationConfig::new(
             SubstructureMatchAlgorithm::Incidence(),
             SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
@@ -657,7 +657,7 @@ mod tests {
     )]
     fn test_reaction_application_config_from_rust(
         #[case] match_algorithm: AstSubstructureMatchAlgorithm,
-        #[case] subgraph_isomorphism_algorithm: RustSubgraphIsomorphismAlgorithm,
+        #[case] subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm,
         #[case] expected: ReactionApplicationConfig,
     ) {
         assert_eq!(
@@ -669,31 +669,31 @@ mod tests {
     #[rstest]
     #[case::vf2(
         SubgraphIsomorphismAlgorithm::Vf2(),
-        RustSubgraphIsomorphismAlgorithm::Vf2
+        GraphCoreSubgraphIsomorphismAlgorithm::Vf2
     )]
     #[case::ullmann(
         SubgraphIsomorphismAlgorithm::Ullmann(),
-        RustSubgraphIsomorphismAlgorithm::Ullmann
+        GraphCoreSubgraphIsomorphismAlgorithm::Ullmann
     )]
     #[case::ri(
         SubgraphIsomorphismAlgorithm::Ri(),
-        RustSubgraphIsomorphismAlgorithm::Ri
+        GraphCoreSubgraphIsomorphismAlgorithm::Ri
     )]
     #[case::arc_match(
         SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-        RustSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+        GraphCoreSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
     )]
     #[case::vf2_rdkit(
         SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
-        RustSubgraphIsomorphismAlgorithm::Vf2Rdkit
+        GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit
     )]
     #[case::ray_kirsch(
         SubgraphIsomorphismAlgorithm::RayKirsch(),
-        RustSubgraphIsomorphismAlgorithm::RayKirsch
+        GraphCoreSubgraphIsomorphismAlgorithm::RayKirsch
     )]
     fn test_reaction_application_config_to_rust(
         #[case] subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
-        #[case] expected_subgraph_isomorphism_algorithm: RustSubgraphIsomorphismAlgorithm,
+        #[case] expected_subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm,
     ) {
         let config = ReactionApplicationConfig::new(
             SubstructureMatchAlgorithm::Incidence(),
