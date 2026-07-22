@@ -6,8 +6,8 @@ use umol_chem::element::Element;
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
     Correspondence, CycleEnumerationAlgorithm, EdgeId, MatchingEnumerationAlgorithm,
-    MaximumIndependentSetAlgorithm, MaximumMatchingAlgorithm, NodeId, ShortestCycleAlgorithm,
-    SubgraphIsomorphismAlgorithm,
+    MaximumIndependentSetAlgorithm, MaximumMatchingAlgorithm, MaximumMatchingError, NodeId,
+    ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 
 use super::super::aromatic::AromaticSystemAst;
@@ -1359,20 +1359,36 @@ fn test_molecule_ast_maximum_matching(#[case] ast: MoleculeAst, #[case] expected
     let node_order: Vec<AtomId> = ast.atoms().iter().map(|atom| atom.id).collect();
     let m = ast
         .graph()
-        .maximum_matching(&node_order, MaximumMatchingAlgorithm::Edmonds);
+        .maximum_matching(&node_order, MaximumMatchingAlgorithm::Edmonds)
+        .unwrap();
     assert_eq!(m.size(), expected_size);
 }
 
 #[rstest]
 fn test_bond_matching_mate() {
     let ast = chain(4);
-    let m = ast.graph().maximum_matching(
-        &[AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
-        MaximumMatchingAlgorithm::Edmonds,
-    );
+    let m = ast
+        .graph()
+        .maximum_matching(
+            &[AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
+            MaximumMatchingAlgorithm::Edmonds,
+        )
+        .unwrap();
     assert!(m.is_matched(AtomId(0)));
     let mate = m.mate(AtomId(0));
     assert!(mate.is_some());
+}
+
+#[rstest]
+#[case::triangle(mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 :single] [1 2 :single] [0 2 :single]]}"#))]
+fn test_molecule_ast_maximum_matching_error(#[case] ast: MoleculeAst) {
+    let node_order: Vec<AtomId> = ast.atoms().iter().map(|atom| atom.id).collect();
+    assert_eq!(
+        ast.graph()
+            .maximum_matching(&node_order, MaximumMatchingAlgorithm::HopcroftKarp)
+            .unwrap_err(),
+        MaximumMatchingError::NonBipartite,
+    );
 }
 
 #[rstest]

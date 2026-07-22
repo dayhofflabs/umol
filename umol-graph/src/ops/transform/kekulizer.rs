@@ -21,7 +21,7 @@ use umol_ast::ast::{
     ElectronCountsAst, EntityStructureContradiction, EntityStructureError,
     EntityStructureValidator, MoleculeAst, ValueAst,
 };
-use umol_graph_core::{MaximumMatchingAlgorithm, NodeId};
+use umol_graph_core::{MaximumMatchingAlgorithm, MaximumMatchingError, NodeId};
 use umol_utils::solution::Solution;
 
 use crate::ops::invariant::ValenceMismatch;
@@ -109,6 +109,8 @@ pub enum KekulizerError {
     PostLocalizationSpinInvariantError(SpinInvariantsError),
     #[error("no perfect matching exists for aromatic system {0:?}")]
     NoMatching(AromaticSystemId),
+    #[error("maximum matching requires a bipartite aromatic system {0:?}")]
+    NonBipartiteMatching(AromaticSystemId),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -444,7 +446,14 @@ impl Kekulizer {
                 MatchingInputMode::Prescribed => self.model.algorithm,
                 MatchingInputMode::OneMobileExposure => MaximumMatchingAlgorithm::Edmonds,
             };
-            let matching = extracted.graph().maximum_matching(&sub_order, algorithm);
+            let matching = extracted
+                .graph()
+                .maximum_matching(&sub_order, algorithm)
+                .map_err(|error| match error {
+                    MaximumMatchingError::NonBipartite => {
+                        KekulizerError::NonBipartiteMatching(system_idx)
+                    }
+                })?;
             let deficiency = extracted.atoms().count() - 2 * matching.size();
             match matching_input.mode {
                 MatchingInputMode::Prescribed if deficiency != 0 => {
@@ -720,6 +729,28 @@ mod tests {
         let result =
             Kekulizer::new(KekulizationModel::default(), node_order).transform_into(&mut ast);
         assert_eq!(result, Err(expected));
+    }
+
+    #[rstest]
+    #[case::non_bipartite(
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [0 2 :aromatic]] :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]"}]}"#),
+        (0..3).map(AtomId).collect(),
+        KekulizerError::NonBipartiteMatching(AromaticSystemId(0)),
+    )]
+    fn test_kekulizer_transform_into_matching_error(
+        #[case] input: MoleculeAst,
+        #[case] node_order: Vec<AtomId>,
+        #[case] expected: KekulizerError,
+    ) {
+        let mut actual = input.clone();
+        let result = Kekulizer::new(
+            KekulizationModel::new(MaximumMatchingAlgorithm::HopcroftKarp),
+            node_order,
+        )
+        .transform_into(&mut actual);
+
+        assert_eq!(result, Err(expected));
+        assert_eq!(actual, input);
     }
 
     #[rstest]

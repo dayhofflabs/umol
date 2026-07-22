@@ -438,7 +438,8 @@ the corrected enumerator.
   Experiment A oracle and chemical fixtures.
 - FKT acceleration through modular arithmetic/CRT, rank-one monomer updates, or reused factorizations
   is deferrable until counting benchmarks justify it.
-- Full layered Hopcroft–Karp is deferrable; Edmonds supplies the correctness oracle.
+- Full layered Hopcroft–Karp was deferred from this plan and was implemented in
+  `151-python-molecule-workflows-2026-07-13.md`, S9h, with Edmonds retained as the correctness oracle.
 - Symmetry-inequivalent counting via Burnside's lemma is deferrable and must not alter labeled counts.
 - Uno 1997/2001, general maximal matching, chemical `MatchingDemand`, charge localization, and the
   kekulizer migration belong to later experiments/stages.

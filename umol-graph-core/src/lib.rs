@@ -24,7 +24,8 @@ pub use algorithms::connected::ConnectedComponentsAlgorithm;
 pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
 pub use algorithms::enumeration::{PathEnumerationAlgorithm, SubgraphEnumerationAlgorithm};
 pub use algorithms::matching::{
-    Matching, MatchingEnumerationAlgorithm, MaximumMatchingAlgorithm, PerfectMatchingAlgorithm,
+    Matching, MatchingEnumerationAlgorithm, MaximumMatchingAlgorithm, MaximumMatchingError,
+    PerfectMatchingAlgorithm,
 };
 pub use algorithms::matching_count::{
     FaceBoundary, PlanarEmbedding, PlanarEmbeddingError, PlanarMatchingCountError,

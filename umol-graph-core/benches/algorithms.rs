@@ -332,7 +332,29 @@ fn maximum_matching(c: &mut Criterion) {
     for (name, g) in &graphs {
         let node_order: Vec<_> = g.node_ids().collect();
         group.bench_function(*name, |b| {
-            b.iter(|| g.maximum_matching(&node_order, MaximumMatchingAlgorithm::Edmonds));
+            b.iter(|| {
+                g.maximum_matching(&node_order, MaximumMatchingAlgorithm::Edmonds)
+                    .expect("Edmonds maximum matching is infallible")
+            });
+        });
+    }
+    group.finish();
+
+    let bipartite_graphs = [
+        ("hexagon", cycle(6)),
+        ("cubane", cubane()),
+        ("grid_16x16", grid(16, 16)),
+    ];
+
+    let mut group = c.benchmark_group("maximum_matching_hopcroft_karp");
+    for (name, graph) in &bipartite_graphs {
+        let node_order: Vec<_> = graph.node_ids().collect();
+        group.bench_function(*name, |b| {
+            b.iter(|| {
+                graph
+                    .maximum_matching(&node_order, MaximumMatchingAlgorithm::HopcroftKarp)
+                    .expect("Hopcroft-Karp benchmark graphs are bipartite")
+            });
         });
     }
     group.finish();

@@ -1795,8 +1795,7 @@ default rather than introducing a one-field composition config.
   backends, eager correspondence snapshotting, lazy owned results, local
   rejection, invalid-structure creation failure, and fatal iterator error.
   **Implemented (green).** The installed workflow covers the default
-  `GraphAndOverlays`/`Vf2Rdkit` pair, explicit `GraphAndOverlays`/`Ullmann` and
-  `Incidence`/`Vf2` pairs, snapshot and detachment behavior, a rejected match
+  `GraphAndOverlays`/`Vf2Rdkit` pair, explicit `GraphAndOverlays`/`Ullmann` and  `Incidence`/`Vf2` pairs, snapshot and detachment behavior, a rejected match
   between successful derivations, precondition failure at iterator creation,
   and a fatal error raised lazily with permanent exhaustion. `[dep: S9e]`
 - **S9g — graph-core terminology and matching-count module**
@@ -1827,7 +1826,14 @@ default rather than introducing a one-field composition config.
   typed odd-cycle error, Edmonds/Hopcroft-Karp cardinality parity on bipartite
   graphs, deterministic order, and propagation through `GraphView`.
   **Breaking return-contract migration plus algorithm correction (red→green).**
-  `[dep: S9g]`
+  **Implemented (green).** `Graph::maximum_matching` and `GraphView` now return
+  the exported typed error; all callers handle it explicitly, and the
+  kekulizer preserves aromatic-system context. Hopcroft-Karp now uses shortest
+  augmenting-path layers with batched DFS, with randomized bipartite parity
+  against Edmonds. A retained Criterion benchmark records the local
+  pre-change → post-change ranges as 343.54–345.70 ns → 243.91–244.58 ns for
+  hexagon, 450.81–453.62 ns → 270.20–273.83 ns for cubane, and
+  12.693–12.820 µs → 4.2859–4.3043 µs for a 16×16 grid. `[dep: S9g]`
 - **S9i — graph-core subsidiary algorithms**
   (`umol-graph-core/src/algorithms/{matching,cycles,refine}.rs`): use the
   existing public selector-bearing calls for BFS bipartition inside

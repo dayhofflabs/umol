@@ -1,6 +1,8 @@
 //! Maximum matching and matching enumeration.
 
 use std::collections::{HashSet, VecDeque};
+use std::error::Error;
+use std::fmt;
 use std::ops::ControlFlow;
 
 use crate::algorithms::coloring::BipartitionAlgorithm;
@@ -10,10 +12,24 @@ use crate::graph::{EdgeId, Graph, NodeId};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaximumMatchingAlgorithm {
     Edmonds,
-    /// Bipartite-only. Caller must ensure the graph is bipartite; verified via
-    /// `debug_assert!` inside the implementation.
+    /// Bipartite-only.
     HopcroftKarp,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MaximumMatchingError {
+    NonBipartite,
+}
+
+impl fmt::Display for MaximumMatchingError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NonBipartite => write!(formatter, "Hopcroft-Karp requires a bipartite graph"),
+        }
+    }
+}
+
+impl Error for MaximumMatchingError {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MatchingEnumerationAlgorithm {
@@ -80,12 +96,13 @@ impl Matching {
 impl Graph {
     /// Returns a maximum matching, using `node_order` as the deterministic vertex traversal
     /// priority. `node_order` must contain every graph node exactly once. Neighbor ties retain the
-    /// graph's stable adjacency order.
+    /// graph's stable adjacency order. Hopcroft-Karp returns
+    /// [`MaximumMatchingError::NonBipartite`] when the graph is not bipartite.
     pub fn maximum_matching(
         &self,
         node_order: &[NodeId],
         alg: MaximumMatchingAlgorithm,
-    ) -> Matching {
+    ) -> Result<Matching, MaximumMatchingError> {
         debug_assert_eq!(
             node_order.len(),
             self.node_count(),
@@ -97,7 +114,7 @@ impl Graph {
             "maximum-matching node order must contain every graph node exactly once",
         );
         match alg {
-            MaximumMatchingAlgorithm::Edmonds => self.maximum_matching_edmonds(node_order),
+            MaximumMatchingAlgorithm::Edmonds => Ok(self.maximum_matching_edmonds(node_order)),
             MaximumMatchingAlgorithm::HopcroftKarp => {
                 self.maximum_matching_hopcroft_karp(node_order)
             }
@@ -173,32 +190,33 @@ impl Graph {
         }
     }
 
-    // Bipartite augmenting-path matching. Repeatedly grows the matching by
-    // BFS for an augmenting path from each unmatched vertex on the U-side.
-    // Each augmenting BFS is O(V+E), repeated up to |M*| ≤ V/2 times, giving
-    // O(V·(V+E)). The full Hopcroft-Karp speedup to O(E·√V) — layered BFS
-    // plus batched DFS — is a future optimization; the variant name carries
-    // the algorithm family rather than the exact complexity.
-    fn maximum_matching_hopcroft_karp(&self, node_order: &[NodeId]) -> Matching {
+    // Hopcroft-Karp maximum matching. BFS constructs shortest augmenting-path
+    // layers and the following DFS pass augments a maximal set of disjoint
+    // paths in that layer graph, giving O(E·√V).
+    fn maximum_matching_hopcroft_karp(
+        &self,
+        node_order: &[NodeId],
+    ) -> Result<Matching, MaximumMatchingError> {
         let n = self.node_count();
-        let bipartition = self.bipartition(BipartitionAlgorithm::Bfs);
-        debug_assert!(
-            bipartition.is_some(),
-            "MaximumMatchingAlgorithm::HopcroftKarp requires a bipartite graph",
-        );
-        let colors = bipartition.unwrap_or_else(|| vec![false; n]);
+        let colors = self
+            .bipartition(BipartitionAlgorithm::Bfs)
+            .ok_or(MaximumMatchingError::NonBipartite)?;
 
         let mut mate = vec![-1i32; n];
-        // Iterate U-side (color = false) in node order.
-        for &start in node_order {
-            let start_idx = start.index();
-            if colors[start_idx] || mate[start_idx] >= 0 {
-                continue;
+        let mut distance = vec![usize::MAX; n];
+        loop {
+            let shortest = hopcroft_karp_bfs(self, node_order, &colors, &mate, &mut distance);
+            if shortest == usize::MAX {
+                break;
             }
-            bfs_augment_bipartite(self, start, &mut mate, n);
+            for &node in node_order {
+                if !colors[node.index()] && mate[node.index()] < 0 {
+                    hopcroft_karp_dfs(self, node, &mut mate, &mut distance, shortest);
+                }
+            }
         }
 
-        Matching::from_mates(self, &mate)
+        Ok(Matching::from_mates(self, &mate))
     }
 
     // Greedy DFS with backtracking. Walks `node_order` left-to-right; at each
@@ -292,52 +310,68 @@ impl Graph {
     }
 }
 
-// Bipartite-only augmenting BFS. `start` is on the U-side. Returns whether
-// an augmenting path was found and applied to `mate`.
-fn bfs_augment_bipartite(graph: &Graph, start: NodeId, mate: &mut [i32], n: usize) -> bool {
-    let mut parent = vec![-1i32; n];
-    let mut visited = vec![false; n];
-    visited[start.index()] = true;
+fn hopcroft_karp_bfs(
+    graph: &Graph,
+    node_order: &[NodeId],
+    colors: &[bool],
+    mate: &[i32],
+    distance: &mut [usize],
+) -> usize {
+    distance.fill(usize::MAX);
     let mut queue = VecDeque::new();
-    queue.push_back(start);
+    for &node in node_order {
+        if !colors[node.index()] && mate[node.index()] < 0 {
+            distance[node.index()] = 0;
+            queue.push_back(node);
+        }
+    }
 
+    let mut shortest = usize::MAX;
     while let Some(u) = queue.pop_front() {
+        let next_distance = distance[u.index()] + 1;
+        if next_distance > shortest {
+            continue;
+        }
         for nbr in graph.neighbors(u) {
             let v = nbr.node;
-            if visited[v.index()] {
-                continue;
-            }
-            visited[v.index()] = true;
-            parent[v.index()] = u.0 as i32;
-            let m = mate[v.index()];
-            if m < 0 {
-                augment_alternating_path(v, &parent, mate);
-                return true;
-            }
-            // v is matched to some U-side vertex; continue exploration there.
-            let m_u = m as usize;
-            if !visited[m_u] {
-                visited[m_u] = true;
-                parent[m_u] = v.0 as i32;
-                queue.push_back(NodeId(m as u32));
+            let paired = mate[v.index()];
+            if paired < 0 {
+                shortest = shortest.min(next_distance);
+            } else if next_distance < shortest && distance[paired as usize] == usize::MAX {
+                distance[paired as usize] = next_distance;
+                queue.push_back(NodeId(paired as u32));
             }
         }
     }
-    false
+    shortest
 }
 
-// Walk back along `parent` from `end`, toggling matched edges along the way.
-fn augment_alternating_path(end: NodeId, parent: &[i32], mate: &mut [i32]) {
-    let mut cur = end.0 as i32;
-    while cur >= 0 {
-        let p = parent[cur as usize];
-        let next = if p >= 0 { mate[p as usize] } else { -1 };
-        mate[cur as usize] = p;
-        if p >= 0 {
-            mate[p as usize] = cur;
+fn hopcroft_karp_dfs(
+    graph: &Graph,
+    u: NodeId,
+    mate: &mut [i32],
+    distance: &mut [usize],
+    shortest: usize,
+) -> bool {
+    let next_distance = distance[u.index()] + 1;
+    for nbr in graph.neighbors(u) {
+        let v = nbr.node;
+        let paired = mate[v.index()];
+        let extends_path = if paired < 0 {
+            next_distance == shortest
+        } else {
+            next_distance < shortest
+                && distance[paired as usize] == next_distance
+                && hopcroft_karp_dfs(graph, NodeId(paired as u32), mate, distance, shortest)
+        };
+        if extends_path {
+            mate[u.index()] = v.0 as i32;
+            mate[v.index()] = u.0 as i32;
+            return true;
         }
-        cur = next;
     }
+    distance[u.index()] = usize::MAX;
+    false
 }
 
 // Backtracking helper for `perfect_matching_backtracking_dfs`. Returns true
@@ -686,7 +720,7 @@ mod tests {
     use super::MatchingEnumerationAlgorithm::BranchAndBound;
     use super::MaximumMatchingAlgorithm::{Edmonds, HopcroftKarp};
     use super::PerfectMatchingAlgorithm::BacktrackingDfs;
-    use super::{Matching, MatchingSearchState, MaximumMatchingAlgorithm};
+    use super::{Matching, MatchingSearchState, MaximumMatchingAlgorithm, MaximumMatchingError};
     use crate::graph::{EdgeId, Graph, NodeId};
 
     #[rstest]
@@ -716,7 +750,7 @@ mod tests {
     ) {
         let g = Graph::new(node_count, &edges);
         let node_order: Vec<NodeId> = g.node_ids().collect();
-        let m = g.maximum_matching(&node_order, Edmonds);
+        let m = g.maximum_matching(&node_order, Edmonds).unwrap();
         assert_eq!(m.size(), expected_size, "matching size");
         assert_eq!(m.is_perfect(node_count), expected_perfect, "is_perfect");
         assert_matching_valid(&g, &m);
@@ -742,38 +776,84 @@ mod tests {
     ) {
         let g = Graph::new(node_count, &edges);
         let node_order: Vec<NodeId> = g.node_ids().collect();
-        let m = g.maximum_matching(&node_order, HopcroftKarp);
+        let m = g.maximum_matching(&node_order, HopcroftKarp).unwrap();
         assert_eq!(m.size(), expected_size, "matching size");
         assert_eq!(m.is_perfect(node_count), expected_perfect, "is_perfect");
         assert_matching_valid(&g, &m);
     }
 
     #[rstest]
-    fn test_graph_maximum_matching_cross_algorithm() {
-        let cases: &[(usize, Vec<[u32; 2]>)] = &[
-            (4, vec![[0, 1], [1, 2], [2, 3], [3, 0]]),
-            (6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
+    #[case::square(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]])]
+    #[case::hexagon(6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]])]
+    #[case::bipartite_4_by_4(
+        8,
+        vec![
+            [0, 4], [0, 5], [1, 4], [1, 6],
+            [2, 5], [2, 7], [3, 6], [3, 7],
+        ],
+    )]
+    fn test_graph_maximum_matching_cross_algorithm(
+        #[case] node_count: usize,
+        #[case] edges: Vec<[u32; 2]>,
+    ) {
+        let graph = Graph::new(node_count, &edges);
+        let node_order: Vec<NodeId> = graph.node_ids().collect();
+        let hopcroft_karp = graph.maximum_matching(&node_order, HopcroftKarp).unwrap();
+        let edmonds = graph.maximum_matching(&node_order, Edmonds).unwrap();
+        assert_eq!(hopcroft_karp.size(), edmonds.size());
+    }
+
+    #[rstest]
+    fn test_graph_maximum_matching_property() {
+        const PROPERTY_CASES: u32 = 128;
+
+        let strategy = (0_usize..=7, 0_usize..=7).prop_flat_map(|(left, right)| {
+            let possible_edges: Vec<_> = (0..left as u32)
+                .flat_map(|first| {
+                    (left as u32..(left + right) as u32).map(move |second| [first, second])
+                })
+                .collect();
             (
-                8,
-                vec![
-                    [0, 4],
-                    [0, 5],
-                    [1, 4],
-                    [1, 6],
-                    [2, 5],
-                    [2, 7],
-                    [3, 6],
-                    [3, 7],
-                ],
-            ),
-        ];
-        for (n, edges) in cases {
-            let g = Graph::new(*n, edges);
-            let node_order: Vec<NodeId> = g.node_ids().collect();
-            let hk = g.maximum_matching(&node_order, HopcroftKarp);
-            let ed = g.maximum_matching(&node_order, Edmonds);
-            assert_eq!(hk.size(), ed.size(), "n={}, edges={:?}", n, edges);
-        }
+                Just(left + right),
+                Just(possible_edges.clone()),
+                prop::collection::vec(any::<bool>(), possible_edges.len()),
+            )
+        });
+        let mut runner = TestRunner::new(Config {
+            cases: PROPERTY_CASES,
+            ..Config::default()
+        });
+
+        runner
+            .run(&strategy, |(node_count, possible_edges, present)| {
+                let edges: Vec<_> = possible_edges
+                    .into_iter()
+                    .zip(present)
+                    .filter_map(|(edge, present)| present.then_some(edge))
+                    .collect();
+                let graph = Graph::new(node_count, &edges);
+                let node_order: Vec<NodeId> = graph.node_ids().collect();
+                let hopcroft_karp = graph
+                    .maximum_matching(&node_order, HopcroftKarp)
+                    .expect("generated graph is bipartite");
+                let edmonds = graph
+                    .maximum_matching(&node_order, Edmonds)
+                    .expect("Edmonds maximum matching is infallible");
+
+                prop_assert_eq!(hopcroft_karp.size(), edmonds.size());
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[rstest]
+    #[case::triangle(Graph::new(3, &[[0, 1], [1, 2], [0, 2]]))]
+    fn test_graph_maximum_matching_error(#[case] graph: Graph) {
+        let node_order: Vec<NodeId> = graph.node_ids().collect();
+        assert_eq!(
+            graph.maximum_matching(&node_order, HopcroftKarp),
+            Err(MaximumMatchingError::NonBipartite),
+        );
     }
 
     #[rstest]
@@ -784,13 +864,13 @@ mod tests {
         let first_order = [NodeId(0), NodeId(1), NodeId(2), NodeId(3)];
         let second_order = [NodeId(2), NodeId(0), NodeId(1), NodeId(3)];
 
-        let first = graph.maximum_matching(&first_order, algorithm);
-        let second = graph.maximum_matching(&second_order, algorithm);
+        let first = graph.maximum_matching(&first_order, algorithm).unwrap();
+        let second = graph.maximum_matching(&second_order, algorithm).unwrap();
 
         assert_eq!(first.edges(), &[EdgeId(0), EdgeId(2)]);
         assert_eq!(second.edges(), &[EdgeId(1), EdgeId(3)]);
-        assert_eq!(graph.maximum_matching(&first_order, algorithm), first);
-        assert_eq!(graph.maximum_matching(&second_order, algorithm), second);
+        assert_eq!(graph.maximum_matching(&first_order, algorithm), Ok(first),);
+        assert_eq!(graph.maximum_matching(&second_order, algorithm), Ok(second),);
     }
 
     #[rstest]
@@ -928,7 +1008,7 @@ mod tests {
     ) {
         let g = Graph::new(node_count, &edges);
         let node_order: Vec<NodeId> = g.node_ids().collect();
-        let initial = g.maximum_matching(&node_order, Edmonds);
+        let initial = g.maximum_matching(&node_order, Edmonds).unwrap();
         let target = initial.size();
         let matchings = g.enumerate_maximum_matchings(BranchAndBound);
         assert_eq!(
