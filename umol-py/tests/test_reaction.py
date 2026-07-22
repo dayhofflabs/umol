@@ -14,6 +14,7 @@ from umol import (
     MoleculeAst,
     MoleculeCorrespondence,
     ParseError,
+    ReactionApplicationConfig,
     ReactionAst,
     ReactionDefaults,
     ReactionDerivation,
@@ -44,12 +45,14 @@ def test_application_exports():
     assert {
         "Correspondence",
         "MoleculeCorrespondence",
+        "ReactionApplicationConfig",
         "ReactionDerivation",
         "SubgraphIsomorphismAlgorithm",
         "SubstructureMatchAlgorithm",
     } <= set(umol.__all__)
     assert umol.Correspondence is Correspondence
     assert umol.MoleculeCorrespondence is MoleculeCorrespondence
+    assert umol.ReactionApplicationConfig is ReactionApplicationConfig
     assert umol.ReactionDerivation is ReactionDerivation
     assert umol.SubgraphIsomorphismAlgorithm is SubgraphIsomorphismAlgorithm
     assert umol.SubstructureMatchAlgorithm is SubstructureMatchAlgorithm
@@ -117,6 +120,92 @@ def test_substructure_match_algorithm_value(algorithm, equal, unequal, expected_
 )
 def test_subgraphisomorphismalgorithm_value(algorithm, expected):
     assert repr(algorithm) == expected
+
+
+def test_reactionapplicationconfig_default():
+    config = ReactionApplicationConfig()
+
+    assert config == ReactionApplicationConfig.default()
+    assert config.match_algorithm == SubstructureMatchAlgorithm.GraphAndOverlays()
+    assert (
+        config.subgraph_isomorphism_algorithm
+        == SubgraphIsomorphismAlgorithm.Vf2Rdkit()
+    )
+    assert repr(config) == (
+        "ReactionApplicationConfig("
+        "match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), "
+        "subgraph_isomorphism_algorithm="
+        "SubgraphIsomorphismAlgorithm.Vf2Rdkit())"
+    )
+
+
+@pytest.mark.parametrize(
+    "match_algorithm,subiso_algorithm,expected_repr",
+    [
+        pytest.param(
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubgraphIsomorphismAlgorithm.Vf2(),
+            "SubgraphIsomorphismAlgorithm.Vf2()",
+            id="vf2",
+        ),
+        pytest.param(
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubgraphIsomorphismAlgorithm.Ullmann(),
+            "SubgraphIsomorphismAlgorithm.Ullmann()",
+            id="ullmann",
+        ),
+        pytest.param(
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubgraphIsomorphismAlgorithm.Ri(),
+            "SubgraphIsomorphismAlgorithm.Ri()",
+            id="ri",
+        ),
+        pytest.param(
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6),
+            "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6)",
+            id="arc-match",
+        ),
+        pytest.param(
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubgraphIsomorphismAlgorithm.Vf2Rdkit(),
+            "SubgraphIsomorphismAlgorithm.Vf2Rdkit()",
+            id="vf2-rdkit",
+        ),
+        pytest.param(
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubgraphIsomorphismAlgorithm.RayKirsch(),
+            "SubgraphIsomorphismAlgorithm.RayKirsch()",
+            id="ray-kirsch",
+        ),
+        pytest.param(
+            SubstructureMatchAlgorithm.Incidence(),
+            SubgraphIsomorphismAlgorithm.Vf2Rdkit(),
+            "SubgraphIsomorphismAlgorithm.Vf2Rdkit()",
+            id="incidence",
+        ),
+    ],
+)
+def test_reactionapplicationconfig_value(
+    match_algorithm, subiso_algorithm, expected_repr
+):
+    config = ReactionApplicationConfig(
+        match_algorithm=match_algorithm,
+        subgraph_isomorphism_algorithm=subiso_algorithm,
+    )
+    equal = ReactionApplicationConfig(
+        match_algorithm=match_algorithm,
+        subgraph_isomorphism_algorithm=subiso_algorithm,
+    )
+
+    assert config == equal
+    assert config.match_algorithm == match_algorithm
+    assert config.subgraph_isomorphism_algorithm == subiso_algorithm
+    assert repr(config) == (
+        "ReactionApplicationConfig("
+        f"match_algorithm={match_algorithm!r}, "
+        f"subgraph_isomorphism_algorithm={expected_repr})"
+    )
 
 
 @pytest.mark.parametrize(

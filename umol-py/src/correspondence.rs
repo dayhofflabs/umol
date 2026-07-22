@@ -208,14 +208,18 @@ impl SubstructureMatchAlgorithm {
     }
 
     fn __repr__(&self) -> &'static str {
+        self.repr()
+    }
+}
+
+impl SubstructureMatchAlgorithm {
+    pub(crate) fn repr(self) -> &'static str {
         match self {
             Self::GraphAndOverlays() => "SubstructureMatchAlgorithm.GraphAndOverlays()",
             Self::Incidence() => "SubstructureMatchAlgorithm.Incidence()",
         }
     }
-}
 
-impl SubstructureMatchAlgorithm {
     #[allow(
         dead_code,
         reason = "Rust-to-Python conversion API for substructure match algorithms"
@@ -254,6 +258,12 @@ impl SubgraphIsomorphismAlgorithm {
     }
 
     fn __repr__(&self) -> String {
+        self.repr()
+    }
+}
+
+impl SubgraphIsomorphismAlgorithm {
+    pub(crate) fn repr(self) -> String {
         match self {
             Self::Vf2() => "SubgraphIsomorphismAlgorithm.Vf2()".to_owned(),
             Self::Ullmann() => "SubgraphIsomorphismAlgorithm.Ullmann()".to_owned(),
@@ -265,9 +275,7 @@ impl SubgraphIsomorphismAlgorithm {
             Self::RayKirsch() => "SubgraphIsomorphismAlgorithm.RayKirsch()".to_owned(),
         }
     }
-}
 
-impl SubgraphIsomorphismAlgorithm {
     #[allow(
         dead_code,
         reason = "Rust-to-Python conversion API for subgraph algorithms"

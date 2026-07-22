@@ -87,7 +87,7 @@ use crate::{
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst, NoncovalentBondView,
         NoncovalentBondViews,
     },
-    reaction::{CompositionScope, ReactionAst, ReactionDerivation},
+    reaction::{CompositionScope, ReactionApplicationConfig, ReactionAst, ReactionDerivation},
     resolve::{AromaticityResolveConfig, ResolveConfig, StereoResolveConfig},
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
     spin::SpinStateAst,
@@ -212,6 +212,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Delta>()?;
         module.add_class::<Deltas>()?;
         module.add_class::<CompositionScope>()?;
+        module.add_class::<ReactionApplicationConfig>()?;
         module.add_class::<ReactionAst>()?;
         module.add_class::<ReactionDerivation>()?;
         module.add_class::<SmilesIoConfig>()?;

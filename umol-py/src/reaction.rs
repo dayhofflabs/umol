@@ -10,15 +10,18 @@ use pyo3::prelude::*;
 use umol_ast::ast::{
     Canonicalize, CompositionScope as AstCompositionScope, IntoAst, MoleculeAst as AstMoleculeAst,
     MoleculeCorrespondence as AstMoleculeCorrespondence, ReactionAst as AstReactionAst,
-    ReactionDerivation as AstReactionDerivation, SubstructureMatchAlgorithm,
+    ReactionDerivation as AstReactionDerivation,
+    SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm,
 };
 use umol_ast::dsl::ReactionDsl as AstReactionDsl;
 use umol_graph::fingerprint::featurize_reaction;
-use umol_graph_core::{Correspondence, NodeId};
+use umol_graph_core::{
+    Correspondence, NodeId, SubgraphIsomorphismAlgorithm as RustSubgraphIsomorphismAlgorithm,
+};
 
 use crate::correspondence::{
     Correspondence as PyCorrespondence, MoleculeCorrespondence as PyMoleculeCorrespondence,
-    SubgraphIsomorphismAlgorithm,
+    SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
 };
 use crate::defaults::ReactionDefaults;
 use crate::delta::Deltas;
@@ -52,6 +55,99 @@ impl CompositionScope {
             Self::RcAnchored => AstCompositionScope::RcAnchored,
             Self::Full => AstCompositionScope::Full,
         }
+    }
+}
+
+/// Algorithms used to enumerate matches for reaction application.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReactionApplicationConfig {
+    match_algorithm: SubstructureMatchAlgorithm,
+    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+}
+
+impl Default for ReactionApplicationConfig {
+    fn default() -> Self {
+        Self {
+            match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        }
+    }
+}
+
+#[pymethods]
+impl ReactionApplicationConfig {
+    #[new]
+    #[pyo3(signature = (
+        *,
+        match_algorithm=SubstructureMatchAlgorithm::GraphAndOverlays(),
+        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+    ))]
+    fn new(
+        match_algorithm: SubstructureMatchAlgorithm,
+        subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+    ) -> Self {
+        Self {
+            match_algorithm,
+            subgraph_isomorphism_algorithm,
+        }
+    }
+
+    #[staticmethod]
+    fn default() -> Self {
+        Default::default()
+    }
+
+    #[getter]
+    fn match_algorithm(&self) -> SubstructureMatchAlgorithm {
+        self.match_algorithm
+    }
+
+    #[getter]
+    fn subgraph_isomorphism_algorithm(&self) -> SubgraphIsomorphismAlgorithm {
+        self.subgraph_isomorphism_algorithm
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "ReactionApplicationConfig(match_algorithm={}, subgraph_isomorphism_algorithm={})",
+            self.match_algorithm.repr(),
+            self.subgraph_isomorphism_algorithm.repr(),
+        )
+    }
+}
+
+impl ReactionApplicationConfig {
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion API for configured reaction application"
+    )]
+    pub(crate) fn from_rust(
+        match_algorithm: AstSubstructureMatchAlgorithm,
+        subgraph_isomorphism_algorithm: RustSubgraphIsomorphismAlgorithm,
+    ) -> Self {
+        Self {
+            match_algorithm: SubstructureMatchAlgorithm::from_rust(match_algorithm),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::from_rust(
+                subgraph_isomorphism_algorithm,
+            ),
+        }
+    }
+
+    #[allow(
+        dead_code,
+        reason = "Python-to-Rust conversion API for configured reaction application"
+    )]
+    pub(crate) fn to_rust(
+        self,
+    ) -> (
+        AstSubstructureMatchAlgorithm,
+        RustSubgraphIsomorphismAlgorithm,
+    ) {
+        (
+            self.match_algorithm.to_rust(),
+            self.subgraph_isomorphism_algorithm.to_rust(),
+        )
     }
 }
 
@@ -226,7 +322,7 @@ impl ReactionAst {
         let host = host.bind(py).borrow().inner().clone();
         let correspondences = reaction.lhs.substructure_matches(
             &host,
-            SubstructureMatchAlgorithm::GraphAndOverlays,
+            AstSubstructureMatchAlgorithm::GraphAndOverlays,
             algorithm.to_rust(),
         );
 
@@ -497,6 +593,111 @@ mod tests {
                 expected_repr
             );
         });
+    }
+
+    #[rstest]
+    fn test_reaction_application_config_default() {
+        let expected = ReactionApplicationConfig::new(
+            SubstructureMatchAlgorithm::GraphAndOverlays(),
+            SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        );
+
+        assert_eq!(ReactionApplicationConfig::default(), expected);
+    }
+
+    #[rstest]
+    fn test_reaction_application_config_value() {
+        let config = ReactionApplicationConfig::new(
+            SubstructureMatchAlgorithm::Incidence(),
+            SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+        );
+
+        assert_eq!(
+            config.match_algorithm(),
+            SubstructureMatchAlgorithm::Incidence()
+        );
+        assert_eq!(
+            config.subgraph_isomorphism_algorithm(),
+            SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 }
+        );
+        assert_eq!(
+            config.__repr__(),
+            concat!(
+                "ReactionApplicationConfig(",
+                "match_algorithm=SubstructureMatchAlgorithm.Incidence(), ",
+                "subgraph_isomorphism_algorithm=",
+                "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6))"
+            )
+        );
+        assert_ne!(config, ReactionApplicationConfig::default());
+    }
+
+    #[rstest]
+    #[case::default(
+        AstSubstructureMatchAlgorithm::GraphAndOverlays,
+        RustSubgraphIsomorphismAlgorithm::Vf2Rdkit,
+        ReactionApplicationConfig::default()
+    )]
+    #[case::incidence_arc_match(
+        AstSubstructureMatchAlgorithm::Incidence,
+        RustSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+        ReactionApplicationConfig::new(
+            SubstructureMatchAlgorithm::Incidence(),
+            SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+        ),
+    )]
+    fn test_reaction_application_config_from_rust(
+        #[case] match_algorithm: AstSubstructureMatchAlgorithm,
+        #[case] subgraph_isomorphism_algorithm: RustSubgraphIsomorphismAlgorithm,
+        #[case] expected: ReactionApplicationConfig,
+    ) {
+        assert_eq!(
+            ReactionApplicationConfig::from_rust(match_algorithm, subgraph_isomorphism_algorithm,),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::vf2(
+        SubgraphIsomorphismAlgorithm::Vf2(),
+        RustSubgraphIsomorphismAlgorithm::Vf2
+    )]
+    #[case::ullmann(
+        SubgraphIsomorphismAlgorithm::Ullmann(),
+        RustSubgraphIsomorphismAlgorithm::Ullmann
+    )]
+    #[case::ri(
+        SubgraphIsomorphismAlgorithm::Ri(),
+        RustSubgraphIsomorphismAlgorithm::Ri
+    )]
+    #[case::arc_match(
+        SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+        RustSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+    )]
+    #[case::vf2_rdkit(
+        SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        RustSubgraphIsomorphismAlgorithm::Vf2Rdkit
+    )]
+    #[case::ray_kirsch(
+        SubgraphIsomorphismAlgorithm::RayKirsch(),
+        RustSubgraphIsomorphismAlgorithm::RayKirsch
+    )]
+    fn test_reaction_application_config_to_rust(
+        #[case] subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+        #[case] expected_subgraph_isomorphism_algorithm: RustSubgraphIsomorphismAlgorithm,
+    ) {
+        let config = ReactionApplicationConfig::new(
+            SubstructureMatchAlgorithm::Incidence(),
+            subgraph_isomorphism_algorithm,
+        );
+
+        assert_eq!(
+            config.to_rust(),
+            (
+                AstSubstructureMatchAlgorithm::Incidence,
+                expected_subgraph_isomorphism_algorithm,
+            )
+        );
     }
 
     #[rstest]

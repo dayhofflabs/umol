@@ -298,6 +298,7 @@ mod tests {
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
     };
     use super::super::stereo::{StereoAtomAst, StereoConfigurationAst, StereoCosetAst, StereoKind};
+    use super::super::substructure::SubstructureMatchAlgorithm;
     use super::super::value::ValueAst;
     use super::*;
 
@@ -898,23 +899,35 @@ mod tests {
             .compose(&b, CompositionScope::Full)
             .iter()
             .flat_map(|c| {
-                c.apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
-                    .unwrap()
-                    .map(Result::unwrap)
+                c.apply(
+                    &host,
+                    SubstructureMatchAlgorithm::GraphAndOverlays,
+                    SubgraphIsomorphismAlgorithm::Vf2,
+                )
+                .unwrap()
+                .map(Result::unwrap)
             })
             .map(|derivation| derivation.rhs().clone())
             .collect();
         let sequential: Vec<MoleculeAst> = a
-            .apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
+            .apply(
+                &host,
+                SubstructureMatchAlgorithm::GraphAndOverlays,
+                SubgraphIsomorphismAlgorithm::Vf2,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
             .flat_map(|intermediate| {
-                b.apply(&intermediate, SubgraphIsomorphismAlgorithm::Vf2)
-                    .unwrap()
-                    .map(Result::unwrap)
-                    .map(|derivation| derivation.rhs().clone())
-                    .collect::<Vec<_>>()
+                b.apply(
+                    &intermediate,
+                    SubstructureMatchAlgorithm::GraphAndOverlays,
+                    SubgraphIsomorphismAlgorithm::Vf2,
+                )
+                .unwrap()
+                .map(Result::unwrap)
+                .map(|derivation| derivation.rhs().clone())
+                .collect::<Vec<_>>()
             })
             .collect();
 
@@ -979,7 +992,7 @@ mod tests {
         let alg = SubgraphIsomorphismAlgorithm::Vf2;
         let host = a.lhs.clone();
         let intermediate = a
-            .apply(&host, alg)
+            .apply(&host, SubstructureMatchAlgorithm::GraphAndOverlays, alg)
             .unwrap()
             .next()
             .unwrap()
@@ -987,7 +1000,11 @@ mod tests {
             .rhs()
             .clone();
         let sequential = b
-            .apply(&intermediate, alg)
+            .apply(
+                &intermediate,
+                SubstructureMatchAlgorithm::GraphAndOverlays,
+                alg,
+            )
             .unwrap()
             .next()
             .unwrap()
@@ -995,7 +1012,7 @@ mod tests {
             .rhs()
             .clone();
         let composed = composite
-            .apply(&host, alg)
+            .apply(&host, SubstructureMatchAlgorithm::GraphAndOverlays, alg)
             .unwrap()
             .next()
             .unwrap()

@@ -2,6 +2,7 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
+use umol_ast::ast::SubstructureMatchAlgorithm;
 use umol_graph_core::{Correspondence, NodeId, SubgraphIsomorphismAlgorithm};
 
 use crate::strategies::*;
@@ -49,7 +50,11 @@ proptest! {
             TestCaseError::fail(format!("identity application failed: {error}"))
         })?;
         let mut applications = reaction
-            .apply(&reaction.lhs, SubgraphIsomorphismAlgorithm::Vf2)
+            .apply(
+                &reaction.lhs,
+                SubstructureMatchAlgorithm::GraphAndOverlays,
+                SubgraphIsomorphismAlgorithm::Vf2,
+            )
             .map_err(|error| TestCaseError::fail(format!("matching failed: {error}")))?;
         let mut found = false;
         for application in &mut applications {

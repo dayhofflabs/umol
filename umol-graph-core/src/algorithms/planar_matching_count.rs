@@ -3,8 +3,6 @@
 //! This module validates an embedding supplied by the caller. It does not test
 //! planarity or discover an embedding.
 
-// TODO: Move into matching module.
-
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt;

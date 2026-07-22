@@ -1343,13 +1343,15 @@ impl ReactionAst {
     }
 
     /// Every product of applying the reaction to `host`: one per injective match of `lhs` into
-    /// `host` (via `subiso`) that satisfies the match-local DPO and structural conditions.
+    /// `host` (using `match_algorithm` and `subgraph_isomorphism_algorithm`) that satisfies the
+    /// match-local DPO and structural conditions.
     /// Structural preconditions are checked before match enumeration. Match-local rejection is
     /// skipped; an internal application failure is yielded once and terminates the iterator.
     pub fn apply<'h>(
         &'h self,
         host: &'h MoleculeAst,
-        subiso: SubgraphIsomorphismAlgorithm,
+        match_algorithm: SubstructureMatchAlgorithm,
+        subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
     ) -> Result<
         impl Iterator<Item = Result<ReactionDerivation, ApplyError>> + 'h,
         ApplyPreconditionError,
@@ -1357,7 +1359,7 @@ impl ReactionAst {
         let deltas = self.application_deltas(host)?;
         let mut correspondences = self
             .lhs
-            .substructure_matches(host, SubstructureMatchAlgorithm::GraphAndOverlays, subiso)
+            .substructure_matches(host, match_algorithm, subgraph_isomorphism_algorithm)
             .into_iter();
         let mut failed = false;
 
@@ -2336,13 +2338,38 @@ mod tests {
         #[case] expected: Vec<MoleculeAst>,
     ) {
         let products: Vec<MoleculeAst> = reaction
-            .apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
+            .apply(
+                &host,
+                SubstructureMatchAlgorithm::GraphAndOverlays,
+                SubgraphIsomorphismAlgorithm::Vf2,
+            )
             .unwrap()
             .map(Result::unwrap)
             .map(|derivation| derivation.rhs().clone())
             .collect();
 
         assert_eq!(products, expected);
+    }
+
+    #[rstest]
+    #[case::graph_and_overlays(SubstructureMatchAlgorithm::GraphAndOverlays)]
+    #[case::incidence(SubstructureMatchAlgorithm::Incidence)]
+    fn test_reaction_ast_apply_match_algorithm(
+        #[case] match_algorithm: SubstructureMatchAlgorithm,
+    ) {
+        let host = MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        });
+        let reaction = ReactionAst::new(host.clone(), Deltas::new());
+        let products: Vec<MoleculeAst> = reaction
+            .apply(&host, match_algorithm, SubgraphIsomorphismAlgorithm::Vf2)
+            .unwrap()
+            .map(Result::unwrap)
+            .map(|derivation| derivation.rhs().clone())
+            .collect();
+
+        assert_eq!(products, vec![host]);
     }
 
     #[rstest]
@@ -2372,7 +2399,11 @@ mod tests {
         #[case] expected: ApplyError,
     ) {
         let mut applications = reaction
-            .apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
+            .apply(
+                &host,
+                SubstructureMatchAlgorithm::GraphAndOverlays,
+                SubgraphIsomorphismAlgorithm::Vf2,
+            )
             .unwrap();
 
         assert_eq!(applications.next().unwrap().unwrap_err(), expected);
@@ -2397,7 +2428,11 @@ mod tests {
         #[case] host: MoleculeAst,
         #[case] expected: ApplyPreconditionError,
     ) {
-        match reaction.apply(&host, SubgraphIsomorphismAlgorithm::Vf2) {
+        match reaction.apply(
+            &host,
+            SubstructureMatchAlgorithm::GraphAndOverlays,
+            SubgraphIsomorphismAlgorithm::Vf2,
+        ) {
             Err(error) => assert_eq!(error, expected),
             Ok(_) => panic!("invalid input passed application integrity validation"),
         }
@@ -2515,7 +2550,11 @@ mod tests {
             ..Default::default()
         });
         let rhs = tetrahedral_inversion
-            .apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
+            .apply(
+                &host,
+                SubstructureMatchAlgorithm::GraphAndOverlays,
+                SubgraphIsomorphismAlgorithm::Vf2,
+            )
             .unwrap()
             .next()
             .expect("the inversion rule matches the host")
@@ -2586,7 +2625,11 @@ mod tests {
             ..Default::default()
         });
         let rhs = reaction
-            .apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
+            .apply(
+                &host,
+                SubstructureMatchAlgorithm::GraphAndOverlays,
+                SubgraphIsomorphismAlgorithm::Vf2,
+            )
             .unwrap()
             .next()
             .expect("the reaction applies to a lone carbon")
@@ -2634,7 +2677,11 @@ mod tests {
             ..Default::default()
         });
         let rhs = ReactionAst::new(center.clone(), Deltas::new())
-            .apply(&center, SubgraphIsomorphismAlgorithm::Vf2)
+            .apply(
+                &center,
+                SubstructureMatchAlgorithm::GraphAndOverlays,
+                SubgraphIsomorphismAlgorithm::Vf2,
+            )
             .unwrap()
             .next()
             .expect("a two-stereo-center molecule matches itself")

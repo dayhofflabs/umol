@@ -5,7 +5,7 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_ast::ast::{
     ApplyError, ApplyPreconditionError, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
     DativeBondDelta, Entity, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
-    StereoBondDelta, TransactionError,
+    StereoBondDelta, SubstructureMatchAlgorithm, TransactionError,
 };
 use umol_graph_core::SubgraphIsomorphismAlgorithm;
 
@@ -523,7 +523,11 @@ proptest! {
             ..Default::default()
         });
         let mut applications = reaction
-            .apply(&host, SubgraphIsomorphismAlgorithm::Vf2)
+            .apply(
+                &host,
+                SubstructureMatchAlgorithm::GraphAndOverlays,
+                SubgraphIsomorphismAlgorithm::Vf2,
+            )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?;
 
         prop_assert_eq!(

@@ -1657,7 +1657,76 @@ and ordinary snapshots are the compatibility seam for a later optional layer.
 DRFP and BRIDGIT remain separate future operation/config families; they do not
 extend `ReactionCombinedFingerprintConfig` in S8.
 
-### S9 — Configured and correctly classified reaction application
+### S9 — Configured reaction application and algorithm transparency
+
+#### Algorithm-transparency audit
+
+The repository-wide audit found several production calls that select a
+`umol-graph-core` algorithm inside an operation whose public arguments or
+configuration do not own that choice. These are silent defaults and must not be
+preserved merely because an algorithm enum currently has one implementation.
+Low-level algorithmic operations pass selectors explicitly; higher-level
+workflows may define defaults, but the selected algorithms remain fields of the
+workflow configuration and are passed explicitly at the lower boundary.
+
+| Location | Hidden selection | Required correction |
+| --- | --- | --- |
+| `umol-ast/src/ast/ring.rs` | `CycleEnumerationAlgorithm::Vismara` behind both `rings` and `rings_with` | Put the cycle-enumeration selection in the low-level ring operation; higher-level ring-consuming workflows own any default. This also affects ECFP, Morgan, and aromaticity transitively. |
+| `umol-ast/src/ast/symmetry.rs` | `AutomorphismAlgorithm::Nauty` for initial symmetry, fixpoint reruns, and site stabilizers | Add the selection to `GraphSymmetryConfig` and retain it in `GraphSymmetry`; `StereoValidateConfig`, not `StereoModel`, owns the higher-level default. |
+| `umol-ast/src/ast/compose.rs` | `CommonSubgraphEnumerationAlgorithm::Backtracking` behind `ReactionAst::compose` | Remove `CompositionScope`; complete composition enumerates every admissible overlap. Require the enumeration algorithm at the Rust boundary and expose it as a visible Python keyword with a high-level default. |
+| `umol-ast/src/ast/reaction.rs`, `umol-py/src/reaction.rs` | `SubstructureMatchAlgorithm::GraphAndOverlays` while only the graph-core subisomorphism backend is supplied | Rust application accepts both the structure strategy and subisomorphism backend explicitly. Python owns both in `ReactionApplicationConfig`. |
+| `umol-graph/src/fingerprint/pattern.rs` | `GraphAndOverlays` plus `SubgraphIsomorphismAlgorithm::Vf2` | `PatternFingerprinter` / `PatternFingerprintConfig` own both selectors. |
+| `umol-graph/src/fingerprint/substructure.rs` | `SubgraphEnumerationAlgorithm::Esu` plus `AutomorphismAlgorithm::Nauty` | `SubstructureFeaturizer` / `StructuralFingerprintConfig` own the enumeration and canonicalization selectors. |
+| `umol-graph/src/ops/aromaticity/clar.rs` | `MaximumIndependentSetAlgorithm::BranchAndBound` | `AromaticityConfig`, separate from `AromaticityModel`, owns the independent-set selector. |
+| `umol-graph/src/ops/aromaticity/hmo.rs` | `ConnectedComponentsAlgorithm::Bfs` | `AromaticityConfig`, separate from `AromaticityModel`, owns the connected-components selector. |
+| `umol-graph/src/ops/transform/kekulizer.rs` | `MaximumMatchingAlgorithm::Edmonds` replaces the configured selection for mobile exposure | Rename `KekulizationModel` to `KekulizationConfig`, honor its selector in both modes, and surface non-bipartite Hopcroft-Karp input as a typed error without fallback. |
+
+`umol-io/src` contains no graph-core algorithm selection. WL, ECFP, and Morgan
+constructing their corresponding refinement variants is not a silent default:
+the named higher-level operation already specifies that algorithm. Dispatch
+matches, tests, benchmarks, and fuzz targets likewise do not constitute hidden
+defaults.
+
+Inside `umol-graph-core`, a named algorithm may specify a subsidiary algorithm
+as part of its implementation without adding another selector to the public
+API. The current cases are Hopcroft-Karp using BFS bipartition, Vismara using
+Tarjan biconnected components, and EC circular refinement using BFS
+neighborhood traversal. Their implementation functions remain private: do not
+widen them to `pub(crate)` or add visibility solely to bypass the ordinary API.
+The implementation instead calls the existing public selector-bearing method
+with the chosen enum variant and documents why that subsidiary choice belongs
+to the named algorithm.
+
+Algorithm selectors and execution bounds are operational configuration, not
+chemistry-model parameters. `AromaticityConfig` owns the three selectors passed
+to the shared perception object; sharing is justified here because perception
+requires cycle enumeration, connected components, and maximum independent set.
+`StereoModel` retains semantic perception choices, while
+`StereoValidateConfig` owns graph-automorphism selection and the fixpoint
+iteration bound. `InconsistencyPolicy` moves to `StereoResolveConfig`, because
+it controls resolver behavior. The parallel naming is deliberate: an `XModel`
+describes chemical semantics, while an `XConfig` describes execution of the
+operation using that model.
+
+The same pass removes three graph-core naming and organization inconsistencies:
+`MaxMatchingAlgorithm` becomes `MaximumMatchingAlgorithm`,
+`MaxIndependentSetAlgorithm` becomes `MaximumIndependentSetAlgorithm`, and
+`planar_matching_count.rs` becomes `matching_count.rs`. Counting remains
+separate from matching construction and enumeration: it has its own planar
+embedding, Pfaffian, and error machinery, while the public planar type and
+method names remain specific. `MaximumMatchingError` makes Hopcroft-Karp's
+bipartite precondition a release-mode result rather than a debug assertion.
+
+`CompositionScope` does not describe two algorithms for the same operation.
+`Full` is complete reaction composition, whereas `RcAnchored` discards valid
+composites using a derived reaction-center filter. The implementation performs
+complete overlap enumeration before filtering, so `RcAnchored` provides no
+search saving; its derived center also omits stereo and important deletion-only
+cases. Remove the enum and define `ReactionAst::compose` as complete composition
+only, including the empty overlap. With scope removed, composition has one
+algorithm selector and no coherent multi-field configuration space. Python
+therefore exposes that selector directly as a keyword with a visible workflow
+default rather than introducing a one-field composition config.
 
 - **S9a — Rust application preflight and outcome classification**
   (`umol-ast/src/ast/reaction.rs`, validation modules): validate the reaction and
@@ -1686,10 +1755,18 @@ extend `ReactionCombinedFingerprintConfig` in S8.
   variants; keep the already-bound six-way `SubgraphIsomorphismAlgorithm` as the
   backend selector. **Implemented (green).** `[dep: S4a]`
 - **S9c — `ReactionApplicationConfig`**
-  (`umol-py/src/reaction.rs`): add the immutable config with default
-  `GraphAndOverlays()` strategy and `Vf2Rdkit()` backend. Convert both fields
-  explicitly for the Rust call; tests cover defaults, `Incidence`, all backend
-  variants, equality, and repr. **Additive (green).** `[dep: S9b]`
+  (`umol-ast/src/ast/reaction.rs`, `umol-py/src/reaction.rs`): migrate the
+  low-level Rust `ReactionAst::apply` operation to accept both
+  `SubstructureMatchAlgorithm` and `SubgraphIsomorphismAlgorithm` explicitly,
+  and migrate all Rust callers in the same subitem. Add the immutable Python
+  config with default `GraphAndOverlays()` strategy and `Vf2Rdkit()` backend.
+  Convert both fields explicitly for the Rust call; tests cover defaults,
+  `Incidence`, all backend variants, equality, and repr. **Implemented
+  (green).** The Rust application signature and all callers now supply both
+  selectors; direct application tests cover both structure strategies. Python
+  exposes the immutable, keyword-only `ReactionApplicationConfig`, including
+  explicit Rust conversions and package-level export, while the Python
+  `ReactionAst.apply` signature remains scheduled for S9e. `[dep: S9b]`
 - **S9d — fatal-error-aware lazy iterator**
   (`umol-py/src/reaction.rs`): change the private one-shot iterator so
   `__next__` skips only classified match rejection, raises internal failures as
@@ -1712,9 +1789,183 @@ extend `ReactionCombinedFingerprintConfig` in S8.
   backends, eager correspondence snapshotting, lazy owned results, local
   rejection, invalid-structure creation failure, and fatal iterator error.
   **Additive (green).** `[dep: S9e]`
+- **S9g — graph-core terminology and matching-count module**
+  (`umol-graph-core/src/algorithms/{matching,mis,matching_count}.rs`,
+  `algorithms.rs`, `lib.rs`, all workspace callers): rename
+  `MaxMatchingAlgorithm` to `MaximumMatchingAlgorithm` and
+  `MaxIndependentSetAlgorithm` to `MaximumIndependentSetAlgorithm`. Rename
+  `planar_matching_count.rs` to `matching_count.rs` without moving its contents
+  into the already-large matching-construction module; retain
+  `PlanarEmbedding`, `PlanarEmbeddingError`, `PlanarMatchingCountError`, and
+  `count_perfect_matchings_planar`. Migrate imports, type annotations, tests,
+  benchmarks, and documentation in the same subitem. **Breaking public renames
+  and module move (red→green).** `[dep: —]`
+- **S9h — fallible maximum matching and genuine Hopcroft-Karp**
+  (`umol-graph-core/src/algorithms/matching.rs`,
+  `umol-ast/src/ast/{matching,view/graph}.rs`, all callers): add
+  `MaximumMatchingError::NonBipartite` and make `Graph::maximum_matching` and
+  the typed `GraphView` adapter return `Result`. Replace the current repeated
+  augmenting-BFS implementation behind `HopcroftKarp` with layered BFS plus
+  batched DFS, preserving caller-supplied node-order determinism. Validate the
+  bipartite precondition in all build modes; never substitute Edmonds. Record
+  the pre-change matching benchmark baseline, retain the benchmark after the
+  replacement, and migrate every caller in the same subitem. Tests cover the
+  typed odd-cycle error, Edmonds/Hopcroft-Karp cardinality parity on bipartite
+  graphs, deterministic order, and propagation through `GraphView`.
+  **Breaking return-contract migration plus algorithm correction (red→green).**
+  `[dep: S9g]`
+- **S9i — graph-core subsidiary algorithms**
+  (`umol-graph-core/src/algorithms/{matching,cycles,refine}.rs`): use the
+  existing public selector-bearing calls for BFS bipartition inside
+  Hopcroft-Karp, Tarjan biconnected components inside Vismara, and BFS
+  neighborhood traversal inside EC circular refinement. Document at each call
+  why the subsidiary choice is fixed by the named parent algorithm. Do not
+  expose private implementation methods or widen them to `pub(crate)`. Focused
+  algorithm tests and strict graph-core Clippy remain green. **Additive
+  documentation (green).** `[dep: S9h]`
+- **S9j — Python graph-core selector values**
+  (`umol-py/src/algorithm.rs`, `lib.rs`, `python/umol/__init__.py`): establish
+  the singular binding module for algorithm selectors, moving the existing
+  `SubstructureMatchAlgorithm` and `SubgraphIsomorphismAlgorithm` wrappers there
+  without changing their public names. Bind `CycleEnumerationAlgorithm`,
+  `AutomorphismAlgorithm`, `CommonSubgraphEnumerationAlgorithm`,
+  `SubgraphEnumerationAlgorithm`, `MaximumIndependentSetAlgorithm`, and
+  `ConnectedComponentsAlgorithm` with inherent `from_rust`/`to_rust`, equality,
+  and repr. Table tests cover every variant and installed tests cover all
+  exports. **Additive public values plus internal module move (green).**
+  `[dep: S9b, S9g]`
+- **S9k — explicit ring-enumeration selection**
+  (`umol-ast/src/ast/{molecule,ring}.rs`, all Rust callers): require a
+  `CycleEnumerationAlgorithm` in both `MoleculeAst::rings` and `rings_with`,
+  thread it into `RingSet::enumerate`, and migrate every workspace caller in the
+  same subitem. Callers initially pass their former Vismara choice explicitly;
+  S9l and S9m then move workflow-owned choices into their configs. Unit and
+  property tests cover both public ring entry points and every migrated
+  ring-consuming operation. **Breaking signatures and caller migration
+  (red→green).** `[dep: —]`
+- **S9l — ring selection in hashed-fingerprint configs**
+  (`umol-graph/src/fingerprint/{ecfp,morgan,featurizer}.rs`,
+  `umol-py/src/fingerprint/config.rs`): add
+  `cycle_enumeration_algorithm` to `EcfpFeaturizer` and `MorganFeaturizer`;
+  their high-level constructors retain Vismara as an inspectable workflow
+  default. Extend the ECFP and Morgan variants of `HashedFingerprintConfig`,
+  conversions, equality, and repr. Migrate reaction fingerprint configs through
+  their nested molecule config. Rust and installed Python tests compare default
+  and explicit selectors and preserve existing fingerprint identities.
+  **Breaking config-shape migration (red→green).** `[dep: S9j, S9k]`
+- **S9m — aromaticity model/config separation**
+  (`umol-graph/src/ops/aromaticity.rs`, `aromaticity/{clar,hmo}.rs`,
+  `resolve/aromaticity.rs`, `transform/aromatizer.rs`,
+  `validate/aromaticity.rs`, `umol-py/src/resolve.rs`): add
+  `AromaticityConfig { cycle_enumeration_algorithm,
+  connected_components_algorithm, maximum_independent_set_algorithm }`, with
+  Vismara, BFS, and branch-and-bound as inspectable high-level defaults.
+  Pass the shared config explicitly to `AromaticityPerception::find_systems`;
+  each top-level operation owns its copy rather than adding selectors to the
+  model or changing the perception dispatch type. Add the shared config as
+  `AromaticityResolveConfig.perception`; add default and configured constructors
+  to the aromatizer and aromaticity validator. Bind `AromaticityConfig` in
+  Python and extend `AromaticityResolveConfig`, leaving `AromaticityModel`
+  unchanged. Migrate all Rust and Python callers together. Tests prove
+  default-result parity and selector propagation through resolution,
+  aromatization, validation, HMO, and Clar.
+  **Additive config followed by breaking resolve-config migration (red→green).**
+  `[dep: S9g, S9j, S9k]`
+- **S9n — configurable graph-symmetry backend**
+  (`umol-ast/src/ast/symmetry.rs`, all callers): add
+  `automorphism_algorithm` to `GraphSymmetryConfig`, retain it in
+  `GraphSymmetry`, and use it for initial symmetry, fixpoint reruns, and site
+  stabilizers. Migrate every config literal in the same subitem. Tests pin the
+  selected backend at all three call sites and preserve the existing Nauty
+  result under an explicit selector. **Breaking config-shape migration
+  (red→green).** `[dep: —]`
+- **S9o — validation operation configs**
+  (`umol-graph/src/ops/{validate,validate/stereo}.rs`): add
+  `StereoValidateConfig { automorphism_algorithm, max_iterations }`, with Nauty
+  and 16 as inspectable defaults, and make `StereoConformanceValidator` consume
+  it together with the semantic `StereoModel`. Add
+  `ValidateConfig { aromaticity, stereo }`, where the aromaticity branch is the
+  shared `AromaticityConfig`; `Validator::new(model)` delegates to defaults and
+  `with_config(model, config)` passes both branches explicitly. Tests cover
+  equality/defaults, both composite branches, and propagation into
+  `GraphSymmetryConfig`. **Additive operation configs and constructor path
+  (green).** `[dep: S9m, S9n]`
+- **S9p — stereo model/resolve-config migration**
+  (`umol-graph/src/ops/{model,resolve/stereo}.rs`,
+  `umol-py/src/{model/stereo,resolve}.rs`, all callers): remove
+  `max_iterations` and `inconsistency` from `StereoModel`. Move
+  `InconsistencyPolicy` to the resolution module and add it to
+  `StereoResolveConfig`, preserving `Error` as the high-level default. Move the
+  Python wrapper to `resolve.rs`, update `StereoResolveConfig`, and remove both
+  operational fields from Python `StereoModel`; the public
+  `InconsistencyPolicy` name remains unchanged. Python does not bind the
+  validation-only configs until it exposes a validation operation. Tests cover
+  model/config equality and repr, Rust/Python conversion, all inconsistency
+  policies, default ingestion parity, and removal of the obsolete model fields.
+  **Breaking Rust and Python model/config migration (red→green).**
+  `[dep: S9o]`
+- **S9q — explicit reaction-composition enumeration**
+  (`umol-ast/src/ast/compose.rs`, `umol-py/src/reaction.rs`, package callers):
+  remove `CompositionScope` from Rust, its Python binding, registration, exports,
+  and callers. Make `ReactionAst::compose` enumerate the complete admissible
+  overlap set, including the empty overlap, and require
+  `CommonSubgraphEnumerationAlgorithm` explicitly at the Rust boundary. Expose
+  the selector directly in Python as the keyword-only `algorithm`, defaulting
+  visibly to `Backtracking()`, and pass it through without another config type.
+  Migrate all Rust and Python callers in the same subitem. Table and property
+  tests cover explicit selector propagation, complete composite sets, and
+  stereo-only and deletion-only reactions that the former reaction-center
+  filter could empty. **Breaking Rust and Python API migration (red→green).**
+  `[dep: S9j]`
+- **S9r — pattern-fingerprint matching configuration**
+  (`umol-graph/src/fingerprint/pattern.rs`,
+  `umol-py/src/fingerprint/config.rs`): add `match_algorithm` and
+  `subgraph_isomorphism_algorithm` to `PatternFingerprinter` and
+  `PatternFingerprintConfig`, with `GraphAndOverlays` and VF2 as inspectable
+  high-level defaults. Thread both values to template matching; update
+  constructors, conversions, equality, repr, and all callers. Cross-algorithm
+  tests require identical fingerprints for representative ground molecules.
+  **Breaking config-shape migration (red→green).** `[dep: S9j]`
+- **S9s — structural-fingerprint algorithm configuration**
+  (`umol-graph/src/fingerprint/substructure.rs`,
+  `umol-py/src/fingerprint/config.rs`): add `subgraph_enumeration_algorithm` and
+  `automorphism_algorithm` to `SubstructureFeaturizer` and
+  `StructuralFingerprintConfig`, with ESU and Nauty as inspectable high-level
+  defaults. Pass the canonicalization selector into the canonical-key operation
+  instead of closing over a literal. Update constructors, conversions, equality,
+  repr, and all callers; tests pin selector propagation and unchanged structural
+  feature sets. **Breaking config-shape migration (red→green).** `[dep: S9j]`
+- **S9t — configured and fallible kekulization matching**
+  (`umol-graph/src/ops/transform/kekulizer.rs`, `ops/transform.rs`, all callers):
+  rename `KekulizationModel` to `KekulizationConfig`, use its
+  `MaximumMatchingAlgorithm` in both prescribed and mobile-exposure modes, and
+  remove the silent Edmonds substitution. Map
+  `MaximumMatchingError::NonBipartite` to
+  `KekulizerError::NonBipartiteMatching(system)` without fallback; all other
+  matching and transactional errors retain their existing classifications.
+  Tests exercise Edmonds in both modes, Hopcroft-Karp on bipartite systems, the
+  typed error and unchanged input on non-bipartite systems, and exact selector
+  propagation to graph-core. **Breaking config rename plus behavioral correction
+  (red→green).** `[dep: S9g, S9h]`
+- **S9u — algorithm-transparency gate** (workspace): search every non-test Rust
+  call to a graph-core selector-bearing operation. Require each selection to
+  originate in a low-level method argument, a stored operational-config field,
+  one of S9i's documented subsidiary choices, or an operation whose public name
+  fixes that exact algorithm family and therefore offers no selection. Verify
+  that `umol-io` remains free of hidden graph-core choices; run focused matching,
+  matching-count, ring, symmetry, composition, fingerprint, aromaticity,
+  validation, kekulization, reaction, and Python config suites, strict Clippy,
+  formatting, benchmarks, and `git diff --check`. Record any future exception
+  beside its call site rather than broadening a visibility boundary. **Additive
+  gate (green).**
+  `[dep: S9f, S9i, S9l, S9m, S9p, S9q, S9r, S9s, S9t]`
 
 S9 preserves the existing direct `apply` happy path while correcting error
-classification. It adds no `apply_at`, report object, or prepared-reaction type.
+classification, separates chemistry models from operational configuration, and
+removes every audited hidden graph-core algorithm selection. Edmonds remains the
+general-graph matching default; another non-bipartite algorithm is not required
+by S9, and Gabow remains contingent on corpus benchmarks. S9 adds no `apply_at`,
+report object, or prepared-reaction type. No S9 subitem is deferrable.
 
 The follow-up comparison vocabulary, panic-removal plan, and property-suite
 reorganization are specified in [doc 156](156-ast-comparison-and-property-suite-2026-07-20.md).
@@ -1727,7 +1978,7 @@ reorganization are specified in [doc 156](156-ast-comparison-and-property-suite-
   exception mapping for every S4–S9 value and method. Installed tests compare the
   exported-name set and verify that no lint, raw-seed, combinator, iterator,
   NumPy, DRFP, or BRIDGIT implementation leaked into this round. **Additive
-  (green).** `[dep: S7d, S8b, S9f]`
+  (green).** `[dep: S7d, S8b, S9u]`
 - **S10b — complete installed workflows**
   (`umol-py/tests`): run three coherent public workflows—configured resolved
   SMILES, molecule/reaction fingerprints, and configured reaction application—
@@ -1760,7 +2011,13 @@ and result branches `{S5, S6}` join at `S7 → S8`.
 The application path is:
 
 `S9a → S9d`, while `S4a → S9b → S9c`; both join with S4b at
-`S9e → S9f`. The three paths join at `S10a → S10b → S10c`.
+`S9e → S9f`. The transparency foundation is `S9g → S9h → S9i`, with
+`S9g → S9j` and `S9k → {S9l, S9m}`. The consumer branches are
+`{S9j, S9k} → S9m`, `{S9m, S9n} → S9o → S9p`,
+`S9j → {S9q, S9r, S9s}`, and `{S9g, S9h} → S9t`; all join the application
+path at `S9u`. The three
+deliverable paths join at
+`S10a → S10b → S10c`.
 
 The following are explicitly deferrable and are not on the required critical
 path: NumPy integration; `SmilesLintFlags`/`SmilesLintConfig`; Python

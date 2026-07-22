@@ -1,6 +1,6 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use umol_ast::ast::IntoAst;
+use umol_ast::ast::{IntoAst, SubstructureMatchAlgorithm};
 use umol_ast::dsl::{ReactionDefaults, ReactionDsl};
 use umol_edn::{read_string, FromEdn};
 use umol_graph_core::SubgraphIsomorphismAlgorithm;
@@ -21,7 +21,11 @@ fuzz_target!(|data: &str| {
     if let Some(dsl) = stream {
         let reaction = dsl.into_ast(&ReactionDefaults::default());
         let _ = reaction.validate_application(&reaction.lhs);
-        if let Ok(applications) = reaction.apply(&reaction.lhs, SubgraphIsomorphismAlgorithm::Vf2) {
+        if let Ok(applications) = reaction.apply(
+            &reaction.lhs,
+            SubstructureMatchAlgorithm::GraphAndOverlays,
+            SubgraphIsomorphismAlgorithm::Vf2,
+        ) {
             for application in applications.take(16) {
                 let _ = application;
             }
