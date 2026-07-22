@@ -1,5 +1,14 @@
-//! Property-based tests for umol-ast, split by area. Shared generators live in
-//! the `strategies` module; each sibling module holds one area's proptests.
+//! Property-based tests for `umol-ast`.
+//!
+//! The suite is organized first by subject and, for the larger molecule,
+//! reaction, and stereo families, then by operation. Uniform law and surface
+//! families remain flat: splitting lattice laws, entity DSL serialization,
+//! deltas, or edits solely by file size would obscure the invariant shared by
+//! the tests.
+//!
+//! Shared generators live in `strategies`. This test target and `cargo test
+//! --test property -- --list` are the authoritative inventory; a separate
+//! README would duplicate coverage information and inevitably drift.
 
 #[path = "property/strategies.rs"]
 mod strategies;

@@ -5,10 +5,12 @@ use umol_edn::{read_string, FromEdn};
 
 fuzz_target!(|data: &str| {
     // Streaming path: single-pass over the bytes.
-    let _ = MoleculeDsl::from_edn_str(data);
+    let stream = MoleculeDsl::from_edn_str(data).ok();
 
     // Tree path: parse EDN tree first, then lift to DSL.
-    if let Ok(edn) = read_string(data) {
-        let _ = MoleculeDsl::from_edn(&edn);
-    }
+    let tree = read_string(data)
+        .ok()
+        .and_then(|edn| MoleculeDsl::from_edn(&edn).ok());
+
+    assert_eq!(stream, tree, "streaming and tree molecule parsers disagree");
 });

@@ -1,3 +1,11 @@
+//! Delta and entity-update algebra.
+//!
+//! The parallel property families are intentional. `*_delta_diff_apply` checks
+//! delta derivation and application, `*_delta_diff_identity` checks the empty
+//! delta representation, and `*_ast_difference_to` checks the public update
+//! value and `update` operation directly. Delta inversion has its own property
+//! and is not folded into each diff/application property.
+
 use proptest::prelude::*;
 use umol_ast::ast::{
     AromaticSystemDelta, AromaticSystemId, AtomDelta, AtomFieldChange, AtomId, BondDelta,
@@ -228,6 +236,13 @@ proptest! {
         }
     }
 
+    #[test]
+    fn test_delta_inverse(reaction in comprehensive_reaction_strategy()) {
+        for delta in reaction.deltas.iter() {
+            prop_assert_eq!(delta.clone().inverse().inverse(), delta.clone());
+        }
+    }
+
     /// `apply(lhs, diff(lhs, rhs)) == rhs` for atoms — the patch algebra law.
     #[test]
     fn test_atom_delta_diff_apply(lhs in atom_ast_strategy(), rhs in atom_ast_strategy()) {
@@ -248,6 +263,15 @@ proptest! {
     fn test_atom_ast_difference_to(lhs in atom_ast_strategy(), rhs in atom_ast_strategy()) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+    }
+
+    #[test]
+    fn test_spin_state_ast_difference_to(
+        lhs in spin_state_strategy(),
+        rhs in spin_state_strategy(),
+    ) {
+        let update = lhs.difference_to(&rhs);
+        prop_assert_eq!(lhs.update(&update), rhs);
     }
 
     /// `apply(lhs, diff(lhs, rhs)) == rhs` for bonds.

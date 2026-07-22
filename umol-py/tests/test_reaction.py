@@ -18,6 +18,7 @@ from umol import (
     ReactionDefaults,
     ReactionDerivation,
     SubgraphIsomorphismAlgorithm,
+    SubstructureMatchAlgorithm,
     ValueAst,
 )
 
@@ -45,11 +46,38 @@ def test_application_exports():
         "MoleculeCorrespondence",
         "ReactionDerivation",
         "SubgraphIsomorphismAlgorithm",
+        "SubstructureMatchAlgorithm",
     } <= set(umol.__all__)
     assert umol.Correspondence is Correspondence
     assert umol.MoleculeCorrespondence is MoleculeCorrespondence
     assert umol.ReactionDerivation is ReactionDerivation
     assert umol.SubgraphIsomorphismAlgorithm is SubgraphIsomorphismAlgorithm
+    assert umol.SubstructureMatchAlgorithm is SubstructureMatchAlgorithm
+
+
+@pytest.mark.parametrize(
+    "algorithm,equal,unequal,expected_repr",
+    [
+        pytest.param(
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubstructureMatchAlgorithm.Incidence(),
+            "SubstructureMatchAlgorithm.GraphAndOverlays()",
+            id="graph-and-overlays",
+        ),
+        pytest.param(
+            SubstructureMatchAlgorithm.Incidence(),
+            SubstructureMatchAlgorithm.Incidence(),
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            "SubstructureMatchAlgorithm.Incidence()",
+            id="incidence",
+        ),
+    ],
+)
+def test_substructure_match_algorithm_value(algorithm, equal, unequal, expected_repr):
+    assert algorithm == equal
+    assert algorithm != unequal
+    assert repr(algorithm) == expected_repr
 
 
 @pytest.mark.parametrize(

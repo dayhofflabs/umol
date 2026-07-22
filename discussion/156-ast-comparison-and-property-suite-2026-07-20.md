@@ -67,7 +67,7 @@ the existing relation-data vocabulary: `equiv` compares in the current frame;
   tests cover symmetry under `correspondence.reverse()` and reduction to S0b
   under the identity frame. **Implemented (green).** `[dep: S0a, S0b]`
 - **S0d — comparison contract and application-property migration**
-  (`umol-ast/tests/property/reaction.rs`): record the comparison matrix for
+  (`umol-ast/tests/property`): record the comparison matrix for
   `==`, entity `canonical_eq`, relation
   `equiv`/`equiv_under`, and molecule `equiv`/`equiv_under`. Replace complete
   result inspection in the eight focused host-refinement application properties
@@ -132,48 +132,53 @@ the existing relation-data vocabulary: `equiv` compares in the current frame;
   property tests pass. The complete `umol-ast` suite passes with 5,136 unit
   tests, and Clippy passes for all `umol-ast` targets with the `proptest`
   feature and warnings denied.
-- **S1d — malformed-input property and fuzz coverage**
-  (`tests/property/malformed.rs`, `fuzz/fuzz_targets/fuzz_reaction.rs`): generate invalid IDs, missing incidence, incompatible
-  overlay references, and malformed update combinations; assert errors rather
-  than panics and assert post-fatal iterator termination. **Additive (green).**
+- **S1d — malformed-reaction property and fuzz coverage**
+  (`tests/property/reaction/malformed.rs`, `fuzz/fuzz_targets/fuzz_reaction.rs`):
+  generate invalid IDs, missing incidence, incompatible overlay references, and
+  malformed update combinations; assert exact precondition errors rather than
+  panics and assert post-fatal iterator termination. Five properties cover all
+  eight delta target families, missing participants and sites, all DAMNSS
+  incidence families, discontinuous field-update chains, invalid stereo
+  configuration domains, and one-shot fatal transaction failure. The reaction
+  fuzz target now validates and performs a bounded self-application after
+  successful parsing. This exposed an out-of-range stereo update that could
+  panic while reframing; application validation now rejects it as
+  `InconsistentReaction` before canonicalization or application.
+  **Implemented (green).**
   [dep: S1c]
 
 ### S2 — Property-suite structure and purpose
 
-- **S2a — invariant inventory** (`umol-ast/tests/property`): write a table
-  mapping each property to its invariant, generator domain, oracle, and failure
-  class. Explicitly distinguish identity/canonicalization, update/difference,
-  delta composition, reaction application, malformed-input safety, and
-  serialization/span properties. **Additive (green).**
-- **S2b — split the large reaction property module**
-  (`umol-ast/tests/property.rs`, `tests/property/reaction.rs`): retain the
-  existing `strategies.rs`, `value.rs`, `lattice.rs`, `entity.rs`, `stereo.rs`,
-  `molecule.rs`, `edit.rs`, `delta.rs`, and `substructure.rs` modules. Replace
-  `reaction.rs` with `reaction_application.rs`, `reaction_composition.rs`,
-  `reaction_span.rs`, and `reaction_serialization.rs`; register
-  `malformed.rs` from S1d alongside them. Move each existing reaction property
-  according to the operation named in the test and change no generators or
-  assertions in this subitem. Keep the single `property` test target.
-  **Breaking file migration (red→green).** [dep: S2a]
+- **S2a — invariant documentation** (`umol-ast/tests/property`): keep invariant,
+  generator-domain, oracle, and suite-organization rationale beside the code it
+  governs. Treat the executable test target as the authoritative inventory and
+  do not maintain a property-suite README. **Implemented (green).**
+- **S2b — introduce hierarchical property modules**
+  (`umol-ast/tests/property.rs`, `umol-ast/tests/property/{molecule,reaction,stereo}`):
+  retain the single `property` test target, group the larger subjects by
+  operation, and keep uniform invariant families flat. The rationale and
+  regression-file ownership are documented in the corresponding modules.
+  **Implemented (green).**
+  [dep: S2a]
 - **S2c — remove accidental overlap while retaining deliberate overlap**:
-  preserve one minimal identity property and one canonical-equivalence
-  property per entity family; retain the eight focused host-refinement
-  application properties because they exercise distinct delta variants; remove
-  duplicate generators/assertions whose only difference is incidental data
-  shape. Record the purpose of any retained overlap beside the property.
-  **Additive (green).** [dep: S2b]
+  remove duplicate assertions whose only difference is incidental data shape
+  and document deliberate overlap beside the affected property families.
+  **Implemented (green).** [dep: S2b]
 - **S2d — migrate semantic assertions to framed equivalence**: use molecule
   `equiv` for complete same-frame results, molecule `equiv_under` where a
   correspondence is part of the property, entity `canonical_eq` for
   entity-focused results, and `==` only where representation identity is the
   invariant. Keep direct topology assertions only for properties explicitly
   testing topology. No property may reach into private molecule storage merely
-  to obtain a general-purpose equality check. **Additive (green).** [dep: S0d, S2b]
+  to obtain a general-purpose equality check. **Implemented (green).** [dep: S0d, S2b]
 - **S2e — suite and soak gate**: run the default property suite, targeted
   reaction application properties at the enlarged case count, malformed-input
   properties, clippy, formatting, and `git diff --check`; retain minimized
-  regressions only when they exercise a documented invariant. **Additive
-  (green).** [dep: S1d, S2c, S2d]
+  regressions only when they exercise a documented invariant. The complete
+  211-property suite passes at its default case count; the workspace Rust tests,
+  all 1,381 `umol-py` Rust tests, all 900 Python tests, all fuzz-target builds,
+  strict Clippy for `umol-ast` and `umol-py`, formatting, and `git diff --check`
+  pass. **Implemented (green).** [dep: S1d, S2c, S2d]
 
 ## Dependencies and deferrals
 

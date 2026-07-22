@@ -41,7 +41,7 @@ use super::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondUpdate};
 use super::reaction_derivation::ReactionDerivation;
 use super::remap::IdRemapping;
-use super::stereo::StereoConfigurationAst;
+use super::stereo::{StereoConfigurationAst, StereoCosetAst, StereoKind, StereoTerm};
 use super::substructure::SubstructureMatchAlgorithm;
 use super::traits::Canonicalize;
 use super::validate::{
@@ -54,6 +54,155 @@ use super::validate::{
 pub struct ReactionAst {
     pub lhs: MoleculeAst,
     pub deltas: Deltas,
+}
+
+fn stereo_delta_domains_are_valid(lhs: &MoleculeAst, deltas: &Deltas) -> bool {
+    fn permutation_is_valid(kind: StereoKind, permutation: Permutation) -> bool {
+        permutation.degree() == kind.degree()
+            && (0..kind.count() as u32).all(|coset| {
+                kind.class_key()
+                    .space()
+                    .reindex(coset, permutation)
+                    .is_some()
+            })
+    }
+
+    fn term_is_valid(kind: StereoKind, term: &StereoTerm) -> bool {
+        match term {
+            StereoTerm::Var(var) => var.1.as_ref().is_none_or(|domain| {
+                !domain.is_empty() && domain.iter().all(|i| *i < kind.count() as u32)
+            }),
+            StereoTerm::Lit(index) => *index < kind.count() as u32,
+            StereoTerm::LitSet(indices) => {
+                !indices.is_empty() && indices.iter().all(|i| *i < kind.count() as u32)
+            }
+            StereoTerm::Swap(inner) | StereoTerm::Mirror(inner) => term_is_valid(kind, inner),
+            StereoTerm::Apply(inner, permutation) => {
+                term_is_valid(kind, inner) && permutation_is_valid(kind, *permutation)
+            }
+        }
+    }
+
+    fn configuration_is_valid(configuration: &StereoConfigurationAst) -> bool {
+        match configuration {
+            StereoConfigurationAst::Undetermined => true,
+            StereoConfigurationAst::Kinded(kind, coset) => match coset {
+                StereoCosetAst::Undetermined => true,
+                StereoCosetAst::Lit(index) => *index < kind.count() as u32,
+                StereoCosetAst::LitSet(indices) => {
+                    !indices.is_empty() && indices.iter().all(|i| *i < kind.count() as u32)
+                }
+                StereoCosetAst::Term(term) => term_is_valid(*kind, term),
+            },
+        }
+    }
+
+    fn configurations_are_compatible(
+        lhs: Option<&StereoConfigurationAst>,
+        old: &StereoConfigurationAst,
+        new: &StereoConfigurationAst,
+    ) -> bool {
+        let lhs_kind = lhs.and_then(StereoConfigurationAst::kind);
+        let old_kind = old.kind();
+        let new_kind = new.kind();
+        configuration_is_valid(old)
+            && configuration_is_valid(new)
+            && old_kind.zip(new_kind).is_none_or(|(old, new)| old == new)
+            && lhs_kind.zip(old_kind).is_none_or(|(lhs, old)| lhs == old)
+            && lhs_kind.zip(new_kind).is_none_or(|(lhs, new)| lhs == new)
+    }
+
+    if lhs
+        .stereo_atoms()
+        .iter()
+        .any(|view| !configuration_is_valid(&view.ast.configuration))
+        || lhs
+            .stereo_bonds()
+            .iter()
+            .any(|view| !configuration_is_valid(&view.ast.configuration))
+    {
+        return false;
+    }
+
+    deltas.iter().all(|delta| match delta {
+        Delta::StereoAtom(StereoAtomDelta::Add { ast, .. }) => {
+            configuration_is_valid(&ast.configuration)
+        }
+        Delta::StereoAtom(StereoAtomDelta::Remove { id, ast, .. }) => {
+            let lhs_configuration = lhs
+                .stereo_atoms()
+                .get(*id)
+                .map(|view| &view.ast.configuration);
+            configurations_are_compatible(lhs_configuration, &ast.configuration, &ast.configuration)
+        }
+        Delta::StereoAtom(StereoAtomDelta::ModifyField {
+            id,
+            change: StereoAtomFieldChange::Configuration { old, new },
+        }) => configurations_are_compatible(
+            lhs.stereo_atoms()
+                .get(*id)
+                .map(|view| &view.ast.configuration),
+            old,
+            new,
+        ),
+        Delta::StereoAtom(StereoAtomDelta::Apply {
+            id,
+            kind,
+            permutation,
+        }) => {
+            lhs.stereo_atoms()
+                .get(*id)
+                .and_then(|view| view.ast.configuration.kind())
+                .is_none_or(|lhs_kind| lhs_kind == *kind)
+                && permutation_is_valid(*kind, *permutation)
+        }
+        Delta::StereoAtom(
+            StereoAtomDelta::Swap { id, kind } | StereoAtomDelta::Mirror { id, kind },
+        ) => lhs
+            .stereo_atoms()
+            .get(*id)
+            .and_then(|view| view.ast.configuration.kind())
+            .is_none_or(|lhs_kind| lhs_kind == *kind),
+        Delta::StereoBond(StereoBondDelta::Add { ast, .. }) => {
+            configuration_is_valid(&ast.configuration)
+        }
+        Delta::StereoBond(StereoBondDelta::Remove { id, ast, .. }) => {
+            let lhs_configuration = lhs
+                .stereo_bonds()
+                .get(*id)
+                .map(|view| &view.ast.configuration);
+            configurations_are_compatible(lhs_configuration, &ast.configuration, &ast.configuration)
+        }
+        Delta::StereoBond(StereoBondDelta::ModifyField {
+            id,
+            change: StereoBondFieldChange::Configuration { old, new },
+        }) => configurations_are_compatible(
+            lhs.stereo_bonds()
+                .get(*id)
+                .map(|view| &view.ast.configuration),
+            old,
+            new,
+        ),
+        Delta::StereoBond(StereoBondDelta::Apply {
+            id,
+            kind,
+            permutation,
+        }) => {
+            lhs.stereo_bonds()
+                .get(*id)
+                .and_then(|view| view.ast.configuration.kind())
+                .is_none_or(|lhs_kind| lhs_kind == *kind)
+                && permutation_is_valid(*kind, *permutation)
+        }
+        Delta::StereoBond(
+            StereoBondDelta::Swap { id, kind } | StereoBondDelta::Mirror { id, kind },
+        ) => lhs
+            .stereo_bonds()
+            .get(*id)
+            .and_then(|view| view.ast.configuration.kind())
+            .is_none_or(|lhs_kind| lhs_kind == *kind),
+        _ => true,
+    })
 }
 
 impl ReactionAst {
@@ -1143,6 +1292,9 @@ impl ReactionAst {
     }
 
     fn application_deltas(&self, host: &MoleculeAst) -> Result<Deltas, ApplyPreconditionError> {
+        if !stereo_delta_domains_are_valid(&self.lhs, &self.deltas) {
+            return Err(ApplyPreconditionError::InconsistentReaction);
+        }
         let deltas = self
             .deltas
             .clone()

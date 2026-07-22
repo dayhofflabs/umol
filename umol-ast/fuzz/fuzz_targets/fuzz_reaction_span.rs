@@ -12,9 +12,7 @@ fuzz_target!(|data: &str| {
         .ok()
         .and_then(|edn| ReactionSpanDsl::from_edn(&edn).ok());
 
-    // Parse-or-error parity: neither path may panic, and when both produce a
-    // value they must agree.
-    if let (Some(s), Some(t)) = (&stream, &tree) {
-        assert_eq!(s, t, "streaming and tree reaction-span parsers disagree");
-    }
+    // Parse-or-error parity: neither path may panic, and both must either
+    // reject or produce the same value.
+    assert_eq!(stream, tree, "streaming and tree reaction-span parsers disagree");
 });

@@ -13,6 +13,7 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 umol-ast = { path = ".." }
 umol-edn = { path = "../../umol-edn" }
+umol-graph-core = { path = "../../umol-graph-core" }
 
 [[bin]]
 name = "fuzz_entity_strings"

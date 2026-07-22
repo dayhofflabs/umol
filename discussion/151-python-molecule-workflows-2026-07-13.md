@@ -127,9 +127,11 @@ registered in `umol-py/src/lib.rs`, re-exported from `python/umol/__init__.py`, 
 listed in `__all__`.
 
 Configured DSL construction is available through `MoleculeDefaults` and
-`ReactionDefaults`. Their ordinary constructors preserve omitted values as
-undetermined; `ground()` fills ordinary entity fields while leaving omitted
-constraints required. `MoleculeAst.parse(text, *, defaults=None)` and
+`ReactionDefaults`. Their ordinary constructors select `Required` for every
+configurable field and constraint: DSL-to-AST conversion leaves omitted values
+undetermined, while AST-to-DSL conversion preserves every value explicitly.
+`ground()` fills ordinary entity fields while leaving omitted constraints
+required. `MoleculeAst.parse(text, *, defaults=None)` and
 `ReactionAst.parse(text, *, defaults=None)` apply the selected policy during
 DSL-to-AST conversion; `None` selects the ordinary no-substitution defaults.
 Reaction defaults cover the LHS and
@@ -1682,7 +1684,7 @@ extend `ReactionCombinedFingerprintConfig` in S8.
   (`umol-py/src/correspondence.rs`): bind `GraphAndOverlays()` and `Incidence()`
   with inherent `from_rust`/`to_rust`, equality, and repr. Table tests cover both
   variants; keep the already-bound six-way `SubgraphIsomorphismAlgorithm` as the
-  backend selector. **Additive (green).** `[dep: S4a]`
+  backend selector. **Implemented (green).** `[dep: S4a]`
 - **S9c — `ReactionApplicationConfig`**
   (`umol-py/src/reaction.rs`): add the immutable config with default
   `GraphAndOverlays()` strategy and `Vf2Rdkit()` backend. Convert both fields

@@ -1,0 +1,103 @@
+//! Property tests for reaction serialization.
+
+use proptest::prelude::*;
+use proptest::test_runner::{Config, FileFailurePersistence};
+
+use crate::strategies::*;
+
+proptest! {
+    #![proptest_config(Config {
+        failure_persistence: Some(Box::new(FileFailurePersistence::Direct(
+            super::REGRESSION_FILE,
+        ))),
+        ..Config::default()
+    })]
+
+    /// The reaction round-trips through the EDN surface: render → parse reaches a
+    /// fixpoint, exercising the atom/bond add / remove / modify-field delta ops
+    /// (`ReactionAst::to_edn` then `from_edn`, twice, must agree).
+    #[test]
+    fn test_reaction_ast_edn_roundtrip_stable(reaction in reaction_strategy()) {
+        let once = ReactionAst::from_edn(&reaction.to_edn())
+            .map_err(|e| TestCaseError::fail(format!("first reparse failed: {e}")))?;
+        let twice = ReactionAst::from_edn(&once.to_edn())
+            .map_err(|e| TestCaseError::fail(format!("second reparse failed: {e}")))?;
+        prop_assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn test_reaction_dsl_to_edn_from_edn_roundtrip(reaction in comprehensive_reaction_strategy()) {
+        let dsl = ReactionDsl::from_ast(&reaction, &ReactionDefaults::new());
+        let via_tree = ReactionDsl::from_edn(&dsl.to_edn())
+            .map_err(|error| TestCaseError::fail(format!("tree parse failed: {error}")))?;
+        let rendered = dsl.to_edn().to_string();
+        let via_stream = ReactionDsl::from_edn_str(&rendered)
+            .map_err(|error| TestCaseError::fail(format!("streaming parse failed: {error}")))?;
+        prop_assert_eq!(&via_tree, &dsl);
+        prop_assert_eq!(via_stream, dsl);
+    }
+
+    #[test]
+    fn test_reaction_dsl_parser_parity(input in any::<String>()) {
+        let via_stream = ReactionDsl::from_edn_str(&input).ok();
+        let via_tree = read_string(&input)
+            .ok()
+            .and_then(|edn| ReactionDsl::from_edn(&edn).ok());
+        prop_assert_eq!(via_stream, via_tree);
+    }
+
+    #[test]
+    fn test_reaction_defaults_roundtrip(reaction in comprehensive_reaction_strategy()) {
+        let defaults = ReactionDefaults::new();
+        let rebuilt = ReactionDsl::from_ast(&reaction, &defaults).into_ast(&defaults);
+        prop_assert_eq!(rebuilt, reaction);
+    }
+
+    #[test]
+    fn test_reaction_defaults_roundtrip_ground(reaction in comprehensive_reaction_strategy()) {
+        let required = ReactionDefaults::new();
+        let ground = ReactionDefaults::ground();
+        let grounded = ReactionDsl::from_ast(&reaction, &required).into_ast(&ground);
+        let rebuilt = ReactionDsl::from_ast(&grounded, &ground).into_ast(&ground);
+        prop_assert_eq!(rebuilt, grounded);
+    }
+
+    #[test]
+    fn test_reaction_span_dsl_to_edn_from_edn_roundtrip(
+        reaction in comprehensive_reaction_strategy(),
+    ) {
+        if let Ok(span) = reaction.to_reaction_span() {
+            let dsl = ReactionSpanDsl::from_ast(&span, &MoleculeDefaults::new());
+            let via_tree = ReactionSpanDsl::from_edn(&dsl.to_edn())
+                .map_err(|error| TestCaseError::fail(format!("tree parse failed: {error}")))?;
+            let rendered = dsl.to_edn().to_string();
+            let via_stream = ReactionSpanDsl::from_edn_str(&rendered).map_err(|error| {
+                TestCaseError::fail(format!("streaming parse failed: {error}"))
+            })?;
+            prop_assert_eq!(&via_tree, &dsl);
+            prop_assert_eq!(via_stream, dsl);
+        }
+    }
+
+    #[test]
+    fn test_reaction_span_dsl_parser_parity(input in any::<String>()) {
+        let via_stream = ReactionSpanDsl::from_edn_str(&input).ok();
+        let via_tree = read_string(&input)
+            .ok()
+            .and_then(|edn| ReactionSpanDsl::from_edn(&edn).ok());
+        prop_assert_eq!(via_stream, via_tree);
+    }
+
+    #[test]
+    fn test_reaction_span_defaults_roundtrip_ground(
+        reaction in comprehensive_reaction_strategy(),
+    ) {
+        if let Ok(span) = reaction.to_reaction_span() {
+            let required = MoleculeDefaults::new();
+            let ground = MoleculeDefaults::ground();
+            let grounded = ReactionSpanDsl::from_ast(&span, &required).into_ast(&ground);
+            let rebuilt = ReactionSpanDsl::from_ast(&grounded, &ground).into_ast(&ground);
+            prop_assert_eq!(rebuilt, grounded);
+        }
+    }
+}

@@ -46,7 +46,10 @@ use crate::{
             StereogenicityAst, TopicityAst, TopicityRelationAst,
         },
     },
-    correspondence::{Correspondence, MoleculeCorrespondence, SubgraphIsomorphismAlgorithm},
+    correspondence::{
+        Correspondence, MoleculeCorrespondence, SubgraphIsomorphismAlgorithm,
+        SubstructureMatchAlgorithm,
+    },
     dative::{DativeBondAst, DativeBondView, DativeBondViews},
     defaults::{MoleculeDefaults, ReactionDefaults},
     delta::{
@@ -231,6 +234,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Correspondence>()?;
         module.add_class::<MoleculeCorrespondence>()?;
         module.add_class::<SubgraphIsomorphismAlgorithm>()?;
+        module.add_class::<SubstructureMatchAlgorithm>()?;
         module.add_class::<SubPatternAnchor>()?;
         module.add_class::<RelationalConstraint>()?;
         module.add_class::<MoleculeConstraint>()?;

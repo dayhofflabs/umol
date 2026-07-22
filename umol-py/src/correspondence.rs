@@ -6,6 +6,7 @@ use pyo3::prelude::*;
 use umol_ast::ast::{
     AromaticSystemId, BondId, DativeBondId, MoleculeCorrespondence as AstMoleculeCorrespondence,
     MulticenterBondId, NoncovalentBondId, StereoAtomId, StereoBondId,
+    SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm,
 };
 use umol_graph_core::{
     Correspondence as RustCorrespondence, NodeId,
@@ -189,6 +190,48 @@ impl MoleculeCorrespondence {
     )]
     pub(crate) fn from_rust(correspondence: AstMoleculeCorrespondence) -> Self {
         Self(correspondence)
+    }
+}
+
+/// Strategy used to match molecule structure and overlays.
+#[pyclass(from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SubstructureMatchAlgorithm {
+    GraphAndOverlays(),
+    Incidence(),
+}
+
+#[pymethods]
+impl SubstructureMatchAlgorithm {
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __repr__(&self) -> &'static str {
+        match self {
+            Self::GraphAndOverlays() => "SubstructureMatchAlgorithm.GraphAndOverlays()",
+            Self::Incidence() => "SubstructureMatchAlgorithm.Incidence()",
+        }
+    }
+}
+
+impl SubstructureMatchAlgorithm {
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion API for substructure match algorithms"
+    )]
+    pub(crate) fn from_rust(algorithm: AstSubstructureMatchAlgorithm) -> Self {
+        match algorithm {
+            AstSubstructureMatchAlgorithm::GraphAndOverlays => Self::GraphAndOverlays(),
+            AstSubstructureMatchAlgorithm::Incidence => Self::Incidence(),
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> AstSubstructureMatchAlgorithm {
+        match self {
+            Self::GraphAndOverlays() => AstSubstructureMatchAlgorithm::GraphAndOverlays,
+            Self::Incidence() => AstSubstructureMatchAlgorithm::Incidence,
+        }
     }
 }
 
@@ -525,6 +568,69 @@ mod tests {
                 "stereo_bonds=Correspondence(mates=[(0, 1)], left_count=1, right_count=2))"
             )
         );
+    }
+
+    #[rstest]
+    #[case::graph_and_overlays(
+        AstSubstructureMatchAlgorithm::GraphAndOverlays,
+        SubstructureMatchAlgorithm::GraphAndOverlays()
+    )]
+    #[case::incidence(
+        AstSubstructureMatchAlgorithm::Incidence,
+        SubstructureMatchAlgorithm::Incidence()
+    )]
+    fn test_substructure_match_algorithm_from_rust(
+        #[case] algorithm: AstSubstructureMatchAlgorithm,
+        #[case] expected: SubstructureMatchAlgorithm,
+    ) {
+        assert_eq!(SubstructureMatchAlgorithm::from_rust(algorithm), expected);
+    }
+
+    #[rstest]
+    #[case::graph_and_overlays(
+        SubstructureMatchAlgorithm::GraphAndOverlays(),
+        AstSubstructureMatchAlgorithm::GraphAndOverlays
+    )]
+    #[case::incidence(
+        SubstructureMatchAlgorithm::Incidence(),
+        AstSubstructureMatchAlgorithm::Incidence
+    )]
+    fn test_substructure_match_algorithm_to_rust(
+        #[case] algorithm: SubstructureMatchAlgorithm,
+        #[case] expected: AstSubstructureMatchAlgorithm,
+    ) {
+        assert_eq!(algorithm.to_rust(), expected);
+    }
+
+    #[rstest]
+    #[case::graph_and_overlays(
+        SubstructureMatchAlgorithm::GraphAndOverlays(),
+        "SubstructureMatchAlgorithm.GraphAndOverlays()"
+    )]
+    #[case::incidence(
+        SubstructureMatchAlgorithm::Incidence(),
+        "SubstructureMatchAlgorithm.Incidence()"
+    )]
+    fn test_substructure_match_algorithm_value(
+        #[case] algorithm: SubstructureMatchAlgorithm,
+        #[case] expected_repr: &str,
+    ) {
+        Python::attach(|py| {
+            let expected = into_py_variant(
+                py,
+                SubstructureMatchAlgorithm::from_rust(algorithm.to_rust()),
+            )
+            .unwrap();
+            let algorithm = into_py_variant(py, algorithm).unwrap();
+            let expected = expected.bind(py).as_any();
+            let algorithm = algorithm.bind(py).as_any();
+
+            assert_eq!(
+                algorithm.repr().unwrap().extract::<String>().unwrap(),
+                expected_repr
+            );
+            assert!(algorithm.eq(expected).unwrap());
+        });
     }
 
     #[rstest]

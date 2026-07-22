@@ -18,6 +18,16 @@ proptest! {
         assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
+    #[test]
+    fn test_boolean_ast_lattice_laws(
+        a in prop_oneof![Just(BooleanAst::Undetermined), any::<bool>().prop_map(BooleanAst::Lit)],
+        b in prop_oneof![Just(BooleanAst::Undetermined), any::<bool>().prop_map(BooleanAst::Lit)],
+        c in prop_oneof![Just(BooleanAst::Undetermined), any::<bool>().prop_map(BooleanAst::Lit)],
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
     /// The universal (input-canonicality-independent) laws on raw, non-canonical
     /// inputs — `canonical()` fold path, `equiv`, `matches`↔meet, and meet/join
     /// canonicality — which the canonicalized strategies above never reach. One
@@ -266,10 +276,30 @@ proptest! {
     }
 
     #[test]
+    fn test_atom_constraint_ast_lattice_laws(
+        a in atom_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        b in atom_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        c in atom_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
     fn test_bond_constraints_lattice_laws(
         a in bond_constraints_strategy(),
         b in bond_constraints_strategy(),
         c in bond_constraints_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_bond_constraint_ast_lattice_laws(
+        a in bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        b in bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        c in bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
@@ -286,10 +316,30 @@ proptest! {
     }
 
     #[test]
+    fn test_aromatic_system_constraint_ast_lattice_laws(
+        a in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintAst::ElectronCount(value).canonicalize().unwrap()),
+        b in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintAst::ElectronCount(value).canonicalize().unwrap()),
+        c in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintAst::ElectronCount(value).canonicalize().unwrap()),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
     fn test_dative_bond_constraints_lattice_laws(
         a in dative_bond_constraints_strategy(),
         b in dative_bond_constraints_strategy(),
         c in dative_bond_constraints_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_dative_bond_constraint_ast_lattice_laws(
+        a in dative_bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        b in dative_bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        c in dative_bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
@@ -306,10 +356,30 @@ proptest! {
     }
 
     #[test]
+    fn test_multicenter_bond_constraint_ast_lattice_laws(
+        a in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintAst::ElectronCount(value).canonicalize().unwrap()),
+        b in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintAst::ElectronCount(value).canonicalize().unwrap()),
+        c in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintAst::ElectronCount(value).canonicalize().unwrap()),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
     fn test_noncovalent_bond_constraints_lattice_laws(
         a in noncovalent_bond_constraints_strategy(),
         b in noncovalent_bond_constraints_strategy(),
         c in noncovalent_bond_constraints_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_noncovalent_bond_constraint_ast_lattice_laws(
+        a in noncovalent_bond_constraint_strategy(),
+        b in noncovalent_bond_constraint_strategy(),
+        c in noncovalent_bond_constraint_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;
@@ -326,10 +396,30 @@ proptest! {
     }
 
     #[test]
+    fn test_stereo_atom_constraint_ast_lattice_laws(
+        a in stereo_atom_constraint_strategy(StereoKind::Tetrahedral),
+        b in stereo_atom_constraint_strategy(StereoKind::Tetrahedral),
+        c in stereo_atom_constraint_strategy(StereoKind::Tetrahedral),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
     fn test_stereo_bond_constraints_lattice_laws(
         a in stereo_bond_constraints_strategy(StereoKind::CisTrans),
         b in stereo_bond_constraints_strategy(StereoKind::CisTrans),
         c in stereo_bond_constraints_strategy(StereoKind::CisTrans),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_stereo_bond_constraint_ast_lattice_laws(
+        a in stereo_bond_constraint_strategy(StereoKind::CisTrans),
+        b in stereo_bond_constraint_strategy(StereoKind::CisTrans),
+        c in stereo_bond_constraint_strategy(StereoKind::CisTrans),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
         assert_canonical_lattice_laws(&a, &b, &c)?;

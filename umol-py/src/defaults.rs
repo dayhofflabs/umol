@@ -12,7 +12,7 @@ pub struct MoleculeDefaults(AstMoleculeDefaults);
 
 #[pymethods]
 impl MoleculeDefaults {
-    /// Preserve omitted values as undetermined.
+    /// Preserve every AST value; omitted input values remain undetermined.
     #[new]
     pub(crate) fn new() -> Self {
         Self(AstMoleculeDefaults::new())
@@ -46,7 +46,7 @@ pub struct ReactionDefaults(AstReactionDefaults);
 
 #[pymethods]
 impl ReactionDefaults {
-    /// Preserve omitted values as undetermined.
+    /// Preserve every AST value; omitted input values remain undetermined.
     #[new]
     pub(crate) fn new() -> Self {
         Self(AstReactionDefaults::new())

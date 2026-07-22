@@ -17,7 +17,7 @@ pub struct MoleculeDefaults {
 }
 
 impl MoleculeDefaults {
-    /// No-op defaults.
+    /// Requires every configurable entity field and constraint to be explicit.
     pub fn new() -> Self {
         Self {
             atom: AtomDefaults::new(),
@@ -119,7 +119,7 @@ pub struct ReactionDefaults {
 }
 
 impl ReactionDefaults {
-    /// No-op defaults.
+    /// Requires every configurable entity field and constraint to be explicit.
     pub fn new() -> Self {
         Self {
             atom: AtomDefaults::new(),
@@ -250,15 +250,15 @@ pub struct AtomDefaults {
 }
 
 impl AtomDefaults {
-    /// No-op defaults
+    /// Requires every atom field and constraint to be explicit.
     pub fn new() -> Self {
         Self {
             isotope: IsotopeDefault::Required,
             charge: NumericDefault::Required,
             implicit_hydrogens: NumericDefault::Required,
             lone_pairs: NumericDefault::Required,
-            unpaired_electrons: UnpairedElectronsDefault::Derived,
-            multiplicity: MultiplicityDefault::Derived,
+            unpaired_electrons: UnpairedElectronsDefault::Required,
+            multiplicity: MultiplicityDefault::Required,
             valence: NumericDefault::Required,
             donated_pairs: NumericDefault::Required,
             accepted_pairs: NumericDefault::Required,
@@ -384,12 +384,12 @@ pub struct BondDefaults {
 }
 
 impl BondDefaults {
-    /// No-op defaults
+    /// Requires every bond field and constraint to be explicit.
     pub fn new() -> Self {
         Self {
             charge: NumericDefault::Required,
-            unpaired_electrons: UnpairedElectronsDefault::Derived,
-            multiplicity: MultiplicityDefault::Derived,
+            unpaired_electrons: UnpairedElectronsDefault::Required,
+            multiplicity: MultiplicityDefault::Required,
             cis_trans_stereo: StereoDefault::Required,
         }
     }
@@ -479,12 +479,12 @@ pub struct AromaticSystemDefaults {
 }
 
 impl AromaticSystemDefaults {
-    /// No-op defaults
+    /// Requires every aromatic-system field to be explicit.
     pub fn new() -> Self {
         Self {
             charge: NumericDefault::Required,
-            unpaired_electrons: UnpairedElectronsDefault::Derived,
-            multiplicity: MultiplicityDefault::Derived,
+            unpaired_electrons: UnpairedElectronsDefault::Required,
+            multiplicity: MultiplicityDefault::Required,
         }
     }
 
@@ -540,12 +540,12 @@ pub struct MulticenterBondDefaults {
 }
 
 impl MulticenterBondDefaults {
-    /// No-op defaults
+    /// Requires every multicenter-bond field to be explicit.
     pub fn new() -> Self {
         Self {
             charge: NumericDefault::Required,
-            unpaired_electrons: UnpairedElectronsDefault::Derived,
-            multiplicity: MultiplicityDefault::Derived,
+            unpaired_electrons: UnpairedElectronsDefault::Required,
+            multiplicity: MultiplicityDefault::Required,
         }
     }
 
@@ -735,11 +735,32 @@ mod tests {
     fn test_molecule_ast_config_roundtrip(#[case] cfg: MoleculeDefaults) {
         let edn = cfg.to_edn();
         let back = MoleculeDefaults::from_edn(&edn).unwrap();
-        assert_eq!(cfg.atom.charge, back.atom.charge);
-        assert_eq!(cfg.atom.implicit_hydrogens, back.atom.implicit_hydrogens);
-        assert_eq!(cfg.bond.charge, back.bond.charge);
-        assert_eq!(cfg.aromatic_system.charge, back.aromatic_system.charge);
-        assert_eq!(cfg.multicenter_bond.charge, back.multicenter_bond.charge);
+        assert_eq!(back, cfg);
+    }
+
+    #[rstest]
+    #[case::atom(
+        AtomDefaults::new().unpaired_electrons,
+        AtomDefaults::new().multiplicity
+    )]
+    #[case::bond(
+        BondDefaults::new().unpaired_electrons,
+        BondDefaults::new().multiplicity
+    )]
+    #[case::aromatic_system(
+        AromaticSystemDefaults::new().unpaired_electrons,
+        AromaticSystemDefaults::new().multiplicity
+    )]
+    #[case::multicenter_bond(
+        MulticenterBondDefaults::new().unpaired_electrons,
+        MulticenterBondDefaults::new().multiplicity
+    )]
+    fn test_new_spin_defaults_required(
+        #[case] unpaired_electrons: UnpairedElectronsDefault,
+        #[case] multiplicity: MultiplicityDefault,
+    ) {
+        assert_eq!(unpaired_electrons, UnpairedElectronsDefault::Required);
+        assert_eq!(multiplicity, MultiplicityDefault::Required);
     }
 
     #[rstest]
@@ -829,7 +850,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::required_atom(
+    #[case::explicit_derived_spin(
         "{:isotope :required :charge :required :implicit-hydrogens :required \
          :lone-pairs :required :unpaired-electrons :derived :multiplicity :derived \
          :valence :required :donated-pairs :required :accepted-pairs :required \
