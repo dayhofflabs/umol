@@ -1,30 +1,17 @@
+#[path = "cycles/corpus.rs"]
+mod corpus;
 #[path = "cycles/oracle.rs"]
 mod oracle;
 
 use proptest::prelude::*;
-use umol_graph_core::{Graph, SubdivisionNodeSource};
+use umol_graph_core::SubdivisionNodeSource;
 
+use self::corpus::multigraph;
 use self::oracle::{relevant_cycles, unique_ring_families};
-
-/// Random multigraph with loops and repeated endpoint pairs.
-fn graph(max_nodes: usize, max_edges: usize) -> impl Strategy<Value = Graph> {
-    (
-        0..=max_nodes,
-        prop::collection::vec((0..max_nodes as u32, 0..max_nodes as u32), 0..=max_edges),
-    )
-        .prop_map(|(node_count, endpoints)| {
-            let edges: Vec<[u32; 2]> = endpoints
-                .into_iter()
-                .filter(|&(first, second)| first < node_count as u32 && second < node_count as u32)
-                .map(|(first, second)| [first, second])
-                .collect();
-            Graph::new(node_count, &edges)
-        })
-}
 
 proptest! {
     #[test]
-    fn test_unique_ring_families(graph in graph(5, 5)) {
+    fn test_unique_ring_families(graph in multigraph(5, 5)) {
         let relevant = relevant_cycles(&graph);
         let families = unique_ring_families(&graph);
 
@@ -44,7 +31,7 @@ proptest! {
     }
 
     #[test]
-    fn test_graph_subdivide_edges(source in graph(8, 12)) {
+    fn test_graph_subdivide_edges(source in multigraph(8, 12)) {
         let subdivision = source.subdivide_edges();
         let graph = subdivision.graph();
 

@@ -841,7 +841,7 @@ correctness oracles.
   bases, positive and negative URF relations, loops, parallel edges, and
   disconnected graphs. The property strategy exercising the exponential
   family oracle is bounded to five edges.
-- **S0f — generated exhaustive graph corpus**
+- **S0f — generated exhaustive graph corpus** **Done**
   (`umol-graph-core/tests/data/cycles/`,
   `tests/property/cycles/corpus.rs`): invoke `/opt/homebrew/bin/geng` once
   during implementation to generate a checked-in graph6 corpus of
@@ -854,6 +854,24 @@ correctness oracles.
   prerequisite. Different algorithms may use explicitly documented corpus
   bounds appropriate to their output size. **Additive, self-contained test
   corpus (green).** `[dep: S0d, S0e]`
+
+  `simple-through-8.g6` contains all 13,598 non-isomorphic simple graphs of
+  orders one through eight. It was generated once with nauty 2.9.3
+  (Homebrew) using:
+
+  ```text
+  for order in {1..8}; do
+      /opt/homebrew/bin/geng -q "$order"
+  done > umol-graph-core/tests/data/cycles/simple-through-8.g6
+  ```
+
+  The file is 93,655 bytes with SHA-256
+  `bbe34489bc2875f5d29b3f4342f6ab6e04d339105d0d89e139f9078f8f0e10f8`
+  and XXH3-64 `c3c03691841d9b70`. The test-only `parse_graph6` reader supports
+  the corpus's compact graph6 order encoding, `simple_graphs` iterates the
+  checked-in data, and `multigraph` provides bounded random graphs with loops
+  and repeated edges. Exact tests pin graph6 decoding, counts by order, and the
+  corpus digest. No Rust test invokes or searches for `geng`.
 
 ### S1 — Complete bounded cycle enumeration
 

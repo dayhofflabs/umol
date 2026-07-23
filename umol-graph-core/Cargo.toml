@@ -26,6 +26,7 @@ proptest = "1.7.0"
 rstest = "0.26.1"
 serde = { version = "1", features = ["derive"] }
 toml = "1.1.0"
+xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
 
 [[test]]
 name = "property"
