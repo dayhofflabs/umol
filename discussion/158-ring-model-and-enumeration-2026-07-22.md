@@ -801,9 +801,10 @@ correctness oracles.
   back; `node_of` and `incidence_edges_of` provide the forward mappings. The
   automorphism benchmark uses the public construction, and unit and property
   tests cover empty, isolated, simple, parallel-edge, and self-loop inputs.
-- **S0d — exhaustive cycle oracle**
+- **S0d — exhaustive cycle oracle** **Done**
   (`umol-graph-core/tests/property.rs`,
-  `tests/property/cycles/{mod,oracle}.rs`): split the cycle properties into a
+  `tests/property/cycles.rs`, `tests/property/cycles/oracle.rs`): split the
+  cycle properties into a
   hierarchical module and add a deliberately simple, test-only oracle that
   enumerates cycles as connected 2-regular edge subsets. Treat self-loops and
   parallel-edge digons as edge-distinct cycles, and provide independent
@@ -811,6 +812,15 @@ correctness oracles.
   any production cycle-enumeration or cycle-space implementation. Exact table
   tests pin the oracle itself on small named simple and non-simple graphs before
   property tests use it. **Additive test infrastructure (green).** `[dep: S0b]`
+
+  The property target is split into `cycles` and `subiso` modules. The cycle
+  oracle represents a cycle as its sorted edge-id set and exhaustively checks
+  every nonempty subset for connected 2-regular incidence, counting a loop
+  twice at its endpoint. It computes cycle-space rank with its own component
+  traversal and tests linear independence by dynamic GF(2) elimination.
+  Exact tables cover empty and acyclic graphs, ordinary cycles, loops,
+  edge-distinct parallel digons, disconnected cycles, rank, and dependent and
+  independent cycle sets.
 - **S0e — exhaustive cycle-family oracle**
   (`umol-graph-core/tests/property/cycles/oracle.rs`): extend the test-only
   oracle to enumerate all cycle bases, retain every minimum basis, derive
