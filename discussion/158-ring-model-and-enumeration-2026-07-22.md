@@ -783,7 +783,7 @@ correctness oracles.
   edges, graph membership, and endpoint incidence before normalizing the joint
   representation under rotation and reversal. The existing node-only Vismara
   result remains unchanged but uses the same normalization path.
-- **S0c — `SubdividedGraph`**
+- **S0c — `SubdividedGraph`** **Done**
   (`umol-graph-core/src/graph.rs`, `src/lib.rs`,
   `benches/algorithms.rs`): add `Graph::subdivide_edges() ->
   SubdividedGraph`. Perform exactly one subdivision, own the resulting graph,
@@ -793,6 +793,14 @@ correctness oracles.
   isolated, path, cycle, parallel-edge, and self-loop inputs; property tests
   prove `|V'| = |V| + |E|`, `|E'| = 2|E|`, endpoint incidence, and mapping
   totality. **Additive API (green).** `[dep: —]`
+
+  `SubdividedGraph` is exported from graph-core together with
+  `SubdivisionNodeSource`. Source nodes retain their ids, inserted nodes are
+  indexed by source edge id, and the two incidence edges of each source edge
+  are consecutive. `node_source` and `edge_source` map subdivision results
+  back; `node_of` and `incidence_edges_of` provide the forward mappings. The
+  automorphism benchmark uses the public construction, and unit and property
+  tests cover empty, isolated, simple, parallel-edge, and self-loop inputs.
 - **S0d — exhaustive cycle oracle**
   (`umol-graph-core/tests/property.rs`,
   `tests/property/cycles/{mod,oracle}.rs`): split the cycle properties into a

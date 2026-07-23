@@ -42,6 +42,7 @@ pub use correspondence::{Correspondence, GraphCorrespondence};
 pub use digraph::DiGraph;
 pub use graph::{
     compact_edge_vec, compact_node_vec, Compaction, EdgeId, Graph, Neighbor, NodeId, Remapping,
+    SubdividedGraph, SubdivisionNodeSource,
 };
 pub use relation::{
     BiRelationData, FactorOrdering, FixedFixedBirelationSet, FixedRelationSet,

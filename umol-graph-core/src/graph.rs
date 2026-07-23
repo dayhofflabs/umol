@@ -59,7 +59,9 @@ struct Csr {
 ///
 /// Stores only adjacency structure — node and edge data live externally,
 /// indexed by `NodeId` and `EdgeId` positions. The CSR is shared via
-/// `Arc`; mutations trigger copy-on-write.
+/// `Arc`; mutations trigger copy-on-write. Each undirected edge endpoint pair
+/// is stored in ascending `NodeId` order, while edge order and `EdgeId`
+/// identity are preserved. Self-loops and parallel edges are retained.
 #[derive(Clone, Debug)]
 pub struct Graph {
     csr: Arc<Csr>,
@@ -352,6 +354,29 @@ impl Graph {
         Graph::new(sub.nodes().mate_count(), &sub_edges)
     }
 
+    /// Subdivide every edge exactly once.
+    ///
+    /// Source nodes retain their ids. Each source edge receives one inserted
+    /// node, and its two incident subdivision edges are consecutive.
+    pub fn subdivide_edges(&self) -> SubdividedGraph {
+        let source_node_count = self.node_count();
+        let source_edge_count = self.edge_count();
+        let edges: Vec<[u32; 2]> = self
+            .edge_ids()
+            .flat_map(|edge| {
+                let [first, second] = self.edge_endpoints(edge);
+                let inserted = NodeId((source_node_count + edge.index()) as u32);
+                [[first.0, inserted.0], [inserted.0, second.0]]
+            })
+            .collect();
+
+        SubdividedGraph {
+            graph: Graph::new(source_node_count + source_edge_count, &edges),
+            source_node_count,
+            source_edge_count,
+        }
+    }
+
     fn build_csr(node_count: usize, edges: &[[u32; 2]]) -> Csr {
         let edge_count = edges.len();
 
@@ -416,6 +441,102 @@ impl Graph {
             node_count,
             edge_count,
         }
+    }
+}
+
+/// The source represented by a node in a [`SubdividedGraph`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SubdivisionNodeSource {
+    Node(NodeId),
+    Edge(EdgeId),
+}
+
+/// A graph in which every source edge has been replaced by a two-edge path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubdividedGraph {
+    graph: Graph,
+    source_node_count: usize,
+    source_edge_count: usize,
+}
+
+impl SubdividedGraph {
+    pub fn graph(&self) -> &Graph {
+        &self.graph
+    }
+
+    /// Return the source node or edge represented by a subdivision node.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `node` is not in the subdivided graph.
+    pub fn node_source(&self, node: NodeId) -> SubdivisionNodeSource {
+        assert!(
+            self.graph.contains_node(node),
+            "subdivision node {} out of range",
+            node.0
+        );
+        if node.index() < self.source_node_count {
+            SubdivisionNodeSource::Node(node)
+        } else {
+            SubdivisionNodeSource::Edge(EdgeId((node.index() - self.source_node_count) as u32))
+        }
+    }
+
+    /// Return the subdivision node representing a source node or edge.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the source id is not in the source graph.
+    pub fn node_of(&self, source: SubdivisionNodeSource) -> NodeId {
+        match source {
+            SubdivisionNodeSource::Node(node) => {
+                assert!(
+                    node.index() < self.source_node_count,
+                    "source node {} out of range",
+                    node.0
+                );
+                node
+            }
+            SubdivisionNodeSource::Edge(edge) => {
+                assert!(
+                    edge.index() < self.source_edge_count,
+                    "source edge {} out of range",
+                    edge.0
+                );
+                NodeId((self.source_node_count + edge.index()) as u32)
+            }
+        }
+    }
+
+    /// Return the source edge represented by a subdivision incidence edge.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `incidence` is not in the subdivided graph.
+    pub fn edge_source(&self, incidence: EdgeId) -> EdgeId {
+        assert!(
+            self.graph.contains_edge(incidence),
+            "subdivision edge {} out of range",
+            incidence.0
+        );
+        EdgeId((incidence.index() / 2) as u32)
+    }
+
+    /// Return the two subdivision incidence edges created from a source edge.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `edge` is not in the source graph.
+    pub fn incidence_edges_of(&self, edge: EdgeId) -> [EdgeId; 2] {
+        assert!(
+            edge.index() < self.source_edge_count,
+            "source edge {} out of range",
+            edge.0
+        );
+        [
+            EdgeId((2 * edge.index()) as u32),
+            EdgeId((2 * edge.index() + 1) as u32),
+        ]
     }
 }
 
@@ -669,6 +790,88 @@ mod tests {
         assert_eq!(extracted.edge_count(), 2);
         assert_eq!(extracted.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
         assert_eq!(extracted.edge_endpoints(EdgeId(1)), [NodeId(1), NodeId(2)]);
+    }
+
+    #[rstest]
+    #[case::empty(0, &[], 0, &[])]
+    #[case::isolated(3, &[], 3, &[])]
+    #[case::path(
+        3,
+        &[[0, 1], [1, 2]],
+        5,
+        &[[0, 3], [3, 1], [1, 4], [4, 2]],
+    )]
+    #[case::cycle(
+        3,
+        &[[0, 1], [1, 2], [2, 0]],
+        6,
+        &[[0, 3], [3, 1], [1, 4], [4, 2], [0, 5], [5, 2]],
+    )]
+    #[case::parallel(
+        2,
+        &[[0, 1], [0, 1]],
+        4,
+        &[[0, 2], [2, 1], [0, 3], [3, 1]],
+    )]
+    #[case::self_loop(1, &[[0, 0]], 2, &[[0, 1], [1, 0]])]
+    fn test_graph_subdivide_edges(
+        #[case] node_count: usize,
+        #[case] edges: &[[u32; 2]],
+        #[case] expected_node_count: usize,
+        #[case] expected_edges: &[[u32; 2]],
+    ) {
+        let subdivision = Graph::new(node_count, edges).subdivide_edges();
+        assert_eq!(
+            subdivision.graph(),
+            &Graph::new(expected_node_count, expected_edges)
+        );
+    }
+
+    #[rstest]
+    #[case::first_node(NodeId(0), SubdivisionNodeSource::Node(NodeId(0)))]
+    #[case::last_node(NodeId(2), SubdivisionNodeSource::Node(NodeId(2)))]
+    #[case::first_edge(NodeId(3), SubdivisionNodeSource::Edge(EdgeId(0)))]
+    #[case::last_edge(NodeId(4), SubdivisionNodeSource::Edge(EdgeId(1)))]
+    fn test_subdivided_graph_node_source(
+        #[case] node: NodeId,
+        #[case] expected: SubdivisionNodeSource,
+    ) {
+        let subdivision = Graph::new(3, &[[0, 1], [1, 2]]).subdivide_edges();
+        assert_eq!(subdivision.node_source(node), expected);
+    }
+
+    #[rstest]
+    #[case::first_node(SubdivisionNodeSource::Node(NodeId(0)), NodeId(0))]
+    #[case::last_node(SubdivisionNodeSource::Node(NodeId(2)), NodeId(2))]
+    #[case::first_edge(SubdivisionNodeSource::Edge(EdgeId(0)), NodeId(3))]
+    #[case::last_edge(SubdivisionNodeSource::Edge(EdgeId(1)), NodeId(4))]
+    fn test_subdivided_graph_node_of(
+        #[case] source: SubdivisionNodeSource,
+        #[case] expected: NodeId,
+    ) {
+        let subdivision = Graph::new(3, &[[0, 1], [1, 2]]).subdivide_edges();
+        assert_eq!(subdivision.node_of(source), expected);
+    }
+
+    #[rstest]
+    #[case::first_first(EdgeId(0), EdgeId(0))]
+    #[case::first_second(EdgeId(1), EdgeId(0))]
+    #[case::second_first(EdgeId(2), EdgeId(1))]
+    #[case::second_second(EdgeId(3), EdgeId(1))]
+    fn test_subdivided_graph_edge_source(#[case] incidence: EdgeId, #[case] expected: EdgeId) {
+        let subdivision = Graph::new(3, &[[0, 1], [1, 2]]).subdivide_edges();
+        assert_eq!(subdivision.edge_source(incidence), expected);
+    }
+
+    #[rstest]
+    #[case::first(EdgeId(0), [EdgeId(0), EdgeId(1)])]
+    #[case::second(EdgeId(1), [EdgeId(2), EdgeId(3)])]
+    fn test_subdivided_graph_incidence_edges_of(
+        #[case] edge: EdgeId,
+        #[case] expected: [EdgeId; 2],
+    ) {
+        let subdivision = Graph::new(3, &[[0, 1], [1, 2]]).subdivide_edges();
+        assert_eq!(subdivision.incidence_edges_of(edge), expected);
     }
 
     #[test]

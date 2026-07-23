@@ -213,18 +213,6 @@ fn disconnected_cycles() -> Graph {
     matching_graphs::parse(matching_graphs::DISCONNECTED_CYCLES).graph()
 }
 
-fn subdivided(graph: &Graph) -> Graph {
-    let node_count = graph.node_count();
-    let mut edges = Vec::with_capacity(2 * graph.edge_count());
-    for (position, edge) in graph.edge_ids().enumerate() {
-        let [a, b] = graph.edge_endpoints(edge);
-        let edge_node = (node_count + position) as u32;
-        edges.push([a.0, edge_node]);
-        edges.push([edge_node, b.0]);
-    }
-    Graph::new(node_count + graph.edge_count(), &edges)
-}
-
 fn degree_colors(graph: &Graph) -> Vec<u32> {
     graph
         .node_ids()
@@ -406,14 +394,13 @@ fn automorphism(c: &mut Criterion) {
         ("K10", complete(10)),
     ];
 
-    let incidence: Vec<(&str, Graph, Vec<u32>)> =
-        [("adamantane", adamantane()), ("c60", fullerene_c60())]
-            .into_iter()
-            .map(|(name, graph)| {
-                let colors = incidence_colors(graph.node_count(), graph.edge_count());
-                (name, subdivided(&graph), colors)
-            })
-            .collect();
+    let incidence = [("adamantane", adamantane()), ("c60", fullerene_c60())]
+        .into_iter()
+        .map(|(name, graph)| {
+            let colors = incidence_colors(graph.node_count(), graph.edge_count());
+            (name, graph.subdivide_edges(), colors)
+        })
+        .collect::<Vec<_>>();
 
     let mut group = c.benchmark_group("automorphism");
     for (name, graph) in molecular.iter().chain(&stress) {
@@ -432,7 +419,8 @@ fn automorphism(c: &mut Criterion) {
             });
         });
     }
-    for (name, graph, colors) in &incidence {
+    for (name, subdivision, colors) in &incidence {
+        let graph = subdivision.graph();
         group.bench_function(format!("incidence/{name}/class"), |b| {
             b.iter(|| {
                 graph.automorphisms(|node| colors[node.index()], AutomorphismAlgorithm::Nauty)
