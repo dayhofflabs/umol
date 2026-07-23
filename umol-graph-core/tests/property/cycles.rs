@@ -4,6 +4,8 @@ mod oracle;
 use proptest::prelude::*;
 use umol_graph_core::{Graph, SubdivisionNodeSource};
 
+use self::oracle::{relevant_cycles, unique_ring_families};
+
 /// Random multigraph with loops and repeated endpoint pairs.
 fn graph(max_nodes: usize, max_edges: usize) -> impl Strategy<Value = Graph> {
     (
@@ -21,6 +23,26 @@ fn graph(max_nodes: usize, max_edges: usize) -> impl Strategy<Value = Graph> {
 }
 
 proptest! {
+    #[test]
+    fn test_unique_ring_families(graph in graph(5, 5)) {
+        let relevant = relevant_cycles(&graph);
+        let families = unique_ring_families(&graph);
+
+        for family in &families {
+            prop_assert!(!family.is_empty());
+            let weight = family[0].len();
+            prop_assert!(family.iter().all(|cycle| cycle.len() == weight));
+        }
+
+        let mut partition: Vec<_> = families.into_iter().flatten().collect();
+        partition.sort_by(|left, right| {
+            left.len()
+                .cmp(&right.len())
+                .then_with(|| left.cmp(right))
+        });
+        prop_assert_eq!(partition, relevant);
+    }
+
     #[test]
     fn test_graph_subdivide_edges(source in graph(8, 12)) {
         let subdivision = source.subdivide_edges();

@@ -821,7 +821,7 @@ correctness oracles.
   Exact tables cover empty and acyclic graphs, ordinary cycles, loops,
   edge-distinct parallel digons, disconnected cycles, rank, and dependent and
   independent cycle sets.
-- **S0e — exhaustive cycle-family oracle**
+- **S0e — exhaustive cycle-family oracle** **Done**
   (`umol-graph-core/tests/property/cycles/oracle.rs`): extend the test-only
   oracle to enumerate all cycle bases, retain every minimum basis, derive
   relevant cycles as their union, and derive Unique Ring Families directly
@@ -830,6 +830,17 @@ correctness oracles.
   tests pin tied minimum bases, relevant-cycle unions, and URF partitions
   before the production implementations are compared with them. **Additive
   test infrastructure (green).** `[dep: S0d]`
+
+  `enumerate_cycle_bases` exhaustively selects every independent
+  cycle-space basis, `minimum_cycle_bases` retains every basis of minimum
+  total edge count, and `relevant_cycles` returns their sorted union.
+  `unique_ring_families` applies the defining pair relation directly:
+  relevant cycles must have equal weight, share an edge, and have a symmetric
+  difference in the span of strictly shorter cycles; connected components of
+  that relation are the families. Exact tables cover unique and tied minimum
+  bases, positive and negative URF relations, loops, parallel edges, and
+  disconnected graphs. The property strategy exercising the exponential
+  family oracle is bounded to five edges.
 - **S0f — generated exhaustive graph corpus**
   (`umol-graph-core/tests/data/cycles/`,
   `tests/property/cycles/corpus.rs`): invoke `/opt/homebrew/bin/geng` once
