@@ -1785,42 +1785,77 @@ fn test_molecule_editor_remove_empty_is_noop(#[from(rich_molecule)] ast: Molecul
 }
 
 #[rstest]
+#[case::hexagon(ring(6), 1)]
+#[case::chain(chain(5), 0)]
+#[case::empty(MoleculeAst::default(), 0)]
+fn test_molecule_ast_rings(#[case] ast: MoleculeAst, #[case] expected: usize) {
+    assert_eq!(
+        ast.rings(CycleEnumerationAlgorithm::Vismara).count(),
+        expected
+    );
+}
+
+#[rstest]
 #[case::hexagon(ring(6), 6, 1)]
 #[case::hexagon_cutoff(ring(6), 5, 0)]
 #[case::chain(chain(5), 10, 0)]
 #[case::empty(MoleculeAst::default(), 10, 0)]
-fn test_molecule_ast_rings(
+fn test_molecule_ast_rings_with(
     #[case] ast: MoleculeAst,
     #[case] max_ring_size: usize,
     #[case] expected: usize,
 ) {
-    let rs = ast.rings_with(RingFamily::Simple, max_ring_size, |_| true);
+    let rs = ast.rings_with(
+        RingFamily::Simple,
+        max_ring_size,
+        |_| true,
+        CycleEnumerationAlgorithm::Vismara,
+    );
     assert_eq!(rs.count(), expected);
 }
 
-#[test]
+#[rstest]
 fn test_molecule_ast_rings_with_atom_filter() {
     let ast = ring(6);
-    let rs = ast.rings_with(RingFamily::Simple, 10, |a| a.0 < 3);
+    let rs = ast.rings_with(
+        RingFamily::Simple,
+        10,
+        |a| a.0 < 3,
+        CycleEnumerationAlgorithm::Vismara,
+    );
     assert_eq!(rs.count(), 0);
 }
 
-#[test]
-fn test_molecule_ast_rings_induced() {
+#[rstest]
+fn test_molecule_ast_rings_with_family() {
     let ast = mol_dsl!(
         r#"{
         :atoms ["C" "C" "C" "C"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]
     }"#
     );
-    let simple_count = ast.rings_with(RingFamily::Simple, 4, |_| true).count();
-    let induced_count = ast.rings_with(RingFamily::Relevant, 4, |_| true).count();
+    let simple_count = ast
+        .rings_with(
+            RingFamily::Simple,
+            4,
+            |_| true,
+            CycleEnumerationAlgorithm::Vismara,
+        )
+        .count();
+    let relevant_count = ast
+        .rings_with(
+            RingFamily::Relevant,
+            4,
+            |_| true,
+            CycleEnumerationAlgorithm::Vismara,
+        )
+        .count();
     assert_eq!(simple_count, 4);
-    assert_eq!(induced_count, 4);
+    assert_eq!(relevant_count, 4);
 }
 
-#[test]
-fn test_molecule_ast_rings_induced_naphthalene() {
+#[rstest]
+fn test_molecule_ast_rings_with_family_fused() {
     let ast = mol_dsl!(
         r#"{
         :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
@@ -1830,17 +1865,36 @@ fn test_molecule_ast_rings_induced_naphthalene() {
         ]
     }"#
     );
-    let simple_count = ast.rings_with(RingFamily::Simple, 10, |_| true).count();
+    let simple_count = ast
+        .rings_with(
+            RingFamily::Simple,
+            10,
+            |_| true,
+            CycleEnumerationAlgorithm::Vismara,
+        )
+        .count();
     assert_eq!(simple_count, 2);
-    let induced_count = ast.rings_with(RingFamily::Relevant, 10, |_| true).count();
-    assert_eq!(induced_count, 2);
+    let relevant_count = ast
+        .rings_with(
+            RingFamily::Relevant,
+            10,
+            |_| true,
+            CycleEnumerationAlgorithm::Vismara,
+        )
+        .count();
+    assert_eq!(relevant_count, 2);
 }
 
-#[test]
+#[rstest]
 fn test_rings_membership() {
     let ast = ring(6);
     let rs = ast
-        .rings_with(RingFamily::Simple, 6, |_| true)
+        .rings_with(
+            RingFamily::Simple,
+            6,
+            |_| true,
+            CycleEnumerationAlgorithm::Vismara,
+        )
         .into_ring_set();
     assert!(rs.contains_atom(AtomId(0)));
     assert!(rs.contains_bond(BondId(0)));

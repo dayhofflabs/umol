@@ -102,14 +102,6 @@ fn arith_expr_heavy() -> MoleculeAst {
     })
 }
 
-// Silence `unused` warnings on pre-switch build: `AtomConstraintAst` is kept
-// here for future bench cases involving atom-constraint patterns.
-// TODO: Add constraints or remove this piece
-#[allow(dead_code)]
-fn _keep_import(c: AtomConstraintAst) -> AtomConstraintAst {
-    c
-}
-
 fn bench_is_ground(c: &mut Criterion) {
     let mut g = c.benchmark_group("molecule_ast_is_ground");
 

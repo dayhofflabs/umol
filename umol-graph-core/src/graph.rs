@@ -189,8 +189,6 @@ impl Graph {
         true
     }
 
-    // --- Mutations (rebuild CSR, CoW via Arc) ---
-
     pub fn add_node(&mut self) -> NodeId {
         let old = &*self.csr;
         let new_id = NodeId(old.node_count as u32);

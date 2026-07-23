@@ -307,6 +307,7 @@ mod tests {
         MoleculeParts, RingFamily, ValueAst,
     };
     use umol_chem::element::Element;
+    use umol_graph_core::CycleEnumerationAlgorithm;
 
     use super::*;
 
@@ -377,8 +378,13 @@ mod tests {
     }
 
     fn enumerate_simple(ast: &MoleculeAst) -> RingSet {
-        ast.rings_with(RingFamily::Simple, 22, |_| true)
-            .into_ring_set()
+        ast.rings_with(
+            RingFamily::Simple,
+            22,
+            |_| true,
+            CycleEnumerationAlgorithm::Vismara,
+        )
+        .into_ring_set()
     }
 
     #[fixture]

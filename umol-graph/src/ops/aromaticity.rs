@@ -26,6 +26,7 @@ use umol_ast::ast::{
     MoleculeAst, RingFamily, TransactionError, ValueAst,
 };
 use umol_chem::element::Element;
+use umol_graph_core::CycleEnumerationAlgorithm;
 use umol_utils::solution::Solution;
 
 use crate::ops::model::AromaticityModel;
@@ -91,7 +92,12 @@ impl AromaticityPerception {
     {
         let (family, max_ring_size) = self.ring_request();
         let rings = ast
-            .rings_with(family, max_ring_size, |_| true)
+            .rings_with(
+                family,
+                max_ring_size,
+                |_| true,
+                CycleEnumerationAlgorithm::Vismara,
+            )
             .into_ring_set();
 
         let systems = match self {

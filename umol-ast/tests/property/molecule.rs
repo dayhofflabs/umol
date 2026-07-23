@@ -19,6 +19,8 @@ mod correspondence;
 mod meet_pushout;
 #[path = "molecule/references.rs"]
 mod references;
+#[path = "molecule/ring.rs"]
+mod ring;
 #[path = "molecule/serialization.rs"]
 mod serialization;
 #[path = "molecule/structure.rs"]

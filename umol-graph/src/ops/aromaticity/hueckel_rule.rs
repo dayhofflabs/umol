@@ -253,6 +253,7 @@ mod tests {
         ElementAst, MoleculeAst, MoleculeParts, RingFamily, ValueAst,
     };
     use umol_chem::element::Element;
+    use umol_graph_core::CycleEnumerationAlgorithm;
 
     use super::*;
 
@@ -322,8 +323,13 @@ mod tests {
     }
 
     fn enumerate_simple(ast: &MoleculeAst, max_ring_size: usize) -> RingSet {
-        ast.rings_with(RingFamily::Simple, max_ring_size, |_| true)
-            .into_ring_set()
+        ast.rings_with(
+            RingFamily::Simple,
+            max_ring_size,
+            |_| true,
+            CycleEnumerationAlgorithm::Vismara,
+        )
+        .into_ring_set()
     }
 
     fn daylight_model() -> HueckelRuleAromaticity {

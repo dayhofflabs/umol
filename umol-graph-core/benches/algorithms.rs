@@ -1,6 +1,6 @@
 use std::iter;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
@@ -238,8 +238,8 @@ fn incidence_colors(node_count: usize, edge_count: usize) -> Vec<u32> {
         .collect()
 }
 
-fn cycle_enumeration(c: &mut Criterion) {
-    let graphs = [
+fn cycle_corpus() -> Vec<(&'static str, Graph)> {
+    vec![
         ("path_6", path(6)),
         ("hexagon", cycle(6)),
         ("naphthalene", naphthalene()),
@@ -250,12 +250,14 @@ fn cycle_enumeration(c: &mut Criterion) {
         ("icosahedron", icosahedron()),
         ("c60", fullerene_c60()),
         ("c70", fullerene_c70()),
-    ];
+    ]
+}
 
-    let mut group = c.benchmark_group("cycle_enumeration");
-    for (name, g) in &graphs {
-        group.bench_function(*name, |b| {
-            b.iter(|| g.enumerate_cycles(usize::MAX, CycleEnumerationAlgorithm::Vismara));
+fn relevant_cycle_enumeration(c: &mut Criterion) {
+    let mut group = c.benchmark_group("relevant_cycles");
+    for (name, graph) in cycle_corpus() {
+        group.bench_with_input(BenchmarkId::new("vismara", name), &graph, |b, graph| {
+            b.iter(|| graph.enumerate_cycles(usize::MAX, CycleEnumerationAlgorithm::Vismara));
         });
     }
     group.finish();
@@ -927,7 +929,7 @@ mod matching {
 
 criterion_group!(
     benches,
-    cycle_enumeration,
+    relevant_cycle_enumeration,
     shortest_cycle,
     connected_components,
     biconnected_components,

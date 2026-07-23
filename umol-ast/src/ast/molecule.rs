@@ -10,8 +10,9 @@ pub use editor::MoleculeEditor;
 pub use fragment::{Fragment, Port, PortArg};
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{
-    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
-    RelationId, RelationParticipant, Remapping, UnionFind, Unordered, VarRelationSet,
+    Correspondence, CycleEnumerationAlgorithm, EdgeId, FixedRelationSet, FixedVarBirelationSet,
+    Graph, NodeId, Ordered, RelationId, RelationParticipant, Remapping, UnionFind, Unordered,
+    VarRelationSet,
 };
 
 use super::aromatic::AromaticSystemAst;
@@ -938,24 +939,26 @@ impl MoleculeAst {
                 .all(|id| self.stereo_bonds.data(id).is_ground())
     }
 
-    /// Canonical ring set (Vismara relevant cycles up to max ring size 22).
-    pub fn rings(&self) -> RingViews<'_> {
+    /// Relevant cycles up to maximum ring size 22, enumerated by `algorithm`.
+    pub fn rings(&self, algorithm: CycleEnumerationAlgorithm) -> RingViews<'_> {
         RingViews::new(
             self,
-            RingSet::enumerate(RingFamily::Relevant, 22, |_| true, &self.graph),
+            RingSet::enumerate(RingFamily::Relevant, 22, |_| true, &self.graph, algorithm),
         )
     }
 
-    /// Ring set with caller-specified family, maximum size, and atom filter.
+    /// Ring set with caller-specified family, maximum size, atom filter, and
+    /// cycle-enumeration algorithm.
     pub fn rings_with(
         &self,
         family: RingFamily,
         max_ring_size: usize,
         atom_filter: impl Fn(AtomId) -> bool,
+        algorithm: CycleEnumerationAlgorithm,
     ) -> RingViews<'_> {
         RingViews::new(
             self,
-            RingSet::enumerate(family, max_ring_size, atom_filter, &self.graph),
+            RingSet::enumerate(family, max_ring_size, atom_filter, &self.graph, algorithm),
         )
     }
 

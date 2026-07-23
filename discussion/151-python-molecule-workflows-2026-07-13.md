@@ -1869,7 +1869,18 @@ default rather than introducing a one-field composition config.
   S9l and S9m then move workflow-owned choices into their configs. Unit and
   property tests cover both public ring entry points and every migrated
   ring-consuming operation. **Breaking signatures and caller migration
-  (red→green).** `[dep: —]`
+  (red→green).** **Implemented (green).** Both public molecule ring entry
+  points and the internal `RingSet` handoff now require the graph-core cycle
+  selector. Every workspace caller passes its former Vismara choice explicitly;
+  molecule unit and property tests cover the direct and configured entry points,
+  and the existing fingerprint, aromaticity, and matching suites cover the
+  migrated consumers. `[dep: —]`
+
+The family/model/config problem exposed by S9k is specified in
+[doc 158](158-ring-model-and-enumeration-2026-07-22.md). S9l and S9m must use
+that settled design rather than preserve the intermediate family-blind cycle
+selector field described below.
+
 - **S9l — ring selection in hashed-fingerprint configs**
   (`umol-graph/src/fingerprint/{ecfp,morgan,featurizer}.rs`,
   `umol-py/src/fingerprint/config.rs`): add

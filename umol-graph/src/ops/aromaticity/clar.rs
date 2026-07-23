@@ -133,6 +133,7 @@ mod tests {
         MoleculeParts, RingFamily, RingId, ValueAst,
     };
     use umol_chem::element::Element;
+    use umol_graph_core::CycleEnumerationAlgorithm;
 
     use super::*;
 
@@ -191,8 +192,13 @@ mod tests {
     }
 
     fn enumerate_induced(ast: &MoleculeAst) -> RingSet {
-        ast.rings_with(RingFamily::Simple, 6, |_| true)
-            .into_ring_set()
+        ast.rings_with(
+            RingFamily::Simple,
+            6,
+            |_| true,
+            CycleEnumerationAlgorithm::Vismara,
+        )
+        .into_ring_set()
     }
 
     fn hex_ring_indices(ast: &MoleculeAst, ring_info: &RingSet) -> Vec<RingId> {

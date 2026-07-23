@@ -6,6 +6,7 @@ use umol_ast::ast::{
 };
 use umol_chem::element::Element;
 use umol_graph::ops::aromaticity::ClarAromaticity;
+use umol_graph_core::CycleEnumerationAlgorithm;
 
 #[derive(Deserialize)]
 struct GraphFixture {
@@ -36,7 +37,12 @@ fn test_clar_aromaticity_find_from_rings() {
         ..Default::default()
     });
     let rings = ast
-        .rings_with(RingFamily::Simple, 6, |_| true)
+        .rings_with(
+            RingFamily::Simple,
+            6,
+            |_| true,
+            CycleEnumerationAlgorithm::Vismara,
+        )
         .into_ring_set();
     let systems = ClarAromaticity
         .find_from_rings(&ast, &rings, &|view| match &view.ast.element {

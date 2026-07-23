@@ -77,14 +77,14 @@ pub struct RingSet {
 
 impl RingSet {
     /// Enumerate rings of `family` up to `max_ring_size` on the atoms of
-    /// `graph` passing `atom_filter`. The actual cycle algorithm is
-    /// Vismara on biconnected components; `RingFamily::Relevant` keeps only
-    /// chordless cycles.
+    /// `graph` passing `atom_filter`, using `algorithm` for cycle enumeration.
+    /// `RingFamily::Relevant` keeps only chordless cycles.
     pub(super) fn enumerate(
         family: RingFamily,
         max_ring_size: usize,
         atom_filter: impl Fn(AtomId) -> bool,
         graph: &Graph,
+        algorithm: CycleEnumerationAlgorithm,
     ) -> Self {
         let filtered_nodes: Vec<NodeId> = graph
             .node_ids()
@@ -107,7 +107,7 @@ impl RingSet {
             (graph.clone(), host_nodes)
         };
 
-        let raw_cycles = sub.enumerate_cycles(max_ring_size, CycleEnumerationAlgorithm::Vismara);
+        let raw_cycles = sub.enumerate_cycles(max_ring_size, algorithm);
 
         let all_rings: Vec<Ring> = raw_cycles
             .into_iter()
@@ -697,7 +697,12 @@ mod tests {
             bonds,
             ..Default::default()
         });
-        let set = mol.rings_with(family, max_ring_size, atom_filter);
+        let set = mol.rings_with(
+            family,
+            max_ring_size,
+            atom_filter,
+            CycleEnumerationAlgorithm::Vismara,
+        );
         assert_eq!(set.count(), expected_count);
     }
 
@@ -716,8 +721,18 @@ mod tests {
             bonds,
             ..Default::default()
         });
-        let simple = mol.rings_with(RingFamily::Simple, 4, |_| true);
-        let relevant = mol.rings_with(RingFamily::Relevant, 4, |_| true);
+        let simple = mol.rings_with(
+            RingFamily::Simple,
+            4,
+            |_| true,
+            CycleEnumerationAlgorithm::Vismara,
+        );
+        let relevant = mol.rings_with(
+            RingFamily::Relevant,
+            4,
+            |_| true,
+            CycleEnumerationAlgorithm::Vismara,
+        );
         assert!(simple.count() >= relevant.count());
         for view in relevant.iter() {
             assert_eq!(view.len(), 3);

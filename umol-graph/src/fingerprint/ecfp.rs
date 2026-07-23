@@ -6,7 +6,7 @@
 //! unspecified, so this is the frozen umol ECFP identity.
 
 use umol_ast::ast::{AsLit, AtomId, BondId, MoleculeAst, RingSet};
-use umol_graph_core::CircularRefinementAlgorithm;
+use umol_graph_core::{CircularRefinementAlgorithm, CycleEnumerationAlgorithm};
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
 use super::featurizer::FingerprintError;
@@ -48,7 +48,9 @@ impl EcfpFeaturizer {
 
     /// The circular-refinement identifier multiset (one per surviving environment).
     fn identifiers(&self, mol: &MoleculeAst) -> Vec<u64> {
-        let rings = mol.rings().into_ring_set();
+        let rings = mol
+            .rings(CycleEnumerationAlgorithm::Vismara)
+            .into_ring_set();
         mol.raw_graph().circular_refine(
             |node| atom_components(mol, &rings, AtomId::from(node)),
             |edge| bond_label(mol, BondId::from(edge)),
