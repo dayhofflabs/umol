@@ -5,6 +5,96 @@ use std::collections::{HashSet, VecDeque};
 use crate::algorithms::bcc::BiconnectedComponentsAlgorithm;
 use crate::graph::{EdgeId, Graph, NodeId};
 
+/// An undirected cycle represented by corresponding node and edge sequences.
+///
+/// Edge `i` connects node `i` to node `(i + 1) % len`. Rotation and reversal
+/// do not affect equality because cycles are normalized when constructed.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Cycle {
+    nodes: Vec<NodeId>,
+    edges: Vec<EdgeId>,
+}
+
+impl Cycle {
+    fn normalized(graph: &Graph, nodes: Vec<NodeId>, edges: Vec<EdgeId>) -> Self {
+        assert!(!nodes.is_empty(), "a cycle must contain a node");
+        assert_eq!(
+            nodes.len(),
+            edges.len(),
+            "a cycle must have one edge per node"
+        );
+
+        let node_count = nodes.len();
+        let distinct_nodes: HashSet<_> = nodes.iter().copied().collect();
+        let distinct_edges: HashSet<_> = edges.iter().copied().collect();
+        assert_eq!(
+            distinct_nodes.len(),
+            node_count,
+            "cycle nodes must be distinct"
+        );
+        assert_eq!(
+            distinct_edges.len(),
+            node_count,
+            "cycle edges must be distinct"
+        );
+
+        for index in 0..node_count {
+            let first = nodes[index];
+            let second = nodes[(index + 1) % node_count];
+            assert!(graph.contains_node(first), "cycle node is not in the graph");
+            assert!(
+                graph.contains_node(second),
+                "cycle node is not in the graph"
+            );
+            let edge = edges[index];
+            assert!(graph.contains_edge(edge), "cycle edge is not in the graph");
+            let [source, target] = graph.edge_endpoints(edge);
+            assert!(
+                (source == first && target == second) || (source == second && target == first),
+                "cycle edge does not connect consecutive nodes"
+            );
+        }
+
+        let start = nodes
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, node)| *node)
+            .map(|(index, _)| index)
+            .expect("a non-empty cycle has a minimum node");
+
+        let mut forward_nodes = Vec::with_capacity(node_count);
+        let mut forward_edges = Vec::with_capacity(node_count);
+        let mut reverse_nodes = Vec::with_capacity(node_count);
+        let mut reverse_edges = Vec::with_capacity(node_count);
+        for offset in 0..node_count {
+            forward_nodes.push(nodes[(start + offset) % node_count]);
+            forward_edges.push(edges[(start + offset) % node_count]);
+            reverse_nodes.push(nodes[(start + node_count - offset) % node_count]);
+            reverse_edges.push(edges[(start + node_count - offset - 1) % node_count]);
+        }
+
+        let (nodes, edges) = if (&reverse_nodes, &reverse_edges) < (&forward_nodes, &forward_edges)
+        {
+            (reverse_nodes, reverse_edges)
+        } else {
+            (forward_nodes, forward_edges)
+        };
+        Self { nodes, edges }
+    }
+
+    pub fn nodes(&self) -> &[NodeId] {
+        &self.nodes
+    }
+
+    pub fn edges(&self) -> &[EdgeId] {
+        &self.edges
+    }
+
+    pub fn length(&self) -> usize {
+        self.nodes.len()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShortestCycleAlgorithm {
     Bfs,
@@ -104,7 +194,7 @@ impl Graph {
                             .expect("subgraph node maps to a host node")
                     })
                     .collect();
-                let normalized = normalize_cycle(&mapped);
+                let normalized = normalize_cycle(self, &mapped);
                 if seen.insert(normalized.clone()) {
                     result.push(normalized);
                 }
@@ -237,7 +327,7 @@ fn relevant_cycles_in_bcc(graph: &Graph, max_cycle_size: usize) -> Vec<Vec<NodeI
                     for pq in &paths_to_q {
                         if let Some(c) = join_odd_cycle(pp, pq) {
                             if c.len() <= max_cycle_size && is_relevant(graph, &c, &shortest_edge) {
-                                let norm = normalize_cycle(&c);
+                                let norm = normalize_cycle(graph, &c);
                                 if seen.insert(norm.clone()) {
                                     cycles.push(norm);
                                 }
@@ -266,7 +356,7 @@ fn relevant_cycles_in_bcc(graph: &Graph, max_cycle_size: usize) -> Vec<Vec<NodeI
                                 if c.len() <= max_cycle_size
                                     && is_relevant(graph, &c, &shortest_edge)
                                 {
-                                    let norm = normalize_cycle(&c);
+                                    let norm = normalize_cycle(graph, &c);
                                     if seen.insert(norm.clone()) {
                                         cycles.push(norm);
                                     }
@@ -283,7 +373,7 @@ fn relevant_cycles_in_bcc(graph: &Graph, max_cycle_size: usize) -> Vec<Vec<NodeI
                     for pq in &paths_to_q {
                         if let Some(c) = join_even_cycle(pp, pq) {
                             if c.len() <= max_cycle_size && is_relevant(graph, &c, &shortest_edge) {
-                                let norm = normalize_cycle(&c);
+                                let norm = normalize_cycle(graph, &c);
                                 if seen.insert(norm.clone()) {
                                     cycles.push(norm);
                                 }
@@ -374,37 +464,176 @@ fn is_relevant(graph: &Graph, cycle: &[NodeId], shortest_edge: &[Option<usize>])
     false
 }
 
-fn normalize_cycle(cycle: &[NodeId]) -> Vec<NodeId> {
-    let n = cycle.len();
-    debug_assert!(n >= 3);
-
-    let min_pos = cycle
+fn normalize_cycle(graph: &Graph, nodes: &[NodeId]) -> Vec<NodeId> {
+    let edges = nodes
         .iter()
-        .enumerate()
-        .min_by_key(|&(_, id)| id)
-        .expect("non-empty cycle")
-        .0;
-
-    let mut rotated = Vec::with_capacity(n);
-    for i in 0..n {
-        rotated.push(cycle[(min_pos + i) % n]);
-    }
-
-    if n > 1 && rotated[1] > rotated[n - 1] {
-        rotated[1..].reverse();
-    }
-
-    rotated
+        .copied()
+        .zip(nodes.iter().copied().cycle().skip(1))
+        .take(nodes.len())
+        .map(|(first, second)| {
+            graph
+                .find_edge(first, second)
+                .expect("consecutive cycle nodes must share an edge")
+        })
+        .collect();
+    Cycle::normalized(graph, nodes.to_vec(), edges).nodes
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use super::Cycle;
     use super::CycleEnumerationAlgorithm::Vismara;
     use super::ShortestCycleAlgorithm::Bfs;
     use crate::graph::{EdgeId, Graph, NodeId};
+
+    #[rstest]
+    #[case::self_loop(
+        Graph::new(1, &[[0, 0]]),
+        vec![NodeId(0)],
+        vec![EdgeId(0)],
+        Cycle { nodes: vec![NodeId(0)], edges: vec![EdgeId(0)] },
+    )]
+    #[case::digon(
+        Graph::new(2, &[[0, 1], [0, 1]]),
+        vec![NodeId(1), NodeId(0)],
+        vec![EdgeId(1), EdgeId(0)],
+        Cycle {
+            nodes: vec![NodeId(0), NodeId(1)],
+            edges: vec![EdgeId(0), EdgeId(1)],
+        },
+    )]
+    #[case::triangle(
+        Graph::new(3, &[[0, 1], [1, 2], [2, 0]]),
+        vec![NodeId(0), NodeId(1), NodeId(2)],
+        vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+        Cycle {
+            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+        },
+    )]
+    #[case::rotated(
+        Graph::new(3, &[[0, 1], [1, 2], [2, 0]]),
+        vec![NodeId(1), NodeId(2), NodeId(0)],
+        vec![EdgeId(1), EdgeId(2), EdgeId(0)],
+        Cycle {
+            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+        },
+    )]
+    #[case::reversed(
+        Graph::new(3, &[[0, 1], [1, 2], [2, 0]]),
+        vec![NodeId(0), NodeId(2), NodeId(1)],
+        vec![EdgeId(2), EdgeId(1), EdgeId(0)],
+        Cycle {
+            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+        },
+    )]
+    #[case::parallel_first(
+        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
+        vec![NodeId(0), NodeId(1)],
+        vec![EdgeId(1), EdgeId(0)],
+        Cycle {
+            nodes: vec![NodeId(0), NodeId(1)],
+            edges: vec![EdgeId(0), EdgeId(1)],
+        },
+    )]
+    #[case::parallel_second(
+        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
+        vec![NodeId(0), NodeId(1)],
+        vec![EdgeId(2), EdgeId(0)],
+        Cycle {
+            nodes: vec![NodeId(0), NodeId(1)],
+            edges: vec![EdgeId(0), EdgeId(2)],
+        },
+    )]
+    fn test_cycle_normalized(
+        #[case] graph: Graph,
+        #[case] nodes: Vec<NodeId>,
+        #[case] edges: Vec<EdgeId>,
+        #[case] expected: Cycle,
+    ) {
+        assert_eq!(Cycle::normalized(&graph, nodes, edges), expected);
+    }
+
+    #[rstest]
+    #[case::triangle(
+        Cycle {
+            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+            edges: vec![EdgeId(3), EdgeId(4), EdgeId(5)],
+        },
+        vec![NodeId(0), NodeId(1), NodeId(2)],
+        vec![EdgeId(3), EdgeId(4), EdgeId(5)],
+        3,
+    )]
+    fn test_cycle_accessors(
+        #[case] cycle: Cycle,
+        #[case] expected_nodes: Vec<NodeId>,
+        #[case] expected_edges: Vec<EdgeId>,
+        #[case] expected_len: usize,
+    ) {
+        assert_eq!(cycle.nodes(), expected_nodes.as_slice());
+        assert_eq!(cycle.edges(), expected_edges.as_slice());
+        assert_eq!(cycle.length(), expected_len);
+    }
+
+    #[rstest]
+    #[case::rotation_reversal(
+        Graph::new(3, &[[0, 1], [1, 2], [2, 0]]),
+        vec![
+            (
+                vec![NodeId(1), NodeId(2), NodeId(0)],
+                vec![EdgeId(1), EdgeId(2), EdgeId(0)],
+            ),
+            (
+                vec![NodeId(0), NodeId(2), NodeId(1)],
+                vec![EdgeId(2), EdgeId(1), EdgeId(0)],
+            ),
+        ],
+        HashSet::from([Cycle {
+            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+        }]),
+    )]
+    #[case::parallel_edges(
+        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
+        vec![
+            (
+                vec![NodeId(0), NodeId(1)],
+                vec![EdgeId(1), EdgeId(0)],
+            ),
+            (
+                vec![NodeId(0), NodeId(1)],
+                vec![EdgeId(2), EdgeId(0)],
+            ),
+        ],
+        HashSet::from([
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1)],
+                edges: vec![EdgeId(0), EdgeId(1)],
+            },
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1)],
+                edges: vec![EdgeId(0), EdgeId(2)],
+            },
+        ]),
+    )]
+    fn test_cycle_hash(
+        #[case] graph: Graph,
+        #[case] paths: Vec<(Vec<NodeId>, Vec<EdgeId>)>,
+        #[case] expected: HashSet<Cycle>,
+    ) {
+        let actual: HashSet<Cycle> = paths
+            .into_iter()
+            .map(|(nodes, edges)| Cycle::normalized(&graph, nodes, edges))
+            .collect();
+        assert_eq!(actual, expected);
+    }
 
     fn n(i: u32) -> NodeId {
         NodeId(i)

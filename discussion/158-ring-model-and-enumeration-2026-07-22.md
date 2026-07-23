@@ -768,7 +768,7 @@ correctness oracles.
   | `icosahedron` | 321.57–331.68 µs |
   | `c60` | 3.6622–3.7993 ms |
   | `c70` | 27.838–29.832 ms |
-- **S0b — edge-aware `Cycle`**
+- **S0b — edge-aware `Cycle`** **Done**
   (`umol-graph-core/src/algorithms/cycles.rs`, `src/lib.rs`): add the public
   `Cycle` value with private node/edge sequences, invariant-preserving internal
   construction, accessors, length, equality, hashing, and normalization under
@@ -776,6 +776,13 @@ correctness oracles.
   distinguish cycles that traverse different `EdgeId`s. Tests use exact whole
   cycles for loop, digon, triangle, rotated, reversed, and parallel-edge cases.
   **Additive API (green).** `[dep: —]`
+
+  `Cycle` is exported from graph-core with private, corresponding node and edge
+  sequences and public `nodes()`, `edges()`, and `length()` accessors. Internal
+  construction verifies non-empty equal-length sequences, distinct nodes and
+  edges, graph membership, and endpoint incidence before normalizing the joint
+  representation under rotation and reversal. The existing node-only Vismara
+  result remains unchanged but uses the same normalization path.
 - **S0c — `SubdividedGraph`**
   (`umol-graph-core/src/graph.rs`, `src/lib.rs`,
   `benches/algorithms.rs`): add `Graph::subdivide_edges() ->

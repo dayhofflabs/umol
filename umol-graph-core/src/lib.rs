@@ -21,7 +21,7 @@ pub use algorithms::common_subgraph::{
     McesAlgorithm, McisAlgorithm, McsConnectivity,
 };
 pub use algorithms::connected::ConnectedComponentsAlgorithm;
-pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
+pub use algorithms::cycles::{Cycle, CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
 pub use algorithms::enumeration::{PathEnumerationAlgorithm, SubgraphEnumerationAlgorithm};
 pub use algorithms::matching::{
     Matching, MatchingEnumerationAlgorithm, MaximumMatchingAlgorithm, MaximumMatchingError,
