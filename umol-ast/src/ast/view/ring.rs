@@ -3,7 +3,7 @@
 use super::super::constraint::RingScope;
 use super::super::id::{AtomId, BondId};
 use super::super::molecule::MoleculeAst;
-use super::super::ring::{intersection, RingFamily, RingId, RingSet};
+use super::super::ring::{intersection, RingId, RingSet, RingSetKind};
 use super::super::value::ValueAst;
 
 /// Molecule ring views: owned ring set plus borrow of molecule.
@@ -55,8 +55,8 @@ impl<'a> RingViews<'a> {
         }
     }
 
-    pub fn family(&self) -> RingFamily {
-        self.rings.family()
+    pub fn kind(&self) -> RingSetKind {
+        self.rings.kind()
     }
 
     pub fn max_ring_size(&self) -> usize {
@@ -308,12 +308,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_ring_views_family(ring_with_chain: MoleculeAst) {
+    fn test_ring_views_kind(ring_with_chain: MoleculeAst) {
         assert_eq!(
             ring_with_chain
                 .rings(CycleEnumerationAlgorithm::Vismara)
-                .family(),
-            RingFamily::Relevant
+                .kind(),
+            RingSetKind::Relevant
         );
     }
 

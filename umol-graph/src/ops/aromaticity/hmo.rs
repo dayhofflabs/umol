@@ -304,7 +304,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, MoleculeAst,
-        MoleculeParts, RingFamily, ValueAst,
+        MoleculeParts, RingSetKind, ValueAst,
     };
     use umol_chem::element::Element;
     use umol_graph_core::CycleEnumerationAlgorithm;
@@ -379,7 +379,7 @@ mod tests {
 
     fn enumerate_simple(ast: &MoleculeAst) -> RingSet {
         ast.rings_with(
-            RingFamily::Simple,
+            RingSetKind::Simple,
             22,
             |_| true,
             CycleEnumerationAlgorithm::Vismara,

@@ -92,8 +92,8 @@ coincide.
 `Graph::enumerate_cycles` therefore enumerates relevant cycles. `RingSet` then
 interprets the same output in two ways:
 
-- `RingFamily::Simple` accepts the Vismara result unchanged;
-- `RingFamily::Relevant` filters that result for induced cycles.
+- `RingSetKind::Simple` accepts the Vismara result unchanged;
+- `RingSetKind::Relevant` filters that result for induced cycles.
 
 Neither branch implements its documented distinction. `Simple` does not return
 all simple cycles or one minimum cycle basis. `Relevant` receives relevant
@@ -168,10 +168,9 @@ cycles and should not be forced into the family selector.
 | Shortest cycle through each vertex triple | Specialized set used by CDK for CACTVS/PubChem keys; add with that fingerprint rather than to obtain generic toolkit parity. |
 | Unique ring families | Decomposition of relevant cycles into equivalence classes, with family-level atom/bond membership and relevant-cycle counts. Its result is a collection of families, not another flat cycle set. |
 
-The last item creates a terminology collision with the current `RingFamily`
-enum. Rename that cycle-set selector to `RingSetKind`. The Unique Ring Family
-concept keeps its own result type and operation rather than becoming
-`RingSetKind::Unique`.
+`RingSetKind` keeps this cycle-set selection distinct from the Unique Ring
+Family concept. Unique Ring Families have their own result type and operation
+rather than becoming `RingSetKind::Unique`.
 
 ## RDKit parity
 
@@ -712,10 +711,9 @@ That redesign is explicitly outside this round; the existing constraints remain
 available.
 
 No design decisions remain before implementation. The staged plan below places
-`RingModel`, `RingConfig`, and the `RingFamily` to `RingSetKind` rename in
-umol-ast; keeps the family-specific algorithm selectors and subdivision
-operation in graph-core; removes `atom_filter`; and preserves existing
-constraint behavior.
+`RingModel` and `RingConfig` in umol-ast; keeps the kind-specific algorithm
+selectors and subdivision operation in graph-core; removes `atom_filter`; and
+preserves existing constraint behavior.
 
 ## Staged implementation plan
 
@@ -1165,7 +1163,7 @@ references.
   `UniqueRingFamilies` decomposition selected by
   `UniqueRingFamilyAlgorithm::Kolodzik`. Each `UniqueRingFamily` exposes its
   source-node and source-edge unions, common source-edge weight, and exact
-  `RelevantCycleCount`. The collection provides stable family identifiers,
+  `RelevantCycleCount`. The collection provides family identifiers,
   descriptor iteration and lookup, reverse node/edge membership, and
   `visit_relevant_cycles` for explicit lazy expansion with `ControlFlow`
   termination.
@@ -1222,9 +1220,12 @@ references.
 - **S3a — `RingSetKind` rename**
   (`umol-ast/src/ast/{ring,molecule,view/ring}.rs`, `src/ast.rs`, all workspace
   Rust callers): rename `RingFamily` to `RingSetKind` and migrate imports,
-  fields, accessors, fixtures, and assertions without a compatibility alias.
+  `family` fields, accessors, and arguments to `kind`, and fixtures and
+  assertions without a compatibility alias.
   Existing unit and property tests retain their exact semantics under the new
-  name. **Breaking rename and complete caller migration (red→green).**
+  name. **Done.** The enum, API vocabulary, and every workspace Rust caller now
+  use `RingSetKind`/`kind`; no compatibility alias remains. **Breaking rename
+  and complete caller migration (red→green).**
   `[dep: —]`
 - **S3b — `RingModel` and `RingConfig`**
   (`umol-ast/src/ast/ring.rs`, `src/ast.rs`): add the public AST-layer model

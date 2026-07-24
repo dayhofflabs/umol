@@ -2,7 +2,7 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_ast::ast::RingFamily;
+use umol_ast::ast::RingSetKind;
 use umol_graph_core::CycleEnumerationAlgorithm;
 
 use crate::strategies::*;
@@ -24,7 +24,7 @@ proptest! {
             .collect::<Vec<_>>();
         let explicit = ast
             .rings_with(
-                RingFamily::Relevant,
+                RingSetKind::Relevant,
                 22,
                 |_| true,
                 CycleEnumerationAlgorithm::Vismara,
@@ -43,14 +43,14 @@ proptest! {
         atom_cutoff in 0u32..16,
         relevant in any::<bool>(),
     ) {
-        let family = if relevant {
-            RingFamily::Relevant
+        let kind = if relevant {
+            RingSetKind::Relevant
         } else {
-            RingFamily::Simple
+            RingSetKind::Simple
         };
         let all = ast
             .rings_with(
-                family,
+                kind,
                 max_ring_size,
                 |_| true,
                 CycleEnumerationAlgorithm::Vismara,
@@ -63,7 +63,7 @@ proptest! {
             })
             .collect::<Vec<_>>();
         let filtered = ast.rings_with(
-            family,
+            kind,
             max_ring_size,
             |atom| atom.0 < atom_cutoff,
             CycleEnumerationAlgorithm::Vismara,

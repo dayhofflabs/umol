@@ -28,7 +28,7 @@ use super::super::id::{
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
-use super::super::ring::RingFamily;
+use super::super::ring::RingSetKind;
 use super::super::spin::SpinStateAst;
 use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
 use super::super::value::ValueAst;
@@ -1806,7 +1806,7 @@ fn test_molecule_ast_rings_with(
     #[case] expected: usize,
 ) {
     let rs = ast.rings_with(
-        RingFamily::Simple,
+        RingSetKind::Simple,
         max_ring_size,
         |_| true,
         CycleEnumerationAlgorithm::Vismara,
@@ -1818,7 +1818,7 @@ fn test_molecule_ast_rings_with(
 fn test_molecule_ast_rings_with_atom_filter() {
     let ast = ring(6);
     let rs = ast.rings_with(
-        RingFamily::Simple,
+        RingSetKind::Simple,
         10,
         |a| a.0 < 3,
         CycleEnumerationAlgorithm::Vismara,
@@ -1836,7 +1836,7 @@ fn test_molecule_ast_rings_with_family() {
     );
     let simple_count = ast
         .rings_with(
-            RingFamily::Simple,
+            RingSetKind::Simple,
             4,
             |_| true,
             CycleEnumerationAlgorithm::Vismara,
@@ -1844,7 +1844,7 @@ fn test_molecule_ast_rings_with_family() {
         .count();
     let relevant_count = ast
         .rings_with(
-            RingFamily::Relevant,
+            RingSetKind::Relevant,
             4,
             |_| true,
             CycleEnumerationAlgorithm::Vismara,
@@ -1867,7 +1867,7 @@ fn test_molecule_ast_rings_with_family_fused() {
     );
     let simple_count = ast
         .rings_with(
-            RingFamily::Simple,
+            RingSetKind::Simple,
             10,
             |_| true,
             CycleEnumerationAlgorithm::Vismara,
@@ -1876,7 +1876,7 @@ fn test_molecule_ast_rings_with_family_fused() {
     assert_eq!(simple_count, 2);
     let relevant_count = ast
         .rings_with(
-            RingFamily::Relevant,
+            RingSetKind::Relevant,
             10,
             |_| true,
             CycleEnumerationAlgorithm::Vismara,
@@ -1890,7 +1890,7 @@ fn test_rings_membership() {
     let ast = ring(6);
     let rs = ast
         .rings_with(
-            RingFamily::Simple,
+            RingSetKind::Simple,
             6,
             |_| true,
             CycleEnumerationAlgorithm::Vismara,

@@ -30,7 +30,7 @@ use super::ligand::StereoLigand;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 use super::remap::IdRemapping;
-use super::ring::{RingFamily, RingSet};
+use super::ring::{RingSet, RingSetKind};
 use super::stereo::{StereoAtomAst, StereoBondAst};
 use super::traits::{BiEquiv, Canonicalize, Equiv, Lattice};
 use super::view::{
@@ -943,22 +943,22 @@ impl MoleculeAst {
     pub fn rings(&self, algorithm: CycleEnumerationAlgorithm) -> RingViews<'_> {
         RingViews::new(
             self,
-            RingSet::enumerate(RingFamily::Relevant, 22, |_| true, &self.graph, algorithm),
+            RingSet::enumerate(RingSetKind::Relevant, 22, |_| true, &self.graph, algorithm),
         )
     }
 
-    /// Ring set with caller-specified family, maximum size, atom filter, and
+    /// Ring set with caller-specified kind, maximum size, atom filter, and
     /// cycle-enumeration algorithm.
     pub fn rings_with(
         &self,
-        family: RingFamily,
+        kind: RingSetKind,
         max_ring_size: usize,
         atom_filter: impl Fn(AtomId) -> bool,
         algorithm: CycleEnumerationAlgorithm,
     ) -> RingViews<'_> {
         RingViews::new(
             self,
-            RingSet::enumerate(family, max_ring_size, atom_filter, &self.graph, algorithm),
+            RingSet::enumerate(kind, max_ring_size, atom_filter, &self.graph, algorithm),
         )
     }
 

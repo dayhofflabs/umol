@@ -2,7 +2,7 @@ use rstest::rstest;
 use serde::Deserialize;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
-    MoleculeParts, RingFamily, ValueAst,
+    MoleculeParts, RingSetKind, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_graph::ops::aromaticity::ClarAromaticity;
@@ -38,7 +38,7 @@ fn test_clar_aromaticity_find_from_rings() {
     });
     let rings = ast
         .rings_with(
-            RingFamily::Simple,
+            RingSetKind::Simple,
             6,
             |_| true,
             CycleEnumerationAlgorithm::Vismara,

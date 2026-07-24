@@ -53,11 +53,11 @@ pub enum RingRelation {
     Noncontiguous,
 }
 
-/// Selection of which cycle family to enumerate: `Simple` for the minimum
-/// cycle basis, `Relevant` for the Vismara relevant-cycle set (the union of
-/// all minimum cycle bases — unique and ordering-independent).
+/// Selection of which ring set to enumerate: `Simple` for the minimum cycle
+/// basis, `Relevant` for the Vismara relevant-cycle set (the union of all
+/// minimum cycle bases — unique and ordering-independent).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum RingFamily {
+pub enum RingSetKind {
     Simple,
     Relevant,
 }
@@ -67,7 +67,7 @@ pub enum RingFamily {
 /// between rings.
 #[derive(Debug, Clone)]
 pub struct RingSet {
-    family: RingFamily,
+    kind: RingSetKind,
     max_ring_size: usize,
     rings: Vec<Ring>,
     atom_to_rings: BTreeMap<AtomId, Vec<RingId>>,
@@ -76,11 +76,11 @@ pub struct RingSet {
 }
 
 impl RingSet {
-    /// Enumerate rings of `family` up to `max_ring_size` on the atoms of
+    /// Enumerate rings of `kind` up to `max_ring_size` on the atoms of
     /// `graph` passing `atom_filter`, using `algorithm` for cycle enumeration.
-    /// `RingFamily::Relevant` keeps only chordless cycles.
+    /// `RingSetKind::Relevant` keeps only chordless cycles.
     pub(super) fn enumerate(
-        family: RingFamily,
+        kind: RingSetKind,
         max_ring_size: usize,
         atom_filter: impl Fn(AtomId) -> bool,
         graph: &Graph,
@@ -111,9 +111,9 @@ impl RingSet {
 
         let all_rings: Vec<Ring> = raw_cycles
             .into_iter()
-            .filter(|cycle| match family {
-                RingFamily::Relevant => is_induced_cycle(&sub, cycle),
-                RingFamily::Simple => true,
+            .filter(|cycle| match kind {
+                RingSetKind::Relevant => is_induced_cycle(&sub, cycle),
+                RingSetKind::Simple => true,
             })
             .filter_map(|cycle| {
                 let ring_atoms: Vec<AtomId> = cycle
@@ -132,10 +132,10 @@ impl RingSet {
             })
             .collect();
 
-        Self::from_parts(family, max_ring_size, all_rings)
+        Self::from_parts(kind, max_ring_size, all_rings)
     }
 
-    fn from_parts(family: RingFamily, max_ring_size: usize, rings: Vec<Ring>) -> Self {
+    fn from_parts(kind: RingSetKind, max_ring_size: usize, rings: Vec<Ring>) -> Self {
         let mut atom_to_rings: BTreeMap<AtomId, Vec<RingId>> = BTreeMap::new();
         let mut bond_to_rings: BTreeMap<BondId, Vec<RingId>> = BTreeMap::new();
         for (id, ring) in rings.iter().enumerate() {
@@ -151,7 +151,7 @@ impl RingSet {
         let ring_graph = RingGraph::new(&rings);
 
         Self {
-            family,
+            kind,
             max_ring_size,
             rings,
             atom_to_rings,
@@ -160,8 +160,8 @@ impl RingSet {
         }
     }
 
-    pub fn family(&self) -> RingFamily {
-        self.family
+    pub fn kind(&self) -> RingSetKind {
+        self.kind
     }
 
     pub fn max_ring_size(&self) -> usize {
@@ -453,7 +453,7 @@ mod tests {
     #[fixture]
     fn triangle_set() -> RingSet {
         RingSet::from_parts(
-            RingFamily::Simple,
+            RingSetKind::Simple,
             6,
             vec![Ring::new(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
@@ -466,7 +466,7 @@ mod tests {
     #[fixture]
     fn fused_pair() -> RingSet {
         RingSet::from_parts(
-            RingFamily::Simple,
+            RingSetKind::Simple,
             10,
             vec![
                 Ring::new(
@@ -514,7 +514,7 @@ mod tests {
     #[fixture]
     fn spiro_pair() -> RingSet {
         RingSet::from_parts(
-            RingFamily::Simple,
+            RingSetKind::Simple,
             6,
             vec![
                 Ring::new(
@@ -534,7 +534,7 @@ mod tests {
     #[fixture]
     fn bridged_pair() -> RingSet {
         RingSet::from_parts(
-            RingFamily::Simple,
+            RingSetKind::Simple,
             6,
             vec![
                 Ring::new(
@@ -555,7 +555,7 @@ mod tests {
     #[fixture]
     fn shared_atom_set() -> RingSet {
         RingSet::from_parts(
-            RingFamily::Simple,
+            RingSetKind::Simple,
             10,
             vec![
                 Ring::new(
@@ -666,7 +666,7 @@ mod tests {
     #[case::full_hexagon(
         6,
         &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]][..],
-        RingFamily::Simple,
+        RingSetKind::Simple,
         10,
         |_: AtomId| true,
         1,
@@ -674,7 +674,7 @@ mod tests {
     #[case::filter_breaks_cycle(
         6,
         &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]][..],
-        RingFamily::Simple,
+        RingSetKind::Simple,
         10,
         |a: AtomId| a.0 != 5,
         0,
@@ -682,7 +682,7 @@ mod tests {
     fn test_ring_set_enumerate(
         #[case] node_count: usize,
         #[case] edges: &[[u32; 2]],
-        #[case] family: RingFamily,
+        #[case] kind: RingSetKind,
         #[case] max_ring_size: usize,
         #[case] atom_filter: fn(AtomId) -> bool,
         #[case] expected_count: usize,
@@ -698,7 +698,7 @@ mod tests {
             ..Default::default()
         });
         let set = mol.rings_with(
-            family,
+            kind,
             max_ring_size,
             atom_filter,
             CycleEnumerationAlgorithm::Vismara,
@@ -722,13 +722,13 @@ mod tests {
             ..Default::default()
         });
         let simple = mol.rings_with(
-            RingFamily::Simple,
+            RingSetKind::Simple,
             4,
             |_| true,
             CycleEnumerationAlgorithm::Vismara,
         );
         let relevant = mol.rings_with(
-            RingFamily::Relevant,
+            RingSetKind::Relevant,
             4,
             |_| true,
             CycleEnumerationAlgorithm::Vismara,
@@ -740,11 +740,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::relevant(RingFamily::Relevant, 5)]
-    #[case::simple(RingFamily::Simple, 5)]
-    fn test_ring_set_from_parts(#[case] family: RingFamily, #[case] max_ring_size: usize) {
-        let set = RingSet::from_parts(family, max_ring_size, vec![]);
-        assert_eq!(set.family(), family);
+    #[case::relevant(RingSetKind::Relevant, 5)]
+    #[case::simple(RingSetKind::Simple, 5)]
+    fn test_ring_set_from_parts(#[case] kind: RingSetKind, #[case] max_ring_size: usize) {
+        let set = RingSet::from_parts(kind, max_ring_size, vec![]);
+        assert_eq!(set.kind(), kind);
         assert_eq!(set.max_ring_size(), max_ring_size);
         assert_eq!(set.count(), 0);
         assert_eq!(set.ids().collect::<Vec<_>>(), Vec::<RingId>::new());
@@ -760,8 +760,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_ring_set_family(triangle_set: RingSet) {
-        assert_eq!(triangle_set.family(), RingFamily::Simple);
+    fn test_ring_set_kind(triangle_set: RingSet) {
+        assert_eq!(triangle_set.kind(), RingSetKind::Simple);
     }
 
     #[rstest]
@@ -887,7 +887,7 @@ mod tests {
     #[rstest]
     fn test_ring_set_fused_components() {
         let set = RingSet::from_parts(
-            RingFamily::Simple,
+            RingSetKind::Simple,
             10,
             vec![
                 Ring::new(
