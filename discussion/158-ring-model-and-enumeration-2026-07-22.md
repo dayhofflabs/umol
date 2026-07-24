@@ -886,13 +886,20 @@ correctness oracles.
 
 ### S1 — Complete bounded cycle enumeration
 
-- **S1a — local shortest-cycle multigraph semantics**
+- **S1a — local shortest-cycle multigraph semantics** **Done**
   (`umol-graph-core/src/algorithms/cycles.rs`): make the existing shortest-cycle
   queries return length one for a self-loop and length two for parallel edges,
   while preserving existing simple-graph results. Table tests assert exact
   edge- and node-local answers for loops, digons, ordinary cycles, bridges, and
   acyclic nodes. **Behavioral correction without a signature change (green).**
   `[dep: S0b]`
+
+  Edge-local BFS handles a self-loop directly before excluding the queried
+  edge; for distinct endpoints, the existing edge-exclusion search finds a
+  parallel alternative as a one-edge path and therefore returns a two-edge
+  cycle. Node-local queries retain their minimum-over-incident-edges semantics.
+  Exact tables cover both public queries on loops, digons, ordinary cycles,
+  bridges, and acyclic nodes.
 - **S1b — edge-aware Read--Tarjan visitor and collector**
   (`umol-graph-core/src/algorithms/cycles.rs`,
   `src/algorithms/cycles/simple.rs`, `src/lib.rs`,

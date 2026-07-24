@@ -139,6 +139,10 @@ impl Graph {
     // BFS with edge exclusion. O(V+E).
     fn shortest_cycle_through_edge_bfs(&self, edge: EdgeId) -> Option<usize> {
         let [u, v] = self.edge_endpoints(edge);
+        if u == v {
+            return Some(1);
+        }
+
         let mut dist = vec![u32::MAX; self.node_bound()];
         let mut queue = VecDeque::new();
         dist[u.index()] = 0;
@@ -640,6 +644,8 @@ mod tests {
     }
 
     #[rstest]
+    #[case::self_loop(1, vec![[0, 0]], EdgeId(0), Some(1))]
+    #[case::digon(2, vec![[0, 1], [0, 1]], EdgeId(0), Some(2))]
     #[case::triangle(3, vec![[0, 1], [1, 2], [0, 2]], EdgeId(0), Some(3))]
     #[case::square(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]], EdgeId(0), Some(4))]
     #[case::bridge(4, vec![[0, 1], [1, 2], [2, 3]], EdgeId(1), None)]
@@ -653,11 +659,13 @@ mod tests {
         #[case] edge: EdgeId,
         #[case] expected: Option<usize>,
     ) {
-        let g = Graph::new(node_count, &edges);
-        assert_eq!(g.shortest_cycle_through_edge(edge, Bfs), expected);
+        let graph = Graph::new(node_count, &edges);
+        assert_eq!(graph.shortest_cycle_through_edge(edge, Bfs), expected);
     }
 
     #[rstest]
+    #[case::self_loop(1, vec![[0, 0]], NodeId(0), Some(1))]
+    #[case::digon(2, vec![[0, 1], [0, 1]], NodeId(0), Some(2))]
     #[case::triangle(3, vec![[0, 1], [1, 2], [0, 2]], NodeId(0), Some(3))]
     #[case::pendant(3, vec![[0, 1], [1, 2]], NodeId(0), None)]
     #[case::naphthalene_bridgehead(10, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [3, 6],
@@ -668,8 +676,8 @@ mod tests {
         #[case] node: NodeId,
         #[case] expected: Option<usize>,
     ) {
-        let g = Graph::new(node_count, &edges);
-        assert_eq!(g.shortest_cycle_through_node(node, Bfs), expected);
+        let graph = Graph::new(node_count, &edges);
+        assert_eq!(graph.shortest_cycle_through_node(node, Bfs), expected);
     }
 
     #[rstest]
