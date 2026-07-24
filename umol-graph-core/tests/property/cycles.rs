@@ -1,17 +1,47 @@
-#[path = "cycles/oracle.rs"]
-mod oracle;
+//! Cycle properties use definition-level exhaustive enumeration for bounded
+//! random multigraphs and the simple corpus through order six. `captured`
+//! independently compares the production operation with captured results over
+//! the larger simple and non-simple corpora.
+
+#[path = "cycles/captured.rs"]
+mod captured;
+#[path = "cycles/exhaustive.rs"]
+mod exhaustive;
 
 use std::collections::HashSet;
 use std::ops::ControlFlow;
 
 use proptest::prelude::*;
+use rstest::rstest;
 use umol_graph_core::{EdgeId, Graph, SimpleCycleEnumerationAlgorithm, SubdivisionNodeSource};
 
-use self::oracle::{enumerate_cycles, relevant_cycles, unique_ring_families};
-use super::graph::multigraph;
+use self::exhaustive::{enumerate_cycles, relevant_cycles, unique_ring_families};
+use super::corpus::simple_graphs;
+use super::strategy::multigraph;
 
 const SIMPLE_CYCLE_ALGORITHM: SimpleCycleEnumerationAlgorithm =
     SimpleCycleEnumerationAlgorithm::ReadTarjan;
+
+#[rstest]
+fn test_graph_enumerate_simple_cycles_corpus() {
+    let mut graph_count = 0;
+    for graph in simple_graphs().take_while(|graph| graph.node_count() <= 6) {
+        let mut actual: Vec<Vec<EdgeId>> = graph
+            .enumerate_simple_cycles(usize::MAX, SIMPLE_CYCLE_ALGORITHM)
+            .into_iter()
+            .map(|cycle| {
+                let mut edges = cycle.edges().to_vec();
+                edges.sort_unstable();
+                edges
+            })
+            .collect();
+        actual.sort_by(|left, right| left.len().cmp(&right.len()).then_with(|| left.cmp(right)));
+
+        assert_eq!(actual, enumerate_cycles(&graph), "{graph:?}");
+        graph_count += 1;
+    }
+    assert_eq!(graph_count, 208);
+}
 
 proptest! {
     #[test]

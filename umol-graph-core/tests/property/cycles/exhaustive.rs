@@ -7,7 +7,7 @@ use umol_graph_core::{EdgeId, Graph, NodeId};
 pub(super) fn enumerate_cycles(graph: &Graph) -> Vec<Vec<EdgeId>> {
     assert!(
         graph.edge_count() < usize::BITS as usize,
-        "the exhaustive oracle requires an edge subset to fit in usize"
+        "exhaustive enumeration requires an edge subset to fit in usize"
     );
 
     let mut cycles = Vec::new();

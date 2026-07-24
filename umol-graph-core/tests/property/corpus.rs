@@ -1,6 +1,5 @@
-//! General graph corpora and generators shared by integration tests.
+//! Checked-in graph corpora used by property tests.
 
-use proptest::prelude::*;
 use umol_graph_core::Graph;
 
 const SIMPLE_GRAPHS_GRAPH6: &str = include_str!("../data/simple-through-8.g6");
@@ -42,21 +41,6 @@ pub(super) fn parse_graph6(source: &str) -> Graph {
 
 pub(super) fn simple_graphs() -> impl Iterator<Item = Graph> {
     SIMPLE_GRAPHS_GRAPH6.lines().map(parse_graph6)
-}
-
-pub(super) fn multigraph(max_nodes: usize, max_edges: usize) -> impl Strategy<Value = Graph> {
-    (
-        0..=max_nodes,
-        prop::collection::vec((0..max_nodes as u32, 0..max_nodes as u32), 0..=max_edges),
-    )
-        .prop_map(|(node_count, endpoints)| {
-            let edges: Vec<[u32; 2]> = endpoints
-                .into_iter()
-                .filter(|&(first, second)| first < node_count as u32 && second < node_count as u32)
-                .map(|(first, second)| [first, second])
-                .collect();
-            Graph::new(node_count, &edges)
-        })
 }
 
 #[cfg(test)]

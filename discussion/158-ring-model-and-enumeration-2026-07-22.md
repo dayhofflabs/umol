@@ -724,8 +724,8 @@ callers have migrated. Every subitem includes its unit or property tests and
 leaves the workspace green unless it is explicitly marked as a breaking
 red-to-green migration. Test additions follow the workspace test-writing
 conventions: `rstest` tables use exact structural expectations, property tests
-state independent invariants, and benchmark fixtures are not used as
-correctness oracles.
+state independent invariants, and benchmark inputs are not used as correctness
+references.
 
 ### S0 — Baselines and graph values
 
@@ -735,10 +735,10 @@ correctness oracles.
   and record the current Vismara baseline before replacing it. Establish
   reusable benchmark inputs and naming so S1b, S2b, S2c, and S2e can add
   separate all-simple-cycle, basis, relevant-cycle, and URF groups without
-  turning this stage into a placeholder for later operations. Add exact fixture
-  tests for the small graphs whose cycle sets are independently known; the
+  turning this stage into a placeholder for later operations. Add exact tests
+  for the small graphs whose cycle sets are independently known; the
   larger molecular graphs remain benchmark inputs rather than expected-output
-  fixtures. **Additive benchmark/test preparation (green).** `[dep: —]`
+  cases. **Additive benchmark/test preparation (green).** `[dep: —]`
 
   The reusable corpus is exposed to the benchmark module by `cycle_corpus()`.
   The current implementation is recorded under the stable Criterion path
@@ -801,29 +801,33 @@ correctness oracles.
   back; `node_of` and `incidence_edges_of` provide the forward mappings. The
   automorphism benchmark uses the public construction, and unit and property
   tests cover empty, isolated, simple, parallel-edge, and self-loop inputs.
-- **S0d — exhaustive cycle oracle** **Done**
+- **S0d — exhaustive cycle reference** **Done**
   (`umol-graph-core/tests/property.rs`,
-  `tests/property/cycles.rs`, `tests/property/cycles/oracle.rs`): split the
+  `tests/property/cycles.rs`, `tests/property/cycles/exhaustive.rs`): split the
   cycle properties into a
-  hierarchical module and add a deliberately simple, test-only oracle that
+  hierarchical module and add deliberately simple, test-only exhaustive
+  enumeration that
   enumerates cycles as connected 2-regular edge subsets. Treat self-loops and
   parallel-edge digons as edge-distinct cycles, and provide independent
-  cycle-space rank and linear-independence operations. The oracle must not call
-  any production cycle-enumeration or cycle-space implementation. Exact table
-  tests pin the oracle itself on small named simple and non-simple graphs before
-  property tests use it. **Additive test infrastructure (green).** `[dep: S0b]`
+  cycle-space rank and linear-independence operations. The exhaustive
+  implementation must not call any production cycle-enumeration or cycle-space
+  implementation. Exact table tests pin it on small named simple and
+  non-simple graphs before property tests use it. **Additive test
+  infrastructure (green).** `[dep: S0b]`
 
   The property target is split into `cycles` and `subiso` modules. The cycle
-  oracle represents a cycle as its sorted edge-id set and exhaustively checks
-  every nonempty subset for connected 2-regular incidence, counting a loop
-  twice at its endpoint. It computes cycle-space rank with its own component
-  traversal and tests linear independence by dynamic GF(2) elimination.
+  reference represents a cycle as its sorted edge-id set and exhaustively
+  checks every nonempty subset for connected 2-regular incidence, counting a
+  loop twice at its endpoint. It computes cycle-space rank with its own
+  component traversal and tests linear independence by dynamic GF(2)
+  elimination.
   Exact tables cover empty and acyclic graphs, ordinary cycles, loops,
   edge-distinct parallel digons, disconnected cycles, rank, and dependent and
   independent cycle sets.
-- **S0e — exhaustive cycle-family oracle** **Done**
-  (`umol-graph-core/tests/property/cycles/oracle.rs`): extend the test-only
-  oracle to enumerate all cycle bases, retain every minimum basis, derive
+- **S0e — exhaustive cycle-family reference** **Done**
+  (`umol-graph-core/tests/property/cycles/exhaustive.rs`): extend the test-only
+  exhaustive implementation to enumerate all cycle bases, retain every minimum
+  basis, derive
   relevant cycles as their union, and derive Unique Ring Families directly
   from the defining relation. Keep the implementation intentionally
   exponential and bound its property-test strategies accordingly. Exact table
@@ -840,10 +844,11 @@ correctness oracles.
   that relation are the families. Exact tables cover unique and tied minimum
   bases, positive and negative URF relations, loops, parallel edges, and
   disconnected graphs. The property strategy exercising the exponential
-  family oracle is bounded to five edges.
+  family reference is bounded to five edges.
 - **S0f — generated exhaustive graph corpus** **Done**
   (`umol-graph-core/tests/data/simple-through-8.g6`,
-  `tests/support/graph.rs`): invoke `/opt/homebrew/bin/geng` once
+  `tests/property/corpus.rs`, `tests/property/strategy.rs`): invoke
+  `/opt/homebrew/bin/geng` once
   during implementation to generate a checked-in graph6 corpus of
   non-isomorphic simple graphs through the selected order, and record the
   exact generation command and nauty version. Add a test-only graph6 reader and
@@ -874,15 +879,17 @@ correctness oracles.
   corpus digest. No Rust test invokes or searches for `geng`.
 - **S0g — algorithm-neutral graph corpus support** **Done**
   (`umol-graph-core/tests/data/simple-through-8.g6`,
-  `tests/support/graph.rs`, `tests/property.rs`,
+  `tests/property/corpus.rs`, `tests/property/strategy.rs`, `tests/property.rs`,
   `tests/property/cycles.rs`): keep the exhaustive simple-graph corpus and its
-  graph6 reader outside any algorithm-specific test hierarchy. Define the
-  shared `parse_graph6`, `simple_graphs`, and `multigraph` test facilities in
-  graph support owned by the integration-test root; cycle properties consume
-  that support without owning it. This makes the corpus directly reusable by
-  other graph-algorithm tests while preserving its S0f contents, provenance,
-  integrity checks, and no-`geng` runtime policy. **Test-support
-  reorganization without behavioral changes (green).** `[dep: S0f]`
+  graph6 reader outside any algorithm-specific test hierarchy. Keep checked-in
+  graph collections in the property target's `corpus` module and generated
+  graph inputs in its `strategy` module; cycle properties consume both without
+  owning them. Their items use `pub(super)` to remain visible throughout this
+  integration-test crate without becoming workspace test support. This makes
+  the corpus directly reusable by other property modules while preserving its
+  S0f contents, provenance, integrity checks, and no-`geng` runtime policy.
+  **Property-suite reorganization without behavioral changes (green).**
+  `[dep: S0f]`
 
 ### S1 — Complete bounded cycle enumeration
 
@@ -910,8 +917,9 @@ correctness oracles.
   `ControlFlow` without materializing unused cycles. Exact tests cover bounds,
   disconnected components, fused and bridged graphs, parallel alternatives,
   deterministic collection order, and early termination. Property tests
-  compare small random multigraphs against the S0d oracle and verify
-  visitor/collector equality, uniqueness, and relabeling invariance. Extend the
+  compare small random multigraphs against the S0d exhaustive reference and
+  verify visitor/collector equality, uniqueness, and relabeling invariance.
+  Extend the
   baseline corpus with bounded and unbounded
   all-simple-cycle benchmarks. **Additive API (green).**
   `[dep: S0a, S0b, S0d]`
@@ -927,23 +935,60 @@ correctness oracles.
 
   Exact tables cover bounds, disconnected and fused components, bridges,
   parallel alternatives, deterministic traversal, and early termination.
-  Properties compare bounded results with the independent edge-subset oracle,
-  prove visitor/collector equality and uniqueness, and preserve edge-cycle sets
-  under node relabeling. Criterion groups
+  Properties compare bounded results with independent exhaustive edge-subset
+  enumeration, prove visitor/collector equality and uniqueness, and preserve
+  edge-cycle sets under node relabeling. Criterion groups
   `simple_cycles_bounded_8/read_tarjan/*` and
   `simple_cycles_unbounded/read_tarjan/*` cover the full bounded molecular
   corpus and the repeatable unbounded small/medium corpus, respectively.
-- **S1c — simple-cycle differential validation**
-  (`materials/rings/validation/`, `umol-graph-core/tests/data/cycles/`): run the
+- **S1c — simple-cycle differential validation** **Done**
+  (`umol-graph-core/tests/data/simple-cycles/`): run the
   completed Read--Tarjan implementation over the S0f corpus and compare it
-  first with the S0d oracle, then independently with NetworkX and igraph from
-  the `work2` environment. Restrict NetworkX comparison to simple-graph
-  node-cycle semantics; use igraph edge-cycle results for non-simple cases only
+  first with the S0d exhaustive reference, then independently with NetworkX
+  and igraph from the `work2` environment. Restrict NetworkX comparison to
+  simple-graph node-cycle semantics; use igraph edge-cycle results for
+  non-simple cases only
   after pinning its loop and parallel-edge behavior with exact probes. Store
   normalized failing cases and a validation report, but do not make either
   Python library or the micromamba environment a prerequisite of the Rust
   property suite. **One-off differential validation with checked-in evidence
   (green).** `[dep: S0f, S1b]`
+
+  The exhaustive Rust reference agrees with Read--Tarjan on all 208
+  non-isomorphic simple graphs through order six. NetworkX 3.5, igraph 1.0.1,
+  and Read--Tarjan agree on all 13,598 simple graphs through order eight,
+  containing 1,526,236 cycles. After exact probes fixed igraph's edge-cycle
+  treatment of loops and parallel edges, igraph and Read--Tarjan also agree on
+  all 3,453 non-simple canonical edge multisets through four nodes and five
+  edges. No failing cases were produced.
+
+  The normalized external answers are checked in as
+  `simple-through-8.tsv` (13,598 rows, 17,818,141 bytes, SHA-256
+  `7ae435ea65b1021a183a30508ec692353b66040a643d1338b6bcc5a3787e0070`)
+  and `multigraph-through-4-edges-5.tsv` (3,453 rows, 98,828 bytes, SHA-256
+  `287b0297108954bd647840fe87a1c2e56ec60280fd2b950d35a720c5d389b2ef`).
+  Rust-only regression tests compare graph-core with these captured results;
+  they never import, invoke, search for, or conditionally skip based on
+  NetworkX, igraph, Python, or `work2`.
+
+  The one-off generator
+  `tests/data/simple-cycles/generate_captured_results.py` uses NetworkX
+  3.5 and python-igraph 1.0.0 backed by igraph 1.0.1. It normalizes
+  simple-graph node cycles over rotation and reversal, and non-simple edge
+  cycles as sorted edge-id sets; `-` denotes an empty cycle set. Before writing
+  the captured results, it verifies igraph's treatment of one and multiple
+  loops, two and three parallel edges, a parallel edge plus a triangle, and
+  combined loops, digons, and triangles. It then requires NetworkX and igraph
+  to agree on every simple-graph node-cycle set before capturing the external
+  results. Regeneration is deliberately separate from the Rust test suite:
+
+  ```text
+  micromamba run -n work2 python \
+      umol-graph-core/tests/data/simple-cycles/generate_captured_results.py \
+      umol-graph-core/tests/data/simple-through-8.g6 \
+      umol-graph-core/tests/data/simple-cycles/simple-through-8.tsv \
+      umol-graph-core/tests/data/simple-cycles/multigraph-through-4-edges-5.tsv
+  ```
 
 ### S2 — Cycle-space, relevant-cycle, and URF analysis
 
@@ -976,9 +1021,9 @@ correctness oracles.
   Keep the new analysis internal until the total public operation is available.
   Exact tests cover odd and even prototypes, multiple shortest paths, fused and
   bridged systems, family counts, and lazy early termination. Property tests
-  compare small simple graphs with the S0e definition-level oracle. Benchmark
-  the new simple path beside the S0 baseline before the legacy backend is
-  removed. **Additive replacement internals (green).**
+  compare small simple graphs with the S0e definition-level reference.
+  Benchmark the new simple path beside the S0 baseline before the legacy
+  backend is removed. **Additive replacement internals (green).**
   `[dep: S0a, S0b, S0e, S2a, S2b]`
 - **S2d — total relevant-cycle public API**
   (`umol-graph-core/src/algorithms/cycles.rs`,
@@ -1009,7 +1054,7 @@ correctness oracles.
   **Additive API (green).**
   `[dep: S0a, S0b, S0c, S0e, S2b, S2c, S2d]`
 - **S2f — cycle-family differential validation**
-  (`materials/rings/validation/`, `umol-graph-core/tests/data/cycles/`): run the
+  (`umol-graph-core/tests/data/cycles/`): run the
   completed MCB, relevant-cycle, and URF operations over the bounded S0f corpus.
   Compare MCB dimension and total weight with NetworkX, igraph, CDK, and
   RingDecomposerLib without requiring the same member cycles when minimum bases
@@ -1018,8 +1063,9 @@ correctness oracles.
   RingDecomposerLib. Run RingDecomposerLib's independent exponential validator
   on the shared tractable cases. Record source revisions, commands, semantic
   exclusions, and normalized failures. These external tools corroborate the
-  S0e oracle and remain one-off validation dependencies, not Rust property-test
-  dependencies. **One-off differential validation with checked-in evidence
+  S0e exhaustive reference and remain one-off validation dependencies, not
+  Rust property-test dependencies. **One-off differential validation with
+  checked-in evidence
   (green).** `[dep: S0f, S2b, S2d, S2e]`
 
 ### S3 — umol-ast ring model and views
