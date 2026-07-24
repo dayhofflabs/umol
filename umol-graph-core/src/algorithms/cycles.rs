@@ -2,6 +2,7 @@
 
 use std::collections::{HashSet, VecDeque};
 use std::ops::ControlFlow;
+use std::slice::Iter;
 
 use crate::algorithms::bcc::BiconnectedComponentsAlgorithm;
 use crate::graph::{EdgeId, Graph, NodeId};
@@ -10,7 +11,7 @@ mod basis;
 mod relevant;
 mod simple;
 
-use self::basis::{cycle_space_rank, CycleVectorBasis, EdgeVector};
+use self::basis::{cycle_space_rank, minimum_cycle_basis_horton, CycleVectorBasis, EdgeVector};
 use self::relevant::ShortestPathDag;
 
 /// An undirected cycle represented by corresponding node and edge sequences.
@@ -103,6 +104,33 @@ impl Cycle {
     }
 }
 
+/// One minimum-total-length basis of the graph's binary cycle space.
+///
+/// Cycles use source graph identifiers. For graphs with parallel edges, the
+/// internal subdivision does not affect the reported cycle lengths.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MinimumCycleBasis {
+    cycles: Vec<Cycle>,
+    total_length: usize,
+}
+
+impl MinimumCycleBasis {
+    /// Number of independent cycles in the basis.
+    pub fn dimension(&self) -> usize {
+        self.cycles.len()
+    }
+
+    /// Sum of basis-cycle lengths in source-edge units.
+    pub fn total_length(&self) -> usize {
+        self.total_length
+    }
+
+    /// Iterate over the selected basis cycles.
+    pub fn iter(&self) -> Iter<'_, Cycle> {
+        self.cycles.iter()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShortestCycleAlgorithm {
     Bfs,
@@ -111,6 +139,12 @@ pub enum ShortestCycleAlgorithm {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SimpleCycleEnumerationAlgorithm {
     ReadTarjan,
+}
+
+/// Algorithm used to select a minimum cycle basis.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MinimumCycleBasisAlgorithm {
+    Horton,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -169,6 +203,17 @@ impl Graph {
             ControlFlow::Continue(())
         });
         cycles
+    }
+
+    /// Select one minimum-total-length basis of the binary cycle space.
+    ///
+    /// The returned basis is not canonically ordered. Self-loops contribute
+    /// one-edge basis cycles, and parallel-edge cycles retain their source
+    /// `EdgeId` identities.
+    pub fn minimum_cycle_basis(&self, alg: MinimumCycleBasisAlgorithm) -> MinimumCycleBasis {
+        match alg {
+            MinimumCycleBasisAlgorithm::Horton => minimum_cycle_basis_horton(self),
+        }
     }
 
     pub fn enumerate_cycles(
@@ -366,6 +411,7 @@ mod tests {
 
     use super::Cycle;
     use super::CycleEnumerationAlgorithm::Vismara;
+    use super::MinimumCycleBasisAlgorithm::Horton;
     use super::ShortestCycleAlgorithm::Bfs;
     use super::SimpleCycleEnumerationAlgorithm::ReadTarjan;
     use crate::graph::{EdgeId, Graph, NodeId};
@@ -719,6 +765,94 @@ mod tests {
             graph.enumerate_simple_cycles(max_cycle_size, ReadTarjan),
             expected
         );
+    }
+
+    #[rstest]
+    #[case::forest(
+        Graph::new(4, &[[0, 1], [1, 2], [1, 3]]),
+        vec![],
+        0,
+    )]
+    #[case::disconnected(
+        Graph::new(6, &[[0, 1], [1, 2], [0, 2], [3, 4], [4, 5], [3, 5]]),
+        vec![
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+                edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+            },
+            Cycle {
+                nodes: vec![NodeId(3), NodeId(4), NodeId(5)],
+                edges: vec![EdgeId(3), EdgeId(4), EdgeId(5)],
+            },
+        ],
+        6,
+    )]
+    #[case::tied(
+        Graph::new(
+            4,
+            &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]],
+        ),
+        vec![
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+                edges: vec![EdgeId(0), EdgeId(3), EdgeId(1)],
+            },
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1), NodeId(3)],
+                edges: vec![EdgeId(0), EdgeId(4), EdgeId(2)],
+            },
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(2), NodeId(3)],
+                edges: vec![EdgeId(1), EdgeId(5), EdgeId(2)],
+            },
+        ],
+        9,
+    )]
+    #[case::loop_and_triangle(
+        Graph::new(3, &[[0, 0], [0, 1], [1, 2], [0, 2]]),
+        vec![
+            Cycle {
+                nodes: vec![NodeId(0)],
+                edges: vec![EdgeId(0)],
+            },
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+                edges: vec![EdgeId(1), EdgeId(2), EdgeId(3)],
+            },
+        ],
+        4,
+    )]
+    #[case::parallel_pair(
+        Graph::new(2, &[[0, 1], [0, 1]]),
+        vec![Cycle {
+            nodes: vec![NodeId(0), NodeId(1)],
+            edges: vec![EdgeId(0), EdgeId(1)],
+        }],
+        2,
+    )]
+    #[case::parallel_triple(
+        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
+        vec![
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1)],
+                edges: vec![EdgeId(0), EdgeId(1)],
+            },
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1)],
+                edges: vec![EdgeId(0), EdgeId(2)],
+            },
+        ],
+        4,
+    )]
+    fn test_graph_minimum_cycle_basis(
+        #[case] graph: Graph,
+        #[case] expected: Vec<Cycle>,
+        #[case] total_length: usize,
+    ) {
+        let basis = graph.minimum_cycle_basis(Horton);
+        assert_eq!(basis.iter().cloned().collect::<Vec<_>>(), expected);
+        assert_eq!(basis.dimension(), expected.len());
+        assert_eq!(basis.total_length(), total_length);
     }
 
     #[rstest]

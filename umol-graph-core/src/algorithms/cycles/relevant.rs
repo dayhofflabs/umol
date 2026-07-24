@@ -124,6 +124,22 @@ impl ShortestPathDag {
         paths
     }
 
+    pub(super) fn path_to(&self, target: NodeId) -> Option<ShortestPath> {
+        self.distance(target)?;
+        let mut nodes = vec![target];
+        let mut edges = Vec::new();
+        let mut current = target;
+        while current != self.root {
+            let predecessor = self.predecessors[current.index()].first()?;
+            nodes.push(predecessor.node);
+            edges.push(predecessor.edge);
+            current = predecessor.node;
+        }
+        nodes.reverse();
+        edges.reverse();
+        Some(ShortestPath { nodes, edges })
+    }
+
     fn reconstruct(
         &self,
         current: NodeId,
@@ -228,6 +244,26 @@ mod tests {
             ShortestPathDag::new(&graph, root).paths_to(target),
             expected
         );
+    }
+
+    #[rstest]
+    #[case::selected(
+        Graph::new(4, &[[0, 1], [0, 2], [1, 3], [2, 3]]),
+        NodeId(0),
+        NodeId(3),
+        Some(ShortestPath {
+            nodes: vec![NodeId(0), NodeId(1), NodeId(3)],
+            edges: vec![EdgeId(0), EdgeId(2)],
+        }),
+    )]
+    #[case::unreachable(Graph::new(2, &[]), NodeId(0), NodeId(1), None)]
+    fn test_shortest_path_dag_path_to(
+        #[case] graph: Graph,
+        #[case] root: NodeId,
+        #[case] target: NodeId,
+        #[case] expected: Option<ShortestPath>,
+    ) {
+        assert_eq!(ShortestPathDag::new(&graph, root).path_to(target), expected);
     }
 
     #[rstest]

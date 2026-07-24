@@ -7,8 +7,8 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm::{
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
     CycleEnumerationAlgorithm, EdgeId, Graph, MaximumIndependentSetAlgorithm,
-    MaximumMatchingAlgorithm, NodeId, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
-    SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+    MaximumMatchingAlgorithm, MinimumCycleBasisAlgorithm, NodeId, ShortestCycleAlgorithm,
+    SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 mod matching_graphs {
@@ -282,6 +282,16 @@ fn simple_cycle_enumeration(c: &mut Criterion) {
         });
     }
     unbounded.finish();
+}
+
+fn minimum_cycle_basis(c: &mut Criterion) {
+    let mut group = c.benchmark_group("minimum_cycle_basis");
+    for (name, graph) in cycle_corpus() {
+        group.bench_with_input(BenchmarkId::new("horton", name), &graph, |b, graph| {
+            b.iter(|| graph.minimum_cycle_basis(MinimumCycleBasisAlgorithm::Horton));
+        });
+    }
+    group.finish();
 }
 
 fn shortest_cycle(c: &mut Criterion) {
@@ -952,6 +962,7 @@ criterion_group!(
     benches,
     relevant_cycle_enumeration,
     simple_cycle_enumeration,
+    minimum_cycle_basis,
     shortest_cycle,
     connected_components,
     biconnected_components,

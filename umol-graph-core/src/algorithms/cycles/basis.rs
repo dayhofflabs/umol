@@ -1,10 +1,14 @@
 //! Binary cycle-space operations.
 
+use std::cmp::Ordering;
+use std::collections::HashSet;
+
 use bitvec::prelude::*;
 
-use super::Cycle;
+use super::relevant::ShortestPathDag;
+use super::{Cycle, MinimumCycleBasis};
 use crate::algorithms::connected::ConnectedComponentsAlgorithm;
-use crate::graph::{EdgeId, Graph};
+use crate::graph::{EdgeId, Graph, SubdividedGraph, SubdivisionNodeSource};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct EdgeVector {
@@ -79,6 +83,132 @@ pub(super) fn cycle_space_rank(graph: &Graph) -> usize {
             .connected_components(ConnectedComponentsAlgorithm::Bfs)
             .len()
         - graph.node_count()
+}
+
+pub(super) fn minimum_cycle_basis_horton(source: &Graph) -> MinimumCycleBasis {
+    let mut loops = Vec::new();
+    let mut loopless_edges = Vec::new();
+    let mut edge_sources = Vec::new();
+    let mut endpoint_pairs = HashSet::new();
+    let mut has_parallel_edges = false;
+
+    for edge in source.edge_ids() {
+        let [first, second] = source.edge_endpoints(edge);
+        if first == second {
+            loops.push(Cycle::normalized(source, vec![first], vec![edge]));
+            continue;
+        }
+        has_parallel_edges |= !endpoint_pairs.insert([first, second]);
+        loopless_edges.push([first.0, second.0]);
+        edge_sources.push(edge);
+    }
+
+    let mut cycles = if loops.is_empty() && !has_parallel_edges {
+        minimum_cycle_basis_simple(source)
+    } else {
+        let loopless = Graph::new(source.node_count(), &loopless_edges);
+        if has_parallel_edges {
+            let subdivision = loopless.subdivide_edges();
+            minimum_cycle_basis_simple(subdivision.graph())
+                .into_iter()
+                .map(|cycle| map_subdivided_cycle(source, &subdivision, &edge_sources, &cycle))
+                .collect()
+        } else {
+            minimum_cycle_basis_simple(&loopless)
+                .into_iter()
+                .map(|cycle| map_cycle(source, &edge_sources, &cycle))
+                .collect()
+        }
+    };
+    cycles.extend(loops);
+    cycles.sort_by(compare_cycles);
+
+    assert_eq!(
+        cycles.len(),
+        cycle_space_rank(source),
+        "Horton candidates must span the source cycle space"
+    );
+    let total_length = cycles.iter().map(Cycle::length).sum();
+    MinimumCycleBasis {
+        cycles,
+        total_length,
+    }
+}
+
+fn minimum_cycle_basis_simple(graph: &Graph) -> Vec<Cycle> {
+    let target_rank = cycle_space_rank(graph);
+    if target_rank == 0 {
+        return Vec::new();
+    }
+
+    let mut candidates = HashSet::new();
+    for root in graph.node_ids() {
+        let paths = ShortestPathDag::new(graph, root);
+        for edge in graph.edge_ids() {
+            let [first, second] = graph.edge_endpoints(edge);
+            let (Some(first_path), Some(second_path)) =
+                (paths.path_to(first), paths.path_to(second))
+            else {
+                continue;
+            };
+            if let Some(cycle) = first_path.cycle_with(graph, &second_path, edge) {
+                candidates.insert(cycle);
+            }
+        }
+    }
+
+    let mut candidates = candidates.into_iter().collect::<Vec<_>>();
+    candidates.sort_by(compare_cycles);
+    let mut vectors = CycleVectorBasis::new(graph.edge_count());
+    let mut cycles = Vec::with_capacity(target_rank);
+    for candidate in candidates {
+        if vectors.insert(EdgeVector::from_cycle(graph.edge_count(), &candidate)) {
+            cycles.push(candidate);
+            if cycles.len() == target_rank {
+                break;
+            }
+        }
+    }
+    assert_eq!(
+        cycles.len(),
+        target_rank,
+        "Horton candidates must span the cycle space"
+    );
+    cycles
+}
+
+fn map_cycle(source: &Graph, edge_sources: &[EdgeId], cycle: &Cycle) -> Cycle {
+    let edges = cycle
+        .edges()
+        .iter()
+        .map(|edge| edge_sources[edge.index()])
+        .collect();
+    Cycle::normalized(source, cycle.nodes().to_vec(), edges)
+}
+
+fn map_subdivided_cycle(
+    source: &Graph,
+    subdivision: &SubdividedGraph,
+    edge_sources: &[EdgeId],
+    cycle: &Cycle,
+) -> Cycle {
+    let mut nodes = Vec::with_capacity(cycle.length() / 2);
+    let mut edges = Vec::with_capacity(cycle.length() / 2);
+    for &node in cycle.nodes() {
+        match subdivision.node_source(node) {
+            SubdivisionNodeSource::Node(node) => nodes.push(node),
+            SubdivisionNodeSource::Edge(edge) => edges.push(edge_sources[edge.index()]),
+        }
+    }
+    Cycle::normalized(source, nodes, edges)
+}
+
+fn compare_cycles(first: &Cycle, second: &Cycle) -> Ordering {
+    first
+        .length()
+        .cmp(&second.length())
+        .then_with(|| first.nodes().cmp(second.nodes()))
+        .then_with(|| first.edges().cmp(second.edges()))
 }
 
 #[cfg(test)]

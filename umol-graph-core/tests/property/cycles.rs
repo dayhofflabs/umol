@@ -13,9 +13,15 @@ use std::ops::ControlFlow;
 
 use proptest::prelude::*;
 use rstest::rstest;
-use umol_graph_core::{EdgeId, Graph, SimpleCycleEnumerationAlgorithm, SubdivisionNodeSource};
+use umol_graph_core::{
+    EdgeId, Graph, MinimumCycleBasisAlgorithm, SimpleCycleEnumerationAlgorithm,
+    SubdivisionNodeSource,
+};
 
-use self::exhaustive::{enumerate_cycles, relevant_cycles, unique_ring_families};
+use self::exhaustive::{
+    are_linearly_independent, cycle_space_rank, enumerate_cycles, minimum_cycle_bases,
+    relevant_cycles, unique_ring_families,
+};
 use super::corpus::simple_graphs;
 use super::strategy::multigraph;
 
@@ -121,6 +127,27 @@ proptest! {
         };
 
         prop_assert_eq!(edge_sets(&relabeled), edge_sets(&graph));
+    }
+
+    #[test]
+    fn test_graph_minimum_cycle_basis(graph in multigraph(5, 5)) {
+        let result = graph.minimum_cycle_basis(MinimumCycleBasisAlgorithm::Horton);
+        let cycles = result
+            .iter()
+            .map(|cycle| cycle.edges().to_vec())
+            .collect::<Vec<_>>();
+        let expected_rank = cycle_space_rank(&graph);
+        let expected_length = minimum_cycle_bases(&graph)
+            .first()
+            .expect("the exhaustive cycle set spans the cycle space")
+            .iter()
+            .map(Vec::len)
+            .sum::<usize>();
+
+        prop_assert_eq!(result.dimension(), expected_rank);
+        prop_assert!(are_linearly_independent(&cycles, graph.edge_count()));
+        prop_assert_eq!(cycles.len(), expected_rank);
+        prop_assert_eq!(result.total_length(), expected_length);
     }
 
     #[test]

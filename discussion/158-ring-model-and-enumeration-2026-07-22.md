@@ -1017,7 +1017,7 @@ references.
   edges, candidate reconstruction, and intersecting-path rejection. A bounded
   multigraph property verifies that the span of all enumerated simple cycles
   has rank `E - V + C`.
-- **S2b — Horton minimum cycle basis**
+- **S2b — Horton minimum cycle basis** **Done**
   (`umol-graph-core/src/algorithms/cycles.rs`,
   `src/algorithms/cycles/basis.rs`, `src/lib.rs`,
   `benches/algorithms.rs`): add `MinimumCycleBasisAlgorithm::Horton`,
@@ -1029,6 +1029,39 @@ references.
   independence, spanning of the cycle space, and minimal total length against
   the S0e exhaustive bases on small graphs. Add basis benchmarks over the S0
   corpus. **Additive API (green).** `[dep: S0a, S0b, S0c, S0e, S2a]`
+
+  `MinimumCycleBasisAlgorithm::Horton`, `MinimumCycleBasis`, and
+  `Graph::minimum_cycle_basis` are exported from graph-core. The result exposes
+  `dimension`, `total_length`, and `iter`; it uses source `NodeId` and `EdgeId`
+  values and makes no canonical-ordering claim. Horton constructs one
+  deterministic shortest-path tree per root, orders candidate cycles by source
+  length and identifiers, and greedily selects independent edge vectors until
+  the cycle-space rank is reached.
+
+  Self-loops are extracted as mandatory one-edge basis members. If the
+  remaining loopless graph has parallel edges, it is subdivided once, solved
+  as a simple graph, and mapped back to source identifiers. Reported lengths
+  are divided structurally by this mapping rather than retaining subdivision
+  edge counts. Exact tests cover forests, disconnected cycles, tied K4 bases,
+  loops, digons, and three parallel edges. The bounded multigraph property
+  compares dimension, independence, spanning, and total length with exhaustive
+  minimum bases; an extended 4,096-case run also passes.
+
+  Criterion group `minimum_cycle_basis/horton/*` covers the S0 corpus. A
+  10-sample verification run on 2026-07-23 measured:
+
+  | Case | Criterion time interval |
+  | --- | ---: |
+  | `path_6` | 574.19–575.96 ns |
+  | `hexagon` | 11.251–11.315 µs |
+  | `naphthalene` | 36.543–36.608 µs |
+  | `prismane` | 21.672–21.701 µs |
+  | `cubane` | 38.160–38.225 µs |
+  | `adamantane` | 62.441–62.552 µs |
+  | `dodecahedron` | 286.62–289.17 µs |
+  | `icosahedron` | 188.31–188.60 µs |
+  | `c60` | 3.2030–3.2084 ms |
+  | `c70` | 4.5588–4.5669 ms |
 - **S2c — compact Vismara/RCF analysis on simple graphs**
   (`umol-graph-core/src/algorithms/cycles/relevant.rs`): replace eager
   shortest-path expansion with retained shortest-path DAGs, Vismara cycle
