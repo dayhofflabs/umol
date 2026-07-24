@@ -1233,8 +1233,12 @@ references.
   separate public simple- and relevant-cycle algorithm fields. Add ordinary
   high-level defaults for relevant rings up to size 22 and the settled
   Read--Tarjan/Vismara implementations. Table tests assert exact construction,
-  defaults, equality, and the field selected for each `RingSetKind`; no
-  compatibility-validation error is introduced. **Additive API (green).**
+  defaults, and equality; no compatibility-validation error is introduced.
+  **Done.** `RingModel` and
+  `RingConfig` are public AST-layer value types with explicit public fields;
+  their defaults select Relevant/22 and Read--Tarjan/Vismara respectively.
+  Dispatch remains in S3c because the two algorithm fields have different
+  selector types. **Additive API (green).**
   `[dep: S1b, S2d, S3a]`
 - **S3c — infallible ring construction and public entry point**
   (`umol-ast/src/ast/{ring,molecule,view/graph,view/ring}.rs`, all workspace
@@ -1246,7 +1250,8 @@ references.
   `RingViews` infallible. Split `GraphView` cycle enumeration into typed simple
   and relevant methods. Migrate every Rust caller in the same subitem using the
   former effective Relevant/Vismara behavior. Exact tests cover both kinds,
-  bounds, bond identity, absence of one- and two-atom chemical rings, and
+  selection of the corresponding `RingConfig` field, bounds, bond identity,
+  absence of one- and two-atom chemical rings, and
   structurally invalid but non-panicking views; property tests preserve ring
   reindexing and view/index consistency. **Breaking ring API and complete Rust
   caller migration (red→green).** `[dep: S1b, S2d, S3b]`

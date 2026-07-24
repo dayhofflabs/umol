@@ -2,7 +2,10 @@
 
 use std::collections::{BTreeMap, HashSet, VecDeque};
 
-use umol_graph_core::{CycleEnumerationAlgorithm, Graph, NodeId};
+use umol_graph_core::{
+    CycleEnumerationAlgorithm, Graph, NodeId, RelevantCycleEnumerationAlgorithm,
+    SimpleCycleEnumerationAlgorithm,
+};
 
 use super::id::{AtomId, BondId};
 use super::view::RingView;
@@ -53,13 +56,50 @@ pub enum RingRelation {
     Noncontiguous,
 }
 
-/// Selection of which ring set to enumerate: `Simple` for the minimum cycle
-/// basis, `Relevant` for the Vismara relevant-cycle set (the union of all
-/// minimum cycle bases — unique and ordering-independent).
+/// Selection of which ring set to enumerate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RingSetKind {
+    /// Every elementary cycle, up to the configured maximum ring size.
     Simple,
+    /// The union of all minimum cycle bases, up to the configured maximum ring
+    /// size.
     Relevant,
+}
+
+/// Semantic definition of the rings returned for a molecule.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RingModel {
+    /// The cycle-set semantics used to define rings.
+    pub kind: RingSetKind,
+    /// Largest number of bonds admitted in a ring.
+    pub max_ring_size: usize,
+}
+
+impl Default for RingModel {
+    fn default() -> Self {
+        Self {
+            kind: RingSetKind::Relevant,
+            max_ring_size: 22,
+        }
+    }
+}
+
+/// Algorithms used to compute each supported [`RingSetKind`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RingConfig {
+    /// Algorithm used when [`RingModel::kind`] is [`RingSetKind::Simple`].
+    pub simple_cycle_algorithm: SimpleCycleEnumerationAlgorithm,
+    /// Algorithm used when [`RingModel::kind`] is [`RingSetKind::Relevant`].
+    pub relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
+}
+
+impl Default for RingConfig {
+    fn default() -> Self {
+        Self {
+            simple_cycle_algorithm: SimpleCycleEnumerationAlgorithm::ReadTarjan,
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+        }
+    }
 }
 
 /// Collection of rings enumerated from a parent molecule, with atom/bond →
@@ -624,6 +664,70 @@ mod tests {
     #[case::second_shorter(vec![1, 2, 3, 4], vec![2, 3], vec![2, 3])]
     fn test_intersection(#[case] a: Vec<u32>, #[case] b: Vec<u32>, #[case] expected: Vec<u32>) {
         assert_eq!(intersection(&a, &b), expected);
+    }
+
+    #[rstest]
+    fn test_ring_model_default() {
+        assert_eq!(
+            RingModel::default(),
+            RingModel {
+                kind: RingSetKind::Relevant,
+                max_ring_size: 22,
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::equal(
+        RingModel {
+            kind: RingSetKind::Simple,
+            max_ring_size: 8,
+        },
+        RingModel {
+            kind: RingSetKind::Simple,
+            max_ring_size: 8,
+        },
+        true,
+    )]
+    #[case::different_kind(
+        RingModel {
+            kind: RingSetKind::Simple,
+            max_ring_size: 8,
+        },
+        RingModel {
+            kind: RingSetKind::Relevant,
+            max_ring_size: 8,
+        },
+        false,
+    )]
+    #[case::different_max_ring_size(
+        RingModel {
+            kind: RingSetKind::Relevant,
+            max_ring_size: 8,
+        },
+        RingModel {
+            kind: RingSetKind::Relevant,
+            max_ring_size: 9,
+        },
+        false,
+    )]
+    fn test_ring_model_eq(
+        #[case] left: RingModel,
+        #[case] right: RingModel,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(left == right, expected);
+    }
+
+    #[rstest]
+    fn test_ring_config_default() {
+        assert_eq!(
+            RingConfig::default(),
+            RingConfig {
+                simple_cycle_algorithm: SimpleCycleEnumerationAlgorithm::ReadTarjan,
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            }
+        );
     }
 
     #[rstest]

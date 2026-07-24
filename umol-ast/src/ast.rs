@@ -98,7 +98,9 @@ pub use reaction::ReactionAst;
 pub use reaction_derivation::ReactionDerivation;
 pub use reaction_span::ReactionSpanAst;
 pub use remap::{IdCompaction, IdRemapping, UndoCompaction};
-pub use ring::{RingConnection, RingGraph, RingId, RingRelation, RingSet, RingSetKind};
+pub use ring::{
+    RingConfig, RingConnection, RingGraph, RingId, RingModel, RingRelation, RingSet, RingSetKind,
+};
 pub use spin::{SpinStateAst, SpinStateUpdate};
 pub use stereo::{
     CisTransStereoAst, StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate,
