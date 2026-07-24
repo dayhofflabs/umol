@@ -1272,7 +1272,17 @@ references.
   parameter to `RingMembershipAst` or `RingScope`. Tests retain exact
   boolean/count/size behavior and make the fixed Relevant choice explicit.
   The boolean-marker/substructure redesign remains outside this round.
-  **Internal migration with unchanged public behavior (green).** `[dep: S3c]`
+  **Done.** Substructure host-target derivation now materializes only the atom
+  and localized-bond ring constraints requested anywhere in the pattern,
+  using an explicit Relevant projection through size 22 and the default
+  relevant-cycle implementation. K4 matching cases distinguish these counts
+  from all-simple-cycle counts for both atoms and bonds. Ring constraint and
+  view documentation records the fixed projection, and generated ring
+  properties cover exact membership booleans plus total and per-size counts.
+  Dative-bond ring membership remains an asserted constraint: deriving it
+  requires the separately deferred definition of ring topology containing
+  dative overlays rather than the localized graph used here.
+  **Internal migration with unchanged public API (green).** `[dep: S3c]`
 
 ### S4 — Rust workflow configuration
 

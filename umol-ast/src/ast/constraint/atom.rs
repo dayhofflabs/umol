@@ -25,9 +25,12 @@ pub enum AtomConstraintAst {
     Degree(ValueAst),
     TotalDegree(ValueAst),
     TotalValence(ValueAst),
+    /// Incident bonds belonging to the fixed Relevant ring projection.
     RingDegree(ValueAst),
+    /// Sum of incident bond orders in the fixed Relevant ring projection.
     RingValence(ValueAst),
     TotalHydrogens(ValueAst),
+    /// Ring count in the fixed Relevant ring projection, optionally restricted by size.
     RingMembership(RingMembershipAst),
 }
 

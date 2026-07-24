@@ -430,6 +430,19 @@ count           ::= '*' | '+' | '!' | value-expr
 
 It lowers to **`RingMembershipAst`** (a **`count`** value plus a **`RingScope`** of **`All`** or **`Size(n)`**); its structured EDN form is **`ring-membership-form`** (**§7.7**). The **`#R`** predicate **MAY** appear **multiple** times on one entity — one per ring scope (total and/or per-size).
 
+**Ring enumeration parameters.** Derived ring predicates use one fixed projection; their syntax does not carry a ring-set selector or an enumeration configuration.
+
+| Parameter | Value for derived DSL predicates |
+|-----------|----------------------------------|
+| **`RingModel.kind`** | **`RingSetKind::Relevant`** — the union of all minimum cycle bases |
+| **`RingModel.max_ring_size`** | **22** bonds |
+| **`RingConfig.relevant_cycle_algorithm`** | **`RelevantCycleEnumerationAlgorithm::Vismara`** by default |
+| **`RingConfig.simple_cycle_algorithm`** | unused for this projection |
+
+The model fields define the observable projection: **`All`** counts relevant rings of at most 22 bonds, and **`Size(n)`** counts rings of exactly **n** bonds within that projection (therefore zero when **n > 22**). The algorithm field is operational and MUST NOT change the resulting ring set. The general **`MoleculeAst::rings`** API accepts an explicit **`RingModel`** and **`RingConfig`**, but those parameters are not part of molecule DSL syntax and do not alter the meaning of atom **`#R`**, atom **`#x`**, atom **`#y`**, or localized-bond **`#R`**.
+
+This projection is defined over the localized atom-bond graph. Dative-bond **`#R`** remains an asserted **`RingMembershipAst`** value: deriving it requires a ring model that includes dative overlays, whose semantics are not defined by this specification.
+
 ### 5.6 Electron counts
 
 The **`electron-counts`** leaf is the mandatory leading specification of the aromatic-string (**§7.8**) and multicenter-string (**§7.9**) — the **per-atom** electron contributions, the counterpart of the bond-string's leading order.
@@ -1073,7 +1086,7 @@ dative-predicate ::= '#' tag payload
 |-----|-----------------------------------|----------|
 | (leading) | **Order**: number of donated electron pairs (**`u8`**, **§7.2**) | inherent field |
 | **`#a`** | **Aromatic**: boolean constraint — the dative bond **is** (**`#a`** / **`#a+`**) / **is not** (**`#a!`**) part of an aromatic system; **`#a*`** = **`undetermined`**. | boolean constraint |
-| **`#R`** | **Ring membership**: **`#R<count>`** (total) / **`#R(<size>)<count>`** (per size); **special** **`#R*`** / **`#R+`** / **`#R!`** (**§7.3**). | derived |
+| **`#R`** | **Ring membership**: **`#R<count>`** (total) / **`#R(<size>)<count>`** (per size); **special** **`#R*`** / **`#R+`** / **`#R!`** (**§7.3**). | asserted constraint; topology derivation deferred |
 
 **Direction.** Dative bonds are intrinsically directional. Direction is carried entirely by the ordered **`:donors`** / **`:acceptor`** assignment on the containing **`dative-bond-entry`** (**§4**); the dative-string itself has **no** direction token. Under pattern matching (**§6**), the embedding MUST map pattern **`:donors`** atoms to target donors and the pattern **`:acceptor`** to the target acceptor — a donor/acceptor swap across the embedding rejects the match.
 

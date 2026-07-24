@@ -127,8 +127,9 @@ impl<'a> RingAtomView<'a> {
         self.rings.iter().filter(move |v| v.atoms().contains(&id))
     }
 
-    /// Count of rings containing this atom matching `scope` (`All` = any,
-    /// `Size(s)` = size `s`). Always `Lit`.
+    /// Count of rings in this view containing the atom and matching `scope` (`All` = any,
+    /// `Size(s)` = size `s`). Constraint matching constructs the view with the fixed Relevant
+    /// projection through size 22. Always `Lit`.
     pub fn ring_membership(&self, scope: RingScope) -> ValueAst {
         let count = match scope {
             RingScope::All => self.rings().count(),
@@ -192,8 +193,9 @@ impl<'a> RingBondView<'a> {
         self.rings.iter().filter(move |v| v.bonds().contains(&id))
     }
 
-    /// Count of rings containing this bond matching `scope` (`All` = any,
-    /// `Size(s)` = size `s`). Always `Lit`.
+    /// Count of rings in this view containing the bond and matching `scope` (`All` = any,
+    /// `Size(s)` = size `s`). Constraint matching constructs the view with the fixed Relevant
+    /// projection through size 22. Always `Lit`.
     pub fn ring_membership(&self, scope: RingScope) -> ValueAst {
         let count = match scope {
             RingScope::All => self.rings().count(),

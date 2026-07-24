@@ -1,16 +1,23 @@
 //! Ring-membership scope and single-entry fact, shared by atom/bond/dative constraints.
+//!
+//! Atom and localized-bond values derived from molecule topology use the Relevant ring projection
+//! through size 22. `RingScope` selects a count; it does not select ring-set semantics.
 
 use super::super::error::{Contradiction, NoJoin};
 use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
 
 /// `All` = total ring count; `Size(s)` = count of size-`s` rings. `All` sorts first.
+///
+/// For derived atom and localized-bond values, the count is taken within the fixed Relevant ring
+/// projection through size 22.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RingScope {
     All,
     Size(u8),
 }
 
+/// A ring count under the semantics of its containing entity constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RingMembershipAst {
     pub scope: RingScope,

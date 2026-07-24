@@ -17,6 +17,7 @@ use super::super::value::ValueAst;
 pub enum BondConstraintAst {
     Aromatic(BooleanAst),
     CisTransStereo(CisTransStereoAst),
+    /// Ring count in the fixed Relevant ring projection, optionally restricted by size.
     RingMembership(RingMembershipAst),
 }
 

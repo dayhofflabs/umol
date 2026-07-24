@@ -16,6 +16,8 @@ use super::super::value::ValueAst;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DativeBondConstraintAst {
     Aromatic(BooleanAst),
+    /// Asserted ring count, optionally restricted by size. Derivation from topology requires a
+    /// ring model that includes dative overlays rather than the localized atom-bond projection.
     RingMembership(RingMembershipAst),
 }
 

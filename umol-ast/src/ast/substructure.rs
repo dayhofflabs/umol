@@ -15,6 +15,7 @@ use umol_graph_core::{
 
 use super::atom::AtomAst;
 use super::bond::BondAst;
+use super::constraint::{AtomConstraintAst, BondConstraintAst, RingScope};
 use super::correspondence::{
     induced_aromatic_systems, induced_bonds, induced_dative_bonds, induced_multicenter_bonds,
     induced_noncovalent_bonds, map_atom, map_ligands, MoleculeCorrespondence,
@@ -23,6 +24,7 @@ use super::entity::Entity;
 use super::id::{AtomId, BondId};
 use super::incidence::IncidenceNodeSelection;
 use super::molecule::MoleculeAst;
+use super::ring::{RingConfig, RingModel, RingSetKind};
 use super::stereo::coset_matches;
 use super::traits::Lattice;
 
@@ -59,22 +61,83 @@ impl MoleculeAst {
         }
     }
 
-    /// Host atom/bond match-targets: each stored entity with its derived
-    /// topological constraints folded in (last-wins) — but only for the entity kind
-    /// the *pattern* constrains. An unconstrained pattern never consults the host's
-    /// derived constraints (empty pattern constraints match any target), so deriving
-    /// them is wasted; element/bond patterns over SMILES-raised hosts skip it.
+    /// Host atom/bond match-targets: each stored entity with the topological constraints requested
+    /// anywhere in the pattern folded in (last-wins). Ring constraints use the fixed Relevant
+    /// projection through size 22. An unconstrained pattern never consults derived constraints, so
+    /// element/bond patterns over SMILES-raised hosts skip the work.
     fn host_match_targets<'h>(
         &self,
         host: &'h MoleculeAst,
     ) -> (Vec<Cow<'h, AtomAst>>, Vec<Cow<'h, BondAst>>) {
         let derive_atoms = self.atoms().iter().any(|a| !a.ast.constraints.is_empty());
+        let mut atom_ring_scopes = Vec::new();
+        let mut derive_ring_degree = false;
+        let mut derive_ring_valence = false;
+        for constraint in self
+            .atoms()
+            .iter()
+            .flat_map(|atom| atom.constraints().iter())
+        {
+            match constraint {
+                AtomConstraintAst::RingDegree(_) => derive_ring_degree = true,
+                AtomConstraintAst::RingValence(_) => derive_ring_valence = true,
+                AtomConstraintAst::RingMembership(membership) => {
+                    atom_ring_scopes.push(membership.scope);
+                }
+                _ => {}
+            }
+        }
+        atom_ring_scopes.sort_unstable();
+        atom_ring_scopes.dedup();
+
+        let mut bond_ring_scopes: Vec<RingScope> = self
+            .bonds()
+            .iter()
+            .flat_map(|bond| bond.constraints().iter())
+            .filter_map(|constraint| match constraint {
+                BondConstraintAst::RingMembership(membership) => Some(membership.scope),
+                _ => None,
+            })
+            .collect();
+        bond_ring_scopes.sort_unstable();
+        bond_ring_scopes.dedup();
+
+        let derive_rings = derive_ring_degree
+            || derive_ring_valence
+            || !atom_ring_scopes.is_empty()
+            || !bond_ring_scopes.is_empty();
+        let rings = derive_rings.then(|| {
+            host.rings(
+                RingModel {
+                    kind: RingSetKind::Relevant,
+                    max_ring_size: 22,
+                },
+                RingConfig::default(),
+            )
+        });
+
         let host_atoms = host
             .atoms()
             .iter()
             .map(|a| {
                 if derive_atoms {
-                    Cow::Owned(a.ast.clone().with_constraints(a.derive_constraints(true)))
+                    let mut constraints = a.derive_constraints(true);
+                    if let Some(rings) = rings.as_ref() {
+                        let ring = rings.atom(a.id);
+                        if derive_ring_degree {
+                            constraints.set(AtomConstraintAst::ring_degree(ring.ring_degree()));
+                        }
+                        if derive_ring_valence {
+                            constraints.set(AtomConstraintAst::ring_valence(ring.ring_valence()));
+                        }
+                        for &scope in &atom_ring_scopes {
+                            constraints.set(AtomConstraintAst::ring_membership(
+                                scope,
+                                ring.ring_membership(scope),
+                            ));
+                        }
+                    }
+                    Cow::Owned(a.ast.clone().with_constraints(constraints))
                 } else {
                     Cow::Borrowed(a.ast)
                 }
@@ -86,7 +149,17 @@ impl MoleculeAst {
             .iter()
             .map(|b| {
                 if derive_bonds {
-                    Cow::Owned(b.ast.clone().with_constraints(b.derive_constraints(true)))
+                    let mut constraints = b.derive_constraints(true);
+                    if let Some(rings) = rings.as_ref() {
+                        let ring = rings.bond(b.id);
+                        for &scope in &bond_ring_scopes {
+                            constraints.set(BondConstraintAst::ring_membership(
+                                scope,
+                                ring.ring_membership(scope),
+                            ));
+                        }
+                    }
+                    Cow::Owned(b.ast.clone().with_constraints(constraints))
                 } else {
                     Cow::Borrowed(b.ast)
                 }
@@ -394,6 +467,54 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
         vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
+    )]
+    #[case::atom_relevant_ring_membership(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#R3"] :bonds []}"#),
+        vec![
+            vec![AtomId(0)],
+            vec![AtomId(1)],
+            vec![AtomId(2)],
+            vec![AtomId(3)],
+        ]
+    )]
+    #[case::atom_simple_ring_membership(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#R6"] :bonds []}"#),
+        vec![]
+    )]
+    #[case::atom_ring_degree_and_valence(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#x3#y3"] :bonds []}"#),
+        vec![
+            vec![AtomId(0)],
+            vec![AtomId(1)],
+            vec![AtomId(2)],
+            vec![AtomId(3)],
+        ]
+    )]
+    #[case::bond_relevant_ring_membership(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#R2"]]}"#),
+        vec![
+            vec![AtomId(0), AtomId(1)],
+            vec![AtomId(0), AtomId(2)],
+            vec![AtomId(0), AtomId(3)],
+            vec![AtomId(1), AtomId(0)],
+            vec![AtomId(1), AtomId(2)],
+            vec![AtomId(1), AtomId(3)],
+            vec![AtomId(2), AtomId(0)],
+            vec![AtomId(2), AtomId(1)],
+            vec![AtomId(2), AtomId(3)],
+            vec![AtomId(3), AtomId(0)],
+            vec![AtomId(3), AtomId(1)],
+            vec![AtomId(3), AtomId(2)],
+        ]
+    )]
+    #[case::bond_simple_ring_membership(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#R4"]]}"#),
+        vec![]
     )]
     #[case::noncovalent(
         mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]] :noncovalent-bonds [{:atoms [0 2] :type "Hbd"}]}"#),

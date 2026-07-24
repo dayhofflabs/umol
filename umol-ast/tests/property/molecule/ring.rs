@@ -2,7 +2,7 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_ast::ast::{AtomId, RingConfig, RingModel, RingSetKind};
+use umol_ast::ast::{AtomId, RingConfig, RingModel, RingSetKind, ValueAst};
 
 use crate::strategies::*;
 
@@ -48,6 +48,38 @@ proptest! {
             }
             for &bond in ring.bonds() {
                 prop_assert!(rings.bond(bond).is_in_ring());
+            }
+        }
+        for atom in ast.atoms().iter() {
+            let view = rings.atom(atom.id);
+            let containing: Vec<_> = view.rings().collect();
+            prop_assert_eq!(view.is_in_ring(), !containing.is_empty());
+            prop_assert_eq!(view.ring_count(), ValueAst::Lit(containing.len() as i64));
+            for size in 0..=max_ring_size.min(u8::MAX as usize) {
+                let expected = containing
+                    .iter()
+                    .filter(|ring| ring.len() == size)
+                    .count();
+                prop_assert_eq!(
+                    view.ring_size_count(size as u8),
+                    ValueAst::Lit(expected as i64)
+                );
+            }
+        }
+        for bond in ast.bonds().iter() {
+            let view = rings.bond(bond.id);
+            let containing: Vec<_> = view.rings().collect();
+            prop_assert_eq!(view.is_in_ring(), !containing.is_empty());
+            prop_assert_eq!(view.ring_count(), ValueAst::Lit(containing.len() as i64));
+            for size in 0..=max_ring_size.min(u8::MAX as usize) {
+                let expected = containing
+                    .iter()
+                    .filter(|ring| ring.len() == size)
+                    .count();
+                prop_assert_eq!(
+                    view.ring_size_count(size as u8),
+                    ValueAst::Lit(expected as i64)
+                );
             }
         }
     }
