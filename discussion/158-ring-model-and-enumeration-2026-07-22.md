@@ -1145,7 +1145,7 @@ references.
   definition and prove visitor/collector agreement. The exhaustive comparison
   passes 4,096 generated cases; the full `umol-graph-core` test suite and
   all-targets Clippy gate pass.
-- **S2e — Unique Ring Family decomposition**
+- **S2e — Unique Ring Family decomposition** **Done**
   (`umol-graph-core/src/algorithms/cycles.rs`,
   `src/algorithms/cycles/urf.rs`, `src/lib.rs`,
   `benches/algorithms.rs`): add `UniqueRingFamilyAlgorithm::Kolodzik`,
@@ -1160,6 +1160,48 @@ references.
   preserves the decomposition. Add decomposition and lazy emission benchmarks.
   **Additive API (green).**
   `[dep: S0a, S0b, S0c, S0e, S2b, S2c, S2d]`
+
+  `Graph::unique_ring_families` now returns the polynomial
+  `UniqueRingFamilies` decomposition selected by
+  `UniqueRingFamilyAlgorithm::Kolodzik`. Each `UniqueRingFamily` exposes its
+  source-node and source-edge unions, common source-edge weight, and exact
+  `RelevantCycleCount`. The collection provides stable family identifiers,
+  descriptor iteration and lookup, reverse node/edge membership, and
+  `visit_relevant_cycles` for explicit lazy expansion with `ControlFlow`
+  termination.
+
+  The implementation groups retained relevant-cycle families by the defining
+  equal-weight relation: their prototypes have equal remainders modulo the
+  strictly smaller cycle space and their edge unions intersect. Shortest-path
+  DAGs provide polynomial node/edge unions and arbitrary-precision path-product
+  counts without materializing the cycles. Self-loops become one-cycle
+  families. Parallel-edge inputs use one subdivision and all public
+  descriptors and emitted cycles are projected back to source identifiers.
+
+  Exact tests cover independent, fused, bridge-connected, symmetric,
+  self-loop, and parallel-edge systems, including a family representing
+  multiple lazily emitted cycles and visitor termination. Bounded multigraph
+  properties compare full partitions and counts with the S0e exhaustive
+  definition, verify reverse membership, and preserve the full decomposition
+  under node relabeling. The extended property set passes 4,096 generated
+  cases; the full `umol-graph-core` suite and all-targets Clippy gate pass.
+
+  Criterion groups `unique_ring_families/decomposition/*` and
+  `unique_ring_families/lazy_emission/*` cover the S0 corpus. A short
+  ten-sample verification run on 2026-07-23 measured:
+
+  | Case | Decomposition | Full lazy emission |
+  | --- | ---: | ---: |
+  | `path_6` | 825.61–832.11 ns | empty |
+  | `hexagon` | 6.7556–6.8082 µs | 0.77046–1.6456 µs |
+  | `naphthalene` | 13.380–13.460 µs | 1.5600–1.5734 µs |
+  | `prismane` | 14.327–14.546 µs | 2.9883–3.0111 µs |
+  | `cubane` | 24.162–24.393 µs | 3.6549–3.6848 µs |
+  | `adamantane` | 31.974–32.237 µs | 4.6203–4.6645 µs |
+  | `dodecahedron` | 106.76–107.90 µs | 8.6328–8.7013 µs |
+  | `icosahedron` | 144.29–144.93 µs | 11.853–14.791 µs |
+  | `c60` | 690.98–695.02 µs | 24.284–24.492 µs |
+  | `c70` | 1.1666–1.1812 ms | 28.098–28.412 µs |
 - **S2f — cycle-family differential validation**
   (`umol-graph-core/tests/data/cycles/`): run the
   completed MCB, relevant-cycle, and URF operations over the bounded S0f corpus.

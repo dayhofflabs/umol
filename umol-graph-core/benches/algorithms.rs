@@ -1,4 +1,5 @@
 use std::iter;
+use std::ops::ControlFlow;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
@@ -8,7 +9,8 @@ use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
     CycleEnumerationAlgorithm, EdgeId, Graph, MaximumIndependentSetAlgorithm,
     MaximumMatchingAlgorithm, MinimumCycleBasisAlgorithm, NodeId, ShortestCycleAlgorithm,
-    SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+    SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm,
+    ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 mod matching_graphs {
@@ -292,6 +294,46 @@ fn minimum_cycle_basis(c: &mut Criterion) {
         });
     }
     group.finish();
+}
+
+fn unique_ring_families(c: &mut Criterion) {
+    let mut decomposition = c.benchmark_group("unique_ring_families/decomposition");
+    for (name, graph) in cycle_corpus() {
+        decomposition.bench_with_input(BenchmarkId::new("kolodzik", name), &graph, |b, graph| {
+            b.iter(|| graph.unique_ring_families(UniqueRingFamilyAlgorithm::Kolodzik));
+        });
+    }
+    decomposition.finish();
+
+    let families = cycle_corpus()
+        .into_iter()
+        .map(|(name, graph)| {
+            (
+                name,
+                graph.unique_ring_families(UniqueRingFamilyAlgorithm::Kolodzik),
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut emission = c.benchmark_group("unique_ring_families/lazy_emission");
+    for (name, families) in &families {
+        emission.bench_with_input(
+            BenchmarkId::new("kolodzik", name),
+            families,
+            |b, families| {
+                b.iter(|| {
+                    let mut count = 0;
+                    for id in families.ids() {
+                        let _: ControlFlow<()> = families.visit_relevant_cycles(id, |_| {
+                            count += 1;
+                            ControlFlow::Continue(())
+                        });
+                    }
+                    count
+                });
+            },
+        );
+    }
+    emission.finish();
 }
 
 fn shortest_cycle(c: &mut Criterion) {
@@ -963,6 +1005,7 @@ criterion_group!(
     relevant_cycle_enumeration,
     simple_cycle_enumeration,
     minimum_cycle_basis,
+    unique_ring_families,
     shortest_cycle,
     connected_components,
     biconnected_components,

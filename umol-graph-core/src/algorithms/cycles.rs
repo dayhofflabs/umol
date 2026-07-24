@@ -4,11 +4,14 @@ use std::collections::{HashSet, VecDeque};
 use std::ops::ControlFlow;
 use std::slice::Iter;
 
+use num_bigint::BigUint;
+
 use crate::graph::{EdgeId, Graph, NodeId, SubdividedGraph, SubdivisionNodeSource};
 
 mod basis;
 mod relevant;
 mod simple;
+mod urf;
 
 use self::basis::minimum_cycle_basis_horton;
 
@@ -157,6 +160,113 @@ impl MinimumCycleBasis {
     }
 }
 
+/// Exact number of relevant cycles represented by a Unique Ring Family.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RelevantCycleCount(pub BigUint);
+
+/// Index of a family within a [`UniqueRingFamilies`] result.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct UniqueRingFamilyId(pub u32);
+
+impl UniqueRingFamilyId {
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+/// One equivalence class in a Unique Ring Family decomposition.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UniqueRingFamily {
+    nodes: Vec<NodeId>,
+    edges: Vec<EdgeId>,
+    weight: usize,
+    relevant_cycle_count: RelevantCycleCount,
+}
+
+impl UniqueRingFamily {
+    /// Source graph nodes occurring in at least one cycle of the family.
+    pub fn nodes(&self) -> &[NodeId] {
+        &self.nodes
+    }
+
+    /// Source graph edges occurring in at least one cycle of the family.
+    pub fn edges(&self) -> &[EdgeId] {
+        &self.edges
+    }
+
+    /// Common cycle length in source-edge units.
+    pub fn weight(&self) -> usize {
+        self.weight
+    }
+
+    /// Exact number of relevant cycles represented by the family.
+    pub fn relevant_cycle_count(&self) -> &RelevantCycleCount {
+        &self.relevant_cycle_count
+    }
+}
+
+/// Polynomial representation of the graph's Unique Ring Families.
+///
+/// Relevant cycles are retained as compact family state and are expanded only
+/// by [`UniqueRingFamilies::visit_relevant_cycles`].
+#[derive(Debug)]
+pub struct UniqueRingFamilies {
+    families: Vec<UniqueRingFamily>,
+    node_to_families: Vec<Vec<UniqueRingFamilyId>>,
+    edge_to_families: Vec<Vec<UniqueRingFamilyId>>,
+    decomposition: urf::UrfDecomposition,
+}
+
+impl UniqueRingFamilies {
+    /// Number of Unique Ring Families.
+    pub fn count(&self) -> usize {
+        self.families.len()
+    }
+
+    /// Iterate over all valid family identifiers.
+    pub fn ids(&self) -> impl Iterator<Item = UniqueRingFamilyId> {
+        (0..self.families.len()).map(|index| UniqueRingFamilyId(index as u32))
+    }
+
+    /// Iterate over the family descriptors.
+    pub fn iter(&self) -> Iter<'_, UniqueRingFamily> {
+        self.families.iter()
+    }
+
+    /// Return the family identified by `id`.
+    pub fn get(&self, id: UniqueRingFamilyId) -> Option<&UniqueRingFamily> {
+        self.families.get(id.index())
+    }
+
+    /// Return the families containing `node`.
+    pub fn families_containing_node(&self, node: NodeId) -> &[UniqueRingFamilyId] {
+        self.node_to_families
+            .get(node.index())
+            .map_or(&[], Vec::as_slice)
+    }
+
+    /// Return the families containing `edge`.
+    pub fn families_containing_edge(&self, edge: EdgeId) -> &[UniqueRingFamilyId] {
+        self.edge_to_families
+            .get(edge.index())
+            .map_or(&[], Vec::as_slice)
+    }
+
+    /// Visit the relevant cycles in one family until traversal completes or
+    /// the visitor returns [`ControlFlow::Break`].
+    ///
+    /// # Panics
+    ///
+    /// Panics when `family` is not a valid identifier in this result.
+    pub fn visit_relevant_cycles<B>(
+        &self,
+        family: UniqueRingFamilyId,
+        visitor: impl FnMut(Cycle) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
+        self.decomposition.visit(family, visitor)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShortestCycleAlgorithm {
     Bfs,
@@ -176,6 +286,12 @@ pub enum RelevantCycleEnumerationAlgorithm {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MinimumCycleBasisAlgorithm {
     Horton,
+}
+
+/// Algorithm used to decompose a graph into Unique Ring Families.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UniqueRingFamilyAlgorithm {
+    Kolodzik,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -286,6 +402,13 @@ impl Graph {
         }
     }
 
+    /// Decompose the graph into Unique Ring Families.
+    pub fn unique_ring_families(&self, alg: UniqueRingFamilyAlgorithm) -> UniqueRingFamilies {
+        match alg {
+            UniqueRingFamilyAlgorithm::Kolodzik => urf::unique_ring_families_kolodzik(self),
+        }
+    }
+
     pub fn enumerate_cycles(
         &self,
         max_cycle_size: usize,
@@ -355,16 +478,20 @@ mod tests {
     use std::collections::HashSet;
     use std::ops::ControlFlow;
 
+    use num_bigint::BigUint;
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::Cycle;
     use super::CycleEnumerationAlgorithm::Vismara as LegacyVismara;
     use super::MinimumCycleBasisAlgorithm::Horton;
     use super::RelevantCycleEnumerationAlgorithm::Vismara;
     use super::ShortestCycleAlgorithm::Bfs;
     use super::SimpleCycleEnumerationAlgorithm::ReadTarjan;
+    use super::UniqueRingFamilyAlgorithm::Kolodzik;
+    use super::{Cycle, UniqueRingFamilyId};
     use crate::graph::{EdgeId, Graph, NodeId};
+
+    type ExpectedUniqueRingFamily = (Vec<NodeId>, Vec<EdgeId>, usize, u64, Vec<Cycle>);
 
     #[rstest]
     #[case::self_loop(
@@ -1011,6 +1138,254 @@ mod tests {
         assert_eq!(basis.iter().cloned().collect::<Vec<_>>(), expected);
         assert_eq!(basis.dimension(), expected.len());
         assert_eq!(basis.total_length(), total_length);
+    }
+
+    #[rstest]
+    #[case::independent(
+        Graph::new(
+            6,
+            &[[0, 1], [1, 2], [0, 2], [3, 4], [4, 5], [3, 5]],
+        ),
+        vec![
+            (
+                vec![NodeId(0), NodeId(1), NodeId(2)],
+                vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+                3,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+                    edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+                }],
+            ),
+            (
+                vec![NodeId(3), NodeId(4), NodeId(5)],
+                vec![EdgeId(3), EdgeId(4), EdgeId(5)],
+                3,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(3), NodeId(4), NodeId(5)],
+                    edges: vec![EdgeId(3), EdgeId(4), EdgeId(5)],
+                }],
+            ),
+        ],
+    )]
+    #[case::fused(
+        Graph::new(
+            4,
+            &[[0, 1], [1, 2], [0, 2], [1, 3], [2, 3]],
+        ),
+        vec![
+            (
+                vec![NodeId(0), NodeId(1), NodeId(2)],
+                vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+                3,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+                    edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+                }],
+            ),
+            (
+                vec![NodeId(1), NodeId(2), NodeId(3)],
+                vec![EdgeId(1), EdgeId(3), EdgeId(4)],
+                3,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(1), NodeId(2), NodeId(3)],
+                    edges: vec![EdgeId(1), EdgeId(4), EdgeId(3)],
+                }],
+            ),
+        ],
+    )]
+    #[case::bridged(
+        Graph::new(
+            6,
+            &[
+                [0, 1], [1, 2], [0, 2],
+                [3, 4], [4, 5], [3, 5],
+                [2, 3],
+            ],
+        ),
+        vec![
+            (
+                vec![NodeId(0), NodeId(1), NodeId(2)],
+                vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+                3,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+                    edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+                }],
+            ),
+            (
+                vec![NodeId(3), NodeId(4), NodeId(5)],
+                vec![EdgeId(3), EdgeId(4), EdgeId(5)],
+                3,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(3), NodeId(4), NodeId(5)],
+                    edges: vec![EdgeId(3), EdgeId(4), EdgeId(5)],
+                }],
+            ),
+        ],
+    )]
+    #[case::symmetric(
+        Graph::new(
+            6,
+            &[[0, 1], [1, 4], [0, 2], [2, 4], [0, 3], [3, 5], [4, 5]],
+        ),
+        vec![
+            (
+                vec![NodeId(0), NodeId(1), NodeId(2), NodeId(4)],
+                vec![EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)],
+                4,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(0), NodeId(1), NodeId(4), NodeId(2)],
+                    edges: vec![EdgeId(0), EdgeId(1), EdgeId(3), EdgeId(2)],
+                }],
+            ),
+            (
+                vec![
+                    NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4), NodeId(5),
+                ],
+                vec![
+                    EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3), EdgeId(4), EdgeId(5),
+                    EdgeId(6),
+                ],
+                5,
+                2,
+                vec![
+                    Cycle {
+                        nodes: vec![
+                            NodeId(0), NodeId(1), NodeId(4), NodeId(5), NodeId(3),
+                        ],
+                        edges: vec![
+                            EdgeId(0), EdgeId(1), EdgeId(6), EdgeId(5), EdgeId(4),
+                        ],
+                    },
+                    Cycle {
+                        nodes: vec![
+                            NodeId(0), NodeId(2), NodeId(4), NodeId(5), NodeId(3),
+                        ],
+                        edges: vec![
+                            EdgeId(2), EdgeId(3), EdgeId(6), EdgeId(5), EdgeId(4),
+                        ],
+                    },
+                ],
+            ),
+        ],
+    )]
+    #[case::loops(
+        Graph::new(2, &[[0, 0], [1, 1]]),
+        vec![
+            (
+                vec![NodeId(0)],
+                vec![EdgeId(0)],
+                1,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(0)],
+                    edges: vec![EdgeId(0)],
+                }],
+            ),
+            (
+                vec![NodeId(1)],
+                vec![EdgeId(1)],
+                1,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(1)],
+                    edges: vec![EdgeId(1)],
+                }],
+            ),
+        ],
+    )]
+    #[case::parallel(
+        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
+        vec![
+            (
+                vec![NodeId(0), NodeId(1)],
+                vec![EdgeId(0), EdgeId(1)],
+                2,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(0), NodeId(1)],
+                    edges: vec![EdgeId(0), EdgeId(1)],
+                }],
+            ),
+            (
+                vec![NodeId(0), NodeId(1)],
+                vec![EdgeId(0), EdgeId(2)],
+                2,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(0), NodeId(1)],
+                    edges: vec![EdgeId(0), EdgeId(2)],
+                }],
+            ),
+            (
+                vec![NodeId(0), NodeId(1)],
+                vec![EdgeId(1), EdgeId(2)],
+                2,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(0), NodeId(1)],
+                    edges: vec![EdgeId(1), EdgeId(2)],
+                }],
+            ),
+        ],
+    )]
+    fn test_graph_unique_ring_families(
+        #[case] graph: Graph,
+        #[case] expected: Vec<ExpectedUniqueRingFamily>,
+    ) {
+        let result = graph.unique_ring_families(Kolodzik);
+        assert_eq!(result.count(), expected.len());
+
+        for (id, (nodes, edges, weight, count, expected_cycles)) in result.ids().zip(expected) {
+            let family = result.get(id).expect("a returned family id must be valid");
+            let mut cycles = Vec::new();
+            let flow = result.visit_relevant_cycles(id, |cycle| {
+                cycles.push(cycle);
+                ControlFlow::<()>::Continue(())
+            });
+
+            assert_eq!(family.nodes(), nodes);
+            assert_eq!(family.edges(), edges);
+            assert_eq!(family.weight(), weight);
+            assert_eq!(&family.relevant_cycle_count().0, &BigUint::from(count));
+            assert_eq!(flow, ControlFlow::Continue(()));
+            assert_eq!(cycles, expected_cycles);
+        }
+    }
+
+    #[rstest]
+    #[case::first(
+        1,
+        vec![Cycle {
+            nodes: vec![NodeId(0), NodeId(1), NodeId(4), NodeId(5), NodeId(3)],
+            edges: vec![EdgeId(0), EdgeId(1), EdgeId(6), EdgeId(5), EdgeId(4)],
+        }],
+    )]
+    fn test_unique_ring_families_visit_relevant_cycles(
+        #[case] stop_after: usize,
+        #[case] expected: Vec<Cycle>,
+    ) {
+        let graph = Graph::new(6, &[[0, 1], [1, 4], [0, 2], [2, 4], [0, 3], [3, 5], [4, 5]]);
+        let families = graph.unique_ring_families(Kolodzik);
+        let mut cycles = Vec::new();
+        let flow = families.visit_relevant_cycles(UniqueRingFamilyId(1), |cycle| {
+            cycles.push(cycle);
+            if cycles.len() == stop_after {
+                ControlFlow::Break(cycles.len())
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+
+        assert_eq!(flow, ControlFlow::Break(stop_after));
+        assert_eq!(cycles, expected);
     }
 
     #[rstest]

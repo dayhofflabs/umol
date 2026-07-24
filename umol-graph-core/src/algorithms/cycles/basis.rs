@@ -75,6 +75,11 @@ impl CycleVectorBasis {
         vector.highest_edge().is_some()
     }
 
+    pub(super) fn reduced(&self, mut vector: EdgeVector) -> EdgeVector {
+        self.reduce(&mut vector);
+        vector
+    }
+
     fn reduce(&self, vector: &mut EdgeVector) {
         while let Some(pivot) = vector.highest_edge() {
             let Some(row) = &self.rows[pivot] else {

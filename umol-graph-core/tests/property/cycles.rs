@@ -11,11 +11,12 @@ mod exhaustive;
 use std::collections::HashSet;
 use std::ops::ControlFlow;
 
+use num_bigint::BigUint;
 use proptest::prelude::*;
 use rstest::rstest;
 use umol_graph_core::{
     EdgeId, Graph, MinimumCycleBasisAlgorithm, RelevantCycleEnumerationAlgorithm,
-    SimpleCycleEnumerationAlgorithm, SubdivisionNodeSource,
+    SimpleCycleEnumerationAlgorithm, SubdivisionNodeSource, UniqueRingFamilyAlgorithm,
 };
 
 use self::exhaustive::{
@@ -201,6 +202,128 @@ proptest! {
             .filter(|cycle| cycle.len() <= max_cycle_size)
             .collect::<Vec<_>>();
         prop_assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_graph_unique_ring_families(graph in multigraph(5, 5)) {
+        let result = graph.unique_ring_families(UniqueRingFamilyAlgorithm::Kolodzik);
+        let mut actual = Vec::new();
+        for id in result.ids() {
+            let family = result.get(id).expect("a returned family id must be valid");
+            let mut cycles = Vec::new();
+            let flow = result.visit_relevant_cycles(id, |cycle| {
+                let mut edges = cycle.edges().to_vec();
+                edges.sort_unstable();
+                cycles.push(edges);
+                ControlFlow::<()>::Continue(())
+            });
+            cycles.sort();
+
+            let mut nodes = cycles
+                .iter()
+                .flatten()
+                .flat_map(|&edge| graph.edge_endpoints(edge))
+                .collect::<Vec<_>>();
+            nodes.sort_unstable();
+            nodes.dedup();
+            let mut edges = cycles.iter().flatten().copied().collect::<Vec<_>>();
+            edges.sort_unstable();
+            edges.dedup();
+
+            prop_assert_eq!(flow, ControlFlow::Continue(()));
+            prop_assert_eq!(family.nodes(), nodes);
+            prop_assert_eq!(family.edges(), edges);
+            prop_assert_eq!(family.weight(), cycles[0].len());
+            prop_assert_eq!(
+                &family.relevant_cycle_count().0,
+                &BigUint::from(cycles.len())
+            );
+            actual.push(cycles);
+        }
+        actual.sort();
+
+        let mut expected = unique_ring_families(&graph);
+        expected.sort();
+        prop_assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_unique_ring_families_families_containing_node(graph in multigraph(5, 5)) {
+        let families = graph.unique_ring_families(UniqueRingFamilyAlgorithm::Kolodzik);
+        for node in graph.node_ids() {
+            let expected = families
+                .ids()
+                .filter(|&id| {
+                    families
+                        .get(id)
+                        .expect("a returned family id must be valid")
+                        .nodes()
+                        .contains(&node)
+                })
+                .collect::<Vec<_>>();
+            prop_assert_eq!(families.families_containing_node(node), expected);
+        }
+    }
+
+    #[test]
+    fn test_unique_ring_families_families_containing_edge(graph in multigraph(5, 5)) {
+        let families = graph.unique_ring_families(UniqueRingFamilyAlgorithm::Kolodzik);
+        for edge in graph.edge_ids() {
+            let expected = families
+                .ids()
+                .filter(|&id| {
+                    families
+                        .get(id)
+                        .expect("a returned family id must be valid")
+                        .edges()
+                        .contains(&edge)
+                })
+                .collect::<Vec<_>>();
+            prop_assert_eq!(families.families_containing_edge(edge), expected);
+        }
+    }
+
+    #[test]
+    fn test_graph_unique_ring_families_relabeling(graph in multigraph(5, 5)) {
+        let node_count = graph.node_count();
+        let relabeled_edges = graph
+            .edge_ids()
+            .map(|edge| {
+                let [first, second] = graph.edge_endpoints(edge);
+                [
+                    (node_count - 1 - first.index()) as u32,
+                    (node_count - 1 - second.index()) as u32,
+                ]
+            })
+            .collect::<Vec<_>>();
+        let relabeled = Graph::new(node_count, &relabeled_edges);
+
+        let decomposition = |source: &Graph| {
+            let result = source.unique_ring_families(UniqueRingFamilyAlgorithm::Kolodzik);
+            let mut families = result
+                .ids()
+                .map(|id| {
+                    let family = result.get(id).expect("a returned family id must be valid");
+                    let mut cycles = Vec::new();
+                    let _: ControlFlow<()> = result.visit_relevant_cycles(id, |cycle| {
+                        let mut edges = cycle.edges().to_vec();
+                        edges.sort_unstable();
+                        cycles.push(edges);
+                        ControlFlow::Continue(())
+                    });
+                    cycles.sort();
+                    (
+                        family.edges().to_vec(),
+                        family.weight(),
+                        family.relevant_cycle_count().clone(),
+                        cycles,
+                    )
+                })
+                .collect::<Vec<_>>();
+            families.sort();
+            families
+        };
+        prop_assert_eq!(decomposition(&graph), decomposition(&relabeled));
     }
 
     #[test]

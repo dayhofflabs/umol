@@ -4,6 +4,8 @@ use std::cmp::Ordering;
 use std::collections::{HashSet, VecDeque};
 use std::ops::ControlFlow;
 
+use num_bigint::BigUint;
+
 use super::basis::{CycleVectorBasis, EdgeVector};
 use super::Cycle;
 use crate::algorithms::bcc::BiconnectedComponentsAlgorithm;
@@ -242,6 +244,59 @@ impl ShortestPathDag {
         self.visit_reconstructed(target, &mut nodes, &mut edges, &mut visitor)
     }
 
+    fn path_count(&self, target: NodeId) -> BigUint {
+        if !self.included[target.index()] {
+            return BigUint::from(0_u8);
+        }
+
+        let mut nodes = self
+            .included
+            .iter()
+            .enumerate()
+            .filter_map(|(node, &included)| included.then_some(NodeId(node as u32)))
+            .collect::<Vec<_>>();
+        nodes.sort_unstable_by_key(|node| self.distances[node.index()]);
+
+        let mut counts = vec![BigUint::from(0_u8); self.included.len()];
+        counts[self.root.index()] = BigUint::from(1_u8);
+        for node in nodes {
+            if node == self.root {
+                continue;
+            }
+            counts[node.index()] = self.predecessors[node.index()]
+                .iter()
+                .map(|predecessor| &counts[predecessor.node.index()])
+                .sum();
+        }
+        counts[target.index()].clone()
+    }
+
+    fn path_union(&self, target: NodeId) -> (Vec<NodeId>, Vec<EdgeId>) {
+        if !self.included[target.index()] {
+            return (Vec::new(), Vec::new());
+        }
+
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+        let mut visited = vec![false; self.included.len()];
+        let mut stack = vec![target];
+        visited[target.index()] = true;
+        while let Some(node) = stack.pop() {
+            nodes.push(node);
+            for predecessor in &self.predecessors[node.index()] {
+                edges.push(predecessor.edge);
+                if !visited[predecessor.node.index()] {
+                    visited[predecessor.node.index()] = true;
+                    stack.push(predecessor.node);
+                }
+            }
+        }
+        nodes.sort_unstable();
+        edges.sort_unstable();
+        edges.dedup();
+        (nodes, edges)
+    }
+
     fn visit_reconstructed<B>(
         &self,
         current: NodeId,
@@ -282,7 +337,7 @@ enum FamilyConnector {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct RelevantCycleFamily {
+pub(super) struct RelevantCycleFamily {
     dag: usize,
     first: NodeId,
     second: NodeId,
@@ -291,11 +346,42 @@ struct RelevantCycleFamily {
 }
 
 impl RelevantCycleFamily {
-    fn weight(&self) -> usize {
+    pub(super) fn weight(&self) -> usize {
         self.prototype.length()
     }
 
-    fn visit_cycles<B>(
+    pub(super) fn prototype(&self) -> &Cycle {
+        &self.prototype
+    }
+
+    pub(super) fn cycle_count(&self, dag: &ShortestPathDag) -> BigUint {
+        dag.path_count(self.first) * dag.path_count(self.second)
+    }
+
+    pub(super) fn union(&self, dag: &ShortestPathDag) -> (Vec<NodeId>, Vec<EdgeId>) {
+        let (mut nodes, mut edges) = dag.path_union(self.first);
+        let (other_nodes, other_edges) = dag.path_union(self.second);
+        nodes.extend(other_nodes);
+        edges.extend(other_edges);
+        match self.connector {
+            FamilyConnector::Odd(edge) => edges.push(edge),
+            FamilyConnector::Even {
+                middle,
+                first_edge,
+                second_edge,
+            } => {
+                nodes.push(middle);
+                edges.extend([first_edge, second_edge]);
+            }
+        }
+        nodes.sort_unstable();
+        nodes.dedup();
+        edges.sort_unstable();
+        edges.dedup();
+        (nodes, edges)
+    }
+
+    pub(super) fn visit_cycles<B>(
         &self,
         graph: &Graph,
         dag: &ShortestPathDag,
@@ -318,6 +404,7 @@ impl RelevantCycleFamily {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct RelevantCycleAnalysis {
     dags: Vec<ShortestPathDag>,
     families: Vec<RelevantCycleFamily>,
@@ -526,6 +613,14 @@ impl RelevantCycleAnalysis {
             }
         }
         ControlFlow::Continue(())
+    }
+
+    pub(super) fn families(&self) -> &[RelevantCycleFamily] {
+        &self.families
+    }
+
+    pub(super) fn family_dag(&self, family: &RelevantCycleFamily) -> &ShortestPathDag {
+        &self.dags[family.dag]
     }
 }
 
