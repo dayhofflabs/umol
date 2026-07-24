@@ -842,8 +842,8 @@ correctness oracles.
   disconnected graphs. The property strategy exercising the exponential
   family oracle is bounded to five edges.
 - **S0f — generated exhaustive graph corpus** **Done**
-  (`umol-graph-core/tests/data/cycles/`,
-  `tests/property/cycles/corpus.rs`): invoke `/opt/homebrew/bin/geng` once
+  (`umol-graph-core/tests/data/simple-through-8.g6`,
+  `tests/support/graph.rs`): invoke `/opt/homebrew/bin/geng` once
   during implementation to generate a checked-in graph6 corpus of
   non-isomorphic simple graphs through the selected order, and record the
   exact generation command and nauty version. Add a test-only graph6 reader and
@@ -862,7 +862,7 @@ correctness oracles.
   ```text
   for order in {1..8}; do
       /opt/homebrew/bin/geng -q "$order"
-  done > umol-graph-core/tests/data/cycles/simple-through-8.g6
+  done > umol-graph-core/tests/data/simple-through-8.g6
   ```
 
   The file is 93,655 bytes with SHA-256
@@ -872,6 +872,17 @@ correctness oracles.
   checked-in data, and `multigraph` provides bounded random graphs with loops
   and repeated edges. Exact tests pin graph6 decoding, counts by order, and the
   corpus digest. No Rust test invokes or searches for `geng`.
+- **S0g — algorithm-neutral graph corpus support** **Done**
+  (`umol-graph-core/tests/data/simple-through-8.g6`,
+  `tests/support/graph.rs`, `tests/property.rs`,
+  `tests/property/cycles.rs`): keep the exhaustive simple-graph corpus and its
+  graph6 reader outside any algorithm-specific test hierarchy. Define the
+  shared `parse_graph6`, `simple_graphs`, and `multigraph` test facilities in
+  graph support owned by the integration-test root; cycle properties consume
+  that support without owning it. This makes the corpus directly reusable by
+  other graph-algorithm tests while preserving its S0f contents, provenance,
+  integrity checks, and no-`geng` runtime policy. **Test-support
+  reorganization without behavioral changes (green).** `[dep: S0f]`
 
 ### S1 — Complete bounded cycle enumeration
 

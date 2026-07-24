@@ -1,9 +1,9 @@
-//! Checked-in simple-graph corpus and bounded multigraph generation.
+//! General graph corpora and generators shared by integration tests.
 
 use proptest::prelude::*;
 use umol_graph_core::Graph;
 
-const SIMPLE_GRAPHS_GRAPH6: &str = include_str!("../../data/cycles/simple-through-8.g6");
+const SIMPLE_GRAPHS_GRAPH6: &str = include_str!("../data/simple-through-8.g6");
 
 pub(super) fn parse_graph6(source: &str) -> Graph {
     let bytes = source.as_bytes();

@@ -1,13 +1,11 @@
-#[path = "cycles/corpus.rs"]
-mod corpus;
 #[path = "cycles/oracle.rs"]
 mod oracle;
 
 use proptest::prelude::*;
 use umol_graph_core::SubdivisionNodeSource;
 
-use self::corpus::multigraph;
 use self::oracle::{relevant_cycles, unique_ring_families};
+use super::graph::multigraph;
 
 proptest! {
     #[test]
