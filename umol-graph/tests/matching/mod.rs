@@ -2,11 +2,10 @@ use rstest::rstest;
 use serde::Deserialize;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
-    MoleculeParts, RingSetKind, ValueAst,
+    MoleculeParts, RingConfig, RingModel, RingSetKind, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_graph::ops::aromaticity::ClarAromaticity;
-use umol_graph_core::CycleEnumerationAlgorithm;
 
 #[derive(Deserialize)]
 struct GraphFixture {
@@ -37,11 +36,12 @@ fn test_clar_aromaticity_find_from_rings() {
         ..Default::default()
     });
     let rings = ast
-        .rings_with(
-            RingSetKind::Simple,
-            6,
-            |_| true,
-            CycleEnumerationAlgorithm::Vismara,
+        .rings(
+            RingModel {
+                kind: RingSetKind::Relevant,
+                max_ring_size: 6,
+            },
+            RingConfig::default(),
         )
         .into_ring_set();
     let systems = ClarAromaticity

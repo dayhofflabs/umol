@@ -220,12 +220,12 @@ impl<'a> RingBondView<'a> {
 mod tests {
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::CycleEnumerationAlgorithm;
 
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::molecule::MoleculeParts;
+    use crate::ast::ring::{RingConfig, RingModel};
 
     // A six-membered ring (atoms 0-5, bonds 0-5) with a pendant chain atom 6
     // (bond 6, atom 0 to atom 6).
@@ -250,7 +250,7 @@ mod tests {
     fn test_ring_views_count(ring_with_chain: MoleculeAst) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .count(),
             1
         );
@@ -260,7 +260,7 @@ mod tests {
     fn test_ring_views_ids(ring_with_chain: MoleculeAst) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .ids()
                 .collect::<Vec<_>>(),
             vec![RingId(0)],
@@ -269,7 +269,7 @@ mod tests {
 
     #[rstest]
     fn test_ring_views_iter(ring_with_chain: MoleculeAst) {
-        let rings = ring_with_chain.rings(CycleEnumerationAlgorithm::Vismara);
+        let rings = ring_with_chain.rings(RingModel::default(), RingConfig::default());
         let rings: Vec<(RingId, usize)> = rings.iter().map(|r| (r.id, r.len())).collect();
         assert_eq!(rings, vec![(RingId(0), 6)]);
     }
@@ -284,7 +284,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .get(ring)
                 .map(|r| r.len()),
             expected_len
@@ -301,7 +301,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .contains(ring),
             expected
         );
@@ -311,7 +311,7 @@ mod tests {
     fn test_ring_views_kind(ring_with_chain: MoleculeAst) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .kind(),
             RingSetKind::Relevant
         );
@@ -321,7 +321,7 @@ mod tests {
     fn test_ring_views_max_ring_size(ring_with_chain: MoleculeAst) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .max_ring_size(),
             22
         );
@@ -330,7 +330,7 @@ mod tests {
     #[rstest]
     fn test_ring_views_into_ring_set(ring_with_chain: MoleculeAst) {
         let ring_set = ring_with_chain
-            .rings(CycleEnumerationAlgorithm::Vismara)
+            .rings(RingModel::default(), RingConfig::default())
             .into_ring_set();
         assert_eq!(ring_set.count(), 1);
         assert!(ring_set.contains_atom(AtomId(0)));
@@ -347,7 +347,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .atom(atom)
                 .is_in_ring(),
             expected
@@ -363,7 +363,7 @@ mod tests {
         #[case] expected: Vec<RingId>,
     ) {
         let ids: Vec<RingId> = ring_with_chain
-            .rings(CycleEnumerationAlgorithm::Vismara)
+            .rings(RingModel::default(), RingConfig::default())
             .atom(atom)
             .rings()
             .map(|r| r.id)
@@ -384,7 +384,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .atom(atom)
                 .ring_membership(scope),
             expected
@@ -401,7 +401,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .atom(atom)
                 .ring_count(),
             expected
@@ -420,7 +420,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .atom(atom)
                 .ring_size_count(size),
             expected
@@ -437,7 +437,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .atom(atom)
                 .smallest_ring_size(),
             expected
@@ -454,7 +454,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .atom(atom)
                 .ring_degree(),
             expected
@@ -471,7 +471,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .atom(atom)
                 .ring_valence(),
             expected
@@ -488,7 +488,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .bond(bond)
                 .is_in_ring(),
             expected
@@ -504,7 +504,7 @@ mod tests {
         #[case] expected: Vec<RingId>,
     ) {
         let ids: Vec<RingId> = ring_with_chain
-            .rings(CycleEnumerationAlgorithm::Vismara)
+            .rings(RingModel::default(), RingConfig::default())
             .bond(bond)
             .rings()
             .map(|r| r.id)
@@ -525,7 +525,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .bond(bond)
                 .ring_membership(scope),
             expected
@@ -542,7 +542,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .bond(bond)
                 .ring_count(),
             expected
@@ -561,7 +561,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .bond(bond)
                 .ring_size_count(size),
             expected
@@ -578,7 +578,7 @@ mod tests {
     ) {
         assert_eq!(
             ring_with_chain
-                .rings(CycleEnumerationAlgorithm::Vismara)
+                .rings(RingModel::default(), RingConfig::default())
                 .bond(bond)
                 .smallest_ring_size(),
             expected

@@ -5,9 +5,9 @@ use rstest::*;
 use umol_chem::element::Element;
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
-    Correspondence, CycleEnumerationAlgorithm, EdgeId, MatchingEnumerationAlgorithm,
-    MaximumIndependentSetAlgorithm, MaximumMatchingAlgorithm, MaximumMatchingError, NodeId,
-    ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
+    Correspondence, EdgeId, MatchingEnumerationAlgorithm, MaximumIndependentSetAlgorithm,
+    MaximumMatchingAlgorithm, MaximumMatchingError, NodeId, RelevantCycleEnumerationAlgorithm,
+    ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 
 use super::super::aromatic::AromaticSystemAst;
@@ -28,7 +28,7 @@ use super::super::id::{
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
-use super::super::ring::RingSetKind;
+use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::SpinStateAst;
 use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
 use super::super::value::ValueAst;
@@ -1326,19 +1326,59 @@ fn test_molecule_ast_shortest_cycle_through_atom(
 }
 
 #[rstest]
-#[case::hexagon(ring(6), 6, 1)]
-#[case::hexagon_cutoff(ring(6), 5, 0)]
-#[case::chain(chain(5), 10, 0)]
-#[case::empty(MoleculeAst::default(), 10, 0)]
-fn test_molecule_ast_enumerate_cycles(
+#[case::hexagon(
+    ring(6),
+    6,
+    vec![vec![
+        AtomId(0),
+        AtomId(1),
+        AtomId(2),
+        AtomId(3),
+        AtomId(4),
+        AtomId(5),
+    ]],
+)]
+#[case::hexagon_cutoff(ring(6), 5, vec![])]
+#[case::chain(chain(5), 10, vec![])]
+#[case::empty(MoleculeAst::default(), 10, vec![])]
+fn test_graph_view_enumerate_simple_cycles(
     #[case] ast: MoleculeAst,
     #[case] max_size: usize,
-    #[case] expected: usize,
+    #[case] expected: Vec<Vec<AtomId>>,
 ) {
-    let cycles = ast
-        .graph()
-        .enumerate_cycles(max_size, CycleEnumerationAlgorithm::Vismara);
-    assert_eq!(cycles.len(), expected);
+    assert_eq!(
+        ast.graph()
+            .enumerate_simple_cycles(max_size, SimpleCycleEnumerationAlgorithm::ReadTarjan),
+        expected
+    );
+}
+
+#[rstest]
+#[case::hexagon(
+    ring(6),
+    6,
+    vec![vec![
+        AtomId(0),
+        AtomId(1),
+        AtomId(2),
+        AtomId(3),
+        AtomId(4),
+        AtomId(5),
+    ]],
+)]
+#[case::hexagon_cutoff(ring(6), 5, vec![])]
+#[case::chain(chain(5), 10, vec![])]
+#[case::empty(MoleculeAst::default(), 10, vec![])]
+fn test_graph_view_enumerate_relevant_cycles(
+    #[case] ast: MoleculeAst,
+    #[case] max_size: usize,
+    #[case] expected: Vec<Vec<AtomId>>,
+) {
+    assert_eq!(
+        ast.graph()
+            .enumerate_relevant_cycles(max_size, RelevantCycleEnumerationAlgorithm::Vismara),
+        expected
+    );
 }
 
 #[rstest]
@@ -1785,120 +1825,171 @@ fn test_molecule_editor_remove_empty_is_noop(#[from(rich_molecule)] ast: Molecul
 }
 
 #[rstest]
-#[case::hexagon(ring(6), 1)]
-#[case::chain(chain(5), 0)]
-#[case::empty(MoleculeAst::default(), 0)]
-fn test_molecule_ast_rings(#[case] ast: MoleculeAst, #[case] expected: usize) {
-    assert_eq!(
-        ast.rings(CycleEnumerationAlgorithm::Vismara).count(),
-        expected
-    );
-}
-
-#[rstest]
-#[case::hexagon(ring(6), 6, 1)]
-#[case::hexagon_cutoff(ring(6), 5, 0)]
-#[case::chain(chain(5), 10, 0)]
-#[case::empty(MoleculeAst::default(), 10, 0)]
-fn test_molecule_ast_rings_with(
+#[case::hexagon(
+    ring(6),
+    RingModel {
+        kind: RingSetKind::Relevant,
+        max_ring_size: 6,
+    },
+    vec![(
+        vec![
+            AtomId(0),
+            AtomId(1),
+            AtomId(2),
+            AtomId(3),
+            AtomId(4),
+            AtomId(5),
+        ],
+        vec![
+            BondId(0),
+            BondId(1),
+            BondId(2),
+            BondId(3),
+            BondId(4),
+            BondId(5),
+        ],
+    )],
+)]
+#[case::hexagon_cutoff(
+    ring(6),
+    RingModel {
+        kind: RingSetKind::Relevant,
+        max_ring_size: 5,
+    },
+    vec![],
+)]
+#[case::chain(
+    chain(5),
+    RingModel {
+        kind: RingSetKind::Relevant,
+        max_ring_size: 10,
+    },
+    vec![],
+)]
+#[case::empty(MoleculeAst::default(), RingModel::default(), vec![])]
+fn test_molecule_ast_rings(
     #[case] ast: MoleculeAst,
-    #[case] max_ring_size: usize,
-    #[case] expected: usize,
+    #[case] model: RingModel,
+    #[case] expected: Vec<(Vec<AtomId>, Vec<BondId>)>,
 ) {
-    let rs = ast.rings_with(
-        RingSetKind::Simple,
-        max_ring_size,
-        |_| true,
-        CycleEnumerationAlgorithm::Vismara,
-    );
-    assert_eq!(rs.count(), expected);
+    let rings = ast
+        .rings(model, RingConfig::default())
+        .iter()
+        .map(|ring| (ring.atoms().to_vec(), ring.bonds().to_vec()))
+        .collect::<Vec<_>>();
+    assert_eq!(rings, expected);
 }
 
 #[rstest]
-fn test_molecule_ast_rings_with_atom_filter() {
-    let ast = ring(6);
-    let rs = ast.rings_with(
-        RingSetKind::Simple,
-        10,
-        |a| a.0 < 3,
-        CycleEnumerationAlgorithm::Vismara,
-    );
-    assert_eq!(rs.count(), 0);
-}
-
-#[rstest]
-fn test_molecule_ast_rings_with_family() {
-    let ast = mol_dsl!(
-        r#"{
-        :atoms ["C" "C" "C" "C"]
-        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]
-    }"#
-    );
-    let simple_count = ast
-        .rings_with(
-            RingSetKind::Simple,
-            4,
-            |_| true,
-            CycleEnumerationAlgorithm::Vismara,
+#[case::simple(
+    RingSetKind::Simple,
+    vec![
+        vec![BondId(0), BondId(3), BondId(1)],
+        vec![BondId(0), BondId(3), BondId(5), BondId(2)],
+        vec![BondId(0), BondId(4), BondId(2)],
+        vec![BondId(0), BondId(4), BondId(5), BondId(1)],
+        vec![BondId(1), BondId(3), BondId(4), BondId(2)],
+        vec![BondId(1), BondId(5), BondId(2)],
+        vec![BondId(3), BondId(5), BondId(4)],
+    ],
+)]
+#[case::relevant(
+    RingSetKind::Relevant,
+    vec![
+        vec![BondId(0), BondId(3), BondId(1)],
+        vec![BondId(0), BondId(4), BondId(2)],
+        vec![BondId(1), BondId(5), BondId(2)],
+        vec![BondId(3), BondId(5), BondId(4)],
+    ],
+)]
+fn test_molecule_ast_rings_kind(#[case] kind: RingSetKind, #[case] mut expected: Vec<Vec<BondId>>) {
+    let ast = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![AtomAst::from_element(Element::C); 4],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondAst::from_order(1)),
+            (AtomId(0), AtomId(2), BondAst::from_order(1)),
+            (AtomId(0), AtomId(3), BondAst::from_order(1)),
+            (AtomId(1), AtomId(2), BondAst::from_order(1)),
+            (AtomId(1), AtomId(3), BondAst::from_order(1)),
+            (AtomId(2), AtomId(3), BondAst::from_order(1)),
+        ],
+        ..Default::default()
+    });
+    let mut actual = ast
+        .rings(
+            RingModel {
+                kind,
+                max_ring_size: 4,
+            },
+            RingConfig::default(),
         )
-        .count();
-    let relevant_count = ast
-        .rings_with(
-            RingSetKind::Relevant,
-            4,
-            |_| true,
-            CycleEnumerationAlgorithm::Vismara,
-        )
-        .count();
-    assert_eq!(simple_count, 4);
-    assert_eq!(relevant_count, 4);
+        .iter()
+        .map(|ring| ring.bonds().to_vec())
+        .collect::<Vec<_>>();
+    actual.sort_unstable();
+    expected.sort_unstable();
+    assert_eq!(actual, expected);
 }
 
 #[rstest]
-fn test_molecule_ast_rings_with_family_fused() {
-    let ast = mol_dsl!(
-        r#"{
-        :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
-        :bonds [
-            [0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
-            [3 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 4 "1"]
+fn test_molecule_ast_rings_parallel_bond_identity() {
+    let ast = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![AtomAst::from_element(Element::C); 3],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondAst::from_order(1)),
+            (AtomId(0), AtomId(1), BondAst::from_order(1)),
+            (AtomId(1), AtomId(2), BondAst::from_order(1)),
+            (AtomId(2), AtomId(0), BondAst::from_order(1)),
+        ],
+        ..Default::default()
+    });
+    let mut actual = ast
+        .rings(
+            RingModel {
+                kind: RingSetKind::Simple,
+                max_ring_size: 3,
+            },
+            RingConfig::default(),
+        )
+        .iter()
+        .map(|ring| ring.bonds().to_vec())
+        .collect::<Vec<_>>();
+    actual.sort_unstable();
+    assert_eq!(
+        actual,
+        vec![
+            vec![BondId(0), BondId(2), BondId(3)],
+            vec![BondId(1), BondId(2), BondId(3)],
         ]
-    }"#
     );
-    let simple_count = ast
-        .rings_with(
-            RingSetKind::Simple,
-            10,
-            |_| true,
-            CycleEnumerationAlgorithm::Vismara,
-        )
-        .count();
-    assert_eq!(simple_count, 2);
-    let relevant_count = ast
-        .rings_with(
-            RingSetKind::Relevant,
-            10,
-            |_| true,
-            CycleEnumerationAlgorithm::Vismara,
-        )
-        .count();
-    assert_eq!(relevant_count, 2);
 }
 
 #[rstest]
-fn test_rings_membership() {
-    let ast = ring(6);
-    let rs = ast
-        .rings_with(
-            RingSetKind::Simple,
-            6,
-            |_| true,
-            CycleEnumerationAlgorithm::Vismara,
-        )
-        .into_ring_set();
-    assert!(rs.contains_atom(AtomId(0)));
-    assert!(rs.contains_bond(BondId(0)));
-    assert_eq!(rs.atom_smallest_ring_size(AtomId(0)), Some(6));
+#[case::self_loop(1, vec![[0, 0]])]
+#[case::parallel_pair(2, vec![[0, 1], [0, 1]])]
+fn test_molecule_ast_rings_invalid(#[case] atom_count: usize, #[case] edges: Vec<[u32; 2]>) {
+    let ast = MoleculeAst::from_parts(MoleculeParts {
+        atoms: vec![AtomAst::from_element(Element::C); atom_count],
+        bonds: edges
+            .into_iter()
+            .map(|[first, second]| (AtomId(first), AtomId(second), BondAst::from_order(1)))
+            .collect(),
+        ..Default::default()
+    });
+    let rings = ast.rings(
+        RingModel {
+            kind: RingSetKind::Simple,
+            max_ring_size: usize::MAX,
+        },
+        RingConfig::default(),
+    );
+    assert_eq!(
+        rings
+            .iter()
+            .map(|ring| (ring.atoms().to_vec(), ring.bonds().to_vec()))
+            .collect::<Vec<_>>(),
+        vec![]
+    );
 }
 
 #[rstest]

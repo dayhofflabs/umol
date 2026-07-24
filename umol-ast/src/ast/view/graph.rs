@@ -2,10 +2,10 @@
 
 use umol_graph_core::{
     AutomorphismAlgorithm, AutomorphismGroupOrder, AutomorphismOutput,
-    BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm, CycleEnumerationAlgorithm,
-    EdgeId, Graph, MatchingEnumerationAlgorithm, MaximumIndependentSetAlgorithm,
-    MaximumMatchingAlgorithm, MaximumMatchingError, NodeId, PerfectMatchingAlgorithm,
-    ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
+    BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm, EdgeId, Graph,
+    MatchingEnumerationAlgorithm, MaximumIndependentSetAlgorithm, MaximumMatchingAlgorithm,
+    MaximumMatchingError, NodeId, PerfectMatchingAlgorithm, RelevantCycleEnumerationAlgorithm,
+    ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 
 use super::super::id::{AtomId, BondId};
@@ -63,15 +63,27 @@ impl<'a> GraphView<'a> {
             .shortest_cycle_through_node(NodeId::from(atom), alg)
     }
 
-    pub fn enumerate_cycles(
+    pub fn enumerate_simple_cycles(
         &self,
         max_size: usize,
-        alg: CycleEnumerationAlgorithm,
+        alg: SimpleCycleEnumerationAlgorithm,
     ) -> Vec<Vec<AtomId>> {
         self.graph
-            .enumerate_cycles(max_size, alg)
+            .enumerate_simple_cycles(max_size, alg)
             .into_iter()
-            .map(|c| c.into_iter().map(AtomId::from).collect())
+            .map(|cycle| cycle.nodes().iter().copied().map(AtomId::from).collect())
+            .collect()
+    }
+
+    pub fn enumerate_relevant_cycles(
+        &self,
+        max_size: usize,
+        alg: RelevantCycleEnumerationAlgorithm,
+    ) -> Vec<Vec<AtomId>> {
+        self.graph
+            .enumerate_relevant_cycles(max_size, alg)
+            .into_iter()
+            .map(|cycle| cycle.nodes().iter().copied().map(AtomId::from).collect())
             .collect()
     }
 

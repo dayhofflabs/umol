@@ -2,10 +2,7 @@
 
 use std::collections::{BTreeMap, HashSet, VecDeque};
 
-use umol_graph_core::{
-    CycleEnumerationAlgorithm, Graph, NodeId, RelevantCycleEnumerationAlgorithm,
-    SimpleCycleEnumerationAlgorithm,
-};
+use umol_graph_core::{Graph, RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm};
 
 use super::id::{AtomId, BondId};
 use super::view::RingView;
@@ -116,63 +113,26 @@ pub struct RingSet {
 }
 
 impl RingSet {
-    /// Enumerate rings of `kind` up to `max_ring_size` on the atoms of
-    /// `graph` passing `atom_filter`, using `algorithm` for cycle enumeration.
-    /// `RingSetKind::Relevant` keeps only chordless cycles.
-    pub(super) fn enumerate(
-        kind: RingSetKind,
-        max_ring_size: usize,
-        atom_filter: impl Fn(AtomId) -> bool,
-        graph: &Graph,
-        algorithm: CycleEnumerationAlgorithm,
-    ) -> Self {
-        let filtered_nodes: Vec<NodeId> = graph
-            .node_ids()
-            .filter(|&n| atom_filter(AtomId::from(n)))
-            .collect();
-
-        let use_subgraph = filtered_nodes.len() < graph.node_count();
-
-        let (sub, host_nodes) = if use_subgraph {
-            let subgraph = graph.induced_subgraph(&filtered_nodes);
-            let host_nodes: Vec<NodeId> = subgraph
-                .nodes()
-                .mates()
-                .iter()
-                .map(|&(_, host)| host)
-                .collect();
-            (graph.extract(&subgraph), host_nodes)
-        } else {
-            let host_nodes: Vec<NodeId> = graph.node_ids().collect();
-            (graph.clone(), host_nodes)
+    /// Enumerate the rings selected by `model` using `config`.
+    pub(super) fn enumerate(graph: &Graph, model: RingModel, config: RingConfig) -> Self {
+        let raw_cycles = match model.kind {
+            RingSetKind::Simple => {
+                graph.enumerate_simple_cycles(model.max_ring_size, config.simple_cycle_algorithm)
+            }
+            RingSetKind::Relevant => graph
+                .enumerate_relevant_cycles(model.max_ring_size, config.relevant_cycle_algorithm),
         };
-
-        let raw_cycles = sub.enumerate_cycles(max_ring_size, algorithm);
 
         let all_rings: Vec<Ring> = raw_cycles
             .into_iter()
-            .filter(|cycle| match kind {
-                RingSetKind::Relevant => is_induced_cycle(&sub, cycle),
-                RingSetKind::Simple => true,
-            })
             .filter_map(|cycle| {
-                let ring_atoms: Vec<AtomId> = cycle
-                    .iter()
-                    .map(|&sub_node| AtomId::from(host_nodes[sub_node.index()]))
-                    .collect();
-                let n = ring_atoms.len();
-                let mut ring_bonds = Vec::with_capacity(n);
-                for i in 0..n {
-                    let a_orig = NodeId::from(ring_atoms[i]);
-                    let b_orig = NodeId::from(ring_atoms[(i + 1) % n]);
-                    let edge = graph.find_edge(a_orig, b_orig)?;
-                    ring_bonds.push(BondId::from(edge));
-                }
+                let ring_atoms = cycle.nodes().iter().copied().map(AtomId::from).collect();
+                let ring_bonds = cycle.edges().iter().copied().map(BondId::from).collect();
                 Ring::new(ring_atoms, ring_bonds)
             })
             .collect();
 
-        Self::from_parts(kind, max_ring_size, all_rings)
+        Self::from_parts(model.kind, model.max_ring_size, all_rings)
     }
 
     fn from_parts(kind: RingSetKind, max_ring_size: usize, rings: Vec<Ring>) -> Self {
@@ -462,33 +422,12 @@ fn classify_ring_relation(a: &Ring, b: &Ring) -> RingRelation {
     }
 }
 
-fn is_induced_cycle(graph: &Graph, cycle: &[NodeId]) -> bool {
-    let n = cycle.len();
-    if n < 3 {
-        return false;
-    }
-    for i in 0..n {
-        for j in (i + 2)..n {
-            if i == 0 && j == n - 1 {
-                continue;
-            }
-            if graph.find_edge(cycle[i], cycle[j]).is_some() {
-                return false;
-            }
-        }
-    }
-    true
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
-    use crate::ast::atom::AtomAst;
-    use crate::ast::bond::BondAst;
-    use crate::ast::molecule::{MoleculeAst, MoleculeParts};
 
     #[fixture]
     fn triangle_set() -> RingSet {
@@ -767,80 +706,77 @@ mod tests {
     }
 
     #[rstest]
-    #[case::full_hexagon(
-        6,
-        &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]][..],
-        RingSetKind::Simple,
-        10,
-        |_: AtomId| true,
-        1,
+    #[case::simple_hexagon(
+        Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
+        RingModel {
+            kind: RingSetKind::Simple,
+            max_ring_size: 6,
+        },
+        vec![(
+            vec![
+                AtomId(0),
+                AtomId(1),
+                AtomId(2),
+                AtomId(3),
+                AtomId(4),
+                AtomId(5),
+            ],
+            vec![
+                BondId(0),
+                BondId(1),
+                BondId(2),
+                BondId(3),
+                BondId(4),
+                BondId(5),
+            ],
+        )],
     )]
-    #[case::filter_breaks_cycle(
-        6,
-        &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]][..],
-        RingSetKind::Simple,
-        10,
-        |a: AtomId| a.0 != 5,
-        0,
+    #[case::simple_hexagon_cutoff(
+        Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
+        RingModel {
+            kind: RingSetKind::Simple,
+            max_ring_size: 5,
+        },
+        vec![],
+    )]
+    #[case::relevant_k4(
+        Graph::new(
+            4,
+            &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]],
+        ),
+        RingModel {
+            kind: RingSetKind::Relevant,
+            max_ring_size: 4,
+        },
+        vec![
+            (
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                vec![BondId(0), BondId(3), BondId(1)],
+            ),
+            (
+                vec![AtomId(0), AtomId(1), AtomId(3)],
+                vec![BondId(0), BondId(4), BondId(2)],
+            ),
+            (
+                vec![AtomId(0), AtomId(2), AtomId(3)],
+                vec![BondId(1), BondId(5), BondId(2)],
+            ),
+            (
+                vec![AtomId(1), AtomId(2), AtomId(3)],
+                vec![BondId(3), BondId(5), BondId(4)],
+            ),
+        ],
     )]
     fn test_ring_set_enumerate(
-        #[case] node_count: usize,
-        #[case] edges: &[[u32; 2]],
-        #[case] kind: RingSetKind,
-        #[case] max_ring_size: usize,
-        #[case] atom_filter: fn(AtomId) -> bool,
-        #[case] expected_count: usize,
+        #[case] graph: Graph,
+        #[case] model: RingModel,
+        #[case] expected: Vec<(Vec<AtomId>, Vec<BondId>)>,
     ) {
-        let atoms = vec![AtomAst::default(); node_count];
-        let bonds: Vec<_> = edges
+        let actual = RingSet::enumerate(&graph, model, RingConfig::default())
             .iter()
-            .map(|[a, b]| (AtomId(*a), AtomId(*b), BondAst::default()))
-            .collect();
-        let mol = MoleculeAst::from_parts(MoleculeParts {
-            atoms,
-            bonds,
-            ..Default::default()
-        });
-        let set = mol.rings_with(
-            kind,
-            max_ring_size,
-            atom_filter,
-            CycleEnumerationAlgorithm::Vismara,
-        );
-        assert_eq!(set.count(), expected_count);
-    }
-
-    #[rstest]
-    fn test_ring_set_enumerate_relevant() {
-        // K4 (4 nodes fully connected): Simple includes 4-cycles spanning
-        // chords; Relevant keeps only the chordless 3-cycles.
-        let atoms = vec![AtomAst::default(); 4];
-        let edges = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
-        let bonds: Vec<_> = edges
-            .iter()
-            .map(|[a, b]| (AtomId(*a), AtomId(*b), BondAst::default()))
-            .collect();
-        let mol = MoleculeAst::from_parts(MoleculeParts {
-            atoms,
-            bonds,
-            ..Default::default()
-        });
-        let simple = mol.rings_with(
-            RingSetKind::Simple,
-            4,
-            |_| true,
-            CycleEnumerationAlgorithm::Vismara,
-        );
-        let relevant = mol.rings_with(
-            RingSetKind::Relevant,
-            4,
-            |_| true,
-            CycleEnumerationAlgorithm::Vismara,
-        );
-        assert!(simple.count() >= relevant.count());
-        for view in relevant.iter() {
-            assert_eq!(view.len(), 3);
-        }
+            .map(|ring| (ring.atoms().to_vec(), ring.bonds().to_vec()))
+            .collect::<Vec<_>>();
+        assert_eq!(actual, expected);
     }
 
     #[rstest]
@@ -1166,29 +1102,5 @@ mod tests {
         #[case] expected: RingRelation,
     ) {
         assert_eq!(classify_ring_relation(&a, &b), expected);
-    }
-
-    #[rstest]
-    #[case::too_short(
-        Graph::new(3, &[[0, 1], [1, 2]]),
-        vec![NodeId(0), NodeId(1)],
-        false,
-    )]
-    #[case::induced_triangle(
-        Graph::new(3, &[[0, 1], [1, 2], [2, 0]]),
-        vec![NodeId(0), NodeId(1), NodeId(2)],
-        true,
-    )]
-    #[case::square_with_chord(
-        Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0], [0, 2]]),
-        vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
-        false,
-    )]
-    fn test_is_induced_cycle(
-        #[case] graph: Graph,
-        #[case] cycle: Vec<NodeId>,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(is_induced_cycle(&graph, &cycle), expected);
     }
 }

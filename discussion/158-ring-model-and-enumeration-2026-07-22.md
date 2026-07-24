@@ -1246,15 +1246,24 @@ references.
   nodes and edges directly. Remove `find_edge` reconstruction, the redundant
   induced-cycle filter, `atom_filter`, `rings_with`, and the family-blind cycle
   selector. Make the general molecule ring entry point accept `RingModel` and
-  `RingConfig`, dispatch to the family-specific graph-core operation, and keep
+  `RingConfig`, dispatch to the kind-specific graph-core operation, and keep
   `RingViews` infallible. Split `GraphView` cycle enumeration into typed simple
   and relevant methods. Migrate every Rust caller in the same subitem using the
   former effective Relevant/Vismara behavior. Exact tests cover both kinds,
   selection of the corresponding `RingConfig` field, bounds, bond identity,
   absence of one- and two-atom chemical rings, and
   structurally invalid but non-panicking views; property tests preserve ring
-  reindexing and view/index consistency. **Breaking ring API and complete Rust
-  caller migration (red→green).** `[dep: S1b, S2d, S3b]`
+  reindexing and view/index consistency. **Done.** `RingSet::enumerate` now
+  takes the graph first, followed by `RingModel` and `RingConfig`, dispatches
+  to the typed graph-core collectors, maps both node and edge identifiers
+  directly, and rejects graph cycles shorter than three atoms only at the
+  chemical-ring boundary. `MoleculeAst::rings` is the sole general entry
+  point; `GraphView` exposes separate simple- and relevant-cycle collectors;
+  `rings_with`, `atom_filter`, induced-cycle filtering, and AST-layer use of
+  the legacy selector are removed. Every Rust caller uses the former effective
+  Relevant/Vismara behavior pending its operation-specific S4 configuration.
+  **Breaking ring API and complete Rust caller migration (red→green).**
+  `[dep: S1b, S2d, S3b]`
 - **S3d — retained ring-constraint behavior**
   (`umol-ast/src/ast/view/ring.rs`,
   `src/ast/constraint/{atom,bond,dative,ring}.rs`, and ring property tests):

@@ -9,9 +9,11 @@
 //! is table-sensitive, so isotope bit-exactness depends on our mass tables
 //! agreeing with RDKit's; natural atoms are always 0.
 
-use umol_ast::ast::{AsLit, AtomId, BondId, IsotopeMassAst, MoleculeAst, RingSet};
+use umol_ast::ast::{
+    AsLit, AtomId, BondId, IsotopeMassAst, MoleculeAst, RingConfig, RingModel, RingSet,
+};
 use umol_chem::isotope::Isotope;
-use umol_graph_core::{CircularRefinementAlgorithm, CycleEnumerationAlgorithm};
+use umol_graph_core::CircularRefinementAlgorithm;
 
 use super::feature_set::{CountedFeatureSet, FeatureSet};
 use super::featurizer::FingerprintError;
@@ -51,7 +53,7 @@ impl MorganFeaturizer {
     /// dedup yields the binary set, counting yields the counted set.
     fn identifiers(&self, mol: &MoleculeAst) -> Vec<u64> {
         let rings = mol
-            .rings(CycleEnumerationAlgorithm::Vismara)
+            .rings(RingModel::default(), RingConfig::default())
             .into_ring_set();
         mol.raw_graph().circular_refine(
             |node| atom_components(mol, &rings, AtomId::from(node)),

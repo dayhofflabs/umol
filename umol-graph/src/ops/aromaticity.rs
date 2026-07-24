@@ -23,10 +23,9 @@ use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AsLit, AtomConstraintAst, AtomId,
     AtomUpdate, AtomView, BondConstraintAst, BondId, BooleanAst, ElectronCountsAst, ElementAst,
-    MoleculeAst, RingSetKind, TransactionError, ValueAst,
+    MoleculeAst, RingConfig, RingModel, RingSetKind, TransactionError, ValueAst,
 };
 use umol_chem::element::Element;
-use umol_graph_core::CycleEnumerationAlgorithm;
 use umol_utils::solution::Solution;
 
 use crate::ops::model::AromaticityModel;
@@ -90,15 +89,8 @@ impl AromaticityPerception {
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
-        let (kind, max_ring_size) = self.ring_request();
-        let rings = ast
-            .rings_with(
-                kind,
-                max_ring_size,
-                |_| true,
-                CycleEnumerationAlgorithm::Vismara,
-            )
-            .into_ring_set();
+        let model = self.ring_request();
+        let rings = ast.rings(model, RingConfig::default()).into_ring_set();
 
         let systems = match self {
             Self::HueckelRule(m) => m.find_from_rings(ast, &rings, &electrons_at),
@@ -163,11 +155,15 @@ impl AromaticityPerception {
         }
     }
 
-    fn ring_request(&self) -> (RingSetKind, usize) {
-        match self {
-            Self::HueckelRule(m) => (RingSetKind::Simple, m.ring_limits.max_ring_size),
-            Self::Hmo(_) => (RingSetKind::Simple, 22),
-            Self::Clar(_) => (RingSetKind::Simple, 6),
+    fn ring_request(&self) -> RingModel {
+        let max_ring_size = match self {
+            Self::HueckelRule(m) => m.ring_limits.max_ring_size,
+            Self::Hmo(_) => 22,
+            Self::Clar(_) => 6,
+        };
+        RingModel {
+            kind: RingSetKind::Relevant,
+            max_ring_size,
         }
     }
 }

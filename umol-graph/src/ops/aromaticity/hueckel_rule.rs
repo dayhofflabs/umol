@@ -250,10 +250,9 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElectronCountsAst,
-        ElementAst, MoleculeAst, MoleculeParts, RingSetKind, ValueAst,
+        ElementAst, MoleculeAst, MoleculeParts, RingConfig, RingModel, RingSetKind, ValueAst,
     };
     use umol_chem::element::Element;
-    use umol_graph_core::CycleEnumerationAlgorithm;
 
     use super::*;
 
@@ -320,16 +319,6 @@ mod tests {
             bonds,
             ..Default::default()
         })
-    }
-
-    fn enumerate_simple(ast: &MoleculeAst, max_ring_size: usize) -> RingSet {
-        ast.rings_with(
-            RingSetKind::Simple,
-            max_ring_size,
-            |_| true,
-            CycleEnumerationAlgorithm::Vismara,
-        )
-        .into_ring_set()
     }
 
     fn daylight_model() -> HueckelRuleAromaticity {
@@ -538,7 +527,15 @@ mod tests {
         #[case] expected_atoms: usize,
         #[case] expected_electrons: i64,
     ) {
-        let rings = enumerate_simple(&ast, RingLimits::default().max_ring_size);
+        let rings = ast
+            .rings(
+                RingModel {
+                    kind: RingSetKind::Relevant,
+                    max_ring_size: RingLimits::default().max_ring_size,
+                },
+                RingConfig::default(),
+            )
+            .into_ring_set();
         let model = daylight_model();
         let systems = model.find_from_rings(&ast, &rings, &|v| match v
             .ast
@@ -564,7 +561,15 @@ mod tests {
         #[case] ast: MoleculeAst,
         #[case] model: HueckelRuleAromaticity,
     ) {
-        let rings = enumerate_simple(&ast, RingLimits::default().max_ring_size);
+        let rings = ast
+            .rings(
+                RingModel {
+                    kind: RingSetKind::Relevant,
+                    max_ring_size: RingLimits::default().max_ring_size,
+                },
+                RingConfig::default(),
+            )
+            .into_ring_set();
         let systems = model.find_from_rings(&ast, &rings, &|v| match v
             .ast
             .constraints
@@ -579,7 +584,15 @@ mod tests {
 
     #[rstest]
     fn test_hueckel_rule_find_from_rings_borazine_permissive(borazine: MoleculeAst) {
-        let rings = enumerate_simple(&borazine, RingLimits::default().max_ring_size);
+        let rings = borazine
+            .rings(
+                RingModel {
+                    kind: RingSetKind::Relevant,
+                    max_ring_size: RingLimits::default().max_ring_size,
+                },
+                RingConfig::default(),
+            )
+            .into_ring_set();
         let systems = permissive_model().find_from_rings(&borazine, &rings, &|v| match v
             .ast
             .constraints

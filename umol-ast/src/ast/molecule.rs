@@ -10,9 +10,8 @@ pub use editor::MoleculeEditor;
 pub use fragment::{Fragment, Port, PortArg};
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{
-    Correspondence, CycleEnumerationAlgorithm, EdgeId, FixedRelationSet, FixedVarBirelationSet,
-    Graph, NodeId, Ordered, RelationId, RelationParticipant, Remapping, UnionFind, Unordered,
-    VarRelationSet,
+    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
+    RelationId, RelationParticipant, Remapping, UnionFind, Unordered, VarRelationSet,
 };
 
 use super::aromatic::AromaticSystemAst;
@@ -30,7 +29,7 @@ use super::ligand::StereoLigand;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 use super::remap::IdRemapping;
-use super::ring::{RingSet, RingSetKind};
+use super::ring::{RingConfig, RingModel, RingSet};
 use super::stereo::{StereoAtomAst, StereoBondAst};
 use super::traits::{BiEquiv, Canonicalize, Equiv, Lattice};
 use super::view::{
@@ -939,27 +938,9 @@ impl MoleculeAst {
                 .all(|id| self.stereo_bonds.data(id).is_ground())
     }
 
-    /// Relevant cycles up to maximum ring size 22, enumerated by `algorithm`.
-    pub fn rings(&self, algorithm: CycleEnumerationAlgorithm) -> RingViews<'_> {
-        RingViews::new(
-            self,
-            RingSet::enumerate(RingSetKind::Relevant, 22, |_| true, &self.graph, algorithm),
-        )
-    }
-
-    /// Ring set with caller-specified kind, maximum size, atom filter, and
-    /// cycle-enumeration algorithm.
-    pub fn rings_with(
-        &self,
-        kind: RingSetKind,
-        max_ring_size: usize,
-        atom_filter: impl Fn(AtomId) -> bool,
-        algorithm: CycleEnumerationAlgorithm,
-    ) -> RingViews<'_> {
-        RingViews::new(
-            self,
-            RingSet::enumerate(kind, max_ring_size, atom_filter, &self.graph, algorithm),
-        )
+    /// Rings selected by `model` and computed using `config`.
+    pub fn rings(&self, model: RingModel, config: RingConfig) -> RingViews<'_> {
+        RingViews::new(self, RingSet::enumerate(&self.graph, model, config))
     }
 
     pub fn atom_mut(&mut self, id: AtomId) -> AtomViewMut<'_> {

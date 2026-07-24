@@ -130,10 +130,9 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, MoleculeAst,
-        MoleculeParts, RingId, RingSetKind, ValueAst,
+        MoleculeParts, RingConfig, RingId, RingModel, RingSetKind, ValueAst,
     };
     use umol_chem::element::Element;
-    use umol_graph_core::CycleEnumerationAlgorithm;
 
     use super::*;
 
@@ -191,16 +190,6 @@ mod tests {
         })
     }
 
-    fn enumerate_induced(ast: &MoleculeAst) -> RingSet {
-        ast.rings_with(
-            RingSetKind::Simple,
-            6,
-            |_| true,
-            CycleEnumerationAlgorithm::Vismara,
-        )
-        .into_ring_set()
-    }
-
     fn hex_ring_indices(ast: &MoleculeAst, ring_info: &RingSet) -> Vec<RingId> {
         ring_info
             .ids()
@@ -248,7 +237,15 @@ mod tests {
         #[case] ast: MoleculeAst,
         #[case] expected_sextets: usize,
     ) {
-        let ring_info = enumerate_induced(&ast);
+        let ring_info = ast
+            .rings(
+                RingModel {
+                    kind: RingSetKind::Relevant,
+                    max_ring_size: 6,
+                },
+                RingConfig::default(),
+            )
+            .into_ring_set();
         let candidates = hex_ring_indices(&ast, &ring_info);
         let sextets = select_disjoint_sextets(&ring_info, &candidates);
         assert_eq!(sextets.len(), expected_sextets);
@@ -264,7 +261,15 @@ mod tests {
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
-        let rings = enumerate_induced(&ast);
+        let rings = ast
+            .rings(
+                RingModel {
+                    kind: RingSetKind::Relevant,
+                    max_ring_size: 6,
+                },
+                RingConfig::default(),
+            )
+            .into_ring_set();
         let model = ClarAromaticity;
         let systems = model
             .find_from_rings(&ast, &rings, &|v| match v
@@ -315,7 +320,15 @@ mod tests {
         aromatic(Element::C, 1),
     ]))]
     fn test_clar_aromaticity_find_from_rings_error(#[case] ast: MoleculeAst) {
-        let rings = enumerate_induced(&ast);
+        let rings = ast
+            .rings(
+                RingModel {
+                    kind: RingSetKind::Relevant,
+                    max_ring_size: 6,
+                },
+                RingConfig::default(),
+            )
+            .into_ring_set();
         let model = ClarAromaticity;
         assert!(model
             .find_from_rings(&ast, &rings, &|v| {
@@ -334,7 +347,15 @@ mod tests {
 
     #[rstest]
     fn test_clar_aromaticity_solver(phenanthrene: MoleculeAst) {
-        let ring_info = enumerate_induced(&phenanthrene);
+        let ring_info = phenanthrene
+            .rings(
+                RingModel {
+                    kind: RingSetKind::Relevant,
+                    max_ring_size: 6,
+                },
+                RingConfig::default(),
+            )
+            .into_ring_set();
         let candidates = hex_ring_indices(&phenanthrene, &ring_info);
         let sextets = select_disjoint_sextets(&ring_info, &candidates);
         assert_eq!(sextets.len(), 2);

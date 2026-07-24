@@ -304,10 +304,9 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, MoleculeAst,
-        MoleculeParts, RingSetKind, ValueAst,
+        MoleculeParts, RingConfig, RingModel, RingSetKind, ValueAst,
     };
     use umol_chem::element::Element;
-    use umol_graph_core::CycleEnumerationAlgorithm;
 
     use super::*;
 
@@ -375,16 +374,6 @@ mod tests {
             })
             .unwrap()
             .solve()
-    }
-
-    fn enumerate_simple(ast: &MoleculeAst) -> RingSet {
-        ast.rings_with(
-            RingSetKind::Simple,
-            22,
-            |_| true,
-            CycleEnumerationAlgorithm::Vismara,
-        )
-        .into_ring_set()
     }
 
     #[fixture]
@@ -508,7 +497,15 @@ mod tests {
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
-        let ring_info = enumerate_simple(&ast);
+        let ring_info = ast
+            .rings(
+                RingModel {
+                    kind: RingSetKind::Relevant,
+                    max_ring_size: 22,
+                },
+                RingConfig::default(),
+            )
+            .into_ring_set();
         let systems = hmo_model
             .find_from_rings(&ast, &ring_info, &|v| match v
                 .ast
