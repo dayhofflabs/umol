@@ -7,8 +7,8 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm::{
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
     CycleEnumerationAlgorithm, EdgeId, Graph, MaximumIndependentSetAlgorithm,
-    MaximumMatchingAlgorithm, NodeId, ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
-    ARCMATCH_DEFAULT_PATH_LENGTH,
+    MaximumMatchingAlgorithm, NodeId, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 mod matching_graphs {
@@ -249,6 +249,39 @@ fn relevant_cycle_enumeration(c: &mut Criterion) {
         });
     }
     group.finish();
+}
+
+fn simple_cycle_enumeration(c: &mut Criterion) {
+    let mut bounded = c.benchmark_group("simple_cycles_bounded_8");
+    for (name, graph) in cycle_corpus() {
+        bounded.bench_with_input(BenchmarkId::new("read_tarjan", name), &graph, |b, graph| {
+            b.iter(|| {
+                graph.enumerate_simple_cycles(8, SimpleCycleEnumerationAlgorithm::ReadTarjan)
+            });
+        });
+    }
+    bounded.finish();
+
+    let cases = [
+        ("path_6", path(6)),
+        ("hexagon", cycle(6)),
+        ("naphthalene", naphthalene()),
+        ("prismane", prismane()),
+        ("cubane", cubane()),
+        ("adamantane", adamantane()),
+    ];
+    let mut unbounded = c.benchmark_group("simple_cycles_unbounded");
+    for (name, graph) in cases {
+        unbounded.bench_with_input(BenchmarkId::new("read_tarjan", name), &graph, |b, graph| {
+            b.iter(|| {
+                graph.enumerate_simple_cycles(
+                    usize::MAX,
+                    SimpleCycleEnumerationAlgorithm::ReadTarjan,
+                )
+            });
+        });
+    }
+    unbounded.finish();
 }
 
 fn shortest_cycle(c: &mut Criterion) {
@@ -918,6 +951,7 @@ mod matching {
 criterion_group!(
     benches,
     relevant_cycle_enumeration,
+    simple_cycle_enumeration,
     shortest_cycle,
     connected_components,
     biconnected_components,

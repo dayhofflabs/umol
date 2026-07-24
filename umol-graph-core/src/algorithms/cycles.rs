@@ -1,9 +1,12 @@
 //! Relevant cycle enumeration and shortest-cycle queries.
 
 use std::collections::{HashSet, VecDeque};
+use std::ops::ControlFlow;
 
 use crate::algorithms::bcc::BiconnectedComponentsAlgorithm;
 use crate::graph::{EdgeId, Graph, NodeId};
+
+mod simple;
 
 /// An undirected cycle represented by corresponding node and edge sequences.
 ///
@@ -101,6 +104,11 @@ pub enum ShortestCycleAlgorithm {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SimpleCycleEnumerationAlgorithm {
+    ReadTarjan,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CycleEnumerationAlgorithm {
     Vismara,
 }
@@ -124,6 +132,38 @@ impl Graph {
         match alg {
             ShortestCycleAlgorithm::Bfs => self.shortest_cycle_through_node_bfs(node),
         }
+    }
+
+    /// Visits every simple cycle until traversal completes or the visitor
+    /// returns [`ControlFlow::Break`]. Traversal is deterministic for a fixed
+    /// graph representation, but its order is not a canonical ordering contract.
+    pub fn visit_simple_cycles<B, F>(
+        &self,
+        max_cycle_size: usize,
+        alg: SimpleCycleEnumerationAlgorithm,
+        mut visitor: F,
+    ) -> ControlFlow<B>
+    where
+        F: FnMut(Cycle) -> ControlFlow<B>,
+    {
+        match alg {
+            SimpleCycleEnumerationAlgorithm::ReadTarjan => {
+                self.visit_simple_cycles_read_tarjan(max_cycle_size, &mut visitor)
+            }
+        }
+    }
+
+    pub fn enumerate_simple_cycles(
+        &self,
+        max_cycle_size: usize,
+        alg: SimpleCycleEnumerationAlgorithm,
+    ) -> Vec<Cycle> {
+        let mut cycles = Vec::new();
+        let _: ControlFlow<()> = self.visit_simple_cycles(max_cycle_size, alg, |cycle| {
+            cycles.push(cycle);
+            ControlFlow::Continue(())
+        });
+        cycles
     }
 
     pub fn enumerate_cycles(
@@ -486,6 +526,7 @@ fn normalize_cycle(graph: &Graph, nodes: &[NodeId]) -> Vec<NodeId> {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::ops::ControlFlow;
 
     use pretty_assertions::assert_eq;
     use rstest::*;
@@ -493,6 +534,7 @@ mod tests {
     use super::Cycle;
     use super::CycleEnumerationAlgorithm::Vismara;
     use super::ShortestCycleAlgorithm::Bfs;
+    use super::SimpleCycleEnumerationAlgorithm::ReadTarjan;
     use crate::graph::{EdgeId, Graph, NodeId};
 
     #[rstest]
@@ -678,6 +720,172 @@ mod tests {
     ) {
         let graph = Graph::new(node_count, &edges);
         assert_eq!(graph.shortest_cycle_through_node(node, Bfs), expected);
+    }
+
+    #[rstest]
+    fn test_graph_visit_simple_cycles() {
+        let graph = Graph::new(6, &[[0, 1], [1, 2], [2, 0], [3, 4], [3, 4], [5, 5]]);
+        let mut visited = Vec::new();
+        let result = graph.visit_simple_cycles(usize::MAX, ReadTarjan, |cycle| {
+            visited.push(cycle);
+            ControlFlow::<()>::Continue(())
+        });
+
+        assert_eq!(result, ControlFlow::Continue(()));
+        assert_eq!(
+            visited,
+            vec![
+                Cycle {
+                    nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+                    edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+                },
+                Cycle {
+                    nodes: vec![NodeId(3), NodeId(4)],
+                    edges: vec![EdgeId(3), EdgeId(4)],
+                },
+                Cycle {
+                    nodes: vec![NodeId(5)],
+                    edges: vec![EdgeId(5)],
+                },
+            ]
+        );
+    }
+
+    #[rstest]
+    #[case::first(
+        1,
+        vec![Cycle {
+            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+        }],
+    )]
+    #[case::prefix(
+        2,
+        vec![
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+                edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+            },
+            Cycle {
+                nodes: vec![NodeId(3), NodeId(4)],
+                edges: vec![EdgeId(3), EdgeId(4)],
+            },
+        ],
+    )]
+    fn test_graph_visit_simple_cycles_break(
+        #[case] stop_after: usize,
+        #[case] expected: Vec<Cycle>,
+    ) {
+        let graph = Graph::new(6, &[[0, 1], [1, 2], [2, 0], [3, 4], [3, 4], [5, 5]]);
+        let mut visited = Vec::new();
+        let result = graph.visit_simple_cycles(usize::MAX, ReadTarjan, |cycle| {
+            visited.push(cycle);
+            if visited.len() == stop_after {
+                ControlFlow::Break(visited.len())
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+
+        assert_eq!(result, ControlFlow::Break(stop_after));
+        assert_eq!(visited, expected);
+    }
+
+    #[rstest]
+    #[case::zero_bound(
+        Graph::new(1, &[[0, 0]]),
+        0,
+        vec![],
+    )]
+    #[case::one_bound(
+        Graph::new(3, &[[0, 0], [0, 1], [0, 1], [1, 2], [2, 0]]),
+        1,
+        vec![Cycle {
+            nodes: vec![NodeId(0)],
+            edges: vec![EdgeId(0)],
+        }],
+    )]
+    #[case::two_bound(
+        Graph::new(3, &[[0, 0], [0, 1], [0, 1], [1, 2], [2, 0]]),
+        2,
+        vec![
+            Cycle {
+                nodes: vec![NodeId(0)],
+                edges: vec![EdgeId(0)],
+            },
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1)],
+                edges: vec![EdgeId(1), EdgeId(2)],
+            },
+        ],
+    )]
+    #[case::disconnected(
+        Graph::new(
+            8,
+            &[
+                [0, 1], [1, 2], [2, 0], [2, 3],
+                [4, 5], [5, 6], [6, 7], [7, 4],
+            ],
+        ),
+        usize::MAX,
+        vec![
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+                edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+            },
+            Cycle {
+                nodes: vec![NodeId(4), NodeId(5), NodeId(6), NodeId(7)],
+                edges: vec![EdgeId(4), EdgeId(5), EdgeId(6), EdgeId(7)],
+            },
+        ],
+    )]
+    #[case::fused_bridge(
+        Graph::new(
+            6,
+            &[
+                [0, 1], [1, 2], [2, 0],
+                [2, 3], [3, 4], [4, 2], [4, 5],
+            ],
+        ),
+        usize::MAX,
+        vec![
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+                edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
+            },
+            Cycle {
+                nodes: vec![NodeId(2), NodeId(3), NodeId(4)],
+                edges: vec![EdgeId(3), EdgeId(4), EdgeId(5)],
+            },
+        ],
+    )]
+    #[case::parallel_alternatives(
+        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
+        usize::MAX,
+        vec![
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1)],
+                edges: vec![EdgeId(0), EdgeId(1)],
+            },
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1)],
+                edges: vec![EdgeId(0), EdgeId(2)],
+            },
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1)],
+                edges: vec![EdgeId(1), EdgeId(2)],
+            },
+        ],
+    )]
+    fn test_graph_enumerate_simple_cycles(
+        #[case] graph: Graph,
+        #[case] max_cycle_size: usize,
+        #[case] expected: Vec<Cycle>,
+    ) {
+        assert_eq!(
+            graph.enumerate_simple_cycles(max_cycle_size, ReadTarjan),
+            expected
+        );
     }
 
     #[rstest]

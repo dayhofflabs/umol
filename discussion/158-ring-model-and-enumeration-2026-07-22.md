@@ -900,7 +900,7 @@ correctness oracles.
   cycle. Node-local queries retain their minimum-over-incident-edges semantics.
   Exact tables cover both public queries on loops, digons, ordinary cycles,
   bridges, and acyclic nodes.
-- **S1b — edge-aware Read--Tarjan visitor and collector**
+- **S1b — edge-aware Read--Tarjan visitor and collector** **Done**
   (`umol-graph-core/src/algorithms/cycles.rs`,
   `src/algorithms/cycles/simple.rs`, `src/lib.rs`,
   `benches/algorithms.rs`): add `SimpleCycleEnumerationAlgorithm::ReadTarjan`,
@@ -915,6 +915,24 @@ correctness oracles.
   baseline corpus with bounded and unbounded
   all-simple-cycle benchmarks. **Additive API (green).**
   `[dep: S0a, S0b, S0d]`
+
+  `SimpleCycleEnumerationAlgorithm::ReadTarjan` is exported with
+  `visit_simple_cycles` and its collecting `enumerate_simple_cycles` wrapper.
+  The edge-aware search emits loops directly, retains only extensions with a
+  bounded return path that avoids the current path, and advances through a
+  single fruitful extension without recursion. The minimum node fixes cycle
+  rotation; ordering the first and closing edges fixes reversal while retaining
+  every edge-distinct parallel cycle. `Cycle` is constructed and normalized
+  only when emitted, and `ControlFlow::Break` propagates immediately.
+
+  Exact tables cover bounds, disconnected and fused components, bridges,
+  parallel alternatives, deterministic traversal, and early termination.
+  Properties compare bounded results with the independent edge-subset oracle,
+  prove visitor/collector equality and uniqueness, and preserve edge-cycle sets
+  under node relabeling. Criterion groups
+  `simple_cycles_bounded_8/read_tarjan/*` and
+  `simple_cycles_unbounded/read_tarjan/*` cover the full bounded molecular
+  corpus and the repeatable unbounded small/medium corpus, respectively.
 - **S1c — simple-cycle differential validation**
   (`materials/rings/validation/`, `umol-graph-core/tests/data/cycles/`): run the
   completed Read--Tarjan implementation over the S0f corpus and compare it

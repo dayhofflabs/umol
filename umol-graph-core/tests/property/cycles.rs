@@ -1,13 +1,98 @@
 #[path = "cycles/oracle.rs"]
 mod oracle;
 
-use proptest::prelude::*;
-use umol_graph_core::SubdivisionNodeSource;
+use std::collections::HashSet;
+use std::ops::ControlFlow;
 
-use self::oracle::{relevant_cycles, unique_ring_families};
+use proptest::prelude::*;
+use umol_graph_core::{EdgeId, Graph, SimpleCycleEnumerationAlgorithm, SubdivisionNodeSource};
+
+use self::oracle::{enumerate_cycles, relevant_cycles, unique_ring_families};
 use super::graph::multigraph;
 
+const SIMPLE_CYCLE_ALGORITHM: SimpleCycleEnumerationAlgorithm =
+    SimpleCycleEnumerationAlgorithm::ReadTarjan;
+
 proptest! {
+    #[test]
+    fn test_graph_enumerate_simple_cycles(
+        graph in multigraph(5, 7),
+        max_cycle_size in 0usize..=5,
+    ) {
+        let cycles = graph.enumerate_simple_cycles(max_cycle_size, SIMPLE_CYCLE_ALGORITHM);
+        let mut actual: Vec<Vec<EdgeId>> = cycles
+            .iter()
+            .map(|cycle| {
+                let mut edges = cycle.edges().to_vec();
+                edges.sort_unstable();
+                edges
+            })
+            .collect();
+        actual.sort_by(|left, right| left.len().cmp(&right.len()).then_with(|| left.cmp(right)));
+
+        let expected: Vec<Vec<EdgeId>> = enumerate_cycles(&graph)
+            .into_iter()
+            .filter(|cycle| cycle.len() <= max_cycle_size)
+            .collect();
+        prop_assert_eq!(actual, expected);
+
+        let mut unique = HashSet::new();
+        for cycle in &cycles {
+            prop_assert!(unique.insert(cycle));
+        }
+    }
+
+    #[test]
+    fn test_graph_visit_simple_cycles(
+        graph in multigraph(5, 7),
+        max_cycle_size in 0usize..=5,
+    ) {
+        let expected = graph.enumerate_simple_cycles(max_cycle_size, SIMPLE_CYCLE_ALGORITHM);
+        let mut visited = Vec::new();
+        let result = graph.visit_simple_cycles(max_cycle_size, SIMPLE_CYCLE_ALGORITHM, |cycle| {
+            visited.push(cycle);
+            ControlFlow::<()>::Continue(())
+        });
+
+        prop_assert_eq!(result, ControlFlow::Continue(()));
+        prop_assert_eq!(visited, expected);
+    }
+
+    #[test]
+    fn test_graph_enumerate_simple_cycles_relabeling(
+        graph in multigraph(5, 7),
+        max_cycle_size in 0usize..=5,
+    ) {
+        let node_count = graph.node_count();
+        let relabeled_edges: Vec<[u32; 2]> = graph
+            .edge_ids()
+            .map(|edge| {
+                let [first, second] = graph.edge_endpoints(edge);
+                [
+                    (node_count - 1 - first.index()) as u32,
+                    (node_count - 1 - second.index()) as u32,
+                ]
+            })
+            .collect();
+        let relabeled = Graph::new(node_count, &relabeled_edges);
+
+        let edge_sets = |source: &Graph| {
+            let mut cycles: Vec<Vec<EdgeId>> = source
+                .enumerate_simple_cycles(max_cycle_size, SIMPLE_CYCLE_ALGORITHM)
+                .into_iter()
+                .map(|cycle| {
+                    let mut edges = cycle.edges().to_vec();
+                    edges.sort_unstable();
+                    edges
+                })
+                .collect();
+            cycles.sort_by(|left, right| left.len().cmp(&right.len()).then_with(|| left.cmp(right)));
+            cycles
+        };
+
+        prop_assert_eq!(edge_sets(&relabeled), edge_sets(&graph));
+    }
+
     #[test]
     fn test_unique_ring_families(graph in multigraph(5, 5)) {
         let relevant = relevant_cycles(&graph);
