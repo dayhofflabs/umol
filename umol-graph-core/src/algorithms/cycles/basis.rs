@@ -8,7 +8,7 @@ use bitvec::prelude::*;
 use super::relevant::ShortestPathDag;
 use super::{Cycle, MinimumCycleBasis};
 use crate::algorithms::connected::ConnectedComponentsAlgorithm;
-use crate::graph::{EdgeId, Graph, SubdividedGraph, SubdivisionNodeSource};
+use crate::graph::{EdgeId, Graph};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct EdgeVector {
@@ -124,12 +124,12 @@ pub(super) fn minimum_cycle_basis_horton(source: &Graph) -> MinimumCycleBasis {
             let subdivision = loopless.subdivide_edges();
             minimum_cycle_basis_simple(subdivision.graph())
                 .into_iter()
-                .map(|cycle| map_subdivided_cycle(source, &subdivision, &edge_sources, &cycle))
+                .map(|cycle| cycle.map_subdivision(source, &subdivision, &edge_sources))
                 .collect()
         } else {
             minimum_cycle_basis_simple(&loopless)
                 .into_iter()
-                .map(|cycle| map_cycle(source, &edge_sources, &cycle))
+                .map(|cycle| cycle.map_edges(source, &edge_sources))
                 .collect()
         }
     };
@@ -188,32 +188,6 @@ fn minimum_cycle_basis_simple(graph: &Graph) -> Vec<Cycle> {
         "Horton candidates must span the cycle space"
     );
     cycles
-}
-
-fn map_cycle(source: &Graph, edge_sources: &[EdgeId], cycle: &Cycle) -> Cycle {
-    let edges = cycle
-        .edges()
-        .iter()
-        .map(|edge| edge_sources[edge.index()])
-        .collect();
-    Cycle::normalized(source, cycle.nodes().to_vec(), edges)
-}
-
-fn map_subdivided_cycle(
-    source: &Graph,
-    subdivision: &SubdividedGraph,
-    edge_sources: &[EdgeId],
-    cycle: &Cycle,
-) -> Cycle {
-    let mut nodes = Vec::with_capacity(cycle.length() / 2);
-    let mut edges = Vec::with_capacity(cycle.length() / 2);
-    for &node in cycle.nodes() {
-        match subdivision.node_source(node) {
-            SubdivisionNodeSource::Node(node) => nodes.push(node),
-            SubdivisionNodeSource::Edge(edge) => edges.push(edge_sources[edge.index()]),
-        }
-    }
-    Cycle::normalized(source, nodes, edges)
 }
 
 fn compare_cycles(first: &Cycle, second: &Cycle) -> Ordering {

@@ -323,6 +323,58 @@ pub(super) struct RelevantCycleAnalysis {
     families: Vec<RelevantCycleFamily>,
 }
 
+pub(super) fn visit_relevant_cycles_vismara<B>(
+    source: &Graph,
+    max_cycle_size: usize,
+    visitor: &mut impl FnMut(Cycle) -> ControlFlow<B>,
+) -> ControlFlow<B> {
+    let mut loops = Vec::new();
+    let mut loopless_edges = Vec::new();
+    let mut edge_sources = Vec::new();
+    let mut endpoint_pairs = HashSet::new();
+    let mut has_parallel_edges = false;
+
+    for edge in source.edge_ids() {
+        let [first, second] = source.edge_endpoints(edge);
+        if first == second {
+            loops.push(Cycle::normalized(source, vec![first], vec![edge]));
+            continue;
+        }
+        has_parallel_edges |= !endpoint_pairs.insert([first, second]);
+        loopless_edges.push([first.0, second.0]);
+        edge_sources.push(edge);
+    }
+
+    if max_cycle_size >= 1 {
+        for cycle in loops {
+            if let ControlFlow::Break(value) = visitor(cycle) {
+                return ControlFlow::Break(value);
+            }
+        }
+    }
+    if max_cycle_size < 2 || (max_cycle_size < 3 && !has_parallel_edges) {
+        return ControlFlow::Continue(());
+    }
+
+    if edge_sources.len() == source.edge_count() && !has_parallel_edges {
+        return RelevantCycleAnalysis::new(source).visit_cycles(source, max_cycle_size, visitor);
+    }
+
+    let loopless = Graph::new(source.node_count(), &loopless_edges);
+    if has_parallel_edges {
+        let subdivision = loopless.subdivide_edges();
+        RelevantCycleAnalysis::new(subdivision.graph()).visit_cycles(
+            subdivision.graph(),
+            max_cycle_size.saturating_mul(2),
+            |cycle| visitor(cycle.map_subdivision(source, &subdivision, &edge_sources)),
+        )
+    } else {
+        RelevantCycleAnalysis::new(&loopless).visit_cycles(&loopless, max_cycle_size, |cycle| {
+            visitor(cycle.map_edges(source, &edge_sources))
+        })
+    }
+}
+
 impl RelevantCycleAnalysis {
     pub(super) fn new(graph: &Graph) -> Self {
         let mut dags = Vec::new();

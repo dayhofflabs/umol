@@ -1109,7 +1109,7 @@ references.
   The compact construction is faster on every cyclic corpus case, from about
   twofold on the small prism and hexagon cases to about 27-fold on C70. The
   acyclic path remains sub-microsecond but is approximately 7–11% slower.
-- **S2d — total relevant-cycle public API**
+- **S2d — total relevant-cycle public API** **Done**
   (`umol-graph-core/src/algorithms/cycles.rs`,
   `src/algorithms/cycles/relevant.rs`, `src/lib.rs`): add
   `RelevantCycleEnumerationAlgorithm::Vismara`,
@@ -1122,6 +1122,29 @@ references.
   termination. Property tests compare small multigraph results with the S0e
   exhaustive minimum-basis union. **Additive API (green).**
   `[dep: S0b, S0c, S0e, S2c]`
+
+  `RelevantCycleEnumerationAlgorithm::Vismara` now selects the public
+  `Graph::visit_relevant_cycles` and `Graph::enumerate_relevant_cycles`
+  operations. The size bound counts source edges. Both operations return
+  normalized `Cycle` values carrying source `NodeId` and `EdgeId` identities.
+  The visitor can terminate traversal through `ControlFlow`; the collector is
+  implemented by collecting that traversal.
+
+  The total traversal extracts source self-loops during its first edge pass.
+  It runs the compact Vismara analysis directly when the remaining graph is
+  simple. Parallel edges instead trigger one subdivision of the loopless
+  remainder, followed by source-identifier projection. Graphs containing loops
+  but no parallel edges use a compact loopless graph and its source-edge map.
+  The legacy node-only Vismara operation delegates to the new collector while
+  retaining its former exclusion of loops and digons.
+
+  Exact tests cover the direct and subdivision paths, source-distinct loops,
+  parallel digons and longer alternatives, mixed disconnected graphs, source
+  size bounds, deterministic collection, and visitor termination. Bounded
+  multigraph properties compare the public result with the S0e exhaustive
+  definition and prove visitor/collector agreement. The exhaustive comparison
+  passes 4,096 generated cases; the full `umol-graph-core` test suite and
+  all-targets Clippy gate pass.
 - **S2e — Unique Ring Family decomposition**
   (`umol-graph-core/src/algorithms/cycles.rs`,
   `src/algorithms/cycles/urf.rs`, `src/lib.rs`,

@@ -23,7 +23,7 @@ pub use algorithms::common_subgraph::{
 pub use algorithms::connected::ConnectedComponentsAlgorithm;
 pub use algorithms::cycles::{
     Cycle, CycleEnumerationAlgorithm, MinimumCycleBasis, MinimumCycleBasisAlgorithm,
-    ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
+    RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
 };
 pub use algorithms::enumeration::{PathEnumerationAlgorithm, SubgraphEnumerationAlgorithm};
 pub use algorithms::matching::{

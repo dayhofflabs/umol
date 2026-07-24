@@ -3,25 +3,6 @@
 use proptest::prelude::*;
 use umol_graph_core::Graph;
 
-pub(super) fn simple_graph(max_nodes: usize, max_edges: usize) -> impl Strategy<Value = Graph> {
-    (
-        0..=max_nodes,
-        prop::collection::vec((0..max_nodes as u32, 0..max_nodes as u32), 0..=max_edges),
-    )
-        .prop_map(|(node_count, endpoints)| {
-            let mut edges: Vec<[u32; 2]> = endpoints
-                .into_iter()
-                .filter(|&(first, second)| {
-                    first < node_count as u32 && second < node_count as u32 && first != second
-                })
-                .map(|(first, second)| [first.min(second), first.max(second)])
-                .collect();
-            edges.sort_unstable();
-            edges.dedup();
-            Graph::new(node_count, &edges)
-        })
-}
-
 pub(super) fn multigraph(max_nodes: usize, max_edges: usize) -> impl Strategy<Value = Graph> {
     (
         0..=max_nodes,

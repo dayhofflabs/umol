@@ -14,7 +14,7 @@ use std::ops::ControlFlow;
 use proptest::prelude::*;
 use rstest::rstest;
 use umol_graph_core::{
-    CycleEnumerationAlgorithm, EdgeId, Graph, MinimumCycleBasisAlgorithm,
+    EdgeId, Graph, MinimumCycleBasisAlgorithm, RelevantCycleEnumerationAlgorithm,
     SimpleCycleEnumerationAlgorithm, SubdivisionNodeSource,
 };
 
@@ -23,7 +23,7 @@ use self::exhaustive::{
     relevant_cycles, unique_ring_families,
 };
 use super::corpus::simple_graphs;
-use super::strategy::{multigraph, simple_graph};
+use super::strategy::multigraph;
 
 const SIMPLE_CYCLE_ALGORITHM: SimpleCycleEnumerationAlgorithm =
     SimpleCycleEnumerationAlgorithm::ReadTarjan;
@@ -151,22 +151,41 @@ proptest! {
     }
 
     #[test]
-    fn test_graph_enumerate_cycles(graph in simple_graph(5, 6)) {
+    fn test_graph_visit_relevant_cycles(
+        graph in multigraph(5, 5),
+        max_cycle_size in 0usize..=5,
+    ) {
+        let expected = graph.enumerate_relevant_cycles(
+            max_cycle_size,
+            RelevantCycleEnumerationAlgorithm::Vismara,
+        );
+        let mut visited = Vec::new();
+        let result = graph.visit_relevant_cycles(
+            max_cycle_size,
+            RelevantCycleEnumerationAlgorithm::Vismara,
+            |cycle| {
+                visited.push(cycle);
+                ControlFlow::<()>::Continue(())
+            },
+        );
+
+        prop_assert_eq!(result, ControlFlow::Continue(()));
+        prop_assert_eq!(visited, expected);
+    }
+
+    #[test]
+    fn test_graph_enumerate_relevant_cycles(
+        graph in multigraph(5, 5),
+        max_cycle_size in 0usize..=5,
+    ) {
         let mut actual = graph
-            .enumerate_cycles(usize::MAX, CycleEnumerationAlgorithm::Vismara)
+            .enumerate_relevant_cycles(
+                max_cycle_size,
+                RelevantCycleEnumerationAlgorithm::Vismara,
+            )
             .into_iter()
-            .map(|nodes| {
-                let mut edges = nodes
-                    .iter()
-                    .copied()
-                    .zip(nodes.iter().copied().cycle().skip(1))
-                    .take(nodes.len())
-                    .map(|(first, second)| {
-                        graph
-                            .find_edge(first, second)
-                            .expect("consecutive cycle nodes share an edge")
-                    })
-                    .collect::<Vec<_>>();
+            .map(|cycle| {
+                let mut edges = cycle.edges().to_vec();
                 edges.sort_unstable();
                 edges
             })
@@ -177,7 +196,11 @@ proptest! {
                 .then_with(|| left.cmp(right))
         });
 
-        prop_assert_eq!(actual, relevant_cycles(&graph));
+        let expected = relevant_cycles(&graph)
+            .into_iter()
+            .filter(|cycle| cycle.len() <= max_cycle_size)
+            .collect::<Vec<_>>();
+        prop_assert_eq!(actual, expected);
     }
 
     #[test]
