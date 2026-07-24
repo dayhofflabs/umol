@@ -992,7 +992,7 @@ references.
 
 ### S2 — Cycle-space, relevant-cycle, and URF analysis
 
-- **S2a — shared cycle-space kernel**
+- **S2a — shared cycle-space kernel** **Done**
   (`umol-graph-core/src/algorithms/cycles.rs`,
   `src/algorithms/cycles/basis.rs`,
   `src/algorithms/cycles/relevant.rs`): add the internal edge-vector,
@@ -1002,6 +1002,21 @@ references.
   difference, shortest-path alternatives, and candidate reconstruction;
   property tests compare the computed cycle-space rank with `E - V + C`.
   **Additive internals (green).** `[dep: S0b]`
+
+  `EdgeVector` stores edge incidence over GF(2), and `CycleVectorBasis`
+  maintains a high-pivot row-echelon basis with insertion reporting linear
+  independence. `cycle_space_rank` computes `E - V + C` using the explicit
+  `ConnectedComponentsAlgorithm::Bfs` selection. `ShortestPathDag` retains
+  every node/edge predecessor alternative, materializes exact `ShortestPath`
+  values, and `ShortestPath::cycle_with` reconstructs a `Cycle` from two
+  compatible paths and a closing edge. The existing Vismara implementation
+  now consumes this path machinery and checks its full, unbounded result
+  against the cycle-space rank in debug builds; its public result type and
+  algorithm selection are unchanged. Exact tests cover symmetric difference,
+  independent and dependent insertion, rank, path alternatives, parallel
+  edges, candidate reconstruction, and intersecting-path rejection. A bounded
+  multigraph property verifies that the span of all enumerated simple cycles
+  has rank `E - V + C`.
 - **S2b — Horton minimum cycle basis**
   (`umol-graph-core/src/algorithms/cycles.rs`,
   `src/algorithms/cycles/basis.rs`, `src/lib.rs`,

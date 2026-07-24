@@ -6,7 +6,12 @@ use std::ops::ControlFlow;
 use crate::algorithms::bcc::BiconnectedComponentsAlgorithm;
 use crate::graph::{EdgeId, Graph, NodeId};
 
+mod basis;
+mod relevant;
 mod simple;
+
+use self::basis::{cycle_space_rank, CycleVectorBasis, EdgeVector};
+use self::relevant::ShortestPathDag;
 
 /// An undirected cycle represented by corresponding node and edge sequences.
 ///
@@ -250,66 +255,6 @@ impl Graph {
     }
 }
 
-struct ShortestPathTree {
-    dist: Vec<u32>,
-    parents: Vec<Vec<NodeId>>,
-}
-
-impl ShortestPathTree {
-    fn bfs(graph: &Graph, root: NodeId) -> Self {
-        let n = graph.node_bound();
-        let mut dist = vec![u32::MAX; n];
-        let mut parents: Vec<Vec<NodeId>> = vec![Vec::new(); n];
-        let mut queue = VecDeque::new();
-
-        dist[root.index()] = 0;
-        queue.push_back(root);
-
-        while let Some(current) = queue.pop_front() {
-            let d = dist[current.index()];
-            for nbr in graph.neighbors(current) {
-                let nd = d + 1;
-                if nd < dist[nbr.node.index()] {
-                    dist[nbr.node.index()] = nd;
-                    parents[nbr.node.index()] = vec![current];
-                    queue.push_back(nbr.node);
-                } else if nd == dist[nbr.node.index()] {
-                    parents[nbr.node.index()].push(current);
-                }
-            }
-        }
-
-        Self { dist, parents }
-    }
-
-    fn all_paths_to(&self, root: NodeId, target: NodeId) -> Vec<Vec<NodeId>> {
-        let mut result = Vec::new();
-        let mut path = vec![target];
-        self.reconstruct(root, target, &mut path, &mut result);
-        result
-    }
-
-    fn reconstruct(
-        &self,
-        root: NodeId,
-        current: NodeId,
-        path: &mut Vec<NodeId>,
-        result: &mut Vec<Vec<NodeId>>,
-    ) {
-        if current == root {
-            let mut full = path.clone();
-            full.reverse();
-            result.push(full);
-            return;
-        }
-        for &p in &self.parents[current.index()] {
-            path.push(p);
-            self.reconstruct(root, p, path, result);
-            path.pop();
-        }
-    }
-}
-
 // Vismara 1997 "Unions of all the minimum cycle bases of a graph".
 // Ref impl: CDK InitialCycles.java (Algorithm 1).
 //
@@ -329,9 +274,9 @@ fn relevant_cycles_in_bcc(graph: &Graph, max_cycle_size: usize) -> Vec<Vec<NodeI
     }
 
     let nodes: Vec<NodeId> = graph.node_ids().collect();
-    let trees: Vec<ShortestPathTree> = nodes
+    let dags: Vec<ShortestPathDag> = nodes
         .iter()
-        .map(|&v| ShortestPathTree::bfs(graph, v))
+        .map(|&node| ShortestPathDag::new(graph, node))
         .collect();
 
     let shortest_edge: Vec<Option<usize>> = graph
@@ -339,173 +284,61 @@ fn relevant_cycles_in_bcc(graph: &Graph, max_cycle_size: usize) -> Vec<Vec<NodeI
         .map(|eid| graph.shortest_cycle_through_edge_bfs(eid))
         .collect();
 
-    let mut seen: HashSet<Vec<NodeId>> = HashSet::new();
+    let mut seen = HashSet::new();
     let mut cycles = Vec::new();
 
-    for (ri, &root) in nodes.iter().enumerate() {
-        let tree = &trees[ri];
+    for dag in &dags {
         for eid in graph.edge_ids() {
             let [p, q] = graph.edge_endpoints(eid);
-            let dp = tree.dist[p.index()];
-            let dq = tree.dist[q.index()];
-            if dp == u32::MAX || dq == u32::MAX {
+            let (Some(dp), Some(dq)) = (dag.distance(p), dag.distance(q)) else {
                 continue;
-            }
+            };
 
-            let cycle_len = dp as usize + dq as usize + 1;
+            let cycle_len = dp + dq + 1;
             if cycle_len < 3 || cycle_len > max_cycle_size {
                 continue;
             }
 
             let is_odd = cycle_len % 2 == 1;
-
-            if is_odd {
-                // Odd prototype: paths from root to p and q must meet only at root.
-                // The edge (p,q) closes the cycle.
-                if dp + dq + 1 != cycle_len as u32 {
-                    continue;
-                }
-                let paths_to_p = tree.all_paths_to(root, p);
-                let paths_to_q = tree.all_paths_to(root, q);
-                for pp in &paths_to_p {
-                    for pq in &paths_to_q {
-                        if let Some(c) = join_odd_cycle(pp, pq) {
-                            if c.len() <= max_cycle_size && is_relevant(graph, &c, &shortest_edge) {
-                                let norm = normalize_cycle(graph, &c);
-                                if seen.insert(norm.clone()) {
-                                    cycles.push(norm);
-                                }
-                            }
-                        }
+            let paths_to_p = dag.paths_to(p);
+            let paths_to_q = dag.paths_to(q);
+            for path_to_p in &paths_to_p {
+                for path_to_q in &paths_to_q {
+                    if is_odd && path_to_p.common_prefix_len(path_to_q) != 1 {
+                        continue;
                     }
-                }
-            } else {
-                // Even prototype: the paths from root to p and root to q must diverge
-                // at the same depth. We need vertices z at distance (cycle_len/2 - 1)
-                // from root that appear on shortest paths to both p and q.
-                let half = cycle_len / 2;
-                if dp as usize != half || dq as usize != half {
-                    // For even cycles, both endpoints must be at distance half from root
-                    // (since cycle_len = dp + dq + 1 and cycle_len is even, this means
-                    //  dp + dq is odd, so dp != dq. The edge (p,q) contributes 1.)
-                    // Actually for even prototypes: dp + dq + 1 = even means dp + dq is odd.
-                    // We need the paths to share a prefix from root and diverge.
-                    // Enumerate through the "even" construction: paths r→p and r→q that
-                    // share nodes only up to a split point, then diverge.
-                    let paths_to_p = tree.all_paths_to(root, p);
-                    let paths_to_q = tree.all_paths_to(root, q);
-                    for pp in &paths_to_p {
-                        for pq in &paths_to_q {
-                            if let Some(c) = join_even_cycle(pp, pq) {
-                                if c.len() <= max_cycle_size
-                                    && is_relevant(graph, &c, &shortest_edge)
-                                {
-                                    let norm = normalize_cycle(graph, &c);
-                                    if seen.insert(norm.clone()) {
-                                        cycles.push(norm);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    continue;
-                }
-
-                let paths_to_p = tree.all_paths_to(root, p);
-                let paths_to_q = tree.all_paths_to(root, q);
-                for pp in &paths_to_p {
-                    for pq in &paths_to_q {
-                        if let Some(c) = join_even_cycle(pp, pq) {
-                            if c.len() <= max_cycle_size && is_relevant(graph, &c, &shortest_edge) {
-                                let norm = normalize_cycle(graph, &c);
-                                if seen.insert(norm.clone()) {
-                                    cycles.push(norm);
-                                }
-                            }
+                    if let Some(candidate) = path_to_p.cycle_with(graph, path_to_q, eid) {
+                        if candidate.length() <= max_cycle_size
+                            && is_relevant(&candidate, &shortest_edge)
+                            && seen.insert(candidate.clone())
+                        {
+                            cycles.push(candidate);
                         }
                     }
                 }
             }
         }
+    }
+
+    if cfg!(debug_assertions) && max_cycle_size >= graph.node_count() {
+        let mut basis = CycleVectorBasis::new(graph.edge_count());
+        for cycle in &cycles {
+            basis.insert(EdgeVector::from_cycle(graph.edge_count(), cycle));
+        }
+        debug_assert_eq!(basis.rank(), cycle_space_rank(graph));
     }
 
     cycles
+        .into_iter()
+        .map(|cycle| cycle.nodes().to_vec())
+        .collect()
 }
 
-fn join_odd_cycle(path_p: &[NodeId], path_q: &[NodeId]) -> Option<Vec<NodeId>> {
-    if path_p.len() < 2 || path_q.len() < 2 {
-        return None;
-    }
-    debug_assert_eq!(path_p[0], path_q[0]);
-    let p_set: HashSet<NodeId> = path_p.iter().copied().collect();
-    for &v in &path_q[1..] {
-        if p_set.contains(&v) {
-            return None;
-        }
-    }
-    // Cycle: path_p forward (root to p), then path_q reversed (q to root), skip root at join
-    let mut cycle = path_p.to_vec();
-    for &v in path_q.iter().rev() {
-        if v != path_p[0] {
-            cycle.push(v);
-        }
-    }
-    Some(cycle)
-}
-
-fn join_even_cycle(path_p: &[NodeId], path_q: &[NodeId]) -> Option<Vec<NodeId>> {
-    if path_p.len() < 2 || path_q.len() < 2 {
-        return None;
-    }
-    debug_assert_eq!(path_p[0], path_q[0]);
-
-    // Find the split point: last shared node on both paths from root
-    let shared_len = path_p
+fn is_relevant(cycle: &Cycle, shortest_edge: &[Option<usize>]) -> bool {
+    cycle
+        .edges()
         .iter()
-        .zip(path_q.iter())
-        .take_while(|(a, b)| a == b)
-        .count();
-
-    if shared_len == 0 {
-        return None;
-    }
-
-    // After the split, the two paths must be completely disjoint
-    let tail_p: HashSet<NodeId> = path_p[shared_len..].iter().copied().collect();
-    for &v in &path_q[shared_len..] {
-        if tail_p.contains(&v) {
-            return None;
-        }
-    }
-
-    // Cycle: path from split to p, then back from q to split
-    // The split vertex is path_p[shared_len - 1]
-    let mut cycle: Vec<NodeId> = path_p[shared_len - 1..].to_vec();
-    for &v in path_q[shared_len..].iter().rev() {
-        cycle.push(v);
-    }
-
-    if cycle.len() < 3 {
-        return None;
-    }
-
-    Some(cycle)
-}
-
-fn is_relevant(graph: &Graph, cycle: &[NodeId], shortest_edge: &[Option<usize>]) -> bool {
-    let len = cycle.len();
-    for i in 0..len {
-        let a = cycle[i];
-        let b = cycle[(i + 1) % len];
-        if let Some(eid) = graph.find_edge(a, b) {
-            if let Some(shortest) = shortest_edge[eid.index()] {
-                if shortest == len {
-                    return true;
-                }
-            }
-        }
-    }
-    false
+        .any(|edge| shortest_edge[edge.index()].is_some_and(|shortest| shortest == cycle.length()))
 }
 
 fn normalize_cycle(graph: &Graph, nodes: &[NodeId]) -> Vec<NodeId> {
