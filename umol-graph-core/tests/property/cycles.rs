@@ -14,8 +14,8 @@ use std::ops::ControlFlow;
 use proptest::prelude::*;
 use rstest::rstest;
 use umol_graph_core::{
-    EdgeId, Graph, MinimumCycleBasisAlgorithm, SimpleCycleEnumerationAlgorithm,
-    SubdivisionNodeSource,
+    CycleEnumerationAlgorithm, EdgeId, Graph, MinimumCycleBasisAlgorithm,
+    SimpleCycleEnumerationAlgorithm, SubdivisionNodeSource,
 };
 
 use self::exhaustive::{
@@ -23,7 +23,7 @@ use self::exhaustive::{
     relevant_cycles, unique_ring_families,
 };
 use super::corpus::simple_graphs;
-use super::strategy::multigraph;
+use super::strategy::{multigraph, simple_graph};
 
 const SIMPLE_CYCLE_ALGORITHM: SimpleCycleEnumerationAlgorithm =
     SimpleCycleEnumerationAlgorithm::ReadTarjan;
@@ -148,6 +148,36 @@ proptest! {
         prop_assert!(are_linearly_independent(&cycles, graph.edge_count()));
         prop_assert_eq!(cycles.len(), expected_rank);
         prop_assert_eq!(result.total_length(), expected_length);
+    }
+
+    #[test]
+    fn test_graph_enumerate_cycles(graph in simple_graph(5, 6)) {
+        let mut actual = graph
+            .enumerate_cycles(usize::MAX, CycleEnumerationAlgorithm::Vismara)
+            .into_iter()
+            .map(|nodes| {
+                let mut edges = nodes
+                    .iter()
+                    .copied()
+                    .zip(nodes.iter().copied().cycle().skip(1))
+                    .take(nodes.len())
+                    .map(|(first, second)| {
+                        graph
+                            .find_edge(first, second)
+                            .expect("consecutive cycle nodes share an edge")
+                    })
+                    .collect::<Vec<_>>();
+                edges.sort_unstable();
+                edges
+            })
+            .collect::<Vec<_>>();
+        actual.sort_by(|left, right| {
+            left.len()
+                .cmp(&right.len())
+                .then_with(|| left.cmp(right))
+        });
+
+        prop_assert_eq!(actual, relevant_cycles(&graph));
     }
 
     #[test]

@@ -1062,7 +1062,7 @@ references.
   | `icosahedron` | 188.31–188.60 µs |
   | `c60` | 3.2030–3.2084 ms |
   | `c70` | 4.5588–4.5669 ms |
-- **S2c — compact Vismara/RCF analysis on simple graphs**
+- **S2c — compact Vismara/RCF analysis on simple graphs** **Done**
   (`umol-graph-core/src/algorithms/cycles/relevant.rs`): replace eager
   shortest-path expansion with retained shortest-path DAGs, Vismara cycle
   families, and relevant-cycle-family state on the direct simple-graph path.
@@ -1073,6 +1073,42 @@ references.
   Benchmark the new simple path beside the S0 baseline before the legacy
   backend is removed. **Additive replacement internals (green).**
   `[dep: S0a, S0b, S0e, S2a, S2b]`
+
+  `RelevantCycleAnalysis` retains one admissible shortest-path DAG per
+  Vismara root and only those cycle families whose prototypes are independent
+  of every strictly shorter prototype. Odd and even prototypes retain source
+  node and edge identifiers. Alternative shortest paths are traversed directly
+  from the DAGs through `ControlFlow`; neither the path alternatives nor their
+  Cartesian products are materialized. The existing node-only
+  `Graph::enumerate_cycles` operation now collects this traversal while its
+  public compatibility surface remains unchanged.
+
+  Exact tests cover odd and even prototypes, an unequal theta graph with
+  multiple shortest paths, fused and bridge-connected ring systems, exact
+  family prototypes and emitted cycles, and early termination at both the path
+  and cycle-family levels. A bounded simple-graph property compares the
+  emitted edge sets with the S0e exhaustive union of all minimum cycle bases;
+  the extended 4,096-case run passes.
+
+  The existing `relevant_cycles/vismara/*` Criterion group was rerun with ten
+  samples against the intervals recorded by S0a:
+
+  | Case | S0a eager interval | S2c compact interval |
+  | --- | ---: | ---: |
+  | `path_6` | 364.44–381.17 ns | 405.10–406.13 ns |
+  | `hexagon` | 11.588–12.187 µs | 5.6489–5.6815 µs |
+  | `naphthalene` | 43.781–46.264 µs | 10.656–10.681 µs |
+  | `prismane` | 22.273–23.045 µs | 11.408–11.422 µs |
+  | `cubane` | 71.967–73.580 µs | 19.908–20.302 µs |
+  | `adamantane` | 70.648–73.472 µs | 25.791–25.869 µs |
+  | `dodecahedron` | 330.88–346.97 µs | 89.248–92.303 µs |
+  | `icosahedron` | 321.57–331.68 µs | 125.13–125.33 µs |
+  | `c60` | 3.6622–3.7993 ms | 581.13–582.10 µs |
+  | `c70` | 27.838–29.832 ms | 1.0181–1.0672 ms |
+
+  The compact construction is faster on every cyclic corpus case, from about
+  twofold on the small prism and hexagon cases to about 27-fold on C70. The
+  acyclic path remains sub-microsecond but is approximately 7–11% slower.
 - **S2d — total relevant-cycle public API**
   (`umol-graph-core/src/algorithms/cycles.rs`,
   `src/algorithms/cycles/relevant.rs`, `src/lib.rs`): add

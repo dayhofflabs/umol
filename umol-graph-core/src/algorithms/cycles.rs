@@ -4,15 +4,14 @@ use std::collections::{HashSet, VecDeque};
 use std::ops::ControlFlow;
 use std::slice::Iter;
 
-use crate::algorithms::bcc::BiconnectedComponentsAlgorithm;
 use crate::graph::{EdgeId, Graph, NodeId};
 
 mod basis;
 mod relevant;
 mod simple;
 
-use self::basis::{cycle_space_rank, minimum_cycle_basis_horton, CycleVectorBasis, EdgeVector};
-use self::relevant::ShortestPathDag;
+use self::basis::minimum_cycle_basis_horton;
+use self::relevant::RelevantCycleAnalysis;
 
 /// An undirected cycle represented by corresponding node and edge sequences.
 ///
@@ -262,7 +261,6 @@ impl Graph {
             .min()
     }
 
-    // Vismara 1997. Ref impl: CDK InitialCycles.java. O(V * (V+E)) per BCC.
     fn enumerate_cycles_vismara(&self, max_cycle_size: usize) -> Vec<Vec<NodeId>> {
         if max_cycle_size < 3 || self.node_count() < 3 {
             return Vec::new();
@@ -270,135 +268,18 @@ impl Graph {
 
         let mut seen: HashSet<Vec<NodeId>> = HashSet::new();
         let mut result = Vec::new();
-
-        // Vismara enumerates relevant cycles independently within each
-        // biconnected component. Tarjan supplies the O(V+E) decomposition
-        // fixed by this implementation.
-        for component in self.biconnected_components(BiconnectedComponentsAlgorithm::Tarjan) {
-            let subgraph = self.induced_subgraph(&component);
-            let sub_graph = self.extract(&subgraph);
-            let cycles = relevant_cycles_in_bcc(&sub_graph, max_cycle_size);
-            for cycle in cycles {
-                let mapped: Vec<NodeId> = cycle
-                    .iter()
-                    .map(|&sub| {
-                        subgraph
-                            .nodes()
-                            .right_of(sub)
-                            .expect("subgraph node maps to a host node")
-                    })
-                    .collect();
-                let normalized = normalize_cycle(self, &mapped);
-                if seen.insert(normalized.clone()) {
-                    result.push(normalized);
-                }
+        let analysis = RelevantCycleAnalysis::new(self);
+        let _: ControlFlow<()> = analysis.visit_cycles(self, max_cycle_size, |cycle| {
+            let nodes = cycle.nodes;
+            if seen.insert(nodes.clone()) {
+                result.push(nodes);
             }
-        }
+            ControlFlow::Continue(())
+        });
 
         result.sort_by(|a, b| a.len().cmp(&b.len()).then_with(|| a.cmp(b)));
         result
     }
-}
-
-// Vismara 1997 "Unions of all the minimum cycle bases of a graph".
-// Ref impl: CDK InitialCycles.java (Algorithm 1).
-//
-// For each vertex r in the BCC, build a shortest-path tree. For each
-// non-tree edge (p,q) relative to r, construct prototype cycles:
-//   - Odd prototype (dist[r][p] + dist[r][q] + 1 is odd):
-//     union of shortest paths r→p and r→q, plus edge (p,q).
-//   - Even prototype (dist[r][p] + dist[r][q] + 1 is even):
-//     for each vertex z on both shortest paths at the split point,
-//     construct cycle through z.
-// Relevance filter: cycle of length L is relevant iff L equals the
-// shortest cycle through at least one of its edges.
-fn relevant_cycles_in_bcc(graph: &Graph, max_cycle_size: usize) -> Vec<Vec<NodeId>> {
-    let n = graph.node_bound();
-    if n < 3 {
-        return Vec::new();
-    }
-
-    let nodes: Vec<NodeId> = graph.node_ids().collect();
-    let dags: Vec<ShortestPathDag> = nodes
-        .iter()
-        .map(|&node| ShortestPathDag::new(graph, node))
-        .collect();
-
-    let shortest_edge: Vec<Option<usize>> = graph
-        .edge_ids()
-        .map(|eid| graph.shortest_cycle_through_edge_bfs(eid))
-        .collect();
-
-    let mut seen = HashSet::new();
-    let mut cycles = Vec::new();
-
-    for dag in &dags {
-        for eid in graph.edge_ids() {
-            let [p, q] = graph.edge_endpoints(eid);
-            let (Some(dp), Some(dq)) = (dag.distance(p), dag.distance(q)) else {
-                continue;
-            };
-
-            let cycle_len = dp + dq + 1;
-            if cycle_len < 3 || cycle_len > max_cycle_size {
-                continue;
-            }
-
-            let is_odd = cycle_len % 2 == 1;
-            let paths_to_p = dag.paths_to(p);
-            let paths_to_q = dag.paths_to(q);
-            for path_to_p in &paths_to_p {
-                for path_to_q in &paths_to_q {
-                    if is_odd && path_to_p.common_prefix_len(path_to_q) != 1 {
-                        continue;
-                    }
-                    if let Some(candidate) = path_to_p.cycle_with(graph, path_to_q, eid) {
-                        if candidate.length() <= max_cycle_size
-                            && is_relevant(&candidate, &shortest_edge)
-                            && seen.insert(candidate.clone())
-                        {
-                            cycles.push(candidate);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if cfg!(debug_assertions) && max_cycle_size >= graph.node_count() {
-        let mut basis = CycleVectorBasis::new(graph.edge_count());
-        for cycle in &cycles {
-            basis.insert(EdgeVector::from_cycle(graph.edge_count(), cycle));
-        }
-        debug_assert_eq!(basis.rank(), cycle_space_rank(graph));
-    }
-
-    cycles
-        .into_iter()
-        .map(|cycle| cycle.nodes().to_vec())
-        .collect()
-}
-
-fn is_relevant(cycle: &Cycle, shortest_edge: &[Option<usize>]) -> bool {
-    cycle
-        .edges()
-        .iter()
-        .any(|edge| shortest_edge[edge.index()].is_some_and(|shortest| shortest == cycle.length()))
-}
-
-fn normalize_cycle(graph: &Graph, nodes: &[NodeId]) -> Vec<NodeId> {
-    let edges = nodes
-        .iter()
-        .copied()
-        .zip(nodes.iter().copied().cycle().skip(1))
-        .take(nodes.len())
-        .map(|(first, second)| {
-            graph
-                .find_edge(first, second)
-                .expect("consecutive cycle nodes must share an edge")
-        })
-        .collect();
-    Cycle::normalized(graph, nodes.to_vec(), edges).nodes
 }
 
 #[cfg(test)]

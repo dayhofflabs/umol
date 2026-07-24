@@ -61,17 +61,30 @@ impl CycleVectorBasis {
     }
 
     pub(super) fn insert(&mut self, mut vector: EdgeVector) -> bool {
+        self.reduce(&mut vector);
+        let Some(pivot) = vector.highest_edge() else {
+            return false;
+        };
+        self.rows[pivot] = Some(vector);
+        self.rank += 1;
+        true
+    }
+
+    pub(super) fn is_independent(&self, mut vector: EdgeVector) -> bool {
+        self.reduce(&mut vector);
+        vector.highest_edge().is_some()
+    }
+
+    fn reduce(&self, vector: &mut EdgeVector) {
         while let Some(pivot) = vector.highest_edge() {
             let Some(row) = &self.rows[pivot] else {
-                self.rows[pivot] = Some(vector);
-                self.rank += 1;
-                return true;
+                return;
             };
             vector.symmetric_difference_assign(row);
         }
-        false
     }
 
+    #[cfg(test)]
     pub(super) fn rank(&self) -> usize {
         self.rank
     }
@@ -290,6 +303,38 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(actual, expected);
         assert_eq!(basis.rank(), expected_rank);
+    }
+
+    #[rstest]
+    #[case::independent(
+        4,
+        vec![
+            EdgeVector { bits: bitvec![1, 1, 0, 0] },
+            EdgeVector { bits: bitvec![0, 1, 1, 0] },
+        ],
+        EdgeVector { bits: bitvec![0, 0, 1, 1] },
+        true,
+    )]
+    #[case::dependent(
+        3,
+        vec![
+            EdgeVector { bits: bitvec![1, 1, 0] },
+            EdgeVector { bits: bitvec![0, 1, 1] },
+        ],
+        EdgeVector { bits: bitvec![1, 0, 1] },
+        false,
+    )]
+    fn test_cycle_vector_basis_is_independent(
+        #[case] edge_count: usize,
+        #[case] basis_vectors: Vec<EdgeVector>,
+        #[case] candidate: EdgeVector,
+        #[case] expected: bool,
+    ) {
+        let mut basis = CycleVectorBasis::new(edge_count);
+        for vector in basis_vectors {
+            assert!(basis.insert(vector));
+        }
+        assert_eq!(basis.is_independent(candidate), expected);
     }
 
     #[rstest]
