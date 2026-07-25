@@ -1481,8 +1481,20 @@ references.
   algorithm classes and bind keyword-only `RingConfig` fields with the settled
   defaults. Implement inherent `from_rust`/`to_rust`, equality, and repr.
   Variant-complete Rust table tests and installed-package tests cover exports,
-  construction, defaults, and repr. **Breaking Python selector replacement and
-  export migration (red→green).** `[dep: S1b, S2d, S3b]`
+  construction, defaults, and repr.
+  **Done.** Python now exports
+  `SimpleCycleEnumerationAlgorithm::ReadTarjan`,
+  `RelevantCycleEnumerationAlgorithm::Vismara`, and the frozen `RingConfig`
+  value. `RingConfig()` selects both AST defaults; either selector can be
+  supplied independently through its keyword-only field. Its copied getters,
+  explicit repr, equality, and inherent `from_rust`/`to_rust` conversions
+  preserve the complete configuration. The family-blind Python
+  `CycleEnumerationAlgorithm` export is removed. Variant-complete native tests
+  cover both selector conversions and representations; installed-package tests
+  cover exports, defaults, explicit construction, keyword-only enforcement,
+  equality, repr, and immutability.
+  **Breaking Python selector replacement and export migration (red→green).**
+  `[dep: S1b, S2d, S3b]`
 - **S6b — fingerprint config integration**
   (`umol-py/src/fingerprint/config.rs`, fingerprint and reaction bindings,
   `umol-py/tests/test_fingerprint.py`): add keyword-only nested `ring_config`

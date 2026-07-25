@@ -7,7 +7,8 @@ use pyo3::prelude::*;
 use crate::{
     algorithm::{
         AutomorphismAlgorithm, CommonSubgraphEnumerationAlgorithm, ConnectedComponentsAlgorithm,
-        CycleEnumerationAlgorithm, MaximumIndependentSetAlgorithm, SubgraphEnumerationAlgorithm,
+        MaximumIndependentSetAlgorithm, RelevantCycleEnumerationAlgorithm,
+        SimpleCycleEnumerationAlgorithm, SubgraphEnumerationAlgorithm,
         SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
     },
     aromatic::{AromaticSystemAst, AromaticSystemView, AromaticSystemViews},
@@ -91,6 +92,7 @@ use crate::{
     },
     reaction::{CompositionScope, ReactionApplicationConfig, ReactionAst, ReactionDerivation},
     resolve::{AromaticityResolveConfig, ResolveConfig, StereoResolveConfig},
+    ring::RingConfig,
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
     spin::SpinStateAst,
     stereo::{
@@ -146,6 +148,8 @@ mod reaction;
 #[cfg(feature = "graph")]
 mod resolve;
 #[cfg(feature = "graph")]
+mod ring;
+#[cfg(feature = "graph")]
 mod smiles;
 #[cfg(feature = "graph")]
 mod spin;
@@ -164,7 +168,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AutomorphismAlgorithm>()?;
         module.add_class::<CommonSubgraphEnumerationAlgorithm>()?;
         module.add_class::<ConnectedComponentsAlgorithm>()?;
-        module.add_class::<CycleEnumerationAlgorithm>()?;
+        module.add_class::<SimpleCycleEnumerationAlgorithm>()?;
+        module.add_class::<RelevantCycleEnumerationAlgorithm>()?;
         module.add_class::<MaximumIndependentSetAlgorithm>()?;
         module.add_class::<SubgraphEnumerationAlgorithm>()?;
         module.add_class::<SubgraphIsomorphismAlgorithm>()?;
@@ -227,6 +232,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ReactionApplicationConfig>()?;
         module.add_class::<ReactionAst>()?;
         module.add_class::<ReactionDerivation>()?;
+        module.add_class::<RingConfig>()?;
         module.add_class::<SmilesIoConfig>()?;
         module.add_class::<SmilesSyntaxFlags>()?;
         module.add_class::<RefinementRounds>()?;

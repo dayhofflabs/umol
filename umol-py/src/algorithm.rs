@@ -6,8 +6,9 @@ use umol_graph_core::{
     AutomorphismAlgorithm as GraphCoreAutomorphismAlgorithm,
     CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm,
     ConnectedComponentsAlgorithm as GraphCoreConnectedComponentsAlgorithm,
-    CycleEnumerationAlgorithm as GraphCoreCycleEnumerationAlgorithm,
     MaximumIndependentSetAlgorithm as GraphCoreMaximumIndependentSetAlgorithm,
+    RelevantCycleEnumerationAlgorithm as GraphCoreRelevantCycleEnumerationAlgorithm,
+    SimpleCycleEnumerationAlgorithm as GraphCoreSimpleCycleEnumerationAlgorithm,
     SubgraphEnumerationAlgorithm as GraphCoreSubgraphEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
 };
@@ -138,15 +139,15 @@ impl ConnectedComponentsAlgorithm {
     }
 }
 
-/// Algorithm used to enumerate relevant cycles.
+/// Algorithm used to enumerate every simple cycle.
 #[pyclass(from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CycleEnumerationAlgorithm {
-    Vismara(),
+pub enum SimpleCycleEnumerationAlgorithm {
+    ReadTarjan(),
 }
 
 #[pymethods]
-impl CycleEnumerationAlgorithm {
+impl SimpleCycleEnumerationAlgorithm {
     fn __eq__(&self, other: &Self) -> bool {
         self.to_rust() == other.to_rust()
     }
@@ -156,26 +157,60 @@ impl CycleEnumerationAlgorithm {
     }
 }
 
-impl CycleEnumerationAlgorithm {
+impl SimpleCycleEnumerationAlgorithm {
     pub(crate) fn repr(self) -> &'static str {
         match self {
-            Self::Vismara() => "CycleEnumerationAlgorithm.Vismara()",
+            Self::ReadTarjan() => "SimpleCycleEnumerationAlgorithm.ReadTarjan()",
         }
     }
 
-    #[allow(
-        dead_code,
-        reason = "Rust-to-Python conversion API for cycle-enumeration algorithms"
-    )]
-    pub(crate) fn from_rust(algorithm: GraphCoreCycleEnumerationAlgorithm) -> Self {
+    pub(crate) fn from_rust(algorithm: GraphCoreSimpleCycleEnumerationAlgorithm) -> Self {
         match algorithm {
-            GraphCoreCycleEnumerationAlgorithm::Vismara => Self::Vismara(),
+            GraphCoreSimpleCycleEnumerationAlgorithm::ReadTarjan => Self::ReadTarjan(),
         }
     }
 
-    pub(crate) fn to_rust(self) -> GraphCoreCycleEnumerationAlgorithm {
+    pub(crate) fn to_rust(self) -> GraphCoreSimpleCycleEnumerationAlgorithm {
         match self {
-            Self::Vismara() => GraphCoreCycleEnumerationAlgorithm::Vismara,
+            Self::ReadTarjan() => GraphCoreSimpleCycleEnumerationAlgorithm::ReadTarjan,
+        }
+    }
+}
+
+/// Algorithm used to enumerate relevant cycles.
+#[pyclass(from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RelevantCycleEnumerationAlgorithm {
+    Vismara(),
+}
+
+#[pymethods]
+impl RelevantCycleEnumerationAlgorithm {
+    fn __eq__(&self, other: &Self) -> bool {
+        self.to_rust() == other.to_rust()
+    }
+
+    fn __repr__(&self) -> &'static str {
+        self.repr()
+    }
+}
+
+impl RelevantCycleEnumerationAlgorithm {
+    pub(crate) fn repr(self) -> &'static str {
+        match self {
+            Self::Vismara() => "RelevantCycleEnumerationAlgorithm.Vismara()",
+        }
+    }
+
+    pub(crate) fn from_rust(algorithm: GraphCoreRelevantCycleEnumerationAlgorithm) -> Self {
+        match algorithm {
+            GraphCoreRelevantCycleEnumerationAlgorithm::Vismara => Self::Vismara(),
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> GraphCoreRelevantCycleEnumerationAlgorithm {
+        match self {
+            Self::Vismara() => GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         }
     }
 }
@@ -481,20 +516,53 @@ mod tests {
     }
 
     #[rstest]
-    #[case::vismara(
-        GraphCoreCycleEnumerationAlgorithm::Vismara,
-        CycleEnumerationAlgorithm::Vismara(),
-        "CycleEnumerationAlgorithm.Vismara()"
+    #[case::read_tarjan(
+        GraphCoreSimpleCycleEnumerationAlgorithm::ReadTarjan,
+        SimpleCycleEnumerationAlgorithm::ReadTarjan(),
+        "SimpleCycleEnumerationAlgorithm.ReadTarjan()"
     )]
-    fn test_cycle_enumeration_algorithm_value(
-        #[case] rust: GraphCoreCycleEnumerationAlgorithm,
-        #[case] python: CycleEnumerationAlgorithm,
+    fn test_simple_cycle_enumeration_algorithm_value(
+        #[case] rust: GraphCoreSimpleCycleEnumerationAlgorithm,
+        #[case] python: SimpleCycleEnumerationAlgorithm,
         #[case] expected_repr: &str,
     ) {
-        assert_eq!(CycleEnumerationAlgorithm::from_rust(rust), python);
+        assert_eq!(SimpleCycleEnumerationAlgorithm::from_rust(rust), python);
         assert_eq!(python.to_rust(), rust);
         Python::attach(|py| {
-            let expected = into_py_variant(py, CycleEnumerationAlgorithm::from_rust(rust)).unwrap();
+            let expected =
+                into_py_variant(py, SimpleCycleEnumerationAlgorithm::from_rust(rust)).unwrap();
+            let value = into_py_variant(py, python).unwrap();
+
+            assert_eq!(
+                value
+                    .bind(py)
+                    .as_any()
+                    .repr()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                expected_repr
+            );
+            assert!(value.bind(py).as_any().eq(expected.bind(py)).unwrap());
+        });
+    }
+
+    #[rstest]
+    #[case::vismara(
+        GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
+        RelevantCycleEnumerationAlgorithm::Vismara(),
+        "RelevantCycleEnumerationAlgorithm.Vismara()"
+    )]
+    fn test_relevant_cycle_enumeration_algorithm_value(
+        #[case] rust: GraphCoreRelevantCycleEnumerationAlgorithm,
+        #[case] python: RelevantCycleEnumerationAlgorithm,
+        #[case] expected_repr: &str,
+    ) {
+        assert_eq!(RelevantCycleEnumerationAlgorithm::from_rust(rust), python);
+        assert_eq!(python.to_rust(), rust);
+        Python::attach(|py| {
+            let expected =
+                into_py_variant(py, RelevantCycleEnumerationAlgorithm::from_rust(rust)).unwrap();
             let value = into_py_variant(py, python).unwrap();
 
             assert_eq!(
