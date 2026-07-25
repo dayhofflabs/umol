@@ -140,7 +140,16 @@ New module `algorithms/matching.rs`:
 - Returns `None` if no perfect matching exists (non-kekulizable)
 - The canonical node order comes from the caller (umol-graph's SMILES canonicalization or Morgan algorithm)
 
-**Status (2026-04-29):** landed. `Graph::perfect_matching(node_order, PerfectMatchingAlgorithm::BacktrackingDfs) -> Option<Matching>` in `umol-graph-core/src/algorithms/matching.rs`. Returns the existing `Matching` struct rather than `Vec<EdgeId>` directly. Companion: `BipartitionAlgorithm::Bfs` in `algorithms/coloring.rs` and `MaximumMatchingAlgorithm::HopcroftKarp`. As of 2026-07-22, Hopcroft-Karp uses layered BFS plus batched DFS and reports non-bipartite input as `MaximumMatchingError::NonBipartite`.
+**Status (2026-04-29, updated 2026-07-25):** landed.
+`Graph::perfect_matching(node_order,
+PerfectMatchingAlgorithm::BacktrackingDfs) -> Option<Matching>` returns the
+existing `Matching` struct rather than `Vec<EdgeId>` directly. Maximum matching
+now separates the fallible bipartite
+`BipartiteMaximumMatchingAlgorithm::HopcroftKarp` operation from the infallible
+general `GeneralMaximumMatchingAlgorithm::Edmonds` operation; the combined
+`bipartite_maximum_matching_or_general` operation requires both selectors.
+Hopcroft--Karp uses layered BFS plus batched DFS and reports non-bipartite input
+as `NonBipartiteGraphError`.
 
 ### Phase 2: all Kekulé structures
 

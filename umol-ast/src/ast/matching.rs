@@ -36,76 +36,67 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::MaximumMatchingAlgorithm;
+    use umol_graph_core::GeneralMaximumMatchingAlgorithm;
 
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::molecule::{MoleculeAst, MoleculeParts};
 
-    fn chain(n: usize) -> MoleculeAst {
-        let atoms = vec![AtomAst::from_element(Element::C); n];
-        let bonds: Vec<_> = (0..n.saturating_sub(1))
-            .map(|i| {
-                (
-                    AtomId(i as u32),
-                    AtomId((i + 1) as u32),
-                    BondAst::from_order(1),
-                )
-            })
-            .collect();
-        MoleculeAst::from_parts(MoleculeParts {
-            atoms,
-            bonds,
-            ..Default::default()
-        })
-    }
-
-    fn ring(n: usize) -> MoleculeAst {
-        let atoms = vec![AtomAst::from_element(Element::C); n];
-        let bonds: Vec<_> = (0..n)
-            .map(|i| {
-                (
-                    AtomId(i as u32),
-                    AtomId(((i + 1) % n) as u32),
-                    BondAst::from_order(1),
-                )
-            })
-            .collect();
-        MoleculeAst::from_parts(MoleculeParts {
-            atoms,
-            bonds,
-            ..Default::default()
-        })
-    }
-
     #[fixture]
     fn chain_4_matching() -> BondMatching {
-        chain(4)
-            .graph()
-            .maximum_matching(
-                &[AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
-                MaximumMatchingAlgorithm::Edmonds,
-            )
-            .unwrap()
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 4],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+            ],
+            ..Default::default()
+        })
+        .graph()
+        .general_maximum_matching(
+            &[AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
+            GeneralMaximumMatchingAlgorithm::Edmonds,
+        )
     }
 
     #[fixture]
     fn ring_6_matching() -> BondMatching {
-        ring(6)
-            .graph()
-            .maximum_matching(
-                &[
-                    AtomId(0),
-                    AtomId(1),
-                    AtomId(2),
-                    AtomId(3),
-                    AtomId(4),
-                    AtomId(5),
-                ],
-                MaximumMatchingAlgorithm::Edmonds,
-            )
-            .unwrap()
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C); 6],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(3), AtomId(4), BondAst::from_order(1)),
+                (AtomId(4), AtomId(5), BondAst::from_order(1)),
+                (AtomId(5), AtomId(0), BondAst::from_order(1)),
+            ],
+            ..Default::default()
+        })
+        .graph()
+        .general_maximum_matching(
+            &[
+                AtomId(0),
+                AtomId(1),
+                AtomId(2),
+                AtomId(3),
+                AtomId(4),
+                AtomId(5),
+            ],
+            GeneralMaximumMatchingAlgorithm::Edmonds,
+        )
+    }
+
+    #[fixture]
+    fn singleton_matching() -> BondMatching {
+        MoleculeAst::from_parts(MoleculeParts {
+            atoms: vec![AtomAst::from_element(Element::C)],
+            ..Default::default()
+        })
+        .graph()
+        .general_maximum_matching(&[AtomId(0)], GeneralMaximumMatchingAlgorithm::Edmonds)
     }
 
     #[rstest]
@@ -116,13 +107,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_matching_bonds_enumerates_matched_edges(chain_4_matching: BondMatching) {
-        let bonds: Vec<BondId> = chain_4_matching.bonds().collect();
-        assert_eq!(bonds.len(), 2);
-        // All bond indices are < bond count of chain(4) == 3.
-        for b in bonds {
-            assert!(b.0 < 3);
-        }
+    fn test_bond_matching_bonds(chain_4_matching: BondMatching) {
+        assert_eq!(
+            chain_4_matching.bonds().collect::<Vec<_>>(),
+            vec![BondId(0), BondId(2)],
+        );
     }
 
     #[rstest]
@@ -138,26 +127,27 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_matching_mate_and_is_matched(chain_4_matching: BondMatching) {
-        for i in 0..4 {
-            assert!(chain_4_matching.is_matched(AtomId(i)));
-            let mate = chain_4_matching.mate(AtomId(i)).unwrap();
-            assert_ne!(mate, AtomId(i));
-            // Matching is symmetric.
-            assert_eq!(chain_4_matching.mate(mate), Some(AtomId(i)));
-        }
+    #[case::first(chain_4_matching(), AtomId(0), Some(AtomId(1)))]
+    #[case::second(chain_4_matching(), AtomId(1), Some(AtomId(0)))]
+    #[case::third(chain_4_matching(), AtomId(2), Some(AtomId(3)))]
+    #[case::fourth(chain_4_matching(), AtomId(3), Some(AtomId(2)))]
+    #[case::unmatched(singleton_matching(), AtomId(0), None)]
+    fn test_bond_matching_mate(
+        #[case] matching: BondMatching,
+        #[case] atom: AtomId,
+        #[case] expected: Option<AtomId>,
+    ) {
+        assert_eq!(matching.mate(atom), expected);
     }
 
     #[rstest]
-    fn test_bond_matching_mate_unmatched_atom() {
-        // Single atom is not matched; a "matching" on just {0} is size 0 and
-        // atom 0 has no mate.
-        let ast = chain(1);
-        let m = ast
-            .graph()
-            .maximum_matching(&[AtomId(0)], MaximumMatchingAlgorithm::Edmonds)
-            .unwrap();
-        assert!(!m.is_matched(AtomId(0)));
-        assert_eq!(m.mate(AtomId(0)), None);
+    #[case::matched(chain_4_matching(), AtomId(0), true)]
+    #[case::unmatched(singleton_matching(), AtomId(0), false)]
+    fn test_bond_matching_is_matched(
+        #[case] matching: BondMatching,
+        #[case] atom: AtomId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(matching.is_matched(atom), expected);
     }
 }

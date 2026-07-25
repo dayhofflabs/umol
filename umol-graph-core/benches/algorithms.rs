@@ -6,11 +6,11 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm::{
     ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
 use umol_graph_core::{
-    AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
-    CycleEnumerationAlgorithm, EdgeId, Graph, MaximumIndependentSetAlgorithm,
-    MaximumMatchingAlgorithm, MinimumCycleBasisAlgorithm, NodeId, ShortestCycleAlgorithm,
-    SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm,
-    ARCMATCH_DEFAULT_PATH_LENGTH,
+    AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
+    ConnectedComponentsAlgorithm, CycleEnumerationAlgorithm, EdgeId,
+    GeneralMaximumMatchingAlgorithm, Graph, MaximumIndependentSetAlgorithm,
+    MinimumCycleBasisAlgorithm, NodeId, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 mod matching_graphs {
@@ -403,13 +403,12 @@ fn maximum_matching(c: &mut Criterion) {
         ("c60", fullerene_c60()),
     ];
 
-    let mut group = c.benchmark_group("maximum_matching");
+    let mut group = c.benchmark_group("general_maximum_matching/edmonds");
     for (name, g) in &graphs {
         let node_order: Vec<_> = g.node_ids().collect();
         group.bench_function(*name, |b| {
             b.iter(|| {
-                g.maximum_matching(&node_order, MaximumMatchingAlgorithm::Edmonds)
-                    .expect("Edmonds maximum matching is infallible")
+                g.general_maximum_matching(&node_order, GeneralMaximumMatchingAlgorithm::Edmonds)
             });
         });
     }
@@ -421,14 +420,33 @@ fn maximum_matching(c: &mut Criterion) {
         ("grid_16x16", grid(16, 16)),
     ];
 
-    let mut group = c.benchmark_group("maximum_matching_hopcroft_karp");
+    let mut group = c.benchmark_group("bipartite_maximum_matching/hopcroft_karp");
     for (name, graph) in &bipartite_graphs {
         let node_order: Vec<_> = graph.node_ids().collect();
         group.bench_function(*name, |b| {
             b.iter(|| {
                 graph
-                    .maximum_matching(&node_order, MaximumMatchingAlgorithm::HopcroftKarp)
+                    .bipartite_maximum_matching(
+                        &node_order,
+                        BipartiteMaximumMatchingAlgorithm::HopcroftKarp,
+                    )
                     .expect("Hopcroft-Karp benchmark graphs are bipartite")
+            });
+        });
+    }
+    group.finish();
+
+    let mut group =
+        c.benchmark_group("bipartite_maximum_matching_or_general/hopcroft_karp_edmonds");
+    for (name, graph) in &graphs {
+        let node_order: Vec<_> = graph.node_ids().collect();
+        group.bench_function(*name, |b| {
+            b.iter(|| {
+                graph.bipartite_maximum_matching_or_general(
+                    &node_order,
+                    BipartiteMaximumMatchingAlgorithm::HopcroftKarp,
+                    GeneralMaximumMatchingAlgorithm::Edmonds,
+                )
             });
         });
     }

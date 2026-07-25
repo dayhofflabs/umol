@@ -31,8 +31,8 @@ pub use algorithms::cycles::{
 };
 pub use algorithms::independent_set::MaximumIndependentSetAlgorithm;
 pub use algorithms::matching::{
-    FaceBoundary, Matching, MatchingEnumerationAlgorithm, MaximumMatchingAlgorithm,
-    MaximumMatchingError, PerfectMatchingAlgorithm, PlanarEmbedding, PlanarEmbeddingError,
+    BipartiteMaximumMatchingAlgorithm, FaceBoundary, GeneralMaximumMatchingAlgorithm, Matching,
+    MatchingEnumerationAlgorithm, PerfectMatchingAlgorithm, PlanarEmbedding, PlanarEmbeddingError,
     PlanarMatchingCountError,
 };
 pub use algorithms::paths::PathEnumerationAlgorithm;

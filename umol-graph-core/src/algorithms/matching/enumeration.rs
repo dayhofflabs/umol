@@ -7,7 +7,7 @@
 
 use std::ops::ControlFlow;
 
-use super::maximum::Matching;
+use super::maximum::{GeneralMaximumMatchingAlgorithm, Matching};
 use crate::correspondence::{Correspondence, GraphCorrespondence};
 use crate::graph::{EdgeId, Graph, NodeId};
 
@@ -76,7 +76,8 @@ impl Graph {
         F: FnMut(Matching) -> ControlFlow<B>,
     {
         let node_order: Vec<NodeId> = self.node_ids().collect();
-        let initial = self.maximum_matching_edmonds(&node_order);
+        let initial =
+            self.general_maximum_matching(&node_order, GeneralMaximumMatchingAlgorithm::Edmonds);
         if !initial.is_perfect(self.node_count()) {
             return ControlFlow::Continue(());
         }
@@ -92,7 +93,8 @@ impl Graph {
         F: FnMut(Matching) -> ControlFlow<B>,
     {
         let node_order: Vec<NodeId> = self.node_ids().collect();
-        let initial = self.maximum_matching_edmonds(&node_order);
+        let initial =
+            self.general_maximum_matching(&node_order, GeneralMaximumMatchingAlgorithm::Edmonds);
         let target_size = initial.size();
         if target_size == 0 {
             return visitor(initial);
@@ -292,7 +294,11 @@ impl<'a> MatchingSearchState<'a> {
 
         let (residual, _) = self.residual_graph();
         let node_order: Vec<NodeId> = residual.node_ids().collect();
-        self.included_size + residual.maximum_matching_edmonds(&node_order).size() >= target_size
+        self.included_size
+            + residual
+                .general_maximum_matching(&node_order, GeneralMaximumMatchingAlgorithm::Edmonds)
+                .size()
+            >= target_size
     }
 
     pub(super) fn matching(&self) -> Matching {

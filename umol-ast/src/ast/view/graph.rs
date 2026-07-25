@@ -2,10 +2,11 @@
 
 use umol_graph_core::{
     AutomorphismAlgorithm, AutomorphismGroupOrder, AutomorphismOutput,
-    BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm, EdgeId, Graph,
-    MatchingEnumerationAlgorithm, MaximumIndependentSetAlgorithm, MaximumMatchingAlgorithm,
-    MaximumMatchingError, NodeId, PerfectMatchingAlgorithm, RelevantCycleEnumerationAlgorithm,
-    ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+    BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
+    ConnectedComponentsAlgorithm, EdgeId, GeneralMaximumMatchingAlgorithm, Graph,
+    MatchingEnumerationAlgorithm, MaximumIndependentSetAlgorithm, NodeId, NonBipartiteGraphError,
+    PerfectMatchingAlgorithm, RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm,
+    SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 
 use super::super::id::{AtomId, BondId};
@@ -95,13 +96,38 @@ impl<'a> GraphView<'a> {
             .collect()
     }
 
-    pub fn maximum_matching(
+    pub fn bipartite_maximum_matching(
         &self,
         node_order: &[AtomId],
-        alg: MaximumMatchingAlgorithm,
-    ) -> Result<BondMatching, MaximumMatchingError> {
+        algorithm: BipartiteMaximumMatchingAlgorithm,
+    ) -> Result<BondMatching, NonBipartiteGraphError> {
         let nodes: Vec<NodeId> = node_order.iter().copied().map(NodeId::from).collect();
-        self.graph.maximum_matching(&nodes, alg).map(BondMatching)
+        self.graph
+            .bipartite_maximum_matching(&nodes, algorithm)
+            .map(BondMatching)
+    }
+
+    pub fn general_maximum_matching(
+        &self,
+        node_order: &[AtomId],
+        algorithm: GeneralMaximumMatchingAlgorithm,
+    ) -> BondMatching {
+        let nodes: Vec<NodeId> = node_order.iter().copied().map(NodeId::from).collect();
+        BondMatching(self.graph.general_maximum_matching(&nodes, algorithm))
+    }
+
+    pub fn bipartite_maximum_matching_or_general(
+        &self,
+        node_order: &[AtomId],
+        bipartite_algorithm: BipartiteMaximumMatchingAlgorithm,
+        general_algorithm: GeneralMaximumMatchingAlgorithm,
+    ) -> BondMatching {
+        let nodes: Vec<NodeId> = node_order.iter().copied().map(NodeId::from).collect();
+        BondMatching(self.graph.bipartite_maximum_matching_or_general(
+            &nodes,
+            bipartite_algorithm,
+            general_algorithm,
+        ))
     }
 
     pub fn perfect_matching(

@@ -141,7 +141,9 @@ SSSR/MCB not implemented — relevant cycles subsume them without the non-unique
 | Edmonds' blossom (Gabow simplification) | Maximum matching | O(V³) | Kekulization (single), radical detection (unmatched = radical) |
 | Branch-and-bound with Edmonds oracle | All perfect/maximum matchings | Exponential worst-case | Kekulization (all representations), tautomer enumeration |
 
-Implemented: `Graph::maximum_matching(node_order, alg: MaximumMatchingAlgorithm) -> Result<Matching, MaximumMatchingError>`,
+Implemented: `Graph::bipartite_maximum_matching(node_order, BipartiteMaximumMatchingAlgorithm) -> Result<Matching, NonBipartiteGraphError>`,
+`Graph::general_maximum_matching(node_order, GeneralMaximumMatchingAlgorithm) -> Matching`,
+`Graph::bipartite_maximum_matching_or_general(node_order, BipartiteMaximumMatchingAlgorithm, GeneralMaximumMatchingAlgorithm) -> Matching`,
 `Graph::enumerate_perfect_matchings(alg: MatchingEnumerationAlgorithm)`,
 `Graph::enumerate_maximum_matchings(alg: MatchingEnumerationAlgorithm)`.
 

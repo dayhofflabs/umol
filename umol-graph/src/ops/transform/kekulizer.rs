@@ -21,7 +21,10 @@ use umol_ast::ast::{
     ElectronCountsAst, EntityStructureContradiction, EntityStructureError,
     EntityStructureValidator, MoleculeAst, ValueAst,
 };
-use umol_graph_core::{MaximumMatchingAlgorithm, MaximumMatchingError, NodeId};
+use umol_graph_core::{
+    BipartiteMaximumMatchingAlgorithm, GeneralMaximumMatchingAlgorithm, NodeId,
+    NonBipartiteGraphError,
+};
 use umol_utils::solution::Solution;
 
 use crate::ops::invariant::ValenceMismatch;
@@ -208,6 +211,12 @@ impl MatchingInput {
             })
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MaximumMatchingAlgorithm {
+    Edmonds,
+    HopcroftKarp,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -442,18 +451,20 @@ impl Kekulizer {
                     )
                 })
                 .collect();
-            let algorithm = match matching_input.mode {
-                MatchingInputMode::Prescribed => self.model.algorithm,
-                MatchingInputMode::OneMobileExposure => MaximumMatchingAlgorithm::Edmonds,
-            };
-            let matching = extracted
-                .graph()
-                .maximum_matching(&sub_order, algorithm)
-                .map_err(|error| match error {
-                    MaximumMatchingError::NonBipartite => {
+            let matching = match self.model.algorithm {
+                MaximumMatchingAlgorithm::Edmonds => extracted
+                    .graph()
+                    .general_maximum_matching(&sub_order, GeneralMaximumMatchingAlgorithm::Edmonds),
+                MaximumMatchingAlgorithm::HopcroftKarp => extracted
+                    .graph()
+                    .bipartite_maximum_matching(
+                        &sub_order,
+                        BipartiteMaximumMatchingAlgorithm::HopcroftKarp,
+                    )
+                    .map_err(|NonBipartiteGraphError| {
                         KekulizerError::NonBipartiteMatching(system_idx)
-                    }
-                })?;
+                    })?,
+            };
             let deficiency = extracted.atoms().count() - 2 * matching.size();
             match matching_input.mode {
                 MatchingInputMode::Prescribed if deficiency != 0 => {
@@ -735,6 +746,11 @@ mod tests {
     #[case::non_bipartite(
         mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [0 2 :aromatic]] :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]"}]}"#),
         (0..3).map(AtomId).collect(),
+        KekulizerError::NonBipartiteMatching(AromaticSystemId(0)),
+    )]
+    #[case::mobile_exposure(
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]#c-"}]}"#),
+        (0..5).map(AtomId).collect(),
         KekulizerError::NonBipartiteMatching(AromaticSystemId(0)),
     )]
     fn test_kekulizer_transform_into_matching_error(

@@ -1409,8 +1409,8 @@ references.
   `GeneralMaximumMatchingAlgorithm::Edmonds`. Add
   `bipartite_maximum_matching`, returning `NonBipartiteGraphError`;
   `general_maximum_matching`, which is infallible; and an infallible
-  `maximum_matching` that takes both selectors, uses Hopcroft--Karp for
-  bipartite input, and the general selector otherwise. Remove
+  `bipartite_maximum_matching_or_general` that takes both selectors, uses
+  Hopcroft--Karp for bipartite input, and the general selector otherwise. Remove
   `MaximumMatchingError`. Preserve the already-approved
   `MaximumMatchingAlgorithm` name only as the operation-level selector beside
   `KekulizationConfig`, where `HopcroftKarp` continues to require
@@ -1420,6 +1420,23 @@ references.
   direct/general parity on bipartite graphs, combined fallback on
   non-bipartite graphs, deterministic node ordering, and unchanged matching
   cardinality.
+  **Done.** Graph-core now exposes separate
+  `BipartiteMaximumMatchingAlgorithm` and
+  `GeneralMaximumMatchingAlgorithm` selectors, the fallible
+  `bipartite_maximum_matching` operation, the infallible
+  `general_maximum_matching` operation, and the infallible combined
+  `bipartite_maximum_matching_or_general` operation requiring both selectors.
+  The obsolete
+  graph-core `MaximumMatchingAlgorithm` and `MaximumMatchingError` are
+  removed. Matching enumeration names Edmonds explicitly for its residual
+  cardinality bound, and the typed `umol-ast` graph view mirrors all three
+  operations. Kekulization owns the remaining operation-level
+  `MaximumMatchingAlgorithm` and dispatches it directly in both prescribed and
+  mobile-exposure modes; Hopcroft--Karp reports
+  `KekulizerError::NonBipartiteMatching` without fallback. Exact and randomized
+  tests cover the direct operations, typed precondition failure, combined
+  fallback, node-order determinism, and cardinality parity. Criterion
+  benchmarks retain separate Edmonds, Hopcroft--Karp, and combined groups.
   **Breaking selector and signature migration with all callers restored
   (red→green).** `[dep: S5c]`
 - **S5e — cycle direct, fallback, and combined operations**

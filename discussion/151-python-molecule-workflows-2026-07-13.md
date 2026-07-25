@@ -1679,7 +1679,7 @@ workflow configuration and are passed explicitly at the lower boundary.
 | `umol-graph/src/fingerprint/substructure.rs` | `SubgraphEnumerationAlgorithm::Esu` plus `AutomorphismAlgorithm::Nauty` | `SubstructureFeaturizer` / `StructuralFingerprintConfig` own the enumeration and canonicalization selectors. |
 | `umol-graph/src/ops/aromaticity/clar.rs` | `MaximumIndependentSetAlgorithm::BranchAndBound` | `AromaticityConfig`, separate from `AromaticityModel`, owns the independent-set selector. |
 | `umol-graph/src/ops/aromaticity/hmo.rs` | `ConnectedComponentsAlgorithm::Bfs` | `AromaticityConfig`, separate from `AromaticityModel`, owns the connected-components selector. |
-| `umol-graph/src/ops/transform/kekulizer.rs` | `MaximumMatchingAlgorithm::Edmonds` replaces the configured selection for mobile exposure | Rename `KekulizationModel` to `KekulizationConfig`, honor its selector in both modes, and surface non-bipartite Hopcroft-Karp input as a typed error without fallback. |
+| `umol-graph/src/ops/transform/kekulizer.rs` | `MaximumMatchingAlgorithm::Edmonds` replaced the configured selection for mobile exposure | The behavioral defect is fixed by doc 158 S5d: both modes honor the operation-level selector and surface non-bipartite Hopcroft--Karp input without fallback. Rename `KekulizationModel` to `KekulizationConfig` in S9t. |
 
 `umol-io/src` contains no graph-core algorithm selection. WL, ECFP, and Morgan
 constructing their corresponding refinement variants is not a silent default:
@@ -1710,12 +1710,14 @@ describes chemical semantics, while an `XConfig` describes execution of the
 operation using that model.
 
 The same pass removes three graph-core naming and organization inconsistencies:
-`MaxMatchingAlgorithm` becomes `MaximumMatchingAlgorithm`,
+the original `MaxMatchingAlgorithm` rename is superseded by doc 158 S5d's
+separate `BipartiteMaximumMatchingAlgorithm` and
+`GeneralMaximumMatchingAlgorithm`,
 `MaxIndependentSetAlgorithm` becomes `MaximumIndependentSetAlgorithm`, and
 `planar_matching_count.rs` becomes `matching_count.rs`. Counting remains
 separate from matching construction and enumeration: it has its own planar
 embedding, Pfaffian, and error machinery, while the public planar type and
-method names remain specific. `MaximumMatchingError` makes Hopcroft-Karp's
+method names remain specific. `NonBipartiteGraphError` makes Hopcroft--Karp's
 bipartite precondition a release-mode result rather than a debug assertion.
 
 `CompositionScope` does not describe two algorithms for the same operation.
@@ -1810,10 +1812,12 @@ default rather than introducing a one-field composition config.
   `count_perfect_matchings_planar`. Migrate imports, type annotations, tests,
   benchmarks, and documentation in the same subitem. **Breaking public renames
   and module move (red→green).** **Implemented (green).** Graph-core and every
-  workspace caller now use `MaximumMatchingAlgorithm` and
+  workspace caller adopted the then-current `MaximumMatchingAlgorithm` and
   `MaximumIndependentSetAlgorithm`; matching-count implementation and exports
   live under `algorithms::matching_count`, while its planar-specific public
-  types and operation retain their existing names. `[dep: —]`
+  types and operation retain their existing names. Doc 158 S5d subsequently
+  replaced the graph-core matching selector with separate bipartite and general
+  selectors. `[dep: —]`
 - **S9h — fallible maximum matching and genuine Hopcroft-Karp**
   (`umol-graph-core/src/algorithms/matching.rs`,
   `umol-ast/src/ast/{matching,view/graph}.rs`, all callers): add
@@ -1835,6 +1839,11 @@ default rather than introducing a one-field composition config.
   pre-change → post-change ranges as 343.54–345.70 ns → 243.91–244.58 ns for
   hexagon, 450.81–453.62 ns → 270.20–273.83 ns for cubane, and
   12.693–12.820 µs → 4.2859–4.3043 µs for a 16×16 grid. `[dep: S9g]`
+  Doc 158 S5d subsequently replaced this interim API with the direct
+  `bipartite_maximum_matching` and `general_maximum_matching` operations plus
+  the infallible `bipartite_maximum_matching_or_general` fallback operation,
+  and replaced `MaximumMatchingError` with `NonBipartiteGraphError` on the
+  direct Hopcroft--Karp path.
 - **S9i — graph-core subsidiary algorithms**
   (`umol-graph-core/src/algorithms/{matching,cycles,refine}.rs`): use the
   existing public selector-bearing calls for BFS bipartition inside
@@ -1977,16 +1986,16 @@ selector field described below.
   feature sets. **Breaking config-shape migration (red→green).** `[dep: S9j]`
 - **S9t — configured and fallible kekulization matching**
   (`umol-graph/src/ops/transform/kekulizer.rs`, `ops/transform.rs`, all callers):
-  rename `KekulizationModel` to `KekulizationConfig`, use its
-  `MaximumMatchingAlgorithm` in both prescribed and mobile-exposure modes, and
-  remove the silent Edmonds substitution. Map
-  `MaximumMatchingError::NonBipartite` to
-  `KekulizerError::NonBipartiteMatching(system)` without fallback; all other
-  matching and transactional errors retain their existing classifications.
-  Tests exercise Edmonds in both modes, Hopcroft-Karp on bipartite systems, the
-  typed error and unchanged input on non-bipartite systems, and exact selector
-  propagation to graph-core. **Breaking config rename plus behavioral correction
-  (red→green).** `[dep: S9g, S9h]`
+  rename `KekulizationModel` to `KekulizationConfig` while retaining its local
+  operation-level `MaximumMatchingAlgorithm`. Doc 158 S5d already removed the
+  silent Edmonds substitution: both modes dispatch Edmonds to
+  `general_maximum_matching` and Hopcroft--Karp to
+  `bipartite_maximum_matching`, mapping `NonBipartiteGraphError` to
+  `KekulizerError::NonBipartiteMatching(system)` without fallback. Preserve
+  that behavior through the config rename and migrate all callers. Tests pin
+  the renamed config construction, exact selector propagation, and the
+  existing unchanged-input error contract. **Breaking config rename with
+  caller migration (red→green).** `[dep: S9g, S9h]`
 - **S9u — algorithm-transparency gate** (workspace): search every non-test Rust
   call to a graph-core selector-bearing operation. Require each selection to
   originate in a low-level method argument, a stored operational-config field,
