@@ -379,6 +379,7 @@ mod tests {
         EcfpHashScheme, PatternFingerprintConfig, RefinementRounds, StructuralFingerprintConfig,
         WlHashScheme,
     };
+    use crate::ring::RingConfig;
 
     #[fixture]
     fn ethanol() -> MoleculeAst {
@@ -588,7 +589,10 @@ mod tests {
 
     #[rstest]
     #[case::morgan_default(
-        HashedFingerprintConfig::Morgan { radius: 2 },
+        HashedFingerprintConfig::Morgan {
+            radius: 2,
+            ring_config: RingConfig::default(),
+        },
         &[
             864662311,
             1535166686,
@@ -599,13 +603,17 @@ mod tests {
         ]
     )]
     #[case::morgan_explicit(
-        HashedFingerprintConfig::Morgan { radius: 0 },
+        HashedFingerprintConfig::Morgan {
+            radius: 0,
+            ring_config: RingConfig::default(),
+        },
         &[864662311, 2245384272, 2246728737]
     )]
     #[case::ecfp_default(
         HashedFingerprintConfig::Ecfp {
             radius: 2,
             hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
+            ring_config: RingConfig::default(),
         },
         &[
             63839236075656913,
@@ -620,6 +628,7 @@ mod tests {
         HashedFingerprintConfig::Ecfp {
             radius: 0,
             hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
+            ring_config: RingConfig::default(),
         },
         &[
             1189585227353469813,
@@ -696,10 +705,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::morgan(HashedFingerprintConfig::Morgan { radius: 2 })]
+    #[case::morgan(HashedFingerprintConfig::Morgan {
+        radius: 2,
+        ring_config: RingConfig::default(),
+    })]
     #[case::ecfp(HashedFingerprintConfig::Ecfp {
         radius: 2,
         hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
+        ring_config: RingConfig::default(),
     })]
     #[case::wl(HashedFingerprintConfig::Wl {
         rounds: RefinementRounds::Fixed { rounds: 3 },
@@ -719,13 +732,17 @@ mod tests {
 
     #[rstest]
     #[case::morgan(
-        HashedFingerprintConfig::Morgan { radius: 2 },
+        HashedFingerprintConfig::Morgan {
+            radius: 2,
+            ring_config: RingConfig::default(),
+        },
         &[(2246728737, 2), (3545175291, 1)]
     )]
     #[case::ecfp(
         HashedFingerprintConfig::Ecfp {
             radius: 2,
             hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
+            ring_config: RingConfig::default(),
         },
         &[(5513743581508886362, 1), (16149328945726899460, 2)]
     )]
@@ -776,10 +793,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::morgan(HashedFingerprintConfig::Morgan { radius: 2 })]
+    #[case::morgan(HashedFingerprintConfig::Morgan {
+        radius: 2,
+        ring_config: RingConfig::default(),
+    })]
     #[case::ecfp(HashedFingerprintConfig::Ecfp {
         radius: 2,
         hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
+        ring_config: RingConfig::default(),
     })]
     #[case::wl(HashedFingerprintConfig::Wl {
         rounds: RefinementRounds::Fixed { rounds: 3 },

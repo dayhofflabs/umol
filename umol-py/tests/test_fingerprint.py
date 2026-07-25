@@ -15,8 +15,11 @@ from umol import (
     ReactionDefaults,
     ReactionSide,
     RefinementRounds,
+    RelevantCycleEnumerationAlgorithm,
+    RingConfig,
     RoleTaggedHashedFeatureSet,
     SignedHashedFeatureSet,
+    SimpleCycleEnumerationAlgorithm,
     StructuralFeatureSet,
     StructuralFingerprintConfig,
     UnderdeterminedError,
@@ -83,17 +86,29 @@ def test_ecfp_hash_scheme():
     [
         (
             HashedFingerprintConfig.Morgan(),
-            HashedFingerprintConfig.Morgan(radius=2),
-            "HashedFingerprintConfig.Morgan(radius=2)",
+            HashedFingerprintConfig.Morgan(
+                radius=2,
+                ring_config=RingConfig(),
+            ),
+            "HashedFingerprintConfig.Morgan(radius=2, "
+            "ring_config=RingConfig("
+            "simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), "
+            "relevant_cycle_algorithm="
+            "RelevantCycleEnumerationAlgorithm.Vismara()))",
         ),
         (
             HashedFingerprintConfig.Ecfp(),
             HashedFingerprintConfig.Ecfp(
                 radius=2,
                 hashing_scheme=EcfpHashScheme.Xxh3Width64V1(),
+                ring_config=RingConfig(),
             ),
             "HashedFingerprintConfig.Ecfp(radius=2, "
-            "hashing_scheme=EcfpHashScheme.Xxh3Width64V1())",
+            "hashing_scheme=EcfpHashScheme.Xxh3Width64V1(), "
+            "ring_config=RingConfig("
+            "simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), "
+            "relevant_cycle_algorithm="
+            "RelevantCycleEnumerationAlgorithm.Vismara()))",
         ),
         (
             HashedFingerprintConfig.Wl(rounds=RefinementRounds.ToFixpoint()),
@@ -115,21 +130,51 @@ def test_hashed_fingerprint_config_defaults(value, expected, expected_repr):
     ("value", "expected", "expected_repr"),
     [
         (
-            HashedFingerprintConfig.Morgan(radius=3),
-            HashedFingerprintConfig.Morgan(radius=3),
-            "HashedFingerprintConfig.Morgan(radius=3)",
+            HashedFingerprintConfig.Morgan(
+                radius=3,
+                ring_config=RingConfig(
+                    simple_cycle_algorithm=(
+                        SimpleCycleEnumerationAlgorithm.ReadTarjan()
+                    ),
+                    relevant_cycle_algorithm=(
+                        RelevantCycleEnumerationAlgorithm.Vismara()
+                    ),
+                ),
+            ),
+            HashedFingerprintConfig.Morgan(
+                radius=3,
+                ring_config=RingConfig(),
+            ),
+            "HashedFingerprintConfig.Morgan(radius=3, "
+            "ring_config=RingConfig("
+            "simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), "
+            "relevant_cycle_algorithm="
+            "RelevantCycleEnumerationAlgorithm.Vismara()))",
         ),
         (
             HashedFingerprintConfig.Ecfp(
                 radius=3,
                 hashing_scheme=EcfpHashScheme.Xxh3Width64V1(),
+                ring_config=RingConfig(
+                    simple_cycle_algorithm=(
+                        SimpleCycleEnumerationAlgorithm.ReadTarjan()
+                    ),
+                    relevant_cycle_algorithm=(
+                        RelevantCycleEnumerationAlgorithm.Vismara()
+                    ),
+                ),
             ),
             HashedFingerprintConfig.Ecfp(
                 radius=3,
                 hashing_scheme=EcfpHashScheme.Xxh3Width64V1(),
+                ring_config=RingConfig(),
             ),
             "HashedFingerprintConfig.Ecfp(radius=3, "
-            "hashing_scheme=EcfpHashScheme.Xxh3Width64V1())",
+            "hashing_scheme=EcfpHashScheme.Xxh3Width64V1(), "
+            "ring_config=RingConfig("
+            "simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), "
+            "relevant_cycle_algorithm="
+            "RelevantCycleEnumerationAlgorithm.Vismara()))",
         ),
         (
             HashedFingerprintConfig.Wl(
@@ -148,6 +193,35 @@ def test_hashed_fingerprint_config_defaults(value, expected, expected_repr):
 def test_hashed_fingerprint_config(value, expected, expected_repr):
     assert value == expected
     assert repr(value) == expected_repr
+
+
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        (
+            HashedFingerprintConfig.Morgan(),
+            RingConfig(),
+        ),
+        (
+            HashedFingerprintConfig.Ecfp(
+                ring_config=RingConfig(
+                    simple_cycle_algorithm=(
+                        SimpleCycleEnumerationAlgorithm.ReadTarjan()
+                    ),
+                    relevant_cycle_algorithm=(
+                        RelevantCycleEnumerationAlgorithm.Vismara()
+                    ),
+                )
+            ),
+            RingConfig(),
+        ),
+    ],
+)
+def test_hashed_fingerprint_config_ring_config(config, expected):
+    ring_config = config.ring_config
+
+    assert ring_config == expected
+    assert ring_config is not config.ring_config
 
 
 @pytest.mark.parametrize(
@@ -292,6 +366,27 @@ def test_fingerprint_result_constructor_error(result_type):
                 4018048386,
             ],
         ),
+        pytest.param(
+            HashedFingerprintConfig.Morgan(
+                ring_config=RingConfig(
+                    simple_cycle_algorithm=(
+                        SimpleCycleEnumerationAlgorithm.ReadTarjan()
+                    ),
+                    relevant_cycle_algorithm=(
+                        RelevantCycleEnumerationAlgorithm.Vismara()
+                    ),
+                )
+            ),
+            [
+                864662311,
+                1535166686,
+                2245384272,
+                2246728737,
+                3542456614,
+                4018048386,
+            ],
+            id="morgan-explicit-ring-config",
+        ),
         (
             HashedFingerprintConfig.Ecfp(),
             [
@@ -302,6 +397,27 @@ def test_fingerprint_result_constructor_error(result_type):
                 15001976065402722634,
                 16149328945726899460,
             ],
+        ),
+        pytest.param(
+            HashedFingerprintConfig.Ecfp(
+                ring_config=RingConfig(
+                    simple_cycle_algorithm=(
+                        SimpleCycleEnumerationAlgorithm.ReadTarjan()
+                    ),
+                    relevant_cycle_algorithm=(
+                        RelevantCycleEnumerationAlgorithm.Vismara()
+                    ),
+                )
+            ),
+            [
+                63839236075656913,
+                1189585227353469813,
+                3822471596818936039,
+                13652293261850732425,
+                15001976065402722634,
+                16149328945726899460,
+            ],
+            id="ecfp-explicit-ring-config",
         ),
         (
             HashedFingerprintConfig.Wl(
@@ -343,9 +459,37 @@ def test_molecule_ast_hashed_fingerprint(ethanol, config, expected_ids):
             HashedFingerprintConfig.Morgan(),
             [(2246728737, 2), (3545175291, 1)],
         ),
+        pytest.param(
+            HashedFingerprintConfig.Morgan(
+                ring_config=RingConfig(
+                    simple_cycle_algorithm=(
+                        SimpleCycleEnumerationAlgorithm.ReadTarjan()
+                    ),
+                    relevant_cycle_algorithm=(
+                        RelevantCycleEnumerationAlgorithm.Vismara()
+                    ),
+                )
+            ),
+            [(2246728737, 2), (3545175291, 1)],
+            id="morgan-explicit-ring-config",
+        ),
         (
             HashedFingerprintConfig.Ecfp(),
             [(5513743581508886362, 1), (16149328945726899460, 2)],
+        ),
+        pytest.param(
+            HashedFingerprintConfig.Ecfp(
+                ring_config=RingConfig(
+                    simple_cycle_algorithm=(
+                        SimpleCycleEnumerationAlgorithm.ReadTarjan()
+                    ),
+                    relevant_cycle_algorithm=(
+                        RelevantCycleEnumerationAlgorithm.Vismara()
+                    ),
+                )
+            ),
+            [(5513743581508886362, 1), (16149328945726899460, 2)],
+            id="ecfp-explicit-ring-config",
         ),
         (
             HashedFingerprintConfig.Wl(
@@ -633,7 +777,16 @@ def test_reaction_ast_combined_fingerprint_difference(ethanol_deoxygenation):
 
     result = ethanol_deoxygenation.combined_fingerprint(
         config=ReactionCombinedFingerprintConfig.Difference(
-            molecule=HashedFingerprintConfig.Morgan()
+            molecule=HashedFingerprintConfig.Morgan(
+                ring_config=RingConfig(
+                    simple_cycle_algorithm=(
+                        SimpleCycleEnumerationAlgorithm.ReadTarjan()
+                    ),
+                    relevant_cycle_algorithm=(
+                        RelevantCycleEnumerationAlgorithm.Vismara()
+                    ),
+                )
+            )
         )
     )
     features = result.features

@@ -1501,7 +1501,20 @@ references.
   to ECFP and Morgan configuration variants, lower it into the Rust
   featurizers, and carry it through reaction fingerprint configs. Installed
   tests compare default and explicit configuration and retain exact fingerprint
-  payloads. **Breaking Python config-shape migration (red→green).**
+  payloads.
+  **Done.** `HashedFingerprintConfig.Morgan` and
+  `HashedFingerprintConfig.Ecfp` now own keyword-only `ring_config` fields
+  defaulting to `RingConfig()`. Their equality, generated field access, and
+  repr include the nested value. Lowering writes it to
+  `MorganFeaturizer::ring_config` or `EcfpFeaturizer::ring_config`; WL remains
+  unchanged because it does not consume ring membership. The existing
+  `ReactionCombinedFingerprintConfig` molecule nesting carries the same
+  configuration through both reaction combinators without a second ring
+  field. Native conversion tests assert the lowered fields, while installed
+  tests cover default and explicit construction, copied nested access, exact
+  hashed and counted molecular payloads, and exact reaction difference and
+  disjoint-union payloads.
+  **Breaking Python config-shape migration (red→green).**
   `[dep: S4a, S6a]`
 - **S6c — aromaticity config integration**
   (`umol-py/src/model/aromaticity.rs`, resolver/aromatizer/validator bindings,

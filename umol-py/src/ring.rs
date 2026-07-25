@@ -7,7 +7,7 @@ use crate::algorithm::{RelevantCycleEnumerationAlgorithm, SimpleCycleEnumeration
 
 /// Algorithms used to compute each supported ring-set kind.
 #[pyclass(eq, frozen, from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RingConfig(AstRingConfig);
 
 #[pymethods]
@@ -18,7 +18,7 @@ impl RingConfig {
         simple_cycle_algorithm: Option<SimpleCycleEnumerationAlgorithm>,
         relevant_cycle_algorithm: Option<RelevantCycleEnumerationAlgorithm>,
     ) -> Self {
-        let defaults = AstRingConfig::default();
+        let defaults = Self::default().0;
         Self(AstRingConfig {
             simple_cycle_algorithm: simple_cycle_algorithm
                 .map_or(defaults.simple_cycle_algorithm, |algorithm| {
@@ -41,7 +41,7 @@ impl RingConfig {
         RelevantCycleEnumerationAlgorithm::from_rust(self.0.relevant_cycle_algorithm)
     }
 
-    fn __repr__(&self) -> String {
+    pub(crate) fn __repr__(&self) -> String {
         format!(
             "RingConfig(simple_cycle_algorithm={}, relevant_cycle_algorithm={})",
             self.simple_cycle_algorithm().repr(),

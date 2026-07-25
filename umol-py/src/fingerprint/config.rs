@@ -11,6 +11,8 @@ use umol_graph::fingerprint::{
 use umol_graph::hash::{EcfpHashScheme as GraphEcfpHashScheme, WlHashScheme as GraphWlHashScheme};
 use umol_graph_core::RefinementRounds as GraphCoreRefinementRounds;
 
+use crate::ring::RingConfig;
+
 /// Number of graph-refinement rounds: fixed or until stabilization.
 #[pyclass(from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -145,12 +147,16 @@ impl EcfpHashScheme {
 #[pyclass(from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HashedFingerprintConfig {
-    #[pyo3(constructor = (*, radius=2))]
-    Morgan { radius: u32 },
-    #[pyo3(constructor = (*, radius=2, hashing_scheme=EcfpHashScheme::Xxh3Width64V1()))]
+    #[pyo3(constructor = (*, radius=2, ring_config=RingConfig::default()))]
+    Morgan {
+        radius: u32,
+        ring_config: RingConfig,
+    },
+    #[pyo3(constructor = (*, radius=2, hashing_scheme=EcfpHashScheme::Xxh3Width64V1(), ring_config=RingConfig::default()))]
     Ecfp {
         radius: u32,
         hashing_scheme: EcfpHashScheme,
+        ring_config: RingConfig,
     },
     #[pyo3(constructor = (*, rounds, hashing_scheme=WlHashScheme::Xxh3SortedWidth64V1()))]
     Wl {
@@ -167,15 +173,21 @@ impl HashedFingerprintConfig {
 
     fn __repr__(&self) -> String {
         match self {
-            Self::Morgan { radius } => {
-                format!("HashedFingerprintConfig.Morgan(radius={radius})")
-            }
+            Self::Morgan {
+                radius,
+                ring_config,
+            } => format!(
+                "HashedFingerprintConfig.Morgan(radius={radius}, ring_config={})",
+                ring_config.__repr__()
+            ),
             Self::Ecfp {
                 radius,
                 hashing_scheme,
+                ring_config,
             } => format!(
-                "HashedFingerprintConfig.Ecfp(radius={radius}, hashing_scheme={})",
-                hashing_scheme.__repr__()
+                "HashedFingerprintConfig.Ecfp(radius={radius}, hashing_scheme={}, ring_config={})",
+                hashing_scheme.__repr__(),
+                ring_config.__repr__()
             ),
             Self::Wl {
                 rounds,
@@ -192,14 +204,21 @@ impl HashedFingerprintConfig {
 impl HashedFingerprintConfig {
     pub(crate) fn to_rust(self) -> GraphFeaturizer {
         match self {
-            Self::Morgan { radius } => GraphFeaturizer::Morgan(GraphMorganFeaturizer::new(radius)),
+            Self::Morgan {
+                radius,
+                ring_config,
+            } => GraphFeaturizer::Morgan(GraphMorganFeaturizer {
+                radius,
+                ring_config: ring_config.to_rust(),
+            }),
             Self::Ecfp {
                 radius,
                 hashing_scheme,
+                ring_config,
             } => GraphFeaturizer::Ecfp(GraphEcfpFeaturizer {
                 radius,
                 hashing_scheme: hashing_scheme.to_rust(),
-                ring_config: Default::default(),
+                ring_config: ring_config.to_rust(),
             }),
             Self::Wl {
                 rounds,
@@ -534,15 +553,23 @@ mod tests {
     }
 
     #[rstest]
-    #[case::morgan_default(HashedFingerprintConfig::Morgan { radius: 2 })]
-    #[case::morgan_explicit(HashedFingerprintConfig::Morgan { radius: 3 })]
+    #[case::morgan_default(HashedFingerprintConfig::Morgan {
+        radius: 2,
+        ring_config: RingConfig::default(),
+    })]
+    #[case::morgan_explicit(HashedFingerprintConfig::Morgan {
+        radius: 3,
+        ring_config: RingConfig::default(),
+    })]
     #[case::ecfp_default(HashedFingerprintConfig::Ecfp {
         radius: 2,
         hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
+        ring_config: RingConfig::default(),
     })]
     #[case::ecfp_explicit(HashedFingerprintConfig::Ecfp {
         radius: 3,
         hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
+        ring_config: RingConfig::default(),
     })]
     #[case::wl_fixed(HashedFingerprintConfig::Wl {
         rounds: RefinementRounds::Fixed { rounds: 3 },
@@ -556,20 +583,27 @@ mod tests {
         let featurizer = config.to_rust();
 
         match (config, featurizer) {
-            (HashedFingerprintConfig::Morgan { radius }, GraphFeaturizer::Morgan(featurizer)) => {
+            (
+                HashedFingerprintConfig::Morgan {
+                    radius,
+                    ring_config,
+                },
+                GraphFeaturizer::Morgan(featurizer),
+            ) => {
                 assert_eq!(featurizer.radius, radius);
-                assert_eq!(featurizer.ring_config, Default::default());
+                assert_eq!(featurizer.ring_config, ring_config.to_rust());
             }
             (
                 HashedFingerprintConfig::Ecfp {
                     radius,
                     hashing_scheme,
+                    ring_config,
                 },
                 GraphFeaturizer::Ecfp(featurizer),
             ) => {
                 assert_eq!(featurizer.radius, radius);
                 assert_eq!(featurizer.hashing_scheme, hashing_scheme.to_rust());
-                assert_eq!(featurizer.ring_config, Default::default());
+                assert_eq!(featurizer.ring_config, ring_config.to_rust());
             }
             (
                 HashedFingerprintConfig::Wl {
@@ -589,15 +623,19 @@ mod tests {
 
     #[rstest]
     #[case::morgan(
-        HashedFingerprintConfig::Morgan { radius: 3 },
-        "HashedFingerprintConfig.Morgan(radius=3)"
+        HashedFingerprintConfig::Morgan {
+            radius: 3,
+            ring_config: RingConfig::default(),
+        },
+        "HashedFingerprintConfig.Morgan(radius=3, ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()))"
     )]
     #[case::ecfp(
         HashedFingerprintConfig::Ecfp {
             radius: 3,
             hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
+            ring_config: RingConfig::default(),
         },
-        "HashedFingerprintConfig.Ecfp(radius=3, hashing_scheme=EcfpHashScheme.Xxh3Width64V1())"
+        "HashedFingerprintConfig.Ecfp(radius=3, hashing_scheme=EcfpHashScheme.Xxh3Width64V1(), ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()))"
     )]
     #[case::wl(
         HashedFingerprintConfig::Wl {
@@ -776,7 +814,10 @@ mod tests {
     #[rstest]
     #[case::difference_morgan(
         ReactionCombinedFingerprintConfig::Difference {
-            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+            molecule: HashedFingerprintConfig::Morgan {
+                radius: 2,
+                ring_config: RingConfig::default(),
+            },
         },
         GraphReactionCombinator::Difference
     )]
@@ -785,6 +826,7 @@ mod tests {
             molecule: HashedFingerprintConfig::Ecfp {
                 radius: 2,
                 hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
+                ring_config: RingConfig::default(),
             },
         },
         GraphReactionCombinator::Difference
@@ -800,7 +842,10 @@ mod tests {
     )]
     #[case::disjoint_union_morgan(
         ReactionCombinedFingerprintConfig::DisjointUnion {
-            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+            molecule: HashedFingerprintConfig::Morgan {
+                radius: 2,
+                ring_config: RingConfig::default(),
+            },
         },
         GraphReactionCombinator::DisjointUnion
     )]
@@ -809,6 +854,7 @@ mod tests {
             molecule: HashedFingerprintConfig::Ecfp {
                 radius: 2,
                 hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
+                ring_config: RingConfig::default(),
             },
         },
         GraphReactionCombinator::DisjointUnion
@@ -834,20 +880,27 @@ mod tests {
 
         assert_eq!(combinator, expected_combinator);
         match (molecule, featurizer) {
-            (HashedFingerprintConfig::Morgan { radius }, GraphFeaturizer::Morgan(featurizer)) => {
+            (
+                HashedFingerprintConfig::Morgan {
+                    radius,
+                    ring_config,
+                },
+                GraphFeaturizer::Morgan(featurizer),
+            ) => {
                 assert_eq!(featurizer.radius, radius);
-                assert_eq!(featurizer.ring_config, Default::default());
+                assert_eq!(featurizer.ring_config, ring_config.to_rust());
             }
             (
                 HashedFingerprintConfig::Ecfp {
                     radius,
                     hashing_scheme,
+                    ring_config,
                 },
                 GraphFeaturizer::Ecfp(featurizer),
             ) => {
                 assert_eq!(featurizer.radius, radius);
                 assert_eq!(featurizer.hashing_scheme, hashing_scheme.to_rust());
-                assert_eq!(featurizer.ring_config, Default::default());
+                assert_eq!(featurizer.ring_config, ring_config.to_rust());
             }
             (
                 HashedFingerprintConfig::Wl {

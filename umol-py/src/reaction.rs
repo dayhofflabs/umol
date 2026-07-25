@@ -536,6 +536,7 @@ mod tests {
     use crate::fingerprint::reaction::{
         ReactionSide, RoleTaggedHashedFeatureSet, SignedHashedFeatureSet,
     };
+    use crate::ring::RingConfig;
 
     #[rstest]
     #[case::rc_anchored(AstCompositionScope::RcAnchored, CompositionScope::RcAnchored)]
@@ -1973,7 +1974,10 @@ mod tests {
     #[rstest]
     #[case::morgan(
         ReactionCombinedFingerprintConfig::Difference {
-            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+            molecule: HashedFingerprintConfig::Morgan {
+                radius: 2,
+                ring_config: RingConfig::default(),
+            },
         },
         vec![
             (864662311, -1),
@@ -1990,6 +1994,7 @@ mod tests {
             molecule: HashedFingerprintConfig::Ecfp {
                 radius: 2,
                 hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
+                ring_config: RingConfig::default(),
             },
         },
         vec![
@@ -2074,7 +2079,10 @@ mod tests {
     #[rstest]
     #[case::morgan(
         ReactionCombinedFingerprintConfig::DisjointUnion {
-            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+            molecule: HashedFingerprintConfig::Morgan {
+                radius: 2,
+                ring_config: RingConfig::default(),
+            },
         },
         vec![
             (ReactionSide::Reactant, 864662311),
@@ -2093,6 +2101,7 @@ mod tests {
             molecule: HashedFingerprintConfig::Ecfp {
                 radius: 2,
                 hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
+                ring_config: RingConfig::default(),
             },
         },
         vec![
@@ -2184,7 +2193,10 @@ mod tests {
     #[rstest]
     #[case::difference(
         ReactionCombinedFingerprintConfig::Difference {
-            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+            molecule: HashedFingerprintConfig::Morgan {
+                radius: 2,
+                ring_config: RingConfig::default(),
+            },
         }
     )]
     fn test_reaction_ast_combined_fingerprint_difference_identity(
@@ -2220,7 +2232,10 @@ mod tests {
     #[rstest]
     #[case::disjoint_union(
         ReactionCombinedFingerprintConfig::DisjointUnion {
-            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+            molecule: HashedFingerprintConfig::Morgan {
+                radius: 2,
+                ring_config: RingConfig::default(),
+            },
         },
         vec![
             (ReactionSide::Reactant, 864662311),
@@ -2275,7 +2290,10 @@ mod tests {
             AstDeltas::new(),
         ),
         ReactionCombinedFingerprintConfig::Difference {
-            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+            molecule: HashedFingerprintConfig::Morgan {
+                radius: 2,
+                ring_config: RingConfig::default(),
+            },
         },
         "UnderdeterminedError",
         "fingerprint requires a determined molecule",
@@ -2292,7 +2310,10 @@ mod tests {
             })]),
         ),
         ReactionCombinedFingerprintConfig::DisjointUnion {
-            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+            molecule: HashedFingerprintConfig::Morgan {
+                radius: 2,
+                ring_config: RingConfig::default(),
+            },
         },
         "UnderdeterminedError",
         "fingerprint requires a determined molecule",
@@ -2309,7 +2330,10 @@ mod tests {
             })]),
         ),
         ReactionCombinedFingerprintConfig::Difference {
-            molecule: HashedFingerprintConfig::Morgan { radius: 2 },
+            molecule: HashedFingerprintConfig::Morgan {
+                radius: 2,
+                ring_config: RingConfig::default(),
+            },
         },
         "ContradictionError",
         "reaction fingerprint input is inconsistent",
