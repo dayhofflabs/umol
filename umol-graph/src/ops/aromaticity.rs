@@ -26,6 +26,7 @@ use umol_ast::ast::{
     MoleculeAst, RingConfig, RingModel, RingSetKind, TransactionError, ValueAst,
 };
 use umol_chem::element::Element;
+use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
 use umol_utils::solution::Solution;
 
 use crate::ops::model::AromaticityModel;
@@ -51,6 +52,28 @@ pub enum AromaticityError {
     NonGroundAtom(AtomId),
     #[error(transparent)]
     Transaction(#[from] TransactionError),
+}
+
+/// Algorithms used by aromaticity perception independently of the chemistry
+/// semantics in [`AromaticityModel`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AromaticityConfig {
+    /// Algorithms used to construct the relevant ring set.
+    pub ring_config: RingConfig,
+    /// Algorithm used to separate HMO candidate components.
+    pub connected_components_algorithm: ConnectedComponentsAlgorithm,
+    /// Algorithm used to select disjoint Clar sextets.
+    pub maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm,
+}
+
+impl Default for AromaticityConfig {
+    fn default() -> Self {
+        Self {
+            ring_config: RingConfig::default(),
+            connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+            maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm::BranchAndBound,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -81,6 +104,7 @@ impl AromaticityPerception {
     pub fn find_systems<F>(
         &self,
         ast: &MoleculeAst,
+        config: AromaticityConfig,
         electrons_at: F,
     ) -> Result<
         Solution<Vec<(Vec<AtomId>, AromaticSystemAst)>, AromaticityContradiction>,
@@ -90,11 +114,16 @@ impl AromaticityPerception {
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
         let model = self.ring_request();
-        let rings = ast.rings(model, RingConfig::default()).into_ring_set();
+        let rings = ast.rings(model, config.ring_config).into_ring_set();
 
         let systems = match self {
             Self::HueckelRule(m) => m.find_from_rings(ast, &rings, &electrons_at),
-            Self::Hmo(m) => match m.find_from_rings(ast, &rings, &electrons_at) {
+            Self::Hmo(m) => match m.find_from_rings(
+                ast,
+                &rings,
+                config.connected_components_algorithm,
+                &electrons_at,
+            ) {
                 Ok(systems) => systems,
                 Err(HmoError::MissingParameters(s)) => {
                     return Err(AromaticityError::HmoMissingParameters(s));
@@ -108,7 +137,12 @@ impl AromaticityPerception {
                     return Ok(Solution::Underdetermined(Vec::new()));
                 }
             },
-            Self::Clar(m) => match m.find_from_rings(ast, &rings, &electrons_at) {
+            Self::Clar(m) => match m.find_from_rings(
+                ast,
+                &rings,
+                config.maximum_independent_set_algorithm,
+                &electrons_at,
+            ) {
                 Ok(systems) => systems,
                 Err(ClarError::NonBenzenoid(s)) => {
                     return Ok(Solution::Contradictory(
@@ -295,9 +329,25 @@ mod tests {
     };
     use umol_ast::mol_dsl_ground;
     use umol_chem::element::Element;
+    use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm};
 
     use super::*;
     use crate::ops::model::{ElementScope, RingLimits};
+
+    #[rstest]
+    fn test_aromaticity_config_default() {
+        assert_eq!(
+            AromaticityConfig::default(),
+            AromaticityConfig {
+                ring_config: RingConfig {
+                    simple_cycle_algorithm: SimpleCycleEnumerationAlgorithm::ReadTarjan,
+                    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                },
+                connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm::BranchAndBound,
+            }
+        );
+    }
 
     fn any_hueckel() -> AromaticityPerception {
         AromaticityPerception::new(&AromaticityModel::HueckelRule {
@@ -365,7 +415,7 @@ mod tests {
         ast: &mut MoleculeAst,
     ) -> Solution<(), AromaticityContradiction> {
         let outcome = perception
-            .find_systems(ast, |v| {
+            .find_systems(ast, AromaticityConfig::default(), |v| {
                 match v
                     .ast
                     .constraints
@@ -483,7 +533,7 @@ mod tests {
         #[case] aromatic_valences: Vec<i64>,
     ) {
         let outcome = any_hueckel()
-            .find_systems(&ast, |v| {
+            .find_systems(&ast, AromaticityConfig::default(), |v| {
                 match v
                     .ast
                     .constraints

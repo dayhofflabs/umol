@@ -11,7 +11,9 @@ use thiserror::Error;
 use umol_ast::ast::{AtomView, ElementAst, MoleculeAst, ValueAst};
 use umol_chem::element::Element;
 
-use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError, AromaticityPerception};
+use crate::ops::aromaticity::{
+    AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerception,
+};
 use crate::ops::model::AromaticityModel;
 use crate::ops::transform::Transformer;
 
@@ -28,12 +30,18 @@ pub enum AromatizerError {
 #[derive(Clone, Debug)]
 pub struct Aromatizer {
     perception: AromaticityPerception,
+    config: AromaticityConfig,
 }
 
 impl Aromatizer {
     pub fn new(model: &AromaticityModel) -> Self {
+        Self::with_config(model, AromaticityConfig::default())
+    }
+
+    pub fn with_config(model: &AromaticityModel, config: AromaticityConfig) -> Self {
         Self {
             perception: AromaticityPerception::new(model),
+            config,
         }
     }
 }
@@ -47,7 +55,7 @@ impl Transformer for Aromatizer {
         }
         let systems = self
             .perception
-            .find_systems(ast, electrons_from_kekule)?
+            .find_systems(ast, self.config, electrons_from_kekule)?
             .into_decisive(AromatizerError::Underdetermined)?;
         self.perception.add_systems(ast, systems);
         Ok(())
@@ -97,9 +105,14 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticSystemId, AtomAst, AtomId, BondAst, BondConstraintKey, MoleculeAst, MoleculeParts,
-        SpinStateAst,
+        RingConfig, SpinStateAst,
     };
+    use umol_ast::mol_dsl_ground;
     use umol_chem::element::Element;
+    use umol_graph_core::{
+        ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
+        RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
+    };
 
     use super::*;
 
@@ -123,6 +136,34 @@ mod tests {
             bonds,
             ..Default::default()
         })
+    }
+
+    #[rstest]
+    fn test_aromatizer_with_config() {
+        let ast = mol_dsl_ground!(
+            r#"{
+                :atoms ["C" "C" "C" "C" "C" "C"]
+                :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"]
+                        [3 4 "1"] [4 5 "2"] [5 0 "1"]]
+            }"#
+        );
+        let expected = Aromatizer::new(&AromaticityModel::daylight())
+            .transform(&ast)
+            .unwrap();
+        let configured = Aromatizer::with_config(
+            &AromaticityModel::daylight(),
+            AromaticityConfig {
+                ring_config: RingConfig {
+                    simple_cycle_algorithm: SimpleCycleEnumerationAlgorithm::ReadTarjan,
+                    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                },
+                connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm::BranchAndBound,
+            },
+        )
+        .transform(&ast);
+
+        assert_eq!(configured, Ok(expected));
     }
 
     #[rstest]

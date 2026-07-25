@@ -349,6 +349,7 @@ mod tests {
             ResolveConfig::default(),
             ResolveConfig {
                 aromaticity: AromaticityResolveConfig {
+                    perception: Default::default(),
                     delocalize_charge: true,
                     reset_aromatic_valence: false,
                 },
@@ -404,6 +405,7 @@ mod tests {
     #[rstest]
     #[case::delocalize_charge(ResolveConfig {
         aromaticity: AromaticityResolveConfig {
+            perception: Default::default(),
             delocalize_charge: false,
             reset_aromatic_valence: false,
         },
@@ -411,6 +413,7 @@ mod tests {
     })]
     #[case::reset_aromatic_valence(ResolveConfig {
         aromaticity: AromaticityResolveConfig {
+            perception: Default::default(),
             delocalize_charge: true,
             reset_aromatic_valence: true,
         },

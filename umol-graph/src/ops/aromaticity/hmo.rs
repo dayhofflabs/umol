@@ -58,6 +58,7 @@ impl HmoAromaticity {
         &self,
         ast: &MoleculeAst,
         rings: &RingSet,
+        connected_components_algorithm: ConnectedComponentsAlgorithm,
         electrons_at: &F,
     ) -> Result<Vec<(Vec<AtomId>, AromaticSystemAst)>, HmoError>
     where
@@ -93,7 +94,7 @@ impl HmoAromaticity {
         sorted_host.sort_unstable();
         let components: Vec<Vec<AtomId>> = extracted
             .graph()
-            .connected_components(ConnectedComponentsAlgorithm::Bfs)
+            .connected_components(connected_components_algorithm)
             .into_iter()
             .map(|c| c.into_iter().map(|sub| sorted_host[sub.index()]).collect())
             .collect();
@@ -507,15 +508,20 @@ mod tests {
             )
             .into_ring_set();
         let systems = hmo_model
-            .find_from_rings(&ast, &ring_info, &|v| match v
-                .ast
-                .constraints
-                .aromatic_valence()
-                .unwrap_or(&AromaticValenceAst::Undetermined)
-            {
-                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
-                _ => None,
-            })
+            .find_from_rings(
+                &ast,
+                &ring_info,
+                ConnectedComponentsAlgorithm::Bfs,
+                &|v| match v
+                    .ast
+                    .constraints
+                    .aromatic_valence()
+                    .unwrap_or(&AromaticValenceAst::Undetermined)
+                {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+                    _ => None,
+                },
+            )
             .unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);

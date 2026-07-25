@@ -6,6 +6,7 @@ use umol_ast::ast::{
 };
 use umol_chem::element::Element;
 use umol_graph::ops::aromaticity::ClarAromaticity;
+use umol_graph_core::MaximumIndependentSetAlgorithm;
 
 #[derive(Deserialize)]
 struct GraphFixture {
@@ -45,10 +46,15 @@ fn test_clar_aromaticity_find_from_rings() {
         )
         .into_ring_set();
     let systems = ClarAromaticity
-        .find_from_rings(&ast, &rings, &|view| match &view.ast.element {
-            ElementAst::Lit(Element::C) => Some(1),
-            _ => None,
-        })
+        .find_from_rings(
+            &ast,
+            &rings,
+            MaximumIndependentSetAlgorithm::BranchAndBound,
+            &|view| match &view.ast.element {
+                ElementAst::Lit(Element::C) => Some(1),
+                _ => None,
+            },
+        )
         .unwrap();
 
     assert_eq!(systems.len(), 1);

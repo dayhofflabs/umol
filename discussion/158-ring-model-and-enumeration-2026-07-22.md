@@ -1316,7 +1316,20 @@ references.
   algorithm explicitly. Migrate resolver, aromatizer, validator, fixtures, and
   conformance tests together. Exact tests preserve aromatic systems and
   transactional results under defaults and exercise explicit selector
-  propagation through Hückel-rule, HMO, and Clar paths. **Additive config
+  propagation through Hückel-rule, HMO, and Clar paths.
+  **Done.** `AromaticityConfig` now owns `ring_config`,
+  `connected_components_algorithm`, and
+  `maximum_independent_set_algorithm`, with Read--Tarjan/Vismara, BFS, and
+  branch-and-bound defaults. `AromaticityPerception::find_systems` constructs
+  the fixed Relevant ring model at the model-specific size bound and passes
+  the HMO and Clar selectors to their low-level operations. Resolver
+  configuration nests the shared config as `perception`; `Aromatizer` and
+  `AromaticityConformanceValidator` provide default and configured
+  constructors. Existing Python resolution configs lower to the Rust default
+  until S5c exposes the nested configuration. Exact resolver plans and
+  configured Hückel-rule, HMO, Clar, aromatizer, validator, and conformance
+  fixtures preserve the established results.
+  **Additive config
   followed by breaking caller migration (red→green).** `[dep: S3c]`
 
 ### S5 — Python configuration surface

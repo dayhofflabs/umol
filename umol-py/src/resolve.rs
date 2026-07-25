@@ -17,6 +17,7 @@ impl AromaticityResolveConfig {
     #[pyo3(signature = (*, delocalize_charge=true, reset_aromatic_valence=false))]
     fn new(delocalize_charge: bool, reset_aromatic_valence: bool) -> Self {
         Self(GraphAromaticityResolveConfig {
+            perception: Default::default(),
             delocalize_charge,
             reset_aromatic_valence,
         })
@@ -183,14 +184,17 @@ mod tests {
     #[rstest]
     #[case::default(true, false, GraphAromaticityResolveConfig::default())]
     #[case::retain_charge(false, false, GraphAromaticityResolveConfig {
+        perception: Default::default(),
         delocalize_charge: false,
         reset_aromatic_valence: false,
     })]
     #[case::reset_valence(true, true, GraphAromaticityResolveConfig {
+        perception: Default::default(),
         delocalize_charge: true,
         reset_aromatic_valence: true,
     })]
     #[case::both(false, true, GraphAromaticityResolveConfig {
+        perception: Default::default(),
         delocalize_charge: false,
         reset_aromatic_valence: true,
     })]
@@ -224,6 +228,7 @@ mod tests {
     #[rstest]
     #[case::default(GraphAromaticityResolveConfig::default())]
     #[case::nondefault(GraphAromaticityResolveConfig {
+        perception: Default::default(),
         delocalize_charge: false,
         reset_aromatic_valence: true,
     })]
@@ -296,6 +301,7 @@ mod tests {
         StereoResolveConfig::new(false),
         GraphResolveConfig {
             aromaticity: GraphAromaticityResolveConfig {
+                perception: Default::default(),
                 delocalize_charge: false,
                 reset_aromatic_valence: true,
             },
@@ -348,6 +354,7 @@ mod tests {
     #[case::default(GraphResolveConfig::default())]
     #[case::configured(GraphResolveConfig {
         aromaticity: GraphAromaticityResolveConfig {
+            perception: Default::default(),
             delocalize_charge: false,
             reset_aromatic_valence: true,
         },

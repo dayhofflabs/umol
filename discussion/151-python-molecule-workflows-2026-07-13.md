@@ -1698,9 +1698,10 @@ with the chosen enum variant and documents why that subsidiary choice belongs
 to the named algorithm.
 
 Algorithm selectors and execution bounds are operational configuration, not
-chemistry-model parameters. `AromaticityConfig` owns the three selectors passed
-to the shared perception object; sharing is justified here because perception
-requires cycle enumeration, connected components, and maximum independent set.
+chemistry-model parameters. `AromaticityConfig` owns `RingConfig` plus the
+connected-components and maximum-independent-set selectors passed to the shared
+perception object; sharing is justified here because perception requires ring
+enumeration, connected components, and maximum independent set.
 `StereoModel` retains semantic perception choices, while
 `StereoValidateConfig` owns graph-automorphism selection and the fixpoint
 iteration bound. `InconsistencyPolicy` moves to `StereoResolveConfig`, because
@@ -1895,9 +1896,10 @@ selector field described below.
   (`umol-graph/src/ops/aromaticity.rs`, `aromaticity/{clar,hmo}.rs`,
   `resolve/aromaticity.rs`, `transform/aromatizer.rs`,
   `validate/aromaticity.rs`, `umol-py/src/resolve.rs`): add
-  `AromaticityConfig { cycle_enumeration_algorithm,
+  `AromaticityConfig { ring_config,
   connected_components_algorithm, maximum_independent_set_algorithm }`, with
-  Vismara, BFS, and branch-and-bound as inspectable high-level defaults.
+  Read--Tarjan/Vismara, BFS, and branch-and-bound as inspectable high-level
+  defaults.
   Pass the shared config explicitly to `AromaticityPerception::find_systems`;
   each top-level operation owns its copy rather than adding selectors to the
   model or changing the perception dispatch type. Add the shared config as

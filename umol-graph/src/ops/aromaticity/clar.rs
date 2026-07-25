@@ -28,6 +28,7 @@ impl ClarAromaticity {
         &self,
         ast: &MoleculeAst,
         rings: &RingSet,
+        maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm,
         electrons_at: &F,
     ) -> Result<Vec<(Vec<AtomId>, AromaticSystemAst)>, ClarError>
     where
@@ -63,7 +64,8 @@ impl ClarAromaticity {
             return Ok(Vec::new());
         }
 
-        let best_sextet_indices = select_disjoint_sextets(rings, &sextet_indices);
+        let best_sextet_indices =
+            select_disjoint_sextets(rings, &sextet_indices, maximum_independent_set_algorithm);
         if best_sextet_indices.is_empty() {
             return Ok(Vec::new());
         }
@@ -91,7 +93,11 @@ impl ClarAromaticity {
     }
 }
 
-fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingId]) -> Vec<RingId> {
+fn select_disjoint_sextets(
+    rings: &RingSet,
+    candidates: &[RingId],
+    maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm,
+) -> Vec<RingId> {
     if candidates.is_empty() {
         return Vec::new();
     }
@@ -117,8 +123,7 @@ fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingId]) -> Vec<RingId
     }
 
     let conflict_graph = Graph::new(n, &edges);
-    let selected =
-        conflict_graph.maximum_independent_set(MaximumIndependentSetAlgorithm::BranchAndBound);
+    let selected = conflict_graph.maximum_independent_set(maximum_independent_set_algorithm);
     selected
         .into_iter()
         .map(|node_id| candidates[node_id.index()])
@@ -247,7 +252,11 @@ mod tests {
             )
             .into_ring_set();
         let candidates = hex_ring_indices(&ast, &ring_info);
-        let sextets = select_disjoint_sextets(&ring_info, &candidates);
+        let sextets = select_disjoint_sextets(
+            &ring_info,
+            &candidates,
+            MaximumIndependentSetAlgorithm::BranchAndBound,
+        );
         assert_eq!(sextets.len(), expected_sextets);
     }
 
@@ -272,26 +281,34 @@ mod tests {
             .into_ring_set();
         let model = ClarAromaticity;
         let systems = model
-            .find_from_rings(&ast, &rings, &|v| match v
-                .ast
-                .constraints
-                .aromatic_valence()
-                .unwrap_or(&AromaticValenceAst::Undetermined)
-            {
-                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
-                _ => None,
-            })
+            .find_from_rings(
+                &ast,
+                &rings,
+                MaximumIndependentSetAlgorithm::BranchAndBound,
+                &|v| match v
+                    .ast
+                    .constraints
+                    .aromatic_valence()
+                    .unwrap_or(&AromaticValenceAst::Undetermined)
+                {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+                    _ => None,
+                },
+            )
             .unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
         if let Some((system_atoms_vec, _)) = systems.first() {
             let system_atoms: HashSet<AtomId> = system_atoms_vec.iter().copied().collect();
-            let expected_atoms: HashSet<AtomId> =
-                select_disjoint_sextets(&rings, &hex_ring_indices(&ast, &rings))
-                    .into_iter()
-                    .filter_map(|idx| rings.get(idx))
-                    .flat_map(|r| r.atoms().iter().copied())
-                    .collect();
+            let expected_atoms: HashSet<AtomId> = select_disjoint_sextets(
+                &rings,
+                &hex_ring_indices(&ast, &rings),
+                MaximumIndependentSetAlgorithm::BranchAndBound,
+            )
+            .into_iter()
+            .filter_map(|idx| rings.get(idx))
+            .flat_map(|r| r.atoms().iter().copied())
+            .collect();
             assert_eq!(system_atoms, expected_atoms);
         }
     }
@@ -331,17 +348,22 @@ mod tests {
             .into_ring_set();
         let model = ClarAromaticity;
         assert!(model
-            .find_from_rings(&ast, &rings, &|v| {
-                match v
-                    .ast
-                    .constraints
-                    .aromatic_valence()
-                    .unwrap_or(&AromaticValenceAst::Undetermined)
-                {
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
-                    _ => None,
-                }
-            })
+            .find_from_rings(
+                &ast,
+                &rings,
+                MaximumIndependentSetAlgorithm::BranchAndBound,
+                &|v| {
+                    match v
+                        .ast
+                        .constraints
+                        .aromatic_valence()
+                        .unwrap_or(&AromaticValenceAst::Undetermined)
+                    {
+                        AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+                        _ => None,
+                    }
+                },
+            )
             .is_err());
     }
 
@@ -357,7 +379,11 @@ mod tests {
             )
             .into_ring_set();
         let candidates = hex_ring_indices(&phenanthrene, &ring_info);
-        let sextets = select_disjoint_sextets(&ring_info, &candidates);
+        let sextets = select_disjoint_sextets(
+            &ring_info,
+            &candidates,
+            MaximumIndependentSetAlgorithm::BranchAndBound,
+        );
         assert_eq!(sextets.len(), 2);
         for &sextet_idx in &sextets {
             let ring = ring_info.get(sextet_idx).unwrap();

@@ -8,12 +8,15 @@ use thiserror::Error;
 use umol_ast::ast::{AromaticValenceAst, AtomId, MoleculeAst, ValueAst};
 use umol_utils::solution::Solution;
 
-use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError, AromaticityPerception};
+use crate::ops::aromaticity::{
+    AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerception,
+};
 use crate::ops::model::AromaticityModel;
 
 #[derive(Clone, Debug)]
 pub struct AromaticityConformanceValidator {
     perception: AromaticityPerception,
+    config: AromaticityConfig,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -36,8 +39,13 @@ pub enum AromaticityValidatorContradiction {
 
 impl AromaticityConformanceValidator {
     pub fn new(model: &AromaticityModel) -> Self {
+        Self::with_config(model, AromaticityConfig::default())
+    }
+
+    pub fn with_config(model: &AromaticityModel, config: AromaticityConfig) -> Self {
         Self {
             perception: AromaticityPerception::new(model),
+            config,
         }
     }
 
@@ -45,7 +53,7 @@ impl AromaticityConformanceValidator {
         &self,
         ast: &MoleculeAst,
     ) -> Result<Solution<(), AromaticityValidatorContradiction>, AromaticityError> {
-        let outcome = self.perception.find_systems(ast, |v| {
+        let outcome = self.perception.find_systems(ast, self.config, |v| {
             match v
                 .ast
                 .constraints
@@ -107,9 +115,13 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticValenceAst, AtomAst, AtomConstraintAst, BondAst, MoleculeAst, MoleculeParts,
-        SpinStateAst, ValueAst,
+        RingConfig, SpinStateAst, ValueAst,
     };
     use umol_chem::element::Element;
+    use umol_graph_core::{
+        ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
+        RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
+    };
 
     use super::*;
     use crate::ops::model::{ElementScope, RingLimits};
@@ -146,6 +158,32 @@ mod tests {
             bonds,
             ..Default::default()
         })
+    }
+
+    #[rstest]
+    fn test_aromaticity_conformance_validator_with_config(
+        benzene: MoleculeAst,
+        carbon_only: AromaticityModel,
+    ) {
+        let mut ast = benzene;
+        AromaticityResolver::new(&carbon_only)
+            .resolve(&mut ast)
+            .unwrap();
+        let expected = AromaticityConformanceValidator::new(&carbon_only).validate(&ast);
+        let configured = AromaticityConformanceValidator::with_config(
+            &carbon_only,
+            AromaticityConfig {
+                ring_config: RingConfig {
+                    simple_cycle_algorithm: SimpleCycleEnumerationAlgorithm::ReadTarjan,
+                    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                },
+                connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm::BranchAndBound,
+            },
+        )
+        .validate(&ast);
+
+        assert_eq!(configured, expected);
     }
 
     #[rstest]

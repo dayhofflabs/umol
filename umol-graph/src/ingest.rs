@@ -339,6 +339,7 @@ mod tests {
         ChemistryModel::default(),
         ResolveConfig {
             aromaticity: AromaticityResolveConfig {
+                perception: Default::default(),
                 delocalize_charge: false,
                 reset_aromatic_valence: false,
             },
@@ -382,6 +383,7 @@ mod tests {
         ChemistryModel::default(),
         ResolveConfig {
             aromaticity: AromaticityResolveConfig {
+                perception: Default::default(),
                 delocalize_charge: true,
                 reset_aromatic_valence: true,
             },

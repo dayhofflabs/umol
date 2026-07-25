@@ -12,12 +12,14 @@ use umol_ast::ast::{
 use umol_utils::solution::Solution;
 
 use crate::ops::aromaticity::{
-    derive_charge_equalization, AromaticityContradiction, AromaticityError, AromaticityPerception,
+    derive_charge_equalization, AromaticityConfig, AromaticityContradiction, AromaticityError,
+    AromaticityPerception,
 };
 use crate::ops::model::AromaticityModel;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AromaticityResolveConfig {
+    pub perception: AromaticityConfig,
     pub delocalize_charge: bool,
     pub reset_aromatic_valence: bool,
 }
@@ -25,6 +27,7 @@ pub struct AromaticityResolveConfig {
 impl Default for AromaticityResolveConfig {
     fn default() -> Self {
         Self {
+            perception: AromaticityConfig::default(),
             delocalize_charge: true,
             reset_aromatic_valence: false,
         }
@@ -54,20 +57,22 @@ impl AromaticityResolver {
         &self,
         ast: &MoleculeAst,
     ) -> Result<Solution<Vec<Edit>, AromaticityContradiction>, AromaticityError> {
-        let outcome = self.perception.find_systems(ast, |view| {
-            if view.is_in_aromatic_system() {
-                return None;
-            }
-            match view
-                .ast
-                .constraints
-                .aromatic_valence()
-                .unwrap_or(&AromaticValenceAst::Undetermined)
-            {
-                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
-                _ => None,
-            }
-        })?;
+        let outcome = self
+            .perception
+            .find_systems(ast, self.config.perception, |view| {
+                if view.is_in_aromatic_system() {
+                    return None;
+                }
+                match view
+                    .ast
+                    .constraints
+                    .aromatic_valence()
+                    .unwrap_or(&AromaticValenceAst::Undetermined)
+                {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if *n >= 0 => Some(*n as u8),
+                    _ => None,
+                }
+            })?;
 
         match outcome {
             Solution::Determined(systems) => {
@@ -159,8 +164,12 @@ impl AromaticityResolver {
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
-    use umol_ast::ast::{AromaticSystemId, BondConstraintKey, BondId, SpinStateAst};
+    use umol_ast::ast::{AromaticSystemId, BondConstraintKey, BondId, RingConfig, SpinStateAst};
     use umol_ast::{mol_dsl, mol_dsl_ground};
+    use umol_graph_core::{
+        ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
+        RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
+    };
 
     use super::*;
     use crate::ops::model::{ElementScope, RingLimits};
@@ -190,6 +199,7 @@ mod tests {
         assert_eq!(
             AromaticityResolveConfig::default(),
             AromaticityResolveConfig {
+                perception: AromaticityConfig::default(),
                 delocalize_charge: true,
                 reset_aromatic_valence: false,
             }
@@ -199,7 +209,23 @@ mod tests {
     #[rstest]
     fn test_aromaticity_resolver_plan(aromaticity_model: AromaticityModel, benzene: MoleculeAst) {
         assert_eq!(
-            AromaticityResolver::new(&aromaticity_model).plan(&benzene),
+            AromaticityResolver::with_config(
+                &aromaticity_model,
+                AromaticityResolveConfig {
+                    perception: AromaticityConfig {
+                        ring_config: RingConfig {
+                            simple_cycle_algorithm: SimpleCycleEnumerationAlgorithm::ReadTarjan,
+                            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                        },
+                        connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                        maximum_independent_set_algorithm:
+                            MaximumIndependentSetAlgorithm::BranchAndBound,
+                    },
+                    delocalize_charge: true,
+                    reset_aromatic_valence: false,
+                },
+            )
+            .plan(&benzene),
             Ok(Solution::Determined(vec![
                 Edit::AddAromaticSystem {
                     atoms: (0..6).map(|id| AtomHandle::Id(AtomId(id))).collect(),
@@ -268,6 +294,7 @@ mod tests {
     )]
     #[case::homogeneous_localized(
         AromaticityResolveConfig {
+            perception: AromaticityConfig::default(),
             delocalize_charge: false,
             reset_aromatic_valence: false,
         },
@@ -296,6 +323,7 @@ mod tests {
     )]
     #[case::reset_source_constraints(
         AromaticityResolveConfig {
+            perception: AromaticityConfig::default(),
             delocalize_charge: true,
             reset_aromatic_valence: true,
         },
