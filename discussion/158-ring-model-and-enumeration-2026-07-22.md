@@ -1299,7 +1299,7 @@ references.
   construction passes the stored selectors into the fixed Relevant/22
   `RingModel`. `Featurizer` and reaction featurization preserve the configured
   concrete featurizer without another configuration layer. Existing Python
-  fingerprint configurations lower to the Rust default until S5b exposes the
+  fingerprint configurations lower to the Rust default until S6b exposes the
   nested configuration. Constructor-based exact fixtures preserve default
   fingerprints, and explicit Read--Tarjan/Vismara fixtures exercise ring
   construction on benzene plus enum-dispatched reaction composition.
@@ -1326,15 +1326,109 @@ references.
   configuration nests the shared config as `perception`; `Aromatizer` and
   `AromaticityConformanceValidator` provide default and configured
   constructors. Existing Python resolution configs lower to the Rust default
-  until S5c exposes the nested configuration. Exact resolver plans and
+  until S6c exposes the nested configuration. Exact resolver plans and
   configured Hückel-rule, HMO, Clar, aromatizer, validator, and conformance
   fixtures preserve the established results.
   **Additive config
   followed by breaking caller migration (red→green).** `[dep: S3c]`
 
-### S5 — Python configuration surface
+### S5 — Graph-algorithm organization and precondition handling
 
-- **S5a — family-specific algorithm values and `RingConfig`**
+- **S5a — problem-oriented algorithm modules**
+  (`umol-graph-core/src/algorithms.rs`, `src/algorithms/**`, `src/lib.rs`,
+  workspace imports): organize public modules by graph problem rather than by
+  collection mechanism or abbreviation. Rename `auto` to `automorphism`,
+  `coloring` to `bipartite`, `mis` to `independent_set`, `refine` to
+  `refinement`, `subiso` to `subgraph_isomorphism`, and `toposort` to
+  `topological_sort`. Combine `connected` and `bcc` behind a `connectivity`
+  facade with component and biconnected internals; split `enumeration` into
+  `paths` and `connected_subgraphs`; combine `matching` and `matching_count`
+  behind a `matching` facade with maximum, enumeration, and count internals.
+  Keep `cycles`, `common_subgraph`, and `traversal` as problem modules; retain
+  the existing cycle internals, split common-subgraph maximum and enumeration
+  implementations, and split subgraph-isomorphism implementations by algorithm
+  so each can later own visitor or resumable iterator state. Keep `visit_*`,
+  `enumerate_*`, and eventual `iter_*` entry points together in the problem
+  module rather than introducing streaming or eager modules. Move unit tests
+  with their implementations and migrate all module-qualified workspace
+  imports; root re-exports remain the ordinary cross-crate surface.
+  **Done.** Public modules now name graph problems in full. Connectivity,
+  matching, and common-subgraph operations use problem facades over focused
+  internals; path and connected-subgraph enumeration are separate problems.
+  Subgraph-isomorphism keeps one public problem module while its VF2, Ullmann,
+  RI, ArcMatch, VF2-RDKit, and Ray--Kirsch implementation state is partitioned
+  into private algorithm modules. Root re-exports preserve the ordinary
+  cross-crate API, and all workspace-qualified paths and the property-module
+  name have been migrated.
+  **Breaking module-path reorganization with complete caller migration
+  (red→green).** `[dep: S4a, S4b]`
+- **S5b — current-algorithm module documentation**
+  (`umol-graph-core/src/algorithms.rs`, `src/algorithms/**`): give every problem
+  and implementation module a concise module comment that lists the operations
+  and algorithms currently implemented with stable paper, DOI, or upstream
+  implementation citations. Use explicitly current wording and do not present
+  any module as a complete catalogue of algorithms. Do not maintain a
+  top-level algorithm list in `algorithms.rs`; it should state only the module
+  organization and the `visit_*`/`enumerate_*`/`iter_*` convention. Correct
+  existing overstatements: bipartition is not general coloring, traversal
+  currently exposes bounded neighborhoods, biconnected-component output does
+  not expose articulation points and omits bridge blocks, and planar matching
+  count uses Kasteleyn signing plus Pfaffian evaluation. Check intra-doc links
+  with rustdoc in addition to the ordinary graph-core tests.
+  **Documentation-only organization cleanup (green).** `[dep: S5a]`
+- **S5c — graph precondition vocabulary**
+  (`umol-graph-core/src/{graph,lib}.rs`,
+  `src/algorithms/{bipartite,cycles}.rs`): retain
+  `Graph::is_bipartite(BipartitionAlgorithm)` and add `Graph::is_simple()`,
+  `NonBipartiteGraphError`, and `NonSimpleGraphError`. Simplicity rejects both
+  self-loops and repeated endpoint pairs without changing permissive graph
+  construction. Exact unit tests cover empty, isolated, simple, looped,
+  parallel-edge, and mixed graphs; property tests relate `is_simple()` to the
+  generated edge-multiset definition.
+  **Additive precondition API (green).** `[dep: S5a]`
+- **S5d — maximum-matching direct, general, and combined operations**
+  (`umol-graph-core/src/algorithms/matching/**`, `src/lib.rs`, benchmarks,
+  property tests, `umol-ast` graph views, `umol-graph` kekulization, and all
+  workspace callers): replace the graph-core `MaximumMatchingAlgorithm` with
+  `BipartiteMaximumMatchingAlgorithm::HopcroftKarp` and
+  `GeneralMaximumMatchingAlgorithm::Edmonds`. Add
+  `bipartite_maximum_matching`, returning `NonBipartiteGraphError`;
+  `general_maximum_matching`, which is infallible; and an infallible
+  `maximum_matching` that takes both selectors, uses Hopcroft--Karp for
+  bipartite input, and the general selector otherwise. Remove
+  `MaximumMatchingError`. Preserve the already-approved
+  `MaximumMatchingAlgorithm` name only as the operation-level selector beside
+  `KekulizationConfig`, where `HopcroftKarp` continues to require
+  bipartiteness rather than silently gaining fallback. Migrate each remaining
+  caller according to its actual policy instead of replacing every call with
+  the combined operation. Exact and property tests cover precondition failure,
+  direct/general parity on bipartite graphs, combined fallback on
+  non-bipartite graphs, deterministic node ordering, and unchanged matching
+  cardinality.
+  **Breaking selector and signature migration with all callers restored
+  (red→green).** `[dep: S5c]`
+- **S5e — cycle direct, fallback, and combined operations**
+  (`umol-graph-core/src/algorithms/cycles{.rs,/**}`, benchmarks and property
+  tests): retain the current infallible `visit_simple_cycles`,
+  `enumerate_simple_cycles`, `visit_relevant_cycles`, and
+  `enumerate_relevant_cycles` names for the combined path. Add their
+  `try_visit_*` and `try_enumerate_*` counterparts, which check simplicity and
+  return `NonSimpleGraphError` before emitting any cycle. Add the explicit
+  `visit_*_fallback` and `enumerate_*_fallback` counterparts: edge-aware
+  Read--Tarjan for simple-cycle enumeration and loop extraction plus
+  subdivision/projection for Vismara relevant-cycle enumeration. The combined
+  visitors use the direct simple-graph path when possible and the corresponding
+  fallback otherwise. Do not add `iter_*` until a resumable implementation
+  exists. Exact and property tests cover error-before-emission, direct/fallback
+  parity on simple graphs, combined/fallback parity on non-simple graphs,
+  source edge identity, bounds, early termination, and visitor/collector
+  equivalence.
+  **Additive visitor and collector APIs with internal combined-path
+  reorganization (green).** `[dep: S5c]`
+
+### S6 — Python configuration surface
+
+- **S6a — family-specific algorithm values and `RingConfig`**
   (`umol-py/src/{algorithm,ring}.rs`, `src/lib.rs`,
   `python/umol/__init__.py`): replace the Python
   `CycleEnumerationAlgorithm` with separate simple- and relevant-cycle
@@ -1343,26 +1437,26 @@ references.
   Variant-complete Rust table tests and installed-package tests cover exports,
   construction, defaults, and repr. **Breaking Python selector replacement and
   export migration (red→green).** `[dep: S1b, S2d, S3b]`
-- **S5b — fingerprint config integration**
+- **S6b — fingerprint config integration**
   (`umol-py/src/fingerprint/config.rs`, fingerprint and reaction bindings,
   `umol-py/tests/test_fingerprint.py`): add keyword-only nested `ring_config`
   to ECFP and Morgan configuration variants, lower it into the Rust
   featurizers, and carry it through reaction fingerprint configs. Installed
   tests compare default and explicit configuration and retain exact fingerprint
   payloads. **Breaking Python config-shape migration (red→green).**
-  `[dep: S4a, S5a]`
-- **S5c — aromaticity config integration**
+  `[dep: S4a, S6a]`
+- **S6c — aromaticity config integration**
   (`umol-py/src/model/aromaticity.rs`, resolver/aromatizer/validator bindings,
   installed aromaticity and resolution tests): bind the Rust
   `AromaticityConfig` with keyword-only ring, connected-components, and
   independent-set selectors; nest it in the existing operation configs and
   migrate every Python caller. Tests cover defaults, explicit nested configs,
   equality, repr, lowering, and unchanged resolved/aromatized structures.
-  **Breaking Python config-shape migration (red→green).** `[dep: S4b, S5a]`
+  **Breaking Python config-shape migration (red→green).** `[dep: S4b, S6a]`
 
-### S6 — Legacy removal and release gates
+### S7 — Legacy removal and release gates
 
-- **S6a — retire the intermediate cycle API**
+- **S7a — retire the intermediate cycle API**
   (`umol-graph-core/src/algorithms/cycles.rs`, `src/lib.rs`,
   `benches/algorithms.rs`, remaining workspace callers): remove
   `CycleEnumerationAlgorithm`, `Graph::enumerate_cycles`, the eager
@@ -1375,15 +1469,15 @@ references.
   remains reproducible without `geng` because it consumes the checked-in S0f
   corpus. **Breaking legacy removal with all callers already migrated
   (red→green).**
-  `[dep: S1c, S2f, S3c, S4a, S4b, S5a, S5b, S5c]`
-- **S6b — documentation and status closure**
+  `[dep: S1c, S2f, S3c, S4a, S4b, S5d, S5e, S6a, S6b, S6c]`
+- **S7b — documentation and status closure**
   (`discussion/151-python-molecule-workflows-2026-07-13.md`, this document,
   `discussion/000-status.md`): update the superseded S9k/S9l/S9m descriptions
   to the family-specific AST design; record the measured benchmark comparison,
   exhaustive corpus bounds, generation provenance, external implementation
   revisions, validation commands, and deliberate semantic exclusions; and mark
-  doc 158 complete only after every S6a gate passes. **Documentation closure
-  after a green workspace (green).** `[dep: S6a]`
+  doc 158 complete only after every S7a gate passes. **Documentation closure
+  after a green workspace (green).** `[dep: S7a]`
 
 ### Critical path and deferral
 
@@ -1395,11 +1489,14 @@ S0b -> S0d -> S0e -> S0f
 S0b -> S2a --\
 S0e ----------> S2b -> S2c -> S2d -> S2e -> S2f <- S0f
                                  |
-{S1b, S2d, S3a} -> S3b -> S3c -> {S4a, S4b}
-                                          |
-                                          -> {S5b, S5c}
-                                                 |
-{S1c, S2f, S5b, S5c} -------------------------> S6a -> S6b
+{S1b, S2d, S3a} -> S3b -> S3c -> {S4a, S4b} -> S5a -> S5b
+                                                     \
+                                                      -> S5c -> {S5d, S5e}
+{S1b, S2d, S3b} -------------------------------> S6a -> {S6b, S6c}
+                                                          ^       ^
+                                                          |       |
+                                                         S4a     S4b
+{S1c, S2f, S5d, S5e, S6b, S6c} --------------> S7a -> S7b
 ```
 
 `S0c` joins the cycle-space path at S2b and S2d; `S3a` can proceed independently
@@ -1408,7 +1505,8 @@ gates rather than recurring external prerequisites; their checked-in evidence
 and the S0f corpus keep subsequent Rust verification self-contained. No
 implementation stage is deferrable in this round: Read--Tarjan, Horton,
 Vismara/RCF, URF, AST integration, workflow configuration, Python migration,
-and independent validation are all part of the settled deliverable.
+graph-algorithm organization and precondition handling, and independent
+validation are all part of the settled deliverable.
 Essential cycles, exact RDKit SSSR compatibility, general path/tree
 enumeration, the ring-constraint redesign, and CX/MOL/SDF work remain outside
 this plan rather than becoming deferred stages.

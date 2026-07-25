@@ -1,4 +1,4 @@
-//! Maximum independent set.
+//! Maximum independent sets.
 
 use crate::graph::{Graph, NodeId};
 

@@ -1,4 +1,4 @@
-//! Graph automorphism and canonical labeling.
+//! Graph automorphisms and canonical labeling.
 
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};

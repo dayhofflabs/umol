@@ -1,4 +1,4 @@
-//! Weisfeiler–Leman color refinement (1-WL): equitable partition + a content hash.
+//! Weisfeiler–Leman and circular refinement.
 //!
 //! Each node is recolored by its own color plus the multiset of its incident
 //! `(edge label, neighbor color)` pairs, iterated until the partition stops

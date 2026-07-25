@@ -1,4 +1,4 @@
-//! Connected component labeling.
+//! Connected components.
 
 use crate::graph::{Graph, NodeId};
 

@@ -13,35 +13,37 @@ pub(crate) mod relation;
 pub(crate) mod rewriting;
 pub(crate) mod union_find;
 
-pub use algorithms::auto::{AutomorphismAlgorithm, AutomorphismGroupOrder, AutomorphismOutput};
-pub use algorithms::bcc::BiconnectedComponentsAlgorithm;
-pub use algorithms::coloring::BipartitionAlgorithm;
+pub use algorithms::automorphism::{
+    AutomorphismAlgorithm, AutomorphismGroupOrder, AutomorphismOutput,
+};
+pub use algorithms::bipartite::BipartitionAlgorithm;
 pub use algorithms::common_subgraph::{
     CommonSubgraphEnumerationAlgorithm, EmbeddingKind, MaximalCommonSubgraphAlgorithm,
     McesAlgorithm, McisAlgorithm, McsConnectivity,
 };
-pub use algorithms::connected::ConnectedComponentsAlgorithm;
+pub use algorithms::connected_subgraphs::SubgraphEnumerationAlgorithm;
+pub use algorithms::connectivity::{BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm};
 pub use algorithms::cycles::{
     Cycle, CycleEnumerationAlgorithm, MinimumCycleBasis, MinimumCycleBasisAlgorithm,
     RelevantCycleCount, RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm,
     SimpleCycleEnumerationAlgorithm, UniqueRingFamilies, UniqueRingFamily,
     UniqueRingFamilyAlgorithm, UniqueRingFamilyId,
 };
-pub use algorithms::enumeration::{PathEnumerationAlgorithm, SubgraphEnumerationAlgorithm};
+pub use algorithms::independent_set::MaximumIndependentSetAlgorithm;
 pub use algorithms::matching::{
-    Matching, MatchingEnumerationAlgorithm, MaximumMatchingAlgorithm, MaximumMatchingError,
-    PerfectMatchingAlgorithm,
+    FaceBoundary, Matching, MatchingEnumerationAlgorithm, MaximumMatchingAlgorithm,
+    MaximumMatchingError, PerfectMatchingAlgorithm, PlanarEmbedding, PlanarEmbeddingError,
+    PlanarMatchingCountError,
 };
-pub use algorithms::matching_count::{
-    FaceBoundary, PlanarEmbedding, PlanarEmbeddingError, PlanarMatchingCountError,
-};
-pub use algorithms::mis::MaximumIndependentSetAlgorithm;
-pub use algorithms::refine::{
+pub use algorithms::paths::PathEnumerationAlgorithm;
+pub use algorithms::refinement::{
     CircularRefinementAlgorithm, CircularRefinementHash, Refinement, RefinementAlgorithm,
     RefinementHash, RefinementRounds,
 };
-pub use algorithms::subiso::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
-pub use algorithms::toposort::TopologicalSortAlgorithm;
+pub use algorithms::subgraph_isomorphism::{
+    SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+};
+pub use algorithms::topological_sort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::TraversalAlgorithm;
 pub use correspondence::{Correspondence, GraphCorrespondence};
 pub use digraph::DiGraph;

@@ -7,7 +7,7 @@ use bitvec::prelude::*;
 
 use super::relevant::ShortestPathDag;
 use super::{Cycle, MinimumCycleBasis};
-use crate::algorithms::connected::ConnectedComponentsAlgorithm;
+use crate::algorithms::connectivity::ConnectedComponentsAlgorithm;
 use crate::graph::{EdgeId, Graph};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -210,7 +210,7 @@ mod tests {
     use rstest::rstest;
 
     use super::{cycle_space_rank, CycleVectorBasis, EdgeVector};
-    use crate::algorithms::connected::ConnectedComponentsAlgorithm;
+    use crate::algorithms::connectivity::ConnectedComponentsAlgorithm;
     use crate::algorithms::cycles::SimpleCycleEnumerationAlgorithm;
     use crate::graph::Graph;
 

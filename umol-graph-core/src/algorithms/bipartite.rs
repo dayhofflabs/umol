@@ -1,4 +1,4 @@
-//! Graph coloring.
+//! Bipartition and bipartiteness.
 
 use std::collections::VecDeque;
 

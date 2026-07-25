@@ -8,7 +8,7 @@ use num_bigint::BigUint;
 
 use super::basis::{CycleVectorBasis, EdgeVector};
 use super::Cycle;
-use crate::algorithms::bcc::BiconnectedComponentsAlgorithm;
+use crate::algorithms::connectivity::BiconnectedComponentsAlgorithm;
 use crate::graph::{EdgeId, Graph, Neighbor, NodeId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]

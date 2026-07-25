@@ -1,4 +1,4 @@
-//! Explicit planar embeddings for planar perfect-matching algorithms.
+//! Planar perfect-matching counts.
 //!
 //! This module validates an embedding supplied by the caller. It does not test
 //! planarity or discover an embedding.

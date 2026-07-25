@@ -1,4 +1,4 @@
-//! Biconnected components and articulation point detection.
+//! Biconnected components.
 
 use std::collections::HashSet;
 

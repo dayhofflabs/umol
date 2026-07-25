@@ -1,4 +1,4 @@
-//! Deterministic topological sort of a `DiGraph`.
+//! Deterministic topological ordering of a `DiGraph`.
 
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;

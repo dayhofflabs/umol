@@ -1,4 +1,4 @@
-//! Property-based cross-validation of the subgraph-isomorphism algorithms: on
+//! Cross-validation properties for the subgraph-isomorphism algorithms: on
 //! random labeled graphs, every named algorithm must return the same match set as
 //! VF2 (the reference). For ArcMatch this is a complete correctness check — its
 //! reduction is provably safe (Bonnici 2024 Thm 2-3), so the only possible defect

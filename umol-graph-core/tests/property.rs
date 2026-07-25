@@ -10,5 +10,5 @@ mod corpus;
 mod cycles;
 #[path = "property/strategy.rs"]
 mod strategy;
-#[path = "property/subiso.rs"]
-mod subiso;
+#[path = "property/subgraph_isomorphism.rs"]
+mod subgraph_isomorphism;
