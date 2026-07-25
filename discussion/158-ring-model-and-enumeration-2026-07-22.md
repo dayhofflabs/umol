@@ -1523,6 +1523,18 @@ references.
   independent-set selectors; nest it in the existing operation configs and
   migrate every Python caller. Tests cover defaults, explicit nested configs,
   equality, repr, lowering, and unchanged resolved/aromatized structures.
+  **Done.** Python now exports a frozen `AromaticityConfig` with keyword-only
+  `ring_config`, `connected_components_algorithm`, and
+  `maximum_independent_set_algorithm` fields and the same inspectable
+  Read--Tarjan/Vismara, BFS, and branch-and-bound defaults as Rust.
+  `AromaticityResolveConfig` owns it as `perception`; construction, copied
+  access, equality, repr, and Rust lowering preserve the complete nested
+  configuration. There are no direct Python aromatizer or validator operations
+  to migrate in this round; their Rust configuration paths were completed in
+  S4b, while configured Python ingestion exercises the resolver path and
+  preserves the exact resolved aromatic structure. Native and installed tests
+  cover exports, keyword-only construction, immutability, defaults, explicit
+  nesting, boundary conversion, and resolved output.
   **Breaking Python config-shape migration (red→green).** `[dep: S4b, S6a]`
 
 ### S7 — Legacy removal and release gates

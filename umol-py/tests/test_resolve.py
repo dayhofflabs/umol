@@ -1,11 +1,17 @@
 import pytest
 
-from umol import AromaticityResolveConfig, ResolveConfig, StereoResolveConfig
+from umol import (
+    AromaticityConfig,
+    AromaticityResolveConfig,
+    ResolveConfig,
+    StereoResolveConfig,
+)
 
 
 def test_aromaticity_resolve_config_default():
     config = AromaticityResolveConfig()
 
+    assert config.perception == AromaticityConfig()
     assert config.delocalize_charge is True
     assert config.reset_aromatic_valence is False
     assert config == AromaticityResolveConfig()
@@ -23,11 +29,15 @@ def test_aromaticity_resolve_config_default():
 def test_aromaticity_resolve_config_new(
     delocalize_charge, reset_aromatic_valence
 ):
+    perception = AromaticityConfig()
     config = AromaticityResolveConfig(
+        perception=perception,
         delocalize_charge=delocalize_charge,
         reset_aromatic_valence=reset_aromatic_valence,
     )
 
+    assert config.perception == perception
+    assert config.perception is not perception
     assert config.delocalize_charge is delocalize_charge
     assert config.reset_aromatic_valence is reset_aromatic_valence
 
@@ -42,7 +52,15 @@ def test_aromaticity_resolve_config_new_error():
     [
         (
             AromaticityResolveConfig(),
-            "AromaticityResolveConfig(delocalize_charge=True, "
+            "AromaticityResolveConfig(perception=AromaticityConfig("
+            "ring_config=RingConfig(simple_cycle_algorithm="
+            "SimpleCycleEnumerationAlgorithm.ReadTarjan(), "
+            "relevant_cycle_algorithm="
+            "RelevantCycleEnumerationAlgorithm.Vismara()), "
+            "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
+            "maximum_independent_set_algorithm="
+            "MaximumIndependentSetAlgorithm.BranchAndBound()), "
+            "delocalize_charge=True, "
             "reset_aromatic_valence=False)",
         ),
         (
@@ -50,7 +68,15 @@ def test_aromaticity_resolve_config_new_error():
                 delocalize_charge=False,
                 reset_aromatic_valence=True,
             ),
-            "AromaticityResolveConfig(delocalize_charge=False, "
+            "AromaticityResolveConfig(perception=AromaticityConfig("
+            "ring_config=RingConfig(simple_cycle_algorithm="
+            "SimpleCycleEnumerationAlgorithm.ReadTarjan(), "
+            "relevant_cycle_algorithm="
+            "RelevantCycleEnumerationAlgorithm.Vismara()), "
+            "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
+            "maximum_independent_set_algorithm="
+            "MaximumIndependentSetAlgorithm.BranchAndBound()), "
+            "delocalize_charge=False, "
             "reset_aromatic_valence=True)",
         ),
     ],
@@ -62,6 +88,7 @@ def test_aromaticity_resolve_config_repr(config, expected):
 @pytest.mark.parametrize(
     ("field", "value"),
     [
+        ("perception", AromaticityConfig()),
         ("delocalize_charge", False),
         ("reset_aromatic_valence", True),
     ],
@@ -188,7 +215,14 @@ def test_resolve_config_equality(other):
                 ),
                 stereo=StereoResolveConfig(reset_stereo_constraints=True),
             ),
-            "ResolveConfig(aromaticity=AromaticityResolveConfig("
+            "ResolveConfig(aromaticity=AromaticityResolveConfig(perception="
+            "AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm="
+            "SimpleCycleEnumerationAlgorithm.ReadTarjan(), "
+            "relevant_cycle_algorithm="
+            "RelevantCycleEnumerationAlgorithm.Vismara()), "
+            "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
+            "maximum_independent_set_algorithm="
+            "MaximumIndependentSetAlgorithm.BranchAndBound()), "
             "delocalize_charge=False, reset_aromatic_valence=True), "
             "stereo=StereoResolveConfig(reset_stereo_constraints=True))",
         ),

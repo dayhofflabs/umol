@@ -3,13 +3,17 @@ import re
 import pytest
 
 from umol import (
+    AromaticityConfig,
     AromaticityModel,
     AtomAst,
     AtomTypeRegistry,
     ChemistryModel,
+    ConnectedComponentsAlgorithm,
     Element,
     ElementScope,
     InconsistencyPolicy,
+    MaximumIndependentSetAlgorithm,
+    RingConfig,
     RingLimits,
     StereoKind,
     StereoKindModel,
@@ -527,6 +531,87 @@ def test_ring_limits_mutation():
 
     with pytest.raises(AttributeError):
         limits.min_ring_size = 5
+
+
+def test_aromaticity_config_default():
+    config = AromaticityConfig()
+
+    assert config.ring_config == RingConfig()
+    assert config.ring_config is not config.ring_config
+    assert (
+        config.connected_components_algorithm
+        == ConnectedComponentsAlgorithm.Bfs()
+    )
+    assert (
+        config.maximum_independent_set_algorithm
+        == MaximumIndependentSetAlgorithm.BranchAndBound()
+    )
+    assert config == AromaticityConfig()
+
+
+def test_aromaticity_config_new():
+    ring_config = RingConfig()
+    config = AromaticityConfig(
+        ring_config=ring_config,
+        connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(),
+        maximum_independent_set_algorithm=(
+            MaximumIndependentSetAlgorithm.BranchAndBound()
+        ),
+    )
+
+    assert config.ring_config == ring_config
+    assert config.ring_config is not ring_config
+    assert (
+        config.connected_components_algorithm
+        == ConnectedComponentsAlgorithm.Bfs()
+    )
+    assert (
+        config.maximum_independent_set_algorithm
+        == MaximumIndependentSetAlgorithm.BranchAndBound()
+    )
+
+
+def test_aromaticity_config_new_error():
+    with pytest.raises(TypeError):
+        AromaticityConfig(
+            RingConfig(),
+            ConnectedComponentsAlgorithm.Bfs(),
+            MaximumIndependentSetAlgorithm.BranchAndBound(),
+        )
+
+
+def test_aromaticity_config_repr():
+    assert repr(AromaticityConfig()) == (
+        "AromaticityConfig("
+        "ring_config=RingConfig("
+        "simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), "
+        "relevant_cycle_algorithm="
+        "RelevantCycleEnumerationAlgorithm.Vismara()), "
+        "connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), "
+        "maximum_independent_set_algorithm="
+        "MaximumIndependentSetAlgorithm.BranchAndBound())"
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("ring_config", RingConfig()),
+        (
+            "connected_components_algorithm",
+            ConnectedComponentsAlgorithm.Bfs(),
+        ),
+        (
+            "maximum_independent_set_algorithm",
+            MaximumIndependentSetAlgorithm.BranchAndBound(),
+        ),
+    ],
+)
+def test_aromaticity_config_mutation(field, value):
+    config = AromaticityConfig()
+
+    with pytest.raises(AttributeError):
+        setattr(config, field, value)
 
 
 @pytest.mark.parametrize(

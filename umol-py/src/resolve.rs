@@ -6,6 +6,8 @@ use umol_graph::ops::resolve::{
     StereoResolveConfig as GraphStereoResolveConfig,
 };
 
+use crate::model::aromaticity::AromaticityConfig;
+
 /// Operational policy for aromaticity resolution.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -14,13 +16,22 @@ pub struct AromaticityResolveConfig(GraphAromaticityResolveConfig);
 #[pymethods]
 impl AromaticityResolveConfig {
     #[new]
-    #[pyo3(signature = (*, delocalize_charge=true, reset_aromatic_valence=false))]
-    fn new(delocalize_charge: bool, reset_aromatic_valence: bool) -> Self {
+    #[pyo3(signature = (*, perception=AromaticityConfig::default(), delocalize_charge=true, reset_aromatic_valence=false))]
+    fn new(
+        perception: AromaticityConfig,
+        delocalize_charge: bool,
+        reset_aromatic_valence: bool,
+    ) -> Self {
         Self(GraphAromaticityResolveConfig {
-            perception: Default::default(),
+            perception: perception.to_rust(),
             delocalize_charge,
             reset_aromatic_valence,
         })
+    }
+
+    #[getter]
+    fn perception(&self) -> AromaticityConfig {
+        AromaticityConfig::from_rust(self.0.perception)
     }
 
     #[getter]
@@ -35,7 +46,8 @@ impl AromaticityResolveConfig {
 
     fn __repr__(&self) -> String {
         format!(
-            "AromaticityResolveConfig(delocalize_charge={}, reset_aromatic_valence={})",
+            "AromaticityResolveConfig(perception={}, delocalize_charge={}, reset_aromatic_valence={})",
+            self.perception().__repr__(),
             if self.0.delocalize_charge {
                 "True"
             } else {
@@ -182,41 +194,47 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::default(true, false, GraphAromaticityResolveConfig::default())]
-    #[case::retain_charge(false, false, GraphAromaticityResolveConfig {
+    #[case::default(
+        AromaticityConfig::default(),
+        true,
+        false,
+        GraphAromaticityResolveConfig::default()
+    )]
+    #[case::retain_charge(AromaticityConfig::default(), false, false, GraphAromaticityResolveConfig {
         perception: Default::default(),
         delocalize_charge: false,
         reset_aromatic_valence: false,
     })]
-    #[case::reset_valence(true, true, GraphAromaticityResolveConfig {
+    #[case::reset_valence(AromaticityConfig::default(), true, true, GraphAromaticityResolveConfig {
         perception: Default::default(),
         delocalize_charge: true,
         reset_aromatic_valence: true,
     })]
-    #[case::both(false, true, GraphAromaticityResolveConfig {
+    #[case::both(AromaticityConfig::default(), false, true, GraphAromaticityResolveConfig {
         perception: Default::default(),
         delocalize_charge: false,
         reset_aromatic_valence: true,
     })]
     fn test_aromaticity_resolve_config_new(
+        #[case] perception: AromaticityConfig,
         #[case] delocalize_charge: bool,
         #[case] reset_aromatic_valence: bool,
         #[case] expected: GraphAromaticityResolveConfig,
     ) {
         assert_eq!(
-            AromaticityResolveConfig::new(delocalize_charge, reset_aromatic_valence).0,
+            AromaticityResolveConfig::new(perception, delocalize_charge, reset_aromatic_valence).0,
             expected
         );
     }
 
     #[rstest]
     #[case::default(
-        AromaticityResolveConfig::new(true, false),
-        "AromaticityResolveConfig(delocalize_charge=True, reset_aromatic_valence=False)"
+        AromaticityResolveConfig::new(AromaticityConfig::default(), true, false),
+        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), delocalize_charge=True, reset_aromatic_valence=False)"
     )]
     #[case::nondefault(
-        AromaticityResolveConfig::new(false, true),
-        "AromaticityResolveConfig(delocalize_charge=False, reset_aromatic_valence=True)"
+        AromaticityResolveConfig::new(AromaticityConfig::default(), false, true),
+        "AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), delocalize_charge=False, reset_aromatic_valence=True)"
     )]
     fn test_aromaticity_resolve_config_repr(
         #[case] config: AromaticityResolveConfig,
@@ -237,8 +255,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::default(AromaticityResolveConfig::new(true, false))]
-    #[case::nondefault(AromaticityResolveConfig::new(false, true))]
+    #[case::default(AromaticityResolveConfig::new(AromaticityConfig::default(), true, false))]
+    #[case::nondefault(AromaticityResolveConfig::new(AromaticityConfig::default(), false, true))]
     fn test_aromaticity_resolve_config_to_rust(#[case] config: AromaticityResolveConfig) {
         assert_eq!(config.to_rust(), config.0);
     }
@@ -292,12 +310,12 @@ mod tests {
 
     #[rstest]
     #[case::default(
-        AromaticityResolveConfig::new(true, false),
+        AromaticityResolveConfig::new(AromaticityConfig::default(), true, false),
         StereoResolveConfig::new(false),
         GraphResolveConfig::default()
     )]
     #[case::aromaticity(
-        AromaticityResolveConfig::new(false, true),
+        AromaticityResolveConfig::new(AromaticityConfig::default(), false, true),
         StereoResolveConfig::new(false),
         GraphResolveConfig {
             aromaticity: GraphAromaticityResolveConfig {
@@ -309,7 +327,7 @@ mod tests {
         },
     )]
     #[case::stereo(
-        AromaticityResolveConfig::new(true, false),
+        AromaticityResolveConfig::new(AromaticityConfig::default(), true, false),
         StereoResolveConfig::new(true),
         GraphResolveConfig {
             aromaticity: GraphAromaticityResolveConfig::default(),
@@ -341,10 +359,10 @@ mod tests {
     #[case::default(ResolveConfig::default(), "ResolveConfig.default()")]
     #[case::configured(
         ResolveConfig::new(
-            AromaticityResolveConfig::new(false, true),
+            AromaticityResolveConfig::new(AromaticityConfig::default(), false, true),
             StereoResolveConfig::new(true),
         ),
-        "ResolveConfig(aromaticity=AromaticityResolveConfig(delocalize_charge=False, reset_aromatic_valence=True), stereo=StereoResolveConfig(reset_stereo_constraints=True))",
+        "ResolveConfig(aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), delocalize_charge=False, reset_aromatic_valence=True), stereo=StereoResolveConfig(reset_stereo_constraints=True))",
     )]
     fn test_resolve_config_repr(#[case] config: ResolveConfig, #[case] expected: &str) {
         assert_eq!(config.__repr__(), expected);
@@ -369,7 +387,7 @@ mod tests {
     #[rstest]
     #[case::default(ResolveConfig::default())]
     #[case::configured(ResolveConfig::new(
-        AromaticityResolveConfig::new(false, true),
+        AromaticityResolveConfig::new(AromaticityConfig::default(), false, true),
         StereoResolveConfig::new(true),
     ))]
     fn test_resolve_config_to_rust(#[case] config: ResolveConfig) {

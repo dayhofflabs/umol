@@ -79,7 +79,7 @@ use crate::{
     },
     fingerprint::value::{BitFp, CountedHashedFeatureSet, HashedFeatureSet, StructuralFeatureSet},
     model::{
-        aromaticity::{AromaticityModel, RingLimits},
+        aromaticity::{AromaticityConfig, AromaticityModel, RingLimits},
         stereo::{InconsistencyPolicy, StereoKindModel, StereoModel},
         valence::{AtomTypeRegistry, ValenceEntry, ValenceModel, ValenceTable},
         ChemistryModel, ElementScope,
@@ -201,6 +201,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ValenceTable>()?;
         module.add_class::<ElementScope>()?;
         module.add_class::<RingLimits>()?;
+        module.add_class::<AromaticityConfig>()?;
         module.add_class::<AromaticityModel>()?;
         module.add_class::<InconsistencyPolicy>()?;
         module.add_class::<StereoKindModel>()?;

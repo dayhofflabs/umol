@@ -1,11 +1,70 @@
-//! Python bindings for aromaticity-model values.
+//! Python bindings for aromaticity model and operation-configuration values.
 
 use pyo3::prelude::*;
+use umol_graph::ops::aromaticity::AromaticityConfig as GraphAromaticityConfig;
 use umol_graph::ops::model::{
     AromaticityModel as GraphAromaticityModel, RingLimits as GraphRingLimits,
 };
 
 use super::ElementScope;
+use crate::algorithm::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
+use crate::ring::RingConfig;
+
+/// Algorithms used to perform aromaticity perception.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AromaticityConfig(GraphAromaticityConfig);
+
+#[pymethods]
+impl AromaticityConfig {
+    #[new]
+    #[pyo3(signature = (*, ring_config=RingConfig::default(), connected_components_algorithm=ConnectedComponentsAlgorithm::Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm::BranchAndBound()))]
+    fn new(
+        ring_config: RingConfig,
+        connected_components_algorithm: ConnectedComponentsAlgorithm,
+        maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm,
+    ) -> Self {
+        Self(GraphAromaticityConfig {
+            ring_config: ring_config.to_rust(),
+            connected_components_algorithm: connected_components_algorithm.to_rust(),
+            maximum_independent_set_algorithm: maximum_independent_set_algorithm.to_rust(),
+        })
+    }
+
+    #[getter]
+    fn ring_config(&self) -> RingConfig {
+        RingConfig::from_rust(self.0.ring_config)
+    }
+
+    #[getter]
+    fn connected_components_algorithm(&self) -> ConnectedComponentsAlgorithm {
+        ConnectedComponentsAlgorithm::from_rust(self.0.connected_components_algorithm)
+    }
+
+    #[getter]
+    fn maximum_independent_set_algorithm(&self) -> MaximumIndependentSetAlgorithm {
+        MaximumIndependentSetAlgorithm::from_rust(self.0.maximum_independent_set_algorithm)
+    }
+
+    pub(crate) fn __repr__(&self) -> String {
+        format!(
+            "AromaticityConfig(ring_config={}, connected_components_algorithm={}, maximum_independent_set_algorithm={})",
+            self.ring_config().__repr__(),
+            self.connected_components_algorithm().repr(),
+            self.maximum_independent_set_algorithm().repr(),
+        )
+    }
+}
+
+impl AromaticityConfig {
+    pub(crate) fn from_rust(config: GraphAromaticityConfig) -> Self {
+        Self(config)
+    }
+
+    pub(crate) fn to_rust(self) -> GraphAromaticityConfig {
+        self.0
+    }
+}
 
 /// Ring-size and fused-ring search bounds for aromaticity perception.
 #[pyclass(eq, frozen, from_py_object)]
@@ -197,9 +256,49 @@ impl AromaticityModel {
 mod tests {
     use rstest::rstest;
     use umol_chem::element::Element as ChemElement;
+    use umol_graph::ops::aromaticity::AromaticityConfig as GraphAromaticityConfig;
     use umol_graph::ops::model::ElementScope as GraphElementScope;
 
     use super::*;
+
+    #[rstest]
+    #[case::default(
+        RingConfig::default(),
+        ConnectedComponentsAlgorithm::Bfs(),
+        MaximumIndependentSetAlgorithm::BranchAndBound(),
+        GraphAromaticityConfig::default()
+    )]
+    fn test_aromaticity_config_new(
+        #[case] ring_config: RingConfig,
+        #[case] connected_components_algorithm: ConnectedComponentsAlgorithm,
+        #[case] maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm,
+        #[case] expected: GraphAromaticityConfig,
+    ) {
+        assert_eq!(
+            AromaticityConfig::new(
+                ring_config,
+                connected_components_algorithm,
+                maximum_independent_set_algorithm,
+            )
+            .to_rust(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::default(
+        AromaticityConfig::default(),
+        "AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound())"
+    )]
+    fn test_aromaticity_config_repr(#[case] config: AromaticityConfig, #[case] expected: &str) {
+        assert_eq!(config.__repr__(), expected);
+    }
+
+    #[rstest]
+    #[case::default(GraphAromaticityConfig::default())]
+    fn test_aromaticity_config_from_rust(#[case] config: GraphAromaticityConfig) {
+        assert_eq!(AromaticityConfig::from_rust(config).to_rust(), config);
+    }
 
     #[rstest]
     #[case::default(3, 22, true, 6, 10_000, GraphRingLimits::default())]

@@ -5,18 +5,21 @@ import pytest
 from umol import (
     AromaticSystemAst,
     AromaticValenceAst,
+    AromaticityConfig,
     AromaticityModel,
     AromaticityResolveConfig,
     AtomAst,
     AtomTypeRegistry,
     BondAst,
     ChemistryModel,
+    ConnectedComponentsAlgorithm,
     ContradictionError,
     ElectronCountsAst,
     Element,
     ElementAst,
     ElementScope,
     InconsistencyPolicy,
+    MaximumIndependentSetAlgorithm,
     ModelConversionError,
     MoleculeAst,
     MoleculeDefaults,
@@ -24,7 +27,10 @@ from umol import (
     NoncovalentBondKind,
     ParseError,
     ResolveConfig,
+    RelevantCycleEnumerationAlgorithm,
+    RingConfig,
     RingLimits,
+    SimpleCycleEnumerationAlgorithm,
     SmilesIoConfig,
     SmilesSyntaxFlags,
     StereoCosetAst,
@@ -251,6 +257,22 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
             "[cH+]1[cH][cH]1",
             ResolveConfig(
                 aromaticity=AromaticityResolveConfig(
+                    perception=AromaticityConfig(
+                        ring_config=RingConfig(
+                            simple_cycle_algorithm=(
+                                SimpleCycleEnumerationAlgorithm.ReadTarjan()
+                            ),
+                            relevant_cycle_algorithm=(
+                                RelevantCycleEnumerationAlgorithm.Vismara()
+                            ),
+                        ),
+                        connected_components_algorithm=(
+                            ConnectedComponentsAlgorithm.Bfs()
+                        ),
+                        maximum_independent_set_algorithm=(
+                            MaximumIndependentSetAlgorithm.BranchAndBound()
+                        ),
+                    ),
                     delocalize_charge=False,
                     reset_aromatic_valence=False,
                 ),
