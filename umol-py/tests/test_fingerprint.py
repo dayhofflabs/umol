@@ -90,19 +90,19 @@ def test_ecfp_hash_scheme():
             HashedFingerprintConfig.Ecfp(),
             HashedFingerprintConfig.Ecfp(
                 radius=2,
-                scheme=EcfpHashScheme.Xxh3Width64V1(),
+                hashing_scheme=EcfpHashScheme.Xxh3Width64V1(),
             ),
             "HashedFingerprintConfig.Ecfp(radius=2, "
-            "scheme=EcfpHashScheme.Xxh3Width64V1())",
+            "hashing_scheme=EcfpHashScheme.Xxh3Width64V1())",
         ),
         (
             HashedFingerprintConfig.Wl(rounds=RefinementRounds.ToFixpoint()),
             HashedFingerprintConfig.Wl(
                 rounds=RefinementRounds.ToFixpoint(),
-                scheme=WlHashScheme.Xxh3SortedWidth64V1(),
+                hashing_scheme=WlHashScheme.Xxh3SortedWidth64V1(),
             ),
             "HashedFingerprintConfig.Wl(rounds=RefinementRounds.ToFixpoint(), "
-            "scheme=WlHashScheme.Xxh3SortedWidth64V1())",
+            "hashing_scheme=WlHashScheme.Xxh3SortedWidth64V1())",
         ),
     ],
 )
@@ -122,26 +122,26 @@ def test_hashed_fingerprint_config_defaults(value, expected, expected_repr):
         (
             HashedFingerprintConfig.Ecfp(
                 radius=3,
-                scheme=EcfpHashScheme.Xxh3Width64V1(),
+                hashing_scheme=EcfpHashScheme.Xxh3Width64V1(),
             ),
             HashedFingerprintConfig.Ecfp(
                 radius=3,
-                scheme=EcfpHashScheme.Xxh3Width64V1(),
+                hashing_scheme=EcfpHashScheme.Xxh3Width64V1(),
             ),
             "HashedFingerprintConfig.Ecfp(radius=3, "
-            "scheme=EcfpHashScheme.Xxh3Width64V1())",
+            "hashing_scheme=EcfpHashScheme.Xxh3Width64V1())",
         ),
         (
             HashedFingerprintConfig.Wl(
                 rounds=RefinementRounds.Fixed(rounds=3),
-                scheme=WlHashScheme.Xxh3SortedWidth64V1(),
+                hashing_scheme=WlHashScheme.Xxh3SortedWidth64V1(),
             ),
             HashedFingerprintConfig.Wl(
                 rounds=RefinementRounds.Fixed(rounds=3),
-                scheme=WlHashScheme.Xxh3SortedWidth64V1(),
+                hashing_scheme=WlHashScheme.Xxh3SortedWidth64V1(),
             ),
             "HashedFingerprintConfig.Wl(rounds=RefinementRounds.Fixed(rounds=3), "
-            "scheme=WlHashScheme.Xxh3SortedWidth64V1())",
+            "hashing_scheme=WlHashScheme.Xxh3SortedWidth64V1())",
         ),
     ],
 )

@@ -8,18 +8,18 @@ use super::featurizer::FingerprintError;
 use crate::hash::WlHashScheme;
 
 /// Weisfeiler–Lehman color-refinement fingerprint over the atom graph, hashed
-/// through a frozen `scheme` for `rounds` rounds.
+/// through a frozen `hashing_scheme` for `rounds` rounds.
 #[derive(Clone, Copy, Debug)]
 pub struct WlFeaturizer {
     pub rounds: RefinementRounds,
-    pub scheme: WlHashScheme,
+    pub hashing_scheme: WlHashScheme,
 }
 
 impl WlFeaturizer {
     pub fn new(rounds: RefinementRounds) -> Self {
         Self {
             rounds,
-            scheme: WlHashScheme::default(),
+            hashing_scheme: WlHashScheme::default(),
         }
     }
 
@@ -60,7 +60,7 @@ impl WlFeaturizer {
             |edge: EdgeId| bond_seeds[edge.index()],
             RefinementAlgorithm::WeisfeilerLehman {
                 rounds: self.rounds,
-                scheme: self.scheme.refinement_scheme(),
+                scheme: self.hashing_scheme.refinement_scheme(),
             },
         )
     }

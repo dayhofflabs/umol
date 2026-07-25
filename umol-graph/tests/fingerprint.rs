@@ -1,7 +1,7 @@
 use rstest::{fixture, rstest};
 use umol_ast::ast::{
     AtomDelta, AtomFieldChange, AtomId, BondDelta, BondId, Delta, Deltas, MoleculeAst, ReactionAst,
-    ValueAst,
+    RingConfig, ValueAst,
 };
 use umol_ast::{mol_dsl, mol_dsl_ground};
 use umol_graph::fingerprint::{
@@ -10,11 +10,18 @@ use umol_graph::fingerprint::{
     SubstructureFeaturizer, WlFeaturizer,
 };
 use umol_graph::ingest::ingest_smiles;
-use umol_graph_core::RefinementRounds;
+use umol_graph_core::{
+    RefinementRounds, RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
+};
 
 #[fixture]
 fn ethanol() -> MoleculeAst {
     ingest_smiles("CCO").unwrap()
+}
+
+#[fixture]
+fn benzene() -> MoleculeAst {
+    ingest_smiles("c1ccccc1").unwrap()
 }
 
 #[fixture]
@@ -82,16 +89,23 @@ fn test_wl_featurizer_featurize_counted_error() {
 }
 
 #[rstest]
-fn test_ecfp_featurizer_featurize(ethanol: MoleculeAst) {
+fn test_ecfp_featurizer_featurize(benzene: MoleculeAst) {
     assert_eq!(
-        EcfpFeaturizer::new(2).featurize(&ethanol).unwrap().ids(),
+        EcfpFeaturizer {
+            radius: 2,
+            hashing_scheme: Default::default(),
+            ring_config: RingConfig {
+                simple_cycle_algorithm: SimpleCycleEnumerationAlgorithm::ReadTarjan,
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            },
+        }
+        .featurize(&benzene)
+        .unwrap()
+        .ids(),
         &[
-            63839236075656913,
-            1189585227353469813,
-            3822471596818936039,
-            13652293261850732425,
-            15001976065402722634,
-            16149328945726899460,
+            3716727142329830942,
+            7364724293986779056,
+            16614949630732484927,
         ]
     );
 }
@@ -117,10 +131,19 @@ fn test_ecfp_featurizer_featurize_counted_error() {
 }
 
 #[rstest]
-fn test_morgan_featurizer_featurize(ethanol: MoleculeAst) {
+fn test_morgan_featurizer_featurize(benzene: MoleculeAst) {
     assert_eq!(
-        MorganFeaturizer::new(2).featurize(&ethanol).unwrap().ids(),
-        &[864662311, 1535166686, 2245384272, 2246728737, 3542456614, 4018048386,]
+        MorganFeaturizer {
+            radius: 2,
+            ring_config: RingConfig {
+                simple_cycle_algorithm: SimpleCycleEnumerationAlgorithm::ReadTarjan,
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            },
+        }
+        .featurize(&benzene)
+        .unwrap()
+        .ids(),
+        &[98513984, 2763854213, 3218693969]
     );
 }
 
@@ -249,7 +272,13 @@ fn test_substructure_featurizer_featurize_error() {
 fn test_featurize_reaction_difference(ethanol_deoxygenation: ReactionAst) {
     let fingerprint = featurize_reaction(
         &ethanol_deoxygenation,
-        &Featurizer::Morgan(MorganFeaturizer::new(1)),
+        &Featurizer::Morgan(MorganFeaturizer {
+            radius: 1,
+            ring_config: RingConfig {
+                simple_cycle_algorithm: SimpleCycleEnumerationAlgorithm::ReadTarjan,
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            },
+        }),
         ReactionCombinator::Difference,
     )
     .unwrap();

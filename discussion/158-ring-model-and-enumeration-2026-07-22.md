@@ -1293,7 +1293,17 @@ references.
   inspectable Relevant/Vismara workflow default; struct literals and
   conversions are migrated together. Exact fingerprint fixtures prove default
   identity stability, and configured tests prove the relevant selector reaches
-  ring construction. **Breaking config-shape migration (red→green).**
+  ring construction.
+  **Done.** `EcfpFeaturizer` and `MorganFeaturizer` now expose `ring_config`;
+  their constructors select `RingConfig::default()`, while fingerprint
+  construction passes the stored selectors into the fixed Relevant/22
+  `RingModel`. `Featurizer` and reaction featurization preserve the configured
+  concrete featurizer without another configuration layer. Existing Python
+  fingerprint configurations lower to the Rust default until S5b exposes the
+  nested configuration. Constructor-based exact fixtures preserve default
+  fingerprints, and explicit Read--Tarjan/Vismara fixtures exercise ring
+  construction on benzene plus enum-dispatched reaction composition.
+  **Breaking config-shape migration (red→green).**
   `[dep: S3c]`
 - **S4b — aromaticity ring configuration**
   (`umol-graph/src/ops/aromaticity.rs`,

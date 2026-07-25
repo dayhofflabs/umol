@@ -147,12 +147,15 @@ impl EcfpHashScheme {
 pub enum HashedFingerprintConfig {
     #[pyo3(constructor = (*, radius=2))]
     Morgan { radius: u32 },
-    #[pyo3(constructor = (*, radius=2, scheme=EcfpHashScheme::Xxh3Width64V1()))]
-    Ecfp { radius: u32, scheme: EcfpHashScheme },
-    #[pyo3(constructor = (*, rounds, scheme=WlHashScheme::Xxh3SortedWidth64V1()))]
+    #[pyo3(constructor = (*, radius=2, hashing_scheme=EcfpHashScheme::Xxh3Width64V1()))]
+    Ecfp {
+        radius: u32,
+        hashing_scheme: EcfpHashScheme,
+    },
+    #[pyo3(constructor = (*, rounds, hashing_scheme=WlHashScheme::Xxh3SortedWidth64V1()))]
     Wl {
         rounds: RefinementRounds,
-        scheme: WlHashScheme,
+        hashing_scheme: WlHashScheme,
     },
 }
 
@@ -167,14 +170,20 @@ impl HashedFingerprintConfig {
             Self::Morgan { radius } => {
                 format!("HashedFingerprintConfig.Morgan(radius={radius})")
             }
-            Self::Ecfp { radius, scheme } => format!(
-                "HashedFingerprintConfig.Ecfp(radius={radius}, scheme={})",
-                scheme.__repr__()
+            Self::Ecfp {
+                radius,
+                hashing_scheme,
+            } => format!(
+                "HashedFingerprintConfig.Ecfp(radius={radius}, hashing_scheme={})",
+                hashing_scheme.__repr__()
             ),
-            Self::Wl { rounds, scheme } => format!(
-                "HashedFingerprintConfig.Wl(rounds={}, scheme={})",
+            Self::Wl {
+                rounds,
+                hashing_scheme,
+            } => format!(
+                "HashedFingerprintConfig.Wl(rounds={}, hashing_scheme={})",
                 rounds.__repr__(),
-                scheme.__repr__()
+                hashing_scheme.__repr__()
             ),
         }
     }
@@ -184,13 +193,20 @@ impl HashedFingerprintConfig {
     pub(crate) fn to_rust(self) -> GraphFeaturizer {
         match self {
             Self::Morgan { radius } => GraphFeaturizer::Morgan(GraphMorganFeaturizer::new(radius)),
-            Self::Ecfp { radius, scheme } => GraphFeaturizer::Ecfp(GraphEcfpFeaturizer {
+            Self::Ecfp {
                 radius,
-                scheme: scheme.to_rust(),
+                hashing_scheme,
+            } => GraphFeaturizer::Ecfp(GraphEcfpFeaturizer {
+                radius,
+                hashing_scheme: hashing_scheme.to_rust(),
+                ring_config: Default::default(),
             }),
-            Self::Wl { rounds, scheme } => GraphFeaturizer::Wl(GraphWlFeaturizer {
+            Self::Wl {
+                rounds,
+                hashing_scheme,
+            } => GraphFeaturizer::Wl(GraphWlFeaturizer {
                 rounds: rounds.to_rust(),
-                scheme: scheme.to_rust(),
+                hashing_scheme: hashing_scheme.to_rust(),
             }),
         }
     }
@@ -522,37 +538,48 @@ mod tests {
     #[case::morgan_explicit(HashedFingerprintConfig::Morgan { radius: 3 })]
     #[case::ecfp_default(HashedFingerprintConfig::Ecfp {
         radius: 2,
-        scheme: EcfpHashScheme::Xxh3Width64V1(),
+        hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
     })]
     #[case::ecfp_explicit(HashedFingerprintConfig::Ecfp {
         radius: 3,
-        scheme: EcfpHashScheme::Xxh3Width64V1(),
+        hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
     })]
     #[case::wl_fixed(HashedFingerprintConfig::Wl {
         rounds: RefinementRounds::Fixed { rounds: 3 },
-        scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+        hashing_scheme: WlHashScheme::Xxh3SortedWidth64V1(),
     })]
     #[case::wl_fixpoint(HashedFingerprintConfig::Wl {
         rounds: RefinementRounds::ToFixpoint(),
-        scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+        hashing_scheme: WlHashScheme::Xxh3SortedWidth64V1(),
     })]
     fn test_hashed_fingerprint_config_to_rust(#[case] config: HashedFingerprintConfig) {
         let featurizer = config.to_rust();
 
         match (config, featurizer) {
             (HashedFingerprintConfig::Morgan { radius }, GraphFeaturizer::Morgan(featurizer)) => {
-                assert_eq!(featurizer.radius, radius)
+                assert_eq!(featurizer.radius, radius);
+                assert_eq!(featurizer.ring_config, Default::default());
             }
             (
-                HashedFingerprintConfig::Ecfp { radius, scheme },
+                HashedFingerprintConfig::Ecfp {
+                    radius,
+                    hashing_scheme,
+                },
                 GraphFeaturizer::Ecfp(featurizer),
             ) => {
                 assert_eq!(featurizer.radius, radius);
-                assert_eq!(featurizer.scheme, scheme.to_rust());
+                assert_eq!(featurizer.hashing_scheme, hashing_scheme.to_rust());
+                assert_eq!(featurizer.ring_config, Default::default());
             }
-            (HashedFingerprintConfig::Wl { rounds, scheme }, GraphFeaturizer::Wl(featurizer)) => {
+            (
+                HashedFingerprintConfig::Wl {
+                    rounds,
+                    hashing_scheme,
+                },
+                GraphFeaturizer::Wl(featurizer),
+            ) => {
                 assert_eq!(featurizer.rounds, rounds.to_rust());
-                assert_eq!(featurizer.scheme, scheme.to_rust());
+                assert_eq!(featurizer.hashing_scheme, hashing_scheme.to_rust());
             }
             (config, featurizer) => {
                 panic!("config {config:?} lowered to mismatched featurizer {featurizer:?}")
@@ -568,16 +595,16 @@ mod tests {
     #[case::ecfp(
         HashedFingerprintConfig::Ecfp {
             radius: 3,
-            scheme: EcfpHashScheme::Xxh3Width64V1(),
+            hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
         },
-        "HashedFingerprintConfig.Ecfp(radius=3, scheme=EcfpHashScheme.Xxh3Width64V1())"
+        "HashedFingerprintConfig.Ecfp(radius=3, hashing_scheme=EcfpHashScheme.Xxh3Width64V1())"
     )]
     #[case::wl(
         HashedFingerprintConfig::Wl {
             rounds: RefinementRounds::Fixed { rounds: 3 },
-            scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+            hashing_scheme: WlHashScheme::Xxh3SortedWidth64V1(),
         },
-        "HashedFingerprintConfig.Wl(rounds=RefinementRounds.Fixed(rounds=3), scheme=WlHashScheme.Xxh3SortedWidth64V1())"
+        "HashedFingerprintConfig.Wl(rounds=RefinementRounds.Fixed(rounds=3), hashing_scheme=WlHashScheme.Xxh3SortedWidth64V1())"
     )]
     fn test_hashed_fingerprint_config_value(
         #[case] config: HashedFingerprintConfig,
@@ -757,7 +784,7 @@ mod tests {
         ReactionCombinedFingerprintConfig::Difference {
             molecule: HashedFingerprintConfig::Ecfp {
                 radius: 2,
-                scheme: EcfpHashScheme::Xxh3Width64V1(),
+                hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
             },
         },
         GraphReactionCombinator::Difference
@@ -766,7 +793,7 @@ mod tests {
         ReactionCombinedFingerprintConfig::Difference {
             molecule: HashedFingerprintConfig::Wl {
                 rounds: RefinementRounds::Fixed { rounds: 3 },
-                scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+                hashing_scheme: WlHashScheme::Xxh3SortedWidth64V1(),
             },
         },
         GraphReactionCombinator::Difference
@@ -781,7 +808,7 @@ mod tests {
         ReactionCombinedFingerprintConfig::DisjointUnion {
             molecule: HashedFingerprintConfig::Ecfp {
                 radius: 2,
-                scheme: EcfpHashScheme::Xxh3Width64V1(),
+                hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
             },
         },
         GraphReactionCombinator::DisjointUnion
@@ -790,7 +817,7 @@ mod tests {
         ReactionCombinedFingerprintConfig::DisjointUnion {
             molecule: HashedFingerprintConfig::Wl {
                 rounds: RefinementRounds::Fixed { rounds: 3 },
-                scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+                hashing_scheme: WlHashScheme::Xxh3SortedWidth64V1(),
             },
         },
         GraphReactionCombinator::DisjointUnion
@@ -808,18 +835,29 @@ mod tests {
         assert_eq!(combinator, expected_combinator);
         match (molecule, featurizer) {
             (HashedFingerprintConfig::Morgan { radius }, GraphFeaturizer::Morgan(featurizer)) => {
-                assert_eq!(featurizer.radius, radius)
+                assert_eq!(featurizer.radius, radius);
+                assert_eq!(featurizer.ring_config, Default::default());
             }
             (
-                HashedFingerprintConfig::Ecfp { radius, scheme },
+                HashedFingerprintConfig::Ecfp {
+                    radius,
+                    hashing_scheme,
+                },
                 GraphFeaturizer::Ecfp(featurizer),
             ) => {
                 assert_eq!(featurizer.radius, radius);
-                assert_eq!(featurizer.scheme, scheme.to_rust());
+                assert_eq!(featurizer.hashing_scheme, hashing_scheme.to_rust());
+                assert_eq!(featurizer.ring_config, Default::default());
             }
-            (HashedFingerprintConfig::Wl { rounds, scheme }, GraphFeaturizer::Wl(featurizer)) => {
+            (
+                HashedFingerprintConfig::Wl {
+                    rounds,
+                    hashing_scheme,
+                },
+                GraphFeaturizer::Wl(featurizer),
+            ) => {
                 assert_eq!(featurizer.rounds, rounds.to_rust());
-                assert_eq!(featurizer.scheme, scheme.to_rust());
+                assert_eq!(featurizer.hashing_scheme, hashing_scheme.to_rust());
             }
             (molecule, featurizer) => {
                 panic!("config {molecule:?} lowered to mismatched featurizer {featurizer:?}")

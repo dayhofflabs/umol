@@ -605,7 +605,7 @@ mod tests {
     #[case::ecfp_default(
         HashedFingerprintConfig::Ecfp {
             radius: 2,
-            scheme: EcfpHashScheme::Xxh3Width64V1(),
+            hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
         },
         &[
             63839236075656913,
@@ -619,7 +619,7 @@ mod tests {
     #[case::ecfp_explicit(
         HashedFingerprintConfig::Ecfp {
             radius: 0,
-            scheme: EcfpHashScheme::Xxh3Width64V1(),
+            hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
         },
         &[
             1189585227353469813,
@@ -630,7 +630,7 @@ mod tests {
     #[case::wl_default_scheme(
         HashedFingerprintConfig::Wl {
             rounds: RefinementRounds::Fixed { rounds: 3 },
-            scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+            hashing_scheme: WlHashScheme::Xxh3SortedWidth64V1(),
         },
         &[
             2520347590860685079,
@@ -650,7 +650,7 @@ mod tests {
     #[case::wl_explicit_rounds(
         HashedFingerprintConfig::Wl {
             rounds: RefinementRounds::Fixed { rounds: 1 },
-            scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+            hashing_scheme: WlHashScheme::Xxh3SortedWidth64V1(),
         },
         &[
             5715207763479934940,
@@ -699,11 +699,11 @@ mod tests {
     #[case::morgan(HashedFingerprintConfig::Morgan { radius: 2 })]
     #[case::ecfp(HashedFingerprintConfig::Ecfp {
         radius: 2,
-        scheme: EcfpHashScheme::Xxh3Width64V1(),
+        hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
     })]
     #[case::wl(HashedFingerprintConfig::Wl {
         rounds: RefinementRounds::Fixed { rounds: 3 },
-        scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+        hashing_scheme: WlHashScheme::Xxh3SortedWidth64V1(),
     })]
     fn test_molecule_ast_hashed_fingerprint_error(#[case] config: HashedFingerprintConfig) {
         Python::attach(|py| {
@@ -725,14 +725,14 @@ mod tests {
     #[case::ecfp(
         HashedFingerprintConfig::Ecfp {
             radius: 2,
-            scheme: EcfpHashScheme::Xxh3Width64V1(),
+            hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
         },
         &[(5513743581508886362, 1), (16149328945726899460, 2)]
     )]
     #[case::wl(
         HashedFingerprintConfig::Wl {
             rounds: RefinementRounds::Fixed { rounds: 3 },
-            scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+            hashing_scheme: WlHashScheme::Xxh3SortedWidth64V1(),
         },
         &[
             (2659163409134283895, 2),
@@ -779,11 +779,11 @@ mod tests {
     #[case::morgan(HashedFingerprintConfig::Morgan { radius: 2 })]
     #[case::ecfp(HashedFingerprintConfig::Ecfp {
         radius: 2,
-        scheme: EcfpHashScheme::Xxh3Width64V1(),
+        hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
     })]
     #[case::wl(HashedFingerprintConfig::Wl {
         rounds: RefinementRounds::Fixed { rounds: 3 },
-        scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+        hashing_scheme: WlHashScheme::Xxh3SortedWidth64V1(),
     })]
     fn test_molecule_ast_counted_hashed_fingerprint_error(#[case] config: HashedFingerprintConfig) {
         Python::attach(|py| {

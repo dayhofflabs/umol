@@ -16,14 +16,16 @@ use crate::hash::EcfpHashScheme;
 #[derive(Clone, Copy, Debug)]
 pub struct EcfpFeaturizer {
     pub radius: u32,
-    pub scheme: EcfpHashScheme,
+    pub hashing_scheme: EcfpHashScheme,
+    pub ring_config: RingConfig,
 }
 
 impl EcfpFeaturizer {
     pub fn new(radius: u32) -> Self {
         Self {
             radius,
-            scheme: EcfpHashScheme::default(),
+            hashing_scheme: EcfpHashScheme::default(),
+            ring_config: RingConfig::default(),
         }
     }
 
@@ -49,14 +51,14 @@ impl EcfpFeaturizer {
     /// The circular-refinement identifier multiset (one per surviving environment).
     fn identifiers(&self, mol: &MoleculeAst) -> Vec<u64> {
         let rings = mol
-            .rings(RingModel::default(), RingConfig::default())
+            .rings(RingModel::default(), self.ring_config)
             .into_ring_set();
         mol.raw_graph().circular_refine(
             |node| atom_components(mol, &rings, AtomId::from(node)),
             |edge| bond_label(mol, BondId::from(edge)),
             CircularRefinementAlgorithm::Ec {
                 radius: self.radius,
-                scheme: self.scheme.recipe(),
+                scheme: self.hashing_scheme.recipe(),
             },
         )
     }
@@ -97,6 +99,15 @@ mod tests {
         :atoms ["C #h3" "C #h2" "C #h2" "C #h0" "O #h0" "N #h2"]
         :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "2"] [3 5 "1"]]
     }"#;
+
+    #[rstest]
+    fn test_ecfp_featurizer_new() {
+        let featurizer = EcfpFeaturizer::new(2);
+
+        assert_eq!(featurizer.radius, 2);
+        assert_eq!(featurizer.hashing_scheme, EcfpHashScheme::default());
+        assert_eq!(featurizer.ring_config, RingConfig::default());
+    }
 
     // Rogers & Hahn 2010, Figure 8 fixes the count per diameter; the exact ids
     // pin the frozen umol hash recipe for those same environments.

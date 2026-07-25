@@ -502,9 +502,9 @@ bird names into public compatibility commitments.
 The hashed config variants have the following parameter policy:
 
 - `Morgan(radius=2)` uses the conventional radius-2 default;
-- `Ecfp(radius=2, scheme=<frozen default>)` uses the conventional radius-2
-  default and the frozen named ECFP scheme;
-- `Wl(rounds, scheme=<frozen default>)` requires an explicit
+- `Ecfp(radius=2, hashing_scheme=<frozen default>)` uses the conventional
+  radius-2 default and the frozen named ECFP scheme;
+- `Wl(rounds, hashing_scheme=<frozen default>)` requires an explicit
   `RefinementRounds` value because `Fixed(n)` and `ToFixpoint` define materially
   different fingerprints; its named scheme may have a workflow default.
 
@@ -1509,10 +1509,10 @@ S4 completes the configured resolved-SMILES Python deliverable.
   `[dep: S3a, S4a]`
 - **S5d — `HashedFingerprintConfig`**
   (`umol-py/src/fingerprint/config.rs`): bind `Morgan(radius=2)`,
-  `Ecfp(radius=2, scheme=<default>)`, and
-  `Wl(rounds, scheme=<default>)`. The config is required by computation methods;
-  conversion lowers each variant to an explicit Rust featurizer. Tests cover
-  defaults, explicit parameters, every lowering path, equality, and repr.
+  `Ecfp(radius=2, hashing_scheme=<default>)`, and
+  `Wl(rounds, hashing_scheme=<default>)`. The config is required by computation
+  methods; conversion lowers each variant to an explicit Rust featurizer. Tests
+  cover defaults, explicit parameters, every lowering path, equality, and repr.
   **Implemented (green).** `[dep: S5a, S5b, S5c]`
 - **S5e — `PatternFingerprintConfig`**
   (`umol-py/src/fingerprint/config.rs`): bind the optional-method config with

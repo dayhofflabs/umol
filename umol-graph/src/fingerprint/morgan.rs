@@ -23,11 +23,15 @@ use crate::hash::Morgan;
 #[derive(Clone, Copy, Debug)]
 pub struct MorganFeaturizer {
     pub radius: u32,
+    pub ring_config: RingConfig,
 }
 
 impl MorganFeaturizer {
     pub fn new(radius: u32) -> Self {
-        Self { radius }
+        Self {
+            radius,
+            ring_config: RingConfig::default(),
+        }
     }
 
     /// Returns the deduplicated set of identifiers.
@@ -53,7 +57,7 @@ impl MorganFeaturizer {
     /// dedup yields the binary set, counting yields the counted set.
     fn identifiers(&self, mol: &MoleculeAst) -> Vec<u64> {
         let rings = mol
-            .rings(RingModel::default(), RingConfig::default())
+            .rings(RingModel::default(), self.ring_config)
             .into_ring_set();
         mol.raw_graph().circular_refine(
             |node| atom_components(mol, &rings, AtomId::from(node)),
@@ -113,6 +117,14 @@ mod tests {
 
     use super::*;
     use crate::ingest::ingest_smiles;
+
+    #[rstest]
+    fn test_morgan_featurizer_new() {
+        let featurizer = MorganFeaturizer::new(2);
+
+        assert_eq!(featurizer.radius, 2);
+        assert_eq!(featurizer.ring_config, RingConfig::default());
+    }
 
     // RDKit 2026.03.3 `GetMorganFingerprint` sparse identifiers (sorted) per
     // (SMILES, radius). Bit-exact target for the replica.

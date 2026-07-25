@@ -1989,7 +1989,7 @@ mod tests {
         ReactionCombinedFingerprintConfig::Difference {
             molecule: HashedFingerprintConfig::Ecfp {
                 radius: 2,
-                scheme: EcfpHashScheme::Xxh3Width64V1(),
+                hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
             },
         },
         vec![
@@ -2006,7 +2006,7 @@ mod tests {
         ReactionCombinedFingerprintConfig::Difference {
             molecule: HashedFingerprintConfig::Wl {
                 rounds: RefinementRounds::Fixed { rounds: 3 },
-                scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+                hashing_scheme: WlHashScheme::Xxh3SortedWidth64V1(),
             },
         },
         vec![
@@ -2092,7 +2092,7 @@ mod tests {
         ReactionCombinedFingerprintConfig::DisjointUnion {
             molecule: HashedFingerprintConfig::Ecfp {
                 radius: 2,
-                scheme: EcfpHashScheme::Xxh3Width64V1(),
+                hashing_scheme: EcfpHashScheme::Xxh3Width64V1(),
             },
         },
         vec![
@@ -2111,7 +2111,7 @@ mod tests {
         ReactionCombinedFingerprintConfig::DisjointUnion {
             molecule: HashedFingerprintConfig::Wl {
                 rounds: RefinementRounds::Fixed { rounds: 3 },
-                scheme: WlHashScheme::Xxh3SortedWidth64V1(),
+                hashing_scheme: WlHashScheme::Xxh3SortedWidth64V1(),
             },
         },
         vec![
