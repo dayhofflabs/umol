@@ -1,4 +1,7 @@
 //! Connected components.
+//!
+//! [`Graph::connected_components`] currently uses breadth-first flood fill and
+//! returns one sorted node set per component.
 
 use crate::graph::{Graph, NodeId};
 

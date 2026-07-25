@@ -1,4 +1,15 @@
-//! Relevant cycle enumeration and shortest-cycle queries.
+//! Cycle queries, enumeration, bases, and ring-family decomposition.
+//!
+//! Current operations provide breadth-first shortest-cycle queries; bounded
+//! Read--Tarjan simple-cycle visitation and collection; Vismara relevant-cycle
+//! visitation and collection; Horton minimum cycle bases; and Kolodzik Unique
+//! Ring Families. The legacy node-only cycle collector also delegates to the
+//! Vismara implementation. See [Read and Tarjan
+//! (1975)](https://doi.org/10.1002/net.1975.5.3.237),
+//! [Horton (1987)](https://doi.org/10.1137/0216026),
+//! [Vismara (1997)](https://doi.org/10.37236/1294), and
+//! [Kolodzik, Urbaczek, and Rarey
+//! (2012)](https://doi.org/10.1021/ci200629w).
 
 use std::collections::{HashSet, VecDeque};
 use std::ops::ControlFlow;

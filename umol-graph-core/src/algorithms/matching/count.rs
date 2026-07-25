@@ -1,7 +1,11 @@
 //! Planar perfect-matching counts.
 //!
 //! This module validates an embedding supplied by the caller. It does not test
-//! planarity or discover an embedding.
+//! planarity or discover an embedding. The current count operation solves a
+//! Kasteleyn signing system for the bounded faces and evaluates the exact
+//! Pfaffian of the resulting skew-symmetric matrix; it is not an enumeration
+//! algorithm. See [Kasteleyn
+//! (1961)](https://doi.org/10.1016/0031-8914(61)90063-5).
 
 use std::collections::VecDeque;
 use std::error::Error;

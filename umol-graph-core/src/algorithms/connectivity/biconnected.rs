@@ -1,4 +1,9 @@
 //! Biconnected components.
+//!
+//! [`Graph::biconnected_components`] currently uses Tarjan's depth-first
+//! algorithm. It returns vertex sets for blocks with at least three vertices,
+//! omits two-vertex bridge blocks, and does not separately return articulation
+//! points. See [Tarjan (1972)](https://doi.org/10.1137/0201010).
 
 use std::collections::HashSet;
 

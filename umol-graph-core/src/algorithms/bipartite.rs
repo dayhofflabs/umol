@@ -1,4 +1,8 @@
 //! Bipartition and bipartiteness.
+//!
+//! [`Graph::bipartition`] currently computes a two-coloring by breadth-first
+//! search; [`Graph::is_bipartite`] is its boolean projection. This is not a
+//! general graph-coloring module.
 
 use std::collections::VecDeque;
 

@@ -1,4 +1,9 @@
 //! Bounded enumeration of connected subgraphs as edge sets.
+//!
+//! [`Graph::enumerate_connected_subgraphs`] currently uses an edge-oriented
+//! adaptation of ESU to emit each connected edge set once. See
+//! [Wernicke, *A Faster Algorithm for Detecting Network Motifs*
+//! (2005)](https://doi.org/10.1007/11557067_14).
 
 use crate::graph::{EdgeId, Graph};
 

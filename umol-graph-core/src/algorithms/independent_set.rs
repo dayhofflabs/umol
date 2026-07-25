@@ -1,4 +1,7 @@
 //! Maximum independent sets.
+//!
+//! [`Graph::maximum_independent_set`] currently uses exact branch-and-bound with
+//! a greedy cardinality bound and deterministic tie-breaking.
 
 use crate::graph::{Graph, NodeId};
 

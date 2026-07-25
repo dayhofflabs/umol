@@ -1,4 +1,9 @@
-//! Binary cycle-space operations.
+//! Binary cycle-space operations and minimum cycle bases.
+//!
+//! The current implementation constructs an unweighted Horton candidate set
+//! and greedily selects an independent minimum-total-length basis over the
+//! binary cycle space. See [Horton
+//! (1987)](https://doi.org/10.1137/0216026).
 
 use std::cmp::Ordering;
 use std::collections::HashSet;

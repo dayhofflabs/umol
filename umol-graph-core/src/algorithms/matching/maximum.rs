@@ -1,4 +1,10 @@
 //! Maximum and perfect matching.
+//!
+//! Current selectors provide Edmonds blossom search for general graphs and
+//! Hopcroft--Karp for bipartite graphs; perfect matching is the corresponding
+//! cardinality check. See [Edmonds
+//! (1965)](https://doi.org/10.4153/CJM-1965-045-4) and
+//! [Hopcroft and Karp (1973)](https://doi.org/10.1137/0202019).
 
 use std::collections::{HashSet, VecDeque};
 use std::error::Error;

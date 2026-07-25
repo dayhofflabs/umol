@@ -254,8 +254,8 @@ impl Graph {
 
     /// DPO-style removal: delete exactly `nodes` and `edges`, or `None` when that would strand an
     /// edge — the **dangling condition**: a removed node incident to an edge the caller did not list
-    /// for removal. On success the result equals [`remove_cascading`] (the check guarantees there is
-    /// nothing extra to sweep), so it is the pushout-complement of a matched deletion.
+    /// for removal. On success the result equals [`Self::remove_cascading`] (the check guarantees
+    /// there is nothing extra to sweep), so it is the pushout-complement of a matched deletion.
     pub fn try_remove(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> Option<Compaction> {
         let removed_edges: HashSet<EdgeId> = edges.iter().copied().collect();
         for &node in nodes {

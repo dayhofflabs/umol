@@ -5,6 +5,10 @@
 //! without recursion. The minimum node fixes cycle rotation, and the ordering
 //! of the first and closing edges fixes reversal while preserving distinct
 //! parallel-edge cycles.
+//!
+//! See [Read and Tarjan, *Bounds on Backtrack Algorithms for Listing Cycles,
+//! Paths, and Spanning Trees*
+//! (1975)](https://doi.org/10.1002/net.1975.5.3.237).
 
 use std::collections::VecDeque;
 use std::ops::ControlFlow;

@@ -1,4 +1,10 @@
-//! Graph algorithms operating on `Graph` and `DiGraph`.
+//! Graph algorithms grouped by graph problem.
+//!
+//! Each problem module owns its operation entry points, algorithm selectors,
+//! and result types. A `visit_*` operation emits results incrementally,
+//! `enumerate_*` collects them eagerly, and an eventual `iter_*` operation
+//! returns resumable iteration state; these forms stay together in the problem
+//! module.
 
 pub mod automorphism;
 pub mod bipartite;

@@ -1,4 +1,9 @@
 //! Maximum common subgraphs.
+//!
+//! Current operations use McGregor backtracking for maximum common induced
+//! subgraphs and maximum common edge subgraphs, including seeded edge search.
+//! See [McGregor, *Backtrack Search Algorithms and the Maximal Common
+//! Subgraph Problem* (1982)](https://doi.org/10.1002/spe.4380120103).
 
 #[cfg(test)]
 use super::enumeration::{

@@ -1375,6 +1375,14 @@ references.
   not expose articulation points and omits bridge blocks, and planar matching
   count uses Kasteleyn signing plus Pfaffian evaluation. Check intra-doc links
   with rustdoc in addition to the ordinary graph-core tests.
+  **Done.** Every public problem module and private implementation module now
+  states its current operations and implementations, with primary-paper DOI or
+  upstream citations where applicable. The top-level module records only the
+  problem-oriented organization and `visit_*`/`enumerate_*`/`iter_*`
+  convention. Connectivity, traversal, planar matching count, and
+  subgraph-isomorphism documentation now describe their actual narrower
+  contracts. Strict rustdoc checking also exposed and corrected the pre-existing
+  unqualified `Graph::remove_cascading` link.
   **Documentation-only organization cleanup (green).** `[dep: S5a]`
 - **S5c — graph precondition vocabulary**
   (`umol-graph-core/src/{graph,lib}.rs`,

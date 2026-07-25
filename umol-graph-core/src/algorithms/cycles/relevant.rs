@@ -1,4 +1,9 @@
 //! Compact shortest-path and cycle-family state for relevant cycles.
+//!
+//! The current implementation builds shortest-path DAGs and Vismara cycle
+//! prototypes, then expands the selected families during visitation. See
+//! [Vismara, *Union of all the Minimum Cycle Bases of a Graph*
+//! (1997)](https://doi.org/10.37236/1294).
 
 use std::cmp::Ordering;
 use std::collections::{HashSet, VecDeque};

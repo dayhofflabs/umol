@@ -1,4 +1,10 @@
 //! Graph automorphisms and canonical labeling.
+//!
+//! The current implementation uses nauty for automorphism groups, orbits,
+//! generators, canonical labels, and colored canonical keys. See
+//! [McKay and Piperno, *Practical Graph Isomorphism, II*
+//! (2014)](https://doi.org/10.1016/j.jsc.2013.09.003) and the
+//! [nauty and Traces upstream site](https://pallini.di.uniroma1.it/).
 
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};

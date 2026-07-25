@@ -12,6 +12,12 @@
 //! [`CircularRefinementHash`] (extended connectivity): a custom impl can reproduce
 //! an external scheme exactly (the iterative-recoloring part — invariants, folding,
 //! and dedup live in the caller). Concrete frozen schemes live downstream.
+//!
+//! The current selectors provide one-dimensional Weisfeiler--Leman refinement
+//! and extended-connectivity circular refinement. See
+//! [Weisfeiler and Leman (1968)](https://www.iti.zcu.cz/wl2018/pdf/wl_paper_translation.pdf)
+//! and [Rogers and Hahn, *Extended-Connectivity Fingerprints*
+//! (2010)](https://doi.org/10.1021/ci100050t).
 
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::Debug;

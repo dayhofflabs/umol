@@ -1,4 +1,7 @@
 //! Bounded enumeration of simple paths as edge sequences.
+//!
+//! [`Graph::enumerate_paths`] currently uses depth-first search with a
+//! maximum-length bound and emits each undirected simple path once.
 
 use crate::graph::{EdgeId, Graph, NodeId};
 

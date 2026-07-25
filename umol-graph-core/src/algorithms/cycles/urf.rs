@@ -1,4 +1,9 @@
 //! Unique Ring Family decomposition.
+//!
+//! The current implementation derives URFs from compact relevant-cycle-family
+//! state and preserves source-graph node and edge identities. See
+//! [Kolodzik, Urbaczek, and Rarey, *Unique Ring Families*
+//! (2012)](https://doi.org/10.1021/ci200629w).
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};

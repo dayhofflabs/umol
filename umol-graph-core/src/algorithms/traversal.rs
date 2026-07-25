@@ -1,4 +1,8 @@
-//! Graph traversal: distance-limited neighborhoods.
+//! Distance-limited graph neighborhoods.
+//!
+//! [`Graph::neighborhood`] is currently the sole traversal operation. It uses
+//! breadth-first search to return nodes through a requested distance; this
+//! module does not yet expose general traversal events or trees.
 
 use std::collections::VecDeque;
 

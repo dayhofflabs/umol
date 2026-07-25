@@ -1,4 +1,9 @@
 //! Complete and maximal common-subgraph enumeration.
+//!
+//! The current implementation builds the modular product, enumerates all
+//! cliques by ordered backtracking for complete output, and uses
+//! Bron--Kerbosch with pivoting for maximal output. See
+//! [Bron and Kerbosch (1973)](https://doi.org/10.1145/362342.362367).
 
 use bitvec::prelude::*;
 

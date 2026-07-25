@@ -1,4 +1,8 @@
-//! Deterministic topological ordering of a `DiGraph`.
+//! Deterministic topological ordering of a [`DiGraph`].
+//!
+//! [`DiGraph::topological_order`] currently uses Kahn's ready-set algorithm
+//! with caller-defined ordering. See [Kahn, *Topological Sorting of Large
+//! Networks* (1962)](https://doi.org/10.1145/368996.369025).
 
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;

@@ -1,4 +1,9 @@
-//! Perfect and maximum matching enumeration.
+//! Perfect and maximum matching visitation and collection.
+//!
+//! The current branch-and-bound search visits matchings incrementally; the
+//! eager operations collect the same traversal. Maximum enumeration uses the
+//! Edmonds implementation as its residual cardinality bound. See
+//! [Edmonds (1965)](https://doi.org/10.4153/CJM-1965-045-4).
 
 use std::ops::ControlFlow;
 

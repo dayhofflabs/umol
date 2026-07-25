@@ -1,6 +1,15 @@
-//! Subgraph isomorphisms (monomorphism: query edges map to target edges, no
-//! induced-subgraph reverse check). Multiple named algorithms behind a selector;
-//! all return the same match set (a query→target index vector per occurrence).
+//! Subgraph-isomorphism search with monomorphism semantics.
+//!
+//! Query edges must map to target edges; no induced-subgraph reverse check is
+//! applied. Current selectors provide VF2, Ullmann, RI, ArcMatch, an
+//! RDKit-compatible VF2 variant, and Ray--Kirsch bond search. Both ordinary and
+//! anchored operations return the same correspondence set for every selector.
+//! See [Cordella et al. (2004)](https://doi.org/10.1109/TPAMI.2004.75),
+//! [Ullmann (1976)](https://doi.org/10.1145/321921.321925),
+//! [Bonnici et al. (2013)](https://doi.org/10.1186/1471-2105-14-S7-S13),
+//! [Bonnici et al. (2024)](https://doi.org/10.1007/s10618-024-01061-8),
+//! [RDKit PR #2500](https://github.com/rdkit/rdkit/pull/2500), and
+//! [Ray and Kirsch (1957)](https://doi.org/10.1126/science.126.3278.814).
 
 use std::cmp::Reverse;
 use std::collections::HashMap;
@@ -551,6 +560,11 @@ impl Graph {
 }
 
 mod vf2 {
+    //! VF2 terminal-set backtracking with monomorphism look-ahead.
+    //!
+    //! See [Cordella et al.
+    //! (2004)](https://doi.org/10.1109/TPAMI.2004.75).
+
     use super::*;
 
     pub(super) struct Vf2State<'g> {
@@ -757,6 +771,10 @@ mod vf2 {
 use vf2::Vf2State;
 
 mod ullmann {
+    //! Ullmann candidate-matrix refinement and backtracking.
+    //!
+    //! See [Ullmann (1976)](https://doi.org/10.1145/321921.321925).
+
     use super::*;
 
     /// Ullmann candidate matrix `m[i * n2 + j]`: query node `i` may map to target
@@ -891,6 +909,11 @@ mod ullmann {
 use ullmann::{ullmann_matrix, ullmann_refine, ullmann_search};
 
 mod ri {
+    //! RI static query ordering and backtracking.
+    //!
+    //! See [Bonnici et al.
+    //! (2013)](https://doi.org/10.1186/1471-2105-14-S7-S13).
+
     use super::*;
 
     /// RI GreatestConstraintFirst ordering of the query vertices: the root is the
@@ -1041,6 +1064,11 @@ mod ri {
 use ri::{ri_order, ri_parents, ri_search};
 
 mod arc_match {
+    //! ArcMatch vertex- and edge-domain reduction, ordering, and search.
+    //!
+    //! See [Bonnici et al.
+    //! (2024)](https://doi.org/10.1007/s10618-024-01061-8).
+
     use super::*;
 
     /// ArcMatch initial vertex domains `d[qi * n2 + tj]`: target vertex `tj`
@@ -1555,6 +1583,11 @@ use arc_match::{
 };
 
 mod vf2_rdkit {
+    //! RDKit-compatible, vflib-derived VF2 search with Mayfield's
+    //! chemical-graph candidate restrictions.
+    //!
+    //! See [RDKit PR #2500](https://github.com/rdkit/rdkit/pull/2500).
+
     use super::*;
 
     /// Next query atom for `Vf2Rdkit`: lowest-index unmapped atom adjacent to the
@@ -1641,6 +1674,12 @@ mod vf2_rdkit {
 use vf2_rdkit::vf2rdkit_search;
 
 mod ray_kirsch {
+    //! Ray--Kirsch bond-oriented backtracking.
+    //!
+    //! See [Ray and Kirsch
+    //! (1957)](https://doi.org/10.1126/science.126.3278.814) and Open Babel's
+    //! [`parsmart.cpp`](https://github.com/openbabel/openbabel/blob/master/src/parsmart.cpp).
+
     use super::*;
 
     /// Query bond order for `RayKirsch`: a DFS edge ordering per component. Each bond is
