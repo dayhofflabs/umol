@@ -6,6 +6,11 @@ materials/
 scratch/
 whitepaper
 
+# Direnv
+.direnv/
+.envrc
+.envrc.local
+
 # Python / maturin (umol-py)
 .venv/
 __pycache__/
