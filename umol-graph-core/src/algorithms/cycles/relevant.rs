@@ -416,6 +416,18 @@ pub(super) struct RelevantCycleAnalysis {
 }
 
 pub(super) fn visit_relevant_cycles_vismara<B>(
+    graph: &Graph,
+    max_cycle_size: usize,
+    visitor: &mut impl FnMut(Cycle) -> ControlFlow<B>,
+) -> ControlFlow<B> {
+    debug_assert!(graph.is_simple(), "direct Vismara input must be simple");
+    if max_cycle_size < 3 {
+        return ControlFlow::Continue(());
+    }
+    RelevantCycleAnalysis::new(graph).visit_cycles(graph, max_cycle_size, visitor)
+}
+
+pub(super) fn visit_relevant_cycles_vismara_fallback<B>(
     source: &Graph,
     max_cycle_size: usize,
     visitor: &mut impl FnMut(Cycle) -> ControlFlow<B>,
@@ -423,8 +435,6 @@ pub(super) fn visit_relevant_cycles_vismara<B>(
     let mut loops = Vec::new();
     let mut loopless_edges = Vec::new();
     let mut edge_sources = Vec::new();
-    let mut endpoint_pairs = HashSet::new();
-    let mut has_parallel_edges = false;
 
     for edge in source.edge_ids() {
         let [first, second] = source.edge_endpoints(edge);
@@ -432,7 +442,6 @@ pub(super) fn visit_relevant_cycles_vismara<B>(
             loops.push(Cycle::normalized(source, vec![first], vec![edge]));
             continue;
         }
-        has_parallel_edges |= !endpoint_pairs.insert([first, second]);
         loopless_edges.push([first.0, second.0]);
         edge_sources.push(edge);
     }
@@ -444,27 +453,17 @@ pub(super) fn visit_relevant_cycles_vismara<B>(
             }
         }
     }
-    if max_cycle_size < 2 || (max_cycle_size < 3 && !has_parallel_edges) {
+    if max_cycle_size < 2 {
         return ControlFlow::Continue(());
     }
 
-    if edge_sources.len() == source.edge_count() && !has_parallel_edges {
-        return RelevantCycleAnalysis::new(source).visit_cycles(source, max_cycle_size, visitor);
-    }
-
     let loopless = Graph::new(source.node_count(), &loopless_edges);
-    if has_parallel_edges {
-        let subdivision = loopless.subdivide_edges();
-        RelevantCycleAnalysis::new(subdivision.graph()).visit_cycles(
-            subdivision.graph(),
-            max_cycle_size.saturating_mul(2),
-            |cycle| visitor(cycle.map_subdivision(source, &subdivision, &edge_sources)),
-        )
-    } else {
-        RelevantCycleAnalysis::new(&loopless).visit_cycles(&loopless, max_cycle_size, |cycle| {
-            visitor(cycle.map_edges(source, &edge_sources))
-        })
-    }
+    let subdivision = loopless.subdivide_edges();
+    RelevantCycleAnalysis::new(subdivision.graph()).visit_cycles(
+        subdivision.graph(),
+        max_cycle_size.saturating_mul(2),
+        |cycle| visitor(cycle.map_subdivision(source, &subdivision, &edge_sources)),
+    )
 }
 
 impl RelevantCycleAnalysis {

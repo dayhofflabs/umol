@@ -9,8 +9,9 @@ use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
     ConnectedComponentsAlgorithm, CycleEnumerationAlgorithm, EdgeId,
     GeneralMaximumMatchingAlgorithm, Graph, MaximumIndependentSetAlgorithm,
-    MinimumCycleBasisAlgorithm, NodeId, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
-    SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+    MinimumCycleBasisAlgorithm, NodeId, RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm,
+    SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm,
+    ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 mod matching_graphs {
@@ -251,6 +252,49 @@ fn relevant_cycle_enumeration(c: &mut Criterion) {
         });
     }
     group.finish();
+
+    let mut paths = c.benchmark_group("relevant_cycle_paths");
+    for (name, graph) in cycle_corpus() {
+        paths.bench_with_input(
+            BenchmarkId::new("vismara_direct", name),
+            &graph,
+            |b, graph| {
+                b.iter(|| {
+                    graph
+                        .try_enumerate_relevant_cycles(
+                            usize::MAX,
+                            RelevantCycleEnumerationAlgorithm::Vismara,
+                        )
+                        .expect("cycle corpus graphs are simple")
+                });
+            },
+        );
+        paths.bench_with_input(
+            BenchmarkId::new("vismara_fallback", name),
+            &graph,
+            |b, graph| {
+                b.iter(|| {
+                    graph.enumerate_relevant_cycles_fallback(
+                        usize::MAX,
+                        RelevantCycleEnumerationAlgorithm::Vismara,
+                    )
+                });
+            },
+        );
+        paths.bench_with_input(
+            BenchmarkId::new("vismara_total", name),
+            &graph,
+            |b, graph| {
+                b.iter(|| {
+                    graph.enumerate_relevant_cycles(
+                        usize::MAX,
+                        RelevantCycleEnumerationAlgorithm::Vismara,
+                    )
+                });
+            },
+        );
+    }
+    paths.finish();
 }
 
 fn simple_cycle_enumeration(c: &mut Criterion) {
@@ -263,6 +307,43 @@ fn simple_cycle_enumeration(c: &mut Criterion) {
         });
     }
     bounded.finish();
+
+    let mut paths = c.benchmark_group("simple_cycle_paths_bounded_8");
+    for (name, graph) in cycle_corpus() {
+        paths.bench_with_input(
+            BenchmarkId::new("read_tarjan_direct", name),
+            &graph,
+            |b, graph| {
+                b.iter(|| {
+                    graph
+                        .try_enumerate_simple_cycles(8, SimpleCycleEnumerationAlgorithm::ReadTarjan)
+                        .expect("cycle corpus graphs are simple")
+                });
+            },
+        );
+        paths.bench_with_input(
+            BenchmarkId::new("read_tarjan_fallback", name),
+            &graph,
+            |b, graph| {
+                b.iter(|| {
+                    graph.enumerate_simple_cycles_fallback(
+                        8,
+                        SimpleCycleEnumerationAlgorithm::ReadTarjan,
+                    )
+                });
+            },
+        );
+        paths.bench_with_input(
+            BenchmarkId::new("read_tarjan_total", name),
+            &graph,
+            |b, graph| {
+                b.iter(|| {
+                    graph.enumerate_simple_cycles(8, SimpleCycleEnumerationAlgorithm::ReadTarjan)
+                });
+            },
+        );
+    }
+    paths.finish();
 
     let cases = [
         ("path_6", path(6)),

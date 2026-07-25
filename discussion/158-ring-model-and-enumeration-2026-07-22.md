@@ -1455,6 +1455,20 @@ references.
   parity on simple graphs, combined/fallback parity on non-simple graphs,
   source edge identity, bounds, early termination, and visitor/collector
   equivalence.
+  **Done.** Both cycle families now expose fallible `try_visit_*` and
+  `try_enumerate_*` simple-graph operations, explicit infallible
+  `visit_*_fallback` and `enumerate_*_fallback` multigraph operations, and the
+  existing infallible total operations. Strict visitation checks simplicity
+  before invoking the visitor. Read--Tarjan's fallback remains edge-aware;
+  Vismara's fallback extracts loops, always subdivides the loopless remainder,
+  and projects normalized cycles back to source node and edge identifiers. The
+  total operations inspect the input graph and select the direct or fallback
+  path while retaining one family-specific algorithm selector. Exact tests
+  cover typed errors before emission, source identities, bounds, and early
+  termination. Generated multigraph properties and the complete simple-graph
+  corpus through order six cover direct/fallback/total parity and
+  visitor/collector equivalence. Criterion groups exercise all three paths for
+  Read--Tarjan and Vismara.
   **Additive visitor and collector APIs with internal combined-path
   reorganization (green).** `[dep: S5c]`
 

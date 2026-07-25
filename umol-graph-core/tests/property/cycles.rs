@@ -15,8 +15,9 @@ use num_bigint::BigUint;
 use proptest::prelude::*;
 use rstest::rstest;
 use umol_graph_core::{
-    EdgeId, Graph, MinimumCycleBasisAlgorithm, RelevantCycleEnumerationAlgorithm,
-    SimpleCycleEnumerationAlgorithm, SubdivisionNodeSource, UniqueRingFamilyAlgorithm,
+    Cycle, EdgeId, Graph, MinimumCycleBasisAlgorithm, NonSimpleGraphError,
+    RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm, SubdivisionNodeSource,
+    UniqueRingFamilyAlgorithm,
 };
 
 use self::exhaustive::{
@@ -33,8 +34,17 @@ const SIMPLE_CYCLE_ALGORITHM: SimpleCycleEnumerationAlgorithm =
 fn test_graph_enumerate_simple_cycles_corpus() {
     let mut graph_count = 0;
     for graph in simple_graphs().take_while(|graph| graph.node_count() <= 6) {
-        let mut actual: Vec<Vec<EdgeId>> = graph
-            .enumerate_simple_cycles(usize::MAX, SIMPLE_CYCLE_ALGORITHM)
+        let cycles = graph.enumerate_simple_cycles(usize::MAX, SIMPLE_CYCLE_ALGORITHM);
+        assert_eq!(
+            graph.try_enumerate_simple_cycles(usize::MAX, SIMPLE_CYCLE_ALGORITHM),
+            Ok(cycles.clone()),
+        );
+        assert_eq!(
+            graph.enumerate_simple_cycles_fallback(usize::MAX, SIMPLE_CYCLE_ALGORITHM),
+            cycles,
+        );
+
+        let mut actual: Vec<Vec<EdgeId>> = cycles
             .into_iter()
             .map(|cycle| {
                 let mut edges = cycle.edges().to_vec();
@@ -45,6 +55,33 @@ fn test_graph_enumerate_simple_cycles_corpus() {
         actual.sort_by(|left, right| left.len().cmp(&right.len()).then_with(|| left.cmp(right)));
 
         assert_eq!(actual, enumerate_cycles(&graph), "{graph:?}");
+        graph_count += 1;
+    }
+    assert_eq!(graph_count, 208);
+}
+
+#[rstest]
+fn test_graph_enumerate_relevant_cycles_paths() {
+    let mut graph_count = 0;
+    for graph in simple_graphs().take_while(|graph| graph.node_count() <= 6) {
+        let cycles =
+            graph.enumerate_relevant_cycles(usize::MAX, RelevantCycleEnumerationAlgorithm::Vismara);
+        assert_eq!(
+            graph.try_enumerate_relevant_cycles(
+                usize::MAX,
+                RelevantCycleEnumerationAlgorithm::Vismara,
+            ),
+            Ok(cycles.clone()),
+        );
+
+        let fallback = graph.enumerate_relevant_cycles_fallback(
+            usize::MAX,
+            RelevantCycleEnumerationAlgorithm::Vismara,
+        );
+        assert_eq!(
+            fallback.into_iter().collect::<HashSet<_>>(),
+            cycles.into_iter().collect::<HashSet<_>>(),
+        );
         graph_count += 1;
     }
     assert_eq!(graph_count, 208);
@@ -85,14 +122,49 @@ proptest! {
         max_cycle_size in 0usize..=5,
     ) {
         let expected = graph.enumerate_simple_cycles(max_cycle_size, SIMPLE_CYCLE_ALGORITHM);
+        let fallback = graph
+            .enumerate_simple_cycles_fallback(max_cycle_size, SIMPLE_CYCLE_ALGORITHM);
+        prop_assert_eq!(&fallback, &expected);
+
         let mut visited = Vec::new();
         let result = graph.visit_simple_cycles(max_cycle_size, SIMPLE_CYCLE_ALGORITHM, |cycle| {
             visited.push(cycle);
             ControlFlow::<()>::Continue(())
         });
-
         prop_assert_eq!(result, ControlFlow::Continue(()));
-        prop_assert_eq!(visited, expected);
+        prop_assert_eq!(&visited, &expected);
+
+        let mut fallback_visited = Vec::new();
+        let fallback_result = graph.visit_simple_cycles_fallback(
+            max_cycle_size,
+            SIMPLE_CYCLE_ALGORITHM,
+            |cycle| {
+                fallback_visited.push(cycle);
+                ControlFlow::<()>::Continue(())
+            },
+        );
+        prop_assert_eq!(fallback_result, ControlFlow::Continue(()));
+        prop_assert_eq!(&fallback_visited, &fallback);
+
+        let mut direct_visited = Vec::new();
+        let direct_result = graph.try_visit_simple_cycles(
+            max_cycle_size,
+            SIMPLE_CYCLE_ALGORITHM,
+            |cycle| {
+                direct_visited.push(cycle);
+                ControlFlow::<()>::Continue(())
+            },
+        );
+        let direct = graph.try_enumerate_simple_cycles(max_cycle_size, SIMPLE_CYCLE_ALGORITHM);
+        if graph.is_simple() {
+            prop_assert_eq!(direct_result, Ok(ControlFlow::Continue(())));
+            prop_assert_eq!(direct.as_ref(), Ok(&expected));
+            prop_assert_eq!(direct_visited, expected);
+        } else {
+            prop_assert_eq!(direct_result, Err(NonSimpleGraphError));
+            prop_assert_eq!(direct, Err(NonSimpleGraphError));
+            prop_assert_eq!(direct_visited, Vec::<Cycle>::new());
+        }
     }
 
     #[test]
@@ -160,6 +232,11 @@ proptest! {
             max_cycle_size,
             RelevantCycleEnumerationAlgorithm::Vismara,
         );
+        let fallback = graph.enumerate_relevant_cycles_fallback(
+            max_cycle_size,
+            RelevantCycleEnumerationAlgorithm::Vismara,
+        );
+
         let mut visited = Vec::new();
         let result = graph.visit_relevant_cycles(
             max_cycle_size,
@@ -169,9 +246,47 @@ proptest! {
                 ControlFlow::<()>::Continue(())
             },
         );
-
         prop_assert_eq!(result, ControlFlow::Continue(()));
-        prop_assert_eq!(visited, expected);
+        prop_assert_eq!(&visited, &expected);
+
+        let mut fallback_visited = Vec::new();
+        let fallback_result = graph.visit_relevant_cycles_fallback(
+            max_cycle_size,
+            RelevantCycleEnumerationAlgorithm::Vismara,
+            |cycle| {
+                fallback_visited.push(cycle);
+                ControlFlow::<()>::Continue(())
+            },
+        );
+        prop_assert_eq!(fallback_result, ControlFlow::Continue(()));
+        prop_assert_eq!(&fallback_visited, &fallback);
+
+        let mut direct_visited = Vec::new();
+        let direct_result = graph.try_visit_relevant_cycles(
+            max_cycle_size,
+            RelevantCycleEnumerationAlgorithm::Vismara,
+            |cycle| {
+                direct_visited.push(cycle);
+                ControlFlow::<()>::Continue(())
+            },
+        );
+        let direct = graph.try_enumerate_relevant_cycles(
+            max_cycle_size,
+            RelevantCycleEnumerationAlgorithm::Vismara,
+        );
+        if graph.is_simple() {
+            let expected_set: HashSet<_> = expected.iter().cloned().collect();
+            let fallback_set: HashSet<_> = fallback.iter().cloned().collect();
+            prop_assert_eq!(fallback_set, expected_set);
+            prop_assert_eq!(direct_result, Ok(ControlFlow::Continue(())));
+            prop_assert_eq!(direct.as_ref(), Ok(&expected));
+            prop_assert_eq!(direct_visited, expected);
+        } else {
+            prop_assert_eq!(fallback, expected);
+            prop_assert_eq!(direct_result, Err(NonSimpleGraphError));
+            prop_assert_eq!(direct, Err(NonSimpleGraphError));
+            prop_assert_eq!(direct_visited, Vec::<Cycle>::new());
+        }
     }
 
     #[test]
