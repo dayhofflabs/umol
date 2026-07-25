@@ -191,6 +191,15 @@ impl Graph {
         true
     }
 
+    /// Returns whether this graph has neither self-loops nor parallel edges.
+    pub fn is_simple(&self) -> bool {
+        let mut endpoints = HashSet::with_capacity(self.edge_count());
+        self.csr
+            .endpoints
+            .iter()
+            .all(|&[first, second]| first != second && endpoints.insert([first, second]))
+    }
+
     pub fn add_node(&mut self) -> NodeId {
         let old = &*self.csr;
         let new_id = NodeId(old.node_count as u32);
@@ -673,6 +682,22 @@ mod tests {
         assert_eq!(g.node_count(), expected_nodes);
         assert_eq!(g.edge_count(), expected_edges);
         assert!(g.is_dense());
+    }
+
+    #[rstest]
+    #[case::empty(0, &[], true)]
+    #[case::isolated(3, &[], true)]
+    #[case::simple(3, &[[0, 1], [1, 2]], true)]
+    #[case::looped(1, &[[0, 0]], false)]
+    #[case::parallel(2, &[[0, 1], [0, 1]], false)]
+    #[case::reverse_parallel(2, &[[0, 1], [1, 0]], false)]
+    #[case::mixed(4, &[[0, 1], [1, 2], [2, 2], [1, 3], [3, 1]], false)]
+    fn test_graph_is_simple(
+        #[case] node_count: usize,
+        #[case] edges: &[[u32; 2]],
+        #[case] expected: bool,
+    ) {
+        assert_eq!(Graph::new(node_count, edges).is_simple(), expected);
     }
 
     #[test]

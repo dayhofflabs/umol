@@ -12,6 +12,8 @@
 //! (2012)](https://doi.org/10.1021/ci200629w).
 
 use std::collections::{HashSet, VecDeque};
+use std::error::Error;
+use std::fmt;
 use std::ops::ControlFlow;
 use std::slice::Iter;
 
@@ -25,6 +27,18 @@ mod simple;
 mod urf;
 
 use self::basis::minimum_cycle_basis_horton;
+
+/// Error returned when a graph operation requires a simple graph.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NonSimpleGraphError;
+
+impl fmt::Display for NonSimpleGraphError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "graph is not simple")
+    }
+}
+
+impl Error for NonSimpleGraphError {}
 
 /// An undirected cycle represented by corresponding node and edge sequences.
 ///

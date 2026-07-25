@@ -8,6 +8,8 @@
 mod corpus;
 #[path = "property/cycles.rs"]
 mod cycles;
+#[path = "property/graph.rs"]
+mod graph;
 #[path = "property/strategy.rs"]
 mod strategy;
 #[path = "property/subgraph_isomorphism.rs"]

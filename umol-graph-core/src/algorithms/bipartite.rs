@@ -5,8 +5,22 @@
 //! general graph-coloring module.
 
 use std::collections::VecDeque;
+use std::error::Error;
+use std::fmt;
 
 use crate::graph::Graph;
+
+/// Error returned when a graph operation requires bipartite input.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NonBipartiteGraphError;
+
+impl fmt::Display for NonBipartiteGraphError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "graph is not bipartite")
+    }
+}
+
+impl Error for NonBipartiteGraphError {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BipartitionAlgorithm {

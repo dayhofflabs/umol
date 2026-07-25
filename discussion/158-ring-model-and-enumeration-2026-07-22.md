@@ -1393,6 +1393,13 @@ references.
   construction. Exact unit tests cover empty, isolated, simple, looped,
   parallel-edge, and mixed graphs; property tests relate `is_simple()` to the
   generated edge-multiset definition.
+  **Done.** `Graph::is_simple()` now rejects loops and repeated canonical
+  endpoint pairs while graph construction continues to retain both.
+  `NonBipartiteGraphError` and `NonSimpleGraphError` are public from the
+  bipartition and cycle modules respectively and re-exported at the crate root.
+  Exact cases cover empty, isolated, simple, looped, parallel, reversed
+  parallel, and mixed graphs; the property suite compares the predicate with
+  an independently normalized copy of each generated edge multiset.
   **Additive precondition API (green).** `[dep: S5a]`
 - **S5d — maximum-matching direct, general, and combined operations**
   (`umol-graph-core/src/algorithms/matching/**`, `src/lib.rs`, benchmarks,
