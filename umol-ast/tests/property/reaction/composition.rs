@@ -11,7 +11,7 @@ use crate::strategies::*;
 const MATCH_ALGORITHM: SubstructureMatchAlgorithm = SubstructureMatchAlgorithm::GraphAndOverlays;
 const SUBISO_ALGORITHM: SubgraphIsomorphismAlgorithm = SubgraphIsomorphismAlgorithm::Vf2;
 const COMPOSITION_ALGORITHM: CommonSubgraphEnumerationAlgorithm =
-    CommonSubgraphEnumerationAlgorithm::Backtracking;
+    CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking;
 
 proptest! {
     #![proptest_config(Config {

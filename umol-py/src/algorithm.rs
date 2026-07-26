@@ -59,7 +59,7 @@ impl AutomorphismAlgorithm {
 #[pyclass(from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommonSubgraphEnumerationAlgorithm {
-    Backtracking(),
+    ModularProductBacktracking(),
 }
 
 #[pymethods]
@@ -76,7 +76,9 @@ impl CommonSubgraphEnumerationAlgorithm {
 impl CommonSubgraphEnumerationAlgorithm {
     pub(crate) fn repr(self) -> &'static str {
         match self {
-            Self::Backtracking() => "CommonSubgraphEnumerationAlgorithm.Backtracking()",
+            Self::ModularProductBacktracking() => {
+                "CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking()"
+            }
         }
     }
 
@@ -86,13 +88,17 @@ impl CommonSubgraphEnumerationAlgorithm {
     )]
     pub(crate) fn from_rust(algorithm: GraphCoreCommonSubgraphEnumerationAlgorithm) -> Self {
         match algorithm {
-            GraphCoreCommonSubgraphEnumerationAlgorithm::Backtracking => Self::Backtracking(),
+            GraphCoreCommonSubgraphEnumerationAlgorithm::ModularProductBacktracking => {
+                Self::ModularProductBacktracking()
+            }
         }
     }
 
     pub(crate) fn to_rust(self) -> GraphCoreCommonSubgraphEnumerationAlgorithm {
         match self {
-            Self::Backtracking() => GraphCoreCommonSubgraphEnumerationAlgorithm::Backtracking,
+            Self::ModularProductBacktracking() => {
+                GraphCoreCommonSubgraphEnumerationAlgorithm::ModularProductBacktracking
+            }
         }
     }
 }
@@ -452,10 +458,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::backtracking(
-        GraphCoreCommonSubgraphEnumerationAlgorithm::Backtracking,
-        CommonSubgraphEnumerationAlgorithm::Backtracking(),
-        "CommonSubgraphEnumerationAlgorithm.Backtracking()"
+    #[case::modular_product_backtracking(
+        GraphCoreCommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
+        "CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking()"
     )]
     fn test_common_subgraph_enumeration_algorithm_value(
         #[case] rust: GraphCoreCommonSubgraphEnumerationAlgorithm,

@@ -267,7 +267,7 @@ impl ReactionAst {
     #[pyo3(signature = (
         other,
         *,
-        algorithm=CommonSubgraphEnumerationAlgorithm::Backtracking(),
+        algorithm=CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
     ))]
     fn compose(
         &self,
@@ -1472,7 +1472,7 @@ mod tests {
                 .compose(
                     py,
                     &second,
-                    CommonSubgraphEnumerationAlgorithm::Backtracking(),
+                    CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
                 )
                 .unwrap()
                 .iter()
@@ -1506,8 +1506,11 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            let algorithm =
-                Py::new(py, CommonSubgraphEnumerationAlgorithm::Backtracking()).unwrap();
+            let algorithm = Py::new(
+                py,
+                CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
+            )
+            .unwrap();
             let kwargs = PyDict::new(py);
             kwargs.set_item("algorithm", algorithm).unwrap();
 
@@ -1571,14 +1574,14 @@ mod tests {
                 .compose(
                     py,
                     &first,
-                    CommonSubgraphEnumerationAlgorithm::Backtracking(),
+                    CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
                 )
                 .unwrap();
             let composites = first
                 .compose(
                     py,
                     &second,
-                    CommonSubgraphEnumerationAlgorithm::Backtracking(),
+                    CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
                 )
                 .unwrap();
 

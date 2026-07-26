@@ -141,7 +141,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
@@ -174,7 +174,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C)], bonds: vec![], ..Default::default() }),
             Deltas::from_iter([
@@ -218,7 +218,7 @@ mod tests {
                 ], ..Default::default() }),
             Deltas::new(),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![]
     )]
     // A raises C-N 1→2 and adds a hydrogen bond across the pair (a created overlay); B raises 2→3.
@@ -245,7 +245,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([
@@ -282,7 +282,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], noncovalent: vec![(
                     AtomId(0),
@@ -323,7 +323,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], noncovalent: vec![(
                     AtomId(0),
@@ -371,7 +371,7 @@ mod tests {
                 },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], noncovalent: vec![(
                     AtomId(0),
@@ -414,7 +414,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![]
     )]
     // A carries an aromatic system (a positional family) it never touches; the composite carries it
@@ -434,7 +434,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::from_electrons(vec![1, 2]))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
@@ -463,7 +463,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
@@ -499,7 +499,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
@@ -533,7 +533,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([
@@ -567,7 +567,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::from_electrons(vec![1, 2]))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
@@ -620,7 +620,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![
                     AtomAst::from_element(Element::C),
@@ -667,7 +667,7 @@ mod tests {
                 },
             })]),
         ),
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts {
                 atoms: vec![
@@ -747,7 +747,10 @@ mod tests {
         });
 
         let composed: Vec<MoleculeAst> = a
-            .compose(&b, CommonSubgraphEnumerationAlgorithm::Backtracking)
+            .compose(
+                &b,
+                CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
+            )
             .iter()
             .flat_map(|c| {
                 c.apply(
@@ -973,7 +976,10 @@ mod tests {
         // deltas — a frame-invariant result.
         let expected = ReactionAst::new(a.lhs.clone(), Deltas::new());
         assert!(a
-            .compose(&b, CommonSubgraphEnumerationAlgorithm::Backtracking)
+            .compose(
+                &b,
+                CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking
+            )
             .contains(&expected));
     }
 }

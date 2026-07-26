@@ -863,7 +863,7 @@ fn common_subgraph_enumeration(c: &mut Criterion) {
             &mut node_match,
             &mut edge_match,
             case.embedding,
-            CommonSubgraphEnumerationAlgorithm::Backtracking,
+            CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         );
         assert_eq!(
             baseline.len(),
@@ -885,7 +885,7 @@ fn common_subgraph_enumeration(c: &mut Criterion) {
                     &mut node_match,
                     &mut edge_match,
                     case.embedding,
-                    CommonSubgraphEnumerationAlgorithm::Backtracking,
+                    CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
                 ))
             });
         });

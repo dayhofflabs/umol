@@ -1673,7 +1673,7 @@ workflow configuration and are passed explicitly at the lower boundary.
 | --- | --- | --- |
 | `umol-ast/src/ast/ring.rs` | `CycleEnumerationAlgorithm::Vismara` behind both `rings` and `rings_with` | Separate ring-set semantics into `RingModel` and the family-specific simple/relevant selectors into `RingConfig`; higher-level ring-consuming workflows own inspectable defaults. This also affects ECFP, Morgan, and aromaticity transitively. |
 | `umol-ast/src/ast/symmetry.rs` | `AutomorphismAlgorithm::Nauty` for initial symmetry, fixpoint reruns, and site stabilizers | Add the selection to `GraphSymmetryConfig` and retain it in `GraphSymmetry`; `StereoValidateConfig`, not `StereoModel`, owns the higher-level default. |
-| `umol-ast/src/ast/compose.rs` | `CommonSubgraphEnumerationAlgorithm::Backtracking` behind `ReactionAst::compose` | Remove `CompositionScope`; complete composition enumerates every admissible overlap. Require the enumeration algorithm at the Rust boundary and expose it as a visible Python keyword with a high-level default. |
+| `umol-ast/src/ast/compose.rs` | `CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking` behind `ReactionAst::compose` | Remove `CompositionScope`; complete composition enumerates every admissible overlap. Require the enumeration algorithm at the Rust boundary and expose it as a visible Python keyword with a high-level default. |
 | `umol-ast/src/ast/reaction.rs`, `umol-py/src/reaction.rs` | `SubstructureMatchAlgorithm::GraphAndOverlays` while only the graph-core subisomorphism backend is supplied | Rust application accepts both the structure strategy and subisomorphism backend explicitly. Python owns both in `ReactionApplicationConfig`. |
 | `umol-graph/src/fingerprint/pattern.rs` | `GraphAndOverlays` plus `SubgraphIsomorphismAlgorithm::Vf2` | `PatternFingerprinter` / `PatternFingerprintConfig` own both selectors. |
 | `umol-graph/src/fingerprint/substructure.rs` | `SubgraphEnumerationAlgorithm::Esu` plus `AutomorphismAlgorithm::Nauty` | `SubstructureFeaturizer` / `StructuralFingerprintConfig` own the enumeration and canonicalization selectors. |
@@ -2017,7 +2017,8 @@ default rather than introducing a one-field composition config.
   overlap set, including the empty overlap, and require
   `CommonSubgraphEnumerationAlgorithm` explicitly at the Rust boundary. Expose
   the selector directly in Python as the keyword-only `algorithm`, defaulting
-  visibly to `Backtracking()`, and pass it through without another config type.
+  visibly to `ModularProductBacktracking()`, and pass it through without another
+  config type.
   Migrate all Rust and Python callers in the same subitem. Table and property
   tests cover explicit selector propagation, complete composite sets, and
   stereo-only and deletion-only reactions that the former reaction-center
@@ -2027,13 +2028,13 @@ default rather than introducing a one-field composition config.
   admissible overlap set, including the empty overlap. `CompositionScope` and
   all reaction-center filtering machinery were removed from `umol-ast` and
   `umol-py`. Python exposes the same selector directly as the keyword-only
-  `algorithm`, with `Backtracking()` as the visible default. Rust and Python
-  callers and exports were migrated; exact tests pin disjoint, overlapping,
-  stereo-only, and deletion-only composition, keyword-only/default selector
-  behavior, source independence, and complete-set ordering. The composition
-  property suite now exercises only the complete operation and retains
-  well-formedness, soundness, completeness, DPO validity, determinism,
-  canonical-delta, and overlay-uniqueness properties.
+  `algorithm`, with `ModularProductBacktracking()` as the visible default. Rust
+  and Python callers and exports were migrated; exact tests pin disjoint,
+  overlapping, stereo-only, and deletion-only composition,
+  keyword-only/default selector behavior, source independence, and
+  complete-set ordering. The composition property suite now exercises only the
+  complete operation and retains well-formedness, soundness, completeness, DPO
+  validity, determinism, canonical-delta, and overlay-uniqueness properties.
   The selector rename and direct-enumeration alternative are tracked in
   [doc 162](162-common-subgraph-enumeration-alternatives-2026-07-25.md).
   `[dep: S9j]`

@@ -12,7 +12,7 @@ use crate::graph::{EdgeId, Graph, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommonSubgraphEnumerationAlgorithm {
-    Backtracking,
+    ModularProductBacktracking,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,7 +42,7 @@ impl Graph {
         let (pairs, neighbors) = self.modular_product(other, node_match, edge_match, embedding);
         let mut cliques = Vec::new();
         match alg {
-            CommonSubgraphEnumerationAlgorithm::Backtracking => {
+            CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking => {
                 all_cliques(
                     &neighbors,
                     &mut Vec::new(),

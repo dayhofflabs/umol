@@ -898,7 +898,7 @@ mod tests {
                 &mut any_node,
                 &mut any_edge,
                 EmbeddingKind::Induced,
-                CommonSubgraphEnumerationAlgorithm::Backtracking,
+                CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
             )
             .iter()
             .map(summary)
@@ -923,14 +923,14 @@ mod tests {
             &mut any_node,
             &mut any_edge,
             EmbeddingKind::Monomorphism,
-            CommonSubgraphEnumerationAlgorithm::Backtracking,
+            CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         );
         let induced = a.enumerate_common_subgraphs(
             &b,
             &mut any_node,
             &mut any_edge,
             EmbeddingKind::Induced,
-            CommonSubgraphEnumerationAlgorithm::Backtracking,
+            CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         );
         assert!(monomorphism
             .iter()
@@ -953,7 +953,7 @@ mod tests {
             &mut any_node,
             &mut any_edge,
             EmbeddingKind::Induced,
-            CommonSubgraphEnumerationAlgorithm::Backtracking,
+            CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         );
         let maximal = a.maximal_common_subgraphs(
             &b,

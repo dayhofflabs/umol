@@ -605,7 +605,7 @@ def test_reactionast_compose(first, second, expected):
 
     composites = first.compose(
         second,
-        algorithm=CommonSubgraphEnumerationAlgorithm.Backtracking(),
+        algorithm=CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
     )
 
     assert composites == [ReactionAst.parse(reaction) for reaction in expected]
@@ -630,7 +630,7 @@ def test_reactionast_compose_default():
     omitted = first.compose(second)
     explicit = first.compose(
         second,
-        algorithm=CommonSubgraphEnumerationAlgorithm.Backtracking(),
+        algorithm=CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
     )
 
     assert omitted == [disjoint, fused]
@@ -638,7 +638,7 @@ def test_reactionast_compose_default():
     with pytest.raises(TypeError):
         first.compose(
             second,
-            CommonSubgraphEnumerationAlgorithm.Backtracking(),
+            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
         )
 
 

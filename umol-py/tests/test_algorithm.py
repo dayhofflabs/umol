@@ -41,10 +41,10 @@ def test_algorithm_exports():
             id="automorphism-nauty",
         ),
         pytest.param(
-            CommonSubgraphEnumerationAlgorithm.Backtracking(),
-            CommonSubgraphEnumerationAlgorithm.Backtracking(),
-            "CommonSubgraphEnumerationAlgorithm.Backtracking()",
-            id="common-subgraph-backtracking",
+            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
+            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
+            "CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking()",
+            id="common-subgraph-modular-product-backtracking",
         ),
         pytest.param(
             ConnectedComponentsAlgorithm.Bfs(),

@@ -118,6 +118,11 @@ the eager cost of returning all of them.
   `ReactionAst.compose` default. Exact common-subgraph and composition results
   must remain unchanged. **Breaking Rust and Python naming migration
   (red→green).** `[dep: S0a]`
+  **Implemented (green).** The Rust and Python variants are now
+  `ModularProductBacktracking` and `ModularProductBacktracking()`. The Python
+  repr and visible `ReactionAst.compose` default use the same name; all Rust,
+  Python, property-test, benchmark, and discussion-doc callers were migrated
+  without changing enumeration or composition results.
 
 ### S1 — Direct enumeration
 
