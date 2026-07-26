@@ -14,6 +14,7 @@ use strum::EnumCount;
 use thiserror::Error;
 use umol_ast::ast::{ConstitutionColoring, GraphSymmetryConfig, StereoKind};
 use umol_chem::element::Element;
+use umol_graph_core::AutomorphismAlgorithm;
 
 use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
@@ -180,6 +181,7 @@ impl StereoModel {
             coloring: ConstitutionColoring::full(),
             iterate_to_fixpoint: self.para_stereo,
             max_iterations: self.max_iterations,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         }
     }
 }
@@ -585,6 +587,7 @@ mod tests {
             ..StereoModel::default()
         };
         let cfg = model.graph_symmetry_config();
+        assert_eq!(cfg.automorphism_algorithm, AutomorphismAlgorithm::Nauty);
         assert_eq!(cfg.iterate_to_fixpoint, expected_fixpoint);
         assert_eq!(cfg.max_iterations, 16);
     }

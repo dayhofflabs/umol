@@ -24,6 +24,7 @@ pub struct GraphSymmetryConfig<C: MoleculeColoring> {
     pub coloring: C,
     pub iterate_to_fixpoint: bool,
     pub max_iterations: usize,
+    pub automorphism_algorithm: AutomorphismAlgorithm,
 }
 
 /// The converged, orientation-graded graph-automorphism symmetry of a molecule
@@ -35,6 +36,7 @@ pub struct GraphSymmetry {
     proper_orbits: Vec<NodeId>,
     star_orbits: Vec<NodeId>,
     chiral: bool,
+    automorphism_algorithm: AutomorphismAlgorithm,
 }
 
 impl MoleculeAst {
@@ -53,7 +55,7 @@ impl MoleculeAst {
         // top of the static base color, re-refine until the orbit partition stabilizes.
         let mut auto = incidence
             .graph()
-            .automorphisms(|node| base[node.index()], AutomorphismAlgorithm::Nauty);
+            .automorphisms(|node| base[node.index()], cfg.automorphism_algorithm);
         let mut orbits = orbit_vec(&auto, node_count);
         let mut iterations = 0;
         loop {
@@ -63,7 +65,7 @@ impl MoleculeAst {
                 .collect();
             let next = incidence
                 .graph()
-                .automorphisms(|node| colors[node.index()], AutomorphismAlgorithm::Nauty);
+                .automorphisms(|node| colors[node.index()], cfg.automorphism_algorithm);
             let next_orbits = orbit_vec(&next, node_count);
             let stable = next_orbits == orbits;
             auto = next;
@@ -99,6 +101,7 @@ impl MoleculeAst {
             proper_orbits,
             star_orbits,
             chiral,
+            automorphism_algorithm: cfg.automorphism_algorithm,
         }
     }
 
@@ -291,14 +294,15 @@ impl GraphSymmetry {
         &self.incidence
     }
 
-    /// Generators of the stabilizer of a node: one nauty run with the site uniquely
-    /// colored. Ungraded (graph-core node space); the per-carrier projection grades them.
+    /// Generators of the stabilizer of a node: one automorphism run with the
+    /// site uniquely colored. Ungraded (graph-core node space); the per-carrier
+    /// projection grades them.
     pub(crate) fn site_stabilizer(&self, site: NodeId) -> Vec<Vec<NodeId>> {
         self.incidence
             .graph()
             .automorphisms(
                 |node| (node == site, self.colors[node.index()]),
-                AutomorphismAlgorithm::Nauty,
+                self.automorphism_algorithm,
             )
             .generators()
             .to_vec()
@@ -585,6 +589,7 @@ mod tests {
             coloring: ConstitutionColoring::full(),
             iterate_to_fixpoint: true,
             max_iterations: 16,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         }
     }
 
@@ -628,6 +633,10 @@ mod tests {
     #[rstest]
     fn test_molecule_ast_graph_symmetry_constitutional(benzene_ring: MoleculeAst) {
         let symmetry = benzene_ring.graph_symmetry(&config());
+        assert_eq!(
+            symmetry.automorphism_algorithm,
+            AutomorphismAlgorithm::Nauty
+        );
         assert!(symmetry.same_proper_orbit(AtomId(0), AtomId(3)));
         assert_eq!(
             symmetry.proper_orbit_of(AtomId(0)),

@@ -5,6 +5,7 @@ use std::iter;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_ast::ast::{ConstitutionColoring, GraphSymmetryConfig};
+use umol_graph_core::AutomorphismAlgorithm;
 
 use crate::strategies::*;
 
@@ -67,6 +68,7 @@ proptest! {
             coloring: ConstitutionColoring::full(),
             iterate_to_fixpoint: true,
             max_iterations: 16,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         });
         let symmetry = molecule.stereo_atom_symmetry(&graph, StereoAtomId(0));
         let expected = symmetry.group().elements().iter().all(|operation| {
@@ -106,6 +108,7 @@ proptest! {
             coloring: ConstitutionColoring::full(),
             iterate_to_fixpoint: true,
             max_iterations: 16,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         });
         let symmetry = molecule.stereo_atom_symmetry(&graph, StereoAtomId(0));
 

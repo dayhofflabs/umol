@@ -1954,7 +1954,15 @@ default rather than introducing a one-field composition config.
   stabilizers. Migrate every config literal in the same subitem. Tests pin the
   selected backend at all three call sites and preserve the existing Nauty
   result under an explicit selector. **Breaking config-shape migration
-  (red→green).** `[dep: —]`
+  (red→green).**
+  **Implemented (green).** `GraphSymmetryConfig` now carries the explicit
+  automorphism selector, and `GraphSymmetry` retains it for site-stabilizer
+  reruns. Initial symmetry, fixpoint refinement, and site stabilization all
+  pass the selected backend. Every Rust config literal now selects Nauty
+  explicitly. Focused symmetry, stereo-view, model-config, and stereo property
+  tests preserve the established orbit, chirality, and stereogenicity results
+  while exercising the construction, fixpoint, and stabilizer paths under that
+  selector. `[dep: —]`
 - **S9o — validation operation configs**
   (`umol-graph/src/ops/{validate,validate/stereo}.rs`): add
   `StereoValidateConfig { automorphism_algorithm, max_iterations }`, with Nauty

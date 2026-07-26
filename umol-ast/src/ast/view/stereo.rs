@@ -851,6 +851,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_graph_core::AutomorphismAlgorithm;
     use umol_perm::Permutation;
 
     use crate::ast::atom::AtomAst;
@@ -1158,6 +1159,7 @@ mod tests {
             coloring: ConstitutionColoring::full(),
             iterate_to_fixpoint: true,
             max_iterations: 16,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         });
         let symmetry = mol.stereo_atom_symmetry(&gs, StereoAtomId(0));
         let view = mol.stereo_atom(StereoAtomId(0));
