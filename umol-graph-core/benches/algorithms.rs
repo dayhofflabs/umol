@@ -852,43 +852,60 @@ fn common_subgraph_enumeration(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("common_subgraph_enumeration");
     for case in cases {
-        let mut node_match = |left: NodeId, right: NodeId| {
-            case.left_node_labels[left.index()] == case.right_node_labels[right.index()]
-        };
-        let mut edge_match = |left: EdgeId, right: EdgeId| {
-            case.left_edge_labels[left.index()] == case.right_edge_labels[right.index()]
-        };
-        let baseline = case.left.enumerate_common_subgraphs(
-            &case.right,
-            &mut node_match,
-            &mut edge_match,
-            case.embedding,
-            CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
-        );
-        assert_eq!(
-            baseline.len(),
-            case.expected_output_count,
-            "unexpected output count for {}",
-            case.name,
-        );
+        for (algorithm_name, algorithm) in [
+            (
+                "modular_product_backtracking",
+                CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
+            ),
+            (
+                "direct_backtracking",
+                CommonSubgraphEnumerationAlgorithm::DirectBacktracking,
+            ),
+        ] {
+            let mut node_match = |left: NodeId, right: NodeId| {
+                case.left_node_labels[left.index()] == case.right_node_labels[right.index()]
+            };
+            let mut edge_match = |left: EdgeId, right: EdgeId| {
+                case.left_edge_labels[left.index()] == case.right_edge_labels[right.index()]
+            };
+            let output = case.left.enumerate_common_subgraphs(
+                &case.right,
+                &mut node_match,
+                &mut edge_match,
+                case.embedding,
+                algorithm,
+            );
+            assert_eq!(
+                output.len(),
+                case.expected_output_count,
+                "unexpected output count for {} with {algorithm_name}",
+                case.name,
+            );
 
-        group.bench_function(case.name, |b| {
-            b.iter(|| {
-                let mut node_match = |left: NodeId, right: NodeId| {
-                    case.left_node_labels[left.index()] == case.right_node_labels[right.index()]
-                };
-                let mut edge_match = |left: EdgeId, right: EdgeId| {
-                    case.left_edge_labels[left.index()] == case.right_edge_labels[right.index()]
-                };
-                black_box(case.left.enumerate_common_subgraphs(
-                    &case.right,
-                    &mut node_match,
-                    &mut edge_match,
-                    case.embedding,
-                    CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
-                ))
-            });
-        });
+            group.bench_with_input(
+                BenchmarkId::new(case.name, algorithm_name),
+                &algorithm,
+                |b, &algorithm| {
+                    b.iter(|| {
+                        let mut node_match = |left: NodeId, right: NodeId| {
+                            case.left_node_labels[left.index()]
+                                == case.right_node_labels[right.index()]
+                        };
+                        let mut edge_match = |left: EdgeId, right: EdgeId| {
+                            case.left_edge_labels[left.index()]
+                                == case.right_edge_labels[right.index()]
+                        };
+                        black_box(case.left.enumerate_common_subgraphs(
+                            &case.right,
+                            &mut node_match,
+                            &mut edge_match,
+                            case.embedding,
+                            algorithm,
+                        ))
+                    });
+                },
+            );
+        }
     }
     group.finish();
 }

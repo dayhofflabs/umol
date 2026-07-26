@@ -1,6 +1,6 @@
 # Common-subgraph enumeration alternatives
 
-Status: **Active**
+Status: **Completed**
 Date: 2026-07-25
 Relates: [108](108-mcs-algorithms-2026-06-09.md),
 [135](135-reaction-composition-completeness-2026-07-01.md),
@@ -170,6 +170,15 @@ the eager cost of returning all of them.
   benchmark group with `DirectBacktracking` and report both runtime and output
   count on the unchanged cases. **Additive verification (green).**
   `[dep: S1b]`
+  **Implemented (green).** Generated labeled simple-graph pairs independently
+  vary from empty through four left and five right nodes. Equality-label
+  predicates exercise rejected node and edge pairs; for both embedding kinds,
+  256 generated cases produced identical complete, sorted
+  `Vec<GraphCorrespondence>` values from the two algorithms. The unchanged
+  benchmark cases retain output counts 34, 69, 209, 109, and 1,957. A short
+  paired run measured modular-product/direct times of approximately
+  6.20/2.82, 14.1/6.09, 44.6/19.3, 23.4/10.0, and 605/364 µs respectively.
+  These measurements are comparison observations, not acceptance thresholds.
 
 At the end of S0 and S1, the workspace test and lint suites must be green. The
 critical path is `S0a → S0b → S1a → S1b → S1c`; no stage in this plan is

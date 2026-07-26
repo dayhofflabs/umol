@@ -1,9 +1,11 @@
 //! Property tests organized by graph operation.
 //!
-//! Checked-in graph collections live in `corpus`, generated inputs live in
-//! `strategy`, and operation-specific validation facilities remain under their
-//! operation module.
+//! Checked-in graph collections live in `corpus`, shared generated inputs live
+//! in `strategy`, and operation-specific validation facilities remain under
+//! their operation module.
 
+#[path = "property/common_subgraph.rs"]
+mod common_subgraph;
 #[path = "property/corpus.rs"]
 mod corpus;
 #[path = "property/cycles.rs"]
