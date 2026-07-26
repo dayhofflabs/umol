@@ -11,7 +11,6 @@ from umol import (
     ConnectedComponentsAlgorithm,
     Element,
     ElementScope,
-    InconsistencyPolicy,
     MaximumIndependentSetAlgorithm,
     RingConfig,
     RingLimits,
@@ -880,58 +879,6 @@ def test_aromaticity_model_mutation(model, field, value):
 
 
 @pytest.mark.parametrize(
-    ("left", "right", "expected"),
-    [
-        (InconsistencyPolicy.Keep, InconsistencyPolicy.Keep, True),
-        (InconsistencyPolicy.Strip, InconsistencyPolicy.Strip, True),
-        (InconsistencyPolicy.Error, InconsistencyPolicy.Error, True),
-        (InconsistencyPolicy.Keep, InconsistencyPolicy.Strip, False),
-        (InconsistencyPolicy.Strip, InconsistencyPolicy.Error, False),
-        (InconsistencyPolicy.Error, InconsistencyPolicy.Keep, False),
-    ],
-)
-def test_inconsistency_policy_equality(left, right, expected):
-    assert (left == right) is expected
-
-
-def test_inconsistency_policy_hash():
-    policies = {
-        InconsistencyPolicy.Keep: "keep",
-        InconsistencyPolicy.Strip: "strip",
-        InconsistencyPolicy.Error: "error",
-    }
-
-    assert policies[InconsistencyPolicy.Keep] == "keep"
-    assert policies[InconsistencyPolicy.Strip] == "strip"
-    assert policies[InconsistencyPolicy.Error] == "error"
-
-
-@pytest.mark.parametrize(
-    ("policy", "expected"),
-    [
-        (InconsistencyPolicy.Keep, "InconsistencyPolicy.Keep"),
-        (InconsistencyPolicy.Strip, "InconsistencyPolicy.Strip"),
-        (InconsistencyPolicy.Error, "InconsistencyPolicy.Error"),
-    ],
-)
-def test_inconsistency_policy_repr(policy, expected):
-    assert repr(policy) == expected
-
-
-@pytest.mark.parametrize(
-    "policy",
-    [
-        InconsistencyPolicy.Keep,
-        InconsistencyPolicy.Strip,
-        InconsistencyPolicy.Error,
-    ],
-)
-def test_inconsistency_policy_mutation(policy):
-    with pytest.raises(AttributeError):
-        policy.value = "changed"
-
-
-@pytest.mark.parametrize(
     ("scope", "fluxionality"),
     [
         (ElementScope.Any(), False),
@@ -999,8 +946,6 @@ def test_stereo_model_default():
         ),
     }
     assert model.para_stereo is False
-    assert model.max_iterations == 16
-    assert model.inconsistency == InconsistencyPolicy.Error
     assert model == StereoModel.default()
 
 
@@ -1029,15 +974,11 @@ def test_stereo_model_new():
     model = StereoModel(
         kind_models=kind_models,
         para_stereo=True,
-        max_iterations=8,
-        inconsistency=InconsistencyPolicy.Strip,
     )
     kind_models.clear()
 
     assert model.kind_models == expected
     assert model.para_stereo is True
-    assert model.max_iterations == 8
-    assert model.inconsistency == InconsistencyPolicy.Strip
     for kind, kind_model in expected.items():
         assert model.kind_models[kind] is not kind_model
 
@@ -1059,29 +1000,16 @@ def test_stereo_model_kind_models():
 
 def test_stereo_model_new_error():
     with pytest.raises(TypeError):
-        StereoModel({}, False, 16, InconsistencyPolicy.Error)
+        StereoModel({}, False)
 
 
-@pytest.mark.parametrize("max_iterations", [-1, 1 << 64])
-def test_stereo_model_new_integer_error(max_iterations):
-    with pytest.raises(OverflowError):
-        StereoModel(
-            kind_models={},
-            para_stereo=False,
-            max_iterations=max_iterations,
-            inconsistency=InconsistencyPolicy.Error,
-        )
-
-
-def test_stereo_model_max_iterations():
-    model = StereoModel(
-        kind_models={},
-        para_stereo=False,
-        max_iterations=0,
-        inconsistency=InconsistencyPolicy.Error,
-    )
-
-    assert model.max_iterations == 0
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("max_iterations", 8), ("inconsistency", "strip")],
+)
+def test_stereo_model_new_field_error(field, value):
+    with pytest.raises(TypeError):
+        StereoModel(kind_models={}, para_stereo=False, **{field: value})
 
 
 @pytest.mark.parametrize(
@@ -1090,8 +1018,6 @@ def test_stereo_model_max_iterations():
         StereoModel(
             kind_models={},
             para_stereo=False,
-            max_iterations=16,
-            inconsistency=InconsistencyPolicy.Error,
         ),
         StereoModel(
             kind_models={
@@ -1103,34 +1029,6 @@ def test_stereo_model_max_iterations():
                 ),
             },
             para_stereo=True,
-            max_iterations=16,
-            inconsistency=InconsistencyPolicy.Error,
-        ),
-        StereoModel(
-            kind_models={
-                StereoKind.Tetrahedral: StereoKindModel(
-                    scope=ElementScope.Any(), fluxionality=False
-                ),
-                StereoKind.CisTrans: StereoKindModel(
-                    scope=ElementScope.Any(), fluxionality=False
-                ),
-            },
-            para_stereo=False,
-            max_iterations=8,
-            inconsistency=InconsistencyPolicy.Error,
-        ),
-        StereoModel(
-            kind_models={
-                StereoKind.Tetrahedral: StereoKindModel(
-                    scope=ElementScope.Any(), fluxionality=False
-                ),
-                StereoKind.CisTrans: StereoKindModel(
-                    scope=ElementScope.Any(), fluxionality=False
-                ),
-            },
-            para_stereo=False,
-            max_iterations=16,
-            inconsistency=InconsistencyPolicy.Keep,
         ),
     ],
 )
@@ -1154,15 +1052,12 @@ def test_stereo_model_equality(other):
                     ),
                 },
                 para_stereo=True,
-                max_iterations=8,
-                inconsistency=InconsistencyPolicy.Keep,
             ),
             "StereoModel(kind_models={StereoKind.Tetrahedral: "
             "StereoKindModel(scope=ElementScope.Any(), fluxionality=False), "
             "StereoKind.Octahedral: StereoKindModel(scope="
             "ElementScope.AllowList([Element('Fe')]), fluxionality=True)}, "
-            "para_stereo=True, max_iterations=8, "
-            "inconsistency=InconsistencyPolicy.Keep)",
+            "para_stereo=True)",
         ),
     ],
 )
@@ -1175,8 +1070,6 @@ def test_stereo_model_repr(model, expected):
     [
         ("kind_models", {}),
         ("para_stereo", True),
-        ("max_iterations", 8),
-        ("inconsistency", InconsistencyPolicy.Keep),
     ],
 )
 def test_stereo_model_mutation(field, value):
@@ -1213,8 +1106,6 @@ def test_chemistry_model_new():
     stereo = StereoModel(
         kind_models=StereoModel.default().kind_models,
         para_stereo=True,
-        max_iterations=8,
-        inconsistency=InconsistencyPolicy.Strip,
     )
     model = ChemistryModel(
         valence=valence,
@@ -1262,8 +1153,6 @@ def test_chemistry_model_new_error():
             stereo=StereoModel(
                 kind_models={},
                 para_stereo=False,
-                max_iterations=16,
-                inconsistency=InconsistencyPolicy.Error,
             ),
         ),
     ],
@@ -1292,8 +1181,6 @@ def test_chemistry_model_equality(other):
                 stereo=StereoModel(
                     kind_models=StereoModel.default().kind_models,
                     para_stereo=True,
-                    max_iterations=8,
-                    inconsistency=InconsistencyPolicy.Keep,
                 ),
             ),
             "ChemistryModel(valence=ValenceModel.Counts(table="
@@ -1303,8 +1190,7 @@ def test_chemistry_model_equality(other):
             "stabilization_threshold=0.375), stereo=StereoModel(kind_models={"
             "StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), "
             "fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope="
-            "ElementScope.Any(), fluxionality=False)}, para_stereo=True, "
-            "max_iterations=8, inconsistency=InconsistencyPolicy.Keep))",
+            "ElementScope.Any(), fluxionality=False)}, para_stereo=True))",
         ),
     ],
 )
@@ -1325,8 +1211,6 @@ def test_chemistry_model_repr(model, expected):
             StereoModel(
                 kind_models={},
                 para_stereo=False,
-                max_iterations=16,
-                inconsistency=InconsistencyPolicy.Error,
             ),
         ),
     ],

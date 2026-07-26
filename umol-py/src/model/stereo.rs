@@ -1,48 +1,15 @@
 //! Python bindings for stereo-model values.
-#![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use std::array;
 use std::collections::BTreeMap;
 
 use pyo3::prelude::*;
 use umol_graph::ops::model::{
-    InconsistencyPolicy as GraphInconsistencyPolicy, StereoKindModel as GraphStereoKindModel,
-    StereoModel as GraphStereoModel,
+    StereoKindModel as GraphStereoKindModel, StereoModel as GraphStereoModel,
 };
 
 use super::ElementScope;
 use crate::stereo::StereoKind;
-
-/// Policy for stereo assertions that cannot be fully realized.
-#[pyclass(eq, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum InconsistencyPolicy {
-    Keep,
-    Strip,
-    Error,
-}
-
-impl InconsistencyPolicy {
-    pub(crate) fn from_rust(policy: GraphInconsistencyPolicy) -> Self {
-        match policy {
-            GraphInconsistencyPolicy::Keep => Self::Keep,
-            GraphInconsistencyPolicy::Strip => Self::Strip,
-            GraphInconsistencyPolicy::Error => Self::Error,
-        }
-    }
-
-    #[allow(
-        dead_code,
-        reason = "Python-to-Rust conversion API for StereoModel configuration"
-    )]
-    pub(crate) fn to_rust(self) -> GraphInconsistencyPolicy {
-        match self {
-            Self::Keep => GraphInconsistencyPolicy::Keep,
-            Self::Strip => GraphInconsistencyPolicy::Strip,
-            Self::Error => GraphInconsistencyPolicy::Error,
-        }
-    }
-}
 
 /// Per-kind element eligibility and fluxionality settings.
 #[pyclass(eq, frozen, from_py_object)]
@@ -111,31 +78,22 @@ const STEREO_KINDS: &[StereoKind] = &[
     StereoKind::Octahedral,
 ];
 
-/// Stereo perception model with per-kind settings and resolver policy.
+/// Stereo perception model with per-kind settings.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StereoModel {
     kind_models: BTreeMap<StereoKind, StereoKindModel>,
     para_stereo: bool,
-    max_iterations: usize,
-    inconsistency: InconsistencyPolicy,
 }
 
 #[pymethods]
 impl StereoModel {
     #[new]
-    #[pyo3(signature = (*, kind_models, para_stereo, max_iterations, inconsistency))]
-    fn new(
-        kind_models: BTreeMap<StereoKind, StereoKindModel>,
-        para_stereo: bool,
-        max_iterations: usize,
-        inconsistency: InconsistencyPolicy,
-    ) -> Self {
+    #[pyo3(signature = (*, kind_models, para_stereo))]
+    fn new(kind_models: BTreeMap<StereoKind, StereoKindModel>, para_stereo: bool) -> Self {
         Self {
             kind_models,
             para_stereo,
-            max_iterations,
-            inconsistency,
         }
     }
 
@@ -154,16 +112,6 @@ impl StereoModel {
         self.para_stereo
     }
 
-    #[getter]
-    fn max_iterations(&self) -> usize {
-        self.max_iterations
-    }
-
-    #[getter]
-    fn inconsistency(&self) -> InconsistencyPolicy {
-        self.inconsistency
-    }
-
     pub(crate) fn __repr__(&self) -> String {
         if self == &Self::from_rust(&GraphStereoModel::default()) {
             return "StereoModel.default()".to_owned();
@@ -176,10 +124,8 @@ impl StereoModel {
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            "StereoModel(kind_models={{{kind_models}}}, para_stereo={}, max_iterations={}, inconsistency=InconsistencyPolicy.{:?})",
+            "StereoModel(kind_models={{{kind_models}}}, para_stereo={})",
             if self.para_stereo { "True" } else { "False" },
-            self.max_iterations,
-            self.inconsistency,
         )
     }
 }
@@ -198,8 +144,6 @@ impl StereoModel {
         Self {
             kind_models,
             para_stereo: model.para_stereo,
-            max_iterations: model.max_iterations,
-            inconsistency: InconsistencyPolicy::from_rust(model.inconsistency),
         }
     }
 
@@ -215,8 +159,6 @@ impl StereoModel {
         GraphStereoModel {
             kind_models,
             para_stereo: self.para_stereo,
-            max_iterations: self.max_iterations,
-            inconsistency: self.inconsistency.to_rust(),
         }
     }
 }
@@ -228,28 +170,6 @@ mod tests {
     use umol_graph::ops::model::ElementScope as GraphElementScope;
 
     use super::*;
-
-    #[rstest]
-    #[case::keep(GraphInconsistencyPolicy::Keep, InconsistencyPolicy::Keep)]
-    #[case::strip(GraphInconsistencyPolicy::Strip, InconsistencyPolicy::Strip)]
-    #[case::error(GraphInconsistencyPolicy::Error, InconsistencyPolicy::Error)]
-    fn test_inconsistency_policy_from_rust(
-        #[case] policy: GraphInconsistencyPolicy,
-        #[case] expected: InconsistencyPolicy,
-    ) {
-        assert_eq!(InconsistencyPolicy::from_rust(policy), expected);
-    }
-
-    #[rstest]
-    #[case::keep(InconsistencyPolicy::Keep, GraphInconsistencyPolicy::Keep)]
-    #[case::strip(InconsistencyPolicy::Strip, GraphInconsistencyPolicy::Strip)]
-    #[case::error(InconsistencyPolicy::Error, GraphInconsistencyPolicy::Error)]
-    fn test_inconsistency_policy_to_rust(
-        #[case] policy: InconsistencyPolicy,
-        #[case] expected: GraphInconsistencyPolicy,
-    ) {
-        assert_eq!(policy.to_rust(), expected);
-    }
 
     #[rstest]
     #[case::any(
@@ -368,8 +288,6 @@ mod tests {
                     ),
                 ]),
                 para_stereo: false,
-                max_iterations: 16,
-                inconsistency: InconsistencyPolicy::Error,
             }
         );
     }
@@ -394,10 +312,8 @@ mod tests {
                 ),
             ]),
             true,
-            8,
-            InconsistencyPolicy::Keep,
         ),
-        "StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.Octahedral: StereoKindModel(scope=ElementScope.AllowList([Element('Fe')]), fluxionality=True)}, para_stereo=True, max_iterations=8, inconsistency=InconsistencyPolicy.Keep)"
+        "StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.Octahedral: StereoKindModel(scope=ElementScope.AllowList([Element('Fe')]), fluxionality=True)}, para_stereo=True)"
     )]
     fn test_stereo_model_repr(#[case] model: StereoModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);
@@ -433,8 +349,6 @@ mod tests {
                 }),
             ],
             para_stereo: true,
-            max_iterations: 8,
-            inconsistency: GraphInconsistencyPolicy::Strip,
         };
 
         assert_eq!(
@@ -492,8 +406,6 @@ mod tests {
                     ),
                 ]),
                 para_stereo: true,
-                max_iterations: 8,
-                inconsistency: InconsistencyPolicy::Strip,
             }
         );
     }
@@ -553,8 +465,6 @@ mod tests {
                 ),
             ]),
             true,
-            8,
-            InconsistencyPolicy::Strip,
         );
 
         assert_eq!(
@@ -587,8 +497,6 @@ mod tests {
                     }),
                 ],
                 para_stereo: true,
-                max_iterations: 8,
-                inconsistency: GraphInconsistencyPolicy::Strip,
             }
         );
     }

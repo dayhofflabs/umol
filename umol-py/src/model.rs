@@ -145,9 +145,8 @@ mod tests {
 
     use rstest::rstest;
     use umol_graph::ops::model::{
-        AromaticityModel as GraphAromaticityModel, InconsistencyPolicy as GraphInconsistencyPolicy,
-        RingLimits as GraphRingLimits, StereoModel as GraphStereoModel,
-        ValenceModel as GraphValenceModel,
+        AromaticityModel as GraphAromaticityModel, RingLimits as GraphRingLimits,
+        StereoModel as GraphStereoModel, ValenceModel as GraphValenceModel,
     };
     use umol_graph::valence_table;
 
@@ -180,12 +179,10 @@ mod tests {
             }),
             StereoModel::from_rust(&GraphStereoModel {
                 para_stereo: true,
-                max_iterations: 8,
-                inconsistency: GraphInconsistencyPolicy::Keep,
                 ..GraphStereoModel::default()
             }),
         ),
-        "ChemistryModel(valence=ValenceModel.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[4], aromatic_valences=[])})), aromaticity=AromaticityModel.Hmo(scope=ElementScope.Any(), stabilization_threshold=0.375), stereo=StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope=ElementScope.Any(), fluxionality=False)}, para_stereo=True, max_iterations=8, inconsistency=InconsistencyPolicy.Keep))"
+        "ChemistryModel(valence=ValenceModel.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[4], aromatic_valences=[])})), aromaticity=AromaticityModel.Hmo(scope=ElementScope.Any(), stabilization_threshold=0.375), stereo=StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope=ElementScope.Any(), fluxionality=False)}, para_stereo=True))"
     )]
     fn test_chemistry_model_repr(#[case] model: ChemistryModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);
@@ -206,8 +203,6 @@ mod tests {
             },
             stereo: GraphStereoModel {
                 para_stereo: true,
-                max_iterations: 8,
-                inconsistency: GraphInconsistencyPolicy::Strip,
                 ..GraphStereoModel::default()
             },
         };
@@ -237,8 +232,6 @@ mod tests {
             },
             stereo: GraphStereoModel {
                 para_stereo: true,
-                max_iterations: 8,
-                inconsistency: GraphInconsistencyPolicy::Strip,
                 ..GraphStereoModel::default()
             },
         };

@@ -17,7 +17,9 @@ pub use bonds::{BondsContradiction, BondsError, BondsResolver};
 pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
 };
-pub use stereo::{StereoContradiction, StereoError, StereoResolveConfig, StereoResolver};
+pub use stereo::{
+    InconsistencyPolicy, StereoContradiction, StereoError, StereoResolveConfig, StereoResolver,
+};
 use thiserror::Error;
 use umol_ast::ast::{MoleculeAst, Transaction, TransactionError};
 use umol_utils::error::UmolError;
@@ -355,6 +357,7 @@ mod tests {
                 },
                 stereo: StereoResolveConfig {
                     reset_stereo_constraints: false,
+                    inconsistency: InconsistencyPolicy::Error,
                 },
             }
         );
@@ -423,6 +426,7 @@ mod tests {
         aromaticity: AromaticityResolveConfig::default(),
         stereo: StereoResolveConfig {
             reset_stereo_constraints: true,
+            inconsistency: InconsistencyPolicy::Error,
         },
     })]
     fn test_resolver_with_config(

@@ -1997,7 +1997,19 @@ default rather than introducing a one-field composition config.
   model/config equality and repr, Rust/Python conversion, all inconsistency
   policies, default ingestion parity, and removal of the obsolete model fields.
   **Breaking Rust and Python model/config migration (red→green).**
-  `[dep: S9o]`
+  **Implemented (green).** Rust `StereoModel` now contains only per-kind
+  perception settings and the semantic `para_stereo` switch.
+  `InconsistencyPolicy` lives in the stereo-resolution module, and
+  `StereoResolveConfig` owns it with `Error` as the explicit default alongside
+  `reset_stereo_constraints`. The Python policy binding moved from
+  `model/stereo.rs` to `resolve.rs` without changing its public package name;
+  Python `StereoModel` dropped both operational constructor arguments,
+  properties, conversion fields, and repr fields, while
+  `StereoResolveConfig` gained the keyword-only policy argument, property,
+  conversion, and repr. All Rust and Python callers were migrated. Tests cover
+  all three policies for unrealizable stereo atoms and bonds, exact model and
+  config conversion/repr contracts, rejection of the removed Python model
+  fields, and unchanged default ingestion. `[dep: S9o]`
 - **S9q — explicit reaction-composition enumeration**
   (`umol-ast/src/ast/compose.rs`, `umol-py/src/reaction.rs`, package callers):
   remove `CompositionScope` from Rust, its Python binding, registration, exports,

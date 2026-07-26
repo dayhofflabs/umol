@@ -294,7 +294,7 @@ mod tests {
 
         assert_eq!(
             validator.aromaticity.validate(&molecule),
-            AromaticityConformanceValidator::with_config(&model.aromaticity, config.aromaticity,)
+            AromaticityConformanceValidator::with_config(&model.aromaticity, config.aromaticity)
                 .validate(&molecule)
         );
         assert_eq!(

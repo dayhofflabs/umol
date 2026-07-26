@@ -80,7 +80,7 @@ use crate::{
     fingerprint::value::{BitFp, CountedHashedFeatureSet, HashedFeatureSet, StructuralFeatureSet},
     model::{
         aromaticity::{AromaticityConfig, AromaticityModel, RingLimits},
-        stereo::{InconsistencyPolicy, StereoKindModel, StereoModel},
+        stereo::{StereoKindModel, StereoModel},
         valence::{AtomTypeRegistry, ValenceEntry, ValenceModel, ValenceTable},
         ChemistryModel, ElementScope,
     },
@@ -91,7 +91,7 @@ use crate::{
         NoncovalentBondViews,
     },
     reaction::{CompositionScope, ReactionApplicationConfig, ReactionAst, ReactionDerivation},
-    resolve::{AromaticityResolveConfig, ResolveConfig, StereoResolveConfig},
+    resolve::{AromaticityResolveConfig, InconsistencyPolicy, ResolveConfig, StereoResolveConfig},
     ring::RingConfig,
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
     spin::SpinStateAst,

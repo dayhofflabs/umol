@@ -231,12 +231,19 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
         stereo=StereoModel(
             kind_models={},
             para_stereo=False,
-            max_iterations=16,
-            inconsistency=InconsistencyPolicy.Strip,
         ),
     )
 
-    molecule = MoleculeAst.from_smiles("C[C@H](N)O", chemistry_model=chemistry_model)
+    molecule = MoleculeAst.from_smiles(
+        "C[C@H](N)O",
+        chemistry_model=chemistry_model,
+        resolve_config=ResolveConfig(
+            aromaticity=AromaticityResolveConfig(),
+            stereo=StereoResolveConfig(
+                inconsistency=InconsistencyPolicy.Strip
+            ),
+        ),
+    )
 
     assert [atom.implicit_hydrogens for atom in molecule.atoms] == [
         ValueAst.Lit(3),

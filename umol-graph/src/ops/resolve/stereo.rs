@@ -11,11 +11,31 @@ use umol_ast::ast::{
 };
 use umol_utils::solution::Solution;
 
-use crate::ops::model::{InconsistencyPolicy, StereoModel};
+use crate::ops::model::StereoModel;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// How stereo resolution handles a `#T`/`#C` assertion it cannot fully
+/// realize. The assertion is retained, removed, or reported as a contradiction;
+/// it is never silently dropped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InconsistencyPolicy {
+    Keep,
+    Strip,
+    Error,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StereoResolveConfig {
     pub reset_stereo_constraints: bool,
+    pub inconsistency: InconsistencyPolicy,
+}
+
+impl Default for StereoResolveConfig {
+    fn default() -> Self {
+        Self {
+            reset_stereo_constraints: false,
+            inconsistency: InconsistencyPolicy::Error,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -70,7 +90,7 @@ impl StereoResolver {
                 continue;
             };
             let Some((ligands, stereo)) = self.derive_stereo_atom(ast, id, coset.clone()) else {
-                match self.model.inconsistency {
+                match self.config.inconsistency {
                     InconsistencyPolicy::Keep => {}
                     InconsistencyPolicy::Strip => {
                         let mut update = AtomUpdate::default();
@@ -125,7 +145,7 @@ impl StereoResolver {
                 continue;
             };
             let Some((ligands, stereo)) = self.derive_stereo_bond(ast, id, coset.clone()) else {
-                match self.model.inconsistency {
+                match self.config.inconsistency {
                     InconsistencyPolicy::Keep => {}
                     InconsistencyPolicy::Strip => {
                         let mut update = BondUpdate::default();
@@ -303,6 +323,7 @@ mod tests {
             StereoResolveConfig::default(),
             StereoResolveConfig {
                 reset_stereo_constraints: false,
+                inconsistency: InconsistencyPolicy::Error,
             }
         );
     }
@@ -365,9 +386,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::keep(InconsistencyPolicy::Keep, Solution::Determined(Vec::new()))]
-    #[case::strip(
+    #[case::atom_keep(
+        InconsistencyPolicy::Keep,
+        mol_dsl_ground!(
+            r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
+        ),
+        Solution::Determined(Vec::new())
+    )]
+    #[case::atom_strip(
         InconsistencyPolicy::Strip,
+        mol_dsl_ground!(
+            r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
+        ),
         Solution::Determined(vec![Edit::ModifyAtomConstraint {
             id: AtomHandle::Id(AtomId(1)),
             old: Some(AtomConstraintAst::TetrahedralStereo(
@@ -376,21 +406,55 @@ mod tests {
             new: None,
         }])
     )]
-    #[case::error(
+    #[case::atom_error(
         InconsistencyPolicy::Error,
+        mol_dsl_ground!(
+            r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
+        ),
         Solution::Contradictory(StereoContradiction::UnrealizableAtom(AtomId(1)))
     )]
+    #[case::bond_keep(
+        InconsistencyPolicy::Keep,
+        mol_dsl_ground!(
+            r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
+        ),
+        Solution::Determined(Vec::new())
+    )]
+    #[case::bond_strip(
+        InconsistencyPolicy::Strip,
+        mol_dsl_ground!(
+            r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
+        ),
+        Solution::Determined(vec![Edit::ModifyBondConstraint {
+            id: BondHandle::Id(BondId(1)),
+            old: Some(BondConstraintAst::CisTransStereo(
+                CisTransStereoAst::Stereo(StereoCosetAst::Lit(1)),
+            )),
+            new: None,
+        }])
+    )]
+    #[case::bond_error(
+        InconsistencyPolicy::Error,
+        mol_dsl_ground!(
+            r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
+        ),
+        Solution::Contradictory(StereoContradiction::UnrealizableBond(BondId(1)))
+    )]
     fn test_stereo_resolver_plan_inconsistency(
-        mut stereo_model: StereoModel,
+        stereo_model: StereoModel,
         #[case] policy: InconsistencyPolicy,
+        #[case] molecule: MoleculeAst,
         #[case] expected: Solution<Vec<Edit>, StereoContradiction>,
     ) {
-        stereo_model.inconsistency = policy;
-        let molecule = mol_dsl_ground!(
-            r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
-        );
         assert_eq!(
-            StereoResolver::new(&stereo_model).plan(&molecule),
+            StereoResolver::with_config(
+                &stereo_model,
+                StereoResolveConfig {
+                    reset_stereo_constraints: false,
+                    inconsistency: policy,
+                },
+            )
+            .plan(&molecule),
             Ok(expected)
         );
     }
@@ -423,6 +487,7 @@ mod tests {
             &stereo_model,
             StereoResolveConfig {
                 reset_stereo_constraints: true,
+                inconsistency: InconsistencyPolicy::Error,
             },
         );
         assert_eq!(
