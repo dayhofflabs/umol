@@ -24,10 +24,9 @@ pub use algorithms::common_subgraph::{
 pub use algorithms::connected_subgraphs::SubgraphEnumerationAlgorithm;
 pub use algorithms::connectivity::{BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm};
 pub use algorithms::cycles::{
-    Cycle, CycleEnumerationAlgorithm, MinimumCycleBasis, MinimumCycleBasisAlgorithm,
-    NonSimpleGraphError, RelevantCycleCount, RelevantCycleEnumerationAlgorithm,
-    ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm, UniqueRingFamilies, UniqueRingFamily,
-    UniqueRingFamilyAlgorithm, UniqueRingFamilyId,
+    Cycle, MinimumCycleBasis, MinimumCycleBasisAlgorithm, NonSimpleGraphError, RelevantCycleCount,
+    RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
+    UniqueRingFamilies, UniqueRingFamily, UniqueRingFamilyAlgorithm, UniqueRingFamilyId,
 };
 pub use algorithms::independent_set::MaximumIndependentSetAlgorithm;
 pub use algorithms::matching::{

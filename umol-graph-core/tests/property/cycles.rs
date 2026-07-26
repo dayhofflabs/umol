@@ -1,12 +1,19 @@
 //! Cycle properties use definition-level exhaustive enumeration for bounded
-//! random multigraphs and the simple corpus through order six. `captured`
-//! independently compares the production operation with captured results over
-//! the larger simple and non-simple corpora.
+//! random multigraphs and the simple corpus through order six. `captured` and
+//! `families` independently compare the production operations with captured
+//! results over the larger simple and non-simple corpora. `literature` preserves
+//! source-stated results for selected chemical and graph-theoretic examples;
+//! its intentional overlap with the exhaustive corpus records provenance, while
+//! the para-bridged macrocycle extends coverage to a larger chemical topology.
 
 #[path = "cycles/captured.rs"]
 mod captured;
 #[path = "cycles/exhaustive.rs"]
 mod exhaustive;
+#[path = "cycles/families.rs"]
+mod families;
+#[path = "cycles/literature.rs"]
+mod literature;
 
 use std::collections::HashSet;
 use std::ops::ControlFlow;

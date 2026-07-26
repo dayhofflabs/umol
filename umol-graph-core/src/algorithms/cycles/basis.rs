@@ -81,7 +81,13 @@ impl CycleVectorBasis {
     }
 
     pub(super) fn reduced(&self, mut vector: EdgeVector) -> EdgeVector {
-        self.reduce(&mut vector);
+        for pivot in (0..self.rows.len()).rev() {
+            if vector.bits[pivot] {
+                if let Some(row) = &self.rows[pivot] {
+                    vector.symmetric_difference_assign(row);
+                }
+            }
+        }
         vector
     }
 
@@ -319,6 +325,26 @@ mod tests {
             assert!(basis.insert(vector));
         }
         assert_eq!(basis.is_independent(candidate), expected);
+    }
+
+    #[rstest]
+    #[case::free_high_edge(
+        4,
+        vec![EdgeVector { bits: bitvec![1, 0, 1, 0] }],
+        EdgeVector { bits: bitvec![0, 1, 1, 1] },
+        EdgeVector { bits: bitvec![1, 1, 0, 1] },
+    )]
+    fn test_cycle_vector_basis_reduced(
+        #[case] edge_count: usize,
+        #[case] basis_vectors: Vec<EdgeVector>,
+        #[case] candidate: EdgeVector,
+        #[case] expected: EdgeVector,
+    ) {
+        let mut basis = CycleVectorBasis::new(edge_count);
+        for vector in basis_vectors {
+            assert!(basis.insert(vector));
+        }
+        assert_eq!(basis.reduced(candidate), expected);
     }
 
     #[rstest]

@@ -4,9 +4,8 @@
 //! Read--Tarjan simple-cycle visitation and collection; Vismara relevant-cycle
 //! visitation and collection; Horton minimum cycle bases; and Kolodzik Unique
 //! Ring Families. Read--Tarjan and Vismara expose strict simple-graph,
-//! explicit multigraph-fallback, and total dispatch operations. The legacy
-//! node-only cycle collector delegates to Vismara. See [Read and Tarjan
-//! (1975)](https://doi.org/10.1002/net.1975.5.3.237),
+//! explicit multigraph-fallback, and total dispatch operations. See [Read and
+//! Tarjan (1975)](https://doi.org/10.1002/net.1975.5.3.237),
 //! [Horton (1987)](https://doi.org/10.1137/0216026),
 //! [Vismara (1997)](https://doi.org/10.37236/1294), and
 //! [Kolodzik, Urbaczek, and Rarey
@@ -320,11 +319,6 @@ pub enum UniqueRingFamilyAlgorithm {
     Kolodzik,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CycleEnumerationAlgorithm {
-    Vismara,
-}
-
 impl Graph {
     pub fn shortest_cycle_through_edge(
         &self,
@@ -598,16 +592,6 @@ impl Graph {
         }
     }
 
-    pub fn enumerate_cycles(
-        &self,
-        max_cycle_size: usize,
-        alg: CycleEnumerationAlgorithm,
-    ) -> Vec<Vec<NodeId>> {
-        match alg {
-            CycleEnumerationAlgorithm::Vismara => self.enumerate_cycles_vismara(max_cycle_size),
-        }
-    }
-
     // BFS with edge exclusion. O(V+E).
     fn shortest_cycle_through_edge_bfs(&self, edge: EdgeId) -> Option<usize> {
         let [u, v] = self.edge_endpoints(edge);
@@ -643,23 +627,6 @@ impl Graph {
             .filter_map(|nbr| self.shortest_cycle_through_edge_bfs(nbr.edge))
             .min()
     }
-
-    fn enumerate_cycles_vismara(&self, max_cycle_size: usize) -> Vec<Vec<NodeId>> {
-        if max_cycle_size < 3 || self.node_count() < 3 {
-            return Vec::new();
-        }
-
-        let mut seen: HashSet<Vec<NodeId>> = HashSet::new();
-        let mut result = self
-            .enumerate_relevant_cycles(max_cycle_size, RelevantCycleEnumerationAlgorithm::Vismara)
-            .into_iter()
-            .filter(|cycle| cycle.length() >= 3)
-            .filter_map(|cycle| seen.insert(cycle.nodes.clone()).then_some(cycle.nodes))
-            .collect::<Vec<_>>();
-
-        result.sort_by(|a, b| a.len().cmp(&b.len()).then_with(|| a.cmp(b)));
-        result
-    }
 }
 
 #[cfg(test)]
@@ -671,7 +638,6 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::CycleEnumerationAlgorithm::Vismara as LegacyVismara;
     use super::MinimumCycleBasisAlgorithm::Horton;
     use super::RelevantCycleEnumerationAlgorithm::Vismara;
     use super::ShortestCycleAlgorithm::Bfs;
@@ -824,10 +790,6 @@ mod tests {
             .map(|(nodes, edges)| Cycle::normalized(&graph, nodes, edges))
             .collect();
         assert_eq!(actual, expected);
-    }
-
-    fn n(i: u32) -> NodeId {
-        NodeId(i)
     }
 
     #[rstest]
@@ -1800,6 +1762,57 @@ mod tests {
             ),
         ],
     )]
+    #[case::quotient_relation(
+        Graph::new(
+            6,
+            &[
+                [0, 3], [0, 4], [1, 4], [3, 4],
+                [0, 5], [1, 5], [2, 5], [3, 5],
+            ],
+        ),
+        vec![
+            (
+                vec![NodeId(0), NodeId(3), NodeId(4)],
+                vec![EdgeId(0), EdgeId(1), EdgeId(3)],
+                3,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(0), NodeId(3), NodeId(4)],
+                    edges: vec![EdgeId(0), EdgeId(3), EdgeId(1)],
+                }],
+            ),
+            (
+                vec![NodeId(0), NodeId(3), NodeId(5)],
+                vec![EdgeId(0), EdgeId(4), EdgeId(7)],
+                3,
+                1,
+                vec![Cycle {
+                    nodes: vec![NodeId(0), NodeId(3), NodeId(5)],
+                    edges: vec![EdgeId(0), EdgeId(7), EdgeId(4)],
+                }],
+            ),
+            (
+                vec![
+                    NodeId(0), NodeId(1), NodeId(3), NodeId(4), NodeId(5),
+                ],
+                vec![
+                    EdgeId(1), EdgeId(2), EdgeId(3), EdgeId(4), EdgeId(5), EdgeId(7),
+                ],
+                4,
+                2,
+                vec![
+                    Cycle {
+                        nodes: vec![NodeId(0), NodeId(4), NodeId(1), NodeId(5)],
+                        edges: vec![EdgeId(1), EdgeId(2), EdgeId(5), EdgeId(4)],
+                    },
+                    Cycle {
+                        nodes: vec![NodeId(1), NodeId(4), NodeId(3), NodeId(5)],
+                        edges: vec![EdgeId(2), EdgeId(3), EdgeId(7), EdgeId(5)],
+                    },
+                ],
+            ),
+        ],
+    )]
     #[case::loops(
         Graph::new(2, &[[0, 0], [1, 1]]),
         vec![
@@ -1910,40 +1923,5 @@ mod tests {
 
         assert_eq!(flow, ControlFlow::Break(stop_after));
         assert_eq!(cycles, expected);
-    }
-
-    #[rstest]
-    #[case::hexagon(6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], 6,
-        vec![vec![n(0), n(1), n(2), n(3), n(4), n(5)]])]
-    #[case::two_fused_triangles(5, vec![[0, 1], [1, 2], [0, 2], [2, 3], [3, 4], [2, 4]], 5,
-        vec![vec![n(0), n(1), n(2)], vec![n(2), n(3), n(4)]])]
-    #[case::k4(4, vec![[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]], 4,
-        vec![vec![n(0), n(1), n(2)], vec![n(0), n(1), n(3)], vec![n(0), n(2), n(3)], vec![n(1), n(2), n(3)]])]
-    #[case::pentagon_cutoff(5, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 0]], 4, vec![])]
-    #[case::pentagon(5, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 0]], 5, vec![vec![n(0), n(1), n(2), n(3), n(4)]])]
-    #[case::acyclic(3, vec![[0, 1], [1, 2]], 10, vec![])]
-    #[case::naphthalene(10,
-        vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [3, 6], [6, 7], [7, 8], [8, 9], [9, 4]],
-        10,
-        vec![vec![n(0), n(1), n(2), n(3), n(4), n(5)],
-             vec![n(3), n(4), n(9), n(8), n(7), n(6)]])]
-    #[case::cube(8,
-        vec![[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]],
-        4,
-        vec![vec![n(0), n(1), n(2), n(3)], vec![n(0), n(1), n(5), n(4)], vec![n(0), n(3), n(7), n(4)],
-             vec![n(1), n(2), n(6), n(5)], vec![n(2), n(3), n(7), n(6)], vec![n(4), n(5), n(6), n(7)]])]
-    #[case::prism(6,
-        vec![[0, 1], [1, 2], [0, 2], [3, 4], [4, 5], [3, 5], [0, 3], [1, 4], [2, 5]],
-        6,
-        vec![vec![n(0), n(1), n(2)], vec![n(3), n(4), n(5)],
-             vec![n(0), n(1), n(4), n(3)], vec![n(0), n(2), n(5), n(3)], vec![n(1), n(2), n(5), n(4)]])]
-    fn test_graph_enumerate_cycles(
-        #[case] node_count: usize,
-        #[case] edges: Vec<[u32; 2]>,
-        #[case] max_size: usize,
-        #[case] expected: Vec<Vec<NodeId>>,
-    ) {
-        let g = Graph::new(node_count, &edges);
-        assert_eq!(g.enumerate_cycles(max_size, LegacyVismara), expected);
     }
 }

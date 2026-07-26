@@ -15,8 +15,8 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::{
-    AtomAst, AtomConstraintAst, AtomId, BondAst, ElementAst, IntoAst, IsotopeMassAst, MemOp,
-    MoleculeAst, MoleculeParts, RelOp, SpinStateAst, ValueAst, ValuePredicate, ValueTerm,
+    AtomAst, AtomId, BondAst, ElementAst, IntoAst, IsotopeMassAst, MemOp, MoleculeAst,
+    MoleculeParts, RelOp, SpinStateAst, ValueAst, ValuePredicate, ValueTerm,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_chem::element::Element;

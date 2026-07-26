@@ -7,11 +7,10 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm::{
 };
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
-    ConnectedComponentsAlgorithm, CycleEnumerationAlgorithm, EdgeId,
-    GeneralMaximumMatchingAlgorithm, Graph, MaximumIndependentSetAlgorithm,
-    MinimumCycleBasisAlgorithm, NodeId, RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm,
-    SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm,
-    ARCMATCH_DEFAULT_PATH_LENGTH,
+    ConnectedComponentsAlgorithm, EdgeId, GeneralMaximumMatchingAlgorithm, Graph,
+    MaximumIndependentSetAlgorithm, MinimumCycleBasisAlgorithm, NodeId,
+    RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 mod matching_graphs {
@@ -248,7 +247,12 @@ fn relevant_cycle_enumeration(c: &mut Criterion) {
     let mut group = c.benchmark_group("relevant_cycles");
     for (name, graph) in cycle_corpus() {
         group.bench_with_input(BenchmarkId::new("vismara", name), &graph, |b, graph| {
-            b.iter(|| graph.enumerate_cycles(usize::MAX, CycleEnumerationAlgorithm::Vismara));
+            b.iter(|| {
+                graph.enumerate_relevant_cycles(
+                    usize::MAX,
+                    RelevantCycleEnumerationAlgorithm::Vismara,
+                )
+            });
         });
     }
     group.finish();

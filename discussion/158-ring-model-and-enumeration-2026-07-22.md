@@ -8,7 +8,8 @@ Relates: [057](057-sssr-needed-2026-03-11.md),
 [086](086-molecule-ast-api-2026-04-16.md),
 [149](149-molecule-ring-cache-and-hashing-2026-07-13.md),
 [151](151-python-molecule-workflows-2026-07-13.md),
-[159](159-simple-graph-policy-2026-07-23.md)
+[159](159-simple-graph-policy-2026-07-23.md),
+[160](160-relevant-cycle-count-and-enumeration-spikes-2026-07-25.md)
 
 ## Scope
 
@@ -1200,7 +1201,7 @@ references.
   | `icosahedron` | 144.29–144.93 µs | 11.853–14.791 µs |
   | `c60` | 690.98–695.02 µs | 24.284–24.492 µs |
   | `c70` | 1.1666–1.1812 ms | 28.098–28.412 µs |
-- **S2f — cycle-family differential validation**
+- **S2f — cycle-family differential validation** **Done**
   (`umol-graph-core/tests/data/cycles/`): run the
   completed MCB, relevant-cycle, and URF operations over the bounded S0f corpus.
   Compare MCB dimension and total weight with NetworkX, igraph, CDK, and
@@ -1214,6 +1215,165 @@ references.
   Rust property-test dependencies. **One-off differential validation with
   checked-in evidence
   (green).** `[dep: S0f, S2b, S2d, S2e]`
+
+  The differential run covers all 13,598 non-isomorphic simple graphs through
+  order eight. NetworkX 3.5, python-igraph 1.0.0 backed by igraph 1.0.1,
+  CDK revision `7e130959efbc0d3561e3437175ca5da83147c298`, and
+  RingDecomposerLib revision `3a7ff93de0d9c4f6a5661508549c6063573f39c7`
+  agree on every MCB dimension and total weight. CDK and RingDecomposerLib
+  agree on all 131,589 normalized relevant edge-cycle sets.
+  RingDecomposerLib supplies 116,205 normalized URFs; its eager and iterator
+  cycle operations agree on every family, and its independent exponential
+  validator accepts all 30 cyclic corpus graphs through order five. There are
+  no normalized failures.
+
+  The first Rust comparison exposed an incomplete quotient-space reduction in
+  `CycleVectorBasis::reduced`: a free high edge stopped the reduction before
+  lower pivot edges were eliminated, so two equal-weight cycles differing by a
+  smaller cycle could be split into separate URFs. Canonical reduction now
+  eliminates every pivot column. The exact `ECvo` graph and the lower-level
+  free-high-edge case are retained as ordinary unit regressions; graph-core
+  then agrees with the complete external corpus.
+
+  `cycle-families-through-8.tsv` is the normalized 4,392,160-byte captured
+  result (SHA-256
+  `12d68a42fd387ac94a37002ccb7aa82ebbf7b40befd9ce66015e0434169c2769`).
+  It records graph6 input, MCB dimension and total weight, relevant edge-cycle
+  sets, complete URF metadata and cycle partitions, and exponential-validation
+  status. `tests/data/cycles/README.md` documents the schema, normalization,
+  external implementations, captured revisions and versions, regeneration
+  procedure, corpus and result hashes, semantic scope, and validation results.
+  The Rust property suite consumes the TSV directly and never invokes Python,
+  Java, CDK, RingDecomposerLib, NetworkX, or igraph.
+
+  The one-off generator and CDK adapter are checked in. Regeneration uses:
+
+  ```text
+  cmake -S "$RDL_SOURCE" -B "$RDL_BUILD" -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+  cmake --build "$RDL_BUILD"
+
+  mvn -f "$CDK_SOURCE/pom.xml" -pl base/core -am package -DskipTests
+
+  micromamba run -n work2 python \
+      umol-graph-core/tests/data/cycles/generate_captured_results.py \
+      umol-graph-core/tests/data/simple-through-8.g6 \
+      umol-graph-core/tests/data/cycles/cycle-families-through-8.tsv \
+      --cdk-source "$CDK_SOURCE" \
+      --rdl-source "$RDL_SOURCE" \
+      --rdl-library "$RDL_BUILD/src/RingDecomposerLib/libRingDecomposerLib.dylib"
+  ```
+
+  MCB member cycles are deliberately excluded because tied minimum bases need
+  not select the same members. The exact comparisons are MCB scalar invariants,
+  relevant-cycle edge sets, and URF partitions, metadata, counts, and emitted
+  cycles. The corpus contains finite, simple, unweighted, undirected graphs;
+  multigraph behavior remains covered by the S0e exhaustive Rust properties.
+- **S2g — ring-perception literature examples** **Done**
+  (`umol-graph-core/tests/property/cycles/literature.rs`): retain
+  provenance-bearing fixtures for ring-system examples whose topology and
+  stated result can be reconstructed without interpretation. Exact relevant
+  edge-cycle sets and MCB length multisets cover the RingDecomposerLib Figure 1
+  system, Berger et al. Figure 7a and `[1.1.1]`propellane examples, the
+  May--Steinbeck barrelene example, and the Kolodzik et al. cubane example.
+  Exact URF weight/count partitions cover the RingDecomposerLib system, cubane,
+  and Kolodzik et al. Figure 3.
+
+  Kolodzik et al. Figure 3 is represented by the ChemDraw SMILES
+  `C1(CC2)CCC(CCC3CCC2CC3)CC1`, corresponding topologically to
+  para-[2,2]cyclophane without aromatic bond distinctions. A one-off RDKit
+  2025.03.2 conversion yields a 16-vertex, 18-edge graph. Its exact relevant
+  set consists of two six-cycles and four twelve-cycles; its MCB contains the
+  two six-cycles and one twelve-cycle, while its three URFs are two singleton
+  six-ring families and one four-member twelve-ring family.
+
+  Kolodzik et al. Figure 4 supplies the larger chemical-topology fixture: eight
+  para-bridged six-rings represented by 40 vertices and 48 edges. The expected
+  result is generated directly from the published path-choice construction,
+  independently of the production enumerator: eight six-cycles, all `2^8 =
+  256` twenty-four-cycles, an MCB with lengths
+  `[6, 6, 6, 6, 6, 6, 6, 6, 24]`, and eight singleton six-ring URFs plus one
+  256-cycle macrocycle URF. The fixture therefore extends the exhaustive
+  order-eight corpus while preserving an exact chemical interpretation.
+
+  Additional manually recovered literature structures add independent larger
+  cases:
+
+  - Gleiss et al. Figure 3 uses the canonical SMILES for Kammermeier et al.
+    compound 8:
+    `C1=CC=C2C(=C1)C=3C=4C=CC=CC4C25CC6=C(CC75C=8C=CC=CC8C3C=9C=CC=CC97)C%10C=%11C=CC=CC%11C6C=%12C=CC=CC%12%10`.
+    A one-off RDKit 2025.03.2 conversion yields the checked-in unlabeled
+    46-vertex, 57-edge graph. Its exact relevant set contains twelve
+    six-cycles and four eight-cycles. Its MCB contains eleven six-cycles and
+    one eight-cycle, agreeing with the paper's nine essential cycles plus two
+    of the three interchangeable six-cycles and one of the four
+    interchangeable eight-cycles.
+  - The hand-transcribed Berger et al. Figure 3 Champetier graph has 21
+    vertices, 56 edges, and the supplied exact degree sequence. Its cycle-space
+    rank is 36; the test independently enumerates every triangle from the
+    adjacency and verifies that the relevant set and unique MCB both consist
+    of exactly those 36 triangles.
+  - The hand-transcribed Berger et al. Figure 8a graph has 18 vertices, 24
+    edges, and the supplied exact degree sequence. Its exact relevant set is
+    the six published pentagons plus the published octagon
+    `9-8-7-6-16-17-18-10`; those seven independent cycles also form its unique
+    MCB, with length multiset `[5, 5, 5, 5, 5, 5, 8]` and total weight 38. The
+    named nine-cycle `N = 10-11-12-13-14-15-16-17-18-10` is retained as an
+    explicit negative case: it arises after edge removal in the paper's SSCE
+    construction but is not relevant in the original graph.
+  - The hand-transcribed Berger et al. Figure 8b graph has 16 vertices and 23
+    edges with the supplied exact degree sequence. Its relevant set contains
+    four quadrangles, six pentagons, and one seven-cycle. The marked octagon
+    `C = 8-9-10-11-12-13-14-15-8` is retained as an exact negative case,
+    agreeing with the paper's statement that it is generated by smaller
+    quadrangles and is not relevant.
+  - The hand-transcribed Berger et al. Figure 9a graph has 12 vertices and 20
+    edges with the supplied exact degree sequence. Its unique MCB and relevant
+    set are the eight published triangles plus the central square
+    `2-4-6-8-2`, with dimension 9 and total weight 28.
+  - Berger et al. Figure 9c `[6.5]coronane` is retained from the ChemDraw SMILES
+    `C12(CCC3)C3(CCC4)C45C(CCC6)(CCC5)C76C1(CCC2)CCC7`. A one-off RDKit
+    2025.03.2 conversion yields the checked-in 24-vertex, 30-edge graph. Its
+    exact relevant set and unique MCB consist of the six published pentagons
+    plus the essential central hexagon, with total MCB weight 36. This directly
+    captures the paper's chemical counterexample in which SSCE contains only
+    the pentagons and therefore omits a basis member.
+  - Berger et al. Figure 10 is retained from the SciFinder SMILES for the
+    `C90H12` parent of the depicted dodecayl structure:
+    `C1=2C3=C4C5=C1C67C=8C=9C%10=C%11C8C%12C%137C5C%14%15C%16C%17=C%18C=%19C%20=C%17C%21%22C=%23C=%24C%25=C%26C%23C%27C%16%21C%28%29C%30%31C%32C=%33C%19C%34(C3=C%35C2C%366C9C%37=C%10C%38%39C%40=C%41C%42=C%43C%44=C%41C%11%38C%12%45C%44C%46%47C%48C%49=C%50C=%51C%52=C%49C%26%53C%54%55C%25=C(C%24C%22%30C%20%33)C%31C%56%55C%57C(C%51C%58(C%42=C%40C%59C%60%39C%37C%61%36C%35C%32%34C%14%29C%13%61C%45%60C%46(C%59%57%58)C%56%28C%27%48%53)C%43%50%47)=C%52%54)C4%18%15`.
+    RDKit 2025.03.2 yields the checked-in 90-vertex, 150-edge unlabeled graph.
+    Its exact relevant set is independently reproduced by bounded simple-cycle
+    enumeration as the published 66 pentagons and one essential hexagon. Its
+    MCB selects 60 pentagons plus that hexagon, giving dimension 61 and total
+    weight 306.
+  - The hand-transcribed Vismara Figure 4 graph uses `r = 1`, `p = 7`, and
+    `q = 17`. The candidate `4-11` edge is excluded: it contradicts the
+    transcribed degree sequence and changes the paper's 24-member family into
+    a different graph. The corrected 20-vertex, 26-edge graph has six relevant
+    quadrangles, one relevant six-cycle, and the stated family of 24 relevant
+    thirteen-cycles containing `r`, `p`, and `q`.
+  - The hand-transcribed Hanser et al. Figure 11 graph has 9 vertices, 18
+    edges, and the supplied exact degree sequence. Definition-level exhaustive
+    enumeration independently agrees with Read--Tarjan on the paper's exact
+    count of 248 elementary cycles.
+
+  NetworkX 3.5 was used only for one-off checking of the recovered adjacency
+  lists and bounded C90 cycle counts; it is not a test dependency. Vismara
+  Figure 2 is intentionally not retained as one fixed transcription: a future
+  regression should generate its parameterized series of squares joined by
+  single links.
+
+  RingDecomposerLib revision
+  `3a7ff93de0d9c4f6a5661508549c6063573f39c7` independently agrees on both
+  the Gleiss and Champetier graphs' MCB dimension and total weight, exact
+  relevant edge-cycle sets, and URF decomposition. It remains a one-off
+  corroboration rather than a test dependency.
+
+  The literature suite intentionally overlaps the exhaustive corpus for the
+  small examples: those cases retain source-stated semantics and provenance,
+  whereas S2f establishes broad implementation agreement. Other unlabeled or
+  interpretation-dependent drawings are not transcribed silently.
+  **Literature exact-result regressions (green).** `[dep: S2f]`
 
 ### S3 — umol-ast ring model and views
 
@@ -1550,9 +1710,9 @@ references.
   clippy, the criterion comparison against S0, and the one-off S1c/S2f
   differential validations before accepting the removal. The ordinary gate
   remains reproducible without `geng` because it consumes the checked-in S0f
-  corpus. **Breaking legacy removal with all callers already migrated
-  (red→green).**
-  `[dep: S1c, S2f, S3c, S4a, S4b, S5d, S5e, S6a, S6b, S6c]`
+  corpus and S2g paper fixtures. **Breaking legacy removal with all callers
+  already migrated (red→green).**
+  `[dep: S1c, S2f, S2g, S3c, S4a, S4b, S5d, S5e, S6a, S6b, S6c]`
 - **S7b — documentation and status closure**
   (`discussion/151-python-molecule-workflows-2026-07-13.md`, this document,
   `discussion/000-status.md`): update the superseded S9k/S9l/S9m descriptions
@@ -1570,7 +1730,10 @@ The critical path is:
 S0b -> S0d -> S0e -> S0f
           \-> S1b ----------------> S1c <- S0f
 S0b -> S2a --\
-S0e ----------> S2b -> S2c -> S2d -> S2e -> S2f <- S0f
+S0e ----------> S2b -> S2c -> S2d -> S2e -> S2f -> S2g
+                                               ^
+                                               |
+                                              S0f
                                  |
 {S1b, S2d, S3a} -> S3b -> S3c -> {S4a, S4b} -> S5a -> S5b
                                                      \
@@ -1579,13 +1742,14 @@ S0e ----------> S2b -> S2c -> S2d -> S2e -> S2f <- S0f
                                                           ^       ^
                                                           |       |
                                                          S4a     S4b
-{S1c, S2f, S5d, S5e, S6b, S6c} --------------> S7a -> S7b
+{S1c, S2g, S5d, S5e, S6b, S6c} --------------> S7a -> S7b
 ```
 
 `S0c` joins the cycle-space path at S2b and S2d; `S3a` can proceed independently
 without blocking graph-core development. S1c and S2f are one-off implementation
-gates rather than recurring external prerequisites; their checked-in evidence
-and the S0f corpus keep subsequent Rust verification self-contained. No
+gates rather than recurring external prerequisites; their checked-in evidence,
+the S0f corpus, and the ordinary S2g regressions keep subsequent Rust
+verification self-contained. No
 implementation stage is deferrable in this round: Read--Tarjan, Horton,
 Vismara/RCF, URF, AST integration, workflow configuration, Python migration,
 graph-algorithm organization and precondition handling, and independent
