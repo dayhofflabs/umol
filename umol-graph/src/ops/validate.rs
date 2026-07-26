@@ -19,7 +19,10 @@ pub mod valence;
 pub use aromaticity::{AromaticityConformanceValidator, AromaticityValidatorContradiction};
 pub use invariant::{ValenceInvariantsError, ValenceInvariantsValidator};
 pub use spin::{SpinInvariantsContradiction, SpinInvariantsError, SpinInvariantsValidator};
-pub use stereo::{StereoConformanceValidator, StereoValidatorContradiction, StereoValidatorError};
+pub use stereo::{
+    StereoConformanceValidator, StereoValidateConfig, StereoValidatorContradiction,
+    StereoValidatorError,
+};
 use thiserror::Error;
 use umol_ast::ast::{
     AtomAst, ConstraintContradiction, ConstraintError, ConstraintValidator,
@@ -30,9 +33,18 @@ pub use valence::{
     ValenceConformanceContradiction, ValenceConformanceError, ValenceConformanceValidator,
 };
 
-use crate::ops::aromaticity::AromaticityError;
+use crate::ops::aromaticity::{AromaticityConfig, AromaticityError};
 use crate::ops::invariant::ValenceMismatch;
 use crate::ops::model::ChemistryModel;
+
+/// Operational configuration for composite molecule validation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ValidateConfig {
+    /// Algorithms used by aromaticity conformance validation.
+    pub aromaticity: AromaticityConfig,
+    /// Algorithms and iteration limits used by stereo conformance validation.
+    pub stereo: StereoValidateConfig,
+}
 
 #[derive(Clone, Debug)]
 pub struct Validator<'a> {
@@ -86,14 +98,21 @@ pub enum ValidatorError {
 
 impl<'a> Validator<'a> {
     pub fn new(model: &'a ChemistryModel) -> Self {
+        Self::with_config(model, ValidateConfig::default())
+    }
+
+    pub fn with_config(model: &'a ChemistryModel, config: ValidateConfig) -> Self {
         Self {
             entity_structure: EntityStructureValidator,
             constraint: ConstraintValidator,
             valence_invariants: ValenceInvariantsValidator,
             spin_invariants: SpinInvariantsValidator,
             valence_conformance: ValenceConformanceValidator::new(&model.valence),
-            aromaticity: AromaticityConformanceValidator::new(&model.aromaticity),
-            stereo: StereoConformanceValidator::new(&model.stereo),
+            aromaticity: AromaticityConformanceValidator::with_config(
+                &model.aromaticity,
+                config.aromaticity,
+            ),
+            stereo: StereoConformanceValidator::with_config(&model.stereo, config.stereo),
         }
     }
 
@@ -214,12 +233,76 @@ fn verdict(any_undetermined: bool) -> Solution<(), ValidatorContradiction> {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{AtomAst, AtomConstraintAst, MoleculeAst, SpinStateAst, ValueAst};
+    use umol_ast::ast::{
+        AtomAst, AtomConstraintAst, MoleculeAst, RingConfig, SpinStateAst, ValueAst,
+    };
     use umol_ast::{mol_dsl, mol_dsl_ground};
     use umol_chem::element::Element;
+    use umol_graph_core::{
+        AutomorphismAlgorithm, ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm,
+    };
 
     use super::*;
     use crate::ops::model::ChemistryModel;
+
+    #[rstest]
+    fn test_validate_config_default() {
+        assert_eq!(
+            ValidateConfig::default(),
+            ValidateConfig {
+                aromaticity: AromaticityConfig {
+                    ring_config: RingConfig::default(),
+                    connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                    maximum_independent_set_algorithm:
+                        MaximumIndependentSetAlgorithm::BranchAndBound,
+                },
+                stereo: StereoValidateConfig {
+                    automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                    max_iterations: 16,
+                },
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::ground(mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#))]
+    #[case::non_ground(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))]
+    fn test_validator_new(#[case] molecule: MoleculeAst) {
+        let model = ChemistryModel::default();
+        assert_eq!(
+            Validator::new(&model).validate(&molecule),
+            Validator::with_config(&model, ValidateConfig::default()).validate(&molecule)
+        );
+    }
+
+    #[rstest]
+    fn test_validator_with_config() {
+        let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
+        let model = ChemistryModel::default();
+        let config = ValidateConfig {
+            aromaticity: AromaticityConfig {
+                ring_config: RingConfig::default(),
+                connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm::BranchAndBound,
+            },
+            stereo: StereoValidateConfig {
+                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                max_iterations: 8,
+            },
+        };
+        let validator = Validator::with_config(&model, config);
+
+        assert_eq!(
+            validator.aromaticity.validate(&molecule),
+            AromaticityConformanceValidator::with_config(&model.aromaticity, config.aromaticity,)
+                .validate(&molecule)
+        );
+        assert_eq!(
+            validator.stereo.validate(&molecule),
+            StereoConformanceValidator::with_config(&model.stereo, config.stereo)
+                .validate(&molecule)
+        );
+    }
 
     #[rstest]
     #[case::ground(mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#), Solution::Determined(()))]

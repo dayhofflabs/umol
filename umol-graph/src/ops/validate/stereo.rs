@@ -2,18 +2,53 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AsLit, BooleanAst, GraphSymmetry, Lattice, LigandSymmetryAst, MoleculeAst, StereoAtomId,
-    StereoBondId, StereoKind, StereoLigandPair, StereoSymmetry, Stereogenicity, StereogenicityAst,
-    Topicity, TopicityAst, TopicityRelationAst,
+    AsLit, BooleanAst, ConstitutionColoring, GraphSymmetry, GraphSymmetryConfig, Lattice,
+    LigandSymmetryAst, MoleculeAst, StereoAtomId, StereoBondId, StereoKind, StereoLigandPair,
+    StereoSymmetry, Stereogenicity, StereogenicityAst, Topicity, TopicityAst, TopicityRelationAst,
 };
+use umol_graph_core::AutomorphismAlgorithm;
 use umol_perm::OrientedPermutation;
 use umol_utils::solution::Solution;
 
 use crate::ops::model::StereoModel;
 
+/// Operational configuration for stereo-conformance validation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StereoValidateConfig {
+    /// Backend used for molecule graph-automorphism calculations.
+    pub automorphism_algorithm: AutomorphismAlgorithm,
+    /// Maximum number of graph-symmetry refinement passes when the stereo
+    /// model enables para-stereo perception.
+    pub max_iterations: usize,
+}
+
+impl Default for StereoValidateConfig {
+    fn default() -> Self {
+        Self {
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            max_iterations: 16,
+        }
+    }
+}
+
+impl StereoValidateConfig {
+    fn graph_symmetry_config(
+        self,
+        model: &StereoModel,
+    ) -> GraphSymmetryConfig<ConstitutionColoring> {
+        GraphSymmetryConfig {
+            coloring: ConstitutionColoring::full(),
+            iterate_to_fixpoint: model.para_stereo,
+            max_iterations: self.max_iterations,
+            automorphism_algorithm: self.automorphism_algorithm,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct StereoConformanceValidator {
     model: StereoModel,
+    config: StereoValidateConfig,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -52,8 +87,13 @@ pub enum StereoValidatorError {}
 
 impl StereoConformanceValidator {
     pub fn new(model: &StereoModel) -> Self {
+        Self::with_config(model, StereoValidateConfig::default())
+    }
+
+    pub fn with_config(model: &StereoModel, config: StereoValidateConfig) -> Self {
         Self {
             model: model.clone(),
+            config,
         }
     }
 
@@ -64,7 +104,7 @@ impl StereoConformanceValidator {
         &self,
         ast: &MoleculeAst,
     ) -> Result<Solution<(), StereoValidatorContradiction>, StereoValidatorError> {
-        let symmetry = ast.graph_symmetry(&self.model.graph_symmetry_config());
+        let symmetry = ast.graph_symmetry(&self.config.graph_symmetry_config(&self.model));
         let mut any_undetermined = false;
 
         for id in ast.stereo_atoms().ids() {
@@ -270,6 +310,52 @@ mod tests {
     const BUTENE: &str = r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"]
         :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
         :stereo-bonds [{:site 0 :ligands [2 3 4 5] :type "Ct1"}]}"#;
+
+    #[rstest]
+    fn test_stereo_validate_config_default() {
+        assert_eq!(
+            StereoValidateConfig::default(),
+            StereoValidateConfig {
+                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                max_iterations: 16,
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::no_para(false, false)]
+    #[case::para(true, true)]
+    fn test_stereo_validate_config_graph_symmetry_config(
+        #[case] para_stereo: bool,
+        #[case] expected_fixpoint: bool,
+    ) {
+        let model = StereoModel {
+            para_stereo,
+            ..StereoModel::default()
+        };
+        let config = StereoValidateConfig {
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            max_iterations: 8,
+        }
+        .graph_symmetry_config(&model);
+
+        assert_eq!(config.automorphism_algorithm, AutomorphismAlgorithm::Nauty);
+        assert_eq!(config.iterate_to_fixpoint, expected_fixpoint);
+        assert_eq!(config.max_iterations, 8);
+    }
+
+    #[rstest]
+    fn test_stereo_conformance_validator_new() {
+        let ast = mol_dsl_ground!(CFCLBRI);
+        assert_eq!(
+            StereoConformanceValidator::new(&StereoModel::default()).validate(&ast),
+            StereoConformanceValidator::with_config(
+                &StereoModel::default(),
+                StereoValidateConfig::default(),
+            )
+            .validate(&ast)
+        );
+    }
 
     #[rstest]
     #[case::bare(CFCLBRI, (|_: &mut MoleculeAst| {}) as fn(&mut MoleculeAst))]

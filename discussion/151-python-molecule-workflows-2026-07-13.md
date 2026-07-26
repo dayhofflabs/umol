@@ -1973,7 +1973,17 @@ default rather than introducing a one-field composition config.
   `with_config(model, config)` passes both branches explicitly. Tests cover
   equality/defaults, both composite branches, and propagation into
   `GraphSymmetryConfig`. **Additive operation configs and constructor path
-  (green).** `[dep: S9m, S9n]`
+  (green).**
+  **Implemented (green).** `StereoValidateConfig` now owns the automorphism
+  selector and symmetry-refinement limit, with explicit Nauty/16 defaults;
+  `StereoConformanceValidator::new` delegates to `with_config`, which combines
+  those operational settings with the model's `para_stereo` semantics when
+  constructing `GraphSymmetryConfig`. The composite `ValidateConfig` combines
+  the shared `AromaticityConfig` with `StereoValidateConfig`, and
+  `Validator::new` likewise delegates to `Validator::with_config`, which passes
+  both branches to their conformance validators. Exact default, constructor
+  parity, composite forwarding, and graph-symmetry propagation tests pass
+  together with the complete `umol-graph` test suite. `[dep: S9m, S9n]`
 - **S9p — stereo model/resolve-config migration**
   (`umol-graph/src/ops/{model,resolve/stereo}.rs`,
   `umol-py/src/{model/stereo,resolve}.rs`, all callers): remove
