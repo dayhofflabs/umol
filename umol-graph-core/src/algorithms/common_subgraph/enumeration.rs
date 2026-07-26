@@ -134,26 +134,137 @@ fn subgraphs_from_cliques(
     let mut subgraphs: Vec<GraphCorrespondence> = cliques
         .into_iter()
         .map(|clique| {
-            let mut edges: Vec<(EdgeId, EdgeId)> = Vec::new();
-            for x in 0..clique.len() {
-                for y in (x + 1)..clique.len() {
-                    let (a1, b1) = pairs[clique[x]];
-                    let (a2, b2) = pairs[clique[y]];
-                    if let (Some(ea), Some(eb)) = (a.find_edge(a1, a2), b.find_edge(b1, b2)) {
-                        edges.push((ea, eb));
-                    }
-                }
-            }
             let mapping: Vec<(NodeId, NodeId)> = clique.iter().map(|&i| pairs[i]).collect();
-            GraphCorrespondence::new(
-                Correspondence::new(mapping, a.node_count(), b.node_count()),
-                Correspondence::new(edges, a.edge_count(), b.edge_count()),
-            )
+            subgraph_from_mapping(mapping, a, b)
         })
         .collect();
     subgraphs.sort_by(|x, y| x.nodes().mates().cmp(y.nodes().mates()));
     subgraphs.dedup();
     subgraphs
+}
+
+fn subgraph_from_mapping(
+    mapping: Vec<(NodeId, NodeId)>,
+    left: &Graph,
+    right: &Graph,
+) -> GraphCorrespondence {
+    let mut edges = Vec::new();
+    for x in 0..mapping.len() {
+        for y in (x + 1)..mapping.len() {
+            let (left_a, right_a) = mapping[x];
+            let (left_b, right_b) = mapping[y];
+            if let (Some(left_edge), Some(right_edge)) = (
+                left.find_edge(left_a, left_b),
+                right.find_edge(right_a, right_b),
+            ) {
+                edges.push((left_edge, right_edge));
+            }
+        }
+    }
+    GraphCorrespondence::new(
+        Correspondence::new(mapping, left.node_count(), right.node_count()),
+        Correspondence::new(edges, left.edge_count(), right.edge_count()),
+    )
+}
+
+#[cfg(test)]
+fn direct_backtracking<N, E>(
+    left: &Graph,
+    right: &Graph,
+    node_match: &mut N,
+    edge_match: &mut E,
+    embedding: EmbeddingKind,
+) -> Vec<GraphCorrespondence>
+where
+    N: FnMut(NodeId, NodeId) -> bool,
+    E: FnMut(EdgeId, EdgeId) -> bool,
+{
+    let candidates = left
+        .node_ids()
+        .map(|left_node| {
+            right
+                .node_ids()
+                .filter(|&right_node| node_match(left_node, right_node))
+                .collect()
+        })
+        .collect();
+    let mut state = DirectEnumerationState {
+        left,
+        right,
+        edge_match,
+        embedding,
+        candidates,
+        used_right: bitvec![0; right.node_count()],
+        mates: Vec::new(),
+        subgraphs: Vec::new(),
+    };
+    state.search(0);
+    state
+        .subgraphs
+        .sort_by(|a, b| a.nodes().mates().cmp(b.nodes().mates()));
+    state.subgraphs
+}
+
+#[cfg(test)]
+struct DirectEnumerationState<'g, 'm, E> {
+    left: &'g Graph,
+    right: &'g Graph,
+    edge_match: &'m mut E,
+    embedding: EmbeddingKind,
+    candidates: Vec<Vec<NodeId>>,
+    used_right: BitVec,
+    mates: Vec<(NodeId, NodeId)>,
+    subgraphs: Vec<GraphCorrespondence>,
+}
+
+#[cfg(test)]
+impl<E> DirectEnumerationState<'_, '_, E>
+where
+    E: FnMut(EdgeId, EdgeId) -> bool,
+{
+    fn search(&mut self, left_index: usize) {
+        if left_index == self.left.node_count() {
+            self.subgraphs.push(subgraph_from_mapping(
+                self.mates.clone(),
+                self.left,
+                self.right,
+            ));
+            return;
+        }
+
+        let left_node = NodeId::from(left_index);
+        for candidate_index in 0..self.candidates[left_index].len() {
+            let right_node = self.candidates[left_index][candidate_index];
+            if self.used_right[right_node.index()] || !self.compatible(left_node, right_node) {
+                continue;
+            }
+            self.used_right.set(right_node.index(), true);
+            self.mates.push((left_node, right_node));
+            self.search(left_index + 1);
+            self.mates.pop();
+            self.used_right.set(right_node.index(), false);
+        }
+        self.search(left_index + 1);
+    }
+
+    fn compatible(&mut self, left_node: NodeId, right_node: NodeId) -> bool {
+        for &(mapped_left, mapped_right) in &self.mates {
+            match (
+                self.left.find_edge(left_node, mapped_left),
+                self.right.find_edge(right_node, mapped_right),
+            ) {
+                (Some(left_edge), Some(right_edge)) => {
+                    if !(self.edge_match)(left_edge, right_edge) {
+                        return false;
+                    }
+                }
+                (None, None) => {}
+                _ if self.embedding == EmbeddingKind::Monomorphism => {}
+                _ => return false,
+            }
+        }
+        true
+    }
 }
 
 fn all_cliques(
@@ -205,5 +316,161 @@ fn bron_kerbosch(
         clique.pop();
         candidates.set(v, false);
         excluded.set(v, true);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case::empty(
+        Graph::new(0, &[]),
+        Graph::new(0, &[]),
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        vec![GraphCorrespondence::new(
+            Correspondence::new(vec![], 0, 0),
+            Correspondence::new(vec![], 0, 0),
+        )],
+    )]
+    #[case::isolated(
+        Graph::new(1, &[]),
+        Graph::new(1, &[]),
+        vec![0],
+        vec![0],
+        vec![],
+        vec![],
+        vec![
+            GraphCorrespondence::new(
+                Correspondence::new(vec![], 1, 1),
+                Correspondence::new(vec![], 0, 0),
+            ),
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(0))], 1, 1),
+                Correspondence::new(vec![], 0, 0),
+            ),
+        ],
+    )]
+    #[case::incompatible_node(
+        Graph::new(1, &[]),
+        Graph::new(1, &[]),
+        vec![0],
+        vec![1],
+        vec![],
+        vec![],
+        vec![GraphCorrespondence::new(
+            Correspondence::new(vec![], 1, 1),
+            Correspondence::new(vec![], 0, 0),
+        )],
+    )]
+    fn test_direct_backtracking(
+        #[case] left: Graph,
+        #[case] right: Graph,
+        #[case] left_node_labels: Vec<u8>,
+        #[case] right_node_labels: Vec<u8>,
+        #[case] left_edge_labels: Vec<u8>,
+        #[case] right_edge_labels: Vec<u8>,
+        #[case] expected: Vec<GraphCorrespondence>,
+    ) {
+        assert_eq!(
+            direct_backtracking(
+                &left,
+                &right,
+                &mut |left_node, right_node| {
+                    left_node_labels[left_node.index()] == right_node_labels[right_node.index()]
+                },
+                &mut |left_edge, right_edge| {
+                    left_edge_labels[left_edge.index()] == right_edge_labels[right_edge.index()]
+                },
+                EmbeddingKind::Induced,
+            ),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::injective_isolated(
+        Graph::new(2, &[]),
+        Graph::new(1, &[]),
+        vec![0, 0],
+        vec![0],
+        vec![],
+        vec![],
+        EmbeddingKind::Induced,
+    )]
+    #[case::incompatible_edge(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[[0, 1]]),
+        vec![0, 0],
+        vec![0, 0],
+        vec![0],
+        vec![1],
+        EmbeddingKind::Induced,
+    )]
+    #[case::disconnected(
+        Graph::new(4, &[[0, 1], [2, 3]]),
+        Graph::new(4, &[[0, 1], [2, 3]]),
+        vec![0, 1, 0, 1],
+        vec![0, 1, 0, 1],
+        vec![0, 1],
+        vec![0, 1],
+        EmbeddingKind::Induced,
+    )]
+    #[case::edge_presence_induced(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[]),
+        vec![0, 0],
+        vec![0, 0],
+        vec![0],
+        vec![],
+        EmbeddingKind::Induced,
+    )]
+    #[case::edge_presence_monomorphism(
+        Graph::new(2, &[[0, 1]]),
+        Graph::new(2, &[]),
+        vec![0, 0],
+        vec![0, 0],
+        vec![0],
+        vec![],
+        EmbeddingKind::Monomorphism,
+    )]
+    fn test_direct_backtracking_equivalence(
+        #[case] left: Graph,
+        #[case] right: Graph,
+        #[case] left_node_labels: Vec<u8>,
+        #[case] right_node_labels: Vec<u8>,
+        #[case] left_edge_labels: Vec<u8>,
+        #[case] right_edge_labels: Vec<u8>,
+        #[case] embedding: EmbeddingKind,
+    ) {
+        let direct = direct_backtracking(
+            &left,
+            &right,
+            &mut |left_node, right_node| {
+                left_node_labels[left_node.index()] == right_node_labels[right_node.index()]
+            },
+            &mut |left_edge, right_edge| {
+                left_edge_labels[left_edge.index()] == right_edge_labels[right_edge.index()]
+            },
+            embedding,
+        );
+        let modular_product = left.enumerate_common_subgraphs(
+            &right,
+            &mut |left_node, right_node| {
+                left_node_labels[left_node.index()] == right_node_labels[right_node.index()]
+            },
+            &mut |left_edge, right_edge| {
+                left_edge_labels[left_edge.index()] == right_edge_labels[right_edge.index()]
+            },
+            embedding,
+            CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
+        );
+
+        assert_eq!(direct, modular_product);
     }
 }

@@ -135,6 +135,14 @@ the eager cost of returning all of them.
   edge-presence distinction. Its sorted output must equal the existing public
   modular-product result for the same fixtures. **Additive (green).**
   `[dep: S0b]`
+  **Implemented (green).** The test-gated `direct_backtracking` kernel
+  precomputes node candidates, walks left nodes in id order, tracks used right
+  nodes with a bitset, applies the embedding and edge-predicate checks while
+  extending, and constructs sorted complete `GraphCorrespondence` output at
+  the leaves. Both kernels use the same node-to-edge correspondence
+  materializer, preventing their edge results from drifting. Exact and
+  cross-algorithm tests cover all listed cases. The `cfg(test)` gate keeps the
+  kernel private and non-dead until S1b adds its production dispatch.
 - **S1b — coordinated public selector**
   (`umol-graph-core/src/algorithms/common_subgraph/enumeration.rs`,
   `umol-py/src/algorithm.rs`, `umol-py/tests/test_algorithm.py`,

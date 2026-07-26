@@ -7,7 +7,8 @@ Relates: [118](118-validator-architecture-2026-06-20.md),
 [131](131-reaction-application-design-2026-06-24.md),
 [136](136-dpo-primitives-2026-07-04.md),
 [148](148-validated-transactions-operations-2026-07-13.md),
-[158](158-ring-model-and-enumeration-2026-07-22.md)
+[158](158-ring-model-and-enumeration-2026-07-22.md),
+[162](162-common-subgraph-enumeration-alternatives-2026-07-25.md)
 
 ## Scope
 
@@ -152,6 +153,30 @@ no additional umol-ast subdivision type is required for ring perception.
 No graph, molecule, editor, builder, parser, or transaction constructor changes
 are prerequisites for doc 158.
 
+## Common-subgraph enumeration finding
+
+The complete and maximal modular-product common-subgraph algorithms currently
+have simple-graph semantics even though they accept a permissive `Graph`:
+
+- compatibility is computed only between two distinct mapped node pairs, so a
+  self-loop does not participate in node-pair compatibility;
+- result edges are likewise derived only between distinct mapped node pairs,
+  so self-loops are not represented in the resulting `GraphCorrespondence`;
+- `Graph::find_edge` selects one edge for an endpoint pair, so parallel edges
+  are not distinguished during compatibility checks or result construction.
+
+The `DirectBacktracking` work in doc 162 deliberately shares this edge
+materialization and reproduces the same behavior. This preserves
+cross-algorithm equality but does not establish multigraph semantics for either
+implementation.
+
+The common-subgraph API therefore needs a later policy decision: either define
+these as simple-graph algorithms with an explicit precondition, or design
+edge-identity-aware multigraph semantics. Until then, non-simple inputs are not
+silently meaningful merely because `Graph` can store them. This also belongs
+in the reaction-policy audit because `ReactionAst::compose` consumes complete
+common-subgraph enumeration.
+
 ## Reaction semantics remain open
 
 The general generated-output rule is clear, but its application to reactions
@@ -185,6 +210,7 @@ validating, or result-generating. The audit should cover:
 - `MoleculeEditor`, `MoleculeBuilder`, and transactions;
 - reaction application and pushouts;
 - resolvers and other transformations;
+- complete and maximal common-subgraph enumeration;
 - induced-subgraph, extraction, compaction, and related graph operations.
 
 For each result-generating operation, the audit should verify that structural
