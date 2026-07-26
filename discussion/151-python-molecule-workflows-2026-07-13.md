@@ -2203,7 +2203,20 @@ reorganization are specified in [doc 156](156-ast-comparison-and-property-suite-
   SMILES, molecule/reaction fingerprints, configured substructure search, and
   configured reaction application—with exact values, typed errors, source
   non-mutation, detached results, and cross-operation composition. **Additive
-  (green).** `[dep: S10a]`
+  (green).** **Implemented (green).** A dedicated installed workflow suite now
+  covers: fully configured cyclopropenium ingestion with explicit syntax,
+  chemistry, ring, aromaticity, and stereo-resolution choices; molecular
+  hashed, counted, pattern, and structural fingerprints combined with a
+  reaction-difference fingerprint through the same molecular config;
+  incidence/Ullmann substructure search of a DSL pattern against a resolved
+  host; and incidence/Ullmann application of a `CO → C` rule to resolved
+  ethanol. Assertions pin exact resolved fields, identifiers, counts, bits,
+  structural byte keys, correspondences, and products. Each workflow includes
+  its applicable typed failure and verifies source preservation and detached
+  Python snapshots. The application product is fed directly into molecular
+  fingerprinting to exercise cross-operation composition. All four workflow
+  tests pass, and the complete installed suite passes 987 tests under Python
+  3.13. `[dep: S10a]`
 - **S10c — workspace gate** (workspace): run focused resolver/fingerprint/
   substructure/reaction suites, complete crate and installed-Python suites,
   workspace clippy over all targets with warnings denied, rustfmt, benchmark
