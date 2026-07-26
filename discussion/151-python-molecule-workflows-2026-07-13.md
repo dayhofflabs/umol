@@ -2088,6 +2088,15 @@ default rather than introducing a one-field composition config.
   the renamed config construction, exact selector propagation, and the
   existing unchanged-input error contract. **Breaking config rename with
   caller migration (red→green).** `[dep: S9g, S9h]`
+  **Implemented (green).** `KekulizationModel` is now
+  `KekulizationConfig`, and `Kekulizer` stores and accepts it as `config`.
+  Module exports, documentation, unit tests, integration tests, and all
+  workspace callers use the operation-level name. Exact construction tests pin
+  both local selector values and the Edmonds default. The existing configured
+  dispatch remains unchanged: Edmonds calls general maximum matching, while
+  Hopcroft--Karp calls the fallible bipartite operation and returns
+  `NonBipartiteMatching(system)` without fallback. Matching-error tests retain
+  the exact error and unchanged-input assertions.
 - **S9u — algorithm-transparency gate** (workspace): search every non-test Rust
   call to a graph-core selector-bearing operation. Require each selection to
   originate in a low-level method argument, a stored operational-config field,

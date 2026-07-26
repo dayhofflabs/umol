@@ -6,7 +6,7 @@
 //! removed from the system's bonds and from the system's atoms; the system
 //! entry itself is removed at the end.
 //!
-//! The matching algorithm is configurable via [`KekulizationModel`]; the
+//! The matching algorithm is configurable via [`KekulizationConfig`]; the
 //! atom processing order — which controls determinism — is fixed at
 //! construction time and is the caller's responsibility (e.g., from a
 //! nauty/Traces canonical labeling).
@@ -220,17 +220,17 @@ pub enum MaximumMatchingAlgorithm {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct KekulizationModel {
+pub struct KekulizationConfig {
     pub algorithm: MaximumMatchingAlgorithm,
 }
 
-impl KekulizationModel {
+impl KekulizationConfig {
     pub fn new(algorithm: MaximumMatchingAlgorithm) -> Self {
         Self { algorithm }
     }
 }
 
-impl Default for KekulizationModel {
+impl Default for KekulizationConfig {
     fn default() -> Self {
         Self::new(MaximumMatchingAlgorithm::Edmonds)
     }
@@ -238,13 +238,13 @@ impl Default for KekulizationModel {
 
 #[derive(Clone, Debug)]
 pub struct Kekulizer {
-    model: KekulizationModel,
+    config: KekulizationConfig,
     node_order: Vec<AtomId>,
 }
 
 impl Kekulizer {
-    pub fn new(model: KekulizationModel, node_order: Vec<AtomId>) -> Self {
-        Self { model, node_order }
+    pub fn new(config: KekulizationConfig, node_order: Vec<AtomId>) -> Self {
+        Self { config, node_order }
     }
 }
 
@@ -451,7 +451,7 @@ impl Kekulizer {
                     )
                 })
                 .collect();
-            let matching = match self.model.algorithm {
+            let matching = match self.config.algorithm {
                 MaximumMatchingAlgorithm::Edmonds => extracted
                     .graph()
                     .general_maximum_matching(&sub_order, GeneralMaximumMatchingAlgorithm::Edmonds),
@@ -670,6 +670,36 @@ mod tests {
     }
 
     #[rstest]
+    #[case::edmonds(
+        MaximumMatchingAlgorithm::Edmonds,
+        KekulizationConfig {
+            algorithm: MaximumMatchingAlgorithm::Edmonds,
+        }
+    )]
+    #[case::hopcroft_karp(
+        MaximumMatchingAlgorithm::HopcroftKarp,
+        KekulizationConfig {
+            algorithm: MaximumMatchingAlgorithm::HopcroftKarp,
+        }
+    )]
+    fn test_kekulization_config_new(
+        #[case] algorithm: MaximumMatchingAlgorithm,
+        #[case] expected: KekulizationConfig,
+    ) {
+        assert_eq!(KekulizationConfig::new(algorithm), expected);
+    }
+
+    #[rstest]
+    fn test_kekulization_config_default() {
+        assert_eq!(
+            KekulizationConfig::default(),
+            KekulizationConfig {
+                algorithm: MaximumMatchingAlgorithm::Edmonds,
+            }
+        );
+    }
+
+    #[rstest]
     #[case::benzene(
         mol_dsl_ground!(r#"{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]}"#),
         (0..6).map(AtomId).collect(),
@@ -691,7 +721,7 @@ mod tests {
         #[case] expected: MoleculeAst,
     ) {
         let mut ast = input;
-        Kekulizer::new(KekulizationModel::default(), node_order)
+        Kekulizer::new(KekulizationConfig::default(), node_order)
             .transform_into(&mut ast)
             .unwrap();
         assert_eq!(ast, expected);
@@ -701,7 +731,7 @@ mod tests {
     #[case::kekule_benzene( mol_dsl_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#))]
     fn test_kekulizer_transform_into_identity(#[case] input: MoleculeAst) {
         let mut ast = input.clone();
-        Kekulizer::new(KekulizationModel::default(), (0..6).map(AtomId).collect())
+        Kekulizer::new(KekulizationConfig::default(), (0..6).map(AtomId).collect())
             .transform_into(&mut ast)
             .unwrap();
         assert_eq!(ast, input);
@@ -738,7 +768,7 @@ mod tests {
     ) {
         let mut ast = input;
         let result =
-            Kekulizer::new(KekulizationModel::default(), node_order).transform_into(&mut ast);
+            Kekulizer::new(KekulizationConfig::default(), node_order).transform_into(&mut ast);
         assert_eq!(result, Err(expected));
     }
 
@@ -760,7 +790,7 @@ mod tests {
     ) {
         let mut actual = input.clone();
         let result = Kekulizer::new(
-            KekulizationModel::new(MaximumMatchingAlgorithm::HopcroftKarp),
+            KekulizationConfig::new(MaximumMatchingAlgorithm::HopcroftKarp),
             node_order,
         )
         .transform_into(&mut actual);
@@ -871,7 +901,7 @@ mod tests {
         #[case] node_order: Vec<AtomId>,
         #[case] expected: Vec<SystemPlan>,
     ) {
-        let kekulizer = Kekulizer::new(KekulizationModel::default(), node_order);
+        let kekulizer = Kekulizer::new(KekulizationConfig::default(), node_order);
         assert_eq!(kekulizer.plan_systems(&input), Ok(expected.clone()));
         assert_eq!(kekulizer.plan_systems(&input), Ok(expected));
     }
@@ -896,7 +926,7 @@ mod tests {
         #[case] node_order: Vec<AtomId>,
         #[case] expected: KekulizerError,
     ) {
-        let kekulizer = Kekulizer::new(KekulizationModel::default(), node_order);
+        let kekulizer = Kekulizer::new(KekulizationConfig::default(), node_order);
         assert_eq!(kekulizer.plan_systems(&input), Err(expected));
     }
 }

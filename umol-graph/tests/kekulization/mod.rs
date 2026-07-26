@@ -8,7 +8,7 @@ use umol_ast::ast::{
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_chem::element::Element;
 use umol_graph::ops::invariant::{ValenceInvariants, ValenceMismatch};
-use umol_graph::ops::transform::{KekulizationModel, Kekulizer, KekulizerError, Transformer};
+use umol_graph::ops::transform::{KekulizationConfig, Kekulizer, KekulizerError, Transformer};
 use umol_utils::solution::Solution;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -329,7 +329,7 @@ fn test_kekulization_fixture_output(
     let expected_dsl: MoleculeDsl = expected_source.parse().unwrap();
     let expected = expected_dsl.into_ast(&MoleculeDefaults::ground());
     let node_order: Vec<AtomId> = input.atoms().iter().map(|atom| atom.id).collect();
-    let kekulizer = Kekulizer::new(KekulizationModel::default(), node_order);
+    let kekulizer = Kekulizer::new(KekulizationConfig::default(), node_order);
 
     let first = kekulizer.transform(&input).unwrap();
     let second = kekulizer.transform(&input).unwrap();
@@ -457,7 +457,7 @@ fn test_kekulization_fixture_output_error(
     let node_order: Vec<AtomId> = input.atoms().ids().collect();
 
     let result =
-        Kekulizer::new(KekulizationModel::default(), node_order).transform_into(&mut input);
+        Kekulizer::new(KekulizationConfig::default(), node_order).transform_into(&mut input);
 
     assert_eq!(result, Err(expected));
     assert_eq!(input, original);
