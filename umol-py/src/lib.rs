@@ -102,6 +102,7 @@ use crate::{
         StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoTerm, Stereogenicity,
         TetrahedralStereo, TetrahedralStereoAst, Topicity,
     },
+    substructure::SubstructureSearchConfig,
     value::{MemOp, RelOp, ValueAst, ValuePredicate, ValueTerm},
 };
 
@@ -155,6 +156,8 @@ mod smiles;
 mod spin;
 #[cfg(feature = "graph")]
 mod stereo;
+#[cfg(feature = "graph")]
+mod substructure;
 #[cfg(feature = "graph")]
 mod value;
 
@@ -252,6 +255,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ReactionCombinedFingerprint>()?;
         module.add_class::<Correspondence>()?;
         module.add_class::<MoleculeCorrespondence>()?;
+        module.add_class::<SubstructureSearchConfig>()?;
         module.add_class::<SubPatternAnchor>()?;
         module.add_class::<RelationalConstraint>()?;
         module.add_class::<MoleculeConstraint>()?;

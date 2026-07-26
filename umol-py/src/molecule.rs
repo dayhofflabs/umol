@@ -19,6 +19,7 @@ use crate::aromatic::{AromaticSystemAst, AromaticSystemViews};
 use crate::atom::{AtomAst, AtomViews};
 use crate::bond::{BondAst, BondViews};
 use crate::constraint::molecule::{Constraint, ConstraintsArg, ConstraintsView};
+use crate::correspondence::MoleculeCorrespondence;
 use crate::dative::{DativeBondAst, DativeBondViews};
 use crate::defaults::MoleculeDefaults;
 use crate::error::{fingerprint_error, parse_error, smiles_input_error};
@@ -34,6 +35,7 @@ use crate::noncovalent::{NoncovalentBondAst, NoncovalentBondViews};
 use crate::resolve::ResolveConfig;
 use crate::smiles::SmilesIoConfig;
 use crate::stereo::{StereoAtomAst, StereoAtomViews, StereoBondAst, StereoBondViews, StereoLigand};
+use crate::substructure::SubstructureSearchConfig;
 
 /// A molecule: the owned graph-AST root.
 #[pyclass(eq)]
@@ -193,6 +195,22 @@ impl MoleculeAst {
         ingest_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
             .map(Self::from_inner)
             .map_err(smiles_input_error)
+    }
+
+    /// Find occurrences of this pattern in `host`.
+    #[pyo3(signature = (host, *, config=None))]
+    fn substructure_matches(
+        &self,
+        host: &Self,
+        config: Option<SubstructureSearchConfig>,
+    ) -> Vec<MoleculeCorrespondence> {
+        let (match_algorithm, subgraph_isomorphism_algorithm) =
+            config.unwrap_or_default().to_rust();
+        self.0
+            .substructure_matches(&host.0, match_algorithm, subgraph_isomorphism_algorithm)
+            .into_iter()
+            .map(MoleculeCorrespondence::from_rust)
+            .collect()
     }
 
     /// Generate an unfolded binary hashed fingerprint.
@@ -358,9 +376,11 @@ mod tests {
         AtomAst as AstAtomAst, BondAst as AstBondAst, Constraint as AstConstraint,
         Constraints as AstConstraints, DativeBondAst as AstDativeBondAst,
         DativeBondId as AstDativeBondId, MoleculeConstraint as AstMoleculeConstraint,
+        MoleculeCorrespondence as AstMoleculeCorrespondence,
         MulticenterBondAst as AstMulticenterBondAst, MulticenterBondId as AstMulticenterBondId,
         NoncovalentBondAst as AstNoncovalentBondAst, NoncovalentBondId as AstNoncovalentBondId,
         NoncovalentBondKind as AstNoncovalentBondKind,
+        SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm,
     };
     use umol_ast::mol_dsl;
     use umol_chem::element::Element as ChemElement;
@@ -369,6 +389,10 @@ mod tests {
         SubstructureFeaturizer as GraphSubstructureFeaturizer,
     };
     use umol_graph::ingest::ingest_smiles;
+    use umol_graph_core::{
+        Correspondence as GraphCoreCorrespondence, NodeId,
+        SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
+    };
 
     use super::*;
     use crate::atom::AtomAst as PyAtomAst;
@@ -585,6 +609,90 @@ mod tests {
                 expected_message
             );
         });
+    }
+
+    #[rstest]
+    fn test_molecule_ast_substructure_matches() {
+        let pattern = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#));
+        let host = MoleculeAst::from_inner(mol_dsl!(
+            r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
+        ));
+        let pattern_before = pattern.inner().clone();
+        let host_before = host.inner().clone();
+        let expected = vec![
+            MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::induce(
+                pattern.inner(),
+                host.inner(),
+                GraphCoreCorrespondence::new(
+                    vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
+                    2,
+                    3,
+                ),
+            )),
+            MoleculeCorrespondence::from_rust(AstMoleculeCorrespondence::induce(
+                pattern.inner(),
+                host.inner(),
+                GraphCoreCorrespondence::new(
+                    vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(0))],
+                    2,
+                    3,
+                ),
+            )),
+        ];
+
+        assert_eq!(pattern.substructure_matches(&host, None), expected);
+        assert_eq!(pattern.inner(), &pattern_before);
+        assert_eq!(host.inner(), &host_before);
+    }
+
+    #[rstest]
+    fn test_molecule_ast_substructure_matches_overlay() {
+        let pattern = MoleculeAst::from_inner(mol_dsl!(
+            r#"{
+                :atoms ["N" "B"]
+                :bonds []
+                :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]
+            }"#
+        ));
+        let host = MoleculeAst::from_inner(mol_dsl!(
+            r#"{
+                :atoms ["N" "B" "C"]
+                :bonds []
+                :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]
+            }"#
+        ));
+        let expected = vec![MoleculeCorrespondence::from_rust(
+            AstMoleculeCorrespondence::induce(
+                pattern.inner(),
+                host.inner(),
+                GraphCoreCorrespondence::new(
+                    vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))],
+                    2,
+                    3,
+                ),
+            ),
+        )];
+        let config = SubstructureSearchConfig::from_rust(
+            AstSubstructureMatchAlgorithm::Incidence,
+            GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
+        );
+
+        assert_eq!(pattern.substructure_matches(&host, Some(config)), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_ast_substructure_matches_empty() {
+        let pattern = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["O"] :bonds []}"#));
+        let host = MoleculeAst::from_inner(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
+        let config = SubstructureSearchConfig::from_rust(
+            AstSubstructureMatchAlgorithm::GraphAndOverlays,
+            GraphCoreSubgraphIsomorphismAlgorithm::Vf2,
+        );
+
+        assert_eq!(
+            pattern.substructure_matches(&host, Some(config)),
+            Vec::new()
+        );
     }
 
     #[rstest]

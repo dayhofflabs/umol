@@ -236,12 +236,14 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
             PatternFingerprintConfig(
                 width=2048,
                 match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(),
-                subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2(),
+                subgraph_isomorphism_algorithm=(
+                    SubgraphIsomorphismAlgorithm.Vf2Rdkit()
+                ),
             ),
             "PatternFingerprintConfig(width=2048, "
             "match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), "
             "subgraph_isomorphism_algorithm="
-            "SubgraphIsomorphismAlgorithm.Vf2())",
+            "SubgraphIsomorphismAlgorithm.Vf2Rdkit())",
         ),
         (
             PatternFingerprintConfig(

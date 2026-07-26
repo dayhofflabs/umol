@@ -251,7 +251,7 @@ impl PatternFingerprintConfig {
         *,
         width=2048,
         match_algorithm=SubstructureMatchAlgorithm::GraphAndOverlays(),
-        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm::Vf2(),
+        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
     ))]
     fn new(
         width: isize,
@@ -754,11 +754,11 @@ mod tests {
     #[case::default(
         2048,
         SubstructureMatchAlgorithm::GraphAndOverlays(),
-        SubgraphIsomorphismAlgorithm::Vf2(),
+        SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
         PatternFingerprintConfig {
             width: 2048,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
         }
     )]
     #[case::custom(
@@ -792,7 +792,7 @@ mod tests {
             let error = PatternFingerprintConfig::new(
                 width,
                 SubstructureMatchAlgorithm::GraphAndOverlays(),
-                SubgraphIsomorphismAlgorithm::Vf2(),
+                SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
             )
             .unwrap_err();
 
@@ -810,7 +810,7 @@ mod tests {
         PatternFingerprintConfig {
             width: 2048,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
         }
     )]
     #[case::custom(
@@ -837,7 +837,7 @@ mod tests {
         PatternFingerprintConfig {
             width: 2048,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
         },
         GraphPatternFingerprinter::new()
     )]
@@ -865,12 +865,12 @@ mod tests {
         PatternFingerprintConfig {
             width: 2048,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
         },
         2048,
         SubstructureMatchAlgorithm::GraphAndOverlays(),
-        SubgraphIsomorphismAlgorithm::Vf2(),
-        "PatternFingerprintConfig(width=2048, match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2())"
+        SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        "PatternFingerprintConfig(width=2048, match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2Rdkit())"
     )]
     #[case::custom(
         PatternFingerprintConfig {

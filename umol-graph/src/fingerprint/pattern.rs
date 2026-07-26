@@ -50,7 +50,7 @@ impl PatternFingerprinter {
         Self {
             width: PATTERN_FP_WIDTH,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
         }
     }
 
@@ -181,7 +181,7 @@ mod tests {
             PatternFingerprinter {
                 width: PATTERN_FP_WIDTH,
                 match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-                subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+                subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
             }
         );
     }

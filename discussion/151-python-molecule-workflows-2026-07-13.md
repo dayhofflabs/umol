@@ -1675,7 +1675,7 @@ workflow configuration and are passed explicitly at the lower boundary.
 | `umol-ast/src/ast/symmetry.rs` | `AutomorphismAlgorithm::Nauty` for initial symmetry, fixpoint reruns, and site stabilizers | Add the selection to `GraphSymmetryConfig` and retain it in `GraphSymmetry`; `StereoValidateConfig`, not `StereoModel`, owns the higher-level default. |
 | `umol-ast/src/ast/compose.rs` | `CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking` behind `ReactionAst::compose` | Remove `CompositionScope`; complete composition enumerates every admissible overlap. Require the enumeration algorithm at the Rust boundary and expose it as a visible Python keyword with a high-level default. |
 | `umol-ast/src/ast/reaction.rs`, `umol-py/src/reaction.rs` | `SubstructureMatchAlgorithm::GraphAndOverlays` while only the graph-core subisomorphism backend is supplied | Rust application accepts both the structure strategy and subisomorphism backend explicitly. Python owns both in `ReactionApplicationConfig`. |
-| `umol-graph/src/fingerprint/pattern.rs` | `GraphAndOverlays` plus `SubgraphIsomorphismAlgorithm::Vf2` | `PatternFingerprinter` / `PatternFingerprintConfig` own both selectors. |
+| `umol-graph/src/fingerprint/pattern.rs` | `GraphAndOverlays` plus `SubgraphIsomorphismAlgorithm::Vf2Rdkit` | `PatternFingerprinter` / `PatternFingerprintConfig` own both selectors. |
 | `umol-graph/src/fingerprint/substructure.rs` | `SubgraphEnumerationAlgorithm::Esu` plus `AutomorphismAlgorithm::Nauty` | `SubstructureFeaturizer` / `StructuralFingerprintConfig` own the enumeration and canonicalization selectors. |
 | `umol-graph/src/ops/aromaticity/clar.rs` | `MaximumIndependentSetAlgorithm::BranchAndBound` | `AromaticityConfig`, separate from `AromaticityModel`, owns the independent-set selector. |
 | `umol-graph/src/ops/aromaticity/hmo.rs` | `ConnectedComponentsAlgorithm::Bfs` | `AromaticityConfig`, separate from `AromaticityModel`, owns the connected-components selector. |
@@ -2042,17 +2042,18 @@ default rather than introducing a one-field composition config.
   (`umol-graph/src/fingerprint/pattern.rs`,
   `umol-py/src/fingerprint/config.rs`): add `match_algorithm` and
   `subgraph_isomorphism_algorithm` to `PatternFingerprinter` and
-  `PatternFingerprintConfig`, with `GraphAndOverlays` and VF2 as inspectable
+  `PatternFingerprintConfig`, with `GraphAndOverlays` and Vf2Rdkit as inspectable
   high-level defaults. Thread both values to template matching; update
   constructors, conversions, equality, repr, and all callers. Cross-algorithm
   tests require identical fingerprints for representative ground molecules.
   **Breaking config-shape migration (red→green).** `[dep: S9j]`
   **Implemented (green).** `PatternFingerprinter` now stores public
   `match_algorithm` and `subgraph_isomorphism_algorithm` fields alongside
-  `width`; `new()` preserves the prior `GraphAndOverlays`/VF2 behavior as
-  explicit inspectable defaults, and template matching passes both selectors
-  through. Python `PatternFingerprintConfig` exposes the same keyword-only
-  fields, defaults, getters, equality, repr, and bidirectional Rust conversion.
+  `width`; `new()` uses the common high-level
+  `GraphAndOverlays`/Vf2Rdkit defaults, and template matching passes both
+  selectors through. Python `PatternFingerprintConfig` exposes the same
+  keyword-only fields, defaults, getters, equality, repr, and bidirectional Rust
+  conversion.
   All Rust and Python callers were migrated. Exact cross-algorithm tests retain
   the pinned ethanol and benzene fingerprints across incidence matching and all
   six subgraph-isomorphism algorithms; the Python molecule operation also
@@ -2127,6 +2128,42 @@ default rather than introducing a one-field composition config.
   Clippy and rustfmt passed. Criterion smoke runs passed for graph-core
   algorithms and the graph fingerprint and substructure benchmarks.
   `[dep: S9f, S9i, S9l, S9m, S9p, S9q, S9r, S9s, S9t]`
+- **S9v — Python substructure search**
+  (`umol-py/src/{substructure,molecule,lib}.rs`,
+  `python/umol/__init__.py`, `tests/test_substructure.py`): bind the immutable,
+  keyword-only `SubstructureSearchConfig` with
+  `match_algorithm=SubstructureMatchAlgorithm::GraphAndOverlays()` and
+  `subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm::Vf2Rdkit()` as
+  inspectable high-level defaults. Implement
+  `pattern.substructure_matches(host, *, config=None)` on `MoleculeAst`, passing
+  both selected algorithms explicitly to the existing Rust
+  `MoleculeAst::substructure_matches`. Return an ordinary Python
+  `list[MoleculeCorrespondence]`: the Rust operation already eagerly enumerates
+  its correspondence set, and there is no second expensive result-construction
+  stage whose deferral would justify a one-shot iterator. Each detached
+  correspondence maps pattern entities to host entities. Keep this config
+  distinct from `ReactionApplicationConfig` even though their initial fields
+  coincide; they configure different public operations and may evolve
+  independently. Register and export only the config—the correspondence type is
+  already public—and do not add a result wrapper, iterator class, error type, or
+  eagerly implemented boolean convenience. Rust/PyO3 and installed tests pin
+  keyword-only construction, defaults and explicit selector conversion,
+  pattern-to-host direction, exact atom/bond/overlay correspondences, empty
+  results, both matching strategies, representative subgraph-isomorphism
+  backends, detached ownership, and unchanged pattern/host inputs. **Additive
+  Python operation (green).** **Implemented (green).**
+  `SubstructureSearchConfig` is an immutable public Python value with the
+  specified GraphAndOverlays/Vf2Rdkit defaults, explicit conversion in both
+  directions, detached getters, equality, and constructor-shaped repr.
+  `MoleculeAst.substructure_matches` preserves the Rust pattern-receiver
+  direction, passes both selectors explicitly, and returns the eagerly collected
+  owned `MoleculeCorrespondence` values as a Python list. Exact Rust and
+  installed-Python tests cover the default graph path, incidence matching of a
+  dative overlay, an alternate backend, empty results, keyword-only calls,
+  complete per-family correspondence maps, detached reads, and source
+  non-mutation. The complete Rust binding suite passed 1,419 tests and the
+  installed Python 3.13 suite passed 959 tests; the no-default-feature build,
+  strict workspace Clippy, rustfmt, and diff checks are green. `[dep: S9u]`
 
 S9 preserves the existing direct `apply` happy path while correcting error
 classification, separates chemistry models from operational configuration, and
@@ -2143,20 +2180,22 @@ reorganization are specified in [doc 156](156-ast-comparison-and-property-suite-
 - **S10a — public surface audit**
   (`umol-py/src/lib.rs`, `python/umol/__init__.py`): audit native registration,
   package imports, `__all__`, constructor visibility, signatures, reprs, and
-  exception mapping for every S4–S9 value and method. Installed tests compare the
-  exported-name set and verify that no lint, raw-seed, combinator, iterator,
-  NumPy, DRFP, or BRIDGIT implementation leaked into this round. **Additive
-  (green).** `[dep: S7d, S8b, S9u]`
+  exception mapping for every S4–S9 value and method, including substructure
+  search. Installed tests compare the exported-name set and verify that no lint,
+  raw-seed, combinator, iterator, NumPy, DRFP, or BRIDGIT implementation leaked
+  into this round. **Additive (green).** `[dep: S7d, S8b, S9v]`
 - **S10b — complete installed workflows**
-  (`umol-py/tests`): run three coherent public workflows—configured resolved
-  SMILES, molecule/reaction fingerprints, and configured reaction application—
-  with exact values, typed errors, source non-mutation, detached results, and
-  cross-operation composition. **Additive (green).** `[dep: S10a]`
+  (`umol-py/tests`): run four coherent public workflows—configured resolved
+  SMILES, molecule/reaction fingerprints, configured substructure search, and
+  configured reaction application—with exact values, typed errors, source
+  non-mutation, detached results, and cross-operation composition. **Additive
+  (green).** `[dep: S10a]`
 - **S10c — workspace gate** (workspace): run focused resolver/fingerprint/
-  reaction suites, complete crate and installed-Python suites, workspace clippy
-  over all targets with warnings denied, rustfmt, benchmark compile/run, and
-  `git diff --check`; record final test counts and benchmark environment without
-  imposing unstable performance thresholds. **Additive (green).** `[dep: S10b]`
+  substructure/reaction suites, complete crate and installed-Python suites,
+  workspace clippy over all targets with warnings denied, rustfmt, benchmark
+  compile/run, and `git diff --check`; record final test counts and benchmark
+  environment without imposing unstable performance thresholds. **Additive
+  (green).** `[dep: S10b]`
 
 At S10 the required round is complete.
 
@@ -2183,8 +2222,8 @@ The application path is:
 `S9g → S9j` and `S9k → {S9l, S9m}`. The consumer branches are
 `{S9j, S9k} → S9m`, `{S9m, S9n} → S9o → S9p`,
 `S9j → {S9q, S9r, S9s}`, and `{S9g, S9h} → S9t`; all join the application
-path at `S9u`. The three
-deliverable paths join at
+path at `S9u`, followed by the Python substructure-search binding at `S9v`. The
+three deliverable paths join at
 `S10a → S10b → S10c`.
 
 The following are explicitly deferrable and are not on the required critical

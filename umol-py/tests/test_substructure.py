@@ -1,0 +1,168 @@
+import pytest
+import umol
+
+from umol import (
+    MoleculeAst,
+    SubgraphIsomorphismAlgorithm,
+    SubstructureMatchAlgorithm,
+    SubstructureSearchConfig,
+)
+
+
+def test_substructure_search_config_export():
+    assert "SubstructureSearchConfig" in umol.__all__
+    assert umol.SubstructureSearchConfig is SubstructureSearchConfig
+
+
+def test_substructure_search_config_default():
+    config = SubstructureSearchConfig()
+
+    assert config == SubstructureSearchConfig.default()
+    assert config.match_algorithm == SubstructureMatchAlgorithm.GraphAndOverlays()
+    assert (
+        config.subgraph_isomorphism_algorithm
+        == SubgraphIsomorphismAlgorithm.Vf2Rdkit()
+    )
+    assert repr(config) == (
+        "SubstructureSearchConfig("
+        "match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), "
+        "subgraph_isomorphism_algorithm="
+        "SubgraphIsomorphismAlgorithm.Vf2Rdkit())"
+    )
+
+
+@pytest.mark.parametrize(
+    ("match_algorithm", "subgraph_isomorphism_algorithm"),
+    [
+        pytest.param(
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubgraphIsomorphismAlgorithm.Vf2(),
+            id="graph-vf2",
+        ),
+        pytest.param(
+            SubstructureMatchAlgorithm.Incidence(),
+            SubgraphIsomorphismAlgorithm.Ullmann(),
+            id="incidence-ullmann",
+        ),
+    ],
+)
+def test_substructure_search_config_value(
+    match_algorithm,
+    subgraph_isomorphism_algorithm,
+):
+    config = SubstructureSearchConfig(
+        match_algorithm=match_algorithm,
+        subgraph_isomorphism_algorithm=subgraph_isomorphism_algorithm,
+    )
+
+    assert config.match_algorithm == match_algorithm
+    assert config.subgraph_isomorphism_algorithm == subgraph_isomorphism_algorithm
+    assert repr(config) == (
+        "SubstructureSearchConfig("
+        f"match_algorithm={match_algorithm!r}, "
+        f"subgraph_isomorphism_algorithm={subgraph_isomorphism_algorithm!r})"
+    )
+
+
+def test_substructure_search_config_keyword_error():
+    with pytest.raises(
+        TypeError,
+        match=(
+            "^SubstructureSearchConfig.__new__\\(\\) takes 0 positional arguments "
+            "but 2 were given$"
+        ),
+    ):
+        SubstructureSearchConfig(
+            SubstructureMatchAlgorithm.Incidence(),
+            SubgraphIsomorphismAlgorithm.Ullmann(),
+        )
+
+
+def test_molecule_ast_substructure_matches():
+    pattern_source = '{:atoms ["C" "C"] :bonds [[0 1 "1"]]}'
+    host_source = '{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}'
+    pattern = MoleculeAst.parse(pattern_source)
+    host = MoleculeAst.parse(host_source)
+    pattern_before = MoleculeAst.parse(pattern_source)
+    host_before = MoleculeAst.parse(host_source)
+
+    matches = pattern.substructure_matches(host)
+
+    assert isinstance(matches, list)
+    assert [match.atoms.mates for match in matches] == [
+        [(0, 0), (1, 1)],
+        [(0, 1), (1, 0)],
+    ]
+    assert [match.bonds.mates for match in matches] == [[(0, 0)], [(0, 0)]]
+    assert [match.dative_bonds.mates for match in matches] == [[], []]
+    assert [match.aromatic_systems.mates for match in matches] == [[], []]
+    assert [match.multicenter_bonds.mates for match in matches] == [[], []]
+    assert [match.noncovalent_bonds.mates for match in matches] == [[], []]
+    assert [match.stereo_atoms.mates for match in matches] == [[], []]
+    assert [match.stereo_bonds.mates for match in matches] == [[], []]
+    assert pattern == pattern_before
+    assert host == host_before
+
+    matches[0].atoms.mates.append((1, 2))
+    assert matches[0].atoms.mates == [(0, 0), (1, 1)]
+
+
+def test_molecule_ast_substructure_matches_overlay():
+    pattern = MoleculeAst.parse(
+        (
+            '{:atoms ["N" "B"] :bonds [] '
+            ':dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}'
+        ),
+    )
+    host = MoleculeAst.parse(
+        (
+            '{:atoms ["N" "B" "C"] :bonds [] '
+            ':dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}'
+        ),
+    )
+
+    matches = pattern.substructure_matches(
+        host,
+        config=SubstructureSearchConfig(
+            match_algorithm=SubstructureMatchAlgorithm.Incidence(),
+            subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
+        ),
+    )
+
+    assert len(matches) == 1
+    match = matches[0]
+    assert match.atoms.mates == [(0, 0), (1, 1)]
+    assert match.bonds.mates == []
+    assert match.dative_bonds.mates == [(0, 0)]
+    assert match.aromatic_systems.mates == []
+    assert match.multicenter_bonds.mates == []
+    assert match.noncovalent_bonds.mates == []
+    assert match.stereo_atoms.mates == []
+    assert match.stereo_bonds.mates == []
+
+
+def test_molecule_ast_substructure_matches_empty():
+    pattern = MoleculeAst.parse('{:atoms ["O"] :bonds []}')
+    host = MoleculeAst.parse('{:atoms ["C"] :bonds []}')
+
+    assert pattern.substructure_matches(
+        host,
+        config=SubstructureSearchConfig(
+            match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(),
+            subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2(),
+        ),
+    ) == []
+
+
+def test_molecule_ast_substructure_matches_keyword_error():
+    pattern = MoleculeAst.parse('{:atoms ["C"] :bonds []}')
+    host = MoleculeAst.parse('{:atoms ["C"] :bonds []}')
+
+    with pytest.raises(
+        TypeError,
+        match=(
+            "^MoleculeAst.substructure_matches\\(\\) takes 1 positional arguments "
+            "but 2 were given$"
+        ),
+    ):
+        pattern.substructure_matches(host, SubstructureSearchConfig())
