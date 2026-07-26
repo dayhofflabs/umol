@@ -1,6 +1,6 @@
 # Ring model and cycle enumeration
 
-Status: **Active**
+Status: **Completed**
 Date: 2026-07-22
 Relates: [057](057-sssr-needed-2026-03-11.md),
 [058](058-aromaticity-perception-2026-03-11.md),
@@ -1699,7 +1699,7 @@ references.
 
 ### S7 — Legacy removal and release gates
 
-- **S7a — retire the intermediate cycle API**
+- **S7a — retire the intermediate cycle API** **Done**
   (`umol-graph-core/src/algorithms/cycles.rs`, `src/lib.rs`,
   `benches/algorithms.rs`, remaining workspace callers): remove
   `CycleEnumerationAlgorithm`, `Graph::enumerate_cycles`, the eager
@@ -1713,7 +1713,39 @@ references.
   corpus and S2g paper fixtures. **Breaking legacy removal with all callers
   already migrated (red→green).**
   `[dep: S1c, S2f, S2g, S3c, S4a, S4b, S5d, S5e, S6a, S6b, S6c]`
-- **S7b — documentation and status closure**
+
+  The intermediate enum, collecting method, eager shortest-path expansion,
+  export, workspace callers, and benchmark adapter are removed. Simple and
+  relevant cycles now use only their family-specific visitor and collector
+  operations. The checked-in S1c and S2f comparisons and the S2g literature
+  fixtures pass against the final implementation without invoking an external
+  generator or comparison library.
+
+  The complete graph-core target passes with `proptest`, including 582 unit
+  tests and 95 property, captured-result, and literature tests. The 32-case AST
+  property target passes all 213 properties. The Rust workspace inventory,
+  1,413 native Python-binding tests, 949 installed Python tests under CPython
+  3.13, and workspace clippy over all targets with warnings denied are green.
+
+  A ten-sample post-removal Criterion run on 2026-07-25 measured:
+
+  | Case | S0a eager interval | S7a final interval |
+  | --- | ---: | ---: |
+  | `path_6` | 364.44–381.17 ns | 534.22–538.85 ns |
+  | `hexagon` | 11.588–12.187 µs | 5.6061–5.6763 µs |
+  | `naphthalene` | 43.781–46.264 µs | 10.561–10.591 µs |
+  | `prismane` | 22.273–23.045 µs | 11.065–11.085 µs |
+  | `cubane` | 71.967–73.580 µs | 18.955–18.997 µs |
+  | `adamantane` | 70.648–73.472 µs | 24.525–24.559 µs |
+  | `dodecahedron` | 330.88–346.97 µs | 86.490–87.041 µs |
+  | `icosahedron` | 321.57–331.68 µs | 118.66–119.78 µs |
+  | `c60` | 3.6622–3.7993 ms | 559.94–563.05 µs |
+  | `c70` | 27.838–29.832 ms | 984.98–986.73 µs |
+
+  Every cyclic corpus case remains faster than S0a, by approximately twofold
+  to twenty-ninefold. The acyclic path remains sub-microsecond but is about
+  44% slower than the eager baseline.
+- **S7b — documentation and status closure** **Done**
   (`discussion/151-python-molecule-workflows-2026-07-13.md`, this document,
   `discussion/000-status.md`): update the superseded S9k/S9l/S9m descriptions
   to the family-specific AST design; record the measured benchmark comparison,
@@ -1721,6 +1753,15 @@ references.
   revisions, validation commands, and deliberate semantic exclusions; and mark
   doc 158 complete only after every S7a gate passes. **Documentation closure
   after a green workspace (green).** `[dep: S7a]`
+
+  Doc 151 S9j--S9m now describe the final family-specific selectors,
+  `RingModel`/`RingConfig` AST API, and nested fingerprint and aromaticity
+  configuration instead of the superseded family-blind intermediate design.
+  This document records the exhaustive corpus bounds and nauty provenance in
+  S0f; NetworkX/igraph versions and regeneration command in S1c; CDK and
+  RingDecomposerLib revisions, commands, comparison scope, and exclusions in
+  S2f; literature fixtures in S2g; and the final S0a/S7a benchmark comparison
+  and release gates in S7a. The status index marks the document complete.
 
 ### Critical path and deferral
 

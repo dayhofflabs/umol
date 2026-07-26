@@ -1671,7 +1671,7 @@ workflow configuration and are passed explicitly at the lower boundary.
 
 | Location | Hidden selection | Required correction |
 | --- | --- | --- |
-| `umol-ast/src/ast/ring.rs` | `CycleEnumerationAlgorithm::Vismara` behind both `rings` and `rings_with` | Put the cycle-enumeration selection in the low-level ring operation; higher-level ring-consuming workflows own any default. This also affects ECFP, Morgan, and aromaticity transitively. |
+| `umol-ast/src/ast/ring.rs` | `CycleEnumerationAlgorithm::Vismara` behind both `rings` and `rings_with` | Separate ring-set semantics into `RingModel` and the family-specific simple/relevant selectors into `RingConfig`; higher-level ring-consuming workflows own inspectable defaults. This also affects ECFP, Morgan, and aromaticity transitively. |
 | `umol-ast/src/ast/symmetry.rs` | `AutomorphismAlgorithm::Nauty` for initial symmetry, fixpoint reruns, and site stabilizers | Add the selection to `GraphSymmetryConfig` and retain it in `GraphSymmetry`; `StereoValidateConfig`, not `StereoModel`, owns the higher-level default. |
 | `umol-ast/src/ast/compose.rs` | `CommonSubgraphEnumerationAlgorithm::Backtracking` behind `ReactionAst::compose` | Remove `CompositionScope`; complete composition enumerates every admissible overlap. Require the enumeration algorithm at the Rust boundary and expose it as a visible Python keyword with a high-level default. |
 | `umol-ast/src/ast/reaction.rs`, `umol-py/src/reaction.rs` | `SubstructureMatchAlgorithm::GraphAndOverlays` while only the graph-core subisomorphism backend is supplied | Rust application accepts both the structure strategy and subisomorphism backend explicitly. Python owns both in `ReactionApplicationConfig`. |
@@ -1860,47 +1860,63 @@ default rather than introducing a one-field composition config.
   (`umol-py/src/algorithm.rs`, `lib.rs`, `python/umol/__init__.py`): establish
   the singular binding module for algorithm selectors, moving the existing
   `SubstructureMatchAlgorithm` and `SubgraphIsomorphismAlgorithm` wrappers there
-  without changing their public names. Bind `CycleEnumerationAlgorithm`,
-  `AutomorphismAlgorithm`, `CommonSubgraphEnumerationAlgorithm`,
-  `SubgraphEnumerationAlgorithm`, `MaximumIndependentSetAlgorithm`, and
-  `ConnectedComponentsAlgorithm` with inherent `from_rust`/`to_rust`, equality,
-  and repr. Table tests cover every variant and installed tests cover all
-  exports. **Additive public values plus internal module move (green).**
-  **Implemented (green).** The singular binding module owns all eight selector
-  wrappers; reaction application imports the moved selectors from it without a
-  Python API change, and the six new graph-core selectors are registered and
+  without changing their public names. Bind
+  `SimpleCycleEnumerationAlgorithm`,
+  `RelevantCycleEnumerationAlgorithm`, `AutomorphismAlgorithm`,
+  `CommonSubgraphEnumerationAlgorithm`, `SubgraphEnumerationAlgorithm`,
+  `MaximumIndependentSetAlgorithm`, and `ConnectedComponentsAlgorithm` with
+  inherent `from_rust`/`to_rust`, equality, and repr. Table tests cover every
+  variant and installed tests cover all exports. **Additive public values plus
+  internal module move, followed by the family-specific cycle-selector
+  migration (green).** **Implemented (green).** The singular binding module
+  owns all nine selector wrappers; reaction application imports the moved
+  selectors from it without a Python API change. The family-blind cycle
+  selector was replaced by the separate Read--Tarjan simple-cycle and Vismara
+  relevant-cycle values specified by doc 158; all selectors are registered and
   exported with variant-complete Rust and installed-Python coverage.
   `[dep: S9b, S9g]`
-- **S9k — explicit ring-enumeration selection**
-  (`umol-ast/src/ast/{molecule,ring}.rs`, all Rust callers): require a
-  `CycleEnumerationAlgorithm` in both `MoleculeAst::rings` and `rings_with`,
-  thread it into `RingSet::enumerate`, and migrate every workspace caller in the
-  same subitem. Callers initially pass their former Vismara choice explicitly;
-  S9l and S9m then move workflow-owned choices into their configs. Unit and
-  property tests cover both public ring entry points and every migrated
-  ring-consuming operation. **Breaking signatures and caller migration
-  (red→green).** **Implemented (green).** Both public molecule ring entry
-  points and the internal `RingSet` handoff now require the graph-core cycle
-  selector. Every workspace caller passes its former Vismara choice explicitly;
-  molecule unit and property tests cover the direct and configured entry points,
-  and the existing fingerprint, aromaticity, and matching suites cover the
-  migrated consumers. `[dep: —]`
-
-The family/model/config problem exposed by S9k is specified in
-[doc 158](158-ring-model-and-enumeration-2026-07-22.md). S9l and S9m must use
-that settled design rather than preserve the intermediate family-blind cycle
-selector field described below.
+- **S9k — family-specific ring model and configuration**
+  (`umol-ast/src/ast/{molecule,ring,view/graph,view/ring}.rs`, all Rust
+  callers): replace the intermediate family-blind selector with
+  `RingModel { kind, max_ring_size }` and
+  `RingConfig { simple_cycle_algorithm, relevant_cycle_algorithm }`.
+  Rename `RingFamily` to `RingSetKind`; make `MoleculeAst::rings(model, config)`
+  the sole general entry point; and make `RingSet::enumerate` dispatch to the
+  family-specific graph-core collector. Remove `rings_with`, `atom_filter`,
+  induced-cycle filtering, and endpoint-based bond reconstruction. Migrate all
+  Rust callers together. Exact and property tests cover both ring-set kinds,
+  bounds, selector routing, edge identity, reindexing, and the fixed Relevant
+  projection used by existing ring constraints. **Breaking AST ring API and
+  complete caller migration (red→green).** **Implemented (green).**
+  `RingModel` and `RingConfig` are public AST values with defaults of
+  Relevant/22 and Read--Tarjan/Vismara. `RingSet::enumerate` takes the graph,
+  model, and config in that order, consumes edge-aware graph-core `Cycle`
+  values, and excludes one- and two-atom cycles only at the chemical-ring
+  boundary. The general molecule surface now consists only of
+  `MoleculeAst::rings`; every workspace caller supplies `RingModel` and
+  `RingConfig` explicitly. Existing ring-membership constraints retain a
+  documented fixed Relevant projection. The complete design and validation
+  record is in [doc 158](158-ring-model-and-enumeration-2026-07-22.md).
+  `[dep: —]`
 
 - **S9l — ring selection in hashed-fingerprint configs**
   (`umol-graph/src/fingerprint/{ecfp,morgan,featurizer}.rs`,
-  `umol-py/src/fingerprint/config.rs`): add
-  `cycle_enumeration_algorithm` to `EcfpFeaturizer` and `MorganFeaturizer`;
-  their high-level constructors retain Vismara as an inspectable workflow
-  default. Extend the ECFP and Morgan variants of `HashedFingerprintConfig`,
-  conversions, equality, and repr. Migrate reaction fingerprint configs through
-  their nested molecule config. Rust and installed Python tests compare default
-  and explicit selectors and preserve existing fingerprint identities.
-  **Breaking config-shape migration (red→green).** `[dep: S9j, S9k]`
+  `umol-py/src/{fingerprint/config,ring}.rs`): add `ring_config` to
+  `EcfpFeaturizer` and `MorganFeaturizer`; their high-level constructors retain
+  the AST default as an inspectable workflow choice. Bind the keyword-only
+  `RingConfig` and extend the ECFP and Morgan variants of
+  `HashedFingerprintConfig`, conversions, equality, and repr. Migrate reaction
+  fingerprint configs through their nested molecule config. Rust and installed
+  Python tests compare default and explicit selectors and preserve exact
+  fingerprint identities. **Breaking config-shape migration (red→green).**
+  **Implemented (green).** ECFP and Morgan now store and pass the complete
+  `RingConfig` into the fixed Relevant/22 fingerprint `RingModel`; WL remains
+  unchanged. Python exports a frozen keyword-only `RingConfig` with independent
+  simple- and relevant-cycle selectors. Both hashed configurations lower the
+  nested value to their concrete Rust featurizers, and reaction difference and
+  disjoint-union fingerprints preserve it through their nested molecular
+  configuration. Exact molecular and reaction payload tests pass under default
+  and explicit configuration. `[dep: S9j, S9k]`
 - **S9m — aromaticity model/config separation**
   (`umol-graph/src/ops/aromaticity.rs`, `aromaticity/{clar,hmo}.rs`,
   `resolve/aromaticity.rs`, `transform/aromatizer.rs`,
@@ -1919,6 +1935,17 @@ selector field described below.
   default-result parity and selector propagation through resolution,
   aromatization, validation, HMO, and Clar.
   **Additive config followed by breaking resolve-config migration (red→green).**
+  **Implemented (green).** Rust `AromaticityConfig` owns `RingConfig`, the
+  connected-components selector, and the maximum-independent-set selector,
+  with Read--Tarjan/Vismara, BFS, and branch-and-bound defaults.
+  `AromaticityPerception` constructs the fixed Relevant ring model at the
+  chemistry model's size bound and threads each operational selector to the
+  corresponding low-level operation. Resolver configuration nests it as
+  `perception`; the aromatizer and validator have default and configured
+  constructors. Python exports the frozen keyword-only configuration and nests
+  it in `AromaticityResolveConfig`. Exact Hückel-rule, HMO, Clar, resolver,
+  aromatizer, validator, conformance, and installed ingestion tests preserve
+  established structures while covering explicit selector propagation.
   `[dep: S9g, S9j, S9k]`
 - **S9n — configurable graph-symmetry backend**
   (`umol-ast/src/ast/symmetry.rs`, all callers): add

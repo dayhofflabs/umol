@@ -159,6 +159,6 @@
 | [155-smiles-io-and-resolve-configuration-2026-07-19.md](155-smiles-io-and-resolve-configuration-2026-07-19.md)   | Completed     | 2026-07-19   |
 | [156-ast-comparison-and-property-suite-2026-07-20.md](156-ast-comparison-and-property-suite-2026-07-20.md)       | Completed     | 2026-07-21   |
 | [157-umol-perm-fallibility-and-arguments-2026-07-20.md](157-umol-perm-fallibility-and-arguments-2026-07-20.md)   | Completed     | 2026-07-21   |
-| [158-ring-model-and-enumeration-2026-07-22.md](158-ring-model-and-enumeration-2026-07-22.md)                     | Active        | 2026-07-22   |
+| [158-ring-model-and-enumeration-2026-07-22.md](158-ring-model-and-enumeration-2026-07-22.md)                     | Completed     | 2026-07-25   |
 | [159-simple-graph-policy-2026-07-23.md](159-simple-graph-policy-2026-07-23.md)                                   | Active        | 2026-07-23   |
 | [160-relevant-cycle-count-and-enumeration-spikes-2026-07-25.md](160-relevant-cycle-count-and-enumeration-spikes-2026-07-25.md) | Active        | 2026-07-25   |
