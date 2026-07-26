@@ -2034,6 +2034,8 @@ default rather than introducing a one-field composition config.
   property suite now exercises only the complete operation and retains
   well-formedness, soundness, completeness, DPO validity, determinism,
   canonical-delta, and overlay-uniqueness properties.
+  The selector rename and direct-enumeration alternative are tracked in
+  [doc 162](162-common-subgraph-enumeration-alternatives-2026-07-25.md).
   `[dep: S9j]`
 - **S9r — pattern-fingerprint matching configuration**
   (`umol-graph/src/fingerprint/pattern.rs`,

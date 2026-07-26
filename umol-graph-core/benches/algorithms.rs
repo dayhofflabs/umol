@@ -1,3 +1,4 @@
+use std::hint::black_box;
 use std::iter;
 use std::ops::ControlFlow;
 
@@ -7,10 +8,11 @@ use umol_graph_core::SubgraphIsomorphismAlgorithm::{
 };
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
-    ConnectedComponentsAlgorithm, EdgeId, GeneralMaximumMatchingAlgorithm, Graph,
-    MaximumIndependentSetAlgorithm, MinimumCycleBasisAlgorithm, NodeId,
-    RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
-    SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+    CommonSubgraphEnumerationAlgorithm, ConnectedComponentsAlgorithm, EdgeId, EmbeddingKind,
+    GeneralMaximumMatchingAlgorithm, Graph, MaximumIndependentSetAlgorithm,
+    MinimumCycleBasisAlgorithm, NodeId, RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm,
+    SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, UniqueRingFamilyAlgorithm,
+    ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 mod matching_graphs {
@@ -763,6 +765,134 @@ fn subgraph_isomorphism(c: &mut Criterion) {
     group.finish();
 }
 
+struct CommonSubgraphCase {
+    name: &'static str,
+    expected_output_count: usize,
+    left: Graph,
+    right: Graph,
+    left_node_labels: Vec<u8>,
+    right_node_labels: Vec<u8>,
+    left_edge_labels: Vec<u8>,
+    right_edge_labels: Vec<u8>,
+    embedding: EmbeddingKind,
+}
+
+fn common_subgraph_enumeration(c: &mut Criterion) {
+    let triangle = cycle(3);
+    let path_4 = path(4);
+    let cycle_4 = cycle(4);
+    let path_5 = path(5);
+    let cycle_6 = cycle(6);
+    let benzene = cycle(6);
+    let naphthalene = naphthalene();
+
+    let cases = [
+        CommonSubgraphCase {
+            name: "dense_compatible/triangle_triangle/induced",
+            expected_output_count: 34,
+            left_node_labels: vec![0; triangle.node_count()],
+            right_node_labels: vec![0; triangle.node_count()],
+            left_edge_labels: vec![0; triangle.edge_count()],
+            right_edge_labels: vec![0; triangle.edge_count()],
+            left: triangle.clone(),
+            right: triangle,
+            embedding: EmbeddingKind::Induced,
+        },
+        CommonSubgraphCase {
+            name: "structural/path_4_cycle_4/induced",
+            expected_output_count: 69,
+            left_node_labels: vec![0; path_4.node_count()],
+            right_node_labels: vec![0; cycle_4.node_count()],
+            left_edge_labels: vec![0; path_4.edge_count()],
+            right_edge_labels: vec![0; cycle_4.edge_count()],
+            left: path_4.clone(),
+            right: cycle_4.clone(),
+            embedding: EmbeddingKind::Induced,
+        },
+        CommonSubgraphCase {
+            name: "structural/path_4_cycle_4/monomorphism",
+            expected_output_count: 209,
+            left_node_labels: vec![0; path_4.node_count()],
+            right_node_labels: vec![0; cycle_4.node_count()],
+            left_edge_labels: vec![0; path_4.edge_count()],
+            right_edge_labels: vec![0; cycle_4.edge_count()],
+            left: path_4,
+            right: cycle_4,
+            embedding: EmbeddingKind::Monomorphism,
+        },
+        CommonSubgraphCase {
+            name: "label_selective/path_5_cycle_6/induced",
+            expected_output_count: 109,
+            left_node_labels: vec![0, 1, 0, 1, 0],
+            right_node_labels: vec![0, 1, 0, 1, 0, 1],
+            left_edge_labels: edge_labels(&path_5),
+            right_edge_labels: edge_labels(&cycle_6),
+            left: path_5,
+            right: cycle_6,
+            embedding: EmbeddingKind::Induced,
+        },
+        CommonSubgraphCase {
+            name: "molecular/benzene_naphthalene/induced",
+            expected_output_count: 1_957,
+            left_node_labels: benzene
+                .node_ids()
+                .map(|node| benzene.degree(node) as u8)
+                .collect(),
+            right_node_labels: naphthalene
+                .node_ids()
+                .map(|node| naphthalene.degree(node) as u8)
+                .collect(),
+            left_edge_labels: vec![0; benzene.edge_count()],
+            right_edge_labels: vec![0; naphthalene.edge_count()],
+            left: benzene,
+            right: naphthalene,
+            embedding: EmbeddingKind::Induced,
+        },
+    ];
+
+    let mut group = c.benchmark_group("common_subgraph_enumeration");
+    for case in cases {
+        let mut node_match = |left: NodeId, right: NodeId| {
+            case.left_node_labels[left.index()] == case.right_node_labels[right.index()]
+        };
+        let mut edge_match = |left: EdgeId, right: EdgeId| {
+            case.left_edge_labels[left.index()] == case.right_edge_labels[right.index()]
+        };
+        let baseline = case.left.enumerate_common_subgraphs(
+            &case.right,
+            &mut node_match,
+            &mut edge_match,
+            case.embedding,
+            CommonSubgraphEnumerationAlgorithm::Backtracking,
+        );
+        assert_eq!(
+            baseline.len(),
+            case.expected_output_count,
+            "unexpected output count for {}",
+            case.name,
+        );
+
+        group.bench_function(case.name, |b| {
+            b.iter(|| {
+                let mut node_match = |left: NodeId, right: NodeId| {
+                    case.left_node_labels[left.index()] == case.right_node_labels[right.index()]
+                };
+                let mut edge_match = |left: EdgeId, right: EdgeId| {
+                    case.left_edge_labels[left.index()] == case.right_edge_labels[right.index()]
+                };
+                black_box(case.left.enumerate_common_subgraphs(
+                    &case.right,
+                    &mut node_match,
+                    &mut edge_match,
+                    case.embedding,
+                    CommonSubgraphEnumerationAlgorithm::Backtracking,
+                ))
+            });
+        });
+    }
+    group.finish();
+}
+
 mod matching {
     use std::env;
     use std::hint::black_box;
@@ -1118,6 +1248,7 @@ criterion_group!(
     automorphism_stabilizer,
     canonical_key,
     subgraph_isomorphism,
+    common_subgraph_enumeration,
     matching::matching_enumeration,
 );
 criterion_main!(benches);
