@@ -2022,6 +2022,18 @@ default rather than introducing a one-field composition config.
   tests cover explicit selector propagation, complete composite sets, and
   stereo-only and deletion-only reactions that the former reaction-center
   filter could empty. **Breaking Rust and Python API migration (red→green).**
+  **Implemented (green).** Rust `ReactionAst::compose` now requires
+  `CommonSubgraphEnumerationAlgorithm` and always enumerates the complete
+  admissible overlap set, including the empty overlap. `CompositionScope` and
+  all reaction-center filtering machinery were removed from `umol-ast` and
+  `umol-py`. Python exposes the same selector directly as the keyword-only
+  `algorithm`, with `Backtracking()` as the visible default. Rust and Python
+  callers and exports were migrated; exact tests pin disjoint, overlapping,
+  stereo-only, and deletion-only composition, keyword-only/default selector
+  behavior, source independence, and complete-set ordering. The composition
+  property suite now exercises only the complete operation and retains
+  well-formedness, soundness, completeness, DPO validity, determinism,
+  canonical-delta, and overlay-uniqueness properties.
   `[dep: S9j]`
 - **S9r — pattern-fingerprint matching configuration**
   (`umol-graph/src/fingerprint/pattern.rs`,

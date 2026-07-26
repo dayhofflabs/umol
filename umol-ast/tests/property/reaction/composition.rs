@@ -3,13 +3,15 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_ast::ast::SubstructureMatchAlgorithm;
-use umol_graph_core::SubgraphIsomorphismAlgorithm;
+use umol_graph_core::{CommonSubgraphEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 use umol_utils::solution::Solution;
 
 use crate::strategies::*;
 
 const MATCH_ALGORITHM: SubstructureMatchAlgorithm = SubstructureMatchAlgorithm::GraphAndOverlays;
 const SUBISO_ALGORITHM: SubgraphIsomorphismAlgorithm = SubgraphIsomorphismAlgorithm::Vf2;
+const COMPOSITION_ALGORITHM: CommonSubgraphEnumerationAlgorithm =
+    CommonSubgraphEnumerationAlgorithm::Backtracking;
 
 proptest! {
     #![proptest_config(Config {
@@ -26,7 +28,7 @@ proptest! {
         a in reaction_strategy(),
         b in reaction_strategy(),
     ) {
-        for composite in a.compose(&b, CompositionScope::Full) {
+        for composite in a.compose(&b, COMPOSITION_ALGORITHM) {
             if let Ok(span) = composite.to_reaction_span() {
                 let right = span.rhs();
                 prop_assert!(composite
@@ -49,7 +51,7 @@ proptest! {
         b in reaction_strategy(),
     ) {
         let host = a.lhs.clone();
-        let composites = a.compose(&b, CompositionScope::Full);
+        let composites = a.compose(&b, COMPOSITION_ALGORITHM);
         let composed: Vec<MoleculeAst> = composites
             .iter()
             .flat_map(|composite| {
@@ -96,7 +98,7 @@ proptest! {
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
-        for composite in a.compose(&b, CompositionScope::Full) {
+        for composite in a.compose(&b, COMPOSITION_ALGORITHM) {
             if let Ok(span) = composite.to_reaction_span() {
                 let right = span.rhs();
                 prop_assert!(composite
@@ -120,7 +122,7 @@ proptest! {
     ) {
         let host = a.lhs.clone();
         let composed: Vec<MoleculeAst> = a
-            .compose(&b, CompositionScope::Full)
+            .compose(&b, COMPOSITION_ALGORITHM)
             .iter()
             .flat_map(|composite| {
                 composite
@@ -157,7 +159,7 @@ proptest! {
         }
     }
 
-    /// P1 completeness (`Full`): every sequential product (B applied after A) is also some
+    /// P1 completeness: every sequential product (B applied after A) is also some
     /// composite's product. Together with `compose_sound_overlay` (composed ⊆ seq) this is set
     /// equality at `host = a.lhs`. Covers stereo: the reactants carry stereo overlays and the deltas
     /// stereo ops, glued and applied across ligand frames by `meet_pushout` / `apply_at`.
@@ -168,7 +170,7 @@ proptest! {
     ) {
         let host = a.lhs.clone();
         let composed: Vec<MoleculeAst> = a
-            .compose(&b, CompositionScope::Full)
+            .compose(&b, COMPOSITION_ALGORITHM)
             .iter()
             .flat_map(|composite| {
                 composite
@@ -215,7 +217,7 @@ proptest! {
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
-        for composite in a.compose(&b, CompositionScope::Full) {
+        for composite in a.compose(&b, COMPOSITION_ALGORITHM) {
             prop_assert_eq!(
                 DpoValidator
                     .validate_reaction(&composite.lhs, &composite.deltas)
@@ -225,37 +227,21 @@ proptest! {
         }
     }
 
-    /// `RcAnchored` is a sound filter: every RC-anchored composite is also a `Full` composite.
-    #[test]
-    fn test_reaction_ast_compose_rc_anchored_subset(
-        a in overlay_reaction_strategy(),
-        b in overlay_reaction_strategy(),
-    ) {
-        let full = a.compose(&b, CompositionScope::Full);
-        for composite in a.compose(&b, CompositionScope::RcAnchored) {
-            prop_assert!(full.contains(&composite));
-        }
-    }
-
-    /// P4 — determinism: `compose` returns the identical `Vec` on repeated calls, and is invariant
-    /// under pre-canonicalizing the inputs (compose canonicalizes the deltas itself).
+    /// P4 — determinism: `compose` returns the identical `Vec` on repeated calls and is invariant
+    /// under pre-canonicalizing the inputs.
     #[test]
     fn test_reaction_ast_compose_determinism(
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
         prop_assert_eq!(
-            a.compose(&b, CompositionScope::Full),
-            a.compose(&b, CompositionScope::Full)
-        );
-        prop_assert_eq!(
-            a.compose(&b, CompositionScope::RcAnchored),
-            a.compose(&b, CompositionScope::RcAnchored)
+            a.compose(&b, COMPOSITION_ALGORITHM),
+            a.compose(&b, COMPOSITION_ALGORITHM)
         );
         if let (Ok(ac), Ok(bc)) = (a.clone().canonicalize(), b.clone().canonicalize()) {
             prop_assert_eq!(
-                a.compose(&b, CompositionScope::Full),
-                ac.compose(&bc, CompositionScope::Full)
+                a.compose(&b, COMPOSITION_ALGORITHM),
+                ac.compose(&bc, COMPOSITION_ALGORITHM)
             );
         }
     }
@@ -266,7 +252,7 @@ proptest! {
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
-        for c in a.compose(&b, CompositionScope::Full) {
+        for c in a.compose(&b, COMPOSITION_ALGORITHM) {
             let canonical = c
                 .deltas
                 .clone()
@@ -283,7 +269,7 @@ proptest! {
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
-        for c in a.compose(&b, CompositionScope::Full) {
+        for c in a.compose(&b, COMPOSITION_ALGORITHM) {
             let m = &c.lhs;
 
             let mut dative: Vec<(Vec<AtomId>, AtomId)> = m

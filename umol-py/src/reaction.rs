@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use umol_ast::ast::{
-    Canonicalize, CompositionScope as AstCompositionScope, IntoAst, MoleculeAst as AstMoleculeAst,
+    Canonicalize, IntoAst, MoleculeAst as AstMoleculeAst,
     MoleculeCorrespondence as AstMoleculeCorrespondence, ReactionAst as AstReactionAst,
     ReactionDerivation as AstReactionDerivation,
     SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm,
@@ -19,7 +19,9 @@ use umol_graph_core::{
     Correspondence, NodeId, SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
 };
 
-use crate::algorithm::{SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm};
+use crate::algorithm::{
+    CommonSubgraphEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
+};
 use crate::correspondence::{
     Correspondence as PyCorrespondence, MoleculeCorrespondence as PyMoleculeCorrespondence,
 };
@@ -29,34 +31,6 @@ use crate::error::{contradiction_error, fingerprint_error, parse_error, InvalidS
 use crate::fingerprint::config::ReactionCombinedFingerprintConfig;
 use crate::fingerprint::reaction::ReactionCombinedFingerprint;
 use crate::molecule::MoleculeAst;
-
-/// Which overlaps sequential reaction composition retains.
-#[pyclass(eq, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum CompositionScope {
-    RcAnchored,
-    Full,
-}
-
-impl CompositionScope {
-    #[allow(
-        dead_code,
-        reason = "Rust-to-Python conversion API for composition scope values"
-    )]
-    pub(crate) fn from_rust(scope: AstCompositionScope) -> Self {
-        match scope {
-            AstCompositionScope::RcAnchored => Self::RcAnchored,
-            AstCompositionScope::Full => Self::Full,
-        }
-    }
-
-    pub(crate) fn to_rust(self) -> AstCompositionScope {
-        match self {
-            Self::RcAnchored => AstCompositionScope::RcAnchored,
-            Self::Full => AstCompositionScope::Full,
-        }
-    }
-}
 
 /// Algorithms used to enumerate matches for reaction application.
 #[pyclass(eq, frozen, from_py_object)]
@@ -290,18 +264,22 @@ impl ReactionAst {
     }
 
     /// Return the sequential composites with another reaction.
-    #[pyo3(signature = (other, scope=CompositionScope::RcAnchored))]
+    #[pyo3(signature = (
+        other,
+        *,
+        algorithm=CommonSubgraphEnumerationAlgorithm::Backtracking(),
+    ))]
     fn compose(
         &self,
         py: Python<'_>,
         other: &Self,
-        scope: CompositionScope,
+        algorithm: CommonSubgraphEnumerationAlgorithm,
     ) -> PyResult<Vec<Self>> {
         let first = self.to_rust(py);
         let second = other.to_rust(py);
 
         first
-            .compose(&second, scope.to_rust())
+            .compose(&second, algorithm.to_rust())
             .into_iter()
             .map(|reaction| Self::from_rust(py, reaction))
             .collect()
@@ -499,7 +477,7 @@ impl ReactionApplicationIter {
 #[cfg(test)]
 mod tests {
     use pyo3::exceptions::{PyTypeError, PyValueError};
-    use pyo3::types::PyList;
+    use pyo3::types::{PyDict, PyList};
     use rstest::{fixture, rstest};
     use umol_ast::ast::{
         AromaticSystemAst as AstAromaticSystemAst, AromaticSystemDelta as AstAromaticSystemDelta,
@@ -537,73 +515,6 @@ mod tests {
         ReactionSide, RoleTaggedHashedFeatureSet, SignedHashedFeatureSet,
     };
     use crate::ring::RingConfig;
-
-    #[rstest]
-    #[case::rc_anchored(AstCompositionScope::RcAnchored, CompositionScope::RcAnchored)]
-    #[case::full(AstCompositionScope::Full, CompositionScope::Full)]
-    fn test_composition_scope_from_rust(
-        #[case] scope: AstCompositionScope,
-        #[case] expected: CompositionScope,
-    ) {
-        assert_eq!(CompositionScope::from_rust(scope), expected);
-    }
-
-    #[rstest]
-    #[case::rc_anchored(CompositionScope::RcAnchored, AstCompositionScope::RcAnchored)]
-    #[case::full(CompositionScope::Full, AstCompositionScope::Full)]
-    fn test_composition_scope_to_rust(
-        #[case] scope: CompositionScope,
-        #[case] expected: AstCompositionScope,
-    ) {
-        assert_eq!(scope.to_rust(), expected);
-    }
-
-    #[rstest]
-    #[case::rc_anchored(
-        CompositionScope::RcAnchored,
-        CompositionScope::RcAnchored,
-        CompositionScope::Full,
-        "CompositionScope.RcAnchored"
-    )]
-    #[case::full(
-        CompositionScope::Full,
-        CompositionScope::Full,
-        CompositionScope::RcAnchored,
-        "CompositionScope.Full"
-    )]
-    fn test_composition_scope_python_value(
-        #[case] scope: CompositionScope,
-        #[case] equal: CompositionScope,
-        #[case] unequal: CompositionScope,
-        #[case] expected_repr: &str,
-    ) {
-        Python::attach(|py| {
-            let scope = Py::new(py, scope).unwrap();
-            let equal = Py::new(py, equal).unwrap();
-            let unequal = Py::new(py, unequal).unwrap();
-
-            assert!(scope.bind(py).as_any().eq(equal.bind(py).as_any()).unwrap());
-            assert!(!scope
-                .bind(py)
-                .as_any()
-                .eq(unequal.bind(py).as_any())
-                .unwrap());
-            assert_eq!(
-                scope.bind(py).as_any().hash().unwrap(),
-                equal.bind(py).as_any().hash().unwrap()
-            );
-            assert_eq!(
-                scope
-                    .bind(py)
-                    .as_any()
-                    .repr()
-                    .unwrap()
-                    .extract::<String>()
-                    .unwrap(),
-                expected_repr
-            );
-        });
-    }
 
     #[rstest]
     fn test_reaction_application_config_default() {
@@ -1532,19 +1443,21 @@ mod tests {
     #[case::no_match(
         r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
         r##"{:lhs {:atoms ["N#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
-        CompositionScope::RcAnchored,
-        Vec::new()
+        vec![
+            r##"{:lhs {:atoms ["C#c0" "N#c0"]} :deltas [{:atom {:modify [0 "#c+"]}} {:atom {:modify [1 "#c+"]}}]}"##
+        ]
     )]
     #[case::admissible(
         r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
         r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
-        CompositionScope::RcAnchored,
-        vec![r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##],
+        vec![
+            r##"{:lhs {:atoms ["C#c0" "C#c+"]} :deltas [{:atom {:modify [0 "#c+"]}} {:atom {:modify [1 "#c+2"]}}]}"##,
+            r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##
+        ],
     )]
     fn test_reaction_ast_compose(
         #[case] first: &str,
         #[case] second: &str,
-        #[case] scope: CompositionScope,
         #[case] expected: Vec<&str>,
     ) {
         Python::attach(|py| {
@@ -1556,55 +1469,17 @@ mod tests {
                 .collect();
 
             let actual: Vec<AstReactionAst> = first
-                .compose(py, &second, scope)
+                .compose(
+                    py,
+                    &second,
+                    CommonSubgraphEnumerationAlgorithm::Backtracking(),
+                )
                 .unwrap()
                 .iter()
                 .map(|reaction| reaction.to_rust(py))
                 .collect();
 
             assert_eq!(actual, expected);
-        });
-    }
-
-    #[rstest]
-    fn test_reaction_ast_compose_scope() {
-        Python::attach(|py| {
-            let first = ReactionAst::parse(
-                py,
-                r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
-                None,
-            )
-            .unwrap();
-            let second = ReactionAst::parse(
-                py,
-                r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
-                None,
-            )
-            .unwrap();
-            let fused = AstReactionAst::from_str(
-                r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
-            )
-            .unwrap();
-            let disjoint = AstReactionAst::from_str(
-                r##"{:lhs {:atoms ["C#c0" "C#c+"]} :deltas [{:atom {:modify [0 "#c+"]}} {:atom {:modify [1 "#c+2"]}}]}"##,
-            )
-            .unwrap();
-
-            let rc_anchored: Vec<AstReactionAst> = first
-                .compose(py, &second, CompositionScope::RcAnchored)
-                .unwrap()
-                .iter()
-                .map(|reaction| reaction.to_rust(py))
-                .collect();
-            let full: Vec<AstReactionAst> = first
-                .compose(py, &second, CompositionScope::Full)
-                .unwrap()
-                .iter()
-                .map(|reaction| reaction.to_rust(py))
-                .collect();
-
-            assert_eq!(rc_anchored, vec![fused.clone()]);
-            assert_eq!(full, vec![disjoint, fused]);
         });
     }
 
@@ -1631,7 +1506,10 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            let scope = Py::new(py, CompositionScope::RcAnchored).unwrap();
+            let algorithm =
+                Py::new(py, CommonSubgraphEnumerationAlgorithm::Backtracking()).unwrap();
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("algorithm", algorithm).unwrap();
 
             let omitted: Vec<Py<ReactionAst>> = first
                 .bind(py)
@@ -1641,7 +1519,7 @@ mod tests {
                 .unwrap();
             let explicit: Vec<Py<ReactionAst>> = first
                 .bind(py)
-                .call_method1("compose", (second, scope))
+                .call_method("compose", (second,), Some(&kwargs))
                 .unwrap()
                 .extract()
                 .unwrap();
@@ -1657,10 +1535,16 @@ mod tests {
             assert_eq!(omitted, explicit);
             assert_eq!(
                 omitted,
-                vec![AstReactionAst::from_str(
-                    r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
-                )
-                .unwrap()]
+                vec![
+                    AstReactionAst::from_str(
+                        r##"{:lhs {:atoms ["C#c0" "C#c+"]} :deltas [{:atom {:modify [0 "#c+"]}} {:atom {:modify [1 "#c+2"]}}]}"##,
+                    )
+                    .unwrap(),
+                    AstReactionAst::from_str(
+                        r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
+                    )
+                    .unwrap(),
+                ]
             );
         });
     }
@@ -1683,8 +1567,20 @@ mod tests {
             let first_before = first.to_rust(py);
             let second_before = second.to_rust(py);
 
-            let _self_composites = first.compose(py, &first, CompositionScope::Full).unwrap();
-            let composites = first.compose(py, &second, CompositionScope::Full).unwrap();
+            let _self_composites = first
+                .compose(
+                    py,
+                    &first,
+                    CommonSubgraphEnumerationAlgorithm::Backtracking(),
+                )
+                .unwrap();
+            let composites = first
+                .compose(
+                    py,
+                    &second,
+                    CommonSubgraphEnumerationAlgorithm::Backtracking(),
+                )
+                .unwrap();
 
             assert_eq!(first.to_rust(py), first_before);
             assert_eq!(second.to_rust(py), second_before);

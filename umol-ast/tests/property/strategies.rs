@@ -18,7 +18,7 @@ pub(crate) use umol_ast::ast::{
     AtomConstraintAst, AtomConstraintKey, AtomConstraintsAst, AtomDelta, AtomFieldChange,
     AtomHandle, AtomId, AtomUpdate, BondAst, BondConstraintAst, BondConstraintKey,
     BondConstraintsAst, BondDelta, BondFieldChange, BondHandle, BondId, BondUpdate, BooleanAst,
-    Canonicalize, CisTransStereoAst, CompositionScope, Constraint, Constraints, DativeBondAst,
+    Canonicalize, CisTransStereoAst, Constraint, Constraints, DativeBondAst,
     DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst, DativeBondDelta,
     DativeBondFieldChange, DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas,
     DpoValidator, Edit, ElectronCountsAst, ElementAst, FluxionalityAst, FromAst, IntoAst,

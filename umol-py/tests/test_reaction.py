@@ -5,7 +5,7 @@ from umol import (
     AtomAst,
     AtomDelta,
     AtomFieldChange,
-    CompositionScope,
+    CommonSubgraphEnumerationAlgorithm,
     ContradictionError,
     Correspondence,
     Delta,
@@ -23,23 +23,6 @@ from umol import (
     SubstructureMatchAlgorithm,
     ValueAst,
 )
-
-
-def test_compositionscope_value():
-    assert CompositionScope.RcAnchored == CompositionScope.RcAnchored
-    assert CompositionScope.RcAnchored != CompositionScope.Full
-    assert (
-        len(
-            {
-                CompositionScope.RcAnchored,
-                CompositionScope.RcAnchored,
-                CompositionScope.Full,
-            }
-        )
-        == 2
-    )
-    assert repr(CompositionScope.RcAnchored) == "CompositionScope.RcAnchored"
-    assert repr(CompositionScope.Full) == "CompositionScope.Full"
 
 
 def test_application_exports():
@@ -580,34 +563,55 @@ def test_reactionast_reverse():
 
 
 @pytest.mark.parametrize(
-    "first,second,scope,expected",
+    "first,second,expected",
     [
         pytest.param(
             '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}',
             '{:lhs {:atoms ["N#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}',
-            CompositionScope.RcAnchored,
-            [],
+            [
+                '{:lhs {:atoms ["C#c0" "N#c0"]} :deltas '
+                '[{:atom {:modify [0 "#c+"]}} '
+                '{:atom {:modify [1 "#c+"]}}]}'
+            ],
             id="no-match",
         ),
         pytest.param(
             '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}',
             '{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}',
-            CompositionScope.RcAnchored,
-            ['{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}'],
+            [
+                '{:lhs {:atoms ["C#c0" "C#c+"]} :deltas '
+                '[{:atom {:modify [0 "#c+"]}} '
+                '{:atom {:modify [1 "#c+2"]}}]}',
+                '{:lhs {:atoms ["C#c0"]} '
+                ':deltas [{:atom {:modify [0 "#c+2"]}}]}',
+            ],
             id="admissible",
+        ),
+        pytest.param(
+            '{:lhs {:atoms ["C"]} :deltas [{:atom {:remove 0}}]}',
+            '{:lhs {:atoms ["N#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}',
+            [
+                '{:lhs {:atoms ["N#c0" "C"]} :deltas '
+                '[{:atom {:remove 1}} '
+                '{:atom {:modify [0 "#c+"]}}]}'
+            ],
+            id="deletion-only",
         ),
     ],
 )
-def test_reactionast_compose(first, second, scope, expected):
+def test_reactionast_compose(first, second, expected):
     first = ReactionAst.parse(first)
     second = ReactionAst.parse(second)
 
-    composites = first.compose(second, scope)
+    composites = first.compose(
+        second,
+        algorithm=CommonSubgraphEnumerationAlgorithm.Backtracking(),
+    )
 
     assert composites == [ReactionAst.parse(reaction) for reaction in expected]
 
 
-def test_reactionast_compose_scope():
+def test_reactionast_compose_default():
     first = ReactionAst.parse(
         '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
     )
@@ -624,12 +628,18 @@ def test_reactionast_compose_scope():
     )
 
     omitted = first.compose(second)
-    rc_anchored = first.compose(second, CompositionScope.RcAnchored)
-    full = first.compose(second, CompositionScope.Full)
+    explicit = first.compose(
+        second,
+        algorithm=CommonSubgraphEnumerationAlgorithm.Backtracking(),
+    )
 
-    assert omitted == [fused]
-    assert rc_anchored == [fused]
-    assert full == [disjoint, fused]
+    assert omitted == [disjoint, fused]
+    assert explicit == [disjoint, fused]
+    with pytest.raises(TypeError):
+        first.compose(
+            second,
+            CommonSubgraphEnumerationAlgorithm.Backtracking(),
+        )
 
 
 def test_reactionast_compose_snapshot():
@@ -642,8 +652,8 @@ def test_reactionast_compose_snapshot():
     first_snapshot = ReactionAst(first.lhs, first.deltas)
     second_snapshot = ReactionAst(second.lhs, second.deltas)
 
-    first.compose(first, CompositionScope.Full)
-    composites = first.compose(second, CompositionScope.Full)
+    first.compose(first)
+    composites = first.compose(second)
 
     assert first == first_snapshot
     assert second == second_snapshot
@@ -999,7 +1009,7 @@ def test_reactionast_workflow():
         ":stereo-atoms [{:ligands [1 2 3 4] :site 0 :type :ccw}]}}"
     )
 
-    composites = reversed_reaction.compose(second, CompositionScope.Full)
+    composites = reversed_reaction.compose(second)
 
     assert composites == [expected_composite]
     assert reversed_reaction == expected_reverse

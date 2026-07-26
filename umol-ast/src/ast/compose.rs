@@ -3,35 +3,24 @@
 //! id space and `canonicalize`d; overlaps with no `B.apply(A.apply(H))` witness (the DPO gluing
 //! conditions) are rejected.
 
-use std::collections::{HashMap, HashSet};
-
 use umol_graph_core::{
     CommonSubgraphEnumerationAlgorithm, EdgeId, EmbeddingKind, GraphCorrespondence, NodeId,
 };
 
-use super::delta::{
-    AromaticSystemDelta, AtomDelta, BondDelta, DativeBondDelta, Delta, Deltas,
-    MulticenterBondDelta, NoncovalentBondDelta,
-};
 use super::id::{AtomId, BondId};
 use super::reaction::ReactionAst;
 use super::traits::{Canonicalize, Lattice};
 
-/// Which overlaps `compose` keeps.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CompositionScope {
-    /// Keep only overlaps touching A's reaction center (sequential composites that actually
-    /// chain A into B).
-    RcAnchored,
-    /// Keep every overlap, including the empty one (the free rule-algebra sum).
-    Full,
-}
-
 impl ReactionAst {
     /// Sequential composites of `self` (A) then `other` (B): one per admissible overlap of A's
-    /// product with B's reactant. `compose(A,B).apply(H)` equals `B.apply(A.apply(H))`.
-    pub fn compose(&self, other: &ReactionAst, scope: CompositionScope) -> Vec<ReactionAst> {
-        compose_all(self, other, scope).unwrap_or_default()
+    /// product with B's reactant, including the empty overlap.
+    /// `compose(A,B).apply(H)` equals `B.apply(A.apply(H))`.
+    pub fn compose(
+        &self,
+        other: &ReactionAst,
+        algorithm: CommonSubgraphEnumerationAlgorithm,
+    ) -> Vec<ReactionAst> {
+        compose_all(self, other, algorithm).unwrap_or_default()
     }
 }
 
@@ -62,170 +51,14 @@ fn compose_overlap(
     ))
 }
 
-fn created_atom_ids(deltas: &Deltas) -> Vec<AtomId> {
-    let mut ids: Vec<AtomId> = deltas
-        .iter()
-        .filter_map(|d| match d {
-            Delta::Atom(AtomDelta::Add { id, .. }) => Some(*id),
-            _ => None,
-        })
-        .collect();
-    ids.sort();
-    ids
-}
-
-fn created_bond_ids(deltas: &Deltas) -> Vec<BondId> {
-    let mut ids: Vec<BondId> = deltas
-        .iter()
-        .filter_map(|d| match d {
-            Delta::Bond(BondDelta::Add { id, .. }) => Some(*id),
-            _ => None,
-        })
-        .collect();
-    ids.sort();
-    ids
-}
-
 fn compose_all(
     a: &ReactionAst,
     b: &ReactionAst,
-    scope: CompositionScope,
+    algorithm: CommonSubgraphEnumerationAlgorithm,
 ) -> Option<Vec<ReactionAst>> {
-    let da = a.deltas.clone().canonicalize().ok()?;
     let span_a = a.to_reaction_span().ok()?;
     let r_a = span_a.rhs();
     let l_b = &b.lhs;
-    let n_a = a.lhs.atoms().count();
-    let m_a = a.lhs.bonds().count();
-
-    // R_A id ⇒ A id: the span's union id space is `lhs_A` in place then A-created appended, and
-    // `right()` keeps the survivors in that order, so the k-th survivor's A-id index is the
-    // A id of R_A atom/bond k.
-    let ra_atom_a_id: Vec<usize> = span_a
-        .atoms()
-        .iter()
-        .enumerate()
-        .filter(|(_, change)| change.rhs().is_some())
-        .map(|(a_id, _)| a_id)
-        .collect();
-    let mut ra_bond_a_id: Vec<usize> = Vec::new();
-    for (a_id, change) in span_a.bonds().iter().enumerate() {
-        if change.rhs().is_none() {
-            continue;
-        }
-        let [x, y] = span_a.graph().edge_endpoints(EdgeId(a_id as u32));
-        if span_a.atoms()[x.index()].rhs().is_some() && span_a.atoms()[y.index()].rhs().is_some() {
-            ra_bond_a_id.push(a_id);
-        }
-    }
-    // A-created delta id ⇒ A-id rank (the span appends them sorted by id).
-    let a_atom_rank: HashMap<AtomId, usize> = created_atom_ids(&da)
-        .into_iter()
-        .enumerate()
-        .map(|(rank, id)| (id, rank))
-        .collect();
-    let a_bond_rank: HashMap<BondId, usize> = created_bond_ids(&da)
-        .into_iter()
-        .enumerate()
-        .map(|(rank, id)| (id, rank))
-        .collect();
-
-    // Reaction center, projected onto R_A: A-created elements (all) plus `lhs_A` elements A
-    // modifies. A id of a changed element → which R_A atoms/bonds it is.
-    let mut rc_a_atom_ids: HashSet<usize> = HashSet::new();
-    let mut rc_a_bond_ids: HashSet<usize> = HashSet::new();
-    for delta in da.iter() {
-        match delta {
-            Delta::Atom(AtomDelta::ModifyField { id, .. })
-            | Delta::Atom(AtomDelta::ModifyConstraint { id, .. }) => {
-                rc_a_atom_ids.insert(id.index());
-            }
-            Delta::Atom(AtomDelta::Add { id, .. }) => {
-                rc_a_atom_ids.insert(n_a + a_atom_rank[id]);
-            }
-            Delta::Bond(BondDelta::ModifyField { id, .. })
-            | Delta::Bond(BondDelta::ModifyConstraint { id, .. }) => {
-                rc_a_bond_ids.insert(id.index());
-            }
-            Delta::Bond(BondDelta::Add { id, .. }) => {
-                rc_a_bond_ids.insert(m_a + a_bond_rank[id]);
-            }
-            _ => {}
-        }
-    }
-    // Any overlay delta touches its participant atoms, which join A's reaction center (so an
-    // overlay-only A edit anchors an overlap). `Add`/`Remove` carry their atoms; the `Modify`
-    // variants name only the overlay, so look its atoms up in `lhs_A`.
-    for delta in da.iter() {
-        let atoms: Vec<AtomId> = match delta {
-            Delta::DativeBond(
-                DativeBondDelta::Add {
-                    donors, acceptor, ..
-                }
-                | DativeBondDelta::Remove {
-                    donors, acceptor, ..
-                },
-            ) => donors.iter().copied().chain([*acceptor]).collect(),
-            Delta::DativeBond(
-                DativeBondDelta::ModifyField { id, .. }
-                | DativeBondDelta::ModifyConstraint { id, .. },
-            ) => a
-                .lhs
-                .dative_bonds()
-                .get(*id)
-                .map_or_else(Vec::new, |x| x.atom_ids().collect()),
-            Delta::AromaticSystem(
-                AromaticSystemDelta::Add { atoms, .. } | AromaticSystemDelta::Remove { atoms, .. },
-            ) => atoms.clone(),
-            Delta::AromaticSystem(
-                AromaticSystemDelta::ModifyField { id, .. }
-                | AromaticSystemDelta::ModifyConstraint { id, .. },
-            ) => a
-                .lhs
-                .aromatic_systems()
-                .get(*id)
-                .map_or_else(Vec::new, |x| x.atom_ids().collect()),
-            Delta::MulticenterBond(
-                MulticenterBondDelta::Add { atoms, .. }
-                | MulticenterBondDelta::Remove { atoms, .. },
-            ) => atoms.clone(),
-            Delta::MulticenterBond(
-                MulticenterBondDelta::ModifyField { id, .. }
-                | MulticenterBondDelta::ModifyConstraint { id, .. },
-            ) => a
-                .lhs
-                .multicenter_bonds()
-                .get(*id)
-                .map_or_else(Vec::new, |x| x.atom_ids().collect()),
-            Delta::NoncovalentBond(
-                NoncovalentBondDelta::Add { atoms, .. }
-                | NoncovalentBondDelta::Remove { atoms, .. },
-            ) => atoms.to_vec(),
-            Delta::NoncovalentBond(
-                NoncovalentBondDelta::ModifyField { id, .. }
-                | NoncovalentBondDelta::ModifyConstraint { id, .. },
-            ) => a
-                .lhs
-                .noncovalent_bonds()
-                .get(*id)
-                .map_or_else(Vec::new, |x| x.atom_ids().to_vec()),
-            _ => continue,
-        };
-        for atom in atoms {
-            let index = a_atom_rank
-                .get(&atom)
-                .map_or(atom.index(), |&rank| n_a + rank);
-            rc_a_atom_ids.insert(index);
-        }
-    }
-    let rc_ra_atoms: HashSet<AtomId> = (0..ra_atom_a_id.len() as u32)
-        .map(AtomId)
-        .filter(|k| rc_a_atom_ids.contains(&ra_atom_a_id[k.index()]))
-        .collect();
-    let rc_ra_bonds: HashSet<BondId> = (0..ra_bond_a_id.len() as u32)
-        .map(BondId)
-        .filter(|k| rc_a_bond_ids.contains(&ra_bond_a_id[k.index()]))
-        .collect();
 
     let mut node_match = |ra: NodeId, lb: NodeId| {
         r_a.atom(AtomId::from(ra))
@@ -250,28 +83,12 @@ fn compose_all(
         &mut node_match,
         &mut edge_match,
         EmbeddingKind::Monomorphism,
-        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        algorithm,
     );
     let a_inverse = a.reverse().ok()?;
 
     let mut results = Vec::new();
     for overlap in overlaps {
-        if matches!(scope, CompositionScope::RcAnchored) {
-            let overlap_ra: HashSet<AtomId> = overlap
-                .nodes()
-                .mates()
-                .iter()
-                .map(|&(ra, _)| AtomId::from(ra))
-                .collect();
-            let touches_atom = overlap_ra.iter().any(|ra| rc_ra_atoms.contains(ra));
-            let touches_bond = rc_ra_bonds.iter().any(|&rb| {
-                let [x, y] = r_a.raw_graph().edge_endpoints(EdgeId(rb.0));
-                overlap_ra.contains(&AtomId::from(x)) && overlap_ra.contains(&AtomId::from(y))
-            });
-            if !touches_atom && !touches_bond {
-                continue;
-            }
-        }
         if let Some(composite) = compose_overlap(&a_inverse, b, &overlap) {
             results.push(composite);
         }
@@ -289,8 +106,13 @@ mod tests {
     use super::super::atom::AtomAst;
     use super::super::bond::BondAst;
     use super::super::constraint::Constraints;
-    use super::super::delta::StereoAtomDelta;
-    use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange};
+    use super::super::delta::{
+        AromaticSystemDelta, AtomDelta, BondDelta, Delta, Deltas, NoncovalentBondDelta,
+        StereoAtomDelta,
+    };
+    use super::super::edit::{
+        AtomFieldChange, BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
+    };
     use super::super::id::{AromaticSystemId, NoncovalentBondId, StereoAtomId};
     use super::super::ligand::{StereoLigand, StereoLigandKind};
     use super::super::molecule::{MoleculeAst, MoleculeParts};
@@ -319,7 +141,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
             })]),
         ),
-        CompositionScope::Full,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
@@ -352,7 +174,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
         ),
-        CompositionScope::Full,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C)], bonds: vec![], ..Default::default() }),
             Deltas::from_iter([
@@ -396,11 +218,11 @@ mod tests {
                 ], ..Default::default() }),
             Deltas::new(),
         ),
-        CompositionScope::Full,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![]
     )]
     // A raises C-N 1→2 and adds a hydrogen bond across the pair (a created overlay); B raises 2→3.
-    // The RC-anchored overlap fuses the bond to 1→3 and carries the noncovalent bond at id 0.
+    // The full overlap fuses the bond to 1→3 and carries the noncovalent bond at id 0.
     #[case::overlay(
         ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
@@ -423,7 +245,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
             })]),
         ),
-        CompositionScope::RcAnchored,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([
@@ -460,7 +282,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
             })]),
         ),
-        CompositionScope::RcAnchored,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], noncovalent: vec![(
                     AtomId(0),
@@ -501,7 +323,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
             })]),
         ),
-        CompositionScope::RcAnchored,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], noncovalent: vec![(
                     AtomId(0),
@@ -549,7 +371,7 @@ mod tests {
                 },
             })]),
         ),
-        CompositionScope::RcAnchored,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], noncovalent: vec![(
                     AtomId(0),
@@ -592,7 +414,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
             })]),
         ),
-        CompositionScope::RcAnchored,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![]
     )]
     // A carries an aromatic system (a positional family) it never touches; the composite carries it
@@ -612,7 +434,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(2), new: ValueAst::Lit(3) },
             })]),
         ),
-        CompositionScope::RcAnchored,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::from_electrons(vec![1, 2]))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
@@ -621,9 +443,9 @@ mod tests {
             })]),
         )]
     )]
-    // A's only edit modifies its own hydrogen bond (no atom/bond delta); B raises the order. The
-    // overlay modify extends A's reaction center (via the lhs lookup), so the overlap is RC-anchored.
-    #[case::rc_modify(
+    // A modifies its hydrogen bond and B raises the covalent order. The composite carries both
+    // changes across the shared atoms.
+    #[case::overlay_modify(
         ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
@@ -641,7 +463,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
         ),
-        CompositionScope::RcAnchored,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
@@ -659,9 +481,9 @@ mod tests {
             ]),
         )]
     )]
-    // A's only edit removes its own hydrogen bond (no atom/bond delta). The overlay remove (which
-    // carries its atoms) anchors the overlap; the composite carries the bond and re-anchors the remove.
-    #[case::rc_remove(
+    // A removes its hydrogen bond and B raises the covalent order. The composite carries the
+    // hydrogen bond in its lhs and removes it.
+    #[case::overlay_remove(
         ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
@@ -677,7 +499,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
         ),
-        CompositionScope::RcAnchored,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
@@ -693,9 +515,9 @@ mod tests {
             ]),
         )]
     )]
-    // A's only edit *creates* a hydrogen bond (no atom/bond delta). The overlay add extends A's
-    // reaction center too, so the overlap is RC-anchored; the composite creates the bond at id 0.
-    #[case::rc_add(
+    // A creates a hydrogen bond and B raises the covalent order. The composite creates the
+    // hydrogen bond at id 0.
+    #[case::overlay_add(
         ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Add {
@@ -711,7 +533,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
         ),
-        CompositionScope::RcAnchored,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
             Deltas::from_iter([
@@ -728,8 +550,8 @@ mod tests {
         )]
     )]
     // A's only edit removes its aromatic system (a positional kind, no atom/bond delta) — exercises
-    // the aromatic RC arm and carry. The overlay remove anchors the overlap.
-    #[case::rc_aromatic_remove(
+    // the aromatic carry path. The overlay removal participates in the overlap.
+    #[case::aromatic_remove(
         ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::from_electrons(vec![1, 2]))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::AromaticSystem(AromaticSystemDelta::Remove {
@@ -745,7 +567,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
         ),
-        CompositionScope::RcAnchored,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::from_electrons(vec![1, 2]))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
@@ -764,13 +586,13 @@ mod tests {
     fn test_reaction_ast_compose(
         #[case] a: ReactionAst,
         #[case] b: ReactionAst,
-        #[case] scope: CompositionScope,
+        #[case] algorithm: CommonSubgraphEnumerationAlgorithm,
         #[case] expected: Vec<ReactionAst>,
     ) {
         // Complete overlap enumeration returns a composite per overlap (partial and empty
         // included), so each case pins that its specific composite is *among* the results; the
         // whole set's soundness / completeness / well-formedness is the property suite's job.
-        let composites = a.compose(&b, scope);
+        let composites = a.compose(&b, algorithm);
         for e in &expected {
             assert!(
                 composites.contains(e),
@@ -780,9 +602,8 @@ mod tests {
     }
 
     // Disjoint reactants (C-C, N-N — no matchable atom) have only the empty overlap, so `compose`
-    // is exactly the disjoint sum A ⊔ B under `Full` (ids concatenated, both bond modifies
-    // relabeled: B's bond 0 → 1), and empty under `RcAnchored` (it drops the RC-missing empty
-    // overlap) — an exact-set assertion.
+    // is exactly the disjoint sum A ⊔ B (ids concatenated, both bond modifies relabeled:
+    // B's bond 0 → 1) — an exact-set assertion.
     #[rstest]
     #[case::disjoint_sum(
         ReactionAst::new(
@@ -799,7 +620,7 @@ mod tests {
                 change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
             })]),
         ),
-        CompositionScope::Full,
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
         vec![ReactionAst::new(
             MoleculeAst::from_parts(MoleculeParts { atoms: vec![
                     AtomAst::from_element(Element::C),
@@ -822,31 +643,61 @@ mod tests {
             ]),
         )]
     )]
-    #[case::disjoint_rc_anchored(
+    #[case::deletion_only(
         ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
-            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
-                id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::C)],
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                ast: AtomAst::from_element(Element::C),
             })]),
         ),
         ReactionAst::new(
-            MoleculeAst::from_parts(MoleculeParts { atoms: vec![AtomAst::from_element(Element::N), AtomAst::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondAst::from_order(1))], ..Default::default() }),
-            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
-                id: BondId(0),
-                change: BondFieldChange::Order { old: ValueAst::Lit(1), new: ValueAst::Lit(2) },
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![AtomAst::from_element(Element::N).with_charge(0)],
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: ValueAst::Lit(0),
+                    new: ValueAst::Lit(1),
+                },
             })]),
         ),
-        CompositionScope::RcAnchored,
-        vec![]
+        CommonSubgraphEnumerationAlgorithm::Backtracking,
+        vec![ReactionAst::new(
+            MoleculeAst::from_parts(MoleculeParts {
+                atoms: vec![
+                    AtomAst::from_element(Element::N).with_charge(0),
+                    AtomAst::from_element(Element::C),
+                ],
+                ..Default::default()
+            }),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Remove {
+                    id: AtomId(1),
+                    ast: AtomAst::from_element(Element::C),
+                }),
+                Delta::Atom(AtomDelta::ModifyField {
+                    id: AtomId(0),
+                    change: AtomFieldChange::Charge {
+                        old: ValueAst::Lit(0),
+                        new: ValueAst::Lit(1),
+                    },
+                }),
+            ]),
+        )]
     )]
     fn test_reaction_ast_compose_disjoint(
         #[case] a: ReactionAst,
         #[case] b: ReactionAst,
-        #[case] scope: CompositionScope,
+        #[case] algorithm: CommonSubgraphEnumerationAlgorithm,
         #[case] expected: Vec<ReactionAst>,
     ) {
-        assert_eq!(a.compose(&b, scope), expected);
+        assert_eq!(a.compose(&b, algorithm), expected);
     }
 
     #[rstest]
@@ -896,7 +747,7 @@ mod tests {
         });
 
         let composed: Vec<MoleculeAst> = a
-            .compose(&b, CompositionScope::Full)
+            .compose(&b, CommonSubgraphEnumerationAlgorithm::Backtracking)
             .iter()
             .flat_map(|c| {
                 c.apply(
@@ -1030,7 +881,7 @@ mod tests {
     #[rstest]
     #[case::same_frame([1, 2, 3, 4], 1, 0)]
     #[case::swapped_frame([2, 1, 3, 4], 0, 1)]
-    fn test_compose_overlap_stereo(
+    fn test_reaction_ast_compose_stereo(
         #[case] b_ligands: [u32; 4],
         #[case] b_old: u32,
         #[case] b_new: u32,
@@ -1117,17 +968,12 @@ mod tests {
                 },
             })]),
         );
-        let overlap = GraphCorrespondence::new(
-            Correspondence::new((0..5u32).map(|i| (NodeId(i), NodeId(i))).collect(), 5, 5),
-            Correspondence::new((0..4u32).map(|i| (EdgeId(i), EdgeId(i))).collect(), 4, 4),
-        );
-        let a_inverse = a.reverse().unwrap();
-        let composite = compose_overlap(&a_inverse, &b, &overlap).expect("admissible composite");
-
         // Invert-then-invert is a net stereo no-op; whatever ligand frame B states its center in, the
         // reframe carries B's delta into the glue frame so the composite folds to A's reactant with no
-        // deltas — a frame-invariant result. (Without the reframe, `swapped_frame`'s B delta fails to
-        // lower onto the glue and `compose_overlap` yields `None`.)
-        assert_eq!(composite, ReactionAst::new(a.lhs.clone(), Deltas::new()));
+        // deltas — a frame-invariant result.
+        let expected = ReactionAst::new(a.lhs.clone(), Deltas::new());
+        assert!(a
+            .compose(&b, CommonSubgraphEnumerationAlgorithm::Backtracking)
+            .contains(&expected));
     }
 }
