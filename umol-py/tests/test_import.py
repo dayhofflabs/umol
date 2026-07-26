@@ -207,9 +207,9 @@ def test_public_exports():
     assert frozenset(umol.__all__) == PUBLIC_EXPORTS
     assert len(umol.__all__) == len(PUBLIC_EXPORTS)
     assert native_exports == native_package_exports
-    assert {
-        name: getattr(umol, name) for name in native_package_exports
-    } == {name: getattr(native, name) for name in native_package_exports}
+    assert {name: getattr(umol, name) for name in native_package_exports} == {
+        name: getattr(native, name) for name in native_package_exports
+    }
 
 
 @pytest.mark.parametrize(
@@ -342,13 +342,11 @@ def test_public_operation_signature(operation, expected):
         (umol.ChemistryModel, "(*, valence, aromaticity, stereo)"),
         (
             umol.ReactionApplicationConfig,
-            "(*, match_algorithm=Ellipsis, "
-            "subgraph_isomorphism_algorithm=Ellipsis)",
+            "(*, match_algorithm=Ellipsis, subgraph_isomorphism_algorithm=Ellipsis)",
         ),
         (
             umol.SubstructureSearchConfig,
-            "(*, match_algorithm=Ellipsis, "
-            "subgraph_isomorphism_algorithm=Ellipsis)",
+            "(*, match_algorithm=Ellipsis, subgraph_isomorphism_algorithm=Ellipsis)",
         ),
     ],
 )

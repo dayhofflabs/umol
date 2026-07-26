@@ -1,10 +1,10 @@
 # Python molecule workflows: SMILES, fingerprints, and reactions
 
-Status: **Active design / general implementation plan**
+Status: **Completed**
 
 Date: 2026-07-13
 
-Updated: 2026-07-18
+Updated: 2026-07-25
 
 Relates: 126 (fingerprints), 131–135 (reaction AST and application), 137 and 140
 (Python binding conventions), 148 (operation boundaries and validation), 150
@@ -21,13 +21,13 @@ capabilities:
    separate result families;
 3. parse and apply reactions while retaining derivations and correspondences.
 
-The reaction value and application surface is implemented. The remaining round
-adds resolved SMILES parsing and molecule/reaction fingerprints, refines workflow
-configuration, and closes the operation-boundary error gaps shared by all three
-capabilities.
+The completed round adds resolved SMILES parsing, molecule/reaction fingerprints,
+configured reaction application and substructure search, and the shared
+operation-boundary error and algorithm-selection contracts required by those
+workflows.
 
-`ReactionSpanAst`, the span DSL, unresolved low-level SMILES parsing, general
-chemistry-model configuration, DRFP, and BRIDGIT are outside this round.
+`ReactionSpanAst`, the span DSL, unresolved low-level SMILES parsing, DRFP, and
+BRIDGIT are outside this round.
 
 ## Layering: algorithm transparency and workflow configuration
 
@@ -2222,7 +2222,25 @@ reorganization are specified in [doc 156](156-ast-comparison-and-property-suite-
   workspace clippy over all targets with warnings denied, rustfmt, benchmark
   compile/run, and `git diff --check`; record final test counts and benchmark
   environment without imposing unstable performance thresholds. **Additive
-  (green).** `[dep: S10b]`
+  (green).** **Implemented (green).** The focused installed resolver,
+  fingerprint, substructure, reaction, and composed-workflow suites pass 342
+  tests. The focused Rust resolver, fingerprint, substructure, and reaction
+  suites are green. The complete Rust workspace passes 13,446 tests across 66
+  test binaries, with one ignored test; the release-installed Python package
+  passes all 987 tests under CPython 3.13.14. Strict workspace Clippy over all
+  targets with warnings denied, rustfmt, Ruff, and the final diff check pass.
+
+  Both Criterion groups execute successfully in test mode: all 12 fingerprint,
+  reaction-fingerprint, and structural fixtures, and all 36 combinations of
+  three substructure fixtures, two molecular matching representations, and six
+  subgraph-isomorphism algorithms. The release Python harness was run on macOS
+  15.7.3 arm64 with CPython 3.13.14, rustc 1.98.0-nightly
+  (b354133fb 2026-06-03), one million baseline iterations, and 10,000
+  fingerprint iterations over five repeats. Best observed call costs were
+  23.7 ns for an empty Python call, 27.5 ns for the trivial PyO3 call, 2.426 µs
+  for WL, 1.993 µs for ECFP, 1.784 µs for Morgan, 1.853 µs for counted Morgan,
+  3.658 µs for pattern, and 9.241 µs for structural fingerprints. These values
+  are recorded without pass/fail thresholds. `[dep: S10b]`
 
 At S10 the required round is complete.
 
@@ -2254,9 +2272,8 @@ three deliverable paths join at
 `S10a → S10b → S10c`.
 
 The following are explicitly deferrable and are not on the required critical
-path: NumPy integration; `SmilesLintFlags`/`SmilesLintConfig`; Python
-`ChemistryModel`; the unresolved `umol-io` AST parser; raw/custom hash schemes;
-DRFP and BRIDGIT; generic `transact_validated`; validator combinators;
-transaction scopes, savepoints, and resolver fallback; general transformer
-atomicity; `apply_at` and diagnostic application reports. The complete S10
-workflows do not depend on any of them.
+path: NumPy integration; `SmilesLintFlags`/`SmilesLintConfig`; the unresolved
+`umol-io` AST parser; raw/custom hash schemes; DRFP and BRIDGIT; generic
+`transact_validated`; validator combinators; transaction scopes, savepoints, and
+resolver fallback; general transformer atomicity; `apply_at` and diagnostic
+application reports. The complete S10 workflows do not depend on any of them.
