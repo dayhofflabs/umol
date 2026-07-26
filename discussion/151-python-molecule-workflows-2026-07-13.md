@@ -2047,6 +2047,16 @@ default rather than introducing a one-field composition config.
   constructors, conversions, equality, repr, and all callers. Cross-algorithm
   tests require identical fingerprints for representative ground molecules.
   **Breaking config-shape migration (red→green).** `[dep: S9j]`
+  **Implemented (green).** `PatternFingerprinter` now stores public
+  `match_algorithm` and `subgraph_isomorphism_algorithm` fields alongside
+  `width`; `new()` preserves the prior `GraphAndOverlays`/VF2 behavior as
+  explicit inspectable defaults, and template matching passes both selectors
+  through. Python `PatternFingerprintConfig` exposes the same keyword-only
+  fields, defaults, getters, equality, repr, and bidirectional Rust conversion.
+  All Rust and Python callers were migrated. Exact cross-algorithm tests retain
+  the pinned ethanol and benzene fingerprints across incidence matching and all
+  six subgraph-isomorphism algorithms; the Python molecule operation also
+  exercises a non-default incidence/Ullmann configuration.
 - **S9s — structural-fingerprint algorithm configuration**
   (`umol-graph/src/fingerprint/substructure.rs`,
   `umol-py/src/fingerprint/config.rs`): add `subgraph_enumeration_algorithm` and

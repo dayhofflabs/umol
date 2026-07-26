@@ -22,6 +22,8 @@ from umol import (
     SimpleCycleEnumerationAlgorithm,
     StructuralFeatureSet,
     StructuralFingerprintConfig,
+    SubgraphIsomorphismAlgorithm,
+    SubstructureMatchAlgorithm,
     UnderdeterminedError,
     WlHashScheme,
 )
@@ -229,18 +231,45 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
     [
         (
             PatternFingerprintConfig(),
-            PatternFingerprintConfig(width=2048),
-            "PatternFingerprintConfig(width=2048)",
+            PatternFingerprintConfig(
+                width=2048,
+                match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(),
+                subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2(),
+            ),
+            "PatternFingerprintConfig(width=2048, "
+            "match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), "
+            "subgraph_isomorphism_algorithm="
+            "SubgraphIsomorphismAlgorithm.Vf2())",
         ),
         (
-            PatternFingerprintConfig(width=512),
-            PatternFingerprintConfig(width=512),
-            "PatternFingerprintConfig(width=512)",
+            PatternFingerprintConfig(
+                width=512,
+                match_algorithm=SubstructureMatchAlgorithm.Incidence(),
+                subgraph_isomorphism_algorithm=(
+                    SubgraphIsomorphismAlgorithm.Ullmann()
+                ),
+            ),
+            PatternFingerprintConfig(
+                width=512,
+                match_algorithm=SubstructureMatchAlgorithm.Incidence(),
+                subgraph_isomorphism_algorithm=(
+                    SubgraphIsomorphismAlgorithm.Ullmann()
+                ),
+            ),
+            "PatternFingerprintConfig(width=512, "
+            "match_algorithm=SubstructureMatchAlgorithm.Incidence(), "
+            "subgraph_isomorphism_algorithm="
+            "SubgraphIsomorphismAlgorithm.Ullmann())",
         ),
     ],
 )
 def test_pattern_fingerprint_config(value, expected, expected_repr):
     assert value.width == expected.width
+    assert value.match_algorithm == expected.match_algorithm
+    assert (
+        value.subgraph_isomorphism_algorithm
+        == expected.subgraph_isomorphism_algorithm
+    )
     assert value == expected
     assert repr(value) == expected_repr
 
@@ -571,7 +600,13 @@ def test_molecule_ast_counted_hashed_fingerprint(config, expected_entries):
             ],
         ),
         (
-            PatternFingerprintConfig(width=64),
+            PatternFingerprintConfig(
+                width=64,
+                match_algorithm=SubstructureMatchAlgorithm.Incidence(),
+                subgraph_isomorphism_algorithm=(
+                    SubgraphIsomorphismAlgorithm.Ullmann()
+                ),
+            ),
             64,
             [7, 9, 10, 15, 20, 25, 37, 42, 45, 46, 50, 54, 55, 62],
         ),

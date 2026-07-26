@@ -11,6 +11,7 @@ use umol_graph::fingerprint::{
 use umol_graph::hash::{EcfpHashScheme as GraphEcfpHashScheme, WlHashScheme as GraphWlHashScheme};
 use umol_graph_core::RefinementRounds as GraphCoreRefinementRounds;
 
+use crate::algorithm::{SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm};
 use crate::ring::RingConfig;
 
 /// Number of graph-refinement rounds: fixed or until stabilization.
@@ -236,18 +237,33 @@ impl HashedFingerprintConfig {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PatternFingerprintConfig {
     width: usize,
+    match_algorithm: SubstructureMatchAlgorithm,
+    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
 }
 
 #[pymethods]
 impl PatternFingerprintConfig {
     #[new]
-    #[pyo3(signature = (*, width=2048))]
-    fn new(width: isize) -> PyResult<Self> {
+    #[pyo3(signature = (
+        *,
+        width=2048,
+        match_algorithm=SubstructureMatchAlgorithm::GraphAndOverlays(),
+        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm::Vf2(),
+    ))]
+    fn new(
+        width: isize,
+        match_algorithm: SubstructureMatchAlgorithm,
+        subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
+    ) -> PyResult<Self> {
         let width = usize::try_from(width)
             .ok()
             .filter(|width| *width > 0)
             .ok_or_else(|| PyValueError::new_err("width must be positive"))?;
-        Ok(Self { width })
+        Ok(Self {
+            width,
+            match_algorithm,
+            subgraph_isomorphism_algorithm,
+        })
     }
 
     #[getter]
@@ -255,8 +271,23 @@ impl PatternFingerprintConfig {
         self.width
     }
 
+    #[getter]
+    fn match_algorithm(&self) -> SubstructureMatchAlgorithm {
+        self.match_algorithm
+    }
+
+    #[getter]
+    fn subgraph_isomorphism_algorithm(&self) -> SubgraphIsomorphismAlgorithm {
+        self.subgraph_isomorphism_algorithm
+    }
+
     fn __repr__(&self) -> String {
-        format!("PatternFingerprintConfig(width={})", self.width)
+        format!(
+            "PatternFingerprintConfig(width={}, match_algorithm={}, subgraph_isomorphism_algorithm={})",
+            self.width,
+            self.match_algorithm.repr(),
+            self.subgraph_isomorphism_algorithm.repr(),
+        )
     }
 }
 
@@ -271,11 +302,19 @@ impl PatternFingerprintConfig {
     pub(crate) fn from_rust(fingerprinter: GraphPatternFingerprinter) -> Self {
         Self {
             width: fingerprinter.width,
+            match_algorithm: SubstructureMatchAlgorithm::from_rust(fingerprinter.match_algorithm),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::from_rust(
+                fingerprinter.subgraph_isomorphism_algorithm,
+            ),
         }
     }
 
     pub(crate) fn to_rust(self) -> GraphPatternFingerprinter {
-        GraphPatternFingerprinter { width: self.width }
+        GraphPatternFingerprinter {
+            width: self.width,
+            match_algorithm: self.match_algorithm.to_rust(),
+            subgraph_isomorphism_algorithm: self.subgraph_isomorphism_algorithm.to_rust(),
+        }
     }
 }
 
@@ -369,6 +408,8 @@ impl ReactionCombinedFingerprintConfig {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use umol_ast::ast::SubstructureMatchAlgorithm as AstSubstructureMatchAlgorithm;
+    use umol_graph_core::SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm;
 
     use super::*;
     use crate::convert::into_py_variant;
@@ -663,13 +704,37 @@ mod tests {
     }
 
     #[rstest]
-    #[case::default(2048, PatternFingerprintConfig { width: 2048 })]
-    #[case::custom(512, PatternFingerprintConfig { width: 512 })]
+    #[case::default(
+        2048,
+        SubstructureMatchAlgorithm::GraphAndOverlays(),
+        SubgraphIsomorphismAlgorithm::Vf2(),
+        PatternFingerprintConfig {
+            width: 2048,
+            match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2(),
+        }
+    )]
+    #[case::custom(
+        512,
+        SubstructureMatchAlgorithm::Incidence(),
+        SubgraphIsomorphismAlgorithm::Ullmann(),
+        PatternFingerprintConfig {
+            width: 512,
+            match_algorithm: SubstructureMatchAlgorithm::Incidence(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann(),
+        }
+    )]
     fn test_pattern_fingerprint_config_new(
         #[case] width: isize,
+        #[case] match_algorithm: SubstructureMatchAlgorithm,
+        #[case] subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
         #[case] expected: PatternFingerprintConfig,
     ) {
-        assert_eq!(PatternFingerprintConfig::new(width).unwrap(), expected);
+        assert_eq!(
+            PatternFingerprintConfig::new(width, match_algorithm, subgraph_isomorphism_algorithm,)
+                .unwrap(),
+            expected
+        );
     }
 
     #[rstest]
@@ -677,7 +742,12 @@ mod tests {
     #[case::negative(-1)]
     fn test_pattern_fingerprint_config_new_error(#[case] width: isize) {
         Python::attach(|py| {
-            let error = PatternFingerprintConfig::new(width).unwrap_err();
+            let error = PatternFingerprintConfig::new(
+                width,
+                SubstructureMatchAlgorithm::GraphAndOverlays(),
+                SubgraphIsomorphismAlgorithm::Vf2(),
+            )
+            .unwrap_err();
 
             assert!(error.is_instance_of::<PyValueError>(py));
             assert_eq!(
@@ -690,11 +760,23 @@ mod tests {
     #[rstest]
     #[case::default(
         GraphPatternFingerprinter::new(),
-        PatternFingerprintConfig { width: 2048 }
+        PatternFingerprintConfig {
+            width: 2048,
+            match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2(),
+        }
     )]
     #[case::custom(
-        GraphPatternFingerprinter { width: 512 },
-        PatternFingerprintConfig { width: 512 }
+        GraphPatternFingerprinter {
+            width: 512,
+            match_algorithm: AstSubstructureMatchAlgorithm::Incidence,
+            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
+        },
+        PatternFingerprintConfig {
+            width: 512,
+            match_algorithm: SubstructureMatchAlgorithm::Incidence(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann(),
+        }
     )]
     fn test_pattern_fingerprint_config_from_rust(
         #[case] fingerprinter: GraphPatternFingerprinter,
@@ -704,29 +786,61 @@ mod tests {
     }
 
     #[rstest]
-    #[case::default(PatternFingerprintConfig { width: 2048 }, 2048)]
-    #[case::custom(PatternFingerprintConfig { width: 512 }, 512)]
+    #[case::default(
+        PatternFingerprintConfig {
+            width: 2048,
+            match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2(),
+        },
+        GraphPatternFingerprinter::new()
+    )]
+    #[case::custom(
+        PatternFingerprintConfig {
+            width: 512,
+            match_algorithm: SubstructureMatchAlgorithm::Incidence(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann(),
+        },
+        GraphPatternFingerprinter {
+            width: 512,
+            match_algorithm: AstSubstructureMatchAlgorithm::Incidence,
+            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
+        }
+    )]
     fn test_pattern_fingerprint_config_to_rust(
         #[case] config: PatternFingerprintConfig,
-        #[case] expected_width: usize,
+        #[case] expected: GraphPatternFingerprinter,
     ) {
-        assert_eq!(config.to_rust().width, expected_width);
+        assert_eq!(config.to_rust(), expected);
     }
 
     #[rstest]
     #[case::default(
-        PatternFingerprintConfig { width: 2048 },
+        PatternFingerprintConfig {
+            width: 2048,
+            match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2(),
+        },
         2048,
-        "PatternFingerprintConfig(width=2048)"
+        SubstructureMatchAlgorithm::GraphAndOverlays(),
+        SubgraphIsomorphismAlgorithm::Vf2(),
+        "PatternFingerprintConfig(width=2048, match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2())"
     )]
     #[case::custom(
-        PatternFingerprintConfig { width: 512 },
+        PatternFingerprintConfig {
+            width: 512,
+            match_algorithm: SubstructureMatchAlgorithm::Incidence(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann(),
+        },
         512,
-        "PatternFingerprintConfig(width=512)"
+        SubstructureMatchAlgorithm::Incidence(),
+        SubgraphIsomorphismAlgorithm::Ullmann(),
+        "PatternFingerprintConfig(width=512, match_algorithm=SubstructureMatchAlgorithm.Incidence(), subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann())"
     )]
     fn test_pattern_fingerprint_config_value(
         #[case] config: PatternFingerprintConfig,
         #[case] expected_width: usize,
+        #[case] expected_match_algorithm: SubstructureMatchAlgorithm,
+        #[case] expected_subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
         #[case] expected_repr: &str,
     ) {
         Python::attach(|py| {
@@ -739,6 +853,22 @@ mod tests {
             assert_eq!(
                 config.getattr("width").unwrap().extract::<usize>().unwrap(),
                 expected_width
+            );
+            assert_eq!(
+                config
+                    .getattr("match_algorithm")
+                    .unwrap()
+                    .extract::<SubstructureMatchAlgorithm>()
+                    .unwrap(),
+                expected_match_algorithm
+            );
+            assert_eq!(
+                config
+                    .getattr("subgraph_isomorphism_algorithm")
+                    .unwrap()
+                    .extract::<SubgraphIsomorphismAlgorithm>()
+                    .unwrap(),
+                expected_subgraph_isomorphism_algorithm
             );
             assert_eq!(
                 config.repr().unwrap().extract::<String>().unwrap(),

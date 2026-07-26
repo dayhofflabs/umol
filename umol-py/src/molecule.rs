@@ -825,12 +825,18 @@ mod tests {
         &[54, 173, 217, 429, 622, 759, 778, 874, 946, 967, 1022, 1033, 1061, 1236, 1289, 1295]
     )]
     #[case::default(
-        Some(PatternFingerprintConfig::from_rust(GraphPatternFingerprinter { width: 2048 })),
+        Some(PatternFingerprintConfig::from_rust(GraphPatternFingerprinter {
+            width: 2048,
+            ..GraphPatternFingerprinter::new()
+        })),
         2048,
         &[54, 173, 217, 429, 622, 759, 778, 874, 946, 967, 1022, 1033, 1061, 1236, 1289, 1295]
     )]
     #[case::custom(
-        Some(PatternFingerprintConfig::from_rust(GraphPatternFingerprinter { width: 64 })),
+        Some(PatternFingerprintConfig::from_rust(GraphPatternFingerprinter {
+            width: 64,
+            ..GraphPatternFingerprinter::new()
+        })),
         64,
         &[7, 9, 10, 15, 20, 25, 37, 42, 45, 46, 50, 54, 55, 62]
     )]
@@ -849,8 +855,14 @@ mod tests {
 
     #[rstest]
     #[case::omitted(None)]
-    #[case::default(Some(PatternFingerprintConfig::from_rust(GraphPatternFingerprinter { width: 2048 })))]
-    #[case::custom(Some(PatternFingerprintConfig::from_rust(GraphPatternFingerprinter { width: 64 })))]
+    #[case::default(Some(PatternFingerprintConfig::from_rust(GraphPatternFingerprinter {
+        width: 2048,
+        ..GraphPatternFingerprinter::new()
+    })))]
+    #[case::custom(Some(PatternFingerprintConfig::from_rust(GraphPatternFingerprinter {
+        width: 64,
+        ..GraphPatternFingerprinter::new()
+    })))]
     fn test_molecule_ast_pattern_fingerprint_error(
         #[case] config: Option<PatternFingerprintConfig>,
     ) {
