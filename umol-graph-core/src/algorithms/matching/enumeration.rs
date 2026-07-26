@@ -76,6 +76,9 @@ impl Graph {
         F: FnMut(Matching) -> ControlFlow<B>,
     {
         let node_order: Vec<NodeId> = self.node_ids().collect();
+        // Branch-and-bound needs the exact attainable cardinality. Edmonds is
+        // fixed as the general-graph bound, not exposed as a second enumeration
+        // choice.
         let initial =
             self.general_maximum_matching(&node_order, GeneralMaximumMatchingAlgorithm::Edmonds);
         if !initial.is_perfect(self.node_count()) {
@@ -93,6 +96,8 @@ impl Graph {
         F: FnMut(Matching) -> ControlFlow<B>,
     {
         let node_order: Vec<NodeId> = self.node_ids().collect();
+        // The target cardinality is part of this branch-and-bound
+        // implementation; Edmonds supplies the exact general-graph bound.
         let initial =
             self.general_maximum_matching(&node_order, GeneralMaximumMatchingAlgorithm::Edmonds);
         let target_size = initial.size();
@@ -294,6 +299,8 @@ impl<'a> MatchingSearchState<'a> {
 
         let (residual, _) = self.residual_graph();
         let node_order: Vec<NodeId> = residual.node_ids().collect();
+        // Use the same exact Edmonds bound on the residual graph to decide
+        // whether this branch can still reach the target cardinality.
         self.included_size
             + residual
                 .general_maximum_matching(&node_order, GeneralMaximumMatchingAlgorithm::Edmonds)

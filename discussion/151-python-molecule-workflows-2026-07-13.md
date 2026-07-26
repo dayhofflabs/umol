@@ -2108,6 +2108,24 @@ default rather than introducing a one-field composition config.
   formatting, benchmarks, and `git diff --check`. Record any future exception
   beside its call site rather than broadening a visibility boundary. **Additive
   gate (green).**
+  **Implemented (green).** The non-test call-site audit found that every
+  higher-layer graph-core selection is supplied by a method argument or stored
+  operational config. The named WL, EC, and Morgan fingerprint operations
+  construct only the refinement algorithm fixed by their public operation;
+  dispatch implementations, defaults stored in public configs, and Python
+  selector conversions introduce no hidden choice. `umol-io` contains no
+  graph-core dependency or selector use. Within graph-core, Hopcroft--Karp's
+  BFS bipartition, Vismara's Tarjan decomposition, EC duplicate removal's BFS
+  traversal, and branch-and-bound matching enumeration's Edmonds cardinality
+  bounds are documented at their call sites as subsidiary implementation
+  choices. No visibility boundary or public API changed.
+
+  The gate passed the graph-core matching, matching-count, and cycle suites;
+  the complete AST and graph unit suites; the kekulization integration suite;
+  the Rust binding suite; and the installed Python algorithm, ring, model,
+  resolve, fingerprint, and reaction suites under Python 3.13. Strict workspace
+  Clippy and rustfmt passed. Criterion smoke runs passed for graph-core
+  algorithms and the graph fingerprint and substructure benchmarks.
   `[dep: S9f, S9i, S9l, S9m, S9p, S9q, S9r, S9s, S9t]`
 
 S9 preserves the existing direct `apply` happy path while correcting error

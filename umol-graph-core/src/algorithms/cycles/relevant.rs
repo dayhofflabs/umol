@@ -470,6 +470,9 @@ impl RelevantCycleAnalysis {
     pub(super) fn new(graph: &Graph) -> Self {
         let mut dags = Vec::new();
         let mut candidates = Vec::new();
+        // Vismara analyzes relevant cycles independently within biconnected
+        // components. Tarjan supplies that decomposition as fixed preprocessing,
+        // not as an independent relevant-cycle choice.
         let mut components = graph.biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
         components.sort();
 
