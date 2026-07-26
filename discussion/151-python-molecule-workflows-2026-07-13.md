@@ -2066,6 +2066,16 @@ default rather than introducing a one-field composition config.
   instead of closing over a literal. Update constructors, conversions, equality,
   repr, and all callers; tests pin selector propagation and unchanged structural
   feature sets. **Breaking config-shape migration (red→green).** `[dep: S9j]`
+  **Implemented (green).** `SubstructureFeaturizer` now stores public
+  `subgraph_enumeration_algorithm` and `automorphism_algorithm` fields alongside
+  `max_bonds`; `new(max_bonds)` exposes ESU and Nauty as the explicit defaults.
+  Connected-subgraph enumeration uses the stored enumeration selector, and
+  canonical-key construction receives the stored automorphism selector for
+  both atomic and bonded features. Python `StructuralFingerprintConfig` exposes
+  the same keyword-only fields, defaults, getters, equality, repr, and
+  bidirectional Rust conversion. All callers were migrated, and exact Rust and
+  Python structural feature-set tests remain unchanged under explicit
+  ESU/Nauty configuration.
 - **S9t — configured and fallible kekulization matching**
   (`umol-graph/src/ops/transform/kekulizer.rs`, `ops/transform.rs`, all callers):
   rename `KekulizationModel` to `KekulizationConfig` while retaining its local

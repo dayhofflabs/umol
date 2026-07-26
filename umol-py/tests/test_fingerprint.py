@@ -1,6 +1,7 @@
 import pytest
 
 from umol import (
+    AutomorphismAlgorithm,
     AtomAst,
     BitFp,
     CountedHashedFeatureSet,
@@ -22,6 +23,7 @@ from umol import (
     SimpleCycleEnumerationAlgorithm,
     StructuralFeatureSet,
     StructuralFingerprintConfig,
+    SubgraphEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm,
     SubstructureMatchAlgorithm,
     UnderdeterminedError,
@@ -283,10 +285,24 @@ def test_pattern_fingerprint_config_error(width):
 @pytest.mark.parametrize("max_bonds", [0, 3])
 def test_structural_fingerprint_config(max_bonds):
     value = StructuralFingerprintConfig(max_bonds=max_bonds)
+    expected = StructuralFingerprintConfig(
+        max_bonds=max_bonds,
+        subgraph_enumeration_algorithm=SubgraphEnumerationAlgorithm.Esu(),
+        automorphism_algorithm=AutomorphismAlgorithm.Nauty(),
+    )
 
     assert value.max_bonds == max_bonds
-    assert value == StructuralFingerprintConfig(max_bonds=max_bonds)
-    assert repr(value) == f"StructuralFingerprintConfig(max_bonds={max_bonds})"
+    assert (
+        value.subgraph_enumeration_algorithm
+        == expected.subgraph_enumeration_algorithm
+    )
+    assert value.automorphism_algorithm == expected.automorphism_algorithm
+    assert value == expected
+    assert repr(value) == (
+        f"StructuralFingerprintConfig(max_bonds={max_bonds}, "
+        "subgraph_enumeration_algorithm=SubgraphEnumerationAlgorithm.Esu(), "
+        "automorphism_algorithm=AutomorphismAlgorithm.Nauty())"
+    )
 
 
 @pytest.mark.parametrize(
@@ -637,7 +653,11 @@ def test_molecule_ast_pattern_fingerprint(
             ],
         ),
         (
-            StructuralFingerprintConfig(max_bonds=2),
+            StructuralFingerprintConfig(
+                max_bonds=2,
+                subgraph_enumeration_algorithm=SubgraphEnumerationAlgorithm.Esu(),
+                automorphism_algorithm=AutomorphismAlgorithm.Nauty(),
+            ),
             [
                 bytes.fromhex("01 00 00 00 05 00 00 00 00 06 00 00 00 00 00 00 00"),
                 bytes.fromhex("01 00 00 00 05 00 00 00 00 08 00 00 00 00 00 00 00"),
