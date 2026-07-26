@@ -1,8 +1,8 @@
 //! Complete and maximal common-subgraph enumeration.
 //!
-//! The current implementation builds the modular product, enumerates all
-//! cliques by ordered backtracking for complete output, and uses
-//! Bron--Kerbosch with pivoting for maximal output. See
+//! Complete enumeration supports ordered clique backtracking over the modular
+//! product and direct backtracking over partial node mappings. Maximal
+//! enumeration uses Bron--Kerbosch with pivoting. See
 //! [Bron and Kerbosch (1973)](https://doi.org/10.1145/362342.362367).
 
 use bitvec::prelude::*;
@@ -12,7 +12,10 @@ use crate::graph::{EdgeId, Graph, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommonSubgraphEnumerationAlgorithm {
+    /// Enumerate every clique of the modular product.
     ModularProductBacktracking,
+    /// Enumerate partial injective node mappings directly.
+    DirectBacktracking,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,19 +42,23 @@ impl Graph {
         N: FnMut(NodeId, NodeId) -> bool,
         E: FnMut(EdgeId, EdgeId) -> bool,
     {
-        let (pairs, neighbors) = self.modular_product(other, node_match, edge_match, embedding);
-        let mut cliques = Vec::new();
         match alg {
             CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking => {
+                let (pairs, neighbors) =
+                    self.modular_product(other, node_match, edge_match, embedding);
+                let mut cliques = Vec::new();
                 all_cliques(
                     &neighbors,
                     &mut Vec::new(),
                     bitvec![1; pairs.len()],
                     &mut cliques,
                 );
+                subgraphs_from_cliques(cliques, &pairs, self, other)
+            }
+            CommonSubgraphEnumerationAlgorithm::DirectBacktracking => {
+                direct_backtracking(self, other, node_match, edge_match, embedding)
             }
         }
-        subgraphs_from_cliques(cliques, &pairs, self, other)
     }
 
     pub fn maximal_common_subgraphs<N, E>(
@@ -167,7 +174,6 @@ fn subgraph_from_mapping(
     )
 }
 
-#[cfg(test)]
 fn direct_backtracking<N, E>(
     left: &Graph,
     right: &Graph,
@@ -205,7 +211,6 @@ where
     state.subgraphs
 }
 
-#[cfg(test)]
 struct DirectEnumerationState<'g, 'm, E> {
     left: &'g Graph,
     right: &'g Graph,
@@ -217,7 +222,6 @@ struct DirectEnumerationState<'g, 'm, E> {
     subgraphs: Vec<GraphCorrespondence>,
 }
 
-#[cfg(test)]
 impl<E> DirectEnumerationState<'_, '_, E>
 where
     E: FnMut(EdgeId, EdgeId) -> bool,
@@ -439,7 +443,7 @@ mod tests {
         vec![],
         EmbeddingKind::Monomorphism,
     )]
-    fn test_direct_backtracking_equivalence(
+    fn test_graph_enumerate_common_subgraphs_equivalence(
         #[case] left: Graph,
         #[case] right: Graph,
         #[case] left_node_labels: Vec<u8>,
@@ -448,8 +452,7 @@ mod tests {
         #[case] right_edge_labels: Vec<u8>,
         #[case] embedding: EmbeddingKind,
     ) {
-        let direct = direct_backtracking(
-            &left,
+        let direct = left.enumerate_common_subgraphs(
             &right,
             &mut |left_node, right_node| {
                 left_node_labels[left_node.index()] == right_node_labels[right_node.index()]
@@ -458,6 +461,7 @@ mod tests {
                 left_edge_labels[left_edge.index()] == right_edge_labels[right_edge.index()]
             },
             embedding,
+            CommonSubgraphEnumerationAlgorithm::DirectBacktracking,
         );
         let modular_product = left.enumerate_common_subgraphs(
             &right,

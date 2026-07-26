@@ -135,14 +135,13 @@ the eager cost of returning all of them.
   edge-presence distinction. Its sorted output must equal the existing public
   modular-product result for the same fixtures. **Additive (green).**
   `[dep: S0b]`
-  **Implemented (green).** The test-gated `direct_backtracking` kernel
-  precomputes node candidates, walks left nodes in id order, tracks used right
-  nodes with a bitset, applies the embedding and edge-predicate checks while
-  extending, and constructs sorted complete `GraphCorrespondence` output at
-  the leaves. Both kernels use the same node-to-edge correspondence
-  materializer, preventing their edge results from drifting. Exact and
-  cross-algorithm tests cover all listed cases. The `cfg(test)` gate keeps the
-  kernel private and non-dead until S1b adds its production dispatch.
+  **Implemented (green).** The `direct_backtracking` kernel precomputes node
+  candidates, walks left nodes in id order, tracks used right nodes with a
+  bitset, applies the embedding and edge-predicate checks while extending, and
+  constructs sorted complete `GraphCorrespondence` output at the leaves. Both
+  kernels use the same node-to-edge correspondence materializer, preventing
+  their edge results from drifting. Exact and cross-algorithm tests cover all
+  listed cases.
 - **S1b — coordinated public selector**
   (`umol-graph-core/src/algorithms/common_subgraph/enumeration.rs`,
   `umol-py/src/algorithm.rs`, `umol-py/tests/test_algorithm.py`,
@@ -155,6 +154,12 @@ the eager cost of returning all of them.
   composites. Keep `ModularProductBacktracking()` as the Python default.
   **Additive Rust and Python API with exhaustive-enum caller migration
   (red→green).** `[dep: S1a]`
+  **Implemented (green).** `DirectBacktracking` is a public graph-core selector
+  and dispatches to the direct kernel without constructing the modular
+  product. Python exposes `DirectBacktracking()` with exact conversion,
+  equality, and repr behavior. Both selectors produce the same exact ordered
+  composites across the Python composition cases, while
+  `ModularProductBacktracking()` remains the visible Python default.
 - **S1c — generated cross-validation and comparative benchmarks**
   (`umol-graph-core/tests/property/common_subgraph.rs`,
   `umol-graph-core/tests/property.rs`,

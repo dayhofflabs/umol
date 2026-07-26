@@ -60,6 +60,7 @@ impl AutomorphismAlgorithm {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommonSubgraphEnumerationAlgorithm {
     ModularProductBacktracking(),
+    DirectBacktracking(),
 }
 
 #[pymethods]
@@ -79,6 +80,7 @@ impl CommonSubgraphEnumerationAlgorithm {
             Self::ModularProductBacktracking() => {
                 "CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking()"
             }
+            Self::DirectBacktracking() => "CommonSubgraphEnumerationAlgorithm.DirectBacktracking()",
         }
     }
 
@@ -91,6 +93,9 @@ impl CommonSubgraphEnumerationAlgorithm {
             GraphCoreCommonSubgraphEnumerationAlgorithm::ModularProductBacktracking => {
                 Self::ModularProductBacktracking()
             }
+            GraphCoreCommonSubgraphEnumerationAlgorithm::DirectBacktracking => {
+                Self::DirectBacktracking()
+            }
         }
     }
 
@@ -98,6 +103,9 @@ impl CommonSubgraphEnumerationAlgorithm {
         match self {
             Self::ModularProductBacktracking() => {
                 GraphCoreCommonSubgraphEnumerationAlgorithm::ModularProductBacktracking
+            }
+            Self::DirectBacktracking() => {
+                GraphCoreCommonSubgraphEnumerationAlgorithm::DirectBacktracking
             }
         }
     }
@@ -461,19 +469,29 @@ mod tests {
     #[case::modular_product_backtracking(
         GraphCoreCommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
+        CommonSubgraphEnumerationAlgorithm::DirectBacktracking(),
         "CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking()"
+    )]
+    #[case::direct_backtracking(
+        GraphCoreCommonSubgraphEnumerationAlgorithm::DirectBacktracking,
+        CommonSubgraphEnumerationAlgorithm::DirectBacktracking(),
+        CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking(),
+        "CommonSubgraphEnumerationAlgorithm.DirectBacktracking()"
     )]
     fn test_common_subgraph_enumeration_algorithm_value(
         #[case] rust: GraphCoreCommonSubgraphEnumerationAlgorithm,
         #[case] python: CommonSubgraphEnumerationAlgorithm,
+        #[case] unequal: CommonSubgraphEnumerationAlgorithm,
         #[case] expected_repr: &str,
     ) {
         assert_eq!(CommonSubgraphEnumerationAlgorithm::from_rust(rust), python);
         assert_eq!(python.to_rust(), rust);
+        assert_ne!(python, unequal);
         Python::attach(|py| {
             let expected =
                 into_py_variant(py, CommonSubgraphEnumerationAlgorithm::from_rust(rust)).unwrap();
             let value = into_py_variant(py, python).unwrap();
+            let unequal = into_py_variant(py, unequal).unwrap();
 
             assert_eq!(
                 value
@@ -486,6 +504,7 @@ mod tests {
                 expected_repr
             );
             assert!(value.bind(py).as_any().eq(expected.bind(py)).unwrap());
+            assert!(!value.bind(py).as_any().eq(unequal.bind(py)).unwrap());
         });
     }
 

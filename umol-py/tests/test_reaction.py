@@ -563,6 +563,19 @@ def test_reactionast_reverse():
 
 
 @pytest.mark.parametrize(
+    "algorithm",
+    [
+        pytest.param(
+            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
+            id="modular-product-backtracking",
+        ),
+        pytest.param(
+            CommonSubgraphEnumerationAlgorithm.DirectBacktracking(),
+            id="direct-backtracking",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
     "first,second,expected",
     [
         pytest.param(
@@ -599,13 +612,13 @@ def test_reactionast_reverse():
         ),
     ],
 )
-def test_reactionast_compose(first, second, expected):
+def test_reactionast_compose(algorithm, first, second, expected):
     first = ReactionAst.parse(first)
     second = ReactionAst.parse(second)
 
     composites = first.compose(
         second,
-        algorithm=CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
+        algorithm=algorithm,
     )
 
     assert composites == [ReactionAst.parse(reaction) for reaction in expected]

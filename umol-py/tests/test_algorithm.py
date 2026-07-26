@@ -41,12 +41,6 @@ def test_algorithm_exports():
             id="automorphism-nauty",
         ),
         pytest.param(
-            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
-            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
-            "CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking()",
-            id="common-subgraph-modular-product-backtracking",
-        ),
-        pytest.param(
             ConnectedComponentsAlgorithm.Bfs(),
             ConnectedComponentsAlgorithm.Bfs(),
             "ConnectedComponentsAlgorithm.Bfs()",
@@ -80,6 +74,33 @@ def test_algorithm_exports():
 )
 def test_algorithm_value(algorithm, equal, expected_repr):
     assert algorithm == equal
+    assert repr(algorithm) == expected_repr
+
+
+@pytest.mark.parametrize(
+    "algorithm,equal,unequal,expected_repr",
+    [
+        pytest.param(
+            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
+            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
+            CommonSubgraphEnumerationAlgorithm.DirectBacktracking(),
+            "CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking()",
+            id="modular-product-backtracking",
+        ),
+        pytest.param(
+            CommonSubgraphEnumerationAlgorithm.DirectBacktracking(),
+            CommonSubgraphEnumerationAlgorithm.DirectBacktracking(),
+            CommonSubgraphEnumerationAlgorithm.ModularProductBacktracking(),
+            "CommonSubgraphEnumerationAlgorithm.DirectBacktracking()",
+            id="direct-backtracking",
+        ),
+    ],
+)
+def test_common_subgraph_enumeration_algorithm_value(
+    algorithm, equal, unequal, expected_repr
+):
+    assert algorithm == equal
+    assert algorithm != unequal
     assert repr(algorithm) == expected_repr
 
 
