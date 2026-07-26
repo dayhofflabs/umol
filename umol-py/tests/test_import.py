@@ -1,205 +1,374 @@
+import inspect
+
+import pytest
 import umol
+import umol._native as native
 
 
-def test_import_umol():
+PUBLIC_EXPORTS = frozenset(
+    """
+    AromaticSystemAst
+    AromaticSystemConstraintAst
+    AromaticSystemConstraintKey
+    AromaticSystemConstraintsAst
+    AromaticSystemConstraintsView
+    AromaticSystemDelta
+    AromaticSystemFieldChange
+    AromaticSystemView
+    AromaticSystemViews
+    AromaticValenceAst
+    AromaticityConfig
+    AromaticityModel
+    AromaticityResolveConfig
+    AtomAst
+    AtomConstraintAst
+    AtomConstraintKey
+    AtomConstraintsAst
+    AtomConstraintsView
+    AtomDelta
+    AtomFieldChange
+    AtomRingSizeCounts
+    AtomTypeRegistry
+    AtomView
+    AtomViews
+    AutomorphismAlgorithm
+    BitFp
+    BondAst
+    BondConstraintAst
+    BondConstraintKey
+    BondConstraintsAst
+    BondConstraintsView
+    BondDelta
+    BondFieldChange
+    BondRingSizeCounts
+    BondView
+    BondViews
+    BooleanAst
+    ChemistryModel
+    CisTransStereo
+    CisTransStereoAst
+    CommonSubgraphEnumerationAlgorithm
+    ConnectedComponentsAlgorithm
+    Constraint
+    ConstraintDelta
+    Constraints
+    ConstraintsView
+    ContradictionError
+    Correspondence
+    CountedHashedFeatureSet
+    DativeBondAst
+    DativeBondConstraintAst
+    DativeBondConstraintKey
+    DativeBondConstraintsAst
+    DativeBondConstraintsView
+    DativeBondDelta
+    DativeBondFieldChange
+    DativeBondRingSizeCounts
+    DativeBondView
+    DativeBondViews
+    Delta
+    Deltas
+    E
+    EcfpHashScheme
+    ElectronCountsAst
+    Element
+    ElementAst
+    ElementScope
+    FluxionalityAst
+    HashedFeatureSet
+    HashedFingerprintConfig
+    InconsistencyPolicy
+    InvalidStructureError
+    IsotopeMassAst
+    LigandPermutation
+    LigandSymmetryAst
+    MaximumIndependentSetAlgorithm
+    MemOp
+    ModelConversionError
+    MoleculeAst
+    MoleculeConstraint
+    MoleculeCorrespondence
+    MoleculeDefaults
+    MulticenterBondAst
+    MulticenterBondConstraintAst
+    MulticenterBondConstraintKey
+    MulticenterBondConstraintsAst
+    MulticenterBondConstraintsView
+    MulticenterBondDelta
+    MulticenterBondFieldChange
+    MulticenterBondView
+    MulticenterBondViews
+    MulticenterValenceAst
+    NoncovalentBondAst
+    NoncovalentBondConstraintAst
+    NoncovalentBondConstraintKey
+    NoncovalentBondConstraintsAst
+    NoncovalentBondConstraintsView
+    NoncovalentBondDelta
+    NoncovalentBondFieldChange
+    NoncovalentBondKind
+    NoncovalentBondKindAst
+    NoncovalentBondView
+    NoncovalentBondViews
+    Orientation
+    OrientedLigandPermutation
+    ParseError
+    PatternFingerprintConfig
+    Permutation
+    ReactionApplicationConfig
+    ReactionAst
+    ReactionCombinedFingerprint
+    ReactionCombinedFingerprintConfig
+    ReactionDefaults
+    ReactionDerivation
+    ReactionSide
+    RefinementRounds
+    RelOp
+    RelationalConstraint
+    RelevantCycleEnumerationAlgorithm
+    ResolveConfig
+    RingConfig
+    RingLimits
+    RingMembershipAst
+    RingScope
+    RoleTaggedHashedFeatureSet
+    SignedHashedFeatureSet
+    SimpleCycleEnumerationAlgorithm
+    SmilesIoConfig
+    SmilesSyntaxFlags
+    SpinStateAst
+    StereoAtomAst
+    StereoAtomConstraintAst
+    StereoAtomConstraintKey
+    StereoAtomConstraintsAst
+    StereoAtomConstraintsView
+    StereoAtomDelta
+    StereoAtomFieldChange
+    StereoAtomView
+    StereoAtomViews
+    StereoBondAst
+    StereoBondConstraintAst
+    StereoBondConstraintKey
+    StereoBondConstraintsAst
+    StereoBondConstraintsView
+    StereoBondDelta
+    StereoBondFieldChange
+    StereoBondView
+    StereoBondViews
+    StereoConfigurationAst
+    StereoCosetAst
+    StereoKind
+    StereoKindModel
+    StereoLigand
+    StereoLigandKind
+    StereoLigandPair
+    StereoModel
+    StereoResolveConfig
+    StereoTerm
+    Stereogenicity
+    StereogenicityAst
+    StructuralFeatureSet
+    StructuralFingerprintConfig
+    SubPatternAnchor
+    SubgraphEnumerationAlgorithm
+    SubgraphIsomorphismAlgorithm
+    SubstructureMatchAlgorithm
+    SubstructureSearchConfig
+    TetrahedralStereo
+    TetrahedralStereoAst
+    Topicity
+    TopicityAst
+    TopicityRelationAst
+    UnderdeterminedError
+    ValenceEntry
+    ValenceModel
+    ValenceTable
+    ValueAst
+    ValuePredicate
+    ValueTerm
+    WlHashScheme
+    __version__
+    """.split()
+)
+
+
+def test_package_metadata():
     assert isinstance(umol.__version__, str)
     assert umol.__version__ != "0.0.0"
+    assert umol._native is native
 
 
-def test_native_present():
-    assert hasattr(umol, "_native")
-
-
-def test_error_imports():
-    from umol import (
-        ContradictionError,
-        InvalidStructureError,
-        ModelConversionError,
-        ParseError,
-        UnderdeterminedError,
+def test_public_exports():
+    native_exports = frozenset(
+        name for name in vars(native) if not name.startswith("_")
     )
-
-    for error_type in (
-        ContradictionError,
-        InvalidStructureError,
-        ModelConversionError,
-        ParseError,
-        UnderdeterminedError,
-    ):
-        error = error_type("diagnostic")
-        assert getattr(umol, error_type.__name__) is error_type
-        assert isinstance(error, Exception)
-        assert str(error) == "diagnostic"
-
-
-def test_smiles_syntax_flags_import():
-    from umol import SmilesIoConfig, SmilesSyntaxFlags
-
-    assert umol.SmilesIoConfig is SmilesIoConfig
-    assert umol.SmilesSyntaxFlags is SmilesSyntaxFlags
-    assert not hasattr(umol, "SmilesParseFlags")
-
-
-def test_atom_type_registry_import():
-    from umol import AtomTypeRegistry, ValenceEntry, ValenceModel, ValenceTable
-
-    assert umol.AtomTypeRegistry is AtomTypeRegistry
-    assert umol.ValenceEntry is ValenceEntry
-    assert umol.ValenceModel is ValenceModel
-    assert umol.ValenceTable is ValenceTable
-
-
-def test_element_scope_import():
-    from umol import ElementScope
-
-    assert umol.ElementScope is ElementScope
-
-
-def test_ring_limits_import():
-    from umol import RingLimits
-
-    assert umol.RingLimits is RingLimits
-
-
-def test_aromaticity_model_import():
-    from umol import AromaticityModel
-
-    assert umol.AromaticityModel is AromaticityModel
-
-
-def test_aromaticity_config_import():
-    from umol import AromaticityConfig
-
-    assert umol.AromaticityConfig is AromaticityConfig
-
-
-def test_inconsistency_policy_import():
-    from umol import InconsistencyPolicy
-
-    assert umol.InconsistencyPolicy is InconsistencyPolicy
-
-
-def test_stereo_kind_model_import():
-    from umol import StereoKindModel
-
-    assert umol.StereoKindModel is StereoKindModel
-
-
-def test_stereo_model_import():
-    from umol import StereoModel
-
-    assert umol.StereoModel is StereoModel
-
-
-def test_chemistry_model_import():
-    from umol import ChemistryModel
-
-    assert umol.ChemistryModel is ChemistryModel
-
-
-def test_aromaticity_resolve_config_import():
-    from umol import AromaticityResolveConfig
-
-    assert umol.AromaticityResolveConfig is AromaticityResolveConfig
-
-
-def test_stereo_resolve_config_import():
-    from umol import StereoResolveConfig
-
-    assert umol.StereoResolveConfig is StereoResolveConfig
-
-
-def test_resolve_config_import():
-    from umol import ResolveConfig
-
-    assert umol.ResolveConfig is ResolveConfig
-
-
-def test_refinement_rounds_import():
-    from umol import RefinementRounds
-
-    assert umol.RefinementRounds is RefinementRounds
-
-
-def test_wl_hash_scheme_import():
-    from umol import WlHashScheme
-
-    assert umol.WlHashScheme is WlHashScheme
-
-
-def test_ecfp_hash_scheme_import():
-    from umol import EcfpHashScheme
-
-    assert umol.EcfpHashScheme is EcfpHashScheme
-
-
-def test_hashed_fingerprint_config_import():
-    from umol import HashedFingerprintConfig
-
-    assert umol.HashedFingerprintConfig is HashedFingerprintConfig
-
-
-def test_pattern_fingerprint_config_import():
-    from umol import PatternFingerprintConfig
-
-    assert umol.PatternFingerprintConfig is PatternFingerprintConfig
-
-
-def test_structural_fingerprint_config_import():
-    from umol import StructuralFingerprintConfig
-
-    assert umol.StructuralFingerprintConfig is StructuralFingerprintConfig
-
-
-def test_reaction_combined_fingerprint_config_import():
-    from umol import ReactionCombinedFingerprintConfig
-
-    assert umol.ReactionCombinedFingerprintConfig is ReactionCombinedFingerprintConfig
-
-
-def test_hashed_feature_set_import():
-    from umol import HashedFeatureSet
-
-    assert umol.HashedFeatureSet is HashedFeatureSet
-
-
-def test_counted_hashed_feature_set_import():
-    from umol import CountedHashedFeatureSet
-
-    assert umol.CountedHashedFeatureSet is CountedHashedFeatureSet
-
-
-def test_bit_fp_import():
-    from umol import BitFp
-
-    assert umol.BitFp is BitFp
-
-
-def test_structural_feature_set_import():
-    from umol import StructuralFeatureSet
-
-    assert umol.StructuralFeatureSet is StructuralFeatureSet
-
-
-def test_reaction_side_import():
-    from umol import ReactionSide
-
-    assert umol.ReactionSide is ReactionSide
-
-
-def test_signed_hashed_feature_set_import():
-    from umol import SignedHashedFeatureSet
-
-    assert umol.SignedHashedFeatureSet is SignedHashedFeatureSet
-
-
-def test_role_tagged_hashed_feature_set_import():
-    from umol import RoleTaggedHashedFeatureSet
-
-    assert umol.RoleTaggedHashedFeatureSet is RoleTaggedHashedFeatureSet
-
-
-def test_reaction_combined_fingerprint_import():
-    from umol import ReactionCombinedFingerprint
-
-    assert umol.ReactionCombinedFingerprint is ReactionCombinedFingerprint
+    native_package_exports = PUBLIC_EXPORTS - {"E", "__version__"}
+
+    assert frozenset(umol.__all__) == PUBLIC_EXPORTS
+    assert len(umol.__all__) == len(PUBLIC_EXPORTS)
+    assert native_exports == native_package_exports
+    assert {
+        name: getattr(umol, name) for name in native_package_exports
+    } == {name: getattr(native, name) for name in native_package_exports}
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "BridgitConfig",
+        "CycleEnumerationAlgorithm",
+        "DrfpConfig",
+        "ReactionApplicationIter",
+        "ReactionCombinator",
+        "SmilesLintConfig",
+        "SmilesLintFlags",
+    ],
+)
+def test_deferred_export(name):
+    assert name not in umol.__all__
+    assert not hasattr(umol, name)
+    assert not hasattr(native, name)
+
+
+@pytest.mark.parametrize(
+    ("owner", "name"),
+    [
+        (umol.WlHashScheme, "seed"),
+        (umol.WlHashScheme, "from_seed"),
+        (umol.EcfpHashScheme, "seed"),
+        (umol.EcfpHashScheme, "from_seed"),
+        (umol.HashedFeatureSet, "__array__"),
+        (umol.HashedFeatureSet, "to_numpy"),
+        (umol.CountedHashedFeatureSet, "__array__"),
+        (umol.CountedHashedFeatureSet, "to_numpy"),
+        (umol.BitFp, "__array__"),
+        (umol.BitFp, "to_numpy"),
+        (umol.StructuralFeatureSet, "__array__"),
+        (umol.StructuralFeatureSet, "to_numpy"),
+        (umol.SignedHashedFeatureSet, "__array__"),
+        (umol.SignedHashedFeatureSet, "to_numpy"),
+        (umol.RoleTaggedHashedFeatureSet, "__array__"),
+        (umol.RoleTaggedHashedFeatureSet, "to_numpy"),
+    ],
+)
+def test_deferred_member(owner, name):
+    assert not hasattr(owner, name)
+
+
+@pytest.mark.parametrize(
+    ("operation", "expected"),
+    [
+        (
+            umol.MoleculeAst.from_smiles,
+            "(source, *, io_config=None, chemistry_model=None, resolve_config=None)",
+        ),
+        (
+            umol.MoleculeAst.substructure_matches,
+            "(self, /, host, *, config=None)",
+        ),
+        (umol.MoleculeAst.hashed_fingerprint, "(self, /, *, config)"),
+        (umol.MoleculeAst.counted_hashed_fingerprint, "(self, /, *, config)"),
+        (umol.MoleculeAst.pattern_fingerprint, "(self, /, *, config=None)"),
+        (umol.MoleculeAst.structural_fingerprint, "(self, /, *, config)"),
+        (
+            umol.ReactionAst.compose,
+            "(self, /, other, *, algorithm=Ellipsis)",
+        ),
+        (umol.ReactionAst.apply, "(self, /, host, *, config=None)"),
+        (umol.ReactionAst.combined_fingerprint, "(self, /, *, config)"),
+    ],
+)
+def test_public_operation_signature(operation, expected):
+    assert str(inspect.signature(operation)) == expected
+
+
+@pytest.mark.parametrize(
+    ("constructor", "expected"),
+    [
+        (umol.SmilesIoConfig.opensmiles, "()"),
+        (umol.SmilesIoConfig.lenient, "()"),
+        (umol.SmilesIoConfig.with_syntax_flags, "(*, syntax_flags)"),
+        (umol.RefinementRounds.Fixed, "(*, rounds)"),
+        (umol.RefinementRounds.ToFixpoint, "()"),
+        (
+            umol.HashedFingerprintConfig.Morgan,
+            "(*, radius=2, ring_config=Ellipsis)",
+        ),
+        (
+            umol.HashedFingerprintConfig.Ecfp,
+            "(*, radius=2, hashing_scheme=Ellipsis, ring_config=Ellipsis)",
+        ),
+        (
+            umol.HashedFingerprintConfig.Wl,
+            "(*, rounds, hashing_scheme=Ellipsis)",
+        ),
+        (
+            umol.ReactionCombinedFingerprintConfig.Difference,
+            "(*, molecule)",
+        ),
+        (
+            umol.ReactionCombinedFingerprintConfig.DisjointUnion,
+            "(*, molecule)",
+        ),
+        (
+            umol.PatternFingerprintConfig,
+            "(*, width=2048, match_algorithm=Ellipsis, "
+            "subgraph_isomorphism_algorithm=Ellipsis)",
+        ),
+        (
+            umol.StructuralFingerprintConfig,
+            "(*, max_bonds, subgraph_enumeration_algorithm=Ellipsis, "
+            "automorphism_algorithm=Ellipsis)",
+        ),
+        (
+            umol.RingConfig,
+            "(*, simple_cycle_algorithm=None, relevant_cycle_algorithm=None)",
+        ),
+        (
+            umol.AromaticityConfig,
+            "(*, ring_config=Ellipsis, connected_components_algorithm=Ellipsis, "
+            "maximum_independent_set_algorithm=Ellipsis)",
+        ),
+        (
+            umol.AromaticityResolveConfig,
+            "(*, perception=Ellipsis, delocalize_charge=True, "
+            "reset_aromatic_valence=False)",
+        ),
+        (
+            umol.StereoResolveConfig,
+            "(*, reset_stereo_constraints=False, inconsistency=Ellipsis)",
+        ),
+        (umol.ResolveConfig, "(*, aromaticity, stereo)"),
+        (umol.ChemistryModel, "(*, valence, aromaticity, stereo)"),
+        (
+            umol.ReactionApplicationConfig,
+            "(*, match_algorithm=Ellipsis, "
+            "subgraph_isomorphism_algorithm=Ellipsis)",
+        ),
+        (
+            umol.SubstructureSearchConfig,
+            "(*, match_algorithm=Ellipsis, "
+            "subgraph_isomorphism_algorithm=Ellipsis)",
+        ),
+    ],
+)
+def test_public_constructor_signature(constructor, expected):
+    assert str(inspect.signature(constructor)) == expected
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [
+        umol.ContradictionError,
+        umol.InvalidStructureError,
+        umol.ModelConversionError,
+        umol.ParseError,
+        umol.UnderdeterminedError,
+    ],
+)
+def test_error_import(error_type):
+    error = error_type("diagnostic")
+
+    assert getattr(umol, error_type.__name__) is error_type
+    assert isinstance(error, Exception)
+    assert str(error) == "diagnostic"

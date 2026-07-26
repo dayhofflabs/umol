@@ -235,6 +235,7 @@ __all__ = [
     "ConnectedComponentsAlgorithm",
     "ContradictionError",
     "Constraint",
+    "ConstraintDelta",
     "Constraints",
     "ConstraintsView",
     "Correspondence",

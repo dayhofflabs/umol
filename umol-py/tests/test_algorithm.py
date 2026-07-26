@@ -1,5 +1,4 @@
 import pytest
-import umol
 
 from umol import (
     AutomorphismAlgorithm,
@@ -12,23 +11,6 @@ from umol import (
     SubgraphIsomorphismAlgorithm,
     SubstructureMatchAlgorithm,
 )
-
-
-def test_algorithm_exports():
-    exports = {
-        "AutomorphismAlgorithm": AutomorphismAlgorithm,
-        "CommonSubgraphEnumerationAlgorithm": CommonSubgraphEnumerationAlgorithm,
-        "ConnectedComponentsAlgorithm": ConnectedComponentsAlgorithm,
-        "MaximumIndependentSetAlgorithm": MaximumIndependentSetAlgorithm,
-        "RelevantCycleEnumerationAlgorithm": RelevantCycleEnumerationAlgorithm,
-        "SimpleCycleEnumerationAlgorithm": SimpleCycleEnumerationAlgorithm,
-        "SubgraphEnumerationAlgorithm": SubgraphEnumerationAlgorithm,
-        "SubgraphIsomorphismAlgorithm": SubgraphIsomorphismAlgorithm,
-        "SubstructureMatchAlgorithm": SubstructureMatchAlgorithm,
-    }
-
-    assert exports.keys() <= set(umol.__all__)
-    assert {name: getattr(umol, name) for name in exports} == exports
 
 
 @pytest.mark.parametrize(

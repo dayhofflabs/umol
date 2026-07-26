@@ -1,5 +1,4 @@
 import pytest
-import umol
 
 from umol import (
     MoleculeAst,
@@ -7,11 +6,6 @@ from umol import (
     SubstructureMatchAlgorithm,
     SubstructureSearchConfig,
 )
-
-
-def test_substructure_search_config_export():
-    assert "SubstructureSearchConfig" in umol.__all__
-    assert umol.SubstructureSearchConfig is SubstructureSearchConfig
 
 
 def test_substructure_search_config_default():

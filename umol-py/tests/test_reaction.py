@@ -1,5 +1,4 @@
 import pytest
-import umol
 
 from umol import (
     AtomAst,
@@ -23,19 +22,6 @@ from umol import (
     SubstructureMatchAlgorithm,
     ValueAst,
 )
-
-
-def test_application_exports():
-    assert {
-        "Correspondence",
-        "MoleculeCorrespondence",
-        "ReactionApplicationConfig",
-        "ReactionDerivation",
-    } <= set(umol.__all__)
-    assert umol.Correspondence is Correspondence
-    assert umol.MoleculeCorrespondence is MoleculeCorrespondence
-    assert umol.ReactionApplicationConfig is ReactionApplicationConfig
-    assert umol.ReactionDerivation is ReactionDerivation
 
 
 def test_reactionapplicationconfig_default():

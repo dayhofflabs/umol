@@ -2183,7 +2183,21 @@ reorganization are specified in [doc 156](156-ast-comparison-and-property-suite-
   exception mapping for every S4–S9 value and method, including substructure
   search. Installed tests compare the exported-name set and verify that no lint,
   raw-seed, combinator, iterator, NumPy, DRFP, or BRIDGIT implementation leaked
-  into this round. **Additive (green).** `[dep: S7d, S8b, S9v]`
+  into this round. **Additive (green).** **Implemented (green).** The audit
+  found and corrected one package-surface omission: `ConstraintDelta` was
+  registered by the native module and imported by the package but absent from
+  `__all__`. A single installed contract now compares the exact 181-name
+  package export set, the native public-name set, and package/native object
+  identity. It also pins every S4–S9 workflow method signature and the
+  keyword-only constructors that define the round's configuration surface.
+  Deferred lint, old cycle-selector, reaction-combinator, application-iterator,
+  DRFP, BRIDGIT, raw-seed, and NumPy members are asserted absent. The former
+  per-module subset-export tests were removed in favor of this one authoritative
+  contract. Existing exact module tests retain constructor visibility, repr,
+  and semantic exception mapping coverage. The focused public-surface suite
+  passes 58 tests; the complete installed suite passes 983 tests under Python
+  3.13, the Rust binding suite passes 1,419 tests, and the no-default-feature
+  build remains green. `[dep: S7d, S8b, S9v]`
 - **S10b — complete installed workflows**
   (`umol-py/tests`): run four coherent public workflows—configured resolved
   SMILES, molecule/reaction fingerprints, configured substructure search, and

@@ -1,23 +1,10 @@
 import pytest
-import umol
 
 from umol import (
     RelevantCycleEnumerationAlgorithm,
     RingConfig,
     SimpleCycleEnumerationAlgorithm,
 )
-
-
-def test_ring_exports():
-    exports = {
-        "RelevantCycleEnumerationAlgorithm": RelevantCycleEnumerationAlgorithm,
-        "RingConfig": RingConfig,
-        "SimpleCycleEnumerationAlgorithm": SimpleCycleEnumerationAlgorithm,
-    }
-
-    assert exports.keys() <= set(umol.__all__)
-    assert {name: getattr(umol, name) for name in exports} == exports
-    assert not hasattr(umol, "CycleEnumerationAlgorithm")
 
 
 def test_ring_config_default():
