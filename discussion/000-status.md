@@ -162,3 +162,4 @@
 | [158-ring-model-and-enumeration-2026-07-22.md](158-ring-model-and-enumeration-2026-07-22.md)                     | Completed     | 2026-07-25   |
 | [159-simple-graph-policy-2026-07-23.md](159-simple-graph-policy-2026-07-23.md)                                   | Active        | 2026-07-23   |
 | [160-relevant-cycle-count-and-enumeration-spikes-2026-07-25.md](160-relevant-cycle-count-and-enumeration-spikes-2026-07-25.md) | Active        | 2026-07-25   |
+| [161-property-tests-as-executable-specifications-2026-07-25.md](161-property-tests-as-executable-specifications-2026-07-25.md) | Informational | 2026-07-25   |
