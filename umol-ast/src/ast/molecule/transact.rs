@@ -1941,7 +1941,7 @@ mod tests {
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
     };
     use super::super::super::stereo::{
-        CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst,
+        CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCoset,
         StereoKind,
     };
     use super::super::super::value::ValueAst;
@@ -2399,7 +2399,7 @@ mod tests {
                 ligands: (1u32..=4)
                     .map(|t| (AtomHandle::Id(AtomId(t)), StereoLigandKind::Atom))
                     .collect(),
-                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             }])
             .unwrap();
         assert_eq!(stereo_atom_skeleton.stereo_atom_count(), 1);
@@ -2412,7 +2412,7 @@ mod tests {
         stereo_atom_skeleton.add_stereo_atom(
             AtomId(0),
             tetrahedral_ligands(),
-            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         );
         let before = stereo_atom_skeleton.clone().build();
         let tx = stereo_atom_skeleton
@@ -2423,7 +2423,7 @@ mod tests {
                     (1u32..=4)
                         .map(|t| (AtomHandle::Id(AtomId(t)), StereoLigandKind::Atom))
                         .collect(),
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 )],
             }])
             .unwrap();
@@ -2439,7 +2439,7 @@ mod tests {
         stereo_atom_skeleton.add_stereo_atom(
             AtomId(0),
             tetrahedral_ligands(),
-            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         );
         let err = stereo_atom_skeleton
             .transact(vec![Edit::RemoveStereoAtoms {
@@ -2450,7 +2450,7 @@ mod tests {
                         .map(|t| (AtomHandle::Id(AtomId(t)), StereoLigandKind::Atom))
                         .collect(),
                     // Wrong recorded coset (Th0 vs the stored Th1).
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
                 )],
             }])
             .unwrap_err();
@@ -2464,7 +2464,7 @@ mod tests {
         stereo_atom_skeleton.add_stereo_atom(
             AtomId(0),
             tetrahedral_ligands(),
-            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         );
         let before = stereo_atom_skeleton.clone().build();
         // Removing a ligand atom cascades the stereo element away.
@@ -2501,7 +2501,7 @@ mod tests {
                     (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
                     (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
                 ],
-                ast: StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+                ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             }])
             .unwrap();
         assert_eq!(stereo_bond_skeleton.stereo_bond_count(), 1);
@@ -2517,7 +2517,7 @@ mod tests {
                 StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
             ],
-            StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         );
         let before = stereo_bond_skeleton.clone().build();
         let tx = stereo_bond_skeleton
@@ -2529,7 +2529,7 @@ mod tests {
                         (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
                         (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
                     ],
-                    StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+                    StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 )],
             }])
             .unwrap();
@@ -2545,7 +2545,7 @@ mod tests {
         stereo_atom_skeleton.add_stereo_atom(
             AtomId(0),
             tetrahedral_ligands(),
-            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         );
         let before = stereo_atom_skeleton.clone().build();
         let tx = stereo_atom_skeleton
@@ -2554,11 +2554,11 @@ mod tests {
                 change: StereoAtomFieldChange::Configuration {
                     old: StereoConfigurationAst::kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(1),
+                        StereoCoset::Lit(1),
                     ),
                     new: StereoConfigurationAst::kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(0),
+                        StereoCoset::Lit(0),
                     ),
                 },
             }])
@@ -2568,7 +2568,7 @@ mod tests {
                 .stereo_atom(StereoAtomId(0))
                 .ast
                 .configuration,
-            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0),),
+            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0),),
         );
         tx.rollback(&mut stereo_atom_skeleton).unwrap();
         assert_eq!(stereo_atom_skeleton.build(), before);
@@ -2581,7 +2581,7 @@ mod tests {
         stereo_atom_skeleton.add_stereo_atom(
             AtomId(0),
             tetrahedral_ligands(),
-            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         );
         let err = stereo_atom_skeleton
             .transact(vec![Edit::ModifyStereoAtomField {
@@ -2590,11 +2590,11 @@ mod tests {
                     // Wrong recorded coset (Th0 vs the stored Th1).
                     old: StereoConfigurationAst::kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(0),
+                        StereoCoset::Lit(0),
                     ),
                     new: StereoConfigurationAst::kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(1),
+                        StereoCoset::Lit(1),
                     ),
                 },
             }])
@@ -2612,21 +2612,15 @@ mod tests {
                 StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
             ],
-            StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         );
         let before = stereo_bond_skeleton.clone().build();
         let tx = stereo_bond_skeleton
             .transact(vec![Edit::ModifyStereoBondField {
                 id: StereoBondHandle::Id(StereoBondId(0)),
                 change: StereoBondFieldChange::Configuration {
-                    old: StereoConfigurationAst::kinded(
-                        StereoKind::CisTrans,
-                        StereoCosetAst::Lit(1),
-                    ),
-                    new: StereoConfigurationAst::kinded(
-                        StereoKind::CisTrans,
-                        StereoCosetAst::Lit(0),
-                    ),
+                    old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                    new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
                 },
             }])
             .unwrap();
@@ -2635,7 +2629,7 @@ mod tests {
                 .stereo_bond(StereoBondId(0))
                 .ast
                 .configuration,
-            StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCosetAst::Lit(0)),
+            StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
         );
         tx.rollback(&mut stereo_bond_skeleton).unwrap();
         assert_eq!(stereo_bond_skeleton.build(), before);
@@ -2651,21 +2645,15 @@ mod tests {
                 StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
             ],
-            StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         );
         let err = stereo_bond_skeleton
             .transact(vec![Edit::ModifyStereoBondField {
                 id: StereoBondHandle::Id(StereoBondId(0)),
                 change: StereoBondFieldChange::Configuration {
                     // Wrong recorded coset (vs the stored 1).
-                    old: StereoConfigurationAst::kinded(
-                        StereoKind::CisTrans,
-                        StereoCosetAst::Lit(0),
-                    ),
-                    new: StereoConfigurationAst::kinded(
-                        StereoKind::CisTrans,
-                        StereoCosetAst::Lit(1),
-                    ),
+                    old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                    new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 },
             }])
             .unwrap_err();

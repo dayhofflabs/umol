@@ -50,7 +50,7 @@ from umol import (
     StereoBondDelta,
     StereoBondFieldChange,
     StereoConfigurationAst,
-    StereoCosetAst,
+    StereoCoset,
     StereoKind,
     StereoLigand,
     StereoLigandKind,
@@ -248,23 +248,23 @@ def test_stereoatomfieldchange_fields():
     change = StereoAtomFieldChange.Configuration(
         old=StereoConfigurationAst.Undetermined(),
         new=StereoConfigurationAst.Kinded(
-            StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+            StereoKind.Tetrahedral, StereoCoset.Undetermined()
         ),
     )
 
     assert change.old == StereoConfigurationAst.Undetermined()
     assert change.new == StereoConfigurationAst.Kinded(
-        StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+        StereoKind.Tetrahedral, StereoCoset.Undetermined()
     )
     assert repr(change) == (
         "StereoAtomFieldChange.Configuration("
         "old=StereoConfigurationAst.Undetermined(), "
         "new=StereoConfigurationAst.Kinded("
-        "StereoKind.Tetrahedral, StereoCosetAst.Undetermined()))"
+        "StereoKind.Tetrahedral, StereoCoset.Undetermined()))"
     )
     with pytest.raises(AttributeError):
         change.old = StereoConfigurationAst.Kinded(
-            StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+            StereoKind.Tetrahedral, StereoCoset.Lit(0)
         )
     with pytest.raises(TypeError):
         hash(change)
@@ -273,20 +273,20 @@ def test_stereoatomfieldchange_fields():
 def test_stereoatomfieldchange_match_positional():
     change = StereoAtomFieldChange.Configuration(
         old=StereoConfigurationAst.Kinded(
-            StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+            StereoKind.Tetrahedral, StereoCoset.Undetermined()
         ),
         new=StereoConfigurationAst.Kinded(
-            StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+            StereoKind.Tetrahedral, StereoCoset.Lit(1)
         ),
     )
 
     match change:
         case StereoAtomFieldChange.Configuration(old, new):
             assert old == StereoConfigurationAst.Kinded(
-                StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+                StereoKind.Tetrahedral, StereoCoset.Undetermined()
             )
             assert new == StereoConfigurationAst.Kinded(
-                StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+                StereoKind.Tetrahedral, StereoCoset.Lit(1)
             )
         case _:
             raise AssertionError("stereo atom field change did not match its variant")
@@ -296,7 +296,7 @@ def test_stereoatomfieldchange_match_named():
     change = StereoAtomFieldChange.Configuration(
         old=StereoConfigurationAst.Undetermined(),
         new=StereoConfigurationAst.Kinded(
-            StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+            StereoKind.Tetrahedral, StereoCoset.Undetermined()
         ),
     )
 
@@ -304,7 +304,7 @@ def test_stereoatomfieldchange_match_named():
         case StereoAtomFieldChange.Configuration(old=old, new=new):
             assert old == StereoConfigurationAst.Undetermined()
             assert new == StereoConfigurationAst.Kinded(
-                StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+                StereoKind.Tetrahedral, StereoCoset.Undetermined()
             )
         case _:
             raise AssertionError("stereo atom field change did not match its variant")
@@ -313,10 +313,10 @@ def test_stereoatomfieldchange_match_named():
 def test_stereoatomfieldchange_inverse():
     change = StereoAtomFieldChange.Configuration(
         old=StereoConfigurationAst.Kinded(
-            StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+            StereoKind.Tetrahedral, StereoCoset.Undetermined()
         ),
         new=StereoConfigurationAst.Kinded(
-            StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+            StereoKind.Tetrahedral, StereoCoset.Lit(1)
         ),
     )
 
@@ -324,10 +324,10 @@ def test_stereoatomfieldchange_inverse():
 
     assert isinstance(inverse, StereoAtomFieldChange.Configuration)
     assert inverse.old == StereoConfigurationAst.Kinded(
-        StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+        StereoKind.Tetrahedral, StereoCoset.Lit(1)
     )
     assert inverse.new == StereoConfigurationAst.Kinded(
-        StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+        StereoKind.Tetrahedral, StereoCoset.Undetermined()
     )
     assert inverse != change
     assert inverse.inverse() == change
@@ -337,23 +337,23 @@ def test_stereobondfieldchange_fields():
     change = StereoBondFieldChange.Configuration(
         old=StereoConfigurationAst.Undetermined(),
         new=StereoConfigurationAst.Kinded(
-            StereoKind.CisTrans, StereoCosetAst.Undetermined()
+            StereoKind.CisTrans, StereoCoset.Undetermined()
         ),
     )
 
     assert change.old == StereoConfigurationAst.Undetermined()
     assert change.new == StereoConfigurationAst.Kinded(
-        StereoKind.CisTrans, StereoCosetAst.Undetermined()
+        StereoKind.CisTrans, StereoCoset.Undetermined()
     )
     assert repr(change) == (
         "StereoBondFieldChange.Configuration("
         "old=StereoConfigurationAst.Undetermined(), "
         "new=StereoConfigurationAst.Kinded("
-        "StereoKind.CisTrans, StereoCosetAst.Undetermined()))"
+        "StereoKind.CisTrans, StereoCoset.Undetermined()))"
     )
     with pytest.raises(AttributeError):
         change.old = StereoConfigurationAst.Kinded(
-            StereoKind.CisTrans, StereoCosetAst.Lit(0)
+            StereoKind.CisTrans, StereoCoset.Lit(0)
         )
     with pytest.raises(TypeError):
         hash(change)
@@ -362,20 +362,20 @@ def test_stereobondfieldchange_fields():
 def test_stereobondfieldchange_match_positional():
     change = StereoBondFieldChange.Configuration(
         old=StereoConfigurationAst.Kinded(
-            StereoKind.CisTrans, StereoCosetAst.Undetermined()
+            StereoKind.CisTrans, StereoCoset.Undetermined()
         ),
         new=StereoConfigurationAst.Kinded(
-            StereoKind.CisTrans, StereoCosetAst.Lit(1)
+            StereoKind.CisTrans, StereoCoset.Lit(1)
         ),
     )
 
     match change:
         case StereoBondFieldChange.Configuration(old, new):
             assert old == StereoConfigurationAst.Kinded(
-                StereoKind.CisTrans, StereoCosetAst.Undetermined()
+                StereoKind.CisTrans, StereoCoset.Undetermined()
             )
             assert new == StereoConfigurationAst.Kinded(
-                StereoKind.CisTrans, StereoCosetAst.Lit(1)
+                StereoKind.CisTrans, StereoCoset.Lit(1)
             )
         case _:
             raise AssertionError("stereo bond field change did not match its variant")
@@ -385,7 +385,7 @@ def test_stereobondfieldchange_match_named():
     change = StereoBondFieldChange.Configuration(
         old=StereoConfigurationAst.Undetermined(),
         new=StereoConfigurationAst.Kinded(
-            StereoKind.CisTrans, StereoCosetAst.Undetermined()
+            StereoKind.CisTrans, StereoCoset.Undetermined()
         ),
     )
 
@@ -393,7 +393,7 @@ def test_stereobondfieldchange_match_named():
         case StereoBondFieldChange.Configuration(old=old, new=new):
             assert old == StereoConfigurationAst.Undetermined()
             assert new == StereoConfigurationAst.Kinded(
-                StereoKind.CisTrans, StereoCosetAst.Undetermined()
+                StereoKind.CisTrans, StereoCoset.Undetermined()
             )
         case _:
             raise AssertionError("stereo bond field change did not match its variant")
@@ -402,10 +402,10 @@ def test_stereobondfieldchange_match_named():
 def test_stereobondfieldchange_inverse():
     change = StereoBondFieldChange.Configuration(
         old=StereoConfigurationAst.Kinded(
-            StereoKind.CisTrans, StereoCosetAst.Undetermined()
+            StereoKind.CisTrans, StereoCoset.Undetermined()
         ),
         new=StereoConfigurationAst.Kinded(
-            StereoKind.CisTrans, StereoCosetAst.Lit(1)
+            StereoKind.CisTrans, StereoCoset.Lit(1)
         ),
     )
 
@@ -413,10 +413,10 @@ def test_stereobondfieldchange_inverse():
 
     assert isinstance(inverse, StereoBondFieldChange.Configuration)
     assert inverse.old == StereoConfigurationAst.Kinded(
-        StereoKind.CisTrans, StereoCosetAst.Lit(1)
+        StereoKind.CisTrans, StereoCoset.Lit(1)
     )
     assert inverse.new == StereoConfigurationAst.Kinded(
-        StereoKind.CisTrans, StereoCosetAst.Undetermined()
+        StereoKind.CisTrans, StereoCoset.Undetermined()
     )
     assert inverse != change
     assert inverse.inverse() == change
@@ -429,55 +429,55 @@ def test_stereobondfieldchange_inverse():
             StereoAtomFieldChange.Configuration(
                 old=StereoConfigurationAst.Undetermined(),
                 new=StereoConfigurationAst.Kinded(
-                    StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+                    StereoKind.Tetrahedral, StereoCoset.Undetermined()
                 ),
             ),
             "StereoAtomFieldChange.Configuration("
             "old=StereoConfigurationAst.Undetermined(), "
             "new=StereoConfigurationAst.Kinded("
-            "StereoKind.Tetrahedral, StereoCosetAst.Undetermined()))",
+            "StereoKind.Tetrahedral, StereoCoset.Undetermined()))",
         ),
         (
             StereoAtomFieldChange.Configuration(
                 old=StereoConfigurationAst.Kinded(
-                    StereoKind.Tetrahedral, StereoCosetAst.Undetermined()
+                    StereoKind.Tetrahedral, StereoCoset.Undetermined()
                 ),
                 new=StereoConfigurationAst.Kinded(
-                    StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+                    StereoKind.Tetrahedral, StereoCoset.Lit(1)
                 ),
             ),
             "StereoAtomFieldChange.Configuration("
             "old=StereoConfigurationAst.Kinded("
-            "StereoKind.Tetrahedral, StereoCosetAst.Undetermined()), "
+            "StereoKind.Tetrahedral, StereoCoset.Undetermined()), "
             "new=StereoConfigurationAst.Kinded("
-            "StereoKind.Tetrahedral, StereoCosetAst.Lit(1)))",
+            "StereoKind.Tetrahedral, StereoCoset.Lit(1)))",
         ),
         (
             StereoBondFieldChange.Configuration(
                 old=StereoConfigurationAst.Undetermined(),
                 new=StereoConfigurationAst.Kinded(
-                    StereoKind.CisTrans, StereoCosetAst.Undetermined()
+                    StereoKind.CisTrans, StereoCoset.Undetermined()
                 ),
             ),
             "StereoBondFieldChange.Configuration("
             "old=StereoConfigurationAst.Undetermined(), "
             "new=StereoConfigurationAst.Kinded("
-            "StereoKind.CisTrans, StereoCosetAst.Undetermined()))",
+            "StereoKind.CisTrans, StereoCoset.Undetermined()))",
         ),
         (
             StereoBondFieldChange.Configuration(
                 old=StereoConfigurationAst.Kinded(
-                    StereoKind.CisTrans, StereoCosetAst.Undetermined()
+                    StereoKind.CisTrans, StereoCoset.Undetermined()
                 ),
                 new=StereoConfigurationAst.Kinded(
-                    StereoKind.CisTrans, StereoCosetAst.Lit(1)
+                    StereoKind.CisTrans, StereoCoset.Lit(1)
                 ),
             ),
             "StereoBondFieldChange.Configuration("
             "old=StereoConfigurationAst.Kinded("
-            "StereoKind.CisTrans, StereoCosetAst.Undetermined()), "
+            "StereoKind.CisTrans, StereoCoset.Undetermined()), "
             "new=StereoConfigurationAst.Kinded("
-            "StereoKind.CisTrans, StereoCosetAst.Lit(1)))",
+            "StereoKind.CisTrans, StereoCoset.Lit(1)))",
         ),
     ],
     ids=[
@@ -1203,7 +1203,7 @@ def test_noncovalentbonddelta_modifyconstraint_match():
 def test_stereoatomdelta_fields():
     source = StereoAtomAst(
         StereoConfigurationAst.Kinded(
-            StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+            StereoKind.Tetrahedral, StereoCoset.Lit(0)
         )
     )
     delta = StereoAtomDelta.Add(
@@ -1218,7 +1218,7 @@ def test_stereoatomdelta_fields():
     )
 
     source.configuration = StereoConfigurationAst.Kinded(
-        StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+        StereoKind.Tetrahedral, StereoCoset.Lit(1)
     )
 
     assert delta.id == 5
@@ -1230,7 +1230,7 @@ def test_stereoatomdelta_fields():
     ]
     assert isinstance(delta.ligands, list)
     assert delta.ast.configuration == StereoConfigurationAst.Kinded(
-        StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+        StereoKind.Tetrahedral, StereoCoset.Lit(0)
     )
     assert repr(delta) == (
         "StereoAtomDelta.Add(id=5, site=3, ligands=["
@@ -1240,10 +1240,10 @@ def test_stereoatomdelta_fields():
         "ast=StereoAtomAst.parse('Th0'))"
     )
     delta.ast.configuration = StereoConfigurationAst.Kinded(
-        StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+        StereoKind.Tetrahedral, StereoCoset.Lit(1)
     )
     assert delta.ast.configuration == StereoConfigurationAst.Kinded(
-        StereoKind.Tetrahedral, StereoCosetAst.Lit(1)
+        StereoKind.Tetrahedral, StereoCoset.Lit(1)
     )
     with pytest.raises(AttributeError):
         delta.ligands = []
@@ -1261,7 +1261,7 @@ def test_stereoatomdelta_add_match():
         ],
         ast=StereoAtomAst(
             StereoConfigurationAst.Kinded(
-                StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+                StereoKind.Tetrahedral, StereoCoset.Lit(0)
             )
         ),
     )
@@ -1275,7 +1275,7 @@ def test_stereoatomdelta_add_match():
                 StereoLigand(2, StereoLigandKind.LonePair),
             ]
             assert ast.configuration == StereoConfigurationAst.Kinded(
-                StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+                StereoKind.Tetrahedral, StereoCoset.Lit(0)
             )
         case _:
             raise AssertionError("stereo atom delta did not match its add variant")
@@ -1293,7 +1293,7 @@ def test_stereoatomdelta_modifyfield_match():
         change=StereoAtomFieldChange.Configuration(
             old=StereoConfigurationAst.Undetermined(),
             new=StereoConfigurationAst.Kinded(
-                StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+                StereoKind.Tetrahedral, StereoCoset.Lit(0)
             ),
         ),
     )
@@ -1304,7 +1304,7 @@ def test_stereoatomdelta_modifyfield_match():
             assert change == StereoAtomFieldChange.Configuration(
                 old=StereoConfigurationAst.Undetermined(),
                 new=StereoConfigurationAst.Kinded(
-                    StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+                    StereoKind.Tetrahedral, StereoCoset.Lit(0)
                 ),
             )
         case _:
@@ -1419,7 +1419,7 @@ def test_stereoatomdelta_involutions():
 def test_stereobonddelta_fields():
     source = StereoBondAst(
         StereoConfigurationAst.Kinded(
-            StereoKind.CisTrans, StereoCosetAst.Lit(0)
+            StereoKind.CisTrans, StereoCoset.Lit(0)
         )
     )
     delta = StereoBondDelta.Add(
@@ -1434,7 +1434,7 @@ def test_stereobonddelta_fields():
     )
 
     source.configuration = StereoConfigurationAst.Kinded(
-        StereoKind.CisTrans, StereoCosetAst.Lit(1)
+        StereoKind.CisTrans, StereoCoset.Lit(1)
     )
 
     assert delta.id == 5
@@ -1446,7 +1446,7 @@ def test_stereobonddelta_fields():
     ]
     assert isinstance(delta.ligands, list)
     assert delta.ast.configuration == StereoConfigurationAst.Kinded(
-        StereoKind.CisTrans, StereoCosetAst.Lit(0)
+        StereoKind.CisTrans, StereoCoset.Lit(0)
     )
     assert repr(delta) == (
         "StereoBondDelta.Add(id=5, site=3, ligands=["
@@ -1456,10 +1456,10 @@ def test_stereobonddelta_fields():
         "ast=StereoBondAst.parse('Ct0'))"
     )
     delta.ast.configuration = StereoConfigurationAst.Kinded(
-        StereoKind.CisTrans, StereoCosetAst.Lit(1)
+        StereoKind.CisTrans, StereoCoset.Lit(1)
     )
     assert delta.ast.configuration == StereoConfigurationAst.Kinded(
-        StereoKind.CisTrans, StereoCosetAst.Lit(1)
+        StereoKind.CisTrans, StereoCoset.Lit(1)
     )
     with pytest.raises(AttributeError):
         delta.ligands = []
@@ -1477,7 +1477,7 @@ def test_stereobonddelta_add_match():
         ],
         ast=StereoBondAst(
             StereoConfigurationAst.Kinded(
-                StereoKind.CisTrans, StereoCosetAst.Lit(0)
+                StereoKind.CisTrans, StereoCoset.Lit(0)
             )
         ),
     )
@@ -1491,7 +1491,7 @@ def test_stereobonddelta_add_match():
                 StereoLigand(2, StereoLigandKind.LonePair),
             ]
             assert ast.configuration == StereoConfigurationAst.Kinded(
-                StereoKind.CisTrans, StereoCosetAst.Lit(0)
+                StereoKind.CisTrans, StereoCoset.Lit(0)
             )
         case _:
             raise AssertionError("stereo bond delta did not match its add variant")
@@ -1509,7 +1509,7 @@ def test_stereobonddelta_modifyfield_match():
         change=StereoBondFieldChange.Configuration(
             old=StereoConfigurationAst.Undetermined(),
             new=StereoConfigurationAst.Kinded(
-                StereoKind.CisTrans, StereoCosetAst.Lit(0)
+                StereoKind.CisTrans, StereoCoset.Lit(0)
             ),
         ),
     )
@@ -1520,7 +1520,7 @@ def test_stereobonddelta_modifyfield_match():
             assert change == StereoBondFieldChange.Configuration(
                 old=StereoConfigurationAst.Undetermined(),
                 new=StereoConfigurationAst.Kinded(
-                    StereoKind.CisTrans, StereoCosetAst.Lit(0)
+                    StereoKind.CisTrans, StereoCoset.Lit(0)
                 ),
             )
         case _:
@@ -1925,7 +1925,7 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                 ligands=[StereoLigand(4, StereoLigandKind.Atom)],
                 ast=StereoAtomAst(
                     StereoConfigurationAst.Kinded(
-                        StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+                        StereoKind.Tetrahedral, StereoCoset.Lit(0)
                     )
                 ),
             ),
@@ -1940,7 +1940,7 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                 ligands=[StereoLigand(4, StereoLigandKind.Atom)],
                 ast=StereoAtomAst(
                     StereoConfigurationAst.Kinded(
-                        StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+                        StereoKind.Tetrahedral, StereoCoset.Lit(0)
                     )
                 ),
             ),
@@ -1954,11 +1954,11 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                 change=StereoAtomFieldChange.Configuration(
                     old=StereoConfigurationAst.Undetermined(),
                     new=StereoConfigurationAst.Kinded(
-                        StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+                        StereoKind.Tetrahedral, StereoCoset.Lit(0)
                     ),
                 ),
             ),
-            "StereoAtomDelta.ModifyField(id=5, change=StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Lit(0))))",
+            "StereoAtomDelta.ModifyField(id=5, change=StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0))))",
             StereoAtomDelta.ModifyField,
             False,
         ),
@@ -2004,7 +2004,7 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                 ligands=[StereoLigand(4, StereoLigandKind.Atom)],
                 ast=StereoBondAst(
                     StereoConfigurationAst.Kinded(
-                        StereoKind.CisTrans, StereoCosetAst.Lit(0)
+                        StereoKind.CisTrans, StereoCoset.Lit(0)
                     )
                 ),
             ),
@@ -2019,7 +2019,7 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                 ligands=[StereoLigand(4, StereoLigandKind.Atom)],
                 ast=StereoBondAst(
                     StereoConfigurationAst.Kinded(
-                        StereoKind.CisTrans, StereoCosetAst.Lit(0)
+                        StereoKind.CisTrans, StereoCoset.Lit(0)
                     )
                 ),
             ),
@@ -2033,11 +2033,11 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                 change=StereoBondFieldChange.Configuration(
                     old=StereoConfigurationAst.Undetermined(),
                     new=StereoConfigurationAst.Kinded(
-                        StereoKind.CisTrans, StereoCosetAst.Lit(0)
+                        StereoKind.CisTrans, StereoCoset.Lit(0)
                     ),
                 ),
             ),
-            "StereoBondDelta.ModifyField(id=5, change=StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Lit(0))))",
+            "StereoBondDelta.ModifyField(id=5, change=StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Lit(0))))",
             StereoBondDelta.ModifyField,
             False,
         ),
@@ -2348,7 +2348,7 @@ def test_delta_atom_match():
                     ast=StereoAtomAst(
                         StereoConfigurationAst.Kinded(
                             StereoKind.Tetrahedral,
-                            StereoCosetAst.Lit(0),
+                            StereoCoset.Lit(0),
                         )
                     ),
                 )
@@ -2366,7 +2366,7 @@ def test_delta_atom_match():
                     ast=StereoBondAst(
                         StereoConfigurationAst.Kinded(
                             StereoKind.CisTrans,
-                            StereoCosetAst.Lit(0),
+                            StereoCoset.Lit(0),
                         )
                     ),
                 )
@@ -2453,7 +2453,7 @@ def test_delta_match():
                 ast=StereoAtomAst(
                     StereoConfigurationAst.Kinded(
                         StereoKind.Tetrahedral,
-                        StereoCosetAst.Lit(0),
+                        StereoCoset.Lit(0),
                     )
                 ),
             )
@@ -2466,7 +2466,7 @@ def test_delta_match():
                 ast=StereoBondAst(
                     StereoConfigurationAst.Kinded(
                         StereoKind.CisTrans,
-                        StereoCosetAst.Lit(0),
+                        StereoCoset.Lit(0),
                     )
                 ),
             )
@@ -2516,7 +2516,7 @@ def test_delta_match():
                 assert ligands == [StereoLigand(4, StereoLigandKind.Atom)]
                 assert ast.configuration == StereoConfigurationAst.Kinded(
                     StereoKind.Tetrahedral,
-                    StereoCosetAst.Lit(0),
+                    StereoCoset.Lit(0),
                 )
                 seen.append("stereo-atom")
             case Delta.StereoBond(
@@ -2525,7 +2525,7 @@ def test_delta_match():
                 assert ligands == [StereoLigand(4, StereoLigandKind.Atom)]
                 assert ast.configuration == StereoConfigurationAst.Kinded(
                     StereoKind.CisTrans,
-                    StereoCosetAst.Lit(0),
+                    StereoCoset.Lit(0),
                 )
                 seen.append("stereo-bond")
             case Delta.Constraint(ConstraintDelta.Add(constraint=constraint)):

@@ -12,7 +12,7 @@ from umol import (
     StereoAtomConstraintsAst,
     StereoBondAst,
     StereoConfigurationAst,
-    StereoCosetAst,
+    StereoCoset,
     StereoKind,
     StereoLigand,
     StereoLigandKind,
@@ -64,12 +64,12 @@ def test_stereoterm_apply():
 
 
 def test_stereocosetast_term():
-    assert StereoCosetAst.Term(StereoTerm.Lit(2)) == StereoCosetAst.Term(StereoTerm.Lit(2))
+    assert StereoCoset.Term(StereoTerm.Lit(2)) == StereoCoset.Term(StereoTerm.Lit(2))
 
 
 def test_tetrahedralstereoast_stereo():
-    assert TetrahedralStereoAst.Stereo(StereoCosetAst.Lit(1)) == TetrahedralStereoAst.Stereo(
-        StereoCosetAst.Lit(1)
+    assert TetrahedralStereoAst.Stereo(StereoCoset.Lit(1)) == TetrahedralStereoAst.Stereo(
+        StereoCoset.Lit(1)
     )
 
 
@@ -78,10 +78,10 @@ def test_tetrahedralstereoast_not_stereo():
 
 
 def test_stereocosetast_eq_hash_repr():
-    assert StereoCosetAst.Lit(1) == StereoCosetAst.Lit(1)
-    assert StereoCosetAst.Lit(1) != StereoCosetAst.Lit(0)
-    assert len({StereoCosetAst.Lit(1), StereoCosetAst.Lit(1)}) == 1
-    assert repr(StereoCosetAst.Lit(1)) == "StereoCosetAst.Lit(1)"
+    assert StereoCoset.Lit(1) == StereoCoset.Lit(1)
+    assert StereoCoset.Lit(1) != StereoCoset.Lit(0)
+    assert len({StereoCoset.Lit(1), StereoCoset.Lit(1)}) == 1
+    assert repr(StereoCoset.Lit(1)) == "StereoCoset.Lit(1)"
 
 
 def test_stereoterm_eq_repr():
@@ -93,14 +93,14 @@ def test_stereoterm_eq_repr():
 
 
 def test_tetrahedralstereoast_stereo_repr():
-    assert repr(TetrahedralStereoAst.Stereo(StereoCosetAst.Lit(1))) == (
-        "TetrahedralStereoAst.Stereo(StereoCosetAst.Lit(1))"
+    assert repr(TetrahedralStereoAst.Stereo(StereoCoset.Lit(1))) == (
+        "TetrahedralStereoAst.Stereo(StereoCoset.Lit(1))"
     )
 
 
 def test_cistransstereoast_stereo():
-    assert CisTransStereoAst.Stereo(StereoCosetAst.Lit(1)) == CisTransStereoAst.Stereo(
-        StereoCosetAst.Lit(1)
+    assert CisTransStereoAst.Stereo(StereoCoset.Lit(1)) == CisTransStereoAst.Stereo(
+        StereoCoset.Lit(1)
     )
 
 
@@ -109,8 +109,8 @@ def test_cistransstereoast_not_stereo():
 
 
 def test_cistransstereoast_stereo_repr():
-    assert repr(CisTransStereoAst.Stereo(StereoCosetAst.Lit(1))) == (
-        "CisTransStereoAst.Stereo(StereoCosetAst.Lit(1))"
+    assert repr(CisTransStereoAst.Stereo(StereoCoset.Lit(1))) == (
+        "CisTransStereoAst.Stereo(StereoCoset.Lit(1))"
     )
 
 
@@ -138,7 +138,7 @@ def test_stereoatomast_new():
     atom = StereoAtomAst(TetrahedralStereo.Ccw)
     assert str(atom) == "Th0"
     assert atom.configuration == StereoConfigurationAst.Kinded(
-        StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+        StereoKind.Tetrahedral, StereoCoset.Lit(0)
     )
     assert len(atom.constraints) == 0
 
@@ -177,7 +177,7 @@ def test_stereoatomast_asdict():
     d = atom.asdict()
     assert set(d.keys()) == {"configuration", "constraints"}
     assert d["configuration"] == StereoConfigurationAst.Kinded(
-        StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+        StereoKind.Tetrahedral, StereoCoset.Lit(0)
     )
     assert d["constraints"] == []
 
@@ -186,7 +186,7 @@ def test_stereobondast_parse_roundtrip():
     bond = StereoBondAst.parse("Ct0")
     assert str(bond) == "Ct0"
     assert bond.configuration == StereoConfigurationAst.Kinded(
-        StereoKind.CisTrans, StereoCosetAst.Lit(0)
+        StereoKind.CisTrans, StereoCoset.Lit(0)
     )
 
 
@@ -198,9 +198,9 @@ def test_molecule_stereo_atoms_from_parts():
     assert view.site_id == 0
     assert view.ligands == [StereoLigand(i, StereoLigandKind.Atom) for i in range(1, 5)]
     assert view.kind == StereoKind.Tetrahedral
-    assert view.coset == StereoCosetAst.Lit(0)
+    assert view.coset == StereoCoset.Lit(0)
     assert view.configuration == StereoConfigurationAst.Kinded(
-        StereoKind.Tetrahedral, StereoCosetAst.Lit(0)
+        StereoKind.Tetrahedral, StereoCoset.Lit(0)
     )
 
 
@@ -208,7 +208,7 @@ def test_stereoatomview_configuration_write_through():
     mol = stereo_atom_molecule()
     mol.stereo_atoms[0].configuration = TetrahedralStereo.Cw
     # a fresh view re-reads the molecule, proving the write landed on it
-    assert mol.stereo_atoms[0].coset == StereoCosetAst.Lit(1)
+    assert mol.stereo_atoms[0].coset == StereoCoset.Lit(1)
 
 
 def test_stereoatomview_constraints_write_through():
@@ -242,7 +242,7 @@ def test_stereoatomviews_setitem():
     mol = stereo_atom_molecule()
     mol.stereo_atoms[0] = StereoAtomAst.parse("Th1")
     view = mol.stereo_atoms[0]
-    assert view.coset == StereoCosetAst.Lit(1)
+    assert view.coset == StereoCoset.Lit(1)
     # site topology preserved
     assert view.site_id == 0
 

@@ -31,7 +31,7 @@ use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::SpinStateAst;
-use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
+use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
 use super::super::value::ValueAst;
 use super::{MoleculeAst, MoleculeParts};
 use crate::{mol_dsl, mol_dsl_ground};
@@ -134,7 +134,7 @@ fn test_molecule_ast_builder() {
 #[case::stereo_atom_undetermined_coset(
     MoleculeAst::from_parts(MoleculeParts {
         atoms: vec![ground_atom()],
-        stereo_atoms: vec![(AtomId(0), vec![], StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))],
+        stereo_atoms: vec![(AtomId(0), vec![], StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Undetermined))],
         constraints: Constraints::new(),
         ..Default::default()
     }),

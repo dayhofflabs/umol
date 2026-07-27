@@ -11,7 +11,7 @@ from umol import (
     MulticenterValenceAst,
     RingMembershipAst,
     RingScope,
-    StereoCosetAst,
+    StereoCoset,
     TetrahedralStereo,
     TetrahedralStereoAst,
     ValueAst,
@@ -303,7 +303,7 @@ def test_atomconstraints_multicenter_valence_int():
 def test_atomconstraints_tetrahedral_stereo_config():
     cs = AtomConstraintsAst([])
     cs.tetrahedral_stereo = TetrahedralStereo.Cw
-    assert cs.tetrahedral_stereo == TetrahedralStereoAst.Stereo(StereoCosetAst.Lit(1))
+    assert cs.tetrahedral_stereo == TetrahedralStereoAst.Stereo(StereoCoset.Lit(1))
 
 
 def test_atomconstraints_tetrahedral_stereo_false():

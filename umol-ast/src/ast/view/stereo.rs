@@ -17,7 +17,7 @@ use super::super::traits::Lattice;
 use super::atom::AtomView;
 use super::bond::BondView;
 use super::ligand::StereoLigandView;
-use crate::ast::{StereoAtomConstraintsAst, StereoBondConstraintsAst, StereoCosetAst};
+use crate::ast::{StereoAtomConstraintsAst, StereoBondConstraintsAst, StereoCoset};
 
 type StereoAtomSet =
     FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>;
@@ -225,7 +225,7 @@ impl<'a> StereoAtomView<'a> {
 
     #[inline]
     /// The stereo coset.
-    pub fn coset(&self) -> &'a StereoCosetAst {
+    pub fn coset(&self) -> &'a StereoCoset {
         self.ast
             .configuration
             .coset()
@@ -321,7 +321,7 @@ impl<'a> StereoAtomView<'a> {
     pub fn coset_for(
         &self,
         ligands: impl IntoIterator<Item = StereoLigand>,
-    ) -> Option<StereoCosetAst> {
+    ) -> Option<StereoCoset> {
         let permutation = self.permutation_for(ligands)?;
         coset_apply_permutation(self.coset(), permutation, self.kind())
     }
@@ -577,7 +577,7 @@ impl<'a> StereoBondView<'a> {
 
     #[inline]
     /// The stereo coset.
-    pub fn coset(&self) -> &'a StereoCosetAst {
+    pub fn coset(&self) -> &'a StereoCoset {
         self.ast
             .configuration
             .coset()
@@ -673,7 +673,7 @@ impl<'a> StereoBondView<'a> {
     pub fn coset_for(
         &self,
         ligands: impl IntoIterator<Item = StereoLigand>,
-    ) -> Option<StereoCosetAst> {
+    ) -> Option<StereoCoset> {
         let permutation = self.permutation_for(ligands)?;
         coset_apply_permutation(self.coset(), permutation, self.kind())
     }
@@ -861,7 +861,7 @@ mod tests {
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::stereo::{
-        StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind, Stereogenicity, Topicity,
+        StereoAtomAst, StereoBondAst, StereoCoset, StereoKind, Stereogenicity, Topicity,
     };
     use crate::ast::symmetry::GraphSymmetryConfig;
 
@@ -883,7 +883,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             stereo_bonds: vec![(
                 BondId(1),
@@ -893,7 +893,7 @@ mod tests {
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         })
@@ -916,7 +916,7 @@ mod tests {
                     StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             stereo_bonds: vec![(
                 BondId(1),
@@ -926,7 +926,7 @@ mod tests {
                     StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         })
@@ -954,7 +954,7 @@ mod tests {
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             stereo_bonds: vec![(
                 BondId(0),
@@ -964,7 +964,7 @@ mod tests {
                     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         })
@@ -1015,7 +1015,7 @@ mod tests {
         );
         assert_eq!(
             view.ast,
-            &StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            &StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         );
     }
 
@@ -1089,7 +1089,7 @@ mod tests {
     fn test_stereo_atom_view_coset(molecule: MoleculeAst) {
         assert_eq!(
             molecule.stereo_atom(StereoAtomId(0)).coset(),
-            &StereoCosetAst::Lit(1),
+            &StereoCoset::Lit(1),
         );
     }
 
@@ -1151,7 +1151,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             )],
             ..Default::default()
         });
@@ -1374,13 +1374,10 @@ mod tests {
                 kind: StereoLigandKind::Atom,
             },
         ];
-        assert_eq!(
-            view.coset_for(ligands.clone()),
-            Some(StereoCosetAst::Lit(1)),
-        );
+        assert_eq!(view.coset_for(ligands.clone()), Some(StereoCoset::Lit(1)),);
 
         let reordered = vec![ligands[1], ligands[0], ligands[2], ligands[3]];
-        assert_eq!(view.coset_for(reordered), Some(StereoCosetAst::Lit(0)));
+        assert_eq!(view.coset_for(reordered), Some(StereoCoset::Lit(0)));
     }
 
     #[rstest]
@@ -1436,7 +1433,7 @@ mod tests {
         assert_eq!(view.kind(), StereoKind::CisTrans);
         assert_eq!(
             view.ast,
-            &StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            &StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         );
     }
 
@@ -1527,7 +1524,7 @@ mod tests {
     fn test_stereo_bond_view_coset(molecule: MoleculeAst) {
         assert_eq!(
             molecule.stereo_bond(StereoBondId(0)).coset(),
-            &StereoCosetAst::Lit(1),
+            &StereoCoset::Lit(1),
         );
     }
 
@@ -1746,13 +1743,10 @@ mod tests {
                 kind: StereoLigandKind::Atom,
             },
         ];
-        assert_eq!(
-            view.coset_for(ligands.clone()),
-            Some(StereoCosetAst::Lit(1)),
-        );
+        assert_eq!(view.coset_for(ligands.clone()), Some(StereoCoset::Lit(1)),);
 
         let reordered = vec![ligands[1], ligands[0], ligands[2], ligands[3]];
-        assert_eq!(view.coset_for(reordered), Some(StereoCosetAst::Lit(0)));
+        assert_eq!(view.coset_for(reordered), Some(StereoCoset::Lit(0)));
     }
 
     #[rstest]

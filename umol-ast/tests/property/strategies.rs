@@ -34,7 +34,7 @@ pub(crate) use umol_ast::ast::{
     StereoAtomConstraintsAst, StereoAtomDelta, StereoAtomFieldChange, StereoAtomId,
     StereoAtomUpdate, StereoBondAst, StereoBondConstraintAst, StereoBondConstraintsAst,
     StereoBondDelta, StereoBondFieldChange, StereoBondId, StereoBondUpdate, StereoConfigurationAst,
-    StereoConfigurationUpdate, StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind,
+    StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
     StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityAst, SubPatternAnchor,
     TetrahedralStereoAst, Topicity, TopicityAst, TopicityRelationAst, ValueAst, ValuePredicate,
     ValueTerm,
@@ -929,11 +929,11 @@ pub(crate) fn noncovalent_bond_update_strategy() -> impl Strategy<Value = Noncov
 /// EDN coset-form: `Undetermined` (`*`), `Lit`, and a literal set
 /// (`{a,b,…}` ↔ EDN vector). The `~`/`^`/`?var` operator-exprs are reserved
 /// (§7.14) and excluded.
-pub(crate) fn stereo_coset_strategy() -> impl Strategy<Value = StereoCosetAst> {
+pub(crate) fn stereo_coset_strategy() -> impl Strategy<Value = StereoCoset> {
     prop_oneof![
-        Just(StereoCosetAst::Undetermined),
-        (0u32..=6).prop_map(StereoCosetAst::Lit),
-        prop::collection::vec(0u32..=6, 1..=3).prop_map(StereoCosetAst::lit_set),
+        Just(StereoCoset::Undetermined),
+        (0u32..=6).prop_map(StereoCoset::Lit),
+        prop::collection::vec(0u32..=6, 1..=3).prop_map(StereoCoset::lit_set),
     ]
 }
 
@@ -2923,11 +2923,11 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = MoleculeAst> {
 /// reaction ops (`Swap` / `Mirror` / `Apply`) act on the coset through the kind's algebra, which
 /// panics on an out-of-range index — so unlike the generic `stereo_coset_strategy`, indices are
 /// bounded by the kind's coset count.
-pub(crate) fn stereo_coset_for_kind(kind: StereoKind) -> impl Strategy<Value = StereoCosetAst> {
+pub(crate) fn stereo_coset_for_kind(kind: StereoKind) -> impl Strategy<Value = StereoCoset> {
     let count = kind.count() as u32;
     prop_oneof![
-        Just(StereoCosetAst::Undetermined),
-        (0..count).prop_map(StereoCosetAst::Lit),
+        Just(StereoCoset::Undetermined),
+        (0..count).prop_map(StereoCoset::Lit),
     ]
 }
 
@@ -3115,7 +3115,7 @@ enum StereoOp {
     Swap,
     Mirror,
     Apply(Permutation),
-    SetCoset(StereoCosetAst),
+    SetCoset(StereoCoset),
 }
 
 /// Per-surviving-stereo-entity optional op: `Swap` / `Mirror` use the kind's in-group generators,

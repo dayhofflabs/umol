@@ -2981,7 +2981,7 @@ mod tests {
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::noncovalent::{NoncovalentBondKind, NoncovalentBondKindAst};
     use crate::ast::spin::{SpinStateAst, SpinStateUpdate};
-    use crate::ast::stereo::{StereoCosetAst, Stereogenicity};
+    use crate::ast::stereo::{StereoCoset, Stereogenicity};
     use crate::ast::value::ValueAst;
     use crate::dsl::bond::BondDsl;
     use crate::dsl::constraint::MoleculeConstraintDsl;
@@ -3331,7 +3331,7 @@ mod tests {
     #[rstest]
     #[case::empty(r##"{:stereo-atom {:modify [:s1 ""]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate::default()))]
     #[case::undetermined(r##"{:stereo-atom {:modify [:s1 "*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
-    #[case::absolute(r##"{:stereo-atom {:modify [:s1 "Th1"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCosetAst::Lit(1)) }, ..Default::default() }))]
+    #[case::absolute(r##"{:stereo-atom {:modify [:s1 "Th1"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
     #[case::relative(r##"{:stereo-atom {:modify [:s1 "Th"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() }))]
     #[case::constraint_removal(r##"{:stereo-atom {:modify [:s1 "Th#g*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
     fn test_parse_delta_input_stereo_atom(#[case] input: &str, #[case] expected: DeltaInput) {
@@ -3342,7 +3342,7 @@ mod tests {
     #[rstest]
     #[case::empty(r##"{:stereo-atom {:modify [:s1 ""]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate::default()))]
     #[case::undetermined(r##"{:stereo-atom {:modify [:s1 "*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
-    #[case::absolute(r##"{:stereo-atom {:modify [:s1 "Th1"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCosetAst::Lit(1)) }, ..Default::default() }))]
+    #[case::absolute(r##"{:stereo-atom {:modify [:s1 "Th1"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
     #[case::relative(r##"{:stereo-atom {:modify [:s1 "Th"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, ..Default::default() }))]
     #[case::constraint_removal(r##"{:stereo-atom {:modify [:s1 "Th#g*"]}}"##, DeltaInput::StereoAtomModify(StereoAtomRef::Id("s1".into()), StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
     fn test_read_delta_input_stereo_atom(#[case] input: &str, #[case] expected: DeltaInput) {
@@ -3356,7 +3356,7 @@ mod tests {
     #[rstest]
     #[case::empty(r##"{:stereo-bond {:modify [:t1 ""]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate::default()))]
     #[case::undetermined(r##"{:stereo-bond {:modify [:t1 "*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
-    #[case::absolute(r##"{:stereo-bond {:modify [:t1 "Ct1"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCosetAst::Lit(1)) }, ..Default::default() }))]
+    #[case::absolute(r##"{:stereo-bond {:modify [:t1 "Ct1"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
     #[case::relative(r##"{:stereo-bond {:modify [:t1 "Ct"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() }))]
     #[case::constraint_removal(r##"{:stereo-bond {:modify [:t1 "Ct#g*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
     fn test_parse_delta_input_stereo_bond(#[case] input: &str, #[case] expected: DeltaInput) {
@@ -3367,7 +3367,7 @@ mod tests {
     #[rstest]
     #[case::empty(r##"{:stereo-bond {:modify [:t1 ""]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate::default()))]
     #[case::undetermined(r##"{:stereo-bond {:modify [:t1 "*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Undetermined, ..Default::default() }))]
-    #[case::absolute(r##"{:stereo-bond {:modify [:t1 "Ct1"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCosetAst::Lit(1)) }, ..Default::default() }))]
+    #[case::absolute(r##"{:stereo-bond {:modify [:t1 "Ct1"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) }, ..Default::default() }))]
     #[case::relative(r##"{:stereo-bond {:modify [:t1 "Ct"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, ..Default::default() }))]
     #[case::constraint_removal(r##"{:stereo-bond {:modify [:t1 "Ct#g*"]}}"##, DeltaInput::StereoBondModify(StereoBondRef::Id("t1".into()), StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)) }))]
     fn test_read_delta_input_stereo_bond(#[case] input: &str, #[case] expected: DeltaInput) {

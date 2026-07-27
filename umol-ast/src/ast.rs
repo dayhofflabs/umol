@@ -103,7 +103,7 @@ pub use ring::{
 pub use spin::{SpinStateAst, SpinStateUpdate};
 pub use stereo::{
     CisTransStereoAst, StereoAtomAst, StereoAtomUpdate, StereoBondAst, StereoBondUpdate,
-    StereoConfiguration, StereoConfigurationAst, StereoConfigurationUpdate, StereoCosetAst,
+    StereoConfiguration, StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset,
     StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoAst, Topicity,
 };
 pub use substructure::SubstructureMatchAlgorithm;

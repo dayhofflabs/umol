@@ -11,8 +11,8 @@ use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraintAst, AtomId, BondAst, BondConstraintAst, BooleanAst,
     CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, Lattice,
-    MoleculeAst, MoleculeParts, MulticenterBondAst, NoncovalentBondAst, SpinStateAst,
-    StereoCosetAst, TetrahedralStereoAst, TryIntoAst, ValueAst,
+    MoleculeAst, MoleculeParts, MulticenterBondAst, NoncovalentBondAst, SpinStateAst, StereoCoset,
+    TetrahedralStereoAst, TryIntoAst, ValueAst,
 };
 use umol_chem::element::Element;
 use umol_perm::{ClassKey, Permutation};
@@ -253,7 +253,7 @@ fn raise_tetrahedral_stereo(
         Some(Chirality::Unspecified) => {
             validate_tetrahedral_geometry(mol, atom_idx)?;
             return Ok(Some(AtomConstraintAst::TetrahedralStereo(
-                TetrahedralStereoAst::stereo(StereoCosetAst::Undetermined),
+                TetrahedralStereoAst::stereo(StereoCoset::Undetermined),
             )));
         }
         Some(symbol) => {
@@ -334,7 +334,7 @@ fn raise_tetrahedral_stereo(
         .reindex(source_coset as u32, relabeling)
         .expect("tetrahedral coset reindex");
     Ok(Some(AtomConstraintAst::TetrahedralStereo(
-        TetrahedralStereoAst::stereo(StereoCosetAst::Lit(coset)),
+        TetrahedralStereoAst::stereo(StereoCoset::Lit(coset)),
     )))
 }
 
@@ -349,7 +349,7 @@ fn raise_cis_trans_stereo(
     }
     if bond.stereo == Some(BondStereo::Either) {
         return Ok(Some(BondConstraintAst::CisTransStereo(
-            CisTransStereoAst::stereo(StereoCosetAst::Undetermined),
+            CisTransStereoAst::stereo(StereoCoset::Undetermined),
         )));
     }
     let atom_1_idx = bond.start_atom() as usize;
@@ -384,7 +384,7 @@ fn raise_cis_trans_stereo(
         )
         .expect("cis/trans coset index");
     Ok(Some(BondConstraintAst::CisTransStereo(
-        CisTransStereoAst::stereo(StereoCosetAst::Lit(coset)),
+        CisTransStereoAst::stereo(StereoCoset::Lit(coset)),
     )))
 }
 
@@ -697,31 +697,31 @@ mod tests {
     }
 
     #[rstest]
-    #[case::cfclbri_clockwise(Smiles::parse_bytes(b"Br[C@@](F)(Cl)I").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::cfclbri_counterclockwise(Smiles::parse_bytes(b"Br[C@](F)(Cl)I").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::cfclbri_fluorine_first(Smiles::parse_bytes(b"F[C@](Cl)(Br)I").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::methyloxirane_explicit_h(Smiles::parse_bytes(b"C[C@@]1([H])OC1").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::butan_2_ol(Smiles::parse_bytes(b"C[C@@H](O)CC").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::alanine(Smiles::parse_bytes(b"C[C@H](N)C(O)=O").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::ring_then_branch(Smiles::parse_bytes(b"C[C@]1(Cl)CC(C)CC1").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::branch_then_ring(Smiles::parse_bytes(b"C[C@](Cl)1CC(C)CC1").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::mol_parity_clockwise(parse_mol_bytes_to_table_ir(CHIRAL_PARITY_MOL.as_bytes()).unwrap(), 0, Some(StereoCosetAst::Lit(0)))]
-    #[case::mol_wedge_cfclbri(parse_mol_bytes_to_table_ir(CFCLBRI_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::mol_wedge_cfclbri_r(parse_mol_bytes_to_table_ir(CFCLBRI_R_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::mol_wedge_cfclbri_single(parse_mol_bytes_to_table_ir(CFCLBRI_SINGLE_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::mol_wedge_butanol(parse_mol_bytes_to_table_ir(BUTANOL_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::mol_wedge_alanine(parse_mol_bytes_to_table_ir(ALANINE_WEDGE_MOL.as_bytes()).unwrap(), 4, Some(StereoCosetAst::Lit(0)))]
-    #[case::mol_wedge_sulfoxide(parse_mol_bytes_to_table_ir(SULFOXIDE_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::mol_wedge_methyloxirane(parse_mol_bytes_to_table_ir(METHYLOXIRANE_WEDGE_MOL.as_bytes()).unwrap(), 0, Some(StereoCosetAst::Lit(0)))]
-    #[case::mol_wedge_prochiral_methylene(parse_mol_bytes_to_table_ir(PROCHIRAL_METHYLENE_WEDGE_MOL.as_bytes()).unwrap(), 0, Some(StereoCosetAst::Lit(1)))]
-    #[case::sulfoxide_counterclockwise(Smiles::parse_bytes(b"C[S@](=O)CC").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::sulfoxide_clockwise(Smiles::parse_bytes(b"C[S@@](=O)CC").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::sulfoxide_charge_separated(Smiles::parse_bytes(b"C[S@@+]([O-])CC").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
+    #[case::cfclbri_clockwise(Smiles::parse_bytes(b"Br[C@@](F)(Cl)I").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::cfclbri_counterclockwise(Smiles::parse_bytes(b"Br[C@](F)(Cl)I").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::cfclbri_fluorine_first(Smiles::parse_bytes(b"F[C@](Cl)(Br)I").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::methyloxirane_explicit_h(Smiles::parse_bytes(b"C[C@@]1([H])OC1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::butan_2_ol(Smiles::parse_bytes(b"C[C@@H](O)CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::alanine(Smiles::parse_bytes(b"C[C@H](N)C(O)=O").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::ring_then_branch(Smiles::parse_bytes(b"C[C@]1(Cl)CC(C)CC1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::branch_then_ring(Smiles::parse_bytes(b"C[C@](Cl)1CC(C)CC1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::mol_parity_clockwise(parse_mol_bytes_to_table_ir(CHIRAL_PARITY_MOL.as_bytes()).unwrap(), 0, Some(StereoCoset::Lit(0)))]
+    #[case::mol_wedge_cfclbri(parse_mol_bytes_to_table_ir(CFCLBRI_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::mol_wedge_cfclbri_r(parse_mol_bytes_to_table_ir(CFCLBRI_R_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::mol_wedge_cfclbri_single(parse_mol_bytes_to_table_ir(CFCLBRI_SINGLE_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::mol_wedge_butanol(parse_mol_bytes_to_table_ir(BUTANOL_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::mol_wedge_alanine(parse_mol_bytes_to_table_ir(ALANINE_WEDGE_MOL.as_bytes()).unwrap(), 4, Some(StereoCoset::Lit(0)))]
+    #[case::mol_wedge_sulfoxide(parse_mol_bytes_to_table_ir(SULFOXIDE_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::mol_wedge_methyloxirane(parse_mol_bytes_to_table_ir(METHYLOXIRANE_WEDGE_MOL.as_bytes()).unwrap(), 0, Some(StereoCoset::Lit(0)))]
+    #[case::mol_wedge_prochiral_methylene(parse_mol_bytes_to_table_ir(PROCHIRAL_METHYLENE_WEDGE_MOL.as_bytes()).unwrap(), 0, Some(StereoCoset::Lit(1)))]
+    #[case::sulfoxide_counterclockwise(Smiles::parse_bytes(b"C[S@](=O)CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::sulfoxide_clockwise(Smiles::parse_bytes(b"C[S@@](=O)CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::sulfoxide_charge_separated(Smiles::parse_bytes(b"C[S@@+]([O-])CC").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
     #[case::no_descriptor(Smiles::parse_bytes(b"F[C@](Cl)(Br)I").unwrap().into_table_ir(), 0, None)]
     fn test_raise_tetrahedral_stereo(
         #[case] mol: TableMolecule,
         #[case] atom_idx: usize,
-        #[case] expected: Option<StereoCosetAst>,
+        #[case] expected: Option<StereoCoset>,
     ) {
         let expected = expected
             .map(|coset| AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::stereo(coset)));
@@ -742,43 +742,43 @@ mod tests {
     }
 
     #[rstest]
-    #[case::trans(Smiles::parse_bytes(b"F/C=C/F").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::cis(Smiles::parse_bytes(b"F/C=C\\F").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::fluoropropene_e(Smiles::parse_bytes(b"F/C=C/C").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::fluoropropene_z(Smiles::parse_bytes(b"F/C=C\\C").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::fluoropropene_z_flipped(Smiles::parse_bytes(b"F\\C=C/C").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::fluoropropene_z_methyl_first(Smiles::parse_bytes(b"C/C=C\\F").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::azomethane_e(Smiles::parse_bytes(b"C/N=N/C").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::azomethane_z(Smiles::parse_bytes(b"C/N=N\\C").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::ethylideneoxirane(Smiles::parse_bytes(b"C/C=C1CO\\1").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::ethylideneoxirane_both_ends(Smiles::parse_bytes(b"C/C=C/1CO\\1").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::ethylideneoxirane_open_only(Smiles::parse_bytes(b"C/C=C/1CO1").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::ethylideneoxirane_open_at_oxygen(Smiles::parse_bytes(b"C/C=C(CO\\1)1").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::ethylideneoxirane_open_at_oxygen_both_ends(Smiles::parse_bytes(b"C/C=C(CO\\1)/1").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::ethylideneoxirane_open_at_oxygen_close_only(Smiles::parse_bytes(b"C/C=C(CO1)/1").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::cyclooctene_trans(Smiles::parse_bytes(b"C1=C/CCCCCC/1").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::cyclooctene_trans_open_marked(Smiles::parse_bytes(b"C\\1=C/CCCCCC1").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::cyclooctene_cis(Smiles::parse_bytes(b"C1=C\\CCCCCC/1").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(0)))]
-    #[case::geminal_difluoro(Smiles::parse_bytes(b"F/C(F)=C(C)\\CC").unwrap().into_table_ir(), 2, Some(StereoCosetAst::Lit(1)))]
-    #[case::butanone_oxime(Smiles::parse_bytes(b"C/C(CC)=N\\O").unwrap().into_table_ir(), 3, Some(StereoCosetAst::Lit(0)))]
-    #[case::fluoropropene_e_backslash(Smiles::parse_bytes(b"F\\C=C\\C").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::fluoropropene_e_methyl_first(Smiles::parse_bytes(b"C/C=C/F").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::fluoropropene_e_methyl_first_backslash(Smiles::parse_bytes(b"C\\C=C\\F").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::trisubstituted(Smiles::parse_bytes(b"F/C(C)=C(Cl)/C").unwrap().into_table_ir(), 2, Some(StereoCosetAst::Lit(0)))]
-    #[case::mol_either(parse_mol_bytes_to_table_ir(CIS_TRANS_EITHER_MOL.as_bytes()).unwrap(), 1, Some(StereoCosetAst::Undetermined))]
+    #[case::trans(Smiles::parse_bytes(b"F/C=C/F").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::cis(Smiles::parse_bytes(b"F/C=C\\F").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::fluoropropene_e(Smiles::parse_bytes(b"F/C=C/C").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::fluoropropene_z(Smiles::parse_bytes(b"F/C=C\\C").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::fluoropropene_z_flipped(Smiles::parse_bytes(b"F\\C=C/C").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::fluoropropene_z_methyl_first(Smiles::parse_bytes(b"C/C=C\\F").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::azomethane_e(Smiles::parse_bytes(b"C/N=N/C").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::azomethane_z(Smiles::parse_bytes(b"C/N=N\\C").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::ethylideneoxirane(Smiles::parse_bytes(b"C/C=C1CO\\1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::ethylideneoxirane_both_ends(Smiles::parse_bytes(b"C/C=C/1CO\\1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::ethylideneoxirane_open_only(Smiles::parse_bytes(b"C/C=C/1CO1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::ethylideneoxirane_open_at_oxygen(Smiles::parse_bytes(b"C/C=C(CO\\1)1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::ethylideneoxirane_open_at_oxygen_both_ends(Smiles::parse_bytes(b"C/C=C(CO\\1)/1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::ethylideneoxirane_open_at_oxygen_close_only(Smiles::parse_bytes(b"C/C=C(CO1)/1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::cyclooctene_trans(Smiles::parse_bytes(b"C1=C/CCCCCC/1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::cyclooctene_trans_open_marked(Smiles::parse_bytes(b"C\\1=C/CCCCCC1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::cyclooctene_cis(Smiles::parse_bytes(b"C1=C\\CCCCCC/1").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(0)))]
+    #[case::geminal_difluoro(Smiles::parse_bytes(b"F/C(F)=C(C)\\CC").unwrap().into_table_ir(), 2, Some(StereoCoset::Lit(1)))]
+    #[case::butanone_oxime(Smiles::parse_bytes(b"C/C(CC)=N\\O").unwrap().into_table_ir(), 3, Some(StereoCoset::Lit(0)))]
+    #[case::fluoropropene_e_backslash(Smiles::parse_bytes(b"F\\C=C\\C").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::fluoropropene_e_methyl_first(Smiles::parse_bytes(b"C/C=C/F").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::fluoropropene_e_methyl_first_backslash(Smiles::parse_bytes(b"C\\C=C\\F").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::trisubstituted(Smiles::parse_bytes(b"F/C(C)=C(Cl)/C").unwrap().into_table_ir(), 2, Some(StereoCoset::Lit(0)))]
+    #[case::mol_either(parse_mol_bytes_to_table_ir(CIS_TRANS_EITHER_MOL.as_bytes()).unwrap(), 1, Some(StereoCoset::Undetermined))]
     #[case::one_sided_marker(Smiles::parse_bytes(b"C(C)=C(Cl)/C").unwrap().into_table_ir(), 1, None)]
     #[case::plain_double(Smiles::parse_bytes(b"C=C").unwrap().into_table_ir(), 0, None)]
     #[case::terminal_no_substituent(Smiles::parse_bytes(b"F/C=C").unwrap().into_table_ir(), 1, None)]
     #[case::cyclohexenone_carbonyl(Smiles::parse_bytes(b"O=C1/C=C\\CCC1").unwrap().into_table_ir(), 0, None)]
-    #[case::cyclohexenone(Smiles::parse_bytes(b"O=C1/C=C\\CCC1").unwrap().into_table_ir(), 3, Some(StereoCosetAst::Lit(0)))]
-    #[case::hexadiene_first(Smiles::parse_bytes(b"C/C=C/C=C/C").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::hexadiene_second(Smiles::parse_bytes(b"C/C=C/C=C/C").unwrap().into_table_ir(), 3, Some(StereoCosetAst::Lit(1)))]
-    #[case::hexadiene_ez_first(Smiles::parse_bytes(b"C/C=C/C=C\\C").unwrap().into_table_ir(), 1, Some(StereoCosetAst::Lit(1)))]
-    #[case::hexadiene_ez_second(Smiles::parse_bytes(b"C/C=C/C=C\\C").unwrap().into_table_ir(), 3, Some(StereoCosetAst::Lit(0)))]
+    #[case::cyclohexenone(Smiles::parse_bytes(b"O=C1/C=C\\CCC1").unwrap().into_table_ir(), 3, Some(StereoCoset::Lit(0)))]
+    #[case::hexadiene_first(Smiles::parse_bytes(b"C/C=C/C=C/C").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::hexadiene_second(Smiles::parse_bytes(b"C/C=C/C=C/C").unwrap().into_table_ir(), 3, Some(StereoCoset::Lit(1)))]
+    #[case::hexadiene_ez_first(Smiles::parse_bytes(b"C/C=C/C=C\\C").unwrap().into_table_ir(), 1, Some(StereoCoset::Lit(1)))]
+    #[case::hexadiene_ez_second(Smiles::parse_bytes(b"C/C=C/C=C\\C").unwrap().into_table_ir(), 3, Some(StereoCoset::Lit(0)))]
     fn test_raise_cis_trans_stereo(
         #[case] mol: TableMolecule,
         #[case] bond_idx: usize,
-        #[case] expected: Option<StereoCosetAst>,
+        #[case] expected: Option<StereoCoset>,
     ) {
         let expected = expected
             .map(|coset| BondConstraintAst::CisTransStereo(CisTransStereoAst::stereo(coset)));

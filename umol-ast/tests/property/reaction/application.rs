@@ -313,7 +313,7 @@ proptest! {
         ];
         let pattern_atom = StereoAtomAst::new(
             StereoKind::Tetrahedral,
-            StereoCosetAst::Undetermined,
+            StereoCoset::Undetermined,
         );
         let host_atom = StereoAtomAst::new(StereoKind::Tetrahedral, host_coset)
             .with_constraints(host_constraints);
@@ -372,7 +372,7 @@ proptest! {
         ];
         let pattern_bond = StereoBondAst::new(
             StereoKind::CisTrans,
-            StereoCosetAst::Undetermined,
+            StereoCoset::Undetermined,
         );
         let host_bond = StereoBondAst::new(StereoKind::CisTrans, host_coset)
             .with_constraints(host_constraints);

@@ -548,7 +548,7 @@ mod tests {
         StereoBondId,
     };
     use crate::ast::noncovalent::NoncovalentBondKind;
-    use crate::ast::stereo::{StereoCosetAst, StereoKind};
+    use crate::ast::stereo::{StereoCoset, StereoKind};
     use crate::ast::value::ValueAst;
 
     #[rstest]
@@ -743,7 +743,7 @@ mod tests {
                     StereoLigandArg::Atom(3_u32.into()),
                     StereoLigandArg::ImplicitHydrogen,
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             );
         let mol = spec.build();
 
@@ -757,7 +757,7 @@ mod tests {
         );
         assert_eq!(
             mol.stereo_atom(StereoAtomId(0)).ast,
-            &StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0))
+            &StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
         );
     }
 
@@ -775,7 +775,7 @@ mod tests {
                     StereoLigandArg::Atom(3_u32.into()),
                     StereoLigandArg::ImplicitHydrogen,
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             );
         let mol = spec.build();
 
@@ -788,7 +788,7 @@ mod tests {
         );
         assert_eq!(
             mol.stereo_bond(StereoBondId(0)).ast,
-            &StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1))
+            &StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1))
         );
     }
 

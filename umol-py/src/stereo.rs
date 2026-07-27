@@ -19,11 +19,11 @@ use umol_ast::ast::{
     StereoAtomId as AstStereoAtomId, StereoAtomView as AstStereoAtomView,
     StereoBondAst as AstStereoBondAst, StereoBondId as AstStereoBondId,
     StereoBondView as AstStereoBondView, StereoConfigurationAst as AstStereoConfigurationAst,
-    StereoCosetAst as AstStereoCosetAst, StereoKind as AstStereoKind,
-    StereoLigand as AstStereoLigand, StereoLigandKind as AstStereoLigandKind,
-    StereoLigandPair as AstStereoLigandPair, StereoLigandPosition as AstStereoLigandPosition,
-    StereoTerm as AstStereoTerm, Stereogenicity as AstStereogenicity,
-    TetrahedralStereoAst as AstTetrahedralStereoAst, Topicity as AstTopicity,
+    StereoCoset as AstStereoCoset, StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
+    StereoLigandKind as AstStereoLigandKind, StereoLigandPair as AstStereoLigandPair,
+    StereoLigandPosition as AstStereoLigandPosition, StereoTerm as AstStereoTerm,
+    Stereogenicity as AstStereogenicity, TetrahedralStereoAst as AstTetrahedralStereoAst,
+    Topicity as AstTopicity,
 };
 use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
 
@@ -158,7 +158,7 @@ impl StereoTerm {
 /// Stereo coset: undetermined, a literal coset index, a set of indices, or a
 /// transformation term.
 #[pyclass]
-pub enum StereoCosetAst {
+pub enum StereoCoset {
     Undetermined(),
     Lit(u32),
     LitSet(BTreeSet<u32>),
@@ -166,7 +166,7 @@ pub enum StereoCosetAst {
 }
 
 #[pymethods]
-impl StereoCosetAst {
+impl StereoCoset {
     fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
         self.to_rust(py) == other.to_rust(py)
     }
@@ -177,34 +177,34 @@ impl StereoCosetAst {
 
     fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            StereoCosetAst::Undetermined() => ("Undetermined", 0),
-            StereoCosetAst::Lit(_) => ("Lit", 1),
-            StereoCosetAst::LitSet(_) => ("LitSet", 1),
-            StereoCosetAst::Term(_) => ("Term", 1),
+            StereoCoset::Undetermined() => ("Undetermined", 0),
+            StereoCoset::Lit(_) => ("Lit", 1),
+            StereoCoset::LitSet(_) => ("LitSet", 1),
+            StereoCoset::Term(_) => ("Term", 1),
         };
-        variant_repr(slf.bind(py).as_any(), "StereoCosetAst", variant, arity)
+        variant_repr(slf.bind(py).as_any(), "StereoCoset", variant, arity)
     }
 }
 
-impl StereoCosetAst {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &AstStereoCosetAst) -> PyResult<Self> {
+impl StereoCoset {
+    pub(crate) fn from_rust(py: Python<'_>, ast: &AstStereoCoset) -> PyResult<Self> {
         Ok(match ast {
-            AstStereoCosetAst::Undetermined => Self::Undetermined(),
-            AstStereoCosetAst::Lit(index) => Self::Lit(*index),
-            AstStereoCosetAst::LitSet(members) => Self::LitSet(members.clone()),
-            AstStereoCosetAst::Term(inner) => {
+            AstStereoCoset::Undetermined => Self::Undetermined(),
+            AstStereoCoset::Lit(index) => Self::Lit(*index),
+            AstStereoCoset::LitSet(members) => Self::LitSet(members.clone()),
+            AstStereoCoset::Term(inner) => {
                 Self::Term(into_py_variant(py, StereoTerm::from_rust(py, inner)?)?)
             }
         })
     }
 
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoCosetAst {
+    pub(crate) fn to_rust(&self, py: Python<'_>) -> AstStereoCoset {
         match self {
-            Self::Undetermined() => AstStereoCosetAst::Undetermined,
-            Self::Lit(index) => AstStereoCosetAst::Lit(*index),
-            Self::LitSet(members) => AstStereoCosetAst::LitSet(members.clone()),
+            Self::Undetermined() => AstStereoCoset::Undetermined,
+            Self::Lit(index) => AstStereoCoset::Lit(*index),
+            Self::LitSet(members) => AstStereoCoset::LitSet(members.clone()),
             Self::Term(inner) => {
-                AstStereoCosetAst::Term(Box::new(inner.bind(py).borrow().to_rust(py)))
+                AstStereoCoset::Term(Box::new(inner.bind(py).borrow().to_rust(py)))
             }
         }
     }
@@ -216,7 +216,7 @@ impl StereoCosetAst {
 pub enum TetrahedralStereoAst {
     Undetermined(),
     NotStereo(),
-    Stereo(Py<StereoCosetAst>),
+    Stereo(Py<StereoCoset>),
 }
 
 #[pymethods]
@@ -250,7 +250,7 @@ impl TetrahedralStereoAst {
             AstTetrahedralStereoAst::Undetermined => Self::Undetermined(),
             AstTetrahedralStereoAst::NotStereo => Self::NotStereo(),
             AstTetrahedralStereoAst::Stereo(coset) => {
-                Self::Stereo(into_py_variant(py, StereoCosetAst::from_rust(py, coset)?)?)
+                Self::Stereo(into_py_variant(py, StereoCoset::from_rust(py, coset)?)?)
             }
         })
     }
@@ -279,8 +279,8 @@ impl TetrahedralStereo {
     /// The tetrahedral-stereo AST for this configuration (a literal coset).
     pub(crate) fn to_rust(self) -> AstTetrahedralStereoAst {
         let coset = match self {
-            TetrahedralStereo::Ccw => AstStereoCosetAst::Lit(0),
-            TetrahedralStereo::Cw => AstStereoCosetAst::Lit(1),
+            TetrahedralStereo::Ccw => AstStereoCoset::Lit(0),
+            TetrahedralStereo::Cw => AstStereoCoset::Lit(1),
         };
         AstTetrahedralStereoAst::Stereo(coset)
     }
@@ -291,7 +291,7 @@ impl TetrahedralStereo {
 pub enum CisTransStereoAst {
     Undetermined(),
     NotStereo(),
-    Stereo(Py<StereoCosetAst>),
+    Stereo(Py<StereoCoset>),
 }
 
 #[pymethods]
@@ -320,7 +320,7 @@ impl CisTransStereoAst {
             AstCisTransStereoAst::Undetermined => Self::Undetermined(),
             AstCisTransStereoAst::NotStereo => Self::NotStereo(),
             AstCisTransStereoAst::Stereo(coset) => {
-                Self::Stereo(into_py_variant(py, StereoCosetAst::from_rust(py, coset)?)?)
+                Self::Stereo(into_py_variant(py, StereoCoset::from_rust(py, coset)?)?)
             }
         })
     }
@@ -349,8 +349,8 @@ impl CisTransStereo {
     /// The cis/trans-stereo AST for this configuration (a literal coset).
     pub(crate) fn to_rust(self) -> AstCisTransStereoAst {
         let coset = match self {
-            CisTransStereo::Z => AstStereoCosetAst::Lit(0),
-            CisTransStereo::E => AstStereoCosetAst::Lit(1),
+            CisTransStereo::Z => AstStereoCoset::Lit(0),
+            CisTransStereo::E => AstStereoCoset::Lit(1),
         };
         AstCisTransStereoAst::Stereo(coset)
     }
@@ -551,7 +551,7 @@ impl StereoLigand {
 #[pyclass]
 pub enum StereoConfigurationAst {
     Undetermined(),
-    Kinded(StereoKind, Py<StereoCosetAst>),
+    Kinded(StereoKind, Py<StereoCoset>),
 }
 
 #[pymethods]
@@ -567,7 +567,7 @@ impl StereoConfigurationAst {
 
     /// The coset, or `None` when undetermined.
     #[getter]
-    fn coset(&self, py: Python<'_>) -> Option<Py<StereoCosetAst>> {
+    fn coset(&self, py: Python<'_>) -> Option<Py<StereoCoset>> {
         match self {
             Self::Kinded(_, coset) => Some(coset.clone_ref(py)),
             Self::Undetermined() => None,
@@ -602,7 +602,7 @@ impl StereoConfigurationAst {
             AstStereoConfigurationAst::Undetermined => Self::Undetermined(),
             AstStereoConfigurationAst::Kinded(kind, coset) => Self::Kinded(
                 StereoKind::from_rust(*kind),
-                into_py_variant(py, StereoCosetAst::from_rust(py, coset)?)?,
+                into_py_variant(py, StereoCoset::from_rust(py, coset)?)?,
             ),
         })
     }
@@ -1011,9 +1011,9 @@ macro_rules! stereo_view {
 
             /// The coset (from the configuration).
             #[getter]
-            fn coset(&self, py: Python<'_>) -> PyResult<StereoCosetAst> {
+            fn coset(&self, py: Python<'_>) -> PyResult<StereoCoset> {
                 let molecule = self.owner.bind(py).borrow();
-                StereoCosetAst::from_rust(py, self.view(molecule.inner())?.coset())
+                StereoCoset::from_rust(py, self.view(molecule.inner())?.coset())
             }
 
             /// The stereo configuration (geometry + coset).
@@ -1299,26 +1299,21 @@ mod tests {
     }
 
     #[rstest]
-    #[case(AstStereoCosetAst::Undetermined)]
-    #[case(AstStereoCosetAst::Lit(1))]
-    #[case(AstStereoCosetAst::LitSet(BTreeSet::from([0, 1])))]
-    #[case(AstStereoCosetAst::Term(Box::new(AstStereoTerm::Lit(1))))]
-    fn test_stereo_coset_ast_roundtrip(#[case] ast: AstStereoCosetAst) {
+    #[case(AstStereoCoset::Undetermined)]
+    #[case(AstStereoCoset::Lit(1))]
+    #[case(AstStereoCoset::LitSet(BTreeSet::from([0, 1])))]
+    #[case(AstStereoCoset::Term(Box::new(AstStereoTerm::Lit(1))))]
+    fn test_stereo_coset_roundtrip(#[case] ast: AstStereoCoset) {
         Python::attach(|py| {
-            assert_eq!(
-                StereoCosetAst::from_rust(py, &ast).unwrap().to_rust(py),
-                ast
-            );
+            assert_eq!(StereoCoset::from_rust(py, &ast).unwrap().to_rust(py), ast);
         });
     }
 
     #[rstest]
     #[case(AstTetrahedralStereoAst::Undetermined)]
     #[case(AstTetrahedralStereoAst::NotStereo)]
-    #[case(AstTetrahedralStereoAst::Stereo(AstStereoCosetAst::Lit(1)))]
-    #[case(AstTetrahedralStereoAst::Stereo(AstStereoCosetAst::Term(Box::new(
-        AstStereoTerm::Lit(0)
-    ))))]
+    #[case(AstTetrahedralStereoAst::Stereo(AstStereoCoset::Lit(1)))]
+    #[case(AstTetrahedralStereoAst::Stereo(AstStereoCoset::Term(Box::new(AstStereoTerm::Lit(0)))))]
     fn test_tetrahedral_stereo_ast_roundtrip(#[case] ast: AstTetrahedralStereoAst) {
         Python::attach(|py| {
             assert_eq!(
@@ -1331,11 +1326,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(TetrahedralStereo::Ccw, AstStereoCosetAst::Lit(0))]
-    #[case(TetrahedralStereo::Cw, AstStereoCosetAst::Lit(1))]
+    #[case(TetrahedralStereo::Ccw, AstStereoCoset::Lit(0))]
+    #[case(TetrahedralStereo::Cw, AstStereoCoset::Lit(1))]
     fn test_tetrahedral_stereo_to_rust(
         #[case] config: TetrahedralStereo,
-        #[case] coset: AstStereoCosetAst,
+        #[case] coset: AstStereoCoset,
     ) {
         assert_eq!(config.to_rust(), AstTetrahedralStereoAst::Stereo(coset));
     }
@@ -1343,8 +1338,8 @@ mod tests {
     #[rstest]
     #[case(AstCisTransStereoAst::Undetermined)]
     #[case(AstCisTransStereoAst::NotStereo)]
-    #[case(AstCisTransStereoAst::Stereo(AstStereoCosetAst::Lit(1)))]
-    #[case(AstCisTransStereoAst::Stereo(AstStereoCosetAst::Term(Box::new(AstStereoTerm::Lit(0)))))]
+    #[case(AstCisTransStereoAst::Stereo(AstStereoCoset::Lit(1)))]
+    #[case(AstCisTransStereoAst::Stereo(AstStereoCoset::Term(Box::new(AstStereoTerm::Lit(0)))))]
     fn test_cis_trans_stereo_ast_roundtrip(#[case] ast: AstCisTransStereoAst) {
         Python::attach(|py| {
             assert_eq!(
@@ -1355,11 +1350,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(CisTransStereo::Z, AstStereoCosetAst::Lit(0))]
-    #[case(CisTransStereo::E, AstStereoCosetAst::Lit(1))]
+    #[case(CisTransStereo::Z, AstStereoCoset::Lit(0))]
+    #[case(CisTransStereo::E, AstStereoCoset::Lit(1))]
     fn test_cis_trans_stereo_to_rust(
         #[case] config: CisTransStereo,
-        #[case] coset: AstStereoCosetAst,
+        #[case] coset: AstStereoCoset,
     ) {
         assert_eq!(config.to_rust(), AstCisTransStereoAst::Stereo(coset));
     }
@@ -1424,11 +1419,11 @@ mod tests {
                 AstStereoConfigurationAst::Undetermined,
                 AstStereoConfigurationAst::kinded(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(1),
+                    AstStereoCoset::Lit(1),
                 ),
                 AstStereoConfigurationAst::kinded(
                     AstStereoKind::Octahedral,
-                    AstStereoCosetAst::Undetermined,
+                    AstStereoCoset::Undetermined,
                 ),
             ] {
                 assert_eq!(
@@ -1444,12 +1439,12 @@ mod tests {
     #[rstest]
     fn test_stereo_configuration_ast_kind_coset() {
         Python::attach(|py| {
-            let coset = into_py_variant(py, StereoCosetAst::Lit(1)).unwrap();
+            let coset = into_py_variant(py, StereoCoset::Lit(1)).unwrap();
             let config = StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, coset);
             assert_eq!(config.kind(), Some(StereoKind::Tetrahedral));
             assert_eq!(
                 config.coset(py).unwrap().bind(py).borrow().to_rust(py),
-                AstStereoCosetAst::Lit(1)
+                AstStereoCoset::Lit(1)
             );
             let undetermined = StereoConfigurationAst::Undetermined();
             assert_eq!(undetermined.kind(), None);
@@ -1465,16 +1460,13 @@ mod tests {
                 StereoConfigurationArg::Tetrahedral(TetrahedralStereo::Cw).to_rust(py),
                 AstStereoConfigurationAst::kinded(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(1)
+                    AstStereoCoset::Lit(1)
                 )
             );
             // the Ct shorthand → Kinded(CisTrans, coset)
             assert_eq!(
                 StereoConfigurationArg::CisTrans(CisTransStereo::E).to_rust(py),
-                AstStereoConfigurationAst::kinded(
-                    AstStereoKind::CisTrans,
-                    AstStereoCosetAst::Lit(1)
-                )
+                AstStereoConfigurationAst::kinded(AstStereoKind::CisTrans, AstStereoCoset::Lit(1))
             );
             // a StereoConfigurationAst passes through
             let config = Py::new(py, StereoConfigurationAst::Undetermined()).unwrap();
@@ -2139,7 +2131,7 @@ mod tests {
                 py,
                 StereoAtomAst::from_inner(AstStereoAtomAst::new(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(0),
+                    AstStereoCoset::Lit(0),
                 )),
             )
             .unwrap();
@@ -2177,7 +2169,7 @@ mod tests {
                 StereoAtomAst::from_inner(AstStereoAtomAst {
                     configuration: AstStereoConfigurationAst::Kinded(
                         AstStereoKind::Tetrahedral,
-                        AstStereoCosetAst::Lit(0),
+                        AstStereoCoset::Lit(0),
                     ),
                     constraints: ast_cs,
                 }),
@@ -2210,7 +2202,7 @@ mod tests {
                 StereoAtomAst::from_inner(AstStereoAtomAst {
                     configuration: AstStereoConfigurationAst::Kinded(
                         AstStereoKind::Tetrahedral,
-                        AstStereoCosetAst::Lit(0),
+                        AstStereoCoset::Lit(0),
                     ),
                     constraints: ast_cs,
                 }),
@@ -2261,7 +2253,7 @@ mod tests {
                 StereoAtomAst::from_inner(AstStereoAtomAst {
                     configuration: AstStereoConfigurationAst::Kinded(
                         AstStereoKind::Tetrahedral,
-                        AstStereoCosetAst::Lit(0),
+                        AstStereoCoset::Lit(0),
                     ),
                     constraints: ast_cs,
                 }),
@@ -2298,7 +2290,7 @@ mod tests {
                 py,
                 StereoAtomAst::from_inner(AstStereoAtomAst::new(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(0),
+                    AstStereoCoset::Lit(0),
                 )),
             )
             .unwrap();
@@ -2346,7 +2338,7 @@ mod tests {
                 StereoAtomAst::from_inner(AstStereoAtomAst {
                     configuration: AstStereoConfigurationAst::Kinded(
                         AstStereoKind::Tetrahedral,
-                        AstStereoCosetAst::Lit(0),
+                        AstStereoCoset::Lit(0),
                     ),
                     constraints: ast_cs,
                 }),
@@ -2375,7 +2367,7 @@ mod tests {
                 py,
                 StereoAtomAst::from_inner(AstStereoAtomAst::new(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(0),
+                    AstStereoCoset::Lit(0),
                 )),
             )
             .unwrap();
@@ -2411,7 +2403,7 @@ mod tests {
                 StereoAtomAst::from_inner(AstStereoAtomAst {
                     configuration: AstStereoConfigurationAst::Kinded(
                         AstStereoKind::Tetrahedral,
-                        AstStereoCosetAst::Lit(0),
+                        AstStereoCoset::Lit(0),
                     ),
                     constraints: ast_cs,
                 }),
@@ -2443,7 +2435,7 @@ mod tests {
                 StereoAtomAst::from_inner(AstStereoAtomAst {
                     configuration: AstStereoConfigurationAst::Kinded(
                         AstStereoKind::Tetrahedral,
-                        AstStereoCosetAst::Lit(0),
+                        AstStereoCoset::Lit(0),
                     ),
                     constraints: ast_cs,
                 }),
@@ -2469,7 +2461,7 @@ mod tests {
                 py,
                 StereoBondAst::from_inner(AstStereoBondAst::new(
                     AstStereoKind::CisTrans,
-                    AstStereoCosetAst::Lit(0),
+                    AstStereoCoset::Lit(0),
                 )),
             )
             .unwrap();
@@ -2498,11 +2490,11 @@ mod tests {
     #[rstest]
     #[case::ccw(
         StereoConfigurationArg::Tetrahedral(TetrahedralStereo::Ccw),
-        AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0))
+        AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0))
     )]
     #[case::cw(
         StereoConfigurationArg::Tetrahedral(TetrahedralStereo::Cw),
-        AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(1))
+        AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(1))
     )]
     fn test_stereo_atom_ast_new(
         #[case] configuration: StereoConfigurationArg,
@@ -2535,7 +2527,7 @@ mod tests {
                 AstStereoAtomAst {
                     configuration: AstStereoConfigurationAst::Kinded(
                         AstStereoKind::Tetrahedral,
-                        AstStereoCosetAst::Lit(0)
+                        AstStereoCoset::Lit(0)
                     ),
                     constraints: expected_cs,
                 }
@@ -2546,13 +2538,13 @@ mod tests {
     #[rstest]
     #[case::ccw(
         "Th0",
-        AstStereoConfigurationAst::Kinded(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0))
+        AstStereoConfigurationAst::Kinded(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0))
     )]
     #[case::undetermined_coset(
         "Th*",
         AstStereoConfigurationAst::Kinded(
             AstStereoKind::Tetrahedral,
-            AstStereoCosetAst::Undetermined
+            AstStereoCoset::Undetermined
         )
     )]
     fn test_stereo_atom_ast_parse(
@@ -2570,11 +2562,11 @@ mod tests {
 
     #[rstest]
     #[case::ccw(
-        AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0)),
+        AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
         "Th0"
     )]
     #[case::square_planar(
-        AstStereoAtomAst::new(AstStereoKind::SquarePlanar, AstStereoCosetAst::Lit(2)),
+        AstStereoAtomAst::new(AstStereoKind::SquarePlanar, AstStereoCoset::Lit(2)),
         "Sp2"
     )]
     fn test_stereo_atom_ast_str(#[case] ast: AstStereoAtomAst, #[case] expected: &str) {
@@ -2586,7 +2578,7 @@ mod tests {
     fn test_stereo_atom_ast_repr() {
         let value = StereoAtomAst::from_inner(AstStereoAtomAst::new(
             AstStereoKind::Tetrahedral,
-            AstStereoCosetAst::Lit(0),
+            AstStereoCoset::Lit(0),
         ));
         assert_eq!(value.__repr__(), "StereoAtomAst.parse('Th0')");
     }
@@ -2596,13 +2588,13 @@ mod tests {
         Python::attach(|py| {
             let value = StereoAtomAst::from_inner(AstStereoAtomAst::new(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ));
             assert_eq!(
                 value.configuration(py).unwrap().to_rust(py),
                 AstStereoConfigurationAst::Kinded(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(0)
+                    AstStereoCoset::Lit(0)
                 )
             );
         });
@@ -2613,7 +2605,7 @@ mod tests {
         Python::attach(|py| {
             let mut value = StereoAtomAst::from_inner(AstStereoAtomAst::new(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ));
             value.set_configuration(
                 py,
@@ -2623,7 +2615,7 @@ mod tests {
                 value.inner().configuration,
                 AstStereoConfigurationAst::Kinded(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(1)
+                    AstStereoCoset::Lit(1)
                 )
             );
         });
@@ -2636,7 +2628,7 @@ mod tests {
                 py,
                 StereoAtomAst::from_inner(AstStereoAtomAst::new(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(0),
+                    AstStereoCoset::Lit(0),
                 )),
             )
             .unwrap();
@@ -2669,7 +2661,7 @@ mod tests {
             let value = StereoAtomAst::from_inner(AstStereoAtomAst {
                 configuration: AstStereoConfigurationAst::Kinded(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(0),
+                    AstStereoCoset::Lit(0),
                 ),
                 constraints: ast_cs,
             });
@@ -2681,7 +2673,7 @@ mod tests {
                     py,
                     &AstStereoConfigurationAst::Kinded(
                         AstStereoKind::Tetrahedral,
-                        AstStereoCosetAst::Lit(0),
+                        AstStereoCoset::Lit(0),
                     ),
                 )
                 .unwrap(),
@@ -2703,7 +2695,7 @@ mod tests {
             );
             assert_eq!(
                 *value.inner(),
-                AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0))
+                AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0))
             );
             assert_eq!(value.__str__(), "Ct0");
         });
@@ -2712,11 +2704,11 @@ mod tests {
     #[rstest]
     #[case::z(
         "Ct0",
-        AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0))
+        AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0))
     )]
     #[case::e(
         "Ct1",
-        AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(1))
+        AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(1))
     )]
     fn test_stereo_bond_ast_parse(#[case] input: &str, #[case] expected: AstStereoBondAst) {
         let value = StereoBondAst::parse(input).unwrap();
@@ -2727,7 +2719,7 @@ mod tests {
     fn test_stereo_bond_ast_str() {
         let value = StereoBondAst::from_inner(AstStereoBondAst::new(
             AstStereoKind::CisTrans,
-            AstStereoCosetAst::Lit(1),
+            AstStereoCoset::Lit(1),
         ));
         assert_eq!(value.__str__(), "Ct1");
     }
@@ -2743,7 +2735,7 @@ mod tests {
                     AstStereoLigand::new(AstAtomId(3), AstStereoLigandKind::Atom),
                     AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
                 ],
-                AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0)),
+                AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
             )],
             ..Default::default()
         });
@@ -2764,7 +2756,7 @@ mod tests {
                     AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
                     AstStereoLigand::new(AstAtomId(3), AstStereoLigandKind::Atom),
                 ],
-                AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+                AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
             )],
             ..Default::default()
         });
@@ -2835,10 +2827,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 id: AstStereoAtomId(0),
             };
-            assert_eq!(
-                view.coset(py).unwrap().to_rust(py),
-                AstStereoCosetAst::Lit(0)
-            );
+            assert_eq!(view.coset(py).unwrap().to_rust(py), AstStereoCoset::Lit(0));
         });
     }
 
@@ -2853,7 +2842,7 @@ mod tests {
                 view.configuration(py).unwrap().to_rust(py),
                 AstStereoConfigurationAst::Kinded(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(0)
+                    AstStereoCoset::Lit(0)
                 )
             );
         });
@@ -2874,7 +2863,7 @@ mod tests {
                 view.configuration(py).unwrap().to_rust(py),
                 AstStereoConfigurationAst::Kinded(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(1)
+                    AstStereoCoset::Lit(1)
                 )
             );
         });
@@ -2943,7 +2932,7 @@ mod tests {
                     py,
                     &AstStereoConfigurationAst::Kinded(
                         AstStereoKind::Tetrahedral,
-                        AstStereoCosetAst::Lit(0),
+                        AstStereoCoset::Lit(0),
                     ),
                 )
                 .unwrap(),
@@ -2983,10 +2972,7 @@ mod tests {
             assert_eq!(view.site_id(py).unwrap(), 0);
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
-                AstStereoConfigurationAst::Kinded(
-                    AstStereoKind::CisTrans,
-                    AstStereoCosetAst::Lit(0)
-                )
+                AstStereoConfigurationAst::Kinded(AstStereoKind::CisTrans, AstStereoCoset::Lit(0))
             );
         });
     }
@@ -3035,7 +3021,7 @@ mod tests {
                 py,
                 StereoAtomAst::from_inner(AstStereoAtomAst::new(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(1),
+                    AstStereoCoset::Lit(1),
                 )),
             )
             .unwrap();
@@ -3046,7 +3032,7 @@ mod tests {
                 view.configuration(py).unwrap().to_rust(py),
                 AstStereoConfigurationAst::Kinded(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(1)
+                    AstStereoCoset::Lit(1)
                 )
             );
             // site topology unchanged

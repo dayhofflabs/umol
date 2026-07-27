@@ -141,8 +141,7 @@ mod tests {
 
     use rstest::rstest;
     use umol_ast::ast::{
-        AromaticSystemId, AromaticValenceAst, AtomId, StereoCosetAst, TetrahedralStereoAst,
-        ValueAst,
+        AromaticSystemId, AromaticValenceAst, AtomId, StereoCoset, TetrahedralStereoAst, ValueAst,
     };
     use umol_ast::{atom_dsl, mol_dsl};
 
@@ -413,7 +412,7 @@ mod tests {
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        Some(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)))
+        Some(TetrahedralStereoAst::Stereo(StereoCoset::Lit(0)))
     )]
     #[case::reset(
         SmilesIoConfig::opensmiles(),

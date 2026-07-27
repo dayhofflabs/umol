@@ -2160,7 +2160,7 @@ mod tests {
         NoncovalentBondKindAst as AstNoncovalentBondKindAst, SpinStateAst as AstSpinStateAst,
         StereoAtomConstraintAst as AstStereoAtomConstraintAst,
         StereoBondConstraintAst as AstStereoBondConstraintAst,
-        StereoConfigurationAst as AstStereoConfigurationAst, StereoCosetAst as AstStereoCosetAst,
+        StereoConfigurationAst as AstStereoConfigurationAst, StereoCoset as AstStereoCoset,
         StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
         StereoLigandKind as AstStereoLigandKind, Stereogenicity as AstStereogenicity,
         StereogenicityAst as AstStereogenicityAst, ValueAst as AstValueAst,
@@ -2642,17 +2642,17 @@ mod tests {
         old: AstStereoConfigurationAst::Undetermined,
         new: AstStereoConfigurationAst::Kinded(
             AstStereoKind::Tetrahedral,
-            AstStereoCosetAst::Undetermined,
+            AstStereoCoset::Undetermined,
         ),
     })]
     #[case::coset_resolved(AstStereoAtomFieldChange::Configuration {
         old: AstStereoConfigurationAst::Kinded(
             AstStereoKind::Tetrahedral,
-            AstStereoCosetAst::Undetermined,
+            AstStereoCoset::Undetermined,
         ),
         new: AstStereoConfigurationAst::Kinded(
             AstStereoKind::Tetrahedral,
-            AstStereoCosetAst::Lit(1),
+            AstStereoCoset::Lit(1),
         ),
     })]
     fn test_stereo_atom_field_change_roundtrip(#[case] change: AstStereoAtomFieldChange) {
@@ -2672,14 +2672,14 @@ mod tests {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Undetermined,
+                AstStereoCoset::Undetermined,
             ),
         },
         AstStereoAtomFieldChange::Configuration {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Undetermined,
+                AstStereoCoset::Undetermined,
             ),
         },
         true,
@@ -2689,14 +2689,14 @@ mod tests {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Undetermined,
+                AstStereoCoset::Undetermined,
             ),
         },
         AstStereoAtomFieldChange::Configuration {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Lit(1),
+                AstStereoCoset::Lit(1),
             ),
         },
         false,
@@ -2719,27 +2719,27 @@ mod tests {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Undetermined,
+                AstStereoCoset::Undetermined,
             ),
         },
         "StereoConfigurationAst.Undetermined()",
-        "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Undetermined())",
-        "StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Undetermined()))",
+        "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined())",
+        "StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined()))",
     )]
     #[case::coset_resolved(
         AstStereoAtomFieldChange::Configuration {
             old: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Undetermined,
+                AstStereoCoset::Undetermined,
             ),
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Lit(1),
+                AstStereoCoset::Lit(1),
             ),
         },
-        "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Undetermined())",
-        "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Lit(1))",
-        "StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Undetermined()), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Lit(1)))",
+        "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined())",
+        "StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(1))",
+        "StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Undetermined()), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(1)))",
     )]
     fn test_stereo_atom_field_change_repr(
         #[case] change: AstStereoAtomFieldChange,
@@ -2781,17 +2781,17 @@ mod tests {
         old: AstStereoConfigurationAst::Undetermined,
         new: AstStereoConfigurationAst::Kinded(
             AstStereoKind::Tetrahedral,
-            AstStereoCosetAst::Undetermined,
+            AstStereoCoset::Undetermined,
         ),
     })]
     #[case::coset_resolved(AstStereoAtomFieldChange::Configuration {
         old: AstStereoConfigurationAst::Kinded(
             AstStereoKind::Tetrahedral,
-            AstStereoCosetAst::Undetermined,
+            AstStereoCoset::Undetermined,
         ),
         new: AstStereoConfigurationAst::Kinded(
             AstStereoKind::Tetrahedral,
-            AstStereoCosetAst::Lit(1),
+            AstStereoCoset::Lit(1),
         ),
     })]
     fn test_stereo_atom_field_change_inverse(#[case] change: AstStereoAtomFieldChange) {
@@ -2812,17 +2812,17 @@ mod tests {
         old: AstStereoConfigurationAst::Undetermined,
         new: AstStereoConfigurationAst::Kinded(
             AstStereoKind::CisTrans,
-            AstStereoCosetAst::Undetermined,
+            AstStereoCoset::Undetermined,
         ),
     })]
     #[case::coset_resolved(AstStereoBondFieldChange::Configuration {
         old: AstStereoConfigurationAst::Kinded(
             AstStereoKind::CisTrans,
-            AstStereoCosetAst::Undetermined,
+            AstStereoCoset::Undetermined,
         ),
         new: AstStereoConfigurationAst::Kinded(
             AstStereoKind::CisTrans,
-            AstStereoCosetAst::Lit(1),
+            AstStereoCoset::Lit(1),
         ),
     })]
     fn test_stereo_bond_field_change_roundtrip(#[case] change: AstStereoBondFieldChange) {
@@ -2842,14 +2842,14 @@ mod tests {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Undetermined,
+                AstStereoCoset::Undetermined,
             ),
         },
         AstStereoBondFieldChange::Configuration {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Undetermined,
+                AstStereoCoset::Undetermined,
             ),
         },
         true,
@@ -2859,14 +2859,14 @@ mod tests {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Undetermined,
+                AstStereoCoset::Undetermined,
             ),
         },
         AstStereoBondFieldChange::Configuration {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Lit(1),
+                AstStereoCoset::Lit(1),
             ),
         },
         false,
@@ -2889,27 +2889,27 @@ mod tests {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Undetermined,
+                AstStereoCoset::Undetermined,
             ),
         },
         "StereoConfigurationAst.Undetermined()",
-        "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Undetermined())",
-        "StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Undetermined()))",
+        "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined())",
+        "StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined()))",
     )]
     #[case::coset_resolved(
         AstStereoBondFieldChange::Configuration {
             old: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Undetermined,
+                AstStereoCoset::Undetermined,
             ),
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Lit(1),
+                AstStereoCoset::Lit(1),
             ),
         },
-        "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Undetermined())",
-        "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Lit(1))",
-        "StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Undetermined()), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Lit(1)))",
+        "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined())",
+        "StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Lit(1))",
+        "StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Undetermined()), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Lit(1)))",
     )]
     fn test_stereo_bond_field_change_repr(
         #[case] change: AstStereoBondFieldChange,
@@ -2951,17 +2951,17 @@ mod tests {
         old: AstStereoConfigurationAst::Undetermined,
         new: AstStereoConfigurationAst::Kinded(
             AstStereoKind::CisTrans,
-            AstStereoCosetAst::Undetermined,
+            AstStereoCoset::Undetermined,
         ),
     })]
     #[case::coset_resolved(AstStereoBondFieldChange::Configuration {
         old: AstStereoConfigurationAst::Kinded(
             AstStereoKind::CisTrans,
-            AstStereoCosetAst::Undetermined,
+            AstStereoCoset::Undetermined,
         ),
         new: AstStereoConfigurationAst::Kinded(
             AstStereoKind::CisTrans,
-            AstStereoCosetAst::Lit(1),
+            AstStereoCoset::Lit(1),
         ),
     })]
     fn test_stereo_bond_field_change_inverse(#[case] change: AstStereoBondFieldChange) {
@@ -4067,7 +4067,7 @@ mod tests {
             AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
             AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
         ],
-        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0)),
+        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
     })]
     #[case::remove(AstStereoAtomDelta::Remove {
         id: AstStereoAtomId(5),
@@ -4077,7 +4077,7 @@ mod tests {
             AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
             AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
         ],
-        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0)),
+        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
     })]
     #[case::modify_field(AstStereoAtomDelta::ModifyField {
         id: AstStereoAtomId(5),
@@ -4085,7 +4085,7 @@ mod tests {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         },
     })]
@@ -4161,7 +4161,7 @@ mod tests {
             ],
             ast: AstStereoAtomAst::new(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         },
         AstStereoAtomDelta::Add {
@@ -4173,7 +4173,7 @@ mod tests {
             ],
             ast: AstStereoAtomAst::new(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         },
         false,
@@ -4214,7 +4214,7 @@ mod tests {
             ],
             ast: AstStereoAtomAst::new(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         },
         "StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoAtomAst.parse('Th0'))",
@@ -4229,7 +4229,7 @@ mod tests {
             ],
             ast: AstStereoAtomAst::new(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         },
         "StereoAtomDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoAtomAst.parse('Th0'))",
@@ -4241,11 +4241,11 @@ mod tests {
                 old: AstStereoConfigurationAst::Undetermined,
                 new: AstStereoConfigurationAst::Kinded(
                     AstStereoKind::Tetrahedral,
-                    AstStereoCosetAst::Lit(0),
+                    AstStereoCoset::Lit(0),
                 ),
             },
         },
-        "StereoAtomDelta.ModifyField(id=5, change=StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCosetAst.Lit(0))))",
+        "StereoAtomDelta.ModifyField(id=5, change=StereoAtomFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0))))",
     )]
     #[case::modify_constraint(
         AstStereoAtomDelta::ModifyConstraint {
@@ -4305,7 +4305,7 @@ mod tests {
             AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
             AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
         ],
-        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0)),
+        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
     })]
     #[case::remove(AstStereoAtomDelta::Remove {
         id: AstStereoAtomId(5),
@@ -4314,7 +4314,7 @@ mod tests {
             AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
             AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
         ],
-        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0)),
+        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
     })]
     #[case::modify_field(AstStereoAtomDelta::ModifyField {
         id: AstStereoAtomId(5),
@@ -4322,7 +4322,7 @@ mod tests {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         },
     })]
@@ -4386,7 +4386,7 @@ mod tests {
             AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
             AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
         ],
-        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
     })]
     #[case::remove(AstStereoBondDelta::Remove {
         id: AstStereoBondId(5),
@@ -4396,7 +4396,7 @@ mod tests {
             AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
             AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
         ],
-        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
     })]
     #[case::modify_field(AstStereoBondDelta::ModifyField {
         id: AstStereoBondId(5),
@@ -4404,7 +4404,7 @@ mod tests {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         },
     })]
@@ -4480,7 +4480,7 @@ mod tests {
             ],
             ast: AstStereoBondAst::new(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         },
         AstStereoBondDelta::Add {
@@ -4492,7 +4492,7 @@ mod tests {
             ],
             ast: AstStereoBondAst::new(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         },
         false,
@@ -4533,7 +4533,7 @@ mod tests {
             ],
             ast: AstStereoBondAst::new(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         },
         "StereoBondDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoBondAst.parse('Ct0'))",
@@ -4548,7 +4548,7 @@ mod tests {
             ],
             ast: AstStereoBondAst::new(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         },
         "StereoBondDelta.Remove(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom), StereoLigand(atom_id=2, kind=StereoLigandKind.LonePair)], ast=StereoBondAst.parse('Ct0'))",
@@ -4560,11 +4560,11 @@ mod tests {
                 old: AstStereoConfigurationAst::Undetermined,
                 new: AstStereoConfigurationAst::Kinded(
                     AstStereoKind::CisTrans,
-                    AstStereoCosetAst::Lit(0),
+                    AstStereoCoset::Lit(0),
                 ),
             },
         },
-        "StereoBondDelta.ModifyField(id=5, change=StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCosetAst.Lit(0))))",
+        "StereoBondDelta.ModifyField(id=5, change=StereoBondFieldChange.Configuration(old=StereoConfigurationAst.Undetermined(), new=StereoConfigurationAst.Kinded(StereoKind.CisTrans, StereoCoset.Lit(0))))",
     )]
     #[case::modify_constraint(
         AstStereoBondDelta::ModifyConstraint {
@@ -4624,7 +4624,7 @@ mod tests {
             AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
             AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
         ],
-        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
     })]
     #[case::remove(AstStereoBondDelta::Remove {
         id: AstStereoBondId(5),
@@ -4633,7 +4633,7 @@ mod tests {
             AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
             AstStereoLigand::new(AstAtomId(2), AstStereoLigandKind::Atom),
         ],
-        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
     })]
     #[case::modify_field(AstStereoBondDelta::ModifyField {
         id: AstStereoBondId(5),
@@ -4641,7 +4641,7 @@ mod tests {
             old: AstStereoConfigurationAst::Undetermined,
             new: AstStereoConfigurationAst::Kinded(
                 AstStereoKind::CisTrans,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         },
     })]
@@ -4851,7 +4851,7 @@ mod tests {
             AstAtomId(4),
             AstStereoLigandKind::Atom,
         )],
-        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0)),
+        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
     }))]
     #[case::stereo_bond(AstDelta::StereoBond(AstStereoBondDelta::Add {
         id: AstStereoBondId(5),
@@ -4860,7 +4860,7 @@ mod tests {
             AstAtomId(4),
             AstStereoLigandKind::Atom,
         )],
-        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
     }))]
     #[case::constraint(AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
         AstAtomId(3),
@@ -4933,7 +4933,7 @@ mod tests {
             )],
             ast: AstStereoAtomAst::new(
                 AstStereoKind::Tetrahedral,
-                AstStereoCosetAst::Lit(0),
+                AstStereoCoset::Lit(0),
             ),
         }),
         "Delta.StereoAtom(StereoAtomDelta.Add(id=5, site=3, ligands=[StereoLigand(atom_id=4, kind=StereoLigandKind.Atom)], ast=StereoAtomAst.parse('Th0')))"
@@ -4999,7 +4999,7 @@ mod tests {
             AstAtomId(4),
             AstStereoLigandKind::Atom,
         )],
-        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(0)),
+        ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(0)),
     }))]
     #[case::stereo_bond(AstDelta::StereoBond(AstStereoBondDelta::Add {
         id: AstStereoBondId(5),
@@ -5008,7 +5008,7 @@ mod tests {
             AstAtomId(4),
             AstStereoLigandKind::Atom,
         )],
-        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(0)),
+        ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(0)),
     }))]
     #[case::constraint(AstDelta::Constraint(AstConstraintDelta::Add(AstConstraint::Atom(
         AstAtomId(3),

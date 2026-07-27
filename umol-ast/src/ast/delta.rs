@@ -3068,8 +3068,8 @@ mod tests {
         DativeBondConstraintsAst, ElectronCountsAst, ElementAst, IsotopeMassAst,
         MulticenterBondConstraintsAst, NoncovalentBondConstraintsAst, NoncovalentBondKindAst,
         RingScope, SpinStateAst, SpinStateUpdate, StereoAtomConstraintsAst,
-        StereoBondConstraintsAst, StereoConfigurationAst, StereoConfigurationUpdate,
-        StereoCosetAst, StereoKind, StereoLigandKind, Stereogenicity, StereogenicityAst,
+        StereoBondConstraintsAst, StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset,
+        StereoKind, StereoLigandKind, Stereogenicity, StereogenicityAst,
     };
 
     #[rstest]
@@ -3541,15 +3541,15 @@ mod tests {
         StereoAtomDelta::ModifyField {
             id: StereoAtomId(1),
             change: StereoAtomFieldChange::Configuration {
-                old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
-                new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             },
         },
         StereoAtomDelta::ModifyField {
             id: StereoAtomId(1),
             change: StereoAtomFieldChange::Configuration {
-                old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
-                new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+                old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             },
         }
     )]
@@ -3592,7 +3592,7 @@ mod tests {
     #[case::configuration_and_constraint(
         StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoAtomUpdate {
-            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCosetAst::Lit(1)) },
+            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) },
             constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
         },
         vec![
@@ -3674,7 +3674,7 @@ mod tests {
     #[case::configuration_and_constraint(
         StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoBondUpdate {
-            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCosetAst::Lit(1)) },
+            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) },
             constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
         },
         vec![
@@ -3729,11 +3729,11 @@ mod tests {
                 change: StereoAtomFieldChange::Configuration {
                     old: StereoConfigurationAst::Kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(0)
+                        StereoCoset::Lit(0)
                     ),
                     new: StereoConfigurationAst::Kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(1)
+                        StereoCoset::Lit(1)
                     ),
                 },
             }],
@@ -3746,14 +3746,8 @@ mod tests {
         StereoAtomDelta::apply_field(
             &mut ast,
             StereoAtomFieldChange::Configuration {
-                old: StereoConfigurationAst::Kinded(
-                    StereoKind::Tetrahedral,
-                    StereoCosetAst::Lit(0),
-                ),
-                new: StereoConfigurationAst::Kinded(
-                    StereoKind::Tetrahedral,
-                    StereoCosetAst::Lit(1),
-                ),
+                old: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                new: StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             },
         )
         .unwrap();
@@ -3769,11 +3763,11 @@ mod tests {
                 StereoAtomFieldChange::Configuration {
                     old: StereoConfigurationAst::Kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(0)
+                        StereoCoset::Lit(0)
                     ),
                     new: StereoConfigurationAst::Kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(1)
+                        StereoCoset::Lit(1)
                     ),
                 },
             ),

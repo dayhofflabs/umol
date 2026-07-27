@@ -468,7 +468,7 @@ mod tests {
     use umol_graph_core::Compaction;
 
     use super::*;
-    use crate::ast::stereo::{StereoCosetAst, StereoTerm};
+    use crate::ast::stereo::{StereoCoset, StereoTerm};
     #[rustfmt::skip]
     #[rstest]
     #[case::ring_membership_all(BondConstraintAst::ring_membership(RingScope::All, 1), BondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)))]
@@ -507,7 +507,7 @@ mod tests {
         BondConstraintAst::RingMembership(RingMembershipAst::new(RingScope::All, ValueAst::lit_set([2]))),
         Ok(BondConstraintAst::ring_membership(RingScope::All, 2)))]
     #[case::cis_trans_lifts_term(
-        BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::term(StereoTerm::Lit(1)))),
+        BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::term(StereoTerm::Lit(1)))),
         Ok(BondConstraintAst::cis_trans_stereo(CisTransStereoAst::stereo(1_u32))))]
     #[case::empty_litset_contradiction(
         BondConstraintAst::RingMembership(RingMembershipAst::new(RingScope::All, ValueAst::lit_set(Vec::<i64>::new()))),
@@ -766,7 +766,7 @@ mod tests {
         Ok(BondConstraintsAst::from_iter([BondConstraintAst::Aromatic(BooleanAst::Lit(true))])))]
     #[case::canonicalizes_values(
         BondConstraintsAst::from_iter([
-            BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::term(StereoTerm::Lit(1)))),
+            BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::term(StereoTerm::Lit(1)))),
         ]),
         Ok(BondConstraintsAst::from_iter([BondConstraintAst::cis_trans_stereo(CisTransStereoAst::stereo(1_u32))])))]
     fn test_bond_constraints_ast_canonicalize(

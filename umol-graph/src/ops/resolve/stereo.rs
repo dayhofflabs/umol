@@ -6,7 +6,7 @@ use thiserror::Error;
 use umol_ast::ast::{
     AsLit, AtomConstraintAst, AtomHandle, AtomId, AtomUpdate, BondConstraintAst, BondHandle,
     BondId, BondUpdate, CisTransStereoAst, Edit, MoleculeAst, StereoAtomAst, StereoBondAst,
-    StereoCosetAst, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoAst,
+    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoAst,
     TransactionError,
 };
 use umol_utils::solution::Solution;
@@ -211,7 +211,7 @@ impl StereoResolver {
         &self,
         ast: &MoleculeAst,
         id: AtomId,
-        coset: StereoCosetAst,
+        coset: StereoCoset,
     ) -> Option<(Vec<StereoLigand>, StereoAtomAst)> {
         let atom = ast.atom(id);
         if atom.is_in_aromatic_system() {
@@ -249,7 +249,7 @@ impl StereoResolver {
         &self,
         ast: &MoleculeAst,
         id: BondId,
-        coset: StereoCosetAst,
+        coset: StereoCoset,
     ) -> Option<(Vec<StereoLigand>, StereoBondAst)> {
         let bond = ast.bond(id);
 
@@ -340,7 +340,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
                 (AtomHandle::Id(AtomId(1)), StereoLigandKind::ImplicitHydrogen),
             ],
-            ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         }]
     )]
     #[case::cis_trans(
@@ -354,7 +354,7 @@ mod tests {
                 (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
                 (AtomHandle::Id(AtomId(2)), StereoLigandKind::ImplicitHydrogen),
             ],
-            ast: StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         }]
     )]
     fn test_stereo_resolver_plan(
@@ -401,7 +401,7 @@ mod tests {
         Solution::Determined(vec![Edit::ModifyAtomConstraint {
             id: AtomHandle::Id(AtomId(1)),
             old: Some(AtomConstraintAst::TetrahedralStereo(
-                TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1)),
+                TetrahedralStereoAst::Stereo(StereoCoset::Lit(1)),
             )),
             new: None,
         }])
@@ -428,7 +428,7 @@ mod tests {
         Solution::Determined(vec![Edit::ModifyBondConstraint {
             id: BondHandle::Id(BondId(1)),
             old: Some(BondConstraintAst::CisTransStereo(
-                CisTransStereoAst::Stereo(StereoCosetAst::Lit(1)),
+                CisTransStereoAst::Stereo(StereoCoset::Lit(1)),
             )),
             new: None,
         }])

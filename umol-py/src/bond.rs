@@ -400,7 +400,7 @@ mod tests {
         BondConstraintKey as AstBondConstraintKey, BondConstraintsAst as AstBondConstraintsAst,
         BooleanAst as AstBooleanAst, CisTransStereoAst as AstCisTransStereoAst,
         MoleculeParts as AstMoleculeParts, RingScope as AstRingScope,
-        StereoCosetAst as AstStereoCosetAst, ValueAst as AstValueAst,
+        StereoCoset as AstStereoCoset, ValueAst as AstValueAst,
     };
     use umol_chem::element::Element as ChemElement;
 
@@ -480,7 +480,7 @@ mod tests {
     #[case(AstBondConstraintAst::aromatic(AstBooleanAst::Lit(true)))]
     #[case(AstBondConstraintAst::cis_trans_stereo(AstCisTransStereoAst::NotStereo))]
     #[case(AstBondConstraintAst::cis_trans_stereo(AstCisTransStereoAst::Stereo(
-        AstStereoCosetAst::Lit(1)
+        AstStereoCoset::Lit(1)
     )))]
     #[case(AstBondConstraintAst::ring_membership(AstRingScope::All, 2))]
     #[case(AstBondConstraintAst::ring_membership(AstRingScope::Size(6), 1))]
@@ -897,10 +897,7 @@ mod tests {
                 .unwrap();
             match constraints.cis_trans_stereo(py).unwrap().unwrap() {
                 CisTransStereoAst::Stereo(coset) => {
-                    assert_eq!(
-                        coset.bind(py).borrow().to_rust(py),
-                        AstStereoCosetAst::Lit(1)
-                    )
+                    assert_eq!(coset.bind(py).borrow().to_rust(py), AstStereoCoset::Lit(1))
                 }
                 _ => panic!("expected Stereo"),
             }

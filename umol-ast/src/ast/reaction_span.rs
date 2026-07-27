@@ -1527,7 +1527,7 @@ mod tests {
     use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange};
     use super::super::ligand::{StereoLigand, StereoLigandKind};
     use super::super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindAst};
-    use super::super::stereo::{StereoConfigurationAst, StereoCosetAst, StereoKind};
+    use super::super::stereo::{StereoConfigurationAst, StereoCoset, StereoKind};
     use super::super::value::ValueAst;
     use super::*;
 
@@ -1716,7 +1716,7 @@ mod tests {
                         StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     ],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 )],
                 constraints: Constraints::new(),
                 ..Default::default()
@@ -1730,7 +1730,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             })]),
         ),
         MoleculeAst::from_parts(MoleculeParts {
@@ -1760,7 +1760,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             constraints: Constraints::new(),
             ..Default::default()
@@ -2005,7 +2005,7 @@ mod tests {
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
             ],
-            ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         })]),
     ))]
     #[case::stereo_atom_remove(ReactionAst::new(
@@ -2025,7 +2025,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )],
             constraints: Constraints::new(),
             ..Default::default()
@@ -2039,7 +2039,7 @@ mod tests {
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
             ],
-            ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         })]),
     ))]
     #[case::stereo_atom_modify(ReactionAst::new(
@@ -2059,7 +2059,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             )],
             constraints: Constraints::new(),
             ..Default::default()
@@ -2067,8 +2067,8 @@ mod tests {
         Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
             id: StereoAtomId(0),
             change: StereoAtomFieldChange::Configuration {
-                old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
-                new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             },
         })]),
     ))]
@@ -2094,7 +2094,7 @@ mod tests {
                 StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
             ],
-            ast: StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            ast: StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         })]),
     ))]
     fn test_reaction_span_ast_to_reaction(#[case] reaction: ReactionAst) {

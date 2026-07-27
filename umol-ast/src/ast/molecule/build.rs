@@ -203,7 +203,7 @@ mod tests {
     use super::*;
     use crate::ast::ligand::StereoLigandKind;
     use crate::ast::noncovalent::NoncovalentBondKind;
-    use crate::ast::stereo::{StereoCosetAst, StereoKind};
+    use crate::ast::stereo::{StereoCoset, StereoKind};
     use crate::ast::value::ValueAst;
 
     #[rstest]
@@ -388,7 +388,7 @@ mod tests {
                 StereoLigand::new(br, StereoLigandKind::Atom),
                 StereoLigand::new(i, StereoLigandKind::Atom),
             ],
-            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
         );
         let mol = builder.build();
 
@@ -401,7 +401,7 @@ mod tests {
         );
         assert_eq!(
             mol.stereo_atom(stereo).ast,
-            &StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0))
+            &StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
         );
     }
 
@@ -419,7 +419,7 @@ mod tests {
                 StereoLigand::new(f, StereoLigandKind::Atom),
                 StereoLigand::new(h, StereoLigandKind::Atom),
             ],
-            StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         );
         let mol = builder.build();
 
@@ -428,7 +428,7 @@ mod tests {
         assert_eq!(mol.stereo_bond(stereo).site_id(), bond);
         assert_eq!(
             mol.stereo_bond(stereo).ast,
-            &StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1))
+            &StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1))
         );
     }
 }

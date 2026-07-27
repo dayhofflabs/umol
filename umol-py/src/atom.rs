@@ -698,7 +698,7 @@ mod tests {
         AromaticValenceAst as AstAromaticValenceAst, AtomConstraintAst as AstAtomConstraintAst,
         AtomConstraintKey as AstAtomConstraintKey, AtomConstraintsAst as AstAtomConstraintsAst,
         MemOp as AstMemOp, MoleculeParts as AstMoleculeParts, RingScope as AstRingScope,
-        SpinStateAst as AstSpinStateAst, StereoCosetAst as AstStereoCosetAst,
+        SpinStateAst as AstSpinStateAst, StereoCoset as AstStereoCoset,
         TetrahedralStereoAst as AstTetrahedralStereoAst, ValueAst as AstValueAst,
     };
 
@@ -1590,10 +1590,7 @@ mod tests {
                 .unwrap();
             match constraints.tetrahedral_stereo(py).unwrap().unwrap() {
                 TetrahedralStereoAst::Stereo(coset) => {
-                    assert_eq!(
-                        coset.bind(py).borrow().to_rust(py),
-                        AstStereoCosetAst::Lit(1)
-                    )
+                    assert_eq!(coset.bind(py).borrow().to_rust(py), AstStereoCoset::Lit(1))
                 }
                 _ => panic!("expected Stereo"),
             }

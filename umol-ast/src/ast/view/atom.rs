@@ -484,7 +484,7 @@ mod tests {
     use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
-    use crate::ast::stereo::{StereoAtomAst, StereoCosetAst, StereoKind, TetrahedralStereoAst};
+    use crate::ast::stereo::{StereoAtomAst, StereoCoset, StereoKind, TetrahedralStereoAst};
     use crate::ast::value::ValueAst;
     use crate::mol_dsl;
 
@@ -801,7 +801,7 @@ mod tests {
                         StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     ],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 ),
                 (
                     AtomId(5),
@@ -811,7 +811,7 @@ mod tests {
                         StereoLigand::new(AtomId(8), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(9), StereoLigandKind::Atom),
                     ],
-                    StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(1)),
+                    StereoAtomAst::new(StereoKind::SquarePlanar, StereoCoset::Lit(1)),
                 ),
             ],
             ..Default::default()
@@ -862,7 +862,7 @@ mod tests {
         AtomConstraintAst::accepted_pairs(ValueAst::Lit(0)),
         AtomConstraintAst::aromatic_valence(AromaticValenceAst::NotAromatic),
         AtomConstraintAst::multicenter_valence(MulticenterValenceAst::NotMulticenter),
-        AtomConstraintAst::tetrahedral_stereo(TetrahedralStereoAst::stereo(StereoCosetAst::Lit(1))),
+        AtomConstraintAst::tetrahedral_stereo(TetrahedralStereoAst::stereo(StereoCoset::Lit(1))),
     ]))]
     #[case::non_stereo_ligand(AtomId(1), AtomConstraintsAst::from_iter([
         AtomConstraintAst::valence(ValueAst::Lit(1)),

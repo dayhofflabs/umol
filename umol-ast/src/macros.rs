@@ -239,7 +239,7 @@ mod tests {
         AtomConstraintsAst, AtomId, AtomUpdate, BondAst, BondConstraintAst, BondConstraintsAst,
         BondUpdate, BooleanAst, DativeBondAst, DativeBondConstraintAst, ElementAst, MoleculeAst,
         MoleculeParts, MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst,
-        StereoBondAst, StereoCosetAst, StereoKind, ValueAst,
+        StereoBondAst, StereoCoset, StereoKind, ValueAst,
     };
     use crate::dsl::molecule::MoleculeMetadata;
     use crate::dsl::{AtomDsl, MoleculeDsl};
@@ -461,9 +461,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::ccw("Th0", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)))]
-    #[case::undetermined("Th*", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))]
-    #[case::square_planar("Sp2", StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(2)))]
+    #[case::ccw("Th0", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)))]
+    #[case::undetermined("Th*", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Undetermined))]
+    #[case::square_planar("Sp2", StereoAtomAst::new(StereoKind::SquarePlanar, StereoCoset::Lit(2)))]
     fn test_stereo_atom_macro(#[case] input: &str, #[case] expected: StereoAtomAst) {
         assert_eq!(stereo_atom_dsl!(input), expected);
     }
@@ -476,15 +476,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::ccw("Th0", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)))]
+    #[case::ccw("Th0", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)))]
     fn test_stereo_atom_ground_macro(#[case] input: &str, #[case] expected: StereoAtomAst) {
         assert_eq!(stereo_atom_dsl_ground!(input), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::z("Ct1", StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)))]
-    #[case::undetermined("Ct*", StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined))]
+    #[case::z("Ct1", StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)))]
+    #[case::undetermined("Ct*", StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Undetermined))]
     fn test_stereo_bond_macro(#[case] input: &str, #[case] expected: StereoBondAst) {
         assert_eq!(stereo_bond_dsl!(input), expected);
     }
@@ -497,7 +497,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::z("Ct1", StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)))]
+    #[case::z("Ct1", StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)))]
     fn test_stereo_bond_ground_macro(#[case] input: &str, #[case] expected: StereoBondAst) {
         assert_eq!(stereo_bond_dsl_ground!(input), expected);
     }

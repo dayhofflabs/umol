@@ -156,7 +156,7 @@ PUBLIC_EXPORTS = frozenset(
     StereoBondView
     StereoBondViews
     StereoConfigurationAst
-    StereoCosetAst
+    StereoCoset
     StereoKind
     StereoKindModel
     StereoLigand

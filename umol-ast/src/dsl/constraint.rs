@@ -46,7 +46,7 @@ use crate::ast::constraint::{
 use crate::ast::id::{AtomId, BondId, StereoLigandPosition};
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::spin::SpinStateAst;
-use crate::ast::stereo::{CisTransStereoAst, StereoCosetAst, StereoKind, TetrahedralStereoAst};
+use crate::ast::stereo::{CisTransStereoAst, StereoCoset, StereoKind, TetrahedralStereoAst};
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
 
@@ -288,14 +288,14 @@ pub(super) fn read_stereo_coset_dsl(
                 .into_iter()
                 .map(coset_lit)
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(StereoCosetDsl(StereoCosetAst::LitSet(
+            Ok(StereoCosetDsl(StereoCoset::LitSet(
                 set.into_iter().collect(),
             )))
         }
         b':' => {
             let name = de.read_keyword_name()?;
             if name.as_ref() == "undetermined" {
-                Ok(StereoCosetDsl(StereoCosetAst::Undetermined))
+                Ok(StereoCosetDsl(StereoCoset::Undetermined))
             } else {
                 Err(
                     DeError::Custom(format!("unexpected keyword :{} in coset position", name))
@@ -303,9 +303,7 @@ pub(super) fn read_stereo_coset_dsl(
                 )
             }
         }
-        _ => Ok(StereoCosetDsl(StereoCosetAst::Lit(coset_lit(
-            de.read_i64()?,
-        )?))),
+        _ => Ok(StereoCosetDsl(StereoCoset::Lit(coset_lit(de.read_i64()?)?))),
     }
 }
 
@@ -2185,8 +2183,7 @@ mod tests {
     };
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::stereo::{
-        CisTransStereoAst, StereoCosetAst, StereoKind, Stereogenicity, TetrahedralStereoAst,
-        Topicity,
+        CisTransStereoAst, StereoCoset, StereoKind, Stereogenicity, TetrahedralStereoAst, Topicity,
     };
     use crate::ast::value::ValueAst;
     use crate::ast::BooleanAst;
@@ -2548,8 +2545,8 @@ mod tests {
     #[case::ring_membership_all(AtomConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:ring-membership {:count 1}}")]
     #[case::ring_membership_size(AtomConstraintAst::ring_membership(RingScope::Size(6), 1), "{:ring-membership {:size 6 :count 1}}")]
     #[case::tetrahedral_stereo_not_stereo(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::NotStereo), "{:tetrahedral-stereo :not-stereo}")]
-    #[case::tetrahedral_stereo_lit(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:tetrahedral-stereo {:stereo 1}}")]
-    #[case::tetrahedral_stereo_set(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([1, 2]))), "{:tetrahedral-stereo {:stereo [1 2]}}")]
+    #[case::tetrahedral_stereo_lit(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::Lit(1))), "{:tetrahedral-stereo {:stereo 1}}")]
+    #[case::tetrahedral_stereo_set(AtomConstraintAst::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCoset::lit_set([1, 2]))), "{:tetrahedral-stereo {:stereo [1 2]}}")]
     fn test_atom_constraint_dsl_roundtrip(
         #[case] input: AtomConstraintAst,
         #[case] edn_source: &str,
@@ -2569,7 +2566,7 @@ mod tests {
     #[case::ring_membership_all(BondConstraintAst::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:bond [0 {:ring-membership {:count 1}}]}")]
     #[case::ring_membership_size(BondConstraintAst::ring_membership(RingScope::Size(6), 1), "{:bond [0 {:ring-membership {:size 6 :count 1}}]}")]
     #[case::cis_trans_stereo_not_stereo(BondConstraintAst::CisTransStereo(CisTransStereoAst::NotStereo), "{:bond [0 {:cis-trans-stereo :not-stereo}]}")]
-    #[case::cis_trans_stereo_lit(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:bond [0 {:cis-trans-stereo {:stereo 1}}]}")]
+    #[case::cis_trans_stereo_lit(BondConstraintAst::CisTransStereo(CisTransStereoAst::Stereo(StereoCoset::Lit(1))), "{:bond [0 {:cis-trans-stereo {:stereo 1}}]}")]
     fn test_bond_constraint_dsl_roundtrip(
         #[from(full_namespace)] namespace: MoleculeNamespace,
         #[case] input: BondConstraintAst,

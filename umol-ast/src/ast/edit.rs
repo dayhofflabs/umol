@@ -1161,8 +1161,7 @@ mod tests {
     use super::super::noncovalent::NoncovalentBondKind;
     use super::super::spin::SpinStateUpdate;
     use super::super::stereo::{
-        StereoConfigurationAst, StereoConfigurationUpdate, StereoCosetAst, StereoKind,
-        Stereogenicity,
+        StereoConfigurationAst, StereoConfigurationUpdate, StereoCoset, StereoKind, Stereogenicity,
     };
     use super::*;
 
@@ -1225,12 +1224,12 @@ mod tests {
     #[rstest]
     #[case::configuration(
         StereoAtomFieldChange::Configuration {
-            old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
-            new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         },
         StereoAtomFieldChange::Configuration {
-            old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
-            new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+            old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
         },
     )]
     fn test_stereo_atom_field_change_inverse(
@@ -1244,12 +1243,12 @@ mod tests {
     #[rstest]
     #[case::configuration(
         StereoBondFieldChange::Configuration {
-            old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCosetAst::Lit(0)),
-            new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+            new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
         },
         StereoBondFieldChange::Configuration {
-            old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
-            new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCosetAst::Lit(0)),
+            old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
         },
     )]
     fn test_stereo_bond_field_change_inverse(
@@ -1719,7 +1718,7 @@ mod tests {
     #[case::configuration_and_constraint(
         StereoAtomAst { configuration: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 0_u32), constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoAtomUpdate {
-            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCosetAst::Lit(1)) },
+            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: Some(StereoCoset::Lit(1)) },
             constraints: StereoAtomConstraintsAst::from(StereoAtomConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
         },
         vec![
@@ -1773,7 +1772,7 @@ mod tests {
     #[case::configuration_and_constraint(
         StereoBondAst { configuration: StereoConfigurationAst::kinded(StereoKind::CisTrans, 0_u32), constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))) },
         StereoBondUpdate {
-            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCosetAst::Lit(1)) },
+            configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: Some(StereoCoset::Lit(1)) },
             constraints: StereoBondConstraintsAst::from(StereoBondConstraintAst::Stereogenicity(StereogenicityAst::Undetermined)),
         },
         vec![

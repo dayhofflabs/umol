@@ -41,7 +41,7 @@ use super::multicenter::{MulticenterBondAst, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondUpdate};
 use super::reaction_derivation::ReactionDerivation;
 use super::remap::IdRemapping;
-use super::stereo::{StereoConfigurationAst, StereoCosetAst, StereoKind, StereoTerm};
+use super::stereo::{StereoConfigurationAst, StereoCoset, StereoKind, StereoTerm};
 use super::substructure::SubstructureMatchAlgorithm;
 use super::traits::Canonicalize;
 use super::validate::{
@@ -87,12 +87,12 @@ fn stereo_delta_domains_are_valid(lhs: &MoleculeAst, deltas: &Deltas) -> bool {
         match configuration {
             StereoConfigurationAst::Undetermined => true,
             StereoConfigurationAst::Kinded(kind, coset) => match coset {
-                StereoCosetAst::Undetermined => true,
-                StereoCosetAst::Lit(index) => *index < kind.count() as u32,
-                StereoCosetAst::LitSet(indices) => {
+                StereoCoset::Undetermined => true,
+                StereoCoset::Lit(index) => *index < kind.count() as u32,
+                StereoCoset::LitSet(indices) => {
                     !indices.is_empty() && indices.iter().all(|i| *i < kind.count() as u32)
                 }
-                StereoCosetAst::Term(term) => term_is_valid(*kind, term),
+                StereoCoset::Term(term) => term_is_valid(*kind, term),
             },
         }
     }
@@ -1515,7 +1515,7 @@ mod tests {
     use super::super::ligand::StereoLigandKind;
     use super::super::molecule::transact::TransactionError;
     use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
-    use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
+    use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
     use super::super::validate::{DpoContradiction, EntityStructureContradiction};
     use super::super::value::ValueAst;
     use super::*;
@@ -2474,11 +2474,11 @@ mod tests {
                 change: StereoAtomFieldChange::Configuration {
                     old: StereoConfigurationAst::Kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(0),
+                        StereoCoset::Lit(0),
                     ),
                     new: StereoConfigurationAst::Kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(1),
+                        StereoCoset::Lit(1),
                     ),
                 },
             })]),
@@ -2644,8 +2644,8 @@ mod tests {
     // first one merely incident to it. Regression for the two-distinct-site self-apply failure that the
     // stereo compose completeness surfaced.
     #[rstest]
-    #[case::undetermined(StereoCosetAst::Undetermined)]
-    fn test_reaction_ast_apply_two_stereo_centers(#[case] coset: StereoCosetAst) {
+    #[case::undetermined(StereoCoset::Undetermined)]
+    fn test_reaction_ast_apply_two_stereo_centers(#[case] coset: StereoCoset) {
         let center = MoleculeAst::from_parts(MoleculeParts {
             atoms: vec![
                 AtomAst::from_element(Element::C),

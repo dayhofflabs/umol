@@ -254,7 +254,7 @@ mod tests {
     use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
-    use crate::ast::stereo::{CisTransStereoAst, StereoBondAst, StereoCosetAst, StereoKind};
+    use crate::ast::stereo::{CisTransStereoAst, StereoBondAst, StereoCoset, StereoKind};
 
     #[fixture]
     fn molecule() -> MoleculeAst {
@@ -392,7 +392,7 @@ mod tests {
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         })
@@ -431,7 +431,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::cis_trans_site(BondId(1), BondConstraintsAst::from_iter([
-        BondConstraintAst::cis_trans_stereo(CisTransStereoAst::stereo(StereoCosetAst::Lit(1))),
+        BondConstraintAst::cis_trans_stereo(CisTransStereoAst::stereo(StereoCoset::Lit(1))),
     ]))]
     #[case::non_stereo(BondId(0), BondConstraintsAst::from_iter([
         BondConstraintAst::cis_trans_stereo(CisTransStereoAst::NotStereo),

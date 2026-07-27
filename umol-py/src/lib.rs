@@ -98,7 +98,7 @@ use crate::{
     stereo::{
         CisTransStereo, CisTransStereoAst, LigandPermutation, Orientation,
         OrientedLigandPermutation, Permutation, StereoAtomAst, StereoAtomView, StereoAtomViews,
-        StereoBondAst, StereoBondView, StereoBondViews, StereoConfigurationAst, StereoCosetAst,
+        StereoBondAst, StereoBondView, StereoBondViews, StereoConfigurationAst, StereoCoset,
         StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoTerm, Stereogenicity,
         TetrahedralStereo, TetrahedralStereoAst, Topicity,
     },
@@ -325,7 +325,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<BooleanAst>()?;
         module.add_class::<Permutation>()?;
         module.add_class::<StereoTerm>()?;
-        module.add_class::<StereoCosetAst>()?;
+        module.add_class::<StereoCoset>()?;
         module.add_class::<TetrahedralStereoAst>()?;
         module.add_class::<TetrahedralStereo>()?;
         module.add_class::<CisTransStereoAst>()?;

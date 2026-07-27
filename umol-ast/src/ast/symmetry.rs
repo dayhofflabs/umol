@@ -14,9 +14,7 @@ use super::ligand::{StereoLigand, StereoLigandKind};
 use super::molecule::MoleculeAst;
 #[cfg(test)]
 use super::molecule::MoleculeParts;
-use super::stereo::{
-    coset_apply_permutation, StereoCosetAst, StereoKind, Stereogenicity, Topicity,
-};
+use super::stereo::{coset_apply_permutation, StereoCoset, StereoKind, Stereogenicity, Topicity};
 use super::traits::AsLit;
 
 /// Configuration for [`MoleculeAst::graph_symmetry`].
@@ -123,7 +121,7 @@ impl MoleculeAst {
     /// current classes. `None` for non-stereo / undetermined / malformed nodes.
     fn observable_descriptor(&self, entity: Entity, orbits: &[NodeId]) -> Option<u32> {
         let (kind, coset, ligands) = self.stereo_center(entity)?;
-        let &StereoCosetAst::Lit(raw) = coset else {
+        let &StereoCoset::Lit(raw) = coset else {
             return None;
         };
         let coset_space = kind.class_key().space();
@@ -185,7 +183,7 @@ impl MoleculeAst {
         let Some((kind, coset, ligands)) = self.stereo_center(entity) else {
             return Ok(None);
         };
-        let &StereoCosetAst::Lit(source) = coset else {
+        let &StereoCoset::Lit(source) = coset else {
             return Ok(None);
         };
         let coset_space = kind.class_key().space();
@@ -197,7 +195,7 @@ impl MoleculeAst {
         let Some((_, target_coset, target_ligands)) = self.stereo_center(target_entity) else {
             return Err(());
         };
-        if !matches!(target_coset, StereoCosetAst::Lit(_)) {
+        if !matches!(target_coset, StereoCoset::Lit(_)) {
             return Err(());
         }
 
@@ -226,7 +224,7 @@ impl MoleculeAst {
             .into_iter()
             .flat_map(|kind| (0..incidence.entity_count(kind)).map(move |i| kind.with_id(i as u32)))
             .any(|entity| match self.stereo_center(entity) {
-                Some((kind, StereoCosetAst::Lit(_), ligands)) => {
+                Some((kind, StereoCoset::Lit(_), ligands)) => {
                     ligands.len() == kind.class_key().space().degree() && all_distinct(&ligands)
                 }
                 _ => false,
@@ -238,7 +236,7 @@ impl MoleculeAst {
     fn stereo_center(
         &self,
         entity: Entity,
-    ) -> Option<(StereoKind, &StereoCosetAst, Vec<StereoLigand>)> {
+    ) -> Option<(StereoKind, &StereoCoset, Vec<StereoLigand>)> {
         match entity {
             Entity::StereoAtom(id) => {
                 let view = self.stereo_atoms().get(id)?;
@@ -314,7 +312,7 @@ impl GraphSymmetry {
 pub struct StereoSymmetry {
     group: OrientedPermutationGroup,
     kind: StereoKind,
-    coset: StereoCosetAst,
+    coset: StereoCoset,
 }
 
 impl MoleculeAst {
@@ -386,7 +384,7 @@ impl StereoSymmetry {
     }
 
     /// The carrier's stored coset.
-    pub fn coset(&self) -> &StereoCosetAst {
+    pub fn coset(&self) -> &StereoCoset {
         &self.coset
     }
 
@@ -502,13 +500,13 @@ fn virtual_block_swaps(ligands: &[StereoLigand]) -> Vec<Permutation> {
 /// (proper) or send it to its enantiomer (improper)?
 fn grade_local(
     kind: StereoKind,
-    coset: &StereoCosetAst,
+    coset: &StereoCoset,
     permutation: Permutation,
 ) -> Option<Orientation> {
     let index = coset.as_lit()?;
     let coset_space = kind.class_key().space();
-    let Some(StereoCosetAst::Lit(transported)) =
-        coset_apply_permutation(&StereoCosetAst::Lit(index), permutation, kind)
+    let Some(StereoCoset::Lit(transported)) =
+        coset_apply_permutation(&StereoCoset::Lit(index), permutation, kind)
     else {
         return None;
     };
@@ -556,13 +554,13 @@ fn union_find(node_count: usize, generators: &[Vec<NodeId>]) -> Vec<NodeId> {
 /// index. `None` if the orders aren't a relabeling of one identical ligand set.
 fn reexpress(
     kind: StereoKind,
-    coset: &StereoCosetAst,
+    coset: &StereoCoset,
     stored: &[StereoLigand],
     requested: &[StereoLigand],
 ) -> Option<u32> {
     let permutation = Permutation::between(stored, requested)?;
     match coset_apply_permutation(coset, permutation, kind) {
-        Some(StereoCosetAst::Lit(index)) => Some(index),
+        Some(StereoCoset::Lit(index)) => Some(index),
         _ => None,
     }
 }
@@ -624,7 +622,7 @@ mod tests {
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
-                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             )],
             ..Default::default()
         })
@@ -767,7 +765,7 @@ mod tests {
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(0)),
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
             )],
             ..Default::default()
         });
@@ -784,7 +782,7 @@ mod tests {
     #[case::singleton(
         OrientedPermutationGroup::generate(4, &[]),
         StereoKind::Tetrahedral,
-        StereoCosetAst::Lit(0),
+        StereoCoset::Lit(0),
         true,
     )]
     #[case::merged(
@@ -793,31 +791,31 @@ mod tests {
             &[OrientedPermutation::proper(Permutation::from_image(&[1, 0, 2, 3]))],
         ),
         StereoKind::Tetrahedral,
-        StereoCosetAst::Lit(0),
+        StereoCoset::Lit(0),
         false,
     )]
     #[case::invalid_generator(
         OrientedPermutationGroup::generate(3, &[]),
         StereoKind::Tetrahedral,
-        StereoCosetAst::Lit(0),
+        StereoCoset::Lit(0),
         false,
     )]
     #[case::invalid_coset(
         OrientedPermutationGroup::generate(4, &[]),
         StereoKind::Tetrahedral,
-        StereoCosetAst::Lit(2),
+        StereoCoset::Lit(2),
         false,
     )]
     #[case::undetermined(
         OrientedPermutationGroup::generate(4, &[]),
         StereoKind::Tetrahedral,
-        StereoCosetAst::Undetermined,
+        StereoCoset::Undetermined,
         false,
     )]
     fn test_stereo_symmetry_is_stereogenic(
         #[case] group: OrientedPermutationGroup,
         #[case] kind: StereoKind,
-        #[case] coset: StereoCosetAst,
+        #[case] coset: StereoCoset,
         #[case] expected: bool,
     ) {
         assert_eq!(

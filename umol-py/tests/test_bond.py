@@ -15,7 +15,7 @@ from umol import (
     RingMembershipAst,
     RingScope,
     SpinStateAst,
-    StereoCosetAst,
+    StereoCoset,
     ValueAst,
 )
 
@@ -249,7 +249,7 @@ def test_bondconstraints_aromatic_property():
 def test_bondconstraints_cis_trans_stereo_config():
     cs = BondConstraintsAst([])
     cs.cis_trans_stereo = CisTransStereo.E
-    assert cs.cis_trans_stereo == CisTransStereoAst.Stereo(StereoCosetAst.Lit(1))
+    assert cs.cis_trans_stereo == CisTransStereoAst.Stereo(StereoCoset.Lit(1))
 
 
 def test_bondconstraints_cis_trans_stereo_false():

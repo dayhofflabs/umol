@@ -496,7 +496,7 @@ mod tests {
         NoncovalentBondKind as AstNoncovalentBondKind, StereoAtomAst as AstStereoAtomAst,
         StereoAtomDelta as AstStereoAtomDelta, StereoAtomId as AstStereoAtomId,
         StereoBondAst as AstStereoBondAst, StereoBondDelta as AstStereoBondDelta,
-        StereoBondId as AstStereoBondId, StereoCosetAst as AstStereoCosetAst,
+        StereoBondId as AstStereoBondId, StereoCoset as AstStereoCoset,
         StereoKind as AstStereoKind, StereoLigand as AstStereoLigand,
         StereoLigandKind as AstStereoLigandKind, ValueAst as AstValueAst,
     };
@@ -1050,7 +1050,7 @@ mod tests {
                 AstStereoLigand::new(AstAtomId(3), AstStereoLigandKind::Atom),
                 AstStereoLigand::new(AstAtomId(4), AstStereoLigandKind::Atom),
             ],
-            ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCosetAst::Lit(1)),
+            ast: AstStereoAtomAst::new(AstStereoKind::Tetrahedral, AstStereoCoset::Lit(1)),
         })],
     )]
     #[case::stereo_bond(
@@ -1064,7 +1064,7 @@ mod tests {
                 AstStereoLigand::new(AstAtomId(0), AstStereoLigandKind::Atom),
                 AstStereoLigand::new(AstAtomId(3), AstStereoLigandKind::Atom),
             ],
-            ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCosetAst::Lit(1)),
+            ast: AstStereoBondAst::new(AstStereoKind::CisTrans, AstStereoCoset::Lit(1)),
         })],
     )]
     #[case::molecule_constraint(

@@ -212,7 +212,7 @@ mod tests {
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::molecule::{MoleculeAst, MoleculeParts};
     use crate::ast::spin::SpinStateAst;
-    use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
+    use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoCoset, StereoKind};
     use crate::ast::value::ValueAst;
 
     #[fixture]
@@ -270,7 +270,7 @@ mod tests {
                         StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                     ],
-                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 ),
                 (
                     AtomId(3),
@@ -278,7 +278,7 @@ mod tests {
                         StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     ],
-                    StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(1)),
+                    StereoAtomAst::new(StereoKind::SquarePlanar, StereoCoset::Lit(1)),
                 ),
             ],
             stereo_bonds: vec![(
@@ -287,7 +287,7 @@ mod tests {
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 ],
-                StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+                StereoBondAst::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
             ..Default::default()
         })

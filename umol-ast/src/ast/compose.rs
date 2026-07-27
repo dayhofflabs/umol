@@ -119,7 +119,7 @@ mod tests {
     use super::super::noncovalent::{
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
     };
-    use super::super::stereo::{StereoAtomAst, StereoConfigurationAst, StereoCosetAst, StereoKind};
+    use super::super::stereo::{StereoAtomAst, StereoConfigurationAst, StereoCoset, StereoKind};
     use super::super::substructure::SubstructureMatchAlgorithm;
     use super::super::value::ValueAst;
     use super::*;
@@ -922,11 +922,11 @@ mod tests {
                 change: StereoAtomFieldChange::Configuration {
                     old: StereoConfigurationAst::Kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(0),
+                        StereoCoset::Lit(0),
                     ),
                     new: StereoConfigurationAst::Kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(1),
+                        StereoCoset::Lit(1),
                     ),
                 },
             })]),
@@ -962,11 +962,11 @@ mod tests {
                 change: StereoAtomFieldChange::Configuration {
                     old: StereoConfigurationAst::Kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(b_old),
+                        StereoCoset::Lit(b_old),
                     ),
                     new: StereoConfigurationAst::Kinded(
                         StereoKind::Tetrahedral,
-                        StereoCosetAst::Lit(b_new),
+                        StereoCoset::Lit(b_new),
                     ),
                 },
             })]),

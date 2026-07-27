@@ -90,7 +90,7 @@ proptest! {
     ) {
         let dsl = StereoAtomDsl(StereoAtomAst::new(
             StereoKind::Tetrahedral,
-            StereoCosetAst::Lit(coset),
+            StereoCoset::Lit(coset),
         ));
         let edn = dsl.to_edn();
         prop_assert!(
@@ -110,7 +110,7 @@ proptest! {
     ) {
         let dsl = StereoBondDsl(StereoBondAst::new(
             StereoKind::CisTrans,
-            StereoCosetAst::Lit(coset),
+            StereoCoset::Lit(coset),
         ));
         let edn = dsl.to_edn();
         prop_assert!(
